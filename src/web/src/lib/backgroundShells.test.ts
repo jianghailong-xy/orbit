@@ -76,4 +76,15 @@ describe('mergeBackgroundShells', () => {
     // What the process wrote is not lost with it: the server's snapshot is still the newer output.
     expect(merged[0].latestOutput).toBe('the last snapshot');
   });
+
+  it('keeps whether the owner can stop a running job, which only the server states, on the live row that wins', () => {
+    const merged = mergeBackgroundShells(
+      [shell({ shellId: 'bgj_1', kind: 'job', stoppable: true })],
+      [shell({ shellId: 'bgj_1', kind: 'job', status: 'running', latestOutput: 'new', latestOutputSeq: 30 })],
+    );
+    expect(merged[0].latestOutput).toBe('new');
+    expect(merged[0].stoppable).toBe(true);
+    // A live row the server does not list says nothing about it: not stoppable.
+    expect(mergeBackgroundShells([], [shell({ shellId: 'bgj_2', kind: 'job' })])[0].stoppable).toBeUndefined();
+  });
 });

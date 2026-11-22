@@ -60,8 +60,8 @@ func TestARequestIsForwardedWithTheRunnersTokenAndWhatHelloDeclared(t *testing.T
 		"X-Orbit-Runner-Schema-Revision":     "3",
 		"X-Orbit-Runner-Contract-Digest":     "bbdd980c",
 		"X-Orbit-Cli-Version":                "0.1.240",
-		"X-Orbit-Managed-Runner-Generation":  "7",
-		"X-Orbit-Managed-Runner-Pod-Uid":     "pod-1",
+		"X-Orbit-Cloud-Runner-Generation":  "7",
+		"X-Orbit-Cloud-Runner-Pod-Uid":     "pod-1",
 	}
 	for name, value := range want {
 		if got := call.Header.Get(name); got != value {

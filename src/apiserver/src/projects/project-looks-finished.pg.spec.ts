@@ -60,6 +60,7 @@ import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
+import { ReaperService } from '../realtime/reaper.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { IntegrationJobRelay } from '../runner-api/integration-job-relay';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
@@ -67,6 +68,9 @@ import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from '../tasks/tasks.service';
 import { CompletionInputRouter } from './completion-input-router.service';
+import { DependentReadyProducer } from './dependent-ready.producer';
+import { TaskRunStoppedProducer } from './task-run-stopped.producer';
+import { CoordinatorFactQueueService } from './coordinator-fact-queue.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { CoordinatorDeliveryService, coordinatorDeliveryTurnId } from './coordinator-delivery.service';
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
@@ -81,6 +85,7 @@ import { readOwnerDecisionSignals } from './owner-decision-signal';
 import { criterionKeyOf } from './project-acceptance';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { readDerivedProjectDone } from './project-done-derived';
+import { projectsToRecordAsDone } from './project-looks-finished';
 import { branchName } from './project-criterion-landing';
 import { INTEGRATION_JOB_CLAIM } from './project-integration-job';
 import { configureProjectIntegration } from './project-integration-line';
@@ -91,6 +96,7 @@ import { ProjectsService } from './projects.service';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
+import { settleDeliveredIdentityAfterFinish } from './project-integration-job';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -127,6 +133,8 @@ interface Stack {
   receipts: MergeReceiptService;
   /** The route a runner posts an integration job's result on, with every post-commit edge wired. */
   api: RunnerApiController;
+  /** The reaper, with the same router behind it as production gives it. */
+  reaper: ReaperService;
   /** The heartbeat's half of the integration queue: what a runner claims and reports on. */
   jobs: IntegrationJobRelay;
 }
@@ -155,7 +163,16 @@ async function connect(): Promise<Stack> {
     new CriterionUnlandedProducer(prisma, convergence),
   );
   const openItems = new ProjectOpenItemService(prisma, sessions);
+  const recoveryDelivery = new CoordinatorDeliveryService(prisma, new CoordinatorWakeService(prisma), sessions);
+  const recovery = new CoordinatorFactQueueService(
+    prisma, recoveryDelivery,
+    new TaskRunStoppedProducer(prisma, convergence, recoveryDelivery),
+    new DependentReadyProducer(prisma, convergence, recoveryDelivery),
+    new ProjectTasksSettledProducer(prisma,
+      new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions), convergence, recoveryDelivery),
+  );
   const tasks = new TasksService(prisma, sessions, realtime, undefined, router, undefined, openItems);
+  Object.assign(tasks, { coordinatorFacts: recovery });
   const acceptance = new ProjectAcceptanceService(prisma);
   const projects = new ProjectsService(prisma, acceptance, sessions);
   const receipts = new MergeReceiptService(prisma, router);
@@ -179,7 +196,9 @@ async function connect(): Promise<Stack> {
     undefined,
     new ProjectPromotionService(prisma),
   );
-  return { db, sessions, tasks, projects, acceptance, receipts, api, jobs };
+  Object.assign(api, { coordinatorFacts: recovery });
+  const reaper = new ReaperService(prisma, realtime, openItems, undefined, undefined, undefined, undefined, router);
+  return { db, sessions, tasks, projects, acceptance, receipts, api, reaper, jobs };
 }
 
 interface World {
@@ -311,13 +330,15 @@ async function servingTask(stack: Stack, w: World, criterionKey: string, title: 
   } as never);
 }
 
-/** A run of that task, as the runner left it: a worktree on `branch`, or none at all. */
+/** A run of that task, as the runner left it: a worktree on `branch`, or none at all; `reported` is
+ *  what it reported as changed. */
 async function workSession(
   stack: Stack,
   w: World,
   taskId: string,
   branch: string | null,
   status: RunStatus = RunStatus.SUCCEEDED,
+  reported?: string[],
 ): Promise<string> {
   const id = randomUUID();
   await stack.db.session.create({
@@ -335,7 +356,12 @@ async function workSession(
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
+      // A run that ended has finished: its finish is what settles the work (§10.5 O-L4 3), and a DONE
+      // over work that has not finished decides its landing at that finish (§12.15 P-M1).
+      ...(([RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED] as RunStatus[]).includes(status)
+        ? { finishedAt: new Date() } : {}),
       ...(branch ? { branch, isolationStatus: 'worktree', baseSha: sha('b') } : {}),
+      ...(reported ? { changedFiles: reported } : {}),
     },
   });
   return id;
@@ -417,7 +443,7 @@ async function queuedJob(
 function settledWakes(stack: Stack, w: World) {
   return stack.db.projectCoordinatorWake.findMany({
     where: { projectId: w.projectId, event: 'PROJECT_TASKS_SETTLED' },
-    select: { id: true, status: true, sessionId: true, idempotencyKey: true, updatedAt: true },
+    select: { id: true, status: true, sessionId: true, idempotencyKey: true, updatedAt: true, refusalCode: true, delivery: true },
     orderBy: { createdAt: 'asc' },
   });
 }
@@ -526,9 +552,16 @@ async function claimedLanding(
   assert.equal(settled.status, TaskStatus.DONE, 'the acceptance command agreed');
   // The runner commits a worktree when it FINISHES the session, and a landing is not handed over
   // before that (J-T1a): the finish, and where HEAD ended, are what the queue reads.
-  await stack.db.session.update({
-    where: { id: sessionId },
-    data: { finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
+  await stack.db.$transaction(async (tx) => {
+    // The finish settles the DONE's delivered identity in the transaction that writes it, as every
+    // finish door does — and decides the route a DONE written while this work moved left to it
+    // (§10.5 O-L4 3, §12.15 P-M1).
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: { finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false },
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
   });
   const claimed = await stack.jobs.dispatch({
     runnerId: w.runnerId,
@@ -610,13 +643,15 @@ test('(1) derivedDone gives every criterion that is not on main its reason, and 
   await workSession(stack, w, unreceipted.id, 'orbit/no-receipt');
   await settleExecutable(stack, unreceipted.id);
 
-  // Looks codeless: its run took no worktree at all, so no landing was ever queued — and it never
-  // declared what it is.
+  // Looks codeless: its run took no worktree at all, so no landing was ever queued — yet it reported
+  // changes, which Orbit knows of and cannot place. (One that reported nothing delivered no commit and
+  // has nothing to land, §12.15 P-M3.)
   const noBranch = await servingTask(stack, w, LOOKS_CODELESS!, 'looks-codeless');
-  await workSession(stack, w, noBranch.id, null);
+  await workSession(stack, w, noBranch.id, null, RunStatus.SUCCEEDED, ['notes.md']);
   await settleExecutable(stack, noBranch.id);
 
-  // Declared codeless: LANDED, with nothing of its own to land — the other kind of landed.
+  // Declared codeless and never ran: LANDED, with nothing of its own to land — because it delivered
+  // no commit, not because of the flag (§12.15 P-M3).
   const definition = await stack.db.projectAcceptanceCriterionDefinition.findFirstOrThrow({
     where: { projectId: w.projectId, ordinal: 7 }, select: { id: true, revision: true },
   });
@@ -654,8 +689,8 @@ test('(1) derivedDone gives every criterion that is not on main its reason, and 
     'a branch with nothing on it is "nothing to land", not "on the project branch"');
   assert.deepEqual(answer(NO_RECEIPT), [true, 'UNKNOWN', 'NO_RECEIPT']);
   assert.deepEqual(answer(LOOKS_CODELESS), [true, 'UNKNOWN', 'NO_BRANCH']);
-  assert.deepEqual(answer(DECLARED), [true, 'LANDED', 'CODELESS'],
-    'declared codeless is LANDED, and the reason says it had nothing to land');
+  assert.deepEqual(answer(DECLARED), [true, 'LANDED', 'NOTHING_TO_LAND'],
+    'work that delivered no commit is LANDED, and the reason says it had nothing to land');
 
   // Counted once, from those answers: on main and every reason partition the criteria, so two
   // numbers on one card can no longer disagree about one gap.
@@ -664,7 +699,7 @@ test('(1) derivedDone gives every criterion that is not on main its reason, and 
     met: 7,
     landed: 2,
     onMain: 1,
-    byReason: { IN_FLIGHT: 1, ON_PROJECT_BRANCH: 1, NOTHING_TO_LAND: 1, NO_RECEIPT: 1, NO_BRANCH: 1, CODELESS: 1 },
+    byReason: { IN_FLIGHT: 1, ON_PROJECT_BRANCH: 1, NOTHING_TO_LAND: 2, NO_RECEIPT: 1, NO_BRANCH: 1, CODELESS: 0 },
   });
   assert.equal(
     derived.counts.onMain + Object.values(derived.counts.byReason).reduce((sum, n) => sum + n, 0),
@@ -781,12 +816,60 @@ test('(2)(3) a project that looks finished is handed to its coordinator with eve
   });
 
   // ── (3) and then the owner ─────────────────────────────────────────────────────────────────────
-  const backdate = (table: 'project_coordinator_wake' | 'project_open_item', id: string, seconds: number) =>
-    stack.db.$executeRawUnsafe(
-      `UPDATE "${table}" SET "updated_at" = "updated_at" - make_interval(secs => $1) WHERE "id" = $2::uuid`,
-      seconds,
-      id,
-    );
+  await t.test('unread notifications wait through outages, retries, account queues and busy turns; recovery replaces a drained turn once', async () => {
+    const [wake] = await settledWakes(stack, w);
+    const originalKey = coordinatorDeliveryTurnId(wake!.idempotencyKey);
+    const farFuture = new Date(Date.now() + 86_400_000);
+    const due = (at = farFuture) => projectsToRecordAsDone(stack.db as unknown as PrismaService, w.ownerId, [w.projectId], at);
+    for (const data of [
+      { status: RunStatus.FAILED, retryAt: null },
+      { status: RunStatus.AWAITING_INPUT, retryAt: new Date(Date.now() + 60_000) },
+      { status: RunStatus.PENDING, retryAt: null },
+      { status: RunStatus.RUNNING, retryAt: null },
+    ]) {
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data });
+      assert.equal((await due()).has(w.projectId), false, `${data.status} escalated an unread turn`);
+      assert.deepEqual(await signalsFor(stack, w), []);
+    }
+    await stack.db.conversationTurn.update({
+      where: { sessionId_clientTurnId: { sessionId: w.coordinatorSessionId, clientTurnId: originalKey } },
+      data: { status: 'ANSWERED', deliveredAt: null },
+    });
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+    await Promise.all([stack.tasks.deliverLooksFinishedOwedTo(w.coordinatorSessionId), stack.tasks.deliverLooksFinishedOwedTo()]);
+    const rebound = await stack.db.projectCoordinatorWake.findUniqueOrThrow({ where: { id: wake!.id } });
+    const key = (rebound.delivery as { clientTurnId: string }).clientTurnId;
+    assert.notEqual(key, originalKey);
+    assert.equal(await stack.db.conversationTurn.count({ where: { sessionId: w.coordinatorSessionId, clientTurnId: key } }), 1);
+    assert.equal((await due()).has(w.projectId), false, 'requeue did not start the window');
+    const takenAt = new Date();
+    await stack.db.conversationTurn.update({
+      where: { sessionId_clientTurnId: { sessionId: w.coordinatorSessionId, clientTurnId: key } },
+      data: { deliveredAt: takenAt, status: 'IN_FLIGHT' },
+    });
+    assert.equal((await due(new Date(takenAt.getTime() + 7_199_999))).has(w.projectId), false);
+    assert.equal((await due(new Date(takenAt.getTime() + 7_200_000))).get(w.projectId)?.getTime(), takenAt.getTime() + 7_200_000);
+    // A true end, Trash and disabling Automatic bypass even an unread turn's missing deadline.
+    await stack.db.conversationTurn.update({
+      where: { sessionId_clientTurnId: { sessionId: w.coordinatorSessionId, clientTurnId: key } },
+      data: { deliveredAt: null, status: 'ANSWERED' },
+    });
+    for (const data of [
+      { status: RunStatus.FAILED, endReason: 'USER_ENDED', deletedAt: null },
+      { status: RunStatus.AWAITING_INPUT, endReason: null, deletedAt: new Date() },
+    ]) {
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data });
+      assert.equal((await due()).has(w.projectId), true, 'a truly unavailable coordinator hands off immediately');
+    }
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT, endReason: null, deletedAt: null } });
+    await stack.db.project.update({ where: { id: w.projectId }, data: { coordinatorEnabled: false } });
+    assert.equal((await due()).has(w.projectId), true, 'Automatic off hands off immediately');
+    await stack.db.project.update({ where: { id: w.projectId }, data: { coordinatorEnabled: true } });
+    await stack.db.conversationTurn.update({
+      where: { sessionId_clientTurnId: { sessionId: w.coordinatorSessionId, clientTurnId: key } },
+      data: { deliveredAt: takenAt, status: 'ANSWERED' },
+    });
+  });
 
   await t.test('(3a) inside the escalation window the owner is not asked', async () => {
     assert.deepEqual(await signalsFor(stack, w), [], 'the owner was asked before the window ran out');
@@ -796,7 +879,11 @@ test('(2)(3) a project that looks finished is handed to its coordinator with eve
 
   await t.test('(3b) once exceptionEscalationSeconds have passed with no request, the owner’s Needs you shows Record as done…', async () => {
     const [wake] = await settledWakes(stack, w);
-    await backdate('project_coordinator_wake', wake!.id, 7_200 + 1);
+    const delivery = await stack.db.projectCoordinatorWake.findUniqueOrThrow({ where: { id: wake!.id } });
+    await stack.db.conversationTurn.update({
+      where: { sessionId_clientTurnId: { sessionId: w.coordinatorSessionId, clientTurnId: (delivery.delivery as { clientTurnId: string }).clientTurnId } },
+      data: { deliveredAt: new Date(Date.now() - 7_201_000) },
+    });
 
     assert.deepEqual(await signalsFor(stack, w), [{
       sessionId: w.coordinatorSessionId,
@@ -852,7 +939,7 @@ test('(2)(3) a project that looks finished is handed to its coordinator with eve
       'Record as done… stood beside an open request to record the project done');
   });
 
-  await t.test('(3d) after the owner answers "Not yet…", the clock runs from the answer', async () => {
+  await t.test('(3d) a declined request does not reset the delivery turn’s deadline', async () => {
     // Answered a window ago, and nothing asked since: the owner's again. One statement, because a
     // finished item is final (`project_open_item` refuses any later write to it).
     await stack.db.$executeRaw`
@@ -865,8 +952,8 @@ test('(2)(3) a project that looks finished is handed to its coordinator with eve
     assert.deepEqual((await signalsFor(stack, w)).map((signal) => signal.kind), ['RECORD_AS_DONE'],
       'a window after the answer, with nothing asked since, it is the owner’s again');
 
-    // Asked again, and answered "Not yet…" just now: the coordinator was just handed the question
-    // back, so the owner is not asked the moment they said not yet.
+    // An open request suppresses the notification; answering it does not change when the
+    // LOOKS_FINISHED turn was taken up.
     const again = await requestDone();
     assert.equal(await recordAsDone(), false);
     await stack.db.projectOpenItem.update({
@@ -879,7 +966,7 @@ test('(2)(3) a project that looks finished is handed to its coordinator with eve
         resolvedByUserId: w.ownerId,
       },
     });
-    assert.equal(await recordAsDone(), false, 'the owner was asked again the moment they said not yet');
+    assert.equal(await recordAsDone(), true, 'a request answer must not restart the delivery turn’s elapsed window');
   });
 
   await t.test('(3e) recording it done ends it', async () => {
@@ -891,6 +978,35 @@ test('(2)(3) a project that looks finished is handed to its coordinator with eve
     });
     assert.deepEqual(await signalsFor(stack, w), [], 'a project recorded done still asked its owner');
   });
+});
+
+test('a looks-finished fact first raised during FAILED waits and is delivered on recovery without another project event', {
+  skip, concurrency: 1, timeout: 300_000,
+}, async (t) => {
+  const stack = await connect();
+  t.after(() => stack.db.$disconnect().catch(() => undefined));
+  const w = await world(stack, 'failed-first', ['the walkthrough is complete']);
+  const task = await servingTask(stack, w, w.keys[0]!, 'walkthrough');
+  const sessionId = await workSession(stack, w, task.id, 'orbit/walkthrough');
+  await settleExecutable(stack, task.id);
+  await queuedJob(stack, w, 'LAND_TASK', task.id, 'NOTHING_TO_LAND');
+  await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+  await stack.receipts.record(w.ownerId, sessionId, {
+    result: 'ALREADY_MERGED', sourceSha: sha('7'), targetBranch: await projectBranch(stack, w), targetShaBefore: sha('7'),
+  }, 'RUNNER');
+  const wakes = await settledWakes(stack, w);
+  assert.equal(wakes.length, 1);
+  assert.equal(wakes[0]!.refusalCode, 'DELIVERY_COORDINATOR_PAUSED');
+  assert.deepEqual(await signalsFor(stack, w), []);
+  await stack.tasks.deliverLooksFinishedOwedTo();
+  assert.equal((await settledWakes(stack, w)).length, 1, 'paused scans do not write another refusal');
+  await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+  await Promise.all([stack.tasks.deliverLooksFinishedOwedTo(w.coordinatorSessionId), stack.tasks.deliverLooksFinishedOwedTo()]);
+  const delivered = (await settledWakes(stack, w)).filter((wake) => wake.status === 'DELIVERED');
+  assert.equal(delivered.length, 1);
+  const key = (delivered[0]!.delivery as { clientTurnId: string }).clientTurnId;
+  assert.equal(await stack.db.conversationTurn.count({ where: { sessionId: w.coordinatorSessionId, clientTurnId: key } }), 1);
+  assert.equal((await projectsToRecordAsDone(stack.db as unknown as PrismaService, w.ownerId, [w.projectId], new Date(Date.now() + 86_400_000))).size, 0);
 });
 
 // ═══ (4) the gap between a landing and main ═══════════════════════════════════════════════════════
@@ -994,6 +1110,86 @@ test('(5) a judgment opened because the tasks settled files no task while a land
   assert.equal(filed.creatorSessionId, judgment.id, 'with nothing landing, the bound is the bound it was');
 });
 
+test('(6) the reaper\'s forced finish of the last task\'s work, with nothing to land, derives the settled fact its deferred landing held', {
+  skip, concurrency: 1, timeout: 300_000,
+}, async (t) => {
+  const stack = await connect();
+  t.after(() => stack.db.$disconnect().catch(() => undefined));
+  const w = await world(stack, 'reaped-settled', ['the served part works', 'the unserved part works']);
+  const task = await servingTask(stack, w, w.keys[0]!, 'served');
+  // A live run on a branch that never moved: no commit of its own, so nothing will be landed.
+  const sessionId = randomUUID();
+  await stack.db.session.create({
+    data: {
+      id: sessionId, ownerId: w.ownerId, creatorId: w.ownerId, taskId: task.id, workspaceId: w.workspaceId,
+      assignedRunnerId: w.runnerId, title: 'live run', prompt: 'work', provider: 'claude',
+      status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      isolationStatus: 'worktree', branch: 'orbit/reaped-settled', branchSha: sha('b'), baseSha: sha('b'),
+      numTurns: 1, startedAt: new Date(),
+    },
+  });
+  await settleExecutable(stack, task.id);
+  await stack.tasks.update(w.ownerId, task.id, { title: 'served, renamed' } as never);
+  assert.deepEqual(await settledWakes(stack, w), [],
+    'CONTROL: while the DONE task\'s work moves its landing is deferred, so the project is not settled');
+
+  assert.equal(
+    (await stack.db.task.findUniqueOrThrow({ where: { id: task.id }, select: { deliveredAt: true } })).deliveredAt,
+    null, 'CONTROL: the identity is not frozen while the work moves');
+
+  await (stack.reaper as unknown as {
+    forceFinalize(sessionId: string, runnerId: string | null, taskId: string | null, reason: string,
+      opts: { status?: RunStatus }): Promise<void>;
+  }).forceFinalize(sessionId, w.runnerId, task.id, 'runner lost', { status: RunStatus.CANCELLED });
+
+  const frozen = await stack.db.task.findUniqueOrThrow({ where: { id: task.id }, select: { deliveredAt: true } });
+  assert.ok(frozen.deliveredAt, 'CONTROL: the reaper\'s finish froze the identity');
+  assert.equal(await stack.db.projectIntegrationJob.count({ where: { projectId: w.projectId } }), 0, 'nothing to land');
+  assert.equal((await settledWakes(stack, w)).length, 1, 'the finish re-derived PROJECT_TASKS_SETTLED');
+});
+
 test('the looks-finished PostgreSQL target is explicitly disposable', { skip }, () => {
   assertCoordinatorPgUrlIsIsolated(URL);
 });
+
+test('a settled-project fact refused during FAILED recovers on the reconcile tick without another event',
+  { skip, timeout: 120_000 }, async (t) => {
+    const stack = await connect();
+    t.after(() => stack.db.$disconnect());
+    const w = await world(stack, 'settled-recovery', ['the walkthrough is complete']);
+    const task = await servingTask(stack, w, w.keys[0]!, 'completed walkthrough');
+    // Ran without a branch and reported changes: the criterion is unlanded (NO_BRANCH), which is what
+    // makes the settled fact say "looks finished, but Orbit…".
+    await workSession(stack, w, task.id, null, RunStatus.SUCCEEDED, ['walkthrough.md']);
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
+    await settleExecutable(stack, task.id);
+    const prisma = stack.db as unknown as PrismaService;
+    const convergence = new CoordinatorConvergenceService(prisma);
+    const delivery = new CoordinatorDeliveryService(prisma, new CoordinatorWakeService(prisma), stack.sessions);
+    const producer = new ProjectTasksSettledProducer(prisma,
+      new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), stack.sessions), convergence, delivery);
+    assert.equal((await producer.afterCommit([w.projectId]))[0]?.outcome, 'REFUSED');
+    const wakes = () => stack.db.projectCoordinatorWake.findMany({
+      where: { projectId: w.projectId, event: 'PROJECT_TASKS_SETTLED' },
+    });
+    assert.equal((await wakes()).length, 1);
+    await stack.tasks.reconcileTick();
+    assert.equal((await wakes()).length, 1, 'a paused coordinator causes no repeated refusal');
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+    await Promise.all([stack.tasks.reconcileTick(), stack.tasks.reconcileTick()]);
+    assert.equal((await wakes()).filter((wake) => wake.status === 'DELIVERED').length, 1);
+    const turns = () => stack.db.conversationTurn.findMany({
+      where: { sessionId: w.coordinatorSessionId, content: { contains: 'looks finished, but Orbit' } },
+    });
+    assert.equal((await turns()).length, 1);
+    await stack.db.conversationTurn.updateMany({
+      where: { id: (await turns())[0]!.id }, data: { status: 'ANSWERED', deliveredAt: null },
+    });
+    await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+    await Promise.all([stack.tasks.reconcileTick(), stack.tasks.reconcileTick()]);
+    const resent = await turns();
+    assert.equal(resent.length, 2);
+    assert.notEqual(resent[0]!.clientTurnId, resent[1]!.clientTurnId);
+    await stack.tasks.reconcileTick();
+    assert.equal((await turns()).length, 2);
+  });

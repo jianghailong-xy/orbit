@@ -77,6 +77,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'codebaseId',
   // `project_criterion_confirmation.check_task_id` — the task an Agent check of a criterion ran as (0545).
   'checkTaskId',
+  // `owner_request_secret.saved_secret_id` (1400): the saved secret "Use saved" made a grant from, the id the owner's
+  // card already sends in a submit body. An address, not a fence.
+  'savedSecretId',
   'id',
   'ownerId',
   'userId',
@@ -169,6 +172,14 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'coordinatorSessionId',
   // The coordinator conversation that last wrote a project's non-code mark (migration 0535): an address.
   'nonCodeSetBySessionId',
+  // The coordinator conversation that last wrote a project's landing check with no card (migration 1310): an address.
+  'landingCheckSetBySessionId',
+  // The coordinator conversation that exempted a task from its project's landing check (migration 1350): an address.
+  'landingCheckExemptBySessionId',
+  // The coordinator conversation that wrote a recorded landing-check change (migration 1390): an address.
+  'writtenBySessionId',
+  // The change an owner's revert put back (migration 1390): the id the history lists it under.
+  'revertsChangeId',
   'workspaceId',
   // The workspaces a personal access token is confined to (migration 0383): addresses its owner
   // picks when issuing it and reads back in the token list — never a fence.
@@ -181,6 +192,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // A managed runner's default workspace (migration 0399): the workspace a reader opens — an
   // address, never a fence.
   'defaultWorkspaceId',
+  // Where the sessions other people start through a Feishu app open (migration 1140,
+  // docs/feishu-bot-design.md §14.1): an address the owner picks, never a fence.
+  'openWorkspaceId',
   'runnerId',
   'assignedRunnerId',
   'targetRunnerId',
@@ -716,6 +730,9 @@ export const NEVER_PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // id of a session assigned to that runner. The column appears in no response (runners.service.ts drops it; the page
   // lists the matched sessions' own ids), and a decode on the way in could only refuse the report over one id.
   'codexAccountRemoveSessions',
+  // The sessions a pending Set as default swap waits on (runner.claude_account_swap_waiting, migration 1000): the same
+  // kind of raw UUIDs, kept only where they equal a session assigned to the reporting runner, and in no response.
+  'claudeAccountSwapWaiting',
   'generation',
   'leaseGeneration',
   'leaseOwner',

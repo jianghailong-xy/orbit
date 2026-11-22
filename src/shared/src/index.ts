@@ -1,6 +1,7 @@
 export * from './enums';
 export * from './events';
 export * from './background';
+export * from './backgroundRow';
 export * from './dto';
 export * from './engineUpdateReport';
 export * from './permissionSemantics';
@@ -79,3 +80,5 @@ export * from './orbit-turn-cards';
 export * from './mainCheckoutGit';
 export * from './schedule';
 export * from './condition';
+export * from './settingsIndex';
+export * from './settingsTiers';

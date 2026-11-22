@@ -112,7 +112,6 @@ export const FROM_ORBIT_TITLE =
 
 export const OPEN_ITEMS_HEADING = 'Open items';
 export const NEEDS_YOU_GROUP = 'Needs you';
-export const WITH_COORDINATOR_GROUP = 'With the coordinator';
 
 /**
  * The word an exception card wears for where the coordinator's handling of it stands (§4.7 H1–H5).
@@ -127,6 +126,16 @@ export const WITH_COORDINATOR_GROUP = 'With the coordinator';
 export const HANDLING_TAG = 'Handling';
 export const HANDLED_TAG = 'Handled';
 export const SUPERSEDED_TAG = 'Superseded';
+/** The tag an item wears while a repair task filed for it is still live (board card-ui-polish D1). */
+export const FIXING_TAG = 'Fixing';
+export const BEING_FIXED_IN = 'Being fixed in';
+export const FIXING_NOTHING_FOR_YOU = 'In progress · nothing for you to do unless it fails.';
+
+/** The repair tasks still working on an item: any not DONE or CANCELLED, the server's own test
+ *  (`openItemRequiredAction`'s `hasLiveFix`), so the card and the sentence it replaces agree. */
+export function liveRepairs(row: Pick<ProjectOpenItemRow, 'handledBy'>): NonNullable<ProjectOpenItemRow['handledBy']> {
+  return (row.handledBy ?? []).filter((task) => task.state !== 'DONE' && task.state !== 'CANCELLED');
+}
 
 /**
  * What each exception card is called, by kind (§7.5, from mock 5).
@@ -561,7 +570,7 @@ function ItemLink({
 
 /** `POST /projects/:id/fuse/:episodeId/resume` — the owner's alone (§6.3 F-T4). An empty body
  *  resumes without raising anything, which is what the plain press means. */
-function resumeFuse(projectId: string, episodeId: string): Promise<unknown> {
+export function resumeFuse(projectId: string, episodeId: string): Promise<unknown> {
   return api(
     `/projects/${encodeURIComponent(projectId)}/fuse/${encodeURIComponent(episodeId)}/resume`,
     { method: 'POST', body: {} },
@@ -1394,7 +1403,14 @@ export function OpenItemCard({
       main={main}
     >
       {cardActions(row, currentPromotionId).length > 0 || (row.assignee === 'OWNER' && HAND_CLOSABLE_KINDS.has(row.kind))
-        ? <CardActions projectId={projectId} row={row} currentPromotionId={currentPromotionId} /> : null}
+        ? (
+          <CardActions
+            projectId={projectId}
+            row={row}
+            currentPromotionId={currentPromotionId}
+            quiet={liveRepairs(row).length > 0}
+          />
+        ) : null}
     </ItemCard>
   );
 }
@@ -1410,6 +1426,27 @@ function FactRow({ label, children }: { label: string; children: ReactNode }): J
       <span className="criteria-decision-k">{label}</span>
       <span className="criteria-decision-v">{children}</span>
     </div>
+  );
+}
+
+/** A row's paths: the first few, and the rest one press away — a delivery can name hundreds, and
+ *  unfolded they push everything after the card out of sight. */
+function PathList({ paths }: { paths: readonly string[] }): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const hidden = Math.max(0, paths.length - DETAIL_FILES_SHOWN);
+  const shown = open || hidden === 0 ? paths : paths.slice(0, DETAIL_FILES_SHOWN);
+  return (
+    <>
+      <span className="project-open-item-mono">{shown.join(' · ')}</span>
+      {hidden > 0 ? (
+        <>
+          {' '}
+          <button className="chat-more" onClick={() => setOpen((o) => !o)}>
+            {open ? 'Show less' : `Show ${hidden} more`}
+          </button>
+        </>
+      ) : null}
+    </>
   );
 }
 
@@ -1541,7 +1578,7 @@ function ItemFactRows({
         <FactRow label="Into">
           {folded?.projectName ? `${folded.projectName}’s branch ` : null}
           <span className="project-open-item-mono">
-            {folded ? shortRef(facts.targetRef) : facts.targetRef}
+            {folded ? shortRef(facts.targetRef) : facts.targetRef.replace(/^refs\/heads\//u, '')}
           </span>
           {facts.targetSha ? ` at ${facts.targetSha.slice(0, 7)}` : null}
           {facts.nothingLanded ? ' · nothing landed' : null}
@@ -1558,8 +1595,8 @@ function ItemFactRows({
               : null}
           </FactRow>
         ) : (
-          <FactRow label="Files">
-            <span className="project-open-item-mono">{facts.files.join(' · ')}</span>
+          <FactRow label={facts.files.length > DETAIL_FILES_SHOWN ? `Files (${facts.files.length})` : 'Files'}>
+            <PathList paths={facts.files} />
           </FactRow>
         )
       ) : null}
@@ -1569,11 +1606,9 @@ function ItemFactRows({
         <FactRow label="Its reason">{facts.review.argument ?? ''}</FactRow>
       ) : facts.review ? (
         <FactRow label="Declared">
-          <span className="project-open-item-mono">
-            {facts.review.declaredPaths.length > 0
-              ? facts.review.declaredPaths.join(' · ')
-              : 'no paths'}
-          </span>
+          {facts.review.declaredPaths.length > 0
+            ? <PathList paths={facts.review.declaredPaths} />
+            : <span className="project-open-item-mono">no paths</span>}
         </FactRow>
       ) : null}
       {facts.task && facts.files.length > 0 && !facts.review && !folded ? (
@@ -1914,10 +1949,14 @@ function CardActions({
   projectId,
   row,
   currentPromotionId,
+  quiet = false,
 }: {
   projectId: string;
   row: ProjectOpenItemRow;
   currentPromotionId?: string | null;
+  /** A repair task is already on it: nothing here is the reader's next step, so every door is a
+   *  quiet link with no consequence line (board card-ui-polish D1 = A). */
+  quiet?: boolean;
 }): JSX.Element {
   const actions = cardActions(row, currentPromotionId);
   // The pair in its own order — the step this kind is asking for, then the alternative beside it —
@@ -1926,7 +1965,7 @@ function CardActions({
   const leading = leadingDoors(row, actions);
   const [primary, secondary] = leading;
   const tierOf = (action: OpenItemAction): PressTier =>
-    action === primary ? 'primary' : action === secondary ? 'secondary' : 'link';
+    quiet ? 'link' : action === primary ? 'primary' : action === secondary ? 'secondary' : 'link';
   const ordered = [...leading, ...actions.filter((action) => !leading.includes(action))];
   const handClosable = row.assignee === 'OWNER' && HAND_CLOSABLE_KINDS.has(row.kind);
   const door = (action: OpenItemAction): JSX.Element => (
@@ -1942,12 +1981,12 @@ function CardActions({
         <ItemLink
           row={row}
           action={action}
-          primary={action === primary}
-          quiet={action !== primary}
+          primary={!quiet && action === primary}
+          quiet={quiet || action !== primary}
           currentPromotionId={currentPromotionId}
         />
       )}
-      <span className="project-open-item-consequence">{actionConsequence(row, action)}</span>
+      {quiet ? null : <span className="project-open-item-consequence">{actionConsequence(row, action)}</span>}
     </div>
   );
   return (
@@ -1956,7 +1995,7 @@ function CardActions({
       {handClosable ? (
         <div className="project-open-item-door" key="MARK_HANDLED">
           <MarkHandledPress row={row} projectId={projectId} />
-          <span className="project-open-item-consequence">{ACTION_CONSEQUENCES.MARK_HANDLED}</span>
+          {quiet ? null : <span className="project-open-item-consequence">{ACTION_CONSEQUENCES.MARK_HANDLED}</span>}
         </div>
       ) : null}
     </>
@@ -2004,7 +2043,14 @@ export function EscalatedItemCard({
   return (
     <ItemCard row={row} heading={heading} tone="owner" now={now} onChat={onChat} main={main}>
       {cardActions(row, currentPromotionId).length > 0 || (row.assignee === 'OWNER' && HAND_CLOSABLE_KINDS.has(row.kind))
-        ? <CardActions projectId={projectId} row={row} currentPromotionId={currentPromotionId} /> : null}
+        ? (
+          <CardActions
+            projectId={projectId}
+            row={row}
+            currentPromotionId={currentPromotionId}
+            quiet={liveRepairs(row).length > 0}
+          />
+        ) : null}
     </ItemCard>
   );
 }
@@ -2110,8 +2156,12 @@ function ItemCard({
   main?: string;
   children?: ReactNode;
 }): JSX.Element {
-  const tag = handlingTag(row);
-  const requiredAction = row.requiredAction?.trim() || row.detailLine?.trim()
+  const repairs = liveRepairs(row);
+  const fixing = repairs.length > 0;
+  const tag = handlingTag(row) ?? (fixing ? { text: FIXING_TAG, tone: 'handling' as const } : null);
+  // While a repair is live the server's sentence only says so, and the line below says it with a
+  // link to the task — one of the two is enough.
+  const requiredAction = fixing ? null : row.requiredAction?.trim() || row.detailLine?.trim()
     || (row.baseline ? null : REQUIRED_ACTION_FALLBACK);
   return (
     <div
@@ -2134,7 +2184,24 @@ function ItemCard({
         </span>
       </div>
       <div className="approval-body is-plan project-open-item-body">
-        {requiredAction || row.handledBy?.length || children ? <div className="project-open-item-next">
+        {fixing ? (
+          <div className="project-open-item-fixing">
+            <span className="project-open-item-fixing-spin" aria-hidden="true" />
+            <div>
+              <div>
+                {BEING_FIXED_IN}{' '}
+                {repairs.map((task, index) => (
+                  <span key={task.taskId}>
+                    {index > 0 ? ' · ' : ''}
+                    <Link to={`/tasks/${encodeURIComponent(encodeId(task.taskId))}`}>{task.title} ↗</Link>
+                  </span>
+                ))}
+              </div>
+              <div className="project-open-item-fixing-sub">{FIXING_NOTHING_FOR_YOU}</div>
+            </div>
+          </div>
+        ) : null}
+        {!fixing && (requiredAction || row.handledBy?.length || children) ? <div className="project-open-item-next">
           {requiredAction ? <p className="project-open-item-required-action">{requiredAction}</p> : null}
           {row.handledBy?.length ? (
             <p className="project-open-item-handled-by">
@@ -2150,7 +2217,12 @@ function ItemCard({
         </div> : null}
         <ItemFactRows row={row} heading={heading} />
         <ItemHandlingRows row={row} now={now} main={main} />
-        <ItemChatRow row={row} onChat={onChat} />
+        {fixing ? (
+          <div className="project-open-item-actions project-open-item-quiet-row">
+            {children}
+            <ItemChatRow row={row} onChat={onChat} />
+          </div>
+        ) : <ItemChatRow row={row} onChat={onChat} />}
       </div>
       <div className="project-open-item-foot">
         {tone === 'settled' ? settledLine(row, now) : ownerLine(row, now)}
@@ -2905,7 +2977,7 @@ export function isOwnerExceptionCard(row: ProjectOpenItemRow): boolean {
 }
 
 /**
- * Every open exception of this project, as cards, wherever a transcript wants them: the project's
+ * The owner’s exceptions for this project, as cards, wherever a transcript wants them: the project's
  * coordinator conversation draws these INTO its own turns, at the moment each one happened, and the
  * project page expands the same components (§7.5).
  *
@@ -2943,14 +3015,9 @@ export function exceptionCardRows(
  * the thing that stopped the project.
  */
 function ordered(items: ProjectOpenItemsView | undefined): ProjectOpenItemRow[] {
-  // The settled ones too (§4.7 H5): a card the conversation drew while the coordinator handled it
-  // stays at the moment it happened and says how it ended, rather than vanishing from under the
-  // reader the moment its rerun lands.
-  const all = [
-    ...(items?.needsYou ?? []),
-    ...(items?.withCoordinator ?? []),
-    ...(items?.settled ?? []),
-  ];
+  // Keep settled cards for items the owner could see before they ended.
+  const all = [...(items?.needsYou ?? []), ...(items?.settled ?? [])]
+    .filter((row) => row.assignee === 'OWNER');
   const paused = all.filter((row) => row.kind === 'FUSE_PAUSED');
   const rest = all
     .filter((row) => row.kind !== 'FUSE_PAUSED')
@@ -3260,13 +3327,12 @@ export function ProjectOpenItems({
     ...(doneRequest ? [doneRequest] : []),
     ...(items.data?.needsYou ?? []).filter((row) => row.kind !== 'FUSE_PAUSED' && row.kind !== 'DONE_REQUEST'),
   ];
-  const withCoordinator = items.data?.withCoordinator ?? [];
   const signIns = items.data?.signIns ?? [];
   const ownStart = start?.kind === 'own' && onStartProject ? onStartProject : null;
   const ownDone = items.data !== undefined && !doneRequest && onRecordDone ? onRecordDone : null;
   if (
     !projectId
-    || (paused.length + needsYou.length + signIns.length + withCoordinator.length === 0 && !ownStart && !ownDone)
+    || (paused.length + needsYou.length + signIns.length === 0 && !ownStart && !ownDone)
   ) return null;
 
   return (
@@ -3274,7 +3340,7 @@ export function ProjectOpenItems({
       <header className="project-open-items-head">
         <span className="project-open-items-title">{OPEN_ITEMS_HEADING}</span>
         <span className="project-open-items-hint">
-          {`${needsYou.length + signIns.length} need you · ${withCoordinator.length} with the coordinator · oldest first`}
+          {`${needsYou.length + signIns.length} need you · oldest first`}
         </span>
       </header>
       {paused.map((row) => (
@@ -3317,22 +3383,6 @@ export function ProjectOpenItems({
                 />
               ),
             )}
-          </ul>
-        </>
-      ) : null}
-      {withCoordinator.length > 0 ? (
-        <>
-          <div className="project-open-items-group">{WITH_COORDINATOR_GROUP}</div>
-          <ul className="project-open-items-list">
-            {withCoordinator.map((row) => (
-              <OpenItemRowView
-                key={row.itemId}
-                row={row}
-                now={now}
-                currentPromotionId={currentPromotionId}
-                main={main}
-              />
-            ))}
           </ul>
         </>
       ) : null}

@@ -1,5 +1,5 @@
 import { IsBoolean, IsInt, IsOptional, IsString, Length, Matches, Min } from 'class-validator';
-import type { ManagedRunnerWriteRequest } from '@orbit/shared';
+import type { ManagedRunnerUpdateNowRequest, ManagedRunnerWriteRequest } from '@orbit/shared';
 
 /**
  * The body of every managed runner write. It names no runner, workspace, PVC or node: the mapping
@@ -15,6 +15,16 @@ export class ManagedRunnerWriteDto implements ManagedRunnerWriteRequest {
   @IsInt()
   @Min(1)
   revision?: number;
+}
+
+/**
+ * The owner's Update Now (POST /api/managed-runner/update-now). It names no runner: the mapping is the caller's own.
+ * `interruptTurns` is the busy path's; this server refuses a busy runner whatever it says.
+ */
+export class ManagedRunnerUpdateNowDto implements ManagedRunnerUpdateNowRequest {
+  @IsOptional()
+  @IsBoolean()
+  interruptTurns?: boolean;
 }
 
 /**

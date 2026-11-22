@@ -25,6 +25,14 @@ const LAST_WORDS_LIMIT = 1_200;
  */
 export type RunStop = { turnId: string } | { engineTurnEndSeq: number };
 
+/**
+ * ORBIT_RUN_STOPPED_WAKE=off stops this producer on the replica: no TASK_RUN_STOPPED fact is written or delivered.
+ * Anything else, unset included, is on. Read per stop, so a restart is all it takes either way.
+ */
+export function runStoppedWakeOn(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.ORBIT_RUN_STOPPED_WAKE?.trim().toLowerCase() !== 'off';
+}
+
 const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -73,10 +81,12 @@ export function turnTypedByOwner(turn: { clientTurnId: string; senderSessionId: 
  * WHY IT GOES TO THE STANDING CONVERSATION
  * ========================================
  * `DEPENDENT_READY`'s reason: no exception to handle and no terminal to record, only a fact one
- * conversation can act on and nothing re-derives. `queue` rather than `deliver`, because a coordinator
+ * conversation can act on and no later task edge necessarily re-derives. `queue` rather than
+ * `deliver`, because a coordinator
  * still holding an unread message is no reason to lose this one. It is refused like every delivery on
  * that carrier when there is no conversation to tell, and the run stays where it is, saying what it
- * said, on the owner's page.
+ * said, on the owner's page. A paused conversation keeps the wake as a queued fact;
+ * `CoordinatorFactQueueService` re-derives it on recovery without waiting for another stop.
  *
  * Post-commit, like every producer here: the fact is read from what the turn's completion committed.
  */
@@ -88,13 +98,14 @@ export class TaskRunStoppedProducer {
     private readonly deliveries: CoordinatorDeliveryService,
   ) {}
 
-  /** Null when this stop justifies no fact, which is the ordinary answer. */
+  /** Null when this stop justifies no fact, which is the ordinary answer, or when the deployment switched it off. */
   async afterStop(sessionId: string, stop: RunStop): Promise<CoordinatorDeliveryOutcome | null> {
+    if (!runStoppedWakeOn()) return null;
     const fact = await this.factFor(sessionId, stop);
-    return fact ? this.deliveries.queue(fact, this.authorize) : null;
+    return fact ? this.deliveries.queue(fact, this.authorize, { holdWhilePaused: true }) : null;
   }
 
-  private async factFor(sessionId: string, stop: RunStop): Promise<WakeFact | null> {
+  async factFor(sessionId: string, stop: RunStop): Promise<WakeFact | null> {
     const run = await this.prisma.session.findFirst({
       where: {
         id: sessionId,

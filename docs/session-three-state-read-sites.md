@@ -8,6 +8,14 @@ plus the sites the readers added by hand; comment lines are included.
 
 ## A. Database objects live at HEAD
 
+Confirmed against the catalog of a Postgres 16 database with every migration applied (plan
+step 0.4, 2026-11-19, at `ae4d62ebd0`): `../scripts/session-status-db-objects.sql` lists the
+same 16 objects and nothing else. No CHECK constraint, view or generated column reads the
+status or `end_reason`; the only partial index that does is the claim index. The triggers
+`session_request_asker_stopped` (function in 0352:63) and
+`task_owner_confirmation_review_reviewer_ended` read the status in their WHEN clauses only;
+their functions do not. Line numbers stay at `a1282659a4`.
+
 | Object defined in | Lines | R/W | Facts | After | What it does with the status |
 |---|---|---|---|---|---|
 | `apiserver/prisma/migrations/0035_add_parked_run_status/migration.sql` | 7 | R | WIRE | RENAME | Enum type run_status: PENDING, RUNNING, SUCCEEDED, FAILED, CANCELLED, AWAITING_INPUT, INTERRUPTED, PARKED (dead label). Only session.status uses it; default PENDING. Labels cannot be dropped. |
@@ -26,7 +34,7 @@ plus the sites the readers added by hand; comment lines are included.
 | `apiserver/prisma/migrations/0426_cursor_engine/migration.sql` | 284, 323 | R | ACT, REL | MOVE | Function guard_cursor_runner_acquisition, trigger on session: gates PENDING to RUNNING and lease takeover on runner cursor capability; same SUCCEEDED, FAILED, CANCELLED to PENDING revive exemption. |
 | `apiserver/prisma/migrations/0507_confirmation_review_waits_for_pickup/migration.sql` | 5 | R | REL, TURN, CAUSE, LIFE | MOVE | Trigger task_owner_confirmation_review_reviewer_ended WHEN SUCCEEDED, CANCELLED, or FAILED/INTERRUPTED with end_reason: stamps reviewer_ended_at on an unanswered confirmation review. |
 | `apiserver/prisma/migrations/0610_project_handoff_move_out/migration.sql` | 44 | R | REL | MOVE | Function task_claimed_project_move_guard (trigger 0122:404 on task): moving a task to another project needs an approved handoff while a session in PENDING, RUNNING, AWAITING_INPUT, INTERRUPTED holds it. |
-| `apiserver/prisma/schema.prisma` | 2090, 2529, 2533, 2536, 2538-2539 | R | WIRE | MOVE | Enum RunStatus (7 values, PARKED omitted), Session.status default PENDING, endReason, cancelRequestedAt, finishedAt, five plain indexes with status as a key column. Cannot express the partial unique index. |
+| `apiserver/prisma/schema.prisma` | 16, 2057, 2088, 2090, 2098, 2529, 2533, 2536, 2538-2539 | R | WIRE | MOVE | Enum RunStatus (7 values, PARKED omitted), Session.status default PENDING, cancelRequestedAt, finishedAt, endReason, five plain indexes with status as a key column (session_status_idx and the assigned_runner_id, batch_id, root_session_id and owner_id/task_id ones). Cannot express the partial unique index. |
 
 ## B. apiserver: sessions, realtime, queue, runners, managed-runners
 
@@ -37,6 +45,7 @@ plus the sites the readers added by hand; comment lines are included.
 | `apiserver/src/queue/dispatch-pause.service.ts` | 37, 109, 120 | R | ACT, REL | RENAME | Raw SQL: in-flight and held turns of open-status sessions, and runners with PENDING sessions to hint when dispatch resumes. |
 | `apiserver/src/queue/queue.service.ts` | 241, 367, 456, 469, 518, 530, 686, 734, 771, 773, 1214 | RW | ACT, ENDING, RETRY | MOVE | The claim: raw SQL PENDING to RUNNING, RUNNING slot counts and replay, RUNNING back to PENDING; holds PENDING rows; must skip a quota hold. |
 | `apiserver/src/realtime/realtime.service.ts` | 15-18, 23-27, 29, 39, 234-236, 238-241, 243, 245-249, 252-254, 257-260, 374, 1001-1002, 1231-1233, 1235, 1243-1247, 1563-1565, 1567, 1569-1575, 1577-1585, 1589-1593, 1673, 1683, 1687, 1690, 1729-1733, 1737, 1755-1760, 1820, 1848, 1870-1871, 1956-1957, 1988-1990, 2083-2084, 2098, 2127, 2130-2131, 2139 | R | WIRE, REL, TURN, ENDING, CAUSE, LIFE, RETRY | MOVE, COMPAT | Builds session summary and legacy session.ended payloads; final STATUS drives push; merge/commit drains pick lease owner or terminal; cancel drain reads finishedAt. |
+| `apiserver/src/realtime/lost-runner-work.ts` | 70, 97, 108-109, 112 | RW | ACT, REL, WORK | SAME | Added in plan step 1.7, after this inventory: under the session's row lock, settles an open session that holds no slot (`sessionHoldsSlot`) but is executing (`isSessionExecuting`) on a lost runner; clears its running-work sets and leaves the status. |
 | `apiserver/src/realtime/reaper.service.ts` | 2, 6-7, 9, 197, 199, 204, 264, 424, 438-439, 486, 488, 494-495, 501, 506-507, 517, 519, 530, 533, 535, 561, 609, 618, 634, 644, 648, 660, 669, 824, 830, 850-851, 854, 881-882, 887, 890, 895-897, 956, 1018, 1021, 1026, 1029, 1031, 1041-1042, 1047, 1050-1052, 1075, 1078, 1080 | RW | REL, TURN, WORK, ENDING, CAUSE, RETRY, LIFE | MOVE | Sweeps non-terminal sessions; force-finalizes to FAILED/CANCELLED/SUCCEEDED, arms retry, reclaims task, drains turns; ends parked sessions of terminal tasks. |
 | `apiserver/src/runners/attention-fix.ts` | 79, 86 | R | REL, LIFE | MOVE | Not in area list. Dedup of machine fix sessions: a non-terminal, unfiled session holds the warning; a terminal one frees a new press. |
 | `apiserver/src/runners/runner-background-holders.ts` | 78-79 | R | ACT, REL | MOVE | Not in area list. Runner running-session count: RUNNING sessions plus open-status sessions its heartbeat names as holding background jobs. |

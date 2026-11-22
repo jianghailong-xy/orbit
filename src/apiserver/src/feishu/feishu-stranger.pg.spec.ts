@@ -50,8 +50,7 @@ const MALLORY = 'ou_mallory';
 
 /** The sentences §7.3 and §7.4 prescribe, spelled out here rather than imported, so the spec pins the words themselves. */
 const STRANGER_DM = 'This bot only takes direct messages from its owner.';
-const NO_OWNER_DM =
-  'This bot has no owner yet. To become its owner, generate a code in Orbit (Settings → Feishu → Connect your Feishu account) and send it here.';
+const NO_OWNER_DM = "This bot isn't set up yet.";
 const STRANGER_CARD = { toast: { type: 'error', content: 'Only the owner of this bot can answer this card.' } };
 
 async function until<T>(what: string, probe: () => Promise<T> | T, ms = 30_000): Promise<NonNullable<T>> {

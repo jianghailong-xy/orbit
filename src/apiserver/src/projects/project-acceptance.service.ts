@@ -47,7 +47,12 @@ import {
 } from './coordinator-authority';
 import { VERIFICATION_METHOD_RUNGS } from './criteria-edit-classification';
 import { NO_REOPEN_RECORD } from './project-done-derived';
-import { defaultStartLine, startProjectLine, type StartLineSettings } from './project-integration-line';
+import {
+  defaultStartLine,
+  startLandingCheckWriter,
+  startProjectLine,
+  type StartLineSettings,
+} from './project-integration-line';
 import { tellCoordinatorProjectStarted } from './project-started';
 import { START_REQUEST_KIND, answerStartRequests } from './project-start-request';
 import {
@@ -434,9 +439,9 @@ export class ProjectAcceptanceService {
     }
     const requestId = input.requestId ?? null;
     return withTransactionRetry(this.prisma, async (tx) => {
-      const [project] = await tx.$queryRaw<Array<{ status: ProjectStatus; non_code: boolean }>>(
+      const [project] = await tx.$queryRaw<Array<{ status: ProjectStatus }>>(
         Prisma.sql`
-        SELECT "status", "non_code"
+        SELECT "status"
           FROM "project"
          WHERE "id" = ${projectId}::uuid AND "owner_id" = ${ownerId}::uuid
            FOR NO KEY UPDATE`);
@@ -486,12 +491,9 @@ export class ProjectAcceptanceService {
       const findings = requestId === null
         ? doneReadiness(await readDoneState(tx, ownerId, projectId, null), [])
         : [];
-      // A project marked non-code reads no landing (0535), so it stores no landing gap either: the
-      // check above finds none, and one a card read before the mark was set is not kept.
-      const given = project.non_code
-        ? input.acceptedGaps.filter((gap) => gap.finding?.code !== 'DONE_CRITERION_UNLANDED')
-        : input.acceptedGaps;
-      const acceptedGaps = [...given, ...findings.map((finding) => ({
+      // The non-code mark (0535) is not read (§12.15 P-M3): the gaps the owner accepted are kept as
+      // given, and a project whose work delivered no commit has no landing gap to accept.
+      const acceptedGaps = [...input.acceptedGaps, ...findings.map((finding) => ({
         criterionKey: finding.criterion?.key ?? `project:${projectId}`,
         scope: finding.criterion ? 'CRITERION' as const : 'PROJECT' as const,
         title: finding.message,
@@ -573,7 +575,7 @@ export class ProjectAcceptanceService {
     await this.assertProject(ownerId, projectId);
 
     const asked: ProjectStartSettings & Pick<StartLineSettings, 'deliveryMode'> = {
-      line: input.line,
+      ...(input.line !== undefined ? { line: input.line } : {}),
       ...(input.projectBranchName !== undefined ? { projectBranchName: input.projectBranchName } : {}),
       ...(input.upstreamRef !== undefined ? { upstreamRef: input.upstreamRef } : {}),
       automatic: input.automatic,
@@ -672,12 +674,19 @@ export class ProjectAcceptanceService {
 
       const suggested = (request?.payload as unknown as ProjectStartRequest | undefined)?.settings;
       const asked = await settingsFor(tx, project);
-      const line = await startProjectLine(tx, { ownerId, projectId, settings: asked });
+      // The landing check the owner started with as the coordinator proposed it stays the
+      // coordinator's to change; one the owner wrote on the card, or with no request, is theirs.
+      const line = await startProjectLine(tx, {
+        ownerId,
+        projectId,
+        settings: asked,
+        landingCheckWriter: startLandingCheckWriter(asked, suggested),
+      });
       // The main branch is recorded when the start or the request it answers named one — the
       // branch the project stands on now, so a choice a locked line kept out reads as a difference.
       const upstreamNamed = asked.upstreamRef !== undefined || suggested?.upstreamRef !== undefined;
       const settings: ProjectStartSettings = {
-        line: line.line,
+        ...(line.line !== undefined ? { line: line.line } : {}),
         ...(line.projectBranchName !== undefined ? { projectBranchName: line.projectBranchName } : {}),
         ...(upstreamNamed && line.upstreamRef !== undefined
           ? { upstreamRef: line.upstreamRef }

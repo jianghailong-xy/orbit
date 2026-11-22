@@ -62,6 +62,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
+import { settleDeliveredIdentityAfterFinish } from './project-integration-job';
 
 /**
  * Exception items (docs/project-integration-line-contract.md §4): a task FAILED from any door opens
@@ -656,13 +657,20 @@ async function queuedLanding(
   // `task-landing-races-final-commit.pg.spec.ts` — a landing judged earlier answers ALREADY_LANDED
   // about a branch that is about to grow). The status is left as it was: what the queue reads is
   // the finish and where HEAD ended, and this spec's cases are about the items a landing opens.
-  await stack.db.session.update({
-    where: { id: a.sessionId },
-    data: {
-      finishedAt: new Date(),
-      worktreeBranch: `orbit/${label}`,
-      worktreeDirty: false,
-    },
+  await stack.db.$transaction(async (tx) => {
+    // The finish settles the DONE's delivered identity in the transaction that writes it, as every
+    // finish door does — and decides the route a DONE written while this work moved left to it
+    // (§10.5 O-L4 3, §12.15 P-M1).
+    const finished = await tx.session.update({
+      where: { id: a.sessionId },
+      data: {
+        finishedAt: new Date(),
+        worktreeBranch: `orbit/${label}`,
+        worktreeDirty: false,
+      },
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
   });
   return a;
 }
@@ -1389,13 +1397,20 @@ test('a claim with nowhere to run it opens an item the coordinator is told about
     // The session that produced this branch has stopped moving, as in `claimedLanding`: a landing is
     // not handed over before the runner's finalize records it (J-T1a, `landingWorkHasSettled`), and
     // this case is about the other reason a claim ends where it was made.
-    await stack.db.session.update({
-      where: { id: a.sessionId },
-      data: {
-        finishedAt: new Date(),
-        worktreeBranch: 'orbit/unworkable',
-        worktreeDirty: false,
-      },
+    await stack.db.$transaction(async (tx) => {
+      // The finish settles the DONE's delivered identity in the transaction that writes it, as every
+      // finish door does — and decides the route a DONE written while this work moved left to it
+      // (§10.5 O-L4 3, §12.15 P-M1).
+      const finished = await tx.session.update({
+        where: { id: a.sessionId },
+        data: {
+          finishedAt: new Date(),
+          worktreeBranch: 'orbit/unworkable',
+          worktreeDirty: false,
+        },
+        select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+      });
+      await settleDeliveredIdentityAfterFinish(tx, finished);
     });
 
     const claimed = await stack.jobs.dispatch({
@@ -2300,9 +2315,12 @@ async function escalate(stack: Stack, w: World, a: Attempt): Promise<ItemRow> {
     Prisma.sql`UPDATE "project_open_item" SET "escalate_at" = now() - interval '1 minute'
                 WHERE "id" = ${opened.id}::uuid`,
   );
+  // A live coordinator retains a taken ITEM; exercise escalation with Automatic switched off.
+  await stack.db.project.update({ where: { id: w.projectId }, data: { coordinatorEnabled: false } });
   const swept = await new ProjectOpenItemEscalationService(
     stack.db as unknown as PrismaService,
   ).sweep();
+  await stack.db.project.update({ where: { id: w.projectId }, data: { coordinatorEnabled: true } });
   assert.deepEqual(swept.map((row) => row.itemId), [opened.id]);
   const item = (await items(stack.db, w.projectId)).find((row) => row.id === opened.id)!;
   assert.equal(item.assignee, 'OWNER');
@@ -2706,10 +2724,6 @@ test('hands it back with the window restarted, and queues it on the coordinator 
       const a = await attempt(stack, w, 'return-back', { taskStatus: TaskStatus.IN_PROGRESS });
       await failTurn(stack, w, a);
       const before = await escalate(stack, w, a);
-      const project = await stack.db.project.findUniqueOrThrow({
-        where: { id: w.projectId },
-        select: { exceptionEscalationSeconds: true },
-      });
 
       const returned = await stack.openItems.returnToCoordinator(w.ownerId, w.projectId, before.id);
       assert.equal(returned.assignee, 'COORDINATOR');
@@ -2724,12 +2738,9 @@ test('hands it back with the window restarted, and queues it on the coordinator 
         after.assignedAt.getTime() > before.assignedAt.getTime(),
         'the assignment moved, which is what makes the delivery a new turn',
       );
-      // The clock the project set, restarted rather than kept: the two hours it already spent
-      // are the ones that ran out (§4.6 X-E2).
-      assert.equal(
-        after.escalateAt!.getTime() - after.waitingSince.getTime(),
-        project.exceptionEscalationSeconds * 1_000,
-      );
+      // A fresh assignment waits for pickup before starting a new window.
+      assert.equal(after.escalateAt, null);
+      assert.equal(returned.escalateAt, null);
 
       const turns = await itemTurns(stack.db, w.coordinatorSessionId!);
       const fresh = turns.filter(

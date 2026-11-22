@@ -72,6 +72,7 @@ import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.composer.CursorRuntime
 import io.orbitd.android.composer.FollowManagedRunner
 import io.orbitd.android.composer.MachineSetupCopy
+import io.orbitd.android.composer.NewWorkspaceCopy
 import io.orbitd.android.composer.ManagedRunner
 import io.orbitd.android.composer.ManagedRunnerIdentity
 import io.orbitd.android.composer.ManagedRunnerNotice
@@ -81,6 +82,7 @@ import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitRoute
 import io.orbitd.android.navigation.Origin
+import io.orbitd.android.navigation.newWorkspaceRoute
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -609,6 +611,17 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                         WorktreeIsolationSwitch(api, workspace, reload = { model.load() }, failed = notice::show)
                     }) { openWorkspace(workspace.text("id")) }
                 }
+                // One more workspace on this machine (docs/mocks/new-workspace-form/02-apple-entry, owner A). With none yet, Start a
+                // session above is the way to its first.
+                if (workspaces.isNotEmpty()) {
+                    HorizontalDivider()
+                    Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { open(newWorkspaceRoute(id, hasWorkspace = true, Origin.LIST)) }
+                        .padding(vertical = 10.dp).testTag("machine-new-workspace"),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Icon(painterResource(R.drawable.ic_add_circle), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                        Text(NewWorkspaceCopy.NEW_WORKSPACE, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
             }
             FormSection(RunnerCopy.ABOUT, footer = if (runner.bool("runsAsRoot") == true) RunnerCopy.ROOT_NO_BYPASS else null) {
                 Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { open(OrbitRoute(Destination.RUNNER, id, recordId = "name")) }.padding(vertical = 10.dp),
@@ -952,6 +965,10 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
     var renaming by remember { mutableStateOf<RunnerPage.AccountLine?>(null) }
     var removing by remember { mutableStateOf<RunnerPage.AccountLine?>(null) }
     var pausing by remember { mutableStateOf<RunnerPage.AccountLine?>(null) }
+    // Set as default (Claude Code, added accounts): the runner swaps that login with the one in ~/.claude, after any turn in progress on
+    // either account ends. One swap per runner at a time; busy from the press until the list says where it stands.
+    var settingDefault by remember { mutableStateOf<RunnerPage.AccountLine?>(null) }
+    var swapPressing by remember(id, engine) { mutableStateOf(false) }
     fun show(failure: String?) { failure?.let(notice::show) }
     fun closeSignIn() { signingIn = null; landedHere = null; scope.launch { model.load() } }
     // Said for a moment, then read again now rather than on the next pass.
@@ -1037,6 +1054,8 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
                             foldsBack = signingIn == line.id && landedHere == line.id && line.auth == "yes" && RunnerPage.loginExpiresLine(line, now) == null,
                             signIn = { signingIn = line.id }, close = ::closeSignIn, landed = { landed(line.id) },
                             rename = { renaming = line }, remove = { removing = line }, pause = { pausing = line },
+                            setDefault = if (RunnerPage.offersSetDefault(engine, line)) { { settingDefault = line } } else null,
+                            setDefaultBlocked = RunnerPage.setDefaultBlocked(runner, offline, swapPressing),
                             resume = { scope.launch { show(pause(line, null)) } }, openSession = ::openSession)
                     }
                     // A Default removed from Orbit ends the accounts that remain, with the way back.
@@ -1119,6 +1138,19 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
             } }) { Text("Remove", color = Ink.red) } },
             dismissButton = { TextButton(onClick = { removing = null }) { Text("Cancel") } })
     }
+    settingDefault?.let { line ->
+        val question = health?.let { RunnerPage.setDefaultQuestion(runner, it, line) }
+        if (question != null) AlertDialog(onDismissRequest = { settingDefault = null }, title = { Text(question.first) }, text = { Text(question.second) },
+            confirmButton = { TextButton(onClick = { settingDefault = null; scope.launch {
+                swapPressing = true
+                model.press { api.post("runners/$id/accounts/$engine/${line.id}/set-default") }?.let {
+                    notice.show("${RunnerAccountCopy.setDefaultFailed(line.name)} — $it")
+                    model.load()
+                }
+                swapPressing = false
+            } }) { Text(RunnerAccountCopy.SET_DEFAULT_CONFIRM) } },
+            dismissButton = { TextButton(onClick = { settingDefault = null }) { Text("Cancel") } })
+    }
     pausing?.let { line -> AccountPauseDialog(line.name, PAUSE_SCOPE, onDismiss = { pausing = null }) { minutes -> pause(line, minutes) } }
 }
 
@@ -1175,14 +1207,16 @@ private const val PAUSE_SCOPE = "Personal account · This runner. Paused session
  * One account: its name — NEXT beside it where a new session starts on it ([next]) — and where it lives, where it stands,
  * its windows — a login about to lapse, a pause, what being signed out costs — and its way (back) in where it is out. Its
  * presses are its ⋯ menu's (the swipe iOS gives it): Rename…, Sign In Again, Pause… or Resume Now and Change Duration…,
- * Remove… where it is [removable] — an added one, and Default while another account stays. None reach an offline machine but
+ * Set as default on an added Claude Code account ([setDefault]), Remove… where it is [removable] — an added one, and Default
+ * while another account stays. None reach an offline machine but
  * Rename…, the pause and Default's Remove…, which Orbit keeps.
  */
 @Composable
 private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, line: RunnerPage.AccountLine, offline: Boolean, now: Long,
                        signingIn: Boolean, next: Boolean, canPause: Boolean, alone: Boolean, removable: Boolean, foldsBack: Boolean, signIn: () -> Unit,
                        close: () -> Unit, landed: () -> Unit, rename: () -> Unit, remove: () -> Unit, pause: () -> Unit, resume: () -> Unit,
-                       openSession: (String) -> Unit, regionBlocked: Boolean = false) {
+                       openSession: (String) -> Unit, regionBlocked: Boolean = false, setDefault: (() -> Unit)? = null,
+                       setDefaultBlocked: String? = null) {
     val windows = RunnerPage.accountWindows(runner, engine, line.id)
     val removal = RunnerPage.removal(runner.obj("accountRemove"), engine, line.id)
     val paused = RunnerPage.isPaused(line.pausedUntil, now)
@@ -1219,6 +1253,13 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
                             DropdownMenuItem(text = { Text(AccountCopy.CHANGE_DURATION) }, onClick = { menu = false; pause() })
                         } else if (line.auth == "yes") DropdownMenuItem(text = { Text(AccountCopy.PAUSE) }, onClick = { menu = false; pause() })
                     }
+                    // What it does under its name, or why it can't be chosen now.
+                    if (setDefault != null) DropdownMenuItem(text = {
+                        Column {
+                            Text(RunnerAccountCopy.SET_DEFAULT)
+                            Text(setDefaultBlocked ?: RunnerAccountCopy.SET_DEFAULT_HINT, style = MaterialTheme.typography.labelSmall, color = Ink.muted)
+                        }
+                    }, enabled = setDefaultBlocked == null, modifier = Modifier.testTag("account-set-default"), onClick = { menu = false; setDefault() })
                     if (removable) {
                         // Default comes off Orbit's list, not the machine: nothing goes to the runner, so it is offered offline too.
                         val enabled = line.isDefault || !offline
@@ -1252,6 +1293,18 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
         // Under way, and waiting on the sessions it moved to another account to leave this one.
         RunnerPage.movingLine(runner.obj("accountRemove"), engine, line.id)?.let {
             Text(it, Modifier.testTag("account-moving"), style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+        }
+        // Becoming the Default: said under the account, as a removal's move is, until the swap is done.
+        RunnerPage.settingDefaultLine(runner, line)?.let {
+            Text(it, Modifier.testTag("account-setting-default"), style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+        }
+        // The machine could not swap the logins, and put both back: its reason, as a refused removal's.
+        RunnerPage.failedSwap(runner, line)?.let { failed ->
+            Column(Modifier.testTag("account-swap-failed")) {
+                Text(RunnerAccountCopy.setDefaultFailed(line.name), style = MaterialTheme.typography.labelMedium, color = Ink.red)
+                failed.str("message")?.takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.red) }
+                Text(RunnerAccountCopy.SET_DEFAULT_UNCHANGED, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+            }
         }
         // Refused over sessions running in it: those sessions, each a way to it, in place of the machine's sentence.
         val inUse = RunnerPage.inUseSessions(runner.obj("accountRemove"), engine, line.id)

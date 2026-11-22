@@ -43,6 +43,13 @@ var agentPrimerHashes = map[string]string{
 	// session-create-allowance.ts, 2026-11-19); "a provider change or an agent change" became "a provider or
 	// agent change" and "what you are about to create" "what you will create", to stay in the byte budget.
 	"1.4.2": "5e18f70ef459f0f1afcf68aaa64890089ac70a1c58c174e163e5611c8dda3988",
+	// 1.4.3: "first 7 tasks" became "first few tasks": the number is the account's cardFreeTaskCreates, 8 by
+	// default (2026-11-20), and task_create / task_create_batch say so.
+	"1.4.3": "c3448ac46513b451f958748518b6e6a0cfdacb7a5d02b4083167ed2ebec35eb9",
+	// 1.4.4: a paragraph for settings from a conversation (docs/settings-from-conversation-design.md §7): call
+	// settings_get, then settings_propose, and link the row a refused key returns. The primer's budget went from 3,200
+	// to 3,456 bytes and the engine instructions' from 7,424 to 7,680 to hold it (owner, 2026-11-20).
+	"1.4.4": "a96eda93645d97fa5b8b8cea9508b86dc3d57bd3bdb59246c1b20b1cb1174df9",
 }
 
 // The snapshots: the primer exactly as `initialize` sends it, and the four shapes of the instructions

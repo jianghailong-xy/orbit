@@ -149,7 +149,8 @@ final class SubagentBlockTests: XCTestCase {
             let block = SubagentBlock.describe(input: call, run: run(status: status, changedFiles: ["a.ts"]),
                                                status: .ok, result: "partial")
             XCTAssertEqual(block.outcome, word)
-            XCTAssertTrue(block.outcomeIsFailure)
+            // A stop is no failure: grey, not red (board docs/mocks/subagent-card-and-end-line D1).
+            XCTAssertEqual(block.outcomeIsFailure, status != "STOPPED")
         }
     }
 

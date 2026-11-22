@@ -12,6 +12,7 @@ import { PublicIdInterceptor } from '../common/public-id.interceptor';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import { SubagentRoutingReportService } from './subagent-routing-report.service';
 import { TaskModelRoutingReportController } from './task-model-routing-report.controller';
 import { TaskModelRoutingReportService, type ModelRoutingReportGroup } from './task-model-routing-report.service';
 
@@ -42,7 +43,7 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
   // Both accounts have smart model selection on, as an account whose runs were routed has.
   for (const id of [owner, otherOwner]) {
     await db.user.create({
-      data: { id, email: `${id}@routing-report.invalid`, name: 'report', passwordHash: 'h', preferences: { modelRouting: true } },
+      data: { id, email: `${id}@routing-report.invalid`, name: 'report', passwordHash: 'h', preferences: { modelRouting: true, optimizeFor: 'cost' } },
     });
   }
   const agent = await db.workspace.create({ data: { ownerId: owner, name: 'first agent' } });
@@ -207,7 +208,7 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
   @Module({
     imports: [JwtModule.register({ secret: 'routing-report-spec' })],
     controllers: [TaskModelRoutingReportController],
-    providers: [TaskModelRoutingReportService, JwtAuthGuard, { provide: PrismaService, useValue: db }],
+    providers: [TaskModelRoutingReportService, SubagentRoutingReportService, JwtAuthGuard, { provide: PrismaService, useValue: db }],
   })
   class ReportModule {}
   app = await NestFactory.create(ReportModule, { logger: false, abortOnError: false });

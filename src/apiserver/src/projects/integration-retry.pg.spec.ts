@@ -51,7 +51,7 @@ import { CoordinatorWakeService } from './coordinator-wake.service';
 import { CriterionReadyProducer } from './criterion-ready.producer';
 import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
 import { INTEGRATION_JOB_CLAIM, PROMOTION_AUTOMATIC_LAND, shortBranchName } from './project-integration-job';
-import { ProjectOpenItemEscalationService } from './open-item-escalation.service';
+import { escalatesAt, ProjectOpenItemEscalationService } from './open-item-escalation.service';
 import { configureProjectIntegration } from './project-integration-line';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectIntegrationRetryController } from './project-integration-retry.controller';
@@ -61,6 +61,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
+import { settleDeliveredIdentityAfterFinish } from './project-integration-job';
 
 /**
  * `integration_retry` (docs/project-integration-line-contract.md §2.3 J-T1b): a project's coordinator
@@ -358,11 +359,18 @@ async function doneTask(
   assert.equal(await taskStatus(stack.db, declared.id), TaskStatus.DONE, 'the acceptance command agreed');
   // The runner commits the worktree when it FINISHES the session (SR13), and a landing is not handed
   // over before that (J-T1a): what the queue reads is the finish and where HEAD ended.
-  await stack.db.session.update({
-    where: { id: sessionId },
-    data: worktree
-      ? { finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false }
-      : { finishedAt: new Date() },
+  await stack.db.$transaction(async (tx) => {
+    // The finish settles the DONE's delivered identity in the transaction that writes it, as every
+    // finish door does — and decides the route a DONE written while this work moved left to it
+    // (§10.5 O-L4 3, §12.15 P-M1).
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: worktree
+        ? { finishedAt: new Date(), worktreeBranch: branch, worktreeDirty: false }
+        : { finishedAt: new Date() },
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
   });
   return { taskId: declared.id, title, sessionId, turnId, branch };
 }
@@ -1225,6 +1233,44 @@ test('not Automatic: the failure is the owner\'s and the coordinator is refused 
     }
   });
 
+test('a taken unanswered exception survives an owner-card wait beyond the window and permits integration_retry',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'retry-owner-card-wait');
+      const { task } = await failedLanding(stack, w, 'retry-owner-card-wait');
+      const [item] = await itemsOf(stack.db, task.taskId);
+      await stack.openItems.deliverForItems([item!.id]);
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.RUNNING } });
+      const handed = await dequeue(stack, w.coordinatorSessionId, w.runnerId);
+      assert.ok(handed);
+      const turn = await stack.db.conversationTurn.findUniqueOrThrow({ where: { id: handed.turnId } });
+      assert.ok(turn.clientTurnId.startsWith(`open-item:v1:${item!.id}:`));
+      assert.equal(turn.status, 'IN_FLIGHT');
+      assert.ok(turn.deliveredAt);
+      assert.equal(turn.answeredAt, null);
+      // The same turn remains blocked on an owner confirmation card for three hours.
+      await stack.db.$executeRaw(Prisma.sql`
+        UPDATE project_open_item SET waiting_since = waiting_since - interval '3 hours',
+          escalate_at = escalate_at - interval '3 hours' WHERE id = ${item!.id}::uuid`);
+      await stack.db.$executeRaw(Prisma.sql`
+        UPDATE conversation_turn SET delivered_at = delivered_at - interval '3 hours'
+        WHERE id = ${turn.id}::uuid`);
+      const [clock] = await stack.db.$queryRaw<Array<{ at: Date | null }>>(Prisma.sql`
+        SELECT ${escalatesAt('item')} AS at FROM project_open_item item WHERE id = ${item!.id}::uuid`);
+      assert.equal(clock!.at, null);
+      assert.deepEqual(await new ProjectOpenItemEscalationService(stack.db as unknown as PrismaService).sweep(), []);
+      const retried = await retry(stack, w, task.taskId, REASON);
+      assert.equal(retried.generation, 2);
+      assert.deepEqual(retried.handlingItemIds, [item!.id]);
+      const stillRunning = await stack.db.conversationTurn.findUniqueOrThrow({ where: { id: turn.id } });
+      assert.equal(stillRunning.status, 'IN_FLIGHT');
+      assert.equal(stillRunning.answeredAt, null);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
 test('escalated: a failure that went to the owner on the clock is theirs, and the coordinator is refused',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
@@ -1233,6 +1279,8 @@ test('escalated: a failure that went to the owner on the clock is theirs, and th
       const { task } = await failedLanding(stack, w, 'retry-escalated');
       const [item] = await itemsOf(stack.db, task.taskId);
       await receiveOpenItem(stack.db, item!.id);
+      // A taken item only escalates after its coordinator can no longer carry it.
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED } });
       await stack.db.$executeRaw(
         Prisma.sql`UPDATE "project_open_item" SET "escalate_at" = now() - interval '1 minute'
                     WHERE "id" = ${item!.id}::uuid`,

@@ -26,7 +26,8 @@ import (
 // Two more things arrive on a runner's subject (live.go): a WatchersHint, which counts one apiserver instance's
 // watchers of a session (the Orbit-Instance header names the instance) and is summed across instances before the
 // runner is told, and a turn prefix request, a Frame with only turn_prefix_request set, which comes with a reply
-// subject and is relayed to the runner. A StreamOpen request comes the same way (streams.go).
+// subject and is relayed to the runner. A StreamOpen request comes the same way (streams.go), and so does a
+// BackgroundJobTailRequest (bgtail.go).
 //
 // The gateway connects as its own NATS user, with the nkey seed in LINK_NATS_SEED (nkey.go, nats.conf).
 
@@ -186,6 +187,10 @@ func (h *hintRelay) deliver(runnerID string, msg *nats.Msg) {
 	err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(data, &f)
 	if err == nil && f.GetTurnPrefixRequest() != nil {
 		h.g.relayPrefixRequest(runnerID, f.GetTurnPrefixRequest(), msg.Reply)
+		return
+	}
+	if err == nil && f.GetBackgroundJobTailRequest() != nil {
+		h.g.relayTailRequest(runnerID, f.GetBackgroundJobTailRequest(), msg.Reply)
 		return
 	}
 	if err == nil && f.GetStreamOpen() != nil {

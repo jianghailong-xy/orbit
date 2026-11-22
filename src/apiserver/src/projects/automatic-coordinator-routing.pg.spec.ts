@@ -692,14 +692,17 @@ test('a review ends when its task is sent back, cancelled or replaced, and one n
       assert.equal(row.resolvedBy, 'PLATFORM');
     });
 
-    await t.test('a review nobody acts on goes to the owner when its window runs out', async () => {
+    await t.test('a review goes to the owner after its window when Automatic is switched off', async () => {
       const before = await reviewOf(silent);
       assert.equal(before.state, 'OPEN');
       // Not yet: the window is ten minutes, and nothing has moved the clock.
       assert.deepEqual((await stack.escalation.sweep()).filter((one) => one.itemId === before.id), []);
       await receiveOpenItem(stack.db, before.id);
       await age(stack, before.id, 20);
+      // Receipt now means taken up; Automatic must be off for this review to escalate.
+      await stack.db.project.update({ where: { id: f.projectId }, data: { coordinatorEnabled: false } });
       const escalated = await stack.escalation.sweep();
+      await stack.db.project.update({ where: { id: f.projectId }, data: { coordinatorEnabled: true } });
       assert.ok(escalated.some((one) => one.itemId === before.id), 'the silent review did not escalate');
       const after = await reviewOf(silent);
       assert.equal(after.state, 'OPEN');

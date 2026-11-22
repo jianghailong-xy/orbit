@@ -8,6 +8,7 @@ import {
   TASK_BATCH_CARD_TOOL,
   TASK_CREATE_CARD_TOOL,
 } from './verifier-write-authority';
+import { RELEASED_SESSION_STATUSES } from '../common/session-release';
 
 /**
  * The card that authorises an in-session task write, and the server's half of reading it.
@@ -67,7 +68,7 @@ export const TASK_WRITE_NEEDS_OWNER_CARD_ACTION = 'ASK_THROUGH_THE_SAME_TOOL';
 export const TASK_WRITE_NEEDS_SESSION_ACTION = 'USE_A_PERSONAL_ACCESS_TOKEN';
 
 /** Session statuses a write may no longer be made under: the conversation is over. */
-const ENDED_SESSION_STATUSES = ['SUCCEEDED', 'FAILED', 'CANCELLED'] as const;
+const ENDED_SESSION_STATUSES = RELEASED_SESSION_STATUSES;
 
 /**
  * How many of a session's answered cards of one kind are read looking for the covering one.
@@ -100,6 +101,8 @@ const ID_FIELDS: ReadonlySet<string> = new Set([
   'listId',
   'parentTaskId',
   'projectId',
+  // A forked create's `fork.sessionId`: base62 on the card, a uuid once TaskForkDto's @IsPublicId has read it.
+  'sessionId',
   'supersedesTaskId',
   'taskId',
   'verifiesTaskId',

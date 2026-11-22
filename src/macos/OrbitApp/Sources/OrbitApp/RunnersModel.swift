@@ -161,7 +161,7 @@ final class RunnersModel {
         let started = Date()
         while !RunnerUpdateNow.answered(runner(id)),
               Date().timeIntervalSince(started) < RunnerUpdateNow.answerWait {
-            try? await Task.sleep(for: .seconds(RunnerUpdateNow.answerPollInterval))
+            await VisibilityGate.app.pause(RunnerUpdateNow.answerPollInterval)   // not while hidden (§4 R3)
             await load()
         }
     }
@@ -187,7 +187,7 @@ final class RunnersModel {
         let askedAt = asked.requestedAt ?? ISO8601DateFormatter().string(from: Date())
         let started = Date()
         while !Task.isCancelled, Date().timeIntervalSince(started) < ClaudeRegion.checkWait {
-            try? await Task.sleep(for: .seconds(ClaudeRegion.checkPollInterval))
+            await VisibilityGate.app.pause(ClaudeRegion.checkPollInterval)   // not while hidden (§4 R3)
             await load()
             if ClaudeRegion.checkAnswered(checkedAt: runner(id)?.region?.checkedAt, askedAt: askedAt) { break }
         }
@@ -225,6 +225,21 @@ final class RunnersModel {
             await load()
             return state.status == "failed" ? state.message : nil
         } catch {
+            return APIClient.failureReason(error)
+        }
+    }
+
+    /// Make an added Claude Code account the Default: POST …/set-default. A control-plane refusal
+    /// (offline, busy, too old) comes back in its own words; a machine failure rides in
+    /// `claudeAccountSwap` after the list is read again.
+    @discardableResult
+    func setDefaultAccount(_ id: String, engine: LoginEngine, account: String) async -> String? {
+        do {
+            _ = try await api.setDefaultRunnerAccount(id, engine: engine, account: account)
+            await load()
+            return nil
+        } catch {
+            await load()
             return APIClient.failureReason(error)
         }
     }

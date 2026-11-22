@@ -1,4 +1,4 @@
-import type { ManagedRunnerSleepRequest, ManagedRunnerWorkload } from '@orbit/shared';
+import { MANAGED_RUNNER_SLEEP_CAPABILITY, type ManagedRunnerSleepRequest, type ManagedRunnerWorkload } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
 import type { ManagedRunnerInstance } from './managed-runner-instance';
@@ -82,6 +82,26 @@ export function readStoredWorkload(value: unknown): StoredManagedWorkload | null
   if (typeof v.generation !== 'number' || typeof v.podUid !== 'string' || typeof v.receivedAt !== 'string') return null;
   if (Number.isNaN(Date.parse(v.receivedAt))) return null;
   return { ...figures, generation: v.generation, podUid: v.podUid, receivedAt: v.receivedAt, draining: v.draining === true };
+}
+
+/**
+ * What the authorized instance last reported, if it may be believed: it declares it can sleep, it heartbeated within
+ * `freshMs`, and the report is that fresh and comes from the generation and instance recorded now. Null otherwise —
+ * missing or stale telemetry never lets anything sleep or roll. `lastBeatAt` is the runner's last beat
+ * (runnerLastBeatAt).
+ */
+export function freshInstanceReport(
+  runner: { capabilities: readonly string[]; managedWorkload: unknown } | null,
+  lastBeatAt: Date | null,
+  mapping: { generation: number; podUid: string | null },
+  now: Date,
+  freshMs: number,
+): StoredManagedWorkload | null {
+  if (!runner?.capabilities.includes(MANAGED_RUNNER_SLEEP_CAPABILITY)) return null;
+  if (!lastBeatAt || now.getTime() - lastBeatAt.getTime() > freshMs) return null;
+  const report = readStoredWorkload(runner.managedWorkload);
+  if (!report || report.generation !== mapping.generation || report.podUid !== mapping.podUid) return null;
+  return now.getTime() - Date.parse(report.receivedAt) <= freshMs ? report : null;
 }
 
 /** Nothing in flight, by the runner's own account. */

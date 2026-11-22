@@ -27,6 +27,11 @@
 .handoff-facts svg { flex: none; width: 14px; height: 14px; margin-top: 3px; color: var(--text-3); }
 .handoff-facts b { color: var(--text-1); font-weight: 600; }
 .handoff-facts .sub { display: block; color: var(--text-3); font-size: 12px; }
+.handoff-successor { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; margin-top: 10px; font-size: 12.5px; line-height: 1.6; color: var(--text-1); }
+.handoff-successor b { font-weight: 600; }
+.handoff-successor .sub { color: var(--text-3); font-size: 12px; }
+.handoff-successor-choice { display: inline-flex; align-items: center; gap: 6px; }
+.handoff-successor-choice .np-mark { flex: none; }
 
 /* ── 02-2 / 02-5: rows in the transcript ── */
 .handoff-sys { display: flex; gap: 8px; align-items: flex-start; padding: 9px 12px; margin: 8px 0; border-radius: 8px;

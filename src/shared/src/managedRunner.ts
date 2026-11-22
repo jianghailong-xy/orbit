@@ -61,8 +61,11 @@ export const MANAGED_RUNNER_ROTATE_REFUSED = 'MANAGED_RUNNER_ROTATE_REFUSED';
  * the instance the manager authorized; a self-managed runner declares nothing and is unaffected.
  */
 export const MANAGED_RUNNER_INSTANCE_CAPABILITY = 'managed-runner-instance-v1';
-export const MANAGED_RUNNER_GENERATION_HEADER = 'x-orbit-managed-runner-generation';
-export const MANAGED_RUNNER_POD_UID_HEADER = 'x-orbit-managed-runner-pod-uid';
+export const MANAGED_RUNNER_GENERATION_HEADER = 'x-orbit-cloud-runner-generation';
+export const MANAGED_RUNNER_POD_UID_HEADER = 'x-orbit-cloud-runner-pod-uid';
+/** The same two headers as a runner built before they were renamed sends them; the server reads either. */
+export const LEGACY_MANAGED_RUNNER_GENERATION_HEADER = 'x-orbit-managed-runner-generation';
+export const LEGACY_MANAGED_RUNNER_POD_UID_HEADER = 'x-orbit-managed-runner-pod-uid';
 
 /** 403: a managed runner's credential sent without the instance protocol (an older runner, or a copy). */
 export const MANAGED_RUNNER_INSTANCE_REQUIRED = 'MANAGED_RUNNER_INSTANCE_REQUIRED';
@@ -116,6 +119,23 @@ export const MANAGED_RUNNER_CAPACITY_UNAVAILABLE = 'MANAGED_RUNNER_CAPACITY_UNAV
 
 /** 409 to an explicit sleep: the runner has work in flight or queued, and sleep never interrupts work. */
 export const MANAGED_RUNNER_BUSY = 'MANAGED_RUNNER_BUSY';
+
+/** 409 to an Update Now: the runner already runs the current image (its status has no `update`). */
+export const MANAGED_RUNNER_CURRENT = 'MANAGED_RUNNER_CURRENT';
+
+/** The body of POST /api/managed-runner/update-now (docs/managed-runner-update-now-design.md). */
+export interface ManagedRunnerUpdateNowRequest {
+  /** Stop the running turns to update now. Absent or false: a busy runner is refused 409 MANAGED_RUNNER_BUSY. */
+  interruptTurns?: boolean;
+}
+
+/** A turn running on the managed runner, as a busy Update Now's 409 lists it. */
+export interface ManagedRunnerBusyTurn {
+  sessionId: string;
+  title: string;
+  /** ISO 8601, or null when the session never recorded a start. */
+  startedAt: string | null;
+}
 
 /** What the owner asked of the managed runner. */
 export type ManagedRunnerDesiredState = 'RUNNING' | 'SLEEPING' | 'DELETED';

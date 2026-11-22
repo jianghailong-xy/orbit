@@ -81,3 +81,55 @@ export const RUNNER_ACCOUNT_IN_USE_RUNNING = 'Running';
 export const RUNNER_ACCOUNT_IN_USE_WAITING = 'Waiting for input';
 /** A listed session with no title yet. */
 export const RUNNER_ACCOUNT_IN_USE_UNTITLED = 'Untitled session';
+
+/** An added Claude Code account's way to become the Default: the item in its ⋯ menu, and what it does. */
+export const RUNNER_ACCOUNT_SET_DEFAULT = 'Set as default';
+export const RUNNER_ACCOUNT_SET_DEFAULT_HINT = 'Moves this login into ~/.claude, so the terminal uses it too';
+/** Why that item can't be chosen: the runner is offline, too old to swap logins, or swapping already. */
+export const RUNNER_ACCOUNT_SET_DEFAULT_OFFLINE = 'The runner is offline';
+export const RUNNER_ACCOUNT_SET_DEFAULT_UPDATE = 'Update the runner to set a default Claude Code account on it';
+export const RUNNER_ACCOUNT_SET_DEFAULT_BUSY = 'A default is already being set on this runner';
+
+/** The question in front of Set as default. */
+export function runnerAccountSetDefaultTitle(name: string): string {
+  return `Make ${name} the default?`;
+}
+
+/** What Set as default comes to: `name` is the added account and `dir` its folder, `defaultName` and
+ *  `defaultDir` the Default's, each the way a terminal spells it. */
+export function runnerAccountSetDefaultDetail(name: string, defaultDir: string, defaultName: string, dir: string, runner: string): string {
+  return `${name}’s login moves to ${defaultDir}, and ${defaultName}’s to ${dir}. Claude Code in a terminal on ${runner} uses ${name} from then on — restart any that are open. Sessions stay on their accounts, and a turn in progress finishes first. Workspaces keep their account.`;
+}
+
+/** The confirmation's own button. */
+export const RUNNER_ACCOUNT_SET_DEFAULT_CONFIRM = 'Make default';
+
+/** Under the account while it is being made the Default, with no turn left to wait for. */
+export function runnerAccountSettingDefault(name: string): string {
+  return `Making ${name} the default`;
+}
+
+/** The same, while one session on either account finishes its turn. */
+export function runnerAccountSettingDefaultOne(name: string): string {
+  return `Making ${name} the default — waiting for 1 session to finish its turn`;
+}
+
+/** The same, while several do. */
+export function runnerAccountSettingDefaultMany(name: string, count: number): string {
+  return `Making ${name} the default — waiting for ${count} sessions to finish their turns`;
+}
+
+/** Beside it, while Claude Code runs in a terminal on either folder: the swap waits for it to exit. */
+export const RUNNER_ACCOUNT_SETTING_DEFAULT_TERMINAL = 'It also waits for Claude Code running in a terminal there to exit.';
+
+/** A swap that failed, or that the control plane refused: over the reason. */
+export function runnerAccountSetDefaultFailed(name: string): string {
+  return `Couldn’t make ${name} the default`;
+}
+
+/** Under that reason: a failed swap puts both logins back. */
+export const RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED = 'Both logins are as they were.';
+
+/** What a former Default is called — the account a Set as default moved out of ~/.claude into an added
+ *  folder — while the owner has not named it and no email is known for it. */
+export const RUNNER_ACCOUNT_FORMER_DEFAULT = 'Former default';

@@ -112,6 +112,11 @@ export const setupConnectingCreate = (machine: string) =>
   `Waiting for ${machine} to connect. It can check folders as soon as it does.`;
 export const setupUpdatingCreate = (machine: string) =>
   `${machine} updates itself first: this version can’t check folders yet.`;
+// The folder field takes a full path too (docs/mocks/new-workspace-form, decision 2 A). Web only until the native
+// clients follow; their card keeps SETUP_FOLDER_HINT.
+export const setupFolderOrPathHint = (root: string) =>
+  `A name in ${root}, or a full path. Uses the folder if it exists, otherwise creates it.`;
+export const setupPathUnchecked = (machine: string) => `${machine} checks a full path once it’s up.`;
 export const SETUP_CREATE = 'Create workspace';
 export const setupCreateFailed = (why: string) => `Couldn’t create the workspace: ${why}`;
 

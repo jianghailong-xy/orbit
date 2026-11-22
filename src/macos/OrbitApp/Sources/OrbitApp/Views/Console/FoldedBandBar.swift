@@ -51,7 +51,7 @@ struct FoldedBandBar: View {
                                                      sending: console.sending || console.awaitingReply)
         let tasks = taskCard
         let branch = branchMark(turnActive: turnActive)
-        let lead = FoldedBand.lead(draft: draft, hasMarks: watching != nil || !console.state.background.isEmpty
+        let lead = FoldedBand.lead(draft: draft, hasMarks: watching != nil || processes != nil
                                    || tasks != nil || agents != nil || branch != nil)
         Button(action: open) {
             HStack(spacing: 8) {
@@ -102,8 +102,8 @@ struct FoldedBandBar: View {
             if let watching {
                 mark("eye", "\(watching)")
             }
-            if !console.state.background.isEmpty {
-                mark("terminal", FoldedBand.processes(console.state.background))
+            if let processes {
+                mark("terminal", processes)
             }
             if let tasks {
                 let part = FoldedBand.tasks(tasks)
@@ -146,6 +146,14 @@ struct FoldedBandBar: View {
         }
         .foregroundStyle(.secondary)
         .fixedSize()
+    }
+
+    /// The Background row's own reading (`BackgroundRowRule`): no mark when the row shows nothing.
+    private var processes: String? {
+        FoldedBand.processes(console.state.background,
+                             clearedAt: BackgroundRowRule.clearedAt(items: console.state.items,
+                                                                    lastAgentTurnStartedAt: console.state.agentTurnStartedAt),
+                             sessionLive: console.isLive)
     }
 
     /// The Agents line's own reading (`AgentsBandRow`).
@@ -207,9 +215,7 @@ struct FoldedBandBar: View {
         if turnActive { parts.append("Working") }
         if needsAttention { parts.append("Needs attention") }
         if let watching { parts.append("Watching: \(watching)") }
-        if !console.state.background.isEmpty {
-            parts.append("Background processes: \(FoldedBand.processes(console.state.background))")
-        }
+        if let processes { parts.append("Background processes: \(processes)") }
         if let tasks { parts.append("\(SessionCreatedTasksCopy.title): \(FoldedBand.tasks(tasks).text)") }
         if let agents { parts.append("Agents: \(agents.capsule)") }
         switch branch {

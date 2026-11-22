@@ -352,7 +352,7 @@ class ConfigurationTest(unittest.TestCase):
     def test_every_problem_is_reported(self):
         for change, needle in (
             ({"network": "host"}, "network"), ({"network": "bridge"}, "network"), ({"network": "none"}, "network"),
-            ({"image": "orbit-managed-runner:latest"}, "image"), ({"instanceId": "Has Spaces"}, "instanceId"),
+            ({"image": "orbit-cloud-runner:latest"}, "image"), ({"instanceId": "Has Spaces"}, "instanceId"),
             ({"listen": {"tcp": {"host": "0.0.0.0", "port": 7000}}}, "listen"), ({"tokenFile": "relative"}, "tokenFile"),
             ({"limits": {"maxCpuMillis": 1}}, "limits"), ({"privileged": True}, "privileged is not a configuration field"),
             ({"extraLabels": {"orbit.managed-runner.instance": "x"}}, "extraLabels"), ({"diskCheckSeconds": 1}, "diskCheckSeconds"),

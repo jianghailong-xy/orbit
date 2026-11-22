@@ -117,7 +117,7 @@ test('a remote host requires an https runner.serverUrl, and every docker.hosts f
     ['a host reserve above 0.9', (p) => (p.docker.hosts[1].capacity = { reserve: { memory: 0.95 } }), /docker\.hosts\.1\.capacity\.reserve\.memory must be a fraction/],
     ['an empty list', (p) => (p.docker.hosts = []), /docker\.hosts must be a non-empty list/],
     ['a list and a single channel', (p) => (p.docker.channel = { socketPath: '/run/c.sock' }), /docker\.channel belongs in each entry of docker\.hosts/],
-    ['an image that is neither an ID nor "channel"', (p) => (p.runner.image = 'orbit-managed-runner:local'), /runner\.image must be the local image ID .*, or "channel"/],
+    ['an image that is neither an ID nor "channel"', (p) => (p.runner.image = 'orbit-cloud-runner:local'), /runner\.image must be the local image ID .*, or "channel"/],
   ];
   for (const [what, change, expected] of cases) {
     const problems = problemsOf(twoHostFile(change));
@@ -187,7 +187,7 @@ test('on a remote profile DockerBackend adopts the image its channel reports, an
   const other = new DockerBackend(new FakeDockerChannel('another-instance', IMAGE_A), profile);
   await assert.rejects(other.capacityBudget(), (e: unknown) => e instanceof ManagedRunnerConflict && e.code === 'DOCKER_CHANNEL_MISMATCH');
   await assert.rejects(other.requireInstanceGuard(recorded), (e: unknown) => e instanceof ManagedRunnerConflict && e.code === 'DOCKER_CHANNEL_MISMATCH', 'nothing is made on it either');
-  const nonsense = new DockerBackend(new FakeDockerChannel(profile.docker.instanceId, 'orbit-managed-runner:local'), profile);
+  const nonsense = new DockerBackend(new FakeDockerChannel(profile.docker.instanceId, 'orbit-cloud-runner:local'), profile);
   await assert.rejects(nonsense.capacityBudget(), (e: unknown) => e instanceof ManagedRunnerConflict && e.code === 'DOCKER_CHANNEL_MISMATCH');
 
   // A pinned profile still refuses a channel on another image.

@@ -308,6 +308,10 @@ const USER_DRIVERS: Readonly<Record<string, Drive>> = {
   'POST /sessions/:id/adopt-branch': (s, w, id) => s.sessions.adoptWorktreeBranch(w.ownerId, id),
   'POST /sessions/:id/retry-message': (s, w, id) => s.autoRetry.resendRetryMessage(w.ownerId, id),
   'POST /sessions/:id/auto-retry': (s, w, id) => s.sessions.armAutoRetry(w.ownerId, id, future()),
+  // The job id is checked after the engine-session guard, so a landing session is refused before any
+  // job of it is looked for.
+  'POST /sessions/:id/background/jobs/:jobId/stop': (s, w, id) =>
+    s.sessions.stopBackgroundJob(w.ownerId, id, 'bgj_0000000000a1'),
   'DELETE /sessions/:id/auto-retry': (s, w, id) => s.sessions.cancelAutoRetry(w.ownerId, id),
   'POST /sessions/:id/complete': (s, w, id) => s.sessions.complete(w.ownerId, id),
   'POST /sessions/:id/archive': (s, w, id) => s.sessions.complete(w.ownerId, id),
@@ -807,9 +811,14 @@ test('only a claimed subject gets a session row, and the compensation points ins
     });
     const settled = await ensureLandingSession(stack.db, g.landingId, claimed);
     assert.ok(settled?.created);
-    assert.equal((await stack.db.session.findUniqueOrThrow({
-      where: { id: settled!.sessionId }, select: { status: true },
-    })).status, RunStatus.SUCCEEDED);
+    const settledRow = await stack.db.session.findUniqueOrThrow({
+      where: { id: settled!.sessionId }, select: { status: true, finishedAt: true, releaseCause: true },
+    });
+    assert.equal(settledRow.status, RunStatus.SUCCEEDED);
+    // Released from the start, at the moment its landing settled (plan step 3.1).
+    const settledAt = (await stack.db.projectLanding.findUniqueOrThrow({ where: { id: g.landingId } })).settledAt;
+    assert.equal(settledRow.finishedAt?.getTime(), settledAt?.getTime(), 'the release column is the settlement time');
+    assert.equal(settledRow.releaseCause, 'landing_settled');
   } finally {
     await stack.db.$disconnect();
   }

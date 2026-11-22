@@ -117,13 +117,19 @@ export function errorPayloadOf(payload: Record<string, unknown>): ControlSession
 }
 
 /** `data` for `background.task`. The runner's BACKGROUND_TASK payload names the process via
- *  `command` (see the transcript reducer); fall back to `name`. */
+ *  `command` (see the transcript reducer); fall back to `name`. `toolUseId` and `kind` ride along when
+ *  the runner sent them: a runner-hosted job re-reports itself `running` once a minute (runner-go
+ *  heartbeatJobs), and only those two say whether a report is a job starting or the same job again, and
+ *  whether it is a `service`, which no tally counts. */
 export function backgroundPayloadOf(payload: Record<string, unknown>): ControlBackgroundTask {
   const exit = payload.exitCode ?? payload.exit_code;
+  const { toolUseId, kind } = payload;
   return {
     name: String(payload.command ?? payload.name ?? 'background task'),
     status: String(payload.status ?? 'unknown'),
     ...(typeof exit === 'number' ? { exitCode: exit } : {}),
+    ...(typeof toolUseId === 'string' && toolUseId ? { toolUseId } : {}),
+    ...(typeof kind === 'string' && kind ? { kind } : {}),
   };
 }
 

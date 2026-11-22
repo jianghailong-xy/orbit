@@ -11,23 +11,27 @@ public struct ProviderModelTier: Codable, Equatable, Sendable, Identifiable {
     public let levels: [String]
     /// `catalogue`, `owner`, or nil when nobody has set one.
     public let source: String?
-    /// The owner may set or clear it (PATCH /providers/mine/:providerId/model-tier).
+    /// The owner may set or clear it: a key's model (PATCH /providers/mine/:providerId/model-tier), or any model
+    /// of a built-in engine's catalogue (PATCH /providers/builtin/:slug/model-tier).
     public let editable: Bool
     /// USD per million output tokens, when known.
     public let outputPricePerMTok: Double?
+    /// Set on a built-in engine's older family model: the newest model of its family, which routing uses instead.
+    public let supersededBy: String?
 
     public var id: String { model }
 
     public init(model: String, levels: [String], source: String? = nil, editable: Bool = false,
-                outputPricePerMTok: Double? = nil) {
+                outputPricePerMTok: Double? = nil, supersededBy: String? = nil) {
         self.model = model
         self.levels = levels
         self.source = source
         self.editable = editable
         self.outputPricePerMTok = outputPricePerMTok
+        self.supersededBy = supersededBy
     }
 
-    private enum CodingKeys: String, CodingKey { case model, levels, source, editable, outputPricePerMTok }
+    private enum CodingKeys: String, CodingKey { case model, levels, source, editable, outputPricePerMTok, supersededBy }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -36,6 +40,7 @@ public struct ProviderModelTier: Codable, Equatable, Sendable, Identifiable {
         source = try c.decodeIfPresent(String.self, forKey: .source)
         editable = try c.decodeIfPresent(Bool.self, forKey: .editable) ?? false
         outputPricePerMTok = try c.decodeIfPresent(Double.self, forKey: .outputPricePerMTok)
+        supersededBy = try c.decodeIfPresent(String.self, forKey: .supersededBy)
     }
 }
 
@@ -83,7 +88,8 @@ public struct SubagentTiersResponse: Codable, Equatable, Sendable {
     public init(providers: [ProviderTierRow]) { self.providers = providers }
 }
 
-/// PATCH /providers/mine/:id/model-tier: set or clear (nil, sent as JSON null) the owner's tier for one model.
+/// PATCH /providers/mine/:id/model-tier or /providers/builtin/:slug/model-tier: set or clear (nil, sent as JSON
+/// null) the owner's tier for one model.
 public struct ProviderModelTierUpdate: Encodable, Sendable {
     public let model: String
     public let tier: String?
@@ -108,12 +114,14 @@ public enum SubagentSettings {
     public static let groupTitle = "SubAgents"
     public static let enabledTitle = "SubAgents"
     public static let enabledDetail = "Let this agent hand work to other providers in the same folder"
-    public static let optimizeFor = "Optimize For"
+    /// Board docs/mocks/subagent-workflow part 5 (docs/subagent-workflow-design.md §6).
+    public static let workflowsTitle = "Workflows"
+    public static let workflowsDetail = "Let this agent run a script that starts many SubAgents and wakes it once"
     public static let providers = "Providers"
     public static let providersDetail = "All enabled providers. Block one to keep SubAgents off it."
     public static let edit = "Edit"
     public static let runningAtOnce = "Running at once"
-    public static let runningAtOnceDetail = "Per session, foreground and background together"
+    public static let runningAtOnceDetail = "Per session: delegated SubAgents and workflow calls together"
     public static let providersLoadFailed = "Couldn't load providers"
     public static let saveBlockedFailed = "Couldn't save blocked providers"
 
@@ -129,6 +137,8 @@ public enum SubagentSettings {
     public static let subscription = "Subscription"
     public static let noPrice = "—"
     public static let clear = "Clear"
+    /// The tag after a tier the owner set (board 2026-11-20).
+    public static let yours = "Yours"
     public static let tierSaveFailed = "Couldn't save the tier"
 
     /// The tiers a model can be given, lowest first.
@@ -136,27 +146,18 @@ public enum SubagentSettings {
 
     // MARK: workspace fields
 
-    /// `modelRoutingOptimizeFor`'s values, in the segmented control's order.
-    public enum OptimizeFor: String, CaseIterable, Identifiable, Sendable {
-        case cost, balance, intelligence
-        public var id: String { rawValue }
-        public var label: String {
-            switch self {
-            case .cost: return "Cost"
-            case .balance: return "Balance"
-            case .intelligence: return "Intelligence"
-            }
-        }
-        /// An absent or unknown value reads as Cost, the server's default.
-        public init(stored: String?) { self = OptimizeFor(rawValue: stored ?? "") ?? .cost }
-    }
-
     public static let defaultMaxRunning = 4
     public static let maxRunningRange = 1...16
 
     /// A stored count, held to the range the server accepts; absent is the default.
     public static func maxRunning(_ stored: Int?) -> Int {
         min(max(stored ?? defaultMaxRunning, maxRunningRange.lowerBound), maxRunningRange.upperBound)
+    }
+
+    /// What the Workflows switch shows: it follows SubAgents, since every call of a workflow is a SubAgent, so it reads
+    /// off (and cannot be turned on) while SubAgents is off, and its own stored value otherwise.
+    public static func workflowsOn(subagentsEnabled: Bool, workflowsEnabled: Bool) -> Bool {
+        subagentsEnabled && workflowsEnabled
     }
 
     // MARK: providers
@@ -192,8 +193,17 @@ public enum SubagentSettings {
         return levels.joined(separator: " · ")
     }
 
+    /// A model's Tier cell: `tierText`, but an older family member reads "Older · uses <newest>" in place of Not set.
+    public static func modelTierText(_ model: ProviderModelTier) -> String {
+        if model.levels.isEmpty, let newest = model.supersededBy { return "Older · uses \(newest)" }
+        return tierText(model.levels)
+    }
+
     /// Whether the Tier cell warns: a model with no tier ranks after every tiered one.
     public static func tierIsUnset(_ levels: [String]) -> Bool { levels.isEmpty }
+
+    /// Whether the Tier cell reads Older (grey, not a warning): no tier of its own, a newer family member routed instead.
+    public static func tierIsOlder(_ model: ProviderModelTier) -> Bool { model.levels.isEmpty && model.supersededBy != nil }
 
     /// A model's Price / M out cell.
     public static func priceText(_ model: ProviderModelTier, billing: String) -> String {
@@ -201,6 +211,20 @@ public enum SubagentSettings {
         return billing == "subscription" ? subscription : noPrice
     }
 
-    /// Whether the tier menu offers Clear: only where a tier is set.
-    public static func menuOffersClear(_ levels: [String]) -> Bool { !levels.isEmpty }
+    /// Whether the tier menu offers Clear: a key's model with a tier, or a built-in engine's model the owner tiered
+    /// (a catalogue tier there has nothing to clear).
+    public static func menuOffersClear(_ provider: ProviderTierRow, _ model: ProviderModelTier) -> Bool {
+        provider.kind == "builtin" ? model.source == "owner" : !model.levels.isEmpty
+    }
+
+    /// Where a model's tier is written: a built-in engine's catalogue, or a key of the owner's own; nil when the
+    /// model's tier is not the owner's to set.
+    public static func tierPath(_ provider: ProviderTierRow, _ model: ProviderModelTier) -> String? {
+        guard model.editable else { return nil }
+        if provider.kind == "builtin" { return "providers/builtin/\(provider.slug)/model-tier" }
+        return provider.providerId.map { "providers/mine/\($0)/model-tier" }
+    }
+
+    /// Whether the Tier cell carries the Yours tag: a tier the owner set.
+    public static func showsYours(_ model: ProviderModelTier) -> Bool { model.source == "owner" }
 }

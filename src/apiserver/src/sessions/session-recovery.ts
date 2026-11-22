@@ -35,6 +35,7 @@ export type SessionRecoveryCode =
   | 'WORKSPACE_NAME_NOT_FOUND'
   | 'ENGINE_SIGNED_OUT'
   | 'MANAGED_RUNNER_FAILED'
+  | 'RUNNER_DISK_BELOW_FLOOR'
   | `SESSION_${SessionResumeBlockedReason}`
   | 'SESSION_ENDED'
   | 'SESSION_NEXT_TURN_STARTING';
@@ -66,6 +67,9 @@ export const SESSION_RECOVERY_RULES: Record<SessionRecoveryCode, Rule> = {
   ENGINE_SIGNED_OUT: { status: HttpStatus.CONFLICT, actor: 'USER', retryPolicy: 'AFTER_STATE_CHANGE', actionCode: 'AWAIT_USER_FIX', disposition: 'HUMAN' },
   // The workspace's managed runner is FAILED, FENCING or being deleted: it does not come back by itself.
   MANAGED_RUNNER_FAILED: { status: HttpStatus.CONFLICT, actor: 'USER', retryPolicy: 'AFTER_STATE_CHANGE', actionCode: 'AWAIT_USER_FIX', disposition: 'HUMAN' },
+  // The workspace's runner has less free disk than its Keep Free: it starts no new session until a person frees space
+  // there or lowers Keep Free.
+  RUNNER_DISK_BELOW_FLOOR: { status: HttpStatus.CONFLICT, actor: 'USER', retryPolicy: 'AFTER_STATE_CHANGE', actionCode: 'AWAIT_USER_FIX', disposition: 'HUMAN' },
   SESSION_TRASHED: { status: HttpStatus.CONFLICT, actor: 'USER', retryPolicy: 'AFTER_STATE_CHANGE', actionCode: 'AWAIT_USER_FIX', disposition: 'HUMAN' },
   SESSION_ENDING: { status: HttpStatus.CONFLICT, actor: 'SYSTEM', retryPolicy: 'AFTER_STATE_CHANGE', actionCode: 'POLL_STATE', disposition: 'WAIT', retryAfterSeconds: 5 },
   SESSION_NOT_TERMINAL: { status: HttpStatus.CONFLICT, actor: 'SYSTEM', retryPolicy: 'AFTER_STATE_CHANGE', actionCode: 'POLL_STATE', disposition: 'WAIT', retryAfterSeconds: 5 },
@@ -227,6 +231,42 @@ export function managedRunnerFailedRefusal(
         managementState: state,
         managedReason: reason,
       },
+    },
+  );
+}
+
+/** The runner a spawn would start on, as its refusals name it. */
+export interface SpawnTargetRunner {
+  id: string;
+  name: string;
+  displayName: string | null;
+}
+
+/**
+ * A spawn onto a workspace whose runner is offline: refused before anything is written, because the agent that asked
+ * would wait on a child that never starts. The resume refusal's code, as the wait is the same: the runner comes back.
+ */
+export function spawnRunnerOfflineRefusal(runner: SpawnTargetRunner, workspaceId: string): HttpException {
+  return sessionRefusal(
+    'SESSION_RUNNER_OFFLINE',
+    `runner "${runner.displayName || runner.name}" is offline, so it starts no new sessions; nothing was created. ` +
+      'Try again once it is back online, or use an agent on another runner',
+    {
+      resources: [{ type: 'WORKSPACE', id: workspaceId }, { type: 'RUNNER', id: runner.id }],
+      extra: { runnerId: runner.id, workspaceId },
+    },
+  );
+}
+
+/** A spawn onto a workspace whose runner is below its Keep Free (runner-disk-gate.ts): refused, as above. */
+export function spawnDiskBelowFloorRefusal(runner: SpawnTargetRunner, workspaceId: string): HttpException {
+  return sessionRefusal(
+    'RUNNER_DISK_BELOW_FLOOR',
+    `runner "${runner.displayName || runner.name}" has less free disk space than its Keep Free setting, so it starts ` +
+      'no new sessions; nothing was created. Try again once space is freed there, or use an agent on another runner',
+    {
+      resources: [{ type: 'WORKSPACE', id: workspaceId }, { type: 'RUNNER', id: runner.id }],
+      extra: { runnerId: runner.id, workspaceId },
     },
   );
 }

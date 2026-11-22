@@ -50,6 +50,7 @@ const REFUSED_OVER_HTTPS = [
   'POST /runner/install-result',
   'POST /runner/codex-account-remove-result',
   'POST /runner/account-remove-result',
+  'POST /runner/claude-account-swap-result',
   'POST /runner/login-result',
   'POST /runner/cursor-key-check-result',
   'GET /runner/sessions/claim',
@@ -165,9 +166,9 @@ async function through(interceptor: RunnerLinkRequiredInterceptor, context: Exec
 
 const door = () => new RunnerLinkRequiredInterceptor();
 
-test('RunnerApiController has 58 routes: 51 refused over HTTPS, 7 kept on HTTPS (D14); a new one fails here', () => {
+test('RunnerApiController has 59 routes: 52 refused over HTTPS, 7 kept on HTTPS (D14); a new one fails here', () => {
   const routes = routesOf(RunnerApiController);
-  assert.equal(REFUSED_OVER_HTTPS.length, 51);
+  assert.equal(REFUSED_OVER_HTTPS.length, 52);
   assert.deepEqual(
     sorted(routes.map((r) => r.route)),
     sorted([...REFUSED_OVER_HTTPS, ...STAYS_ON_HTTPS]),
@@ -175,7 +176,7 @@ test('RunnerApiController has 58 routes: 51 refused over HTTPS, 7 kept on HTTPS 
       + 'over HTTPS (REFUSED_OVER_HTTPS; and src/runner-go/link_mode.go linkDaemonRoutes), or not part of it and marked '
       + '@StaysOnHttps() (STAYS_ON_HTTPS, docs/runner-link-design.md D14)',
   );
-  assert.equal(routes.length, 58, 'the 49 counted on 2026-10-25, the three that moved here on 2026-10-28, the directory probe\'s answer, the Claude region check, the file upload of 2026-11-02, the abandoned-checkout inventory of 2026-11-05, the two main checkout answers of 2026-11-12 and the batch takeover of 2026-11-13, less /complete');
+  assert.equal(routes.length, 59, 'the 49 counted on 2026-10-25, the three that moved here on 2026-10-28, the directory probe\'s answer, the Claude region check, the file upload of 2026-11-02, the abandoned-checkout inventory of 2026-11-05, the two main checkout answers of 2026-11-12, the batch takeover of 2026-11-13 and the Claude account swap\'s answer of 2026-11-17, less /complete');
   assert.deepEqual(sorted(routes.filter((r) => staysOnHttps(r.handler)).map((r) => r.route)), sorted(STAYS_ON_HTTPS));
   for (const route of [...RETIRED, ...CALLED_BY_NAMED_CALLERS]) {
     assert.ok(REFUSED_OVER_HTTPS.includes(route), `${route} is not one of the daemon's routes`);

@@ -97,7 +97,7 @@ export class FakeDockerChannel implements DockerChannel {
     this.call('info');
     return {
       schemaVersion: 1, instanceId: this.instanceId, image: this.image, imageRevision: this.imageRevision,
-      network: { name: 'orbit-managed-runners', internal: true, interContainer: false },
+      network: { name: 'orbit-cloud-runners', internal: true, interContainer: false },
       limits: this.limits, stopGraceSeconds: 240, diskCheckSeconds: 120, host: this.host,
     };
   }

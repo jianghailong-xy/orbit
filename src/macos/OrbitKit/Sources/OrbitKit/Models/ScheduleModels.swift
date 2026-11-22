@@ -11,11 +11,15 @@ public enum ScheduleRule: Equatable, Hashable, Sendable, Codable {
     case once(at: String)
     case daily(time: String)
     case weekly(time: String, weekdays: [String])
+    /// Sub-daily: a slot every `minutes` from `time` through `until` (inclusive; nil for the end of the day) on
+    /// `weekdays`. The server always writes `time` and `weekdays` too, so a build that predates EVERY reads the same
+    /// JSON as a weekly rule (design §9.3).
+    case every(minutes: Int, time: String, until: String?, weekdays: [String])
     /// A WHEN rule: starts a run each time its condition fires. `conditionId` is nil on a create card, before Create
     /// writes the condition.
     case when(conditionId: String?, runsPerWeek: Int, condition: ScheduleWhenCondition)
 
-    private enum CodingKeys: String, CodingKey { case kind, at, time, weekdays, conditionId, runsPerWeek, condition }
+    private enum CodingKeys: String, CodingKey { case kind, at, time, weekdays, minutes, until, conditionId, runsPerWeek, condition }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -26,6 +30,11 @@ public enum ScheduleRule: Equatable, Hashable, Sendable, Codable {
             self = .when(conditionId: try? c.decodeIfPresent(String.self, forKey: .conditionId),
                          runsPerWeek: (try? c.decode(Int.self, forKey: .runsPerWeek)) ?? 0,
                          condition: try c.decode(ScheduleWhenCondition.self, forKey: .condition))
+        case "EVERY":
+            self = .every(minutes: try c.decode(Int.self, forKey: .minutes),
+                          time: try c.decode(String.self, forKey: .time),
+                          until: try? c.decodeIfPresent(String.self, forKey: .until),
+                          weekdays: (try? c.decode([String].self, forKey: .weekdays)) ?? [])
         default:
             self = .weekly(time: try c.decode(String.self, forKey: .time),
                            weekdays: (try? c.decode([String].self, forKey: .weekdays)) ?? [])
@@ -45,6 +54,12 @@ public enum ScheduleRule: Equatable, Hashable, Sendable, Codable {
             try c.encode("WEEKLY", forKey: .kind)
             try c.encode(time, forKey: .time)
             try c.encode(weekdays, forKey: .weekdays)
+        case .every(let minutes, let time, let until, let weekdays):
+            try c.encode("EVERY", forKey: .kind)
+            try c.encode(minutes, forKey: .minutes)
+            try c.encode(time, forKey: .time)
+            try c.encodeIfPresent(until, forKey: .until)
+            try c.encode(weekdays, forKey: .weekdays)
         case .when(let conditionId, let runsPerWeek, let condition):
             try c.encode("WHEN", forKey: .kind)
             try c.encode(conditionId, forKey: .conditionId)
@@ -63,7 +78,7 @@ public enum ScheduleRule: Equatable, Hashable, Sendable, Codable {
     public var time: String? {
         switch self {
         case .once, .when: return nil
-        case .daily(let time), .weekly(let time, _): return time
+        case .daily(let time), .weekly(let time, _), .every(_, let time, _, _): return time
         }
     }
 
@@ -328,6 +343,10 @@ public struct ScheduleView: Codable, Equatable, Hashable, Sendable, Identifiable
     public let revision: Int
     public let startAt: String?
     public let endAt: String?
+    /// The planned end by count of started runs (§8.5); nil for none or from a server before it.
+    public let maxRuns: Int?
+    /// maxRuns minus the runs started, at least 0; nil without maxRuns.
+    public let runsLeft: Int?
     public let nextDueAt: String?
     public let consecutiveFailures: Int
     public let createdFromSessionId: String?
@@ -345,7 +364,8 @@ public struct ScheduleView: Codable, Equatable, Hashable, Sendable, Identifiable
                 accessLevel: String = "CHECK_ONLY", runLimitMinutes: Int = 30, runsPerWeek: Int = 7,
                 envelope: ScheduleEnvelope? = nil, state: String = "ACTIVE", heldReason: String? = nil,
                 endedReason: String? = nil, note: String? = nil, revision: Int = 1, startAt: String? = nil,
-                endAt: String? = nil, nextDueAt: String? = nil, consecutiveFailures: Int = 0,
+                endAt: String? = nil, maxRuns: Int? = nil, runsLeft: Int? = nil, nextDueAt: String? = nil,
+                consecutiveFailures: Int = 0,
                 createdFromSessionId: String? = nil, createdAt: String = "2026-11-10T00:00:00.000Z",
                 endedAt: String? = nil, lastRun: ScheduleRunView? = nil) {
         self.id = id
@@ -369,6 +389,8 @@ public struct ScheduleView: Codable, Equatable, Hashable, Sendable, Identifiable
         self.revision = revision
         self.startAt = startAt
         self.endAt = endAt
+        self.maxRuns = maxRuns
+        self.runsLeft = runsLeft
         self.nextDueAt = nextDueAt
         self.consecutiveFailures = consecutiveFailures
         self.createdFromSessionId = createdFromSessionId
@@ -380,7 +402,7 @@ public struct ScheduleView: Codable, Equatable, Hashable, Sendable, Identifiable
     private enum CodingKeys: String, CodingKey {
         case id, title, intent, prompt, rule, timezone, workspaceId, workspaceName, agentId, agentName, engine, accessLevel
         case runLimitMinutes, runsPerWeek, envelope, state, heldReason, endedReason, note, revision, startAt, endAt
-        case nextDueAt, consecutiveFailures, createdFromSessionId, createdAt, endedAt, lastRun, pausedAt, condition
+        case maxRuns, runsLeft, nextDueAt, consecutiveFailures, createdFromSessionId, createdAt, endedAt, lastRun, pausedAt, condition
     }
 
     public init(from decoder: Decoder) throws {
@@ -409,6 +431,8 @@ public struct ScheduleView: Codable, Equatable, Hashable, Sendable, Identifiable
         revision = (try? c.decode(Int.self, forKey: .revision)) ?? 1
         startAt = try? c.decodeIfPresent(String.self, forKey: .startAt)
         endAt = try? c.decodeIfPresent(String.self, forKey: .endAt)
+        maxRuns = try? c.decodeIfPresent(Int.self, forKey: .maxRuns)
+        runsLeft = try? c.decodeIfPresent(Int.self, forKey: .runsLeft)
         nextDueAt = try? c.decodeIfPresent(String.self, forKey: .nextDueAt)
         consecutiveFailures = (try? c.decode(Int.self, forKey: .consecutiveFailures)) ?? 0
         createdFromSessionId = try? c.decodeIfPresent(String.self, forKey: .createdFromSessionId)

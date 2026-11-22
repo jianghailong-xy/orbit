@@ -140,6 +140,8 @@ let projectDetails: Record<string, unknown> | null = null;
 let projectDetailsCalls: string[] = [];
 let folders: Array<typeof FOLDER> = [];
 let listCalls: string[] = [];
+/** The workspace list's placement reads (useSessionProjectData). */
+let placementCalls: string[] = [];
 let location = '';
 let routerNavigate: NavigateFunction;
 let mobile = false;
@@ -257,6 +259,7 @@ beforeEach(() => {
   projectDetailsCalls = [];
   folders = [];
   listCalls = [];
+  placementCalls = [];
   location = '';
   mobile = false;
   projectReadError = false;
@@ -329,6 +332,24 @@ beforeEach(() => {
       return reply(inScope.filter((r) => r.lifecycleState === lifecycle &&
         (!params.has('projectId') || r.projectMembership?.projectId === params.get('projectId')))
         .sort((a, b) => Date.parse(b.lastTurnAt) - Date.parse(a.lastTurnAt)));
+    }
+    if (path.startsWith('/sessions/project-placement?')) {
+      // What the server answers (SessionsService.projectPlacement), from every workspace's rows.
+      placementCalls.push(path);
+      const params = new URLSearchParams(path.split('?')[1]);
+      const lifecycle = params.get('view') === 'completed' ? 'COMPLETED' : 'OPEN';
+      const all = [...rows, ...remoteRows];
+      return reply({ projects: (params.get('projectIds') ?? '').split(',').filter(Boolean).map((projectId) => {
+        const ofProject = all.filter((r) => r.projectMembership?.projectId === projectId);
+        const coordinator = ofProject.find((r) => r.projectMembership?.role === 'COORDINATOR' && r.lifecycleState !== 'TRASH') ?? null;
+        const inView = ofProject.filter((r) => r.lifecycleState === lifecycle);
+        return {
+          projectId,
+          coordinator,
+          waiting: inView.filter((r) => ((r as { pendingApprovals?: number }).pendingApprovals ?? 0) > 0),
+          sessionCount: new Set([...inView.map((r) => r.id), ...(coordinator ? [coordinator.id] : [])]).size,
+        };
+      }) });
     }
     if (path.startsWith('/sessions/')) {
       if (path.includes('/events/page')) return reply({ events: [], hasMore: false });
@@ -1743,6 +1764,79 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await until(() => expect(apiModule.pinSession).toHaveBeenCalledWith(TASK.id));
   });
 
+  // A project's row is its coordinator's session row (SessionListRow): what one row kind does, the other does.
+  it('opens a phone project row’s menu on a held press, as a session row’s, and its release does not open the row', async () => {
+    mobile = true;
+    await mount();
+    const entry = projectRow();
+    Object.defineProperty(entry, 'getBoundingClientRect', { configurable: true, value: () => ({ width: 400, left: 0, top: 100 }) });
+    const down = new Event('touchstart', { bubbles: true, cancelable: true });
+    Object.defineProperty(down, 'touches', { value: [{ clientX: 120, clientY: 130 }] });
+    const before = location;
+    await act(async () => entry.dispatchEvent(down));
+    await until(() => expect(menuItem('Sessions')).toBeTruthy());
+    expect(menuItems().map((item) => item.textContent?.trim())).toEqual(['Open Session', 'Sessions', 'Open Project', 'Pin', 'Move…']);
+    const up = new Event('touchend', { bubbles: true, cancelable: true });
+    Object.defineProperty(up, 'touches', { value: [] });
+    await act(async () => entry.dispatchEvent(up));
+    expect(up.defaultPrevented, 'the release must not send the click that opens the row').toBe(true);
+    expect(location).toBe(before);
+    await click(menuItem('Pin'), 'Pin');
+    await until(() => expect(apiModule.pinSession).toHaveBeenCalledWith(COORDINATOR.id));
+  });
+
+  it('fires nothing on a full rightward swipe of a phone project row', async () => {
+    mobile = true;
+    projects = [project({ startedAt: '2026-10-01T00:00:00Z' } as never)];
+    await mount();
+    await swipe(projectRow(), 300);
+    expect(apiModule.pinSession).not.toHaveBeenCalled();
+    expect(vi.mocked(apiModule.api)).not.toHaveBeenCalledWith(expect.stringMatching(/\/(pause|resume)$/), expect.anything());
+  });
+
+  it('puts Pause first on a running project row and Resume first on a paused one, in the swipe and the menu', async () => {
+    mobile = true;
+    projects = [project({ startedAt: '2026-10-01T00:00:00Z' } as never)];
+    await mount();
+    const labels = () => [...projectRow().querySelectorAll('.session-swipe-actions.leading button')].map((b) => b.getAttribute('aria-label'));
+    expect(labels()).toEqual(['Pause', 'Pin']);
+    await swipe(projectRow(), 90);
+    await click(projectRow().querySelector('.session-swipe-action.pause'), 'the swipe Pause');
+    await until(() => expect(vi.mocked(apiModule.api)).toHaveBeenCalledWith(`/projects/${PROJECT_ID}/pause`, { method: 'POST' }));
+  });
+
+  it('lists Pause first in the desktop menu group of a running project', async () => {
+    projects = [project({ startedAt: '2026-10-01T00:00:00Z' } as never)];
+    await mount();
+    await hoverProjectMenu();
+    await until(() => expect(menuItems().map((item) => item.textContent?.trim())).toEqual(['Open Session', 'Sessions', 'Open Project', 'Pause', 'Pin', 'Move…']));
+  });
+
+  it('shows Resume with the grey paused line on an owner-paused project row', async () => {
+    mobile = true;
+    projects = [project({ startedAt: '2026-10-01T00:00:00Z', pausedAt: '2026-10-04T08:00:00Z', pausedReason: 'OWNER' } as never)];
+    await mount();
+    const entry = projectRow();
+    expect([...entry.querySelectorAll('.session-swipe-actions.leading button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Resume', 'Pin']);
+    expect(entry.querySelector('.session-preview.tone-paused')?.textContent).toMatch(/^Paused · /);
+    expect(entry.querySelector('.session-project-progress.paused')).not.toBeNull();
+  });
+
+  it('gives a plain session row keyboard focus, Enter and a right-click menu, as a project row has', async () => {
+    await mount(undefined, `/sessions/${TASK.id}`);
+    for (const entry of [memberRow(LOOSE.title)!, projectRow()]) {
+      expect(entry.getAttribute('tabindex')).toBe('0');
+      expect(entry.getAttribute('role')).toBe('button');
+    }
+    const loose = memberRow(LOOSE.title)!;
+    await act(async () => loose.focus());
+    await act(async () => loose.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    await act(async () => memberRow(LOOSE.title)!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+    await until(() => expect(menuItem('Rename…')).toBeTruthy());
+    expect(menuItems().map((item) => item.textContent?.trim())).toContain('Move…');
+  });
+
   it('returns to the originating folder with the page back button', async () => {
     mobile = true; // the page in the list's place, as a phone still has it
     folders = [FOLDER];
@@ -1827,11 +1921,15 @@ describe('project sessions page', { timeout: 60_000 }, () => {
   });
 });
 
-describe('project-specific supplemental reads', { timeout: 60_000 }, () => {
-  it('does not request extra members when the local coordinator and waiting target are available', async () => {
+describe('the workspace list’s project placement read', { timeout: 60_000 }, () => {
+  const placed = (): URLSearchParams[] => placementCalls.map((path) => new URLSearchParams(path.split('?')[1]));
+
+  it('places the list’s projects with one read, and reads no project on its own', async () => {
     rows = [LOOSE, COORDINATOR, { ...TASK, pendingApprovals: 1, waitingKind: 'OWNER_CONFIRMATION' }];
     await mount();
+    await until(() => expect(placementCalls.length).toBeGreaterThan(0));
     expect(projectQueryCalls()).toEqual([]);
+    expect(placed().every((params) => params.get('projectIds') === PROJECT_ID && params.get('view') === 'open')).toBe(true);
     expect(listCalls.some((path) => {
       const params = new URLSearchParams(path.split('?')[1]);
       return params.get('view') === 'completed' && !params.has('workspaceId') && !params.has('projectId');
@@ -1839,14 +1937,14 @@ describe('project-specific supplemental reads', { timeout: 60_000 }, () => {
   });
 
   // In the coordinator's workspace, the one place its project has a row (owner 11-07): the member waiting
-  // in another workspace is read through the project.
-  it('only supplements projects in the current list that lack a coordinator or waiting member', async () => {
+  // in another workspace comes with the placement read.
+  it('names a member waiting in another workspace from the placement read', async () => {
     rows = [LOOSE, COORDINATOR, TASK];
     remoteRows = [remote(828, 'Remote waiting question', { pendingApprovals: 1, waitingKind: 'OWNER_CONFIRMATION' })];
     await mount();
     await until(() => expect(preview()?.textContent).toContain('Remote waiting question'));
-    expect(projectQueryCalls().length).toBeGreaterThan(0);
-    expect(projectQueryCalls().every((params) => params.get('projectId') === PROJECT_ID)).toBe(true);
+    expect(projectQueryCalls()).toEqual([]);
+    expect(placed().every((params) => params.get('projectIds') === PROJECT_ID)).toBe(true);
     expect(listCalls.every((path) => {
       const params = new URLSearchParams(path.split('?')[1]);
       return params.has('workspaceId') || params.has('projectId') || params.get('limit') !== null;
@@ -1858,15 +1956,15 @@ describe('project-specific supplemental reads', { timeout: 60_000 }, () => {
     await mount();
     await chooseView('Completed');
     await until(() => expect(projectRows()).toHaveLength(1));
-    expect(projectQueryCalls().length).toBeGreaterThan(0);
-    expect(projectQueryCalls().every((params) => params.get('projectId') === PROJECT_ID)).toBe(true);
+    expect(placed().some((params) => params.get('view') === 'completed' && params.get('projectIds') === PROJECT_ID)).toBe(true);
+    expect(projectQueryCalls()).toEqual([]);
     expect(listCalls.some((path) => {
       const params = new URLSearchParams(path.split('?')[1]);
       return params.get('view') === 'completed' && !params.has('workspaceId') && !params.has('projectId') && !params.has('limit');
     })).toBe(false);
   });
 
-  it.each(['entry', 'page'])('keeps the %s query stable on unrelated events and debounces project-member updates', async (surface) => {
+  it.each(['entry', 'page'])('keeps the %s reads stable on unrelated events and reads once a window for member updates', async (surface) => {
     withControlPlane = true;
     rows = [LOOSE, COORDINATOR, TASK];
     remoteRows = [remote(829, 'Remote waiting question', { pendingApprovals: 1, waitingKind: 'OWNER_CONFIRMATION' })];
@@ -1883,7 +1981,8 @@ describe('project-specific supplemental reads', { timeout: 60_000 }, () => {
     expect(stream).toBeTruthy();
     await act(async () => stream!.onopen?.());
     await settle();
-    const countBefore = projectQueryCalls().length;
+    const projectBefore = projectQueryCalls().length;
+    const placementBefore = placementCalls.length;
     const publish = (projectId: string, sessionId: string) => stream!.onmessage?.({ data: JSON.stringify({
       type: 'session.updated', sessionId,
       data: { id: sessionId, projectMembership: { projectId, role: 'TASK' } },
@@ -1894,17 +1993,20 @@ describe('project-specific supplemental reads', { timeout: 60_000 }, () => {
       await new Promise((resolve) => setTimeout(resolve, 1_200));
     });
     await settle();
-    expect(projectQueryCalls()).toHaveLength(countBefore);
+    expect(projectQueryCalls()).toHaveLength(projectBefore);
+    expect(placementCalls).toHaveLength(placementBefore);
     await act(async () => {
       for (let i = 0; i < 5; i += 1) publish(PROJECT_ID, TASK.id);
       await new Promise((resolve) => setTimeout(resolve, 1_200));
     });
     await settle();
-    // The page's two reads, and with the list still the workspace's beside it, the entry's one.
-    expect(projectQueryCalls()).toHaveLength(countBefore + (surface === 'page' ? 3 : 1));
+    // The page's own two reads; the list's placement once, whichever surface is open beside it.
+    expect(projectQueryCalls()).toHaveLength(projectBefore + (surface === 'page' ? 2 : 0));
+    expect(placementCalls.length - placementBefore).toBeLessThanOrEqual(1);
     expect(projectQueryCalls().every((params) => params.get('projectId') === PROJECT_ID)).toBe(true);
   });
 });
+
 
 /**
  * The merge into main lives on this page (owner decision 2026-10-06): its card under the progress
@@ -2157,6 +2259,22 @@ describe('the project sessions page — the Landings row', () => {
     await openSessions();
     expect(section()).toBeNull();
     expect(mounted().textContent).not.toContain('Nothing landed today');
+  });
+
+  it('draws no Landings row while the project has no line, and draws it once the line exists', async () => {
+    rows = [LOOSE, COORDINATOR, TASK, LANDING(820, 'Land · Build the package', awaiting())];
+    integrationView = { line: null, lineAbsentReason: 'NOT_DECIDED', upstreamRef: null, integratingCount: 0, queuedCount: 0, inFlight: null };
+    await mount();
+    await openSessions();
+    await until(() => expect(mounted().querySelector('.session-project-coordinator')).not.toBeNull());
+    await settle();
+    expect(section()).toBeNull();
+    await unmount();
+
+    integrationView = { line: 'PROJECT_BRANCH', lineAbsentReason: null, upstreamRef: 'main', integratingCount: 0, queuedCount: 0, inFlight: null };
+    await mount();
+    await openSessions();
+    await until(() => expect(section()).not.toBeNull());
   });
 
   it('opens the project’s Landings window from the whole row', async () => {

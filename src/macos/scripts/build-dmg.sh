@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-APP_NAME="Orbit"
+APP_NAME="Orbitd"
 BUNDLE_ID="${BUNDLE_ID:-com.orbit.macos}"
 # Release builds get VERSION from the git tag (release.yml); a local build falls back to the newest
 # tag rather than a hardcoded default that silently goes stale. versionsort.suffix=-beta sorts
@@ -71,6 +71,13 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>CFBundleURLTypes</key><array><dict>
     <key>CFBundleURLName</key><string>${BUNDLE_ID}</string>
     <key>CFBundleURLSchemes</key><array><string>orbit</string><string>orbit-session</string></array>
+  </dict></array>
+  <!-- A session row dragged onto a folder row (Views/SessionFolderDrop.swift): the app's own type,
+       so nothing outside the app reads the drag as text or a file. -->
+  <key>UTExportedTypeDeclarations</key><array><dict>
+    <key>UTTypeIdentifier</key><string>app.orbit.session-row</string>
+    <key>UTTypeDescription</key><string>Orbit session row</string>
+    <key>UTTypeConformsTo</key><array><string>public.data</string></array>
   </dict></array>
   <!-- The App Group (signed into the entitlements below) that holds the share inbox and snapshot. -->
   <key>OrbitAppGroup</key><string>${APP_GROUP}</string>
@@ -185,7 +192,7 @@ echo "▶ create DMG (drag-to-Applications layout)"; rm -f "$dmg"
 # maps to the 660x400-pt window (a bare 2x PNG would overflow the window and show only its corner).
 bgtiff="$out/dmg-background.tiff"
 tiffutil -cathidpicheck "$here/assets/dmg-background.png" "$here/assets/dmg-background@2x.png" -out "$bgtiff"
-# create-dmg lays out the window: Orbit.app on the left + an /Applications drop-link on the right
+# create-dmg lays out the window: Orbitd.app on the left + an /Applications drop-link on the right
 # (the arrow + wording live in the background art). It can exit non-zero on CI Finder/AppleScript
 # hiccups while still producing the DMG, so verify the artifact rather than trusting the exit code.
 create-dmg \

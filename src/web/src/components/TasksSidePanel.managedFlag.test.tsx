@@ -11,7 +11,7 @@ import { TasksSidePanel } from './TasksSidePanel';
 /**
  * The managed runner is Orbit Cloud from the moment the runner list arrives: GET /runners says
  * `managed` on its row, so the sidebar's Set up row and the Machines menu never show its stored
- * name `orbit-managed` while GET /managed-runner is still on its way, or when it fails.
+ * name `orbit-cloud` while GET /managed-runner is still on its way, or when it fails.
  */
 
 vi.mock('../api', async (importOriginal) => ({
@@ -130,11 +130,11 @@ afterEach(async () => {
 
 describe("the managed runner's row flag names it Orbit Cloud before GET /managed-runner answers", () => {
   it.each(['pending', 'failing'] as const)(
-    'with /managed-runner %s, the Set up row and the Machines menu say Orbit Cloud and never orbit-managed',
+    'with /managed-runner %s, the Set up row and the Machines menu say Orbit Cloud and never orbit-cloud',
     async (state) => {
       managedStatus = state;
       runners = [
-        { id: MANAGED_ID, name: 'orbit-managed', displayName: null, online: true, managed: true },
+        { id: MANAGED_ID, name: 'orbit-cloud', displayName: null, online: true, managed: true },
         { id: 'r2', name: 'build-box', displayName: null, online: true, managed: false },
       ];
       serve();
@@ -150,19 +150,19 @@ describe("the managed runner's row flag names it Orbit Cloud before GET /managed
 
       expect(vi.mocked(api).mock.calls.some(([path]) => path === '/managed-runner')).toBe(true);
       expect(seen.length).toBeGreaterThan(1);
-      expect(seen.filter((html) => html.includes('orbit-managed'))).toEqual([]);
-      expect(document.body.innerHTML).not.toContain('orbit-managed');
+      expect(seen.filter((html) => html.includes('orbit-cloud'))).toEqual([]);
+      expect(document.body.innerHTML).not.toContain('orbit-cloud');
     },
   );
 
   it("an owner-given name still wins over Orbit Cloud", async () => {
-    runners = [{ id: MANAGED_ID, name: 'orbit-managed', displayName: 'Team cloud', online: true, managed: true }];
+    runners = [{ id: MANAGED_ID, name: 'orbit-cloud', displayName: 'Team cloud', online: true, managed: true }];
     serve();
     await visit();
     await act(async () => {
       await vi.waitFor(() => expect(setupRows()).toContain('Set up Team cloud'), { timeout: 5_000, interval: 20 });
     });
     expect(document.body.textContent).not.toContain('Orbit Cloud');
-    expect(seen.filter((html) => html.includes('orbit-managed'))).toEqual([]);
+    expect(seen.filter((html) => html.includes('orbit-cloud'))).toEqual([]);
   });
 });

@@ -52,6 +52,8 @@ import {
   parseQuotaResetAt,
   isAsyncAgentLaunchAck,
   delegateLaunchReceipt,
+  ORBIT_WORKFLOW_TOOL,
+  orbitWorkflowLaunchReceipt,
   progressBadge,
   COORDINATOR_HANDOFF_PROMPT_HEAD,
   QUESTION_RECORD_COPY,
@@ -96,7 +98,17 @@ import type { MainCheckoutChangedNotice, MainCheckoutResultNotice } from '@orbit
 import type { TaskRunConflict } from '../lib/taskRunHandoff';
 import { WatchWakeCard, WatchWakeNamesCtx, watchWakeTitle } from './WatchWakeCard';
 import { BackgroundWakeCard, backgroundWakeName, backgroundWakeTitle } from './BackgroundWakeCard';
-import { SubagentFinishedCard, subagentFinishedTitle } from './SubagentFinishedCard';
+import {
+  SubagentEndBlock,
+  type SubagentEndedRun,
+  SubagentEndStatus,
+  subagentEnded,
+  SubagentFoldedEnd,
+  SubagentQueuedWakesCtx,
+  SubagentWakeQueued,
+  type SubagentWakeSeen,
+  SubagentWakesCtx,
+} from './SubagentCardEnd';
 import { OrbitEventLine } from './OrbitEventLine';
 import { OrbitExchangeGroup, OrbitExchangeSolo } from './OrbitExchangeFold';
 import { foldsAtLength, parseRunNotice, replyGist, type OrbitExchangeSummary } from '../lib/orbitExchangeFold';
@@ -110,7 +122,13 @@ import { resolutionTurnLabel } from '../lib/ownerRequests';
 import { RUNNER_UPDATE_INTERRUPT_REASON, RUNNER_UPDATE_RESUME_NOTE } from '@orbit/shared';
 import { isRunnerUpdateResume, runnerUpdateInterruptedLine } from '../lib/runnerUpdateNow';
 import { parseBackgroundWake } from '../lib/backgroundWake';
-import { parseSubagentFinished, subagentFinishedOk } from '../lib/subagentFinished';
+import { BG_RUN_TOOL, bgRunReceipt, isRunnerJobLaunch, jobWakesOf, wakeupsOnly } from '../lib/bgJobCard';
+import { deriveBackgroundShells, mergeBackgroundShells, type BgShell } from '../lib/backgroundShells';
+import { BgJobHostCtx, JobCard, JobShellsCtx, JobWakesCtx } from './JobCard';
+import { parseSubagentFinished } from '../lib/subagentFinished';
+import { parseWorkflowFinished, workflowFinishedTitle } from '../lib/orbitWorkflow';
+import { WorkflowRunsCtx } from '../lib/workflowRuns';
+import { OrbitWorkflowBlock, WorkflowFinishedStrip } from './OrbitWorkflowBlock';
 import { parseOpenItemDelivery } from '../lib/openItemDelivery';
 import type { OpenItemDeliveryCard as OpenItemDelivery, ProjectStartedCard as Started } from '@orbit/shared';
 import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
@@ -1000,6 +1018,7 @@ const readersOwnWords = (node: TextNode): boolean =>
   && !isRunnerUpdateResume(node.text)
   && !parseBackgroundWake(node.note)
   && !parseSubagentFinished(node.note)
+  && !parseWorkflowFinished(node.note)
   && !orbitOnlyTurn(node);
 
 // A turn whose typed text is empty and whose recorded note holds Orbit's blocks, with nothing the
@@ -1296,6 +1315,9 @@ function buildTranscript(
   // `turn_end` closes it. What says how long that turn worked once the end arrives.
   let turnHead: TextNode['turnHead'];
   let legacyWithheld: { node: NoticeNode; count: number; turn: string | null | undefined } | undefined;
+  // The runner's launch pair for a bg_run job (lib/bgJobCard `isRunnerJobLaunch`): the job's card is its
+  // bg_run call, so neither half draws, and its result must not fall to whichever call is still open.
+  const runnerJobLaunches = new Set<string>();
   for (const ev of events) {
     const p = ev.payload ?? {};
     const parent: string | undefined = p.parentToolUseId;
@@ -1535,6 +1557,10 @@ function buildTranscript(
         break;
       }
       case 'tool_use': {
+        if (isRunnerJobLaunch(String(p.name ?? ''), String(p.id ?? ''), p.input)) {
+          runnerJobLaunches.add(String(p.id));
+          break;
+        }
         const node: ToolNode = {
           kind: 'tool',
           seq: ev.seq,
@@ -1552,6 +1578,7 @@ function buildTranscript(
         break;
       }
       case 'tool_result': {
+        if (p.toolUseId && runnerJobLaunches.has(String(p.toolUseId))) break;
         const t =
           (p.toolUseId ? byId.get(String(p.toolUseId)) : undefined) ??
           (lastOpenTool && !lastOpenTool.result ? lastOpenTool : undefined);
@@ -1914,6 +1941,27 @@ export const Transcript = memo(function Transcript({
   inserts?: readonly TranscriptInsert[];
 }) {
   const nodes = useMemo(() => transcriptOf(events, turnImages).nodes, [events, turnImages]);
+  // Each SubAgent end turn loaded, by run id: its card draws the end, so the turn itself draws nothing.
+  const subagentWakes = useMemo(() => subagentWakesOf(nodes), [nodes]);
+  // Each bg_run job's wake turns and its runner reports, by job id: its card draws them (JobCard).
+  const jobWakes = useMemo(
+    () =>
+      jobWakesOf(
+        nodes.flatMap((node) =>
+          node.kind === 'user'
+            ? [{ note: node.note, ts: node.ts, delivered: node.delivery !== 'failed' && node.delivery !== 'unconfirmed' }]
+            : [],
+        ),
+      ),
+    [nodes],
+  );
+  const jobHost = useContext(BgJobHostCtx);
+  const jobShells = useMemo(() => {
+    const out = new Map<string, BgShell>();
+    const shells = mergeBackgroundShells([...(jobHost?.serverShells ?? [])], deriveBackgroundShells(events, { sessionLive: !!live }));
+    for (const shell of shells) if (shell.kind === 'job') out.set(shell.shellId, shell);
+    return out;
+  }, [events, live, jobHost]);
   // Only the Agent and Workflow cards read this (TaskBadgeAndStatus, TaskProgressDetail), so a
   // progress frame re-renders those and nothing else.
   const activity = useContext(TaskActivityCtx);
@@ -1986,6 +2034,9 @@ export const Transcript = memo(function Transcript({
   }, [events]);
   const body = (
     <MainCheckoutResultsCtx.Provider value={mainCheckoutResults}>
+      <SubagentWakesCtx.Provider value={subagentWakes}>
+      <JobWakesCtx.Provider value={jobWakes}>
+      <JobShellsCtx.Provider value={jobShells}>
       <TaskLookupCtx.Provider value={taskLookup}>
         <ShownOriginalProvider>
         <ImagePreviewProvider>
@@ -1998,6 +2049,9 @@ export const Transcript = memo(function Transcript({
         </ImagePreviewProvider>
         </ShownOriginalProvider>
       </TaskLookupCtx.Provider>
+      </JobShellsCtx.Provider>
+      </JobWakesCtx.Provider>
+      </SubagentWakesCtx.Provider>
     </MainCheckoutResultsCtx.Provider>
   );
   return artifactResolve ? (
@@ -2006,6 +2060,19 @@ export const Transcript = memo(function Transcript({
     body
   );
 });
+
+/** The SubAgent end turns among `nodes`, by run id: the block the agent read and, once delivered, when. */
+function subagentWakesOf(nodes: Node[]): ReadonlyMap<string, SubagentWakeSeen> {
+  const out = new Map<string, SubagentWakeSeen>();
+  for (const node of nodes) {
+    if (node.kind !== 'user') continue;
+    const wake = parseSubagentFinished(node.note);
+    if (!wake) continue;
+    const read = node.delivery !== 'failed' && node.delivery !== 'unconfirmed';
+    for (const run of wake.runs) out.set(run.runId, { text: wake.text, readAt: read ? node.ts : undefined });
+  }
+  return out;
+}
 
 /**
  * Something drawn into the conversation that is not an event: it has a moment but no seq of its
@@ -2174,20 +2241,19 @@ function orbitTurnOf(
       target: one && (one.kind === 'TASK' || one.kind === 'SESSION') ? { kind: one.kind, id: one.id, title: name } : null,
     };
   }
-  // A SubAgent's end folds like a job's news: a session running several should not read as a run of
-  // rounds the reader opened. One that did not finish stays drawn, as a failed job does.
-  const subagent = parseSubagentFinished(node.note);
-  if (subagent) {
-    if (subagent.runs.some((run) => !subagentFinishedOk(run))) return null;
-    const jobs = parseBackgroundWake(subagent.rest);
-    if (jobs?.jobs.some((job) => job.status === 'failed' || job.status === 'killed')) return null;
-    const title = subagentFinishedTitle(subagent);
-    const name = subagent.runs.length === 1 ? subagent.runs[0].description : null;
+  // A workflow's end folds like a job's news. A SubAgent's end itself draws no separate line because
+  // its card owns the end; any background job news carried beside it still folds normally.
+  const workflow = parseWorkflowFinished(node.note);
+  if (workflow) {
+    if (workflow.runs.some((run) => run.status !== 'DONE')) return null;
+    const title = workflowFinishedTitle(workflow.runs[0]);
+    const name = workflow.runs.length === 1 ? workflow.runs[0].name : null;
     return { ts, what: name ? `${title}: ${name}` : title, category: 'job', target: null };
   }
-  const background = parseBackgroundWake(node.note);
+  // A job's news draws nothing either (its card says it, JobCard): only a wakeup coming due beside it folds.
+  const subagent = parseSubagentFinished(node.note);
+  const background = wakeupsOnly(parseBackgroundWake(subagent ? subagent.rest : node.note));
   if (background) {
-    if (background.jobs.some((job) => job.status === 'failed' || job.status === 'killed')) return null;
     const title = backgroundWakeTitle(background);
     const name = backgroundWakeName(background);
     return { ts, what: name ? `${title}: ${name}` : title, category: 'job', target: null };
@@ -2305,6 +2371,7 @@ function isGroupableTool(node: Node, chat = false): node is ToolNode {
     node.name !== 'mcp__orbit__task_create' &&
     node.name !== 'mcp__orbit__project_create' &&
     !isBackgroundTaskCall(node.name) &&
+    node.name !== BG_RUN_TOOL &&
     !ownerChatReplyOf(node)
   );
 }
@@ -2620,31 +2687,37 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // the running turn's stream where its echo landed, saying how far it got as a steer's bubble
       // would — never the bubble itself.
       //
-      // A SubAgent's end is the same kind of turn, in a block of its own (SubagentFinishedCard). A note
-      // that carries a background job's news beside it draws that line too, after the SubAgent's, as
-      // the control plane wrote them; the job's line then says how the turn went, once.
+      // A workflow's end is one strip (board part 2), drawn before any background job news the note
+      // carried. A SubAgent's end draws nothing here: its joined card owns that end.
+      const workflow = parseWorkflowFinished(node.note);
+      if (workflow) {
+        const others = parseSubagentFinished(workflow.rest);
+        const jobs = wakeupsOnly(parseBackgroundWake(others ? others.rest : workflow.rest));
+        return (
+          <>
+            <WorkflowFinishedStrip wake={workflow} seq={seq} queued={jobs ? undefined : queued} />
+            {jobs && <BackgroundWakeCard wake={jobs} seq={seq} ts={node.ts} queued={queued} />}
+            {node.text.trim() !== '' && <UserBubble node={{ ...node, note: undefined }} />}
+          </>
+        );
+      }
+      // A SubAgent's end is the same kind of turn, in a block of its own, and it draws NOTHING: like Claude
+      // Code's built-in Agent, the SubAgent is one card from start to end, and that card draws how it ended
+      // (SubagentCardEnd, joined by run id). The agent still reads the block unchanged. A note that carries
+      // a background job's news beside it draws that line, as it always has.
       const subagent = parseSubagentFinished(node.note);
       if (subagent) {
         const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
-        const steer = node.steer && !undelivered ? steerDeliveryState(node.delivery).label : undefined;
-        const jobs = parseBackgroundWake(subagent.rest);
+        const jobs = wakeupsOnly(parseBackgroundWake(subagent.rest));
         return (
           <>
-            <SubagentFinishedCard
-              wake={subagent}
-              seq={seq}
-              ts={node.ts}
-              undelivered={undelivered && !jobs}
-              steer={jobs ? undefined : steer}
-              queued={jobs ? undefined : queued}
-            />
             {jobs && (
               <BackgroundWakeCard
                 wake={jobs}
                 seq={seq}
                 ts={node.ts}
                 undelivered={undelivered}
-                steer={steer}
+                steer={node.steer && !undelivered ? steerDeliveryState(node.delivery).label : undefined}
                 queued={queued}
               />
             )}
@@ -2652,8 +2725,13 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
           </>
         );
       }
-      const background = parseBackgroundWake(node.note);
-      if (background) {
+      // A background job's end, new output or stall draws NOTHING (board C1): like a SubAgent, the job is one card
+      // from start to end (JobCard, joined by job id), and the agent still reads the block unchanged. A wakeup that
+      // came due beside it keeps its line.
+      const jobNews = parseBackgroundWake(node.note);
+      if (jobNews) {
+        const background = wakeupsOnly(jobNews);
+        if (!background) return node.text.trim() !== '' ? <UserBubble node={{ ...node, note: undefined }} /> : null;
         const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
         return (
           <>
@@ -4581,9 +4659,9 @@ function resultRepeatsBody(node: ToolNode): boolean {
 }
 
 /** The runtime's calls whose work outlives them: a sub-agent (Agent; Task before 2.x), a Workflow — and
- *  Orbit's own SubAgent (`delegate`). */
+ *  Orbit's own SubAgent (`delegate`) and workflow. */
 function isBackgroundTaskCall(name: string): boolean {
-  return name === 'Agent' || name === 'Task' || name === 'Workflow' || name === DELEGATE_TOOL;
+  return name === 'Agent' || name === 'Task' || name === 'Workflow' || name === DELEGATE_TOOL || name === ORBIT_WORKFLOW_TOOL;
 }
 
 /**
@@ -4597,6 +4675,7 @@ function isLaunchReceipt(node: ToolNode): boolean {
   if (!content || node.result?.isError) return false;
   if (node.name === 'Workflow') return !!workflowLaunchReceipt(content);
   if (node.name === DELEGATE_TOOL) return !!delegateLaunchReceipt(content);
+  if (node.name === ORBIT_WORKFLOW_TOOL) return !!orbitWorkflowLaunchReceipt(content);
   return (node.name === 'Agent' || node.name === 'Task') && isAsyncAgentLaunchAck(content);
 }
 
@@ -4604,7 +4683,7 @@ function isLaunchReceipt(node: ToolNode): boolean {
 // Each tool renders as a single folded row (icon · name · summary · status);
 // clicking expands to show the call body, any sub-workspace transcript, and the
 // result.
-function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
+function ToolView({ node, live, startOpen }: { node: ToolNode; live?: boolean; startOpen?: boolean }) {
   // A `!`-shell command the user ran (runner tags its tool_use id `shell-…`) renders as a
   // distinct "Shell" card, not Claude's Bash tool — see describeTool's isShell branch.
   const isShell = node.id.startsWith('shell-');
@@ -4628,6 +4707,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // asked and how it was answered (see `questionUnread` below for the one time it still does).
   const usuallyOpen =
     !!exp ||
+    !!startOpen ||
     node.name === 'ExitPlanMode' ||
     isShell ||
     isAutoOpenBatch(node);
@@ -4687,6 +4767,12 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // A SubAgent's tier, model, time and cost, and its Why, come from its run rather than its call.
   const isDelegate = node.name === DELEGATE_TOOL;
   const run = useContext(SubagentRunsCtx).get(node.id);
+  const taskLookup = useContext(TaskLookupCtx);
+  // A background SubAgent that has ended: its card draws the end (SubagentCardEnd), joined to its end turn by run id.
+  const ended = isDelegate ? subagentEnded(run) : undefined;
+  const runId = isDelegate && node.result ? delegateRunId(resultContent) : null;
+  const endWake = useContext(SubagentWakesCtx).get(runId ?? '');
+  const dontSend = useContext(SubagentQueuedWakesCtx).get(runId ?? '');
   const meta = isDelegate ? subagentMeta(run) ?? undefined : toolMeta;
   const why = isDelegate ? subagentWhy(run) : null;
   const waitingFor = useContext(SubagentWaitingCtx).get(node.id);
@@ -4708,6 +4794,13 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   if ((node.name === 'AskUserQuestion' || node.name === 'ExitPlanMode') && live && !node.result) return null;
   // A spawned child session (mcp__orbit__session_create): once its result is back, render a
   // clickable card that jumps to the child instead of the default folded JSON.
+  // A bg_run call is its job's card from start to end (JobCard); one refused, or whose answer names no job, stays a call.
+  if (node.name === BG_RUN_TOOL && !node.result?.isError) {
+    const receipt = node.result ? bgRunReceipt(resultContent) : null;
+    if (!node.result || receipt) {
+      return <JobCard seq={node.seq} input={input} jobId={receipt?.jobId ?? null} startedAt={receipt?.startedAt ?? null} live={live} />;
+    }
+  }
   if (node.name === 'mcp__orbit__session_create' && node.result && !node.result.isError) {
     // Nothing to render until the untrimmed result lands (see needsWholeResult).
     if (node.result.truncated && !fullResult) return null;
@@ -4715,6 +4808,21 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   }
   // A drafting call that made a card is the card; one that made none (a dry run, a refusal) stays a call. A clipped
   // answer that does not name its card yet waits for the whole one (see needsWholeResult), as a session's does.
+  // An Orbit workflow is its own block (board parts 2 and 3): its calls by phase, read from the server.
+  if (node.name === ORBIT_WORKFLOW_TOOL) {
+    return (
+      <OrbitWorkflowBlock
+        node={node}
+        running={taskLookup.running(node.id)}
+        title={summary}
+        source={body}
+        card={(id) => {
+          const child = node.children.find((c): c is ToolNode => c.kind === 'tool' && c.id === id);
+          return child ? <WorkflowCallCard node={child} live={live} /> : null;
+        }}
+      />
+    );
+  }
   if (draftCall && node.result && !node.result.isError) {
     const draftId = wikiChatDraftIdOf(resultContent);
     if (draftId) return <WikiDraftCard draftId={draftId} />;
@@ -4724,8 +4832,8 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
     <>
       <div
         data-seq={node.seq}
-        // Where a SubAgent's finished line finds the card it was started from (SubagentFinishedCard).
-        data-subagent-run={isDelegate && node.result ? delegateRunId(resultContent) ?? undefined : undefined}
+        // The run a SubAgent's card stands for: its end turn is joined to it by this id.
+        data-subagent-run={runId ?? undefined}
         // Where the composer band's Agents list finds a run's block (SessionAgentsStrip).
         data-delegate-call={isDelegate ? node.id : undefined}
         className={`chat-tool-card chat-tone-${tone ?? 'default'}${isSubWorkspace ? ' chat-tool-task' : ''}${
@@ -4753,7 +4861,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
           )}
           {tag && <span className="chat-tool-tag">{tag}</span>}
           {isBackgroundTask ? (
-            <TaskBadgeAndStatus node={node} live={live} meta={meta} />
+            <TaskBadgeAndStatus node={node} live={live} meta={meta} run={isDelegate ? run : undefined} />
           ) : outcome?.kind === 'replied' ? (
             // The engine files "Chat about this" as the call's error; it is the person's reply.
             <MessageFilled className="chat-tool-status replied" />
@@ -4764,7 +4872,14 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
             </>
           )}
         </div>
-        {isBackgroundTask && !(hasDetail && open) && (waitingLine ?? <SubagentLiveLine node={node} live={live} />)}
+        {isBackgroundTask &&
+          !(hasDetail && open) &&
+          (waitingLine ??
+            (ended ? (
+              <SubagentFoldedEnd run={ended} onShowFiles={() => setManualOpen(true)} />
+            ) : (
+              <SubagentLiveLine node={node} live={live} />
+            )))}
         {questions.length > 0 && !(hasDetail && open) && (
           <QuestionFolded
             questions={shown}
@@ -4795,7 +4910,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
                 }
               />
             )}
-            {body && (node.name === 'Workflow' ? (
+            {body && (node.name === 'Workflow' || node.name === ORBIT_WORKFLOW_TOOL ? (
               <details className="chat-workflow-source" open={exp ? true : undefined}>
                 <summary>Workflow source</summary>
                 <div className="chat-tool-body">{body}</div>
@@ -4810,19 +4925,35 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
             {/* A sub-agent's totals close its transcript rather than open it. */}
             {isBackgroundTask && node.name !== 'Workflow' && <TaskProgressDetail id={node.id} />}
             {/* A question's result, once read, is only the replay above said again. */}
+            {/* An interrupted run's result is only the runner saying it was interrupted: its end says that, once. */}
             {isDelegate
-              ? node.result && !node.result.isError && (
+              ? node.result && !node.result.isError && ended?.status !== 'INTERRUPTED' && (
                   <DelegateResult content={resultContent} run={run} seq={node.seq} steps={node.children} />
                 )
               : node.result && !node.result.isError && !hideResult && !launchReceipt && !outcome && (
                   <ToolResult seq={node.seq} content={resultContent} compact markdown={isSubWorkspace} />
                 )}
             {!node.result && isShell && <LiveShellOutput toolUseId={node.id} seq={node.seq} />}
+            {ended && <SubagentEndBlock run={ended} runId={runId} wake={endWake} />}
           </div>
         )}
+        {/* Its end turn still on the queue: the agent has not read it, and the reader can keep it back. */}
+        {ended && dontSend && <SubagentWakeQueued onDontSend={dontSend} />}
       </div>
       {ownerWords && <OwnerChatBubble words={ownerWords} />}
     </>
+  );
+}
+
+/** A workflow call's SubAgent card, opened from its row: today's SubAgent block, reading the call's run. */
+function WorkflowCallCard({ node, live }: { node: ToolNode; live?: boolean }) {
+  const runs = useContext(SubagentRunsCtx);
+  const run = useContext(WorkflowRunsCtx).calls.get(node.id);
+  const merged = useMemo(() => (run ? new Map(runs).set(node.id, run) : runs), [runs, run, node.id]);
+  return (
+    <SubagentRunsCtx.Provider value={merged}>
+      <ToolView node={node} live={live} startOpen />
+    </SubagentRunsCtx.Provider>
   );
 }
 
@@ -4981,7 +5112,19 @@ function leadToolSummary(desc: ToolDesc): { text: string; mono: boolean } | unde
  * workflow) or tool calls made (an agent), and a spinner for as long as the work runs — the call
  * itself returned the moment it launched, so its own result would put a check on work just begun.
  */
-function TaskBadgeAndStatus({ node, live, meta }: { node: ToolNode; live?: boolean; meta?: string }) {
+function TaskBadgeAndStatus({
+  node,
+  live,
+  meta,
+  run,
+}: {
+  node: ToolNode;
+  live?: boolean;
+  meta?: string;
+  /** A SubAgent's run: once it has ended, its end is the card's status, not the call's (a background call only
+   *  answered with its receipt, so it always reads as a success). */
+  run?: SubagentRunView;
+}) {
   const lookup = useContext(TaskLookupCtx);
   const progress = lookup.progress(node.id);
   const badge = (progress && progressBadge(progress)) ?? meta;
@@ -4990,6 +5133,9 @@ function TaskBadgeAndStatus({ node, live, meta }: { node: ToolNode; live?: boole
       {badge && <span className="chat-tool-meta">{badge}</span>}
       {lookup.running(node.id) ? (
         <LoadingOutlined className="chat-tool-status running" spin />
+      ) : run && run.status !== 'RUNNING' ? (
+        // ✓ for DONE; the mark and a word for every other end, grey for a stop (SubagentCardEnd).
+        <SubagentEndStatus run={run as SubagentEndedRun} />
       ) : (
         <ToolStatus node={node} live={live} />
       )}
@@ -5305,6 +5451,18 @@ function describeTool(
         summary: workflowTitle(i, null),
         body: typeof i.script === 'string' ? <Pre text={i.script} threshold={6} muted /> : undefined,
       };
+    case ORBIT_WORKFLOW_TOOL:
+      // Orbit's own workflow (docs/subagent-workflow-design.md): drawn as the runtime's Workflow card is, named by
+      // its script's meta and the call's description. Its agent() calls nest under it as SubAgent cards.
+      return {
+        label: 'Workflow',
+        icon: <ApartmentOutlined />,
+        tone: 'agent',
+        summary: [orbitWorkflowName(i.script), typeof i.description === 'string' ? i.description.trim() : '']
+          .filter(Boolean)
+          .join(' · ') || undefined,
+        body: typeof i.script === 'string' ? <Pre text={i.script} threshold={6} muted /> : undefined,
+      };
     case 'ExitPlanMode':
       // The plan is Markdown meant to be read — render it like Task's prompt,
       // not as a raw key/value blob via the default branch.
@@ -5407,6 +5565,12 @@ function describeTool(
       }
       return { label: name, icon: <ToolOutlined />, summary: kvSummary(i), summaryMono: true, body: hasKeys(i) ? <KeyVals obj={i} /> : undefined };
   }
+}
+
+/** The `name` of an Orbit workflow script's leading `export const meta = { name: … }`, when it is a plain string. */
+function orbitWorkflowName(script: unknown): string {
+  if (typeof script !== 'string') return '';
+  return /export\s+const\s+meta\s*=\s*\{[^]*?\bname\s*:\s*(['"`])([^'"`\n]+)\1/.exec(script)?.[2]?.trim() ?? '';
 }
 
 function ToolResult({

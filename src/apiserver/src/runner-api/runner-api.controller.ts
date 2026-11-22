@@ -3,7 +3,7 @@ import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from
 import { DRAIN_SKIPS_HELD, translationLanguages, turnTranslationOf } from '../sessions/turn-translation';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
-import { BROWSER_CLEAR_V1, CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
+import { BG_OWNER_STOP_V1, BROWSER_CLEAR_V1, type BackgroundJobStopCommand, CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import { ConditionsService } from '../conditions/conditions.service';
 import { GithubWorkspaceService } from '../github/github-workspace.service';
@@ -123,6 +123,8 @@ import {
   AccountRemoveCommand,
   AccountRemoveMove,
   AccountRemoveResult,
+  ClaudeAccountSwapCommand,
+  ClaudeAccountSwapResult,
   CodexAccountRemoveResult,
   InstallCommand,
   InstallResult,
@@ -198,6 +200,11 @@ import {
   normalizeEffortForRuntimeModel,
 } from '../common/runtime-provider';
 import { OPEN_SESSION_STATUSES, statusAfterTurnCompleted } from '../common/session-scheduling';
+import {
+  finalizeReleaseCause,
+  HELD_SESSION_STATUSES,
+  RELEASED_SESSION_STATUSES,
+} from '../common/session-release';
 import { assertValidUpload, MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
 import { FileUploadCleanupInterceptor } from '../files/file-upload-cleanup.interceptor';
 import { FILE_UPLOAD_STORAGE, type FileUpload } from '../files/file-upload-storage';
@@ -213,6 +220,15 @@ import { TransactionSurface } from '../common/prisma-transaction-surface';
 import { PrismaService } from '../prisma/prisma.service';
 import { settleSteerWithdrawal, STEER_WITHDRAW_DELIVERY_WINDOW_MS } from '../sessions/steer-withdraw';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
+import {
+  CLAUDE_ACCOUNT_SWAP_NO_ANSWER,
+  CLAUDE_ACCOUNT_SWAP_TIMED_OUT,
+  CLAUDE_ACCOUNT_SWAP_TOO_OLD,
+  CLAUDE_ACCOUNT_SWAP_V1,
+  claudeSwapHolds,
+  swapForeignProcesses,
+  swapWaitingOn,
+} from '../runners/claude-account-swap';
 import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import {
@@ -260,8 +276,9 @@ import {
   terminalizePendingCurrentWorkSteers,
 } from '../sessions/current-work-delivery';
 import { fileSubagentWake, fileWorkflowWake, interruptOrphanedSubagentRuns, interruptOrphanedWorkflowRuns } from './subagent-wake';
-import { orbitWorkflowLaunchReceipt } from './workflow-run';
+import { orbitWorkflowLaunchReceipt, workflowClaimFields } from './workflow-run';
 import { remoteSubagentHeartbeat } from './subagent-remote';
+import { backgroundJobStopsFor } from './background-job-stops';
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
@@ -279,6 +296,7 @@ import { settleTaskSegmentAfterReceipt } from '../projects/landing-session';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
+import { CoordinatorFactQueueService } from '../projects/coordinator-fact-queue.service';
 import { CoordinatorEvidenceQueueService } from '../projects/coordinator-evidence-queue.service';
 import { EvidenceReviewService } from '../tasks/evidence-review.service';
 import {
@@ -491,7 +509,9 @@ import {
   replayableEventSql,
   TOMBSTONE_EVENT_TYPE,
 } from '../common/system-noise';
-import { isInstallEngine, isKimiRegion, isLoginEngine, sanitizeRunnerEngines, usedRunnerEngines } from '../common/runner-engines';
+import {
+  FORMER_DEFAULT_KEY, formerDefaultEmail, isInstallEngine, isKimiRegion, isLoginEngine, sanitizeRunnerEngines, usedRunnerEngines,
+} from '../common/runner-engines';
 import { antigravityGoogleLoginRefusal, antigravitySignInUnderWay } from '../common/antigravity-readiness';
 import { RUNNER_OS_HEADER, withRunnerOs } from '../common/runner-platform';
 import { loginCodeRelay } from '../runners/login-code-relay';
@@ -552,6 +572,7 @@ import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-d
 import { DELETE_APPROVAL_TOOL_NAMES, deleteCardInput } from './runner-delete-approval';
 import { sanitizeWorkspaceWrite } from './runner-agents.controller';
 import { workspaceWriteCardInput } from './runner-workspace-approval';
+import { turnOutcomeOf } from './turn-outcome';
 import { authorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import {
@@ -570,6 +591,7 @@ import {
 } from '../runners/runner-presence';
 import { recordRunnerResources, sanitizeRunnerResources } from '../runners/runner-resources';
 import { ownBackgroundJobSessionIds, sanitizeBackgroundJobSessionIds } from '../runners/runner-background-holders';
+import { executingStatedAt, replaceExecutingSets, sanitizeExecuting } from '../runners/runner-executing-sets';
 import {
   CHECK_ONLY_REFUSED_MESSAGE,
   checkOnlyRefusesApproval,
@@ -581,6 +603,7 @@ import {
   scheduleRunAllowedTools,
   scheduleRunDisallowedTools,
 } from '../schedules/schedule-access';
+import { storableBranchCommits } from './branch-commits';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -667,6 +690,10 @@ const INGEST_SESSION_SELECT = {
   runningBgJobs: true,
   runningBgJobActivity: true,
   runningSubagents: true,
+  // Beside the sets: whether this batch moved the engine's turn, and the batch stamp a moved set leaves
+  // (`executingEventAt`, runners/runner-executing-sets.ts).
+  engineTurnActive: true,
+  executingEventAt: true,
   coordinatorContextEpoch: true,
   // Same one-shot-per-run reason as runtimeSessionId: the stamp ingestEvents takes is only taken
   // while this is still null, and the row is held FOR UPDATE across that decision.
@@ -906,6 +933,7 @@ const INGESTED_SESSION_COLUMNS: Record<string, { column: string; type: 'text' | 
   contextTokens: { column: 'context_tokens', type: 'integer' },
   contextWindow: { column: 'context_window', type: 'integer' },
   engineTurnActive: { column: 'engine_turn_active', type: 'boolean' },
+  executingEventAt: { column: 'executing_event_at', type: 'timestamp' },
   enginePhase: { column: 'engine_phase', type: 'text' },
   enginePhaseSince: { column: 'engine_phase_since', type: 'timestamp' },
   lastUserText: { column: 'last_user_text', type: 'text' },
@@ -924,6 +952,16 @@ const INGESTED_SESSION_COLUMNS: Record<string, { column: string; type: 'text' | 
   runningBgJobActivity: { column: 'running_bg_job_activity', type: 'jsonb' },
   agentTools: { column: 'agent_tools', type: 'jsonb' },
 };
+
+/** The newest runner-clock `ts` of a batch's events, or null when none parses. */
+function newestEventTime(events: ReadonlyArray<{ ts?: unknown }>): Date | null {
+  let newest: number | null = null;
+  for (const e of events) {
+    const at = typeof e.ts === 'string' ? Date.parse(e.ts) : Number.NaN;
+    if (!Number.isNaN(at) && (newest === null || at > newest)) newest = at;
+  }
+  return newest === null ? null : new Date(newest);
+}
 
 /** A value of an ingested Session column as text, or undefined when it is not one writeCallSessions carries. */
 function ingestedSessionValue(type: (typeof INGESTED_SESSION_COLUMNS)[string]['type'], value: unknown): string | null | undefined {
@@ -1070,8 +1108,9 @@ const LEASE_GENERATION_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-
 // entity-ID validation separate from the stricter runner-generated lease UUID
 // validation above so adding a UUID version cannot take the heartbeat offline.
 const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED];
-const TERMINAL: RunStatus[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
+// Held by a runner past its claim, and released (common/session-release.ts).
+const LIVE: RunStatus[] = HELD_SESSION_STATUSES.filter((status) => status !== RunStatus.PENDING);
+const TERMINAL: RunStatus[] = [...RELEASED_SESSION_STATUSES];
 // PENDING is also open/resumable. In the active-turn model it can briefly coexist with
 // a still-warm runtime (a new message arrived after the prior turn released its slot), so
 // late event tails and heartbeat snapshots must remain streamable while it waits to claim.
@@ -1712,6 +1751,7 @@ export class RunnerApiController {
      */
     @Optional() private readonly coordinatorHandoffs?: CoordinatorHandoffService,
     @Optional() private readonly conditions?: ConditionsService,
+    @Optional() private readonly coordinatorFacts?: CoordinatorFactQueueService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -2090,6 +2130,7 @@ export class RunnerApiController {
       return this.reconcileHeartbeat(admitted, dto, headers.capabilities, headers.providerHeader, headers.osHeader, instance, link);
     }
     if (row.landingNamed) assertEngineSessionRow({ sessionKind: 'LANDING' });
+    await this.recordExecuting(runnerId, leaseOwner, dto);
     let verdict = linkBeatVerdict(runnerId, row, digests, supervised.length);
     if (verdict.answer === 'REPORT') {
       // A beat whose checkout report changed is written here, not by the full reconcile: read what it overwrites, so
@@ -2134,6 +2175,22 @@ export class RunnerApiController {
       row,
       digests,
     });
+  }
+
+  /**
+   * What the beat states is executing in each session the process supervises, replacing those sessions' inferred sets
+   * (runners/runner-executing-sets.ts); nothing for a beat that carries none. Advisory, as the background-job holders
+   * are: a write that fails leaves the sets as they were, and the next beat states them again.
+   */
+  private async recordExecuting(runnerId: string, leaseOwner: string | null, dto: RunnerHeartbeatRequest): Promise<void> {
+    const entries = sanitizeExecuting(dto?.executing);
+    if (!entries) return;
+    try {
+      const moved = await replaceExecutingSets(this.prisma, { runnerId, leaseOwner, entries, statedAt: executingStatedAt(dto?.executingAt) });
+      for (const sessionId of moved) this.realtime.publishSessionUpdated(sessionId);
+    } catch (error) {
+      this.logger.warn(`runner ${runnerId}: executing sets not recorded this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+    }
   }
 
   /** What a link heartbeat's answer says waits for the runner: the beat statement's HintState, and this process's own. */
@@ -2337,6 +2394,7 @@ export class RunnerApiController {
         backgroundJobSessionIds,
         at: beatAt,
       }).catch(beatLost);
+      await this.recordExecuting(runner.id, heartbeatLeaseOwner, dto);
       // The machine's reading, on the row the beat just wrote. Advisory: a reading lost is the page's dash until the next.
       const resources = sanitizeRunnerResources(dto?.resources);
       if (resources) {
@@ -2467,6 +2525,16 @@ export class RunnerApiController {
       remoteSubagents = await remoteSubagentHeartbeat(this.prisma, runner.id);
     } catch (error) {
       this.logger.warn(`runner ${runner.id}: remote SubAgent runs skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+    }
+    // The bg_run jobs the owner asked to stop from the app, listed while each still runs; only to a runner that
+    // carries them out (BG_OWNER_STOP_V1), which the stop route already refuses to queue for any other.
+    let stopBackgroundJobs: BackgroundJobStopCommand[] = [];
+    if (runnerSupportsCapability(capabilities, BG_OWNER_STOP_V1)) {
+      try {
+        stopBackgroundJobs = await backgroundJobStopsFor(this.prisma, runner.id);
+      } catch (error) {
+        this.logger.warn(`runner ${runner.id}: background job stops skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+      }
     }
     // An engine that was signed in and now isn't: tell the owner while it is still news, rather
     // than letting them find out from the next session that refuses to start. Only the yes -> no
@@ -2694,6 +2762,7 @@ export class RunnerApiController {
     let loginRequest: RunnerHeartbeatResponse['loginRequest'];
     let codexAccountRemoveRequest: RunnerHeartbeatResponse['codexAccountRemoveRequest'];
     let accountRemoveRequest: RunnerHeartbeatResponse['accountRemoveRequest'];
+    let claudeAccountSwapRequest: RunnerHeartbeatResponse['claudeAccountSwapRequest'];
     let installRequest: RunnerHeartbeatResponse['installRequest'];
     let agentDirs: RunnerHeartbeatResponse['agentDirs'] = [];
     let conditionProbes: RunnerHeartbeatResponse['conditionProbes'];
@@ -2750,6 +2819,7 @@ export class RunnerApiController {
       } else {
         accountRemoveRequest = removeRequest;
       }
+      claudeAccountSwapRequest = await this.drainClaudeAccountSwapRequest(runner.id, capabilities);
       installRequest = await this.drainInstallRequest(runner.id);
       repoCleanupRequest = await this.drainRepoCleanupRequest(runner.id);
       claudeHistoryRequest = await this.drainClaudeHistoryRequest(runner.id);
@@ -2846,6 +2916,7 @@ export class RunnerApiController {
       loginRequest,
       codexAccountRemoveRequest,
       accountRemoveRequest,
+      claudeAccountSwapRequest,
       installRequest,
       agentDirs,
       ...(conditionProbes ? { conditionProbes } : {}),
@@ -2872,6 +2943,7 @@ export class RunnerApiController {
       // Present only while this runner has remote SubAgent runs to claim or to stop.
       ...(!draining && remoteSubagents.remoteSubagentRuns.length > 0 ? { remoteSubagentRuns: remoteSubagents.remoteSubagentRuns } : {}),
       ...(remoteSubagents.stopSubagentRunIds.length > 0 ? { stopSubagentRunIds: remoteSubagents.stopSubagentRunIds } : {}),
+      ...(stopBackgroundJobs.length > 0 ? { stopBackgroundJobs } : {}),
       ...(mainCheckoutRequests ? { mainCheckoutRequests } : {}),
       // Only to the instance being drained to sleep: every other runner's response keeps its shape.
       ...(managedBeat.sleep ? { managedSleep: managedBeat.sleep } : {}),
@@ -3952,16 +4024,146 @@ export class RunnerApiController {
         codexAccountRemoveSessions: sessionIds,
       },
     });
-    // The name the account was given in Orbit goes with it (RunnersService.renameAccount): nothing
-    // would show it again, and a slot added later under the same id must not inherit it.
+    // The name the account was given in Orbit goes with it (RunnersService.renameAccount), and so does
+    // its mark as a former Default: nothing would show them again, and a slot added later under the
+    // same id must not inherit them.
     if (count > 0 && status === 'done' && body.account) {
       await this.prisma.$executeRaw`
         UPDATE "runner"
            SET "account_names" = "account_names" #- ARRAY[${engine}::text, ${body.account}::text]
+                                 #- ARRAY[${FORMER_DEFAULT_KEY}::text, ${engine}::text, ${body.account}::text]
          WHERE "id" = ${runnerId}::uuid
-           AND "account_names" #> ARRAY[${engine}::text, ${body.account}::text] IS NOT NULL`;
+           AND ("account_names" #> ARRAY[${engine}::text, ${body.account}::text] IS NOT NULL
+                OR "account_names" #> ARRAY[${FORMER_DEFAULT_KEY}::text, ${engine}::text, ${body.account}::text] IS NOT NULL)`;
     }
     return { ok: true, applied: count > 0 };
+  }
+
+  /**
+   * The Set as default swap a runner is handed on its heartbeat (docs/claude-default-swap-contract.md §5): redelivered
+   * while it is `pending`, like the removal's. Swept here rather than by a timer: past the relay window with no answer
+   * from the runner, or past 6 hours once it has answered (it waits out turns in progress), the swap fails with the
+   * words the page shows. A runner that no longer declares claude-account-swap/v1 would never answer, so it fails at
+   * once. A failure changes no record of either account.
+   */
+  private async drainClaudeAccountSwapRequest(
+    runnerId: string,
+    capabilities: string | string[] | undefined,
+  ): Promise<ClaudeAccountSwapCommand | undefined> {
+    const r = await this.prisma.runner.findUnique({
+      where: { id: runnerId },
+      select: {
+        claudeAccountSwapAccount: true, claudeAccountSwapStatus: true, claudeAccountSwapAt: true, claudeAccountSwapForeign: true,
+      },
+    });
+    if (r?.claudeAccountSwapStatus !== 'pending' || !r.claudeAccountSwapAccount || !r.claudeAccountSwapAt) return undefined;
+    const fail = async (message: string) => {
+      await this.prisma.runner.updateMany({
+        where: { id: runnerId, claudeAccountSwapStatus: 'pending', claudeAccountSwapAt: r.claudeAccountSwapAt },
+        data: {
+          claudeAccountSwapStatus: 'failed',
+          claudeAccountSwapMessage: message,
+          claudeAccountSwapWaiting: [],
+          claudeAccountSwapForeign: Prisma.DbNull,
+        },
+      });
+      await this.releaseClaudeAccountSwap(runnerId);
+      return undefined;
+    };
+    if (capabilities !== undefined && !runnerSupportsCapability(capabilities, CLAUDE_ACCOUNT_SWAP_V1)) {
+      return fail(CLAUDE_ACCOUNT_SWAP_TOO_OLD);
+    }
+    // `claude_account_swap_foreign` is written (as a list, empty or not) by every pending report, so a non-null one
+    // says the runner has answered and is waiting out turns.
+    const answered = r.claudeAccountSwapForeign !== null;
+    if (Date.now() - r.claudeAccountSwapAt.getTime() > (answered ? ACCOUNT_REMOVE_MOVE_TIMEOUT_MS : LOGIN_RELAY_TIMEOUT_MS)) {
+      return fail(answered ? CLAUDE_ACCOUNT_SWAP_TIMED_OUT : CLAUDE_ACCOUNT_SWAP_NO_ANSWER);
+    }
+    return { account: r.claudeAccountSwapAccount, attempt: r.claudeAccountSwapAt.toISOString() };
+  }
+
+  /** Once a swap is no longer pending, the work it held goes out: the claims it held, and each held session's inbox. */
+  private async releaseClaudeAccountSwap(runnerId: string, sessionIds?: readonly string[]): Promise<void> {
+    const held = sessionIds ?? (await this.prisma.session.findMany({
+      where: {
+        assignedRunnerId: runnerId, provider: 'claude', providerBuiltin: true, sessionKind: 'CONVERSATION',
+        status: { notIn: [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED] },
+      },
+      select: { id: true },
+    })).map((row) => row.id);
+    for (const id of held) this.realtime.notifyInbox(id);
+    this.queue.notifySessionQueued(runnerId);
+  }
+
+  /**
+   * Runner → control plane: where one Set as default swap stands (docs/claude-default-swap-contract.md §5). The same
+   * body every time, the latest wins, and a report about a swap the row has moved past (another account or attempt,
+   * or one no longer pending) changes nothing.
+   *
+   * `pending` names what the swap waits on. `failed` ends it and changes no record of either account. `done` ends it
+   * and, in the same transaction, swaps every record Orbit keys by the two account ids (SessionsService
+   * .applyClaudeAccountSwap); it is applied once.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('claude-account-swap-result')
+  @HttpCode(200)
+  async claudeAccountSwapResult(@CurrentRunner() runner: { id: string }, @Body() body: ClaudeAccountSwapResult) {
+    const status = body?.status;
+    if (status !== 'pending' && status !== 'done' && status !== 'failed') {
+      throw new BadRequestException('Unknown swap status');
+    }
+    if (!ACCOUNT_ID_PATTERN.test(String(body.account ?? '')) || body.account === 'default') {
+      throw new BadRequestException('Unknown account');
+    }
+    const attempt = new Date(String(body.attempt ?? ''));
+    if (Number.isNaN(attempt.getTime())) throw new BadRequestException('attempt must be the request this reports on');
+    const asked = {
+      id: runner.id,
+      claudeAccountSwapStatus: 'pending',
+      claudeAccountSwapAccount: body.account,
+      claudeAccountSwapAt: attempt,
+    };
+    if (status === 'pending') {
+      // Only sessions this runner runs are kept, as for the removal's.
+      const named = swapWaitingOn(body.waitingOn);
+      const waiting = named.length === 0 ? [] : (await this.prisma.session.findMany({
+        where: { id: { in: named }, assignedRunnerId: runner.id },
+        select: { id: true },
+      })).map((row) => row.id).sort((x, y) => named.indexOf(x) - named.indexOf(y));
+      const { count } = await this.prisma.runner.updateMany({
+        where: asked,
+        data: {
+          claudeAccountSwapWaiting: waiting,
+          claudeAccountSwapForeign: swapForeignProcesses(body.foreignProcesses) as unknown as Prisma.InputJsonValue,
+        },
+      });
+      return { ok: true, applied: count > 0 };
+    }
+    if (status === 'failed') {
+      const { count } = await this.prisma.runner.updateMany({
+        where: asked,
+        data: {
+          claudeAccountSwapStatus: 'failed',
+          claudeAccountSwapMessage: typeof body.message === 'string' && body.message
+            ? body.message.replace(/\p{Cc}/gu, ' ').slice(0, 500)
+            : 'The runner could not set this account as the default.',
+          claudeAccountSwapWaiting: [],
+          claudeAccountSwapForeign: Prisma.DbNull,
+        },
+      });
+      if (count > 0) await this.releaseClaudeAccountSwap(runner.id);
+      return { ok: true, applied: count > 0 };
+    }
+    if (!this.sessions) throw new HttpException('sessions are not available', 503);
+    const applied = await this.sessions.applyClaudeAccountSwap(
+      runner.id, body.account, attempt, formerDefaultEmail(body.now?.accountEmail),
+    );
+    if (applied) {
+      this.queue.notifySessionQueued(runner.id);
+      // The page shows the exchanged accounts at once, as for a sign-in.
+      this.realtime.notifyRunnerWake(runner.id);
+    }
+    return { ok: true, applied: applied !== null };
   }
 
   /**
@@ -4531,6 +4733,8 @@ export class RunnerApiController {
         ...watchClaimFields(watchRollout, s.ownerId),
         // And the wiki, on the same rule (wiki/wiki-rollout.ts).
         ...wikiClaimFields(wikiRollout, s.ownerId),
+        // cf. the claim path: the Agent's Workflows switch, which may have moved since the session was first claimed.
+        ...workflowClaimFields(workspace),
         // cf. the claim path: a scheduled run's session lists schedule_run_report.
         ...(s.scheduleRunId ? { scheduleRun: true } : {}),
         // Read, never re-derived (SR29). A session already PINNED comes back on the SHA its first
@@ -4571,9 +4775,11 @@ export class RunnerApiController {
     @Body() dto: SourcePinRequest,
   ): Promise<SourcePinResponse> {
     await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
+    const settledBox: { work: { ownerId: string; taskId: string } | null } = { work: null };
     const outcome = await withTransactionRetry(
       this.prisma,
       async (tx) => {
+        settledBox.work = null;
         const frozen = await freezeSessionSourcePin(
           tx,
           { sessionId, runnerId: runner.id, ownerId: runner.ownerId },
@@ -4595,10 +4801,14 @@ export class RunnerApiController {
           );
           // The refusal ended the run, and that finish may be the one a DONE task's identity was
           // waiting for (§10.5 O-L4 3). Here rather than in the freeze, after the project is taken.
-          await settleDeliveredIdentityAfterFinish(tx, await tx.session.findUnique({
+          const finished = await tx.session.findUnique({
             where: { id: sessionId },
-            select: { ownerId: true, taskId: true, startsTaskWork: true },
-          }));
+            select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+          });
+          const settled = await settleDeliveredIdentityAfterFinish(tx, finished);
+          if (finished?.taskId && (settled === 'FROZEN' || settled === 'IDENTITY_UNKNOWN')) {
+            settledBox.work = { ownerId: finished.ownerId, taskId: finished.taskId };
+          }
         }
         return frozen;
       },
@@ -4613,6 +4823,13 @@ export class RunnerApiController {
     // (publishTaskChanged) and the project's coordinator is told, because a start that never became
     // a run is the one thing a project's timeline would otherwise never mention.
     const { refused, ...response } = outcome;
+    // §12.15 P-M1: the refused run's finish decided the route a DONE task's work had left open.
+    const settledWork = settledBox.work;
+    if (settledWork) {
+      await this.tasks?.dispatchDependentsOfSettledWork(settledWork.ownerId, settledWork.taskId).catch((error) =>
+        this.logger.warn(`dependents of task ${settledWork.taskId} not dispatched after its work settled: ${
+          error instanceof Error ? error.message : error}`));
+    }
     if (refused) {
       this.realtime.publishTaskChanged(sessionId, refused.taskId);
       await this.tasks?.deliverDispatchRefusalAfterCommit(refused.taskId);
@@ -4952,6 +5169,8 @@ export class RunnerApiController {
       }
 
       const orphanedApprovals: Array<{ sessionId: string; id: string }> = [];
+      const interruptedSubagents: string[] = [];
+      const interruptedWorkflows: string[] = [];
       if (writes.length > 0) {
         // The single route's writes, once for the batch. The lease write goes first here so a row a
         // guard refuses (it skips the row rather than raising) retires nothing and reaps nothing —
@@ -4998,11 +5217,34 @@ export class RunnerApiController {
           const replaced = landed.filter((w) => w.predecessor).map((w) => w.id);
           if (replaced.length > 0) {
             orphanedApprovals.push(...await reapApprovalsOfReplacedSupervisors(tx, replaced));
+            // The single route's SubAgent and workflow interrupts, once for the batch: the predecessor that hosted them is
+            // gone, and none of them will report an end. Without this a restart's idle sessions kept their runs RUNNING with
+            // no wake for the parent (design §11.3 item 4), and no sweep ends a local run.
+            interruptedSubagents.push(...await interruptOrphanedSubagentRuns(tx, replaced));
+            interruptedWorkflows.push(...await interruptOrphanedWorkflowRuns(tx, replaced));
           }
         }
       }
-      return { results: ids.map((id) => answers.get(id)!), orphanedApprovals };
+      return { results: ids.map((id) => answers.get(id)!), orphanedApprovals, interruptedSubagents, interruptedWorkflows };
     }, loggedRetry(this.logger, 'runnerApi.takeoverLeasesBatch'));
+
+    // As the single route files them; the wake sweep files any not filed here (ScheduledWakeupWorker).
+    if (this.sessions) {
+      for (const runId of taken.interruptedSubagents) {
+        try {
+          await fileSubagentWake(this.prisma, this.sessions, runId);
+        } catch (error) {
+          this.logger.warn(`the wake for interrupted SubAgent run ${runId} was not filed yet: ${(error as Error).message}`);
+        }
+      }
+      for (const runId of taken.interruptedWorkflows) {
+        try {
+          await fileWorkflowWake(this.prisma, this.sessions, runId);
+        } catch (error) {
+          this.logger.warn(`the wake for interrupted workflow run ${runId} was not filed yet: ${(error as Error).message}`);
+        }
+      }
+    }
 
     for (const { sessionId, id } of taken.orphanedApprovals) {
       this.realtime.publish(sessionId, {
@@ -5500,6 +5742,8 @@ export class RunnerApiController {
           taskId: string | null;
           /** The runner dispatch pause (queue/dispatch-pause.ts), read with the lock. */
           dispatchPaused?: boolean;
+          /** A Set as default swap of Claude accounts is pending on this runner (claude-account-swap.ts). */
+          claudeSwapPending?: boolean;
           /** The newest link fetch that handed a turn out, and that turn (migration 0448). */
           inboxRequestId?: string | null;
           inboxRequestTurnId?: string | null;
@@ -5510,6 +5754,8 @@ export class RunnerApiController {
                "owner_id" AS "ownerId", provider, "provider_builtin" AS "providerBuiltin", engine
                , "task_id" AS "taskId", ${DISPATCH_PAUSED} AS "dispatchPaused"
                , "inbox_request_id" AS "inboxRequestId", "inbox_request_turn_id" AS "inboxRequestTurnId"
+               , EXISTS (SELECT 1 FROM "runner" r WHERE r.id = "session"."assigned_runner_id"
+                          AND r."claude_account_swap_status" = 'pending') AS "claudeSwapPending"
         FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runnerId}::uuid
         FOR UPDATE
@@ -5537,6 +5783,10 @@ export class RunnerApiController {
       if (active.length === 0) {
         throw new ConflictException('inbox lease generation is missing or retired');
       }
+      // Set as default for Claude Code (claude-account-swap.ts): while a swap is pending, a session on either of its
+      // accounts is handed no turn — it would start in the folder that is about to change. What waits stays queued and
+      // is delivered once the swap ends, when each such session is hinted.
+      if (owned[0].claudeSwapPending && await claudeSwapHolds(tx, runnerId, sessionId)) return null;
       // A link poller of the process that holds this session's inbox lease, polling under the
       // generation the running turn was leased to, says it is not running that turn: the answer that
       // carried it was lost on its way (a connection that dropped, a gateway that never relayed it).
@@ -7297,6 +7547,7 @@ export class RunnerApiController {
       // message away. A task-bound session additionally reclaims its task as FAILED (it
       // would otherwise sit IN_PROGRESS with nothing watching).
       let failSession = dto.status === RunStatus.FAILED && !regionStopped;
+      let settledWork = false;
       // A reserved L0 turn that cannot produce a comparison is unsettled, not a guessed task
       // failure. An ordinary failed model/shell turn retains the existing FAILED behaviour.
       const failTask = failSession && !!current.taskId && !taskAcceptanceTurn;
@@ -7495,6 +7746,19 @@ export class RunnerApiController {
             : unanswered && noEngineTurnRan && current.retryAt == null
               ? nextAutoRetryAt(current.retryAttempts, new Date())
               : null;
+      // How the turn ended, for the turn row and the session's copy of it (docs/session-three-state-design.md
+      // §4.2), and the words it ended with: see turn-outcome.ts. A steer and a withdraw settled above.
+      const turnEnd = turnOutcomeOf({
+        kind: completedTurn?.kind,
+        status: dto.status,
+        regionStopped,
+        swallowed,
+        unanswered,
+        failureError: (swallowed ? swallowedMessageError(failureText) : failureText) || 'run failed',
+        error: dto.error,
+        result: dto.result,
+      });
+      const turnOutcome = turnEnd?.outcome ?? null;
       // Idempotent ack: only the first turn-complete for this turn applies. `deliveredAt` is the
       // other half of that compare-and-set now that a completion can leave the row un-ANSWERED: a
       // turn put back in the queue is no longer out on a delivery, so a retried completion for it
@@ -7524,6 +7788,14 @@ export class RunnerApiController {
           await tx.session.update({ where: { id: sessionId }, data: { ...CLEARED_MERGE_STATE } });
         }
         return { applied: false, steer: false, requeued: false, status: current.status, failSession, retryAt: current.retryAt };
+      }
+      // Beside the status the ack just wrote, in its transaction and only when it won, so a retried completion
+      // records nothing twice. The session's copy rides on the park below, the one Session write (I3).
+      if (turnEnd) {
+        await tx.conversationTurn.updateMany({
+          where: { id: dto.turnId, sessionId },
+          data: { outcome: turnEnd.outcome, error: turnEnd.error },
+        });
       }
       let acceptanceTaskChanged = false;
       let acceptanceTaskCompleted = false;
@@ -7871,6 +8143,8 @@ export class RunnerApiController {
                 // released the turn without a reply. Its own sentence follows when it gave one.
                 error: (acceptanceFailureReason ?? (swallowed ? swallowedMessageError(failureText) : failureText)) || 'run failed',
                 finishedAt: new Date(),
+                // Released for the turn that failed (design §4.2), in the statement that writes FAILED.
+                releaseCause: 'turn_failed',
                 cancelRequestedAt: new Date(),
                 // FAILED is where this session stops being live, so whatever it had running
                 // goes with it (CLEARED_RUNNING_WORK). This write is the reason the runner
@@ -7881,6 +8155,9 @@ export class RunnerApiController {
             : {}),
           // The stopped sentence a region stop ends the turn with (§10), which the claim clears once the hold releases.
           ...(regionStopped && !failSession ? { error: dto.error || dto.result || null } : {}),
+          // The outcome just written on the turn, copied for list rows (design §4.2). A turn with none leaves the
+          // last one that had one.
+          ...(turnOutcome ? { lastTurnOutcome: turnOutcome } : {}),
           // Live worktree state for the composer's status bar, refreshed each turn (the
           // runner reports the worktree's uncommitted diff and the exact healed base used to
           // compute it on every turn-complete). Keep both in this one write so a rebase cannot
@@ -7900,6 +8177,8 @@ export class RunnerApiController {
           ...(dto.worktreeBranch !== undefined ? { worktreeBranch: dto.worktreeBranch } : {}),
           // The branch tip a confirmation review is held to (0370): written when reported.
           ...(storableBranchSha(dto.branchSha) ? { branchSha: dto.branchSha } : {}),
+          // The branch's commits, for the status bar's commit list: written when reported, beside its tip.
+          ...branchCommitsData(dto.branchCommits),
           runtimeSessionId: dto.runtimeSessionId ?? undefined,
           lastTurnAt: new Date(),
           numTurns: { increment: turnInc },
@@ -7930,8 +8209,9 @@ export class RunnerApiController {
       });
       if (parked.count === 0) {
         // Nothing was written above — an UPDATE that matches no row leaves the tuple, and its
-        // xmin, exactly as it was — so this is still this transaction's first Session write.
-        if (clearsMergedState || acknowledgedCoordinatorContextKey) {
+        // xmin, exactly as it was — so this is still this transaction's first Session write. A turn that
+        // ended while its session was being ended still ended, so its outcome is the session's latest too.
+        if (clearsMergedState || acknowledgedCoordinatorContextKey || turnOutcome) {
           await tx.session.update({
             where: { id: sessionId },
             data: {
@@ -7939,6 +8219,7 @@ export class RunnerApiController {
               ...(acknowledgedCoordinatorContextKey
                 ? { coordinatorContextAckKey: acknowledgedCoordinatorContextKey }
                 : {}),
+              ...(turnOutcome ? { lastTurnOutcome: turnOutcome } : {}),
             },
           });
         }
@@ -7962,7 +8243,8 @@ export class RunnerApiController {
         // The park above wrote this session's finish, which may be the one a DONE task's identity was
         // waiting for (§10.5 O-L4 3). An item it opens is delivered after the commit with this
         // turn's own exception items.
-        await settleDeliveredIdentityAfterFinish(tx, current);
+        const settled = await settleDeliveredIdentityAfterFinish(tx, current);
+        settledWork = settled === 'FROZEN' || settled === 'IDENTITY_UNKNOWN';
       }
       // NO_REPLY (contract §4.1): the turn has settled, the session is idle and its run goes on. Each
       // request it has read and not answered is closed with its last words — unless something will
@@ -8134,6 +8416,7 @@ export class RunnerApiController {
         repairCheck: repairCheckAfter(current, true, dto.status === RunStatus.SUCCEEDED),
         droppedWakeups,
         checksSettled,
+        settledWork,
       };
     }, loggedRetry(this.logger, 'runnerApi.turnComplete', {
       transaction: {
@@ -8229,6 +8512,13 @@ export class RunnerApiController {
     // what an attempt ending with its task unsettled means. Nothing is decided here: the producer
     // behind this door re-reads what committed and owes the coordinator nothing for a task that
     // settled after all.
+    // §12.15 P-M1: the failed turn ended the last work session of a DONE task whose route was left to
+    // this finish; the DONE edge runs again on what is now decided (the 60 s sweep asks the same).
+    if ('settledWork' in finalized && finalized.settledWork && finalized.taskId && finalized.taskOwnerId) {
+      await this.tasks?.dispatchDependentsOfSettledWork(finalized.taskOwnerId, finalized.taskId).catch((error) =>
+        this.logger.warn(`dependents of task ${finalized.taskId} not dispatched after its work settled: ${
+          error instanceof Error ? error.message : error}`));
+    }
     if (
       finalized.applied
       && !finalized.steer
@@ -8265,8 +8555,12 @@ export class RunnerApiController {
       if ('taskId' in finalized && finalized.taskId) await this.observeAfterWorkTurn(sessionId, finalized.taskId);
       // And the evidence revisions that waited for it while it was paused: a coordinator whose turn
       // ended is back, and a paused one is left alone (projects/coordinator-evidence-queue.service.ts).
+      await this.tasks?.deliverLooksFinishedOwedTo?.(sessionId);
+      await this.coordinatorFacts?.deliverOwedTo(sessionId);
       await this.evidenceQueue?.deliverOwedTo(sessionId);
       await this.evidenceReviews?.deliverOwedTo(sessionId);
+      await this.evidenceReviews?.deliverSendBacksOwedTo(sessionId);
+      await this.confirmationReviews?.deliverOwedTo(sessionId);
       // And the confirmation reviews it was to be handed whose delivery a crash cut off between their
       // commit and the hand-off (docs/owner-confirmation-review-contract.md §2 D5).
       await this.confirmationReviews?.deliverPendingFor(sessionId).catch((error) => this.logger.warn(
@@ -9540,6 +9834,16 @@ export class RunnerApiController {
       if (!sameIds(shells, session.runningBgShells)) sessionData.runningBgShells = shells;
       if (!sameIds(jobs, session.runningBgJobs)) sessionData.runningBgJobs = jobs;
       if (!sameIds(subagents, session.runningSubagents)) sessionData.runningSubagents = subagents;
+      // A batch that moved what is executing stamps the row with its newest event's time, on the runner's clock: a beat
+      // composed before that instant, and written after this batch, is older news and does not replace these sets
+      // (runners/runner-executing-sets.ts). Never moved back: a late retry of an older batch keeps the newer stamp.
+      const executingMoved = sessionData.runningBgShells !== undefined || sessionData.runningBgJobs !== undefined
+        || sessionData.runningSubagents !== undefined
+        || (engineTurnActive !== undefined && engineTurnActive !== session.engineTurnActive);
+      const batchAt = executingMoved ? newestEventTime(events) : null;
+      if (batchAt && (!session.executingEventAt || batchAt > session.executingEventAt)) {
+        sessionData.executingEventAt = batchAt;
+      }
       // When each of those jobs last produced output, folded from the same reports and pruned to the
       // same set. This is what makes the marker mean "work in flight AND still moving": a job whose
       // entry here is older than the threshold stops counting as in flight while staying in
@@ -9880,6 +10184,9 @@ export class RunnerApiController {
           // id, so it only serves as a fallback here and is never persisted on its own.
           runtimeSessionId: dto.runtimeSessionId ?? dto.claudeSessionId ?? undefined,
           finishedAt: new Date(),
+          // Why it was released: the requested end's reason, which also chose the status above, or the
+          // engine exiting by itself (engine_failed when the runner reported FAILED, the status written then).
+          releaseCause: finalizeReleaseCause(current, dto.status),
           // Worktree isolation outcome reported by the runner: the branch it committed
           // the work to, the base it forked from, what it did (worktree/shared-nogit),
           // and the per-file diff summary. Each left untouched when the runner omits it.
@@ -9892,6 +10199,8 @@ export class RunnerApiController {
           // task is frozen from below (§10.5 O-L4). Written when reported: an older runner, and a park
           // checkpoint the next resume undoes, leave the tip the last live report gave.
           ...(storableBranchSha(dto.branchSha) ? { branchSha: dto.branchSha } : {}),
+          // The branch's commits, for the status bar's commit list: written when reported, beside its tip.
+          ...branchCommitsData(dto.branchCommits),
           isolationStatus: dto.isolationStatus ?? undefined,
           ...(dto.changedFiles !== undefined
             ? {
@@ -10057,6 +10366,10 @@ export class RunnerApiController {
         taskReclaimed,
         dispatchRefused,
         identityUnknown: delivered === 'IDENTITY_UNKNOWN',
+        // This finish froze a DONE task's identity and decided the route its DONE left to it (§12.15
+        // P-M1): a task that delivered nothing releases its dependents on this edge.
+        identityFrozen: delivered === 'FROZEN',
+        ownerId: current.ownerId,
         taskId: current.taskId,
         currentWorkTerminalized,
         // A session the runner finalizes while it runs a turn ends that turn here — completed, failed or
@@ -10095,9 +10408,18 @@ export class RunnerApiController {
       // this door reclaimed the task and told nobody at all.
       await this.openItems?.deliverForTasks([outcome.taskId]);
     }
-    // The item a DONE task's unknown identity opened when this finish settled its work (O-T1).
-    if ('identityUnknown' in outcome && outcome.identityUnknown && outcome.taskId) {
+    // The item a DONE task's unknown identity opened when this finish settled its work (O-T1), or the
+    // WORK_ELSEWHERE one its frozen identity opened (§12.15 P-M1).
+    if ('identityUnknown' in outcome && (outcome.identityUnknown || outcome.identityFrozen) && outcome.taskId) {
       await this.openItems?.deliverForTasks([outcome.taskId]);
+    }
+    // §12.15 P-M1, J10's second edge for a DONE written while its work moved: the finish decided the
+    // route, and a task that delivered nothing releases its dependents now. A predicate the 60 s
+    // ready sweep asks too, so a process that dies here costs one sweep.
+    if ('identityFrozen' in outcome && outcome.identityFrozen && outcome.taskId && outcome.ownerId) {
+      await this.tasks?.dispatchDependentsOfSettledWork(outcome.ownerId, outcome.taskId).catch((error) =>
+        this.logger.warn(`dependents of task ${outcome.taskId} not dispatched after its work settled: ${
+          error instanceof Error ? error.message : error}`));
     }
     // The refusal this finalize recorded: the task row moved, and the project's coordinator is told,
     // because nothing else about a start that never became a run would tell anybody.
@@ -10176,6 +10498,8 @@ export class RunnerApiController {
         baseSha: dto.baseSha ?? undefined,
         ...(dto.worktreeBranch !== undefined ? { worktreeBranch: dto.worktreeBranch } : {}),
         ...(storableBranchSha(dto.branchSha) ? { branchSha: dto.branchSha } : {}),
+        // The branch's commits, for the status bar's commit list: written when reported, beside its tip.
+        ...branchCommitsData(dto.branchCommits),
         isolationStatus: dto.isolationStatus ?? undefined,
         ...(dto.changedFiles !== undefined ? { changedFiles: dto.changedFiles as unknown as Prisma.InputJsonValue } : {}),
         ...(dto.mergeTargets !== undefined ? { mergeTargets: dto.mergeTargets } : {}),
@@ -10286,6 +10610,9 @@ export class RunnerApiController {
           status: RunStatus.FAILED,
           error: dto.error ?? 'import failed',
           deletedAt: new Date(),
+          // Released with the status, as every terminal write is (design §4.2).
+          finishedAt: new Date(),
+          releaseCause: 'import_failed',
         },
       });
       return { applied: false, failed: true, announced: true };
@@ -10921,6 +11248,8 @@ export class RunnerApiController {
         // The branch tip a confirmation review is held to (0370) — moved by a Commit, which is what
         // pushes this diff: written when reported.
         ...(storableBranchSha(dto.branchSha) ? { branchSha: dto.branchSha } : {}),
+        // The branch's commits, for the status bar's commit list: written when reported, beside its tip.
+        ...branchCommitsData(dto.branchCommits),
       },
     });
     if (updated.count > 0 && dto.branchMerged === true) {
@@ -11612,4 +11941,10 @@ const DRAIN_SCOPE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 /** The session ids of a `drainScope` claim parameter: the UUIDs in it, at most DRAIN_SCOPE_MAX. */
 export function parseDrainScope(raw: string): string[] {
   return raw.split(',').map((id) => id.trim()).filter((id) => DRAIN_SCOPE_ID.test(id)).slice(0, DRAIN_SCOPE_MAX);
+}
+
+/** The session-row write for a report's `branchCommits`: nothing when it carried no list. */
+function branchCommitsData(value: unknown): { branchCommits?: Prisma.InputJsonValue } {
+  const commits = storableBranchCommits(value);
+  return commits === undefined ? {} : { branchCommits: commits as unknown as Prisma.InputJsonValue };
 }

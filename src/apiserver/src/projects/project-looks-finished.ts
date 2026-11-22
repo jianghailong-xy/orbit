@@ -3,12 +3,14 @@ import { Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { SETTLED_TASK_STATUSES, type CoordinatorWakeEvent } from './coordinator-wake';
 import { IN_FLIGHT_JOB_STATES, LANDING_JOB_KINDS } from './criterion-landing-reason';
+import { isCodeTaskSql, taskLandingSql, workStillMovingSql } from './project-criterion-landing';
 import {
   readDerivedProjectDoneReading,
   type DerivedProjectDoneReading,
 } from './project-done-derived';
 import { DONE_REQUEST_KIND } from './project-done-request';
-import { SESSION_ENDING_SELECT, openItemOwed, sessionHasEnded } from './project-open-item';
+import { COORDINATOR_PAUSE_SELECT, conversationIsPaused } from './coordinator-evidence-queue';
+import { openItemOwed, conversationIsOver } from './project-open-item';
 
 /**
  * A project that LOOKS finished and that Orbit still cannot record done — and who is told so, in
@@ -62,7 +64,7 @@ export type ProjectFinish =
  * judgment alike: while it is, the work is still moving towards the upstream. One statement.
  */
 export async function landingInFlight(
-  prisma: Pick<PrismaService, 'projectIntegrationJob'>,
+  prisma: Pick<PrismaService, 'projectIntegrationJob' | '$queryRaw'>,
   projectId: string,
 ): Promise<boolean> {
   const job = await prisma.projectIntegrationJob.findFirst({
@@ -73,7 +75,32 @@ export async function landingInFlight(
     },
     select: { id: true },
   });
-  return job !== null;
+  return job !== null || landingDeferred(prisma, projectId);
+}
+
+/**
+ * Whether a DONE code task of this project has its landing still to be decided (§12.15 P-M1): its
+ * DONE was written while its work moved, so nothing is queued for it yet — the finish that freezes its
+ * identity queues it, or finds nothing to land — and no receipt says its work is on the line already. The work is still moving towards the line exactly as
+ * it is with a job queued, and that finish re-derives the settled fact once it has decided
+ * (`TasksService.dispatchDependentsOfSettledWork`). One statement.
+ */
+export async function landingDeferred(
+  prisma: Pick<PrismaService, '$queryRaw'>,
+  projectId: string,
+): Promise<boolean> {
+  const [row] = await prisma.$queryRaw<Array<{ deferred: boolean }>>(Prisma.sql`
+    SELECT EXISTS (
+      SELECT 1 FROM "task" t
+       WHERE t."project_id" = ${projectId}::uuid
+         AND t."status" = 'DONE'
+         AND t."delivered_at" IS NULL
+         AND ${Prisma.raw(isCodeTaskSql('t'))}
+         AND ${Prisma.raw(workStillMovingSql('t'))}
+         -- Work a receipt already puts on the line has no landing left to decide.
+         AND (${Prisma.raw(taskLandingSql('t'))}) = 'NOT_KNOWN'
+    ) AS "deferred"`);
+  return row?.deferred === true;
 }
 
 /** The delegates the guardrail reads: the projection's, and the four rows it asks before it. */
@@ -130,7 +157,7 @@ export async function readProjectFinish(
   if (open?.owed) return { state: 'NOT_FINISHED' };
 
   const reading = await readDerivedProjectDoneReading(prisma, project.ownerId, projectId);
-  if (reading.inFlight.length > 0) return { state: 'LANDING_IN_FLIGHT' };
+  if (reading.inFlight.length > 0 || await landingDeferred(prisma, projectId)) return { state: 'LANDING_IN_FLIGHT' };
   const { derived } = reading;
   // Facts that prove DONE are not a question for anybody: the projection stores it. That goes for a
   // project whose owner pressed Reopen too, which the facts prove and the press holds OPEN
@@ -145,7 +172,7 @@ export async function readProjectFinish(
 }
 
 /** The delegates `projectsToRecordAsDone` reads. */
-type EscalationClient = FinishClient & Pick<PrismaService, 'projectCoordinatorWake' | 'projectOpenItem'>;
+type EscalationClient = FinishClient & Pick<PrismaService, 'projectCoordinatorWake' | 'projectOpenItem' | 'conversationTurn'>;
 
 /**
  * This owner's projects, among `projectIds`, whose "Record as done…" is the owner's now — with the
@@ -153,12 +180,11 @@ type EscalationClient = FinishClient & Pick<PrismaService, 'projectCoordinatorWa
  *
  * A project is the owner's when ALL of these hold at `readAt`:
  *
- *   * its coordinator was told it looks finished — a `PROJECT_TASKS_SETTLED` wake DELIVERED to its
- *     standing conversation, which is the only way that fact is ever delivered;
+ *   * its coordinator was to be told it looks finished — a `PROJECT_TASKS_SETTLED` delivery wake;
  *   * there is no valid request to record it done — no OPEN `DONE_REQUEST`. A request the owner
- *     answered "Not yet…", or that went stale, restarts the clock rather than ending it: the
- *     coordinator was just handed the question back;
- *   * the project's `exceptionEscalationSeconds` have run out since the later of those two — or
+ *     answered "Not yet…", or that went stale, no longer hides the notification;
+ *   * the project's `exceptionEscalationSeconds` have run out since its delivery turn was taken up,
+ *     with no deadline while unread or while the coordinator is paused — or
  *     the conversation it was delivered to has ended, since a conversation that is over will not
  *     choose anything (`pending-evidence-judgments.ts` holds evidence on the same terms);
  *   * and it STILL looks finished (`readProjectFinish`): new work, an open item or a landing in
@@ -192,15 +218,17 @@ export async function projectsToRecordAsDone(
     where: {
       projectId: { in: candidates },
       event: LOOKS_FINISHED_DELIVERY,
-      status: 'DELIVERED',
+      status: { in: ['DELIVERED', 'REFUSED'] },
       project: { ownerId, status: 'OPEN' },
     },
     orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
     select: {
       projectId: true,
+      sessionId: true,
+      delivery: true,
       updatedAt: true,
-      session: { select: SESSION_ENDING_SELECT },
-      project: { select: { exceptionEscalationSeconds: true } },
+      project: { select: { exceptionEscalationSeconds: true, coordinatorEnabled: true,
+        coordinatorSession: { select: COORDINATOR_PAUSE_SELECT } } },
     },
   });
   const delivered = new Map<string, (typeof deliveries)[number]>();
@@ -211,20 +239,27 @@ export async function projectsToRecordAsDone(
 
   const requests = await prisma.projectOpenItem.findMany({
     where: { projectId: { in: [...delivered.keys()] }, kind: DONE_REQUEST_KIND },
-    select: { projectId: true, state: true, updatedAt: true },
+    select: { projectId: true, state: true },
   });
 
   for (const [projectId, delivery] of delivered) {
     const asked = requests.filter((request) => request.projectId === projectId);
     if (asked.some((request) => request.state === 'OPEN')) continue;
-    const since = Math.max(
-      delivery.updatedAt.getTime(),
-      ...asked.map((request) => request.updatedAt.getTime()),
-    );
-    const ended = !delivery.session || sessionHasEnded(delivery.session);
-    const escalatesAt = ended
-      ? since
-      : since + delivery.project.exceptionEscalationSeconds * 1_000;
+    const coordinator = delivery.project.coordinatorSession;
+    const ended = !delivery.project.coordinatorEnabled || !coordinator || conversationIsOver(coordinator);
+    let escalatesAt = delivery.updatedAt.getTime();
+    if (!ended) {
+      if (conversationIsPaused(coordinator)) continue;
+      const record = delivery.delivery as { clientTurnId?: string } | null;
+      if (!delivery.sessionId || !record?.clientTurnId) continue;
+      const turn = await prisma.conversationTurn.findUnique({
+        where: { sessionId_clientTurnId: { sessionId: delivery.sessionId, clientTurnId: record.clientTurnId } },
+        select: { deliveredAt: true },
+      });
+      if (!turn?.deliveredAt) continue;
+      const since = turn.deliveredAt.getTime();
+      escalatesAt = since + delivery.project.exceptionEscalationSeconds * 1_000;
+    }
     if (readAt.getTime() < escalatesAt) continue;
     const finish = await readProjectFinish(prisma, projectId);
     if (finish.state !== 'LOOKS_FINISHED') continue;

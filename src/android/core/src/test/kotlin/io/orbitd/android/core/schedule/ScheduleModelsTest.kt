@@ -196,4 +196,33 @@ class ScheduleModelsTest {
         assertEquals("q", api.request("q").id)
         assertEquals(listOf("GET schedules/a", "GET schedule-requests/q"), server.asked)
     }
+
+    private val everyJson = """{"kind":"EVERY","minutes":30,"time":"09:00","until":"18:00","weekdays":["MON","TUE","WED","THU","FRI"]}"""
+
+    /** The rule reader of the builds before EVERY: ONCE, DAILY and WHEN by name, any other kind weekly. */
+    private fun oldFallbackRule(o: kotlinx.serialization.json.JsonObject): ScheduleRule? {
+        val kind = o.scheduleText("kind") ?: return null
+        return when (kind) {
+            "ONCE" -> ScheduleRule.Once(o.scheduleText("at") ?: return null)
+            "DAILY" -> ScheduleRule.Daily(o.scheduleText("time") ?: return null)
+            else -> ScheduleRule.Weekly(o.scheduleText("time") ?: return null, o.scheduleStrings("weekdays") ?: emptyList())
+        }
+    }
+
+    @Test fun everyRuleReadsAndTheOldWeeklyFallbackKeepsIt() {
+        val rule = ScheduleRule.parse(json(everyJson))
+        assertEquals(ScheduleRule.Every(30, "09:00", listOf("MON", "TUE", "WED", "THU", "FRI"), "18:00"), rule)
+        assertEquals(rule, ScheduleRule.parse(rule!!.toJson()))
+        // The same JSON through the old fallback is a weekly rule, not null: a shipped build keeps the schedule.
+        assertEquals(ScheduleRule.Weekly("09:00", listOf("MON", "TUE", "WED", "THU", "FRI")),
+            oldFallbackRule(json(everyJson) as kotlinx.serialization.json.JsonObject))
+        // A list holding an EVERY schedule still reads whole.
+        val list = """{"schedules":[{"id":"s1","title":"Poll","workspaceId":"w","timezone":"UTC","rule":$everyJson,"maxRuns":3,"runsLeft":2}]}"""
+        val view = ScheduleListResponse.parse(json(list))!!.schedules.single()
+        assertEquals(rule, view.rule)
+        assertEquals(3, view.maxRuns)
+        assertEquals(2, view.runsLeft)
+        // EVERY without a readable interval is read as weekly, not dropped.
+        assertEquals(ScheduleRule.Weekly("09:00", emptyList()), ScheduleRule.parse(json("""{"kind":"EVERY","time":"09:00"}""")))
+    }
 }

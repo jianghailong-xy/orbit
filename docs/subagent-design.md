@@ -114,8 +114,8 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 
 只有「跑不起来」才去掉。**凡是在 Orbit 注册了的都参与路由，只是先后不同**（owner，2026-11-19）：
 
-- **所有档位都进池**，不只是要的那一档。没有档位的不再去掉：一个 Provider × 引擎**一个档位都没有**时（Antigravity、Cursor、
-  OpenCode、DSH 的内置登录，没标档位的自定义 endpoint），它的**默认模型**以「无档位」进池——runner 报的该引擎默认模型，
+- **所有档位都进池**，不只是要的那一档。没有档位的不再去掉：一个 Provider × 引擎**一个档位都没有**时（目录里没有一个已知
+  家族模型、owner 也没标档位的内置引擎，例如只报 `grok-4.7` 之类的 Cursor；没标档位的自定义 endpoint），它的**默认模型**以「无档位」进池——runner 报的该引擎默认模型，
   否则 Provider 自己的默认模型，否则列表第一个；列表里其余的模型记为去掉（`The model has no tier; <provider> runs <model>`），
   点名照样能用。已有档位的 Provider 里个别没档位的模型仍记为去掉。
 - **额度读不到**的订阅（runner 没报这个账号、或报了但没有窗口）不去掉，也不当作 100% 余量：排在额度已知的之后。
@@ -123,17 +123,41 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 **档位表**从「每个引擎一张」扩成「每个模型一行」：`(provider, model, effort) → 档位`。preset 的模型由目录提供档位和价格
 （价格取自 models.dev，preset 列表本来就从那里刷新，`providerPresets.ts`）；Claude / Codex 内置登录沿用今天
 `DEFAULT_MODEL_TIER_TABLE` 的映射，Kimi 内置登录也在这张表里（S/M 用 K3，L/XL 用 K3.1 Pro，没有就 K3；只给 SubAgent 用）。
+其余内置引擎（Cursor、Antigravity、OpenCode、DSH）的目录按**模型家族**定档（`MODEL_FAMILY_TIERS`：Claude Sonnet S/M、
+Claude Opus L/XL、Gemini Flash S/M、Gemini L/XL、Composer S、Claude Haiku S、Kimi K3 S/M、Kimi K3.1 Pro L/XL（无 K3.1 Pro 时 K3 顶替 L/XL；`kimi-k2.*` 不定档）），每档取该家族版本最新的模型，effort 夹到模型自己报的等级
+（`clampEffort`）；不属于任何已知家族的模型（Cursor 的 `grok-4.7`、`kimi-k2.*`，Antigravity 的 `gpt-oss-120b` 等）没有档位。
+
+**owner 给内置引擎的模型定档**（owner，2026-11-20：表总会漏，漏了应该点一下就能补，而不是等发版）：任何内置引擎目录里的
+任何模型，owner 都可以在 Providers 页的 Tier 列设一个档位或清除，存在账号偏好 `builtinModelTiers`（引擎 → 模型 → 档位），
+只经 `PATCH /providers/builtin/:engine/model-tier` 写（`tier: null` 清除）。设了档位的模型在该引擎上**只**占 owner 定的那一档，
+取代内置表和家族给它的档位；effort 是该档要的（S low、M medium、L high、XL max）夹到模型报的等级。清除后回到内置表 / 家族的档位，
+没有就回到无档位。只对 runner 报了的模型生效；用同一引擎目录的 key（例如 Claude Code 上的 Anthropic key）也读这份档位。
+owner 什么都没设时 Claude / Codex / Kimi 的行与以前逐字节相同；任务 run 的路由（`routeTaskRun`）不读它。
 
 **先按贴合度**：要的那一档 → 更高的档（近的先）→ 无档位的默认模型 → 更低的档（近的先）。选中的不在要的档时，理由里写明
 （`Nothing in tier M can run: …`）。**同一贴合度内**再按下表：
 
 | Optimize For | 规则 |
 |---|---|
-| Cost（默认） | 订阅先于计费 key；订阅里额度已知的先、余量多的先；key 里便宜的先 |
-| Balance | 额度已知的先（key 算已知），余量多的先，并列时便宜的先 |
-| Intelligence | 档位上限高的模型先（例如 L 档里 Opus 先于 Sonnet-high），再额度已知的先，并列时便宜的先 |
+| Cost（默认） | 订阅先于计费 key；订阅里额度已知的先，再**先过期的先**，再余量多的先；key 里便宜的先 |
+| Balance | 与 Cost 相同：可用的订阅（读得到额度与否）都先于计费 key（owner，2026-11-19）；与 Cost 只差在没给档位时抬到 M |
+| Intelligence | 档位上限高的模型先（例如 L 档里 Opus 先于 Sonnet-high），再额度已知的先，再先过期的先，并列时便宜的先 |
+
+**先过期的先**（owner，2026-11-19）：和 runner 上选账号同一条规则（`planUsage.ts` `rankAccounts`）——快用完的
+（`quotaNearLimit`：5 小时窗口 ≥ 80%，更长的 ≥ 90%）排最后，其余按额度作废的时刻（`quotaExpiresAt`：最长那个窗口的重置，
+有周窗口就是周窗口）早的先。号池选它的成员也按这条。Kimi 的月窗口算在内。
 
 最后按 owner 在 Providers 页排的顺序打破平局。结果和理由冻结在 `subagent_run` 里，续跑不重算。
+
+**点名的模型**（调用或定义文件里写的）：列出它、且在这台 runner 上跑得起来（上面 1–4 条）的 Provider × 引擎，按 owner 的顺序，
+第一个是选中的，其余是它的候选；跑不起来的都记为去掉。有人列出但都跑不起来：调用被拒（`No usable provider on … offers …`），
+定义文件里写的则按 auto 路由。没人列出：照旧在父会话的 Provider 上按名字跑。
+
+**续跑**（`resume`）：在它上次跑的引擎、Provider、模型和 effort 上接着跑，不再路由——对话是那个引擎的，换引擎只会拿到模型却没有对话。
+那个目标现在起不来就拒绝（`SUBAGENT_RESUME_CANNOT_START`），不换到别处；runner 把 `resumeOf` 带上，服务端据此识别本机续跑。
+
+**Opus 的周窗口**：Claude 账号的 Opus 周额度 ≥ 90% 时，该账号上的 Opus 行去掉（`Opus's weekly quota is at …`），Sonnet 照常；
+模型家族的窗口不算进账号的「快用完」和过期时刻。runner 自己的登录报「未登录」只去掉那个登录，订阅 token 的 key 用自己的 token，不受影响。
 
 ### 4.3 失败
 
@@ -196,6 +220,9 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
   DSH 没有 plan，用它的只读文件策略（Don't Ask）。Codex 只能用 shell 读仓库，而它的 plan 拒绝一切命令，所以只读的
   Codex 子 Agent 不走 plan 的 Codex 配置，改用 Codex 自己的 `read-only` 沙箱（无写、无网络）加 `never`：命令不问人，
   在沙箱里跑，写入由沙箱拒绝；要求越出沙箱的请求一律拒绝（`codexReadonlySubagentMode`）。会话本身的 plan 含义不变。
+  只读的 Kimi 子 Agent 在 plan 下每次 shell 调用都会请求批准：按 owner 2026-11-20 的决定，这类请求跟随父会话**当时**的模式——
+  父会话是 Auto 或 Bypass 时 runner 直接批准、不出卡；其他模式照常出卡（`kimiReadonlyShellFollowsParent`）。runner 不检查命令本身，
+  所以在这两种父模式下，Kimi 子 Agent 的「只读」只靠 plan 模式的指令约束，写文件的 shell 命令也会被执行。
 - 审批卡用父会话的 `sessionId` 发出，`toolUseId` 加 runId 前缀，并带 `subagentRunId`（与 `backgroundJobId` 同一作用：
   父会话的 tool_result 到达时不把它当作已返回的调用收走）。卡片出现在父会话的审批区，标题写明来自哪个 SubAgent。
 - 子 Agent 的 AskUserQuestion / 计划审批一律拒绝，提示它把疑问写进结果里交回。Cursor 在 subagent 里也是这样。
@@ -240,7 +267,8 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 - 路由：`model-routing.ts` 增加 `routeSubagent(input)`，与 `routeTaskRun` 共用档位表和引擎状态读取；档位表扩成按模型。
 - 审批：`ApprovalCreateRequest` 加 `subagentRunId`；`reapApprovalsOfReturnedCalls` 跳过它。
 - 设置：Agent（workspace）上加 `subagentsEnabled`、`subagentsMaxRunning`；屏蔽列表放 owner 级
-  `UserPreferences.subagentBlockedProviders`；Optimize For 复用 `modelRoutingOptimizeFor`。
+  `UserPreferences.subagentBlockedProviders`；Optimize For 是账号级的 `UserPreferences.optimizeFor`（没设过 = Balance，owner，2026-11-19；
+  原先复用 Agent 的 `modelRoutingOptimizeFor`，已不再读）。
 
 ### 6.3 runner
 
@@ -259,11 +287,21 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 
 ## 7. 设置与界面
 
-- **Agent 设置 → SubAgents**：开关、Optimize For（Cost / Balance / Intelligence）、Providers（默认全部，点进去屏蔽）、
+- **设置 → General → New sessions**：Optimize For（Cost / Balance / Intelligence），账号级，紧跟 Smart model selection
+  （owner，2026-11-19，board `docs/mocks/routing-mode-account`）。
+- **Agent 设置 → SubAgents**：开关、Providers（默认全部，点进去屏蔽）、
   Running at once。
 - **Providers 页**：每个模型多一列 Tier；preset 的档位和价格跟目录走，自定义 endpoint 显示 `Not set`，点开可以标。
+  内置引擎（Claude Code、Codex、Cursor、Antigravity……）列出 runner 目录里的**每个**模型：内置表或家族给了档位的显示该档位，
+  其余显示 `Not set`；每一行都可以点开设档位（覆盖目录的档位）或清除（`builtinModelTiers`，§4.2）。
 - **报告**：沿用 model routing 报告页，加一个 SubAgents 视图：按档位、模型统计次数、成功率、花费、额度换候选次数、
   没给 `size` 的比例。
+  已做（2026-11-20，owner 批准的效果图 [`mocks/subagent-workflow/08-report.html`](./mocks/subagent-workflow/08-report.html)）：
+  model routing 报告原本只有接口、没有页面，于是新开 **设置 → Routing report**（`/settings/routing-report`），两个视图
+  SubAgents 与 Workflows（`subagent-workflow-design.md` §8 P4），接口 `GET /tasks/model-routing/report/subagents?since=&agentId=`。
+  一次运行算在 Orbit **选的**档位和模型下（同任务报告「算在首次决策」的口径），换了候选记一次 Moved on；`agentId` 是父会话的
+  Agent；workflow 的调用就是 SubAgent 运行，两个视图数同一批 `subagent_run` 行，所以 workflow 的调用合计恒等于 SubAgents 里的
+  workflow 调用数。任务的路由报告以后作为第三个视图 Tasks 放进同一页。
 
 ## 8. 分期
 

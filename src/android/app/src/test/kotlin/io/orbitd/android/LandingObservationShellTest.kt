@@ -6,7 +6,6 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.cards.ExceptionCards
-import io.orbitd.android.projects.ProjectPage
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -61,11 +60,9 @@ class LandingObservationShellTest {
             useUnmergedTree = true).assertExists()
         // How long ago it was asked moves with the clock: ExceptionCardsTest holds those words.
         says(LandingObservationItems.UNOBSERVED_OWNER, "Observing main… — running · asked ", substring = true)
-        says(LandingObservationItems.UNOBSERVED, "Observing main… — queued · asked ", substring = true)
-        says(LandingObservationItems.OBSERVE_FAILING, "Integration error: observing main")
-        compose.onAllNodesWithTag("open-item:${LandingObservationItems.OBSERVE_FAILING}:action").assertCountEquals(0)
-        compose.onNodeWithTag("project-open-items-subtitle").assertTextEquals("2 items need you · 2 with the coordinator")
-        compose.onNodeWithText(ProjectPage.withCoordinatorGroup.uppercase()).assertExists()
+        compose.onNodeWithTag("open-item:${LandingObservationItems.UNOBSERVED}").assertDoesNotExist()
+        compose.onNodeWithTag("open-item:${LandingObservationItems.OBSERVE_FAILING}").assertDoesNotExist()
+        compose.onNodeWithTag("project-open-items-subtitle").assertTextEquals("2 items need you")
 
         // The task rows (§10.9): not seen is not landed — two wait in Pending landing, one landed.
         compose.onNodeWithTag("project-open-items-close").performClick()

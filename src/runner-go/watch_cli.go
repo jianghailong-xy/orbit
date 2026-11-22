@@ -49,9 +49,10 @@ Options:
                            SESSION_RUN_TERMINAL, SESSION_LIFECYCLE_TERMINAL, SESSION_NEEDS_ATTENTION.
                            Version 2 adds {"kind":"AT_LEAST","count":N,...} and "params" for
                            TASK_PROGRESS_AT_LEAST and TASK_NO_PROGRESS_FOR; version 3 adds
-                           SESSION_JOB_NO_OUTPUT_FOR (watch_create's description says how to ask each)
+                           SESSION_JOB_NO_OUTPUT_FOR; version 4 adds SESSION_QUIESCENT
+                           (watch_create's description says how to ask each)
   --predicate-file -       Read the predicate from stdin; filesystem paths are rejected
-  --predicate-version N    The grammar version: 1, 2 or 3 (default: the lowest the predicate needs)
+  --predicate-version N    The grammar version: 1 to 4 (default: the lowest the predicate needs)
   --action ACTION          RESUME_SESSION (default) starts a turn in this session when it holds;
                            NOTIFY_USER notifies the person instead
   --ttl-seconds N          How long it may wait: 60 to 2592000 (default 86400). If it runs out

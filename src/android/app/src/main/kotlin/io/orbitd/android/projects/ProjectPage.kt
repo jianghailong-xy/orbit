@@ -175,6 +175,9 @@ object ProjectPage {
     const val landingTakenOver = "Taken over"
     const val landingFirstStarted = "first started"
     const val landingUsually = "usually"
+    /** The state word of a claimed job waiting for its runner's local lock: it has not started its work, so it is not fetching and has
+     * no output to be quiet about (web `LANDING_LIVENESS_WORDS.WAITING`). */
+    const val landingWaiting = "waiting"
     /** "round 2 of 3" for a task's landing, "round 1" for a merge check or a merge into main (iOS `landingRoundClause`): the M is the
      * kind's own most rounds per claim (`ExceptionCards.landTaskRoundsPerClaim`), never the check's count, and a kind with one round —
      * or one this client does not know — names no M. */
@@ -234,7 +237,7 @@ object ProjectPage {
         return liveLine(word, what, running, inFlight.text("phase"), inFlight.text("startedAt"), inFlight.text("heartbeatAt"), now, updatedAt, unavailable, main,
             silent, wait, inFlight.text("runner"), inFlight.text("kind"), inFlight.number("claim"), inFlight.number("round"), inFlight.obj("check"),
             inFlight.text("stepStartedAt"), inFlight.text("outputMovedAt"), inFlight.number("typicalMs"), inFlight.text("liveness"),
-            firstStartedAt(view, inFlight.text("jobId")))
+            firstStartedAt(view, inFlight.text("jobId")), inFlight.obj("blockingReason"))
     }
 
     /** When the attempt behind a job FIRST started: the `landTask` row's own `startedAt` is the column a claim leaves alone across
@@ -306,7 +309,7 @@ object ProjectPage {
                     job.text("heartbeatAt"), now, updatedAt, unavailable, main, runner = job.text("runnerName"), kind = job.text("kind"),
                     claim = job.number("claim"), round = job.number("round"), check = job.obj("check"), stepStartedAt = job.text("stepStartedAt"),
                     outputMovedAt = job.text("outputMovedAt"), typicalMs = job.number("typicalMs"), livenessWord = job.text("liveness"),
-                    firstStartedAt = firstStartedAt(view, job.text("jobId")))
+                    firstStartedAt = firstStartedAt(view, job.text("jobId")), blockingReason = job.obj("blockingReason"))
             LandingJobLine(job.text("jobId").orEmpty(), job.text("taskId"), line, landingJobDetail(job, zone, main), job.flag("retryable"),
                 job.text("landingSessionId")?.takeIf { it.isNotEmpty() }, mergeJob, job.flag("skippable"), job.text("skipCheck"))
         }
@@ -321,7 +324,7 @@ object ProjectPage {
      * than 90 s; SILENT freezes it at the runner's last word, and LEGACY at the read it came with (iOS `landingLiveness`). */
     private fun landingLiveness(liveness: String?, running: Boolean, startedAt: String?, heartbeatAt: String?, kind: String?, claim: Int?, round: Int?,
         check: JsonObject?, stepStartedAt: String?, outputMovedAt: String?, typicalMs: Int?, runner: String?, firstStartedAt: String?,
-        now: Instant, updatedAt: Instant?): LandingLiveness? {
+        now: Instant, updatedAt: Instant?, lockWait: String? = null): LandingLiveness? {
         if (liveness == null || liveness == "LEASE_EXPIRED" || !running) return null
         val stepStart = ProjectTime.parse(stepStartedAt ?: startedAt.orEmpty())
         val heartbeat = heartbeatAt?.let(ProjectTime::parse)
@@ -340,7 +343,9 @@ object ProjectPage {
         // the 360 dp Android card) elide everything past it, and the board says the liveness there — "checking · output 1s ago"
         // (v4 04 and 07). The claim, round and the usual duration follow it and are read in full on the wider rows.
         val clauses = mutableListOf<String>()
-        when (liveness) {
+        // A job waiting for its runner's local lock has not started: what holds it leads the line, and the step's clock is the wait's.
+        if (lockWait != null) clauses += lockWait
+        else when (liveness) {
             "LIVE" -> if (outputMoved != null) clauses += "${landingOutput.replaceFirstChar { it.lowercase() }} " +
                 "${max(0, Math.round(seconds(outputMoved, now)))}s ago"
             "QUIET" -> {
@@ -369,13 +374,21 @@ object ProjectPage {
         return LandingLiveness(if (budget != null) "$stepClock $landingOf ${budget}m" else stepClock, clauses, ticking)
     }
 
+    /** The server's sentence about a claimed job waiting for its runner's local lock, naming the job holding it — or null for any
+     * other job. A SILENT runner keeps its own words (web `localLockWait`). */
+    private fun localLockWait(running: Boolean, liveness: String?, blockingReason: JsonObject?): String? {
+        if (!running || liveness == "SILENT" || liveness == "LEASE_EXPIRED") return null
+        return if (blockingReason?.text("code") == "WAITING_LOCAL_LOCK") blockingReason.text("summary") else null
+    }
+
     /** A job running or waiting its turn. `unavailable` freezes the clock at the last update the app had and stops the row claiming
      * activity; `silent` freezes it at the last REPORT instead — the same freeze, reached from the runner's silence rather than this
      * app's read — and the freshness slot then says where the reports stand rather than a false "Updated". */
     private fun liveLine(word: String, what: String?, running: Boolean, phase: String?, startedAt: String?, heartbeatAt: String?, now: Instant,
         updatedAt: Instant?, unavailable: Boolean, main: String, silent: Boolean = false, wait: String? = null, runner: String? = null,
         kind: String? = null, claim: Int? = null, round: Int? = null, check: JsonObject? = null, stepStartedAt: String? = null, outputMovedAt: String? = null,
-        typicalMs: Int? = null, livenessWord: String? = null, firstStartedAt: String? = null): LandingLine {
+        typicalMs: Int? = null, livenessWord: String? = null, firstStartedAt: String? = null, blockingReason: JsonObject? = null): LandingLine {
+        val lockWait = localLockWait(running, livenessWord, blockingReason)
         // A queued job's heartbeat and phase can be an earlier claim's: only a running job's count.
         val reported = heartbeatAt?.let(ProjectTime::parse)
         val lastUpdate = if (running) reported ?: updatedAt else updatedAt
@@ -384,9 +397,10 @@ object ProjectPage {
         val elapsed = startedAt?.let(ProjectTime::parse)?.let { seconds(it, elapsedAt) } ?: 0.0
         val report = if (silent) (if (reported != null) age?.let { landingNoReportFor(it) } else null) ?: landingNoReportYet
             else age?.let { if (it == 0) "Updated just now" else "Updated ${it}m ago" }
-        val state = when { unavailable -> "Update unavailable"; silent -> landingNoReport; running -> phaseWords(main)[phase] ?: "running"; else -> "queued" }
+        val state = when { unavailable -> "Update unavailable"; silent -> landingNoReport; running && lockWait != null -> landingWaiting
+            running -> phaseWords(main)[phase] ?: "running"; else -> "queued" }
         val v6 = if (unavailable) null else landingLiveness(livenessWord, running, startedAt, heartbeatAt, kind, claim, round, check, stepStartedAt,
-            outputMovedAt, typicalMs, runner, firstStartedAt, now, updatedAt)
+            outputMovedAt, typicalMs, runner, firstStartedAt, now, updatedAt, lockWait)
         // A legacy claim's runner reports only between steps, so its quiet is not a stall: the ring keeps turning and the line says
         // why. SILENT is the state that stops it.
         return LandingLine(word, what, running && !unavailable && !silent && livenessWord != "SILENT", state,
@@ -540,21 +554,16 @@ object ProjectPage {
     // MARK: open items
     const val openItemsHeading = "Open items"
     const val needsYouGroup = "Needs you"
-    const val withCoordinatorGroup = "With the coordinator"
     const val noOpenItems = "No open items"
-    const val noActionNeeded = "No action needed from you"
-    const val nothingWaiting = "Nothing is waiting on you or the coordinator."
     const val openItemsUnread = "Open items couldn't be loaded"
     /** What the toolbar's Open items says aloud before its read has answered, or once it has failed. */
     const val openItemsLoading = "Loading"
     const val openItemsCantLoad = "Couldn't load open items"
     const val closeOpenItems = "Close open items"
-    /** The toolbar counts every open item; only the owner's share raises a reminder on the page (`OpenItemsSummary`). */
-    data class OpenItemsSummary(val needsYou: Int, val withCoordinator: Int) {
-        val count get() = needsYou + withCoordinator
+    data class OpenItemsSummary(val needsYou: Int) {
+        val count get() = needsYou
         val attention get() = if (needsYou <= 0) null else if (needsYou == 1) "1 item needs you" else "$needsYou items need you"
-        val subtitle get() = if (count == 0) noOpenItems
-            else (attention ?: noActionNeeded).let { if (withCoordinator > 0) "$it · $withCoordinator with the coordinator" else it }
+        val subtitle get() = attention ?: noOpenItems
     }
     /** A missing read is not an empty inbox. A start request counts only while the page can answer it, and the coordinator's
      * request to record the project done while it is OPEN; the owner's own Start… and Record as done… are actions nobody waits on. */
@@ -562,7 +571,7 @@ object ProjectPage {
         if (items == null) return null
         val asked = StartProjectCopy.pageRow(ProjectDoc.status(doc), ProjectDoc.started(doc), items) is StartProjectCopy.PageRow.Asked
         val done = ProjectDone.live(items, ProjectDoc.status(doc)) != null
-        return OpenItemsSummary(needsYouRows(items).size + (if (asked) 1 else 0) + (if (done) 1 else 0), items.objects("withCoordinator").size)
+        return OpenItemsSummary(needsYouRows(items).size + (if (asked) 1 else 0) + (if (done) 1 else 0))
     }
     /** The owner's rows, without the request to record the project done should a server ever list it there too: it has a row of
      * its own (`ProjectDone.PageRow`). */
@@ -892,6 +901,7 @@ object StartProjectCopy {
     const val doneWhen = "Done when"
     const val plan = "Plan"
     const val howItRuns = "How it runs"
+    const val noLine = "Lands on the project’s branch when a task commits"
     const val viewTasks = "View tasks ›"
     /** Beside it, while the plan is listed by level: the project page's task graph, full screen. */
     const val taskGraph = "Task graph"
@@ -961,7 +971,11 @@ object StartProjectCopy {
      * Merge check: Set · At most 2 tasks at a time". [branch] is the project branch, named when tasks land on it. */
     fun settingsLine(draft: Draft, branch: String): String = listOfNotNull(
         if (draft.automatic) RunSettings.automatic else "${RunSettings.automatic} off",
-        if (draft.line == "MAIN") RunSettings.lineMain(draft.main) else branch,
+        when (draft.line) {
+            "MAIN" -> RunSettings.lineMain(draft.main)
+            "PROJECT_BRANCH" -> branch
+            else -> null
+        },
         draft.upstream?.let { "${RunSettings.mainBranch}: $it" },
         "${RunSettings.mergeCheck}: ${if (draft.hasMergeCheck) RunSettings.mergeCheckSet else RunSettings.mergeCheckNone}",
         "${RunSettings.atMost} ${draft.maxConcurrentTasks} ${RunSettings.tasksAtATime(draft.maxConcurrentTasks)}",
@@ -987,11 +1001,11 @@ object StartProjectCopy {
     data class ComesToYouItem(val text: String, val detail: String? = null)
     /** The Automatic switch's consequence, listed (`StartProject.comesToYou`); the merges name the project's main branch. An agent
      * that pushes its own work to main ([deliveryMode] AGENT_PUSH) asks nobody to merge it (§10.5 O-L2): no merge comes to the owner. */
-    fun comesToYou(automatic: Boolean, line: String, ownerConfirmed: List<NamedTask>, evidenceJudged: Int, escalationSeconds: Int,
+    fun comesToYou(automatic: Boolean, line: String?, ownerConfirmed: List<NamedTask>, evidenceJudged: Int, escalationSeconds: Int,
         main: String = RunSettings.defaultMainBranch, deliveryMode: String? = null): List<ComesToYouItem> {
         val confirms = if (ownerConfirmed.size > 3) listOf(ComesToYouItem(tasksYouConfirm(ownerConfirmed.size)))
             else ownerConfirmed.map { ComesToYouItem("${it.label} · ${it.title}", youConfirm) }
-        val merges = if (line == "MAIN") { if (deliveryMode == "AGENT_PUSH") emptyList() else listOf(ComesToYouItem(eachMergeInto(main))) }
+        val merges = if (line == null) emptyList() else if (line == "MAIN") { if (deliveryMode == "AGENT_PUSH") emptyList() else listOf(ComesToYouItem(eachMergeInto(main))) }
             else if (automatic) emptyList() else listOf(ComesToYouItem(mergingInto(main)))
         val criteria = ComesToYouItem(criteriaChanges)
         if (automatic) return confirms + merges + criteria + ComesToYouItem(problemsUnresolved(within(escalationSeconds)))
@@ -1134,7 +1148,7 @@ object StartProjectCopy {
         return graph.marks.any { it.kind == MarkKind.RUN } || graph.edges.any { it.source in live && it.target in live }
     }
     /** `upstreamRef` is the main branch as a full ref: a coordinator's suggestion, or the one the project already stands on. */
-    data class Settings(val line: String, val projectBranchName: String?, val automatic: Boolean, val maxConcurrentTasks: Int, val mergeCheckCommand: String?,
+    data class Settings(val line: String?, val projectBranchName: String?, val automatic: Boolean, val maxConcurrentTasks: Int, val mergeCheckCommand: String?,
         val upstreamRef: String? = null, val landingCheckCommand: String? = null,
         val landingCheckTimeoutSeconds: Int? = null, val mergeCheckTimeoutSeconds: Int? = null)
     /** `StartProject.defaultSettings`: the decided line, else a branch when the plan has dependencies — and the main branch the
@@ -1161,7 +1175,8 @@ object StartProjectCopy {
     fun request(row: JsonObject?): Request? {
         val asked = row?.obj("startRequest") ?: return null
         val settings = asked.obj("settings") ?: return null
-        val line = settings.text("line")?.takeIf { it == "MAIN" || it == "PROJECT_BRANCH" } ?: return null
+        val line = settings.text("line")
+        if (settings["line"] != null && settings["line"] != JsonNull && line != "MAIN" && line != "PROJECT_BRANCH") return null
         val automatic = (settings["automatic"] as? JsonPrimitive)?.booleanOrNull ?: return null
         val count = settings.number("maxConcurrentTasks")?.takeIf { it >= 0 } ?: return null
         val check = when (val value = settings["mergeCheckCommand"]) { null, JsonNull -> null; is JsonPrimitive -> if (value.isString) value.content else return null; else -> return null }
@@ -1173,10 +1188,12 @@ object StartProjectCopy {
      * the main branch by name, `refs/heads/` left off: what the row shows and the picker takes — null for a project with no
      * repository, which has no main branch to choose, and for an integration read that did not answer. `deliveryMode` is how the work
      * reaches it (§10.5 O-L1, A-Q21) — null where the card offers no choice: a read that does not say, or a server that predates it. */
-    data class Draft(val line: String, val automatic: Boolean, val maxConcurrentTasks: Int, val mergeCheckCommand: String = "",
+    data class Draft(val line: String?, val automatic: Boolean, val maxConcurrentTasks: Int, val mergeCheckCommand: String = "",
         val upstream: String? = null, val deliveryMode: String? = null, val landingCheckCommand: String = "",
         val landingCheckTimeoutSeconds: Int? = null, val mergeCheckTimeoutSeconds: Int? = null) {
-        val complete get() = (line == "MAIN" || line == "PROJECT_BRANCH") && maxConcurrentTasks in 1..StartProjectCopy.maxConcurrentTasks && (landingCheckTimeoutSeconds == null || landingCheckTimeoutSeconds > 0)
+        val complete get() = (line == null || line == "MAIN" || line == "PROJECT_BRANCH") &&
+            maxConcurrentTasks in 1..StartProjectCopy.maxConcurrentTasks &&
+            (landingCheckTimeoutSeconds == null || landingCheckTimeoutSeconds > 0)
         val hasMergeCheck get() = mergeCheckCommand.isNotBlank()
         /** The branch every sentence about where work goes names: the one on the card, or main for a project with none. */
         val main get() = upstream ?: RunSettings.defaultMainBranch
@@ -1187,8 +1204,8 @@ object StartProjectCopy {
              * that says how the work reaches it offers that choice — opened on what the project already chose when that is AGENT_PUSH
              * on a line that stays main, and otherwise on PLATFORM, the default. */
             fun of(settings: Settings, view: JsonObject? = null) = Draft(settings.line, true, settings.maxConcurrentTasks, settings.mergeCheckCommand.orEmpty(),
-                if (ProjectMainBranch.repository(view) != null) startMainBranch(settings.upstreamRef, view) else null,
-                view?.text("deliveryMode")?.let { RunSettings.delivery(settings.line, it) }, settings.landingCheckCommand.orEmpty(),
+                if (settings.line != null && ProjectMainBranch.repository(view) != null) startMainBranch(settings.upstreamRef, view) else null,
+                view?.text("deliveryMode")?.takeIf { settings.line != null }?.let { RunSettings.delivery(settings.line, it) }, settings.landingCheckCommand.orEmpty(),
                 settings.landingCheckTimeoutSeconds, settings.mergeCheckTimeoutSeconds)
         }
     }
@@ -1197,9 +1214,10 @@ object StartProjectCopy {
     fun body(request: Request, draft: Draft, requestId: String?): JsonObject = buildJsonObject {
         val branch = request.settings.projectBranchName.orEmpty()
         val check = draft.mergeCheckCommand.trim()
-        put("criteriaDigest", request.criteriaDigest); put("line", draft.line)
+        put("criteriaDigest", request.criteriaDigest)
+        draft.line?.let { put("line", it) }
         if (draft.line == "PROJECT_BRANCH" && branch.isNotEmpty()) put("projectBranchName", branch)
-        draft.upstream?.let { put("upstreamRef", RunSettings.mainBranchRef(it)) }
+        if (draft.line != null) draft.upstream?.let { put("upstreamRef", RunSettings.mainBranchRef(it)) }
         put("automatic", draft.automatic); put("maxConcurrentTasks", draft.maxConcurrentTasks)
         put("mergeCheckCommand", if (check.isEmpty()) JsonNull else JsonPrimitive(check))
         if (draft.line == "PROJECT_BRANCH") {
@@ -1309,8 +1327,11 @@ object RunSettings {
     const val automaticOnMain = "The coordinator decides when each task is done. Each merge into main still asks you."
     const val automaticOff = "You decide when each task is done and when the branch goes into main."
     const val automaticOffMain = "You decide when each task is done, and each merge into main asks you."
-    /** …said of the project's main branch: the five constants above, for a project on main. */
-    fun automaticSays(automatic: Boolean, line: String, hasMergeCheck: Boolean, main: String = defaultMainBranch) = when {
+    const val automaticOnNoLine = "The coordinator decides when each task is done."
+    const val automaticOffNoLine = "You decide when each task is done."
+    /** The Automatic sentence for the selected line and main branch. */
+    fun automaticSays(automatic: Boolean, line: String?, hasMergeCheck: Boolean, main: String = defaultMainBranch) = when {
+        line == null -> if (automatic) automaticOnNoLine else automaticOffNoLine
         !automatic -> if (line == "MAIN") "You decide when each task is done, and each merge into $main asks you."
             else "You decide when each task is done and when the branch goes into $main."
         line == "MAIN" -> "The coordinator decides when each task is done. Each merge into $main still asks you."

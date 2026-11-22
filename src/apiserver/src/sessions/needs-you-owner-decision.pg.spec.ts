@@ -977,7 +977,9 @@ test('the badge says Record as done… once a finished-looking project has waite
   const f = await fixture(db, 'looks-finished');
 
   // One criterion, confirmed, and the one task serving it DONE through the DONE fence — with no
-  // receipt anywhere, so the projection withholds DONE while every criterion is met.
+  // receipt anywhere, so the projection withholds DONE while every criterion is met. Its work ran
+  // a worktree branch and reported files: since revision 42 (§12.15 P-M3) landing follows the
+  // delivered commit, and work that ran no branch and reported nothing has nothing to land.
   await stack.projects.update(f.ownerId, f.projectId, {
     acceptanceCriteriaItems: [{ text: RULER, verificationMethod: METHOD }],
   } as never);
@@ -1004,10 +1006,43 @@ test('the badge says Record as done… once a finished-looking project has waite
     `UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1::uuid AND "status" = 'OPEN'`, [served.id],
   );
   assert.equal(settled.rowCount, 1, 'the task reached DONE through the DONE fence');
+  // The session the task's work ran in: on its own branch, with a commit reported, and finished, so
+  // the criterion has a landing nobody recorded rather than nothing to land (§12.15 P-M3).
+  const { runnerId } = await db.workspace.findUniqueOrThrow({
+    where: { id: f.workspaceId }, select: { runnerId: true },
+  });
+  await db.session.create({
+    data: {
+      id: randomUUID(),
+      ownerId: f.ownerId,
+      creatorId: f.ownerId,
+      taskId: served.id,
+      workspaceId: f.workspaceId,
+      assignedRunnerId: runnerId,
+      title: 'the work the ruler asks for',
+      prompt: 'the work the ruler asks for',
+      provider: 'claude',
+      status: RunStatus.SUCCEEDED,
+      dispatchOrigin: SessionDispatchOrigin.USER,
+      startsTaskWork: true,
+      isolationStatus: 'worktree',
+      branch: `orbit/${served.id.slice(0, 8)}`,
+      changedFiles: ['src/work.ts'],
+      startedAt: new Date(),
+      finishedAt: new Date(),
+    },
+  });
 
   // The settled fact, as the producer leaves it when it hands a finished-looking project to the
   // conversation coordinating it: DELIVERED there, instead of a judgment.
   const wakeId = randomUUID();
+  const clientTurnId = randomUUID();
+  await db.conversationTurn.create({
+    data: {
+      sessionId: f.coordinatorSessionId, clientTurnId, seq: 2,
+      kind: 'message', content: 'The project looks finished.', status: 'ANSWERED', deliveredAt: new Date(),
+    },
+  });
   await db.projectCoordinatorWake.create({
     data: {
       id: wakeId,
@@ -1019,7 +1054,7 @@ test('the badge says Record as done… once a finished-looking project has waite
       idempotencyKey: `cw:v1:PROJECT_TASKS_SETTLED:PROJECT:${f.projectId}:settled`,
       status: 'DELIVERED',
       sessionId: f.coordinatorSessionId,
-      delivery: { clientTurnId: randomUUID() },
+      delivery: { clientTurnId },
     },
   });
 
@@ -1044,9 +1079,9 @@ test('the badge says Record as done… once a finished-looking project has waite
 
   await t.test('(8b) once the window has run out with no request, the row lights as Record as done…', async () => {
     await sql.query(
-      `UPDATE "project_coordinator_wake" SET "updated_at" = "updated_at" - interval '7201 seconds'
-        WHERE "id" = $1::uuid`,
-      [wakeId],
+      `UPDATE "conversation_turn" SET "delivered_at" = "delivered_at" - interval '7201 seconds'
+        WHERE "session_id" = $1::uuid AND "client_turn_id" = $2`,
+      [f.coordinatorSessionId, clientTurnId],
     );
     assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId), [{
       sessionId: f.coordinatorSessionId, projectId: f.projectId, count: 1, kind: 'RECORD_AS_DONE',

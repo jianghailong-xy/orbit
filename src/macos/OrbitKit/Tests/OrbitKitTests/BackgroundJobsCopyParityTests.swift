@@ -83,11 +83,16 @@ final class BackgroundJobsCopyParityTests: XCTestCase {
     /// A wake draws a bubble only for words somebody typed.
     func testAWakeTurnDrawsNoBubbleForABlockNobodyTyped() throws {
         let web = try flat(Self.webTranscript)
-        let branch = try section(web, from: "      const background = parseBackgroundWake(node.note);",
+        let branch = try section(web, from: "      const jobNews = parseBackgroundWake(node.note);",
                                  to: "return <UserBubble node={node} queued={queued} />;", Self.webTranscript)
 
         assertBuilt(branch, "{node.text.trim() !== '' && <UserBubble",
                     "the bubble drawn only for words somebody typed", Self.webTranscript)
+        // A job's news alone draws no line, and a bubble only for words somebody typed (board C1).
+        assertBuilt(branch, "const background = wakeupsOnly(jobNews);",
+                    "the line drawn for a wakeup only", Self.webTranscript)
+        assertBuilt(branch, "if (!background) return node.text.trim() !== '' ? <UserBubble",
+                    "a job's news drawing nothing but typed words", Self.webTranscript)
         XCTAssertFalse(BackgroundWakeCard.drawsBubble(text: ""))
         XCTAssertFalse(BackgroundWakeCard.drawsBubble(text: "\n  \n"))
         XCTAssertTrue(BackgroundWakeCard.drawsBubble(text: "把它做完"))
