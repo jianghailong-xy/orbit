@@ -256,7 +256,12 @@ test('Rollback messages: a claim clears the install notice once a runner takes t
   let sql: { values: readonly unknown[] } | undefined;
   const tx = {
     $executeRaw: async () => 0,
-    $queryRaw: async (...args: unknown[]) => { sql = renderRawQuery(args); return []; },
+    $queryRaw: async (...args: unknown[]) => {
+      // Only the claim statement: Run now's pass check (an EXISTS) follows a claim that took nothing.
+      const rendered = renderRawQuery(args);
+      if (rendered.text.includes('UPDATE "session" SET')) sql = rendered;
+      return [];
+    },
   };
   const prisma = {
     session: { findMany: async () => [] },

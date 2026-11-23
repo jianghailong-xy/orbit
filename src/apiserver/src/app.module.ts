@@ -29,6 +29,7 @@ import { RunnerApiModule } from './runner-api/runner-api.module';
 import { AttachmentsModule } from './attachments/attachments.module';
 import { SharedModule } from './shared/shared.module';
 import { ShareLinksModule } from './share-links/share-links.module';
+import { DriveModule } from './drive/drive.module';
 import { SessionGuestsModule } from './session-guests/session-guests.module';
 import { PushModule } from './push/push.module';
 import { ProvidersModule } from './providers/providers.module';
@@ -88,6 +89,7 @@ import { ConditionsModule } from './conditions/conditions.module';
     AttachmentsModule,
     SharedModule,
     ShareLinksModule,
+    DriveModule,
     SessionGuestsModule,
     PushModule,
     ProvidersModule,

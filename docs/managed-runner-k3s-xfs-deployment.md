@@ -97,7 +97,7 @@ archive at `/root/orbit-cloud-runner-main-dcb75cb6e.tar.gz` on the node.
 
 From then on the image comes with the release (.claude/skills/upgrade/SKILL.md, "Two-stage release"). The build host
 builds `10.66.0.1:5000/orbit-cloud-runner:<commit>` whenever a release changes what the image is built from, and
-pushes it with the other images. The deploy on `10.66.0.4` sets the profile's `runner.image` to it by digest, keeps the
+pushes it with the other images. The deploy on `10.66.0.4` sets the profile's `runner.image` to it by digest and `runner.imageRevision` to the image's source commit (40 hex; what the runner reports as `managed-<sha>`, and what lets the status offer Update Now), keeps the
 profile it replaces beside it, and replaces the apiserver, which reads the profile as it starts. The apiserver's manager
 then moves each runner whose Pod runs another image onto it once that runner is idle: the drain a sleep takes, then a
 wake at once, as the next generation on the same PVC (`rollPreviousImage`). Nothing in flight is cut short; a busy runner
@@ -188,6 +188,28 @@ The previous backend was Docker on the same host (`orbit-ws03`, channel at `http
   push them to a registry before relying on a rebuild.
 - The fast path's runtime log (`checkout index: filled …`) appears only when a session creates a checkout; the image
   version was verified, but the log had not yet been observed at the switch.
+
+## Orbit Files RGW storage
+
+The production Orbit Files data pool is `orbit-files.rgw.buckets.data`. Its `max_bytes` quota is
+**10 TiB (10,995,116,277,760 bytes)**. Set `ORBIT_FILES_STORE_QUOTA_BYTES=10995116277760` when
+deploying the S3 backend. The S3 bucket is `orbit-files`.
+Keep `ORBIT_FILES_S3_ACCESS_KEY_ID` and `ORBIT_FILES_S3_SECRET_ACCESS_KEY` in the production
+apiserver's private Compose env file.
+
+Durability for Files bytes comes from Ceph replication. The owner is scaling out Ceph to increase
+replica placement and capacity. Run without a ZFS mirror and leave `ORBIT_FILES_S3_MIRROR` unset.
+
+As Ceph grows, check the cluster's usable capacity and agree on a new Files pool ceiling in bytes.
+From the cluster's administration environment, set and verify the new quota.
+
+```sh
+ceph osd pool set-quota orbit-files.rgw.buckets.data max_bytes "${new_quota_bytes}"
+ceph osd pool get-quota orbit-files.rgw.buckets.data
+```
+
+Set `ORBIT_FILES_STORE_QUOTA_BYTES` to the verified pool quota at the corresponding apiserver
+configuration rollout.
 
 ## Rollback
 

@@ -3179,6 +3179,7 @@ func buildOperationCatalog() []*operation {
 	// (wiki_tools.go; they are left out entirely when the wiki is off).
 	add(gateAlways, wikiToolDescriptors(obj)...)
 	add(gateAlways, fileToolDescriptors(obj)...)
+	add(gateAlways, driveToolDescriptors(obj)...)
 	// The owner's own Settings (settings_tools.go): listed whether or not Session orchestration is on, since they fix
 	// ordinary settings and turning orchestration off is itself a proposal (docs/settings-from-conversation-design.md §7).
 	add(gateAlways, settingsToolDescriptors(obj)...)
@@ -3725,8 +3726,8 @@ func fileToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 				"path": map[string]interface{}{
 					"type": "string",
 					"description": "The file or directory, absolute or relative to the working directory. Its real " +
-						"location, links resolved, has to be inside this session's checkout or its uploads directory, " +
-						"as with a file a reply links; anywhere else is refused, so copy a file there first.",
+						"location, links resolved, has to be inside this session's checkout, its uploads directory, " +
+						"or the mounted Orbit Files drive on Orbit Cloud.",
 				},
 				"taskId": map[string]interface{}{
 					"type": "string",
@@ -4564,6 +4565,7 @@ func finishOperationCatalog(ops []*operation) []*operation {
 		{"wiki", wikiCLICapabilities},
 		{"wiki", wikiImportCLICapabilities},
 		{"file", fileCLICapabilities},
+		{"drive", driveCLICapabilities},
 		{"subagent", subagentCLICapabilities},
 		{"settings", settingsCLICapabilities},
 		{"browser", browserCLICapabilities},
@@ -5383,6 +5385,27 @@ var catalogMetadata = map[string]operationMeta{
 	"file_list": {
 		Object: objectFile,
 		Intent: "See the files this session keeps.",
+	},
+	"drive_put": {
+		Object: objectFile,
+		Intent: "Copy a local file into the owner's Orbit Files drive.",
+	},
+	"drive_get": {
+		Object: objectFile,
+		Intent: "Download a drive file into this session's uploads directory.",
+	},
+	"drive_list": {
+		Object: objectFile,
+		Intent: "See the contents of a drive folder.",
+	},
+	"drive_move": {
+		Object: objectFile,
+		Intent: "Move or rename an entry on the drive.",
+	},
+	"drive_delete": {
+		Object:      objectFile,
+		Intent:      "Move an entry to the owner's Trash.",
+		Destructive: true,
 	},
 	"bg_run": {
 		Object: objectBackgroundJob,

@@ -65,7 +65,7 @@ final class ExternalLinkTests: XCTestCase {
     /// away a reference to a task, or a wiki footnote's number.
     func testTheAppsOwnLinksStayLinksWithoutLeaving() throws {
         for text in ["orbit-task:abc", "orbit-session:abc", "orbit-project:abc", "orbit-list:abc", "orbit-wiki:abc",
-                     "orbit-attachment:abc", "orbit-footnote://note?n=1", "orbit-mark://x", "orbit-cursor:start-elsewhere",
+                     "orbit-attachment:abc", "orbit-drive:abc", "orbit-footnote://note?n=1", "orbit-mark://x", "orbit-cursor:start-elsewhere",
                      "orbit-wiki-status://run", "ORBIT-TASK:abc"] {
             let link = try url(text)
             XCTAssertFalse(ExternalLink.mayLeaveTheApp(link), text)

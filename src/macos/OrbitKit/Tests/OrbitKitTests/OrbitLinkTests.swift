@@ -377,7 +377,7 @@ final class OrbitLinkTests: XCTestCase {
                            [.card(OrbitLinkRef(target: target,
                                                source: .reference("orbit-\(kind.rawValue):\(listID)")))])
         }
-        for text in ["[x](orbit-attachment:\(taskID))", "[x](orbit-task:)", "[x](orbit-task:abc-def)",
+        for text in ["[x](orbit-attachment:\(taskID))", "[x](orbit-drive:\(taskID))", "[x](orbit-task:)", "[x](orbit-task:abc-def)",
                      "[x](https://orbitd.io/tasks/\(taskID))"] {
             XCTAssertEqual(place(text), [paragraph(text)], "should have stayed as it was: \(text)")
         }
