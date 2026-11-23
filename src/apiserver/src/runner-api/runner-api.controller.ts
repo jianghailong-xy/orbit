@@ -39,6 +39,7 @@ import { MachineProtocol } from '../common/machine-protocol';
 import { isStopping, pauseUnlessStopping } from '../common/graceful-stop';
 import { registerFeishuReply } from '../feishu/feishu-outbox-register';
 import { deriveSessionCapabilities, type SessionCapabilityFields } from '../sessions/session-state';
+import { answeredPerson } from '../sessions/session-listed-at';
 import { readWorktreeArtifactRequest, worktreeFileAnswerKey } from '../sessions/worktree-artifact';
 import { importForkSessionId } from '../sessions/import-fork';
 import { reloadCarriesEnv } from '../sessions/session-settings';
@@ -596,7 +597,7 @@ import {
   type ManagedHeartbeatAnswer,
 } from '../managed-runners/managed-runner-sleep';
 import { readManagedRunnerStorage, type ManagedRunnerStorage } from '../managed-runners/managed-runner-storage';
-import { markUpdateNowCuts } from '../managed-runners/managed-runner-update-cut';
+import { markUpdateNowCuts, queueUpdateNowContinuation } from '../managed-runners/managed-runner-update-cut';
 import {
   RUNNER_OFFLINE_AFTER_MS,
   RunnerPresenceService,
@@ -6798,6 +6799,9 @@ export class RunnerApiController {
     // An already-answered approval raises no card and buzzes no phone: not interrupting is the
     // entire point of having granted it.
     if (!existing && !allowedMessage && !refused && !held) {
+      // A card in front of the owner is the turn waiting on them: the row moves to the top of their list
+      // (session.listed_at, sessions/session-listed-at.ts). A card a coordinator holds, or one already decided, does not.
+      await this.prisma.session.updateMany({ where: { id: sessionId }, data: { listedAt: new Date() } });
       this.realtime.publish(sessionId, approvalRequestEvent(approval, new Date().toISOString()));
       // Fire-and-forget: nudge the owner's iOS devices that a reply is needed. Not awaited so a
       // slow APNs round-trip can't delay the runner's approval-create response.
@@ -7278,6 +7282,9 @@ export class RunnerApiController {
           status: true,
           taskId: true,
           startsTaskWork: true,
+          // Whose opening this session's first turn is, for `answeredPerson` below (parentSessionId is read further down).
+          openedBy: true,
+          promptByOrbit: true,
           ownerId: true,
           creatorId: true,
           workspaceId: true,
@@ -7355,6 +7362,7 @@ export class RunnerApiController {
           leaseGeneration: true,
           coordinatorContextKey: true,
           senderSessionId: true,
+          byPerson: true,
         },
       });
       // A dequeue only proposes that context was delivered. The successful top-level turn is its
@@ -8141,10 +8149,11 @@ export class RunnerApiController {
       let currentWorkTerminalized = 0;
       let currentWorkRequeued = 0;
       let stoppedRequestsClosed: string[] = [];
+      const reportedInterrupted = dto.status === RunStatus.INTERRUPTED;
       if (
         completedTurn
         && !failSession
-        && (dto.status === RunStatus.INTERRUPTED || await stopOvertookTarget(tx, sessionId, completedTurn.seq))
+        && (reportedInterrupted || await stopOvertookTarget(tx, sessionId, completedTurn.seq))
       ) {
         const settled = await settleStoppedCurrentWorkSteers(
           tx,
@@ -8182,6 +8191,12 @@ export class RunnerApiController {
         where: { sessionId, kind: 'steer', status: 'PENDING', sendIntent: null },
         data: { kind: 'message' },
       });
+      // A turn an older runner ended INTERRUPTED at the owner's Update Now's stop, rather than keeping it for the next
+      // generation, is followed by the update's continuation (managed-runner-update-cut.ts), which the count below then
+      // finds queued: the session stays RUNNING for the next generation to take it.
+      if (completedTurn && !failSession && !unanswered) {
+        await queueUpdateNowContinuation(tx, runner.id, sessionId, completedTurn, reportedInterrupted);
+      }
       // If a follow-up arrived before this completion acquired the Session lock, the
       // current active slot passes directly to it and the inbox may deliver it next. With
       // no executable follow-up, release the slot while the runtime remains warm.
@@ -8326,6 +8341,12 @@ export class RunnerApiController {
           ...branchCommitsData(dto.branchCommits),
           runtimeSessionId: dto.runtimeSessionId ?? undefined,
           lastTurnAt: new Date(),
+          // The turn ended on its owner: a person's message answered and nothing queued behind it, so the row moves to
+          // the top of their list (session.listed_at, migration 1434). A wake-up's, a notification's or a task brief's
+          // end leaves it where it was; FAILED and every other end move it through the session_listed_at_settle trigger.
+          ...(nextStatus === RunStatus.AWAITING_INPUT && answeredPerson(current, completedTurn, sessionId)
+            ? { listedAt: new Date() }
+            : {}),
           numTurns: { increment: turnInc },
           costUsd: { increment: gatewayBooked ? 0 : turnCostUsd },
           // The totals this turn was measured to, for the next completion to be measured from.
@@ -11232,6 +11253,8 @@ export class RunnerApiController {
             ? {
                 branchMerged: true,
                 mergedSourceSha: dto.sourceSha ?? null,
+                // Landing is the session changing for its owner: its row moves (session.listed_at, session-listed-at.ts).
+                listedAt: new Date(),
               }
             : {}),
           // On a successful merge, advance the recorded fork point to the merge tip.

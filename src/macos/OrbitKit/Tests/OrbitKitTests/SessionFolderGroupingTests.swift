@@ -20,12 +20,13 @@ final class SessionFolderGroupingTests: XCTestCase {
     private func session(_ id: String, folder: String? = nil, state: SessionRunState = .awaitingInput,
                          lifecycle: SessionLifecycleState? = nil, approvals: Int = 0,
                          waitingKind: SessionWaitingKind? = nil, bg: Int = 0, jobs: Int = 0,
-                         pinnedAt: String? = nil, lastTurnAt: String? = nil) -> Session {
+                         pinnedAt: String? = nil, lastTurnAt: String? = nil,
+                         listedAt: String? = nil) -> Session {
         Session(id: id, title: id, status: .awaitingInput, runState: state, lifecycleState: lifecycle,
                 agentId: "w1", assignedRunnerId: nil, pendingApprovals: approvals,
                 waitingKind: waitingKind, branch: nil, updatedAt: nil,
                 runningBgCount: bg, runningBgJobCount: jobs,
-                pinnedAt: pinnedAt, lastTurnAt: lastTurnAt, folderId: folder)
+                pinnedAt: pinnedAt, lastTurnAt: lastTurnAt, listedAt: listedAt, folderId: folder)
     }
 
     private func listing(_ sessions: [Session], folders: [SessionFolder],
@@ -41,12 +42,12 @@ final class SessionFolderGroupingTests: XCTestCase {
     /// built from what is left, so neither a recent session nor a pinned one shows outside.
     func testASessionInAFolderIsNotInTheTimeSections() {
         let list = [
-            session("loose-pinned", pinnedAt: "2026-09-01T00:00:00Z", lastTurnAt: "2026-09-01T09:00:00Z"),
+            session("loose-pinned", pinnedAt: "2026-09-01T00:00:00Z", listedAt: "2026-09-01T09:00:00Z"),
             session("filed-pinned", folder: "f1", pinnedAt: "2026-09-02T00:00:00Z",
-                    lastTurnAt: "2026-09-02T09:00:00Z"),
-            session("filed-today", folder: "f1", lastTurnAt: "2026-10-02T11:00:00Z"),
-            session("loose-today", lastTurnAt: "2026-10-02T10:00:00Z"),
-            session("loose-older", lastTurnAt: "2026-07-01T09:00:00Z"),
+                    listedAt: "2026-09-02T09:00:00Z"),
+            session("filed-today", folder: "f1", listedAt: "2026-10-02T11:00:00Z"),
+            session("loose-today", listedAt: "2026-10-02T10:00:00Z"),
+            session("loose-older", listedAt: "2026-07-01T09:00:00Z"),
         ]
         let split = listing(list, folders: [folder("f1", "Notes")])
         XCTAssertEqual(split.sessions.map(\.id), ["loose-pinned", "loose-today", "loose-older"])
@@ -187,14 +188,14 @@ final class SessionFolderGroupingTests: XCTestCase {
     // MARK: a folder's page
 
     /// The page lists the folder's sessions in the order the list orders that scope — pinned first,
-    /// then latest activity, whatever order they arrive in — so its time sections are the list's.
+    /// then latest `listedAt`, whatever order they arrive in — so its time sections are the list's.
     func testAFolderPageListsItsSessionsInTheListsOrder() {
         let open = [
-            session("older", folder: "f1", lastTurnAt: "2026-09-20T09:00:00Z"),
-            session("elsewhere", folder: "f2", lastTurnAt: "2026-10-02T10:00:00Z"),
-            session("newer", folder: "f1", lastTurnAt: "2026-10-02T09:00:00Z"),
-            session("pinned", folder: "f1", pinnedAt: "2026-09-01T00:00:00Z", lastTurnAt: "2026-07-01T09:00:00Z"),
-            session("loose", lastTurnAt: "2026-10-02T11:00:00Z"),
+            session("older", folder: "f1", listedAt: "2026-09-20T09:00:00Z"),
+            session("elsewhere", folder: "f2", listedAt: "2026-10-02T10:00:00Z"),
+            session("newer", folder: "f1", listedAt: "2026-10-02T09:00:00Z"),
+            session("pinned", folder: "f1", pinnedAt: "2026-09-01T00:00:00Z", listedAt: "2026-07-01T09:00:00Z"),
+            session("loose", listedAt: "2026-10-02T11:00:00Z"),
         ]
         let page = SessionFolderGrouping.sessions(open, inFolder: "f1", view: .open)
         XCTAssertEqual(page.map(\.id), ["pinned", "newer", "older"])
