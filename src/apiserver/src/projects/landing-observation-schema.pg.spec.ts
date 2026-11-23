@@ -768,6 +768,13 @@ test('0453 §10.4 §10.9 on the schema before it, over rows of every table it al
         await sql.query(readFileSync(path.join(MIGRATIONS, '1310_project_landing_check_set_by', 'migration.sql'), 'utf8'));
         await sql.query(readFileSync(path.join(MIGRATIONS, '1350_task_landing_check_exempt', 'migration.sql'), 'utf8'));
         await sql.query(readFileSync(path.join(MIGRATIONS, '1390_project_setting_change', 'migration.sql'), 'utf8'));
+        // 1527 gives the job its pull request columns and CHECKs, rewrites the state CHECK and J2, and recreates J3's
+        // index (docs/design/protected-branch-landing.md §4.2). Its other sections alter tables 0453 predates (0820's
+        // `github_app_config`), so only its `project_integration_job` section is replayed, as it ships.
+        const migration1527 = readFileSync(path.join(MIGRATIONS, '1527_pull_request_landing', 'migration.sql'), 'utf8');
+        const jobSection = /^-- ── project_integration_job ─+$\n([\s\S]*?)^-- ── project_integration_job_event ─+$/m.exec(migration1527);
+        assert.ok(jobSection, 'migration 1527 no longer has its project_integration_job section');
+        await sql.query(jobSection[1]);
         // 1060 adds `task.start_when_condition_id` with its unique index, its foreign key to `condition` and
         // `task_run_at_or_start_when_chk`. The key needs 1030's `condition` table, which needs `schedule` and more,
         // so 1060 cannot be replayed here alone: its four objects, by name, are left out of the empty side instead.
