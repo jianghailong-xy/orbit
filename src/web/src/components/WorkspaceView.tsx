@@ -217,6 +217,7 @@ import {
   permissionModeSupported,
   contextWindowFor,
   DEFAULT_MODEL,
+  DEFAULT_PERMISSION_MODE,
   defaultEngineOf,
   defaultModelFor,
   effectiveSessionEffort,
@@ -413,7 +414,7 @@ import {
   type CriteriaDecisionReply,
 } from './CriteriaDecisionCard';
 import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows, coordinatorQuestions } from './CoordinatorQuestionCard';
-import { useSessionOwnerRequestInserts } from './OwnerRequestCard';
+import { useSessionOwnerRequestInserts, useSessionOwnerRequestPointers } from './OwnerRequestCard';
 import { useScheduleRunOfSession, useSessionScheduleCards, useSessionScheduleInserts } from './ScheduleCards';
 import {
   OWNER_REQUEST_CHAT_PLACEHOLDER,
@@ -1522,9 +1523,16 @@ export function CoordinatorBadge({ projectId }: { projectId?: string | null }) {
 
 /** Where and how the agent runs a guest's message, for the Share dialog's People who can reply: the session's own
  *  runner and permission mode, or the workspace's machine when the session names none. */
-const guestContextOf = (s: any, fallbackRunner: string, managedRunnerId: string | null) => ({
+const guestContextOf = (
+  s: any,
+  fallbackRunner: string,
+  managedRunnerId: string | null,
+  accountPermissionMode: string | undefined,
+) => ({
   runnerName: (s.assignedRunner ? machineName(s.assignedRunner, managedRunnerId) : '') || fallbackRunner,
-  permissionMode: typeof s.permissionMode === 'string' ? s.permissionMode : 'default',
+  // A session that stored no mode runs in the account's, else Auto, as the server resolves it.
+  permissionMode:
+    typeof s.permissionMode === 'string' ? s.permissionMode : (accountPermissionMode ?? DEFAULT_PERMISSION_MODE),
 });
 
 /** What the two-person icon beside a row's time says: people the owner invited can reply here. */
@@ -2964,8 +2972,9 @@ export function WorkspaceView({
   >(null);
   // The bar while it is drawn: its height is how far its own coming and going moves the transcript.
   const stuckBarRef = useRef<HTMLButtonElement>(null);
-  // The exception cards scrolled wholly above the viewport, by item id and space-joined so an
-  // unchanged answer is no re-render: which way the pinned line's press goes to reach one.
+  // The exception cards scrolled wholly above the viewport, by item id, and the owner request cards,
+  // by their element id (`owner-request-<id>`), space-joined so an unchanged answer is no re-render:
+  // which way the pinned line's press goes to reach one.
   const [openItemsAbove, setOpenItemsAbove] = useState('');
   // Smart auto-scroll: only keep pinned to the bottom when the user is already there, so
   // reading history (or jumping to the sticky prompt) isn't yanked back by streaming updates.
@@ -4547,7 +4556,18 @@ export function WorkspaceView({
   // Model and Mode have independent dirty guards. If an untouched model is refined by a late
   // Runtime heartbeat after the user explicitly chose Auto, correctness still wins: never keep
   // an invalid pair merely because Mode is dirty.
+  //
+  // Not in the commit a new context arrives in: that commit still holds the previous context's
+  // model and mode, the seeds above having only queued this one's. Judged on those, a stopped Claude
+  // session opened after a Codex one read Codex's model, lost Auto, and its Continue stored Default
+  // (seen on orbitd.io, 2026-11-23). The seeds are clamped already, and the next commit runs this
+  // check again on this context's own values.
+  const clampContextKey = useRef<string | null>(null);
   useEffect(() => {
+    if (clampContextKey.current !== modelContextKey) {
+      clampContextKey.current = modelContextKey;
+      return;
+    }
     if (
       !live &&
       shownProviderCapabilitiesResolved &&
@@ -4562,6 +4582,7 @@ export function WorkspaceView({
     live,
     mode,
     model,
+    modelContextKey,
     runner.modelCatalog,
     shownEngine,
     shownProvider,
@@ -4893,9 +4914,9 @@ export function WorkspaceView({
     if (top < LOAD_OLDER_AT) loadOlder();
     const topY = el.getBoundingClientRect().top;
     setOpenItemsAbove(
-      Array.from(el.querySelectorAll<HTMLElement>('[data-open-item]'))
+      Array.from(el.querySelectorAll<HTMLElement>('[data-open-item], .owner-request-card'))
         .filter((card) => card.getBoundingClientRect().bottom <= topY + 1)
-        .map((card) => card.getAttribute('data-open-item'))
+        .map((card) => card.getAttribute('data-open-item') ?? card.id)
         .join(' '),
     );
     // A turn the control plane queued is scanned too — it is where the answer under it starts, so the
@@ -5795,6 +5816,8 @@ export function WorkspaceView({
     transcriptEvents,
     startOwnerRequestChat,
   );
+  // The same requests still waiting on their cards, for the pinned strip to point at.
+  const ownerRequestPointers = useSessionOwnerRequestPointers(selectedTrashed ? null : selectedId);
 
   // A scheduled task's run: its schedule and run (crumb, strip, report), and the cards and change lines a session put
   // up, each where it happened (docs/mocks/scheduled-tasks/web/02-board.png).
@@ -11099,7 +11122,7 @@ export function WorkspaceView({
             onClose={() => setShareOpen(false)}
             kind="SESSION"
             rootId={selected.id}
-            guests={guestContextOf(selected, runnerShownName, managedRunnerId)}
+            guests={guestContextOf(selected, runnerShownName, managedRunnerId, accountDefaultPermissionMode)}
           />
         )}
         {selected && !selectedTrashed && !composing && (
@@ -11127,7 +11150,7 @@ export function WorkspaceView({
             onClose={() => setShareRow(null)}
             kind="SESSION"
             rootId={shareRow.id}
-            guests={guestContextOf(shareRow, runnerShownName, managedRunnerId)}
+            guests={guestContextOf(shareRow, runnerShownName, managedRunnerId, accountDefaultPermissionMode)}
           />
         )}
         <SessionMoveModal
@@ -11196,6 +11219,10 @@ export function WorkspaceView({
                 return Number.isFinite(at) ? Math.max(0, Math.floor((Date.now() - at) / 1000)) : null;
               })(),
             })) : []}
+            ownerRequests={ownerRequestPointers.map((request) => ({
+              ...request,
+              above: openItemsAbove.split(' ').includes(`owner-request-${request.id}`),
+            }))}
           />
         )}
 
