@@ -1,8 +1,8 @@
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
-import { DRIVE_CHUNK_MAX, DriveChunksService } from './drive-chunks.service';
-import { assertDriveName, DriveService, OWNER_WRITER } from './drive.service';
+import { DRIVE_CHUNK_MAX, DocumentsChunksService } from './documents-chunks.service';
+import { assertDriveName, DocumentsService, OWNER_WRITER } from './documents.service';
 
 export const DRIVE_UPLOAD_INCOMPLETE = 'DRIVE_UPLOAD_INCOMPLETE';
 export const DRIVE_UPLOAD_INVALID = 'DRIVE_UPLOAD_INVALID';
@@ -18,18 +18,18 @@ const notFound = () => refusal(HttpStatus.NOT_FOUND, UPLOAD_NOT_FOUND, 'No such 
 
 /**
  * The owner's resumable upload (docs/orbit-files-drive-technical-design.md §4.1): open a staging, send its chunks one
- * request each (DriveChunksService.putChunk), ask which have arrived, and complete, which creates the file and commits it
- * through DriveService.commit, keyed by the staging id so a retry never makes a second file. Every call takes the owner
+ * request each (DocumentsChunksService.putChunk), ask which have arrived, and complete, which creates the file and commits it
+ * through DocumentsService.commit, keyed by the staging id so a retry never makes a second file. Every call takes the owner
  * from the credential; another account's upload is not found.
  */
 @Injectable()
-export class DriveUploadsService {
-  private readonly logger = new Logger(DriveUploadsService.name);
+export class DocumentsUploadsService {
+  private readonly logger = new Logger(DocumentsUploadsService.name);
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly drive: DriveService,
-    private readonly chunks: DriveChunksService,
+    private readonly drive: DocumentsService,
+    private readonly chunks: DocumentsChunksService,
   ) {}
 
   /**

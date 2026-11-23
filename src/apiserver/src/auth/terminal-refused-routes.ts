@@ -532,7 +532,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   // Conditions (conditions/conditions.controller.ts): the owner's read of one condition a task or a schedule waits on;
   // a terminal drives sessions, not the conditions that start work.
   'GET /conditions/:id',
-  // The drive (drive/drive.controller.ts): the owner's Files page; a terminal drives sessions, and an agent reaches the
+  // The drive (documents/documents.controller.ts): the owner's Files page; a terminal drives sessions, and an agent reaches the
   // drive through its mount or the runner drive door, never these routes.
   'GET /drive/entries',
   'GET /drive/entries/:id',

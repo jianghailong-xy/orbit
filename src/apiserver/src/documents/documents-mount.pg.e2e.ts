@@ -3,7 +3,7 @@
  * run as uid 10001 through a real FUSE mount made the way the privileged parent makes it (src/drive-mount), against
  * the production apiserver (`node build/main.js`) over a real PostgreSQL that `scripts/run-pg-spec.sh` migrates:
  *
- *   sudo RUN_PG_SPEC_TIMEOUT=7200 bash scripts/run-pg-spec.sh src/apiserver/src/drive/drive-mount.pg.e2e.ts
+ *   sudo RUN_PG_SPEC_TIMEOUT=7200 bash scripts/run-pg-spec.sh src/apiserver/src/documents/documents-mount.pg.e2e.ts
  *
  * Needs root (it mounts, as the CSI plugin does), a usable /dev/fuse, Go (it builds src/drive-mount unless
  * DRIVE_MOUNT_BIN names a binary) and the shell tools the rows use. Not in CI's pg roster, which takes *.pg.spec only.
@@ -44,7 +44,7 @@ import { call, startApiserver, type Apiserver } from '../auth/pat-test-apiserver
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
-import { issueDriveMountCredential } from './drive-mount-credential';
+import { issueDriveMountCredential } from './documents-mount-credential';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);

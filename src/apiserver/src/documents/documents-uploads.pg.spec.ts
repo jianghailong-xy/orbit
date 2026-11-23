@@ -1,9 +1,9 @@
 /**
  * The owner's resumable upload and ranged download (docs/orbit-files-drive-technical-design.md §4.1;
- * drive/drive-uploads.service.ts, drive-content.service.ts, drive.controller.ts), over a real PostgreSQL that
+ * documents/documents-uploads.service.ts, documents-content.service.ts, documents.controller.ts), over a real PostgreSQL that
  * `scripts/run-pg-spec.sh` migrates from empty, with the chunks on a files directory of this run's:
  *
- *   bash scripts/run-pg-spec.sh src/apiserver/src/drive/drive-uploads.pg.spec.ts
+ *   bash scripts/run-pg-spec.sh src/apiserver/src/documents/documents-uploads.pg.spec.ts
  *
  *   (1) an upload interrupted after some parts is read back by its status, resumes with the rest, completes, and the
  *       file downloads with the sha256 it was sent with; completing again answers the same file;
@@ -43,12 +43,12 @@ import { UserFileResponseInterceptor } from '../files/user-file-response';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
-import { DriveChunksService, DRIVE_CHUNK_MAX } from './drive-chunks.service';
-import { DriveContentService } from './drive-content.service';
-import { DriveDownloadLinks } from './drive-download-links';
-import { DriveUploadsService } from './drive-uploads.service';
-import { DriveController, DriveDownloadController } from './drive.controller';
-import { DriveService } from './drive.service';
+import { DocumentsChunksService, DRIVE_CHUNK_MAX } from './documents-chunks.service';
+import { DocumentsContentService } from './documents-content.service';
+import { DocumentsDownloadLinks } from './documents-download-links';
+import { DocumentsUploadsService } from './documents-uploads.service';
+import { DocumentsController, DocumentsDownloadController } from './documents.controller';
+import { DocumentsService } from './documents.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -73,7 +73,7 @@ test('Orbit Files drive: resumable upload and ranged download', { skip: !URL, co
   let caller: string = owner;
 
   @Module({
-    controllers: [DriveController, DriveDownloadController],
+    controllers: [DocumentsController, DocumentsDownloadController],
     providers: [
       JwtAuthGuard,
       Reflector,
@@ -84,7 +84,7 @@ test('Orbit Files drive: resumable upload and ranged download', { skip: !URL, co
       { provide: FilesService, useValue: files },
       // The controller's download-link route needs its signer; this spec does not call it.
       { provide: ConfigService, useValue: new ConfigService({ JWT_SECRET: `secret-${RUN}` }) },
-      DriveService, DriveChunksService, DriveUploadsService, DriveContentService, DriveDownloadLinks,
+      DocumentsService, DocumentsChunksService, DocumentsUploadsService, DocumentsContentService, DocumentsDownloadLinks,
     ],
   })
   class DriveHarness {}
@@ -280,7 +280,7 @@ test('Orbit Files drive: resumable upload and ranged download', { skip: !URL, co
   });
 
   await t.test('(7) two overlapping completes of one upload make one file', async () => {
-    const drive = app.get(DriveService);
+    const drive = app.get(DocumentsService);
     const upload = await open({ name: 'race.bin', size: 3 });
     assert.equal((await putChunk(upload.id, 0, Buffer.from('abc'))).status, 200);
     const original = drive.createFile.bind(drive);

@@ -7,13 +7,13 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
-import { DRIVE_CHUNK_MAX, DRIVE_CHUNK_TOO_LARGE, DriveChunksService } from './drive-chunks.service';
-import { DriveContentService, type DriveContent } from './drive-content.service';
-import { DriveUploadsService } from './drive-uploads.service';
+import { DRIVE_CHUNK_MAX, DRIVE_CHUNK_TOO_LARGE, DocumentsChunksService } from './documents-chunks.service';
+import { DocumentsContentService, type DriveContent } from './documents-content.service';
+import { DocumentsUploadsService } from './documents-uploads.service';
 import { FilesService, type DriveUsage } from '../files/files.service';
-import { DriveService } from './drive.service';
-import { DriveDownloadLinks } from './drive-download-links';
-import { CreateDriveFolderDto, DriveDownloadLinkDto, OpenDriveUploadDto, RestoreDriveVersionDto, UpdateDriveEntryDto } from './dto';
+import { DocumentsService } from './documents.service';
+import { DocumentsDownloadLinks } from './documents-download-links';
+import { CreateDocumentsFolderDto, DocumentsDownloadLinkDto, OpenDocumentsUploadDto, RestoreDocumentsVersionDto, UpdateDocumentsEntryDto } from './dto';
 
 /** What every drive route declares for a token: the files scope; a drive holds no workspace, so a confined token is refused. */
 export const DRIVE_PAT = () => PatScope('files', { workspaceConfinable: false });
@@ -28,13 +28,13 @@ const limitOf = (limit?: string) => (limit === undefined ? undefined : Number.pa
  */
 @UseGuards(JwtAuthGuard)
 @Controller('drive')
-export class DriveController {
+export class DocumentsController {
   constructor(
-    private readonly drive: DriveService,
-    private readonly uploads: DriveUploadsService,
-    private readonly chunks: DriveChunksService,
-    private readonly content: DriveContentService,
-    private readonly downloadLinks: DriveDownloadLinks,
+    private readonly drive: DocumentsService,
+    private readonly uploads: DocumentsUploadsService,
+    private readonly chunks: DocumentsChunksService,
+    private readonly content: DocumentsContentService,
+    private readonly downloadLinks: DocumentsDownloadLinks,
     private readonly files: FilesService,
   ) {}
 
@@ -77,13 +77,13 @@ export class DriveController {
 
   @DRIVE_PAT()
   @Post('folders')
-  createFolder(@CurrentUser() user: AuthUser, @Body() dto: CreateDriveFolderDto) {
+  createFolder(@CurrentUser() user: AuthUser, @Body() dto: CreateDocumentsFolderDto) {
     return this.drive.createFolder(user.userId, { parentId: dto.parentId ?? null, name: dto.name, onClash: 'SUFFIX' });
   }
 
   @DRIVE_PAT()
   @Patch('entries/:id')
-  update(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateDriveEntryDto) {
+  update(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateDocumentsEntryDto) {
     return this.drive.rename(user.userId, id, { name: dto.name, parentId: dto.parentId, replace: false });
   }
 
@@ -103,7 +103,7 @@ export class DriveController {
   @DRIVE_PAT()
   @Post('versions/:id/restore')
   @HttpCode(HttpStatus.OK)
-  restoreVersion(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: RestoreDriveVersionDto) {
+  restoreVersion(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: RestoreDocumentsVersionDto) {
     return this.drive.restoreVersion(user.userId, id, dto.as);
   }
 
@@ -176,7 +176,7 @@ export class DriveController {
   /** Open a resumable upload: answers the staging id and the chunk size every chunk but the last must have. */
   @DRIVE_PAT()
   @Post('uploads')
-  openUpload(@CurrentUser() user: AuthUser, @Body() dto: OpenDriveUploadDto) {
+  openUpload(@CurrentUser() user: AuthUser, @Body() dto: OpenDocumentsUploadDto) {
     return this.uploads.open(user.userId, {
       parentId: dto.parentId ?? null, name: dto.name, size: dto.size, relativePath: dto.relativePath, dropRootId: dto.dropRootId ?? null,
     });
@@ -245,7 +245,7 @@ export class DriveController {
   @DRIVE_PAT()
   @Post('entries/:id/download-link')
   @HttpCode(HttpStatus.OK)
-  downloadLink(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: DriveDownloadLinkDto) {
+  downloadLink(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: DocumentsDownloadLinkDto) {
     return this.downloadLinks.mint(user.userId, id, dto.versionId);
   }
 
@@ -290,8 +290,8 @@ function send(content: DriveContent, res: Response): StreamableFile | undefined 
  * one 404. Range, If-Range and If-None-Match work as on the owner's content route.
  */
 @Controller('drive')
-export class DriveDownloadController {
-  constructor(private readonly downloadLinks: DriveDownloadLinks) {}
+export class DocumentsDownloadController {
+  constructor(private readonly downloadLinks: DocumentsDownloadLinks) {}
 
   @Get('dl/:token')
   async open(
