@@ -105,28 +105,18 @@ struct LandingFixCardView: View {
 }
 
 /// ② b ③: the one line the session gains once the fix it committed is queued to land again —
-/// `Landing 4be19c2 again · Open landing ›`, the commit read off the landing's own record.
+/// `Landing 4be19c2 again · Open landing ›`. Read off the session's own landing (`sourceLanding`): its
+/// record's `FIXED_BY_SESSION` that this session asked for, which names the commit.
 struct LandingFixAgainLine: View {
     let console: ConsoleModel
     @Environment(AppModel.self) private var app
     @State private var landing: SessionLandingView?
 
-    /// The landing the session's newest landing-fix card names, and whether a turn followed it.
-    private var asked: (landingID: String, answered: Bool)? {
-        let items = console.state.items
-        guard let at = items.lastIndex(where: {
-            if case .user(let b) = $0 { return LandingFix.isTurn(clientTurnId: b.clientTurnId, text: b.text) }
-            return false
-        }), case .user(let bubble) = items[at],
-              let card = LandingFix.parse(clientTurnId: bubble.clientTurnId, text: bubble.text),
-              let id = card.landingSessionId else { return nil }
-        return (id, items.index(after: at) < items.endIndex)
-    }
-
     var body: some View {
-        if let asked, asked.answered {
+        if let source = console.worktree.detail?.sourceLanding, !source.landingSessionId.isEmpty {
+            let asked = (landingID: source.landingSessionId, state: source.state)
             Group {
-                if let line = LandingFix.againLine(landing) {
+                if let line = LandingFix.againLine(landing, by: console.sessionID) {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(Color.accentColor)
                         Text(line).foregroundStyle(.secondary)
@@ -142,7 +132,7 @@ struct LandingFixAgainLine: View {
                 }
             }
             // Read again whenever the session's own landing moves.
-            .task(id: "\(asked.landingID)|\(console.worktree.detail?.sourceLanding?.state ?? "")") {
+            .task(id: "\(asked.landingID)|\(asked.state)") {
                 await read(asked.landingID)
             }
         }

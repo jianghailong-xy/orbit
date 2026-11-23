@@ -70,7 +70,7 @@ struct LandingStatusCardView: View {
             if let outcome {
                 line(kind: outcome.ok ? .ok : .quiet, title: outcome.title, status: outcome.right)
             } else if fixing {
-                line(kind: .running, title: LandingFixCopy.fixing)
+                line(kind: .fixing, title: LandingFixCopy.fixing)
             } else if let card {
                 line(kind: card.stoppedOnFailure || card.timedOut ? .failed : .running,
                      title: card.rightIsClock ? card.word : card.right, word: word,
@@ -250,17 +250,21 @@ struct LandingStatusCardView: View {
                 Label(LandingPageCopy.decisionsTheCoordinator, systemImage: "person")
                     .font(.orbitMeta).foregroundStyle(.secondary)
             }
-            HStack(spacing: 8) {
-                ForEach(Array(waitDoors.enumerated()), id: \.offset) { index, action in
-                    if index == 0 {
-                        Button(Self.doorLabel(action)) { act(action) }
-                            .buttonStyle(.borderedProminent).controlSize(.small)
-                    } else {
-                        Button(Self.doorLabel(action)) { act(action) }
-                            .buttonStyle(.bordered).controlSize(.small)
+            // Two to a row, as the board draws the hand-back's three (02 d): no door's word wraps.
+            ForEach(Array(stride(from: 0, to: waitDoors.count, by: 2)), id: \.self) { start in
+                HStack(spacing: 8) {
+                    ForEach(Array(waitDoors.enumerated()).filter { $0.offset >= start && $0.offset < start + 2 },
+                            id: \.offset) { index, action in
+                        if index == 0 {
+                            Button(Self.doorLabel(action)) { act(action) }
+                                .buttonStyle(.borderedProminent).controlSize(.small)
+                        } else {
+                            Button(Self.doorLabel(action)) { act(action) }
+                                .buttonStyle(.bordered).controlSize(.small)
+                        }
                     }
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
@@ -786,7 +790,9 @@ final class LandingPromotionSource: PromotionReviewSource {
 /// `Details ›`; under them the task's name, up to two lines. Web: `LandingLine` in
 /// ProjectLandingsWindow.tsx, one line on a wide window.
 struct LandingLineView: View {
-    enum Kind { case ok, merge, quiet, failed, running }
+    /// `fixing` (revision 42, board landing-fix-own-session 02 c): the task's own session has the failure —
+    /// the board's blue circling arrows, and the word in blue.
+    enum Kind { case ok, merge, quiet, failed, running, fixing }
 
     /// Where what a line carries hangs: under its title, off its mark.
     static let indent: CGFloat = 22
@@ -803,7 +809,7 @@ struct LandingLineView: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 mark.frame(width: 16)
                 Text(title)
-                    .foregroundStyle(kind == .failed ? Color.red : Color.secondary)
+                    .foregroundStyle(kind == .failed ? Color.red : kind == .fixing ? Color.accentColor : Color.secondary)
                     .lineLimit(1)
                 if let status, !status.isEmpty {
                     Text(status)
@@ -847,6 +853,7 @@ struct LandingLineView: View {
         case .failed: Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
         case .quiet: Image(systemName: "minus.circle").foregroundStyle(.secondary)
         case .running: Image(systemName: "clock").foregroundStyle(.secondary)
+        case .fixing: Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(Color.accentColor)
         case .merge: Text("⇢").fontWeight(.semibold).foregroundStyle(Color.accentColor)
         }
     }

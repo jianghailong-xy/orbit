@@ -388,10 +388,17 @@ public enum LandingFix {
 
     /// The session's one line once its fix is queued to land (② b ③), `Landing 4be19c2 again`, the commit
     /// read off the landing's record; nil before any fix of its was queued.
-    public static func againLine(_ landing: SessionLandingView?) -> String? {
+    /// With `by`, only a fix that session asked for: the line is that session's own.
+    public static func againLine(_ landing: SessionLandingView?, by sessionID: String? = nil) -> String? {
         guard let landing else { return nil }
         let fixed = (landing.timeline?.sections ?? []).flatMap { $0.entries }
-            .last { $0.kind == "FIXED_BY_SESSION" }
+            .last { entry in
+                guard entry.kind == "FIXED_BY_SESSION" else { return false }
+                guard let sessionID else { return true }
+                return entry.data?["sessionId"]?.stringValue.map {
+                    PublicID.storageKey($0) == PublicID.storageKey(sessionID)
+                } ?? false
+            }
         guard let fixed else { return nil }
         return LandingFixCopy.landingAgain(fixed.data?["sourceSha"]?.stringValue.map(shortSha))
     }

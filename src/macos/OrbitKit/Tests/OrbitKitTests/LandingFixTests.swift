@@ -219,6 +219,8 @@ final class LandingFixTests: XCTestCase {
         XCTAssertEqual(rows[2].rest, "no new commit")
         XCTAssertTrue(LandingFix.rows(after: 1, in: view.timeline!.sections).isEmpty)
         XCTAssertEqual(LandingFix.againLine(view), "Landing 4be19c2 again")
+        XCTAssertEqual(LandingFix.againLine(view, by: "s1"), "Landing 4be19c2 again")
+        XCTAssertNil(LandingFix.againLine(view, by: "s2"), "another session's fix is not this session's line")
         XCTAssertNil(LandingFix.againLine(landing(held: true)))
         // The steps leave them out: no Queue or Sync row says it.
         let steps = LandingSteps.steps(view.timeline!.sections[0].entries, kind: "LAND_TASK")
