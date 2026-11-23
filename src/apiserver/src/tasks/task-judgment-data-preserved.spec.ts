@@ -3318,21 +3318,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // row is written, and no trigger, function or DONE fence changes.
       // Written as 1430 on the project line, it was renumbered after main took 1430.
       '1431_managed_runner_update_interrupt',
-      // 1432 creates model_identity (rule_key, canonical_key, name, decided_at), a new table no preserved relation
-      // references; no existing row is written, and no trigger, function or DONE fence changes.
+      // 1432 creates model_identity (which model ids name one model, for display); 1433 seeds it with INSERTs. Neither
+      // touches a preserved relation, and no trigger, function or DONE fence changes.
       '1432_model_identity',
-      // 1433 seeds model_identity with production's model ids, INSERT ... ON CONFLICT (rule_key) DO NOTHING into that
-      // new table only; no preserved relation, trigger, function or DONE fence is touched.
       '1433_model_identity_seed',
       // 1434 adds session.listed_at (backfilled from last_turn_at/created_at, then defaulted) and conversation_turn.by_person,
       // and a BEFORE UPDATE trigger on session (status, completed_at) that writes listed_at alone. session is not a
       // preserved relation, none of the six preserved triggers/functions is named or replaced, and no DONE fence changes.
       // Written as 1260 on its task branch, it was renumbered after main took 1260.
       '1434_session_listed_at',
-      // 1447 adds SCHEDULE_CHANGE to session_run_source, three nullable columns on session (change_schedule_id with its
-      // foreign key and partial index, schedule_change_opening) and asked_text on schedule_revision and
-      // schedule_change_request; no row is written, session is not a preserved relation, and no preserved trigger,
-      // function or DONE fence changes.
+      // 1447 adds a session_run_source value, two nullable session columns (change_schedule_id with a foreign key to
+      // schedule, schedule_change_opening) and asked_text on schedule_revision and schedule_change_request; no row is
+      // written, and no preserved relation, trigger, function or DONE fence changes.
       '1447_schedule_change_conversation',
       // 1462 adds one nullable column, login_browser, to runner; no row is written, and no preserved relation,
       // trigger, function or DONE fence changes.
