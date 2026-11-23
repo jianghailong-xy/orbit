@@ -112,19 +112,6 @@ export function ModelRoutingPage() {
               />
             }
           />
-          {/* Absent means off (docs/routing-account-health-design.md §7.5): a pinned task whose account can't run holds. */}
-          <SettingsRow
-            title="Run pinned tasks elsewhere"
-            description="When the account a task is pinned to can't run, let it run on another account. Providers you've blocked stay out either way."
-            control={
-              <Switch
-                aria-label="Run pinned tasks elsewhere"
-                checked={prefs.relaxBlockedPins === true}
-                onCheckedChange={(v) => save.mutate({ relaxBlockedPins: v })}
-                loading={save.isPending}
-              />
-            }
-          />
           {/* Account-wide since 2026-11-19 (board docs/mocks/routing-mode-account); absent means Balance. Only
               Route by tier reads it, so it shows only while that is on (owner, 2026-11-20); the saved
               value is kept while it is off. */}
@@ -148,6 +135,19 @@ export function ModelRoutingPage() {
               }
             />
           )}
+          {/* Absent means off (docs/routing-account-health-design.md §7.5): a pinned task whose account can't run holds. */}
+          <SettingsRow
+            title="Run pinned tasks elsewhere"
+            description="When the account a task is pinned to can't run, let it run on another account. Providers you've blocked stay out either way."
+            control={
+              <Switch
+                aria-label="Run pinned tasks elsewhere"
+                checked={prefs.relaxBlockedPins === true}
+                onCheckedChange={(v) => save.mutate({ relaxBlockedPins: v })}
+                loading={save.isPending}
+              />
+            }
+          />
         </SettingsCard>
       </SettingsSection>
 
