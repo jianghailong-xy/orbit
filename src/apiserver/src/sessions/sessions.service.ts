@@ -408,11 +408,14 @@ import {
   type WorkspaceAccountChoices,
 } from '../providers/plan-usage-accounts';
 import { countedAccountBeforeDispatch, withActiveSessions } from '../providers/active-sessions';
+import { withAccountHealth } from '../providers/account-health-blocked';
 import {
   ACCOUNT_CHOICE,
   ACCOUNT_PINNED,
   DEFAULT_ACCOUNT,
+  accountBlockOn,
   accountInPlaceOf,
+  accountsOn,
   defaultRemovedOn,
   remainingAccount,
   type AccountRunner,
@@ -1773,14 +1776,16 @@ export class SessionsService {
     const signedInOn = (engine: AccountEngine) =>
       resolved.credential.kind === 'login' && resolved.credential.engine === engine;
     // Its runner's sessions are counted only when there is a pick to make, and the pick then keeps each
-    // account to its share of them.
+    // account to its share of them. An account that account health takes out is passed over as a paused one is
+    // (withAccountHealth, docs/routing-account-health-design.md §7.6).
     const automatic = async (engine: AccountEngine) => {
       if (!signedInOn(engine) || !targetRunner) return null;
       const workspace = { env: workspaceEnv, ...accountChoices };
       const now = new Date();
-      const pick = automaticAccount(engine, workspace, targetRunner, now);
+      const runner = await withAccountHealth(this.prisma, ownerId, assignedRunnerId, targetRunner, now);
+      const pick = automaticAccount(engine, workspace, runner, now);
       return pick && assignedRunnerId
-        ? automaticAccount(engine, workspace, await withActiveSessions(this.prisma, assignedRunnerId, targetRunner, now), now)
+        ? automaticAccount(engine, workspace, await withActiveSessions(this.prisma, assignedRunnerId, runner, now), now)
         : pick;
     };
     const picked = (engine: AccountEngine, account: string | undefined) =>
@@ -7610,14 +7615,16 @@ export class SessionsService {
           },
         })
       : null;
+    const now = new Date();
     const move = await countedAccountBeforeDispatch(
       tx,
       session.assignedRunnerId,
       engine,
       { account: session[ACCOUNT_CHOICE[engine]], pinned: session[ACCOUNT_PINNED[engine]] },
       workspace,
-      runner,
-      new Date(),
+      // An account that account health takes out is left as a paused one is (§7.6).
+      await withAccountHealth(this.prisma, session.ownerId, session.assignedRunnerId, runner, now, session.id),
+      now,
     );
     if (!move || (!move.defaultRemoved && !runnerCarriesAccounts(runner, engine))) return null;
     await this.insertTurnLocked(tx, session.id, {
@@ -12088,6 +12095,8 @@ export class SessionsService {
     const session = await tx.session.findUniqueOrThrow({
       where: { id },
       select: {
+        ownerId: true,
+        assignedRunnerId: true,
         numTurns: true,
         codexAccountPinned: true,
         claudeAccountPinned: true,
@@ -12111,7 +12120,10 @@ export class SessionsService {
       }
       const pinned = session[ACCOUNT_PINNED[engine]];
       if (account === undefined && pinned) return {};
-      const to = automaticAccountOnSwitch(session, engine, new Date());
+      const now = new Date();
+      // Automatic's pick passes over an account that account health takes out (§7.6).
+      const assignedRunner = runner && await withAccountHealth(this.prisma, session.ownerId, session.assignedRunnerId, runner, now);
+      const to = automaticAccountOnSwitch({ ...session, assignedRunner }, engine, now);
       if (to) return write(to, false);
       // Asked for by name, Automatic unpins even when it has nowhere to move the session yet.
       if (account === AUTOMATIC_ACCOUNT) return { [ACCOUNT_PINNED[engine]]: false };
@@ -12522,6 +12534,7 @@ export class SessionsService {
               env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
             },
           },
+          assignedRunnerId: true,
           assignedRunner: {
             select: { engines: true, accountNames: true, accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true },
           },
@@ -12560,17 +12573,24 @@ export class SessionsService {
           throw new BadRequestException("this session's workspace decides its account");
         }
         pinned = false;
+        // What account health says of the runner's accounts: Automatic passes over one it takes out as it
+        // passes over a paused one, and leaves one it is on (§7.6).
+        const healthy = await withAccountHealth(this.prisma, ownerId, session.assignedRunnerId, runner, now);
         // Off a Default its owner removed from Orbit, to the account Automatic picks among those left.
-        const offDefault = current === DEFAULT_ACCOUNT ? remainingAccount(engine, runner, now) : null;
+        const offDefault = current === DEFAULT_ACCOUNT ? remainingAccount(engine, healthy, now) : null;
         const paused = runnerAccountPausedUntil(runner.accountPauses, engine, current, now) !== null;
-        const spent = paused || planUsageBlockedUntil(usage, engine, now, current) != null;
-        const roomier = !offDefault && spent ? accountToMoveTo(engine, accounts, usage, now, current) : null;
+        const block = paused ? null : accountBlockOn(engine, healthy, current, now);
+        const spent = paused || block !== null || planUsageBlockedUntil(usage, engine, now, current) != null;
+        // Each with its pause, and an account health takes out read as paused (accountsOn).
+        const roomier = !offDefault && spent ? accountToMoveTo(engine, accountsOn(engine, healthy, now), usage, now, current) : null;
         if (offDefault) {
           to = offDefault.id;
           notice = accountSwitchNotice(engine, { from: current, to, defaultRemoved: true }, runner);
         } else if (roomier) {
           to = roomier;
-          notice = accountSwitchNotice(engine, { from: current, to, ...(paused ? { paused: true } : {}) }, runner);
+          notice = accountSwitchNotice(engine, {
+            from: current, to, ...(paused ? { paused: true } : block ? { blocked: block.reason } : {}),
+          }, runner);
         }
       } else {
         const row = accounts?.find((entry) => entry.id === account);
@@ -12652,6 +12672,7 @@ export class SessionsService {
             runtimeSessionId: true,
             engineTurnActive: true,
             poolSwitchNotice: true,
+            ownerId: true,
             codexAccount: true,
             claudeAccount: true,
             antigravityAccount: true,
@@ -12682,7 +12703,8 @@ export class SessionsService {
           return 'leaving' as const;
         }
         const now = new Date();
-        const to = accountInPlaceOf(engine, runner, account, now);
+        // Automatic's ranking, with an account that account health takes out passed over as a paused one is (§7.6).
+        const to = accountInPlaceOf(engine, await withAccountHealth(this.prisma, session.ownerId, runnerId, runner, now), account, now);
         if (!to) return 'stuck' as const;
         if (engine === AgentProvider.CURSOR ? cursorMoveRefusal(session, runner) : !runnerCarriesAccounts(runner, engine)) {
           return 'stuck' as const;

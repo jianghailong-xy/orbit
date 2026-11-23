@@ -352,6 +352,7 @@ import { readTaskProgress } from './task-progress.service';
 import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './task-dag';
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
 import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
+import { withAccountHealth } from '../providers/account-health-blocked';
 import { ACCOUNT_CHOICE, accountEnvVar } from '../providers/account';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { readOwnerConfirmationRows } from './owner-confirmation-read';
@@ -12885,7 +12886,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           continue;
         }
       }
-      const runner = runnerById.get(assignee.runnerId);
+      // Automatic's pick skips an account health set aside, as sessions.create's does (§7.6 of
+      // docs/routing-account-health-design.md), so that is the quota the run would spend.
+      const reported = runnerById.get(assignee.runnerId);
+      const runner = reported ? await withAccountHealth(this.prisma, t.ownerId, assignee.runnerId, reported, now) : reported;
       // Antigravity's quota travels with its engine health, and is weighed with the rest here.
       const usage = withEnginePlanUsage(
         runner?.planUsage as unknown as PlanUsage | null | undefined,
@@ -13103,7 +13107,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const runners = await this.prisma.runner.findMany({
       where: { id: { in: [...new Set(judged.map((t) => t.assignee!.runnerId!))] } },
       select: {
-        id: true, name: true, displayName: true, status: true, ...RUNNER_BEATS, engines: true, accountNames: true,
+        id: true, ownerId: true, name: true, displayName: true, status: true, ...RUNNER_BEATS, engines: true, accountNames: true,
         accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true,
       },
     });
@@ -13122,9 +13126,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const now = this.now();
     for (const t of judged) {
       const { provider, runnerId, workspaceId } = t.assignee!;
-      const runner = runnerById.get(runnerId!);
+      const reported = runnerById.get(runnerId!);
       const workspace = workspaceById.get(workspaceId);
-      if (!runner || !workspace || !isAccountEngine(provider)) continue;
+      if (!reported || !workspace || !isAccountEngine(provider)) continue;
+      // The account sessions.create would pick: Automatic skips one account health set aside (§7.6).
+      const runner = await withAccountHealth(this.prisma, reported.ownerId, runnerId, reported, now);
       const automatic = automaticAccount(provider, workspace, runner, now);
       const refusal = signedOutEngineRefusal({
         runtime: provider,

@@ -62,7 +62,7 @@ import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-
 import { latestAgentToolsReport } from './agent-tools-report';
 import { reportsCodexSandboxUnavailable } from './codex-sandbox-report';
 import { withActiveSessions } from '../providers/active-sessions';
-import { accountAfterSignOut, accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount, waitsForWarmCache } from '../providers/plan-usage-accounts';
+import { accountAfterSignOut, accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, changedPlans, runAccount, waitsForWarmCache } from '../providers/plan-usage-accounts';
 import {
   ACCOUNT_MOVE_CAPABILITY,
   CLAUDE_ACCOUNT_MOVE_V1,
@@ -1885,6 +1885,16 @@ export class RunnerApiController {
     };
   }
 
+  /**
+   * The replacement of §7.3 (docs/routing-account-health-design.md) for a run that ended FAILED: TasksService decides
+   * whether its account refused it at admission and, within the bound, dispatches the task again. Never awaited by the
+   * runner's request, and never in its way: a failure is logged.
+   */
+  private replaceRefusedRun(sessionId: string): void {
+    void this.tasks?.replaceRefusedRun(sessionId).catch((error) =>
+      this.logger.warn(`refused run ${sessionId} not replaced: ${(error as Error)?.message ?? error}`));
+  }
+
   /** Insert a device session, regenerating the short code on the rare collision. */
   private async createDeviceSession(dto: DeviceStartRequest, deviceCode: string, requesterIp: string | null): Promise<string> {
     const expiresAt = new Date(Date.now() + DEVICE_TTL_MS);
@@ -2164,7 +2174,7 @@ export class RunnerApiController {
         ? (await this.prisma.runner.findUnique({ where: { id: runnerId }, select: { repoHealth: true } }))?.repoHealth
         : undefined;
       try {
-        await writeLinkBeatReports(this.prisma, {
+        const written = await writeLinkBeatReports(this.prisma, {
           runnerId,
           leaseOwner,
           dto,
@@ -2174,6 +2184,10 @@ export class RunnerApiController {
           storedPlanUsage: row.planUsage,
           now: new Date(),
         });
+        // The plan usage it overwrote was read with the beat (planUsageRead): a plan that changed makes trials due.
+        if (written.planUsageStored && row.planUsageRead && verdict.reports.includes('planUsage')) {
+          await this.makePlanChangeTrialsDue(runnerId, admission.ownerId, row.planUsage, dto?.planUsage);
+        }
         if (reposChanged) {
           for (const workspaceId of workspacesWithChangedRepoHealth(priorRepoHealth, sanitizeRunnerRepoHealth(dto.repos) ?? [])) {
             this.realtime.publishWorkspaceRepoHealthChanged(admission.ownerId, workspaceId);
@@ -2230,6 +2244,39 @@ export class RunnerApiController {
    * presence row, so this does neither again; it leaves the runner row as it is when nothing written there changed
    * (only its own record of the beat, when that is due); and it records what it covered (recordLinkReconcile).
    */
+  /**
+   * The plan usage stored for `runnerId` before a heartbeat overwrites it, while the runner has a blocked account
+   * (account_health); undefined otherwise, when no plan change could make a trial due, and when the read fails: the
+   * heartbeat is never in its way.
+   */
+  private async planUsageUnderBlock(runnerId: string): Promise<unknown> {
+    try {
+      const blocked = await this.prisma.accountHealth.findFirst({
+        where: { runnerId, clearedAt: null, state: 'BLOCKED' }, select: { id: true },
+      });
+      if (!blocked) return undefined;
+      return (await this.prisma.runner.findUnique({ where: { id: runnerId }, select: { planUsage: true } }))?.planUsage ?? null;
+    } catch (error) {
+      this.logger.warn(`runner ${runnerId}: plan usage before this heartbeat not read: ${(error as Error)?.message ?? error}`);
+      return undefined;
+    }
+  }
+
+  /**
+   * §6.3 of docs/routing-account-health-design.md: a usage reading whose plan differs from the last one may be the
+   * owner's fix for a block on that account (changedPlans), so its trial is due now, as after a fresh sign-in. The
+   * ladder is kept. Never in the heartbeat's way: a failure is logged.
+   */
+  private async makePlanChangeTrialsDue(runnerId: string, ownerId: string, before: unknown, after: unknown): Promise<void> {
+    try {
+      for (const { engine, account } of changedPlans(before, after)) {
+        await makeTrialDue(this.prisma, ownerId, { runnerId, engine, account });
+      }
+    } catch (error) {
+      this.logger.warn(`runner ${runnerId}: trials not made due after a plan change: ${(error as Error)?.message ?? error}`);
+    }
+  }
+
   private async reconcileHeartbeat(
     runner: { id: string; version: string | null; lastHeartbeatAt?: Date | null },
     dto: RunnerHeartbeatRequest,
@@ -2474,10 +2521,15 @@ export class RunnerApiController {
     const planUsageUnchanged = !!linkBeat && !!storedFacts && storedFacts.planUsage === linkBeat.digests.facts.planUsage;
     if (dto?.planUsage != null && !planUsageUnchanged) {
       planUsageStored = false;
+      // What it overwrites, for a plan that changed (makePlanChangeTrialsDue): read only while this runner has a
+      // blocked account, one indexed read otherwise.
+      const planUsageBefore = ownerOfRunner ? await this.planUsageUnderBlock(runner.id) : undefined;
       try {
         planUsageStored = await storeHeartbeatPlanUsage(this.prisma, runner.id, dto.planUsage, heartbeatLeaseOwner);
         if (!planUsageStored) {
           this.logger.warn(`runner ${runner.id}: planUsage not stored after ${PLAN_USAGE_CAS_ATTEMPTS} compare-and-set attempts; the next heartbeat reports it again`);
+        } else if (planUsageBefore !== undefined) {
+          await this.makePlanChangeTrialsDue(runner.id, ownerOfRunner!, planUsageBefore, dto.planUsage);
         }
       } catch (error) {
         // Advisory telemetry, like the live diffs below: never fail the heartbeat for it.
@@ -8591,6 +8643,9 @@ export class RunnerApiController {
         turnCompleted: !finalized.failSession,
         until: dto.failure?.until ?? null,
       });
+      // A task run its account refused at admission is replaced at once (§7.3), off the response path: the runner is
+      // blocked on this reply, and the replacement is a whole dispatch.
+      if (finalized.failSession === true) this.replaceRefusedRun(sessionId);
     }
     if (finalized.applied && !finalized.steer && this.coordinatorHandoffs) {
       void this.coordinatorHandoffs.afterTurn(sessionId, dto.turnId, dto.status).catch((error) => this.logger.warn(
@@ -10590,6 +10645,8 @@ export class RunnerApiController {
       failed: 'failedRun' in outcome && outcome.failedRun === true,
       until: dto.failure?.until ?? null,
     });
+    // A task run its account refused at admission is replaced at once (§7.3), off the response path.
+    if ('failedRun' in outcome && outcome.failedRun === true) this.replaceRefusedRun(sessionId);
     // The one-shot wakeups this finalize dropped with its FAILED session, no retry armed: their owner is
     // told, once, now that the drop has committed (contract §4).
     signalDrainedWakeups(this.push, this.logger, outcome.droppedWakeups ?? []);

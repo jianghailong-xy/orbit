@@ -29,6 +29,7 @@ import {
 } from '../providers/codex-login-claude';
 import { codexPoolUnavailableReason } from '../providers/codex-login';
 import { loginCanRun, loginPoolResumesAt, loginRunsAgainAt, type LoginAccount } from '../providers/pool-login-select';
+import { accountName } from '../providers/codex-login-gateway';
 import { choosePoolCredential } from '../providers/pool-credential-select';
 import {
   accountPoolRuntime,
@@ -62,6 +63,7 @@ import {
 import { PoolNotices } from '../providers/pool-notice';
 import { ACCOUNT_MOVE_CAPABILITY } from '../providers/account-move-capability';
 import { countedAccountBeforeDispatch } from '../providers/active-sessions';
+import { healthIndexFor, runnerWithHealth, subjectBlocked, withAccountHealth, withoutBlocked } from '../providers/account-health-blocked';
 import {
   accountBeforeDispatch,
   accountSwitchNotice,
@@ -288,6 +290,9 @@ export class QueueService {
     });
     const blocked: string[] = [];
     const poolPauses = new Map<string, Date | null>();
+    // Each owner's account health, read once and only for a paused session that may move: the move the claim
+    // makes passes over an account health takes out (accountsForClaim), so the one asked about here must too.
+    const health = new Map<string, Awaited<ReturnType<typeof healthIndexFor>>>();
     for (const session of pending) {
       const runner = session.assignedRunner;
       // A pending Set as default for Claude Code holds back the sessions on either of its accounts: a claim now would
@@ -311,10 +316,13 @@ export class QueueService {
       let credential: AnthropicBoundCredential | null = null;
       if (until && runner && isAccountEngine(slug)) {
         const canMove = runner.capabilities.includes(ACCOUNT_MOVE_CAPABILITY[slug]);
+        if (canMove && !health.has(session.ownerId)) {
+          health.set(session.ownerId, await healthIndexFor(this.prisma, session.ownerId, now));
+        }
         const move = canMove && accountBeforeDispatch(slug, {
           account: session[ACCOUNT_CHOICE[slug]],
           pinned: session[ACCOUNT_PINNED[slug]],
-        }, session.workspace, runner, now);
+        }, session.workspace, runnerWithHealth(runner, runnerId, health.get(session.ownerId), now), now);
         // Off a Default its owner removed from Orbit the move is to Automatic's pick even when that is
         // paused too — every account left is — and the session waits for it.
         if (move && !runnerAccountPausedUntil(runner.accountPauses, slug, move.to, now)) until = null;
@@ -867,6 +875,7 @@ export class QueueService {
    */
   private async accountsForClaim(session: {
     id: string;
+    ownerId: string;
     assignedRunnerId: string | null;
     provider: string | null;
     providerBuiltin: boolean;
@@ -897,6 +906,7 @@ export class QueueService {
     if (!engine || !isBuiltinProvider(session.provider, session.providerBuiltin) || !runner) return accounts;
     const column = ACCOUNT_CHOICE[engine];
     const own = session[column];
+    const now = new Date();
     const move = await countedAccountBeforeDispatch(
       this.prisma,
       session.assignedRunnerId!,
@@ -904,8 +914,9 @@ export class QueueService {
       { account: own, pinned: session[ACCOUNT_PINNED[engine]] },
       // The account a directory variable names is read off the env the engine starts on (engineBaseEnv).
       workspace && { ...workspace, env: engineBaseEnv(workspace.env as Record<string, string> | null, session.env) },
-      runner,
-      new Date(),
+      // An account that account health takes out is left as a paused one is (§7.6), unless this run is its trial.
+      await withAccountHealth(this.prisma, session.ownerId, session.assignedRunnerId, runner, now, session.id),
+      now,
     );
     if (!move || (!move.defaultRemoved && !(runner.capabilities ?? []).includes(ACCOUNT_MOVE_CAPABILITY[engine]))) {
       return accounts;
@@ -922,8 +933,9 @@ export class QueueService {
       data: { poolSwitchNotice: accountSwitchNotice(engine, move, runner) },
     });
     // A resident engine still holds the previous account's environment. Reload before
-    // the next message so a pause cannot be bypassed by reusing that warm process, nor a removed Default.
-    if (move.paused || move.defaultRemoved) await new PoolNotices(this.prisma, this.realtime).carrier(session.id, engine);
+    // the next message so a pause cannot be bypassed by reusing that warm process, nor a removed Default,
+    // nor an account health took out, which would only refuse it again.
+    if (move.paused || move.defaultRemoved || move.blocked) await new PoolNotices(this.prisma, this.realtime).carrier(session.id, engine);
     return { ...accounts, [column]: move.to };
   }
 
@@ -1733,7 +1745,20 @@ export class QueueService {
     if (!pool || pool.engine === AgentProvider.CODEX) return null;
     const now = new Date();
     const { rows, candidates } = pool;
-    const chosen = choosePoolMember(candidates, session.poolMemberProviderId, now);
+    // A member that account health takes out is skipped while another can run (§9 "Claude pool"), as bestPoolMember
+    // skips it when routing; with every one out the pool is chosen from as before. Not the member this run is
+    // the trial of.
+    const health = candidates.length > 1 ? await healthIndexFor(this.prisma, session.ownerId, now, session.id) : new Map();
+    const blockedMember = (id: string | null | undefined) => !!id && subjectBlocked(health, { type: 'provider', providerId: id });
+    const chosen = choosePoolMember(
+      withoutBlocked(
+        candidates,
+        (candidate) => blockedMember(candidate.row.id),
+        (candidate) => !candidate.refused && !(candidate.pausedUntil && candidate.pausedUntil > now),
+      ),
+      session.poolMemberProviderId,
+      now,
+    );
     if (!chosen && candidates.some((candidate) => candidate.pausedUntil && candidate.pausedUntil > now)) {
       const pausedUntil = await this.accountPoolPausedUntil(session.ownerId, slug, now, db);
       throw new ConflictException({ code: 'POOL_ACCOUNT_PAUSED', message: 'The pool accounts are paused', pausedUntil: pausedUntil?.toISOString() });
@@ -1755,7 +1780,8 @@ export class QueueService {
         // The first member a session runs on is where it starts, not a move.
         ...(session.poolMemberProviderId
           ? {
-              poolSwitchNotice: poolSwitchNotice(
+              // Health's reason, never "paused": nobody paused it.
+              poolSwitchNotice: previous && blockedMember(previous.id) ? `Switched to ${chosen.label} — ${previous.label} needs action` : poolSwitchNotice(
                 chosen,
                 previous
                   ? {
@@ -1833,17 +1859,36 @@ export class QueueService {
     if (pool?.engine !== AgentProvider.CODEX) return null;
     const now = new Date();
     const claude = engine === AgentProvider.CLAUDE && claudeCodexLoginEnabled();
+    // A ChatGPT account that account health takes out is skipped while another can run (§9 "Codex pool"); with every
+    // one out they are chosen from as before. Not the account this run is the trial of.
+    const health = pool.logins.length > 1 ? await healthIndexFor(this.prisma, session.ownerId, now, session.id) : new Map();
+    const blockedLogin = (accountId: string | null) =>
+      !!accountId && subjectBlocked(health, { type: 'pool-login', poolId: pool.id, accountId });
+    const logins = withoutBlocked(
+      claude ? pool.logins.filter((login) => login.userId === session.ownerId) : pool.logins,
+      (login) => blockedLogin(login.accountId),
+      (login) => loginCanRun(login, now),
+    );
     // accountPool found it as a pool of the session's owner's own, never a shared one: its accounts first.
-    const { chosen, next, notice } = choosePoolCredential(
+    const choice = choosePoolCredential(
       {
         ownerId: session.ownerId,
-        accounts: claude ? pool.logins.filter((login) => login.userId === session.ownerId) : pool.logins,
+        accounts: logins,
         keys: claude ? [] : await sharedPoolKeyCandidates(db, pool.id, now),
         ownKeyFirst: pool.ownKeyFirst,
       },
       { ownerId: session.ownerId, accountId: session.poolCodexAccountId, keyId: session.poolKeyId },
       now,
     );
+    const { chosen, next } = choice;
+    // Moved off an account health took out, which is then not among the accounts chosen from: the line says why in
+    // health's terms rather than that the account left the pool.
+    const left = !blockedLogin(session.poolCodexAccountId) || logins.some((login) => login.accountId === session.poolCodexAccountId)
+      ? null
+      : pool.logins.find((login) => login.accountId === session.poolCodexAccountId);
+    const notice = left && choice.notice
+      ? choice.notice.replace(' — the previous account is no longer in this pool', ` — ${accountName(left)} needs action`)
+      : choice.notice;
     if (!chosen) {
       const pausedUntil = await this.accountPoolPausedUntil(session.ownerId, slug, now, db);
       if (pausedUntil) throw new ConflictException({

@@ -59,6 +59,7 @@ import {
   isConfirmationReviewContentTurn,
 } from '../tasks/owner-confirmation-review-turn';
 import { withActiveSessions } from '../providers/active-sessions';
+import { withAccountHealth } from '../providers/account-health-blocked';
 import { ACCOUNT_RESET_WAIT_MS, accountAfterUsageLimitAt, runAccount } from '../providers/plan-usage-accounts';
 import { ACCOUNT_CHOICE, ACCOUNT_PINNED } from '../providers/account';
 import { ACCOUNT_MOVE_CAPABILITY } from '../providers/account-move-capability';
@@ -332,6 +333,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       take: MAX_PER_SWEEP,
       select: {
         id: true,
+        ownerId: true,
         engine: true,
         provider: true,
         providerBuiltin: true,
@@ -376,11 +378,13 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       const account = runAccount(engine, engineBaseEnv(session.workspace?.env as Record<string, string> | null, session.env), { [column]: session[column] ?? session.workspace?.[column] }, runner, now);
       const usage = withEnginePlanUsage(runner.planUsage as PlanUsage | null, sanitizeRunnerEngines(runner.engines));
       if (!planUsageBlockedUntil(usage, engine, now, account)) continue;
+      // An account that account health takes out has no room for it, as a paused one has none (§7.6): the dispatch
+      // would not move the session there (accountBeforeDispatch).
       const elsewhere = accountAfterUsageLimitAt(
         engine,
         { account: session[column], pinned: session[ACCOUNT_PINNED[engine]] },
         session.workspace,
-        await withActiveSessions(this.prisma, runnerId, runner, now),
+        await withActiveSessions(this.prisma, runnerId, await withAccountHealth(this.prisma, session.ownerId, runnerId, runner, now), now),
         now,
       );
       if (!elsewhere || elsewhere > now) continue;
@@ -679,8 +683,14 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
               engine,
               { account: session[ACCOUNT_CHOICE[engine]], pinned: session[ACCOUNT_PINNED[engine]] },
               session.workspace,
+              // An account that account health takes out has no room for it (§7.6), as above.
               session.assignedRunnerId && session.assignedRunner
-                ? await withActiveSessions(this.prisma, session.assignedRunnerId, session.assignedRunner, now)
+                ? await withActiveSessions(
+                    this.prisma,
+                    session.assignedRunnerId,
+                    await withAccountHealth(this.prisma, session.ownerId, session.assignedRunnerId, session.assignedRunner, now),
+                    now,
+                  )
                 : session.assignedRunner,
               now,
             )

@@ -20,6 +20,7 @@ import { runnerAccountPausedUntil } from '../common/account-pause';
 import { runNotCounted } from '../common/run-not-counted';
 import { routingHealthIndex } from '../providers/account-health.service';
 import { runnerSubjectAccount, subjectKey } from '../providers/account-health';
+import { runnerWithHealth } from '../providers/account-health-blocked';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { modelRoutingEnabled, optimizeForOf } from '../common/model-routing-switch';
 import { resolvePermissionMode } from '../common/permission-mode';
@@ -330,7 +331,10 @@ export function engineState(
   now: Date,
   health?: ReadonlyMap<string, RoutingHealthEntry[]>,
 ): ModelRoutingEngineState {
-  const automatic = automaticAccount(engine, agent, runner, now);
+  // Automatic's account skips one account health set aside, as it skips a paused one (§7.6), so a second account on
+  // the engine is the one judged here; with every account out the pick is today's, and health removes the engine.
+  const healthy = runnerWithHealth(runner, 'id' in runner ? (runner.id as string | null) : null, health, now);
+  const automatic = automaticAccount(engine, agent, healthy, now);
   const accounts = {
     codexAccount: agent.codexAccount,
     claudeAccount: agent.claudeAccount,
@@ -347,7 +351,7 @@ export function engineState(
     runner,
     nowMs: now.getTime(),
   }) !== null;
-  const account = runAccount(engine, agent.env, accounts, runner, now);
+  const account = runAccount(engine, agent.env, accounts, healthy, now);
   // Antigravity's reading travels with its engine health, not in planUsage: folded in as every quota reader does.
   const usage = withEnginePlanUsage(runner.planUsage as PlanUsage | null, sanitizeRunnerEngines(runner.engines));
   const snapshot = account === null ? undefined : spentPlanUsage(usage, engine, account);
