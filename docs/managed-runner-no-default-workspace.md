@@ -63,6 +63,10 @@ Points 8 and 9 change three clients' UI, so each needs a design board under `doc
     On a volume an earlier image ran on, the entrypoint moves the config and identity marker from
     `orbit-repos/default` to `orbit-repos` and removes that folder while it is still empty
     (`retire_legacy_workdir`); one with anything in it stays.
+11. The image makes no `orbit-repos` either (2026-11-23). The runner's work directory is home; the runner makes
+    `orbit-repos` itself when it clones the first repository. On a volume an earlier image ran on, the entrypoint
+    moves the config and identity marker from `orbit-repos` (or `orbit-repos/default`) to home and leaves
+    `orbit-repos` where it is.
 
 ## Not changed
 

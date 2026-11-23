@@ -153,6 +153,12 @@ export interface RoutingModelRow extends RunFigures {
   tiers: TierRuns[];
   /** Of `runs`, those routed at a tier it is not set to now (all of them for a model with no tier). */
   outsideRuns: number;
+  /** The other providers listing the same model (its `identity`): its Quality is pooled with theirs. */
+  pooledWith: string[];
+  /** The row above is the same model: this one draws only its provider, and the Quality above stands for it. */
+  continues: boolean;
+  /** The row below is the same model: no rule is drawn between the two. */
+  continued: boolean;
 }
 
 /** The SubAgents view's rows, in its sections. */
@@ -193,6 +199,15 @@ export function routingSections(providers: readonly ProviderTierRow[], groups: r
       if (!listed.has(key)) listed.set(key, { provider, model, order: listed.size });
     }
 
+  // Which providers list each model, by identity: one model's rows share their Quality and sit together.
+  const identityOf = (key: string) => listed.get(key)?.model.identity?.key ?? key;
+  const listedBy = new Map<string, Set<string>>();
+  for (const [key, { provider }] of listed) {
+    const holders = listedBy.get(identityOf(key)) ?? new Set<string>();
+    holders.add(provider.label);
+    listedBy.set(identityOf(key), holders);
+  }
+
   const byKind = { routed: new Map<string, SubagentReportGroup[]>(), named: new Map<string, SubagentReportGroup[]>(), notRouted: new Map<string, SubagentReportGroup[]>() };
   for (const group of groups) {
     const into = group.tier === 'named' ? byKind.named : group.tier === 'not-routed' ? byKind.notRouted : byKind.routed;
@@ -213,12 +228,31 @@ export function routingSections(providers: readonly ProviderTierRow[], groups: r
       key,
       provider: entry?.provider ?? null,
       model: entry?.model ?? null,
-      modelLabel: first?.modelLabel ?? entry?.model.model ?? 'No model',
+      modelLabel: entry?.model.identity?.name ?? first?.modelLabel ?? entry?.model.model ?? 'No model',
       providerLabel: entry?.provider.label ?? first?.providerLabel ?? null,
       ...sum(picked),
       tiers,
       outsideRuns: tiers.reduce((total, tier) => total + (tier.outside ? tier.runs : 0), 0),
+      pooledWith: entry ? [...(listedBy.get(identityOf(key)) ?? [])].filter((label) => label !== entry.provider.label) : [],
+      continues: false,
+      continued: false,
     };
+  };
+  // Each model's rows right after its first, in the order the first came, and marked as one block.
+  const together = (rows: RoutingModelRow[]) => {
+    const firstAt = new Map<string, number>();
+    rows.forEach((row, index) => {
+      if (!firstAt.has(identityOf(row.key))) firstAt.set(identityOf(row.key), index);
+    });
+    const ordered = rows
+      .map((row, index) => ({ row, index, at: firstAt.get(identityOf(row.key))! }))
+      .sort((a, b) => a.at - b.at || a.index - b.index)
+      .map(({ row }) => row);
+    ordered.forEach((row, index) => {
+      row.continues = index > 0 && identityOf(ordered[index - 1].key) === identityOf(row.key);
+      row.continued = index < ordered.length - 1 && identityOf(ordered[index + 1].key) === identityOf(row.key);
+    });
+    return ordered;
   };
   const order = (key: string) => listed.get(key)?.order ?? Number.MAX_SAFE_INTEGER;
   const byRuns = (a: RoutingModelRow, b: RoutingModelRow) => b.runs - a.runs || order(a.key) - order(b.key);
@@ -233,5 +267,5 @@ export function routingSections(providers: readonly ProviderTierRow[], groups: r
   }
   for (const [key, picked] of byKind.routed) tiered.push(row(key, picked));
   const rest = (map: Map<string, SubagentReportGroup[]>) => [...map].map(([key, picked]) => row(key, picked)).sort(byRuns);
-  return { tiered: tiered.sort(byRuns), named: rest(byKind.named), notRouted: rest(byKind.notRouted), idle };
+  return { tiered: together(tiered.sort(byRuns)), named: rest(byKind.named), notRouted: rest(byKind.notRouted), idle: together(idle) };
 }
