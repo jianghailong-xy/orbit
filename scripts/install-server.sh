@@ -514,6 +514,9 @@ else
       ${PUBLIC_ORIGIN:+-e "s|^PUBLIC_ORIGIN=.*\$|PUBLIC_ORIGIN=\"$PUBLIC_ORIGIN\"|"} \
       .env.example >"$NEW_ENV"
   unset JWT_SECRET PROVIDER_SECRET_KEY
+  # Grafana's admin password (docs/self-hosting.md, "Monitoring"): Grafana is on this host's loopback alone, and the
+  # password it signs in with is this one, which no file in the repository holds.
+  printf '\n# Grafana'"'"'s admin password (docs/self-hosting.md, "Monitoring"). Generated once; Grafana keeps the one it first started with.\nGRAFANA_ADMIN_PASSWORD="%s"\n' "$(openssl rand -hex 16)" >>"$NEW_ENV"
 fi
 write_managed_lines >>"$NEW_ENV"
 if [ "$ENABLE_EXISTING" -eq 0 ]; then

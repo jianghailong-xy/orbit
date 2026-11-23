@@ -443,6 +443,18 @@ link_prepare() {
   if [ "$LINK_STATE" = new ]; then link_write_env || return 0; fi
 }
 
+# Grafana's admin password (docs/self-hosting.md, "Monitoring"): written to .env once, where it has none, so that the
+# monitoring profile's Grafana has one to start with. A password already there is never replaced, and none is written
+# where there is no .env. Grafana is published on this host's loopback alone.
+grafana_password() {
+  [ -f .env ] || return 0
+  [ -z "$(link_env GRAFANA_ADMIN_PASSWORD)" ] || return 0
+  if [ -n "$(tail -c 1 .env)" ]; then printf '\n' >>.env || return 0; fi
+  ( umask 077 && printf '# Grafana'"'"'s admin password, written by the upgrade script at %s. Grafana keeps the one it first started with.\nGRAFANA_ADMIN_PASSWORD="%s"\n' \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(openssl rand -hex 16)" >>.env ) || { echo "!!  warning: could not write Grafana's admin password to .env" >&2; return 0; }
+  echo "==> Wrote GRAFANA_ADMIN_PASSWORD to .env (not shown)"
+}
+
 # What a link address answers from this project's network, as scripts/runner-link/door-check.js says it.
 link_door() {
   $DC run --rm --no-deps -T apiserver node - "$1" <scripts/runner-link/door-check.js 2>/dev/null || echo "unreachable the check did not run"
@@ -778,6 +790,7 @@ else
 fi
 # Once what can stop this run before anything is built has had its say.
 if [ "$LINK_EARLY" -eq 0 ]; then link_prepare; fi
+grafana_password
 # The other apiservers a deployment adds in docker-compose.override.yml, apiserver-2 and on (docs/self-hosting.md,
 # "Several apiservers"). They run the apiserver's image and build nothing; they are recreated after it, below.
 # Where Compose lists none, nothing is added.
