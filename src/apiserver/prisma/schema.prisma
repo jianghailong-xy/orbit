@@ -8571,6 +8571,10 @@ model OwnerRequest {
   /// whose browser they sign in on. Nothing else of the browser is stored. History, no FK.
   browserSite             String?   @map("browser_site")
   browserRunnerId         String?   @map("browser_runner_id") @db.Uuid
+  /// CHANGE (migration 1538): `{ runnerId, field, requested, before }`, written by the server; v1's one field is
+  /// `maxConcurrent`. NULL otherwise. Its partial unique `owner_request_change_pending_key` holds an owner to one PENDING
+  /// CHANGE per (runner, field). The runner is history, not a foreign key.
+  changeSpec              Json?     @map("change_spec")
   expiresAt           DateTime? @map("expires_at") @db.Timestamptz(3)
   clientRequestId     String?   @map("client_request_id")
   resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(3)

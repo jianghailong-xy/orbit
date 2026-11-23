@@ -64,6 +64,7 @@ import { loginCodeRelay } from './login-code-relay';
 import { engineKeepsAccounts } from '../common/runner-engines';
 import { ENGINE_LABELS } from '../sessions/engine-signin-preflight';
 import { ACCOUNT_ID_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunnerDto } from './dto';
+import { runnerSettingsData } from './runner-settings';
 import { accountPauseUntil } from '../common/account-pause';
 import { refuseManagedRunnerDeletion, refuseManagedRunnerRotation } from '../managed-runners/managed-runner-delete';
 import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from './runner-presence';
@@ -559,31 +560,7 @@ export class RunnersService {
   async updateRunner(ownerId: string, id: string, dto: UpdateRunnerDto) {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
     if (!runner) throw new NotFoundException('runner not found');
-    const data: {
-      displayName?: string | null;
-      maxConcurrent?: number;
-      burstConcurrent?: number;
-      minFreeDiskMb?: number | null;
-    } = {};
-    if (dto.displayName !== undefined) {
-      const trimmed = dto.displayName.trim();
-      data.displayName = trimmed.length ? trimmed : null;
-    }
-    // The queue gates live sessions on this per claim, so a change takes effect
-    // next cycle without restarting the runner.
-    if (dto.maxConcurrent !== undefined) {
-      data.maxConcurrent = dto.maxConcurrent;
-    }
-    // Extra sessions on demand: read by the next overflow claim and by the session list's Run now, so it too
-    // takes effect at once. 0 turns Run now off on this machine.
-    if (dto.burstConcurrent !== undefined) {
-      data.burstConcurrent = dto.burstConcurrent;
-    }
-    // Read by the auto-run sweep against each workspace's own measured filesystem; null clears
-    // the floor. Also effective next sweep — nothing to restart.
-    if (dto.minFreeDiskMb !== undefined) {
-      data.minFreeDiskMb = dto.minFreeDiskMb;
-    }
+    const data = runnerSettingsData(dto);
     // Never echo back tokenHash.
     return this.prisma.runner.update({
       where: { id },

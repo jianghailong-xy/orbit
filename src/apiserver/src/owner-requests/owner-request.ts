@@ -5,12 +5,23 @@
  * SECRET only the owner holds, a MANUAL_STEP only a person can do, a yes/no CONFIRM, and a WIKI_CREATE —
  * a wiki for its repository, which only the owner makes (docs/wiki-explicit-creation-design.md §3.6), and a BROWSER_SIGN_IN
  * — a sign-in to a site in the Orbit Cloud runner's shared browser, which only the owner does (browser_request_sign_in,
- * docs/mocks/runner-browser/03-agent-tools.html ①). This file
+ * docs/mocks/runner-browser/03-agent-tools.html ①), and a CHANGE — one setting of one of the owner's runners, which the
+ * owner applies with one press (docs/design/owner-request-change.md; v1: a runner's Max Concurrent). This file
  * is the rules with no database in them — what a filing must hold per kind, the state machine, and
  * the lock-screen copy — so they can be read and tested in one place.
  */
 
-export const OWNER_REQUEST_KINDS = ['DECISION', 'SECRET', 'MANUAL_STEP', 'CONFIRM', 'WIKI_CREATE', 'BROWSER_SIGN_IN'] as const;
+import {
+  OWNER_REQUEST_CHANGE_REPLACED_NOTE,
+  type OwnerRequestChangeAnswer,
+  type OwnerRequestChangeFiling,
+  type OwnerRequestChangeOutcome,
+  type OwnerRequestChangeSpec,
+} from '@orbit/shared';
+
+export const OWNER_REQUEST_KINDS = [
+  'DECISION', 'SECRET', 'MANUAL_STEP', 'CONFIRM', 'WIKI_CREATE', 'BROWSER_SIGN_IN', 'CHANGE',
+] as const;
 export type OwnerRequestKind = (typeof OWNER_REQUEST_KINDS)[number];
 
 /**
@@ -169,6 +180,8 @@ export interface OwnerRequestFiling {
   recommendedOption?: number;
   steps?: OwnerRequestStep[];
   secretSpec?: OwnerRequestSecretSpecFiling;
+  /** CHANGE: the one setting asked for. v1: `{ runnerId, maxConcurrent }`. */
+  change?: OwnerRequestChangeFiling;
   verifyHint?: string;
   expiresAt?: string;
   clientRequestId?: string;
@@ -184,7 +197,7 @@ export class OwnerRequestNotFileable extends Error {}
  * `clientRequestId` and the `projectId` it is filed under.
  */
 const NOT_FOR_WIKI_CREATE = [
-  'title', 'blocksTaskIds', 'options', 'recommendedOption', 'steps', 'secretSpec', 'verifyHint', 'expiresAt',
+  'title', 'blocksTaskIds', 'options', 'recommendedOption', 'steps', 'secretSpec', 'change', 'verifyHint', 'expiresAt',
 ] as const satisfies readonly (keyof OwnerRequestFiling)[];
 
 /** A secret's environment variable (design §3.2). */
@@ -253,6 +266,7 @@ export function normalizeOwnerRequest(filing: OwnerRequestFiling, now: Date): Ow
   only('recommendedOption', 'DECISION');
   only('steps', 'MANUAL_STEP');
   only('secretSpec', 'SECRET');
+  only('change', 'CHANGE');
 
   const options = filing.options?.map((option) => {
     const label = trimmed(option.label);
@@ -306,6 +320,9 @@ export function normalizeOwnerRequest(filing: OwnerRequestFiling, now: Date): Ow
     };
   }
 
+  let change: OwnerRequestChangeFiling | undefined;
+  if (kind === 'CHANGE') change = normalizeChange(filing.change);
+
   let expiresAtDate: Date | null = null;
   if (filing.expiresAt !== undefined) {
     expiresAtDate = new Date(filing.expiresAt);
@@ -323,12 +340,35 @@ export function normalizeOwnerRequest(filing: OwnerRequestFiling, now: Date): Ow
     recommendedOption: filing.recommendedOption,
     steps,
     secretSpec,
+    change,
     verifyHint: trimmed(filing.verifyHint),
     expiresAt: filing.expiresAt,
     clientRequestId: trimmed(filing.clientRequestId),
     projectId: filing.projectId,
     expiresAtDate,
   };
+}
+
+/**
+ * A CHANGE's `change`, checked against the typed allow-list (design §2, decision 2): exactly one runner and one setting,
+ * and v1's one setting is Max Concurrent, an integer of at least 1 — the floor `PATCH /runners/:id` holds it to.
+ */
+function normalizeChange(change: OwnerRequestChangeFiling | undefined): OwnerRequestChangeFiling {
+  if (!change || typeof change !== 'object') {
+    throw new OwnerRequestNotFileable('a CHANGE request needs change: { runnerId, maxConcurrent }');
+  }
+  const other = Object.keys(change).find((key) => key !== 'runnerId' && key !== 'maxConcurrent');
+  if (other) {
+    throw new OwnerRequestNotFileable(`change.${other} is not a setting a CHANGE request can ask for; it names maxConcurrent only`);
+  }
+  const runnerId = typeof change.runnerId === 'string' ? change.runnerId.trim() : '';
+  if (!runnerId) throw new OwnerRequestNotFileable('change.runnerId is required: the runner whose setting changes');
+  const { maxConcurrent } = change;
+  if (maxConcurrent === undefined) throw new OwnerRequestNotFileable('change.maxConcurrent is required: the value asked for');
+  if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1) {
+    throw new OwnerRequestNotFileable('change.maxConcurrent must be an integer of at least 1');
+  }
+  return { runnerId, maxConcurrent };
 }
 
 /** The banner's first line, per kind. Short enough to read at a glance on a lock screen. */
@@ -340,6 +380,7 @@ const ALERT_TITLES: Readonly<Record<FiledOwnerRequestKind, string>> = {
   WIKI_CREATE: 'Create a wiki?',
   SETTINGS_CHANGE: 'Confirm settings',
   BROWSER_SIGN_IN: 'Sign in needed',
+  CHANGE: 'Setting change',
 };
 
 /** Longest body a lock screen shows without cutting it. */
@@ -387,6 +428,8 @@ export interface EndedOwnerRequest {
   secretGrant?: { exposure: string; expiresAt: Date } | null;
   /** WIKI_CREATE: the repository the wiki was asked for. */
   repoUrlNorm?: string | null;
+  /** CHANGE: `{ runnerId, field, requested, before }`, as the server wrote it at filing. */
+  changeSpec?: unknown;
 }
 
 /**
@@ -401,6 +444,16 @@ function wikiCreateMeaning(request: EndedOwnerRequest): string | undefined {
   }
   if (request.state === 'DECLINED') return 'The owner does not want a wiki for this repository. Do not ask again.';
   return undefined;
+}
+
+/**
+ * A CHANGE withdrawn because a newer filing for the same runner setting replaced it (design §2): not withdrawn by this
+ * session, whatever the generic WITHDRAWN line says, so its turn says what happened.
+ */
+function changeReplacedMeaning(request: EndedOwnerRequest): string | undefined {
+  if (request.kind !== 'CHANGE' || request.state !== 'WITHDRAWN') return undefined;
+  if (request.resolutionNote !== OWNER_REQUEST_CHANGE_REPLACED_NOTE) return undefined;
+  return 'A newer request for the same runner setting replaced it; that one is the request the owner sees now.';
 }
 
 /** What each ending means, in the turn's first line. */
@@ -462,6 +515,10 @@ export function ownerRequestResolutionPayload(request: EndedOwnerRequest): Recor
     if (request.state === 'DONE' && made.spaceId) payload.wiki = { spaceId: made.spaceId, name: made.name ?? null };
     return payload;
   }
+  if (request.kind === 'CHANGE') {
+    payload.change = ownerRequestChangeOutcome(request);
+    return payload;
+  }
   if (request.kind === 'DECISION' && answer.option !== undefined) {
     const options = (request.options ?? []) as OwnerRequestOption[];
     payload.chosenOption = { index: answer.option, label: options[answer.option]?.label ?? null };
@@ -471,16 +528,36 @@ export function ownerRequestResolutionPayload(request: EndedOwnerRequest): Recor
 }
 
 /**
+ * A CHANGE's `change` in its resolution turn (design §5): what was asked and the value then, and, only when the owner
+ * applied it, the value written and the one it replaced at that moment. The agent reads `applied`: the owner may have
+ * chosen another number than `requested`.
+ */
+export function ownerRequestChangeOutcome(request: Pick<EndedOwnerRequest, 'state' | 'changeSpec' | 'answer'>): OwnerRequestChangeOutcome {
+  const spec = (request.changeSpec ?? {}) as OwnerRequestChangeSpec;
+  const outcome: OwnerRequestChangeOutcome = {
+    runnerId: spec.runnerId,
+    field: spec.field,
+    requested: spec.requested,
+    before: spec.before,
+  };
+  const answer = (request.answer ?? {}) as Partial<OwnerRequestChangeAnswer>;
+  if (request.state === 'DONE' && typeof answer.applied === 'number') {
+    return { ...outcome, applied: answer.applied, actualBefore: answer.actualBefore };
+  }
+  return outcome;
+}
+
+/**
  * The message the asking session is woken with when its request ends: one line naming the request and how it ended,
  * then the structured payload as JSON. Built only from columns an ended request never changes, so every attempt at one
  * delivery writes the same bytes and a retry replays the turn already queued.
  */
 export function ownerRequestResolutionTurn(request: EndedOwnerRequest): string {
-  const wiki = wikiCreateMeaning(request);
+  const special = wikiCreateMeaning(request) ?? changeReplacedMeaning(request);
   const meaning = ENDING_MEANING[request.state as Exclude<OwnerRequestState, 'PENDING'>] ?? 'it ended';
   const header = [
-    wiki
-      ? `Orbit owner request ${request.id} (${request.kind}) ended ${request.state}. ${wiki}`
+    special
+      ? `Orbit owner request ${request.id} (${request.kind}) ended ${request.state}. ${special}`
       : `Orbit owner request ${request.id} (${request.kind}) ended ${request.state}: ${meaning}.`,
     '',
     'This turn was queued by Orbit when the request ended, not typed by a person. The request is final and will not wake this session again.',
