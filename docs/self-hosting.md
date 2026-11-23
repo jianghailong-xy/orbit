@@ -574,8 +574,12 @@ also holds each container's settings, environment included, so treat Alloy as yo
 
 **Retention.** Loki keeps 7 days (`ORBIT_LOKI_RETENTION`, in hours: `168h`) in the `loki-data` volume, in Docker's
 data root rather than in `./data`, and it is not backed up. Its compactor deletes older lines every 10 minutes, at
-most two hours after they expire. Alloy keeps where it has read each file to in the `alloy-data` volume. Loki checks
-no size, so its disk use grows with traffic until lines start to expire.
+most two hours after they expire. Alloy keeps where it has read each file to in the `alloy-data` volume. Loki has no
+size limit, so its disk use grows with traffic until lines start to expire. It does stop at a full disk: while the disk
+its volume is on is more than 90% full, Loki refuses every line (it logs `disk usage exceeded threshold`, and Alloy
+logs pushes answered `500 … Ingester is shutting down`). Logs therefore never take the last tenth of the disk that
+`./data` and the database usually share; what arrives meanwhile is lost to Loki, and stays in `docker logs`. Free
+space and it accepts lines again by itself.
 
 **Check it.** Both stay inside the project network. Ask from Grafana's container:
 
