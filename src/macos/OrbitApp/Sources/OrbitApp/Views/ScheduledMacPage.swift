@@ -38,6 +38,14 @@ struct ScheduledMacPage: View {
         return ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 header(scheduled)
+                // A condition's items and a scheduled task's, whole, under the head: each answers at its own door. There is
+                // no Waiting on you sheet (docs/mocks/waiting-on-you-removal; the owner, 2026-11-16).
+                ForEach(model.ownerRequests?.conditionItems ?? []) { item in
+                    ConditionWaitingCardView(item: item).padding(.vertical, 6)
+                }
+                ForEach(model.ownerRequests?.scheduleItems ?? []) { item in
+                    ScheduleWaitingCardView(item: item).padding(.vertical, 6)
+                }
                 if empty {
                     // Empty (board ⑤): the lead, the line, and three examples a click puts on the line.
                     Text(SC.Empty.lead)

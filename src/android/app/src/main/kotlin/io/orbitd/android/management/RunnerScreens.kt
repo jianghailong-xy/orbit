@@ -417,10 +417,10 @@ private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: 
 fun RunnerScreen(api: ManagementApi, runnerId: String?, record: String?, revision: Long, open: (OrbitRoute) -> Unit,
                  back: () -> Unit, openWorkspace: (String) -> Unit) {
     when {
-        runnerId == null -> MachinesAndModelsPage(api, revision, open)
+        runnerId == null -> MachinesAndModelsPage(api, revision, open, record = record)
         record == "name" -> RunnerNamePage(api, runnerId, revision, back)
         record?.startsWith("engine:") == true -> RunnerEnginePage(api, runnerId, record.removePrefix("engine:"), revision, open)
-        else -> RunnerDetail(api, runnerId, revision, open, back, openWorkspace)
+        else -> RunnerDetail(api, runnerId, record, revision, open, back, openWorkspace)
     }
 }
 
@@ -432,9 +432,9 @@ private fun RunnerGone(title: String) {
     }
 }
 
-/** RunnerDetailContent: Needs Attention, Capacity, Engines, Workspaces, About, then rotate and remove. */
+/** RunnerDetailContent: Needs Attention, Capacity, Engines, Workspaces, its approved terminals, About, then rotate and remove. */
 @Composable
-private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (OrbitRoute) -> Unit, back: () -> Unit, openWorkspace: (String) -> Unit) {
+private fun RunnerDetail(api: ManagementApi, id: String, record: String?, revision: Long, open: (OrbitRoute) -> Unit, back: () -> Unit, openWorkspace: (String) -> Unit) {
     val model = remember(api) { RunnersModel(api) }
     val resumed = rememberResumed()
     val now = rememberNow()
@@ -447,6 +447,10 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
         // A machine checks in every 30s: read it again while its page is up.
         while (true) { delay(15_000); model.load(); model.loadSessionCounts() }
     }
+    val terminalStore = remember(api) { TerminalRequestStore.of(api) }
+    val terminals = rememberLiveTerminalRequests(terminalStore)
+    // Opened from a terminal's notice ([record] `terminal:<id>`): that card is lit for a moment.
+    val litTerminal = TerminalNeedsYou.requestOf(record)
     // The account's managed runner: its state's label in the head and the banner at the top; nothing is read without the capability.
     val managedReader = rememberManagedRunner(api, ask = true)
     FollowManagedRunner(managedReader, follow = resumed && managedReader.shown != null)
@@ -496,6 +500,10 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
             RunnerHead(runner, now, managedRow)
             managed?.let { ManagedRunnerNotice(managedReader, it) { open(OrbitRoute(Destination.RUNNER, null)) } }
+            // This machine's terminals asking to be approved, under its head (docs/mocks/waiting-on-you-removal/02 ①).
+            TerminalRequestStore.on(terminals, id).takeIf { it.isNotEmpty() }?.let {
+                FormSection(TerminalNeedsYou.TO_APPROVE) { TerminalRequestCards(it, terminalStore, litTerminal, notice::show) }
+            }
             if (model.failed) model.error?.let { Text("⚠ $it", Modifier.padding(top = 8.dp), color = Ink.amber, style = MaterialTheme.typography.labelMedium) }
             if (managed != null) ManagedRunnerUpdateSection(managedReader, notice::show)
             else if (!managedWaiting) RunnerPage.updateCard(runner, now)?.let { card ->
@@ -630,6 +638,8 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                     }
                 }
             }
+            // The terminals approved on this machine, with Revoke (docs/mocks/terminals-on-machine-page); nothing while it has none.
+            MachineTerminals(api, id, notice, reread = terminals)
             FormSection(RunnerCopy.ABOUT, footer = if (runner.bool("runsAsRoot") == true) RunnerCopy.ROOT_NO_BYPASS else null) {
                 Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { open(OrbitRoute(Destination.RUNNER, id, recordId = "name")) }.padding(vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically) {

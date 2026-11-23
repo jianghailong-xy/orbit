@@ -127,6 +127,10 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     public var landingCheckExemptReason: String? = nil
     public var landingCheckExemptBySessionId: String? = nil
     public var landingCheckExemptOwnerSetAt: String? = nil
+    /// Its next automatic start stands down: no account that could run it can run now (contract §3). Nil unless a hold stands.
+    public var accountHold: TaskAccountHold? = nil
+    /// The sign-in hold (an engine signed out): when it stands it wins over `accountHold`. Read for its presence only.
+    public var hold: TaskSignInHoldMark? = nil
     public let assignee: TaskAssignee?
     /// Where a run of this task last said it was (`task_progress_report`). Detail payload only.
     public let progress: TaskProgressView?
@@ -157,6 +161,7 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
         case dependencyState, runnable
         case integration
         case landingCheckExempt, landingCheckExemptReason, landingCheckExemptBySessionId, landingCheckExemptOwnerSetAt
+        case accountHold, hold
         case assignee, progress, comments, sessions, creatorSession, dependsOn, dependedOnBy
         case counts = "_count"
     }
@@ -215,11 +220,14 @@ public struct TaskIntegrationView: Codable, Equatable, Sendable {
     public let landTask: LandTaskIntegrationView?
     /// The project's main branch by name, which `ON_UPSTREAM` is on. Absent from an older server.
     public let mainBranch: String?
+    /// With `FIXING` (revision 42, §12.7): the task's own work session that holds the failed landing,
+    /// which pressing the row opens. Absent in every other state and from an older server.
+    public let workSessionId: String?
 
     public init(state: String, since: String? = nil, handler: String? = nil,
                 openItemId: String? = nil, jobId: String? = nil,
                 checksRunningForMs: Double? = nil, landTask: LandTaskIntegrationView? = nil,
-                mainBranch: String? = nil) {
+                mainBranch: String? = nil, workSessionId: String? = nil) {
         self.state = state
         self.since = since
         self.handler = handler
@@ -228,6 +236,7 @@ public struct TaskIntegrationView: Codable, Equatable, Sendable {
         self.checksRunningForMs = checksRunningForMs
         self.landTask = landTask
         self.mainBranch = mainBranch
+        self.workSessionId = workSessionId
     }
 
     public init(from decoder: Decoder) throws {
@@ -240,6 +249,7 @@ public struct TaskIntegrationView: Codable, Equatable, Sendable {
         checksRunningForMs = try? c.decodeIfPresent(Double.self, forKey: .checksRunningForMs)
         landTask = try? c.decodeIfPresent(LandTaskIntegrationView.self, forKey: .landTask)
         mainBranch = try? c.decodeIfPresent(String.self, forKey: .mainBranch)
+        workSessionId = try? c.decodeIfPresent(String.self, forKey: .workSessionId)
     }
 }
 
@@ -388,9 +398,14 @@ public struct TaskRunRoute: Codable, Equatable, Sendable {
     public let reasons: [String]
     public let policyVersion: Int
     public let decidedAt: String
+    /// A pinned run that went elsewhere because its pin can't run now: which pin, where it ran and why, in the
+    /// server's sentence (contract §3). Nil on any other run.
+    public var relaxedRun: String? = nil
 
     public init(level: String?, provider: String, model: String?, effort: String?, applied: Bool,
-                escalated: Bool = false, reasons: [String] = [], policyVersion: Int = 1, decidedAt: String = "") {
+                escalated: Bool = false, reasons: [String] = [], policyVersion: Int = 1, decidedAt: String = "",
+                relaxedRun: String? = nil) {
+        self.relaxedRun = relaxedRun
         self.level = level
         self.provider = provider
         self.model = model
@@ -403,7 +418,7 @@ public struct TaskRunRoute: Codable, Equatable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case level, provider, model, effort, applied, escalated, reasons, policyVersion, decidedAt
+        case level, provider, model, effort, applied, escalated, reasons, policyVersion, decidedAt, relaxedRun
     }
 
     public init(from decoder: Decoder) throws {
@@ -417,6 +432,7 @@ public struct TaskRunRoute: Codable, Equatable, Sendable {
         reasons = try c.decodeIfPresent([String].self, forKey: .reasons) ?? []
         policyVersion = try c.decodeIfPresent(Int.self, forKey: .policyVersion) ?? 0
         decidedAt = try c.decodeIfPresent(String.self, forKey: .decidedAt) ?? ""
+        relaxedRun = try? c.decodeIfPresent(String.self, forKey: .relaxedRun)
     }
 }
 

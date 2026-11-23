@@ -2,13 +2,7 @@ import Foundation
 import XCTest
 @testable import OrbitKit
 
-/// Holds OrbitKit's session decoders to `contracts/session-state.contract.json` (plan step 5.1): every payload kind
-/// the contract lists now carries `phase`, `released`, `lastTurnOutcome` and `waitingOn`, and since plan phase 5
-/// `endReason` and `workFinished`. So each decoder must take a payload with the new fields present — every value the
-/// contract's vectors give them — and decode it to exactly what it decodes without them: the old fields read as
-/// before, and nothing fails on the new keys. `endReason` is an old field on the kinds that already sent it (list row,
-/// detail, `session.ended`, link preview), so it is listed but not merged in here. The TypeScript side is held to the same file by `sessionStateContract.spec.ts` and
-/// `session-payloads-phase.pg.spec.ts`.
+/// Holds the Apple decoders to the additive fields and the legacy values in the wire contract.
 final class SessionStateContractTests: XCTestCase {
     private struct ContractMissing: Error, CustomStringConvertible {
         let searchedFrom: String
@@ -59,31 +53,49 @@ final class SessionStateContractTests: XCTestCase {
         "sharedHead": #"{"title":"Fix it","workspaceName":"orbit","status":"RUNNING","runStatus":"RUNNING","sessionState":"RUNNING","runState":"RUNNING","lifecycleState":"OPEN","filingState":"OPEN","createdAt":"2026-11-22T00:00:00.000Z","hasMore":false,"ownerName":"Ana","waitingOnOwner":true,"events":[]}"#,
     ]
 
-    /// Decodes `json` as the kind's OrbitKit type, and says whether the two payloads decode alike.
-    private func decodesAlike(_ kind: String, _ without: Data, _ with: Data) throws -> Bool {
+    private func check<T: Codable>(_ type: T.Type, _ before: Data, _ after: Data,
+                                   fields: [String: Any], label: String) throws {
         let decoder = JSONDecoder()
+        let encoder = JSONEncoder()
+        let old = try object(String(decoding: encoder.encode(decoder.decode(type, from: before)), as: UTF8.self))
+        var new = try object(String(decoding: encoder.encode(decoder.decode(type, from: after)), as: UTF8.self))
+        for key in ["phase", "released", "lastTurnOutcome", "waitingOn", "workFinished"] {
+            XCTAssertNil(old[key], label)
+            XCTAssertEqual(new.removeValue(forKey: key) as? NSObject, fields[key] as? NSObject, "\(label) / \(key)")
+        }
+        XCTAssertEqual(old as NSDictionary, new as NSDictionary, label)
+    }
+
+    private func check(_ kind: String, _ old: Data, _ new: Data,
+                       fields: [String: Any], label: String) throws {
         switch kind {
-        case "listRow":
-            return try decoder.decode(Session.self, from: without) == decoder.decode(Session.self, from: with)
-        case "detail":
-            return try decoder.decode(SessionDetail.self, from: without) == decoder.decode(SessionDetail.self, from: with)
-        case "sessionSummary":
-            return try decoder.decode(ControlSessionSummary.self, from: without)
-                == decoder.decode(ControlSessionSummary.self, from: with)
-        case "sessionEnded":
-            return try decoder.decode(ControlSessionEnded.self, from: without)
-                == decoder.decode(ControlSessionEnded.self, from: with)
-        case "linkPreview":
-            return try decoder.decode(LinkPreviewSession.self, from: without)
-                == decoder.decode(LinkPreviewSession.self, from: with)
-        case "guestRow":
-            return try decoder.decode(GuestSessionSummary.self, from: without)
-                == decoder.decode(GuestSessionSummary.self, from: with)
+        case "listRow": try check(Session.self, old, new, fields: fields, label: label)
+        case "detail": try check(SessionDetail.self, old, new, fields: fields, label: label)
+        case "sessionSummary": try check(ControlSessionSummary.self, old, new, fields: fields, label: label)
+        case "sessionEnded": try check(ControlSessionEnded.self, old, new, fields: fields, label: label)
+        case "linkPreview": try check(LinkPreviewSession.self, old, new, fields: fields, label: label)
+        case "guestRow": try check(GuestSessionSummary.self, old, new, fields: fields, label: label)
         case "sharedHead":
-            return try decoder.decode(GuestSession.self, from: without) == decoder.decode(GuestSession.self, from: with)
+            let decoder = JSONDecoder()
+            let before = try decoder.decode(GuestSession.self, from: old)
+            let after = try decoder.decode(GuestSession.self, from: new)
+            XCTAssertNil(before.state.phase, label)
+            XCTAssertNil(before.state.released, label)
+            XCTAssertNil(before.state.lastTurnOutcome, label)
+            XCTAssertNil(before.state.waitingOn, label)
+            XCTAssertNil(before.state.workFinished, label)
+            XCTAssertEqual(after.state.phase?.rawValue, fields["phase"] as? String, label)
+            XCTAssertEqual(after.state.released, fields["released"] as? Bool, label)
+            XCTAssertEqual(after.state.lastTurnOutcome?.rawValue, fields["lastTurnOutcome"] as? String, label)
+            XCTAssertEqual(after.state.waitingOn?.rawValue, fields["waitingOn"] as? String, label)
+            XCTAssertEqual(after.state.workFinished, fields["workFinished"] as? Bool, label)
+            XCTAssertEqual(after.state.runState, before.state.runState, label)
+            XCTAssertEqual(after.state.runStatus, before.state.runStatus, label)
+            XCTAssertEqual(after.state.sessionState, before.state.sessionState, label)
+            XCTAssertEqual(after.state.lifecycleState, before.state.lifecycleState, label)
+            XCTAssertEqual(after.state.waitingOnOwner, before.state.waitingOnOwner, label)
         default:
-            XCTFail("the contract names a payload kind this test does not decode: \(kind)")
-            return false
+            XCTFail("Unhandled payload kind: \(kind)")
         }
     }
 
@@ -97,15 +109,40 @@ final class SessionStateContractTests: XCTestCase {
         }
     }
 
-    func testEachKindDecodesTheNewFieldsToWhatItDecodesWithoutThem() throws {
+    func testEachKindReadsTheNewFieldsAndPreservesTheLegacyFields() throws {
         let cases = try vectors()
         XCTAssertFalse(cases.isEmpty)
         for (kind, json) in Self.payloads {
             let base = try object(json)
             let without = try data(base)
             for (id, fields) in cases {
+                // endReason is an old field on the kinds that already send it: listed, not merged in here.
                 let with = try data(base.merging(fields.filter { $0.key != "endReason" }) { _, new in new })
-                XCTAssertTrue(try decodesAlike(kind, without, with), "\(kind) / \(id): the new fields changed the decode")
+                let expected = fields.filter { !($0.value is NSNull) }
+                try check(kind, without, with, fields: expected, label: "\(kind) / \(id)")
+            }
+        }
+    }
+
+    func testUnknownAndMalformedNewFieldsDecodeAsAbsent() throws {
+        let malformed: [String: Any] = [
+            "phase": "FUTURE", "released": "false", "lastTurnOutcome": "FUTURE", "waitingOn": "FUTURE",
+            "workFinished": "true",
+        ]
+        for (kind, json) in Self.payloads {
+            let base = try object(json)
+            try check(kind, data(base), data(base.merging(malformed) { _, new in new }),
+                      fields: [:], label: kind)
+        }
+    }
+
+    func testEveryPayloadDecodesWorkFinishedWhenTheServerSendsIt() throws {
+        for (kind, json) in Self.payloads {
+            let base = try object(json)
+            for finished in [true, false] {
+                let fields = ["workFinished": finished]
+                let with = try data(base.merging(fields) { _, new in new })
+                try check(kind, data(base), with, fields: fields, label: kind)
             }
         }
     }
@@ -120,9 +157,15 @@ final class SessionStateContractTests: XCTestCase {
             ]
             let event = try JSONDecoder().decode(ControlEvent.self, from: data(envelope))
             if kind == "sessionSummary" {
-                XCTAssertEqual(try XCTUnwrap(event.payload(ControlSessionSummary.self)).runStatus, .running)
+                let summary = try XCTUnwrap(event.payload(ControlSessionSummary.self))
+                XCTAssertEqual(summary.runStatus, .running)
+                XCTAssertEqual(summary.phase, .running)
+                XCTAssertEqual(summary.waitingOn, .person)
             } else {
-                XCTAssertEqual(try XCTUnwrap(event.payload(ControlSessionEnded.self)).runStatus, .cancelled)
+                let ended = try XCTUnwrap(event.payload(ControlSessionEnded.self))
+                XCTAssertEqual(ended.runStatus, .cancelled)
+                XCTAssertEqual(ended.phase, .running)
+                XCTAssertEqual(ended.released, false)
             }
         }
     }

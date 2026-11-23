@@ -65,7 +65,7 @@ final class ShareMarkdownTests: XCTestCase {
             "",
             "1 run",
             "",
-            "- Succeeded · Sep 25, 2:12 AM · orbit",
+            "- Finished · Sep 25, 2:12 AM · orbit",
             "",
         ].joined(separator: "\n"), "the run in the Trash is not one to send anybody to")
     }
@@ -74,7 +74,7 @@ final class ShareMarkdownTests: XCTestCase {
         let markdown = ShareMarkdown.task(try task(Self.detail), link: Self.taskLink)
         let runs = try XCTUnwrap(markdown.range(of: "## Runs")).lowerBound
         let line = try XCTUnwrap(markdown[runs...].split(separator: "\n").last)
-        XCTAssertTrue(line.hasPrefix("- Succeeded · "), String(line))
+        XCTAssertTrue(line.hasPrefix("- Finished · "), String(line))
         XCTAssertTrue(line.hasSuffix(" · orbit"), String(line))
         XCTAssertFalse(line.contains("—"), "a readable start time, not the placeholder: \(line)")
     }

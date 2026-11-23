@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+@testable import OrbitKit
 
 /// SwiftUI doesn't exist on Linux, so nothing here compiles the app shells. These hold the
 /// coordinator conversation's crossing card to its source: the console reads the project's
@@ -63,8 +64,10 @@ final class CrossingBatchWiringTests: XCTestCase {
         XCTAssertTrue(view.contains("CrossingBatches.refuseLabel(for: batch)"),
                       "a move out's refuse button keeps it here")
         XCTAssertTrue(view.contains("CrossingBatches.listHead(for: batch)"))
-        XCTAssertTrue(view.contains("Text(batch.out ? CrossingBatches.toNoProject : CrossingBatches.toThisProject)"),
-                      "a move out's route ends at no project")
+        XCTAssertTrue(view.contains("Text(CrossingBatches.toText(batch))"),
+                      "the route says where the batch goes")
+        XCTAssertEqual(CrossingBatches.toText(CrossingBatch(id: "b", kind: ProjectCrossings.moveKind, rows: [], out: true)),
+                       CrossingBatches.toNoProject, "a move out's route ends at no project")
         let review = try app("Views/ApprovalReview.swift")
         XCTAssertTrue(review.contains("return console.crossingAnsweredHere(batchID)"),
                       "the review leaves after its own press, like every other card's")

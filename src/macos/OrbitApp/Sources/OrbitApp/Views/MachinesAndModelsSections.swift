@@ -21,6 +21,9 @@ struct MachinesAndModelsLists {
     /// Every list has had its answer, a failed one included: Needs you at the top waits for that, so it
     /// doesn't change under the reader as each list arrives.
     let settled: Bool
+    /// The terminals asking to be approved, read by the owner-requests model — all machines' for the
+    /// page's Needs you section, one machine's for its own page.
+    let terminalRequests: [TerminalRequest]
 
     @MainActor init(_ model: AppModel) {
         runners = model.runners?.runners ?? []
@@ -32,6 +35,7 @@ struct MachinesAndModelsLists {
             return SharedPools.ownPoolWithAccess(pool, access)
         }
         keys = model.agents?.ownKeys ?? []
+        terminalRequests = model.ownerRequests?.terminalRequests ?? []
         let states = [model.runners?.loadState, model.agents?.poolsState, model.agents?.ownKeysState,
                       model.sharedPools?.loadState]
         settled = states.allSatisfy { state in state.map { $0.hasLoaded || $0.lastLoadFailed } ?? false }
@@ -40,6 +44,12 @@ struct MachinesAndModelsLists {
     var attention: [MachinesAndModels.Attention] {
         MachinesAndModels.attention(runners: runners, workspaces: workspaces,
                                  memberPools: memberPools.map(SharedPools.asProviderPool), ownPools: ownPools)
+    }
+
+    /// What Settings' row counts: the page's Needs you holds the waiting terminals beside the
+    /// machines and pools that need a person.
+    var needsYouCount: Int {
+        attention.count + Terminals.liveRequests(terminalRequests).count
     }
 
     /// The account's own Codex pools, whose people and keys are read one by one.
@@ -51,15 +61,26 @@ struct MachinesAndModelsLists {
 // MARK: - Needs you
 
 /// A line for each thing that waits on a person, in the web's words, each with its way out: a machine's
-/// record, a pool's page.
+/// record, a pool's page — and the terminals asking to be approved above them, as their cards
+/// (docs/mocks/waiting-on-you-removal/02 ①).
 struct MachinesAndModelsNeedsYouSection: View {
     let items: [MachinesAndModels.Attention]
+    /// Every machine's waiting terminals, oldest first; empty draws no cards.
+    var terminals: [TerminalRequest] = []
+    /// The owner-requests model the cards approve and deny through.
+    var ownerRequests: OwnerRequestsModel? = nil
+    /// The card a push or the needs-you line opened.
+    var lit: String? = nil
+    var onSaid: (String) -> Void = { _ in }
     /// Whether a pool's line opens its page — the Mac has no pool pages, so there the line only says why.
     var opensPools = true
     let open: (MachinesAndModels.Attention) -> Void
 
     var body: some View {
         Section {
+            if let ownerRequests, !terminals.isEmpty {
+                TerminalRequestCards(model: ownerRequests, requests: terminals, lit: lit, onSaid: onSaid)
+            }
             ForEach(items) { item in
                 MachinesAndModelsAttentionRow(item: item, open: opens(item) ? open : nil)
             }
@@ -273,6 +294,8 @@ struct MachinesAndModelsKeysSection: View {
     /// (`MachinesAndModels.cursorModel`) — a Cursor key has no model list of its own.
     var cursorModel = "Auto"
     var open: ((NavNode) -> Void)? = nil
+    /// A key an account refused runs on: the provider's words, the next trial and Check again (contract §4).
+    var health = AccountHealthRows()
 
     var body: some View {
         Section {
@@ -297,11 +320,22 @@ struct MachinesAndModelsKeysSection: View {
                 } else {
                     row(key, balance: nil)
                 }
+                healthRow(key)
             }
         } header: {
             RunnerSectionHeader(ProvidersOverview.apiKeys)
         } footer: {
             Text(ProvidersOverview.apiKeysDetail + " " + ProvidersOverview.editOnWeb)
+        }
+    }
+
+    /// A key an account refused, on its own list row under the key's: a press on the key's row opens its page,
+    /// so Check again can't share that row on iOS.
+    @ViewBuilder private func healthRow(_ key: ConfiguredProvider) -> some View {
+        if let id = key.providerID, let block = AccountHealth.block(health.blocks, providerID: id) {
+            health.row(block)
+                .padding(.leading, 38)
+                .listRowSeparator(.hidden, edges: .top)
         }
     }
 

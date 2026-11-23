@@ -1603,9 +1603,43 @@ func subagentEngine(exec AgentExecConfig, parent *ClaimedSession) string {
 	return runtimeProvider(&ClaimedSession{Provider: exec.Provider, Agent: AgentExecConfig{Provider: parent.Provider}})
 }
 
+// readonlySubagentRefusesEdit reports whether job is a read-only SubAgent on an engine other than Claude and toolName
+// one of the edit tools a read-only Claude child goes without (subagentReadonlyDisallowed), under any engine's
+// spelling: such a request is refused, whatever the parent's mode or a rule says.
+func readonlySubagentRefusesEdit(job *ClaimedSession, toolName string) bool {
+	if job == nil || !job.readonlySubagent || job.readonlyParentMode == nil {
+		return false
+	}
+	for _, edit := range subagentReadonlyDisallowed {
+		if strings.EqualFold(toolName, edit) {
+			return true
+		}
+	}
+	return false
+}
+
+// readonlySubagentAnswer is how a read-only SubAgent on an engine other than Claude has a request answered: the way
+// its parent's mode answers it, read now (docs/subagent-design.md §5.3). Auto and Bypass allow it, Don't Ask refuses
+// it, and under any other mode decided is false: the engine files the card it files for its own session. Its edits
+// are refused before this is asked (readonlySubagentRefusesEdit). Nothing here reads the command: a shell call that
+// writes runs too under an Auto parent, so such a child is read-only by its engine's edit lock and its instructions
+// alone (owner, 2026-11-20).
+func readonlySubagentAnswer(job *ClaimedSession, toolName string) (allowed, decided bool) {
+	if job == nil || !job.readonlySubagent || job.readonlyParentMode == nil || readonlySubagentRefusesEdit(job, toolName) {
+		return false, false
+	}
+	switch job.readonlyParentMode() {
+	case "auto", "bypassPermissions":
+		return true, true
+	case "dontAsk":
+		return false, true
+	}
+	return false, false
+}
+
 // subagentChildJob is the claim a child engine is launched from: the parent's, in child mode, on the server's
 // execution target, with the definition applied — the preamble and the definition's body as its appended system
-// prompt, no delegate, and when it is read-only no edit tools on Claude, plan mode elsewhere. engineSession is the conversation a
+// prompt, no delegate, and when it is read-only no edit tools on Claude, its engine's read-only setup elsewhere. engineSession is the conversation a
 // resume continues (RuntimeSessionID, which every engine's open-or-resume reads), "" for a new one.
 func subagentChildJob(parent *ClaimedSession, exec AgentExecConfig, def subagentDefinition, runID, provider, engineSession string) *ClaimedSession {
 	child := *parent
@@ -1636,11 +1670,11 @@ func subagentChildJob(parent *ClaimedSession, exec AgentExecConfig, def subagent
 			// them, and plan mode would ask about every Bash call, however the parent runs (§5.3).
 			child.Agent.DisallowedTools = appendUnique(child.Agent.DisallowedTools, subagentReadonlyDisallowed...)
 		} else {
-			// The server already narrows a read-only run on any other engine to plan mode (§5.3); kept here so the
-			// child never reads wider.
+			// No other engine takes a denylist of edit tools, so each keeps its own read-only setup — plan mode here,
+			// or what its launcher sets instead (Codex's and DSH's read-only sandboxes, OpenCode's edit denial,
+			// Antigravity's approval hook) — and what the child asks is answered by the parent's mode, read when it
+			// is asked (readonlySubagentAnswer; owner, 2026-11-20 and 2026-11-23).
 			child.Agent.PermissionMode = "plan"
-			// Plan mode asks about every shell call; the parent's mode, read when one is asked, answers it instead
-			// (owner, 2026-11-20; kimiReadonlyShellFollowsParent).
 			parentLive, parentMode := parent.liveMode, parent.Agent.PermissionMode
 			child.readonlyParentMode = func() string {
 				if parentLive != nil {

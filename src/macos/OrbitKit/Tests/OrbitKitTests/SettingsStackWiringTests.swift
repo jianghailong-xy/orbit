@@ -202,7 +202,7 @@ final class SettingsStackWiringTests: XCTestCase {
         // between them, in amber while they hold anything — over lists the list reads for them, pools
         // and their people included.
         XCTAssertTrue(rows.contains(".foregroundStyle(value.needsYou ? RunnerInk.amber : Color.secondary)"))
-        XCTAssertTrue(list.contains("let needsYou = MachinesAndModelsLists(model).attention.filter(\\.isMachine).count"))
+        XCTAssertTrue(list.contains("let needsYou = MachinesAndModelsLists(model).needsYouCount"))
         XCTAssertTrue(list.contains("SettingsHome.machinesAndModelsValue(needsYou: needsYou, runners: runners.runners)"))
         XCTAssertTrue(list.contains("SettingsHome.needsYouValue(lists.attention.filter { !$0.isMachine }.count)"))
         for read in [".task { await model.runners?.load() }", ".task { await model.agents?.reloadPools() }",
@@ -215,7 +215,7 @@ final class SettingsStackWiringTests: XCTestCase {
         for control in ["$permMode", "$orchestration", "$modelRouting", "$promptSuggestions", "$recaps"] {
             XCTAssertFalse(list.contains(control), "the list still draws \(control)")
         }
-        XCTAssertTrue(rows.contains("case .general, .notifications, .profile, .sharedLinks, .accessTokens, .terminals, .github:"))
+        XCTAssertTrue(rows.contains("case .general, .notifications, .profile, .sharedLinks, .accessTokens, .github:"))
         // Signing out asks first, in the shape the width calls for — `ConfirmationStyle` asks a phone
         // for an alert and a tablet for the anchored panel, and every confirmation in the app goes
         // through it rather than naming one of the two itself.

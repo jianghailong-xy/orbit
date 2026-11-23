@@ -513,6 +513,9 @@ private struct RunnerEngineContent: View {
                     }
                 }
             }
+            if let block = AccountHealth.block(runners.healthBlocks, runnerID: runner.id, engine: engine, account: line.id) {
+                AccountHealthRow(block: block, now: now) { await runners.checkAccountAgain(block) }
+            }
             if signingIn == line.id {
                 RunnerSignInView(runnerID: runner.id, engine: login, account: line.signInAccount, autoStart: true,
                                  onClose: { closeSignIn() }, onSignedIn: { landed(line.id) })

@@ -444,6 +444,9 @@ func mcpRequestIDSent(args map[string]interface{}) bool {
 // listedToolDescriptors is what tools/list answers.
 func (s *mcpServer) listedToolDescriptors() []map[string]interface{} {
 	tools := toolDescriptors(s.allowPermissionPrompt, s.orchestrationEnabled())
+	if s.readsOwnTaskLanding() {
+		tools = withOwnLandingSessionGet(tools)
+	}
 	if s.watchesOff {
 		tools = withoutWatchTools(tools)
 	}

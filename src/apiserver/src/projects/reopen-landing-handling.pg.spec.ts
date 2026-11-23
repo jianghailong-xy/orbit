@@ -105,6 +105,7 @@ const LANDED: Result = {
 
 interface Stack {
   db: PrismaClient;
+  sessions: SessionsService;
   tasks: TasksService;
   api: RunnerApiController;
   jobs: IntegrationJobRelay;
@@ -141,6 +142,7 @@ async function connect(): Promise<Stack> {
   );
   return {
     db,
+    sessions,
     tasks,
     api,
     jobs,
@@ -307,6 +309,12 @@ async function completeTask(stack: Stack, w: World, taskId: string, label: strin
       Promise<{ turnId: string; taskAcceptance?: boolean } | null>;
   }).dequeueTurn(sessionId, w.runnerId, null);
   assert.equal(acceptance?.taskAcceptance, true, 'acceptance was queued for the reopened task');
+  // W4 false on purpose (§12.3 condition 1): this file is about the reopen's H1 hand-off of the card the
+  // coordinator (or the owner) holds, so every landing failure here must open that card as before
+  // revision 42. A person ends the work session while its acceptance command runs; the command passes and
+  // writes DONE, but the session ended with `end_reason = 'ended'`, not with its task's DONE, so it is never
+  // handed the failure. Left to its DONE's own end (`task_done`), the failure would be the session's (W-T1).
+  await stack.sessions.end(w.ownerId, sessionId);
   await stack.api.turnComplete({ id: w.runnerId }, sessionId, {
     turnId: acceptance!.turnId,
     status: SharedRunStatus.SUCCEEDED,
@@ -317,6 +325,10 @@ async function completeTask(stack: Stack, w: World, taskId: string, label: strin
   assert.equal(
     (await stack.db.task.findUniqueOrThrow({ where: { id: taskId }, select: { status: true } })).status,
     TaskStatus.DONE,
+  );
+  assert.equal(
+    (await stack.db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { endReason: true } })).endReason,
+    'ended', 'CONTROL: the work session is one a person ended, which W4 does not hand a failure',
   );
   // Integration conflict happens after the task work session has ended. Keep the fixture's old run
   // out of the execution-claim index before the task_reopen analogue creates the next run.

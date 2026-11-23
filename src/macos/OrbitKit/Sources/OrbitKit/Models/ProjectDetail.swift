@@ -1288,14 +1288,19 @@ public struct ProjectTaskIntegration: Codable, Equatable, Sendable {
     /// observation waits to see on the line. Nil while the identity is not frozen, in every other
     /// state, and from an older server.
     public let deliveredSha: String?
+    /// With `FIXING` (revision 42, §12.7): the task's own work session fixing the failed landing on
+    /// its branch, which pressing the row opens. Nil in every other state and from an older server.
+    public let workSessionId: String?
 
     public init(state: String, handler: String? = nil, checksRunningForMs: Double? = nil,
-                landTask: LandTaskIntegrationView? = nil, deliveredSha: String? = nil) {
+                landTask: LandTaskIntegrationView? = nil, deliveredSha: String? = nil,
+                workSessionId: String? = nil) {
         self.state = state
         self.handler = handler
         self.checksRunningForMs = checksRunningForMs
         self.landTask = landTask
         self.deliveredSha = deliveredSha
+        self.workSessionId = workSessionId
     }
 }
 
@@ -1329,6 +1334,10 @@ public struct ProjectTaskRow: Codable, Equatable, Sendable, Identifiable {
     /// have said nothing for ten minutes.
     public let runReason: String?
     public let runStalled: Bool?
+    /// No account that could run it can run now (contract §3); nil unless a hold stands.
+    public var accountHold: TaskAccountHold? = nil
+    /// The sign-in hold, which wins over `accountHold` when it stands. Read for its presence only.
+    public var hold: TaskSignInHoldMark? = nil
 
     public init(id: String, title: String, status: String = "OPEN", parentTaskId: String? = nil,
                 childCount: Int = 0, unmetCount: Int = 0, blocksCount: Int = 0, topoLevel: Int = 0,
@@ -1377,6 +1386,8 @@ public struct ProjectTaskRow: Codable, Equatable, Sendable, Identifiable {
         landingWaitCount = try c.decodeIfPresent(Int.self, forKey: .landingWaitCount)
         runReason = try? c.decodeIfPresent(String.self, forKey: .runReason)
         runStalled = try? c.decodeIfPresent(Bool.self, forKey: .runStalled)
+        accountHold = try? c.decodeIfPresent(TaskAccountHold.self, forKey: .accountHold)
+        hold = try? c.decodeIfPresent(TaskSignInHoldMark.self, forKey: .hold)
     }
 }
 

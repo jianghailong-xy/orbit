@@ -805,6 +805,7 @@ struct ProjectDetailView: View {
                     if let done = section.done { doneItem(done, store: store, now: now) }
                     ForEach(section.needsYou) { row in openItem(row, store: store, now: now) }
                 }
+                beingFixedGroup(section.beingFixed, store: store, now: now)
             } header: {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(ProjectPage.openItemsHeading)
@@ -906,6 +907,30 @@ struct ProjectDetailView: View {
                 groupLabel(ProjectPage.needsYouGroup)
             }
         }
+        if let beingFixed = store.openItems?.withWorkSession, !beingFixed.isEmpty {
+            Section {
+                beingFixedGroup(beingFixed, store: store, now: now, labelled: false)
+            } header: {
+                beingFixedLabel(beingFixed.count)
+            }
+        }
+    }
+
+    /// "Being fixed by its session · N" (revision 42, §12.7; web board landing-fix-own-session 06 d):
+    /// landing failures in their task's own session's hands, under Needs you and counted in nobody's.
+    @ViewBuilder
+    private func beingFixedGroup(_ rows: [ProjectOpenItemRow], store: ProjectDetailModel, now: Date,
+                                 labelled: Bool = true) -> some View {
+        if !rows.isEmpty {
+            if labelled {
+                beingFixedLabel(rows.count)
+            }
+            ForEach(rows) { row in
+                BeingFixedItemRow(row: row, taskTitle: row.taskId.flatMap { id in
+                    store.tasks.first { $0.id == id }?.title
+                }, now: now)
+            }
+        }
     }
 
     /// The start's row. The coordinator's request says "Start this project?" over what it suggests,
@@ -987,6 +1012,14 @@ struct ProjectDetailView: View {
     /// Answer's own door, with the start card as what it lands on.
     private func reviewStart(_ store: ProjectDetailModel) {
         openCoordinator(store, focus: nil, startCard: true)
+    }
+
+    /// The group's heading in the board's violet: `BEING FIXED BY ITS SESSION · 1`.
+    private func beingFixedLabel(_ count: Int) -> some View {
+        Text(ProjectPage.beingFixedHeading(count).uppercased())
+            .font(.orbitMeta.weight(.semibold))
+            .foregroundStyle(Color.purple)
+            .accessibilityIdentifier("being-fixed-heading")
     }
 
     private func groupLabel(_ text: String) -> some View {
@@ -2475,7 +2508,14 @@ struct ProjectDetailView: View {
                          group: ProjectPage.TaskGroup) -> some View {
         let tags = ProjectPage.rowTags(task, heading: group.heading, ref: document.integration?.ref,
                                        upstreamRef: document.integration?.upstreamRef)
-        return Button { openTask(task.id) } label: {
+        return Button {
+            // `Landing · fixing` (revision 42, §12.7): the row opens the task's own session, which has it.
+            if let session = ProjectPage.fixingSessionID(task) {
+                model.route(to: .session(session))
+            } else {
+                openTask(task.id)
+            }
+        } label: {
             HStack(spacing: 10) {
                 ProjectGlyphMark(glyph: ProjectPage.taskGlyph(task), size: 9)
                 VStack(alignment: .leading, spacing: 3) {
@@ -2483,6 +2523,11 @@ struct ProjectDetailView: View {
                         .font(.orbitSubtext)
                         .lineLimit(2)
                         .foregroundStyle(group.settled ? .secondary : .primary)
+                    if TaskAccountHoldCopy.showsOnRow(task.accountHold, signInHold: task.hold,
+                                                      running: task.workState == "RUNNING", queued: false),
+                       let hold = task.accountHold {
+                        TaskAccountHoldLine(hold: hold)
+                    }
                     if !tags.isEmpty || task.unmetCount > 0 || task.blocksCount > 0 {
                         HStack(spacing: 6) {
                             ForEach(Array(tags.enumerated()), id: \.offset) { _, tag in

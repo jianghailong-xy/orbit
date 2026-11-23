@@ -72,6 +72,10 @@ type mcpServer struct {
 	// helpAsk: spawned with ORBIT_HELP_ASK=1 for the help center's Ask, it serves the four help reads and nothing else
 	// (mcp_help_ask.go).
 	helpAsk bool
+	// callToolUseID is the engine's id for the tool call being answered (Claude Code's `claudecode/toolUseId`), so a
+	// drive transfer's progress lands on its card; "" outside one, or when the engine names none. Calls are served
+	// one at a time (serve), as rec is.
+	callToolUseID string
 	// rec is what the tool call being answered did, for its receipt (tool_receipt.go); nil outside one.
 	rec *callRecord
 	// Reads the session's live permission mode for Orbit's Plan gate (plan_gate.go); nil reads it from the runner
@@ -279,6 +283,8 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 			// Its calls' events nest under this id, as a delegate call's do.
 			return s.ok(req.ID, s.callWorkflow(p.Arguments, asString(p.Meta["claudecode/toolUseId"]))), true
 		}
+		s.callToolUseID = asString(p.Meta["claudecode/toolUseId"])
+		defer func() { s.callToolUseID = "" }()
 		return s.ok(req.ID, s.invokeTool(p.Name, p.Arguments)), true
 	default:
 		if isNotification {
@@ -399,7 +405,8 @@ func driveToolDescriptors(obj func(map[string]interface{}, ...string) map[string
 		{
 			"name": "drive_put",
 			"description": "Copy a local file into the owner's Orbit Files drive. Creates missing parent folders and " +
-				"keeps the previous version when overwriting a file. Returns an orbit-drive: link for replies.",
+				"keeps the previous version when overwriting a file. Returns an orbit-drive: link for replies. The file is " +
+				"sent in 8 MiB chunks and has no size limit: file_upload's 25 MiB cap does not apply here.",
 			"inputSchema": obj(map[string]interface{}{
 				"localPath": map[string]interface{}{"type": "string", "description": "A file in this session's checkout or uploads directory."},
 				"path":      drivePath,
@@ -1780,14 +1787,22 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 		return toolResult(prettyJSON(raw), false)
 
 	case "session_get":
-		if !s.orchestrationEnabled() {
+		// Revision 42 (own_landing.go): a task's work session reads its task's landing with orchestration off.
+		ownLanding := s.readsOwnTaskLanding()
+		if !s.orchestrationEnabled() && !ownLanding {
 			return toolResult(orchestrationOffMsg, true)
 		}
 		id := getString(args, "sessionId")
 		if id == "" {
 			return toolResult("sessionId is required", true)
 		}
-		raw, err := s.t.getSession(s.sessionID, s.orchestrationToken, id)
+		var raw json.RawMessage
+		var err error
+		if ownLanding {
+			raw, err = s.t.getOwnTaskLanding(s.sessionID, id)
+		} else {
+			raw, err = s.t.getSession(s.sessionID, s.orchestrationToken, id)
+		}
 		if err != nil {
 			return toolResult("get session failed: "+err.Error(), true)
 		}
