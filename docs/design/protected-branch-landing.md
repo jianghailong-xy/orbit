@@ -906,3 +906,28 @@ permissions, and its runner declares the capability. Until then landings behave 
   (M5).
 - **SSH keys for Orbit.** A separate, later plan (`docs/design/orbit-ssh-keys.md`). It does not change what GitHub
   allows a push to a protected branch.
+
+## 13. Owner steps: changing the `orbitd-cloud` App's permissions
+
+Task `3521xdtdRcxvbQtuchAcl`. The token mint in `github-api.client.ts` (`installationToken`) stays at
+`contents: write, metadata: read`: §12 says the pull request calls use a second token, minted by the server task. The
+admin page's "Register the app on GitHub" list now carries the permission list above.
+
+**Steps (the App's owner, once)**
+
+1. github.com → Settings → Developer settings → GitHub Apps → `orbitd-cloud` → Edit. (For an organization-owned App:
+   the organization's Settings → Developer settings → GitHub Apps.)
+2. Permissions & events → Repository permissions. Set: Pull requests **Read and write**, Checks **Read-only**,
+   Commit statuses **Read-only**, Actions **Read-only**, Workflows **Read and write**. Leave Contents (Read and write)
+   and Metadata (Read-only). Do not add Actions: write or Administration.
+3. Save changes. GitHub shows "permissions changed" and emails every installation's owner.
+4. Do not turn the webhook on yet. The webhook URL, secret and event subscriptions (§10) are added with the server task
+   that serves the endpoint.
+5. Tell Orbit it is done (reply on the task). Orbit reads the App's permissions back with `GET /app`, if the server
+   carries that read; otherwise check the App's page lists the seven rows above.
+
+**What existing installations see.** Each installation keeps its old permissions, and tokens minted for it carry only
+those, until its owner (the user, or an organization owner) opens GitHub's email or
+`github.com/settings/installations/<id>` (organization: `github.com/organizations/<org>/settings/installations/<id>`)
+and chooses **Accept new permissions**. Until then Orbit lands as it does today. Pending installations are not removed
+or suspended.
