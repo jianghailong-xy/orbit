@@ -3133,7 +3133,9 @@ export function WorkspaceView({
   const sessions = useMemo(() => {
     // A scheduled task's run is listed only in its workspace's Scheduled runs folder (owner 2026-11-18): the server
     // reads the folder apart, and a row on the wrong side is not drawn here either.
-    const rows = (sessionsQ.data ?? []).filter((row) => (row.runSource === 'SCHEDULE') === onScheduledRuns);
+    // A schedule's change conversation (§8.2) is in no list: it is reached from its schedule.
+    const rows = (sessionsQ.data ?? []).filter((row) =>
+      row.runSource !== 'SCHEDULE_CHANGE' && (row.runSource === 'SCHEDULE') === onScheduledRuns);
     // The Completed view is ordered by the server on completed_at (newest first) and
     // intentionally ignores pinning. The optimistic cache edits
     // (drop/rename/pin) only remove or patch rows in place — never reorder — and a real
@@ -3926,16 +3928,6 @@ export function WorkspaceView({
   // this turn is meant to create a project. Keeping it in the URL makes refresh/back truthful and
   // lets dismissing it return to the byte-for-byte ordinary compose without a second screen/state.
   const projectIntent = composing && searchParams.get('intent') === 'project';
-  // A scheduled task's Change… lands here with the schedule named in the composer (ScheduledPage): it is changed
-  // by talking to a session, never through a form. Read from the browser's own entry (useLocation trails it), once.
-  useEffect(() => {
-    if (!composing) return;
-    const entry = window.history.state as { usr?: { composerText?: string } } | null;
-    const seed = entry?.usr?.composerText;
-    if (!seed) return;
-    setText(seed);
-    window.history.replaceState({ ...entry, usr: { ...entry.usr, composerText: undefined } }, '');
-  }, [composing]);
   const dismissProjectIntent = useCallback(() => {
     setSearchParams(
       (current) => {
@@ -8648,8 +8640,10 @@ export function WorkspaceView({
         shownOnOwnModels ? undefined : shownModel,
         runner.runsAsRoot,
         runner.modelCatalog,
+        // The open session's runner reported Codex's sandbox cannot start there: Auto says it is off.
+        selected?.codexSandboxUnavailable === true,
       ),
-    [shownEngine, shownOnOwnModels, shownModel, runner.runsAsRoot, runner.modelCatalog],
+    [shownEngine, shownOnOwnModels, shownModel, runner.runsAsRoot, runner.modelCatalog, selected?.codexSandboxUnavailable],
   );
   // Model, Mode, Effort & Provider can be changed any time on a live session (the runner must be
   // online to act on it), and none of them aborts the running turn. When the change lands is the

@@ -24,7 +24,8 @@ import type {
   SlashCommandInfo,
   RunnerUpdateTurn,
 } from '@orbit/shared';
-import { CLAUDE_REGION_UNSUPPORTED, CLAUDE_REGION_V1, LOGIN_FAILURE_REASONS, SELF_UPDATE_NOW_V1, SELF_UPDATE_POSTPONE_V1 } from '@orbit/shared';
+import { CLAUDE_REGION_UNSUPPORTED, CLAUDE_REGION_V1, SELF_UPDATE_NOW_V1, SELF_UPDATE_POSTPONE_V1 } from '@orbit/shared';
+import { loginStateOf } from './login-state';
 import type {
   RunnerSelfUpdateNowRequest,
   RunnerSelfUpdateNowResponse,
@@ -752,6 +753,7 @@ export class RunnersService {
         loginMessage: null,
         loginExpiresAt: null,
         loginReason: null,
+        loginBrowser: null,
         loginAt: new Date(),
       },
     });
@@ -828,6 +830,7 @@ export class RunnersService {
         loginMessage: null,
         loginExpiresAt: null,
         loginReason: null,
+        loginBrowser: null,
         loginAt: stopOnRunner ? runner.loginAt : null,
       },
     });
@@ -1635,35 +1638,6 @@ export async function accountRemoveSessionsOf(
   return out;
 }
 
-/** Project a runner row onto the browser-facing relay view (no code, ever). */
-function loginStateOf(r: {
-  loginStatus: string | null;
-  loginEngine: string | null;
-  loginAccount?: string | null;
-  loginUrl: string | null;
-  loginUserCode: string | null;
-  loginMessage: string | null;
-  loginExpiresAt?: Date | null;
-  loginReason?: string | null;
-}): RunnerLoginState {
-  // A cancel still owed to the runner (cancelLogin) is a sign-in the user has already dismissed.
-  const status = r.loginStatus === 'cancelling' ? null : r.loginStatus;
-  const waiting = status === 'awaiting_code' || status === 'awaiting_approval';
-  const reason = LOGIN_FAILURE_REASONS.find((known) => known === r.loginReason);
-  return {
-    status: (status as RunnerLoginState['status']) ?? null,
-    // A row written before the relay drove anything but claude carries no engine.
-    engine: status ? ((r.loginEngine as LoginEngine) ?? 'claude') : null,
-    userCode: r.loginUserCode,
-    url: r.loginUrl,
-    message: r.loginMessage,
-    account: status ? (r.loginAccount ?? null) : null,
-    // As the runner reported them (RunnerApiController.loginResult): how long the link lasts while one
-    // is waiting, and why a sign-in failed when a client answers that differently.
-    ...(waiting && r.loginExpiresAt ? { expiresAt: r.loginExpiresAt.toISOString() } : {}),
-    ...(status === 'failed' && reason ? { reason } : {}),
-  };
-}
 
 /**
  * A device enrollment nobody has decided is open to whoever holds its code — that is the device

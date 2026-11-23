@@ -116,6 +116,8 @@ export interface DriveCommitResult {
   trashGroupId: string | null;
   sizeBytes: number;
   seq: number;
+  /** Absent on receipts saved before commits returned the entry's mtime. */
+  mtime?: string;
 }
 
 export interface DriveEntryView {
@@ -893,7 +895,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
             data: { sizeBytes: BigInt(offset), chunkCount: firstIdx + sorted.length, handleId: input.handleId ?? current.handleId, ...versionWriterFields(writer) },
           });
           const seq = await this.finishCommit(tx, ownerId, entry, writer, now, BigInt(offset), input, {
-            entryId: entry.id, versionId: current.id, newVersion: false, replacedVersionId: null, trashGroupId: null, sizeBytes: offset, seq: 0,
+            entryId: entry.id, versionId: current.id, newVersion: false, replacedVersionId: null, trashGroupId: null, sizeBytes: offset,
           });
           return seq;
         }
@@ -930,7 +932,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
         });
         if (fresh) await tx.driveTrashGroup.update({ where: { id: fresh.groupId }, data: { itemCount: 1, sizeBytes: BigInt(size) } });
         return this.finishCommit(tx, ownerId, entry, writer, now, BigInt(size), input, {
-          entryId: entry.id, versionId: current.id, newVersion: false, replacedVersionId: null, trashGroupId: null, sizeBytes: size, seq: 0,
+          entryId: entry.id, versionId: current.id, newVersion: false, replacedVersionId: null, trashGroupId: null, sizeBytes: size,
         });
       }
       // OVERWRITE: a new current version; the previous one to Trash in a VERSION group of its own.
@@ -945,7 +947,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
       const groupId = await replaceVersion(tx, ownerId, entry, current, writer, now);
       await tx.driveEntry.update({ where: { id: entry.id }, data: { currentVersionId: versionId } });
       return this.finishCommit(tx, ownerId, entry, writer, now, BigInt(size), input, {
-        entryId: entry.id, versionId, newVersion: true, replacedVersionId: current.id, trashGroupId: groupId, sizeBytes: size, seq: 0,
+        entryId: entry.id, versionId, newVersion: true, replacedVersionId: current.id, trashGroupId: groupId, sizeBytes: size,
       });
     }, loggedRetry(this.logger, 'drive.commit', { transaction: TRANSACTION }));
     if (!outcome.replayed) this.announce(ownerId, outcome.result.seq);
@@ -961,7 +963,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
     now: Date,
     size: bigint,
     input: DriveCommitInput,
-    result: DriveCommitResult,
+    result: Omit<DriveCommitResult, 'seq' | 'mtime'>,
   ): Promise<{ result: DriveCommitResult; replayed: boolean }> {
     await tx.driveEntry.update({
       where: { id: entry.id },
@@ -972,7 +974,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
       await tx.driveStagingChunk.deleteMany({ where: { stagingId: input.stagingId, ownerId } });
       await tx.driveStaging.updateMany({ where: { id: input.stagingId, ownerId }, data: { touchedAt: now, dirty: false } });
     }
-    const answer = { ...result, seq };
+    const answer = { ...result, seq, mtime: now.toISOString() };
     await tx.driveCommit.create({
       data: { ownerId, commitId: input.commitId, entryId: entry.id, result: answer as unknown as Prisma.InputJsonValue, createdAt: now },
     });

@@ -176,6 +176,7 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
     assert.equal(stat.path, '/Proj/sub/r.md');
     assert.equal(stat.kind, 'FILE');
     assert.equal(stat.sizeBytes, first.length);
+    assert.equal(commit.mtime, stat.mtime, 'the commit returns the stored entry mtime');
     assert.equal(stat.lastWriter.kind, 'AGENT');
     assert.equal(toUuid(stat.lastWriter.runnerId), aliceRunner.id);
     assert.equal(ok(await as(aliceRunner.token, 'GET', `/stat?path=${q('Proj/sub/r.md')}`), 'stat without the slash').json.id, stat.id);
@@ -210,9 +211,11 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
     const again = ok(await as(aliceRunner.token, 'POST', '/commit', over.body), 'the same commit again').json;
     assert.equal(again.replayed, true);
     assert.equal(again.versionId, overwritten.versionId);
+    assert.equal(again.mtime, overwritten.mtime);
     assert.equal(await db.driveVersion.count({ where: { entryId: toUuid(stat.id) } }), 2, 'two versions, not three');
     const status = ok(await as(aliceRunner.token, 'GET', `/commits/${q(over.body.commitId)}`), 'commit status').json;
     assert.equal(status.applied, true);
+    assert.equal(status.result.mtime, overwritten.mtime);
     assert.equal(ok(await as(aliceRunner.token, 'GET', `/commits/${randomUUID()}`), 'an unknown commit').json.applied, false);
     const now = await raw(server, 'GET', `/api/runner/drive/chunks/${sha256(second)}`, aliceRunner.token);
     assert.deepEqual(now.body, second);

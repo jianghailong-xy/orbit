@@ -238,6 +238,8 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     // When the gap began, and when the browser last came back online.
     let droppedAt = -Infinity;
     let onlineAt = -Infinity;
+    // When the tab came back into view, if that is what asked for the stream now connecting.
+    let returnedAt = -Infinity;
     let fails = 0;
     let lastMsgAt = Date.now();
     // A hidden tab reads nothing on the stream's word (docs/list-freshness-design.md R3).
@@ -873,8 +875,14 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     //
     // A browser back online during the gap has already sent this round for the polls it held while
     // offline (React Query resumes them on `online`), so those are not read a second time.
+    //
+    // Likewise a tab back in view: it has just read what came due while it was hidden (`catchUp`), and the stream
+    // that return asked for does not read those a second time. Asked for later, by the backoff, it reads them again.
     const reconcile = (): void => {
-      const resumedFrom = onlineAt > droppedAt ? onlineAt : Infinity;
+      const resumedFrom = Math.min(
+        onlineAt > droppedAt ? onlineAt : Infinity,
+        Number.isFinite(returnedAt) && returnedAt >= droppedAt ? returnedAt : Infinity,
+      );
       answered = (query) => (readStartedAt.get(query.queryHash) ?? -Infinity) >= resumedFrom;
       try {
         refresh({
@@ -907,10 +915,11 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       streamReport.dropped();
       if (stopped) return;
       const backoff = ++fails > QUICK_RETRIES ? SLOW_RETRY_MS : Math.min(1000 * fails, 15000);
-      reconnectTimer = setTimeout(connect, backoff + Math.random() * 500);
+      reconnectTimer = setTimeout(() => connect(), backoff + Math.random() * 500);
     };
-    function connect(): void {
+    function connect(onReturn = -Infinity): void {
       dropped = false;
+      returnedAt = onReturn;
       hinted = false;
       lastMsgAt = Date.now();
       // `hints=list_changed` asks for the Open list's hint (docs/realtime-control-plane-stream.md §4.8),
@@ -1047,10 +1056,10 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     connect();
     // A tab coming back into view, or a browser back online, need not wait out the backoff: ask for
     // the stream at once. Nothing to do while one is open or opening.
-    const retryNow = (): void => {
+    const retryNow = (onReturn?: number): void => {
       if (stopped || !dropped || document.visibilityState === 'hidden') return;
       if (reconnectTimer) clearTimeout(reconnectTimer);
-      connect();
+      connect(onReturn);
     };
     // A poll that came due while the tab was hidden: React Query skipped its tick, and would
     // otherwise wait out a whole interval more before reading it.
@@ -1072,10 +1081,19 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     };
     // Back in view, the tab reads once what it was asked to while hidden, and every poll that came
     // due meanwhile (R3).
+    //
+    // A tab the browser froze in the background runs no timer, the watchdog's included: a stream that died meanwhile
+    // may have said nothing, and would pass for live until the watchdog's next tick. One silent past the watchdog's
+    // limit is dropped here, before anything reads, so the reads go by the outage's budget and the stream is asked
+    // for at once. With the stream down, the return's read is the outage's quick first look, and the polls keep its
+    // slowest pace from here (listBudget `returned`).
     const onVisibility = (): void => {
       if (stopped || hidden()) return;
+      const now = Date.now();
+      if (!dropped && now - lastMsgAt > WATCHDOG_SILENCE_MS) drop();
+      if (dropped) streamReport.returned(now);
       catchUp();
-      retryNow();
+      retryNow(now);
     };
     const onOnline = (): void => {
       onlineAt = Date.now();

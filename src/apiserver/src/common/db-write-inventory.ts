@@ -1338,7 +1338,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'runner-api/runner-api.controller.ts#ingestEvents',
     shape: 'TX_RETRIED',
-    locks: 'session FOR UPDATE via lockSessionLeaseOwner (rank 30), then run_event / tool_call / approval child rows (rank 60), then ONE session UPDATE (I3).',
+    locks: 'session FOR UPDATE via lockSessionLeaseOwner (rank 30), then run_event / tool_call / approval child rows (rank 60), then ONE session UPDATE (I3). A first Codex sandbox-unavailable notice sets session.codex_sandbox_unavailable in that same UPDATE under the held lock. The column changes neither foreign keys nor the trigger lock ranks, and the merged link call carries it in writeCallSessions.',
     identity: 'The batch itself: `run_event` is unique on `(sessionId, seq)` with skipDuplicates — a runner link batch\'s tombstones too, one per refused event\'s seq — tool_call outcomes — and the PENDING approvals a returned call collects — are keyed by tool_use id, and the running sets are set-valued.',
     isolation: '',
     attempts: 4,
@@ -3281,6 +3281,7 @@ export interface TransactionParticipant {
  * silently.
  */
 export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
+  { at: 'runner-api/model-identity.ts#learnModelIdentities', under: "its one caller, ProvidersController's Model tiers view (providers.controller.ts, through subagentTierView's sightings hook), hands it the root client and does not await it (62caf021ee): so it is one model_identity INSERT ... ON CONFLICT DO NOTHING (createMany skipDuplicates) in its own implicit transaction, keyed by rule_key, after a read of the keys already decided. Two views asking at once insert each key once; a failure writes nothing and is asked again after the back-off" },
   { at: 'realtime/parked-session-end.ts#claimParkedSessionEnd', under: 'reaper.endParked and parkedSessionEnd.endIdleWorkOfDoneTask, each its own unit: the conditional UPDATE of the session row (rank 30) that is the claim, then one conversation_turn INSERT (rank 60) for the end turn, so a seq conflict rolls both back' },
   { at: 'conditions/condition-still-waiting.ts#fileStillWaitingItem', under: 'conditions.askStillWaiting: under the condition row FOR UPDATE it holds, one owner_request INSERT ON CONFLICT (asked_by_session_id, client_request_id) DO NOTHING' },
   { at: 'owner-requests/settings-apply.ts#applySettingsChanges', under: "ownerRequests.settle, as its effect for applySettings (docs/settings-from-conversation-design.md §5.2): after the card's CAS to DONE, the owner's user row read FOR NO KEY UPDATE, then one UPDATE of its preferences; a stale from throws 409 SETTINGS_STALE and the settle rolls back whole" },

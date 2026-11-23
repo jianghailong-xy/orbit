@@ -284,6 +284,7 @@ enum ScheduleTimelineRows {
     @MainActor
     private static func select(_ id: String, _ scheduled: ScheduledModel) {
         scheduled.draftPanel = nil
+        scheduled.changeDraft = nil
         scheduled.inspectedID = id
     }
 
@@ -402,6 +403,10 @@ struct ScheduledPage: View {
             ScheduleDraftPanel(panel: panel)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+        }
+        // The draft change conversation (board 03-change ② 3): a page of its own, back to Scheduled.
+        .fullScreenCover(item: $scheduled.changeDraft) { draft in
+            ScheduleChangePage(scheduleID: draft.scheduleID)
         }
     }
 
@@ -996,6 +1001,22 @@ extension ScheduleDetailPanel {
             HStack(alignment: .center, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(ScheduleDisplay.recordText(record)).font(.orbitSubtext)
+                    if let asked = record.askedText {
+                        // Asked in the schedule's change conversation (§8.2): the person's words, and the way back.
+                        HStack(spacing: 0) {
+                            Text("“\(asked)”")
+                            if let sessionID = record.sessionId {
+                                Text(SC.separator)
+                                Button(SC.ChangeConversation.conversation) {
+                                    model.route(to: .session(sessionID))
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(Color.accentColor)
+                            }
+                        }
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("schedule-history-asked")
+                    }
                     Text(when).font(.orbitLabel).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 6)

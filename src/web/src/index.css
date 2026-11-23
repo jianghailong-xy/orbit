@@ -10527,6 +10527,15 @@ button.chat-jump-start:hover {
   border-color: var(--brand-border);
   color: var(--brand);
 }
+/* Use the runner's browser (docs/runner-browser-engine-sign-in-design.md): a second way to the same link, under the
+   card's own. */
+.rsi-runner-browser {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 10px 0 4px;
+}
 .rsi-link {
   margin-top: 8px;
   padding: 0;
@@ -29364,10 +29373,27 @@ button.agent-progress-agent:hover {
 .model-tiers-rated {
   cursor: help;
 }
-/* Under the figures: the other providers listing the same model, whose runs the figures include. */
+/* Under the figures: how many providers list the same model, whose runs the figures include (named in its tooltip). */
 .model-tiers-pooled {
+  width: max-content;
   font-size: 11px;
   line-height: 17px;
+  cursor: help;
+}
+/* One model's rows are one block: no rule inside it, and a row after the first names only its provider. */
+.model-routing-table tr.model-routing-continued td {
+  border-bottom-color: transparent;
+}
+.model-routing-no-open > span[aria-hidden] {
+  visibility: hidden;
+}
+.model-routing-table td.model-routing-same {
+  padding-left: 28px;
+}
+.model-routing-table td.model-routing-same .routing-report-provider {
+  margin-left: 0;
+  font-size: 12.5px;
+  color: var(--text-2);
 }
 
 /* Settings → Routing report (docs/subagent-design.md §7, board docs/mocks/subagent-workflow/08-report.html). */
