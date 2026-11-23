@@ -228,11 +228,11 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 val detail = api.detail() // Revalidate resume/capabilities at the actual send, not from cache.
                 if (draft.text.trim().takeWhile { !it.isWhitespace() } == "/status") {
                     // The engine first, as the rows of iOS's status card name it (A07-19 (c), iOS cef3c3f83 `statusRows`).
-                    val engine = ProviderEngines.cliName(ProviderChoices.engine(JsonObject(detail + draft.resumeConfig),
-                        state.value.catalog?.providers.orEmpty()))
+                    val engineId = ProviderChoices.engine(JsonObject(detail + draft.resumeConfig), state.value.catalog?.providers.orEmpty())
+                    val engine = ProviderEngines.cliName(engineId)
                     mutable.update { it.copy(draft = it.draft.copy(text = "", selectionStart = 0, selectionEnd = 0),
                         notice = "Engine: $engine · Provider: ${detail.text("provider").orEmpty()} · Model: ${detail.text("model").orEmpty()} · " +
-                            "Session: ${detail.text("status") ?: "New session"} · Permission: ${detail.text("permissionMode") ?: "default"}") }
+                            "Session: ${detail.text("status") ?: "New session"} · Permission: ${detail.text("permissionMode") ?: CursorRuntime.unsetMode(engineId)}") }
                     persist(); return@launch
                 }
                 val endpoint = if (target != null) {

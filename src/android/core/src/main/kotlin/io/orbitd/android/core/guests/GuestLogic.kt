@@ -1,5 +1,6 @@
 package io.orbitd.android.core.guests
 
+import io.orbitd.android.core.protocol.SessionFacts
 import io.orbitd.android.core.realtime.RunEvent
 import java.time.Duration
 import java.time.Instant
@@ -69,26 +70,43 @@ val GuestState.resolvedRunState: GuestRunState get() {
 val GuestState.completed: Boolean get() = lifecycleState?.uppercase().let { it == "COMPLETED" || it == "ARCHIVED" }
 
 /** The agent is still in a run — and the conversation is not filed away — so a message joins it rather than restarting it. */
-val GuestState.live: Boolean get() = resolvedRunState.isLive && !completed
+val GuestState.live: Boolean get() = (released?.not() ?: resolvedRunState.isLive) && !completed
 
 /** Waiting on its owner — a permission card or a question pending — which only the owner answers. */
 val GuestState.waiting: Boolean get() = live && waitingOnOwner
 
 /** Queued or running: the conversation is moving now. */
+/** What the release establishes, once the payload carries enough to say: a guest head historically omitted the end reason, so until
+ * it carries `workFinished` or one, the terminal wording stays on the old path (OrbitKit `GuestSessionState.releasedRunState`). */
+private val GuestState.releasedRunState: GuestRunState? get() {
+    if (released != true || (workFinished == null && endReason == null)) return null
+    return when (SessionFacts.afterRelease(endReason, lastTurnOutcome, workFinished)) {
+        "FINISHED" -> GuestRunState.SUCCEEDED
+        "FAILED" -> GuestRunState.FAILED
+        else -> GuestRunState.ENDED
+    }
+}
+
+private val GuestState.displayRunState: GuestRunState get() {
+    releasedRunState?.let { return it }
+    if (SessionFacts.endingAfterInterrupt(released, endReason, lastTurnOutcome)) return GuestRunState.INTERRUPTED
+    return resolvedRunState
+}
+
 val GuestState.busy: Boolean get() = resolvedRunState.let { it == GuestRunState.QUEUED || it == GuestRunState.RUNNING }
 
 /** The status word (web `sessionStateWord`): `Completed` once filed, else the run's own word. */
-val GuestState.word: String get() = if (completed) "Completed" else when (resolvedRunState) {
-    GuestRunState.QUEUED -> "Queued"
+val GuestState.word: String get() = if (completed) "Completed" else when (displayRunState) {
+    GuestRunState.QUEUED -> if (waitingOn == "HOLD") "On hold" else "Queued"
     GuestRunState.RUNNING -> "Running"
     GuestRunState.AWAITING_INPUT -> "Awaiting reply"
-    GuestRunState.SUCCEEDED -> "Succeeded"
+    GuestRunState.SUCCEEDED -> if (releasedRunState == GuestRunState.SUCCEEDED) "Finished" else "Succeeded"
     GuestRunState.FAILED -> "Failed"
     GuestRunState.INTERRUPTED -> "Interrupted"
     GuestRunState.ENDED -> "Ended"
 }
 
-val GuestState.tone: GuestTone get() = if (completed) GuestTone.DONE else when (resolvedRunState) {
+val GuestState.tone: GuestTone get() = if (completed) GuestTone.DONE else when (displayRunState) {
     GuestRunState.QUEUED -> GuestTone.QUEUED
     GuestRunState.RUNNING -> GuestTone.RUNNING
     GuestRunState.AWAITING_INPUT -> GuestTone.AWAITING
@@ -135,8 +153,8 @@ object GuestFollow {
     /** The wait before the next read, after an answer that did ([moved]) or did not bring anything new; null once the conversation
      * has stopped and gone quiet. [expecting]: a message was just sent and the run it starts has not been seen yet. */
     fun delay(state: GuestState, moved: Boolean, expecting: Boolean = false): Long? = when {
-        moved || state.busy -> WORKING_MS
-        state.resolvedRunState.isLive && !state.completed -> WAITING_MS
+        moved || (state.released != true && (state.phase?.let { it == "PENDING" || it == "RUNNING" } ?: state.busy)) -> WORKING_MS
+        state.live -> WAITING_MS
         expecting -> WORKING_MS
         else -> null
     }

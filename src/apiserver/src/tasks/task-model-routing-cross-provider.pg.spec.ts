@@ -236,9 +236,11 @@ async function runNow(services: Services, target: Fixture, taskId: string): Prom
   return result.sessionId;
 }
 
-/** The run ends as the runner's /finalize leaves it. */
+/** The run ends as the runner's /finalize leaves it: a failure is on the turn it cut off (removal step R2). */
 async function end(db: PrismaClient, sessionId: string, status: typeof RunStatus.SUCCEEDED | typeof RunStatus.FAILED, error: string | null = null) {
-  await db.session.update({ where: { id: sessionId }, data: { status, error, finishedAt: new Date()} });
+  await db.session.update({ where: { id: sessionId }, data: {
+    status, error, finishedAt: new Date(), ...(status === RunStatus.FAILED ? { lastTurnOutcome: 'FAILED' } : {}),
+  } });
 }
 
 /** What a run actually is: the three values routing decides. */
