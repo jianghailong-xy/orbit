@@ -11,7 +11,7 @@
 //
 //   node cases.mjs        (run.sh runs it on the isolated stack; records under $LM_DIR/records/<run>/lfx-cases/)
 import { execFileSync } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 
 import {
   SD, call, evidence, execute, getTask, gitIn, logSince, logSize, login, mcpAnswer, origin, psql, readState,
@@ -30,8 +30,14 @@ const TITLE = `LFX42 landing fix by the task's own session: fixed, handed back, 
 const LINE = `lfx42/line-${RUN}`;
 const BRANCH = `refs/heads/${LINE}`;
 const MERGE_CHECK = 'echo "LFX42 merge check on $(git rev-parse HEAD)"; test -f README.md';
-const LANDING_CHECK = 'echo "LFX42 landing check on $(git rev-parse HEAD)"; '
+// While HOLD exists the landing check waits (case 1 holds the first landing so the runner can reclaim the second
+// task's checkout meanwhile); then it refuses a tree that carries LINE_RED.md (case 3).
+const HOLD = `${SD}/ops-out/lfx42-hold-landing-${RUN}`;
+const LANDING_CHECK = `while [ -f ${HOLD} ]; do sleep 2; done; echo "LFX42 landing check on $(git rev-parse HEAD)"; `
   + 'if [ -f LINE_RED.md ]; then echo "LINE_RED.md is on the line: refusing it"; exit 3; fi';
+const RECLAIM = process.env.LFX_RECLAIM !== '0';
+const RUNNER_LOG = `${SD}/logs/runner.log`;
+const runnerLogHas = (needle, from) => logSince(RUNNER_LOG, from).split('\n').find((l) => l.includes(needle)) ?? null;
 // fake-claude's DECLINE_WORDS: what the declining session says, byte for byte.
 const DECLINE_WORDS = 'LFX42 decline: this conflict is with another task\'s line in the same file, and which line stays is '
   + 'not mine to decide, so I committed nothing. The coordinator should choose.';
@@ -51,6 +57,50 @@ const COORD_TURNS = (from, to) => `select count(*) from conversation_turn where 
   from project where id = ${P}) and created_at > ${lit(from)}::timestamptz${to ? ` and created_at <= ${lit(to)}::timestamptz` : ''}`;
 
 ev.say(`run ${RUN}: project "${TITLE}" in workspace ${ws.id}; line ${BRANCH}`);
+
+// The rig's clone of the origin, as a person pushing to main: case 3 makes main red, and a run starts from a green one.
+const rig = `${SD}/rig-${RUN}`;
+const rigEnv = { PATH: '/usr/bin:/bin', HOME: `${SD}/runner-userhome`, GIT_CONFIG_NOSYSTEM: '1' };
+const rigGit = (...args) => execFileSync('git', ['-C', rig, '-c', 'user.name=LFX42 Rig', '-c', 'user.email=rig@lfx42.test', ...args], {
+  encoding: 'utf8', env: rigEnv, stdio: ['ignore', 'pipe', 'pipe'],
+}).trim();
+mkdirSync(rig, { recursive: true });
+execFileSync('git', ['clone', '-q', '--branch', 'main', origin(REPO), rig], { env: rigEnv });
+if (existsSync(`${rig}/LINE_RED.md`)) {
+  rigGit('rm', '-q', 'LINE_RED.md');
+  rigGit('commit', '-qm', 'main is green again: LINE_RED.md removed (an earlier run left it)');
+  rigGit('push', '-q', 'origin', 'HEAD:refs/heads/main');
+  ev.say(`origin main carried LINE_RED.md from an earlier run; removed it: main is ${rigGit('rev-parse', 'HEAD')}`);
+}
+
+// The engine: the real Claude Code CLI (run.sh links it into the runner's PATH) on an Orbit provider whose base URL is
+// scripted-model.py, unless LFX_ENGINE=stand-in (part two's fake-claude, no provider). A person-started conversation in
+// the workspace on that provider comes first: a project's coordinator takes the engine of the workspace's last one.
+const REAL = process.env.LFX_ENGINE !== 'stand-in';
+let pin = {};
+if (REAL) {
+  if (!state.lfxProvider) {
+    const key = await call('POST', '/providers/mine', T, {
+      label: 'LFX42 scripted model on loopback (not a model)', presetSlug: 'deepseek',
+      baseUrl: `http://127.0.0.1:${process.env.LFX_MODEL_PORT || 48912}/anthropic`, apiKey: 'sk-lfx42-scripted-model-not-a-key-0123456789',
+    });
+    state.lfxProvider = { id: key.id, slug: key.slug, presetSlug: key.presetSlug, baseUrl: key.baseUrl, defaultModel: key.defaultModel, runtime: key.runtime };
+    saveState(state);
+  }
+  pin = { provider: state.lfxProvider.slug, engine: 'claude' };
+  ev.say(`engine: the real claude CLI (${process.env.LFX_CLAUDE_VERSION || 'version not given'}) on provider ${JSON.stringify(state.lfxProvider)}`);
+  const opener = await call('POST', '/sessions', T, {
+    workspaceId: ws.id, title: `LFX42 engine opener (${RUN})`, prompt: 'LFX42 opener: say hello.', provider: state.lfxProvider.slug,
+  });
+  const opened = await until('the opener conversation to answer', async () => {
+    const s = await call('GET', `/sessions/${opener.id}`, T);
+    return ['AWAITING_INPUT', 'IDLE', 'COMPLETED', 'SUCCEEDED'].includes(s.status) || s.lastAssistantText ? s : null;
+  }, { timeoutMs: 240_000, everyMs: 3_000 });
+  ev.file('opener-session.json', opened);
+  ev.say(`opener ${opener.id}: ${opened.status}, said ${JSON.stringify(opened.lastAssistantText ?? null)}`);
+} else {
+  ev.say('engine: part two\'s fake-claude stand-in (LFX_ENGINE=stand-in), no model and no provider');
+}
 const p = await call('POST', '/projects', T, {
   title: TITLE,
   goal: 'Show that a landing failure goes first to the task\'s own session, and what happens when it cannot fix it.',
@@ -78,7 +128,7 @@ for (const [k, s] of Object.entries(spec)) {
   if (s.barrier) lines.push(`E2E-BARRIER ${s.barrier} 2`);
   const t = await call('POST', '/tasks', T, {
     projectId: p.id, assigneeId: ws.id, title: `${s.title} (${RUN})`, criterionKey: key, description: lines.join('\n'),
-    ...accept, autoRunWhenReady: false,
+    ...accept, ...pin, autoRunWhenReady: false,
   });
   ids[k] = t.id;
 }
@@ -118,7 +168,7 @@ const started = await call('POST', `/projects/${p.id}/start`, T, {
 ev.file('start-answer.json', started);
 check('the owner started it on the project branch, Automatic', started.settings?.line === 'PROJECT_BRANCH', JSON.stringify(started.settings));
 const lc = await coordinatorCall('landing-check', 'project_update', {
-  projectId: p.id, integration: { landingCheckCommand: LANDING_CHECK, landingCheckReason: 'The line must never carry LINE_RED.md.' },
+  projectId: p.id, integration: { landingCheckCommand: LANDING_CHECK, landingCheckTimeoutSeconds: 1800, landingCheckReason: 'The line must never carry LINE_RED.md.' },
 });
 check('the coordinator set the landing check', !lc.isError, lc.text.slice(0, 200));
 
@@ -145,7 +195,7 @@ const fixTurns = (sessionId) => rows(`select client_turn_id, status, to_char(cre
   from conversation_turn where session_id = ${lit(sessionId)}::uuid and client_turn_id like 'landing-fix:v1:%' order by seq`)
   .map(([clientTurnId, st, createdAt, isFix]) => ({ clientTurnId, status: st, createdAt, isFix: isFix === 't' }));
 
-async function runPair(a, b, what) {
+async function runPair(a, b, what, whileFirstLands = null) {
   for (const k of [a, b]) await execute(T, ids[k]);
   await until(`${a} and ${b} to be DONE`, async () => {
     const ts = await Promise.all([a, b].map((k) => getTask(T, ids[k])));
@@ -153,9 +203,7 @@ async function runPair(a, b, what) {
     if (failed) throw new Error(`${failed.title} FAILED`);
     return ts.every((t) => t.status === 'DONE');
   }, { timeoutMs: 600_000, everyMs: 3_000 });
-  const bases = rows(`select t.title, s.base_sha from session s join task t on t.id = s.task_id
-    where t.id in (${taskRow(a)}, ${taskRow(b)}) and s.starts_task_work order by s.created_at`);
-  check(`${what}: ${a} and ${b} started from the same tip`, bases.length === 2 && bases[0][1] === bases[1][1], JSON.stringify(bases));
+  if (whileFirstLands) await whileFirstLands();
   const both = await until(`one of ${a}/${b} to land and the other to conflict`, () => {
     const ja = landJobs(a); const jb = landJobs(b);
     const conflicted = [[a, ja], [b, jb]].find(([, j]) => j[0]?.state === 'CONFLICT');
@@ -163,11 +211,38 @@ async function runPair(a, b, what) {
     return conflicted && landed ? { conflicted: conflicted[0], landed: landed[0] } : null;
   }, { timeoutMs: 600_000, everyMs: 3_000 });
   ev.say(`${what}: ${both.landed} landed first; ${both.conflicted} conflicted`);
+  // Both work commits sit on the same parent: the two runs started from the same tip (the runner's clone has them).
+  const parents = [a, b].map((k) => gitIn(ws.workDir, 'rev-parse', `${landJobs(k)[0].source}^`));
+  check(`${what}: ${a}'s and ${b}'s work commits have the same parent (one tip)`, parents[0] === parents[1], parents.join(' vs '));
   return both;
 }
 
 // ── case 1: a conflict the task's own session fixes ─────────────────────────────────────────────────────────────
-const c1 = await runPair('F1', 'F2', 'case 1');
+const runnerMark = logSize(RUNNER_LOG);
+let reclaim = null;
+if (RECLAIM) execFileSync('/bin/sh', ['-c', `mkdir -p ${SD}/ops-out && : > ${HOLD}`]);
+const c1 = await runPair('F1', 'F2', 'case 1', RECLAIM ? async () => {
+  // The first landing is held in its landing check; the other waits behind it (J1). Its session ended with its task's
+  // DONE and sits idle: raise the runner's free-disk floor above what the disk has, and its sweep reclaims that checkout.
+  const first = await until('one of F1/F2 to be landing (held)', () => {
+    const running = ['F1', 'F2'].find((k) => landJobs(k)[0]?.state === 'RUNNING');
+    const other = running === 'F1' ? 'F2' : 'F1';
+    return running && landJobs(other)[0] ? running : null;
+  }, { timeoutMs: 300_000, everyMs: 2_000 });
+  const second = first === 'F1' ? 'F2' : 'F1';
+  const secondSession = landJobs(second)[0].session;
+  const runnerId = state.runner.id;
+  await call('PATCH', `/runners/${runnerId}`, T, { minFreeDiskMb: 100_000_000 });
+  ev.say(`case 1: ${first} is held in its landing check; runner floor raised to 100,000,000 MB to reclaim ${second}'s checkout (session ${secondSession})`);
+  const line = await until(`the runner to reclaim ${second}'s checkout`, () => runnerLogHas(`gc: reclaimed checkout ${secondSession}`, runnerMark),
+    { timeoutMs: 900_000, everyMs: 5_000 }).catch(() => null);
+  await call('PATCH', `/runners/${runnerId}`, T, { minFreeDiskMb: null });
+  const gone = !existsSync(`${SD}/runner-home/worktrees/${secondSession}`);
+  reclaim = { first, second, secondSession, line, gone };
+  check(`case 1: the runner reclaimed ${second}'s checkout while ${first} was landing (disk floor)`, !!line && gone, line ?? 'no gc line');
+  await sleep(40_000); // the floor's removal reaches the runner on a heartbeat before the hold is lifted
+  execFileSync('/bin/sh', ['-c', `rm -f ${HOLD}`]);
+} : null);
 const X = c1.conflicted;
 const [x1] = landJobs(X);
 check(`case 1: ${X}'s first landing is a CONFLICT on SHARED-1.md`, x1.state === 'CONFLICT' && ['REBASE', 'MERGE'].includes(x1.phase)
@@ -200,6 +275,24 @@ const lineFile = (() => { try { return gitIn(origin(REPO), 'show', `${BRANCH}:SH
 check('case 1: the project branch carries both tasks\' lines of SHARED-1.md',
   lineFile.split('\n').filter((l) => l.endsWith(': this line is the work of this task')).length === 2, JSON.stringify(lineFile));
 check(`case 1: ${X} stayed DONE`, (await getTask(T, ids[X])).status === 'DONE');
+if (RECLAIM) {
+  // After the reclaim, the revival's claim put the checkout back from the session's own local branch on this runner:
+  // restoreAbsentCheckout ("restored its checkout") for a checkout the resumable sweep marked away, or setupWorktree's
+  // new worktree on that branch ("isolated in worktree ... (branch <its branch>") for one the floor sweep removed. The
+  // fixed commit's parent being the failed source (above) says the work came back with it.
+  const branch = row(`select worktree_branch from session where id = ${lit(x1.session)}::uuid`);
+  const afterGc = reclaim?.line ? logSince(RUNNER_LOG, runnerMark).split(reclaim.line)[1] ?? '' : '';
+  const restored = afterGc.split('\n').find((l) => l.includes(`session ${x1.session} — `)
+    && (l.includes('restored its checkout') || l.includes(`isolated in worktree ${SD}/runner-home/worktrees/${x1.session} (branch ${branch} `))) ?? null;
+  check(`case 1: the revived session's reclaimed checkout came back from its local branch on the same runner (R3)`,
+    reclaim?.second === X && !!branch && !!restored, restored ?? `no checkout line after the reclaim (reclaimed ${reclaim?.second}, branch ${branch})`);
+}
+// The model saw the fix turn with the task's first turn before it: the real CLI's --resume brought the history back.
+const modelLog = () => logSince(`${SD}/logs/fake-claude.jsonl`, fakeMark).split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return {}; } });
+const fixRequests = (k) => modelLog().filter((r) => String(r.kind ?? '').startsWith('fix') && String(r.turn ?? '').includes(`for "${spec[k].title}`));
+const xFix = fixRequests(X);
+check(`case 1: the model answered ${X}'s fix turn from the resumed history (E2E-ONFIX: resolve found in earlier messages)`,
+  xFix.length > 0 && xFix.every((r) => r.kind === 'fix-resolve' && r.messages > 2), JSON.stringify(xFix.map((r) => [r.kind, r.messages, r.tool])))
 
 // ── case 2: the session settles without a new commit; the item is handed back with what it said ────────────────
 const c2 = await runPair('H1', 'H2', 'case 2');
@@ -224,6 +317,9 @@ const coordQuote = await until('the coordinator to be handed the item with those
   return Number(n) > 0 ? n : null;
 }, { timeoutMs: 300_000, everyMs: 3_000 }).catch(() => '0');
 check('case 2: the coordinator got a turn after the hand-back quoting the session\'s words', Number(coordQuote) > 0, `${coordQuote} turn(s)`);
+const yFix = fixRequests(Y);
+check(`case 2: the model answered ${Y}'s fix turn from the resumed history (E2E-ONFIX: decline found in earlier messages)`,
+  yFix.length > 0 && yFix.every((r) => r.kind === 'fix-decline' && r.messages > 2), JSON.stringify(yFix.map((r) => [r.kind, r.messages])));
 const y2 = landJobs(Y).filter((g) => g.generation > y1.generation);
 check(`case 2: nothing was landed again for ${Y} (no next generation)`, y2.length === 0, JSON.stringify(y2));
 const yDelivered = row(`select delivered_sha from task where id = ${taskRow(Y)}`);
@@ -232,12 +328,7 @@ check(`case 2: ${Y}'s delivered identity is frozen again on the failed job's sou
 // ── case 3: a baseline-red landing never reaches the task's session ──────────────────────────────────────────────
 await until('no promotion of the project to be in motion', () => row(`select count(*) from project_promotion
   where project_id = ${P} and state in ('CHECKING', 'CONFIRMED', 'RECHECKING')`) === '0' || null, { timeoutMs: 300_000, everyMs: 3_000 }).catch(() => null);
-const rig = `${SD}/rig-${RUN}`;
-mkdirSync(rig, { recursive: true });
-const rigGit = (...args) => execFileSync('git', ['-C', rig, '-c', 'user.name=LFX42 Rig', '-c', 'user.email=rig@lfx42.test', ...args], {
-  encoding: 'utf8', env: { PATH: '/usr/bin:/bin', HOME: `${SD}/runner-userhome`, GIT_CONFIG_NOSYSTEM: '1' }, stdio: ['ignore', 'pipe', 'pipe'],
-}).trim();
-execFileSync('git', ['clone', '-q', '--branch', 'main', origin(REPO), rig], { env: { PATH: '/usr/bin:/bin', HOME: `${SD}/runner-userhome`, GIT_CONFIG_NOSYSTEM: '1' } });
+rigGit('pull', '-q', '--ff-only', 'origin', 'main');
 execFileSync('/bin/sh', ['-c', `printf 'main went red: the landing check refuses this file\\n' > ${rig}/LINE_RED.md`]);
 rigGit('add', 'LINE_RED.md');
 rigGit('commit', '-qm', 'main gains LINE_RED.md (the e2e makes main red)');
@@ -302,6 +393,12 @@ ev.query('conversation_turn of the coordinator session', `select t.seq, t.client
   left(replace(t.content, E'\\n', ' '), 220) as content_head,
   position(${lit(DECLINE_WORDS)} in coalesce(t.content, '')) > 0 as quotes_the_decline
 from conversation_turn t where t.session_id = (select coordinator_session_id from project where id = ${P}) order by t.seq`, true);
+ev.query('the engine each session of the project ran on', `select coalesce(t.title, 'coordinator') as task, s.id, s.provider, s.engine,
+  s.model, s.permission_mode, s.status, s.end_reason
+from session s left join task t on t.id = s.task_id
+where s.task_id in (select id from task where project_id = ${P}) or s.id = (select coordinator_session_id from project where id = ${P})
+order by s.created_at`, true);
+ev.query('the runner and the engine it reported', `select name, version, engines from runner where name = 'lm42-runner'`, true);
 ev.file(`origin-${REPO}.txt`, `${gitIn(origin(REPO), 'log', '--graph', '--format=%h %s', BRANCH, 'refs/heads/main')}\n\n`
   + `${gitIn(origin(REPO), 'for-each-ref', '--format=%(refname) %(objectname)', 'refs/heads')}\n`);
 const fake = logSince(`${SD}/logs/fake-claude.jsonl`, fakeMark).split('\n').filter(Boolean);

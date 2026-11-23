@@ -33,6 +33,29 @@ heavy bash "$KIT/stack.sh" up > "$LM_DIR/logs/up-$LM_RUN.log" 2>&1 || { tail -40
 grep -E 'building the apiserver|staging stack .* is up' "$LM_DIR/logs/up-$LM_RUN.log" || true
 bash "$KIT/stack.sh" status
 docker inspect --format '{{.Name}} {{.Image}} {{.Created}}' "$LM_PROJECT-apiserver" "$LM_PROJECT-web"
+# The engine (LFX_ENGINE, default real): the host's Claude Code binary, copied out of /root (the runner's namespace hides
+# /root), its model scripted-model.py on 127.0.0.1:$LFX_MODEL_PORT behind the Orbit provider cases.mjs makes. The
+# model's log is the file lib.mjs#mcpAnswer reads. LFX_ENGINE=stand-in runs part two's fake-claude instead.
+export LFX_ENGINE=${LFX_ENGINE:-real} LFX_MODEL_PORT=${LFX_MODEL_PORT:-48912}
+if [ "$LFX_ENGINE" = real ]; then
+  step "engine: the real claude CLI, its model scripted on 127.0.0.1:$LFX_MODEL_PORT"
+  src=$(readlink -f "${LFX_CLAUDE:-/root/.local/bin/claude}")
+  export LFX_CLAUDE_VERSION
+  LFX_CLAUDE_VERSION=$(env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT "$src" --version | head -1)
+  dst=${LFX_CLAUDE_DIR:-/var/tmp/lfx42-claude}/claude-${LFX_CLAUDE_VERSION%% *}
+  [ -x "$dst" ] || { mkdir -p "$(dirname "$dst")"; cp "$src" "$dst.new"; mv "$dst.new" "$dst"; }
+  export LM_CLAUDE_BIN=$dst
+  echo "claude $LFX_CLAUDE_VERSION from $src as $dst ($(sha256sum "$dst" | cut -c1-16))"
+  if [ -f "$LM_DIR/model.pid" ] && kill -0 "$(cat "$LM_DIR/model.pid")" 2>/dev/null; then kill "$(cat "$LM_DIR/model.pid")"; sleep 1; fi
+  setsid -f python3 -I "$HERE/scripted-model.py" "$LFX_MODEL_PORT" "$LM_DIR/logs/fake-claude.jsonl" \
+    >> "$LM_DIR/logs/scripted-model.out" 2>&1 < /dev/null
+  for _ in $(seq 1 20); do pid=$(pgrep -f "scripted-model.py $LFX_MODEL_PORT" | head -1); [ -n "$pid" ] && break; sleep 0.5; done
+  echo "${pid:?the scripted model did not start}" > "$LM_DIR/model.pid"
+  echo "scripted model pid $pid"
+  # The engine's user settings in the runner's HOME: its Bash tool and the orbit MCP tools are allowed.
+  mkdir -p "$LM_DIR/runner-userhome/.claude"
+  printf '{"permissions":{"allow":["Bash","mcp__orbit"]}}\n' > "$LM_DIR/runner-userhome/.claude/settings.json"
+fi
 step "runner: build from this checkout and restart"
 heavy bash "$KIT/stack.sh" build-runner
 bash "$KIT/stack.sh" stop-runner
