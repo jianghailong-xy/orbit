@@ -2192,6 +2192,11 @@ model Session {
   failureScope         String?   @map("failure_scope")
   failureSaid          String?   @map("failure_said")
   admissionFailure     Boolean?  @map("admission_failure")
+  // What account health did with this run's failure (docs/routing-account-health-design.md §7.4, migration 1495):
+  // SUSPECT or BLOCKED when it struck or blocked the account the run spent, TRIAL when the run was that account's
+  // trial and was refused; null when health did nothing with it. A run that has one is not counted for tier
+  // escalation or the auto-run failure budget (common/run-not-counted.ts).
+  accountHealthEffect  String?   @map("account_health_effect")
   result               String?
   // Why the session ended, orthogonal to `status` (which collapses every graceful end
   // to CANCELLED). Set by the path that requests the end — endLive (user end/complete/

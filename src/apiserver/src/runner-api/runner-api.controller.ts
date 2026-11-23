@@ -3,6 +3,7 @@ import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from
 import { DRAIN_SKIPS_HELD, translationLanguages, turnTranslationOf } from '../sessions/turn-translation';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
+import { AccountHealthService, makeTrialDue } from '../providers/account-health.service';
 import { runFailureColumns } from './run-failure-columns';
 import { BG_OWNER_STOP_V1, BROWSER_CLEAR_V1, BROWSER_OPEN_V1, type BackgroundJobStopCommand, CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
@@ -1773,6 +1774,8 @@ export class RunnerApiController {
     /** The browser switch, said on every reclaim as on a claim (browserClaimFields); absent in hand-built specs: off. */
     @Optional() @Inject(MANAGED_RUNNER_BROWSER_GATE) private readonly browserGate?: ManagedRunnerBrowserGate,
     @Optional() private readonly coordinatorFacts?: CoordinatorFactQueueService,
+    /** Account health (docs/routing-account-health-design.md §6.3): told of every run's end; absent in hand-built specs. */
+    @Optional() private readonly accountHealth?: AccountHealthService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -2289,6 +2292,16 @@ export class RunnerApiController {
           )?.engines,
         )
       : null;
+    // §6.3 of docs/routing-account-health-design.md: an engine newly signed in may be the fix for a block on it, so its
+    // trial is due now. The engines as they stood before this beat, read only while this runner has a blocked account
+    // and the beat reports an engine signed in: one indexed read otherwise.
+    const ownerOfRunner = (runner as { ownerId?: string }).ownerId;
+    const healthPriorEngines = ownerOfRunner && signIns?.some((e) => e.installed && e.auth === 'yes')
+      && (await this.prisma.accountHealth.findFirst({
+        where: { runnerId: runner.id, clearedAt: null, state: 'BLOCKED' }, select: { id: true },
+      }))
+      ? priorEngines ?? signInsOf((await this.prisma.runner.findUnique({ where: { id: runner.id }, select: { engines: true } }))?.engines)
+      : null;
     // The beat is two writes, in this order: the runner row — what this heartbeat reports, and the
     // runner's own record of its beats once that is RUNNER_DURABLE_BEAT_EVERY_MS old — then its
     // presence row (runners/runner-presence.ts), which every reading of "online" asks. Presence
@@ -2570,6 +2583,14 @@ export class RunnerApiController {
         // that attempt ends, so its probe reads `no` mid-sign-in — not news to whoever is signing in.
         if (current.engine === 'antigravity' && antigravitySignInUnderWay(updated)) continue;
         void this.push.notifyEngineSignedOut(runner.id, current.engine);
+      }
+    }
+    if (healthPriorEngines && ownerOfRunner) {
+      for (const current of signIns ?? []) {
+        if (!current.installed || current.auth !== 'yes') continue;
+        if (healthPriorEngines.find((was) => was.engine === current.engine)?.auth === 'yes') continue;
+        await makeTrialDue(this.prisma, ownerOfRunner, { runnerId: runner.id, engine: current.engine }).catch((error) =>
+          this.logger.warn(`runner ${runner.id}: trials not made due after ${current.engine} signed in: ${(error as Error)?.message ?? error}`));
       }
     }
     // A finished install stops being news the moment the probe confirms it: clear the slot so the
@@ -8562,6 +8583,15 @@ export class RunnerApiController {
     // runs the coordinator replacement, which the runner — blocked on this reply — must not wait for,
     // so it is settled off the response path. Any other turn of the session is a read that finds
     // no WRITING handoff and stops.
+    // What the turn's end says of the account it spent (§6.3): a failure to the rules, a completed turn as the account
+    // working. After the commit, awaited so the next dispatch reads it; it logs its own failure.
+    if (finalized.applied && !finalized.steer && 'failSession' in finalized) {
+      await this.accountHealth?.afterRunEnd(sessionId, {
+        failed: finalized.failSession === true,
+        turnCompleted: !finalized.failSession && dto.status === RunStatus.SUCCEEDED,
+        until: dto.failure?.until ?? null,
+      });
+    }
     if (finalized.applied && !finalized.steer && this.coordinatorHandoffs) {
       void this.coordinatorHandoffs.afterTurn(sessionId, dto.turnId, dto.status).catch((error) => this.logger.warn(
         `coordinator handoff after turn ${dto.turnId} of ${sessionId} failed: `
@@ -10552,6 +10582,12 @@ export class RunnerApiController {
       return { ok: true, keepCheckout: outcome.keepCheckout };
     }
     if (!outcome.finalized) return { ok: true, keepCheckout: outcome.keepCheckout };
+    // What the run's end says of the account it spent (§6.3), now that its release and its failure kind are committed:
+    // awaited, so the next dispatch reads it, and never in the way: it logs its own failure.
+    await this.accountHealth?.afterRunEnd(sessionId, {
+      failed: outcome.effectiveStatus === RunStatus.FAILED,
+      until: dto.failure?.until ?? null,
+    });
     // The one-shot wakeups this finalize dropped with its FAILED session, no retry armed: their owner is
     // told, once, now that the drop has committed (contract §4).
     signalDrainedWakeups(this.push, this.logger, outcome.droppedWakeups ?? []);

@@ -72,6 +72,8 @@ import {
   SubagentRunUpdateDto,
   truncateResultSummary,
 } from './subagent-run';
+import { AccountHealthService } from '../providers/account-health.service';
+import type { SubagentAttempt } from '@orbit/shared';
 import { planSubagentRoute } from './subagent-route';
 import {
   chooseSubagentWorkspace,
@@ -191,7 +193,39 @@ export class RunnerSubagentsController {
     @Optional() private readonly sessions?: SessionsService,
     /** Marks a remote run's target runner changed, so its next beat over the runner link lists the run (§10.2). */
     @Optional() private readonly realtime?: RealtimeService,
+    /** Told of each attempt's end (docs/routing-account-health-design.md §6.3); absent in hand-built specs. */
+    @Optional() private readonly accountHealth?: AccountHealthService,
   ) {}
+
+  /** Hand an attempt's end to account health (§6.3), on the parent's runner and workspace; never in the run's way. */
+  private async attemptEnded(
+    sessionId: string,
+    runId: string,
+    attempt: SubagentAttempt | undefined,
+    end: { failed: boolean; error?: string; failure?: SubagentFallbackDto['failure']; admission?: boolean },
+  ): Promise<void> {
+    if (!this.accountHealth || !attempt) return;
+    const parent = await this.prisma.session.findUnique({
+      where: { id: sessionId }, select: { ownerId: true, assignedRunnerId: true, workspaceId: true },
+    });
+    if (!parent) return;
+    const member = attempt.poolMember;
+    await this.accountHealth.afterSubagentAttempt({
+      ownerId: parent.ownerId,
+      runId,
+      runnerId: parent.assignedRunnerId,
+      workspaceId: parent.workspaceId,
+      attempt: {
+        engine: attempt.engine, provider: attempt.provider, model: attempt.model,
+        ...(member && 'providerId' in member ? { poolMember: { providerId: member.providerId } } : {}),
+        ...(member && 'accountId' in member ? { poolMember: { accountId: member.accountId } } : {}),
+      },
+      failed: end.failed,
+      error: end.error ?? null,
+      failure: end.failure ?? null,
+      admission: end.admission ?? null,
+    });
+  }
 
   /** Mark a run's end as owing its parent a wake, whatever its status, and read the status back. */
   private recordWakeOwed(sessionId: string, runId: string): Promise<{ status: string } | null> {
@@ -958,6 +992,9 @@ export class RunnerSubagentsController {
   ): Promise<SubagentFallbackResponse> {
     await this.assertParentOfRunner(sessionId, runner);
     const failure = movableFailure(dto.error, dto.failure);
+    // The attempt that failed, as it stood before this closes it: what account health is told of (§6.3).
+    const before = await this.prisma.subagentRun.findFirst({ where: { id: runId, sessionId, status: 'RUNNING' }, select: { attempts: true } });
+    const failing = before ? attemptsOf(before.attempts).at(-1) : undefined;
     // Refusals still close the failed attempt, so they are thrown after the transaction commits.
     const outcome = await withTransactionRetry(this.prisma, async (tx) => {
       await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR UPDATE`;
@@ -1039,6 +1076,7 @@ export class RunnerSubagentsController {
         message: noProviderMessage(decision, attempts, skipped),
       }) };
     }, loggedRetry(this.logger, 'runnerSubagents.nextSubagentCandidate'));
+    await this.attemptEnded(sessionId, runId, failing, { failed: true, error: dto.error, failure: dto.failure, admission: dto.admission });
     if (outcome.refusal) throw outcome.refusal;
     return outcome.answer!;
   }
@@ -1127,9 +1165,14 @@ export class RunnerSubagentsController {
       }
       // Its child engine was the only reader of the cards it asked (§5.3), and it has gone.
       await reapApprovalsOfEndedSubagents(tx, sessionId, runId);
-      return { runId, status: dto.status, applied: true };
+      return { runId, status: dto.status, applied: true, last };
     }, loggedRetry(this.logger, 'runnerSubagents.updateSubagentRun'));
+    // A run that succeeded was admitted on the account of its last attempt (§6.3).
+    if (answer.applied && dto.status === 'DONE' && 'last' in answer) {
+      await this.attemptEnded(sessionId, runId, answer.last, { failed: false });
+    }
     if (answer.applied) await this.fileWake(runId);
-    return answer;
+    const { last: _last, ...reply } = answer as SubagentRunUpdateResponse & { last?: unknown };
+    return reply;
   }
 }

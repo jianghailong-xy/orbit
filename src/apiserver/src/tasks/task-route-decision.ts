@@ -5,8 +5,6 @@ import {
   accountCapWindows,
   cursorUsageRead,
   isEngine,
-  RunFailureKind,
-  runFailureIs,
   runnerCatalogRow,
   quotaExpiry,
   quotaNearLimit,
@@ -19,6 +17,9 @@ import {
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { runnerAccountPausedUntil } from '../common/account-pause';
+import { runNotCounted } from '../common/run-not-counted';
+import { routingHealthIndex } from '../providers/account-health.service';
+import { runnerSubjectAccount, subjectKey } from '../providers/account-health';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { modelRoutingEnabled, optimizeForOf } from '../common/model-routing-switch';
 import { resolvePermissionMode } from '../common/permission-mode';
@@ -46,9 +47,11 @@ import {
   priorLevel,
   routeTaskRun,
   type ModelRoutingEngineState,
+  type ModelRoutingHold,
   type ModelRoutingInput,
   type ModelRoutingLevel,
   type ModelRoutingRun,
+  type RoutingHealthEntry,
 } from './model-routing';
 import type { TaskRunRoute } from './task-run-receipt';
 
@@ -89,7 +92,7 @@ export function taskRouteReads(prisma: PrismaService, ownerId: string, now: Date
     runner: (id: string) => once(`runner:${id}`, () => prisma.runner.findFirst({
       where: { id, ownerId },
       select: {
-        modelCatalog: true, runtimeDefaultModels: true, planUsage: true,
+        id: true, modelCatalog: true, runtimeDefaultModels: true, planUsage: true,
         name: true, displayName: true, status: true, ...RUNNER_BEATS, engines: true, accountNames: true,
         accountPauses: true, defaultRemoved: true,
         // The Claude region check's verdict, which rules Claude's own sign-in out as a sign-out does (engineState).
@@ -101,7 +104,18 @@ export function taskRouteReads(prisma: PrismaService, ownerId: string, now: Date
       () => routeEngine(prisma, ownerId, provider, providerBuiltin),
     ),
     deepSeekKey: () => once('deepseek-key', () => defaultDeepSeekKey(prisma, ownerId)),
+    /** The owner's live account health by subject key (docs/routing-account-health-design.md §7.1): one batched read. */
+    health: () => once('health', () => routingHealthIndex(prisma, ownerId, now)),
   };
+}
+
+/** The health index with one account's due trial read as being tried by another run: a dispatch that lost its claim
+ *  routes again with that account excluded (§6.5). */
+export function withTrialHeld(index: ReadonlyMap<string, RoutingHealthEntry[]>, subject: string): Map<string, RoutingHealthEntry[]> {
+  const next = new Map(index);
+  const entries = next.get(subject);
+  if (entries) next.set(subject, entries.map((entry) => (entry.model === null && entry.state === 'trial-due' ? { ...entry, state: 'trial-running' } : entry)));
+  return next;
 }
 
 export type TaskRouteReads = ReturnType<typeof taskRouteReads>;
@@ -313,6 +327,7 @@ export function engineState(
   agent: RouteAgent,
   runner: RouteRunner,
   now: Date,
+  health?: ReadonlyMap<string, RoutingHealthEntry[]>,
 ): ModelRoutingEngineState {
   const automatic = automaticAccount(engine, agent, runner, now);
   const accounts = {
@@ -345,8 +360,14 @@ export function engineState(
   const regionBlocked = engine === AgentProvider.CLAUDE && blockedRunnerRegion(runner, now) !== null;
   // Only the SubAgent router reads it (routeSubagent); chooseEngine does not.
   const paused = runnerAccountPausedUntil(runner.accountPauses, engine, account, now) !== null;
+  // What account health learned of that account on this runner (§6.1, §7.1): the subject the ingest records it under.
+  const subjectAccount = runnerSubjectAccount(account);
+  const entries = health && subjectAccount !== null && 'id' in runner && runner.id
+    ? health.get(subjectKey({ type: 'runner', runnerId: runner.id, engine, account: subjectAccount }))
+    : undefined;
   return {
     signedOut, quota, ...quotaTiming(snapshot, now), ...(quotaUnread ? { quotaUnread } : {}), ...(regionBlocked ? { regionBlocked } : {}), ...(paused ? { paused } : {}),
+    ...(entries?.length ? { health: entries } : {}),
   };
 }
 
@@ -369,21 +390,6 @@ async function routeEngines(
 }
 
 /**
- * Whether a run failed on a spent quota or a model at capacity, which say nothing about the task (§3.3): the runner's
- * kind, else the legacy markers of its error as this history always read them — a marker anywhere in the text, the
- * reading autoRunHoldOff's SQL `contains` uses too (docs/routing-account-health-design.md §5.4).
- */
-export function runLimitFailures(
-  run: { failureKind: string | null; error: string | null },
-  failed: boolean,
-): { quotaFailure: boolean; capacityFailure: boolean } {
-  return {
-    quotaFailure: failed && runFailureIs(run, [RunFailureKind.USAGE_LIMIT], { usageLimit: 'anywhere' }),
-    capacityFailure: failed && runFailureIs(run, [RunFailureKind.CAPACITY]),
-  };
-}
-
-/**
  * The task's work runs as the router reads them (§3.3): newest first, numbered in the order they
  * were started ("run 1" is the first), each with the tier its own Route Decision named — a shadow
  * one included — and how it ended.
@@ -402,7 +408,7 @@ async function readRunHistory(
     where: { ownerId, taskId, startsTaskWork: true },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     select: {
-      id: true, createdAt: true, ...RELEASE_FAILURE_SELECT, error: true, failureKind: true,
+      id: true, createdAt: true, ...RELEASE_FAILURE_SELECT, error: true, failureKind: true, accountHealthEffect: true,
       engine: true, provider: true, providerBuiltin: true, ownerId: true, model: true, effort: true,
     },
   });
@@ -430,7 +436,9 @@ async function readRunHistory(
     return {
       ordinal: index + 1,
       status: run.status,
-      ...runLimitFailures(run, failed),
+      // Skipped for escalation when its failure was the account's or the provider's (common/run-not-counted.ts, §7.4).
+      ...(failed && runNotCounted(run) ? { notCounted: runNotCounted(run) } : {}),
+      ...(failed && run.accountHealthEffect === 'TRIAL' ? { trialOf: run.provider } : {}),
       level: MODEL_ROUTING_LEVELS.find((level) => level === levels.get(run.id)) ?? null,
       model: run.model,
       effort: run.effort,
@@ -470,12 +478,21 @@ export interface TaskRouteSubject {
  * Null when the account has smart model selection off (common/model-routing-switch.ts): routing
  * does not exist then, so there is no decision to record, and the run is dispatched as before routing.
  */
+/** A planned route, with what the dispatch acts on before it freezes one (docs/routing-account-health-design.md §6.5, §7.5). */
+export type PlannedTaskRunRoute = TaskRunRoute & {
+  /** Nothing can run it now: no run is started, and the task waits. */
+  hold?: ModelRoutingHold;
+  /** The pick's account is due its trial, which the dispatch claims before the run starts. */
+  trial?: { subject: string; scopeModel: string; provider: string };
+};
+
 export async function planTaskRunRoute(
   reads: TaskRouteReads,
   task: TaskRouteSubject,
   workspace: { id: string; runnerId: string },
   prompt: string,
-): Promise<TaskRunRoute | null> {
+  health?: ReadonlyMap<string, RoutingHealthEntry[]>,
+): Promise<PlannedTaskRunRoute | null> {
   if (!modelRoutingEnabled(await reads.owner())) return null;
   const { prisma, ownerId } = reads;
   const env = await routeEnvironment(reads, task, workspace.id, workspace.runnerId);
@@ -497,6 +514,7 @@ export async function planTaskRunRoute(
     dto: { toolUseId: '', type: 'task', definitionSource: 'builtin' },
     parent: { engine: env.engine, provider: env.provider, model: task.model ?? '', effort },
     now: reads.now,
+    health: health ?? await reads.health(),
   });
   const structuralFeatures = {
     completionCriterion: task.completionCriterion ?? null,
@@ -531,9 +549,8 @@ export async function planTaskRunRoute(
     engines,
     pool,
   });
-  // The run the router compared against: the newest one that did not stop at a usage limit or
-  // at a model at capacity.
-  const skipped = history.findIndex((run) => !run.quotaFailure && !run.capacityFailure);
+  // The run the router compared against: the newest one that is counted (§7.4).
+  const skipped = history.findIndex((run) => !run.notCounted);
   const last = skipped < 0 ? undefined : history[skipped];
   const passedOver = skipped < 0 ? history : history.slice(0, skipped);
   const lastLevel = last ? priorLevel(last, env.runtime) : null;
@@ -573,9 +590,11 @@ export async function planTaskRunRoute(
       optimizeFor,
       priorRuns: history.length,
       priorFailures: history
-        .filter((run) => run.outcome !== 'OK' && !run.quotaFailure && !run.capacityFailure).length,
-      quotaFailuresSkipped: passedOver.filter((run) => run.quotaFailure).length,
-      capacityFailuresSkipped: passedOver.filter((run) => !run.quotaFailure && run.capacityFailure).length,
+        .filter((run) => run.outcome !== 'OK' && !run.notCounted).length,
+      quotaFailuresSkipped: passedOver.filter((run) => run.notCounted === 'usage-limit').length,
+      capacityFailuresSkipped: passedOver.filter((run) => run.notCounted === 'capacity').length,
+      // The rest of what §7.4 does not count: an account's refusal, a lost connection, a failure at admission.
+      accountFailuresSkipped: passedOver.filter((run) => run.notCounted === 'account' || run.notCounted === 'admission').length,
       lastRun: last
         ? { ordinal: last.ordinal, level: lastLevel, model: last.model ?? null, outcome: last.outcome }
         : null,
@@ -584,6 +603,8 @@ export async function planTaskRunRoute(
       verifiedRunEngine: engines.verifiedRunEngine ?? null,
     },
     reasons: decision.reasons,
+    ...(decision.hold ? { hold: decision.hold } : {}),
+    ...(decision.trial ? { trial: decision.trial } : {}),
   };
 }
 

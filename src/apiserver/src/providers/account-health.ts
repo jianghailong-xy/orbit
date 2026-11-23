@@ -1,3 +1,4 @@
+import { RunFailureKind as SharedRunFailureKind, type RunFailureScope as SharedRunFailureScope } from '@orbit/shared';
 import { QUOTA_BLIND_RETRY_BACKOFF_MS } from '../tasks/task-retry-policy';
 
 /**
@@ -7,23 +8,29 @@ import { QUOTA_BLIND_RETRY_BACKOFF_MS } from '../tasks/task-retry-policy';
 
 /**
  * The failure kind of a released run (§4), as `runFailureKind` of @orbit/shared answers it: the runner's structured
- * kind, else what the legacy markers say of the error text; null when it is not classified.
- *
- * Declared here to the interface §5.4 gives it until phase 1a adds it to @orbit/shared; then this becomes an import.
+ * kind, else what the legacy markers say of the error text; null when it is not classified. The shared enum's
+ * values, so a stored kind and an enum member are both one.
  */
-export type RunFailureKind =
-  | 'USAGE_LIMIT'
-  | 'CAPACITY'
-  | 'ACCOUNT_ACTION_REQUIRED'
-  | 'CREDENTIAL_REFUSED'
-  | 'ACCESS_DENIED'
-  | 'TRANSPORT'
-  | 'REQUEST_REFUSED';
+export type RunFailureKind = `${SharedRunFailureKind}`;
 
 /** What a failure is about (§4): the whole account (the default), one model on it, this runner, or the request. */
-export type RunFailureScope = 'account' | 'model' | 'runner' | 'request';
+export type RunFailureScope = SharedRunFailureScope;
 
 export type AccountHealthState = 'SUSPECT' | 'BLOCKED' | 'COOLDOWN';
+
+/**
+ * What health did with one failed run, as the run records it (session.account_health_effect, §7.4): it struck or
+ * blocked the account (the row it left is SUSPECT or BLOCKED), or the run was the account's trial and was refused.
+ * A run with an effect is not counted against its task: the failure was the account's.
+ */
+export type AccountHealthEffect = 'SUSPECT' | 'BLOCKED' | 'TRIAL';
+
+/** The effect a failure's step leaves on its run: none for a cool-down or no change. */
+export function failureEffect(step: AccountHealthStep, heldTrial: boolean): AccountHealthEffect | null {
+  const state = step.next?.state;
+  if (state !== 'SUSPECT' && state !== 'BLOCKED') return null;
+  return heldTrial && state === 'BLOCKED' ? 'TRIAL' : state;
+}
 
 /** The kind the breaker writes: an unclassified zero-cost admission failure. */
 export const UNCLASSIFIED_ADMISSION = 'UNCLASSIFIED_ADMISSION';
@@ -74,6 +81,16 @@ export function subjectKey(subject: AccountHealthSubject): string {
     case 'pool-login':
       return `pool-login:${subject.poolId}:${subject.accountId}`;
   }
+}
+
+/**
+ * The account part of a runner subject, from what runAccount (plan-usage-accounts.ts) answers for the run: the
+ * account it names; `default` for an engine whose CLI keeps one login for the machine (undefined); none (null) for
+ * a run whose workspace env brings a credential of its own, which spends no account of the runner's.
+ */
+export function runnerSubjectAccount(account: string | null | undefined): string | null {
+  if (account === null) return null;
+  return account ?? 'default';
 }
 
 /** The key's parts, stored beside it for joins and cascade delete. */

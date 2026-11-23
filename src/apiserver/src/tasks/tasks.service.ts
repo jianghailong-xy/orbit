@@ -252,7 +252,8 @@ import {
   QUOTA_BLIND_RETRY_BACKOFF_MS,
   autoRunEnd,
 } from './task-retry-policy';
-import { failureKindIs, failureKindIsNot } from '../common/run-failure-kind-filter';
+import { failureKindIs } from '../common/run-failure-kind-filter';
+import { countedFilter } from '../common/run-not-counted';
 import {
   heldFilter,
   heldStatusFilter,
@@ -306,9 +307,16 @@ import {
   readTaskRouteSummaries,
   recordTaskRouteDecision,
   taskRouteReads,
+  withTrialHeld,
+  type PlannedTaskRunRoute,
   type TaskRouteReads,
   type TaskRouteSubject,
 } from './task-route-decision';
+import { claimTrialByKey } from '../providers/account-health.service';
+import type { ModelRoutingHold } from './model-routing';
+
+/** How many accounts a dispatch may find already being tried before it takes the route it has (§6.5). */
+const TRIAL_CLAIM_ROUNDS = 3;
 import {
   TASK_RUN_TRIGGER,
   taskRunBatchId,
@@ -880,6 +888,13 @@ export type TaskRunAnswer =
          */
         | 'project-not-started'
         | 'project-paused'
+        /**
+         * Nothing can run it now: every account that could has been set aside by account health
+         * (docs/routing-account-health-design.md §7.5). Automatic callers only; a person's start is
+         * refused with ACCOUNT_NEEDS_ACTION. Released, not frozen: the hold lifts when the first of those
+         * accounts' trials is due, and the same moment then starts the task.
+         */
+        | 'account-needs-action'
         /**
          * The moment this request names has passed: `task_dispatch_epoch` has moved since the scan
          * that produced this delivery. Terminal, and the one automatic stand-down that is — the
@@ -9627,7 +9642,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // and a row with work of its own is one whose detail has a verifier state like any other.
     const [
       dependencyFacts, supersession, autoRunSkipped, workState, progress, verifier, routes, modelHintOptions, integrations,
-      forkSource, runsWith, signInHolds,
+      forkSource, runsWith, signInHolds, accountHold,
     ] =
       await Promise.all([
         this.dependencyFactsFor(ownerId, [id]),
@@ -9649,6 +9664,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         mayBeSweepCandidate(task)
           ? this.signInHolds(ownerId, Prisma.sql`t.id = ${task.id}::uuid`)
           : new Map<string, SignInHold>(),
+        mayBeSweepCandidate(task) ? this.accountHold(ownerId, task) : null,
       ]);
     const dependencyState = computeDependencyState(dependencyFacts.get(id) ?? []);
     return {
@@ -9665,6 +9681,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // Why the auto-run sweep holds this task although it reads Ready: its engine is signed out on its
       // runner (signInHolds, the sweep's own rule). Null while nothing of the kind holds it.
       hold: signInHolds.get(task.id) ?? null,
+      // Why its next automatic start stands down although it reads Ready: no account that could run it can run now
+      // (docs/routing-account-health-design.md §7.5), with each account's line and when the first is tried again.
+      // Null while an account can run it.
+      accountHold: accountHold ?? null,
       // While it waits for its condition: "Waiting for: <text>", with the condition's lastValue and lastSampleAt.
       // Not a dependency state, and not read by the dependency gate: a peer of runAt (task-start-when.ts).
       startWhen: startWhenView(task.startWhenCondition),
@@ -13122,10 +13142,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         by: ['taskId'],
         where: {
           taskId: { in: ids },
-          // Released by a failure (common/session-release.ts), and not on a spent quota: the runner's kind, else
-          // the legacy markers of its error (runFailureKind). A run that failed with no kind and no error text is an
-          // ordinary failure and counts (failureKindIsNot keeps the NULLs a negated match would drop).
-          AND: [releaseWasFailureFilter(), failureKindIsNot([RunFailureKind.USAGE_LIMIT])],
+          // Released by a failure (common/session-release.ts) that counts against the task: the one definition tier
+          // escalation reads too (common/run-not-counted.ts, routing-account-health-design §7.4). A spent quota, a model
+          // at capacity, an account's refusal or a failure account health acted on is not the task's. A run that failed
+          // with no kind and no error text is an ordinary failure and counts (countedFilter keeps those NULLs).
+          AND: [releaseWasFailureFilter(), countedFilter()],
         },
         _count: { _all: true },
         _max: { createdAt: true },
@@ -16059,13 +16080,33 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // pins and names no effort, as before routing. A RESUME or ADOPT is never
     // routed: that run has already started. With the account's switch off there is no decision at
     // all (planTaskRunRoute), and the run is planned as before routing existed.
-    const route = planned.kind === 'CREATE'
+    const planned_route = planned.kind === 'CREATE'
       ? await this.routeFreshRun(
         taskRouteReads(this.prisma, ownerId, this.now()),
         task,
         { id: task.assignee!.id, runnerId: task.assignee!.runnerId! },
         prompt,
+        { ownerId, sessionId: planned.sessionId },
       )
+      : null;
+    // Nothing can run it (docs/routing-account-health-design.md §7.5): no run is started on an account that cannot run,
+    // and the task waits for the first trial due. An automatic start stands down, released, so the same moment starts
+    // it then; a person's start is told why and when.
+    if (planned_route?.hold) {
+      const hold = planned_route.hold;
+      if (auto) {
+        return this.standDownReleasing(lease, { ok: false as const, skipped: 'account-needs-action' as const });
+      }
+      throw new ConflictException({
+        statusCode: 409,
+        code: 'ACCOUNT_NEEDS_ACTION',
+        message: hold.reason,
+        taskId: task.id,
+        hold,
+      });
+    }
+    const route: TaskRunRoute | null = planned_route
+      ? (({ hold: _hold, trial: _trial, ...kept }) => kept)(planned_route)
       : null;
     // Only a fresh run decides a mode, and it is the account's default: a paused run keeps its own.
     if (actingSessionId && planned.kind === 'CREATE') {
@@ -16227,6 +16268,34 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * The hold a dispatch of this task would meet now (§7.5), routed as the dispatch routes it but claiming nothing.
+   * Asked only while the owner has an account health sets aside, so an owner whose accounts are all healthy pays one
+   * indexed read. A decoration: a failure reads as no hold, logged.
+   */
+  private async accountHold(
+    ownerId: string,
+    task: TaskRouteSubject & { title: string; description?: string | null; assigneeId?: string | null },
+  ): Promise<ModelRoutingHold | null> {
+    try {
+      const reads = taskRouteReads(this.prisma, ownerId, this.now());
+      const health = await reads.health();
+      if (![...health.values()].some((entries) => entries.some((entry) => entry.state !== 'suspect' && entry.state !== 'trial-due'))) {
+        return null;
+      }
+      const workspace = task.assigneeId
+        ? await this.prisma.workspace.findFirst({ where: { id: task.assigneeId, ownerId }, select: { id: true, runnerId: true } })
+        : null;
+      if (!workspace?.runnerId) return null;
+      const route = await planTaskRunRoute(reads, task, { id: workspace.id, runnerId: workspace.runnerId },
+        `${task.title}\n\n${task.description ?? ''}`, health);
+      return route?.hold ?? null;
+    } catch (e) {
+      this.logger.warn(`task ${task.id}: account hold not read: ${(e as Error)?.message ?? e}`);
+      return null;
+    }
+  }
+
+  /**
    * The route for one fresh run, or null when it could not be worked out — or when the account has
    * smart model selection off, which routes nothing. Routing never refuses (contract §7.2 P7): a
    * failure here is logged and the run is planned exactly as without it.
@@ -16236,9 +16305,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     task: TaskRouteSubject,
     workspace: { id: string; runnerId: string },
     prompt: string,
-  ): Promise<TaskRunRoute | null> {
+    run?: { ownerId: string; sessionId: string },
+  ): Promise<PlannedTaskRunRoute | null> {
     try {
-      return await planTaskRunRoute(reads, task, workspace, prompt);
+      let health = await reads.health();
+      // An account whose block ran out is tried by one run at a time (§6.5): the pick claims its trial for this run's
+      // Session, and a dispatch that loses the claim routes again with that account read as being tried. Bounded:
+      // each round excludes one more account.
+      for (let round = 0; ; round += 1) {
+        const route = await planTaskRunRoute(reads, task, workspace, prompt, health);
+        if (!route?.trial || !run || round >= TRIAL_CLAIM_ROUNDS) return route;
+        const claim = await claimTrialByKey(this.prisma, run.ownerId, route.trial.subject, route.trial.scopeModel, run.sessionId, reads.now);
+        if (claim !== 'HELD') return route;
+        health = withTrialHeld(health, route.trial.subject);
+      }
     } catch (e) {
       this.logger.warn(`task ${task.id}: no route decided: ${(e as Error)?.message ?? e}`);
       return null;
@@ -16479,9 +16559,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     );
     // Routed per item, exactly as the single Run does it: a fresh run only, and dispatched with
     // the route whenever it decided a tier.
-    const route = itemPlan.kind === 'CREATE'
+    // A bulk press is a person's start of each task: a hold is not applied to it here, and no trial is claimed.
+    const planned = itemPlan.kind === 'CREATE'
       ? await this.routeFreshRun(routeReads, t, workspace, prompt)
       : null;
+    const route: TaskRunRoute | null = planned ? (({ hold: _hold, trial: _trial, ...kept }) => kept)(planned) : null;
     return {
       taskId: t.id,
       title: `Task: ${t.title}`,
