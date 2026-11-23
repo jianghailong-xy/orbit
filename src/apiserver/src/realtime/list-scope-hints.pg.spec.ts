@@ -234,6 +234,51 @@ test('an OPEN RUN_QUESTION from A to a coordinator in B: a write to the coordina
   assert.ok(!scopes.includes(pub(f.c)), 'the hint named a workspace nothing in it reads');
 });
 
+/** An OPEN request of `kind` from `from` to `to`, delivered in a turn of `to`'s; returns that turn's id. */
+async function openRequest(f: Fixture, from: string, to: string, kind: 'MESSAGE' | 'RUN_QUESTION'): Promise<string> {
+  const turn = await f.db.conversationTurn.create({
+    data: { sessionId: to, seq: 1, clientTurnId: `lsh-${randomUUID()}`, kind: 'message', content: 'asked', status: 'PENDING' },
+  });
+  await f.db.$executeRaw`
+    INSERT INTO session_request (id, owner_id, from_session_id, to_session_id, turn_id, client_turn_id, request_preview, reply_by, kind)
+    VALUES (gen_random_uuid(), ${f.ownerId}::uuid, ${from}::uuid, ${to}::uuid, ${turn.id}::uuid, ${turn.clientTurnId},
+            'asked', now() + interval '1 hour', ${kind})`;
+  return turn.id;
+}
+
+test('rule 3 in one workspace: an OPEN MESSAGE between an Open session in A and a completed one in A, renaming the completed one names A', { skip }, async (t) => {
+  const f = await fixture(t);
+  const sessions = new SessionsService(
+    f.prisma,
+    inert<ConstructorParameters<typeof SessionsService>[1]>(),
+    inert<ConstructorParameters<typeof SessionsService>[2]>(),
+  );
+  const aDone = await session(f.db, f, f.a, { status: RunStatus.SUCCEEDED, finishedAt: new Date(), completedAt: new Date() });
+  await openRequest(f, f.a1, aDone, 'MESSAGE');
+  const scoped = open(f, t, SCOPED);
+  await settled(scoped.hints);
+  const read = (since: string) => sessions.listOpenSince(f.ownerId, { runnerId: f.runnerId, workspaceId: f.a }, since) as Promise<Delta>;
+  const { cursor } = await read('');
+  await f.db.$executeRaw`UPDATE session SET title = 'the peer, renamed' WHERE id = ${aDone}::uuid`;
+  // The rename moves A's column (the Open asker shows its peer's title), so a hint that left A out would hide it.
+  const delta = await read(cursor);
+  assert.ok(!delta.full && (delta.upserts?.length ?? 0) > 0, 'renaming the completed peer did not move A\'s column (the case proves nothing)');
+  const scopes = scopesOf(await nextHint(scoped.hints, 1));
+  assert.ok(scopes?.includes(pub(f.a)), `the hint did not name A (${scopes === undefined ? 'every list' : scopes.join(', ')})`);
+});
+
+test('rule 3 in one workspace: an OPEN RUN_QUESTION to a completed coordinator in A, a write to its delivery turn names A', { skip }, async (t) => {
+  const f = await fixture(t);
+  const coordinator = await session(f.db, f, f.a, { status: RunStatus.SUCCEEDED, finishedAt: new Date(), completedAt: new Date() });
+  await f.db.project.create({ data: { ownerId: f.ownerId, title: 'lsh project', coordinatorSessionId: coordinator } });
+  const turn = await openRequest(f, f.a1, coordinator, 'RUN_QUESTION');
+  const scoped = open(f, t, SCOPED);
+  await settled(scoped.hints);
+  await f.db.$executeRaw`UPDATE conversation_turn SET status = 'IN_FLIGHT', delivered_at = now() WHERE id = ${turn}::uuid`;
+  const scopes = scopesOf(await nextHint(scoped.hints, 1));
+  assert.ok(scopes?.includes(pub(f.a)), `the hint did not name A (${scopes === undefined ? 'every list' : scopes.join(', ')})`);
+});
+
 test('a workspace holding a PENDING row is named whenever any workspace moves', { skip }, async (t) => {
   const f = await fixture(t);
   await session(f.db, f, f.c, { status: RunStatus.PENDING, startedAt: null });
@@ -371,6 +416,21 @@ test('soundness: whenever a tick sends no hint naming W, a since= read of W\'s c
                 'asked', now() + interval '1 hour', ${pick(['MESSAGE', 'RUN_QUESTION'])})`;
       requests.push(id);
     }],
+    ['a request in one workspace with a closed peer', async () => {
+      // A peer outside every Open list moves only its workspace's closed key; the Open peer beside it still draws it.
+      const peer = pick(closed);
+      const { workspaceId } = await db.session.findUniqueOrThrow({ where: { id: peer }, select: { workspaceId: true } });
+      const beside = (await db.session.findMany({ where: { id: { in: live }, workspaceId }, select: { id: true } })).map((row) => row.id);
+      if (beside.length === 0) return;
+      const [from, to] = random() < 0.5 ? [pick(beside), peer] : [peer, pick(beside)];
+      const turn = await turnOn(to);
+      const id = randomUUID();
+      await db.$executeRaw`
+        INSERT INTO session_request (id, owner_id, from_session_id, to_session_id, turn_id, client_turn_id, request_preview, reply_by, kind)
+        VALUES (${id}::uuid, ${f.ownerId}::uuid, ${from}::uuid, ${to}::uuid, ${turn.id}::uuid, ${turn.clientTurnId},
+                'asked', now() + interval '1 hour', ${pick(['MESSAGE', 'RUN_QUESTION'])})`;
+      requests.push(id);
+    }],
     ['a request closed', async () => {
       if (requests.length) await db.$executeRaw`UPDATE session_request SET state = 'REPLIED', reply_text = 'answered', closed_at = now() WHERE id = ${pick(requests)}::uuid AND state = 'OPEN'`;
     }],
@@ -458,6 +518,7 @@ test('soundness: whenever a tick sends no hint naming W, a since= read of W\'s c
       cursors.set(ws, delta.cursor);
     }
   }
+  console.log(JSON.stringify({ soundness: { seed, steps, namedReads: named, skippedReads: skipped } }));
   // The property was exercised both ways.
   assert.ok(named > 0 && skipped > steps / 2, `the sequence named ${named} and skipped ${skipped} workspace reads`);
 });

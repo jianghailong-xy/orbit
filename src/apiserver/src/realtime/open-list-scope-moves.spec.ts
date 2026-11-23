@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { uuidToBase62 } from '@orbit/shared';
-import { declaresListScopes, movedScopes } from './open-list-hints';
+import { declaresListScopes, movedScopes, openListTickStatement } from './open-list-hints';
 
 /** What the poller names from two reads of an account's counter keys (docs/list-freshness-scope-hints.md §5.1). */
 
@@ -31,6 +31,18 @@ test('an open request names the other end of a move in either scope; always-rebu
   assert.deepEqual(movedScopes(keys({}), keys({ [`session@w:${A}`]: 1 }), false, pairs, none), [uuidToBase62(A), uuidToBase62(B)].sort());
   assert.deepEqual(movedScopes(keys({}), keys({ [`session@c:${B}`]: 1 }), false, [], new Set([C])), [uuidToBase62(C)]);
   assert.deepEqual(movedScopes(keys({}), keys({}), false, pairs, new Set([C])), []);
+});
+
+test('a pair in one workspace names it when its peer outside every Open list moves', () => {
+  assert.deepEqual(movedScopes(keys({}), keys({ [`session@c:${A}`]: 1 }), false, [[A, A]], none), [uuidToBase62(A)]);
+  assert.deepEqual(movedScopes(keys({}), keys({ [`conversation_turn@c:${A}`]: 1 }), false, [[A, A], [B, C]], none), [uuidToBase62(A)]);
+});
+
+test('the tick statement keeps pairs in one workspace and reads no LANDING-rooted rows', () => {
+  const { sql } = openListTickStatement([A], []);
+  assert.doesNotMatch(sql, /f\.workspace_id\s*<>\s*t\.workspace_id/, 'pairs in one workspace are dropped');
+  assert.doesNotMatch(sql, /LANDING/, 'the tick reads LANDING-rooted rows, a scan of the account');
+  assert.match(sql, /x\.status = 'PENDING'/);
 });
 
 test('the hints value declares list_scopes beside the others', () => {

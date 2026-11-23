@@ -27,7 +27,7 @@ interface Watched {
   keys?: Map<string, bigint>;
   /** The clock part of the hint token at its last read (`hintClock`); undefined until the first one. */
   clockPart?: string;
-  /** The workspaces holding an Open row a `since=` read rebuilds on every read (rule 4), as last read. */
+  /** The workspaces holding an Open PENDING row, which a `since=` read rebuilds on every read (rule 4), as last read. */
   always: Set<string>;
   /** The account's `session` counter total when `always` was read; undefined until it is. */
   alwaysAt?: string;
@@ -76,10 +76,13 @@ const listed = (alias: string): Prisma.Sql => {
  * clock threshold, a runner's `steady`). A workspace moved when its own `w:` key did, and also:
  * - when the other end of one of the account's OPEN requests moved, in either scope (rule 3): an open
  *   request shows the peer's title on both rows, and a held question reads the recipient's row and
- *   turn;
- * - when any scope moved and the workspace holds an Open row a `since=` read rebuilds on every read
- *   (rule 4): a PENDING row, whose queued gate counts other sessions on its runner, or one whose root
- *   is a LANDING session. Those are read again whenever the account's `session` keys moved.
+ *   turn. That holds within one workspace too: a peer outside every Open list moves only `c:W`, and an
+ *   Open row of W still draws it;
+ * - when any scope moved and the workspace holds an Open PENDING row (rule 4), whose queued gate counts
+ *   other sessions on its runner, which a `since=` read rebuilds on every read. Those are read again
+ *   whenever the account's `session` keys moved. A row rooted in a LANDING session, which that read
+ *   rebuilds too, is not one of them: the landing's own writes move no counter (open_list_bump_session
+ *   counts CONVERSATION rows only) and its progress writes account-wide sources, which name no workspace.
  * Every other stream is told exactly what it was before: `{ version }`, whenever the token moved.
  *
  * What a stream was told is kept per stream, not per account. A new stream is told the current
@@ -154,60 +157,12 @@ export class OpenListHints {
     this.timer.unref?.();
   }
 
-  /**
-   * One statement for every watched account: each counter key's total; the two workspaces of each OPEN
-   * request whose peers sit in two (rule 3), on session_request's partial OPEN indexes; and, for an account
-   * whose `session` keys moved since they were last read (or that was never read), the workspaces holding an
-   * Open PENDING row or an Open row rooted in a LANDING session (rule 4), marked by an `r` row with the
-   * `session` total they were read at.
-   */
   private read(ids: string[]): Promise<TickRow[]> {
     const held = ids.flatMap((id) => {
       const at = this.owners.get(id)?.alwaysAt;
       return at === undefined ? [] : [[id, at] as const];
     });
-    return this.prisma.$queryRaw<TickRow[]>(Prisma.sql`
-      WITH counters AS (
-        SELECT owner_id, split_part(source, '#', 1) AS key, sum(epoch) AS total
-          FROM open_list_epoch
-         WHERE owner_id = ANY(${ids}::uuid[])
-         GROUP BY owner_id, split_part(source, '#', 1)
-      ),
-      sessions AS (
-        SELECT o.id AS owner_id, COALESCE(sum(c.total), 0)::text AS total
-          FROM unnest(${ids}::uuid[]) AS o(id)
-          LEFT JOIN counters c ON c.owner_id = o.id AND split_part(c.key, '@', 1) = 'session'
-         GROUP BY o.id
-      ),
-      stale AS (
-        SELECT s.owner_id, s.total
-          FROM sessions s
-          LEFT JOIN unnest(${held.map(([id]) => id)}::uuid[], ${held.map(([, at]) => at)}::text[]) AS h(owner_id, total)
-            ON h.owner_id = s.owner_id
-         WHERE h.total IS DISTINCT FROM s.total
-      )
-      SELECT 'k' AS kind, owner_id::text AS owner_id, key AS a, total::text AS b FROM counters
-      UNION ALL
-      SELECT 'r', owner_id::text, total, NULL FROM stale
-      UNION ALL
-      SELECT 'p', r.owner_id::text, f.workspace_id::text, t.workspace_id::text
-        FROM session_request r
-        JOIN session f ON f.id = r.from_session_id
-        JOIN session t ON t.id = r.to_session_id
-       WHERE r.state = 'OPEN' AND r.owner_id = ANY(${ids}::uuid[])
-         AND f.workspace_id IS NOT NULL AND t.workspace_id IS NOT NULL AND f.workspace_id <> t.workspace_id
-      UNION ALL
-      SELECT 'a', owner_id::text, workspace_id::text, NULL FROM (
-        SELECT x.owner_id, x.workspace_id
-          FROM session x
-         WHERE x.owner_id IN (SELECT owner_id FROM stale) AND x.status = 'PENDING'
-           AND x.workspace_id IS NOT NULL AND ${listed('x')}
-        UNION
-        SELECT x.owner_id, x.workspace_id
-          FROM session x JOIN session l ON l.id = x.root_session_id AND l.id <> x.id
-         WHERE x.owner_id IN (SELECT owner_id FROM stale) AND l.kind = 'LANDING'
-           AND x.workspace_id IS NOT NULL AND ${listed('x')}
-      ) always`);
+    return this.prisma.$queryRaw<TickRow[]>(openListTickStatement(ids, held));
   }
 
   private async tick(): Promise<void> {
@@ -274,6 +229,52 @@ export class OpenListHints {
       this.log.warn(`list_changed tick failed: ${(error as Error).message}`);
     }
   }
+}
+
+/**
+ * The poller's one statement per tick, for every watched account (`ids`): each counter key's total; the two
+ * workspaces of each OPEN request (rule 3), the same one twice when both peers sit in it, on session_request's
+ * partial OPEN indexes; and, for an account whose `session` keys moved since they were last read (`held`: the
+ * `session` total each account's were read at; an account not in it was never read), the workspaces holding an
+ * Open PENDING row (rule 4), through session_owner_status_task_idx, marked by an `r` row with the `session`
+ * total they were read at. No branch scans an account's sessions.
+ */
+export function openListTickStatement(ids: readonly string[], held: ReadonlyArray<readonly [string, string]>): Prisma.Sql {
+  return Prisma.sql`
+      WITH counters AS (
+        SELECT owner_id, split_part(source, '#', 1) AS key, sum(epoch) AS total
+          FROM open_list_epoch
+         WHERE owner_id = ANY(${[...ids]}::uuid[])
+         GROUP BY owner_id, split_part(source, '#', 1)
+      ),
+      sessions AS (
+        SELECT o.id AS owner_id, COALESCE(sum(c.total), 0)::text AS total
+          FROM unnest(${[...ids]}::uuid[]) AS o(id)
+          LEFT JOIN counters c ON c.owner_id = o.id AND split_part(c.key, '@', 1) = 'session'
+         GROUP BY o.id
+      ),
+      stale AS (
+        SELECT s.owner_id, s.total
+          FROM sessions s
+          LEFT JOIN unnest(${held.map(([id]) => id)}::uuid[], ${held.map(([, at]) => at)}::text[]) AS h(owner_id, total)
+            ON h.owner_id = s.owner_id
+         WHERE h.total IS DISTINCT FROM s.total
+      )
+      SELECT 'k' AS kind, owner_id::text AS owner_id, key AS a, total::text AS b FROM counters
+      UNION ALL
+      SELECT 'r', owner_id::text, total, NULL FROM stale
+      UNION ALL
+      SELECT 'p', r.owner_id::text, f.workspace_id::text, t.workspace_id::text
+        FROM session_request r
+        JOIN session f ON f.id = r.from_session_id
+        JOIN session t ON t.id = r.to_session_id
+       WHERE r.state = 'OPEN' AND r.owner_id = ANY(${[...ids]}::uuid[])
+         AND f.workspace_id IS NOT NULL AND t.workspace_id IS NOT NULL
+      UNION ALL
+      SELECT DISTINCT 'a', x.owner_id::text, x.workspace_id::text, NULL::text
+        FROM session x
+       WHERE x.owner_id IN (SELECT owner_id FROM stale) AND x.status = 'PENDING'
+         AND x.workspace_id IS NOT NULL AND ${listed('x')}`;
 }
 
 /**
