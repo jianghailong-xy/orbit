@@ -1153,7 +1153,8 @@ test('(6) a project shaped like Coordinator handoff v2 counts only its met crite
   await workSession(stack, w, moving.id, 'orbit/met-in-flight');
   await settleExecutable(stack, moving.id);
   await queuedJob(stack, w, 'LAND_TASK', moving.id);
-  // 5, LANDED + CODELESS: its only task is declared codeless and was never run (handoff v2's 5).
+  // 5, NO_BRANCH: its only task is declared codeless and was never run (handoff v2's 5); since 2caec7aae9 the codeless
+  // flag no longer decides landing, so it reads as criterion 3 does.
   const definition = await stack.db.projectAcceptanceCriterionDefinition.findFirstOrThrow({
     where: { projectId: w.projectId, ordinal: 5 }, select: { id: true, revision: true },
   });
@@ -1190,7 +1191,8 @@ test('(6) a project shaped like Coordinator handoff v2 counts only its met crite
     ['CRITERION_UNSATISFIED', 'CRITERION_UNLANDED'],
     ['CRITERION_UNSATISFIED', 'CRITERION_UNLANDED'],
     ['CRITERION_UNLANDED'],
-    ['CRITERION_UNSATISFIED'],
+    // Codeless no longer lands a never-run task (2caec7aae9): it is unlanded too, as criterion 3 is.
+    ['CRITERION_UNSATISFIED', 'CRITERION_UNLANDED'],
   ]);
   assert.equal(
     derived.criteria.filter((criterion) => criterion.landingReason === 'IN_FLIGHT').length,

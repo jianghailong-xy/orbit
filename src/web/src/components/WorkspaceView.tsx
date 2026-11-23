@@ -57,6 +57,7 @@ import {
   ThunderboltOutlined,
   UndoOutlined,
   UnorderedListOutlined,
+  UploadOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AgentToolsDrawer, agentToolsMenuStatus } from './AgentToolsDrawer';
@@ -12354,7 +12355,6 @@ export function SessionComposer({
   const fileInputRef = useRef<HTMLInputElement>(null);
   // The `+` menu's "From Files" picker (board docs/mocks/orbit-files, 02-web frame 8).
   const [drivePickerOpen, setDrivePickerOpen] = useState(false);
-  const driveFilesChip = useRef<HTMLButtonElement>(null);
   // Manual composer height (px). null = autoSize auto-grow (up to maxRows); once the user
   // drags the top handle, that height wins over autoSize until they double-click to reset.
   const [composerHeight, setComposerHeight] = useState<number | null>(null);
@@ -13046,25 +13046,26 @@ export function SessionComposer({
           // WorkspaceView.composerMenu.test.tsx, drawn in
           // docs/mocks/composer-attach-menu-phone.html.
           items={[
+              // Each row says what it does and where the file comes from, with no heading to
+              // miss: "File" and "From Files" read alike (docs/mocks/composer-attach-labels).
               {
                 key: 'file',
-                icon: <PaperClipOutlined />,
-                label: 'File',
+                icon: <UploadOutlined />,
+                label: 'Upload File',
                 onSelect: () => fileInputRef.current?.click(),
               },
               {
                 key: 'image',
                 icon: <PictureOutlined />,
-                // One word per action, the way the native composer's `+` menu writes them
-                // (ComposerView.swift `addMenu`). Offered unconditionally too: a state the
-                // upload can't work in says so on pick, rather than greying the item out.
-                label: 'Image',
+                // Offered unconditionally: a state the upload can't work in says so on pick,
+                // rather than greying the item out.
+                label: 'Upload Image',
                 onSelect: () => imageInputRef.current?.click(),
               },
               {
                 key: 'drive',
                 icon: <FolderOpenOutlined />,
-                label: 'From Files',
+                label: 'Add from Orbit Files',
                 onSelect: () => setTimeout(() => setDrivePickerOpen(true), 0),
               },
               { key: 'divider', type: 'separator' },
@@ -13121,11 +13122,9 @@ export function SessionComposer({
             onOpenChange={setDrivePickerOpen}
             disabled={composerDisabled}
             popupClassName="drive-picker-popover"
-            trigger={
-              <button ref={driveFilesChip} type="button" className="composer-pill composer-drive-chip" aria-label="Add from Files">
-                <FolderOpenOutlined /> Files
-              </button>
-            }
+            // No chip of its own: the picker opens from the `+` menu's From Files, and this
+            // zero-width, unfocusable button only anchors it beside the `+`.
+            trigger={<button type="button" className="composer-drive-anchor" tabIndex={-1} aria-hidden="true" />}
           >
             <DriveFilePicker projectFolder={projectFolder} onClose={() => setDrivePickerOpen(false)} onPick={insertDriveFiles} />
           </Popover>
