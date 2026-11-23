@@ -224,6 +224,13 @@ public struct TranscriptReducer: Sendable, Codable {
     /// yet is waiting for it (web: `turnTranslated`). Transient like `turnAccountedFor`.
     private var turnTranslated = false
 
+    /// Bumped each time a durable row changes in place with no new seq: a live `translation` folded
+    /// into a reply already in the window (`applyTranslation`). `maxSeq` cannot say that a snapshot
+    /// written before it is stale, and this can (`TranscriptSaveLedger`). Transient like
+    /// `turnAccountedFor`: a restored reducer starts at 0, as does the record of the snapshot it was
+    /// restored from.
+    public private(set) var inPlaceRevision = 0
+
     /// Latest broadcast-only foreground-shell snapshot, including the runner's monotonic version.
     /// Keeping this beside (rather than inside) ``TranscriptState`` lets an output that beats its
     /// durable tool_use wait here, and lets a reordered replica notification be rejected. It is
@@ -536,6 +543,25 @@ public struct TranscriptReducer: Sendable, Codable {
     /// older history, which one page fetch settles.
     public mutating func reopenUnsettledOlderEdge() {
         if !state.hasMoreOlder, let oldest = state.oldestSeq, oldest > 1 { state.hasMoreOlder = true }
+    }
+
+    /// What becomes of the loaded window when the stream cannot resume it: the server's `resync`, or
+    /// a reconnect's catch-up that spent its budget short of the tail (web parity: `replaceWindow` in
+    /// useSessionStream.ts; Android `ReadingWindow.live`).
+    ///
+    /// A reader following the tail gets a fresh tail page: the window is dropped (`resetForResync`)
+    /// and nil comes back, for the caller to seed it. A reader who has scrolled up keeps the window.
+    /// Swapping it then moved whatever they were reading out from under them, to wherever the new
+    /// page put the same scroll position. Its rows stay exactly as they are and its bottom becomes a
+    /// gap, as in a window opened at a record (`applyRecordPage`). The seq that comes back is where
+    /// the gap starts, the `after=` cursor the caller pages forward from. An empty window has nothing
+    /// to keep and is always reset.
+    public mutating func replaceWindow(readerAtTail: Bool) -> Int? {
+        guard !readerAtTail, state.maxSeq > 0 else {
+            resetForResync()
+            return nil
+        }
+        return state.maxSeq
     }
 
     public mutating func resetForResync() {
@@ -1281,6 +1307,9 @@ public struct TranscriptReducer: Sendable, Codable {
         b.translation = translation.unchanged(from: b.text) ? nil : translation
         b.awaitsTranslation = nil
         state.items[i] = .assistant(b)
+        // The reply is durable and its seq is already written: without this the snapshot on disk
+        // keeps it untranslated (`inPlaceRevision`).
+        inPlaceRevision &+= 1
     }
 
     /// Settings › Translation: the line under the owner's message changes with its held turn —

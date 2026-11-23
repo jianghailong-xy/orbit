@@ -139,7 +139,7 @@ class RunnerPageTest {
         assertEquals("Kept up to date by Orbit", RunnerPage.hostLine(runner("orbit-cloud"), managed = true))
         assertEquals("Kept up to date by Orbit", RunnerPage.versionValue(runner("orbit-cloud"), "0.1.197", managed = true))
         assertEquals("v0.1.190", RunnerPage.hostLine(runner("orbit-cloud", version = "0.1.190"), managed = true))
-        assertEquals("0.1.190 · Orbit updates this machine for you.", RunnerPage.versionValue(runner("orbit-cloud", version = "0.1.190"), "0.1.197", managed = true))
+        assertEquals("0.1.190 · Orbit moves it to each new build.", RunnerPage.versionValue(runner("orbit-cloud", version = "0.1.190"), "0.1.197", managed = true))
         assertFalse(RunnerPage.hostLine(runner("orbit-cloud"), managed = true).contains("managed-"))
 
         // The head's line leads with the country its IP is in, once a check has decided one; the words are OrbitKit's.
@@ -562,7 +562,7 @@ class RunnerPageTest {
 
         assertEquals(SandboxFixView.Ready("Starts a session in orbit-develop on this machine, with Codex."),
             RunnerPage.sandboxFixView(runner()))
-        assertEquals(SandboxFixView.Fixing(AgentFixing("sandboxMissing", "codex", "s1", "w1", "orbit-develop")),
+        assertEquals(SandboxFixView.Fixing(AgentFixing("sandboxMissing", "codex", "s1", "w1", "orbit-dev")),
             RunnerPage.sandboxFixView(runner(fixing = fixingEntry("sandboxMissing", "codex"))))
         assertEquals(SandboxFixView.Handled("s2", "orbit-develop"), RunnerPage.sandboxFixView(runner(handled =
             """{"kind":"sandboxMissing","engine":"codex","sessionId":"s2","workspaceId":"w1","workspaceName":"orbit-develop","status":"SUCCEEDED"}""")))

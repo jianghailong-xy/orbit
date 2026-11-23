@@ -458,6 +458,7 @@ Agent tools on a session counts each family as that session's engine lists it. T
 | Background jobs (5) | `bg_kill`, `bg_list`, `bg_output`, `bg_run`, `schedule_wakeup` |
 | Questions for you (8) | `ask_owner`, `notify`, `open_item_hand_over`, `request_owner_action`, `settings_get`, `settings_propose`, `task_request_confirmation`, `withdraw_owner_request` |
 | Wiki (5) | `wiki_draft`, `wiki_get`, `wiki_note`, `wiki_propose`, `wiki_search` |
+| Orbit Cloud browser (4) | `browser_clear_logins`, `browser_open`, `browser_request_sign_in`, `browser_status` |
 | Providers (4) | `provider_create`, `provider_delete`, `provider_list`, `provider_update` |
 | Merge receipts (3) | `merge_receipt`, `merge_receipts`, `project_merge_evidence` |
 | Guide (1) | `guide` |

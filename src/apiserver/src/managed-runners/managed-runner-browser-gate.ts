@@ -65,3 +65,13 @@ export function managedRunnerBrowserGateFrom(
   exports: [MANAGED_RUNNER_BROWSER_GATE],
 })
 export class ManagedRunnerBrowserGateModule {}
+
+/**
+ * What a claim says of the browser switch (ClaimedSession.browserEnabled): `browserEnabled` only while it is on. The
+ * runner writes it into the engine's environment as ORBIT_BROWSER=on, and `orbit mcp` and the CLI offer the browser
+ * tools (browser_status and the ones after it) only then: off, they are absent rather than refused. The one place a
+ * session learns whether the browser tools exist; their routes answer 404 by ManagedRunnerBrowserEnabledGuard.
+ */
+export function browserClaimFields(gate: Pick<ManagedRunnerBrowserGate, 'enabled'> | undefined): { browserEnabled?: true } {
+  return gate?.enabled ? { browserEnabled: true } : {};
+}

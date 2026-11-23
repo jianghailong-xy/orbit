@@ -3190,12 +3190,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // preserved relation, and no trigger, function or DONE fence changes.
       '1201_turn_outcome',
       '1202_turn_outcome_backfill',
+      // 1210 adds nullable managed_runner.image_outdated_since and current_image_sha (no default); `managed_runner`
+      // is none of the preserved relations, no row is written, and no trigger, function or DONE fence changes.
+      '1210_managed_runner_image_outdated',
       // 1213 adds a nullable session.branch_commits (JSONB, no default); no row is written, and no preserved
       // relation, trigger, function or DONE fence changes.
       '1213_session_branch_commits',
       // 1220 sets fastupdate = off on run_event's trigram index and merges its pending list; no row is written, and
       // no preserved relation, trigger, function or DONE fence changes.
       '1220_run_event_text_trgm_fastupdate_off',
+      // 1237 adds two nullable columns with no default (browser_open_requested_at, browser_open_request) to `runner`,
+      // which is not a preserved relation; no row is written, and no trigger, function or DONE fence changes.
+      '1237_runner_browser_open_request',
       // 1240 adds a plain index on project_coordinator_wake (idempotency_key); no row is written, and no preserved
       // relation, trigger, function or DONE fence changes.
       '1240_project_coordinator_wake_key_idx',
@@ -3225,6 +3231,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // stored row passes and a partial unique index; no row is written, and no preserved relation, trigger, function
       // or DONE fence changes.
       '1273_owner_request_settings_change',
+      // 1290 adds nullable managed_runner.update_requested_at, update_requested_by and update_completed_at (no
+      // default); `managed_runner` is none of the preserved relations, no row is written, and no trigger, function or
+      // DONE fence changes.
+      '1290_managed_runner_update_now',
       // 1304 adds two nullable columns on schedule, max_runs (with a CHECK that NULL passes) and planned_end_told_at,
       // marks every ENDED schedule told (an UPDATE of schedule rows only), and adds two partial indexes; schedule and
       // schedule_run are not preserved relations, and no trigger, function or DONE fence changes.
@@ -3241,6 +3251,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // and task.landing_check_exempt_owner_set_at; neither table is a preserved relation, and no trigger,
       // function or DONE fence changes.
       '1390_project_setting_change',
+      // 1393 restates owner_request's kind CHECK to admit BROWSER_SIGN_IN beside 1273's SETTINGS_CHANGE and adds two
+      // nullable columns with a CHECK that every existing row passes; no row is written, and no preserved relation,
+      // trigger, function or DONE fence changes.
+      '1393_owner_request_browser_sign_in',
       // 1400 adds three nullable columns, a foreign key and a partial index on owner_request_secret and account_secret;
       // no row is written, and no preserved relation, trigger, function or DONE fence changes.
       '1400_owner_secret_saved_links',
@@ -3296,6 +3310,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // subagent_run; no row is written, and no preserved relation, trigger, function or DONE fence changes.
       // Written as 1420 on its task branch, it was renumbered after main took 1420 to 1428.
       '1429_subagent_run_rating',
+      // 1430 adds one nullable column, capacity_held_at, to schedule_run; no row is written, and no preserved
+      // relation, trigger, function or DONE fence changes.
+      '1430_schedule_run_capacity_held_at',
+      // 1431 adds managed_runner.update_interrupt_turns, BOOLEAN NOT NULL with a constant default (catalog-only, no
+      // rewrite), for an owner's Update Now of a busy runner; `managed_runner` is none of the preserved relations, no
+      // row is written, and no trigger, function or DONE fence changes.
+      // Written as 1430 on the project line, it was renumbered after main took 1430.
+      '1431_managed_runner_update_interrupt',
       // 1437 (renumbered from 1317 to sit after main's migrations) adds two nullable columns on session,
       // actual_permission_mode and actual_permission_mode_at, and a new append-only table session_permission_mode_change
       // (cascades with its session); no row is written, and no preserved relation, trigger, function or DONE fence changes.

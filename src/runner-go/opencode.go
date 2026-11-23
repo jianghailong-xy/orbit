@@ -488,6 +488,7 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 		"ORBIT_ALLOW_ORCHESTRATION":       orchestrationEnv(job.AllowOrchestration),
 		envWatches:                        watchesEnv(job.WatchesDisabled),
 		envWiki:                           wikiEnv(job.WikiDisabled),
+		envBrowser:                        browserEnv(job.BrowserEnabled),
 		envWorkflows:                      workflowsEnv(job.WorkflowsDisabled),
 		envScheduleRun:                    scheduleRunEnv(job.ScheduleRun),
 		envOrchestrationToken:             job.OrchestrationToken,
@@ -508,6 +509,8 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 	// its shell tool with detached:true (its own process group), which is the case
 	// terminateSessionProcessTree's ppid walk exists to catch. Stage 4 verdict.
 	cmd.Env = append(cmd.Env, bgJobEnvPairs(job.SessionID)...)
+	// On the Orbit Cloud runner with the browser on, a tool the agent runs opens its pages there (browser_opener.go).
+	cmd.Env = browserOpenerEnv(cmd.Env, job.BrowserEnabled)
 	cmd.Stdin = strings.NewReader(prompt)
 	configureSessionProcessTree(cmd)
 	stdout, err := cmd.StdoutPipe()
@@ -924,6 +927,7 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 			"ORBIT_ALLOW_ORCHESTRATION": orchestrationEnv(job.AllowOrchestration),
 			envWatches:                  watchesEnv(job.WatchesDisabled),
 			envWiki:                     wikiEnv(job.WikiDisabled),
+			envBrowser:                  browserEnv(job.BrowserEnabled),
 			envWorkflows:                workflowsEnv(job.WorkflowsDisabled),
 			envScheduleRun:              scheduleRunEnv(job.ScheduleRun),
 			envOrchestrationToken:       job.OrchestrationToken,
