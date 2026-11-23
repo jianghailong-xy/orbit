@@ -102,6 +102,16 @@ export interface TransactionUnit {
  * `providers.service.ts#pausePoolMember`.
  */
 export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
+  // Account health (docs/routing-account-health-design.md §6.3): one run's failure applied to its account's live row.
+  {
+    at: 'providers/account-health.service.ts#recordFailure', shape: 'TX_RETRIED',
+    locks: 'First one UPDATE releasing any trial this session holds on the subject\'s live account_health rows (at most one per scope; no trigger, no key moves). Then a plain read of the subject\'s rows for this session (idempotency), the live row of the failure\'s scope FOR UPDATE, and either one UPDATE of that row by id, or — when there is none, or it ran out — an UPDATE stamping it EXPIRED and one INSERT ... ON CONFLICT (account_health_live_key) DO NOTHING, whose foreign keys take user, runner, model_provider and provider_pool FOR KEY SHARE. Every other writer of account_health takes only its own rows by the same key, and no account_health writer locks a parent first, so the KEY SHARE adds no cycle.',
+    identity: 'The owner, subject key, scope and session: a re-run, or a retried finalize of the same session, finds the session on a row of that scope and writes nothing.',
+    isolation: '', attempts: 4,
+    replay: 'Every attempt re-reads and re-locks the live row and re-applies the pure rules (account-health.ts) to it; a rolled-back attempt leaves neither the release nor the write. An INSERT that lost the race to a concurrent failure inserts nothing and the closure reads the winner\'s row once more.',
+    effects: 'None.',
+    answer: 'Typed 503 after retry exhaustion; the run-end ingest that called it is retried by the runner, and the same session writes the same step.',
+  },
   // Fix with an agent (runners/attention-fix.ts): one warning's claim before its session is created.
   {
     at: 'runners/runner-attention-fix.service.ts#fix', shape: 'TX_RETRIED',
@@ -3824,6 +3834,9 @@ export interface StatementUnit {
  * whose writes are not atomic with each other.
  */
 export const STATEMENT_UNITS: readonly StatementUnit[] = [
+  { at: 'providers/account-health.service.ts#recordSuccess', class: 'MANY_ROWS', statements: 1, note: 'An admitted turn (docs/routing-account-health-design.md §6.3): one UPDATE clearing at most two live account_health rows of one subject (the whole account and the run\'s model) by owner, subject key and scope, under the partial unique key. No trigger names the table; a concurrent recordFailure on the same rows waits for this one and then reads them as cleared.' },
+  { at: 'providers/account-health.service.ts#claimTrial', class: 'ONE_ROW_CAS', statements: 1, note: 'The trial claim (§6.5): one UPDATE of the live BLOCKED row by owner, subject key and scope, predicated on its block having run out and on no other run holding a fresh or running claim (a NOT EXISTS read of that session\'s status). Two dispatches racing for it serialise on the row lock and the second re-checks the predicate and matches nothing.' },
+  { at: 'providers/account-health.service.ts#releaseTrial', class: 'ONE_ROW_CAS', statements: 1, note: 'A trial that ended before admission (§6.5): one UPDATE clearing the claim on the subject\'s live rows still held by that session; at most one row per scope, and a claim another run took since matches nothing.' },
   { at: 'runner-api/subagent-rating.ts#rateSubagentRun', class: 'ONE_ROW_CAS', statements: 1, note: "subagent_rate (docs/subagent-design.md §7.1): one UPDATE of the run by (id, the rating session) predicated on status <> 'RUNNING', writing the score, note, time and the rater's engine, provider and model. subagent_run's columns written are in no key and fire no trigger; a repeat writes the same rating again, which is what a re-rating is." },
   { at: 'projects/coordinator-handoff.service.ts#start', class: 'INSERT', statements: 2, note: "Hand over (docs/coordinator-handoff.md): one INSERT of the coordinator_handoff row (WRITING, attempt 1), its project and session foreign keys taking those rows FOR KEY SHARE and nothing else; two presses meet coordinator_handoff_one_live_idx and the loser answers the winner's row. Then the note turn is queued by sessions.createTurn in its own transaction; if that is refused, a second statement — a CAS on WRITING by id — marks the row CANCELLED, so a refused turn leaves no handoff under way. Not one transaction with the turn: createTurn is its own retried unit under the Session lock, and the row is written first so the turn's end always finds it." },
   { at: 'projects/coordinator-handoff.service.ts#rememberSuccessor', class: 'ONE_ROW_CAS', statements: 1, note: "A successor named while a handoff is under way, or cleared by naming none: one UPDATE by id, a CAS on the state the row was read in, writing successor_engine, successor_provider and successor_model (all NULL when cleared). Its start was resolved by assertStartResolves before this write. A row that moved on — completed, cancelled or retried — matches nothing and the caller keeps what it read. No key moves and no trigger names the row, so it takes that one row and waits for nothing else." },

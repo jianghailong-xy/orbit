@@ -3389,7 +3389,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1493 adds four nullable session columns (failure_kind, failure_scope, failure_said, admission_failure) with no
       // default, CHECK, index or backfill; no row is written, and no preserved relation, trigger, function or DONE
       // fence changes.
-      '1493_session_failure_kind'],
+      '1493_session_failure_kind',
+      // 1494 creates account_health (docs/routing-account-health-design.md §6): a new table, its partial unique index on
+      // the live row and three foreign-key indexes. No existing row, trigger or judgment column is touched.
+      '1494_account_health'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

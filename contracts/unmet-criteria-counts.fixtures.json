@@ -1,5 +1,5 @@
 {
-  "$comment": "Unmet criteria are never counted or labelled by their landing reason (project 34zzTeZx49jI9ndWIsQEF, criterion 5; board gaps G1/G2). A project shaped like Coordinator handoff v2: four unmet criteria whose landing lanes say NO_RECEIPT (two), NO_BRANCH and LANDED + CODELESS, and one met criterion IN_FLIGHT. The server's derivedDone.counts tally only met criteria by where their work is (onMain + byReason add up to met); landed counts met LANDED criteria only. Clients count unmet criteria apart ('N not met'), and the done card's 'N items running' is read from the criteria (landingReason IN_FLIGHT, met or not), not from counts.byReason. Whether the project can be recorded as done is unchanged: derivedDone.withheld is read over every criterion. Read by the apiserver's project-looks-finished.pg.spec.ts case (6), which also holds the done check (doneCheck: severity, code, criterion ordinal) to it, web's projectDone.unmetCounts.test.ts, and the iOS (OrbitKit) and Android tests of the Done tally / Record as done confirmation.",
+  "$comment": "Unmet criteria are never counted or labelled by their landing reason (project 34zzTeZx49jI9ndWIsQEF, criterion 5; board gaps G1/G2). A project shaped like Coordinator handoff v2: four unmet criteria whose landing lanes say NO_RECEIPT (two) and NO_BRANCH (two: one never run, one never run and declared codeless, which since 2caec7aae9 no longer decides landing), and one met criterion IN_FLIGHT. The server's derivedDone.counts tally only met criteria by where their work is (onMain + byReason add up to met); landed counts met LANDED criteria only. Clients count unmet criteria apart ('N not met'), and the done card's 'N items running' is read from the criteria (landingReason IN_FLIGHT, met or not), not from counts.byReason. Whether the project can be recorded as done is unchanged: derivedDone.withheld is read over every criterion. Read by the apiserver's project-looks-finished.pg.spec.ts case (6), which also holds the done check (doneCheck: severity, code, criterion ordinal) to it, web's projectDone.unmetCounts.test.ts, and the iOS (OrbitKit) and Android tests of the Done tally / Record as done confirmation.",
   "project": {
     "title": "Coordinator handoff v2",
     "main": "main",
@@ -37,10 +37,10 @@
     },
     {
       "ordinal": 5,
-      "name": "unmet, its only task never run and declared codeless",
+      "name": "unmet, its only task never run (declared codeless, which no longer decides landing)",
       "satisfied": false,
-      "landing": "LANDED",
-      "landingReason": "CODELESS"
+      "landing": "UNKNOWN",
+      "landingReason": "NO_BRANCH"
     }
   ],
   "expect": {
