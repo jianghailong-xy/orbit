@@ -170,6 +170,17 @@ describe("Use the runner's browser on the sign-in card", () => {
     expect(useButton(card)).toBeDefined();
   });
 
+  it('for Antigravity, also waits for the code from the runner’s browser', async () => {
+    const card = await mount(
+      state({ status: 'awaiting_code', engine: 'antigravity', url: 'https://accounts.google.com/o/oauth2/auth?state=G', browser: 'opened' }),
+      { engine: 'antigravity' },
+    );
+    expect(text(card.querySelector('.rsi-runner-browser .rsi-row'))).toBe(
+      "Finish signing in in the runner's browser. Orbit takes the code from there.",
+    );
+    expect(card.querySelector('.rsi-input')).toBeNull();
+  });
+
   it('for a device flow keeps the one-time code on the card', async () => {
     const card = await mount(
       state({ status: 'awaiting_approval', engine: 'codex', url: 'https://auth.openai.com/codex/device', userCode: 'ABCD-1234', browser: 'opened' }),

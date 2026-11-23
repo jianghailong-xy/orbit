@@ -20,6 +20,7 @@ import {
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { runtimeCatalogModels } from '../common/runtime-model';
 import { anthropicGatewayEnabled, engineTableOptions, withKeyGatewayToken } from '../providers/key-gateway';
 import {
   claudeCodexLoginEnabled,
@@ -35,7 +36,6 @@ import {
   adminOnlyProviderRefusal,
   builtinSessionEngine,
   engineBaseEnv,
-  ENGINE_INCOMPATIBLE_ERROR_LIKE,
   engineIncompatibleMessage,
   isBuiltinProvider,
   keyCredential,
@@ -96,16 +96,7 @@ import {
 } from '../common/session-tree-sql';
 import {
   ADMIN_ONLY_PROVIDER_ERROR,
-  ANTIGRAVITY_RUNNER_UPGRADE_ERROR,
-  CURSOR_NOT_INSTALLED_ERROR,
-  CURSOR_RUNNER_UPGRADE_ERROR,
-  DSH_NOT_INSTALLED_ERROR,
-  DSH_PLATFORM_UNSUPPORTED_ERROR,
-  DSH_RUNNER_UPGRADE_ERROR,
-  DSH_VERSION_INCOMPATIBLE_ERROR,
-  OPENCODE_RUNNER_UPGRADE_ERROR,
   PROVIDER_UNAVAILABLE_ERROR,
-  SOURCE_PROTOCOL_UNSUPPORTED_ERROR,
 } from '../runner-api/runner-provider-support';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
 import { orchestrationEnabled } from '../common/orchestration-switch';
@@ -129,6 +120,7 @@ import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/
 import { browserClaimFields, MANAGED_RUNNER_BROWSER_GATE, type ManagedRunnerBrowserGate } from '../managed-runners/managed-runner-browser-gate';
 import { DISPATCH_PAUSED } from './dispatch-pause';
 import { CLAUDE_REGION_ERROR_PREFIX, claudeRegionHold } from '../runners/runner-region';
+import { holdNoticeSql } from './hold-notice';
 import { openingTurnId } from '../sessions/orbit-authored-turn';
 import {
   runAccessLevel,
@@ -137,6 +129,7 @@ import {
   scheduleRunAllowedTools,
   scheduleRunDisallowedTools,
 } from '../schedules/schedule-access';
+import { claimModelLogLine } from './claim-model-log';
 
 /** What a claim attempt answers when another transaction holds the row it picked (FOR UPDATE NOWAIT, 55P03). */
 const LOST_LOCK = Symbol('the claim lost the row lock');
@@ -498,23 +491,9 @@ export class QueueService {
           -- runner unable to drive the row and had nothing else to say why it sat there; the row
           -- being claimed IS the answer, so leaving the text behind would make a running session
           -- read as blocked on the machine that is running it.
+          -- The hold notices (queue/hold-notice.ts), the one list a payload's waitingOn HOLD reads too.
           error = CASE
-            WHEN error IN (
-              ${OPENCODE_RUNNER_UPGRADE_ERROR},
-              ${ANTIGRAVITY_RUNNER_UPGRADE_ERROR},
-              ${DSH_RUNNER_UPGRADE_ERROR},
-              ${CURSOR_RUNNER_UPGRADE_ERROR},
-              ${CURSOR_NOT_INSTALLED_ERROR},
-              ${DSH_NOT_INSTALLED_ERROR},
-              ${DSH_PLATFORM_UNSUPPORTED_ERROR},
-              ${DSH_VERSION_INCOMPATIBLE_ERROR},
-              ${PROVIDER_UNAVAILABLE_ERROR},
-              ${ADMIN_ONLY_PROVIDER_ERROR},
-              ${SOURCE_PROTOCOL_UNSUPPORTED_ERROR}
-            ) OR error LIKE 'Account paused until %' OR error LIKE ${ENGINE_INCOMPATIBLE_ERROR_LIKE}
-              -- The region check's hold, released (docs/claude-region-check-contract.md §11), and the sentence a turn it
-              -- stopped ended with: both begin with the code.
-              OR starts_with(error, ${CLAUDE_REGION_ERROR_PREFIX}) THEN NULL
+            WHEN ${holdNoticeSql(Prisma.sql`error`)} THEN NULL
             ELSE error
           END,
           "started_at" = COALESCE("started_at", now()),
@@ -1140,6 +1119,9 @@ export class QueueService {
         runner: session.assignedRunner,
       });
     let exec = resolveExec(session.model);
+    // The value the resolution ran on, for the claim-model line below: moved to the PATCH winner's
+    // when that compare-and-set loses, so the line shows the choice dispatch actually used.
+    let resolvedFrom = session.model;
     // Snapshot an inherited default on the session at its first claim, and refresh one the runtime
     // has since retired. Later Runtime heartbeat changes must not silently switch an
     // already-established conversation on reclaim/resume — only a model that is no longer offered
@@ -1164,6 +1146,7 @@ export class QueueService {
           select: { model: true },
         });
         exec = resolveExec(winner.model);
+        resolvedFrom = winner.model;
       }
     }
     const provider = exec.provider;
@@ -1177,6 +1160,20 @@ export class QueueService {
     // What the runner is handed as the model: the session's own id, except an OpenCode session on a
     // key, which names it the way OpenCode selects it (resolveProviderExec `runnerModel`).
     const runnerModel = exec.runnerModel ?? exec.model;
+    // What this claim decided about the model, `claim-model {json}` (claim-model-log.ts): the
+    // catalogue the assigned runner reported, what the resolver was offered, and what the runner is
+    // told to run. Diagnostic for the Antigravity Google-account rollout, whose failure mode was a
+    // catalogue id reaching the runner as no `--model` at all with nothing on this side to read.
+    this.logger.log(
+      claimModelLogLine({
+        sessionId: session.id,
+        provider,
+        requestedModel: resolvedFrom,
+        catalog: (session.assignedRunner?.modelCatalog as RunnerModelCatalog | null)?.[provider],
+        offered: runtimeCatalogModels(session.assignedRunner?.modelCatalog, provider),
+        resolvedModel: runnerModel,
+      }),
+    );
     const permissionMode = resolvePermissionMode(session.permissionMode, session.owner);
     // Claude spawns with a pre-generated --session-id, so a Claude row without one has no
     // conversation the runtime could resume — it was created before the column existed, or

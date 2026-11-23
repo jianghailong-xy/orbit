@@ -170,7 +170,8 @@ test('a claim clears the upgrade notice of every runtime gate it just passed', a
   // The preflight wrote it because a runner could not drive the row; the row being claimed is the
   // answer, so a running session must not keep reading as blocked.
   const captured = await capturedClaimCapability([AgentProvider.ANTIGRAVITY]);
-  assert.match(captured.sql, /error = CASE\s+WHEN error IN \(/);
+  // The hold notices, one list with waitingOn HOLD (queue/hold-notice.ts).
+  assert.match(captured.sql, /error = CASE\s+WHEN \(error IN \(/);
   assert.ok(captured.values.includes(OPENCODE_RUNNER_UPGRADE_ERROR));
   assert.ok(captured.values.includes(ANTIGRAVITY_RUNNER_UPGRADE_ERROR));
 });

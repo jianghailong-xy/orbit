@@ -53,8 +53,12 @@ interface Row {
   ownerId: string;
 }
 
-function outcomesOf(status: string): readonly (string | null)[] {
+function outcomesOf(status: string, endReason: string | null, filing: string): readonly (string | null)[] {
   // A SUCCEEDED or CANCELLED release whose turn failed is a failure by the turn: no writer leaves one with no end asked.
+  // A FAILED release with no end asked carries FAILED on its turn (removal step R2's writers record it, and migration
+  // 1441 wrote it on every stored row the status bridge used to carry, which R7 removed), but for the failed import,
+  // which records none and is in Trash.
+  if (status === 'FAILED' && endReason === null) return filing === 'trash' ? ['FAILED', null] : ['FAILED'];
   if (status === 'FAILED') return OUTCOMES;
   if (status === 'SUCCEEDED' || status === 'CANCELLED') return OUTCOMES.filter((o) => o !== 'FAILED');
   return [null];
@@ -153,7 +157,7 @@ test('every gate answers from the release column what it answered from the statu
             for (const retry of RETRIES) {
               const verdicts = new Set<string>();
               let before = '';
-              for (const outcome of outcomesOf(status)) {
+              for (const outcome of outcomesOf(status, endReason, filing)) {
                 const row = rowOf(status, outcome, endReason, cancelled, filing, retry);
                 before = gate.before(row);
                 const after = gate.after(row);
@@ -200,8 +204,8 @@ test('named cases: a FAILED session with a retry armed, and a session a person e
 });
 
 test('rows 1262 left FAILED with no end reason read as failed, as their status says', () => {
-  // (85 in production.) The readers read the end reason, the turn outcome (1202 wrote FAILED on every FAILED row) and
-  // the status bridge, and answer what the status, and production today, answer.
+  // (85 in production.) The readers read the end reason and the turn outcome (1202 wrote FAILED on every FAILED row),
+  // and answer what the status, and production today, answer.
   const row = { ...rowOf('FAILED', 'FAILED', null, true, 'open', 'none') };
   assert.equal(oldTickStanding(row, NOW), 'FAILED');
   assert.equal(tickStanding(row, NOW), 'FAILED');

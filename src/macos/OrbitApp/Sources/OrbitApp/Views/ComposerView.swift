@@ -1406,14 +1406,14 @@ struct ComposerView: View {
                 #else
                 pickFiles(images: true)
                 #endif
-            } label: { Label("Image", systemImage: "photo") }
+            } label: { Label("Upload Image", systemImage: "photo") }
             Button {
                 #if os(iOS)
                 showFileImporter = true
                 #else
                 pickFiles(images: false)
                 #endif
-            } label: { Label("File", systemImage: "paperclip") }
+            } label: { Label("Upload File", systemImage: "square.and.arrow.up") }
             #if os(iOS)
             // Paste an image from the clipboard (macOS does this via the ⌘V monitor above). Only
             // shown when the clipboard actually holds an image — `hasImages` is a non-consuming

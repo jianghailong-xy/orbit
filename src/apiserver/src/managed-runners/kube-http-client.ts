@@ -180,6 +180,7 @@ export class KubeHttpClient implements ManagedKubeClient {
           apiVersion: 'v1',
           kind: 'DeleteOptions',
           ...(options?.uid ? { preconditions: { uid: options.uid } } : {}),
+          ...(options?.gracePeriodSeconds !== undefined ? { gracePeriodSeconds: options.gracePeriodSeconds } : {}),
         };
         const response = await this.send('DELETE', `${base}/${objectName(name)}`, JSON.stringify(body));
         if (response.status === 404) return;

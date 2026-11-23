@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { RealtimeService } from './realtime.service';
 import { noSessionRequests } from '../test-support/prisma-transaction-double';
+import { isSessionPhaseFactsQuery, sessionPhaseFactsAnswer } from '../test-support/session-phase-facts';
 
 const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -36,6 +37,9 @@ type Row = {
     lastHeartbeatAt: Date | null;
   } | null;
   lastTurnAt: Date | null;
+  /** The list's order key (session.listed_at, migration 1434), and the creation it is read as where it is NULL. */
+  listedAt: Date | null;
+  createdAt: Date;
   workspace: { id: string; name: string | null; model: string | null; effort: string | null } | null;
   coordinatorForProject?: { id: string; title: string } | null;
   folderId?: string | null;
@@ -74,7 +78,10 @@ function fakePrisma(
 ): PrismaService {
   return {
     $executeRawUnsafe: async () => 0,
-    $queryRaw: async ({ values }: { values: unknown[] }) => {
+    $queryRaw: async (query: { values: unknown[] }) => {
+      // phase, released, lastTurnOutcome, waitingOn (sessions/session-phase.ts), from these rows.
+      if (isSessionPhaseFactsQuery(query)) return sessionPhaseFactsAnswer(query, rows);
+      const { values } = query;
       const row = rows[values[0] as string];
       return [{ projectMembership: row?.coordinatorForProject ? {
         projectId: row.coordinatorForProject.id,
@@ -144,6 +151,9 @@ const rowA: Row = {
     lastHeartbeatAt: new Date(),
   },
   lastTurnAt: new Date('2026-06-26T00:00:00.000Z'),
+  // Behind lastTurnAt, as on a session whose latest activity was not its owner's: the summary carries this one.
+  listedAt: new Date('2026-06-25T23:00:00.000Z'),
+  createdAt: new Date('2026-06-25T22:00:00.000Z'),
   workspace: { id: 'workspaceA', name: 'builder', model: 'opus', effort: 'high' },
   coordinatorForProject: { id: 'projectA', title: 'Fix the project' },
   // The SOURCE columns, as migration 0231 leaves them on every session that resolves no baseline:
@@ -203,6 +213,7 @@ test('a STATUS event reaches the owner as session.updated with a full summary', 
   });
   assert.equal(data.pendingApprovals, 3);
   assert.equal(data.lastTurnAt, '2026-06-26T00:00:00.000Z');
+  assert.equal(data.listedAt, '2026-06-25T23:00:00.000Z');
   assert.deepEqual(data.agent, {
     id: 'workspaceA',
     name: 'builder',
@@ -405,7 +416,9 @@ test('publishSessionCreated surfaces as session.created with the full summary', 
 });
 
 test('publishSessionLifecycleChanged preserves run outcome and exposes Completed canonically', async () => {
-  const svc = svcWith({ sessA: rowA }, 0);
+  // The row as the end left it, released: the event's four new fields are read from it (sessions/session-phase.ts).
+  const ended = { ...rowA, status: RunStatus.CANCELLED, finishedAt: new Date('2026-06-27T00:00:00.000Z') };
+  const svc = svcWith({ sessA: ended }, 0);
   const got: ControlEvent[] = [];
   const sub = svc.streamForUser('userA').subscribe((e) => got.push(e));
 
@@ -428,11 +441,18 @@ test('publishSessionLifecycleChanged preserves run outcome and exposes Completed
     lifecycleState: 'COMPLETED',
     filingState: 'ARCHIVED',
     endReason: 'completed',
+    phase: 'IDLE',
+    released: true,
+    lastTurnOutcome: null,
+    waitingOn: null,
+    workFinished: false,
   });
 });
 
 test('completing an already-ended session preserves its actual runState', async () => {
-  const svc = svcWith({ sessA: rowA }, 0);
+  // The row as the end left it, released: the event's four new fields are read from it (sessions/session-phase.ts).
+  const ended = { ...rowA, status: RunStatus.CANCELLED, finishedAt: new Date('2026-06-27T00:00:00.000Z') };
+  const svc = svcWith({ sessA: ended }, 0);
   const got: ControlEvent[] = [];
   const sub = svc.streamForUser('userA').subscribe((e) => got.push(e));
 
@@ -453,6 +473,11 @@ test('completing an already-ended session preserves its actual runState', async 
     lifecycleState: 'COMPLETED',
     filingState: 'ARCHIVED',
     endReason: 'ended',
+    phase: 'IDLE',
+    released: true,
+    lastTurnOutcome: null,
+    waitingOn: null,
+    workFinished: false,
   });
 });
 

@@ -368,6 +368,16 @@ export function exceptionPointer(
  * said "Question from coordinator" while the line said nothing, and the card that answers it could
  * be a long scroll away (the account owner's report, 2026-11-16; docs/mocks/coordinator-question-jump).
  */
+/** A request this conversation filed for its owner (`request_owner_action`), still waiting on its
+ *  card in the transcript: named by the card's own title (docs/mocks/owner-request-strip-jump). */
+export interface OwnerRequestCardPointer {
+  id: string;
+  title: string;
+  ageSeconds: number | null;
+  /** Whether its card is scrolled wholly above the reader, as the page measured it. */
+  above?: boolean;
+}
+
 export interface QuestionCardPointer {
   itemId: string;
   /** What was asked, in the coordinator's words. */
@@ -705,6 +715,8 @@ export function DecisionStrip({
   onRevealException = () => {},
   questions = [],
   onRevealQuestion = () => {},
+  ownerRequests = [],
+  onRevealOwnerRequest = () => {},
 }: {
   queue: PendingDecisionQueue;
   /** The held criteria proposals of the project this session coordinates, when it coordinates one.
@@ -748,6 +760,10 @@ export function DecisionStrip({
   questions?: ReadonlyArray<QuestionCardPointer>;
   /** Where the reader goes to answer one: its card, by its item. */
   onRevealQuestion?: (itemId: string) => void;
+  /** The owner requests this conversation filed whose cards it draws, still pending. */
+  ownerRequests?: ReadonlyArray<OwnerRequestCardPointer>;
+  /** Where the reader goes to answer one: its card, by the request's id. */
+  onRevealOwnerRequest?: (id: string) => void;
 }) {
   const [at, setAt] = useState<string | null>(null);
   const hasNeedsYou = needsYou !== undefined;
@@ -782,6 +798,19 @@ export function DecisionStrip({
       above,
       go: () => onRevealException(row),
     })),
+    // The requests this conversation filed for its owner: the owner's alone, like the exceptions,
+    // and each holds the conversation up until it is ended — after the exceptions, which already
+    // stop a project, and before the coordinator's questions (owner 2026-11-23). Oldest first; a
+    // card drawn among the messages can be above the reader.
+    ...[...ownerRequests]
+      .sort((a, b) => (b.ageSeconds ?? -1) - (a.ageSeconds ?? -1))
+      .map((request) => ({
+        key: `owner-request:${request.id}`,
+        label: request.title,
+        ageSeconds: request.ageSeconds,
+        above: request.above,
+        go: () => onRevealOwnerRequest(request.id),
+      })),
     // The coordinator's questions next: like the exceptions they are the owner's alone, and each
     // holds the coordinator up until it is answered — ahead of evidence, which waits on nobody's
     // work. Their cards are at the foot, so never above the reader.
@@ -854,7 +883,7 @@ export function DecisionStrip({
         <button
           className="decision-strip-line"
           type="button"
-          aria-label={`${ownerExceptions.length + questions.length > 0 ? `${ownerExceptions.length + questions.length} waiting` : needsDecisionCount(ways.length)}: ${shown.label}`}
+          aria-label={`${ownerExceptions.length + ownerRequests.length + questions.length > 0 ? `${ownerExceptions.length + ownerRequests.length + questions.length} waiting` : needsDecisionCount(ways.length)}: ${shown.label}`}
           title={here < 0 || ways.length < 2 ? GO_TO_CARD_HINT : GO_TO_NEXT_CARD_HINT}
           onClick={step}
         >
@@ -925,6 +954,7 @@ export function SessionDecisionStrip({
   onOpenCriteria,
   crossings = [],
   questions = [],
+  ownerRequests = [],
 }: {
   sessionId: string;
   /** The project this session coordinates, when it coordinates one. Its held criteria proposals
@@ -949,6 +979,8 @@ export function SessionDecisionStrip({
   crossings?: ReadonlyArray<CrossingPointer>;
   /** The coordinator's open questions whose cards this conversation draws. */
   questions?: ReadonlyArray<QuestionCardPointer>;
+  /** The pending owner requests whose cards this conversation draws. */
+  ownerRequests?: ReadonlyArray<OwnerRequestCardPointer>;
 }) {
   const [open, setOpen] = useState(false);
   const phone = useMediaQuery(PHONE_QUERY);
@@ -969,14 +1001,16 @@ export function SessionDecisionStrip({
   // thing that keeps a reader from mistaking a broken query for an empty queue; the strip is
   // otherwise silent while the first read is in flight, so it never flashes.
   const ownerExceptions = needsYou ?? exceptions;
-  if (pending.isError && ownerExceptions.length === 0 && crossings.length === 0 && questions.length === 0) {
+  if (pending.isError && ownerExceptions.length === 0 && crossings.length === 0 && questions.length === 0
+    && ownerRequests.length === 0) {
     return (
       <div className="decision-strip decision-strip-unread" role="status">
         {`${STRIP_LABEL}: this queue could not be read.`}
       </div>
     );
   }
-  if (!pending.data && ownerExceptions.length === 0 && crossings.length === 0 && questions.length === 0) return null;
+  if (!pending.data && ownerExceptions.length === 0 && crossings.length === 0 && questions.length === 0
+    && ownerRequests.length === 0) return null;
   const queue: PendingDecisionQueue = pending.data ?? {
     decidingSessionId: sessionId,
     count: 0,
@@ -1003,6 +1037,8 @@ export function SessionDecisionStrip({
       onRevealException={(row) => revealOwnerItemCard(row.itemId)}
       questions={questions}
       onRevealQuestion={(itemId) => revealQuestionCard(itemId)}
+      ownerRequests={ownerRequests}
+      onRevealOwnerRequest={(id) => revealCard(document.getElementById(`owner-request-${id}`))}
     />
   );
 }
