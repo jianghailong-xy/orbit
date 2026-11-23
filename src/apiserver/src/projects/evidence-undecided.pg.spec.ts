@@ -73,6 +73,8 @@ function coordinatorColumns(state: CoordinatorState) {
   return {
     status: failed ? RunStatus.FAILED : RunStatus.AWAITING_INPUT,
     finishedAt: failed ? new Date() : null,
+    // A failure release carries FAILED on its turn (removal step R2), which is what reads it as down since R7.
+    lastTurnOutcome: failed ? 'FAILED' : null,
     retryAt: state === 'retry' ? new Date(Date.now() + 60 * MINUTE) : null,
     completedAt: state === 'ended' ? new Date() : null,
     cancelRequestedAt: state === 'cancelled' ? new Date() : null,

@@ -1,1 +1,1 @@
-{"cancelSessionIds":[],"leaseLostSessionIds":[],"maxConcurrent":4,"minFreeDiskMb":2048,"mergeRequests":[],"commitRequests":[],"artifactRequests":[]}
+{"cancelSessionIds":[],"leaseLostSessionIds":[],"maxConcurrent":4,"burstConcurrent":2,"minFreeDiskMb":2048,"mergeRequests":[],"commitRequests":[],"artifactRequests":[]}

@@ -158,7 +158,9 @@ public enum ManagedRunnerCopy {
 
     /// Sleep is not a fault: a sending client wakes it, and nothing warns that it is offline.
     public enum Setup {
-        public static let reposRoot = "/home/orbit/orbit-repos"
+        /// The managed runner's home, fixed by its image: a new folder goes here before it has reported
+        /// (@orbit/shared MANAGED_RUNNER_HOME).
+        public static let home = "/home/orbit"
         public enum Notice {
             public static let preparing = "Orbit is setting up your managed runner. You can create the workspace now; your first session starts when it’s ready."
             public static let asleep = "Your managed runner is asleep. Your first message wakes it (about 10 s)."

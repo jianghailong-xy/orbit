@@ -281,6 +281,12 @@ test('a card stays within 30 KB: long details are cut and say so', () => {
   assert.ok(!holds(short, CUT_NOTE));
 });
 
+test("a notify from outside any session (a script's `orbit notify`) does not offer a reply to a session", () => {
+  const card = renderFeishuCard({ kind: 'agent-message', sessionTitle: 'orbit@austin', message: 'disk is 91% full', sessionless: true }, ctx('FULL'));
+  assert.ok(holds(card, 'disk is 91% full'));
+  assert.ok(!holds(card, REPLY_HINT), 'there is no session to reply to');
+});
+
 test("a card too long even with its details cut keeps its title and says it's too long", () => {
   const card = renderFeishuCard({
     kind: 'approval', sessionTitle: 's',

@@ -82,7 +82,7 @@ public enum SessionListTime {
             guard let started = session.currentTurnStartedAt else { return nil }
             return RelativeTime.elapsed(started, now: now)
         }
-        guard let timestamp = session.lastTurnAt ?? session.createdAt else { return nil }
+        guard let timestamp = session.listedAt ?? session.createdAt else { return nil }
         return RelativeTime.format(timestamp, now: now)
     }
 }
@@ -131,19 +131,27 @@ public enum SessionFilter {
     /// (`if view === 'completed' return rows`). Without these two rules the clients disagree on order.
     public static func forAgent(_ sessions: [Session], agentID: String, view: SessionView,
                                 scheduled: Bool = false) -> [Session] {
-        let scoped = forAgent(sessions, agentID: agentID).filter { ($0.runSource == "SCHEDULE") == scheduled }
+        // A schedule's change conversation (runSource SCHEDULE_CHANGE, §8.2) is in no list: it is reached from
+        // the schedule (its history, Change…) and from Waiting on you, exactly as the web's list reads it.
+        let scoped = forAgent(sessions, agentID: agentID).filter {
+            $0.runSource != "SCHEDULE_CHANGE" && ($0.runSource == "SCHEDULE") == scheduled
+        }
         return view == .completed ? scoped : consoleSorted(scoped)
     }
 
-    /// Order a per-agent console list as web's `AgentView` does: pinned sessions first, then
-    /// most-recent activity first (`lastTurnAt`, falling back to `createdAt`). ISO-8601 timestamps
-    /// compare correctly as strings, matching web's `a.lastTurnAt ?? a.createdAt` comparison.
+    /// Order a per-agent console list by the shared rule (contracts/session-list-order.fixtures.json):
+    /// pinned sessions first, then `listedAt` descending (`createdAt` when null), then `createdAt`
+    /// descending, then id ascending. `lastTurnAt` is never a key: it moves with every streamed event.
+    /// Instants are compared as parsed dates, so fractional-second and offset spellings agree.
     static func consoleSorted(_ sessions: [Session]) -> [Session] {
-        sessions.sorted { a, b in
+        func instant(_ iso: String?) -> Date { iso.flatMap(RelativeTime.parse) ?? .distantPast }
+        return sessions.sorted { a, b in
             if (a.pinnedAt != nil) != (b.pinnedAt != nil) { return a.pinnedAt != nil }
-            let ta = a.lastTurnAt ?? a.createdAt ?? ""
-            let tb = b.lastTurnAt ?? b.createdAt ?? ""
-            return ta > tb
+            let la = instant(a.listedAt ?? a.createdAt), lb = instant(b.listedAt ?? b.createdAt)
+            if la != lb { return la > lb }
+            let ca = instant(a.createdAt), cb = instant(b.createdAt)
+            if ca != cb { return ca > cb }
+            return a.id < b.id
         }
     }
 }

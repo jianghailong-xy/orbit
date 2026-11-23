@@ -67,9 +67,9 @@ export const FEISHU_SCOPE_PURPOSES: Readonly<Record<(typeof FEISHU_APP_SCOPES)[n
 
 /** §6.4: what the detail switch says, off (the default) and on. Feishu keeps whatever a card carries. */
 export const MESSAGE_DETAIL_HINT =
-  "Off by default: alerts carry only the session or project title, the kind of event and a tool's name. "
-  + "On, they also carry tool inputs, recaps, failure reasons, the agent's messages and questions, and owner item text, "
-  + "and all of it is stored on Feishu's servers.";
+  "On by default: alerts carry tool inputs, recaps, failure reasons, the agent's messages and questions, and owner item text, "
+  + "and all of it is stored on Feishu's servers. "
+  + "Off, they carry only the session or project title, the kind of event and a tool's name.";
 
 /** §7.2, decision 1: what the approvals switch says. "Always allow" stays in Orbit either way. */
 export const APPROVALS_IN_FEISHU_HINT =

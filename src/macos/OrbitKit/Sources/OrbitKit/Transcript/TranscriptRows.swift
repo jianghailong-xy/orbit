@@ -144,11 +144,16 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         /// The record a change inside the envelope left here (§4): "Changed Codex stable check: time 10:00 →
         /// 09:00 · Undo", placed at its own `createdAt`.
         case scheduleRecord(scheduleID: String, revision: Int)
+        /// A scheduled task's change conversation (§8.2, board 03-change): Orbit's opening — the strip naming the
+        /// schedule and the schedule as it was when the conversation was opened — at the conversation's head,
+        /// before the person's first words, placed at the conversation's creation.
+        case scheduleChangeOpening
         /// A scheduled task's run, at the head of its own session: "Scheduled run · planned 10:00, started 10:01 ·
         /// access Check only · …" (§7.4), placed at the run's planned time.
         case scheduleRunStrip(runID: String)
         /// What that run reported, after its last event: placed at the run's end.
         case scheduleRunReport(runID: String)
+        case permissionModeChange(SessionPermissionModeChange)
 
         /// Historical records obey the conversation's creation boundary when placed by moment.
         /// A promotion approval placed by moment is a blocked candidate's record.
@@ -156,7 +161,7 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
             switch self {
             case .criteriaDecisionReceipt, .evidenceDecisionReceipt,
                  .acceptanceConfirmationReceipt, .ownerDecisionReceipt, .promotionReceipt,
-                 .coordinatorQuestionRecord, .promotionApproval:
+                 .coordinatorQuestionRecord, .promotionApproval, .permissionModeChange:
                 return true
             default:
                 return false
@@ -254,8 +259,10 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         case .scheduleCard(let requestID):        return "schedule-card-\(PublicID.storageKey(requestID))"
         case .scheduleRecord(let scheduleID, let revision):
             return "schedule-record-\(PublicID.storageKey(scheduleID))@\(revision)"
+        case .scheduleChangeOpening:              return "schedule-change-opening"
         case .scheduleRunStrip(let runID):        return "schedule-run-strip-\(PublicID.storageKey(runID))"
         case .scheduleRunReport(let runID):       return "schedule-run-report-\(PublicID.storageKey(runID))"
+        case .permissionModeChange(let change): return change.rowID
         }
     }
 }
@@ -422,7 +429,8 @@ public enum DeliveryAnchor {
              .evidenceDecision, .ownerDecisionReceipt, .evidenceDecisionReceipt,
              .promotionApproval, .promotionReceipt, .coordinatorQuestion,
              .coordinatorQuestionRecord, .escalatedItem, .fusePause, .ownerRequest, .crossingBatch,
-             .scheduleCard, .scheduleRecord, .scheduleRunStrip, .scheduleRunReport:
+             .scheduleCard, .scheduleRecord, .scheduleChangeOpening, .scheduleRunStrip, .scheduleRunReport,
+             .permissionModeChange:
             return items.last?.id
         }
     }

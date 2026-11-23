@@ -207,3 +207,30 @@ describe('derivePermissionSemantics follows the catalogue for Auto', () => {
     expect(degraded.shortNote).toMatch(/runs as Default/);
   });
 });
+
+describe('Codex Auto with its sandbox unavailable on Orbit Cloud', () => {
+  it('says the sandbox is off, and claims no workspace-write sandbox', () => {
+    const s = derivePermissionSemantics(AgentProvider.CODEX, PermissionMode.AUTO, undefined, undefined, undefined, true);
+    expect(s).toEqual({
+      mode: PermissionMode.AUTO,
+      unapproved: 'allow',
+      approvalSupport: 'partial',
+      honored: false,
+      sandbox: 'off',
+      note: "Codex's sandbox is unavailable on Orbit Cloud: commands run unconfined inside your Cloud runner.",
+      shortNote: 'sandbox off on Orbit Cloud, commands run unconfined',
+    });
+    expect(JSON.stringify(s)).not.toMatch(/workspace-write/);
+  });
+
+  it('changes nothing without the report, or for any other engine or mode', () => {
+    for (const provider of Object.values(AgentProvider)) {
+      for (const mode of Object.values(PermissionMode)) {
+        const before = derivePermissionSemantics(provider, mode);
+        expect(derivePermissionSemantics(provider, mode, undefined, undefined, undefined, false)).toEqual(before);
+        if (provider === AgentProvider.CODEX && mode === PermissionMode.AUTO) continue;
+        expect(derivePermissionSemantics(provider, mode, undefined, undefined, undefined, true)).toEqual(before);
+      }
+    }
+  });
+});

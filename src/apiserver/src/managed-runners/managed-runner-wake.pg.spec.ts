@@ -252,7 +252,12 @@ test('managed runners wake on demand and sleep through the real application', {
     const m = await mappingOf(o.userId);
     const asked = await call(server, 'POST', '/api/managed-runner/sleep', o.token, { idempotencyKey: `sleep-${m.generation}-${randomUUID()}`, revision: m.revision });
     assert.equal(asked.status, 202, asked.text);
-    await until('DRAINING', async () => (await mappingOf(o.userId)).managementState === 'DRAINING');
+    await until('DRAINING', async () => {
+      if ((await mappingOf(o.userId)).managementState === 'DRAINING') return true;
+      // The manager waits for an idle workload report received after the owner's request.
+      await heartbeat(m.runnerId);
+      return false;
+    });
     const first = await heartbeat(m.runnerId);
     assert.ok(first.managedSleep?.requestedAt && !first.managedSleep.confirmed, `the drained instance is asked: ${JSON.stringify(first.managedSleep)}`);
     assert.equal(first.integrationJobs, undefined, 'a draining instance is handed no new work');
@@ -274,7 +279,10 @@ test('managed runners wake on demand and sleep through the real application', {
       title: 'earlier work', prompt: 'the opening prompt', provider: 'claude', provider_builtin: true, status, num_turns: 1,
       runtime_session_id: randomUUID(),
       ...(isReleasedStatus(status) ? {
-        finished_at: new Date(), 
+        finished_at: new Date(),
+        // A failure release carries FAILED on its turn, copied here (removal step R2); since the status bridge went
+        // (R7) that is what reads it as a failure.
+        ...(status === 'FAILED' ? { last_turn_outcome: 'FAILED' } : {}),
       } : {}),
       ...extra,
     };

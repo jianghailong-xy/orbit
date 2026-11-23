@@ -83,7 +83,7 @@ func TestTheRunLoopAppliesAQuietAnswerAsNoChange(t *testing.T) {
 	body = body[:strings.Index(body, "\n}\n")]
 	for _, want := range []struct{ code, why string }{
 		{"if resp.AgentDirs != nil {\n\t\t\t\tagentDirs.trigger(resp.AgentDirs)", "directories are scanned again only when an answer names them"},
-		{"if resp.MaxConcurrent > 0 {\n\t\t\t\tif prev := pool.maxConcurrent(); prev != resp.MaxConcurrent {", "max-concurrent moves only to a new value"},
+		{"pool.applyConcurrency(resp.MaxConcurrent, resp.BurstConcurrent)", "both concurrency settings go through the pool"},
 		{"if resp.MinFreeDiskMb != nil {\n\t\t\t\tfloorMb = int64(*resp.MinFreeDiskMb)\n\t\t\t}\n\t\t\tdiskFloorMb.Store(floorMb)", "the floor is the one the answer states"},
 		{"for _, id := range resp.LeaseLostSessionIDs {", "leases are detached only for the ids an answer names"},
 		{"for _, id := range resp.CancelSessionIDs {", "sessions are cancelled only for the ids an answer names"},

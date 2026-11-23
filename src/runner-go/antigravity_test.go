@@ -467,6 +467,15 @@ const agyModelsOutput = "gemini-3.8-flash-high\tGemini 3.8 Flash (High)\ngemini-
 	"gemini-3.6-flash-high\tGemini 3.6 Flash (High)\ngemini-3.6-flash-medium\tGemini 3.6 Flash (Medium)\n" +
 	"gemini-3.6-flash-low\tGemini 3.6 Flash (Low)\ngemini-3.1-pro-high\tGemini 3.1 Pro (High)\ngemini-3.1-pro-low\tGemini 3.1 Pro (Low)\n"
 
+// `agy models` after a Google sign-in: the API-key rows above plus the account's own, whose ids
+// are not Gemini's (contract §16.7, read back from the production runner's model_catalog).
+const agyGoogleModelsOutput = agyModelsOutput +
+	"claude-opus-5-5-low\tClaude Opus 5.5 (Low)\nclaude-opus-5-5-medium\tClaude Opus 5.5 (Medium)\n" +
+	"claude-opus-5-5-high\tClaude Opus 5.5 (High)\n" +
+	"claude-sonnet-5-5-low\tClaude Sonnet 5.5 (Low)\nclaude-sonnet-5-5-medium\tClaude Sonnet 5.5 (Medium)\n" +
+	"claude-sonnet-5-5-high\tClaude Sonnet 5.5 (High)\n" +
+	"gpt-oss-120b-medium\tGPT-OSS 120B (Medium)\n"
+
 func TestAntigravityModelCatalogFoldsLevelsIntoModels(t *testing.T) {
 	models := parseAntigravityModels([]byte("Fetching available models...\n" + agyModelsOutput))
 	want := []ModelInfo{
@@ -486,6 +495,7 @@ func TestAntigravityModelCatalogFoldsLevelsIntoModels(t *testing.T) {
 
 func TestAntigravityModelArgs(t *testing.T) {
 	catalog := parseAntigravityModels([]byte(agyModelsOutput))
+	googleCatalog := parseAntigravityModels([]byte(agyGoogleModelsOutput))
 	for _, tc := range []struct {
 		model, effort string
 		catalog       []ModelInfo
@@ -502,6 +512,18 @@ func TestAntigravityModelArgs(t *testing.T) {
 		{"gemini-4-argon", "", nil, []string{"--model", "gemini-4-argon"}},
 		{"gemini-4-argon", "max", nil, []string{"--model", "gemini-4-argon", "--effort", "max"}},
 		{"gemini-4-argon-high", "", nil, []string{"--model", "gemini-4-argon-high"}},
+		// A Google sign-in's account rows: the id the control plane dispatched is the one agy is
+		// started on, and the level its slug names (or the model's own default) becomes --effort.
+		{"claude-sonnet-5-5", "", googleCatalog, []string{"--model", "claude-sonnet-5-5", "--effort", "high"}},
+		{"claude-sonnet-5-5-medium", "", googleCatalog, []string{"--model", "claude-sonnet-5-5", "--effort", "medium"}},
+		{"claude-sonnet-5-5-high", "low", googleCatalog, []string{"--model", "claude-sonnet-5-5", "--effort", "low"}},
+		{"claude-opus-5-5", "", googleCatalog, []string{"--model", "claude-opus-5-5", "--effort", "high"}},
+		{"claude-opus-5-5-low", "", googleCatalog, []string{"--model", "claude-opus-5-5", "--effort", "low"}},
+		{"claude-opus-5-5-medium", "", googleCatalog, []string{"--model", "claude-opus-5-5", "--effort", "medium"}},
+		{"claude-opus-5-5-high", "", googleCatalog, []string{"--model", "claude-opus-5-5", "--effort", "high"}},
+		{"gpt-oss-120b-medium", "", googleCatalog, []string{"--model", "gpt-oss-120b", "--effort", "medium"}},
+		// GPT-OSS has no `high`: the model's default level, not a level agy would refuse.
+		{"gpt-oss-120b", "high", googleCatalog, []string{"--model", "gpt-oss-120b", "--effort", "medium"}},
 	} {
 		if got := antigravityModelArgs(tc.model, tc.effort, tc.catalog); !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("antigravityModelArgs(%q, %q) = %q, want %q", tc.model, tc.effort, got, tc.want)
@@ -768,6 +790,48 @@ func TestAntigravityArgsAndEnv(t *testing.T) {
 			t.Errorf("env lacks %s", pair)
 		}
 	}
+}
+
+func TestAntigravityGoogleModelsReachTheProcessArgv(t *testing.T) {
+	// The whole point of the fix at the runner's end: a Google sign-in's model arrives as
+	// `--model`, not as an omitted flag agy replaces with its own default (the E2E failure of
+	// 2026-10-05 had no --model at all in this argv).
+	publishModelCatalog(&ModelCatalog{Antigravity: parseAntigravityModels([]byte(agyGoogleModelsOutput))})
+	t.Cleanup(func() { publishModelCatalog(nil) })
+	// Every id the control plane may dispatch from this catalogue — the account's rows and the
+	// levels `agy models` prints for them — reaches the full process argv as that same model.
+	for _, tc := range []struct {
+		model string
+		want  []string
+	}{
+		{"claude-sonnet-5-5", []string{"--model", "claude-sonnet-5-5", "--effort", "high"}},
+		{"claude-sonnet-5-5-medium", []string{"--model", "claude-sonnet-5-5", "--effort", "medium"}},
+		{"claude-opus-5-5", []string{"--model", "claude-opus-5-5", "--effort", "high"}},
+		{"claude-opus-5-5-low", []string{"--model", "claude-opus-5-5", "--effort", "low"}},
+		{"claude-opus-5-5-medium", []string{"--model", "claude-opus-5-5", "--effort", "medium"}},
+		{"claude-opus-5-5-high", []string{"--model", "claude-opus-5-5", "--effort", "high"}},
+		{"gpt-oss-120b", []string{"--model", "gpt-oss-120b", "--effort", "medium"}},
+		{"gpt-oss-120b-medium", []string{"--model", "gpt-oss-120b", "--effort", "medium"}},
+	} {
+		job := &ClaimedSession{
+			SessionID: "s1", RuntimeSessionID: "conv-1",
+			Agent: AgentExecConfig{Model: tc.model, PermissionMode: "default"},
+		}
+		got := antigravityArgs(job, "/scratch/antigravity", false)
+		if i := indexOfSequence(got, tc.want); i < 0 {
+			t.Errorf("argv %q lacks %q", got, tc.want)
+		}
+	}
+}
+
+// indexOfSequence is the position of want inside got as a contiguous slice, or -1.
+func indexOfSequence(got, want []string) int {
+	for i := 0; i+len(want) <= len(got); i++ {
+		if reflect.DeepEqual(got[i:i+len(want)], want) {
+			return i
+		}
+	}
+	return -1
 }
 
 func TestAntigravityEngineWiring(t *testing.T) {

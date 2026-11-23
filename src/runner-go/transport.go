@@ -24,6 +24,7 @@ import (
 
 const (
 	runnerCapabilitiesHeader = "X-Orbit-Runner-Capabilities"
+	overCapacityCapabilityV1 = "over-capacity/v1"
 	// The operating system this binary was built for (runtime.GOOS). The control plane offers a
 	// sign-in only where it works — Antigravity's Google login is Linux-only for now.
 	runnerOSHeader                   = "X-Orbit-Runner-Os"
@@ -120,6 +121,7 @@ func init() {
 		dirProbeCapabilityV1,
 		createWorkDirCapabilityV1,
 		cloneWorkDirCapabilityV1,
+		cloneWorkDirCapabilityV2,
 		conditionProbeCapabilityV1,
 		createWorkDirCapabilityV2,
 		claudeRegionCapabilityV1,
@@ -135,6 +137,7 @@ func init() {
 		subagentRemoteInPlaceCapabilityV1,
 		bgOwnerStopCapabilityV1,
 		bgOutputTailCapabilityV1,
+		overCapacityCapabilityV1,
 	}, cursorAccountCapabilities()...), declaredSteerCapabilities()...), ",")
 	// Where 0600 means something (secret_file_unix.go); a Windows runner is never handed a secret.
 	if secretFilesSupported {
@@ -142,7 +145,7 @@ func init() {
 	}
 	// Only a runner the managed image's entrypoint started has the browser (browser_supervisor.go).
 	if declaresBrowserClear(os.LookupEnv) {
-		runnerCapabilitiesV1 += "," + browserClearCapabilityV1 + "," + browserOpenCapabilityV1
+		runnerCapabilitiesV1 += "," + browserClearCapabilityV1 + "," + browserOpenCapabilityV1 + "," + loginRunnerBrowserCapabilityV1
 	}
 }
 
@@ -264,6 +267,9 @@ type Transport struct {
 	// noTakeoverBatch is set once the control plane has answered the batch takeover 404 or 405: it
 	// predates it, and every takeover from then on is one request per session, as before it.
 	noTakeoverBatch atomic.Bool
+	// releaseOffered is what the latest successful heartbeat answer said of the session-release protocol
+	// (session_release.go): false until one says it, and on the first that does not.
+	releaseOffered atomic.Bool
 	// observer hears about every request and card of the tool call it was set for (transport_observe.go).
 	observerMu sync.Mutex
 	observer   func(transportEvent)

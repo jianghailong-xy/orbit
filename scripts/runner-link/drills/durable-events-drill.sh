@@ -557,9 +557,10 @@ judge() {
   docker logs --since "$since_at" "$gateway" > "$out/$phase-link-gateway.log" 2>&1 || true
   docker logs --since "$since_at" "$apiserver" > "$out/$phase-apiserver.log" 2>&1 || true
   awk -v from="$from" 'NR > from' "$drill/runner.log" > "$out/$phase-runner.log"
-  # Why the reaper held its sweeps over the phase, each reason with how many sweeps gave it.
+  # Why the reaper held its sweeps over the phase, each reason with how many sweeps gave it. A JSON line
+  # (ORBIT_LOG_FORMAT=json) ends its message at the first `","`, and the fields after it are dropped.
   reaper="$(sed 's/\x1b\[[0-9;]*m//g' "$out/$phase-apiserver.log" | grep -E 'not reaping' |
-    sed -E 's/^.*not reaping [^:]*: //; s/[0-9]+/N/g' | sort | uniq -c | sort -rn |
+    sed -E 's/^.*not reaping [^:]*: //; s/",".*$//; s/[0-9]+/N/g' | sort | uniq -c | sort -rn |
     awk '{ n = $1; $1 = ""; printf "%s%sx \"%s\"", (NR > 1 ? ", " : ""), n, substr($0, 2) }' || true)"
   say "$phase: the reaper held ${reaper:-no sweep}; it reaped the session $(grep -c -e "reaped session $suuid" -e "reaped session $sid" "$out/$phase-apiserver.log" || true) time(s)"
   if [ "$verdict" = PASS ]; then

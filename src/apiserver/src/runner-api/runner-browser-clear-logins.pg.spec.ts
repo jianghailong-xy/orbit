@@ -116,8 +116,8 @@ test('browser_clear_logins: the profile is cleared only on the owner\'s yes; a d
   const headersOf = (token: string): Record<string, string> => (token === r.token
     ? {
       'x-orbit-runner-capabilities': `${INSTANCE_CAPABILITY},${BROWSER_CLEAR}`,
-      'x-orbit-managed-runner-generation': '1',
-      'x-orbit-managed-runner-pod-uid': podUid,
+      'x-orbit-cloud-runner-generation': '1',
+      'x-orbit-cloud-runner-pod-uid': podUid,
     }
     : {});
   type Who = { token: string; sessionId: string };

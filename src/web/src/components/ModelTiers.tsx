@@ -4,7 +4,7 @@ import { api } from '../api';
 import { PROVIDERS_BASE } from '../lib/providerAdmin';
 import {
   modelTierText,
-  qualityLines,
+  qualitySummary,
   subagentTiersQuery,
   TIER_LEVELS,
   type ProviderModelTier,
@@ -31,30 +31,14 @@ export function ModelTierCell({ provider, model }: { provider: ProviderTierRow; 
 }
 
 /**
- * A model's Quality cell: how well it completed work, for display only (docs/subagent-design.md §7.1, board
- * docs/mocks/model-quality/01-board.png). The figures are the model's on every provider listing it; `pooledWith`
- * names the others, under the figures.
+ * A model's Quality cell: how well it completed work, for display only (docs/subagent-design.md §7.1), on one line
+ * (qualitySummary). The figures are the model's on every account listing it; the tooltip has both lines in full and who
+ * rated.
  */
-export function QualityCell({ model, pooledWith = [] }: { model: ProviderModelTier; pooledWith?: readonly string[] }) {
-  const lines = qualityLines(model.quality);
-  if (lines.empty) return <span className="model-tiers-muted">No runs yet</span>;
-  const subagents = (
-    <div className={`model-tiers-quality-line${lines.subagents.raters ? ' model-tiers-rated' : ''}`}
-      tabIndex={lines.subagents.raters ? 0 : undefined}>
-      <span className="model-tiers-quality-source">SubAgents</span>
-      <span className={lines.subagents.muted ? 'model-tiers-muted' : undefined}>{lines.subagents.text}</span>
-    </div>
-  );
-  return (
-    <>
-      {lines.subagents.raters ? <Tooltip content={lines.subagents.raters} toggleOnClick popupStyle={{ whiteSpace: 'nowrap' }}>{subagents}</Tooltip> : subagents}
-      <div className="model-tiers-quality-line">
-        <span className="model-tiers-quality-source">Tasks</span>
-        <span className={lines.tasks.muted ? 'model-tiers-muted' : undefined}>{lines.tasks.text}</span>
-      </div>
-      {pooledWith.length > 0 && <div className="model-tiers-muted model-tiers-pooled">Pooled with {pooledWith.join(', ')}</div>}
-    </>
-  );
+export function QualityCell({ model }: { model: ProviderModelTier }) {
+  const { text, muted, detail } = qualitySummary(model.quality);
+  const cell = <span className={`model-tiers-quality-one${muted ? ' model-tiers-muted' : ''}`} tabIndex={detail ? 0 : undefined}>{text}</span>;
+  return detail ? <Tooltip content={detail} toggleOnClick popupStyle={{ whiteSpace: 'pre-line' }}>{cell}</Tooltip> : cell;
 }
 
 function TierCell({ provider, model }: { provider: ProviderTierRow; model: ProviderModelTier }) {

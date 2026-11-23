@@ -31,6 +31,9 @@
  *       the settled fact is derived, so the project never looks finished in that gap.
  *   (5) A judgment opened because a project's tasks settled files no task while a landing is in
  *       flight, and the same task is filed once nothing is.
+ *   (6) Unmet criteria are counted apart: over contracts/unmet-criteria-counts.fixtures.json (a project
+ *       shaped like Coordinator handoff v2), `derivedDone.counts` tallies only the met criterion by
+ *       landing, while `withheld` and the done check answer over every criterion, as before.
  *
  * Not destructive: every case owns freshly generated ids and asserts over its own project.
  *
@@ -38,6 +41,8 @@
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
 
 import {
@@ -86,6 +91,7 @@ import { readOwnerDecisionSignals } from './owner-decision-signal';
 import { criterionKeyOf } from './project-acceptance';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { readDerivedProjectDone } from './project-done-derived';
+import { doneReadiness, readDoneState } from './project-done-request';
 import { projectsToRecordAsDone } from './project-looks-finished';
 import { branchName } from './project-criterion-landing';
 import { INTEGRATION_JOB_CLAIM } from './project-integration-job';
@@ -824,7 +830,7 @@ test('(2)(3) a project that looks finished is handed to its coordinator with eve
     const farFuture = new Date(Date.now() + 86_400_000);
     const due = (at = farFuture) => projectsToRecordAsDone(stack.db as unknown as PrismaService, w.ownerId, [w.projectId], at);
     for (const data of [
-      { status: RunStatus.FAILED, finishedAt: new Date(), retryAt: null },
+      { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', finishedAt: new Date(), retryAt: null },
       { status: RunStatus.AWAITING_INPUT, finishedAt: null, retryAt: new Date(Date.now() + 60_000) },
       { status: RunStatus.PENDING, retryAt: null },
       { status: RunStatus.RUNNING, retryAt: null },
@@ -857,7 +863,7 @@ test('(2)(3) a project that looks finished is handed to its coordinator with eve
       data: { deliveredAt: null, status: 'ANSWERED' },
     });
     for (const data of [
-      { status: RunStatus.FAILED, finishedAt: new Date(), endReason: 'USER_ENDED', deletedAt: null },
+      { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', finishedAt: new Date(), endReason: 'USER_ENDED', deletedAt: null },
       { status: RunStatus.AWAITING_INPUT, finishedAt: null, endReason: null, deletedAt: new Date() },
     ]) {
       await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data });
@@ -992,7 +998,7 @@ test('a looks-finished fact first raised during FAILED waits and is delivered on
   const sessionId = await workSession(stack, w, task.id, 'orbit/walkthrough');
   await settleExecutable(stack, task.id);
   await queuedJob(stack, w, 'LAND_TASK', task.id, 'NOTHING_TO_LAND');
-  await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, finishedAt: new Date()} });
+  await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', finishedAt: new Date()} });
   await stack.receipts.record(w.ownerId, sessionId, {
     result: 'ALREADY_MERGED', sourceSha: sha('7'), targetBranch: await projectBranch(stack, w), targetShaBefore: sha('7'),
   }, 'RUNNER');
@@ -1112,6 +1118,108 @@ test('(5) a judgment opened because the tasks settled files no task while a land
   assert.equal(filed.creatorSessionId, judgment.id, 'with nothing landing, the bound is the bound it was');
 });
 
+// ═══ (6) unmet criteria are counted apart, and the done answers do not move ══════════════════════
+
+/** The project every client's Done tally is held to: contracts/unmet-criteria-counts.fixtures.json. */
+const UNMET_FIXTURE = JSON.parse(readFileSync(
+  path.resolve(__dirname, '../../../../contracts/unmet-criteria-counts.fixtures.json'), 'utf8',
+)) as {
+  criteria: Array<{ ordinal: number; satisfied: boolean; landing: string; landingReason: string | null }>;
+  expect: {
+    counts: unknown;
+    done: boolean;
+    withheld: string[];
+    running: number;
+    doneCheck: string[];
+  };
+};
+
+test('(6) a project shaped like Coordinator handoff v2 counts only its met criterion by landing, and its done answers are unchanged', {
+  skip, concurrency: 1, timeout: 300_000,
+}, async (t) => {
+  const stack = await connect();
+  t.after(() => stack.db.$disconnect().catch(() => undefined));
+  const w = await world(stack, 'unmet-counts', UNMET_FIXTURE.criteria.map((c) => `criterion ${c.ordinal}`));
+  // 1 (NO_RECEIPT) has nothing filed under it, so its key is not needed.
+  const [, BRANCH_UNSETTLED, NEVER_RUN, MET_IN_FLIGHT, CODELESS_NEVER_RUN] = w.keys;
+
+  // 2, NO_RECEIPT: its task ran on a branch and has not settled.
+  const unsettled = await servingTask(stack, w, BRANCH_UNSETTLED!, 'branch-unsettled');
+  await workSession(stack, w, unsettled.id, 'orbit/branch-unsettled');
+  // 3, NO_BRANCH: its only task was filed and never run.
+  await servingTask(stack, w, NEVER_RUN!, 'never-run');
+  // 4, met and IN_FLIGHT: settled, its landing still queued.
+  const moving = await servingTask(stack, w, MET_IN_FLIGHT!, 'met-in-flight');
+  await workSession(stack, w, moving.id, 'orbit/met-in-flight');
+  await settleExecutable(stack, moving.id);
+  await queuedJob(stack, w, 'LAND_TASK', moving.id);
+  // 5, NO_BRANCH: its only task is declared codeless and was never run (handoff v2's 5); since 2caec7aae9 the codeless
+  // flag no longer decides landing, so it reads as criterion 3 does.
+  const definition = await stack.db.projectAcceptanceCriterionDefinition.findFirstOrThrow({
+    where: { projectId: w.projectId, ordinal: 5 }, select: { id: true, revision: true },
+  });
+  assert.equal(criterionKeyOf(definition.id), CODELESS_NEVER_RUN);
+  await stack.db.task.create({
+    data: {
+      ownerId: w.ownerId,
+      projectId: w.projectId,
+      title: 'codeless, never run',
+      creatorType: CreatorType.USER,
+      creatorId: w.ownerId,
+      status: TaskStatus.OPEN,
+      criterionDefinitionId: definition.id,
+      criterionRevision: definition.revision,
+      completionCriterion: 'EXECUTABLE',
+      acceptanceCommand: 'true',
+      acceptanceExpectedExitCode: 0,
+      codeless: true,
+      autoRunWhenReady: false,
+    },
+  });
+
+  const derived = await readDerivedProjectDone(stack.db as unknown as PrismaService, w.ownerId, w.projectId);
+  // The lanes are the fixture's, criterion by criterion: this change reads them, it does not move them.
+  assert.deepEqual(
+    derived.criteria.map((criterion) => [criterion.satisfied, criterion.landing, criterion.landingReason]),
+    UNMET_FIXTURE.criteria.map((criterion) => [criterion.satisfied, criterion.landing, criterion.landingReason]),
+  );
+  // Whether it can be DONE is read over every criterion, as before.
+  assert.equal(derived.done, UNMET_FIXTURE.expect.done);
+  assert.deepEqual(derived.withheld, UNMET_FIXTURE.expect.withheld);
+  assert.deepEqual(derived.criteria.map((criterion) => criterion.withheld), [
+    ['CRITERION_UNSATISFIED', 'CRITERION_UNLANDED'],
+    ['CRITERION_UNSATISFIED', 'CRITERION_UNLANDED'],
+    ['CRITERION_UNSATISFIED', 'CRITERION_UNLANDED'],
+    ['CRITERION_UNLANDED'],
+    // Codeless no longer lands a never-run task (2caec7aae9): it is unlanded too, as criterion 3 is.
+    ['CRITERION_UNSATISFIED', 'CRITERION_UNLANDED'],
+  ]);
+  assert.equal(
+    derived.criteria.filter((criterion) => criterion.landingReason === 'IN_FLIGHT').length,
+    UNMET_FIXTURE.expect.running,
+  );
+
+  // And recording it done answers as it did: the done check reads each criterion, never the counts.
+  const state = await readDoneState(stack.db as never, w.ownerId, w.projectId, null);
+  assert.deepEqual(
+    doneReadiness(state, []).map((finding) => `${finding.severity} ${finding.code}${finding.criterion ? ` ${finding.criterion.ordinal}` : ''}`),
+    UNMET_FIXTURE.expect.doneCheck,
+  );
+
+  // Then the counts, after the done answers above, which never read them. Only the met criterion is
+  // tallied by where its work is: no unmet one is "landed", "no receipt", "no branch" or "codeless".
+  // onMain + byReason add up to met.
+  assert.deepEqual(derived.counts, UNMET_FIXTURE.expect.counts);
+  assert.equal(
+    derived.counts.onMain + Object.values(derived.counts.byReason).reduce((sum, n) => sum + n, 0),
+    derived.counts.met,
+  );
+
+  // The project document serves the same reading.
+  const document = await stack.projects.get(w.ownerId, w.projectId) as unknown as { derivedDone: typeof derived };
+  assert.deepEqual(document.derivedDone, derived, 'project_get and the projection read differently');
+});
+
 test('(6) the reaper\'s forced finish of the last task\'s work, with nothing to land, derives the settled fact its deferred landing held', {
   skip, concurrency: 1, timeout: 300_000,
 }, async (t) => {
@@ -1167,7 +1275,7 @@ test('a settled-project fact refused during FAILED recovers on the reconcile tic
     await workSession(stack, w, task.id, null, RunStatus.SUCCEEDED, ['walkthrough.md']);
     await stack.db.session.update({
       where: { id: w.coordinatorSessionId },
-      data: { status: RunStatus.FAILED, finishedAt: new Date()},
+      data: { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', finishedAt: new Date()},
     });
     await settleExecutable(stack, task.id);
     const prisma = stack.db as unknown as PrismaService;

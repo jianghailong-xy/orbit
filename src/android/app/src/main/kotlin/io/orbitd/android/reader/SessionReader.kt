@@ -391,9 +391,14 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // What the needs-you bar counts in this conversation (iOS `ConsoleModel.openBelowRows`), and which way it lies from
     // the reader: the cards are drawn in the rail before the tail, so they are above only once the reader is past it. A question
     // answered here stops counting with the press, not with the read after it (A08-13).
-    val belowRows = remember(state.session?.snapshot, cards.answered) {
+    // The owner requests it filed that still wait are drawn inline in the conversation, above the rail: they count first, in
+    // conversation order (iOS `.ownerRequest`).
+    val ownerPlacedAll = remember(shownRows, ownerRequests) { OwnerRequests.place(shownRows.map { it.event.ts }, ownerRequests) }
+    val ownerRows = remember(ownerPlacedAll, state.window.hasOlder) { NeedsYouLogic.ownerRequestRows(ownerPlacedAll, state.window.hasOlder) }
+    val railRows = remember(state.session?.snapshot, cards.answered) {
         state.session?.snapshot?.let { NeedsYouLogic.belowRows(state.session!!.id, it, cards.answered) }.orEmpty()
     }
+    val belowRows = remember(ownerRows, railRows) { ownerRows + railRows }
     // …and its own approvals still asking, at the tail: the header's capsule counts them too (07-console-one-capsule).
     val approvalRows = remember(state.session?.snapshot, cards.answered) {
         state.session?.snapshot?.let { NeedsYouLogic.approvalRows(state.session!!.id, it, cards.answered) }.orEmpty()
@@ -439,7 +444,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         // Once the change has been laid out: how far the card stands from where it was brought to, and back by that much.
         withFrameNanos { }; withFrameNanos { }
         val delta = (CardFocus.position(route.id!!, held.key) ?: return@LaunchedEffect) - held.top
-        if (kotlin.math.abs(delta) >= 1f && CardFocus.held(route.id!!)?.key == held.key) {
+        if (kotlin.math.abs(delta) >= 1f && CardFocus.held(route.id!!) == held) {
             positioning = true
             list.scrollBy(delta)
             positioning = false
@@ -463,9 +468,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     LaunchedEffect(follow) { if (follow) { CardFocus.release(route.id!!); recordHeld = null } }
     LaunchedEffect(placed) {
         if (!placed || !ontoWaitingCard || placedAtCards || route.recordId != null) return@LaunchedEffect
-        placedAtCards = true
         positioning = true
         list.scrollToItem((list.layoutInfo.totalItemsCount - 2 - queuedShown).coerceAtLeast(0))
+        placedAtCards = true
         positioning = false
     }
     // The questions whose answers the turns on screen hand to the coordinator — the window's, and at the live tail the accepted head and
@@ -474,7 +479,18 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         val tail = if (liveTail) accepted + queued.map { it.event } else emptyList()
         AnsweredQuestions(state.session?.let(cards::shown).orEmpty(), rows.map { it.event } + tail)
     }
+    // The list item an inline owner request is drawn in: its host row's, or the "older" item ahead of every row (-1).
+    val ownerHostIndex: (String) -> Int? = { row ->
+        val id = row.removePrefix(NeedsYouLogic.ownerRequestPrefix)
+        ownerPlacedAll.entries.firstOrNull { e -> e.value.any { it.id == id } }?.let { rowsStart[0] + it.key }
+    }
+    // A state the side reads, so a request that arrives after the first composition steers it too.
+    val firstOwnerHost by rememberUpdatedState(belowRows.firstOrNull()?.rowId
+        ?.takeIf { it.startsWith(NeedsYouLogic.ownerRequestPrefix) }?.let(ownerHostIndex))
     val readerSide by remember(list) { derivedStateOf {
+        val host = firstOwnerHost
+        val topItem = list.layoutInfo.visibleItemsInfo.lastOrNull { it.offset <= list.layoutInfo.viewportStartOffset }
+        if (host != null && topItem != null) return@derivedStateOf if (host <= topItem.index) ReaderSide.ABOVE else ReaderSide.BELOW
         when (val top = topLineItem(list.layoutInfo.visibleItemsInfo, list.layoutInfo.viewportStartOffset)) {
             null -> null
             "tail" -> ReaderSide.ABOVE
@@ -487,6 +503,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val showWaiting: (String) -> Unit = { row ->
         follow = false
         scope.launch {
+            val host = if (row.startsWith(NeedsYouLogic.ownerRequestPrefix)) ownerHostIndex(row) else null
+            if (host != null) { list.scrollToItem(host); return@launch }
             // The rail is the item before the queue and the tail; a card in it is brought into view once it is drawn.
             list.scrollToItem((list.layoutInfo.totalItemsCount - 2 - queuedShown).coerceAtLeast(0))
             CardFocus.request(route.id!!, row)
@@ -862,7 +880,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                             if (head == null && held == null) TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1), target = targetSeq)
                             else Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1), target = targetSeq)
-                                held?.let { RunnerUpdatingFoot(it, runnerUpdatingMachine, later = runnerUpdatingLater) }
+                                // Under the reader's own message, so it stands at the bubble's right edge, as on iOS and web.
+                                held?.let { RunnerUpdatingFoot(it, runnerUpdatingMachine, Modifier.align(Alignment.End), later = runnerUpdatingLater) }
                                 head?.let { TurnHeadLine(it, ticking = sessionLive && row.event.seq == newestHead) }
                             }
                         }
@@ -908,7 +927,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                                 val withdraw = heldCancel?.takeIf { it.turnId == head.turnId }?.let { held ->
                                     { composer.withdraw(held.turnId, held.words, steer = false, engine = console.engine) }
                                 }
-                                RunnerUpdatingFoot(gate, runnerUpdatingMachine, later = runnerUpdatingLater, cancel = withdraw)
+                                RunnerUpdatingFoot(gate, runnerUpdatingMachine, Modifier.align(Alignment.End), later = runnerUpdatingLater, cancel = withdraw)
                             }
                         }
                     }
@@ -919,8 +938,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     item(key = "newer") { if (displayedWindow.newerAfter != null) TextButton(enabled = !displayedLoading, onClick = model::newer) { Text("Load newer messages") } }
                     item(key = "interaction-cards") {
                         Box(Modifier.onSizeChanged { cardsSize = it.height; if (rail.grew(it.height) && placed && follow && state.window.newerAfter == null) repin++ }) {
-                            // The list's height below the floating needs-you bar: a card brought in by its top lands under the bar, not behind it.
-                            CompositionLocalProvider(LocalCardViewport provides listHeight.coerceAtLeast(0)) { SessionCards(cards, openLink, discuss = discussCard) }
+                            // Only opens without a record jump run the rail's initial scroll.
+                            val viewport = if (ontoWaitingCard && !placedAtCards && route.recordId == null) 0 else listHeight
+                            CompositionLocalProvider(LocalCardViewport provides viewport) { SessionCards(cards, openLink, discuss = discussCard) }
                         }
                     }
                     // A08-4: what is still waiting in the queue, as the turns it will be — after the decisions, before the tail.

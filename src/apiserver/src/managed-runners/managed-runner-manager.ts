@@ -10,6 +10,7 @@ import {
 
 import { generateToken, sha256 } from '../common/crypto.util';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import { issueDriveMountCredential, revokeDriveMountCredentials } from '../drive/drive-mount-credential';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { ManagedKubeClient } from './kube-client';
 import { KubernetesBackend } from './kubernetes-backend';
@@ -365,7 +366,8 @@ export class ManagedRunnerManager {
   readonly holder: string;
   /** Where instances run: every infrastructure call this manager makes. */
   readonly backend: ManagedRunnerBackend;
-  private readonly now: () => Date;
+  /** The clock this manager judges everything by; an owner's sleep request is stamped on it too. */
+  readonly now: () => Date;
   private readonly random: () => number;
   private readonly log: Pick<Logger, 'warn' | 'error'>;
   private readonly linkOnly: () => boolean | Promise<boolean>;
@@ -393,6 +395,14 @@ export class ManagedRunnerManager {
     this.scope = options.ownLocationOnly
       ? { backend: this.backend.name, clusterKey: this.backend.location.clusterKey, namespace: this.backend.location.namespace }
       : { backend: this.backend.name };
+  }
+
+  /**
+   * Whether the manager may ask the backend to stop an instance on its own account — an accepted sleep past its drain
+   * time, a disabled owner's drain, a silent instance of a previous image — and not only for the owner's Update Now.
+   */
+  private get stopsUnasked(): boolean {
+    return !!this.backend.stopInstance && !this.backend.ownerStopsOnly;
   }
 
   /** Whether a mapping is one this manager drives (`scope`). */
@@ -753,6 +763,8 @@ export class ManagedRunnerManager {
       const adopted = await this.adoptCredential(issued.mapping, issued.credential);
       if (adopted) return { next: adopted };
     }
+    const drive = await this.ensureDriveMount(issued.mapping);
+    if (drive) return drive;
     return {
       next: await this.commit(issued.mapping, {
         managementState: 'STARTING',
@@ -894,9 +906,9 @@ export class ManagedRunnerManager {
    * on the current image ends the request (`updateCompletedAt`). Otherwise, null when it stays:
    *
    *   - Asked of a busy runner with the owner's word that its turns may be interrupted (`updateInterruptTurns`), on a
-   *     backend whose host reports every stop it makes (`stopInstance`, Docker): the instance is asked to stop
-   *     (`stopForOwnerUpdate`), and its host's report of the exit is read as for any stop (`terminated`).
-   *   - Otherwise — an idle runner's request, or a busy one's on a backend that cannot stop it (Kubernetes) — the same
+   *     backend whose host reports every stop it makes (`stopInstance`, Docker and Kubernetes): the instance is asked
+   *     to stop (`stopForOwnerUpdate`), and its host's report of the exit is read as for any stop (`terminated`).
+   *   - Otherwise — an idle runner's request, or a busy one's on a backend that cannot stop it — the same
    *     roll as `rollPreviousImage`, on any backend: once the instance is idle, by its own fresh report and by the
    *     records, it drains marked as a roll and wakes at once as the next generation, made from the image the backend
    *     makes instances from now, on the same volume and runner. Nothing in flight is cut short: while busy it stays
@@ -926,8 +938,9 @@ export class ManagedRunnerManager {
   /**
    * The owner's Update Now of a busy runner, with their word that its turns may be interrupted, on a backend whose host
    * reports every stop it makes: the READY instance is asked to stop (`stopInstance`), as `stopSilentPrevious` asks.
-   * Docker sends SIGTERM with the profile's stop grace, and the runner's ordinary shutdown stops its turns, which stay
-   * resumable; that works on every runner image. Asking is no proof: the mapping stays READY, nothing is created, and
+   * Docker sends SIGTERM with the profile's stop grace, and Kubernetes deletes the Pod with its termination grace, which
+   * the kubelet turns into the same SIGTERM; the runner's ordinary shutdown stops its turns, which stay resumable; that
+   * works on every runner image. Asking is no proof: the mapping stays READY, nothing is created, and
    * every pass asks again until its host reports the exit. That report is the stop proof (`terminated`): recorded, the
    * container removed by UID, its volume released, and only then the next generation made from the image the backend
    * makes instances from now, on the same volume and runner. Demand changes none of it.
@@ -988,9 +1001,10 @@ export class ManagedRunnerManager {
    * exit is, read as for any stop (`terminated`): recorded as the proof, the container removed by UID, its volume
    * released, and the next generation made from the image the profile names now, on the same volume and runner (or
    * asleep, if its owner asked). A stop reported by anything else, or a container gone, fences. Null when it stays.
+   * Never on Kubernetes (`stopsUnasked`), where only the owner's Update Now stops an instance.
    */
   private async stopSilentPrevious(mapping: ManagedRunner, instance: ManagedInstance): Promise<Step | null> {
-    if (!this.backend.stopInstance || !instance.previousImage || !instance.running) return null;
+    if (!this.stopsUnasked || !instance.previousImage || !instance.running) return null;
     if (!(await this.linkOnly())) return null;
     const now = this.now();
     const beats = await this.prisma.runner.findUnique({ where: { id: mapping.runnerId }, select: RUNNER_BEATS });
@@ -1002,7 +1016,7 @@ export class ManagedRunnerManager {
         + `previous image (${instance.previousImage}) and silent since ${beat?.toISOString() ?? 'it started'}, on a server that takes runners `
         + `over the link alone; asking it to stop, so that the next generation starts from the current image`,
     );
-    await this.backend.stopInstance(mapping);
+    await this.backend.stopInstance!(mapping);
     return { done: 'READY' };
   }
 
@@ -1024,7 +1038,9 @@ export class ManagedRunnerManager {
   /**
    * READY, and asked to sleep — by the owner, or by the idle interval having passed since the
    * runner became READY, since the last demand and by the instance's own count — with nothing in the
-   * records and nothing in flight on the instance: drain. Claims stop at once (the claim refuses a
+   * records and nothing in flight on the instance: drain. The owner's request is answered only by a
+   * report the instance sent after it (`sleepRequestedAt`): one from before may predate a write or a
+   * turn begun since, and draining on it would stop claims on a busy runner. Claims stop at once (the claim refuses a
    * draining mapping), and the instance's heartbeats carry the sleep request from now on. The
    * compare-and-set includes the demand revision this decision read, so demand that came meanwhile
    * keeps the runner READY.
@@ -1040,6 +1056,7 @@ export class ManagedRunnerManager {
     if (!asked && now.getTime() - quietSince < idleMs) return null;
     const report = await this.instanceReport(mapping, now);
     if (!report || !workloadIdle(report) || report.draining) return null;
+    if (asked && mapping.sleepRequestedAt && Date.parse(report.receivedAt) <= mapping.sleepRequestedAt.getTime()) return null;
     if (!asked && Date.parse(report.receivedAt) - report.idleSeconds * 1000 > now.getTime() - idleMs) return null;
     if ((await managedRunnerWork(this.prisma, mapping.runnerId)).length > 0) return null;
     const { count } = await this.prisma.managedRunner.updateMany({
@@ -1125,7 +1142,7 @@ export class ManagedRunnerManager {
     }
     // Accepted: it stops by itself. Overdue is said, and forced only where the backend can (`stopOverdue`).
     const overdue = now.getTime() - mapping.stopAcknowledgedAt.getTime() > this.profile.lifecycle.drainSeconds * 1000;
-    const said = this.backend.stopInstance ? 'SLEEP_STOP_FORCED' : 'SLEEP_STOP_OVERDUE';
+    const said = this.stopsUnasked ? 'SLEEP_STOP_FORCED' : 'SLEEP_STOP_OVERDUE';
     if (overdue && (mapping.lastError as { code?: unknown } | null)?.code !== said) {
       await this.commit(mapping, { lastError: { ...managedRunnerReason(said), detail: `accepted at ${mapping.stopAcknowledgedAt.toISOString()}` } });
     }
@@ -1136,14 +1153,14 @@ export class ManagedRunnerManager {
   /**
    * A drain that is past its drain time since `since` — accepted and not yet stopped, or a disabled
    * owner's runner that has not stopped by itself — is stopped, where the backend's host reports
-   * every stop it makes (`stopInstance`: Docker; Kubernetes has none and nothing is forced). Asking
-   * is never the proof: the gate still waits for the host's report of the exit, then removes the
-   * instance by UID, as for a runner that stopped on its own.
+   * every stop it makes and the manager may ask it on its own account (`stopsUnasked`: Docker; on
+   * Kubernetes nothing is forced). Asking is never the proof: the gate still waits for the host's
+   * report of the exit, then removes the instance by UID, as for a runner that stopped on its own.
    */
   private async stopOverdue(mapping: ManagedRunner, since: Date, now: Date): Promise<void> {
-    if (!this.backend.stopInstance || now.getTime() - since.getTime() <= this.profile.lifecycle.drainSeconds * 1000) return;
+    if (!this.stopsUnasked || now.getTime() - since.getTime() <= this.profile.lifecycle.drainSeconds * 1000) return;
     this.log.warn(`managed runner ${mapping.id}: draining past its drain time; asking ${this.backend.terms.instance} ${mapping.podUid} to stop`);
-    await this.backend.stopInstance(mapping);
+    await this.backend.stopInstance!(mapping);
   }
 
   /**
@@ -1235,6 +1252,8 @@ export class ManagedRunnerManager {
         });
         if (count === 0) throw new Superseded();
         await tx.runner.update({ where: { id: mapping.runnerId }, data: { tokenHash: sha256(generateToken(32)) } });
+        // The drive's mount credential of this generation goes with its runner credential (§8.2).
+        await revokeDriveMountCredentials(tx, mapping.runnerId, mapping.generation + 1);
         if (held && compute) await releaseCapacity(tx, held.pool, compute, null);
       },
       loggedRetry(this.log, 'managedRunners.fallAsleep'),
@@ -1574,6 +1593,8 @@ export class ManagedRunnerManager {
         });
         if (count === 0) throw new Superseded();
         await tx.runner.update({ where: { id: mapping.runnerId }, data: { tokenHash: sha256(generateToken(32)) } });
+        // The drive's mount credential of this generation goes with its runner credential (§8.2).
+        await revokeDriveMountCredentials(tx, mapping.runnerId, mapping.generation + 1);
       },
       loggedRetry(this.log, 'managedRunners.fence'),
     );
@@ -1615,6 +1636,8 @@ export class ManagedRunnerManager {
         });
         if (count === 0) throw new Superseded();
         await tx.runner.update({ where: { id: mapping.runnerId }, data: { tokenHash: sha256(generateToken(32)) } });
+        // The drive's mount credential of this generation goes with its runner credential (§8.2).
+        await revokeDriveMountCredentials(tx, mapping.runnerId, mapping.generation + 1);
       },
       loggedRetry(this.log, 'managedRunners.advanceGeneration'),
     );
@@ -1836,6 +1859,8 @@ export class ManagedRunnerManager {
           });
           if (count === 0) throw new Superseded();
           if (retired) await tx.runner.update({ where: { id: mapping.runnerId }, data: { tokenHash: sha256(generateToken(32)) } });
+          // The drive's mount credential of the retired generation goes with its runner credential (§8.2).
+          if (retired) await revokeDriveMountCredentials(tx, mapping.runnerId, mapping.generation + 1);
           if (held && compute) await releaseCapacity(tx, held.pool, compute, null);
           await tx.activity.create({
             data: {
@@ -1971,6 +1996,38 @@ export class ManagedRunnerManager {
     const problem = this.backend.credentialProblem(credential, current);
     if (problem) throw new ManagedRunnerConflict('SECRET_CONFLICT', problem);
     return { mapping: current, credential };
+  }
+
+  /**
+   * The Orbit Files drive's mount credential of the mapping's generation, delivered for the mounter before any
+   * instance of the generation is created (docs/orbit-files-drive-technical-design.md §4.3, §6.1): the CSI plugin reads
+   * it when the kubelet publishes the drive. An older generation's is removed first. Issuing revokes every live mount
+   * credential of the runner, this generation's included, so one that was issued and never delivered (a crash, a
+   * failed create) holds nothing. Null once it is in place, or where runners receive no drive.
+   */
+  private async ensureDriveMount(mapping: ManagedRunner): Promise<Step | null> {
+    const drive = this.backend.driveMount;
+    if (!drive) return null;
+    const mine = (found: ManagedCredential) => found.ownerId === mapping.ownerId && found.runnerId === mapping.runnerId;
+    const current = (found: ManagedCredential) => mine(found) && found.generation === mapping.generation && !!found.token && !found.removing;
+    const found = await drive.read(mapping);
+    if (found && current(found)) return null;
+    if (found && !mine(found)) {
+      throw new ManagedRunnerConflict('DRIVE_SECRET_CONFLICT', `${drive.name} names another owner or runner`);
+    }
+    if (found) {
+      if (found.removing) return this.waitWithin(mapping);
+      await drive.remove(mapping, found);
+    }
+    await revokeDriveMountCredentials(this.prisma, mapping.runnerId, mapping.generation + 1);
+    const { token } = await issueDriveMountCredential(this.prisma, { ownerId: mapping.ownerId, runnerId: mapping.runnerId, generation: mapping.generation });
+    const delivered = await drive.deliver(mapping, token);
+    if (!mine(delivered)) throw new ManagedRunnerConflict('DRIVE_SECRET_CONFLICT', `${drive.name} names another owner or runner`);
+    if (current(delivered) && delivered.token === token) return null;
+    // Another one under the name (an older one not gone yet, or one whose credential the issue above revoked):
+    // removed, and this generation's delivered on a later pass.
+    if (!delivered.removing) await drive.remove(mapping, delivered);
+    return this.waitWithin(mapping);
   }
 
   /** An instance under the fixed name that is not this generation's is a conflict for an operator.

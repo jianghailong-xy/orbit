@@ -161,6 +161,7 @@ export const HEARTBEAT_DELIVERIES = {
   },
   leaseLostSessionIds: { how: 'EVERY_BEAT', reads: 'the lease of every supervised session, by the leaseLostSessionIds rule' },
   maxConcurrent: { how: 'EVERY_BEAT', reads: 'runner.max_concurrent, which the quiet answer carries' },
+  burstConcurrent: { how: 'EVERY_BEAT', reads: 'runner.burst_concurrent, which the quiet answer carries' },
   minFreeDiskMb: {
     how: 'EVERY_BEAT',
     reads: 'runner.min_free_disk_mb, which the quiet answer carries; the default floor of a managed runner whose owner set none is stated by the full reconcile alone, which every beat of a managed runner is',
@@ -222,6 +223,10 @@ export const HEARTBEAT_DELIVERIES = {
   drainScopedClaims: {
     how: 'EVERY_BEAT',
     reads: "the beat's own draining flag: a word about this server, which the quiet answer to a draining beat carries as the full one does",
+  },
+  sessionReleaseV1: {
+    how: 'EVERY_BEAT',
+    reads: "the apiserver's switch ORBIT_SESSION_RELEASE_V1 (run-release.ts sessionReleaseOffered): a word about this server, which the quiet answer carries as the full one does",
   },
   postponeSelfUpdateUntil: { how: 'MARKED', writers: ['runners/runners.service.ts#postponeSelfUpdate'], pending: 'until a beat claims it' },
   selfUpdateNow: { how: 'MARKED', writers: ['runners/runners.service.ts#updateSelfNow'], pending: 'until a beat claims it' },
@@ -438,6 +443,7 @@ export interface LinkBeatRow extends RunnerLinkHintColumns {
   managed: boolean;
   landingNamed: boolean;
   maxConcurrent: number;
+  burstConcurrent: number;
   minFreeDiskMb: number | null;
   /** Whether the presence row was written: false for a caller refused above, and for a managed runner. */
   beaten: boolean;
@@ -479,7 +485,8 @@ export async function readLinkBeat(prisma: Pick<PrismaService, '$queryRaw'>, inp
   const landingNamed = Prisma.sql`EXISTS (SELECT 1 FROM "session" s WHERE s."id" = ANY(${input.namedSessionIds}::uuid[]) AND s."owner_id" = r."owner_id" AND s."kind" = 'LANDING')`;
   const rows = await prisma.$queryRaw<LinkBeatRow[]>`${Prisma.raw(PREPARED_STATEMENT)}
     WITH caller AS (
-      SELECT r."id", r."max_concurrent" AS "maxConcurrent", r."min_free_disk_mb" AS "minFreeDiskMb",
+      SELECT r."id", r."max_concurrent" AS "maxConcurrent", r."burst_concurrent" AS "burstConcurrent",
+             r."min_free_disk_mb" AS "minFreeDiskMb",
              ${credentialHeld} AS "credentialHeld", u."disabled_at" IS NOT NULL AS "ownerDisabled",
              EXISTS (SELECT 1 FROM "managed_runner" m WHERE m."runner_id" = r."id") AS "managed", ${landingNamed} AS "landingNamed"
         FROM "runner" r JOIN "user" u ON u."id" = r."owner_id"
@@ -513,7 +520,8 @@ export async function readLinkBeat(prisma: Pick<PrismaService, '$queryRaw'>, inp
                 (extract(epoch FROM "reconciled_at") * 1000)::float8 AS "reconciledMs",
                 (xmax = 0) AS "inserted"
     )
-    SELECT c."credentialHeld", c."ownerDisabled", c."managed", c."landingNamed", c."maxConcurrent", c."minFreeDiskMb",
+    SELECT c."credentialHeld", c."ownerDisabled", c."managed", c."landingNamed", c."maxConcurrent", c."burstConcurrent",
+           c."minFreeDiskMb",
            (b."changes" IS NOT NULL) AS "beaten", b."inserted", b."changes", b."factsHash", b."reconcileHash", b."reconciledMs",
            (extract(epoch FROM now()) * 1000)::float8 AS "nowMs",
            (SELECT count(*)::int FROM "session" s
@@ -577,13 +585,14 @@ export function linkBeatVerdict(
  * and no `agentDirs`, which a runner reads as "keep scanning the directories you have" — a full reconcile names them.
  */
 export function quietHeartbeatAnswer(
-  row: Pick<LinkBeatRow, 'maxConcurrent' | 'minFreeDiskMb'>,
-  extra: Pick<RunnerHeartbeatResponse, 'cursorKeyChecks'> & { linkHints?: RunnerLinkHints; draining?: boolean },
+  row: Pick<LinkBeatRow, 'maxConcurrent' | 'burstConcurrent' | 'minFreeDiskMb'>,
+  extra: Pick<RunnerHeartbeatResponse, 'cursorKeyChecks'> & { linkHints?: RunnerLinkHints; draining?: boolean; sessionRelease?: boolean },
 ): RunnerHeartbeatResponse & { linkHints?: RunnerLinkHints } {
   return {
     cancelSessionIds: [],
     leaseLostSessionIds: [],
     maxConcurrent: row.maxConcurrent,
+    burstConcurrent: row.burstConcurrent,
     minFreeDiskMb: row.minFreeDiskMb,
     mergeRequests: [],
     commitRequests: [],
@@ -591,6 +600,8 @@ export function quietHeartbeatAnswer(
     // As the full answer says it, to a draining beat: a runner draining for an update reads its absence as an
     // older server (runner-go drainClaimScope).
     ...(extra.draining ? { drainScopedClaims: true } : {}),
+    // As the full answer says it: a runner that reads no such word declares SESSION_RELEASE_V1 on nothing it sends.
+    ...(extra.sessionRelease ? { sessionReleaseV1: true } : {}),
     ...(extra.cursorKeyChecks && extra.cursorKeyChecks.length > 0 ? { cursorKeyChecks: extra.cursorKeyChecks } : {}),
     ...(extra.linkHints ? { linkHints: extra.linkHints } : {}),
   };
