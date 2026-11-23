@@ -657,9 +657,8 @@ internal fun sendEndpoint(detail: JsonObject): String {
     val caps = detail["capabilities"] as? JsonObject
     if (caps != null) {
         // The server sends canSend AND canResume for a released resumable session, so the release decides first (OrbitKit
-        // `ComposerLogic.shouldResume`; web `sessionSendDispositionOf`): the new field, else the old status reading.
-        val released = SessionFacts.released(detail) ?: (terminal(detail) || detail.text("status")?.let { it !in KNOWN_RUN_STATUSES } == true)
-        if (released && caps.flag("canResume") == true && caps.flag("canSend") == true) return "resume"
+        // `ComposerLogic.shouldResume`; web `sessionSendDispositionOf`). An older server sends no `released`: capabilities decide, as before.
+        if (SessionFacts.released(detail) == true && caps.flag("canResume") == true && caps.flag("canSend") == true) return "resume"
         if (caps.flag("canSend") == true) return "turns"
         if (caps.flag("canResume") == true) return "resume"
         error(caps.text("resumeBlockedReason") ?: "This session cannot receive messages.")
