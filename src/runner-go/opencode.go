@@ -1099,6 +1099,19 @@ func applyOpenCodePermissions(permission map[string]interface{}, agent AgentExec
 		permission["bash"] = "ask"
 	}
 
+	// The Orbit Files drive is a workspace root: outside the checkout, so its external-directory check is told. Plan
+	// keeps its denial of every edit above, so there the drive is only read (design §7.2).
+	if guarded {
+		if roots := driveGrantRoots(); len(roots) > 0 {
+			external := map[string]interface{}{"*": permission["*"]}
+			for _, root := range roots {
+				external[root] = "allow"
+				external[root+"/**"] = "allow"
+			}
+			permission["external_directory"] = external
+		}
+	}
+
 	// A workspace symlink whose target resolves outside the checkout: OpenCode's lexical
 	// boundary check passes but the kernel walks out of the workspace. Deny those paths
 	// explicitly, last, so neither the mode baseline nor an AllowedTools entry reopens them.

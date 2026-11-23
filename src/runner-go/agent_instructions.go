@@ -92,17 +92,17 @@ func orbitCLIInstructions(executable string, insideRecordedWork, watches, delega
 		orbitSubAgentInstructions +
 		orbitReplyFileInstructions +
 		orbitEvidenceFileInstructions +
+		orbitDriveInstructions() +
 		orbitProjectInstructions(insideRecordedWork) +
 		orbitProgressInstructions(insideRecordedWork) +
 		orbitWaitInstructionsFor(watches) +
 		orbitNotifyInstructions +
 		orbitDelegateInstructionsFor(delegates) +
 		orbitWikiPathInstructions +
-		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: they are schema-checked and need " +
-		"no shell. Inside a session the Orbit CLI at `" + command + "` takes the same approvals and attributes the work " +
-		"to you: find a command with `" + command + " guide [topic] --json` or `" + command + " capabilities --id <id> " +
-		"--json`, then run the argv it returns with that exact absolute path. Pass `--receipt` to read the receipt its " +
-		"MCP tool answers with; `--json` prints the entity alone. Do not run `" + command + " mcp` directly."
+		"Prefer the `mcp__orbit__*` tools (schema-checked, no shell). Inside a session the CLI at `" + command +
+		"` takes the same approvals and attributes work to you: `" + command + " guide [topic] --json` or `" + command +
+		" capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt " +
+		"its MCP tool answers with; `--json` prints the entity alone. Do not run `" + command + " mcp` directly."
 }
 
 // orbitSubAgentInstructions is §0 rule 1 for the engine's own sub-agents (Claude Code's Agent tool, a Codex sub-agent):
@@ -126,11 +126,10 @@ const orbitSubAgentInstructions = "Your engine's own sub-agents are as private a
 // because an agent must not read it as the runner committing for it. The uploads path is not spelled
 // out because this text is the same for every session, and "a git-ignored path" is there for the
 // engines that do not show it to the agent. ASCII like the rest of the paragraph.
-const orbitReplyFileInstructions = "To hand the user a file, link it in your reply as `[name](path)`, or `![name](path)` " +
-	"to show an image. Orbit attaches a linked file only if it is inside your working directory or this session's " +
-	"uploads directory; from anywhere else, /tmp included, the user cannot open it, so copy the file there first and " +
-	"link the copy. Whatever git does not ignore in your working directory can end up in a commit, so a file that " +
-	"does not belong in the repository goes in the uploads directory or a git-ignored path.\n\n"
+const orbitReplyFileInstructions = "Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one " +
+	"inside your working directory or this session's uploads directory reaches them: from elsewhere, /tmp included, " +
+	"copy the file there first and link the copy. Unignored files there can end up in a commit; keep others in the " +
+	"uploads directory or a git-ignored path.\n\n"
 
 // orbitEvidenceFileInstructions is where the evidence of a piece of work goes, which is what the repository was for
 // until file_upload (docs/orbit-files-design.md §2.3): 96% of its history was evidence and mocks. It follows
@@ -138,9 +137,46 @@ const orbitReplyFileInstructions = "To hand the user a file, link it in your rep
 // (localFileScope), which is why this sentence can lean on the one before it. A log is named as well as the screenshot,
 // because the tool call that printed it is already stored. The FILE check is what spares the file a commit: it binds the
 // bytes into the evidence the way a commit would, and it is how whoever judges the work gets to read it. ASCII like the rest.
-const orbitEvidenceFileInstructions = "For evidence, cite a command's output by its tool call rather than saving a log, " +
-	"and keep screenshots and reports with file_upload rather than in the repository: it reads those same two " +
-	"directories and returns a link that also works in a reply, and an id to cite as a FILE check.\n\n"
+const orbitEvidenceFileInstructions = "Evidence: cite a command's output by its tool call rather than saving a log; " +
+	"keep screenshots and reports with file_upload rather than in the repository: it reads those same two " +
+	"directories and returns a reply link and the id a FILE check cites.\n\n"
+
+// orbitDriveInstructions is the owner's Orbit Files drive, per runner kind (docs/orbit-files-drive-technical-design.md
+// §4.6, §7.3). On Orbit Cloud the drive is mounted at ~/Files and is used with the shell, so the paragraph says what the
+// mount does not support and where it reports; on every other runner the drive is reached only through the drive tools.
+// Either way agents never see Trash (D11), and verification, judgment and guest-driven turns only read (D9). Kept short:
+// it is in every session's instructions, inside orbitInstructionsMaxBytes.
+func orbitDriveInstructions() string {
+	const readOnly = "Verifying, judging and ORBIT_GUEST turns only read it."
+	if !driveMounted() {
+		return "The owner's Orbit Files drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); " +
+			"deletes go to a Trash agents cannot see. " + readOnly + "\n\n"
+	}
+	return "~/Files is the owner's permanent Orbit Files drive; link its files by path. Give ls, find, du ~/Files/ (a " +
+		"symlink). Copy in with cp -r or rsync -rt (no modes: -a, -p fail on executables; tar x drops the x bit). No " +
+		"links, locks, in-place writes or exec; see /run/orbit-files/errors.log. " + readOnly + "\n\n"
+}
+
+// orbitDriveGuide is the drive's rule in the guide's files topic: the whole of §7.3, which orbitDriveInstructions says
+// in brief because the guide is read on demand and has no byte budget.
+func orbitDriveGuide() string {
+	const readOnly = "Verification, judgment and guest-driven turns (a message carrying the ORBIT_GUEST marker) read the drive and do not write it."
+	if !driveMounted() {
+		return "The owner's Orbit Files drive is reached with drive_put, drive_get, drive_list, drive_move and drive_delete, " +
+			"or `orbit drive put|get|ls|mv|rm`, by drive path (/Proj/r.md). drive_put reads only this session's checkout or " +
+			"uploads directory and overwrites with a version; drive_get saves into the uploads directory. A delete moves the " +
+			"entry to the owner's Trash, which agents cannot see or restore, and no tool shares a drive file. " + readOnly
+	}
+	return "~/Files (/home/orbit/Files, mounted at /run/orbit-files/drive) is the owner's permanent Orbit Files drive, " +
+		"shared across sessions and runners; link a drive file in a reply by its path. ~/Files is a symlink: give ls -l, " +
+		"find and du ~/Files/ with the trailing slash. Copy in with cp -r or rsync -rt: the drive keeps no modes, so cp -a, " +
+		"cp -p and rsync -a report an error and exit non-zero for executables, though the contents are copied, and tar x " +
+		"extracts them without the executable bit. Not " +
+		"supported: hard and symbolic links, mode and owner changes, file locks, shared mmap of a file open for writing, " +
+		"writing inside an existing file (write a new file and rename it over), fallocate, executing a file (run it with " +
+		"bash), special files and xattrs. Each refusal is logged in /run/orbit-files/errors.log; status.json there says " +
+		"whether the drive is connected, and unsent/ keeps bytes a failed close could not commit. " + readOnly
+}
 
 // orbitWikiPathInstructions sends an agent to the wiki at the moment it can use what is there: searches by
 // path found nothing 3 times in 21 up to 2026-11-02, where multi-word ones did 124 times in 188

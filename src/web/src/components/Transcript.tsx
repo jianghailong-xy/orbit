@@ -4094,6 +4094,8 @@ function CodeBlock({ children }: any) {
   );
 }
 
+import { DriveFileCard, driveIdFromHref } from './files/DriveFileCard';
+
 const ORBIT_ATTACHMENT_PREFIX = 'orbit-attachment:';
 
 function attachmentIdFromSrc(src: unknown): string | null {
@@ -4114,6 +4116,7 @@ function attachmentIdFromSrc(src: unknown): string | null {
 function transcriptUrlTransform(url: string): string {
   const trimmed = url.trim();
   if (trimmed.startsWith(ORBIT_ATTACHMENT_PREFIX)) return trimmed;
+  if (driveIdFromHref(trimmed)) return trimmed;
   return referenceUrlTransform(url);
 }
 
@@ -4172,6 +4175,8 @@ function fileLabel(src: string): string {
 }
 
 function MarkdownImage({ node: _node, src, alt, className: _className, ...rest }: any) {
+  const driveId = driveIdFromHref(src);
+  if (driveId) return <DriveFileCard id={driveId} label={typeof alt === 'string' ? alt : undefined} />;
   const id = attachmentIdFromSrc(src);
   if (id) {
     return (
@@ -4307,6 +4312,8 @@ function nodeText(node: ReactNode): string {
 
 function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
   const exp = useContext(ExportCtx);
+  const driveId = driveIdFromHref(href);
+  if (driveId) return <DriveFileCard id={driveId} label={nodeText(children).trim() || undefined} />;
   const id = attachmentIdFromSrc(href);
   if (id) {
     const name = typeof title === 'string' && title.trim() ? title.trim() : nodeText(children).trim() || undefined;

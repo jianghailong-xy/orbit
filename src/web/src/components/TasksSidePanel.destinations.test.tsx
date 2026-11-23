@@ -286,7 +286,7 @@ describe('Machines & models, which has no sidebar row (docs/mocks/machines-and-m
     serve();
     await visit('/tasks');
     const labels = [...container!.querySelectorAll('.tp-section .tp-label')].map((label) => label.textContent);
-    expect(labels).toEqual(['Projects', 'Tasks', 'Scheduled', 'Waiting on you', 'Wiki']);
+    expect(labels).toEqual(['Projects', 'Tasks', 'Scheduled', 'Waiting on you', 'Wiki', 'Files']);
   });
 
   it.each([
@@ -305,5 +305,37 @@ describe('Machines & models, which has no sidebar row (docs/mocks/machines-and-m
     await visit(path);
     expect(litTopEntries()).toEqual([]);
     expect(litRailEntries()).toEqual([]);
+  });
+});
+
+// Orbit Files (docs/mocks/orbit-files/02-web, frame 1): the row directly under the Wiki, with no count and no shortcut.
+describe('Files, the row under the Wiki', () => {
+  const litTopEntries = () =>
+    [...container!.querySelectorAll<HTMLElement>('.tp-section .tp-item.active .tp-label')].map((label) => label.textContent);
+  const litRailEntries = () =>
+    [...container!.querySelectorAll<HTMLElement>('.tp-rail-item.active')].map((item) => item.getAttribute('title'));
+
+  it('sits directly under the Wiki, with neither a count nor a shortcut', async () => {
+    serve();
+    await visit('/tasks');
+    const labels = [...container!.querySelectorAll('.tp-section .tp-label')].map((label) => label.textContent);
+    expect(labels.indexOf('Files')).toBe(labels.indexOf('Wiki') + 1);
+    expect(topEntry('Files').querySelector('.tp-count')).toBeNull();
+    expect(topEntry('Files').querySelector('.sidebar-nav-icon-files')).not.toBeNull();
+  });
+
+  it('opens the Files page', async () => {
+    serve();
+    await visit('/tasks');
+    await click(topEntry('Files'));
+    expect(location).toBe('/files');
+    expect(litTopEntries()).toEqual(['Files']);
+  });
+
+  it.each(['/files', '/files?folder=x&file=y', '/files/trash'])('lights Files, in either form, on %s', async (path) => {
+    serve();
+    await visit(path);
+    expect(litTopEntries()).toEqual(['Files']);
+    expect(litRailEntries()).toEqual(['Files']);
   });
 });

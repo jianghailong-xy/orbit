@@ -1553,6 +1553,9 @@ type ClaimedSession struct {
 	// every engine but Claude, whose child keeps the parent's mode without edit tools; Codex alone reads this too, since its plan mode refuses every command and a shell
 	// is the only way Codex reads a repository (codexPermissionMode).
 	readonlySubagent bool
+	// codexCloudSandboxUnavailable says Codex's sandbox cannot start on this Orbit Cloud runner, so Auto
+	// runs with it off (codex_cloud_sandbox.go). Set when Codex is launched; false everywhere else.
+	codexCloudSandboxUnavailable bool
 	// readonlyParentMode is the parent session's permission mode as it stands now, on a read-only SubAgent's
 	// child claim on an engine other than Claude (subagentChildJob); nil on every other claim. Kimi reads it to
 	// answer its plan mode's shell requests the way the parent runs (kimiReadonlyShellFollowsParent).

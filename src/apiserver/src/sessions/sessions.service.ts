@@ -4872,6 +4872,7 @@ export class SessionsService {
       providerBuiltin: boolean;
       model: string | null;
       permissionMode: string | null;
+      codexSandboxUnavailable: boolean;
       effort: string | null;
       fastMode: boolean;
       /** SCHEDULE marks a scheduled run's session, which only a workspace's Scheduled runs folder lists. */
@@ -4987,6 +4988,7 @@ export class SessionsService {
         s.source, s.engine, s.provider, s.model,
         s.provider_builtin AS "providerBuiltin",
         s.permission_mode AS "permissionMode",
+        s.codex_sandbox_unavailable AS "codexSandboxUnavailable",
         s.effort,
         s.fast_mode       AS "fastMode",
         s.run_source      AS "runSource",
@@ -5242,6 +5244,7 @@ export class SessionsService {
         providerBuiltin: r.providerBuiltin,
         model: r.model,
         permissionMode: r.permissionMode,
+        codexSandboxUnavailable: r.codexSandboxUnavailable,
         effort: r.effort,
         fastMode: r.fastMode,
         runSource: r.runSource,

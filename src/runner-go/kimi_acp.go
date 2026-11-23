@@ -2431,6 +2431,11 @@ func kimiAutomaticPermissionOption(job *ClaimedSession, toolName string, input i
 			return selectDecision(false)
 		}
 	}
+	// The Files drive is read-only in Plan: Kimi's plan mode asks about every shell call, and one that writes the
+	// drive is refused here rather than put on a card or allowed by a rule (plan_drive.go).
+	if job.Agent.PermissionMode == "plan" && planDriveWrite(toolName, mapValue(input)) {
+		return selectDecision(false)
+	}
 	allowed := appendUnique(job.Agent.AllowedTools,
 		orbitCLIAllowedTools(
 			orbitCLIPermissionExecutable(orbitCLIExecutable()),

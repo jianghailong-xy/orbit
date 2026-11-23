@@ -174,6 +174,11 @@ export interface ManagedKubeClient {
   readonly namespace: string;
   readonly persistentVolumeClaims: KubeResource<PersistentVolumeClaim>;
   readonly secrets: KubeResource<Secret>;
+  /**
+   * The Secrets of the profile's files namespace (`files.namespace`), where the manager writes each generation's
+   * mount credential for the Orbit Files CSI plugin; absent when the profile has no drive.
+   */
+  readonly driveSecrets?: Pick<KubeResource<Secret>, 'get' | 'create' | 'delete'>;
   readonly pods: KubePods;
   /** Read-only: where an operator leaves a fencing receipt (managed-runner-fencing.ts). */
   readonly configMaps: Pick<KubeResource<ConfigMap>, 'get'>;

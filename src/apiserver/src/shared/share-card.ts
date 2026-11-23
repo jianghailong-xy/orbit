@@ -8,6 +8,7 @@ const DESCRIPTION: Record<ShareRootKind, string> = {
   TASK: 'A task shared from Orbit',
   PROJECT: 'A project shared from Orbit',
   WIKI: 'A wiki shared from Orbit',
+  DRIVE_FILE: 'A file shared from Orbit',
 };
 
 /** A title is cut here; a chat shows two lines of it at most. */

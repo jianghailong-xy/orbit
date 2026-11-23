@@ -1400,4 +1400,51 @@ test('Orbit Files retention', { skip: !URL, concurrency: 1, timeout: 900_000 }, 
     await purgeTrash();
     assert.equal(await sessionStays(kept2.runId), false);
   });
+
+  await t.test('(27) the off-host date of an s3 blob is set only when the bucket is mirrored, and a local blob always gets it', async () => {
+    const s3Env = {
+      ORBIT_FILES_DIR: dir,
+      ORBIT_FILES_BACKEND: 's3',
+      ORBIT_FILES_S3_ENDPOINT: 'http://127.0.0.1:9',
+      ORBIT_FILES_S3_BUCKET: 'orbit',
+      ORBIT_FILES_S3_ACCESS_KEY_ID: 'key',
+      ORBIT_FILES_S3_SECRET_ACCESS_KEY: 'secret',
+    };
+    // A bucket that answers every delete, standing in for the real one: this case is about the date, not the transport.
+    const sweepWith = (env: NodeJS.ProcessEnv) => {
+      const service = new FilesService(db as never, filesConfigFrom(env));
+      const removed: string[] = [];
+      const realStoreOf = service.storeOf.bind(service);
+      service.storeOf = (storage: string) => {
+        if (storage !== 's3') return realStoreOf(storage);
+        return { remove: async (sha256: string) => { removed.push(sha256); } } as unknown as FileStore;
+      };
+      return { sweep: new FileRetentionSweep(db as never, service), removed };
+    };
+    const released = new Date(Date.now() - 400 * DAY);
+    const blobRow = async (storage: 'local' | 's3', name: string) => {
+      const sha256 = sha256Of(fresh(name));
+      await db.fileBlob.create({ data: { sha256, sizeBytes: 1, storage, lastReferencedAt: released, releasedAt: released } });
+      return sha256;
+    };
+    const end = new Date();
+
+    for (const [label, env, expectS3] of [
+      ['mirror declared', { ...s3Env, ORBIT_FILES_S3_MIRROR: '1' }, true],
+      ['no mirror declared', s3Env, false],
+      ['mirror switched off', { ...s3Env, ORBIT_FILES_S3_MIRROR: '0' }, false],
+    ] as const) {
+      const s3 = await blobRow('s3', `an s3 blob, ${label}`);
+      const local = await blobRow('local', `a local blob, ${label}`);
+      const { sweep: swept, removed } = sweepWith(env);
+      await swept.sweep(end);
+      assert.ok(removed.includes(s3), `${label}: the bucket's bytes go`);
+      const gone = await blob(s3);
+      assert.deepEqual(gone.bytesDeletedAt, end, `${label}: and the row says so`);
+      assert.deepEqual(gone.offHostPruneAt, expectS3 ? later(end, GRACE) : null, `${label}: the s3 blob's off-host date`);
+      const goneLocal = await blob(local);
+      assert.deepEqual(goneLocal.bytesDeletedAt, end);
+      assert.deepEqual(goneLocal.offHostPruneAt, later(end, GRACE), `${label}: a local blob's off-host date is the same either way`);
+    }
+  });
 });

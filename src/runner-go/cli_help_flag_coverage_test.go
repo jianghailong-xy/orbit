@@ -26,6 +26,7 @@ func TestPerActionHelpDocumentsEveryAdvertisedFlag(t *testing.T) {
 		"watch":     watchActionHelp,
 		"wiki":      wikiActionHelp,
 		"file":      fileActionHelp,
+		"drive":     driveActionHelp,
 		"browser":   browserActionHelp,
 		"subagent":  subagentActionHelp,
 	}
@@ -35,7 +36,7 @@ func TestPerActionHelpDocumentsEveryAdvertisedFlag(t *testing.T) {
 		baseCLICapabilities, providerCLICapabilities, projectCLICapabilities,
 		notifyCLICapabilities, sessionCLICapabilities, agentCLICapabilities,
 		runnerCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities,
-		fileCLICapabilities, subagentCLICapabilities, browserCLICapabilities, userCLICapabilities, guideCLICapabilities,
+		fileCLICapabilities, driveCLICapabilities, subagentCLICapabilities, browserCLICapabilities, userCLICapabilities, guideCLICapabilities,
 	} {
 		for _, spec := range list {
 			help, ok := "", false

@@ -56,6 +56,7 @@ var agentPrimerHashes = map[string]string{
 // the runner writes into an engine, so any change to what an agent reads first is a visible diff.
 // Regenerate with ORBIT_UPDATE_PRIMER_SNAPSHOTS=1 go test -run TestAgentPrimerSnapshots .
 func TestAgentPrimerSnapshots(t *testing.T) {
+	fakeDriveMount(t, false)
 	const exe = "/usr/local/bin/orbit"
 	snapshots := map[string]string{
 		"mcp-instructions.txt":                agentPrimer,
