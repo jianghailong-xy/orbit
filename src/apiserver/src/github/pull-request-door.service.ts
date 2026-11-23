@@ -461,9 +461,12 @@ export class PullRequestDoorService implements OnApplicationBootstrap, OnModuleD
     const key = `${row.installationId}:${row.githubRepoId}`;
     const held = this.tokens.get(key);
     if (held && held.expiresAt.getTime() - TOKEN_REUSE_MARGIN_MS > this.now().getTime()) return held.token;
+    const grant = await this.grants.grant(row.installationId.toString());
     const minted = await this.github.pullRequestToken({
       appId: app.appId, privateKey: app.privateKey,
       installationId: row.installationId.toString(), repoId: row.githubRepoId.toString(),
+      // Asked for only where it was granted: GitHub refuses a token that asks for more than the installation gave.
+      workflows: grant?.permissions.workflows === 'write',
     });
     this.tokens.set(key, minted);
     return minted.token;

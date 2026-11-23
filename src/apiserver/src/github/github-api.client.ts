@@ -271,14 +271,21 @@ export class GithubClient {
    * and commit statuses, nothing an agent ever sees. Never answered to any runner route; GitHub refuses it (422)
    * for an installation that has not granted these.
    */
-  async pullRequestToken(input: { appId: string; privateKey: string; installationId: string; repoId: string }): Promise<{ token: string; expiresAt: Date }> {
+  async pullRequestToken(input: {
+    appId: string; privateKey: string; installationId: string; repoId: string;
+    /** The installation granted Workflows: write (D4): a pull request that changes a workflow file merges only so. */
+    workflows?: boolean;
+  }): Promise<{ token: string; expiresAt: Date }> {
     const answer = await this.api<{ token?: unknown; expires_at?: unknown }>(
       'POST',
       `/app/installations/${encodeURIComponent(input.installationId)}/access_tokens`,
       `Bearer ${appJwt(input.appId, input.privateKey)}`,
       {
         repository_ids: [Number(input.repoId)],
-        permissions: { contents: 'write', metadata: 'read', ...PULL_REQUEST_LANDING_PERMISSIONS },
+        permissions: {
+          contents: 'write', metadata: 'read', ...PULL_REQUEST_LANDING_PERMISSIONS,
+          ...(input.workflows ? { workflows: 'write' } : {}),
+        },
       },
     );
     const expiresAt = typeof answer.expires_at === 'string' ? new Date(answer.expires_at) : null;
