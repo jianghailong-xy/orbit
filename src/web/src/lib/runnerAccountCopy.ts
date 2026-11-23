@@ -134,39 +134,38 @@ export const RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED = 'Both logins are as they wer
  *  folder — while the owner has not named it and no email is known for it. */
 export const RUNNER_ACCOUNT_FORMER_DEFAULT = 'Former default';
 
-/** Default's own way out: the item in its ⋯ menu, and the confirmation's button. */
-export const RUNNER_DEFAULT_SIGN_OUT = 'Sign out…';
-export const RUNNER_DEFAULT_SIGN_OUT_CONFIRM = 'Sign out';
-
-/** The question in front of Sign out…; `name` is Default's name. */
+/** The question in front of Default's Sign out…, which deletes its login from the machine. */
 export function runnerDefaultSignOutTitle(name: string): string {
   return `Sign out of ${name}?`;
 }
 
-/** What it comes to for an engine whose Default lives under Orbit's own directory: only the sign-in goes. */
-export function runnerDefaultSignOutDetail(runner: string, cli: string): string {
-  return `Its sign-in is deleted from ${runner}. Orbit can’t use ${cli} there until you sign in again. Sessions and history stay.`;
+/** What Sign out of Default does to the machine: the login goes, the history and settings stay. */
+export function runnerDefaultSignOutDetail(runner: string): string {
+  return `Its login is deleted from ${runner}. Its history and settings stay.`;
 }
 
-/** The same for Claude Code and Codex, whose Default is the machine user’s own login: a terminal there is
- *  signed out too. */
-export function runnerDefaultSignOutDetailTerminal(runner: string, cli: string): string {
-  return `Its sign-in is deleted from ${runner}, so ${cli} in a terminal there is signed out too. Sessions and history stay. Sign in again to use it.`;
+/** Added for Claude Code and Codex, whose CLI shares Default's login; `command` is `claude` or `codex`. */
+export function runnerDefaultSignOutTerminal(runner: string, command: string): string {
+  return `${command} in a terminal on ${runner} is signed out too.`;
 }
+
+export const RUNNER_DEFAULT_SIGN_OUT_CONFIRM = 'Sign out';
+
+/** The menu item, and the row's state while the runner takes the login off the machine. */
+export const RUNNER_DEFAULT_SIGN_OUT = 'Sign out…';
+export const RUNNER_DEFAULT_SIGNING_OUT = 'Signing out…';
 
 /** The second question, after the runner refused because sessions are running on Default. */
-export const RUNNER_DEFAULT_SIGN_OUT_ANYWAY_TITLE = 'Sign out anyway?';
-export const RUNNER_DEFAULT_SIGN_OUT_ANYWAY = 'Sign out anyway';
-
-export function runnerDefaultSignOutInUseOne(name: string): string {
-  return `1 session is running on ${name}. Sign out anyway? It will fail on its next turn.`;
+export function runnerDefaultSignOutRunningOne(name: string): string {
+  return `1 session is running on ${name}. Sign out anyway?`;
 }
 
-export function runnerDefaultSignOutInUseMany(name: string, count: number): string {
-  return `${count} sessions are running on ${name}. Sign out anyway? They will fail on their next turn.`;
+export function runnerDefaultSignOutRunningMany(count: number, name: string): string {
+  return `${count} sessions are running on ${name}. Sign out anyway?`;
 }
 
-/** Over the reason when a sign-out was refused or the sign-in stayed. */
+export const RUNNER_DEFAULT_SIGN_OUT_RUNNING_DETAIL = 'They will stop working until you sign in again.';
+
 export function runnerDefaultSignOutFailed(name: string): string {
   return `Couldn’t sign out of ${name}`;
 }

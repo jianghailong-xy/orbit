@@ -154,22 +154,23 @@ final class RunnerDefaultSignOutTests: XCTestCase {
         let line = try defaultLine(runner)
         let claude = RunnerPageFormat.signOutQuestion(line, engine: "claude", runner: runner)
         XCTAssertEqual(claude.title, "Sign out of Default?")
-        XCTAssertTrue(claude.message.contains("Claude Code in a terminal there is signed out too"), claude.message)
+        XCTAssertEqual(claude.message,
+                       "Its login is deleted from Mini. Its history and settings stay. claude in a terminal on Mini is signed out too.")
         let codex = RunnerPageFormat.signOutQuestion(line, engine: "codex", runner: runner)
-        XCTAssertTrue(codex.message.contains("Codex in a terminal there is signed out too"), codex.message)
+        XCTAssertTrue(codex.message.hasSuffix("codex in a terminal on Mini is signed out too."), codex.message)
         let cursor = RunnerPageFormat.signOutQuestion(line, engine: "cursor", runner: runner)
-        XCTAssertFalse(cursor.message.contains("terminal"), cursor.message)
+        XCTAssertEqual(cursor.message, "Its login is deleted from Mini. Its history and settings stay.")
         XCTAssertEqual(RunnerAccountCopy.RUNNER_DEFAULT_SIGN_OUT, "Sign out…")
     }
 
     func testASessionsRefusalAsksAgainWithTheCount() throws {
         let runner = try runner(auth: "yes", capabilities: ["claude-default-sign-out/v1"])
         let line = try defaultLine(runner)
-        XCTAssertEqual(RunnerPageFormat.signOutAgainQuestion(line, count: 1).message,
-                       "1 session is running on Default. Sign out anyway? It will fail on its next turn.")
-        let many = RunnerPageFormat.signOutAgainQuestion(line, count: 3)
-        XCTAssertEqual(many.title, "Sign out anyway?")
-        XCTAssertEqual(many.message, "3 sessions are running on Default. Sign out anyway? They will fail on their next turn.")
+        let one = RunnerPageFormat.signOutAgainQuestion(line, count: 1)
+        XCTAssertEqual(one.title, "1 session is running on Default. Sign out anyway?")
+        XCTAssertEqual(one.message, "They will stop working until you sign in again.")
+        XCTAssertEqual(RunnerPageFormat.signOutAgainQuestion(line, count: 3).title,
+                       "3 sessions are running on Default. Sign out anyway?")
     }
 
     func testARefusedSignOutIsSaidInSignOutWordsNotRemovalWords() throws {
@@ -180,6 +181,6 @@ final class RunnerDefaultSignOutTests: XCTestCase {
         let removal = try XCTUnwrap(RunnerPageFormat.removal(state, engine: "claude", account: "default"))
         XCTAssertEqual(removal.blocking.count, 2)
         XCTAssertEqual(removal.refused,
-                       "2 sessions are running on Default. Sign out anyway? They will fail on their next turn.")
+                       "2 sessions are running on Default. Sign out anyway?")
     }
 }

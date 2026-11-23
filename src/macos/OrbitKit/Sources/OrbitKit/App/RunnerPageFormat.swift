@@ -848,26 +848,26 @@ public enum RunnerPageFormat {
     /// one request at a time is in flight.
     public static func canSignOut(offline: Bool, pending: Bool) -> Bool { !offline && !pending }
 
-    /// Claude Code and Codex Default is the machine user's own login, so a terminal there is signed out too.
+    /// Default's login is deleted from the machine; for Claude Code and Codex the CLI in a terminal shares
+    /// it, which the question says too (the web's words).
     public static func signOutQuestion(_ line: AccountLine, engine: String, runner: Runner) -> RemovalQuestion {
         let machine = displayName(runner)
-        let cli = engineName(engine)
-        let terminal = engine == "claude" || engine == "codex"
-        return RemovalQuestion(title: RunnerAccountCopy.runnerDefaultSignOutTitle(name: line.name),
-                               message: terminal
-                                   ? RunnerAccountCopy.runnerDefaultSignOutDetailTerminal(runner: machine, cli: cli)
-                                   : RunnerAccountCopy.runnerDefaultSignOutDetail(runner: machine, cli: cli))
+        var message = RunnerAccountCopy.runnerDefaultSignOutDetail(runner: machine)
+        if engine == "claude" || engine == "codex" {
+            message += " " + RunnerAccountCopy.runnerDefaultSignOutTerminal(runner: machine, command: engine)
+        }
+        return RemovalQuestion(title: RunnerAccountCopy.runnerDefaultSignOutTitle(name: line.name), message: message)
     }
 
     /// The second question, once the runner named `count` sessions running on Default.
     public static func signOutAgainQuestion(_ line: AccountLine, count: Int) -> RemovalQuestion {
-        RemovalQuestion(title: RunnerAccountCopy.RUNNER_DEFAULT_SIGN_OUT_ANYWAY_TITLE,
-                        message: signOutInUse(name: line.name, count: count))
+        RemovalQuestion(title: signOutInUse(name: line.name, count: count),
+                        message: RunnerAccountCopy.RUNNER_DEFAULT_SIGN_OUT_RUNNING_DETAIL)
     }
 
     private static func signOutInUse(name: String = "Default", count: Int) -> String {
-        count == 1 ? RunnerAccountCopy.runnerDefaultSignOutInUseOne(name: name)
-                   : RunnerAccountCopy.runnerDefaultSignOutInUseMany(name: name, count: count)
+        count == 1 ? RunnerAccountCopy.runnerDefaultSignOutRunningOne(name: name)
+                   : RunnerAccountCopy.runnerDefaultSignOutRunningMany(count: count, name: name)
     }
 
     /// What a runner declares when it can make an added Claude Code account the Default: the swap

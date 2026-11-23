@@ -327,14 +327,14 @@ private struct RunnerEngineContent: View {
                     } message: { line in
                         Text(signOutQuestion(line).message)
                     }
-                    .orbitConfirmation({ _ in RunnerAccountCopy.RUNNER_DEFAULT_SIGN_OUT_ANYWAY_TITLE },
+                    .orbitConfirmation({ _ in forcingSignOut.map { forcingSignOutQuestion($0).title } ?? "" },
                                        isPresented: forceSignOutAsked, presenting: forcingSignOut) { line in
-                        Button(RunnerAccountCopy.RUNNER_DEFAULT_SIGN_OUT_ANYWAY, role: .destructive) {
+                        Button(RunnerAccountCopy.RUNNER_DEFAULT_SIGN_OUT_CONFIRM, role: .destructive) {
                             signOut(line, force: true)
                         }
                         Button("Cancel", role: .cancel) {}
                     } message: { line in
-                        Text(forcingSignOutMessage(line))
+                        Text(forcingSignOutQuestion(line).message)
                     }
                     .orbitConfirmation({ _ in setDefaultTitle },
                                        isPresented: setDefaultAsked, presenting: pendingSetDefault) { line in
@@ -516,6 +516,12 @@ private struct RunnerEngineContent: View {
                         .controlSize(.small)
                         .disabled(offline || removal?.pending == true)
                 }
+            }
+            // Default's relayed state is always its sign-out: the runner is taking the login off the machine.
+            if line.isDefault, removal?.pending == true {
+                Text(RunnerAccountCopy.RUNNER_DEFAULT_SIGNING_OUT)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
             }
             if let moving = removal?.moving {
                 Text(moving)
@@ -843,9 +849,9 @@ private struct RunnerEngineContent: View {
     }
 
     /// The second question names the sessions the runner refused over.
-    private func forcingSignOutMessage(_ line: RunnerPageFormat.AccountLine) -> String {
+    private func forcingSignOutQuestion(_ line: RunnerPageFormat.AccountLine) -> RunnerPageFormat.RemovalQuestion {
         let count = RunnerPageFormat.removal(runner.accountRemove, engine: engine, account: line.id)?.blocking.count ?? 0
-        return RunnerPageFormat.signOutAgainQuestion(line, count: count).message
+        return RunnerPageFormat.signOutAgainQuestion(line, count: count)
     }
 
     private var setDefaultAsked: Binding<Bool> {

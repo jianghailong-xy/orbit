@@ -93,8 +93,8 @@ final class RunnerAccountCopyParityTests: XCTestCase {
         ("RUNNER_ACCOUNT_FORMER_DEFAULT", RunnerAccountCopy.RUNNER_ACCOUNT_FORMER_DEFAULT),
         ("RUNNER_DEFAULT_SIGN_OUT", RunnerAccountCopy.RUNNER_DEFAULT_SIGN_OUT),
         ("RUNNER_DEFAULT_SIGN_OUT_CONFIRM", RunnerAccountCopy.RUNNER_DEFAULT_SIGN_OUT_CONFIRM),
-        ("RUNNER_DEFAULT_SIGN_OUT_ANYWAY_TITLE", RunnerAccountCopy.RUNNER_DEFAULT_SIGN_OUT_ANYWAY_TITLE),
-        ("RUNNER_DEFAULT_SIGN_OUT_ANYWAY", RunnerAccountCopy.RUNNER_DEFAULT_SIGN_OUT_ANYWAY),
+        ("RUNNER_DEFAULT_SIGNING_OUT", RunnerAccountCopy.RUNNER_DEFAULT_SIGNING_OUT),
+        ("RUNNER_DEFAULT_SIGN_OUT_RUNNING_DETAIL", RunnerAccountCopy.RUNNER_DEFAULT_SIGN_OUT_RUNNING_DETAIL),
     ]
 
     /// This end's templates, each handed the web's own interpolations as its values.
@@ -125,12 +125,13 @@ final class RunnerAccountCopyParityTests: XCTestCase {
              .replacingOccurrences(of: "90001", with: "${count}")),
         ("runnerAccountSetDefaultFailed", RunnerAccountCopy.runnerAccountSetDefaultFailed(name: "${name}")),
         ("runnerDefaultSignOutTitle", RunnerAccountCopy.runnerDefaultSignOutTitle(name: "${name}")),
-        ("runnerDefaultSignOutDetail", RunnerAccountCopy.runnerDefaultSignOutDetail(runner: "${runner}", cli: "${cli}")),
-        ("runnerDefaultSignOutDetailTerminal",
-         RunnerAccountCopy.runnerDefaultSignOutDetailTerminal(runner: "${runner}", cli: "${cli}")),
-        ("runnerDefaultSignOutInUseOne", RunnerAccountCopy.runnerDefaultSignOutInUseOne(name: "${name}")),
-        ("runnerDefaultSignOutInUseMany", RunnerAccountCopy.runnerDefaultSignOutInUseMany(name: "${name}", count: 90_001)
-            .replacingOccurrences(of: "90001", with: "${count}")),
+        ("runnerDefaultSignOutDetail", RunnerAccountCopy.runnerDefaultSignOutDetail(runner: "${runner}")),
+        ("runnerDefaultSignOutTerminal",
+         RunnerAccountCopy.runnerDefaultSignOutTerminal(runner: "${runner}", command: "${command}")),
+        ("runnerDefaultSignOutRunningOne", RunnerAccountCopy.runnerDefaultSignOutRunningOne(name: "${name}")),
+        ("runnerDefaultSignOutRunningMany",
+         RunnerAccountCopy.runnerDefaultSignOutRunningMany(count: 90_001, name: "${name}")
+             .replacingOccurrences(of: "90001", with: "${count}")),
         ("runnerDefaultSignOutFailed", RunnerAccountCopy.runnerDefaultSignOutFailed(name: "${name}")),
     ]
 
