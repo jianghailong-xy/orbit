@@ -509,7 +509,7 @@ test('an automatic re-run is held by the engine its pins give it while the accou
 
       // Run 1 stopped at claude's weekly limit, which the runner now reports spent until RESETS.
       await db.session.update({
-        where: { id: run1.id }, data: { status: RunStatus.FAILED, error: WEEKLY_LIMIT, finishedAt: new Date() },
+        where: { id: run1.id }, data: { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', error: WEEKLY_LIMIT, finishedAt: new Date() },
       });
       await db.runner.update({
         where: { id: target.runnerId },

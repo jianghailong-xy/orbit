@@ -12,6 +12,7 @@ import type { SessionCapabilities } from './dto';
 import type { ConfirmationUnderReview } from './owner-confirmation-review';
 import type { SessionOwnerItem, SessionWaitingKind } from './project-progress';
 import type { ExternalMessageFrom, OrbitMessageFrom, SessionMessageFrom } from './session-message';
+import type { SessionPhase, SessionTurnOutcome, SessionWaitingOn } from './session-phase';
 import type { SessionRequestPeer } from './session-request';
 import type { SessionSourceRefusalDetail, SourceRefusalCode, SourceState } from './source';
 
@@ -237,6 +238,14 @@ export interface ControlSessionSummary {
   lifecycleState: SessionLifecycleState;
   /** @deprecated Compatibility representation; use `lifecycleState`. */
   filingState: SessionFilingState;
+  /** The three-state field and the facts beside it (session-phase.ts, contracts/session-state.contract.json).
+   *  Absent from an older control plane. */
+  phase?: SessionPhase;
+  released?: boolean;
+  lastTurnOutcome?: SessionTurnOutcome | null;
+  waitingOn?: SessionWaitingOn | null;
+  endReason?: string | null;
+  workFinished?: boolean;
   /** Server-derived actions; optional for rolling-version compatibility. */
   capabilities?: SessionCapabilities;
   /** The engine the session runs on for good — the CLI on the runner (`claude`, `codex`, `kimi`,
@@ -402,6 +411,13 @@ export interface ControlSessionEnded {
   /** @deprecated Compatibility representation; use `lifecycleState`. */
   filingState: SessionFilingState;
   endReason: SessionEndReason | null;
+  /** The three-state field and the facts beside it (session-phase.ts, contracts/session-state.contract.json).
+   *  Absent from an older control plane. */
+  phase?: SessionPhase;
+  released?: boolean;
+  lastTurnOutcome?: SessionTurnOutcome | null;
+  waitingOn?: SessionWaitingOn | null;
+  workFinished?: boolean;
 }
 
 /** `data` for `session.error`. `recoverable=true` marks a mid-turn (non-fatal) error — e.g. a
