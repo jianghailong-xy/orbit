@@ -81,7 +81,9 @@ public enum SessionRunState: String, Codable, Sendable {
     /// when `phase` or `released` is absent (an older server), which keeps the legacy reading. A release is
     /// Failed only when the last turn failed and nobody asked for an end; Finished only by `workFinished`
     /// (else the end reason or a settled landing); any other release is Ended. A held session reads its
-    /// phase: queued, running (parked when `activity` names work outside a turn), or waiting on its reply.
+    /// phase: queued, running, or waiting on its reply. `activity` is TURN on every queued or running row (and on
+    /// a parked session whose engine runs its own turn), so only another activity (a background job, a wait) on a
+    /// RUNNING phase means no turn is running: that reads as parked.
     public static func fromPhaseFields(phase: SessionPhase?, released: Bool?,
                                        lastTurnOutcome: SessionTurnOutcome?, endReason: String?,
                                        workFinished: Bool? = nil, activity: String? = nil,
@@ -93,7 +95,9 @@ public enum SessionRunState: String, Codable, Sendable {
         }
         switch phase {
         case .pending: return .queued
-        case .running: return (activity ?? "").isEmpty ? .running : .awaitingInput
+        case .running:
+            let other = activity ?? ""
+            return other.isEmpty || other == "TURN" ? .running : .awaitingInput
         case .idle:    return lastTurnOutcome == .interrupted ? .interrupted : .awaitingInput
         }
     }
