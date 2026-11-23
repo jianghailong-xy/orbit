@@ -193,6 +193,10 @@ type integrationResult struct {
 	UnknownPushes []IntegrationUnknownPushCheck
 	// Observations is an OBSERVED job's answer, one per task its command named (§10.6 O-S2).
 	Observations []IntegrationObservation
+	// LandingRefSha and PushRefusal are a PULL_REQUEST answer's (docs/design/protected-branch-landing.md §4.2
+	// J-T14): the commit the landing branch holds after the push, and GitHub's words for the refused target push.
+	LandingRefSha string
+	PushRefusal   string
 	// Interrupted is a job this runner stopped because the runner itself is stopping
 	// (runIntegrationJobUntil): it pushed nothing, so it is handed back rather than answered, and
 	// Phase says where it was. Never part of a report.
@@ -706,6 +710,12 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 		result.ErrorDetail = map[string]any{"detail": refusal}
 		return result
 	}
+	// docs/design/protected-branch-landing.md §9 item 2: the subject's pull request is open, so this attempt pushes
+	// only its landing branch. The target refused this subject before, and the pull request is how it lands now.
+	viaPullRequest := landsThroughPullRequest(cmd.LandVia, cmd.LandingRef, local)
+	if viaPullRequest && cmd.PullRequestOpen {
+		return toLandingBranch(result, cmd, scratch, remote, tested, treeSha, targetSha, "")
+	}
 	mergeLock.Lock()
 	unlockCheckout := lockMainCheckout(repoRoot)
 	pushErr := integrationPush(repoRoot, scratch, remote, cmd.TargetRef, tested, targetSha, local)
@@ -715,13 +725,24 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 	unlockCheckout()
 	mergeLock.Unlock()
 	if pushErr != nil {
+		stderr := gitStderr(pushErr)
+		// §9 item 1: GitHub refused the push because of the branch's rules. The target did not move, so this is
+		// never TARGET_MOVED: a landing that goes through a pull request pushes its landing branch instead, and one
+		// with no pull request to fall back to says the branch is protected. A control plane that named no landVia
+		// knows neither answer and is told PUSH_REJECTED, as it always was.
+		if cmd.LandVia != "" && isProtectedRefusal(stderr) {
+			if viaPullRequest {
+				return toLandingBranch(result, cmd, scratch, remote, tested, treeSha, targetSha, githubRefusalWords(stderr))
+			}
+			return protectedPushResult(result, stderr)
+		}
 		result.State, result.Phase = "ERROR", "PUSH"
-		if isNonFastForward(gitStderr(pushErr)) {
+		if isNonFastForward(stderr) {
 			result.ErrorCode = "TARGET_MOVED"
 		} else {
 			result.ErrorCode = "PUSH_REJECTED"
 		}
-		result.ErrorDetail = map[string]any{"detail": clip(gitStderr(pushErr), 2000)}
+		result.ErrorDetail = map[string]any{"detail": clip(stderr, 2000)}
 		return result
 	}
 
@@ -1055,6 +1076,12 @@ func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scra
 		result.ErrorDetail = map[string]any{"detail": refusal}
 		return result
 	}
+	// docs/design/protected-branch-landing.md §9 item 2, as in J-S6: the candidate's pull request is open, so this
+	// attempt pushes only its landing branch.
+	viaPullRequest := landsThroughPullRequest(cmd.LandVia, cmd.LandingRef, local)
+	if viaPullRequest && cmd.PullRequestOpen {
+		return toLandingBranch(result, cmd, scratch, remote, tested, treeSha, upstreamSha, "")
+	}
 	mergeLock.Lock()
 	unlockCheckout := lockMainCheckout(repoRoot)
 	// The same push for both kinds, and it is a fast-forward either way: a merge commit and a rebased
@@ -1067,6 +1094,13 @@ func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scra
 	unlockCheckout()
 	mergeLock.Unlock()
 	if pushErr != nil {
+		// §9 item 1, as in J-S6: refused by the branch's rules, never TARGET_MOVED.
+		if stderr := gitStderr(pushErr); cmd.LandVia != "" && isProtectedRefusal(stderr) {
+			if viaPullRequest {
+				return toLandingBranch(result, cmd, scratch, remote, tested, treeSha, upstreamSha, githubRefusalWords(stderr))
+			}
+			return protectedPushResult(result, stderr)
+		}
 		result.State, result.Phase = "ERROR", "PUSH"
 		if isNonFastForward(gitStderr(pushErr)) {
 			result.ErrorCode = "TARGET_MOVED"
@@ -2432,6 +2466,8 @@ func runIntegrationJobAndReport(stop, handBack context.Context, t *Transport, jo
 		ErrorDetail:          result.ErrorDetail,
 		UpstreamMovedCommits: result.UpstreamMovedCommits,
 		UnknownPushes:        result.UnknownPushes,
+		LandingRefSha:        result.LandingRefSha,
+		PushRefusal:          result.PushRefusal,
 	}
 	if result.State == "OBSERVED" {
 		observations := append([]IntegrationObservation{}, result.Observations...)

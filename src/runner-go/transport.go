@@ -97,6 +97,8 @@ func init() {
 		integrationObserveCapabilityV1,
 		integrationProgressV2Capability,
 		promotionAutomaticLandCapabilityV1,
+		integrationPullRequestCapabilityV1,
+		sessionMergePullRequestCapabilityV1,
 		codexAccountLoginCapabilityV1,
 		antigravityGoogleLoginCapabilityV1,
 		codexAccountRemoveCapabilityV1,
