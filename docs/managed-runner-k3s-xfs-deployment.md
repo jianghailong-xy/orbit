@@ -189,6 +189,29 @@ The previous backend was Docker on the same host (`orbit-ws03`, channel at `http
 - The fast path's runtime log (`checkout index: filled …`) appears only when a session creates a checkout; the image
   version was verified, but the log had not yet been observed at the switch.
 
+## Orbit Files RGW storage
+
+The production Orbit Files data pool is `orbit-files.rgw.buckets.data`. Its starting `max_bytes`
+quota is **2 TiB (2,199,023,255,552 bytes)**. Use that exact value for
+`ORBIT_FILES_STORE_QUOTA_BYTES` when deploying the S3 backend. The S3 bucket is `orbit-files`.
+Keep `ORBIT_FILES_S3_ACCESS_KEY_ID` and `ORBIT_FILES_S3_SECRET_ACCESS_KEY` in the production
+apiserver's private Compose env file.
+
+Durability for Files bytes comes from Ceph replication. The owner is scaling out Ceph to increase
+replica placement and capacity. Run without a ZFS mirror and leave `ORBIT_FILES_S3_MIRROR` unset.
+Retain the former mirror dataset `data/orbit-files-mirror` and its data.
+
+As Ceph grows, check the cluster's usable capacity and agree on a new Files pool ceiling in bytes.
+From the cluster's administration environment, set and verify the new quota.
+
+```sh
+ceph osd pool set-quota orbit-files.rgw.buckets.data max_bytes "${new_quota_bytes}"
+ceph osd pool get-quota orbit-files.rgw.buckets.data
+```
+
+Set `ORBIT_FILES_STORE_QUOTA_BYTES` to the verified pool quota at the corresponding apiserver
+configuration rollout.
+
 ## Rollback
 
 The Docker profile, the owner's mapping row and the Docker volume are preserved. To roll back: delete the Kubernetes
