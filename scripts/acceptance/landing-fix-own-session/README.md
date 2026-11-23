@@ -38,6 +38,11 @@ Contract: `docs/project-integration-line-contract.md` §12.1–§12.8 (W4–W8, 
   3. **R** lands after the rig pushes `LINE_RED.md` to main. Checks: `CHECK_FAILED` with `baseline_red`, the landing
      check red on the combined tree and on the baseline, and the item `BASELINE_RED` and the coordinator's from the
      start, never offered to R's session. That session gets no turn after its landing and stays ended `task_done`.
+- **A second project** (case 4, task 352ZEtmx7cOXY91yIodUk), started while main still carries `LINE_RED.md`, on a line
+  nobody has pushed: its task **Z** lands first, so the job's T0 is main's own tip and nothing is absorbed. Checks: the
+  line is absent from origin before and after, `target_sha_before` = `upstream_sha` = main with no `main_sync_sha`,
+  `CHECK_FAILED` with `baseline_red` (the landing check red on the combined tree and on main's own tree), the item
+  `BASELINE_RED` and the coordinator's, never offered, and Z's session gets no turn after its landing.
 - **Records:** `$LM_DIR/records/<run>/lfx-cases/` (`transcript.md`, `checks.json`, `queries.txt` with read-only queries
   of `project_integration_job`, `project_open_item`, `conversation_turn`, `session` and `runner`, the model's log, the
   origin's graph). `run.sh` prints `queries.txt` at the end. The runner's log is `$LM_DIR/logs/runner.log`.
