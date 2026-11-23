@@ -16420,6 +16420,31 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * The account holds among a project's open auto-run tasks (§8 item 3): what `accountHold` says of each, for the
+   * project's Needs you row. Nothing at all while the owner has no blocked account, which is one indexed read.
+   */
+  async accountHolds(ownerId: string, projectId: string): Promise<Map<string, { reason: string; until: string }>> {
+    const held = new Map<string, { reason: string; until: string }>();
+    const [blocked] = await this.prisma.$queryRaw<Array<{ one: number }>>`
+      SELECT 1 AS "one" FROM "account_health" WHERE "owner_id" = ${ownerId}::uuid AND "cleared_at" IS NULL AND "state" = 'BLOCKED' LIMIT 1`;
+    if (!blocked) return held;
+    const tasks = await this.prisma.task.findMany({
+      where: { ownerId, projectId, status: TaskStatus.OPEN, autoRunWhenReady: true, assigneeId: { not: null } },
+      select: {
+        id: true, title: true, description: true, assigneeId: true, engine: true, provider: true, model: true, modelHint: true,
+        modelHintReason: true, completionCriterion: true, acceptanceCommand: true, verifiesTaskId: true, isForeman: true,
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 50,
+    });
+    for (const task of tasks) {
+      const hold = await this.accountHold(ownerId, task);
+      if (hold) held.set(task.id, { reason: hold.reason, until: hold.until });
+    }
+    return held;
+  }
+
+  /**
    * The route for one fresh run, or null when it could not be worked out — or when the account has
    * smart model selection off, which routes nothing. Routing never refuses (contract §7.2 P7): a
    * failure here is logged and the run is planned exactly as without it.
