@@ -1445,7 +1445,8 @@ function AccountRow({
   // What became of the last removal asked for here, if it was this account's of this engine's: the
   // button says it is under way, and a machine that refused says why.
   const removal = runner.accountRemove;
-  const mine = removal?.engine === engine && removal.account === account.id ? removal : null;
+  // Default is never removed from the machine: a state naming it is its sign-out, which asks again itself.
+  const mine = !isDefault && removal?.engine === engine && removal.account === account.id ? removal : null;
   const removing = beingRemoved(runner, engine, account.id);
   const refused = mine?.status === 'failed' ? mine.message : null;
   // The sessions the machine named as running in it, when that is why it refused.

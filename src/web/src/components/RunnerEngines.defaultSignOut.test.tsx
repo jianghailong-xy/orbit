@@ -121,7 +121,8 @@ describe('Sign out… on Default’s More menu', () => {
   it('is absent once Default is signed out', async () => {
     const out = { ...DEFAULT, auth: 'no' as const };
     const { page } = mount([runner([out], { engines: [{ ...health('codex', [out]), auth: 'no' }] })]);
-    expect(await labels(engineRow(page))).not.toContain('Sign out…');
+    // A signed-out lone row has nothing to offer in More, Sign out… included.
+    expect(engineRow(page).querySelector('button[aria-label="More actions"]')).toBeNull();
   });
 
   it('is disabled while the machine is offline', async () => {
@@ -182,6 +183,8 @@ describe('signing Default out', () => {
     await vi.waitFor(() => expect(document.body.textContent).toContain('2 sessions are running on Default'), { timeout: 20_000 });
     const again = await openDialog('2 sessions are running on Default. Sign out anyway?');
     expect(dialogDescription(again)).toBe('They will stop working until you sign in again.');
+    // The removal's own "can't be removed" panel is not drawn for a sign-out's refusal.
+    expect(accountRows(page)[0].querySelector('.re-panel.bad')).toBeNull();
     await press(again, 'Sign out');
     expect(signOuts().map(([, options]) => options?.body)).toEqual([{ force: false }, { force: true }]);
   });
