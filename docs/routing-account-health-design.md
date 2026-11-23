@@ -535,6 +535,16 @@ one of the two moves.
    comment above `SCHEDULED_DISPATCH_MAX_PER_SWEEP` (`tasks.service.ts:1687`) warns must exist whenever a failure is
    exempt from the budget.
 
+**The re-arm path, traced (phase 2).** Before phase 2 an auto-run task's next run after a refusal came from
+`rearmEndedAutoRuns`, called first in every `reconcileReadyTasks` pass (once a minute): it reads each auto-run task
+whose current dispatch moment's run has ended, asks `autoRunRetryDecisions` (how the run ended, an armed
+`AutoRetryService` retry, the quota gate, then `autoRunHoldOff`), and on RETRY advances `task_dispatch_epoch` by a
+compare-and-set so the candidate scans dispatch a new moment. An uncounted refusal spends no budget, so it was
+re-armed on the next pass, up to a minute later and with no bound; a task that does not auto-run was never re-armed.
+Phase 2 replaces at once from the runner API (`TasksService.replaceRefusedRun`, after the run's health is written),
+under a request named after the refused run (`replace:<task>:<session>`, `replace-trial:` for a refused trial), and
+`autoRunRetryDecisions` holds an auto-run task whose bound is spent until the hour has room.
+
 A replacement is a continuation of the start the owner or the sweep already made, not a new decision to start. For a
 task that does not auto-run it is recorded as such on the task (`Replaced run N, which its account refused`), so the
 history shows why a second run exists that nobody pressed for.
@@ -639,8 +649,13 @@ at 21:19.`
   signal there is, and it keeps health from ever locking the owner out of their own account.
 - **Automatic account choice inside one engine** (`automaticAccount`, `plan-usage-accounts.ts:163`, and the retry's
   account move) treats a blocked account as it treats a paused one, so a runner with two Cursor accounts moves to the
-  second. The exact call sites that read `runnerAccountPausedUntil` for this (`sessions.service.ts:12572`–`12586`) are
-  to be confirmed during phase 2.
+  second. Confirmed in phase 2: the Automatic choice in `switchAccount` (`sessions.service.ts`, the block the design
+  pointed at), session create, the move before a turn and `moveOffRemovedAccount` in the same file, the move at claim
+  and both pool resolvers in `queue.service.ts`, the two "can it go elsewhere" checks in `auto-retry.service.ts`, and
+  the router's `engineState` with the quota and sign-in gates in `tasks.service.ts`. All of them read the runner
+  through `withAccountHealth` / `runnerWithHealth` (`providers/account-health-blocked.ts`), which folds a blocked
+  account in as a pause until its block ends; nothing is written as a pause, and with every account out the pick is
+  as before.
 
 ## 8. Owner surface
 
