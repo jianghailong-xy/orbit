@@ -75,7 +75,7 @@ describe('session-state contract', () => {
 
   it('lists every payload kind with all six fields, and each named shared type carries them', () => {
     expect(Object.keys(CONTRACT.payloads)).toEqual([
-      'listRow', 'detail', 'sessionSummary', 'sessionEnded', 'linkPreview', 'guestRow', 'sharedHead',
+      'listRow', 'detail', 'sessionSummary', 'sessionEnded', 'linkPreview', 'guestRow', 'sharedHead', 'taskRun',
     ]);
     for (const [kind, payload] of Object.entries<{ sharedType: string | null; fields: string[] }>(CONTRACT.payloads)) {
       expect(payload.fields, kind).toEqual([...SESSION_PHASE_FIELD_NAMES]);
