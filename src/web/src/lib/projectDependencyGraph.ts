@@ -197,6 +197,9 @@ const RUN_REASON_LABEL: Record<TaskRunReason, string> = {
   WAITING: 'Waiting to be woken',
 };
 
+/** A running task whose background jobs have said nothing for ten minutes (`runStalled`). */
+export const RUN_STALLED = 'no output 10+ min';
+
 /**
  * What a running task says it is doing: "Running · Background job".
  *
@@ -215,7 +218,7 @@ export function runningLabel(run: {
 }): string | null {
   if (!run.runReason) return null;
   const label = `Running · ${RUN_REASON_LABEL[run.runReason] ?? run.runReason}`;
-  return run.runStalled ? `${label} · no output 10+ min` : label;
+  return run.runStalled ? `${label} · ${RUN_STALLED}` : label;
 }
 
 /**

@@ -2534,7 +2534,7 @@ struct DeliveredDecisionCardView: View {
                                  onChat: { console.startOwnerRequestReply($0) })
             case .crossingBatch(let batchID):
                 CrossingDecisionCard(console: console, batchID: batchID)
-            case .scheduleCard, .scheduleRecord, .scheduleRunStrip, .scheduleRunReport:
+            case .scheduleCard, .scheduleRecord, .scheduleChangeOpening, .scheduleRunStrip, .scheduleRunReport:
                 ScheduleConsoleCard(console: console, kind: card.kind)
             }
         }
@@ -2914,22 +2914,37 @@ private struct CriteriaDecisionCard: View {
 
 /// The record of an answer to a held proposal, where the decision was made.
 ///
-/// Green and ticked, with no actions and no badge: this is not a question any more, and the only
-/// thing it has to do is say which way it went and when. It is drawn from the committed answer the
-/// read publishes rather than kept by the window that pressed the button, so it is here after a
-/// relaunch, on a device that never saw the card, and it is what the browser's receipt says, word
-/// for word (`CriteriaDecisions.recordedHeading` / `receiptLine`).
+/// Orange like the question it answers — web's `.criteria-decision`, frame and head in the warning
+/// tone, because what was answered is a ruler getting looser (decision D1 A) — with the verdict and
+/// its check mark green, and no actions. It is drawn from the committed answer the read publishes
+/// rather than kept by the window that pressed the button, so it is here after a relaunch, on a
+/// device that never saw the card, and it says what the browser's receipt says, word for word
+/// (`CriteriaDecisions.recordedHeading` / `receiptLine`). Under the line, folded, what the answer
+/// was about: web's "What this approved · …" (`CriteriaDecisions.settledFold`).
 private struct CriteriaDecisionReceiptCard: View {
     let settled: SettledCriteriaDecision
+    @State private var foldOpen = false
+    @State private var unchangedOpen = false
+
+    private static func color(_ tone: CriteriaDecisions.ReceiptTone) -> Color {
+        switch tone {
+        case .warning: return .orange
+        case .success: return .green
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
             ApprovalHeader(symbol: "checkmark.circle.fill",
                            title: CriteriaDecisions.recordedHeading,
-                           tone: .green)
+                           tone: Self.color(CriteriaDecisions.receiptTone))
             Text(CriteriaDecisions.receiptLine(settled))
-                .font(.orbitProse)
+                .font(.orbitProse.weight(.semibold))
+                .foregroundStyle(Self.color(CriteriaDecisions.receiptVerdictTone))
                 .frame(maxWidth: .infinity, alignment: .leading)
+            if let fold = CriteriaDecisions.settledFold(settled) {
+                foldView(fold)
+            }
             // Who is speaking, on the line that is standing in for the card's meta row: the browser
             // puts the same mark on its receipt, and a record of a decision the owner made is no
             // more the agent's writing than the question was.
@@ -2937,7 +2952,76 @@ private struct CriteriaDecisionReceiptCard: View {
                 .font(.orbitMonoFine).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .approvalChrome(.green)
+        .approvalChrome(Self.color(CriteriaDecisions.receiptTone))
+    }
+
+    /// Closed by default, like the Project started card's "What the coordinator was told": the
+    /// receipt's job is to say the decision was recorded; what it was about is asked second.
+    private func foldView(_ fold: CriteriaDecisions.SettledFold) -> some View {
+        DisclosureGroup(isExpanded: $foldOpen) {
+            VStack(alignment: .leading, spacing: 6) {
+                if let legend = fold.legend {
+                    Text(legend)
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                ForEach(fold.rows) { row in
+                    rowView(row)
+                }
+                if let line = fold.unchangedLine {
+                    DisclosureToggle(open: unchangedOpen, label: line) {
+                        unchangedOpen.toggle()
+                    }
+                    if unchangedOpen {
+                        ForEach(fold.unchanged) { row in
+                            Text("\(row.ordinal.map { "\($0). " } ?? "")\(row.text)")
+                                .font(.orbitLabel).foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+                if let note = fold.note {
+                    Text(note)
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(.top, 4)
+        } label: {
+            Text(fold.summary)
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// One moved criterion, as the live card draws its rows: the server's ordinal (none on a
+    /// dropped one), the words — a stored rewrite struck through and underlined in place — and the
+    /// badge in the warning tone.
+    private func rowView(_ row: CriteriaDecisions.SettledFold.Row) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            (Text(row.ordinal.map { "\($0). " } ?? "• ").foregroundStyle(.secondary)
+                + rewritten(row.words))
+                .font(.orbitProse)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(row.badge)
+                .font(.orbitLabel).foregroundStyle(.orange)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let method = row.method {
+                (Text("\(CriteriaDecisions.methodLabel): ") + rewritten(method))
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private func rewritten(_ runs: [CriterionSegment]) -> Text {
+        runs.reduce(Text("")) { line, run in
+            switch run.side {
+            case .kept: return line + Text(run.text)
+            case .removed: return line + Text(run.text).strikethrough().foregroundStyle(.secondary)
+            case .added: return line + Text(run.text).underline()
+            }
+        }
     }
 }
 

@@ -1448,6 +1448,21 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * The owner's drive changed (docs/orbit-files-drive-technical-design.md §5.4): a write committed rows to its change feed,
+   * the highest of them `seq`. THE PAYLOAD IS THE SEQ AND NOTHING ELSE: no name, path or size. An accelerant only: the Files
+   * page reads `GET /drive/changes` for what changed, and re-reads it on focus and reconnect. Published after the write
+   * commits, and only to the streams that declared `hints=drive_changed`.
+   */
+  publishDriveChanged(ownerId: string, seq: number): void {
+    this.publish(`${RealtimeService.USER_SCOPE}${ownerId}`, {
+      seq: 0,
+      type: RunEventType.DRIVE_CHANGED,
+      ts: new Date().toISOString(),
+      payload: { seq: String(seq) },
+    });
+  }
+
+  /**
    * What these sessions' schedule cards (`GET /sessions/:id/schedule-cards`) read may have moved: a card one of them put
    * up, a change it recorded, or a schedule its cards and records name. User-scoped, keyed by the owner like the
    * libraries; the payload names the sessions and nothing else, at most SCHEDULE_CARDS_CHANGED_MAX_SESSIONS of them, a
@@ -1488,10 +1503,12 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
 
   streamForUser(
     userId: string,
-    options: { listChanged?: boolean; ownerRequests?: boolean; scheduleCards?: boolean } = {},
+    options: { listChanged?: boolean; listScopes?: boolean; ownerRequests?: boolean; driveChanged?: boolean; scheduleCards?: boolean } = {},
   ): Observable<ControlEvent> {
     const events$ = this.hub.asObservable().pipe(
       filter((m) => controlTypeFor(m.event.type) !== null),
+      // `drive.changed` only for a stream that declared it (`?hints=drive_changed`), for the same reason.
+      filter((m) => options.driveChanged === true || m.event.type !== RunEventType.DRIVE_CHANGED),
       // `schedule_cards.changed` only for a stream that declared it (`?hints=schedule_cards`), like the hints below.
       filter((m) => options.scheduleCards === true || m.event.type !== RunEventType.SCHEDULE_CARDS_CHANGED),
       mergeMap((m) => this.toControlEvent(userId, m)),
@@ -1499,9 +1516,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     );
     // `sessions.list_changed` only for a stream that declared it (`?hints=list_changed`): a shipped
     // client re-reads everything on an event type it does not know (open-list-hints.ts).
-    // `owner_requests.changed` likewise, for a stream that declared `?hints=owner_requests`.
+    // `owner_requests.changed` likewise, for a stream that declared `?hints=owner_requests`. Only a stream that
+    // also declared `?hints=list_scopes` is told which workspaces moved (`scopes`); any other gets `{ version }`.
     const hinted = [
-      ...(options.listChanged ? [this.listHints.watch(userId)] : []),
+      ...(options.listChanged ? [this.listHints.watch(userId, { scoped: options.listScopes === true })] : []),
       ...(options.ownerRequests ? [this.ownerRequestHints.watch(userId)] : []),
     ];
     return hinted.length > 0 ? merge(events$, ...hinted) : events$;
@@ -1536,8 +1554,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       const data =
         taskChange
           ? taskChange instanceof Promise ? await taskChange : taskChange
-          : type === ControlEventType.SCHEDULE_CARDS_CHANGED
-            ? scheduleCardsChangedData(ev.payload)
+          : type === ControlEventType.DRIVE_CHANGED
+            ? { seq: String(ev.payload.seq ?? '') }
+            : type === ControlEventType.SCHEDULE_CARDS_CHANGED
+              ? scheduleCardsChangedData(ev.payload)
           : type === ControlEventType.AGENT_CHANGED
             ? {
                 agentId: String(ev.payload.id ?? ''),
@@ -1643,7 +1663,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       case ControlEventType.SESSION_CREATED:
         // A scheduled task's run enters no list (docs/scheduled-tasks-design.md §7.4, §12.1): an open list is not
         // told about it. It is reached from its schedule's history and its notification.
-        if ((await this.prisma.session.findUnique({ where: { id: sessionId }, select: { runSource: true } }))?.runSource === 'SCHEDULE') {
+        // Nor is a schedule's change conversation (§8.2), which is reached from its schedule.
+        if (['SCHEDULE', 'SCHEDULE_CHANGE'].includes(
+          (await this.prisma.session.findUnique({ where: { id: sessionId }, select: { runSource: true } }))?.runSource ?? '',
+        )) {
           return null;
         }
       // falls through

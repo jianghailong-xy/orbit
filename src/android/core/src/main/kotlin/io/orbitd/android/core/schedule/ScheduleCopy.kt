@@ -284,6 +284,20 @@ object ScheduleCopy {
         const val minutes = "{minutes} min"
         const val noEnd = "no end"
     }
+    object ChangeConversation {
+        const val title = "Change {title}"
+        const val lead = "What should change about {title}? This is what it does now:"
+        const val does = "Does"
+        const val `when` = "When"
+        const val runsIn = "Runs in"
+        const val may = "May"
+        const val costs = "Costs"
+        const val tail = "I can change the time, the days, what it checks and how it reports right away, and you can undo it. More runs, longer runs, more access or another workspace need your Allow."
+        const val placeholder = "Say what to change…"
+        const val openSchedule = "Open"
+        const val openInScheduled = "Open in Scheduled"
+        const val conversation = "conversation"
+    }
     object Record {
         const val changed = "Changed {title}: {change}"
         const val ended = "Ended {title}: {reason} · {by}"
@@ -608,6 +622,18 @@ object ScheduleCopy {
         "history.ended" to History.ended,
         "history.minutes" to History.minutes,
         "history.noEnd" to History.noEnd,
+        "changeConversation.title" to ChangeConversation.title,
+        "changeConversation.lead" to ChangeConversation.lead,
+        "changeConversation.does" to ChangeConversation.does,
+        "changeConversation.when" to ChangeConversation.`when`,
+        "changeConversation.runsIn" to ChangeConversation.runsIn,
+        "changeConversation.may" to ChangeConversation.may,
+        "changeConversation.costs" to ChangeConversation.costs,
+        "changeConversation.tail" to ChangeConversation.tail,
+        "changeConversation.placeholder" to ChangeConversation.placeholder,
+        "changeConversation.openSchedule" to ChangeConversation.openSchedule,
+        "changeConversation.openInScheduled" to ChangeConversation.openInScheduled,
+        "changeConversation.conversation" to ChangeConversation.conversation,
         "record.changed" to Record.changed,
         "record.ended" to Record.ended,
         "record.byThisRun" to Record.byThisRun,

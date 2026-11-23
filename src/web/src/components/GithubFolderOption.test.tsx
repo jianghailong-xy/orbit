@@ -355,6 +355,15 @@ describe('P3: a repository picked', () => {
     expect(said(step())).toContain('Cloned before the session starts. Work lands back on GitHub. Other branch');
   });
 
+  it('on a runner that clones into its home (clone-workdir/v2), the folder goes there, as the server puts it', async () => {
+    await open({ runner: machine({ capabilities: ['dir-probe/v1', 'create-workdir/v1', 'clone-workdir/v1', 'clone-workdir/v2'] }) });
+    await chooseGithub();
+    await press(host!.querySelector<HTMLButtonElement>('.ghp-item')!);
+    await wait(450);
+    expect(said(step()!.querySelector('.msc-prefix'))).toBe('/Users/austin/');
+    expect(vi.mocked(askDirProbe).mock.calls.map(([, path]) => path)).toContain('/Users/austin/orbit-web');
+  });
+
   it('the Name follows the repository’s folder until it is edited', async () => {
     await pickWeb();
     expect(workspaceName().value).toBe('orbit-web');

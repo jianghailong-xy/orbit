@@ -32,7 +32,11 @@ import (
 // of the canonical catalogue and is emitted with `orbit capabilities --json`, so a client can tell
 // which catalogue answered it.
 
-const operationCatalogVersion = "1.9.0"
+const operationCatalogVersion = "1.10.0"
+
+// sessionStateFieldsNote is how an agent reads the session-state fields session_list and session_get
+// return beside `status` (Agent Contract 1.12.0). They are additive: `status` and its values are unchanged.
+const sessionStateFieldsNote = " Beside `status` it carries `phase` (PENDING, RUNNING, IDLE), `released` (true: the session is over), `lastTurnOutcome` (ANSWERED, FAILED, INTERRUPTED, CANCELLED or null) and `waitingOn` (PERSON, HOLD, WAKE or null: what stands between it and its next turn). It failed when released with lastTurnOutcome FAILED and no endReason; it is working when phase is RUNNING. A server that does not send them leaves them out: then read `status`."
 
 // operationObject is the Orbit object an operation acts on (docs/orbit-agent-contract.md §1.1),
 // plus the auxiliary resources (watch, wiki, file) and the two doors that are not writes at all
@@ -2916,7 +2920,7 @@ func buildOperationCatalog() []*operation {
 			},
 			map[string]interface{}{
 				"name":        "session_list",
-				"description": "List this owner's sessions (optionally filter by status or parentSessionId). Use to see what other sessions are doing and to collect the children you spawned (pass your own session id as parentSessionId).",
+				"description": "List this owner's sessions (optionally filter by status or parentSessionId). Use to see what other sessions are doing and to collect the children you spawned (pass your own session id as parentSessionId)." + sessionStateFieldsNote,
 				"inputSchema": obj(map[string]interface{}{"status": sessionStatus, "parentSessionId": str}),
 			},
 			map[string]interface{}{
@@ -2929,7 +2933,7 @@ func buildOperationCatalog() []*operation {
 			},
 			map[string]interface{}{
 				"name":        "session_get",
-				"description": fmt.Sprintf("Get one session's current status and latest output (to collect a spawned sub-task's result). To wait for a session, call session_await instead of calling this in a loop. A record over %d characters is shortened to fit: the prompt first, then changedFiles, lastToolUse, lastUserText and error; lastAssistantText and result stay whole unless nothing else is left to shorten. What was shortened is named in truncatedFields; summary=false returns the full record.", toolResultBudget),
+				"description": fmt.Sprintf("Get one session's current status and latest output (to collect a spawned sub-task's result). To wait for a session, call session_await instead of calling this in a loop. A record over %d characters is shortened to fit: the prompt first, then changedFiles, lastToolUse, lastUserText and error; lastAssistantText and result stay whole unless nothing else is left to shorten. What was shortened is named in truncatedFields; summary=false returns the full record."+sessionStateFieldsNote, toolResultBudget),
 				"inputSchema": obj(map[string]interface{}{
 					"sessionId": sessionIDProp,
 					"summary":   map[string]interface{}{"type": "boolean", "description": "Default true: the record held under the budget. false returns it in full."},
@@ -3179,6 +3183,7 @@ func buildOperationCatalog() []*operation {
 	// (wiki_tools.go; they are left out entirely when the wiki is off).
 	add(gateAlways, wikiToolDescriptors(obj)...)
 	add(gateAlways, fileToolDescriptors(obj)...)
+	add(gateAlways, driveToolDescriptors(obj)...)
 	// The owner's own Settings (settings_tools.go): listed whether or not Session orchestration is on, since they fix
 	// ordinary settings and turning orchestration off is itself a proposal (docs/settings-from-conversation-design.md §7).
 	add(gateAlways, settingsToolDescriptors(obj)...)
@@ -3725,8 +3730,8 @@ func fileToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 				"path": map[string]interface{}{
 					"type": "string",
 					"description": "The file or directory, absolute or relative to the working directory. Its real " +
-						"location, links resolved, has to be inside this session's checkout or its uploads directory, " +
-						"as with a file a reply links; anywhere else is refused, so copy a file there first.",
+						"location, links resolved, has to be inside this session's checkout, its uploads directory, " +
+						"or the mounted Orbit Files drive on Orbit Cloud.",
 				},
 				"taskId": map[string]interface{}{
 					"type": "string",
@@ -4564,6 +4569,7 @@ func finishOperationCatalog(ops []*operation) []*operation {
 		{"wiki", wikiCLICapabilities},
 		{"wiki", wikiImportCLICapabilities},
 		{"file", fileCLICapabilities},
+		{"drive", driveCLICapabilities},
 		{"subagent", subagentCLICapabilities},
 		{"settings", settingsCLICapabilities},
 		{"browser", browserCLICapabilities},
@@ -5383,6 +5389,27 @@ var catalogMetadata = map[string]operationMeta{
 	"file_list": {
 		Object: objectFile,
 		Intent: "See the files this session keeps.",
+	},
+	"drive_put": {
+		Object: objectFile,
+		Intent: "Copy a local file into the owner's Orbit Files drive.",
+	},
+	"drive_get": {
+		Object: objectFile,
+		Intent: "Download a drive file into this session's uploads directory.",
+	},
+	"drive_list": {
+		Object: objectFile,
+		Intent: "See the contents of a drive folder.",
+	},
+	"drive_move": {
+		Object: objectFile,
+		Intent: "Move or rename an entry on the drive.",
+	},
+	"drive_delete": {
+		Object:      objectFile,
+		Intent:      "Move an entry to the owner's Trash.",
+		Destructive: true,
 	},
 	"bg_run": {
 		Object: objectBackgroundJob,

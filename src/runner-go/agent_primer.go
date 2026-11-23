@@ -31,11 +31,11 @@ package main
 // a change to a word is a new agentPrimerVersion, reviewed as a diff.
 
 // agentPrimerVersion is the version of the primer's text. Any change to it is a new version.
-const agentPrimerVersion = "1.4.4"
+const agentPrimerVersion = "1.4.5"
 
 // agentContractVersion is the Agent Contract version the primer was written from: the header of
 // docs/orbit-agent-contract.md and contractVersion in contracts/orbit-agent.contract.json.
-const agentContractVersion = "1.11.0"
+const agentContractVersion = "1.12.0"
 
 // agentPrimerLeadMaxChars is the most the first paragraph may take. It is read on its own: by a
 // client that shows only the beginning of a server's instructions, and by a model skimming them.
@@ -55,7 +55,9 @@ const agentPrimerMaxBytes = 3456
 // the longest shape is 7,178 bytes, so the budget is 7,424 (7.25 KiB); reconciling the two paragraphs, which both
 // speak of handing work to another agent, is P2-01's follow-up, not the merge's. Raised to 7,680 on 2026-11-20, with
 // the owner's agreement, for the primer's settings paragraph: the longest shape went from 7,236 bytes to 7,425.
-const orbitInstructionsMaxBytes = 7680
+// Raised to 8,192 on 2026-11-23 for the workflow paragraph (orbitWorkflowInstructions, 416 bytes): the longest shape
+// went from 7,582 bytes to 7,998. A session whose Agent has Workflows off, or a SubAgent, does not carry it.
+const orbitInstructionsMaxBytes = 8192
 
 // The primer, one rule set per paragraph. The first states the choices an agent gets wrong most
 // often (contract §8.3: S1-S4), and every later one is one or two of §0's ten rules.

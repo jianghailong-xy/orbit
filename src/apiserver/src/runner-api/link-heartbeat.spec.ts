@@ -278,11 +278,12 @@ test('the periodic reconcile: at least once in five minutes, once per period, an
 
 test('the quiet answer hands out nothing and states the runner\'s settings, with no directory list', () => {
   const hints = { inboxSessionIds: [SESSION_A], claim: false, approvals: [] };
-  const quiet = quietHeartbeatAnswer({ maxConcurrent: 4, minFreeDiskMb: 2048 }, { cursorKeyChecks: [], linkHints: hints });
+  const quiet = quietHeartbeatAnswer({ maxConcurrent: 4, burstConcurrent: 2, minFreeDiskMb: 2048 }, { cursorKeyChecks: [], linkHints: hints });
   assert.deepEqual(quiet, {
     cancelSessionIds: [],
     leaseLostSessionIds: [],
     maxConcurrent: 4,
+    burstConcurrent: 2,
     minFreeDiskMb: 2048,
     mergeRequests: [],
     commitRequests: [],
@@ -292,27 +293,27 @@ test('the quiet answer hands out nothing and states the runner\'s settings, with
   assert.equal(heartbeatAnswerHandsOut(quiet), false);
   assert.equal('agentDirs' in quiet, false, 'a runner keeps scanning the directories it has (runloop.go)');
   // A floor that is not set is said as null, which the runner reads as no floor — what it has.
-  assert.equal(quietHeartbeatAnswer({ maxConcurrent: 1, minFreeDiskMb: null }, {}).minFreeDiskMb, null);
+  assert.equal(quietHeartbeatAnswer({ maxConcurrent: 1, burstConcurrent: 2, minFreeDiskMb: null }, {}).minFreeDiskMb, null);
 });
 
 test('the quiet answer is, to the byte, what the runner\'s own test applies (src/runner-go/testdata/o1-quiet-answer.json)', () => {
   const fixture = readFileSync(path.resolve(__dirname, '../../../runner-go/testdata/o1-quiet-answer.json'), 'utf8').trim();
-  assert.equal(JSON.stringify(quietHeartbeatAnswer({ maxConcurrent: 4, minFreeDiskMb: 2048 }, {})), fixture);
+  assert.equal(JSON.stringify(quietHeartbeatAnswer({ maxConcurrent: 4, burstConcurrent: 2, minFreeDiskMb: 2048 }, {})), fixture);
 });
 
 // A runner draining for an update claims for its engines at work only on this word (runner-go drainClaimScope),
 // so the quiet answer to its beat says it as the full one does; to any other beat neither does.
 test('the quiet answer to a draining beat says the claim takes a drain scope', () => {
-  assert.equal(quietHeartbeatAnswer({ maxConcurrent: 4, minFreeDiskMb: 2048 }, { draining: true }).drainScopedClaims, true);
-  assert.equal('drainScopedClaims' in quietHeartbeatAnswer({ maxConcurrent: 4, minFreeDiskMb: 2048 }, { draining: false }), false);
+  assert.equal(quietHeartbeatAnswer({ maxConcurrent: 4, burstConcurrent: 2, minFreeDiskMb: 2048 }, { draining: true }).drainScopedClaims, true);
+  assert.equal('drainScopedClaims' in quietHeartbeatAnswer({ maxConcurrent: 4, burstConcurrent: 2, minFreeDiskMb: 2048 }, { draining: false }), false);
 });
 
 // A runner declares SESSION_RELEASE_V1 only on this word in its latest answer (runner-go session_release.go), so the
 // quiet answer says it as the full one does while the operator's switch is on, and neither says it while it is off.
 test('the quiet answer says the server offers the release protocol only while the switch is on', () => {
-  assert.equal(quietHeartbeatAnswer({ maxConcurrent: 4, minFreeDiskMb: 2048 }, { sessionRelease: true }).sessionReleaseV1, true);
-  assert.equal('sessionReleaseV1' in quietHeartbeatAnswer({ maxConcurrent: 4, minFreeDiskMb: 2048 }, { sessionRelease: false }), false);
-  assert.equal('sessionReleaseV1' in quietHeartbeatAnswer({ maxConcurrent: 4, minFreeDiskMb: 2048 }, {}), false);
+  assert.equal(quietHeartbeatAnswer({ maxConcurrent: 4, burstConcurrent: 2, minFreeDiskMb: 2048 }, { sessionRelease: true }).sessionReleaseV1, true);
+  assert.equal('sessionReleaseV1' in quietHeartbeatAnswer({ maxConcurrent: 4, burstConcurrent: 2, minFreeDiskMb: 2048 }, { sessionRelease: false }), false);
+  assert.equal('sessionReleaseV1' in quietHeartbeatAnswer({ maxConcurrent: 4, burstConcurrent: 2, minFreeDiskMb: 2048 }, {}), false);
 });
 
 test('the release protocol switch is off unless ORBIT_SESSION_RELEASE_V1 says on', () => {

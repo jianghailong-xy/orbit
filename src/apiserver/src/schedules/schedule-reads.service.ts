@@ -9,7 +9,7 @@
  *     what one session put up — its cards and the records of the changes it made.
  */
 import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
-import type { ScheduleRunSessionStatus, ScheduleRunTry, ScheduleWaitingTask } from '@orbit/shared';
+import type { ScheduleChangeOpening, ScheduleRunSessionStatus, ScheduleRunTry, ScheduleWaitingTask } from '@orbit/shared';
 import type {
   Prisma,
   Schedule,
@@ -316,7 +316,7 @@ export class ScheduleReadsService {
   async sessionCards(ownerId: string, sessionId: string) {
     const session = await this.prisma.session.findFirst({
       where: { id: sessionId, ownerId },
-      select: { id: true, runSource: true, scheduleRunId: true },
+      select: { id: true, runSource: true, scheduleRunId: true, changeScheduleId: true, scheduleChangeOpening: true },
     });
     if (!session) throw new NotFoundException('session not found');
     const [{ requests }, revisions, run] = await Promise.all([
@@ -338,6 +338,8 @@ export class ScheduleReadsService {
     return {
       run: run ? scheduleRunView(run) : null,
       runStatus,
+      // The opening it was drawn with keeps the schedule's id even once the schedule is deleted (the column is SET NULL).
+      change: session.scheduleChangeOpening ? (session.scheduleChangeOpening as unknown as ScheduleChangeOpening) : null,
       cards: requests,
       records: revisions.map((r) =>
         scheduleRecordView(r.schedule.id, r.schedule.title, r, undoneBy.get(`${r.scheduleId}:${r.revision}`) ?? null)),

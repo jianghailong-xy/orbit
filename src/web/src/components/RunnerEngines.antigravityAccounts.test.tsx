@@ -261,11 +261,12 @@ describe('two Google accounts on one runner', () => {
     expect(tags(workRow)).toEqual(['Signed out']);
     expect(workRow.querySelector('.re-quota')?.textContent).toBe('Sign in to see quota');
     await click(button(workRow, 'Sign in'));
-    expect(workRow.querySelector('.rsi')?.textContent).toContain('Google terms');
+    // The terms stay in view above the panel, on the engine's row, while its sign-in starts.
+    expect(engineRow(page).querySelector('.re-login-note')?.textContent).toContain('Google terms');
     const popup = { document: { write: vi.fn(), close: vi.fn() }, location: { replace: vi.fn() }, close: vi.fn() };
     const open = vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window);
-    await click(button(workRow, 'Sign in with Google'));
-    expect(loginPosts()).toEqual([{ engine: 'antigravity', account: WORK.id }]);
+    // The row's press starts it: there is no second button to press.
+    await vi.waitFor(() => expect(loginPosts()).toEqual([{ engine: 'antigravity', account: WORK.id }]));
     open.mockRestore();
   });
 

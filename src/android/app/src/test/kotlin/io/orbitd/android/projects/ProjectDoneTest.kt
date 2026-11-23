@@ -42,7 +42,7 @@ class ProjectDoneTest {
     }
 
     @Test fun noCodeToLandIsCountedAsNothingToLandOnTheCardButNamedInTheTally() {
-        assertEquals("4 met · 3 landed on main · 2 nothing to land",
+        assertEquals("4 met · 3 landed on main · 2 nothing to land · 3 not met",
             ProjectDone.cardTally(j("""{"criteria":7,"met":4,"landed":3,"onMain":3,"byReason":{"IN_FLIGHT":1,"NO_RECEIPT":1,"CODELESS":2}}""")))
         val seven = closeout(criteria = """[{"definitionId":"c1","satisfied":true},{"definitionId":"c2","satisfied":true},
             {"definitionId":"c3","satisfied":true,"landingReason":"IN_FLIGHT"},{"definitionId":"c4","satisfied":true,"landingReason":"CODELESS"},
@@ -102,7 +102,10 @@ class ProjectDoneTest {
             ProjectDone.openItemsCount(items(needsYou = listOf(asking("req0")), start = start, done = asking())))
         assertEquals("a card nobody asked for answers no request: nothing is left out", 2, ProjectDone.openItemsCount(items(needsYou = listOf(row), start = start)))
         assertEquals(0, ProjectDone.openItemsCount(null))
-        assertEquals(2, ProjectDone.runningCount(closeout(counts = """{"criteria":3,"met":3,"landed":1,"onMain":1,"byReason":{"IN_FLIGHT":2}}""")))
+        // Read off the criteria, met or not, since byReason tallies met criteria only.
+        assertEquals(2, ProjectDone.runningCount(closeout(
+            criteria = """[{"definitionId":"c1","satisfied":true,"landingReason":"IN_FLIGHT"},{"definitionId":"c2","satisfied":false,"landingReason":"IN_FLIGHT"},{"definitionId":"c3","satisfied":true}]""",
+            counts = """{"criteria":3,"met":2,"landed":1,"onMain":1,"byReason":{"IN_FLIGHT":1}}""")))
         assertEquals(ProjectDone.recordAsDone, ProjectDone.recordLabel(ProjectDone.counts(closeout()), asked = true, doneCheck = null))
         assertEquals(ProjectDone.recordAsDoneAnyway, ProjectDone.recordLabel(j("""{"criteria":2,"met":1}"""), asked = true, doneCheck = null))
         assertEquals("Orbit checked: 1 of 2 criteria are met by their work · nothing running · no open items",

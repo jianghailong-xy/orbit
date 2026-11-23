@@ -22,8 +22,8 @@ or infer permission from available credentials. Local fixtures are preparation e
 ## Image and build
 
 [Dockerfile](image/Dockerfile) pins the base images by digest, Go 1.27.1, Node 26.10.0, a dated Debian
-package snapshot and every engine Orbit runs: Codex 0.170.0, Claude Code 2.1.328 (which also runs
-Anthropic-dialect API keys, DeepSeek's included), OpenCode 1.19.6, Kimi Code 2.6.3, Antigravity CLI 1.5.12,
+package snapshot and every engine Orbit runs: Codex 0.171.0, Claude Code 2.1.330 (which also runs
+Anthropic-dialect API keys, DeepSeek's included), OpenCode 1.19.6, Kimi Code 2.7.2, Antigravity CLI 1.5.14,
 Cursor CLI 2026.10.14-941492e and DeepSeek Harness 0.2.0-rc.2. [pins.json](image/pins.json) records each
 pin and where its digest comes from. Kimi Code and Antigravity CLI are fetched by URL and checked against
 the SHA-256/SHA-512 their publishers' manifests give; Codex, Claude Code and OpenCode are their npm
@@ -72,7 +72,7 @@ stay constant across rebuilds and nodes:
 | `/home/orbit/.orbit/codex-state` | Codex SQLite partitions, including database, WAL and SHM. |
 | `/home/orbit/.codex` | Default Codex auth/configuration, transcripts and sessions. |
 | `/home/orbit/.claude` | Claude Code configuration and session transcripts (`projects/<cwd>/<session>.jsonl`). |
-| `/home/orbit/orbit-repos` | The runner's work directory, empty at first: workspaces' folders are made here or in home when their first session is claimed. An image before 2026-11-17 also made an empty `orbit-repos/default`; the entrypoint removes it while it is still empty and moves the config and identity marker to `orbit-repos`. |
+| `/home/orbit/orbit-repos` | Where the runner clones repositories, made by the runner on its first clone; the image does not make it. The runner's work directory is home itself. An image before 2026-11-23 made `orbit-repos` and named it the work directory, and one before 2026-11-17 also made an empty `orbit-repos/default`; the entrypoint moves the config and identity marker to home, removes `orbit-repos/default` while it is still empty, and leaves `orbit-repos` as it is. |
 
 A volume an image before 2026-11-17 (a944a7f362) ran on was mounted at `/var/lib/orbit`, with home in
 its `home` folder. The entrypoint's start moves that folder's contents to the volume root, under the
@@ -330,7 +330,9 @@ kubectl --context "$AUTHORIZED_TEST_CONTEXT" --namespace "$AUTHORIZED_TEST_NAMES
 In the managed namespace: Pods get, create (including `dryRun`), delete, patch (only to take its own
 finalizer off a Pod whose stop it recorded); PVCs get, create; Secrets get, create, delete;
 ConfigMaps get. Cluster-scoped and read-only: PersistentVolumes get, VolumeAttachments list. Nothing
-on nodes, Ceph or the webhook configuration.
+on nodes, Ceph or the webhook configuration. With the Orbit Files drive (the profile's `files`
+section), also Secrets get, create, update and delete in `orbit-files-system`, for the mount
+credentials (files-csi/rbac.yaml).
 
 ## Reproducible checks and pending acceptance
 

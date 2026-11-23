@@ -84,7 +84,7 @@ const app = (): FeishuAppSettings | null =>
     hasSecret: true,
     secretUnreadable,
     enabled: stored.enabled,
-    messageDetail: stored.messageDetail ?? 'TITLES_ONLY',
+    messageDetail: stored.messageDetail ?? 'FULL',
     approvalsInFeishu: stored.approvalsInFeishu ?? true,
     showOrbit,
     defaultWorkspaceId: stored.defaultWorkspaceId ?? null,
@@ -366,22 +366,22 @@ describe('the app connected', () => {
     expect(card('Your app')!.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('false');
   });
 
-  it('sends titles only by default, says Feishu stores the details, and switches them on and off with PATCH', async () => {
+  it('sends the details by default, says Feishu stores them, and switches them off and on with PATCH', async () => {
     await open();
     const row = [...card('Your app')!.querySelectorAll<HTMLElement>('.admin-signin-row')]
       .find((r) => r.querySelector('.admin-signin-label')?.textContent?.trim() === 'Include details in alerts');
     expect(row?.textContent).toContain(MESSAGE_DETAIL_HINT);
-    expect(MESSAGE_DETAIL_HINT).toContain('Off by default');
+    expect(MESSAGE_DETAIL_HINT).toContain('On by default');
     expect(MESSAGE_DETAIL_HINT).toContain("stored on Feishu's servers");
     const control = () => row!.querySelector<HTMLElement>('[role="switch"]');
-    expect(control()?.getAttribute('aria-checked')).toBe('false');
-    await click(control(), 'Include details in alerts');
-    expect(requests.at(-1)).toEqual({ method: 'PATCH', body: { messageDetail: 'FULL' } });
     expect(control()?.getAttribute('aria-checked')).toBe('true');
-    expect(badge()).toBe('Saved');
     await click(control(), 'Include details in alerts');
     expect(requests.at(-1)).toEqual({ method: 'PATCH', body: { messageDetail: 'TITLES_ONLY' } });
     expect(control()?.getAttribute('aria-checked')).toBe('false');
+    expect(badge()).toBe('Saved');
+    await click(control(), 'Include details in alerts');
+    expect(requests.at(-1)).toEqual({ method: 'PATCH', body: { messageDetail: 'FULL' } });
+    expect(control()?.getAttribute('aria-checked')).toBe('true');
   });
 
   it('answers approvals in Feishu by default, says "always allow" stays in Orbit, and switches it with PATCH', async () => {

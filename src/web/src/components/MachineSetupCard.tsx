@@ -2,7 +2,7 @@ import { DesktopOutlined, GithubOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { MANAGED_RUNNER_COPY, MANAGED_RUNNER_REPOS_ROOT, managedSetupState, type LoginEngine } from '@orbit/shared';
+import { MANAGED_RUNNER_COPY, managedSetupState, newFolderRootFor, type LoginEngine } from '@orbit/shared';
 import { githubIntegrationQuery } from '../lib/githubIntegration';
 import { encodeId } from '../lib/idCodec';
 import type { ManagedRunner } from '../lib/managedRunner';
@@ -19,7 +19,6 @@ import {
   makesNewFolders,
   newFolderPath,
   newFolderPick,
-  newFolderRootOf,
   newFolderVerdict,
   updatesItself,
   type PickedFolder,
@@ -173,7 +172,15 @@ export function MachineSetupCard({
   // A managed runner that isn't up makes the folder when its first session is claimed, on any runner version.
   const usable = !!managedState || (probes && makesNewFolders(runner));
   const disabled = offline || !usable;
-  const root = managedState && !runner.reposRoot?.trim() ? MANAGED_RUNNER_REPOS_ROOT : newFolderRootOf(runner);
+  // Where the server will make it (@orbit/shared newFolderRootFor). Only a usable card shows or sends a root, and a
+  // managed runner always has one, so '' is never drawn.
+  const root =
+    newFolderRootFor({
+      managed: !!runner.managed || !!managedState,
+      up: runner.online === true,
+      reposRoot: runner.reposRoot,
+      capabilities: runner.capabilities,
+    }) ?? '';
 
   const [typed, setTyped] = useState('');
   const folder = typed.trim();

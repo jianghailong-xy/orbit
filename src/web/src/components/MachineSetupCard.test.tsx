@@ -584,8 +584,8 @@ const managedIn = (name: string): ManagedRunner => {
 
 describe('the managed runner before it is up', () => {
   for (const [name, root] of [
-    // Never reported: the image's fixed repos folder.
-    ['preparing: starting', '/home/orbit/orbit-repos/'],
+    // Never reported: the image's home.
+    ['preparing: starting', '/home/orbit/'],
     // Asleep after it had reported its home.
     ['sleeping', '/home/orbit/'],
   ] as const) {
@@ -607,6 +607,20 @@ describe('the managed runner before it is up', () => {
       expect(onCreate).toHaveBeenCalledWith({ kind: 'new', name: 'my-project', path: `${root}my-project` }, 'my-project', null);
     });
   }
+
+  it('asleep since an image that declared create-workdir/v1 only: offers its home, where it makes it on waking', async () => {
+    const managed = managedIn('sleeping');
+    const runner = machine({ online: false, status: 'OFFLINE', reposRoot: '/home/orbit/orbit-repos', capabilities: ['dir-probe/v1', 'create-workdir/v1'] });
+    const page = await open(runner, { managed });
+    expect(said(page.querySelector('.msc-prefix'))).toBe('/home/orbit/');
+  });
+
+  it('preparing: starting, with a Repos Folder stored from an earlier image, still offers where the server makes it', async () => {
+    const managed = managedIn('preparing: starting');
+    const runner = machine({ online: false, status: 'OFFLINE', reposRoot: '/var/lib/orbit/home/orbit-repos', capabilities: [], engines: null });
+    const page = await open(runner, { managed });
+    expect(said(page.querySelector('.msc-prefix'))).toBe('/home/orbit/');
+  });
 
   it('reads any other runner as before: offline, with nothing to type', async () => {
     const managed = managedIn('sleeping');
