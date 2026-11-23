@@ -401,13 +401,14 @@ export function ProjectLandingsWindow({
         {/* What this window is and the way to who decides: nothing to type here (LS6). One plain line on
             the window's bottom edge — a lock and the sentence's first half, the coordinator's door at
             the end (docs/mocks/landings-ui-polish ③). */}
-        <span className="landing-page-foot-line" title={SESSION_LANDINGS_COPY.ORBIT_RUNS_THESE_LANDINGS}>
+        <span className={`landing-page-foot-line${cards.some((card) => card.state === 'FIXING') ? ' has-decisions' : ''}`}
+          title={SESSION_LANDINGS_COPY.ORBIT_RUNS_THESE_LANDINGS}>
           <LockOutlined aria-hidden="true" />
           <span className="sr-only">{SESSION_LANDINGS_COPY.ORBIT_RUNS_THESE_LANDINGS}</span>
           <span className="landing-page-foot-words" aria-hidden="true">{runs}</span>
           {/* A landing in its own task's session's hands is decided there first (web b ③). */}
           {cards.some((card) => card.state === 'FIXING') ? (
-            <span className="landing-page-foot-decisions">{` · ${LANDING_FIX_COPY.DECISIONS_SESSION_FIRST}`}</span>
+            <span className="landing-page-foot-decisions">{LANDING_FIX_COPY.DECISIONS_SESSION_FIRST}</span>
           ) : null}
         </span>
         {coordinatorId ? (

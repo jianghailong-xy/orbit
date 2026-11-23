@@ -30638,12 +30638,16 @@ td > .routing-report-tier + .model-routing-flag {
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 0.92em;
 }
-/* b ③: who decides, while a landing is in its own task's session's hands — said after the line's own words, and cut
-   with them when the window is narrow. */
+/* b ③: who decides, while a landing is in its own task's session's hands — a line of its own under the footer's words,
+   so a narrow window wraps it rather than cutting it. */
+.landing-page-foot-line.has-decisions {
+  flex-wrap: wrap;
+  row-gap: 2px;
+  white-space: normal;
+}
 .landing-page-foot-decisions {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex-basis: 100%;
+  padding-left: 21px;
 }
 .landings-window-card.is-fixing .landings-window-status-icon {
   background: var(--fixing-bg);
