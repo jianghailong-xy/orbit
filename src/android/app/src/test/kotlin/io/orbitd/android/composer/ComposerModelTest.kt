@@ -244,7 +244,7 @@ class ComposerModelTest {
         assertTrue(rig.sends.isEmpty()); assertTrue(model.state.value.draft.text.isEmpty())
         assertTrue(model.state.value.notice!!.contains("codex"))
         // A07-19 (c): the engine first, by its CLI's name, as iOS's status card's Engine row (iOS cef3c3f83).
-        assertEquals("Engine: Codex · Provider: codex · Model:  · Session: AWAITING_INPUT · Permission: default", model.state.value.notice)
+        assertEquals("Engine: Codex · Provider: codex · Model:  · Session: AWAITING_INPUT · Permission: auto", model.state.value.notice)
         val runner=Wire.json.parseToJsonElement("""{"runsAsRoot":true,"commands":[{"name":"host","type":"command"},{"name":"wrong-agent","agentId":"other","type":"command"},{"name":"kimi","provider":"kimi","type":"command"}],"modelCatalog":{"claude":[{"value":"claude-opus-5","permissionModes":["default"]}]}}""").jsonObject
         val catalog=ComposerCatalog(runner,emptyList())
         assertEquals(listOf("host"),catalog.slashItems("claude","agent").map { it.text("name") })
@@ -252,6 +252,16 @@ class ComposerModelTest {
         assertEquals(listOf("kimi"),catalog.slashItems("kimi",null).map { it.text("name") })
         assertFalse("auto" in catalog.permissions("claude","claude","claude-opus-5"))
         assertFalse("bypassPermissions" in catalog.permissions("claude","claude","claude-opus-5"))
+    }
+
+    // A runner whose catalogue has not answered for a model falls back to the known list, which has to name the current models:
+    // without them, moving a session onto one dropped its Auto to Default (shared AUTO_CAPABLE_CLAUDE_MODELS).
+    @Test fun currentClaudeModelsKeepAutoWhereTheCatalogIsSilent() {
+        val silent = ComposerCatalog(Wire.json.parseToJsonElement("""{"modelCatalog":{}}""").jsonObject, emptyList())
+        for (model in listOf("claude-opus-5-5", "claude-fable-5-2", "claude-sonnet-5-5", "claude-haiku-5-5")) {
+            assertTrue(model, "auto" in silent.permissions("claude", "claude", model))
+        }
+        assertFalse("auto" in silent.permissions("claude", "claude", "claude-haiku-4-5"))
     }
 
     @Test fun shellUsesSameSwiftPostContractIncludingCarriedAttachments() = runTest {

@@ -229,6 +229,21 @@ final class RunnersModel {
         }
     }
 
+    /// Sign Default out: POST …/default/sign-out. The runner answers on its next check-in, so a refusal
+    /// because sessions run on Default arrives in `accountRemove` after the list is read again, and the
+    /// page asks once more with `force`. A control-plane refusal (offline, too old) comes back in its
+    /// own words.
+    @discardableResult
+    func signOutDefault(_ id: String, engine: LoginEngine, force: Bool) async -> String? {
+        do {
+            _ = try await api.signOutRunnerDefault(id, engine: engine, force: force)
+            await load()
+            return nil
+        } catch {
+            return APIClient.failureReason(error)
+        }
+    }
+
     /// Make an added Claude Code account the Default: POST …/set-default. A control-plane refusal
     /// (offline, busy, too old) comes back in its own words; a machine failure rides in
     /// `claudeAccountSwap` after the list is read again.

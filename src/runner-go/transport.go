@@ -267,6 +267,9 @@ type Transport struct {
 	// noTakeoverBatch is set once the control plane has answered the batch takeover 404 or 405: it
 	// predates it, and every takeover from then on is one request per session, as before it.
 	noTakeoverBatch atomic.Bool
+	// releaseOffered is what the latest successful heartbeat answer said of the session-release protocol
+	// (session_release.go): false until one says it, and on the first that does not.
+	releaseOffered atomic.Bool
 	// observer hears about every request and card of the tool call it was set for (transport_observe.go).
 	observerMu sync.Mutex
 	observer   func(transportEvent)

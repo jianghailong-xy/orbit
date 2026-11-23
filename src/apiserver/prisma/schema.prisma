@@ -1729,11 +1729,14 @@ model ManagedRunner {
   /// column, which any fresh report answers.
   sleepRequestedAt    DateTime?                   @map("sleep_requested_at") @db.Timestamptz(3)
   /// DRAINING: when the instance was asked to stop for sleep. Null until then: up to that moment
-  /// the drain can still be called off without anything having stopped.
+  /// the drain can still be called off without anything having stopped. READY: when the owner's
+  /// interrupting Update Now first asked the backend to stop the instance (stopForOwnerUpdate),
+  /// kept on the next generation until another stop is asked.
   stopRequestedAt     DateTime?                   @map("stop_requested_at") @db.Timestamptz(3)
   /// DRAINING: when the instance, with nothing to do, accepted the stop. Set by its heartbeat only
   /// while the drain stands and no demand has come since it began; from then on the drain cannot be
-  /// called off, and the instance exits on its own.
+  /// called off, and the instance exits on its own. For the owner's Update Now: when the host
+  /// reported the exit that followed its stop request (`terminated`), kept like `stopRequestedAt`.
   stopAcknowledgedAt  DateTime?                   @map("stop_acknowledged_at") @db.Timestamptz(3)
   /// DRAINING for an image roll: the image the profile names, which the instance's Pod was not made from. The drain
   /// keeps the runner wanted (desiredState RUNNING), and once it has stopped the runner wakes at once as the next
@@ -1742,9 +1745,11 @@ model ManagedRunner {
   /// READY on a previous image: when the manager first found the instance made from an image other than the one it
   /// makes instances from now, with that image's source commit (`org.opencontainers.image.revision`) as
   /// `currentImageSha`. Both null while the instance is current or the backend cannot name the current build; the
-  /// owner's status reads them (`update`) without asking the backend.
+  /// owner's status reads them (`update`) without asking the backend. With them, the release that image was published
+  /// for (`org.opencontainers.image.version`), as `currentImageVersion`: null for an image built from a checkout.
   imageOutdatedSince  DateTime?                   @map("image_outdated_since") @db.Timestamptz(3)
   currentImageSha     String?                     @map("current_image_sha")
+  currentImageVersion String?                     @map("current_image_version")
   /// The owner's Update Now (managed-runner.service.ts updateNow): when it was asked for, and by whom (the owner's
   /// user id). Kept as the record of the last request. It is in progress while `updateCompletedAt` is null or older:
   /// the manager rolls the READY instance onto the current image once it is idle, or stops it at once for a request
@@ -2181,6 +2186,10 @@ model Session {
   // report one; a reader with no window shows the token count, not a percentage of a guess.
   contextWindow        Int?      @map("context_window")
   lastTurnAt           DateTime? @map("last_turn_at")
+  // Where the session sits in the session list (migration 1434). Unlike lastTurnAt, the liveness clock, it moves only
+  // when the session changes for its owner: created, a person's message, a turn ending on the owner, ended or completed
+  // (the last two by the session_listed_at_settle trigger). Null only on a row an older server inserted mid-deploy.
+  listedAt             DateTime? @default(now()) @map("listed_at")
   cancelRequestedAt    DateTime? @map("cancel_requested_at")
   startedAt            DateTime? @map("started_at")
   finishedAt           DateTime? @map("finished_at")
@@ -2192,9 +2201,9 @@ model Session {
   // runner's async /finalize. null = a natural agent finish (read `status`) or a
   // pre-migration row. Values: see SessionEndReason in @orbit/shared.
   endReason            String?   @map("end_reason")
-  // No failure fact on the session (design §12, decision D9; removal step R5, 2026-11-21): the nullable column `release_cause` and its CHECK
-  // session_release_cause_chk still exist in the database, and this model does not declare it. Nothing writes it
-  // and nothing reads it; migration R8 drops both one deploy after this field left the model.
+  // No failure fact on the session (design §12, decision D9): the field `release_cause` left this model in deploy 2
+  // (removal step R5, 2026-11-21), and migration 1443 dropped the column and its CHECK session_release_cause_chk in
+  // deploy 3 (R8, 2026-11-22). A failure is the carrying turn's outcome, copied to lastTurnOutcome below.
   // How the session's latest completed turn ended: ANSWERED | FAILED | INTERRUPTED | CANCELLED, the same
   // value as that turn's `outcome`, written by runner turn-complete in the write that parks the session
   // (migration 1201, CHECK session_last_turn_outcome_chk). Backfilled from status and endReason (1202); null
@@ -3161,6 +3170,9 @@ model ConversationTurn {
   /// platform's own deliveries, and every turn written before 0662.
   senderClient       String? @map("sender_client")
   senderClientDetail String? @map("sender_client_detail")
+  // A person sent this turn — the owner at their own doors, a guest, a Feishu sender (migration 1434). Its end, waiting
+  // for input, moves the session's listedAt; a platform delivery's end does not.
+  byPerson        Boolean   @default(false) @map("by_person")
   /// Session translation (migration 0532, @orbit/shared translation.ts): what the owner wrote, when the turn was
   /// translated for the engine — `content` is then the English delivered. Null on every turn translation was not
   /// involved in, and so are the two below.
@@ -4855,6 +4867,16 @@ model ProjectOpenItem {
   handoverNote          String?   @map("handover_note")
   handedOverAt          DateTime? @map("handed_over_at") @db.Timestamptz(3)
   handedOverBySessionId String?   @map("handed_over_by_session_id") @db.Uuid
+
+  /// Revision 42 (§12.4, migration 1501): the task's own work session a landing failure was handed to
+  /// first (W4, W5), when, and when and why it was handed back to the coordinator (W7). History, not a
+  /// relation. Offered and not returned = in the work session's hands: delivered to no coordinator and
+  /// no escalation time (`escalateAt` NULL). The pairs are both-or-neither, and the reason is one of
+  /// NO_NEW_COMMIT, TURN_FAILED, SESSION_ENDED, ROUNDS_EXHAUSTED, TASK_MOVED_ON.
+  workSessionId           String?   @map("work_session_id") @db.Uuid
+  workSessionOfferedAt    DateTime? @map("work_session_offered_at") @db.Timestamptz(3)
+  workSessionReturnedAt   DateTime? @map("work_session_returned_at") @db.Timestamptz(3)
+  workSessionReturnReason String?   @map("work_session_return_reason")
 
   resolution          String?
   resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(3)

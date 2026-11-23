@@ -160,10 +160,15 @@ export class EvidenceReviewService {
         translationLang: true,
         decidedByType: true,
         evidence: { select: { revision: true, sourceSessionId: true } },
-        task: { select: { title: true } },
+        task: { select: { title: true, status: true } },
       },
     });
     if (!decision || decision.decision !== 'SEND_BACK' || !decision.note) return;
+    // A send-back asks the run for another revision, and a task that is DONE asks for none: its DONE
+    // came after the decision, so the note is stale. Without this, a run of a DONE task revived for its
+    // landing-fix turn (docs/project-integration-line-contract.md §12.5 W6) would be handed the old note
+    // at that turn's end and asked to submit evidence again.
+    if (decision.task.status === 'DONE') return;
     const runSessionId = decision.evidence.sourceSessionId;
     const from = fromSessionId ? await readBlockSender(this.prisma, ownerId, fromSessionId, runSessionId) : null;
     const message = (note: string): string => evidenceSendBackMessage({

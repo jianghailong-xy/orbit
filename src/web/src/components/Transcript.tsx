@@ -114,6 +114,8 @@ import {
   SubagentWakesCtx,
 } from './SubagentCardEnd';
 import { OrbitEventLine } from './OrbitEventLine';
+import { LandingFixCard } from './LandingFixCard';
+import { parseLandingFixTurn } from '../lib/landingFix';
 import { OrbitExchangeGroup, OrbitExchangeSolo } from './OrbitExchangeFold';
 import { foldsAtLength, parseRunNotice, replyGist, type OrbitExchangeSummary } from '../lib/orbitExchangeFold';
 import { WikiDraftCard, WikiDraftCardCtx } from './WikiDraftCard';
@@ -1080,6 +1082,7 @@ const readersOwnWords = (node: TextNode): boolean =>
   && !parseWatchWake(node.text)
   && !resolutionTurnLabel(node.text)
   && !isRunnerUpdateResume(node.text)
+  && !parseLandingFixTurn(node.text)
   && !parseBackgroundWake(node.note)
   && !parseSubagentFinished(node.note)
   && !parseWorkflowFinished(node.note)
@@ -2579,6 +2582,19 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // payload is written for the agent.
       // The turn Orbit sends a session whose turn the owner's Update Now cut (D4): Orbit's words, written
       // for the agent, so one Orbit line rather than a bubble in the reader's name (owner rule 10-27).
+      // A failed landing handed to the session that wrote the work (revision 42, §12.5 W6): Orbit's card, from the
+      // turn's own words, never the reader's bubble.
+      const landingFix = parseLandingFixTurn(node.text);
+      if (landingFix) {
+        return (
+          <LandingFixCard
+            turn={landingFix}
+            seq={seq}
+            undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            queued={queued}
+          />
+        );
+      }
       if (isRunnerUpdateResume(node.text)) {
         return <div className="chat-note runner-update-resume" data-seq={seq} title={node.text}>{RUNNER_UPDATE_RESUME_NOTE}</div>;
       }

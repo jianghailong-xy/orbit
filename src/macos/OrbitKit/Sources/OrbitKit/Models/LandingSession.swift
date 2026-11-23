@@ -188,14 +188,18 @@ public struct SessionLandingTodo: Codable, Equatable, Sendable, Identifiable {
     public let state: String
     public let title: String
     public let waitingSince: String
+    /// The task's own work session that holds the item while it fixes it (revision 42, §12.7); nil
+    /// when the item is the coordinator's or the owner's, and from an older server.
+    public let workSessionId: String?
 
     public init(id: String, kind: String = "", state: String = "", title: String = "",
-                waitingSince: String = "") {
+                waitingSince: String = "", workSessionId: String? = nil) {
         self.id = id
         self.kind = kind
         self.state = state
         self.title = title
         self.waitingSince = waitingSince
+        self.workSessionId = workSessionId
     }
 
     public init(from decoder: Decoder) throws {
@@ -205,6 +209,7 @@ public struct SessionLandingTodo: Codable, Equatable, Sendable, Identifiable {
         state = try c.decodeIfPresent(String.self, forKey: .state) ?? ""
         title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
         waitingSince = try c.decodeIfPresent(String.self, forKey: .waitingSince) ?? ""
+        workSessionId = try? c.decodeIfPresent(String.self, forKey: .workSessionId)
     }
 }
 
@@ -428,7 +433,8 @@ public struct SessionLandingView: Codable, Equatable, Sendable {
     /// `LANDED | ALREADY_LANDED | NOTHING_TO_LAND | MERGED | HANDLED | DECLINED | CANCELLED | DELETED`,
     /// or nil while the subject is open.
     public let settledAs: String?
-    /// The list summary's state: `IN_FLIGHT`, `AWAITING_DECISION` or `SETTLED` — nil on a detail view.
+    /// The list summary's state: `IN_FLIGHT`, `AWAITING_DECISION`, `FIXING` (revision 42: a failure in
+    /// its task's own work session's hands) or `SETTLED` — nil on a detail view.
     public let state: String?
     /// The newest attempt's phase and round, lifted so a card can draw them without reaching into it.
     public let phase: String?

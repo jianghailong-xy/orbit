@@ -9,15 +9,13 @@ import { type WakeFact, taskRunStoppedFact } from './coordinator-wake';
 import type { WakeAuthorization, WakeAuthorizer } from './coordinator-wake.service';
 import { isDerivedUuid } from './project-dispatch-identity';
 import { SESSION_ENDING_SELECT, sessionHasEnded } from './project-open-item';
+import { runLastWords } from './run-last-words';
 
 /** The project disappeared between the committed read and the wake's authorization. */
 export const RUN_STOPPED_WAKE_PROJECT_GONE = 'PROJECT_GONE';
 
 /** The same refusal, about the same column, its siblings spell this way. */
 export const RUN_STOPPED_WAKE_COORDINATOR_DISABLED = 'COORDINATOR_DISABLED';
-
-/** How much of what the run said last is copied into the message. */
-const LAST_WORDS_LIMIT = 1_200;
 
 /**
  * What ended, which is what names one stop: a turn somebody delivered, as `/turn-complete` reports
@@ -155,14 +153,13 @@ export class TaskRunStoppedProducer {
       if (!turn || turnTypedByOwner(turn)) return null;
     }
 
-    const words = run.lastAssistantText?.trim() ?? '';
     return taskRunStoppedFact({
       projectId: run.task.projectId,
       taskId: run.task.id,
       taskTitle: run.task.title,
       sessionId,
       stopKey: 'turnId' in stop ? stop.turnId : `engine:${stop.engineTurnEndSeq}`,
-      lastWords: words.length > LAST_WORDS_LIMIT ? `${words.slice(0, LAST_WORDS_LIMIT)}…` : words || null,
+      lastWords: runLastWords(run.lastAssistantText),
     });
   }
 

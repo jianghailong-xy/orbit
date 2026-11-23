@@ -430,7 +430,10 @@ const (
 )
 
 type dshTurnRecord struct {
-	State     string   `json:"state"`
+	State string `json:"state"`
+	// Cut: a prompted turn a runner stop cut once its drain ran out (cutForRunnerStop). Orbit keeps it leased and
+	// hands it back to the next process as the stop's continuation, which is prompted rather than recovered.
+	Cut       bool     `json:"cut,omitempty"`
 	OpenTools []string `json:"openTools,omitempty"`
 	Status    string   `json:"status,omitempty"`
 	Subtype   string   `json:"subtype,omitempty"`
@@ -765,11 +768,29 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		if !p.waitTurnPermit(p.ctx) {
 			return false
 		}
-		if rec, ok := ledger.get(resp.TurnID); ok {
+		rec, recorded := ledger.get(resp.TurnID)
+		// Handed back after a runner stop: cut by this binary's stop (Cut), or settled INTERRUPTED by an earlier
+		// binary's, which cancelled the turn at the stop and whose completion never reached Orbit (Orbit would not hand
+		// back a turn it had heard end). Either way Orbit's delivery is its continuation, and it is prompted. Any
+		// other settled turn is reported again as it settled; a prompted one never settled is a crash, not replayed.
+		cut := recorded && ((rec.State == dshTurnPrompted && rec.Cut) || (rec.State == dshTurnSettled && rec.Status == stInterrupted))
+		if recorded && !cut {
 			p.setTurn(resp.TurnID)
 			recoverTurn(resp, rec)
 			p.setTurn("")
 			return true
+		}
+		if cut {
+			// A turn a runner stop cut, handed back: Orbit's delivery is the stop's continuation ("interrupted
+			// because its runner restarted / the runner update interrupted this turn; continue"), and dsh's resumed
+			// session holds what the turn did before. Its tools still open never got their result.
+			for _, id := range rec.OpenTools {
+				p.emitFor(resp.TurnID, evToolResult, map[string]interface{}{
+					"toolUseId": id, "toolCallId": id, "status": "failed", "isError": true,
+					"content":          "dsh stopped before this tool returned a final status; side effects may have occurred",
+					"runtimeSessionId": sessionID, "localTurnId": resp.TurnID,
+				})
+			}
 		}
 		activeID = resp.TurnID
 		p.setTurn(activeID)
@@ -801,6 +822,34 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 			promptDone <- dshPromptResult{turnID: turnID, result: result, err: err}
 		}()
 		return true
+	}
+	// cutForRunnerStop ends the active turn's prompt as a runner stop that outlasted its drain does on every engine
+	// (watchShutdownDrain): marked `interrupt {reason: runner_restart}` (or the Update Now's runner_update) and left
+	// unsettled, so Orbit keeps it leased and the next process is handed it back as the stop's continuation. dsh is
+	// cancelled first, so its session keeps the turn as far as it went; its answer is not reported.
+	cutForRunnerStop := func() {
+		turnID := activeID
+		if err := ledger.update(func() {
+			if rec := ledger.Turns[turnID]; rec != nil && rec.State == dshTurnPrompted {
+				rec.Cut = true
+			}
+		}); err != nil {
+			logln("dsh turn ledger:", err)
+		}
+		p.emitFor(turnID, evInterrupt, stopInterruptPayload(p.shutdownCtx))
+		logln("runner stop for", p.job.SessionID+"; cutting the dsh turn in flight, which the next process continues")
+		stopped = true
+		permissions.close()
+		cancelCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		err := app.write(cancelCtx, map[string]interface{}{"jsonrpc": "2.0", "method": "session/cancel",
+			"params": map[string]interface{}{"sessionId": sessionID}})
+		cancel()
+		if err != nil {
+			app.fail(err)
+		}
+		awaitPrompt()
+		activeID, stopped = "", false
+		p.setTurn("")
 	}
 	closeSession := func() {
 		permissions.close()
@@ -870,11 +919,24 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 			}
 			return stCancelled, true, false
 		case <-p.shutdownCtx.Done():
-			stopped = activeID != ""
-			closeSession()
+			// The runner stops (SIGTERM, a self-update, the owner's Update Now): as on every engine, the turn in flight
+			// gets the drain (stopDrainBudget) and is reported if it ends within it; otherwise it is cut, left for the
+			// next process to continue (cutForRunnerStop). Nothing new is taken on meanwhile.
+			pollCancel()
 			if activeID != "" {
-				settle(awaitPrompt(), true)
+				select {
+				case done := <-promptDone:
+					settle(done, true)
+				case <-time.After(stopDrainBudget(p.shutdownCtx, shutdownDrainTimeout)):
+					cutForRunnerStop()
+				case <-p.ctx.Done():
+					stopped = true
+					permissions.close()
+					settle(<-promptDone, true)
+					return stCancelled, true, false
+				}
 			}
+			closeSession()
 			return stCancelled, true, false
 		case err := <-pollErrors:
 			// Another owner holds the lease: end the process tree first, so nothing more runs on

@@ -128,6 +128,8 @@ export const SESSION_STATE_META: Record<SessionRunState, { label: string; tone: 
   // queuedLabel), not here.
   QUEUED: { label: QUEUED_LABEL, tone: 'muted' },
   RUNNING: { label: 'Running', tone: 'blue' },
+  // Still Succeeded: OrbitKit's SharePanelCopyParityTests pins this line, and the task-run badge moves to the
+  // approved Finished on web, Apple and Android together in one task (351u25GFXaHC6mVVZWRX6).
   SUCCEEDED: { label: 'Succeeded', tone: 'green' },
   FAILED: { label: 'Failed', tone: 'red' },
   AWAITING_INPUT: { label: 'Awaiting reply', tone: 'amber' },

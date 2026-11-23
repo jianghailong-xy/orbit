@@ -305,6 +305,9 @@ const CORE_TRIGGERS_AFTER: Readonly<Record<string, readonly string[]>> = {
     // 0850's: a session is a help center Ask for its whole life or never; the column is written by the
     // Ask's create alone. Another SIBLING change.
     'session_help_ask_guard',
+    // 1434's: a session that ends or is completed moves `listed_at`, the session list's order key. Another SIBLING
+    // change.
+    'session_listed_at_settle',
     'session_merge_projection_checkpoint_authority_trg',
     // 0484's: the Open list's version counter, bumped by the session row itself. A SIBLING change.
     'session_open_list_epoch_delete',
@@ -345,7 +348,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
   // `task` carries 24; naming all of them here would restate the inventory rather than check it.
   // What matters for it is the same two properties, stated directly.
   const core = TRIGGER_WRITE_SOURCES.filter((entry) => CENSUS_TABLES.includes(entry.table));
-  assert.equal(core.length, 67,
+  assert.equal(core.length, 68,
     'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
     + '`failure_successor_task_binding_immutable` from `task`, 38 once 0227 removed '
     + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime, 35 once 0228 '
@@ -375,7 +378,8 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + '`task_fork_guard` to `task`, which refuses a write that would change where a forked task starts, and 66 once '
     + '0850 added `session_help_ask_guard` to `session`, which refuses a write that would make a session an Ask or not, '
     + 'and 67 once 1060 added `condition_ended_with_task` to `task`, which ends a task\'s condition when it is cancelled, '
-    + 'done or failed');
+    + 'done or failed, and 68 once 1434 added `session_listed_at_settle` to `session`, which moves the session list\'s '
+    + 'order key when a session ends or is completed');
   assert.deepEqual(core.filter((entry) => entry.since.startsWith('0207_')), [],
     'no trigger attributed to 0207 may still be registered');
   // Every one of them installed BEFORE 0207 is still here. Derived from the inventory's own
@@ -401,6 +405,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
       'session_dsh_runner_acquisition_guard',
       'session_engine_from_task_pin', 'session_engine_immutable',
       'session_help_ask_guard',
+      'session_listed_at_settle',
       'session_open_list_epoch_delete', 'session_open_list_epoch_insert', 'session_open_list_epoch_update',
       'session_request_asker_stopped', 'session_request_recipient_ended', 'session_source_freeze_guard',
       'session_wiki_chat_space_guard',
@@ -419,7 +424,8 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + '`session_cursor_runner_acquisition_guard` and 0441\'s two `project_rollup_candidate_task_*` '
     + 'and 0476\'s `session_wiki_chat_space_guard`. '
     + '0484\'s nine `open_list_epoch_*` triggers and `conversation_turn_evidence_review_deadline`, '
-    + 'and 0615\'s `task_fork_guard`, and 0850\'s `session_help_ask_guard`, and 1060\'s `condition_ended_with_task`. '
+    + 'and 0615\'s `task_fork_guard`, and 0850\'s `session_help_ask_guard`, and 1060\'s `condition_ended_with_task`, '
+    + 'and 1434\'s `session_listed_at_settle`. '
     + '0212\'s `failure_successor_task_binding_immutable` was another, and 0226 removed it',
   );
   assert.ok(

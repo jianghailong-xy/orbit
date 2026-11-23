@@ -19,18 +19,42 @@ const UPGRADES = ['.claude/skills/upgrade/upgrade.sh', '.agents/skills/upgrade/s
 const REGISTRY = 'registry.invalid:5000';
 const realDocker = spawnSync('sh', ['-c', 'command -v docker'], { encoding: 'utf8' }).stdout.trim();
 const compose = realDocker && spawnSync(realDocker, ['compose', 'version'], { encoding: 'utf8' }).status === 0;
+// Every file of deploy/monitoring: Prometheus, Grafana's provisioning and dashboards, Loki and Alloy.
+const MONITORING = [
+  'deploy/monitoring/alloy/config.alloy',
+  'deploy/monitoring/alloy/log-targets.sh',
+  'deploy/monitoring/alloy/run.sh',
+  'deploy/monitoring/grafana/dashboards/database.json',
+  'deploy/monitoring/grafana/dashboards/host.json',
+  'deploy/monitoring/grafana/dashboards/overview.json',
+  'deploy/monitoring/grafana/dashboards/runners-sessions.json',
+  'deploy/monitoring/grafana/provisioning/alerting/contact-points.yml',
+  'deploy/monitoring/grafana/provisioning/alerting/policies.yml',
+  'deploy/monitoring/grafana/provisioning/alerting/rules.yml',
+  'deploy/monitoring/grafana/provisioning/alerting/templates.yml',
+  'deploy/monitoring/grafana/provisioning/dashboards/orbit.yml',
+  'deploy/monitoring/grafana/provisioning/datasources/loki.yml',
+  'deploy/monitoring/grafana/provisioning/datasources/prometheus.yml',
+  'deploy/monitoring/loki.yml',
+  'deploy/monitoring/prometheus.yml',
+];
+const MONITORING_SERVICES = ['prometheus', 'node-exporter', 'postgres-exporter', 'grafana', 'loki', 'alloy'];
 const COPIED = [
   ...UPGRADES, 'deploy/two-stage/release.sh', 'deploy/two-stage/deploy-stage.sh', 'deploy/two-stage/base-images.env',
+  'deploy/two-stage/registry.sh', 'deploy/two-stage/publish-managed-runner.sh',
   'docker-compose.yml', '.gitignore', 'gateway/nginx.conf', 'gateway/several-apiservers/http/upstreams.conf',
   'gateway/several-apiservers/server/routes.conf', 'scripts/pg-archive-wal.sh', 'scripts/pg-backup.sh',
   'src/link-gateway/nats.conf', 'deploy/runner-link/behind-web-gateway.env', 'deploy/postgres-pinned.yml', 'deploy/db-proxy.yml',
-  'deploy/db-proxy/haproxy.cfg',
+  'deploy/db-proxy/haproxy.cfg', 'scripts/pg-monitor-role.sh',
+  // The monitoring profile's config, every file of it.
+  ...MONITORING,
 ];
 // What the target is left with besides .env, its ./data and .upgrade/: the release's files, and nothing built from.
 const SHIPPED = [
-  'deploy/db-proxy.yml', 'deploy/db-proxy/haproxy.cfg', 'deploy/postgres-pinned.yml', 'deploy/runner-link/behind-web-gateway.env',
-  'docker-compose.yml', 'gateway/nginx.conf', 'gateway/several-apiservers/http/upstreams.conf',
-  'gateway/several-apiservers/server/routes.conf', 'scripts/pg-archive-wal.sh', 'scripts/pg-backup.sh', 'src/link-gateway/nats.conf',
+  'deploy/db-proxy.yml', 'deploy/db-proxy/haproxy.cfg', ...MONITORING, 'deploy/postgres-pinned.yml',
+  'deploy/runner-link/behind-web-gateway.env', 'docker-compose.yml', 'gateway/nginx.conf', 'gateway/several-apiservers/http/upstreams.conf',
+  'gateway/several-apiservers/server/routes.conf', 'scripts/pg-archive-wal.sh', 'scripts/pg-backup.sh', 'scripts/pg-monitor-role.sh',
+  'src/link-gateway/nats.conf',
 ];
 const DEPLOY_ORDER = ['postgres', 'db-proxy', 'nats', 'apiserver', 'wiki-worker', 'web', 'link-gateway', 'gateway', 'pgbackup'];
 // Without a gap, a web gateway the release recreates goes first, so that the gateway handing the apiserver and web over
@@ -147,6 +171,18 @@ case "$side $*" in
       pgbackup) cp scripts/pg-backup.sh "$state/pgbackup.file" ;;
       web) "$FAKE_REAL_DOCKER" compose config --images web >"$state/web.image" ;;
     esac ;;
+  # The hosted runners' image, as publish-managed-runner.sh builds it: what the Dockerfile makes of the build arguments
+  # (its labels, and the version its runner reports) is kept in FAKE_REGISTRY.built, by image.
+  "build build "*)
+    image="$(printf '%s\n' "$@" | sed -n '/^-t$/{n;p;}')"
+    sha="$(printf '%s\n' "$@" | sed -n 's/^ORBIT_SOURCE_SHA=//p')"
+    version="$(printf '%s\n' "$@" | sed -n 's/^ORBIT_RELEASE_VERSION=//p')"
+    printf '%s %s %s\n' "$image" "$sha" "$version" >>"$FAKE_REGISTRY.built" ;;
+  "build image inspect -f "*)
+    awk -v image="${'$'}{!#}" '$1 == image { line = $2 " " $3 } END { print line }' "$FAKE_REGISTRY.built" ;;
+  "build run --rm --network none --entrypoint /usr/local/bin/orbit "*)
+    if [ -n "${'$'}{FAKE_REPORTS:-}" ]; then echo "$FAKE_REPORTS"; exit 0; fi
+    awk -v image="$7" '$1 == image { line = $3 } END { print line }' "$FAKE_REGISTRY.built" ;;
   "target compose pull "*|"target compose "*" pull "*)
     [ -z "${'$'}{FAKE_PULL_FAIL:-}" ] || { echo "fake docker: manifest unknown" >&2; exit 1; } ;;
 esac
@@ -230,7 +266,7 @@ function makeFixture(t) {
     for (const log of [fixture.dockerLog, fixture.sshLog]) writeFileSync(log, '');
     const env = { ...fixture.env, ...extra };
     for (const [name, value] of Object.entries(extra)) if (value === undefined) delete env[name];
-    const result = spawnSync(path.join(checkout, script), ['--no-pull', ...args], {
+    const result = spawnSync(path.join(checkout, script), UPGRADES.includes(script) ? ['--no-pull', ...args] : args, {
       cwd: checkout, env, encoding: 'utf8', timeout: 180_000, stdio: ['ignore', 'pipe', 'pipe'],
     });
     const calls = readFileSync(fixture.dockerLog, 'utf8').split('\n').filter(Boolean).map((line) => {
@@ -335,10 +371,10 @@ test('with ORBIT_REGISTRY unset, Compose renders exactly what the file rendered 
   // The file with the release's lines put back as they read before it.
   const before = now.replace(/\n# Where each image comes from\.[^\n]*\n(?:#[^\n]*\n)*\n/, '\n')
     .replace(/\n {4}# Empty unless ORBIT_IMAGE_TAG is set[^\n]*\n {4}#[^\n]*\n {4}image: \$\{ORBIT_IMAGE_TAG:\+[^\n]*\n/, '\n')
-    .replace(/\$\{ORBIT_REGISTRY:\+\$\{ORBIT_REGISTRY\}\/\}\$\{ORBIT_[A-Z]+_IMAGE:-([^}]+)\}/g, '$1')
+    .replace(/\$\{ORBIT_REGISTRY:\+\$\{ORBIT_REGISTRY\}\/\}\$\{ORBIT_[A-Z_]+_IMAGE:-([^}]+)\}/g, '$1')
     .replace(/\$\{ORBIT_REGISTRY:\+\$\{ORBIT_REGISTRY\}\/\}(orbit-[a-z-]+):\$\{ORBIT_[A-Z_]+_TAG:-local\}/g, '$1:local');
   assert.notEqual(before, now);
-  assert.doesNotMatch(before, /ORBIT_REGISTRY|ORBIT_IMAGE_TAG|ORBIT_LINK_GATEWAY_TAG|ORBIT_[A-Z]+_IMAGE/);
+  assert.doesNotMatch(before, /ORBIT_REGISTRY|ORBIT_IMAGE_TAG|ORBIT_LINK_GATEWAY_TAG|ORBIT_[A-Z_]+_IMAGE/);
   writeFileSync(path.join(dir, 'before.yml'), before);
   writeFileSync(path.join(dir, 'now.yml'), now);
   writeFileSync(path.join(dir, '.env'), 'JWT_SECRET=x\nPROVIDER_SECRET_KEY=y\nRUNNER_LINK_SIGNING_KEY=z\n');
@@ -368,7 +404,7 @@ test('with ORBIT_REGISTRY unset, Compose renders exactly what the file rendered 
     env: {
       ...env, ORBIT_REGISTRY: REGISTRY, ORBIT_IMAGE_TAG: 'a'.repeat(40), ORBIT_LINK_GATEWAY_TAG: 'b'.repeat(40),
       ...Object.fromEntries(readFileSync(path.join(repo, 'deploy/two-stage/base-images.env'), 'utf8').split('\n')
-        .filter((line) => /^ORBIT_[A-Z]+_IMAGE=/.test(line)).map((line) => line.split('='))),
+        .filter((line) => /^ORBIT_[A-Z_]+_IMAGE=/.test(line)).map((line) => line.split('='))),
     },
   });
   assert.equal(set.status, 0, set.stderr);
@@ -381,6 +417,14 @@ test('with ORBIT_REGISTRY unset, Compose renders exactly what the file rendered 
     `${REGISTRY}/library/postgres@sha256:d845e7f0ac8517b9d9868b6d20379f9688ba3676595e50ca7c0b664964b2a760`,
     `${REGISTRY}/orbit-apiserver:${'a'.repeat(40)}`, `${REGISTRY}/orbit-apiserver:${'a'.repeat(40)}`,
     `${REGISTRY}/orbit-link-gateway:${'b'.repeat(40)}`, `${REGISTRY}/orbit-web:${'a'.repeat(40)}`,
+    // The monitoring profile's: pg-monitor-role pinned beside postgres, and the six images by digest, each from base-images.env.
+    `${REGISTRY}/library/postgres@sha256:d845e7f0ac8517b9d9868b6d20379f9688ba3676595e50ca7c0b664964b2a760`,
+    `${REGISTRY}/prom/node-exporter@sha256:7296504d4ada44b7d7ab4431e27e9f9900d8488f8d55842f4b12ae2704e16dfe`,
+    `${REGISTRY}/prom/prometheus@sha256:e04987641b57704f408e31f6373ba4138ecf27cb4a165d24aabb6c38fddd0f06`,
+    `${REGISTRY}/prometheuscommunity/postgres-exporter@sha256:3b8e05a84282cd1199ad2fb6c66f362738bf4c68c1547d8f4226a34a7dd6d8d7`,
+    `${REGISTRY}/grafana/grafana@sha256:74144189b38447facf737dfd0f3906e42e0776212bf575dc3334c3609183adf7`,
+    `${REGISTRY}/grafana/loki@sha256:b43c257ccfc925d4a50b8717cac61a3b51df8c48d01847936057e5c4075a24a7`,
+    `${REGISTRY}/grafana/alloy@sha256:9acc2529bc1edb7f5b2bd801dd8334ebc80c158e3a9e5526ecd7c9a273d43189`,
   ].sort());
 });
 
@@ -426,11 +470,12 @@ for (const upgrade of UPGRADES) {
     assert.ok(env.startsWith(TARGET_ENV), 'what .env held comes first, byte for byte');
     assert.equal(statSync(path.join(fixture.target, '.env')).mode & 0o777, 0o600);
     const base = Object.fromEntries(readFileSync(path.join(repo, 'deploy/two-stage/base-images.env'), 'utf8').split('\n')
-      .filter((line) => /^ORBIT_[A-Z]+_IMAGE=/.test(line)).map((line) => line.split('=')));
+      .filter((line) => /^ORBIT_[A-Z_]+_IMAGE=/.test(line)).map((line) => line.split('=')));
     assert.deepEqual(releaseLines(env), [
       '# >>> The release this host runs: written by /upgrade\'s two-stage deploy, and replaced whole by the next one',
       `ORBIT_REGISTRY=${REGISTRY}`, `ORBIT_IMAGE_TAG=${first}`, `ORBIT_LINK_GATEWAY_TAG=${link}`,
       `ORBIT_NGINX_IMAGE=${base.ORBIT_NGINX_IMAGE}`, `ORBIT_NATS_IMAGE=${base.ORBIT_NATS_IMAGE}`,
+      ...['PROMETHEUS', 'NODE_EXPORTER', 'POSTGRES_EXPORTER', 'GRAFANA', 'LOKI', 'ALLOY'].map((name) => `ORBIT_${name}_IMAGE=${base[`ORBIT_${name}_IMAGE`]}`),
       '# <<< The release this host runs',
     ]);
     const rendered = spawnSync(realDocker, ['compose', 'config', '--images'], {
@@ -816,6 +861,21 @@ test('a host\'s own Compose files, named in COMPOSE_FILE, are rendered with the 
   assert.deepEqual(ups(run), []);
 });
 
+test('a plan for a target with the monitoring profile on creates every monitoring service from the registry', { skip: !compose && 'needs docker compose' }, (t) => {
+  const fixture = makeFixture(t);
+  const upgrade = UPGRADES[0];
+  const first = fixture.commit('the first release');
+  const envFile = path.join(fixture.target, '.env');
+  writeFileSync(envFile, TARGET_ENV.replace('COMPOSE_PROFILES=runner-link', 'COMPOSE_PROFILES=runner-link,monitoring'), { mode: 0o600 });
+  let run = fixture.run(upgrade, ['--build-only']);
+  assert.equal(run.status, 0, run.output);
+  run = fixture.run(upgrade, ['--plan', first]);
+  assert.equal(run.status, 0, run.output);
+  for (const service of MONITORING_SERVICES) assert.match(run.stdout, new RegExp(` {4}${service} +create \\(a deploy leaves it as it is\\)\\n`), run.stdout);
+  assert.doesNotMatch(run.stdout, /not in registry\.invalid|which is not in/);
+  assert.deepEqual(shippedFiles(fixture.target, { directories: true }), []);
+});
+
 test('a plan prints what the deploy would change, and changes nothing on the target', { skip: !compose && 'needs docker compose' }, (t) => {
   const fixture = makeFixture(t);
   const upgrade = UPGRADES[0];
@@ -876,91 +936,224 @@ test('a plan prints what the deploy would change, and changes nothing on the tar
   assert.ok(!upped(run).includes('postgres'), ups(run).join('\n'));
 });
 
-test('the hosted runners\' image is built when the runner changed, and their profile follows the release', { skip: !compose && 'needs docker compose' }, (t) => {
+test('the hosted runners\' image is the newest release tag\'s, published from the tag, and their profile follows the release', { skip: !compose && 'needs docker compose' }, (t) => {
   const fixture = makeFixture(t);
   const upgrade = UPGRADES[0];
+  const PUBLISH = 'deploy/two-stage/publish-managed-runner.sh';
   const digestOf = (image) => `${image.slice(0, image.lastIndexOf(':'))}@sha256:${execFileSync('sha256sum', { input: image, encoding: 'utf8' }).slice(0, 64)}`;
   const OLD = `docker.io/library/orbit-cloud-runner@sha256:${'a'.repeat(64)}`;
-  // The runner's sources and the image's directory, as the build reads them; a test of the runner is not one of them.
+  const write = (relative, text) => {
+    mkdirSync(path.dirname(path.join(fixture.checkout, relative)), { recursive: true });
+    writeFileSync(path.join(fixture.checkout, relative), text);
+  };
+  const release = (version) => write('package.json', `{\n  "name": "orbit",\n  "version": "${version}",\n  "private": true\n}\n`);
+  write('src/runner-go/main.go', 'package main\n');
+  write('src/runner-go/go.mod', 'module orbit\n');
+  // What /upgrade takes the downloadable runner from, at the release tag behind the commit.
+  write('contracts/runner-write-protocol.json', '{}\n');
+  // A Dockerfile from before release-built images: it takes no release version.
+  write('deploy/managed-runner/image/Dockerfile', 'FROM scratch\nARG ORBIT_SOURCE_SHA\n');
+  release('0.0.9');
+  // The target runs managed runners on Kubernetes: its .env switches them on, and their profile names the image.
+  appendFileSync(path.join(fixture.target, '.env'), 'ORBIT_MANAGED_RUNNERS_ENABLED=true\nORBIT_MANAGED_RUNNERS_DIR=./data/managed-runners\n');
+  const profilePath = path.join(fixture.target, 'data/managed-runners/profile.json');
+  mkdirSync(path.dirname(profilePath), { recursive: true });
+  const profileText = (image, revision, version) => `{\n  "backend": "kubernetes",\n  "runner": {\n${
+    revision ? `    "imageRevision": "${revision}",\n` : ''}${version ? `    "imageVersion": "${version}",\n` : ''}    "image": "${image}",\n    "maxConcurrent": 2\n  }\n}\n`;
+  writeFileSync(profilePath, profileText(OLD), { mode: 0o600 });
+  const profile = () => readFileSync(profilePath, 'utf8');
+  const backups = () => readdirSync(path.dirname(profilePath)).filter((name) => name.startsWith('profile.json.bak-')).sort();
+  const imageBuilds = (run) => run.build.filter((call) => call.args.includes('/deploy/managed-runner/image/Dockerfile') || call.args.includes('-f deploy/managed-runner/image/Dockerfile'));
+  const registry = () => (existsSync(fixture.registry) ? readFileSync(fixture.registry, 'utf8').trim().split('\n').filter(Boolean) : []);
+  const image = (version) => `${REGISTRY}/orbit-cloud-runner:${version}`;
+  const escaped = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  // No release tag behind the commit: the deploy goes on, and leaves the hosted runners' image as it is.
+  const c0 = fixture.commit('before any release');
+  let run = fixture.run(upgrade);
+  assert.equal(run.status, 0, run.output);
+  assert.match(run.stderr, new RegExp(`the hosted runners' image is left as it is: no release tag \\(v\\*\\) is at or behind ${c0}`));
+  assert.deepEqual(imageBuilds(run), [], 'a deploy builds no hosted runner image');
+  assert.equal(profile(), profileText(OLD));
+
+  // Its newest tag predates release-built images: the same, and that tag cannot be published.
+  fixture.git('tag', 'v0.0.9');
+  run = fixture.run(upgrade, ['--deploy', c0]);
+  assert.equal(run.status, 0, run.output);
+  assert.match(run.stderr, /left as it is: v0\.0\.9, the newest release tag at or behind [0-9a-f]{40}, predates release-built/);
+  assert.equal(profile(), profileText(OLD));
+  run = fixture.run(PUBLISH, ['v0.0.9']);
+  assert.notEqual(run.status, 0, run.output);
+  assert.match(run.stderr, /v0\.0\.9 \([0-9a-f]{40}\) predates release-built hosted runner images/);
+  assert.deepEqual(imageBuilds(run), []);
+
+  // A release: the Dockerfile takes the release version, and the tag names the package's version.
+  write('deploy/managed-runner/image/Dockerfile', 'FROM scratch\nARG ORBIT_SOURCE_SHA\nARG ORBIT_RELEASE_VERSION=\n');
+  release('0.1.0');
+  const c1 = fixture.commit('the first release');
+  fixture.git('tag', 'v0.1.0');
+
+  // Its image is not published yet: a release stops before it builds anything, and a deploy before it changes anything,
+  // each naming the command that publishes it.
+  writeFileSync(fixture.registry, '');
+  run = fixture.run(upgrade);
+  assert.notEqual(run.status, 0, run.output);
+  assert.match(run.stderr, new RegExp(`${escaped(image('0.1.0'))}, the hosted runners' image of v0\\.1\\.0`));
+  assert.match(run.stderr, new RegExp(`ORBIT_REGISTRY=${escaped(REGISTRY)} deploy/two-stage/publish-managed-runner\\.sh v0\\.1\\.0`));
+  assert.match(run.stderr, /Nothing was built or changed/);
+  assert.ok(!run.build.some((call) => /^(compose build|build |push )/.test(call.args)), run.output);
+  assert.deepEqual(run.ssh, [], 'nothing reaches the target');
+  run = fixture.run(upgrade, ['--build-only']);
+  assert.equal(run.status, 0, run.output);
+  assert.deepEqual(imageBuilds(run), [], 'the build stage builds no hosted runner image');
+  const before = snapshot(fixture.target);
+  const envBefore = readFileSync(path.join(fixture.target, '.env'), 'utf8');
+  for (const args of [['--deploy', c1], ['--plan', c1]]) {
+    run = fixture.run(upgrade, args);
+    assert.notEqual(run.status, 0, run.output);
+    assert.match(run.stderr, /publish-managed-runner\.sh v0\.1\.0/);
+    assert.deepEqual(run.ssh, [], `${args[0]}: nothing reaches the target`);
+  }
+  assert.deepEqual(snapshot(fixture.target), before);
+  assert.equal(readFileSync(path.join(fixture.target, '.env'), 'utf8'), envBefore);
+  assert.equal(profile(), profileText(OLD));
+
+  // /release's publish step: built from the tag's commit with the release version, checked, pushed by version.
+  run = fixture.run(PUBLISH, ['v0.1.0']);
+  assert.equal(run.status, 0, run.output);
+  const builds = imageBuilds(run).map((call) => call.args);
+  assert.equal(builds.length, 1, run.output);
+  assert.match(builds[0], new RegExp(`^build --provenance=false -f (\\S+)/deploy/managed-runner/image/Dockerfile --build-arg ORBIT_SOURCE_SHA=${c1} `
+    + `--build-arg ORBIT_RELEASE_VERSION=0\\.1\\.0 -t ${escaped(image('0.1.0'))} \\1$`));
+  const calls = run.build.map((call) => call.args);
+  const at = (prefix) => calls.findIndex((call) => call.startsWith(prefix));
+  assert.ok(at('build ') < at('image inspect -f ') && at('image inspect -f ') < at('run --rm --network none') && at('run --rm --network none') < at('push '),
+    `built, its labels and version checked, then pushed:\n${calls.join('\n')}`);
+  assert.deepEqual(registry().filter((ref) => ref.includes('orbit-cloud-runner')), [image('0.1.0')]);
+  assert.match(run.stdout, /labels: revision [0-9a-f]{40}, version 0\.1\.0; its runner reports 0\.1\.0/);
+  // Again: the image is there, and nothing is built or pushed.
+  run = fixture.run(PUBLISH, ['v0.1.0']);
+  assert.equal(run.status, 0, run.output);
+  assert.match(run.stdout, new RegExp(`${escaped(image('0.1.0'))} is in ${escaped(REGISTRY)} already`));
+  assert.ok(!run.build.some((call) => /^(build|push) /.test(call.args)), run.output);
+
+  // The deploy: the profile names that image by digest, the tag's commit and the release version, before the apiserver is
+  // replaced, with the one before kept beside it.
+  run = fixture.run(upgrade, ['--deploy', c1]);
+  assert.equal(run.status, 0, run.output);
+  assert.match(run.stdout, new RegExp(`The hosted runners' image is v0\\.1\\.0's: ${escaped(image('0.1.0'))} \\(${c1}\\)`));
+  assert.match(run.stdout, new RegExp(` {4}managed-runner +${escaped(OLD)}\n {18}-> ${escaped(digestOf(image('0.1.0')))}\n`));
+  assert.match(run.stdout, new RegExp(` {4}imageRevision +\\(none\\)\\n {18}-> ${c1}\\n {4}imageVersion +\\(none\\)\\n {18}-> 0\\.1\\.0\\n`));
+  assert.equal(profile(), profileText(digestOf(image('0.1.0')), c1, '0.1.0'));
+  assert.equal(statSync(profilePath).mode & 0o777, 0o600);
+  assert.equal(backups().length, 1);
+  assert.equal(readFileSync(path.join(path.dirname(profilePath), backups()[0]), 'utf8'), profileText(OLD));
+  assert.ok(run.stdout.indexOf(`names ${digestOf(image('0.1.0'))}`) < run.stdout.indexOf('==> apiserver:'), 'before the apiserver is replaced');
+  assert.deepEqual(run.build.filter((call) => /^(compose build|build|push) /.test(call.args)), [], 'and builds nothing');
+
+  // A commit after the tag that changes the runner: its deploy keeps the tag's image, and the profile is unchanged.
+  write('src/runner-go/main.go', 'package main\n\n// a change after the release\n');
+  const c2 = fixture.commit('a change between releases');
+  run = fixture.run(upgrade);
+  assert.equal(run.status, 0, run.output);
+  assert.deepEqual(imageBuilds(run), []);
+  assert.match(run.stdout, / {4}managed-runner +unchanged\n {4}imageRevision +unchanged\n {4}imageVersion +unchanged\n/);
+  assert.equal(profile(), profileText(digestOf(image('0.1.0')), c1, '0.1.0'));
+  assert.equal(backups().length, 1);
+  assert.ok(!ups(run).some((call) => call.includes('--force-recreate apiserver')), ups(run).join('\n'));
+
+  // The next release: published, then a plan says what moves and changes nothing, and the deploy moves the profile on.
+  release('0.2.0');
+  const c3 = fixture.commit('the second release');
+  fixture.git('tag', 'v0.2.0');
+  run = fixture.run(upgrade, ['--build-only']);
+  assert.equal(run.status, 0, run.output);
+  run = fixture.run(PUBLISH, ['v0.2.0']);
+  assert.equal(run.status, 0, run.output);
+  const plan = fixture.run(upgrade, ['--plan', c3]);
+  assert.equal(plan.status, 0, plan.output);
+  assert.match(plan.stdout, new RegExp(`-> ${escaped(digestOf(image('0.2.0')))}\n {4}imageRevision +${c1}\\n {18}-> ${c3}\\n {4}imageVersion +0\\.1\\.0\\n {18}-> 0\\.2\\.0\\n`));
+  assert.equal(profile(), profileText(digestOf(image('0.1.0')), c1, '0.1.0'), 'a plan changes nothing');
+  run = fixture.run(upgrade, ['--deploy', c3]);
+  assert.equal(run.status, 0, run.output);
+  assert.equal(profile(), profileText(digestOf(image('0.2.0')), c3, '0.2.0'));
+  assert.equal(backups().length, 2);
+
+  // The rollback to the commit between the releases: the first release's image again, and nothing built.
+  run = fixture.run(upgrade, ['--deploy', c2]);
+  assert.equal(run.status, 0, run.output);
+  assert.deepEqual(run.build.filter((call) => /^(compose build|build|push) /.test(call.args)), [], run.output);
+  assert.equal(profile(), profileText(digestOf(image('0.1.0')), c1, '0.1.0'));
+
+  // A profile an earlier deploy wrote, with the image and revision but no version: the deploy backfills the version.
+  writeFileSync(profilePath, profileText(digestOf(image('0.1.0')), c1));
+  run = fixture.run(upgrade, ['--plan', c2]);
+  assert.match(run.stdout, / {4}managed-runner +unchanged\n {4}imageRevision +unchanged\n {4}imageVersion +\(none\)\n {18}-> 0\.1\.0\n/);
+  assert.equal(profile(), profileText(digestOf(image('0.1.0')), c1), 'a plan changes nothing');
+  run = fixture.run(upgrade, ['--deploy', c2]);
+  assert.equal(run.status, 0, run.output);
+  assert.equal(profile(), profileText(digestOf(image('0.1.0')), c1, '0.1.0'));
+  assert.match(run.stdout, /==> apiserver: recreate, without a gap/);
+
+  // A wrong version and revision on the right image are set right in place.
+  writeFileSync(profilePath, profileText(digestOf(image('0.1.0')), 'b'.repeat(40), '0.0.1'));
+  run = fixture.run(upgrade, ['--deploy', c2]);
+  assert.equal(run.status, 0, run.output);
+  assert.equal(profile(), profileText(digestOf(image('0.1.0')), c1, '0.1.0'));
+
+  // All right: nothing is written, no backup is made, and the apiserver is not replaced.
+  const kept = backups().length;
+  run = fixture.run(upgrade, ['--deploy', c2]);
+  assert.equal(run.status, 0, run.output);
+  assert.equal(profile(), profileText(digestOf(image('0.1.0')), c1, '0.1.0'));
+  assert.equal(backups().length, kept);
+  assert.ok(!ups(run).some((call) => call.includes('--force-recreate')), ups(run).join('\n'));
+});
+
+test('publishing the hosted runners\' image refuses what is no release, and pushes nothing it could not check', { skip: !realDocker && 'needs docker on PATH for the fixture' }, (t) => {
+  const fixture = makeFixture(t);
+  const PUBLISH = 'deploy/two-stage/publish-managed-runner.sh';
   const write = (relative, text) => {
     mkdirSync(path.dirname(path.join(fixture.checkout, relative)), { recursive: true });
     writeFileSync(path.join(fixture.checkout, relative), text);
   };
   write('src/runner-go/main.go', 'package main\n');
-  write('src/runner-go/go.mod', 'module orbit\n');
-  write('deploy/managed-runner/image/Dockerfile', 'FROM scratch\n');
-  // The target runs managed runners on Kubernetes: its .env switches them on, and their profile names the image.
-  appendFileSync(path.join(fixture.target, '.env'), 'ORBIT_MANAGED_RUNNERS_ENABLED=true\nORBIT_MANAGED_RUNNERS_DIR=./data/managed-runners\n');
-  const profilePath = path.join(fixture.target, 'data/managed-runners/profile.json');
-  mkdirSync(path.dirname(profilePath), { recursive: true });
-  const profileText = (image) => `{\n  "backend": "kubernetes",\n  "runner": {\n    "image": "${image}",\n    "maxConcurrent": 2\n  }\n}\n`;
-  writeFileSync(profilePath, profileText(OLD), { mode: 0o600 });
-  const profile = () => readFileSync(profilePath, 'utf8');
-  const backups = () => readdirSync(path.dirname(profilePath)).filter((name) => name.startsWith('profile.json.bak-')).sort();
-  const imageBuilds = (run) => run.build.filter((call) => call.args.includes('-f deploy/managed-runner/image/Dockerfile'));
+  write('deploy/managed-runner/image/Dockerfile', 'FROM scratch\nARG ORBIT_SOURCE_SHA\nARG ORBIT_RELEASE_VERSION=\n');
+  write('package.json', '{\n  "name": "orbit",\n  "version": "0.3.0"\n}\n');
+  fixture.commit('a release');
+  fixture.git('tag', 'v0.3.0');
+  fixture.git('tag', 'v0.3.1');
+  const pushed = (run) => run.build.filter((call) => call.args.startsWith('push '));
 
-  // The first release: the image is built from this checkout, tagged by the last commit of the runner's sources, and
-  // pushed; the profile names it by its digest, before the apiserver is replaced, with the one before kept beside it.
-  const first = fixture.commit('the first release');
-  const firstImage = `${REGISTRY}/orbit-cloud-runner:${first}`;
-  let run = fixture.run(upgrade);
+  // No tag, a tag that is no release's shape, and one the checkout and origin do not have.
+  for (const [args, message] of [[[], /give the release tag to publish/], [['0.3.0'], /give the release tag to publish/],
+    [['v0.3.0', 'v0.3.1'], /one release tag at a time/], [['v9.9.9'], /origin has no tag v9\.9\.9/]]) {
+    const run = fixture.run(PUBLISH, args);
+    assert.notEqual(run.status, 0, `${args.join(' ')}: ${run.output}`);
+    assert.match(run.stderr, message);
+    assert.deepEqual(pushed(run), []);
+  }
+  // A tag whose package.json names another version.
+  let run = fixture.run(PUBLISH, ['v0.3.1']);
+  assert.notEqual(run.status, 0, run.output);
+  assert.match(run.stderr, /v0\.3\.1's package\.json says version "0\.3\.0", not 0\.3\.1/);
+  // No registry.
+  run = fixture.run(PUBLISH, ['v0.3.0'], { ORBIT_REGISTRY: undefined });
+  assert.notEqual(run.status, 0, run.output);
+  assert.match(run.stderr, /ORBIT_REGISTRY must be the registry's host\[:port\]/);
+  // A plain-HTTP registry this Docker does not trust: stopped before the build.
+  run = fixture.run(PUBLISH, ['v0.3.0'], { FAKE_REGISTRY_HTTP: '1', FAKE_UNTRUSTED: '1' });
+  assert.notEqual(run.status, 0, run.output);
+  assert.match(run.stderr, /serves plain HTTP/);
+  assert.ok(!run.build.some((call) => call.args.startsWith('build ')), run.output);
+  // An image whose runner reports another version: built, and not pushed.
+  run = fixture.run(PUBLISH, ['v0.3.0'], { FAKE_REPORTS: 'managed-0000000' });
+  assert.notEqual(run.status, 0, run.output);
+  assert.match(run.stderr, /reports version "managed-0000000", not 0\.3\.0\. Nothing was pushed/);
+  assert.deepEqual(pushed(run), []);
+  // And --no-cache reaches the build.
+  run = fixture.run(PUBLISH, ['v0.3.0', '--no-cache']);
   assert.equal(run.status, 0, run.output);
-  assert.deepEqual(imageBuilds(run).map((call) => call.args),
-    [`build --provenance=false -f deploy/managed-runner/image/Dockerfile --build-arg ORBIT_SOURCE_SHA=${first} -t ${firstImage} .`]);
-  assert.ok(readFileSync(fixture.registry, 'utf8').split('\n').includes(firstImage), 'and pushed');
-  assert.match(run.stdout, new RegExp(` {4}managed-runner +${OLD.replace(/[.]/g, '\\.')}\n {18}-> ${digestOf(firstImage).replace(/[.]/g, '\\.')}\n`));
-  assert.equal(profile(), profileText(digestOf(firstImage)), 'the profile names the image by digest, and is otherwise as it was');
-  assert.equal(statSync(profilePath).mode & 0o777, 0o600);
-  assert.equal(backups().length, 1);
-  assert.equal(readFileSync(path.join(path.dirname(profilePath), backups()[0]), 'utf8'), profileText(OLD));
-  assert.ok(run.stdout.indexOf('names ' + digestOf(firstImage)) < run.stdout.indexOf('==> apiserver:'), 'before the apiserver is replaced');
-
-  // A release that does not change the runner builds no image, and leaves the profile as it is.
-  write('src/runner-go/main_test.go', 'package main\n');
-  write('docs/notes.md', 'a change elsewhere\n');
-  const second = fixture.commit('the second release');
-  run = fixture.run(upgrade);
-  assert.equal(run.status, 0, run.output);
-  assert.deepEqual(imageBuilds(run), [], 'a runner test and a document are not what the image is built from');
-  assert.match(run.stdout, new RegExp(`orbit-cloud-runner:${first} is in the registry already`));
-  assert.match(run.stdout, / {4}managed-runner +unchanged\n/);
-  assert.equal(profile(), profileText(digestOf(firstImage)));
-  assert.equal(backups().length, 1);
-
-  // A release that changes the runner: a plan says so and changes nothing; the deploy moves the profile on.
-  write('src/runner-go/main.go', 'package main\n\n// a change of the third release\n');
-  const third = fixture.commit('the third release');
-  const thirdImage = `${REGISTRY}/orbit-cloud-runner:${third}`;
-  run = fixture.run(upgrade, ['--build-only']);
-  assert.equal(run.status, 0, run.output);
-  assert.equal(imageBuilds(run).length, 1);
-  const plan = fixture.run(upgrade, ['--plan', third]);
-  assert.equal(plan.status, 0, plan.output);
-  assert.match(plan.stdout, new RegExp(`-> ${digestOf(thirdImage).replace(/[.]/g, '\\.')}\n`));
-  assert.equal(profile(), profileText(digestOf(firstImage)), 'a plan changes nothing');
-  run = fixture.run(upgrade, ['--deploy', third]);
-  assert.equal(run.status, 0, run.output);
-  assert.equal(profile(), profileText(digestOf(thirdImage)));
-  assert.equal(backups().length, 2);
-
-  // The rollback: the second release names the first's image again, and builds nothing.
-  run = fixture.run(upgrade, ['--deploy', second]);
-  assert.equal(run.status, 0, run.output);
-  assert.deepEqual(run.build.filter((call) => /^(compose build|build|push) /.test(call.args)), [], run.output);
-  assert.equal(profile(), profileText(digestOf(firstImage)));
-
-  // The same release again: the apiserver, otherwise unchanged, is not replaced for the profile, which is unchanged too.
-  run = fixture.run(upgrade, ['--deploy', second]);
-  assert.equal(run.status, 0, run.output);
-  assert.match(run.stdout, / {4}managed-runner +unchanged\n/);
-  assert.ok(!ups(run).some((call) => call.includes('--force-recreate')), ups(run).join('\n'));
-
-  // The profile changed by hand while the release stays: the deploy sets it back, and replaces the unchanged apiserver,
-  // which reads it only as it starts.
-  writeFileSync(profilePath, profileText(OLD));
-  run = fixture.run(upgrade, ['--deploy', second]);
-  assert.equal(run.status, 0, run.output);
-  assert.equal(profile(), profileText(digestOf(firstImage)));
-  assert.deepEqual(handover(run).slice(0, 5), WITHOUT_A_GAP.slice(0, 5), 'the apiserver is handed over, as for a new image');
-  assert.match(run.stdout, /==> apiserver: recreate, without a gap/);
+  assert.ok(run.build.some((call) => call.args.startsWith('build --no-cache --provenance=false -f ')), run.output);
+  assert.deepEqual(pushed(run).map((call) => call.args), [`push ${REGISTRY}/orbit-cloud-runner:0.3.0`]);
 });

@@ -2226,6 +2226,16 @@ public final class APIClient: @unchecked Sendable {
         try await delete("runners/\(id)/accounts/\(engine.rawValue)/\(account)")
     }
 
+    /// Sign the machine's own Default login out (docs/default-sign-out-design.md): the runner deletes the
+    /// credential and nothing else. Answered `pending`, and the runner's word comes back in the list's
+    /// `accountRemove`; a runner refuses while sessions run on Default unless `force` — the person
+    /// confirmed after that refusal named them.
+    public func signOutRunnerDefault(_ id: String, engine: LoginEngine,
+                                     force: Bool = false) async throws -> RunnerAccountRemoveState {
+        try await post("runners/\(id)/accounts/\(engine.rawValue)/default/sign-out",
+                       body: SignOutDefaultRequest(force: force))
+    }
+
     /// Make an added Claude Code account the Default: the runner swaps its login with ~/.claude after
     /// any turn in progress on either account ends (docs/claude-default-swap-contract.md).
     public func setDefaultRunnerAccount(_ id: String, engine: LoginEngine,

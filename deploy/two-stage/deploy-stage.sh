@@ -9,7 +9,8 @@
 #   ORBIT_RELEASE_COMMIT     the commit the apiserver and web images were built from, and their tag
 #   ORBIT_REGISTRY           the registry every image is pulled from
 #   ORBIT_LINK_GATEWAY_TAG   the link gateway image's tag: the last commit under src/link-gateway
-#   ORBIT_NGINX_IMAGE, ORBIT_NATS_IMAGE
+#   ORBIT_NGINX_IMAGE, ORBIT_NATS_IMAGE, ORBIT_PROMETHEUS_IMAGE, ORBIT_NODE_EXPORTER_IMAGE, ORBIT_POSTGRES_EXPORTER_IMAGE,
+#   ORBIT_GRAFANA_IMAGE, ORBIT_LOKI_IMAGE, ORBIT_ALLOY_IMAGE
 #                            the base images by digest, from that commit's deploy/two-stage/base-images.env (postgres,
 #                            pgbackup and db-proxy are pinned by deploy/postgres-pinned.yml and deploy/db-proxy.yml)
 #   ORBIT_MANAGED_RUNNER_IMAGE
@@ -17,6 +18,15 @@
 #                            empty for a release without one. Where this host runs managed runners on Kubernetes, their
 #                            profile's runner.image is set to it before the apiserver is replaced, and the apiserver's
 #                            manager moves each runner onto it once that runner is idle (rollPreviousImage)
+#   ORBIT_MANAGED_RUNNER_REVISION
+#                            the source commit that image was built from (ORBIT_SOURCE_SHA), 40 hex: the commit of the
+#                            release tag it was published for. Written to the profile's runner.imageRevision in the same
+#                            rename as runner.image, which is what lets Kubernetes runners offer Update Now. Empty leaves
+#                            runner.imageRevision alone
+#   ORBIT_MANAGED_RUNNER_VERSION
+#                            that release's version, the tag without its "v" (0.1.261-beta.83): what the image's runner
+#                            reports as its version. Written to the profile's runner.imageVersion in the same rename.
+#                            Empty leaves runner.imageVersion alone
 #   ORBIT_DEPLOY_PULL_BASE   1 lets a running postgres whose configuration changed be recreated (upgrade.sh --pull-base)
 #   ORBIT_DEPLOY_PRUNE       1 also prunes dangling images once the release runs (upgrade.sh --prune); earlier releases'
 #                            images beyond the last 3 are removed on every deploy
@@ -29,7 +39,7 @@
 # that names an image anywhere but the registry is refused.
 set -euo pipefail
 
-for name in ORBIT_DEPLOY_DIR ORBIT_RELEASE_COMMIT ORBIT_REGISTRY ORBIT_LINK_GATEWAY_TAG ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE; do
+for name in ORBIT_DEPLOY_DIR ORBIT_RELEASE_COMMIT ORBIT_REGISTRY ORBIT_LINK_GATEWAY_TAG ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE ORBIT_PROMETHEUS_IMAGE ORBIT_NODE_EXPORTER_IMAGE ORBIT_POSTGRES_EXPORTER_IMAGE ORBIT_GRAFANA_IMAGE ORBIT_LOKI_IMAGE ORBIT_ALLOY_IMAGE; do
   if [ -z "${!name:-}" ]; then
     echo "error: $name is not set. deploy/two-stage/release.sh starts this script; run upgrade.sh on the build host." >&2
     exit 2
@@ -45,14 +55,30 @@ RELEASE_ENV=(
   "ORBIT_LINK_GATEWAY_TAG=$LINK_TAG"
   "ORBIT_NGINX_IMAGE=$ORBIT_NGINX_IMAGE"
   "ORBIT_NATS_IMAGE=$ORBIT_NATS_IMAGE"
+  "ORBIT_PROMETHEUS_IMAGE=$ORBIT_PROMETHEUS_IMAGE"
+  "ORBIT_NODE_EXPORTER_IMAGE=$ORBIT_NODE_EXPORTER_IMAGE"
+  "ORBIT_POSTGRES_EXPORTER_IMAGE=$ORBIT_POSTGRES_EXPORTER_IMAGE"
+  "ORBIT_GRAFANA_IMAGE=$ORBIT_GRAFANA_IMAGE"
+  "ORBIT_LOKI_IMAGE=$ORBIT_LOKI_IMAGE"
+  "ORBIT_ALLOY_IMAGE=$ORBIT_ALLOY_IMAGE"
 )
 MR_IMAGE="${ORBIT_MANAGED_RUNNER_IMAGE:-}"
+MR_REV="${ORBIT_MANAGED_RUNNER_REVISION:-}"
+if [ -n "$MR_REV" ] && ! [[ "$MR_REV" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "error: ORBIT_MANAGED_RUNNER_REVISION is not a full 40-character commit sha: $MR_REV" >&2
+  exit 2
+fi
+MR_VER="${ORBIT_MANAGED_RUNNER_VERSION:-}"
+if [ -n "$MR_VER" ] && ! [[ "$MR_VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+  echo "error: ORBIT_MANAGED_RUNNER_VERSION is not a release version such as 0.1.261-beta.83: $MR_VER" >&2
+  exit 2
+fi
 PULL_BASE="${ORBIT_DEPLOY_PULL_BASE:-0}"
 PRUNE="${ORBIT_DEPLOY_PRUNE:-0}"
 PLAN="${ORBIT_DEPLOY_PLAN:-0}"
 STOP_THEN_START="${ORBIT_DEPLOY_STOP_THEN_START:-0}"
 # From here on Compose reads the release from release_dc's environment below, and then from .env, as anyone's would.
-unset ORBIT_REGISTRY ORBIT_IMAGE_TAG ORBIT_LINK_GATEWAY_TAG ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE
+unset ORBIT_REGISTRY ORBIT_IMAGE_TAG ORBIT_LINK_GATEWAY_TAG ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE ORBIT_PROMETHEUS_IMAGE ORBIT_NODE_EXPORTER_IMAGE ORBIT_POSTGRES_EXPORTER_IMAGE ORBIT_GRAFANA_IMAGE ORBIT_LOKI_IMAGE ORBIT_ALLOY_IMAGE
 STAGE=".upgrade/release-$COMMIT"
 cd "$DIR"
 mkdir -p .upgrade
@@ -438,10 +464,17 @@ done
 
 # The hosted runners' image. This host runs managed runners on Kubernetes when its .env switches them on and their
 # profile (profile.json in ORBIT_MANAGED_RUNNERS_DIR, which the apiserver reads as it starts) names that backend. The
-# profile names the image in one place, runner.image; a profile that names an image anywhere else is left alone.
+# profile names the image in one place, runner.image; a profile that names an image anywhere else is left alone. Beside
+# it, runner.imageRevision names the commit that image was built from and runner.imageVersion the release it reports:
+# Kubernetes has no other way to know which build a hosted runner should be on, and offers Update Now only when it knows.
 env_value() { sed -n "s/^$1=//p" .env | tail -n 1 | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
 MR_PROFILE=""
 MR_FROM=""
+# Each of the two fields beside runner.image: the value the release names (empty leaves it alone), the one the profile
+# has, and whether this deploy changes it.
+declare -A MR_WANT=([imageRevision]="$MR_REV" [imageVersion]="$MR_VER") MR_HAS=() MR_CHANGES=()
+MR_FIELDS=(imageRevision imageVersion)
+MR_ANY_CHANGE=0
 if [ -n "$MR_IMAGE" ] && [ "$(env_value ORBIT_MANAGED_RUNNERS_ENABLED)" = true ]; then
   mr_dir="$(env_value ORBIT_MANAGED_RUNNERS_DIR)"
   case "$mr_dir" in
@@ -455,7 +488,17 @@ if [ -n "$MR_IMAGE" ] && [ "$(env_value ORBIT_MANAGED_RUNNERS_ENABLED)" = true ]
       refuse "error: $mr_dir/profile.json names an image in more than one place, so this deploy cannot tell which is" \
         "       runner.image. Set runner.image to $MR_IMAGE by hand, or make it the only \"image\"."
     fi
+    for field in "${MR_FIELDS[@]}"; do
+      if [ "$(grep -cE "\"$field\"[[:space:]]*:" "$mr_dir/profile.json")" -gt 1 ]; then
+        refuse "error: $mr_dir/profile.json names an $field in more than one place. Leave one, runner.$field."
+      fi
+    done
     MR_PROFILE="$mr_dir/profile.json"
+    for field in "${MR_FIELDS[@]}"; do
+      MR_HAS[$field]="$(sed -nE "s/.*\"$field\"[[:space:]]*:[[:space:]]*\"([^\"]*)\".*/\\1/p" "$MR_PROFILE")"
+      MR_CHANGES[$field]=0
+      if [ -n "${MR_WANT[$field]}" ] && [ "${MR_HAS[$field]}" != "${MR_WANT[$field]}" ]; then MR_CHANGES[$field]=1; MR_ANY_CHANGE=1; fi
+    done
     MR_FROM="$(sed -nE 's/.*"image"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p' "$MR_PROFILE")"
     echo "==> The hosted runners' image, in $MR_PROFILE"
     if [ "$MR_FROM" = "$MR_IMAGE" ]; then
@@ -463,6 +506,17 @@ if [ -n "$MR_IMAGE" ] && [ "$(env_value ORBIT_MANAGED_RUNNERS_ENABLED)" = true ]
     else
       echo "    managed-runner   $MR_FROM"
       echo "                  -> $MR_IMAGE"
+    fi
+    for field in "${MR_FIELDS[@]}"; do
+      [ -n "${MR_WANT[$field]}" ] || continue
+      if [ "${MR_CHANGES[$field]}" = 1 ]; then
+        printf '    %-16s %s\n' "$field" "${MR_HAS[$field]:-(none)}"
+        echo "                  -> ${MR_WANT[$field]}"
+      else
+        printf '    %-16s unchanged\n' "$field"
+      fi
+    done
+    if [ "$MR_FROM" != "$MR_IMAGE" ] || [ "$MR_ANY_CHANGE" = 1 ]; then
       echo "    The profile is changed before the apiserver is replaced, which reads it as it starts. Each hosted runner"
       echo "    moves onto it once it is idle: drained, and woken at once on the new image, on the same volume."
     fi
@@ -503,20 +557,47 @@ if [ "$(docker compose config --hash '*' | sort)" != "$HASHES" ]; then
   exit 1
 fi
 
-# The hosted runners' profile names the release's image, by a rename, with the one it replaces kept beside it. The
-# apiserver reads it only as it starts: one this release does not replace otherwise is replaced for it.
-if [ -n "$MR_PROFILE" ] && [ "$MR_FROM" != "$MR_IMAGE" ]; then
+# The hosted runners' profile names the release's image, the commit it was built from and the version it reports, in one
+# rename, with the one it replaces kept beside it. The apiserver reads it only as it starts: one this release does not
+# replace otherwise is replaced for it, also when only the revision or the version was missing or wrong.
+if [ -n "$MR_PROFILE" ] && { [ "$MR_FROM" != "$MR_IMAGE" ] || [ "$MR_ANY_CHANGE" = 1 ]; }; then
   backup="$MR_PROFILE.bak-$(date -u +%Y%m%dT%H%M%SZ)-before-${COMMIT:0:12}"
   cp -p "$MR_PROFILE" "$backup"
   cp -p "$MR_PROFILE" "$MR_PROFILE.new"
   from_pattern="$(printf '%s' "$MR_FROM" | sed 's/[][\.*^$+?(){}]/\\&/g')"
   sed -E "s|(\"image\"[[:space:]]*:[[:space:]]*)\"$from_pattern\"|\\1\"$MR_IMAGE\"|" "$backup" >"$MR_PROFILE.new"
-  if [ "$(grep -cF "\"$MR_IMAGE\"" "$MR_PROFILE.new")" != 1 ] || [ "$(wc -l <"$MR_PROFILE.new")" != "$(wc -l <"$backup")" ]; then
+  want_lines="$(wc -l <"$backup")"
+  for field in "${MR_FIELDS[@]}"; do
+    [ "${MR_CHANGES[$field]}" = 1 ] || continue
+    want="${MR_WANT[$field]}"
+    if [ -n "${MR_HAS[$field]}" ]; then
+      sed -E -i "s|(\"$field\"[[:space:]]*:[[:space:]]*)\"[^\"]*\"|\\1\"$want\"|" "$MR_PROFILE.new"
+    elif grep -q "\"$field\"" "$MR_PROFILE.new"; then
+      sed -E -i "s|(\"$field\"[[:space:]]*:[[:space:]]*)[^,}]*|\\1\"$want\"|" "$MR_PROFILE.new"
+    else
+      # A new line before the image's own, indented as it is; a profile written on one line gets it inline.
+      sed -E -i -e "s|^([[:space:]]+)(\"image\"[[:space:]]*:)|\\1\"$field\": \"$want\",\n\\1\\2|" \
+        -e t -e "s|(\"image\"[[:space:]]*:)|\"$field\": \"$want\", \\1|" "$MR_PROFILE.new"
+      if [ "$(wc -l <"$MR_PROFILE.new")" = $((want_lines + 1)) ]; then want_lines=$((want_lines + 1)); fi
+    fi
+  done
+  written=1
+  if [ "$(grep -cF "\"$MR_IMAGE\"" "$MR_PROFILE.new")" != 1 ] || [ "$(wc -l <"$MR_PROFILE.new")" != "$want_lines" ]; then written=0; fi
+  for field in "${MR_FIELDS[@]}"; do
+    want="${MR_WANT[$field]}"
+    [ -n "$want" ] || continue
+    if [ "$(grep -cE "\"$field\"[[:space:]]*:" "$MR_PROFILE.new")" != 1 ] \
+      || [ "$(sed -nE "s/.*\"$field\"[[:space:]]*:[[:space:]]*\"([^\"]*)\".*/\\1/p" "$MR_PROFILE.new")" != "$want" ]; then
+      written=0
+    fi
+  done
+  named="$MR_IMAGE${MR_REV:+ at $MR_REV}${MR_VER:+, version $MR_VER}"
+  if [ "$written" != 1 ]; then
     rm -f "$MR_PROFILE.new"
-    fail "error: $MR_PROFILE could not be set to $MR_IMAGE; it is as it was. Nothing was recreated."
+    fail "error: $MR_PROFILE could not be set to $named; it is as it was. Nothing was recreated."
   fi
   mv -f "$MR_PROFILE.new" "$MR_PROFILE"
-  echo "==> $MR_PROFILE names $MR_IMAGE (the one before is in $backup)"
+  echo "==> $MR_PROFILE names $named (the one before is in $backup)"
   if [ "${STATE[apiserver]:-create}" = unchanged ]; then
     STATE[apiserver]=recreate
     FORCE[apiserver]=1

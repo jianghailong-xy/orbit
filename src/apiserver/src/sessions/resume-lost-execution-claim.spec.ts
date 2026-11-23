@@ -49,9 +49,9 @@ function claimConflict(): Prisma.PrismaClientKnownRequestError {
         cause: {
           originalCode: '23505',
           originalMessage:
-            'duplicate key value violates unique constraint "session_task_execution_claim_idx"',
+            'duplicate key value violates unique constraint "session_task_execution_claim_idx_finished_at"',
           kind: 'UniqueConstraintViolation',
-          constraint: { index: 'session_task_execution_claim_idx' },
+          constraint: { index: 'session_task_execution_claim_idx_finished_at' },
         },
       },
     },
