@@ -60,6 +60,13 @@
 .owner-request-why {
   color: var(--text-2);
 }
+/* BROWSER_SIGN_IN: what the card is, above its title. */
+.owner-request-eyebrow {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 600;
+}
 .owner-request-why p {
   margin: 0;
 }

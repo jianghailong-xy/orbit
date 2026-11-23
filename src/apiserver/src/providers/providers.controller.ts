@@ -14,6 +14,7 @@ import {
   UpdateProviderModelTierDto,
 } from './dto';
 import { PrismaService } from '../prisma/prisma.service';
+import { learnModelIdentities } from '../runner-api/model-identity';
 import { subagentTierView } from '../runner-api/subagent-route';
 import { CodexLoginService } from './codex-login.service';
 import { DeepSeekBalanceService } from './deepseek-balance.service';
@@ -121,7 +122,7 @@ export class ProvidersController {
   @PatScope('workspaces:read', { workspaceConfinable: false })
   @Get('subagent-tiers')
   subagentTiers(@CurrentUser() user: AuthUser) {
-    return subagentTierView(this.prisma, user.userId);
+    return subagentTierView(this.prisma, user.userId, new Date(), (sightings) => void learnModelIdentities(this.prisma, sightings));
   }
 
   // The owner's tier for a model the catalogue gives none. Human-only: the runner's provider doors take no tier.

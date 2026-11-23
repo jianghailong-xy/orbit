@@ -40,6 +40,7 @@ import {
   type SettingsChangePayload,
 } from './settings-change';
 import {
+  BROWSER_SIGN_IN_KIND,
   OWNER_REQUEST_EXPIRED,
   OWNER_REQUEST_NOT_ASKER,
   OWNER_REQUEST_NOT_PENDING,
@@ -49,6 +50,8 @@ import {
   SETTINGS_CHANGE_DECLINED,
   SETTINGS_OWNER_CHANNEL_ONLY,
   WIKI_CREATE_DAILY_RUN_LIMIT,
+  browserSignInSite,
+  browserSignInTitle,
   WIKI_CREATE_DECLINED,
   WIKI_CREATE_LOOKBACK_DAYS,
   WIKI_CREATE_NO_REPOSITORY,
@@ -60,6 +63,9 @@ import {
   type OwnerRequestOption,
   type OwnerRequestState,
 } from './owner-request';
+
+/** The longest reason a BROWSER_SIGN_IN may carry: the card quotes it whole. */
+const MAX_BROWSER_SIGN_IN_REASON = 1_000;
 
 /** How often the expiry sweep runs. A deadline is honoured to the minute. */
 const EXPIRY_TICK_MS = 60_000;
@@ -103,6 +109,9 @@ const VIEW = {
   conditionId: true,
   // SETTINGS_CHANGE (migration 1273): `{ changes: [{ key, from, to, tier }] }`, which the card draws.
   payload: true,
+  // BROWSER_SIGN_IN (migration 1393): the site the agent named and the Orbit Cloud runner whose browser it is.
+  browserSite: true,
+  browserRunnerId: true,
   expiresAt: true,
   clientRequestId: true,
   askedBySessionId: true,
@@ -141,7 +150,16 @@ export type OwnerRequestView = Prisma.OwnerRequestGetPayload<{ select: typeof VI
   secretGrant?: OwnerSecretGrantView | null;
   /** SECRET: what ends the key (§6.1) — its task (TASK_ENDED) or, for a session with no task, the session. */
   secretScope?: 'TASK' | 'SESSION';
+  /** BROWSER_SIGN_IN: the asking session's title, which the card names ("From session …"); null when it has none. */
+  askedBySessionTitle?: string | null;
 };
+
+/** What browser_request_sign_in files (POST /runner/browser/sign-in-requests). */
+export interface BrowserSignInFiling {
+  site?: string;
+  reason?: string;
+  clientRequestId?: string;
+}
 
 /**
  * Owner requests: filed by any session of the account, answered by the owner (migration 0503).
@@ -450,6 +468,63 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     return { repoUrlNorm, workspaceId: workspace.id, title: wikiCreateTitle(repoUrlNorm) };
   }
 
+  /**
+   * browser_request_sign_in (board docs/mocks/runner-browser/03-agent-tools.html ①): the asking session, on the account's
+   * Orbit Cloud runner `runnerId` (the caller checked both), asks the owner to sign in to `site` in that runner's
+   * browser. A BROWSER_SIGN_IN card: Orbit writes its title from the site, the agent's reason is its `why`, and it is
+   * told to the owner like every other card (push, web, Mac). Only the site is stored of the browser: no page, cookie or
+   * login state. Idempotent on (asking session, clientRequestId), as `file` is.
+   */
+  async fileBrowserSignIn(
+    ownerId: string,
+    askingSessionId: string,
+    runnerId: string,
+    filing: BrowserSignInFiling,
+  ): Promise<OwnerRequestView & { created: boolean }> {
+    const site = browserSignInSite(filing.site);
+    if (!site) throw new BadRequestException('site is the host to sign in to, such as github.com');
+    const why = filing.reason?.trim();
+    if (!why) throw new BadRequestException('reason is required: say what the sign-in is for, so the owner can decide');
+    if (why.length > MAX_BROWSER_SIGN_IN_REASON) {
+      throw new BadRequestException(`reason is at most ${MAX_BROWSER_SIGN_IN_REASON} characters`);
+    }
+    const clientRequestId = filing.clientRequestId?.trim() || null;
+    const [created] = await this.prisma.ownerRequest.createManyAndReturn({
+      data: [{
+        ownerId,
+        askedBySessionId: askingSessionId,
+        kind: BROWSER_SIGN_IN_KIND,
+        state: 'PENDING',
+        title: browserSignInTitle(site),
+        why,
+        browserSite: site,
+        browserRunnerId: runnerId,
+        clientRequestId,
+      }],
+      skipDuplicates: true,
+      select: VIEW,
+    });
+    if (created) {
+      void this.push?.notifyOwnerRequest(created.id);
+      this.realtime?.publishSessionUpdated(created.askedBySessionId);
+      void translationLanguages(this.prisma, ownerId)
+        .then((langs) => { if (langs) this.queueTranslation(ownerId, created, langs); })
+        .catch((error: Error) => this.logger.warn(`translating request ${created.id} failed to queue: ${error.message}`));
+      const [view] = await this.withSessionTitles(ownerId, [created]);
+      return { ...view, created: true };
+    }
+    return this.filedBefore(ownerId, askingSessionId, clientRequestId ?? undefined);
+  }
+
+  /** Each BROWSER_SIGN_IN request with its asking session's title, which its card names. */
+  private async withSessionTitles(ownerId: string, requests: OwnerRequestView[]): Promise<OwnerRequestView[]> {
+    const askers = [...new Set(requests.filter((r) => r.kind === BROWSER_SIGN_IN_KIND).map((r) => r.askedBySessionId))];
+    if (askers.length === 0) return requests;
+    const sessions = await this.prisma.session.findMany({ where: { id: { in: askers }, ownerId }, select: { id: true, title: true } });
+    const titleOf = new Map(sessions.map((s) => [s.id, s.title]));
+    return requests.map((r) => (r.kind === BROWSER_SIGN_IN_KIND ? { ...r, askedBySessionTitle: titleOf.get(r.askedBySessionId) ?? null } : r));
+  }
+
   /** The owner's requests in one list (`open` unless named), newest first. */
   async list(ownerId: string, filter: string | undefined): Promise<{ requests: OwnerRequestView[] }> {
     const key = filter ?? 'open';
@@ -466,7 +541,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     });
     await this.translateUntranslated(ownerId, requests).catch((error: Error) =>
       this.logger.warn(`queueing request translations failed: ${error.message}`));
-    return { requests: await this.withGrants(ownerId, requests) };
+    return { requests: await this.withSessionTitles(ownerId, await this.withGrants(ownerId, requests)) };
   }
 
   /**
@@ -522,7 +597,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     if (request.kind === 'WIKI_CREATE' && request.state === 'PENDING' && (await this.settleMadeWikis(ownerId)).includes(id)) {
       request = (await this.prisma.ownerRequest.findFirst({ where: { id, ownerId }, select: VIEW }))!;
     }
-    const [view] = await this.withGrants(ownerId, [request]);
+    const [view] = await this.withSessionTitles(ownerId, await this.withGrants(ownerId, [request]));
     return view;
   }
 
@@ -834,9 +909,12 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       if (written.count === 1) {
         if (effect) await effect(tx, now);
         // A scheduled task's item was written by the schedule, and a condition's by the condition, not asked by a
-        // session: nobody is waiting to hear.
+        // session: nobody is waiting to hear. A BROWSER_SIGN_IN's asker is waiting in the call that filed it
+        // (browser_request_sign_in reads the answer and returns it), so a turn saying the same would be a second answer.
         const kind = await tx.ownerRequest.findUnique({ where: { id }, select: { kind: true } });
-        if (!kind || !(isScheduleItemKind(kind.kind) || isConditionItemKind(kind.kind))) await enqueueResolutions(tx, [id]);
+        if (!kind || !(isScheduleItemKind(kind.kind) || isConditionItemKind(kind.kind) || kind.kind === BROWSER_SIGN_IN_KIND)) {
+          await enqueueResolutions(tx, [id]);
+        }
         await endUndeliveredGrants(tx, [id], to === 'WITHDRAWN' ? 'WITHDRAWN' : 'REVOKED');
       }
       return written;

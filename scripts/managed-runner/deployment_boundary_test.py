@@ -47,7 +47,10 @@ ENTRY_POINTS = [
 # points: the optional delivery's own scripts, which may name its paths and the single-machine lab, and the
 # long-running-loop drill, an isolated stack one starts by hand as root for an acceptance run, which runs the
 # lab's fake model (an Anthropic-dialect stand-in, nothing of Kubernetes).
-EXCLUDED = [":(exclude)scripts/managed-runner/", ":(exclude)scripts/long-running-loops/"]
+# The lab's own workflow is not one either: it runs only when dispatched by hand, on a GitHub runner, and boots the
+# single-machine lab there (owner, 2026-11-20: the lab runs on GitHub CI).
+EXCLUDED = [":(exclude)scripts/managed-runner/", ":(exclude)scripts/long-running-loops/",
+            ":(exclude).github/workflows/managed-runner-lab.yml"]
 # The parts of deploy/managed-runner the Docker backend is made of, which an entry point may name: with the channel-host
 # kit for a channel on another machine (remote-host) and the host preparation it shares with the install (host.sh).
 DOCKER_BACKEND_PARTS = {"docker-channel", "image", "firewall", "remote-host", "host.sh"}

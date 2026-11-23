@@ -17,6 +17,7 @@ public enum OwnerRequests {
         case .confirm:    return "CONFIRM"
         case .wikiCreate: return "WIKI"
         case .settingsChange: return "SETTINGS"
+        case .browserSignIn: return "SIGN IN"
         }
     }
 
@@ -29,6 +30,7 @@ public enum OwnerRequests {
         case .confirm:    return "Confirm"
         case .wikiCreate: return "Create wiki"
         case .settingsChange: return SettingsChangeCopy.save
+        case .browserSignIn: return BrowserSignInCopy.openBrowser
         }
     }
 
@@ -173,7 +175,7 @@ public enum OwnerRequests {
         switch request.kind {
         case .secret:   return draft.body != nil
         case .decision: return option != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        case .manualStep, .confirm, .wikiCreate, .settingsChange: return true
+        case .manualStep, .confirm, .wikiCreate, .settingsChange, .browserSignIn: return true
         }
     }
 
@@ -196,6 +198,7 @@ public enum OwnerRequests {
     /// What came of it: the summary's second line.
     public static func outcomeLine(_ request: OwnerRequest, runner: String) -> String {
         let note = request.resolutionNote?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if request.kind == .browserSignIn, request.state == .declined { return BrowserSignInCopy.notNow }
         switch request.state {
         case .declined:  return note.map { $0.isEmpty ? "Declined" : "Declined: “\($0)”" } ?? "Declined"
         case .expired:   return "Expired before anyone answered"
@@ -218,6 +221,7 @@ public enum OwnerRequests {
         if request.kind == .settingsChange {
             return SettingsChangeCopy.changed(SettingsFromConversation.entries(request.payload).count)
         }
+        if request.kind == .browserSignIn { return request.browserSite.map(BrowserSignInCopy.signedIn) ?? "Signed in" }
         return request.kind == .confirm ? "Confirmed" : "Marked done"
     }
 
@@ -395,5 +399,34 @@ public enum OwnerRequestLink {
               let id = url.pathComponents.first(where: { $0 != "/" && !$0.isEmpty }),
               PublicID.toUUID(id) != nil else { return nil }
         return PublicID.toPublic(id)
+    }
+}
+
+/// The BROWSER_SIGN_IN card's words (web `BROWSER_SIGN_IN_COPY`). Signed in is answered from the runner's browser tab
+/// on the web, not from the card: the card only opens that tab, or says Not now.
+public enum BrowserSignInCopy {
+    public static let eyebrow = "Sign in needed · Orbit Cloud browser"
+    public static func fromSession(_ title: String) -> String { "From session \(title)" }
+    public static let note = "You sign in yourself; Orbit never sees your password. The login stays on this runner, and every agent on it can use it."
+    public static let openBrowser = "Open browser"
+    public static let notNow = "Not now"
+    public static func signedIn(_ site: String) -> String { "Signed in to \(site)" }
+    /// The push's first action.
+    public static let action = "Sign in"
+
+    /// The "From session …" line, or nil when the server named no session title.
+    public static func fromSessionLine(_ request: OwnerRequest) -> String? {
+        guard let title = request.askedBySessionTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !title.isEmpty else { return nil }
+        return fromSession(title)
+    }
+
+    /// The runner's browser tab, which only the web draws: `<baseURL>/runners/<id>/browser?control=1`. Nil without a
+    /// runner to open it on.
+    public static func browserURL(baseURL: URL, runnerId: String?) -> URL? {
+        guard let runnerId, !runnerId.isEmpty else { return nil }
+        var base = baseURL.absoluteString
+        while base.hasSuffix("/") { base.removeLast() }
+        return URL(string: "\(base)/runners/\(PublicID.toPublic(runnerId))/browser?control=1")
     }
 }

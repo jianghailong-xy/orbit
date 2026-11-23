@@ -19,6 +19,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -150,12 +151,21 @@ fun OwnerRequestCard(asked: OwnerRequest, store: OwnerRequestStore, runner: (Str
             Spacer(Modifier.weight(1f))
             Text(OwnerRequests.askedLine(request, now), Modifier.testTag("$tag:asked"), style = MaterialTheme.typography.labelSmall, color = secondary)
         }
+        if (request.kind == OwnerRequests.BROWSER_SIGN_IN) Text(OwnerRequests.browserSignInEyebrow, Modifier.testTag("$tag:eyebrow"),
+            style = MaterialTheme.typography.labelMedium, color = secondary)
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(request.title, Modifier.weight(1f).testTag("$tag:title"), style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold))
             Text(OwnerRequests.kindTag(request.kind), Modifier.background(tone.copy(alpha = 0.16f), RoundedCornerShape(50))
                 .padding(horizontal = 8.dp, vertical = 2.dp).testTag("$tag:kind"), style = MaterialTheme.typography.labelSmall, color = tone)
         }
-        if (request.why.isNotBlank()) MarkdownText(request.why, Modifier.testTag("$tag:why"), open)
+        if (request.kind == OwnerRequests.BROWSER_SIGN_IN) {
+            // The agent's reason, quoted as its own words; the session that asked; what signing in there means.
+            if (request.why.isNotBlank()) Text("“${request.why}”", Modifier.testTag("$tag:why"), style = MaterialTheme.typography.bodyMedium)
+            request.askedBySessionTitle?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                Text(OwnerRequests.fromSession(it), Modifier.testTag("$tag:from-session"), style = MaterialTheme.typography.bodySmall, color = secondary)
+            }
+            Text(OwnerRequests.browserSignInNote, Modifier.testTag("$tag:notice"), style = MaterialTheme.typography.bodySmall, color = secondary)
+        } else if (request.why.isNotBlank()) MarkdownText(request.why, Modifier.testTag("$tag:why"), open)
         if (request.blocksTaskIds.isNotEmpty() || request.secretSpec != null) Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (request.blocksTaskIds.isNotEmpty()) Fact(OwnerRequests.holdingUp, "$tag:holding") {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -251,6 +261,7 @@ fun OwnerRequestCard(asked: OwnerRequest, store: OwnerRequestStore, runner: (Str
 
         if (request.kind == OwnerRequests.WIKI_CREATE) WikiCreateActions(request, store, tag, enabled = !busy && !closed, focus,
             chat = discuss?.takeIf { !closed }?.let { { it(OwnerRequests.chatContext(request) + "\n\n") } }) { door -> press(door) }
+        else if (request.kind == OwnerRequests.BROWSER_SIGN_IN) BrowserSignInActions(request, store, tag, enabled = !busy && !closed, focus) { door -> press(door) }
         else if (declining) {
             OutlinedTextField(reason, { reason = it.take(2000) }, Modifier.fillMaxWidth().testTag("$tag:reason"),
                 placeholder = { Text(OwnerRequests.declineReason) }, minLines = 2, maxLines = 6)
@@ -335,6 +346,24 @@ private fun WikiCreateActions(request: OwnerRequest, store: OwnerRequestStore, t
         val data by rememberDirectoryData(app, store.handle)
         WikiCreateSheet(wiki, data, workspaceId = request.workspaceId, created = { store.load(*store.state.value.lists.keys.toTypedArray()) },
             close = { changing = false })
+    }
+}
+
+/** BROWSER_SIGN_IN's two answers: Open browser, the runner's browser tab on the web (the only place it exists), which does not answer
+ * the card — Signed in is pressed in that tab once the owner has; and Not now, a decline. */
+@Composable
+private fun BrowserSignInActions(request: OwnerRequest, store: OwnerRequestStore, tag: String, enabled: Boolean, focus: FocusRequester,
+    press: (suspend io.orbitd.android.core.cards.OwnerRequestsApi.() -> OwnerRequest) -> Unit) {
+    val uri = LocalUriHandler.current
+    val runnerId = request.browserRunnerId
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Button(onClick = { runnerId?.let { runCatching { uri.openUri(OwnerRequests.browserTabUrl(store.handle.account.server, it)) } } },
+            Modifier.focusRequester(focus).testTag("$tag:primary"), enabled = enabled && runnerId != null) {
+            Text(OwnerRequests.primary(request.kind))
+        }
+        OutlinedButton(onClick = { press { decline(request.id, OwnerRequests.notNow) } }, Modifier.testTag("$tag:decline"), enabled = enabled) {
+            Text(OwnerRequests.notNow)
+        }
     }
 }
 

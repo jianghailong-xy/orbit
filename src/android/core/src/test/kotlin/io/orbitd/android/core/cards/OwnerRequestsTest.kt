@@ -60,6 +60,27 @@ class OwnerRequestsTest {
             "It is still open: not marked done and not declined. Their message:", OwnerRequests.chatContext(secret))
     }
 
+    /** BROWSER_SIGN_IN: the site, the Orbit Cloud runner and the asking session are read off the card; its words are the web's;
+     * Open browser goes to the runner's browser tab on the web; DONE says where it signed in, a decline says Not now. */
+    @Test fun aBrowserSignInCardReadsItsSiteAndRunnerAndSaysHowItEnded() {
+        val asked = request("""{"id":"b1","kind":"BROWSER_SIGN_IN","state":"PENDING","title":"Sign in to github.com","why":"Needs a token page",
+            "browserSite":"github.com","browserRunnerId":"r9","askedBySessionTitle":"Fix CI","answer":null,"createdAt":"2026-11-10T07:58:00Z"}""")
+        assertEquals(listOf("github.com", "r9", "Fix CI"), listOf(asked.browserSite, asked.browserRunnerId, asked.askedBySessionTitle))
+        assertNull(request("""{"id":"w","kind":"CONFIRM","state":"PENDING","title":"t","createdAt":"2026-11-10T07:58:00Z"}""").browserSite)
+        assertTrue(OwnerRequests.BROWSER_SIGN_IN in OwnerRequests.kinds)
+        assertEquals(listOf("SIGN IN", "Open browser", "Sign in"), listOf(OwnerRequests.kindTag("BROWSER_SIGN_IN"),
+            OwnerRequests.primary("BROWSER_SIGN_IN"), OwnerRequests.pushAction("BROWSER_SIGN_IN")))
+        assertEquals("Sign in needed · Orbit Cloud browser", OwnerRequests.browserSignInEyebrow)
+        assertEquals("You sign in yourself; Orbit never sees your password. The login stays on this runner, and every agent on it can use it.",
+            OwnerRequests.browserSignInNote)
+        assertEquals("From session Fix CI", OwnerRequests.fromSession("Fix CI"))
+        assertEquals("Not now", OwnerRequests.notNow)
+        assertEquals("https://orbit.example/runners/r9/browser?control=1", OwnerRequests.browserTabUrl("https://orbit.example/", "r9"))
+        assertEquals("Signed in to github.com", OwnerRequests.outcomeLine(asked.copy(state = "DONE", resolvedByUserId = "u"), "mini"))
+        assertEquals("Not now", OwnerRequests.outcomeLine(asked.copy(state = "DECLINED", resolutionNote = "Not now"), "mini"))
+        assertEquals("Expired before anyone answered", OwnerRequests.outcomeLine(asked.copy(state = "EXPIRED"), "mini"))
+    }
+
     @Test fun theResolvedLineSaysHowWhoAndWhen() {
         val done = secret.copy(state = "DONE", resolvedAt = "2026-11-10T07:59:00Z", resolvedByUserId = "u", resolvedClient = "android")
         assertEquals("Delivered to mini as STRIPE_API_KEY", OwnerRequests.outcomeLine(done, "mini"))
