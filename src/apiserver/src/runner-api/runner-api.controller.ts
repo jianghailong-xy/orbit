@@ -10717,8 +10717,9 @@ export class RunnerApiController {
         finalized: true,
         effectiveStatus,
         // Whether the release was a failure, for account health and the replacement after the commit (§6.3, §7.3): a
-        // failed turn's release too, whose turn report recorded the failure while the session was still live.
-        releasedFailed: effectiveStatus === RunStatus.FAILED,
+        // failed turn's release too (a reported failed turn always releases FAILED), whose turn report recorded the
+        // failure while the session was still live.
+        releasedFailed: failedRun || failureReported,
         keepCheckout,
         retryAt,
         taskReclaimed,
