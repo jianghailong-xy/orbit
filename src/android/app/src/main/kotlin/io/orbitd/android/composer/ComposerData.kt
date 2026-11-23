@@ -1,5 +1,6 @@
 package io.orbitd.android.composer
 
+import io.orbitd.android.core.protocol.SessionFacts
 import io.orbitd.android.core.promptoptimizer.PromptOptimizerState
 import io.orbitd.android.core.cards.ClaudeRegion
 import io.orbitd.android.core.cards.ClaudeRegionCopy
@@ -608,7 +609,8 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
             (runner.flag("runsAsRoot") == true && mode == "bypassPermissions") ||
                 (mode == "auto" && engine == ProviderEngines.CLAUDE && row(provider) == null &&
                     if (reported?.get("permissionModes") is JsonArray) "auto" !in reported.strings("permissionModes")
-                    else model !in setOf("claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-fable-5", "claude-sonnet-5"))
+                    else model !in setOf("claude-opus-5-5", "claude-opus-5", "claude-fable-5-2", "claude-fable-5-1", "claude-fable-5",
+                        "claude-sonnet-5-5", "claude-sonnet-5", "claude-haiku-5-5"))
         }
     }
 
@@ -659,6 +661,8 @@ internal fun sendEndpoint(detail: JsonObject): String {
         error(caps.text("resumeBlockedReason") ?: "This session cannot receive messages.")
     }
     check(detail.text("lifecycleState") !in setOf("TRASHED", "COMPLETED")) { "Restore this session before sending." }
+    // The session facts decide when they are sent: a released session is resumed, any other takes a turn in place.
+    SessionFacts.released(detail)?.let { return if (it) "resume" else "turns" }
     // A status outside the seven known words, or none at all, is never sent a turn in place: it is offered what an ended session is.
     if (detail.text("status") !in KNOWN_RUN_STATUSES) return "resume"
     check(detail.text("status") in setOf("PENDING", "RUNNING", "AWAITING_INPUT", "ENDED", "FAILED", "CANCELLED")) { "Session state is unavailable." }

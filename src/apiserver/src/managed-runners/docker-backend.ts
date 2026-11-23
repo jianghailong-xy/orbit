@@ -190,8 +190,9 @@ export class DockerBackend implements ManagedRunnerBackend {
   readonly location: { readonly clusterKey: string; readonly namespace: string };
   /** The image the channel reported, on a profile that adopts it (D2), and when it was read. */
   private adopted?: { image: string; at: number };
-  /** The revision label of the image the channel serves (`imageRevision`, null when it has none), and when it was read. */
-  private revision?: { value: string | null; at: number };
+  /** The revision and version labels of the image the channel serves (`imageRevision`, `imageVersion`, each null when it
+   *  has none), and when they were read. */
+  private revision?: { value: string | null; version: string | null; at: number };
   private channelUnreachable = false;
   /** When `recheckReachability` last asked the channel. */
   private rechecked?: number;
@@ -254,7 +255,11 @@ export class DockerBackend implements ManagedRunnerBackend {
       );
     }
     if (adopt) this.adopted = { image: info.image, at: this.now() };
-    this.revision = { value: typeof info.imageRevision === 'string' && info.imageRevision ? info.imageRevision : null, at: this.now() };
+    this.revision = {
+      value: typeof info.imageRevision === 'string' && info.imageRevision ? info.imageRevision : null,
+      version: typeof info.imageVersion === 'string' && info.imageVersion ? info.imageVersion : null,
+      at: this.now(),
+    };
     return info;
   }
 
@@ -279,11 +284,12 @@ export class DockerBackend implements ManagedRunnerBackend {
     return this.profile.runner.image === DOCKER_IMAGE_FROM_CHANNEL ? this.adopted?.image : this.profile.runner.image;
   }
 
-  /** The source commit the image new containers are made from was built from, as the channel reports it: read
-   *  afresh once the last reading is older than ADOPTED_IMAGE_TTL_MS. Null when the channel does not say. */
-  private async imageRevision(): Promise<string | null> {
+  /** The source commit the image new containers are made from was built from, and the release it was published for,
+   *  as the channel reports them: read afresh once the last reading is older than ADOPTED_IMAGE_TTL_MS. Each null when
+   *  the channel does not say. */
+  private async imageBuild(): Promise<{ revision: string | null; version: string | null }> {
     if (!this.revision || this.now() - this.revision.at > ADOPTED_IMAGE_TTL_MS) await this.checkedInfo();
-    return this.revision!.value;
+    return { revision: this.revision!.value, version: this.revision!.version };
   }
 
   computeShare(): ComputeAmounts {
@@ -377,8 +383,9 @@ export class DockerBackend implements ManagedRunnerBackend {
     if (!instance.previousImage) return instance;
     // Only the status reads it: a channel not reached, or not yet restarted on the profile's image, cannot name the
     // current build, which is no reason to fail the pass that read the container.
-    const revision = await this.imageRevision().catch(() => null);
-    return revision ? { ...instance, currentImageRevision: revision } : instance;
+    const build = await this.imageBuild().catch(() => null);
+    if (!build?.revision) return instance;
+    return { ...instance, currentImageRevision: build.revision, ...(build.version ? { currentImageVersion: build.version } : {}) };
   }
 
   /**

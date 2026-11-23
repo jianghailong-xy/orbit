@@ -369,10 +369,16 @@ test('a new account queues its first session while its managed runner waits for 
     // The holder goes to sleep through the owner's request and the whole handshake.
     const asked = await call(server, 'POST', '/api/managed-runner/sleep', holder.token, { idempotencyKey: `sleep-${randomUUID()}`, revision: held.revision });
     assert.equal(asked.status, 202, asked.text);
-    await until(`${backend}: the holder DRAINING`, async () => (await mappingOf(holder.id))?.managementState === 'DRAINING');
-    const request = await heartbeat(held.runnerId, [{ engine: 'claude', installed: true, auth: 'yes' }]);
+    const holderEngines = [{ engine: 'claude', installed: true, auth: 'yes' }];
+    await until(`${backend}: the holder DRAINING`, async () => {
+      if ((await mappingOf(holder.id))?.managementState === 'DRAINING') return true;
+      // Report idle workload after the sleep request so the manager can start draining.
+      await heartbeat(held.runnerId, holderEngines);
+      return false;
+    });
+    const request = await heartbeat(held.runnerId, holderEngines);
     assert.ok(request.managedSleep?.requestedAt, `the drained instance is asked: ${JSON.stringify(request)}`);
-    const accepted = await heartbeat(held.runnerId, [{ engine: 'claude', installed: true, auth: 'yes' }], { ...IDLE, sleepReady: request.managedSleep!.requestedAt });
+    const accepted = await heartbeat(held.runnerId, holderEngines, { ...IDLE, sleepReady: request.managedSleep!.requestedAt });
     assert.equal(accepted.managedSleep?.confirmed, true);
     host.stopped(held.runnerId);
     await until(`${backend}: the holder SLEEPING`, async () => (await mappingOf(holder.id))?.managementState === 'SLEEPING');

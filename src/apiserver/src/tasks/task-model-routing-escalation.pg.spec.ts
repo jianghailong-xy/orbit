@@ -184,7 +184,10 @@ async function end(
   status: typeof RunStatus.SUCCEEDED | typeof RunStatus.FAILED,
   data: { error?: string | null; model?: string } = {},
 ) {
-  await db.session.update({ where: { id: sessionId }, data: { status, finishedAt: new Date(), ...data } });
+  // A failure is on the turn the run cut off, copied to lastTurnOutcome (removal step R2): what reads it as one since R7.
+  await db.session.update({ where: { id: sessionId }, data: {
+    status, finishedAt: new Date(), ...(status === RunStatus.FAILED ? { lastTurnOutcome: 'FAILED' } : {}), ...data,
+  } });
 }
 
 const decisionOf = (db: PrismaClient, sessionId: string) =>

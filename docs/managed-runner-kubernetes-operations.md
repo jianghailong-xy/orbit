@@ -626,9 +626,9 @@ checkouts below its floor as any runner does
   disk is under its floor, applies only that. With managed runners switched off, a runner gets no default floor.
 - **No storage budget.** A storage budget is the Docker backend's, where `statfs` cannot see a volume's limit
   ([its runbook](managed-runner-docker-operations.md#session-checkouts-and-the-volumes-limit)). Here the rules of a
-  runner without one apply: a resting session's checkout goes only once nothing in it has been written for two weeks
-  and every commit is on a remote, a look that finds nothing to take waits an hour, and no room is made before a new
-  checkout. So resting sessions keep their checkouts for two weeks, and a volume with many of them can fill up:
+  runner without one apply: below the floor a resting session's checkout goes, oldest first, when nothing in it would
+  be lost, as under a budget, but a look that finds nothing to take waits an hour, and no room is made before a new
+  checkout. So a burst of new checkouts can still take the volume past its floor before a sweep catches up, and
   writes then fail with "no space left on device".
 - **Clones on XFS; plain on ext4.** On the .3 deployment the claim is XFS with `reflink=1` (the patched Ceph-CSI class),
   so every session checkout is cloned from the workspace checkout and the runner logs `checkouts: cloned: …`; the

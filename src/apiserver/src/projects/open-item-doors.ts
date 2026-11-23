@@ -112,6 +112,12 @@ export interface OpenItemDoorInput {
   phase?: string | null;
   jobKind?: string | null;
   payload?: unknown;
+  /**
+   * Revision 42 (§12.5 W9): the item is in its task's own work session's hands — offered to it and not
+   * handed back (`inWorkSessionHands`). Its doors are then the work-session cell's, whoever its
+   * assignee is: {@link OPEN_ITEM_WORK_SESSION_DOOR_TABLE}.
+   */
+  workSession?: boolean;
 }
 
 /** The two non-failure item kinds have no landing source, but their presses still belong in the
@@ -489,6 +495,27 @@ function accept(holder: OpenItemDoorAssignee): OpenItemDoor {
   });
 }
 
+/**
+ * The owner's stop of a task's in-flight landing (§4.7, J-T8): QUEUED ends CANCELLED, RUNNING is asked
+ * to stop. It ends no item by itself — the attempt it stops is not the item's answer.
+ */
+function stopLanding(holder: OpenItemDoorAssignee): OpenItemDoor {
+  return door(holder, 'integration-stop', 'integration stop', 'ROUTE', 'CANCEL', [], {
+    route: '/projects/:id/tasks/:taskId/integration/stop',
+    resolving: false,
+  });
+}
+
+/**
+ * A candidate's stop is its Cancel (M-F3, M-T10): the owner retires the candidate, and the items about
+ * it end with it (PROMOTION_MOVED_ON).
+ */
+function cancelCandidate(holder: OpenItemDoorAssignee): OpenItemDoor {
+  return door(holder, 'promotion-cancel', 'promotion cancel', 'ROUTE', 'CANCEL', ['PROMOTION_MOVED_ON'], {
+    route: '/projects/:id/promotions/:promotionId/cancel',
+  });
+}
+
 function directDoorTable(): OpenItemDirectDoorCell[] {
   return (['COORDINATOR_QUESTION', 'FUSE_PAUSED'] as const).flatMap((kind) =>
     OPEN_ITEM_DOOR_ASSIGNEES.map((assignee) => ({
@@ -792,6 +819,39 @@ function buildTable(): OpenItemDoorCell[] {
   return cells;
 }
 
+/** The failures §12.3 hands to the task's own work session, as the matrix spells them. */
+export const OPEN_ITEM_WORK_SESSION_TODO_TYPES = ['INTEGRATION_CONFLICT', 'INTEGRATION_CHECK_FAILED'] as const;
+export const OPEN_ITEM_WORK_SESSION_SOURCE_JOBS = ['LAND_TASK', 'MAIN_SYNC', 'CHECK_PROMOTION', 'LAND_PROMOTION'] as const;
+
+/**
+ * Revision 42 (§12.5 W9, §4.7): the doors of an item in its task's own work session's hands. Only the
+ * owner's stop door — a task landing's integration stop, a candidate's Cancel — and "Chat about this",
+ * which is not a door (§4.7) and so is not in the cell. The coordinator holds nothing: `open_item_resolve`
+ * and `integration_retry` refuse such an item with 409 OPEN_ITEM_WITH_WORK_SESSION, because two sessions
+ * fixing one failure have no winner. Once the item is handed back (W7) its ordinary cell applies.
+ *
+ * One cell per kind, source and class the hand-off can open, held by the OWNER whatever the item's
+ * assignee will be on hand-back: `cellForOpenItem` ignores the assignee here.
+ */
+export function workSessionDoorsForCell(cell: Pick<OpenItemDoorCell, 'sourceJob'>): OpenItemDoor[] {
+  return [isPromotionSource(cell.sourceJob) ? cancelCandidate('OWNER') : stopLanding('OWNER')];
+}
+
+function buildWorkSessionTable(): OpenItemDoorCell[] {
+  const cells: OpenItemDoorCell[] = [];
+  for (const todoType of OPEN_ITEM_WORK_SESSION_TODO_TYPES) {
+    for (const sourceJob of OPEN_ITEM_WORK_SESSION_SOURCE_JOBS) {
+      // The kind and the class say the same thing: a conflict opens INTEGRATION_CONFLICT, a red check
+      // INTEGRATION_CHECK_FAILED.
+      const failureClass = todoType === 'INTEGRATION_CONFLICT' ? 'CONFLICT' : 'CHECK_FAILED';
+      cells.push({ todoType, sourceJob, failureClass, assignee: 'OWNER', doors: workSessionDoorsForCell({ sourceJob }) });
+    }
+  }
+  return cells;
+}
+
+export const OPEN_ITEM_WORK_SESSION_DOOR_TABLE: readonly OpenItemDoorCell[] = buildWorkSessionTable();
+
 /** The complete capability table for every source/type pairing that can actually open a row.
  * Impossible pairings (for example TASK_FAILED from a landing job) are not cells to hand to a
  * person, so they are intentionally absent rather than silently inventing a door for them. */
@@ -810,6 +870,12 @@ export function cellForOpenItem(input: OpenItemDoorInput): OpenItemDoorCell | nu
   const sourceJob = sourceJobForOpenItem(input);
   if (!todoType || !sourceJob) return null;
   const failureClass = failureClassForOpenItem(input);
+  if (input.workSession) {
+    // W9: no fall-through to the ordinary cell — an item the work session holds offers nothing else.
+    return OPEN_ITEM_WORK_SESSION_DOOR_TABLE.find((cell) => cell.todoType === todoType
+      && cell.sourceJob === sourceJob
+      && cell.failureClass === failureClass) ?? null;
+  }
   const assignee = normalizeAssignee(input.assignee);
   return OPEN_ITEM_DOOR_TABLE.find((cell) => cell.todoType === todoType
     && cell.sourceJob === sourceJob
@@ -863,6 +929,8 @@ export function appendOpenLanding(
 
 /** The action projection consumed by `project-open-item.ts`; order is the long-standing UI order. */
 export function openItemActionsFromDoors(input: OpenItemDoorInput): OpenItemAction[] {
+  // W9: the stop door is drawn by the landing window, not as a card press, and chat is not an action.
+  if (input.workSession) return [];
   const assignee = normalizeAssignee(input.assignee);
   const directDoors = doorsForOpenItem(input);
   if (input.fuseEpisodeId || input.kind === 'COORDINATOR_QUESTION') {

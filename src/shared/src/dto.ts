@@ -198,6 +198,9 @@ export interface PermissionSemantics {
    * newer Claude model.
    */
   shortNote?: string;
+  /** `off` when the runtime's command sandbox is not running for this session: commands run
+   *  unconfined. Absent everywhere else, which says nothing either way. */
+  sandbox?: 'off';
 }
 
 /**
@@ -1283,19 +1286,21 @@ function homeOfReposRoot(reposRoot: string): string {
 }
 
 /** What newFolderRootFor reads of a runner. `capabilities` is what it has reported: a server passes [] for a runner
- *  that has not reported yet (no capabilitiesReportedAt). */
+ *  that has not reported yet (no capabilitiesReportedAt). `up` is whether it is online now, so that those are what its
+ *  running process declares; a managed runner that is not up wakes on its current image, whatever it declared before. */
 export interface NewFolderRunner {
   managed: boolean;
+  up: boolean;
   reposRoot: string | null | undefined;
   capabilities: readonly string[] | null | undefined;
 }
 
 /** Where a new folder named on this runner goes, for every client and the server alike (new-folder-root.fixture.json):
- *  on a managed runner that has not reported yet, its image's home MANAGED_RUNNER_HOME, whatever Repos Folder is stored
- *  from before, so its first workspace can be made before it is up; newFolderRoot on a runner that makes new folders and
- *  has reported its Repos Folder; null on any other, which cannot make one. */
+ *  on a managed runner that is not up, or has not reported yet, its image's home MANAGED_RUNNER_HOME, whatever Repos
+ *  Folder and capabilities are stored from an earlier process, so its first workspace can be made before it is up;
+ *  newFolderRoot on a runner that makes new folders and has reported its Repos Folder; null on any other. */
 export function newFolderRootFor(runner: NewFolderRunner): string | null {
-  if (runner.managed && !runner.capabilities?.length) return MANAGED_RUNNER_HOME;
+  if (runner.managed && (!runner.up || !runner.capabilities?.length)) return MANAGED_RUNNER_HOME;
   const reposRoot = runner.reposRoot?.trim() ?? '';
   if (reposRoot && runner.capabilities?.includes(CREATE_WORKDIR_CAPABILITY)) return newFolderRoot(reposRoot, runner.capabilities);
   return null;
@@ -1621,6 +1626,9 @@ export interface RunnerHeartbeatResponse {
    *  adopts this live on each heartbeat, so a UI/API change to it takes effect within
    *  one heartbeat without restarting the runner. */
   maxConcurrent: number;
+  /** Extra sessions on demand (the editable DB value): how many turns past maxConcurrent an overflow claim
+   *  (`ClaimedSession.overCapacity`) may run at once. Adopted live like maxConcurrent. Absent on older control planes. */
+  burstConcurrent?: number;
   /** Branch merges the user requested from the UI for sessions this runner ran. The
    *  runner merges each session's branch into main on its local repo and reports the
    *  outcome back via POST /runner/sessions/:id/merge-result. Absent on older control
@@ -1683,6 +1691,10 @@ export interface RunnerHeartbeatResponse {
    *  which a runner draining for an update sends for the sessions whose engine is running a turn on it.
    *  Absent from an older server, to which such a runner sends no claim while it drains. */
   drainScopedClaims?: boolean;
+  /** This server's operator says every replica serves SESSION_RELEASE_V1 (the switch ORBIT_SESSION_RELEASE_V1): a runner
+   *  may declare it on its turn-complete and release reports. Absent from an older server and while the switch is
+   *  off; a runner that does not read it on its latest answer declares nothing. */
+  sessionReleaseV1?: boolean;
   /** The owner's Later (ISO time): stop draining for the waiting release now and put it off until
    *  then, when it waits for idle again under a fresh deferral limit. Set once per request and
    *  cleared as it is handed over, like `checkSelfUpdate`; only a runner that declares
@@ -1837,6 +1849,15 @@ export const SUBAGENT_REMOTE_IN_PLACE_V1 = 'subagent-remote-in-place/v1';
  *  BG_JOB_STOPPED_BY_OWNER. The stop is refused for a session whose runner does not declare it, and that runner's
  *  jobs are listed as not stoppable. runner-go declares the same string (bgOwnerStopCapabilityV1). */
 export const BG_OWNER_STOP_V1 = 'bg-owner-stop/v1';
+
+/** Declared by a runner that admits a turn the server claimed over its limit (`ClaimedSession.overCapacity`, Run now,
+ *  docs/mocks/queued-run-now): past maxConcurrent up to maxConcurrent + burstConcurrent, evicting no running turn for
+ *  it. No overflow claim is made for a runner without it, and Run now on its sessions is refused as too old.
+ *  runner-go declares the same string. */
+export const OVER_CAPACITY_V1 = 'over-capacity/v1';
+
+/** The most Extra sessions on demand (Runner.burstConcurrent) a runner may be given; its default is 2. */
+export const RUNNER_BURST_CONCURRENT_MAX = 32;
 
 /** The reason a bg_run job killed by its session's owner from the app carries, on its terminal background_task, its
  *  wake and its row of GET /sessions/:id/background. runner-go names the kill the same (bgStoppedByOwnerReason). */
@@ -3469,6 +3490,13 @@ export interface ClaimedSession {
   codelessCheckout?: boolean;
   /** The branch a `codelessCheckout` run makes at finalize if it changed anything. */
   codelessBranch?: string;
+  /** Run now (docs/mocks/queued-run-now): this claim takes the session past the runner's maxConcurrent, as the turn
+   *  its owner let start over the limit (`overCapacityTurnId`). Sent only to a runner that declares OVER_CAPACITY_V1,
+   *  which admits it up to maxConcurrent + burstConcurrent and evicts no running turn for it. When that turn ends the
+   *  slot is returned: the session's next message is claimed as any other. Absent on every ordinary claim. */
+  overCapacity?: boolean;
+  /** The conversation turn the overflow covers, beside `overCapacity`. */
+  overCapacityTurnId?: string;
   /** Agent opt-in: if workDir isn't a git repo, the runner `git init`s it (default
    *  .gitignore + baseline commit) so the session can still be worktree-isolated. */
   autoInitGit?: boolean;
@@ -4039,6 +4067,18 @@ export interface OrchestrationCredentialResponse {
 }
 
 /**
+ * Runner capability (X-Orbit-Runner-Capabilities, read on each request): the runner reports a turn's outcome and the
+ * session's release as two reports (docs/session-three-state-plan.md step 6.1, design §3). On a turn-complete that
+ * declares it, a FAILED `status` is the turn's outcome and releases nothing: the turn and `last_turn_outcome` record
+ * FAILED with the error, the queue is drained and the task told as for the old protocol, and the session stays held
+ * (RUNNING, the runner's slot) with `cancelRequestedAt` set, the signal to tear its engine down; the runner then
+ * sends POST /runner/sessions/:id/release (RunReleaseRequest), which writes the release. A turn-complete without it is
+ * the old protocol: a FAILED turn releases the session in the same write. If no release follows, the reaper's
+ * cancel-grace sweep releases the held session as a failure.
+ */
+export const SESSION_RELEASE_V1 = 'session-release/v1';
+
+/**
  * Runner → control plane: a single interactive turn finished (the per-turn `result`),
  * distinct from /complete which finalizes the whole session. Carries per-turn billing.
  */
@@ -4046,7 +4086,8 @@ export interface TurnCompleteRequest {
   turnId: string;
   /** Stable UUID for the runner process completing this turn. Omitted only by legacy runners. */
   leaseOwner?: string;
-  /** Turn outcome: SUCCEEDED | INTERRUPTED | FAILED. */
+  /** Turn outcome: SUCCEEDED | INTERRUPTED | FAILED. A FAILED turn releases the session unless the request declares
+   *  SESSION_RELEASE_V1. */
   status: RunStatus;
   result?: string;
   /** What a FAILED turn failed with, when the runtime reported it as the turn's error rather than
@@ -4098,6 +4139,9 @@ export interface TurnCompleteRequest {
   branchCommits?: BranchCommit[] | null;
   /** The worktree's actual current HEAD branch (see SessionLiveState.worktreeBranch). */
   worktreeBranch?: string;
+  /** SESSION_RELEASE_V1, declared in the body: how a runner on the runner link declares it per request, since the link
+   *  carries no request header. The same declaration as the capabilities header. */
+  releaseProtocol?: string;
 }
 
 /**
@@ -4307,6 +4351,26 @@ export interface RunFinalizeResponse {
   keepCheckout: boolean;
 }
 
+/**
+ * Runner → control plane under SESSION_RELEASE_V1: POST /runner/sessions/:id/release. The runner's engine is gone and
+ * its checkout finalized; the session is released. It is the finalize report with no status word: the server reads
+ * what the release is from the facts it holds. An end somebody asked for settles as asked (`end_reason`); a release
+ * after a failed turn this hold reported is a failure (FAILED); any other release is a stop nobody asked for
+ * (CANCELLED, and the turn it cuts off ends CANCELLED). Answered with RunFinalizeResponse. Refused without the
+ * capability declared on the request.
+ */
+export interface RunReleaseRequest extends Omit<RunFinalizeRequest, 'status' | 'claudeSessionId'> {
+  /**
+   * The run failed with no turn the runner could report (an engine that died or never started before it read a turn
+   * from the inbox). Only 'FAILED': the turn the release cuts off (in flight, else the oldest queued, else the latest)
+   * records FAILED with `error`, and the release is a failure. Ignored when an end was asked for: an end somebody asked
+   * for is a stop, not a failure.
+   */
+  cutOffTurnOutcome?: 'FAILED';
+  /** SESSION_RELEASE_V1, declared in the body (see TurnCompleteRequest.releaseProtocol). */
+  releaseProtocol?: string;
+}
+
 /** @deprecated Compatibility type alias; use {@link RunFinalizeRequest}. */
 export type SessionCompleteRequest = RunFinalizeRequest;
 /** @deprecated Compatibility type alias; use {@link RunFinalizeResponse}. */
@@ -4472,6 +4536,9 @@ export interface SessionSearchHit {
   taskId: string | null;
   taskTitle: string | null;
   lastTurnAt: string | Date | null;
+  /** The session list's order key (session.listed_at): moves only when the session changes for its owner. Absent from
+   *  an older control plane. */
+  listedAt?: string | Date | null;
   createdAt: string | Date;
   /** Set when the session has been moved to Completed. */
   completedAt: string | Date | null;

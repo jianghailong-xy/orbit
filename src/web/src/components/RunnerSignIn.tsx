@@ -344,14 +344,21 @@ export function RunnerSignIn({
     mutationFn: () => api<RunnerLoginState>(`/runners/${runnerId}/browser/sign-in`, { method: 'POST' }),
     onSuccess: put,
   });
+  // The viewer tab this card opened for the sign-in, closed again once the card says Signed in: its page has nothing
+  // left to show (the runner closes the sign-in's own tab too). Only one this card opened can be closed from here.
+  const viewer = useRef<Window | null>(null);
+  const showRunnerBrowser = () => {
+    viewer.current = openRunnerBrowserTab(runnerId, true) ?? viewer.current;
+  };
   const pressRunnerBrowser = () => {
-    openRunnerBrowserTab(runnerId, true);
+    showRunnerBrowser();
     runnerBrowserSignIn.mutate();
   };
-  // Claude Code's code comes back from the runner's browser by itself, so its paste field steps aside once the page is
-  // open there, a press away for when it does not.
+  // Claude Code's and Antigravity's codes come back from the runner's browser by themselves, so the paste field steps
+  // aside once the page is open there, a press away for when it does not.
   const [pasteInstead, setPasteInstead] = useState(false);
-  const codeFromBrowser = engine === 'claude' && s?.browser === 'opened' && !s?.message && !pasteInstead;
+  const codeFromBrowser =
+    (engine === 'claude' || engine === 'antigravity') && s?.browser === 'opened' && !s?.message && !pasteInstead;
   // Option A of the sign-in card (owner, 2026-11-23): where the runner's browser is offered, the card asks where to sign
   // in and puts both ways in one row, this browser the main one; the line under the row says what the runner's way
   // means, and a divider keeps that choice apart from the paste.
@@ -387,7 +394,7 @@ export function RunnerSignIn({
             : "Finish signing in in the runner's browser."}
       </div>
       <div className="rsi-links">
-        <button className="rsi-link" onClick={() => openRunnerBrowserTab(runnerId, true)} type="button">
+        <button className="rsi-link" onClick={showRunnerBrowser} type="button">
           Show the browser
         </button>
         {codeFromBrowser && (
@@ -494,6 +501,14 @@ export function RunnerSignIn({
 
   // A card that goes away mid-flow can never point its tab anywhere.
   useEffect(() => dropTab, []);
+
+  // Signed in: the viewer tab this card opened goes, as the runner closes the sign-in's tab in its browser.
+  useEffect(() => {
+    if (status !== 'done') return;
+    const w = viewer.current;
+    viewer.current = null;
+    if (w && !w.closed) w.close();
+  }, [status]);
 
   // Cursor CLI's link stops working about 23 minutes after the runner relays it (expiresAt): the card
   // counts down to it, a minute at a time.

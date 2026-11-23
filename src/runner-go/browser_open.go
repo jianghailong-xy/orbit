@@ -106,17 +106,24 @@ func navigateBrowserPage(ctx context.Context, endpoint, target string) error {
 // front, so the viewer shows it. Chrome's /json/new (PUT, as current Chrome requires) and /json/activate. The errors
 // never quote target.
 func openBrowserTab(ctx context.Context, endpoint, target string) error {
+	_, err := openBrowserTabID(ctx, endpoint, target)
+	return err
+}
+
+// openBrowserTabID is openBrowserTab answering the new tab's target id ("" when Chrome named none), for a caller that
+// closes the tab again (login_runner_browser.go).
+func openBrowserTabID(ctx context.Context, endpoint, target string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint+"/json/new?"+url.QueryEscape(target), nil)
 	if err != nil {
-		return errors.New("the page is not an address the browser can open")
+		return "", errors.New("the page is not an address the browser can open")
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return errors.New("The browser's DevTools do not answer")
+		return "", errors.New("The browser's DevTools do not answer")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("The browser's DevTools answered %d to a new tab", resp.StatusCode)
+		return "", fmt.Errorf("The browser's DevTools answered %d to a new tab", resp.StatusCode)
 	}
 	var tab struct {
 		ID string `json:"id"`
@@ -128,5 +135,5 @@ func openBrowserTab(ctx context.Context, endpoint, target string) error {
 			}
 		}
 	}
-	return nil
+	return tab.ID, nil
 }

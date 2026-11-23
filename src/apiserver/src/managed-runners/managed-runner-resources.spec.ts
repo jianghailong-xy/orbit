@@ -8,7 +8,9 @@ import { testManagedRunnerProfile } from '../test-support/managed-runner-profile
 import type { PersistentVolume, PersistentVolumeClaim } from './kube-client';
 import {
   bootstrapCredentialOf,
+  buildDriveMountSecret,
   buildManagedPod,
+  driveMountSecretName,
   buildManagedPvc,
   buildManagedSecret,
   managedPodName,
@@ -32,6 +34,8 @@ const RUNNER = '0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b';
 const OWNER = '0199a1b2-0000-7000-8000-000000000001';
 const PVC_UID = '9b1f3c2e-1111-4222-8333-444455556666';
 const profile = testManagedRunnerProfile();
+/** The profile with the Orbit Files drive: the example shows the Pod with it. */
+const filesProfile = testManagedRunnerProfile({ files: true });
 const identity = { ownerId: OWNER, runnerId: RUNNER, generation: 1, namespace: profile.kubernetes.namespace };
 
 test('names derive from the canonical runner UUID alone', () => {
@@ -122,7 +126,7 @@ function readYaml(text: string): unknown {
 }
 
 test('the Pod is deploy/managed-runner/runner-pod.yaml.example, filled in and nothing else', () => {
-  const pod = buildManagedPod(identity, PVC_UID, profile);
+  const pod = buildManagedPod(identity, PVC_UID, filesProfile);
   const fill: Record<string, string> = {
     __FIXED_USER_POD_NAME__: managedPodName(RUNNER),
     __AUTHORIZED_TEST_NAMESPACE__: profile.kubernetes.namespace,
@@ -206,6 +210,49 @@ test('Docker: the channel\'s template mounts the same data volume directory at /
   assert.deepEqual(tmp, [{ Type: 'volume', Source: managedPvcName(RUNNER), Target: '/tmp', ReadOnly: false, VolumeOptions: { NoCopy: true, Subpath: TMP_SUBPATH } }]);
   assert.equal(out.mounts.find((m: { Target: string }) => m.Target === '/home/orbit')?.Source, managedPvcName(RUNNER), '/tmp is the runner\'s own data volume');
   assert.ok(!out.mounts.some((m: { Type: string }) => m.Type === 'tmpfs'), 'no tmpfs held in the container\'s memory');
+});
+
+test('the drive adds one CSI volume and one mount to the runner, and changes nothing else (G3)', () => {
+  type Container = { name: string; securityContext: unknown; volumeMounts: Array<Record<string, unknown>> };
+  const withDrive = buildManagedPod(identity, PVC_UID, filesProfile);
+  const without = buildManagedPod(identity, PVC_UID, profile);
+  const volume = { name: 'orbit-files', csi: { driver: 'files.orbit.dev', volumeAttributes: { runnerId: RUNNER } } };
+  const mount = { name: 'orbit-files', mountPath: '/run/orbit-files', mountPropagation: 'HostToContainer' };
+  assert.deepEqual(withDrive.spec.volumes, [...without.spec.volumes!, volume]);
+  const runner = (pod: typeof withDrive) => (pod.spec.containers as Container[])[0];
+  assert.deepEqual(runner(withDrive).volumeMounts, [...runner(without).volumeMounts, mount]);
+  // Everything but the runner's mounts and the Pod's volumes is the same object: security contexts, host
+  // namespaces, the service-account token, the init container.
+  const rest = (pod: typeof withDrive) => {
+    const copy = structuredClone(pod);
+    delete copy.spec.volumes;
+    delete (copy.spec.containers as Array<Partial<Container>>)[0].volumeMounts;
+    return copy;
+  };
+  assert.deepEqual(rest(withDrive), rest(without));
+  assert.deepEqual(runner(withDrive).securityContext, {
+    runAsUser: 10001,
+    runAsGroup: 10001,
+    runAsNonRoot: true,
+    allowPrivilegeEscalation: false,
+    readOnlyRootFilesystem: true,
+    capabilities: { drop: ['ALL'] },
+  });
+  assert.deepEqual(withDrive.spec.securityContext, { seccompProfile: { type: 'RuntimeDefault' } });
+  assert.ok(!JSON.stringify(withDrive).includes('mrf-'), 'the mount credential never enters the runner Pod');
+});
+
+test("the mount Secret carries the generation's mount credential, in the files namespace", () => {
+  const secret = buildDriveMountSecret({ ...identity, generation: 3 }, 'orbit-files-test', 'orbit_drive_mount_x');
+  assert.equal(secret.metadata.name, driveMountSecretName(RUNNER));
+  assert.equal(secret.metadata.name, `mrf-${RUNNER}`);
+  assert.equal(secret.metadata.namespace, 'orbit-files-test');
+  assert.equal(secret.immutable, true);
+  assert.equal(bootstrapCredentialOf(secret), 'orbit_drive_mount_x');
+  assert.equal(Buffer.from(secret.data!.generation, 'base64').toString('utf8'), '3');
+  assert.equal(secretGeneration(secret), 3);
+  assert.equal(secretIdentityProblem(secret, { ...identity, generation: 3 }), null);
+  assert.throws(() => driveMountSecretName('alice'), /canonical runner UUID/);
 });
 
 test('the bootstrap Secret carries the credential and the generation it is for, and is immutable', () => {

@@ -114,6 +114,8 @@ import {
   SubagentWakesCtx,
 } from './SubagentCardEnd';
 import { OrbitEventLine } from './OrbitEventLine';
+import { LandingFixCard } from './LandingFixCard';
+import { parseLandingFixTurn } from '../lib/landingFix';
 import { OrbitExchangeGroup, OrbitExchangeSolo } from './OrbitExchangeFold';
 import { foldsAtLength, parseRunNotice, replyGist, type OrbitExchangeSummary } from '../lib/orbitExchangeFold';
 import { WikiDraftCard, WikiDraftCardCtx } from './WikiDraftCard';
@@ -518,9 +520,8 @@ export interface SteerWithdrawHandle {
   withdrawing: ReadonlySet<string>;
   withdrawn: ReadonlySet<string>;
 }
-/** A tag for one user bubble's foot row, by the bubble's seq: what holds the message the reader sent
- *  last (WorkspaceView's RunnerUpdatingTag). Null where nothing holds one. */
-export const QueuedFootCtx = createContext<{ seq: number; tag: ReactNode } | null>(null);
+/** A tag for one user bubble's foot row, by its seq: what holds the turn or how it is running. */
+export const TurnStatusFootCtx = createContext<{ seq: number; tag: ReactNode; running?: boolean } | null>(null);
 
 export const SteerWithdrawCtx = createContext<SteerWithdrawHandle | null>(null);
 
@@ -1081,6 +1082,7 @@ const readersOwnWords = (node: TextNode): boolean =>
   && !parseWatchWake(node.text)
   && !resolutionTurnLabel(node.text)
   && !isRunnerUpdateResume(node.text)
+  && !parseLandingFixTurn(node.text)
   && !parseBackgroundWake(node.note)
   && !parseSubagentFinished(node.note)
   && !parseWorkflowFinished(node.note)
@@ -2172,6 +2174,7 @@ function NodeList({
   const items = useMemo(() => groupToolRuns(nodes, chat), [nodes, chat]);
   const exporting = useContext(ExportCtx) !== null;
   const wakeName = useContext(WatchWakeNamesCtx);
+  const turnFoot = useContext(TurnStatusFootCtx);
   const renderItem = (item: NodeListItem) => {
     const seqs = item.kind === 'steps' ? item.nodes.map((node) => node.seq) : [item.node.seq];
     // The row a turn opens with, under its message and over everything the turn writes.
@@ -2184,6 +2187,9 @@ function NodeList({
         <StepsLine key={item.key} nodes={item.nodes} live={live} />
       ) : (
         <NodeView key={item.node.seq} node={item.node} live={live} />
+      ),
+      turnFoot?.running && item.kind === 'node' && item.node.seq === turnFoot.seq && (
+        <div key="running-over-limit" className="chat-user-meta">{turnFoot.tag}</div>
       ),
       head,
       ...seqs
@@ -2576,6 +2582,19 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // payload is written for the agent.
       // The turn Orbit sends a session whose turn the owner's Update Now cut (D4): Orbit's words, written
       // for the agent, so one Orbit line rather than a bubble in the reader's name (owner rule 10-27).
+      // A failed landing handed to the session that wrote the work (revision 42, §12.5 W6): Orbit's card, from the
+      // turn's own words, never the reader's bubble.
+      const landingFix = parseLandingFixTurn(node.text);
+      if (landingFix) {
+        return (
+          <LandingFixCard
+            turn={landingFix}
+            seq={seq}
+            undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            queued={queued}
+          />
+        );
+      }
       if (isRunnerUpdateResume(node.text)) {
         return <div className="chat-note runner-update-resume" data-seq={seq} title={node.text}>{RUNNER_UPDATE_RESUME_NOTE}</div>;
       }
@@ -3544,8 +3563,8 @@ function SteerState({ node, typed }: { node: TextNode; typed: string }) {
 function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   const exp = useContext(ExportCtx);
   const putBack = useContext(UndeliveredCtx);
-  const foot = useContext(QueuedFootCtx);
-  const held = foot && !queued && foot.seq === node.seq ? foot.tag : null;
+  const foot = useContext(TurnStatusFootCtx);
+  const held = foot && !foot.running && !queued && foot.seq === node.seq ? foot.tag : null;
   const [copied, setCopied] = useState(false);
   // The "Copied" reset is cancelled when this goes, so it never updates a component that is gone.
   const copiedReset = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -4094,6 +4113,8 @@ function CodeBlock({ children }: any) {
   );
 }
 
+import { DriveFileCard, driveIdFromHref } from './files/DriveFileCard';
+
 const ORBIT_ATTACHMENT_PREFIX = 'orbit-attachment:';
 
 function attachmentIdFromSrc(src: unknown): string | null {
@@ -4114,6 +4135,7 @@ function attachmentIdFromSrc(src: unknown): string | null {
 function transcriptUrlTransform(url: string): string {
   const trimmed = url.trim();
   if (trimmed.startsWith(ORBIT_ATTACHMENT_PREFIX)) return trimmed;
+  if (driveIdFromHref(trimmed)) return trimmed;
   return referenceUrlTransform(url);
 }
 
@@ -4172,6 +4194,8 @@ function fileLabel(src: string): string {
 }
 
 function MarkdownImage({ node: _node, src, alt, className: _className, ...rest }: any) {
+  const driveId = driveIdFromHref(src);
+  if (driveId) return <DriveFileCard id={driveId} label={typeof alt === 'string' ? alt : undefined} />;
   const id = attachmentIdFromSrc(src);
   if (id) {
     return (
@@ -4307,6 +4331,8 @@ function nodeText(node: ReactNode): string {
 
 function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
   const exp = useContext(ExportCtx);
+  const driveId = driveIdFromHref(href);
+  if (driveId) return <DriveFileCard id={driveId} label={nodeText(children).trim() || undefined} />;
   const id = attachmentIdFromSrc(href);
   if (id) {
     const name = typeof title === 'string' && title.trim() ? title.trim() : nodeText(children).trim() || undefined;

@@ -318,6 +318,7 @@ const USER_DRIVERS: Readonly<Record<string, Drive>> = {
   'POST /sessions/:id/archive': (s, w, id) => s.sessions.complete(w.ownerId, id),
   'POST /sessions/:id/restore': (s, w, id) => s.sessions.restore(w.ownerId, id),
   'POST /sessions/:id/pin': (s, w, id) => s.sessions.pin(w.ownerId, id),
+  'POST /sessions/:id/run-now': (s, w, id) => s.sessions.runNow(w.ownerId, id, null),
   'DELETE /sessions/:id/pin': (s, w, id) => s.sessions.unpin(w.ownerId, id),
   'POST /sessions/:id/move': (s, w, id) => s.sessions.move(w.ownerId, id, {}),
   'PUT /sessions/:id/tags': (s, w, id) => s.tags.setForSession(w.ownerId, id, []),
@@ -387,6 +388,8 @@ const RUNNER_DRIVERS: Readonly<Record<string, Drive>> = {
     s.api.events({ id: w.runnerId, ownerId: w.ownerId } as never, id, { events: [] } as never),
   'POST /runner/sessions/:id/finalize': (s, w, id) =>
     s.api.finalize({ id: w.runnerId, ownerId: w.ownerId } as never, id, { status: 'CANCELLED' } as never),
+  'POST /runner/sessions/:id/release': (s, w, id) =>
+    s.api.release({ id: w.runnerId, ownerId: w.ownerId } as never, id, {} as never, 'session-release/v1'),
   'POST /runner/sessions/:id/import-result': (s, w, id) =>
     s.api.importResult({ id: w.runnerId, ownerId: w.ownerId } as never, id, { ok: true }),
   'POST /runner/sessions/:id/merge-result': (s, w, id) =>

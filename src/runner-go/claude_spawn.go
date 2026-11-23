@@ -62,6 +62,7 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 		job.insideRecordedWork(),
 		job.watchesOn(),
 		job.BrowserEnabled,
+		job.workflowsOn(),
 	)
 	// Orbit ships its own task tools via the `orbit` MCP server (mcp__orbit__task_*).
 	// Claude's built-in Task* tools collide by intent: an agent told to "create tasks"
@@ -152,6 +153,11 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 	upDir := uploadsDir(job.SessionID)
 	if err := os.MkdirAll(upDir, 0o755); err == nil {
 		args = append(args, "--add-dir", upDir)
+	}
+	// The drive is a workspace root beside the uploads folder in every mode. In Plan it is only read: the permission
+	// prompt and the PreToolUse hook refuse a write there (plan_drive.go, design §7.2).
+	for _, root := range driveGrantRoots() {
+		args = append(args, "--add-dir", root)
 	}
 	return args
 }

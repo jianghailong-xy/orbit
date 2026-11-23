@@ -173,7 +173,7 @@ test('requests: paths, verbs, bodies and answers', async () => {
   assert.deepEqual(await kube.persistentVolumeClaims.create(pvc), created);
   await assert.rejects(kube.persistentVolumeClaims.create(pvc), (e: unknown) => e instanceof KubeApiError && e.status === 409 && e.reason === 'AlreadyExists');
   assert.deepEqual(await kube.persistentVolumeClaims.list({ labelSelector: 'app.kubernetes.io/name=orbit-cloud-runner' }), [created]);
-  await kube.pods.delete('mr-x', { uid: 'pod-uid-1' });
+  await kube.pods.delete('mr-x', { uid: 'pod-uid-1', gracePeriodSeconds: 240 });
   await kube.pods.delete('mr-x'); // already gone: resolves
   assert.equal((await kube.getPersistentVolume('pv-1'))?.metadata.name, 'pv-1');
   assert.equal(await kube.getPersistentVolume('pv-2'), null);
@@ -193,8 +193,8 @@ test('requests: paths, verbs, bodies and answers', async () => {
   );
   assert.deepEqual(JSON.parse(sent[1].body!), pvc);
   assert.equal(sent[1].headers['content-type'], 'application/json');
-  assert.deepEqual(JSON.parse(sent[4].body!), { apiVersion: 'v1', kind: 'DeleteOptions', preconditions: { uid: 'pod-uid-1' } });
-  assert.deepEqual(JSON.parse(sent[5].body!), { apiVersion: 'v1', kind: 'DeleteOptions' });
+  assert.deepEqual(JSON.parse(sent[4].body!), { apiVersion: 'v1', kind: 'DeleteOptions', preconditions: { uid: 'pod-uid-1' }, gracePeriodSeconds: 240 });
+  assert.deepEqual(JSON.parse(sent[5].body!), { apiVersion: 'v1', kind: 'DeleteOptions' }, 'without a grace, the object\'s own');
   assert.ok(sent.every((r) => r.timeoutMs === PROFILE.lifecycle.requestTimeoutSeconds * 1000));
 });
 

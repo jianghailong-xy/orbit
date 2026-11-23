@@ -159,6 +159,8 @@ export class RunnersService {
         labels: true,
         status: true,
         maxConcurrent: true,
+        // Extra sessions on demand, edited beside maxConcurrent: how far past it Run now may go.
+        burstConcurrent: true,
         version: true,
         // When it was last heard from (runners/runner-presence.ts), shown as `lastHeartbeatAt`, and the
         // sessions its background jobs hold slots for, which `activeSessions` counts while it is online.
@@ -566,6 +568,7 @@ export class RunnersService {
     const data: {
       displayName?: string | null;
       maxConcurrent?: number;
+      burstConcurrent?: number;
       minFreeDiskMb?: number | null;
     } = {};
     if (dto.displayName !== undefined) {
@@ -585,6 +588,11 @@ export class RunnersService {
         notice = managedConcurrencyClampNotice(dto.maxConcurrent, ceiling);
       }
     }
+    // Extra sessions on demand: read by the next overflow claim and by the session list's Run now, so it too
+    // takes effect at once. 0 turns Run now off on this machine.
+    if (dto.burstConcurrent !== undefined) {
+      data.burstConcurrent = dto.burstConcurrent;
+    }
     // Read by the auto-run sweep against each workspace's own measured filesystem; null clears
     // the floor. Also effective next sweep — nothing to restart.
     if (dto.minFreeDiskMb !== undefined) {
@@ -599,6 +607,7 @@ export class RunnersService {
         name: true,
         displayName: true,
         maxConcurrent: true,
+        burstConcurrent: true,
         minFreeDiskMb: true,
       },
     });
@@ -955,6 +964,25 @@ export class RunnersService {
     // Delivered on the runner's next heartbeat; have that be now, as for a removal.
     this.realtime?.notifyRunnerWake(id);
     return claudeAccountSwapStateOf({ claudeAccountSwapAccount: account, claudeAccountSwapStatus: 'pending' });
+  }
+
+  /**
+   * Dismiss a Set as default that failed: the runner's swap state goes back to none, so the failure
+   * the page shows under that account goes away on every client. Only a `failed` swap of that account
+   * is cleared, in the statement itself; a pending or done one, or one for another account, is left as
+   * it is. Orbit's own record, so the runner need not be online and is not woken.
+   */
+  async dismissSetDefaultFailure(ownerId: string, id: string, engine: LoginEngine, account: string): Promise<{ ok: true }> {
+    // The runner first, as setDefaultAccount does (1b1c7a8e71): another account's runner is not found, whatever the
+    // engine named, and nothing is written.
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId }, select: { id: true } });
+    if (!runner) throw new NotFoundException('runner not found');
+    if (engine !== 'claude') throw new BadRequestException('Only a Claude Code account can be made the Default');
+    await this.prisma.runner.updateMany({
+      where: { id, ownerId, claudeAccountSwapStatus: 'failed', claudeAccountSwapAccount: account },
+      data: { claudeAccountSwapStatus: null, claudeAccountSwapMessage: null },
+    });
+    return { ok: true };
   }
 
   /**

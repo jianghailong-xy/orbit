@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -14,9 +17,10 @@ import (
 //   - The link the attempt published is opened as a new tab of the runner's shared Chrome (Q1 = B), started without the
 //     lease as the owner's Open browser starts it, and the browser is reserved for the owner until the attempt ends
 //     (browserSupervisor.ReserveForEngineSignIn): no session's browser call is taken meanwhile.
-//   - Claude Code's page redirects to its hosted callback with the code in the address. The runner reads Chrome's pages
-//     until one is that callback with this attempt's state, and hands `code#state` to the CLI as a pasted code would be
-//     (§4, Q2 = A). Antigravity keeps the paste until its callback is confirmed on a live sign-in.
+//   - Claude Code's and Antigravity's pages redirect to a hosted callback with the code in the address. The runner reads
+//     Chrome's pages until one is that callback with this attempt's state, and hands the CLI what the page shows, as a
+//     pasted code would be (§4, Q2 = A): Claude Code's `code#state`, Antigravity's code alone (seen on a live sign-in
+//     2026-11-23: https://antigravity.google/oauth-callback, "Paste this code into your application").
 //   - What became of it goes back on the attempt's own waiting report, repeated with Browser set, so the control plane
 //     keeps the link and the code it shows. The heartbeat redelivers the command until that report lands; a repeat for
 //     an attempt already opened reports again and opens nothing.
@@ -42,8 +46,11 @@ const loginBrowserCaptureEvery = 500 * time.Millisecond
 // loginBrowserTargets reads Chrome's pages. A var so a test can stand in for Chrome.
 var loginBrowserTargets = browserTargets
 
-// loginBrowserOpenTab opens a page in a new tab. A var for the same reason.
-var loginBrowserOpenTab = openBrowserTab
+// loginBrowserOpenTab opens a page in a new tab and answers its target id. A var for the same reason.
+var loginBrowserOpenTab = openBrowserTabID
+
+// loginBrowserCloseTab closes the sign-in's tab once it succeeded. A var for the same reason.
+var loginBrowserCloseTab = closeSignInTab
 
 // loginBrowser is the part of the browser supervisor a sign-in uses.
 type loginBrowser interface {
@@ -112,38 +119,105 @@ func (r *loginRelay) openInLoginBrowser(ctx context.Context, lr LoginCommand, b 
 	openCtx, cancel := context.WithTimeout(ctx, browserOpenNavigateWait)
 	defer cancel()
 	browserDevToolsReady(endpoint)
-	if err := loginBrowserOpenTab(openCtx, endpoint, published.URL); err != nil {
+	tabID, err := loginBrowserOpenTab(openCtx, endpoint, published.URL)
+	if err != nil {
 		b.EndEngineSignIn(run.attempt)
 		fail(err.Error())
 		return
 	}
+	// The tab goes once the machine is signed in: the page has nothing more to say, and the owner watching the
+	// browser is left on what was there before. A sign-in that failed or was cancelled keeps it, for what it said.
+	go func() {
+		<-run.ctx.Done()
+		r.mu.Lock()
+		done := run.reportedDone
+		r.mu.Unlock()
+		if !done || tabID == "" {
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := loginBrowserCloseTab(ctx, endpoint, tabID); err != nil {
+			logln("login: the sign-in tab could not be closed:", err)
+			return
+		}
+		logln("login: the sign-in tab was closed")
+	}()
 	r.mu.Lock()
 	run.browser = loginBrowserOpened
 	r.mu.Unlock()
 	logln("login: the sign-in page was opened in the runner's browser")
 	answer(loginBrowserOpened)
-	if callback, state, ok := claudeCodeCallback(lr.Engine, published.URL); ok {
-		go r.takeCodeFromBrowser(run, lr, endpoint, callback, state, func() { answer(loginBrowserCodeTaken) })
+	if callback, state, paste, ok := codeCallback(lr.Engine, published.URL); ok {
+		go r.takeCodeFromBrowser(run, lr, endpoint, callback, state, paste, func() { answer(loginBrowserCodeTaken) })
 	}
 }
 
-// claudeCodeCallback is where Claude Code's sign-in page sends the browser with the code, and the state it must carry:
-// from the authorize URL the attempt published. ok is false for any other engine, and for a URL without both.
-func claudeCodeCallback(engine, authorize string) (callback *url.URL, state string, ok bool) {
-	if loginFlowFor(engine).engine != providerClaude {
-		return nil, "", false
+// closeSignInTab closes the tab with target id in the Chrome whose DevTools listen at endpoint, if it is still open.
+// Chrome quits when its last tab closes, so a sign-in tab that is the only one is first given a blank tab beside it.
+// Nothing else is closed, and nothing of the page is logged.
+func closeSignInTab(ctx context.Context, endpoint, id string) error {
+	targets, err := loginBrowserTargets(ctx, endpoint)
+	if err != nil {
+		return err
+	}
+	found, pages := false, 0
+	for _, t := range targets {
+		if t.Type != "page" || strings.HasPrefix(t.URL, "devtools://") {
+			continue
+		}
+		pages++
+		if t.ID == id {
+			found = true
+		}
+	}
+	if !found {
+		return nil // the owner closed it already
+	}
+	if pages == 1 {
+		if _, err := loginBrowserOpenTab(ctx, endpoint, "about:blank"); err != nil {
+			return err
+		}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+"/json/close/"+url.PathEscape(id), nil)
+	if err != nil {
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return errors.New("The browser's DevTools do not answer")
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("The browser's DevTools answered %d to closing a tab", resp.StatusCode)
+	}
+	return nil
+}
+
+// codeCallback is where an engine's sign-in page sends the browser with the code, the state it must carry, both from
+// the authorize URL the attempt published, and what of the code the CLI takes, as the page shows it to paste: Claude
+// Code's `code#state` (platform.claude.com/oauth/code/callback), Antigravity's code alone (antigravity.google/
+// oauth-callback). ok is false for any other engine, and for a URL without an https callback or a state.
+func codeCallback(engine, authorize string) (callback *url.URL, state string, paste func(code string) string, ok bool) {
+	switch loginFlowFor(engine).engine {
+	case providerClaude:
+		paste = func(code string) string { return code + "#" + state }
+	case providerAntigravity:
+		paste = func(code string) string { return code }
+	default:
+		return nil, "", nil, false
 	}
 	u, err := url.Parse(authorize)
 	if err != nil {
-		return nil, "", false
+		return nil, "", nil, false
 	}
 	q := u.Query()
 	callback, err = url.Parse(q.Get("redirect_uri"))
 	state = q.Get("state")
 	if err != nil || callback.Scheme != "https" || callback.Host == "" || state == "" {
-		return nil, "", false
+		return nil, "", nil, false
 	}
-	return callback, state, true
+	return callback, state, paste, true
 }
 
 // callbackCode is the code a page at address carries for this sign-in: address is the callback (scheme, host and path
@@ -163,7 +237,7 @@ func callbackCode(address string, callback *url.URL, state string) string {
 // takeCodeFromBrowser reads Chrome's pages until one is the callback for this sign-in, then hands its code to the CLI
 // as a paste is handed (submitCode, which also watches for the CLI refusing it). Once per attempt; it stops when the
 // attempt ends. A capture that never comes leaves the card's paste field, as before.
-func (r *loginRelay) takeCodeFromBrowser(run *loginRun, lr LoginCommand, endpoint string, callback *url.URL, state string, taken func()) {
+func (r *loginRelay) takeCodeFromBrowser(run *loginRun, lr LoginCommand, endpoint string, callback *url.URL, state string, paste func(string) string, taken func()) {
 	tick := time.NewTicker(loginBrowserCaptureEvery)
 	defer tick.Stop()
 	for {
@@ -185,7 +259,7 @@ func (r *loginRelay) takeCodeFromBrowser(run *loginRun, lr LoginCommand, endpoin
 			if code := callbackCode(t.URL, callback, state); code != "" {
 				logln("login: code taken from the runner's browser")
 				taken()
-				r.submitCode(LoginCommand{Action: "code", Engine: lr.Engine, Account: lr.Account, Attempt: run.attempt, Code: code + "#" + state}, run.report)
+				r.submitCode(LoginCommand{Action: "code", Engine: lr.Engine, Account: lr.Account, Attempt: run.attempt, Code: paste(code)}, run.report)
 				return
 			}
 		}

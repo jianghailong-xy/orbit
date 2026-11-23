@@ -39,11 +39,13 @@ function mapping(change: Partial<ManagedRunner> = {}): ManagedRunner {
     lastDemandAt: null,
     capacityRevision: null,
     drainDemandRevision: null,
+    sleepRequestedAt: null,
     stopRequestedAt: null,
     stopAcknowledgedAt: null,
     imageRollTo: null,
     imageOutdatedSince: null,
     currentImageSha: null,
+    currentImageVersion: null,
     updateRequestedAt: null,
     updateRequestedBy: null,
     updateCompletedAt: null,
@@ -259,6 +261,41 @@ test('update: an outdated READY runner names both builds; draining for a roll is
   assert.equal(status(outdated, '0.42.0'), undefined);
   assert.equal(status(outdated, 'managed-a800ca3'), undefined);
   assert.equal(status(outdated, 'managed-95884b154f', true), undefined, 'a disabled account is never offered an update');
+});
+
+test('update: release versions are compared by version, and managed-<sha> by commit, in every mix', () => {
+  const C = 'a800ca3973b1c2d3e4f5a800ca3973b1c2d3e4f5';
+  const status = (change: Partial<ManagedRunner>, version: string | null) =>
+    managedRunnerStatus({
+      enabled: true, available: true, mapping: mapping({ imageOutdatedSince: NOW, currentImageSha: C, ...change }),
+      runner: { ...beat(1000), version }, now: NOW, heartbeatFreshMs: FRESH,
+    }).update;
+  const release = { currentImageVersion: '0.1.261-beta.84' };
+  // A release runner against a newer release image: both versions, and the current commit.
+  assert.deepEqual(status(release, '0.1.261-beta.83'), {
+    running: { sha: '', version: '0.1.261-beta.83' }, current: { sha: C, version: '0.1.261-beta.84' }, phase: 'available',
+  });
+  // A runner already on the current release: none, whatever the record says of the image.
+  assert.equal(status(release, '0.1.261-beta.84'), undefined);
+  // An old managed-<sha> runner against a release image: by commit, and the current side keeps its version.
+  assert.deepEqual(status(release, 'managed-95884b154f'), {
+    running: { sha: '95884b154f' }, current: { sha: C, version: '0.1.261-beta.84' }, phase: 'available',
+  });
+  // The release image's own commit, reported as managed-<sha>: the same build, none.
+  assert.equal(status(release, `managed-${C.slice(0, 10)}`), undefined);
+  // A Docker self-host's image built from its checkout (no version label): managed-<sha> against the commit, as before.
+  assert.deepEqual(status({ currentImageVersion: null }, 'managed-95884b154f'), {
+    running: { sha: '95884b154f' }, current: { sha: C }, phase: 'available',
+  });
+  assert.equal(status({ currentImageVersion: null }, `managed-${C}`), undefined);
+  // A release runner against an image with no version (a rollback to a checkout's build): no commit to compare, none.
+  assert.equal(status({ currentImageVersion: null }, '0.1.261-beta.83'), undefined);
+  // A version that is neither shape names no build.
+  assert.equal(status(release, 'dev'), undefined);
+  // Draining for a roll onto the release: updating, with both versions.
+  assert.deepEqual(status({ ...release, managementState: 'DRAINING', imageRollTo: 'sha256:x' }, '0.1.261-beta.83')?.running,
+    { sha: '', version: '0.1.261-beta.83' });
+  assert.equal(status({ ...release, managementState: 'DRAINING', imageRollTo: 'sha256:x' }, '0.1.261-beta.83')?.phase, 'updating');
 });
 
 test('update: the owner\'s Update Now reads updating until the next generation is READY', () => {

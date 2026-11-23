@@ -474,6 +474,8 @@ type HeartbeatResponse struct {
 	// Server-authoritative max-concurrent (the editable DB value). 0 from an older
 	// control plane that doesn't send it — the runner keeps its current value then.
 	MaxConcurrent int `json:"maxConcurrent"`
+	// Extra sessions on demand. Nil from an older control plane, zero disables burst admission.
+	BurstConcurrent *int `json:"burstConcurrent,omitempty"`
 	// Branch merges the user requested for sessions this runner ran: merge each one's
 	// branch into the repo's main, then POST the outcome to /merge-result. Omitted by
 	// older control planes (the field is simply absent → no merges).
@@ -544,6 +546,10 @@ type HeartbeatResponse struct {
 	// (drainClaimScope). False/absent on older control planes, which would ignore the scope, so the
 	// runner claims nothing while it drains, as before.
 	DrainScopedClaims bool `json:"drainScopedClaims,omitempty"`
+	// SessionReleaseV1: this server's operator says every replica serves the session-release protocol (the apiserver's
+	// switch ORBIT_SESSION_RELEASE_V1), so this runner may report a failed turn and the release separately
+	// (session_release.go). Absent from an older control plane and while the switch is off: declared on nothing.
+	SessionReleaseV1 bool `json:"sessionReleaseV1,omitempty"`
 	// The owner's Later (RFC3339): stop draining for the waiting release now and put it off until
 	// this time, then wait for idle again under a fresh deferral limit (selfUpdateGate.postpone).
 	// Handed over once and cleared, like CheckSelfUpdate; sent only to a runner that declares
@@ -1546,6 +1552,8 @@ type ClaimedSession struct {
 	Provider  string          `json:"provider,omitempty"`
 	Prompt    string          `json:"prompt"`
 	Agent     AgentExecConfig `json:"agent"`
+	// OverCapacity authorizes this turn to use the runner's burst headroom.
+	OverCapacity bool `json:"overCapacity,omitempty"`
 	// liveMode is the session's permission mode as the goroutines serving its socket read it
 	// (background_gate.go); nil until that service starts.
 	liveMode *sessionLiveMode
@@ -1553,6 +1561,9 @@ type ClaimedSession struct {
 	// every engine but Claude, whose child keeps the parent's mode without edit tools; Codex alone reads this too, since its plan mode refuses every command and a shell
 	// is the only way Codex reads a repository (codexPermissionMode).
 	readonlySubagent bool
+	// codexCloudSandboxUnavailable says Codex's sandbox cannot start on this Orbit Cloud runner, so Auto
+	// runs with it off (codex_cloud_sandbox.go). Set when Codex is launched; false everywhere else.
+	codexCloudSandboxUnavailable bool
 	// readonlyParentMode is the parent session's permission mode as it stands now, on a read-only SubAgent's
 	// child claim on an engine other than Claude (subagentChildJob); nil on every other claim. Kimi reads it to
 	// answer its plan mode's shell requests the way the parent runs (kimiReadonlyShellFollowsParent).
@@ -1944,6 +1955,10 @@ type TurnCompleteRequest struct {
 	BranchMerged bool `json:"branchMerged"`
 	// WorktreeBranch: the worktree's actual current HEAD branch (see SessionLiveState.WorktreeBranch).
 	WorktreeBranch string `json:"worktreeBranch,omitempty"`
+	// ReleaseProtocol declares the session-release protocol on this report (session_release.go): set only on a failed
+	// turn's report, by turnCompleteReporting, while the server offers it. The body says it because the runner link
+	// carries no request header of its own.
+	ReleaseProtocol string `json:"releaseProtocol,omitempty"`
 }
 
 // TurnCompleteResponse carries the control-plane status after the ack. Newer

@@ -170,6 +170,17 @@ describe("Use the runner's browser on the sign-in card", () => {
     expect(useButton(card)).toBeDefined();
   });
 
+  it('for Antigravity, also waits for the code from the runner’s browser', async () => {
+    const card = await mount(
+      state({ status: 'awaiting_code', engine: 'antigravity', url: 'https://accounts.google.com/o/oauth2/auth?state=G', browser: 'opened' }),
+      { engine: 'antigravity' },
+    );
+    expect(text(card.querySelector('.rsi-runner-browser .rsi-row'))).toBe(
+      "Finish signing in in the runner's browser. Orbit takes the code from there.",
+    );
+    expect(card.querySelector('.rsi-input')).toBeNull();
+  });
+
   it('for a device flow keeps the one-time code on the card', async () => {
     const card = await mount(
       state({ status: 'awaiting_approval', engine: 'codex', url: 'https://auth.openai.com/codex/device', userCode: 'ABCD-1234', browser: 'opened' }),
@@ -198,5 +209,37 @@ describe("Use the runner's browser on the sign-in card", () => {
     const starts = apiMock.mock.calls.filter(([path, options]) => path === `/runners/${RUNNER}/login` && (options as { method?: string })?.method === 'POST');
     expect(starts).toEqual([]);
     expect(text(card.querySelector('.rsi-runner-browser .rsi-row'))).toBe("Finish signing in in the runner's browser. Orbit takes the code from there.");
+  });
+
+  it('closes the viewer tab it opened once the card says Signed in', async () => {
+    const card = await mount(claudeLink());
+    const viewer = { closed: false, close: vi.fn() };
+    vi.mocked(window.open).mockImplementation((url?: string | URL, target?: string) => {
+      opened.push([url, target]);
+      return viewer as unknown as Window;
+    });
+    await act(async () => useButton(card)!.click());
+    await settle();
+    await report(claudeLink({ browser: 'opened' }));
+    expect(viewer.close).not.toHaveBeenCalled();
+    await report(state({ status: 'done', engine: 'claude' }));
+    expect(viewer.close).toHaveBeenCalledTimes(1);
+    expect(text(card)).toContain('Signed in');
+  });
+
+  it('leaves the viewer tab open when the sign-in failed, or when it was never opened from the card', async () => {
+    const card = await mount(claudeLink());
+    const viewer = { closed: false, close: vi.fn() };
+    vi.mocked(window.open).mockImplementation(() => viewer as unknown as Window);
+    await act(async () => useButton(card)!.click());
+    await settle();
+    await report(state({ status: 'failed', engine: 'claude', message: 'sign-in did not complete' }));
+    expect(viewer.close).not.toHaveBeenCalled();
+    act(() => root?.unmount());
+
+    // Signed in through this browser: no viewer was opened, so none is closed (and nothing throws).
+    await mount(claudeLink());
+    await report(state({ status: 'done', engine: 'claude' }));
+    expect(opened).toEqual([]);
   });
 });

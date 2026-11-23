@@ -13,12 +13,14 @@ import {
   credentialIsAnthropicBound,
   fastModeAvailable,
   HELP_ASK_V1,
+  OVER_CAPACITY_V1,
   openCodeKeyOf,
   type AnthropicBoundCredential,
   type PlanUsageSnapshot,
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { runtimeCatalogModels } from '../common/runtime-model';
 import { anthropicGatewayEnabled, engineTableOptions, withKeyGatewayToken } from '../providers/key-gateway';
 import {
   claudeCodexLoginEnabled,
@@ -34,7 +36,6 @@ import {
   adminOnlyProviderRefusal,
   builtinSessionEngine,
   engineBaseEnv,
-  ENGINE_INCOMPATIBLE_ERROR_LIKE,
   engineIncompatibleMessage,
   isBuiltinProvider,
   keyCredential,
@@ -86,22 +87,15 @@ import { workspaceCloneHoldSql } from '../common/workspace-clone-gate';
 import { engineNamingJob } from '../sessions/naming';
 import {
   batchActiveTurns,
+  overCapacityPassPendingSql,
   runnerActiveTurns,
+  runnerBackgroundHeldSessions,
   treeActiveTurns,
   treeCeiling,
 } from '../common/session-tree-sql';
 import {
   ADMIN_ONLY_PROVIDER_ERROR,
-  ANTIGRAVITY_RUNNER_UPGRADE_ERROR,
-  CURSOR_NOT_INSTALLED_ERROR,
-  CURSOR_RUNNER_UPGRADE_ERROR,
-  DSH_NOT_INSTALLED_ERROR,
-  DSH_PLATFORM_UNSUPPORTED_ERROR,
-  DSH_RUNNER_UPGRADE_ERROR,
-  DSH_VERSION_INCOMPATIBLE_ERROR,
-  OPENCODE_RUNNER_UPGRADE_ERROR,
   PROVIDER_UNAVAILABLE_ERROR,
-  SOURCE_PROTOCOL_UNSUPPORTED_ERROR,
 } from '../runner-api/runner-provider-support';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
 import { orchestrationEnabled } from '../common/orchestration-switch';
@@ -125,6 +119,7 @@ import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/
 import { browserClaimFields, MANAGED_RUNNER_BROWSER_GATE, type ManagedRunnerBrowserGate } from '../managed-runners/managed-runner-browser-gate';
 import { DISPATCH_PAUSED } from './dispatch-pause';
 import { CLAUDE_REGION_ERROR_PREFIX, claudeRegionHold } from '../runners/runner-region';
+import { holdNoticeSql } from './hold-notice';
 import { openingTurnId } from '../sessions/orbit-authored-turn';
 import {
   runAccessLevel,
@@ -133,6 +128,7 @@ import {
   scheduleRunAllowedTools,
   scheduleRunDisallowedTools,
 } from '../schedules/schedule-access';
+import { claimModelLogLine } from './claim-model-log';
 
 /** What a claim attempt answers when another transaction holds the row it picked (FOR UPDATE NOWAIT, 55P03). */
 const LOST_LOCK = Symbol('the claim lost the row lock');
@@ -478,32 +474,25 @@ export class QueueService {
         // and a UI that names the wrong gate is worse than one that names none.
         const runnerId = Prisma.sql`${runner.id}::uuid`;
         const scopedClaim = runner.onlySessionIds !== undefined;
-        const claimed = await tx.$queryRaw<Array<{
+        // `overflow` is Run now's claim (sessions/run-now.ts): of the sessions holding a pass for a queued message,
+        // one the three slot gates hold back, while the runner stays under max_concurrent + burst_concurrent. Every
+        // other condition below is the same for both, so nothing but the slot gates is lifted.
+        const claimOne = (overflow: boolean) => tx.$queryRaw<Array<{
           id: string; engine: string | null; provider: string; providerBuiltin: boolean; ownerId: string;
         }>>(Prisma.sql`
         UPDATE "session" SET
           status = 'RUNNING',
+          -- The pass is spent by whichever claim starts its turn. An overflow claim keeps it, so the RUNNING row says
+          -- it runs over the limit until that turn ends (turnComplete clears it); an ordinary one started the turn in
+          -- a slot of its own and clears it.
+          "over_capacity_turn_id" = CASE WHEN ${overflow}::boolean THEN "over_capacity_turn_id" ELSE NULL END,
           -- A stall this claim just disproved. Both markers are written by a preflight that saw a
           -- runner unable to drive the row and had nothing else to say why it sat there; the row
           -- being claimed IS the answer, so leaving the text behind would make a running session
           -- read as blocked on the machine that is running it.
+          -- The hold notices (queue/hold-notice.ts), the one list a payload's waitingOn HOLD reads too.
           error = CASE
-            WHEN error IN (
-              ${OPENCODE_RUNNER_UPGRADE_ERROR},
-              ${ANTIGRAVITY_RUNNER_UPGRADE_ERROR},
-              ${DSH_RUNNER_UPGRADE_ERROR},
-              ${CURSOR_RUNNER_UPGRADE_ERROR},
-              ${CURSOR_NOT_INSTALLED_ERROR},
-              ${DSH_NOT_INSTALLED_ERROR},
-              ${DSH_PLATFORM_UNSUPPORTED_ERROR},
-              ${DSH_VERSION_INCOMPATIBLE_ERROR},
-              ${PROVIDER_UNAVAILABLE_ERROR},
-              ${ADMIN_ONLY_PROVIDER_ERROR},
-              ${SOURCE_PROTOCOL_UNSUPPORTED_ERROR}
-            ) OR error LIKE 'Account paused until %' OR error LIKE ${ENGINE_INCOMPATIBLE_ERROR_LIKE}
-              -- The region check's hold, released (docs/claude-region-check-contract.md §11), and the sentence a turn it
-              -- stopped ended with: both begin with the code.
-              OR starts_with(error, ${CLAUDE_REGION_ERROR_PREFIX}) THEN NULL
+            WHEN ${holdNoticeSql(Prisma.sql`error`)} THEN NULL
             ELSE error
           END,
           "started_at" = COALESCE("started_at", now()),
@@ -698,7 +687,7 @@ export class QueueService {
             -- starts none: it is for a session whose engine is already running a turn on this runner, and the
             -- runner holds the message it brings until its update. Refused here, its row would read PENDING
             -- while that engine runs, so it is exempt from all three; an unscoped claim never is.
-            AND (${scopedClaim}::boolean OR (
+            AND (${overflow}::boolean OR ${scopedClaim}::boolean OR (
               -- A slot is an active turn, not a warm process. Idle AWAITING_INPUT and
               -- legacy INTERRUPTED sessions remain resumable without consuming capacity.
               ${runnerActiveTurns(runnerId)}
@@ -716,6 +705,20 @@ export class QueueService {
               AND (
                 s."root_session_id" IS NULL
                 OR ${treeActiveTurns('s')} < ${treeCeiling(runnerId)}
+              )
+            ))
+            -- Run now (decisions C, D, F): a session whose queued message its owner passed is taken past the three caps
+            -- above, while the runner's turns plus the slots its background jobs hold — what the runner admits against —
+            -- stay under its limit plus its Extra sessions on demand. Only for a runner whose process declares it admits
+            -- such a turn: an older one would refuse it past its own max, or evict nothing and run it anyway.
+            AND (NOT ${overflow}::boolean OR (
+              NOT ${scopedClaim}::boolean
+              AND ${overCapacityPassPendingSql('s')}
+              AND EXISTS (
+                SELECT 1 FROM "runner" r WHERE r.id = ${runnerId}
+                  AND ${OVER_CAPACITY_V1} = ANY(r.capabilities)
+                  AND ${runnerActiveTurns(runnerId)} + ${runnerBackgroundHeldSessions(runnerId)}
+                      < r."max_concurrent" + r."burst_concurrent"
               )
             ))
             -- A message may be queued behind a merge/commit still executing on this
@@ -755,6 +758,19 @@ export class QueueService {
         )
         RETURNING id, engine, provider, provider_builtin AS "providerBuiltin", owner_id::text AS "ownerId"
       `);
+        // The ordinary claim first, so a message already waiting takes a slot that came free before a passed one is
+        // put over the limit (F). The overflow claim runs only when it took nothing and a pass waits on this runner,
+        // which the partial index session_over_capacity_pending_idx answers from a handful of rows.
+        let claimed = await claimOne(false);
+        if (claimed.length === 0 && !scopedClaim) {
+          const [waiting] = await tx.$queryRaw<Array<{ waiting: boolean }>>`
+            SELECT EXISTS (
+              SELECT 1 FROM "session" s
+               WHERE s."assigned_runner_id" = ${runner.id}::uuid
+                 AND s."over_capacity_turn_id" IS NOT NULL AND s.status = 'PENDING'
+            ) AS waiting`;
+          if (waiting?.waiting === true) claimed = await claimOne(true);
+        }
         // A row an older replica wrote has no engine: record the one it is about to run on, derived by
         // the rules that replica follows, in this same transaction (§1.1). From here on nothing derives
         // it again — a later edit of its key cannot move it onto another CLI.
@@ -1102,6 +1118,9 @@ export class QueueService {
         runner: session.assignedRunner,
       });
     let exec = resolveExec(session.model);
+    // The value the resolution ran on, for the claim-model line below: moved to the PATCH winner's
+    // when that compare-and-set loses, so the line shows the choice dispatch actually used.
+    let resolvedFrom = session.model;
     // Snapshot an inherited default on the session at its first claim, and refresh one the runtime
     // has since retired. Later Runtime heartbeat changes must not silently switch an
     // already-established conversation on reclaim/resume — only a model that is no longer offered
@@ -1126,6 +1145,7 @@ export class QueueService {
           select: { model: true },
         });
         exec = resolveExec(winner.model);
+        resolvedFrom = winner.model;
       }
     }
     const provider = exec.provider;
@@ -1139,6 +1159,20 @@ export class QueueService {
     // What the runner is handed as the model: the session's own id, except an OpenCode session on a
     // key, which names it the way OpenCode selects it (resolveProviderExec `runnerModel`).
     const runnerModel = exec.runnerModel ?? exec.model;
+    // What this claim decided about the model, `claim-model {json}` (claim-model-log.ts): the
+    // catalogue the assigned runner reported, what the resolver was offered, and what the runner is
+    // told to run. Diagnostic for the Antigravity Google-account rollout, whose failure mode was a
+    // catalogue id reaching the runner as no `--model` at all with nothing on this side to read.
+    this.logger.log(
+      claimModelLogLine({
+        sessionId: session.id,
+        provider,
+        requestedModel: resolvedFrom,
+        catalog: (session.assignedRunner?.modelCatalog as RunnerModelCatalog | null)?.[provider],
+        offered: runtimeCatalogModels(session.assignedRunner?.modelCatalog, provider),
+        resolvedModel: runnerModel,
+      }),
+    );
     const permissionMode = resolvePermissionMode(session.permissionMode, session.owner);
     // Claude spawns with a pre-generated --session-id, so a Claude row without one has no
     // conversation the runtime could resume — it was created before the column existed, or
@@ -1198,6 +1232,11 @@ export class QueueService {
       // An Ask (migration 0850): the runner starts it read-only in a scratch folder of help articles, never in a
       // workDir (help/help-ask.ts). Only when set, so every other claim keeps the shape it had.
       ...(session.helpAsk != null ? { helpAsk: helpAskMarkerOf(session.helpAsk) ?? { page: null } } : {}),
+      // Run now: this claim took the session over the runner's limit, for the turn named (only an overflow claim
+      // keeps the pass). The runner admits it up to max + burst. Only when set, so every other claim keeps its shape.
+      ...(session.overCapacityTurnId != null && session.status === 'RUNNING'
+        ? { overCapacity: true, overCapacityTurnId: session.overCapacityTurnId }
+        : {}),
       // Per-session worktree branch (generated at creation); the runner isolates the
       // session in a `git worktree` on this branch when workDir is a git repo.
       branch: session.branch ?? undefined,

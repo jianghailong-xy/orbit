@@ -118,14 +118,17 @@ public struct ManagedRunnerStatus: Decodable, Equatable, Sendable {
     public let actions: ManagedRunnerActions
 }
 
-/// One build of the managed runner image: its source commit, and when it was built, if known.
+/// One build of the managed runner image: its source commit, and when it was built, if known. `version` is the
+/// release it was published for (`0.1.261-beta.83`); absent for an image built from a checkout.
 public struct ManagedRunnerBuild: Decodable, Equatable, Sendable {
     public let sha: String
     public let builtAt: String?
+    public let version: String?
 
-    public init(sha: String, builtAt: String? = nil) {
+    public init(sha: String, builtAt: String? = nil, version: String? = nil) {
         self.sha = sha
         self.builtAt = builtAt
+        self.version = version
     }
 }
 

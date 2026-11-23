@@ -264,7 +264,7 @@ describe('sessionLine', () => {
    */
   it('falls back to the run state word when there is nothing to preview', () => {
     expect(sessionLine({ status: 'SUCCEEDED' }, true)).toEqual({
-      text: 'Succeeded',
+      text: 'Finished',
       tone: 'preview',
     });
     expect(sessionLine({ status: 'FAILED' }, true)).toEqual({ text: 'Failed', tone: 'preview' });

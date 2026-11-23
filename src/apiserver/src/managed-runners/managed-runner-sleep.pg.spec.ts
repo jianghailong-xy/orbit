@@ -32,7 +32,10 @@
  *       kept; demand before it accepts sends it back to waiting; a wake brings it up again, and once
  *       a runtime is signed in it is READY by itself, with no retry;
  *  (11) a runner an earlier version FAILED for want of a login is taken up again by itself: it waits
- *       on the same instance, and is READY once a runtime is signed in.
+ *       on the same instance, and is READY once a runtime is signed in;
+ *  (12) an owner's sleep drains only on a report the instance sent after the request: an idle report
+ *       from before it (the walk's, sent just before a drive write began) keeps the runner READY, and
+ *       so does a busy one after it; the first idle one after it drains.
  *
  * Not destructive: every row belongs to a user this run creates.
  */
@@ -358,10 +361,11 @@ test('managed runner idle sleep and wake against a fake cluster', {
   await t.test('(9) the owner\'s explicit sleep and wake', async () => {
     const w = managedRunnerWorld(db);
     const { ownerId, mapping } = await w.readyRunner('owner');
-    await w.heartbeat(mapping.runnerId, { idleSeconds: 5 });
     const asked = await w.service.sleep(ownerId, 'sleep-1', (await w.mappingOf(ownerId)).revision);
     assert.equal(asked.desiredState, 'SLEEPING');
     assert.equal(asked.actions.canSleep, false);
+    w.advance(1_000);
+    await w.heartbeat(mapping.runnerId, { idleSeconds: 5 });
     // Asked, it drains without waiting out the idle interval — but only with nothing in flight.
     assert.equal(await w.primary.reconcile(mapping.id), 'DRAINING');
     const draining = await w.mappingOf(ownerId);
@@ -493,5 +497,34 @@ test('managed runner idle sleep and wake against a fake cluster', {
     w.advance(1_000);
     await w.heartbeat(mapping.runnerId);
     assert.equal(await w.primary.reconcile(mapping.id), 'READY');
+  });
+
+  await t.test('(12) an owner\'s sleep drains only on a report sent after the request; a busy one keeps it READY', async () => {
+    const w = managedRunnerWorld(db);
+    const { ownerId, mapping } = await w.readyRunner('fresh-report');
+    // Idle by its last report, which is fresh — and then a write begins, which the next report will say.
+    await w.heartbeat(mapping.runnerId, { idleSeconds: 5 });
+    w.advance(1_000);
+    await w.service.sleep(ownerId, 'sleep-fresh', (await w.mappingOf(ownerId)).revision);
+    const state = async () => {
+      const m = await w.mappingOf(ownerId);
+      return { state: m.managementState, desired: m.desiredState, stopRequestedAt: m.stopRequestedAt };
+    };
+    for (let i = 0; i < 3; i += 1) {
+      assert.equal(await w.primary.reconcile(mapping.id), 'READY', 'a report from before the request is no answer to it');
+      w.advance(1_000);
+    }
+    assert.deepEqual(await state(), { state: 'READY', desired: 'SLEEPING', stopRequestedAt: null });
+    // The next report: a drive write holds bytes no commit has taken.
+    await w.heartbeat(mapping.runnerId, { driveWrites: 1 });
+    for (let i = 0; i < 3; i += 1) {
+      assert.equal(await w.primary.reconcile(mapping.id), 'READY', 'busy: never DRAINING');
+      w.advance(1_000);
+    }
+    assert.deepEqual(await state(), { state: 'READY', desired: 'SLEEPING', stopRequestedAt: null });
+    // Idle again, in a report after the request: now it drains.
+    await w.heartbeat(mapping.runnerId, { idleSeconds: 1 });
+    assert.equal(await w.primary.reconcile(mapping.id), 'DRAINING');
+    assert.equal((await state()).state, 'DRAINING');
   });
 });

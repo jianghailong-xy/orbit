@@ -49,6 +49,7 @@ import {
   SESSION_RUNNING_BG_JOB_WHERE,
 } from '../common/session-working';
 import { readSessionActivities, sessionActivitySql } from './task-work-carrier';
+import { readOneSessionPhaseFields, readSessionPhaseFields } from './session-phase';
 import { CLEARED_RUNNING_WORK, KEEP_BACKGROUND_WORK_END_CONTENT } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest, worktreeFileAnswerKey } from './worktree-artifact';
@@ -139,6 +140,7 @@ import {
   supportsSteerWithdraw,
   supportsTargetBoundCurrentWorkSteer,
   uuidToBase62,
+  toUuid,
   accountToMoveTo,
   isAccountEngine,
   planUsageBlockedUntil,
@@ -208,15 +210,10 @@ import { orchestrationEnabled } from '../common/orchestration-switch';
 import { isStopping } from '../common/graceful-stop';
 import { normalizePermissionRules } from '../common/permission-rules';
 import { reachesPastOneMcpTool } from './remember-rules';
-import {
-  batchActiveTurns,
-  runnerActiveTurns,
-  runnerBackgroundHeldSessions,
-  treeActiveTurns,
-  treeCeiling,
-} from '../common/session-tree-sql';
+import { runnerActiveTurns, runnerBackgroundHeldSessions } from '../common/session-tree-sql';
 import { queuedRunnerUpdateOf } from '../common/runner-self-update';
-import { queuedReasonSql } from './queued-reason-sql';
+import { queuedGateLateral, queuedRunNowOf } from './queued-gate';
+import { grantRunNow, refuseRunNowForSession } from './run-now';
 import { QueueService } from '../queue/queue.service';
 import { mergeDispatchGate } from '../projects/task-checkpoint.service';
 import {
@@ -239,7 +236,7 @@ import { isCodelessTaskRun } from './codeless-checkout';
 import { readWikiChatContext, sameWikiChatContext, wikiContextOutsideChat } from '../wiki/wiki-chat-context';
 import { branchName } from '../projects/project-criterion-landing';
 import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
-import { INTEGRATION_ITEM_KINDS, openItemOwed, openItemVisible } from '../projects/project-open-item';
+import { INTEGRATION_ITEM_KINDS, openItemInWorkSessionHands, openItemOwed, openItemVisible } from '../projects/project-open-item';
 import { landingContainerStatus, readSourceLanding } from '../projects/landing-session';
 import { readLandingIntegrationLog, type IntegrationLogSelectors } from '../projects/project-integration-log';
 import {
@@ -434,7 +431,7 @@ import {
   terminalizePendingCurrentWorkSteers,
 } from './current-work-delivery';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
-import { returnQueuedTurns } from '../projects/project-open-item';
+import { handBackLandingFixesOfSession, returnQueuedTurns } from '../projects/project-open-item';
 import { type OpenListBase, OpenListDeltaStore } from './open-list-delta';
 import { type OpenListVersionParts, openListEtag, readOpenListVersion, readOpenListVersionParts } from './open-list-version';
 import {
@@ -2081,7 +2078,7 @@ export class SessionsService {
     }
     const runner = await this.prisma.runner.findFirst({
       where: { id: ask.runnerId, ownerId },
-      select: { id: true, reposRoot: true, capabilities: true, capabilitiesReportedAt: true, managedRunner: { select: { id: true } } },
+      select: { id: true, reposRoot: true, capabilities: true, capabilitiesReportedAt: true, managedRunner: { select: { id: true } }, status: true, ...RUNNER_BEATS },
     });
     if (!runner) throw new ForbiddenException('runner not found');
     if (ask.workDir !== undefined) {
@@ -3432,6 +3429,47 @@ export class SessionsService {
   }
 
   /**
+   * Revision 42 (§12.5 W6, §12.7): a task's own work session reading its task's landing — `session_get` on the landing
+   * session id its landing-fix turn names, or on `task_get`'s `integration.landTask.landingSessionId` — whether or not
+   * the account has Session orchestration on. The landing is about the work this session wrote, and fixing it needs
+   * the record.
+   *
+   * Answers only when the calling session is a work session of this runner that is not deleted, the id is a landing of the project this session's task is in, and that landing's task is this session's task; then it
+   * is the same detail `getForOrchestration` serves for it. Null in every other case, which leaves the request to the
+   * orchestration door and its refusals unchanged.
+   */
+  async ownTaskLandingForWorkSession(
+    ownerId: string,
+    runnerId: string,
+    callingSessionId: string | undefined,
+    id: string,
+  ) {
+    const raw = callingSessionId?.trim();
+    if (!raw) return null;
+    let caller: string;
+    try {
+      caller = toUuid(raw);
+    } catch {
+      return null;
+    }
+    const session = await this.prisma.session.findFirst({
+      where: {
+        // Not `cancel_requested_at`: a session revived for its landing-fix round keeps the end its task's DONE asked
+        // for (R3 resumes it without clearing that), and this is exactly the session that must read its landing.
+        id: caller, ownerId, assignedRunnerId: runnerId, startsTaskWork: true, deletedAt: null, taskId: { not: null },
+      },
+      select: { taskId: true, task: { select: { projectId: true } } },
+    });
+    if (!session?.taskId || !session.task?.projectId) return null;
+    const landing = await this.prisma.projectLanding.findFirst({
+      where: { sessionId: id, ownerId, taskId: session.taskId, projectId: session.task.projectId },
+      select: { sessionId: true },
+    });
+    if (!landing) return null;
+    return this.getForOrchestration(ownerId, landing.sessionId);
+  }
+
+  /**
    * Owner-scoped detail returned to an orchestrating workspace. Keep this deliberately
    * narrower than the UI detail query: the full Workspace row contains injected env,
    * MCP config, prompts, and other configuration that must not become model output.
@@ -3595,6 +3633,7 @@ export class SessionsService {
       taskId: string | null;
       taskTitle: string | null;
       lastTurnAt: Date | null;
+      listedAt: Date | null;
       createdAt: Date;
       completedAt: Date | null;
       archivedAt: Date | null;
@@ -3860,6 +3899,7 @@ export class SessionsService {
               s.task_id AS "taskId",
               t.title   AS "taskTitle",
               s.last_turn_at AS "lastTurnAt",
+              COALESCE(s.listed_at, s.created_at) AS "listedAt",
               s.created_at   AS "createdAt",
               COALESCE(s.completed_at, s.archived_at) AS "completedAt",
               COALESCE(s.completed_at, s.archived_at) AS "archivedAt",
@@ -3906,9 +3946,9 @@ export class SessionsService {
                  ELSE 1                  -- branch / agent / task: names of the container, not of this
                END)
               + (CASE
-                   WHEN COALESCE(s.last_turn_at, s.created_at) > now() - interval '1 day'  THEN 3
-                   WHEN COALESCE(s.last_turn_at, s.created_at) > now() - interval '7 days' THEN 2
-                   WHEN COALESCE(s.last_turn_at, s.created_at) > now() - interval '30 days' THEN 1
+                   WHEN COALESCE(s.listed_at, s.created_at) > now() - interval '1 day'  THEN 3
+                   WHEN COALESCE(s.listed_at, s.created_at) > now() - interval '7 days' THEN 2
+                   WHEN COALESCE(s.listed_at, s.created_at) > now() - interval '30 days' THEN 1
                    ELSE 0
                  END)
               -- Exactness, the one match-quality signal a substring search can afford. The length
@@ -3934,13 +3974,13 @@ export class SessionsService {
               count(*) FILTER (WHERE is_conversation) OVER () AS conv_total,
               row_number() OVER (
                 PARTITION BY is_conversation
-                ORDER BY score DESC, "lastTurnAt" DESC NULLS LAST, "createdAt" DESC
+                ORDER BY score DESC, "listedAt" DESC, "createdAt" DESC
               ) AS group_rn
             FROM scored
           )
           SELECT
             id, title, status, "workspaceId", "workspaceName", "runnerId", "taskId", "taskTitle",
-            "lastTurnAt", "createdAt", "completedAt", "archivedAt", "deletedAt", "endReason",
+            "lastTurnAt", "listedAt", "createdAt", "completedAt", "archivedAt", "deletedAt", "endReason",
             "matchField", "snippet", total::int AS "total"
           FROM ranked
           -- The name tier cannot take the whole page. Weights alone don't prevent that: a common
@@ -3950,7 +3990,7 @@ export class SessionsService {
           -- name tier takes what's left, which is all of it when there is nothing to reserve for.
           WHERE is_conversation
              OR group_rn <= ${take}::int - LEAST(conv_total, ${take}::int / 2)
-          ORDER BY score DESC, "lastTurnAt" DESC NULLS LAST, "createdAt" DESC
+          ORDER BY score DESC, "listedAt" DESC, "createdAt" DESC
           LIMIT ${take}::int
         `)
       : await this.prisma.$queryRaw<Row[]>(Prisma.sql`
@@ -3962,6 +4002,7 @@ export class SessionsService {
             s.task_id AS "taskId",
             t.title   AS "taskTitle",
             s.last_turn_at AS "lastTurnAt",
+            COALESCE(s.listed_at, s.created_at) AS "listedAt",
             s.created_at   AS "createdAt",
             COALESCE(s.completed_at, s.archived_at) AS "completedAt",
             COALESCE(s.completed_at, s.archived_at) AS "archivedAt",
@@ -3975,7 +4016,8 @@ export class SessionsService {
           WHERE s.owner_id = ${ownerId}::uuid
             AND s.kind = 'CONVERSATION' AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')
             AND s.deleted_at IS NULL
-          ORDER BY s.last_turn_at DESC NULLS LAST, s.created_at DESC
+          -- Recent is the list's own order (session.listed_at, session-listed-at.ts), not the liveness clock.
+          ORDER BY COALESCE(s.listed_at, s.created_at) DESC, s.created_at DESC
           LIMIT ${take}::int
         `);
 
@@ -3989,6 +4031,7 @@ export class SessionsService {
         taskId: r.taskId,
         taskTitle: r.taskTitle,
         lastTurnAt: r.lastTurnAt,
+        listedAt: r.listedAt,
         createdAt: r.createdAt,
         completedAt: r.completedAt,
         archivedAt: r.archivedAt,
@@ -4314,15 +4357,15 @@ export class SessionsService {
     // Completed orders by when the session was completed
     // (completed_at, newest first) — not by last activity — and deliberately ignores
     // pinning, which is an Open-list affordance. Every other view floats pinned
-    // sessions to the top and orders by last turn activity.
-    // A session that has never run has no last_turn_at, and the clients place it by when it
-    // was created (not last, as `NULLS LAST` would) — so order on the same key they sort by.
-    // With `limit` that stopped being cosmetic: a differently ordered page would cut exactly
+    // sessions to the top and orders by `listed_at` (migration 1434, session-listed-at.ts): the
+    // clock that moves only when the session changes for its owner, not with every event.
+    // The clients sort on the same key, read as created_at where an older server left it NULL.
+    // With `limit` that is not cosmetic: a differently ordered page would cut exactly
     // the rows the client then floats to the top.
     const orderBy: Prisma.Sql =
       view === 'completed'
         ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) DESC NULLS LAST, s.created_at DESC`
-        : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, COALESCE(s.last_turn_at, s.created_at) DESC, s.created_at DESC`;
+        : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, COALESCE(s.listed_at, s.created_at) DESC, s.created_at DESC`;
     // An Ask (migration 0850) is in no session list: it is listed under /help → Your questions (help/help-ask.ts).
     return { view, query: {
       scope: Prisma.sql`AND s.help_ask IS NULL ${runnerFilter} ${workspaceFilter} ${confinedFilter} ${tagFilter} ${projectFilter}`,
@@ -4856,6 +4899,7 @@ export class SessionsService {
       title: string;
       createdAt: Date;
       lastTurnAt: Date | null;
+      listedAt: Date | null;
       currentTurnStartedAt: Date | null;
       startedAt: Date | null;
       numTurns: number;
@@ -4872,6 +4916,7 @@ export class SessionsService {
       providerBuiltin: boolean;
       model: string | null;
       permissionMode: string | null;
+      codexSandboxUnavailable: boolean;
       effort: string | null;
       fastMode: boolean;
       /** SCHEDULE marks a scheduled run's session, which only a workspace's Scheduled runs folder lists. */
@@ -4936,6 +4981,15 @@ export class SessionsService {
       queuedActive: number | null;
       queuedLimit: number | null;
       queuedHeldByJobs: number | bigint | null;
+      queuedRunnerActive: number | bigint | null;
+      queuedRunnerHeld: number | bigint | null;
+      queuedRunnerLimit: number | null;
+      queuedRunnerBurst: number | null;
+      queuedRunnerOverflow: boolean | null;
+      queuedPassPending: boolean | null;
+      runnerLabel: string | null;
+      overLimitActive: number | bigint | null;
+      overLimitLimit: number | null;
       queuedRunnerSelfUpdate: Prisma.JsonValue;
       queuedRunnerTurns: Array<{ id: string; title: string | null }> | null;
       queuedSince: Date | null;
@@ -4954,6 +5008,9 @@ export class SessionsService {
         s.kind            AS "sessionKind",
         s.created_at      AS "createdAt",
         s.last_turn_at    AS "lastTurnAt",
+        -- The list's order key (migration 1434): moved only when the session changes for its owner. NULL only on a row
+        -- an older server inserted mid-deploy, which is read as its creation.
+        COALESCE(s.listed_at, s.created_at) AS "listedAt",
         -- When the turn now in flight was handed to the runner. last_turn_at cannot answer this:
         -- it is rewritten on every state move (turn delivered, awaiting input, the reaper's
         -- idle-clock reset), so on a running session it sits seconds behind now and a list of
@@ -4987,6 +5044,7 @@ export class SessionsService {
         s.source, s.engine, s.provider, s.model,
         s.provider_builtin AS "providerBuiltin",
         s.permission_mode AS "permissionMode",
+        s.codex_sandbox_unavailable AS "codexSandboxUnavailable",
         s.effort,
         s.fast_mode       AS "fastMode",
         s.run_source      AS "runSource",
@@ -5113,6 +5171,7 @@ export class SessionsService {
                    AND oi.kind IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
                    AND ${openItemOwed('oi')}
                    AND ${openItemVisible('oi')}
+                   AND NOT ${openItemInWorkSessionHands('oi')}
                    AND (oi.task_id = l.task_id
                         OR oi.promotion_id = l.promotion_id
                         OR EXISTS (
@@ -5126,6 +5185,20 @@ export class SessionsService {
                           SELECT j.promotion_id FROM project_integration_job j
                            WHERE j.landing_id = l.id AND j.promotion_id IS NOT NULL))
               ) THEN 'AWAITING_DECISION'
+              -- Revision 42 (§12.7): a failure of this segment in its task's own work session's hands is being fixed
+              -- there; no coordinator has it yet, and no decision is awaited.
+              WHEN EXISTS (
+                SELECT 1 FROM project_open_item oi
+                 WHERE oi.state = 'OPEN'
+                   AND oi.project_id = l.project_id
+                   AND oi.kind IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
+                   AND ${openItemOwed('oi')}
+                   AND ${openItemInWorkSessionHands('oi')}
+                   AND (oi.task_id = l.task_id
+                        OR EXISTS (
+                          SELECT 1 FROM project_integration_job j
+                           WHERE j.id = oi.integration_job_id AND j.landing_id = l.id))
+              ) THEN 'FIXING'
               ELSE 'IN_FLIGHT'
             END,
             'settledAs', l.settled_as,
@@ -5138,6 +5211,22 @@ export class SessionsService {
         q.active  AS "queuedActive",
         q."limit" AS "queuedLimit",
         q.held    AS "queuedHeldByJobs",
+        -- Run now (docs/mocks/queued-run-now): what the runner's counts, burst and capability say about starting
+        -- this queued message over the limit (runNowOf), and the name its sentences use.
+        q."runnerActive" AS "queuedRunnerActive",
+        q."runnerHeld"   AS "queuedRunnerHeld",
+        q."runnerLimit"  AS "queuedRunnerLimit",
+        q."runnerBurst"  AS "queuedRunnerBurst",
+        q."runnerOverflow" AS "queuedRunnerOverflow",
+        q."passPending"  AS "queuedPassPending",
+        COALESCE(NULLIF(btrim(r.display_name), ''), r.name) AS "runnerLabel",
+        -- A turn running over the limit (an overflow claim keeps the pass; an ordinary claim clears it): the
+        -- runner's count against its limit, for "over limit · 17/16". Only such a row pays for the counts.
+        CASE WHEN s.status = 'RUNNING' AND s.over_capacity_turn_id IS NOT NULL THEN
+          ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)}
+            + ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`)}
+        END AS "overLimitActive",
+        CASE WHEN s.status = 'RUNNING' AND s.over_capacity_turn_id IS NOT NULL THEN r.max_concurrent END AS "overLimitLimit",
         -- What the runner_updating explanation names (docs/runner-update-drain-design.md §3): the
         -- release it is updating to, the owner's turns it waits for, and the clock "Waiting 38 min"
         -- counts from. Read only for a row that gate holds; every other row pays nothing for it.
@@ -5169,43 +5258,7 @@ export class SessionsService {
       -- ceiling here is the SAME fragment the claim decides with (session-tree-sql.ts) — a
       -- second copy would drift, and confidently naming the wrong gate is worse than naming
       -- none. Only PENDING rows carry an answer; for the rest the lateral yields NULLs.
-      LEFT JOIN LATERAL (
-        SELECT reason, active, "limit", held FROM (
-          SELECT
-            ${queuedReasonSql()} AS reason,
-            ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)} AS runner_active,
-            ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`)} AS runner_held,
-            r.max_concurrent AS runner_limit,
-            ${treeActiveTurns('s')} AS tree_active,
-            ${treeCeiling(Prisma.sql`s.assigned_runner_id`)} AS tree_limit,
-            ${batchActiveTurns('s')} AS batch_active,
-            s.batch_max_concurrent AS batch_limit
-        ) g,
-        LATERAL (
-          SELECT
-            CASE g.reason
-              -- The turns the drain waits for: every one in flight on the runner.
-              WHEN 'runner_updating'    THEN g.runner_active
-              WHEN 'runner_at_capacity' THEN g.runner_active + g.runner_held
-              WHEN 'tree_at_capacity'   THEN g.tree_active
-              WHEN 'batch_at_capacity'  THEN g.batch_active
-            END AS active,
-            CASE g.reason
-              WHEN 'runner_at_capacity' THEN g.runner_limit
-              WHEN 'tree_at_capacity'   THEN g.tree_limit
-              WHEN 'batch_at_capacity'  THEN g.batch_limit
-            END AS "limit",
-            -- Of active, the slots background jobs hold (runner_at_capacity only): the part of a
-            -- full runner its list of running turns does not show.
-            CASE g.reason WHEN 'runner_at_capacity' THEN g.runner_held END AS held
-        ) n
-        -- Asked inside, behind OFFSET 0, rather than on the join: as a join condition the planner flattened
-        -- this subquery and computed every gate's counts for every row of the list, then dropped all but the
-        -- PENDING ones (production, 2026-11-19: 1,297 rows for 15, 130k of the statement's 154k buffers and
-        -- 175 ms of its 289). Here it is a one-time filter, so the counts run only for a PENDING row.
-        WHERE s.status = 'PENDING' AND s.cancel_requested_at IS NULL
-        OFFSET 0
-      ) q ON true
+      LEFT JOIN LATERAL (${queuedGateLateral()}) q ON true
       WHERE s.owner_id = ${ownerId}::uuid
         ${scope}
         AND (${visibility})
@@ -5222,6 +5275,8 @@ export class SessionsService {
         title: r.title,
         createdAt: r.createdAt,
         lastTurnAt: r.lastTurnAt,
+        // Where the row sits: the clients sort by this, never by lastTurnAt, which moves with every event.
+        listedAt: r.listedAt,
         currentTurnStartedAt: r.currentTurnStartedAt,
         startedAt: r.startedAt,
         numTurns: r.numTurns,
@@ -5242,6 +5297,7 @@ export class SessionsService {
         providerBuiltin: r.providerBuiltin,
         model: r.model,
         permissionMode: r.permissionMode,
+        codexSandboxUnavailable: r.codexSandboxUnavailable,
         effort: r.effort,
         fastMode: r.fastMode,
         runSource: r.runSource,
@@ -5311,6 +5367,12 @@ export class SessionsService {
         queuedHeldByJobs: r.queuedHeldByJobs == null ? null : Number(r.queuedHeldByJobs),
         // Only beside queuedReason 'runner_updating'; null on every other row.
         queuedRunnerUpdate: queuedRunnerUpdateOf(r),
+        // Run now (docs/mocks/queued-run-now) beside a slot gate, and how far over the runner may go.
+        ...queuedRunNowOf(r),
+        // A turn its owner started over the runner's limit, while it runs: "over limit · 17/16".
+        runningOverLimit: r.overLimitActive == null || r.overLimitLimit == null
+          ? null
+          : { active: Number(r.overLimitActive), limit: r.overLimitLimit, runnerName: r.runnerLabel },
       }),
     );
     // What each row says about who is waiting on whom (`listOverlay`): given by a caller that already
@@ -5318,8 +5380,15 @@ export class SessionsService {
     const given = overlay ?? new Map<string, ListOverlay>();
     const missing = rows.filter((r) => !given.has(r.id));
     const read = missing.length === 0 ? new Map<string, ListOverlay>() : await this.listOverlay(ownerId, missing);
+    const overlays = new Map(rows.map((r) => [r.id, given.get(r.id) ?? read.get(r.id)!]));
+    // phase, released, lastTurnOutcome, waitingOn (sessions/session-phase.ts), over the approvals the overlay counted.
+    const phases = await readSessionPhaseFields(
+      this.prisma,
+      rows.map((r) => r.id),
+      new Map(rows.map((r) => [r.id, overlays.get(r.id)!.pendingApprovals])),
+    );
     // The release column was read for the capabilities; the row does not carry it.
-    return sessions.map(({ finishedAt: _released, ...s }) => ({ ...s, ...(given.get(s.id) ?? read.get(s.id)!) }));
+    return sessions.map(({ finishedAt: _released, ...s }) => ({ ...s, ...overlays.get(s.id)!, ...phases.get(s.id) }));
   }
 
   /**
@@ -5707,6 +5776,8 @@ export class SessionsService {
       settings: sessionSettingsOf(session, session.workspace?.env, SessionsService.engineLive(session)),
       usage,
       engineVersion,
+      // phase, released, lastTurnOutcome, waitingOn (sessions/session-phase.ts), as every payload kind carries them.
+      ...(await readOneSessionPhaseFields(this.prisma, session.id)),
     });
   }
 
@@ -6032,6 +6103,7 @@ export class SessionsService {
     // A parked session can still be working (a self-driven turn, a sub-agent, a job, a wait that
     // wakes it): without this the page read its AWAITING_INPUT as idle and said "Awaiting reply".
     const activity = (await readSessionActivities(this.prisma, [session.id])).get(session.id) ?? null;
+    const phase = await readOneSessionPhaseFields(this.prisma, session.id);
     return {
       waitingOnOwner,
       title: session.title,
@@ -6043,6 +6115,7 @@ export class SessionsService {
       runState: stateful.runState,
       lifecycleState: stateful.lifecycleState,
       filingState: stateful.filingState,
+      ...phase,
       createdAt: session.createdAt,
     };
   }
@@ -7435,6 +7508,8 @@ export class SessionsService {
       /** Which client sent it (migration 0595), as `senderClientColumns` writes it. */
       senderClient?: string;
       senderClientDetail?: string | null;
+      /** A person sent it (migration 1434): its end, waiting for input, moves the session's `listedAt`. */
+      byPerson?: boolean;
       /** A wiki chat's page and selection (migration 0476), which delivery reads. */
       wikiContext?: Prisma.InputJsonValue;
       /** A held message under Settings › Translation (heldTurnColumns, migration 0532). */
@@ -7728,6 +7803,13 @@ export class SessionsService {
        * never a field of `dto`.
        */
       translated?: { content: string; from: TranslationLanguage };
+      /**
+       * A person sent this turn — the owner at one of their own doors, a guest, a Feishu sender — so the session moves
+       * to the top of the session list (`session.listed_at`, migration 1434). An option of this call and never a field
+       * of `dto`; every platform delivery (wake-ups, notifications, task briefs, re-sends) and every session-to-session
+       * door leaves it unset, which is what keeps a session busy with those where its owner left it.
+       */
+      listed?: boolean;
     },
   ) {
     assertPromptSize(dto.content, 'message');
@@ -7862,6 +7944,7 @@ export class SessionsService {
         return {
           turn: await this.insertHeldTurnLocked(
             tx, ownerId, session, dto, translateFrom, intent, wikiContext, opts?.clearSettledWorktreeState === true,
+            opts?.listed === true,
           ),
           placement: 'queued' as const,
           wakeQueue: false,
@@ -8035,6 +8118,7 @@ export class SessionsService {
       const turn = await this.insertTurnLocked(tx, id, {
         // Whitelist: this endpoint cannot manufacture control turns.
         kind,
+        ...(opts?.listed ? { byPerson: true } : {}),
         content: opts?.translated && dto.content ? opts.translated.content : dto.content,
         ...(opts?.translated && dto.content
           ? { displayPrompt: dto.content, translationState: 'DONE', translationLang: opts.translated.from }
@@ -8069,6 +8153,8 @@ export class SessionsService {
         data: {
           status: nextStatus,
           lastTurnAt: new Date(),
+          // A person's message moves the row; anything else that queues a turn leaves it where it is.
+          ...(opts?.listed ? { listedAt: new Date() } : {}),
           // The message the list previews while it waits to be answered. Written here, at
           // enqueue, rather than when the runner reports the user turn: between the two lies the
           // whole wait — for a runner slot, and for a message queued behind a running turn the
@@ -8173,6 +8259,7 @@ export class SessionsService {
     intent: SessionTurnIntent | undefined,
     wikiContext: WikiChatContext | null,
     clearSettledWorktreeState: boolean,
+    listed: boolean,
   ): Promise<ConversationTurn> {
     const content = dto.content!;
     const attachmentIds = await this.assertLinkableAttachments(ownerId, session.id, dto.clientTurnId, dto.attachmentIds, tx);
@@ -8181,6 +8268,7 @@ export class SessionsService {
       kind: 'message',
       content,
       clientTurnId: dto.clientTurnId,
+      ...(listed ? { byPerson: true } : {}),
       ...(intent === 'NEXT_TURN' ? { sendIntent: 'NEXT_TURN' as const } : {}),
       ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
       ...heldTurnColumns(content, from),
@@ -8190,6 +8278,7 @@ export class SessionsService {
       where: { id: session.id },
       data: {
         lastTurnAt: new Date(),
+        ...(listed ? { listedAt: new Date() } : {}),
         // The owner's own words, as they wrote them.
         ...pendingMessageColumns(content, null, null),
         // The owner took over, as in createTurn.
@@ -8473,6 +8562,8 @@ export class SessionsService {
       senderSessionId?: string;
       /** The owner's own door: the follow-up is held and translated, as `createTurn`'s `translate`. */
       translate?: boolean;
+      /** A person sent the follow-up — see `createTurn`'s own. A stop with no follow-up moves nothing. */
+      listed?: boolean;
     },
   ) {
     // Stopping a turn — or stopping one and replacing it — is an engine door (§2.9 LS6).
@@ -8651,6 +8742,7 @@ export class SessionsService {
         kind: 'message',
         content,
         clientTurnId: dto!.clientTurnId!,
+        ...(opts?.listed ? { byPerson: true } : {}),
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
         ...(heldFrom ? heldTurnColumns(content, heldFrom) : {}),
       });
@@ -8669,6 +8761,7 @@ export class SessionsService {
         data: {
           status: nextStatus,
           lastTurnAt: new Date(),
+          ...(opts?.listed ? { listedAt: new Date() } : {}),
           // The redirected message is what the session is waiting on now — previewed from here
           // exactly as in createTurn, with who sent it.
           ...(content ? pendingMessageColumns(content, sentBy, sentByOrbit) : {}),
@@ -10340,7 +10433,25 @@ export class SessionsService {
     );
     await reprojectAfterSettledChecks(this.prisma, ended.checksSettled, this.logger);
     if (ended.settledProjectId) await this.routeSettledFacts(ended.settledProjectId);
+    if (ended.settledProjectId || (ended.changed && lifecycle === 'deletedAt')) {
+      await this.deliverLandingFixesAfterFinish(sessionId);
+    }
     return ended;
+  }
+
+  /**
+   * Revision 42 (§12.5 W7): an end that finished a work session here — one that never ran — or moved it to Trash may have
+   * handed back the failed landing it held (SESSION_ENDED); it is the coordinator's from that commit, and delivered now. Found by
+   * `ModuleRef` as `routeSettledFacts` finds its router; without one, the coordinator's next turn end delivers it.
+   */
+  private async deliverLandingFixesAfterFinish(sessionId: string): Promise<void> {
+    if (!this.moduleRef) return;
+    try {
+      const { ProjectOpenItemService } = await import('../projects/project-open-item.service.js');
+      await this.moduleRef.get(ProjectOpenItemService, { strict: false }).offerLandingFixesTo(sessionId);
+    } catch (e) {
+      this.logger.warn(`landing fixes handed back by an end not delivered: ${e instanceof Error ? e.message : e}`);
+    }
   }
 
   /**
@@ -10559,6 +10670,12 @@ export class SessionsService {
         clientTurnId: randomUUID(),
         ...(endTurnContent !== undefined ? { content: endTurnContent } : {}),
       });
+    }
+    // Revision 42 (§12.5 W7): a work session moved to Trash hands back the failed landing it holds, SESSION_ENDED, in
+    // this transaction (the items are rank 60, after this Session's rank 30). Its finish cannot decide it: a trashed
+    // session is no work a delivered identity is read from (`readDeliveredIdentity`), so no settlement reaches W7.
+    if (lifecycle === 'deletedAt' && session.startsTaskWork) {
+      await handBackLandingFixesOfSession(tx, sessionId, 'SESSION_ENDED');
     }
     return {
       changed: true,
@@ -11095,7 +11212,7 @@ export class SessionsService {
     dto: SessionResumeDto,
     taskId: string | null,
     workspaceId: string | null,
-    opts?: { routeToCurrentRun?: boolean; translate?: boolean },
+    opts?: { routeToCurrentRun?: boolean; translate?: boolean; listed?: boolean },
   ): Promise<SessionResumeAnswer> {
     if (taskId !== null) {
       // `NOT: { id }` is belt-and-braces — every path here arrives with THIS row terminal, so it
@@ -11151,7 +11268,7 @@ export class SessionsService {
           // attachment with a sentence about ids. Both are worse than the structured refusal this
           // door has always given, which at least names the run to open and re-send in.
           if (dto.attachmentIds?.length) throw inTheWay();
-          const delivered = await this.createTurn(ownerId, holder.id, dto, { translate: opts?.translate });
+          const delivered = await this.createTurn(ownerId, holder.id, dto, { translate: opts?.translate, listed: opts?.listed });
           return {
             ...delivered,
             revived: false as const,
@@ -11265,6 +11382,8 @@ export class SessionsService {
        *  branches — a revived session's message is held like any other (insertHeldOpeningLocked's rule:
        *  the claim does not hand out a session whose only work is held). */
       translate?: boolean;
+      /** A person sent the turn — see `createTurn`'s own. Carried onto both branches. */
+      listed?: boolean;
     },
   ): Promise<SessionResumeAnswer> {
     refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
@@ -11381,6 +11500,7 @@ export class SessionsService {
         onTurnWritten: opts?.onTurnWritten,
         requestFingerprint,
         translate: opts?.translate,
+        listed: opts?.listed,
       });
       // Nothing was revived: this turn joined a process that was already running. Said out loud
       // because the orchestration door offers resume as a fallback for `send`, and the caller
@@ -11683,6 +11803,7 @@ export class SessionsService {
         content: dto.content,
         clientTurnId: dto.clientTurnId,
         requestFingerprint,
+        ...(opts?.listed ? { byPerson: true } : {}),
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
         ...senderClientColumns(opts?.senderClient),
         ...externalSenderColumns(opts?.externalSender),
@@ -11737,6 +11858,7 @@ export class SessionsService {
           error: null,
           result: null,
           lastTurnAt: new Date(),
+          ...(opts?.listed ? { listedAt: new Date() } : {}),
           // Previewed from enqueue, as in createTurn: a revive waits for a slot like any other
           // turn, and until the runner reports it the row would show the reply from before. With
           // its sender, as there.
@@ -12972,6 +13094,27 @@ export class SessionsService {
     assertEngineSessionRow(await this.get(ownerId, id)); // ownership check (404s otherwise)
     await this.prisma.session.update({ where: { id }, data: { pinnedAt: new Date() } });
     return { ok: true };
+  }
+
+  /**
+   * `POST /sessions/:id/run-now` (docs/mocks/queued-run-now): start this session's queued message over its runner's
+   * limit, one turn (run-now.ts). The runner is woken at once so its claim takes it.
+   */
+  async runNow(ownerId: string, id: string, actingSessionId: string | null) {
+    refuseRunNowForSession(actingSessionId);
+    assertEngineSessionRow(await this.get(ownerId, id)); // ownership check (404s otherwise); a landing is the platform's
+    const granted = await withTransactionRetry(this.prisma, async (tx) => {
+      // The session row first, as every turn write takes it: the seed and the pass are then one decision about it.
+      const [session] = await tx.$queryRaw<Array<{
+        id: string; prompt: string; importedAt: Date | null; wikiChatSpaceId: string | null;
+      }>>`SELECT id, prompt, imported_at AS "importedAt", wiki_chat_space_id AS "wikiChatSpaceId"
+            FROM "session" WHERE id = ${id}::uuid AND owner_id = ${ownerId}::uuid FOR UPDATE`;
+      if (!session) throw new NotFoundException('session not found');
+      return grantRunNow(tx, ownerId, id, () => this.ensurePromptSeeded(tx, session));
+    }, loggedRetry(this.logger, 'sessions.runNow'));
+    if (!granted.alreadyPassed) this.realtime.publishSessionUpdated(id);
+    this.queue.notifySessionQueued(granted.runnerId);
+    return { ok: true, turnId: granted.turnId, alreadyPassed: granted.alreadyPassed };
   }
 
   /** Remove a session's pin, dropping it back into time order. */

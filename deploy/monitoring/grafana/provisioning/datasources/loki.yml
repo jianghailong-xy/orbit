@@ -1,0 +1,12 @@
+# The logs: the loki service, by its name in the Compose project's network (docs/self-hosting.md, "Logs"). Provisioned,
+# so it cannot be edited or deleted from Grafana's UI.
+apiVersion: 1
+datasources:
+  - name: Loki
+    uid: orbit-loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: false
+    jsonData:
+      maxLines: 1000

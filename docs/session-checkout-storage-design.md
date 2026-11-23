@@ -8,6 +8,12 @@ Revision 2026-11-16: the production managed-runner deployment on 10.66.0.3 uses 
 Ceph-CSI reflink patch; see [the deployment record](managed-runner-k3s-xfs-deployment.md). The XFS durability and
 power-cut drills that D4 requires have **not** been run yet. D1–D3, D5 and D6 stand.
 
+Revision 2026-11-23: the resting-checkout rules of a budget's floor now apply under every floor, and a roomy disk keeps
+at most `maxRetainedResumableCheckouts` (64) resting checkouts. On the HPC runner that day 378 checkouts held 471 GiB of
+a 915 GiB disk, and in the week before only 10 resting checkouts went: 223 clean ones were kept by the two weeks alone
+and 99 by commits only their branch had. The sweep now orders resting checkouts by `checkoutLastActivity` (two stats)
+and walks a checkout only when about to take it. §5 below describes the rules as they were before this.
+
 Every isolated session gets its own `git worktree` under `$ORBIT_HOME/worktrees/<session>`. Git shares the object
 database between worktrees, but every working tree is a full copy of the checked-out files plus whatever the session
 builds or installs there. This design makes three changes, all of which work without privileges:
@@ -81,9 +87,17 @@ with driver options are left out of `/system/df` sizes altogether.
 
 ## 3. Constraints
 
-- **Managed container hardening is fixed.** The channel (`deploy/managed-runner/docker-channel/channel.py`, around line
-  576) refuses privileged mode, added capabilities, devices, host binds and user-namespace modes. So no mounts, no
-  FUSE, no loop devices and no kernel modules inside the container. Nothing in this design may relax that.
+- **Managed container hardening is fixed.** The channel (`deploy/managed-runner/docker-channel/channel.py`) refuses
+  privileged mode, added capabilities, devices, host binds and user-namespace modes for the runner container, and the
+  Pod template drops every capability. So the runner container cannot mount anything, use FUSE or loop devices, or
+  load kernel modules. **One exception, decided for Orbit Files (docs/orbit-files-drive-design.md,
+  docs/orbit-files-drive-technical-design.md §6):** the runner container may *receive* exactly one mount made outside
+  it, `/run/orbit-files` (a plain per-runner directory with slave propagation; the drive's FUSE mount sits below it),
+  from an Orbit-owned mounter. On Kubernetes that is the `files.orbit.dev` CSI node driver
+  (`deploy/managed-runner/files-csi/`). On Docker, only if it is built (§6.2 of the technical design; it is not
+  today), it is the per-runner `mrf-<uuid>` container, the only container the channel would create with `SYS_ADMIN`,
+  `/dev/fuse` and the `orbit-files-mounter` AppArmor profile. Nothing else in this design may relax the runner
+  container's hardening.
 - **Docker volume accounting is logical.** The 20 GiB limit is measured with Docker's sizes. Clones save host disk but do
   not lower the measured size.
 - **Kubernetes backend.** The original baseline is an ext4 RBD filesystem of a fixed size

@@ -447,3 +447,27 @@ test('3. the row: changing every undrawn session column leaves the Open list\'s 
   }
   assert.deepEqual(await sessions.list(f.ownerId, { view: 'open' }), before);
 });
+
+test('4. keys (1464): an undrawn write moves no counter key at all; a drawn one moves its workspace\'s key alone', { skip, timeout: 60_000 }, async (t) => {
+  const f = await fixture(t, { held: true });
+  const { workspaceId } = await f.db.session.findUniqueOrThrow({ where: { id: f.sessionId }, select: { workspaceId: true } });
+  const keys = async () => new Map((await f.db.$queryRaw<Array<{ key: string; total: string }>>`
+    SELECT split_part(source, '#', 1) AS key, sum(epoch)::text AS total
+      FROM open_list_epoch WHERE owner_id = ${f.ownerId}::uuid GROUP BY 1`).map((row) => [row.key, row.total]));
+  const moved = async (statement: string, ...args: unknown[]) => {
+    const before = await keys();
+    assert.equal(await f.db.$executeRawUnsafe(statement, ...args), 1, `${statement}: the write matched no row`);
+    const after = await keys();
+    return [...new Set([...before.keys(), ...after.keys()])].filter((key) => before.get(key) !== after.get(key)).sort();
+  };
+  for (const [column, set] of Object.entries(UNDRAWN_SESSION_WRITES)) {
+    assert.deepEqual(await moved(`UPDATE session SET ${set} WHERE id = $1::uuid`, f.sessionId), [], `session.${column} moved a key`);
+  }
+  for (const { columns, row, set } of UNDRAWN_TURN_WRITES) {
+    assert.deepEqual(await moved(`UPDATE conversation_turn SET ${set} WHERE id = $1::uuid`, f[row]), [], `conversation_turn.${columns.join('+')} moved a key`);
+  }
+  assert.deepEqual(await moved(`UPDATE session SET title = 'renamed', context_tokens = 3 WHERE id = $1::uuid`, f.sessionId),
+    [`session@w:${workspaceId}`]);
+  assert.deepEqual(await moved(`UPDATE conversation_turn SET answered_at = now(), lease_deadline_at = NULL WHERE id = $1::uuid`, f.turnId),
+    [`conversation_turn@w:${workspaceId}`]);
+});

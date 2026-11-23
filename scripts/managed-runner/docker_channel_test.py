@@ -1465,6 +1465,7 @@ class ListingAndHostTest(ChannelFixture):
         info = self.call("GET", "/v1/info")[1]
         self.assertEqual((info["instanceId"], info["image"]), (INSTANCE, IMAGE))
         self.assertIsNone(info["imageRevision"], "an image without the revision label: nothing to compare against")
+        self.assertIsNone(info["imageVersion"], "nor a version label")
         self.assertEqual(info["network"], {"name": "orbit-mr-test", "internal": True, "interContainer": False})
         self.assertEqual((info["host"]["cpus"], info["host"]["memoryBytes"]), (8, 16 * 2 ** 30))
         self.assertEqual(info["host"]["managedVolumeBytes"], 12345, "only this instance's data volumes")
@@ -1476,6 +1477,16 @@ class ListingAndHostTest(ChannelFixture):
         self.server.channel = self.channel = self.ch.Channel(self.ch.parse_config(self.config_value(Path(self.scratch.name))), self.docker, TOKEN)
         self.channel.prepare()
         self.assertEqual(self.call("GET", "/v1/info")[1]["imageRevision"], "c0ffee1234")
+        self.assertIsNone(self.call("GET", "/v1/info")[1]["imageVersion"], "a revision label alone: no release version")
+
+    def test_info_reports_the_release_version_label_and_not_an_empty_one(self):
+        for label, reported in (("0.1.261-beta.83", "0.1.261-beta.83"), ("", None)):
+            self.docker.images[IMAGE]["Config"]["Labels"] = {"org.opencontainers.image.revision": "c0ffee1234",
+                                                            "org.opencontainers.image.version": label}
+            self.server.channel = self.channel = self.ch.Channel(self.ch.parse_config(self.config_value(Path(self.scratch.name))), self.docker, TOKEN)
+            self.channel.prepare()
+            info = self.call("GET", "/v1/info")[1]
+            self.assertEqual((info["imageRevision"], info["imageVersion"]), ("c0ffee1234", reported), label)
 
     def test_the_disk_is_measured_where_the_probe_path_says(self):
         # Root Compose mounts an empty volume of the channel's own there: Docker keeps it beside the data volumes.

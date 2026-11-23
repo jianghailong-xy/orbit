@@ -93,6 +93,7 @@ DISK_LIMIT_LABEL = LABEL + "disk-limit-bytes"
 FILESYSTEM_LABEL = LABEL + "volume-filesystem"
 MIN_FILESYSTEM_BYTES = 32 * 2 ** 20
 IMAGE_REVISION_LABEL = "org.opencontainers.image.revision"
+IMAGE_VERSION_LABEL = "org.opencontainers.image.version"
 
 # \Z, not $: `$` also matches before a final newline, and "<uuid>\n" is not a runner's name.
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
@@ -893,6 +894,7 @@ class Channel:
         self.network_facts = None
         self.image_env = ()
         self.image_revision = None
+        self.image_version = None
         self.firewall_dir = Path(firewall_dir) if firewall_dir else None
         self.pending_volumes = state / "pending-volumes"
         root = config.get("volumeFilesystemRoot")
@@ -925,8 +927,13 @@ class Channel:
         self.image_env = tuple((image.get("Config") or {}).get("Env") or ())
         # The source commit the image was built from (deploy/managed-runner/image/Dockerfile): the build the
         # manager compares a running instance's against. None when the image does not say.
-        revision = ((image.get("Config") or {}).get("Labels") or {}).get(IMAGE_REVISION_LABEL)
+        labels = (image.get("Config") or {}).get("Labels") or {}
+        revision = labels.get(IMAGE_REVISION_LABEL)
         self.image_revision = revision if isinstance(revision, str) and revision else None
+        # The release it was published for, which its runner reports as its version: None for an image built from a
+        # checkout (orbit-managed-runner:local), whose label is empty and whose runner reports managed-<revision>.
+        version = labels.get(IMAGE_VERSION_LABEL)
+        self.image_version = version if isinstance(version, str) and version else None
         network = self.docker.network(self.config["network"])
         if not network:
             raise ValueError(f"the configured network {self.config['network']} does not exist")
@@ -1588,7 +1595,7 @@ class Channel:
     def info(self):
         return {
             "schemaVersion": 1, "instanceId": self.config["instanceId"], "image": self.config["image"],
-            "imageRevision": self.image_revision,
+            "imageRevision": self.image_revision, "imageVersion": self.image_version,
             "network": self.network_facts, "limits": {**self.config["limits"], "maxContainers": self.max_containers},
             "allowVolumeRemoval": self.config["allowVolumeRemoval"], "stopGraceSeconds": self.config["stopGraceSeconds"],
             "volumeLimitMode": "filesystem" if self.filesystems else "measured",
