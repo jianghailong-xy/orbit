@@ -37,8 +37,8 @@ const mapping = {
 };
 
 /** The heartbeat route over one runner row holding `maxConcurrent`, managed or not, under `runtime`. */
-function heartbeatWorld(options: { maxConcurrent: number; runtime?: unknown; switchOn?: boolean; linkBeat?: boolean }) {
-  const row = { id: RUNNER_ID, ownerId: OWNER_ID, maxConcurrent: options.maxConcurrent, minFreeDiskMb: null, tokenHash: TOKEN_HASH, version: null };
+function heartbeatWorld(options: { maxConcurrent: number; concurrencyCap?: number; runtime?: unknown; switchOn?: boolean; linkBeat?: boolean }) {
+  const row = { id: RUNNER_ID, ownerId: OWNER_ID, maxConcurrent: options.maxConcurrent, burstConcurrent: 2, minFreeDiskMb: null, tokenHash: TOKEN_HASH, version: null };
   const prisma = {
     runner: {
       update: async () => ({ ...row }),
@@ -47,11 +47,12 @@ function heartbeatWorld(options: { maxConcurrent: number; runtime?: unknown; swi
     runnerPresence: { upsert: async () => ({}) },
     session: { findMany: async () => [], updateMany: async () => ({ count: 0 }) },
     workspace: { findMany: async () => [] },
-    managedRunner: { findUnique: async () => mapping },
+    managedRunner: { findUnique: async () => ({ ...mapping, concurrencyCap: options.concurrencyCap ?? null }) },
     $queryRaw: async (...args: unknown[]) => {
       if (options.linkBeat && renderRawQuery(args).text.includes('INSERT INTO "runner_presence"')) {
         return [{
-          credentialHeld: true, ownerDisabled: false, managed: true, landingNamed: false, maxConcurrent: row.maxConcurrent, minFreeDiskMb: null,
+          credentialHeld: true, ownerDisabled: false, managed: true, landingNamed: false, maxConcurrent: row.maxConcurrent,
+          burstConcurrent: row.burstConcurrent, minFreeDiskMb: null,
           beaten: false, inserted: null, changes: null, factsHash: null, reconcileHash: null, reconciledMs: null, nowMs: Date.now(),
           leasesHeld: 0, planUsageRead: false, planUsage: null,
         }];
@@ -86,11 +87,21 @@ test('a managed runner whose row says 8, with a 4 GiB limit, is answered 3', asy
   const w = heartbeatWorld({ maxConcurrent: 8, runtime: runtimeWith('4Gi') });
   const answer = wire(await w.controller.heartbeat(runner, beat, undefined, undefined, undefined, instance));
   assert.equal(answer.maxConcurrent, 3);
+  assert.equal(answer.burstConcurrent, 0);
 });
 
-test('a managed runner within its ceiling is answered its row\'s value', async () => {
+test('a managed runner can use spare permits within its memory ceiling', async () => {
   const w = heartbeatWorld({ maxConcurrent: 2, runtime: runtimeWith('4Gi') });
-  assert.equal(wire(await w.controller.heartbeat(runner, beat, undefined, undefined, undefined, instance)).maxConcurrent, 2);
+  const answer = wire(await w.controller.heartbeat(runner, beat, undefined, undefined, undefined, instance));
+  assert.equal(answer.maxConcurrent, 2);
+  assert.equal(answer.burstConcurrent, 1);
+});
+
+test('an OOM recovery cap of one leaves no spare permits', async () => {
+  const w = heartbeatWorld({ maxConcurrent: 2, concurrencyCap: 1, runtime: runtimeWith('4Gi') });
+  const answer = wire(await w.controller.heartbeat(runner, beat, undefined, undefined, undefined, instance));
+  assert.equal(answer.maxConcurrent, 1);
+  assert.equal(answer.burstConcurrent, 0);
 });
 
 test('over the runner link a managed runner reconciles in full, and every answer carries the clamped value', async () => {
@@ -109,12 +120,15 @@ test('over the runner link a managed runner reconciles in full, and every answer
       { id: RUNNER_ID, version: null }, beat, MANAGED_RUNNER_INSTANCE_CAPABILITY, undefined, undefined, undefined, link, headers,
     ));
     assert.equal(answer.maxConcurrent, 3, `beat ${i + 1}`);
+    assert.equal(answer.burstConcurrent, 0, `beat ${i + 1}`);
   }
 });
 
 test('a self-registered runner whose row says 8 is answered 8, whatever the managed profile', async () => {
   const w = heartbeatWorld({ maxConcurrent: 8, runtime: runtimeWith('4Gi') });
-  assert.equal(wire(await w.controller.heartbeat(runner, beat)).maxConcurrent, 8);
+  const answer = wire(await w.controller.heartbeat(runner, beat));
+  assert.equal(answer.maxConcurrent, 8);
+  assert.equal(answer.burstConcurrent, 2);
 });
 
 test('with the managed runner switch off, or no profile, nothing is clamped', async () => {
