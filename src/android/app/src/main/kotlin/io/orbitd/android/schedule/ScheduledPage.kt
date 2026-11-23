@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.orbitd.android.R
+import io.orbitd.android.core.schedule.ConditionWaitingItem
 import io.orbitd.android.core.schedule.ConditionCopy
 import io.orbitd.android.core.schedule.ConditionDisplay
 import io.orbitd.android.core.schedule.ConditionEventView
@@ -53,6 +54,7 @@ import io.orbitd.android.core.schedule.ScheduleDisplay
 import io.orbitd.android.core.schedule.ScheduleRule
 import io.orbitd.android.core.schedule.ScheduleRunView
 import io.orbitd.android.core.schedule.ScheduleView
+import io.orbitd.android.core.schedule.ScheduleWaitingItem
 import io.orbitd.android.ui.LocalOrbitColors
 import java.time.Instant
 import kotlinx.coroutines.delay
@@ -156,7 +158,8 @@ private data class ScheduleRowModel(val id: String, val circle: ScheduleDisplay.
  */
 @Composable
 fun ScheduledPage(store: ScheduledStore, workspaces: List<Pair<String, String>>, preferredWorkspace: String?, focused: String?,
-    openSession: (String) -> Unit, openRun: (String) -> Unit, change: (ScheduleView) -> Unit, openTask: (String) -> Unit = {}) {
+    openSession: (String) -> Unit, openRun: (String) -> Unit, change: (ScheduleView) -> Unit, openTask: (String) -> Unit = {},
+    waiting: List<ScheduleWaitingItem> = emptyList(), conditionWaiting: List<ConditionWaitingItem> = emptyList(), answered: () -> Unit = {}) {
     val state by store.state.collectAsState()
     val zone = store.timezone
     LaunchedEffect(store) { store.loadNow() }
@@ -170,6 +173,22 @@ fun ScheduledPage(store: ScheduledStore, workspaces: List<Pair<String, String>>,
     var typed by rememberSaveable { mutableStateOf("") }
     LazyColumn(Modifier.fillMaxSize().testTag("scheduled-page"), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
         item(key = "header") { ScheduledHeader(store, state) }
+        // A condition's items (the can't-read card and the 30-day question, condition-triggers board ⑥ ①) and a scheduled task's
+        // (failed, held, a run's approval, a run asking for more), whole, under the head: each answers at its own doors. There is no
+        // Waiting on you page (docs/mocks/waiting-on-you-removal; the owner, 2026-11-16); the run's session draws its own.
+        items(conditionWaiting, key = { "condition-waiting:${it.id}" }) { item ->
+            Box(Modifier.padding(vertical = 6.dp).testTag("scheduled-waiting:${item.id}")) {
+                ConditionWaitingCard(item, store, openSchedule = { id -> store.inspect(id); store.loadDetail(id) }, openTask = openTask,
+                    answered = answered)
+            }
+        }
+        items(waiting, key = { "schedule-waiting:${it.id}" }) { item ->
+            val openSchedule: (String) -> Unit = { id -> store.inspect(id); store.loadDetail(id) }
+            Box(Modifier.padding(vertical = 6.dp).testTag("scheduled-waiting:${item.id}")) {
+                ScheduleWaitingCard(item, store, openSession = openRun, openSchedule = openSchedule,
+                    openAgentSettings = { openSchedule(item.scheduleId) }, answered = answered)
+            }
+        }
         if (empty) {
             item(key = "lead") {
                 Text(SC.Empty.lead, Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.bodyMedium,

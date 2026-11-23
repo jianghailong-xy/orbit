@@ -163,8 +163,10 @@ class MachinesAndModelsPageTest {
         compose.onNode(hasText(MachinesAndModels.MACHINES) and hasText("1 of 1 online") and hasClickAction()).assertExists()
         compose.waitUntil(60_000) { compose.onAllNodes(hasText(SETTINGS_PROVIDERS) and hasText("1 needs you")).fetchSemanticsNodes().isNotEmpty() }
         listOf("Runners", MachinesAndModels.TITLE, "Preferences", "Account").forEach { compose.onAllNodesWithText(it).assertCountEquals(0) }
-        assertTrue("Personal, its last row Terminals, then Machines, then Providers", top(SETTINGS_PERSONAL) < top(Terminals.TITLE) &&
-            top(Terminals.TITLE) < top(MachinesAndModels.MACHINES) && top(MachinesAndModels.MACHINES) < top(SETTINGS_PROVIDERS))
+        // No Terminals row: each machine's page lists its own terminals (docs/mocks/terminals-on-machine-page).
+        compose.onAllNodesWithText(Terminals.TITLE).assertCountEquals(0)
+        assertTrue("Personal, then Machines, then Providers", top(SETTINGS_PERSONAL) < top(MachinesAndModels.MACHINES) &&
+            top(MachinesAndModels.MACHINES) < top(SETTINGS_PROVIDERS))
         // A machine offline is the Machines row's to count, and not the Providers row's.
         fixture.secondRunner = true; fixture.runnerTwoOnline = false
         revision++

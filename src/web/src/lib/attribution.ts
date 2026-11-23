@@ -103,11 +103,12 @@ export interface ProjectCrossingRow {
    *  and for a subject since deleted; absent from a server older than the move request. */
   subjectTask?: { id: string; publicId?: string; title: string } | null;
   /** MOVE_TASK: the target project's criterion the request names. `text` is null once that
-   *  criterion has been deleted. Null when the request names none. */
-  requestedCriterion?: { key: string; text: string | null } | null;
+   *  criterion has been deleted. Null when the request names none. `ordinal` is its 1-based
+   *  position in the target project's criteria; null once deleted, absent from an older server. */
+  requestedCriterion?: { key: string; text: string | null; ordinal?: number | null } | null;
   /** MOVE_TASK: the source project's criterion the task declares today, which the move takes back.
-   *  Null when it declares none of the source project's. */
-  withdrawnCriterion?: { key: string; text: string } | null;
+   *  Null when it declares none of the source project's. `ordinal` as above, in the source's list. */
+  withdrawnCriterion?: { key: string; text: string; ordinal?: number | null } | null;
   crossingKey: string;
   state: CrossingState;
   title: string;

@@ -13,6 +13,7 @@
  *   - FORK_SOURCE_NOT_REACHABLE, at the create door and again when a run would be placed elsewhere;
  *   - FORK_IN_BOUND_PROJECT, at the create door and again when the binding came after the task;
  *   - task_update refuses both: a reassignment to another machine and a move into a bound project;
+ *   - an owner-approved move refuses a forked task into a bound project, by one yes or by a batch;
  *   - the five fork columns cannot be rewritten (0615's guard), and a fork is only ever of the caller.
  *
  * Destructive only for the rows it makes (one owner, deleted at the end). Run it the way every pg spec
@@ -28,6 +29,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import { ProjectHandoffService } from '../projects/project-handoff.service';
 import { freezeSessionSourcePin } from '../projects/session-source';
 import { QueueService } from '../queue/queue.service';
 import { RunnerTasksController } from '../runner-api/runner-tasks.controller';
@@ -493,6 +495,67 @@ test('SR55: a task forked from its creating session', { skip, concurrency: 1, ti
     await tasks.update(w.ownerId, plain.id, { projectId: bound } as never);
     const plainAfter = await prisma.task.findUniqueOrThrow({ where: { id: plain.id }, select: { assigneeId: true, projectId: true } });
     assert.deepEqual(plainAfter, { assigneeId: w.workspaceB, projectId: bound });
+  });
+
+  await t.test('an approved move refuses a forked task into a bound project, one yes or a whole batch', async () => {
+    const w = await seed('moves');
+    // The move doors, wired as the server wires them: the handoff service applies a yes through tasks.
+    const handoffs = new ProjectHandoffService(prisma as never);
+    const movers = new TasksService(prisma as never, {} as never, realtime as never, handoffs);
+    const bound = randomUUID();
+    await admin.query(
+      `INSERT INTO "project" ("id","owner_id","title","updated_at") VALUES ($1,$2,'moves-bound',now())`,
+      [bound, w.ownerId],
+    );
+    await prisma.projectCodebase.create({
+      data: {
+        projectId: bound, ownerId: w.ownerId, canonicalRepoUrl: 'https://github.com/acme/widgets',
+        upstreamRef: 'refs/heads/main', integrationRef: 'refs/heads/main', refAuthority: 'REMOTE',
+      },
+    });
+    const forked = await createForked(w) as { id: string };
+    const plain = await createForked(w, { title: 'Ordinary work', fork: undefined }) as { id: string };
+    // The forking session coordinates the source project, so it may ask; asking moves nothing.
+    const ask = async (taskId: string) => {
+      const asked = await refusal(() => movers.update(w.ownerId, taskId, {
+        projectId: bound, handoff: { reason: 'it belongs to the bound project' },
+      } as never, w.forkingSessionId));
+      assert.equal(asked?.body?.code, 'CROSS_PROJECT_APPROVAL_REQUIRED');
+      return String(asked?.body?.handoffId);
+    };
+    const forkedMove = await ask(forked.id);
+    const plainMove = await ask(plain.id);
+    const stateOf = async (id: string) =>
+      (await prisma.projectHandoffApproval.findUniqueOrThrow({ where: { id }, select: { state: true } })).state;
+    const projectOf = async (id: string) =>
+      (await prisma.task.findUniqueOrThrow({ where: { id }, select: { projectId: true } })).projectId;
+
+    // One yes, the single-move door.
+    const single = await refusal(() => handoffs.decide(w.ownerId, w.ownerId, forkedMove, 'APPROVE', new Date()));
+    assert.equal(single?.status, 409);
+    assert.equal(single?.body?.code, 'FORK_IN_BOUND_PROJECT');
+    assert.equal(single?.body?.detail?.projectId, bound);
+    assert.equal(await stateOf(forkedMove), 'PENDING', 'refused before the approval is spent');
+
+    // The whole batch, the session card's door: the forked task refuses it, and nothing is written.
+    const batches = await handoffs.listMovesForSession(w.ownerId, w.forkingSessionId);
+    const batch = batches.find((b) => b.moves.some((move) => move.id === forkedMove));
+    assert.ok(batch, 'the asking session draws the batch');
+    assert.deepEqual(new Set(batch.moves.map((move) => move.id)), new Set([forkedMove, plainMove]));
+    const answers = batch.moves.map((move) => ({ handoffId: move.id, crossingKey: move.crossingKey }));
+    const whole = await refusal(() => handoffs.decideBatch(
+      w.ownerId, w.ownerId, w.forkingSessionId, 'APPROVE', answers, new Date(),
+    ));
+    assert.equal(whole?.status, 409);
+    assert.equal(whole?.body?.code, 'FORK_IN_BOUND_PROJECT');
+    assert.deepEqual([await stateOf(forkedMove), await stateOf(plainMove)], ['PENDING', 'PENDING']);
+    assert.deepEqual([await projectOf(forked.id), await projectOf(plain.id)], [w.projectId, w.projectId],
+      'a refused batch moved neither task');
+
+    // The control: the ordinary task's own yes moves it.
+    await handoffs.decide(w.ownerId, w.ownerId, plainMove, 'APPROVE', new Date());
+    assert.equal(await stateOf(plainMove), 'APPLIED');
+    assert.equal(await projectOf(plain.id), bound);
   });
 
   await t.test('only the calling session, on its own runner, can be forked; and a fork is never rewritten', async () => {
