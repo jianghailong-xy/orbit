@@ -14,11 +14,12 @@ import (
 
 // handle is one open file or folder.
 type handle struct {
-	node   *node
-	dir    *dirHandle
-	write  bool
-	append bool
-	wf     *wfile
+	node    *node
+	dir     *dirHandle
+	write   bool
+	append  bool
+	wf      *wfile
+	rewrite bool // created or truncated to zero by this handle; guarded by wf.wmu
 }
 
 func (fs *FS) handle(fh uint64) *handle {
@@ -175,7 +176,10 @@ func (fs *FS) open(ctx context.Context, n *node, flags uint32, pid uint32, handl
 		wf.session = session
 		wf.mu.Unlock()
 	}
-	fh := fs.addHandle(&handle{node: n, write: true, append: flags&syscall.O_APPEND != 0, wf: wf})
+	fh := fs.addHandle(&handle{
+		node: n, write: true, append: flags&syscall.O_APPEND != 0, wf: wf,
+		rewrite: mode == modeNew || mode == modeTrunc,
+	})
 	out.Fh = fh
 	// A handle open for writing is direct I/O: every close maps to one FLUSH that commits, and a shared mmap of it is
 	// refused by the kernel with ENODEV (§5.6).
@@ -313,7 +317,7 @@ func (fs *FS) Write(cancel <-chan struct{}, input *fuse.WriteIn, data []byte) (u
 	if h.append {
 		off = -1
 	}
-	if err := h.wf.write(ctx, off, data); err != nil {
+	if err := h.wf.write(ctx, h, off, data); err != nil {
 		drivePath = fs.pathForLog(h.node.ino, "")
 		st := statusOfWrite(err)
 		if st == fuse.Status(syscall.EOPNOTSUPP) {
@@ -452,9 +456,11 @@ func (fs *FS) SetAttr(cancel <-chan struct{}, input *fuse.SetAttrIn, out *fuse.A
 // setSize is truncate(2) or ftruncate(2) (§5.2, §5.6).
 func (fs *FS) setSize(ctx context.Context, n *node, input *fuse.SetAttrIn, drivePath string) fuse.Status {
 	size := int64(input.Size)
+	var h *handle
 	var wf *wfile
 	if input.Valid&fuse.FATTR_FH != 0 {
-		if h := fs.handle(input.Fh); h != nil && h.wf != nil {
+		if opened := fs.handle(input.Fh); opened != nil && opened.wf != nil {
+			h = opened
 			wf = h.wf
 		}
 	}
@@ -481,13 +487,19 @@ func (fs *FS) setSize(ctx context.Context, n *node, input *fuse.SetAttrIn, drive
 	if fs.door.Health().Offline() {
 		return fs.offline("truncate", drivePath)
 	}
-	if err := wf.truncate(ctx, size); err != nil {
+	if err := wf.truncate(ctx, h, size); err != nil {
 		st := statusOfWrite(err)
 		if st == fuse.Status(syscall.EOPNOTSUPP) {
 			return fs.refuse(st, "truncate", drivePath, fmt.Sprintf("to %d bytes", size),
 				"the drive does not change a file in place: it can empty a file (truncate to 0) or replace it with a new one")
 		}
 		return fs.failed("truncate", drivePath, err)
+	}
+	if h == nil && size == 0 {
+		// A pathname truncate has no writable descriptor whose FLUSH can commit it.
+		if err := wf.commit(fs.ctx, fs.opts.CloseWait); err != nil {
+			return fs.closeFailed(wf, drivePath, err)
+		}
 	}
 	return fuse.OK
 }

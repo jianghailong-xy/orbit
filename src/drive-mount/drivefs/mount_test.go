@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -228,14 +229,29 @@ func TestAnAllZeroChunkIsOneBlob(t *testing.T) {
 
 func TestAWriteInsideAnExistingFileIsRefused(t *testing.T) {
 	f, mnt, rep := mountFake(t, Options{})
+	// Go's SIGURG preemption signal can interrupt the caller's FUSE request and cancel its door call.
+	// Block it on the syscall caller for this stress test. The FUSE server still runs normally.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	var blocked, previous unix.Sigset_t
+	blocked.Val[0] = 1 << (unix.SIGURG - 1)
+	if err := unix.PthreadSigmask(unix.SIG_BLOCK, &blocked, &previous); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := unix.PthreadSigmask(unix.SIG_SETMASK, &previous, nil); err != nil {
+			t.Error(err)
+		}
+	}()
 	p := filepath.Join(mnt, "h.txt")
 	if err := os.WriteFile(p, []byte("hello\n"), 0o644); err != nil {
-		t.Fatal(err)
+		t.Fatalf("create and write: %v, errors.log: %v", err, rep.Lines())
 	}
 	fh, err := os.OpenFile(p, os.O_WRONLY, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = fh.Close() })
 	if _, err := fh.WriteAt([]byte("X"), 2); !errors.Is(err, syscall.EOPNOTSUPP) {
 		t.Fatalf("a write inside: %v", err)
 	}
@@ -257,7 +273,7 @@ func TestAWriteInsideAnExistingFileIsRefused(t *testing.T) {
 	}
 	// ftruncate to 0 is an overwrite to empty: a version.
 	if err := os.Truncate(p, 0); err != nil {
-		t.Fatal(err)
+		t.Fatalf("truncate to zero: %v, errors.log: %v", err, rep.Lines())
 	}
 	if data, versions := f.content("/h.txt"); len(data) != 0 || versions != 2 {
 		t.Fatalf("%q, %d versions", data, versions)
