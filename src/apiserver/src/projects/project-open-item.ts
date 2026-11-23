@@ -7,6 +7,8 @@ import {
   OpenItemDeliveryCard,
   OpenItemFacts,
   OpenItemStage,
+  OpenItemWorkSession,
+  OpenItemWorkSessionReturnReason,
   OwnerAnswerCard,
   OwnerItemKind,
   OwnerWordsTranslation,
@@ -1228,6 +1230,66 @@ export function inWorkSessionHands(item: {
   workSessionReturnedAt: Date | null;
 }): boolean {
   return item.workSessionOfferedAt !== null && item.workSessionReturnedAt === null;
+}
+
+/** `inWorkSessionHands` as SQL over the `project_open_item` row aliased `alias`: offered to its task's own work
+ *  session and not handed back. Parameter-free. */
+export function openItemInWorkSessionHands(alias: string): Prisma.Sql {
+  const item = Prisma.raw(`"${alias}"`);
+  return Prisma.sql`(${item}."work_session_offered_at" IS NOT NULL AND ${item}."work_session_returned_at" IS NULL)`;
+}
+
+/** The `work_session_*` columns, and what the item is about, an item's `workSession` is read from (§12.7). */
+export interface WorkSessionColumns {
+  id: string;
+  integrationJobId: string | null;
+  payload: unknown;
+  workSessionId: string | null;
+  workSessionOfferedAt: Date | null;
+  workSessionReturnedAt: Date | null;
+  workSessionReturnReason: string | null;
+}
+
+/**
+ * Revision 42 (§12.7): the `workSession` each item offered to its task's own work session is read with — the session,
+ * when it was offered and returned, why, and the rounds W8 counts. A handed-back item's rounds are the ones its
+ * hand-back wrote on the payload (`landingFixHandBackOf`, frozen with the reason); one still in the session's hands
+ * counts them now, the same way: the jobs of the failed job's landing segment that session asked for. Items never
+ * offered are absent from the map. One read for every item still held, whatever their number.
+ */
+export async function readOpenItemWorkSessions(
+  prisma: Pick<Prisma.TransactionClient, '$queryRaw'>,
+  items: readonly WorkSessionColumns[],
+): Promise<Map<string, OpenItemWorkSession<Date>>> {
+  const out = new Map<string, OpenItemWorkSession<Date>>();
+  const offered = items.filter((item) => item.workSessionId && item.workSessionOfferedAt);
+  const held = offered.filter((item) => item.workSessionReturnedAt === null);
+  const counted = held.length > 0
+    ? await prisma.$queryRaw<Array<{ id: string; rounds: number }>>(Prisma.sql`
+        SELECT item."id", (
+                 SELECT count(*)::int FROM "project_integration_job" asked
+                  WHERE asked."retry_requested_by_session_id" = item."work_session_id"
+                    AND (failed."landing_id" IS NULL OR asked."landing_id" = failed."landing_id")
+               ) AS "rounds"
+          FROM "project_open_item" item
+          LEFT JOIN "project_integration_job" failed ON failed."id" = item."integration_job_id"
+         WHERE item."id" IN (${Prisma.join(held.map((item) => Prisma.sql`${item.id}::uuid`))})`)
+    : [];
+  const rounds = new Map(counted.map((row) => [row.id, row.rounds]));
+  for (const item of offered) {
+    const returned = item.workSessionReturnedAt;
+    const frozen = (item.payload as { workSession?: Partial<LandingFixHandBack> } | null)?.workSession?.rounds;
+    out.set(item.id, {
+      sessionId: item.workSessionId!,
+      offeredAt: item.workSessionOfferedAt!,
+      ...(returned ? { returnedAt: returned } : {}),
+      ...(returned && item.workSessionReturnReason
+        ? { returnReason: item.workSessionReturnReason as OpenItemWorkSessionReturnReason }
+        : {}),
+      rounds: returned ? (typeof frozen === 'number' ? frozen : 0) : rounds.get(item.id) ?? 0,
+    });
+  }
+  return out;
 }
 
 /** W9's refusal: two sessions fixing the same failure at once have no winner. */

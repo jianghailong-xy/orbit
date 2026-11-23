@@ -356,6 +356,9 @@ export class RunnerSessionsController {
       );
     }
     this.assertNoServiceToken(grant);
+    // Revision 42 (§12.7): a task's own work session reads its task's landing without Session orchestration.
+    const ownLanding = await this.sessions.ownTaskLandingForWorkSession(runner.ownerId, runner.id, callingSessionId, id);
+    if (ownLanding) return ownLanding;
     await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
     return this.sessions.getForOrchestration(runner.ownerId, id);
   }

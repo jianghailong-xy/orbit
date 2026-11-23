@@ -139,6 +139,7 @@ import {
   supportsSteerWithdraw,
   supportsTargetBoundCurrentWorkSteer,
   uuidToBase62,
+  toUuid,
   accountToMoveTo,
   isAccountEngine,
   planUsageBlockedUntil,
@@ -234,7 +235,7 @@ import { isCodelessTaskRun } from './codeless-checkout';
 import { readWikiChatContext, sameWikiChatContext, wikiContextOutsideChat } from '../wiki/wiki-chat-context';
 import { branchName } from '../projects/project-criterion-landing';
 import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
-import { INTEGRATION_ITEM_KINDS, openItemOwed, openItemVisible } from '../projects/project-open-item';
+import { INTEGRATION_ITEM_KINDS, openItemInWorkSessionHands, openItemOwed, openItemVisible } from '../projects/project-open-item';
 import { landingContainerStatus, readSourceLanding } from '../projects/landing-session';
 import { readLandingIntegrationLog, type IntegrationLogSelectors } from '../projects/project-integration-log';
 import {
@@ -3427,6 +3428,47 @@ export class SessionsService {
   }
 
   /**
+   * Revision 42 (§12.5 W6, §12.7): a task's own work session reading its task's landing — `session_get` on the landing
+   * session id its landing-fix turn names, or on `task_get`'s `integration.landTask.landingSessionId` — whether or not
+   * the account has Session orchestration on. The landing is about the work this session wrote, and fixing it needs
+   * the record.
+   *
+   * Answers only when the calling session is a live work session of this runner (not deleted, not asked to end), the
+   * id is a landing of the project this session's task is in, and that landing's task is this session's task; then it
+   * is the same detail `getForOrchestration` serves for it. Null in every other case, which leaves the request to the
+   * orchestration door and its refusals unchanged.
+   */
+  async ownTaskLandingForWorkSession(
+    ownerId: string,
+    runnerId: string,
+    callingSessionId: string | undefined,
+    id: string,
+  ) {
+    const raw = callingSessionId?.trim();
+    if (!raw) return null;
+    let caller: string;
+    try {
+      caller = toUuid(raw);
+    } catch {
+      return null;
+    }
+    const session = await this.prisma.session.findFirst({
+      where: {
+        id: caller, ownerId, assignedRunnerId: runnerId, startsTaskWork: true,
+        deletedAt: null, cancelRequestedAt: null, taskId: { not: null },
+      },
+      select: { taskId: true, task: { select: { projectId: true } } },
+    });
+    if (!session?.taskId || !session.task?.projectId) return null;
+    const landing = await this.prisma.projectLanding.findFirst({
+      where: { sessionId: id, ownerId, taskId: session.taskId, projectId: session.task.projectId },
+      select: { sessionId: true },
+    });
+    if (!landing) return null;
+    return this.getForOrchestration(ownerId, landing.sessionId);
+  }
+
+  /**
    * Owner-scoped detail returned to an orchestrating workspace. Keep this deliberately
    * narrower than the UI detail query: the full Workspace row contains injected env,
    * MCP config, prompts, and other configuration that must not become model output.
@@ -5119,6 +5161,7 @@ export class SessionsService {
                    AND oi.kind IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
                    AND ${openItemOwed('oi')}
                    AND ${openItemVisible('oi')}
+                   AND NOT ${openItemInWorkSessionHands('oi')}
                    AND (oi.task_id = l.task_id
                         OR oi.promotion_id = l.promotion_id
                         OR EXISTS (
@@ -5132,6 +5175,20 @@ export class SessionsService {
                           SELECT j.promotion_id FROM project_integration_job j
                            WHERE j.landing_id = l.id AND j.promotion_id IS NOT NULL))
               ) THEN 'AWAITING_DECISION'
+              -- Revision 42 (§12.7): a failure of this segment in its task's own work session's hands is being fixed
+              -- there; no coordinator has it yet, and no decision is awaited.
+              WHEN EXISTS (
+                SELECT 1 FROM project_open_item oi
+                 WHERE oi.state = 'OPEN'
+                   AND oi.project_id = l.project_id
+                   AND oi.kind IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
+                   AND ${openItemOwed('oi')}
+                   AND ${openItemInWorkSessionHands('oi')}
+                   AND (oi.task_id = l.task_id
+                        OR EXISTS (
+                          SELECT 1 FROM project_integration_job j
+                           WHERE j.id = oi.integration_job_id AND j.landing_id = l.id))
+              ) THEN 'FIXING'
               ELSE 'IN_FLIGHT'
             END,
             'settledAs', l.settled_as,

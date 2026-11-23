@@ -21,6 +21,7 @@ import {
   type OpenItemFacts,
   type OpenItemHandling,
   type OpenItemOutcome,
+  type OpenItemWorkSession,
   type ProjectDoneNotReadyBody,
   type ProjectClosedQuestion,
   type ProjectDoneRequestDeclineBody,
@@ -94,6 +95,7 @@ import {
   openItemMessage,
   openItemOwed,
   inWorkSessionHands,
+  readOpenItemWorkSessions,
   handBackLandingFix,
   type LandingFixReturnReason,
   OPEN_ITEM_WITH_WORK_SESSION,
@@ -295,6 +297,11 @@ const HAND_CLOSABLE_RESOLUTIONS: Readonly<Record<string, 'HANDLED' | 'WITHDRAWN'
  */
 const ANSWERS_RECONSIDERED_PER_BINDING = 50;
 
+/** Revision 42 (§12.7): the row is in its task's own work session's hands — offered and not handed back. */
+function heldBySession(row: Pick<OpenItemRow, 'workSession'>): boolean {
+  return row.workSession != null && row.workSession.returnedAt === undefined;
+}
+
 /** One exception item, as a reader of the project sees it (§4.8). */
 export interface OpenItemRow {
   itemId: string;
@@ -404,6 +411,9 @@ export interface OpenItemRow {
    *  of "no one acted on this". False on a settled row: nothing is asked of one. Optional for
    *  rolling-version readers, which read its absence as false. */
   coordinatorUnreachable?: boolean;
+  /** The task's own work session the failure went to first (revision 42, §12.7), whether it still holds it or
+   *  handed it back; null for an item never offered to one. */
+  workSession: OpenItemWorkSession<Date> | null;
 }
 
 /** A question filed, as `ask_owner` answers its caller (§5.2 R7). */
@@ -566,6 +576,9 @@ export interface TaskIntegrationStop {
 export interface ProjectOpenItems {
   needsYou: OpenItemRow[];
   withCoordinator: OpenItemRow[];
+  /** "Being fixed by its session" (revision 42, §12.7): the landing failures in their task's own work session's
+   *  hands — nobody's Needs you, and not the coordinator's yet. */
+  withWorkSession: OpenItemRow[];
   startRequest: OpenItemRow | null;
   doneRequest: OpenItemRow | null;
   latestDoneRequestDecline: { note: string; declinedAt: Date } | null;
@@ -3873,8 +3886,10 @@ export class ProjectOpenItemService {
         fuseEpisodeId: true,
         assignedAt: true,
         translation: true,
+        workSessionId: true,
         workSessionOfferedAt: true,
         workSessionReturnedAt: true,
+        workSessionReturnReason: true,
         ...HANDLING_SELECT,
         deliveries: {
           where: { purpose: 'ITEM' },
@@ -3939,8 +3954,15 @@ export class ProjectOpenItemService {
         resolvedByJobId: true,
         resolutionNote: true,
         supersededByItemId: true,
+        integrationJobId: true,
+        workSessionId: true,
+        workSessionOfferedAt: true,
+        workSessionReturnedAt: true,
+        workSessionReturnReason: true,
       },
     });
+    // Revision 42 (§12.7): the task's own work session each offered item went to, and the rounds it asked for.
+    const workSessions = await readOpenItemWorkSessions(this.prisma, [...rows, ...closed]);
     // Which reruns are still in flight: an item is being handled only while the job its coordinator
     // queued is QUEUED or RUNNING (§4.7 H1). A job that ended without a verdict on it — cancelled with
     // its candidate, or answered "nothing to land" — leaves the item open and no longer handled.
@@ -4124,6 +4146,7 @@ export class ProjectOpenItemService {
           coordinator,
         }),
         coordinatorUnreachable: unreachable,
+        workSession: workSessions.get(row.id) ?? null,
       };
     });
     const settledView = closed.map((row): OpenItemRow => {
@@ -4191,6 +4214,7 @@ export class ProjectOpenItemService {
           resolution: row.resolution as OpenItemOutcome['resolution'],
           coordinator,
         }),
+        workSession: workSessions.get(row.id) ?? null,
       };
     });
     const latestRequest = await this.prisma.projectOpenItem.findFirst({
@@ -4208,9 +4232,12 @@ export class ProjectOpenItemService {
         && latestRequest.resolution === 'DECLINED' && latestRequest.resolvedAt
         ? { note: latestRequest.resolutionNote!, declinedAt: latestRequest.resolvedAt }
         : null,
-      needsYou: view.filter((row) => row.assignee === 'OWNER'
+      // Revision 42 (§12.7): an item in its task's own work session's hands is nobody's to act on yet — not the
+      // owner's Needs you, and not among what the coordinator is handling — and is listed apart.
+      needsYou: view.filter((row) => row.assignee === 'OWNER' && !heldBySession(row)
         && row.kind !== START_REQUEST_KIND && row.kind !== DONE_REQUEST_KIND),
-      withCoordinator: view.filter((row) => row.assignee === 'COORDINATOR'),
+      withCoordinator: view.filter((row) => row.assignee === 'COORDINATOR' && !heldBySession(row)),
+      withWorkSession: view.filter(heldBySession),
       startRequest: view.find((row) => row.kind === START_REQUEST_KIND) ?? null,
       doneRequest: view.find((row) => row.kind === DONE_REQUEST_KIND) ?? null,
       settled: settledView,
