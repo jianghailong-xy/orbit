@@ -19,19 +19,32 @@ import (
 
 const runnerBrowserClaudeURL = "https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback&scope=user%3Ainference&code_challenge=abc&code_challenge_method=S256&state=STATE-1"
 
-func TestClaudeCodeCallbackAndItsCode(t *testing.T) {
-	callback, state, ok := claudeCodeCallback(providerClaude, runnerBrowserClaudeURL)
-	if !ok || callback.String() != "https://platform.claude.com/oauth/code/callback" || state != "STATE-1" {
-		t.Fatalf("callback %v state %q ok %v", callback, state, ok)
+const runnerBrowserAntigravityURL = "https://accounts.google.com/o/oauth2/auth?access_type=offline&client_id=fixture.apps.googleusercontent.com&code_challenge=c&code_challenge_method=S256&redirect_uri=https%3A%2F%2Fantigravity.google%2Foauth-callback&response_type=code&scope=openid&state=G-STATE"
+
+func TestCodeCallbackAndItsCode(t *testing.T) {
+	callback, state, paste, ok := codeCallback(providerClaude, runnerBrowserClaudeURL)
+	if !ok || callback.String() != "https://platform.claude.com/oauth/code/callback" || state != "STATE-1" || paste("C") != "C#STATE-1" {
+		t.Fatalf("claude: callback %v state %q ok %v", callback, state, ok)
 	}
-	// Only Claude Code's sign-in is captured; the others keep what they had.
-	for _, engine := range []string{providerCodex, providerKimi, providerAntigravity, providerCursor} {
-		if _, _, ok := claudeCodeCallback(engine, runnerBrowserClaudeURL); ok {
+	// Antigravity's page shows the code alone, and that is what agy takes.
+	gcb, gstate, gpaste, ok := codeCallback(providerAntigravity, runnerBrowserAntigravityURL)
+	if !ok || gcb.String() != "https://antigravity.google/oauth-callback" || gstate != "G-STATE" || gpaste("4/0AUn6Hd") != "4/0AUn6Hd" {
+		t.Fatalf("antigravity: callback %v state %q ok %v", gcb, gstate, ok)
+	}
+	if got := callbackCode("https://antigravity.google/oauth-callback?state=G-STATE&code=4%2F0AUn6Hd__KS36&scope=openid", gcb, gstate); got != "4/0AUn6Hd__KS36" {
+		t.Fatalf("antigravity code = %q", got)
+	}
+	// The device flows need no code back; nothing is taken for them.
+	for _, engine := range []string{providerCodex, providerKimi, providerCursor} {
+		if _, _, _, ok := codeCallback(engine, runnerBrowserClaudeURL); ok {
 			t.Errorf("%s's link was taken for a callback", engine)
 		}
 	}
-	if _, _, ok := claudeCodeCallback(providerClaude, "https://claude.com/cai/oauth/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A1%2Fcb&state=S"); ok {
+	if _, _, _, ok := codeCallback(providerClaude, "https://claude.com/cai/oauth/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A1%2Fcb&state=S"); ok {
 		t.Error("a localhost callback was taken")
+	}
+	if _, _, _, ok := codeCallback(providerAntigravity, "https://accounts.google.com/o/oauth2/auth?redirect_uri=https%3A%2F%2Fantigravity.google%2Foauth-callback"); ok {
+		t.Error("a link without a state was taken")
 	}
 	for address, want := range map[string]string{
 		"https://platform.claude.com/oauth/code/callback?code=CODE-9&state=STATE-1": "CODE-9",
@@ -486,5 +499,30 @@ func TestCloseSignInTab(t *testing.T) {
 				t.Errorf("the blank tab came after the close: %s", joined)
 			}
 		})
+	}
+}
+
+// Antigravity's sign-in: agy is handed the code its callback page shows, as a paste is (submitAntigravityGoogleCode).
+func TestLoginTakesAntigravitysCodeFromTheRunnersBrowser(t *testing.T) {
+	rig := newRunnerBrowserRig(t, providerAntigravity, LoginResultRequest{Status: loginAwaitingCode, URL: runnerBrowserAntigravityURL})
+	rig.relay.mu.Lock()
+	rig.run.google = &antigravityGoogleLoginOutput{url: runnerBrowserAntigravityURL}
+	rig.relay.mu.Unlock()
+	rig.relay.openInLoginBrowser(context.Background(), LoginCommand{Action: "browser", Engine: providerAntigravity, Attempt: "A1"}, &fakeLoginBrowser{})
+	rig.showPage("https://antigravity.google/oauth-callback?state=OTHER&code=WRONG")
+	rig.showPage("https://antigravity.google/oauth-callback?state=G-STATE&code=4%2F0AUn6Hd__KS36&scope=openid")
+	typed := make(chan string, 1)
+	go func() {
+		buf := make([]byte, 256)
+		n, _ := rig.stdin.Read(buf)
+		typed <- string(buf[:n])
+	}()
+	select {
+	case got := <-typed:
+		if got != "4/0AUn6Hd__KS36\r" {
+			t.Fatalf("agy was handed %q", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the code was never handed to agy")
 	}
 }

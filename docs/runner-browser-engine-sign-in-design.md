@@ -1,6 +1,6 @@
 # Engine sign-in in the Orbit Cloud browser: design (v1)
 
-**Status:** **decided** (owner, 2026-11-23); phases 1–3 built for Claude Code and the device flows, Antigravity's capture and the lab walk to come. Q1 B, Q2 A, Q3 A, Q4 A (§7). Builds on `docs/runner-browser-design.md`.
+**Status:** **decided** (owner, 2026-11-23); phases 1–3 built, Antigravity's capture included (2026-11-23); the lab walk per engine to come. Q1 B, Q2 A, Q3 A, Q4 A (§7). Builds on `docs/runner-browser-design.md`.
 
 Today an engine's sign-in on a runner (Settings → the runner → Engines → **Sign in**) hands the owner a link to open
 in their own browser and, for Claude Code and Antigravity, a code to paste back. On the Orbit Cloud runner there is
@@ -96,8 +96,9 @@ account (billing, settings, other products) within their reach. The owner chose 
 - One capture per attempt, reported as `code-taken` (the card shows it signing in); a code the CLI rejects falls back
   to the paste field with today's message.
 - The URL, the code and the state are never logged or reported: only "code taken from the browser".
-- Antigravity keeps the paste for now: its callback must first be confirmed against a live `agy` sign-in; if it is a
-  page with the code in its address, it is captured the same way.
+- Antigravity's callback, seen on a live `agy` sign-in (2026-11-23), is `https://antigravity.google/oauth-callback`,
+  with the code and the state in its address, and its page says to paste the code alone. The runner captures it the
+  same way and hands `agy` that code (`codeCallback`, login_runner_browser.go).
 
 The device flows need none of this: the CLI sees the approval itself.
 
