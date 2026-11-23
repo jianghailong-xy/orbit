@@ -464,9 +464,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     LaunchedEffect(follow) { if (follow) { CardFocus.release(route.id!!); recordHeld = null } }
     LaunchedEffect(placed) {
         if (!placed || !ontoWaitingCard || placedAtCards || route.recordId != null) return@LaunchedEffect
-        placedAtCards = true
         positioning = true
         list.scrollToItem((list.layoutInfo.totalItemsCount - 2 - queuedShown).coerceAtLeast(0))
+        placedAtCards = true
         positioning = false
     }
     // The questions whose answers the turns on screen hand to the coordinator — the window's, and at the live tail the accepted head and
