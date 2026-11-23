@@ -97,7 +97,7 @@ archive at `/root/orbit-cloud-runner-main-dcb75cb6e.tar.gz` on the node.
 
 From then on the image comes with the release (.claude/skills/upgrade/SKILL.md, "Two-stage release"). The build host
 builds `10.66.0.1:5000/orbit-cloud-runner:<commit>` whenever a release changes what the image is built from, and
-pushes it with the other images. The deploy on `10.66.0.4` sets the profile's `runner.image` to it by digest, keeps the
+pushes it with the other images. The deploy on `10.66.0.4` sets the profile's `runner.image` to it by digest and `runner.imageRevision` to the image's source commit (40 hex; what the runner reports as `managed-<sha>`, and what lets the status offer Update Now), keeps the
 profile it replaces beside it, and replaces the apiserver, which reads the profile as it starts. The apiserver's manager
 then moves each runner whose Pod runs another image onto it once that runner is idle: the drain a sleep takes, then a
 wake at once, as the next generation on the same PVC (`rollPreviousImage`). Nothing in flight is cut short; a busy runner
