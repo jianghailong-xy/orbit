@@ -510,10 +510,11 @@ final class ScheduleDisplayTests: XCTestCase {
     }
 
     func testTheDrawerPutsScheduledUnderTasks() {
-        XCTAssertEqual(DrawerWorkLogic.rows(AppSection.workSections, wiki: true, scheduled: true, waitingOnYou: true),
-                       [.projects, .section(.tasks), .scheduled, .wiki, .waitingOnYou, .workspacesHeader, .agents,
+        // No Waiting on you row (docs/mocks/waiting-on-you-removal; the owner, 2026-11-16): Scheduled keeps its own.
+        XCTAssertEqual(DrawerWorkLogic.rows(AppSection.workSections, wiki: true, scheduled: true),
+                       [.projects, .section(.tasks), .scheduled, .wiki, .workspacesHeader, .agents,
                         .openProjects, .sharedWithMe])
-        XCTAssertFalse(DrawerWorkLogic.rows(AppSection.workSections, wiki: true, waitingOnYou: true).contains(.scheduled),
+        XCTAssertFalse(DrawerWorkLogic.rows(AppSection.workSections, wiki: true).contains(.scheduled),
                        "the Mac's source list and an old call leave it out until they draw it")
         XCTAssertEqual(AppSection.scheduled.title, "Scheduled")
     }
