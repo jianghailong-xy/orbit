@@ -37,10 +37,9 @@ the way every machine's is, from the setup card (`docs/first-workspace-contract.
    managed runner skips the guard.
 5. `GET /api/managed-runner` keeps `workspaceId` for older clients and always sends `null`. No client reads it
    after this change.
-6. A `newFolder` on a managed runner that has never reported goes in its image's fixed repos folder,
-   `/home/orbit/orbit-repos` (`MANAGED_RUNNER_REPOS_ROOT`), which every runner version can make a
-   folder in; once it has reported, the usual rule (its home on a `create-workdir/v2` runner) applies, asleep
-   or not. The folder is made at claim, as for every `newFolder`.
+6. A `newFolder` on a managed runner that has never reported goes in its image's home, `/home/orbit`
+   (`MANAGED_RUNNER_HOME`), where every managed image (`create-workdir/v2`) makes it; once it has reported, the
+   usual rule (`newFolderRootFor`, its home on a `create-workdir/v2` runner) applies, asleep or not. The folder is made at claim, as for every `newFolder`.
 
 ### Clients (web, macOS/iOS, Android)
 

@@ -110,8 +110,8 @@ class ManagedRunnerFixtureTest {
 
     @Test fun setupCopyMatchesTheFixture() {
         val setup = fixture.getValue("setup").jsonObject
-        assertEquals(setup["reposRoot"]!!.jsonPrimitive.content, ManagedRunner.REPOS_ROOT)
-        assertEquals(setOf("notice", "folderUnchecked", "reposRoot"), setup.keys)
+        assertEquals(setup["home"]!!.jsonPrimitive.content, ManagedRunner.HOME)
+        assertEquals(setOf("notice", "folderUnchecked", "home"), setup.keys)
         for ((key, words) in mapOf("notice" to ManagedRunner.Setup.NOTICE,
             "folderUnchecked" to ManagedRunner.Setup.FOLDER_UNCHECKED)) {
             assertEquals(setup[key]!!.jsonObject.mapValues { it.value.jsonPrimitive.content }, words)
