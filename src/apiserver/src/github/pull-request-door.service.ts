@@ -21,11 +21,20 @@ import { deliverIntegrationAftermath } from '../runner-api/integration-aftermath
 import { applyIntegrationJobResult, resultTransactionRetry } from '../runner-api/integration-job-relay';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { followWikiDocsAfterSessionMerge } from '../wiki/wiki-docs-follow';
-import { GithubCallError, GithubClient, type GithubPullRequestReading } from './github-api.client';
+import { GithubCallError, GithubClient, type GithubPullRequestCheck, type GithubPullRequestReading } from './github-api.client';
 import { type GithubAppCredentials, GithubAppConfigService } from './github-app-config.service';
 import { GithubInstallationGrants } from './github-installation-grants';
 import { landingCommandFields, landingModeOf } from '../projects/pull-request-landing';
-import { decidePullRequest, mergeMethodFor, mergeMethodRefused, type PullRequestSubject } from './pull-request-door';
+import { decidePullRequest, mergeMethodFor, mergeMethodRefused, mergeRefusedForMovedBase, type PullRequestSubject } from './pull-request-door';
+import { githubCheckResult } from '../projects/pull-request-landing';
+import { IntegrationJobRefused } from '../runner-api/integration-job-relay';
+import { SessionsService } from '../sessions/sessions.service';
+import {
+  SESSION_FIX_ROUNDS,
+  pullRequestFixMessage,
+  pullRequestFixTurnId,
+  pullRequestFixTurnPrefix,
+} from '../sessions/pull-request-fix-turn';
 
 /** A server token is used again until this long before it expires; it is never handed to a runner (§12). */
 const TOKEN_REUSE_MARGIN_MS = 5 * 60_000;
@@ -43,6 +52,16 @@ export const REREAD_BATCH = 50;
 
 /** How often one row's read may repeat back to back when a merge it made needs reading again. */
 const READS_PER_ADVANCE = 3;
+
+/** The most failed required checks one J-T16 records, each with its log. */
+const FAILED_CHECKS_KEPT = 3;
+
+/** What GitHub said that ends the attempt waiting on a pull request without landing it (§4.2). */
+type PullRequestFailure =
+  | { kind: 'CHECK_FAILED'; checks: IntegrationCheckResult[] }
+  | { kind: 'TARGET_MOVED'; counted: boolean; condition: string | null }
+  | { kind: 'CLOSED' }
+  | { kind: 'HEAD_CHANGED' };
 
 /**
  * The pull request door (docs/design/protected-branch-landing.md §4): everything Orbit does on GitHub for a landing
@@ -80,6 +99,8 @@ export class PullRequestDoorService implements OnApplicationBootstrap, OnModuleD
     @Optional() private readonly realtime?: RealtimeService,
     /** Which process re-reads. `@Optional()` for a spec that calls `tick` itself. */
     @Optional() private readonly leader?: ControlPlaneLeader,
+    /** A session's Merge whose check failed or whose target moved (§4.6): its fix turn and its merge again. */
+    @Optional() private readonly sessions?: SessionsService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -214,11 +235,13 @@ export class PullRequestDoorService implements OnApplicationBootstrap, OnModuleD
       where: { id: row.id, state: 'OPEN' },
       data: {
         condition: verdict.condition,
-        checks: verdict.checks as unknown as Prisma.InputJsonValue,
+        // What the clients read (§8): each check's name, whether it is required, how it stands and its link.
+        checks: verdict.checks.map(({ name, required, state, url, conclusion }) => ({ name, required, state, url, conclusion })) as unknown as Prisma.InputJsonValue,
         observedAt: this.now(),
       },
     });
-    switch (verdict.decision.kind) {
+    const decision = verdict.decision;
+    switch (decision.kind) {
       case 'MERGED':
         await this.landed(row, reading, token, fullName);
         return false;
@@ -227,14 +250,229 @@ export class PullRequestDoorService implements OnApplicationBootstrap, OnModuleD
         // attempt was stopped (J-T18) stays open for the subject's next attempt.
         if (!(await this.waitedOn(row))) return false;
         return this.merge(row, reading, token, fullName);
+      case 'CHECK_FAILED': {
+        if (!(await this.waitedOn(row))) return false;
+        const failed = await this.failedChecks(row, reading, decision.failed, token, fullName);
+        await this.fail(row, reading, { kind: 'CHECK_FAILED', checks: failed });
+        return false;
+      }
+      case 'TARGET_MOVED':
+        if (!(await this.waitedOn(row))) return false;
+        await this.fail(row, reading, { kind: 'TARGET_MOVED', counted: false, condition: verdict.condition });
+        return false;
       case 'CLOSED':
+        await this.fail(row, reading, { kind: 'CLOSED' });
+        return false;
       case 'HEAD_CHANGED':
-        // J-T19 and J-T20 are the failure-path task's: the landing keeps waiting, and says why in the logs.
-        this.logger.warn(`pull request #${row.number} of ${fullName}: ${verdict.decision.kind}, left to the failure path`);
+        if (!(await this.waitedOn(row))) return false;
+        await this.fail(row, reading, { kind: 'HEAD_CHANGED' });
         return false;
       case 'WAIT':
+        if (verdict.condition === 'REVIEW_REQUIRED') await this.announceReview(row, reading);
         return false;
     }
+  }
+
+  /**
+   * J-T16's GitHub checks (§4.5 "The log"): each required check that failed, with the log of the GitHub Actions job
+   * behind it (Actions: read), or what the check said about itself and its link for any other. A log GitHub does not
+   * answer is a check recorded with what it said about itself.
+   */
+  private async failedChecks(
+    row: GithubPullRequest, reading: GithubPullRequestReading, failed: GithubPullRequestCheck[], token: string, fullName: string,
+  ): Promise<IntegrationCheckResult[]> {
+    const results: IntegrationCheckResult[] = [];
+    for (const check of failed.slice(0, FAILED_CHECKS_KEPT)) {
+      const log = check.actionsJobId !== null
+        ? await this.github.actionsJobLog(token, fullName, check.actionsJobId).catch((error) => {
+          this.logger.warn(`log of check "${check.name}" on pull request #${row.number} not read: ${describe(error)}`);
+          return null;
+        })
+        : null;
+      results.push(githubCheckResult({
+        name: check.name, url: check.url, conclusion: check.conclusion, log, summary: check.summary,
+        pullRequest: { number: reading.number, url: reading.url }, headSha: reading.headSha,
+      }));
+    }
+    return results;
+  }
+
+  /**
+   * J-T16, J-T17, J-T19 and J-T20 (§4.2, §4.5): what GitHub said ends the attempt waiting on this pull request — a
+   * job through the result transaction every landing ends in, a session's Merge through its own (§4.6). A pull
+   * request nobody waits on any more is only marked closed when GitHub closed it.
+   */
+  private async fail(row: GithubPullRequest, reading: GithubPullRequestReading, failure: PullRequestFailure): Promise<void> {
+    if (row.landingId) {
+      const ended = await this.failJob(row, reading, failure);
+      if (ended) return;
+    } else if (row.sessionId) {
+      const ended = await this.failSessionMerge(row, reading, failure);
+      if (ended) return;
+    }
+    if (failure.kind === 'CLOSED') {
+      await this.prisma.githubPullRequest.updateMany({
+        where: { id: row.id, state: 'OPEN' },
+        data: { state: 'CLOSED', closedBy: reading.closedBy, closedAt: this.now(), condition: null },
+      });
+    }
+  }
+
+  /** The job waiting on this pull request ends as GitHub's answer says, and its aftermath follows. False: none waits. */
+  private async failJob(row: GithubPullRequest, reading: GithubPullRequestReading, failure: PullRequestFailure): Promise<boolean> {
+    const job = await this.prisma.projectIntegrationJob.findFirst({
+      where: { pullRequestId: row.id, state: 'PULL_REQUEST', ownerId: row.ownerId },
+      select: {
+        id: true, claimGeneration: true, sourceSha: true, targetShaBefore: true, upstreamSha: true, mainSyncSha: true,
+        testedSha: true, testedTreeSha: true, aheadOfUpstream: true, checks: true,
+      },
+    });
+    if (!job) return false;
+    const pullRequest = { number: reading.number, url: reading.url };
+    const ran = (Array.isArray(job.checks) ? job.checks : []) as unknown as IntegrationCheckResult[];
+    const body: IntegrationJobResultRequest = {
+      claimGeneration: job.claimGeneration.toString(),
+      leaseOwner: '',
+      state: failure.kind === 'CHECK_FAILED' ? 'CHECK_FAILED' : 'ERROR',
+      phase: 'PUSH',
+      sourceSha: job.sourceSha,
+      targetShaBefore: job.targetShaBefore,
+      upstreamSha: job.upstreamSha,
+      mainSyncSha: job.mainSyncSha,
+      testedSha: job.testedSha,
+      testedTreeSha: job.testedTreeSha,
+      aheadOfUpstream: job.aheadOfUpstream,
+      checks: failure.kind === 'CHECK_FAILED' ? [...ran, ...failure.checks] : ran,
+      ...jobFailureCode(row, reading, failure, pullRequest),
+    };
+    try {
+      const applied = await applyIntegrationJobResult(
+        this.prisma,
+        { jobId: job.id, ownerId: row.ownerId, body },
+        resultTransactionRetry(this.logger),
+        undefined,
+        {
+          pullRequestId: row.id, number: reading.number, url: reading.url, mergeMethod: null, mergedBy: null,
+          ...(failure.kind === 'TARGET_MOVED' ? { catchUp: { counted: failure.counted } } : {}),
+          ...(failure.kind === 'CLOSED' ? { closedBy: reading.closedBy } : {}),
+        },
+      );
+      await this.jobEvent(row.id, `pull-request:${failure.kind.toLowerCase()}:${row.headSha}`, pullRequestFailureFact(failure, reading), job.id);
+      await deliverIntegrationAftermath({
+        prisma: this.prisma,
+        logger: this.logger,
+        promotions: this.promotions,
+        mergeReceipts: this.mergeReceipts,
+        openItems: this.openItems,
+        push: this.push,
+      }, applied.after, applied.answer.openItemId);
+    } catch (error) {
+      // Another read ended it first (a webhook and the re-read at once): nothing more to do.
+      if (error instanceof IntegrationJobRefused && error.refusal === 'STALE_CLAIM') return true;
+      throw error;
+    }
+    this.announce(row);
+    return true;
+  }
+
+  /**
+   * §4.6 step 4 for a session's Merge waiting on this pull request, in one transaction under the session's lock: a
+   * required check that failed records `error` naming it, and under D5 (the owner's ruling of 2026-11-23) hands the
+   * check's log to the session as a platform turn whose end merges again into the same pull request, at most
+   * {@link SESSION_FIX_ROUNDS} times; a moved target queues the merge again; closed and a head Orbit did not push record
+   * `error` with the reason. False: the session no longer waits on it.
+   */
+  private async failSessionMerge(row: GithubPullRequest, reading: GithubPullRequestReading, failure: PullRequestFailure): Promise<boolean> {
+    const sessionId = row.sessionId as string;
+    const which = `pull request #${reading.number}`;
+    const mergeError = failure.kind === 'CHECK_FAILED'
+      ? `The required check "${failure.checks[0]?.command ?? 'a check'}" failed on ${which}: ${failure.checks[0]?.github?.url ?? reading.url}`
+      : failure.kind === 'CLOSED'
+        ? `${reading.closedBy ? `@${reading.closedBy}` : 'Somebody'} closed ${which} without merging it: ${reading.url}`
+        : failure.kind === 'HEAD_CHANGED'
+          ? `${which} holds ${reading.headSha.slice(0, 7)}, a commit Orbit did not push, so Orbit will not merge it: ${reading.url}`
+          : null;
+    const ended = await withTransactionRetry(this.prisma, async (tx) => {
+      const [session] = await tx.$queryRaw<Array<{ mergeStatus: string | null; mergePullRequestId: string | null }>>(Prisma.sql`
+        SELECT "merge_status" AS "mergeStatus", "merge_pull_request_id" AS "mergePullRequestId"
+          FROM "session" WHERE "id" = ${sessionId}::uuid AND "owner_id" = ${row.ownerId}::uuid FOR UPDATE`);
+      if (!session || session.mergeStatus !== 'pull_request' || session.mergePullRequestId !== row.id) return false;
+      if (failure.kind === 'CLOSED') {
+        await tx.githubPullRequest.updateMany({
+          where: { id: row.id, state: 'OPEN' },
+          data: { state: 'CLOSED', closedBy: reading.closedBy, closedAt: this.now(), condition: null },
+        });
+      }
+      if (failure.kind === 'TARGET_MOVED') return true;
+      await tx.session.update({ where: { id: sessionId }, data: { mergeStatus: 'error', mergeError } });
+      return true;
+    }, loggedRetry(this.logger, 'pullRequestDoor.failSessionMerge'));
+    if (!ended) return false;
+    if (failure.kind === 'TARGET_MOVED') {
+      // The merge queued again, into the same landing branch (§4.6 step 4): it rebuilds on the new tip.
+      await this.sessions?.mergeAgainForPullRequest(sessionId, row.id, branchOf(row.baseRef));
+    } else if (failure.kind === 'CHECK_FAILED') {
+      await this.sendSessionFix(row, reading, failure.checks);
+    }
+    this.announce(row);
+    return true;
+  }
+
+  /**
+   * D5 (§4.6): the failing check's log, handed to the session as one platform turn per head Orbit pushed, keyed
+   * `pull-request-fix:v1:<pull request>:<head>`; its end merges again (`mergeAfterTurnAt`, written in the turn's own
+   * transaction), so the session's next commit updates the same pull request. At most {@link SESSION_FIX_ROUNDS}.
+   */
+  private async sendSessionFix(row: GithubPullRequest, reading: GithubPullRequestReading, checks: IntegrationCheckResult[]): Promise<void> {
+    if (!this.sessions || !row.headSha) return;
+    const sessionId = row.sessionId as string;
+    const rounds = await this.prisma.conversationTurn.count({
+      where: { sessionId, clientTurnId: { startsWith: pullRequestFixTurnPrefix(row.id) } },
+    });
+    const key = pullRequestFixTurnId(row.id, row.headSha);
+    const sent = await this.prisma.conversationTurn.count({ where: { sessionId, clientTurnId: key } });
+    if (sent > 0 || rounds >= SESSION_FIX_ROUNDS) return;
+    const session = await this.prisma.session.findUnique({ where: { id: sessionId }, select: { title: true } });
+    const content = pullRequestFixMessage({
+      title: session?.title ?? null,
+      targetBranch: branchOf(row.baseRef),
+      pullRequest: { number: reading.number, url: reading.url },
+      headSha: row.headSha,
+      checks,
+      round: rounds + 1,
+      rounds: SESSION_FIX_ROUNDS,
+    });
+    await this.sessions.createTurn(row.ownerId, sessionId, { clientTurnId: key, content, intent: 'NEXT_TURN' }, {
+      participateSendTransaction: async (tx) => {
+        await tx.session.update({
+          where: { id: sessionId },
+          data: { mergeAfterTurnAt: this.now(), mergeAfterTurnTarget: branchOf(row.baseRef) },
+        });
+      },
+    }).catch((error) => this.logger.warn(`the failing check of pull request #${reading.number} was not handed to its session: ${describe(error)}`));
+  }
+
+  /**
+   * §4.5 "Review required" and §11.3: the first read that finds the pull request waiting for a review tells the owner,
+   * once per pull request (`review_announced_at`, a compare-and-set), with the link.
+   */
+  private async announceReview(row: GithubPullRequest, reading: GithubPullRequestReading): Promise<void> {
+    const claimed = await this.prisma.githubPullRequest.updateMany({
+      where: { id: row.id, state: 'OPEN', reviewAnnouncedAt: null },
+      data: { reviewAnnouncedAt: this.now() },
+    });
+    if (claimed.count !== 1) return;
+    await this.jobEvent(row.id, `pull-request:review:${reading.number}`, {
+      data: { step: 'WAITING_FOR_REVIEW', number: reading.number, url: reading.url },
+      text: `Waiting for review on pull request #${reading.number}`,
+    });
+    await this.push?.notifyOwner(row.ownerId, {
+      title: 'Waiting for review',
+      message: `Pull request #${reading.number} is waiting for review`,
+      priority: 'normal',
+      url: reading.url,
+    }).catch((error) => this.logger.warn(`review notice for pull request #${reading.number} not sent: ${describe(error)}`));
+    this.announce(row);
   }
 
   /**
@@ -286,6 +524,11 @@ export class PullRequestDoorService implements OnApplicationBootstrap, OnModuleD
         if (error instanceof GithubCallError && error.status === 405 && mergeMethodRefused(error.githubError)) {
           refused.add(method);
           continue;
+        }
+        if (error instanceof GithubCallError && error.status === 405 && mergeRefusedForMovedBase(error.githubError)) {
+          // J-T17, counted (§4.5): GitHub refused the merge because the base moved since Orbit read it.
+          await this.fail(row, reading, { kind: 'TARGET_MOVED', counted: true, condition: 'BEHIND' });
+          return false;
         }
         if (error instanceof GithubCallError && (error.status === 405 || error.status === 409)) {
           // 405: GitHub will not merge it yet; 409: the head moved (J-T20, the failure path's). The next read decides.
@@ -560,10 +803,13 @@ export class PullRequestDoorService implements OnApplicationBootstrap, OnModuleD
     };
   }
 
-  /** A line on the landing timeline of the job waiting on this pull request (§2.9 LS2), after the fact committed. */
-  private async jobEvent(pullRequestId: string, key: string, fact: { data: Record<string, unknown>; text: string }): Promise<void> {
+  /**
+   * A line on the landing timeline of the job waiting on this pull request (§2.9 LS2), after the fact committed — or of
+   * the job named, which a failure just ended.
+   */
+  private async jobEvent(pullRequestId: string, key: string, fact: { data: Record<string, unknown>; text: string }, jobId?: string): Promise<void> {
     const job = await this.prisma.projectIntegrationJob.findFirst({
-      where: { pullRequestId, state: 'PULL_REQUEST' },
+      where: jobId ? { id: jobId, pullRequestId } : { pullRequestId, state: 'PULL_REQUEST' },
       select: { id: true, claimGeneration: true, round: true },
     });
     if (!job) return;
@@ -576,6 +822,60 @@ export class PullRequestDoorService implements OnApplicationBootstrap, OnModuleD
   /** The owner's clients read the landing or the session again. */
   private announce(row: Pick<GithubPullRequest, 'sessionId'>): void {
     if (row.sessionId) this.realtime?.publishSessionUpdated(row.sessionId);
+  }
+}
+
+/** The error code and detail a job's J-T17, J-T19 or J-T20 is written with; a J-T16 has none. */
+function jobFailureCode(
+  row: GithubPullRequest, reading: GithubPullRequestReading, failure: PullRequestFailure, pullRequest: { number: number; url: string },
+): Pick<IntegrationJobResultRequest, 'errorCode' | 'errorDetail'> {
+  switch (failure.kind) {
+    case 'CHECK_FAILED':
+      return {};
+    case 'TARGET_MOVED':
+      return {
+        errorCode: 'TARGET_MOVED',
+        errorDetail: failure.counted
+          ? { pullRequest, pullRequestMergeRefused: true, message: `GitHub refused to merge pull request #${pullRequest.number}: ${branchOf(row.baseRef)} moved since Orbit read it.` }
+          : { pullRequest, pullRequestCatchUp: true, condition: failure.condition, message: `${branchOf(row.baseRef)} moved since pull request #${pullRequest.number} was built. Orbit is catching up.` },
+      };
+    case 'CLOSED':
+      return {
+        errorCode: 'PULL_REQUEST_CLOSED',
+        errorDetail: {
+          pullRequest, closedBy: reading.closedBy,
+          message: `${reading.closedBy ? `@${reading.closedBy}` : 'Somebody'} closed pull request #${pullRequest.number} without merging it.`,
+        },
+      };
+    case 'HEAD_CHANGED':
+      return {
+        errorCode: 'PULL_REQUEST_HEAD_CHANGED',
+        errorDetail: {
+          pullRequest, pushedSha: row.headSha, foundSha: reading.headSha,
+          message: `Pull request #${pullRequest.number} holds ${reading.headSha.slice(0, 7)}, not the commit Orbit pushed (${(row.headSha ?? '').slice(0, 7)}). Orbit merges only what it checked.`,
+        },
+      };
+  }
+}
+
+/** The landing timeline's line about what GitHub said (§2.9). */
+function pullRequestFailureFact(failure: PullRequestFailure, reading: GithubPullRequestReading): { data: Record<string, unknown>; text: string } {
+  const which = `pull request #${reading.number}`;
+  switch (failure.kind) {
+    case 'CHECK_FAILED':
+      return {
+        data: { step: 'CHECK_FAILED', number: reading.number, checks: failure.checks.map((check) => ({ name: check.command, url: check.github?.url ?? null })) },
+        text: `Required check "${failure.checks[0]?.command ?? 'a check'}" failed on ${which}`,
+      };
+    case 'TARGET_MOVED':
+      return {
+        data: { step: 'TARGET_MOVED', number: reading.number, counted: failure.counted },
+        text: failure.counted ? `GitHub refused to merge ${which}: the base moved` : `Catching up: the base moved under ${which}`,
+      };
+    case 'CLOSED':
+      return { data: { step: 'CLOSED', number: reading.number, closedBy: reading.closedBy }, text: `${which} was closed on GitHub` };
+    case 'HEAD_CHANGED':
+      return { data: { step: 'HEAD_CHANGED', number: reading.number, headSha: reading.headSha }, text: `${which} holds a commit Orbit did not push` };
   }
 }
 

@@ -13,6 +13,8 @@ import {
   type SessionMergeResultRequest,
 } from '@orbit/shared';
 import { redactSecrets } from '../common/secret-redaction';
+import { redactCheckOutput } from '../runner-api/check-output-redaction';
+import { FAILURE_LINES_HEADING } from './landing-fix-turn';
 import { appendIntegrationJobEvent } from './project-integration-event';
 import { reportedLandingAuthority } from './task-checkpoint.service';
 
@@ -238,6 +240,66 @@ export async function recordPullRequestResult(
     text: `Pushed ${headSha.slice(0, 7)} for a pull request`,
   });
   return { pullRequestId };
+}
+
+// ── §4.5 J-T16: a required check that failed on the pull request ───────────────────────────────────────────────
+
+/** The most failure lines a GitHub check's record keeps, and the longest one. */
+const GITHUB_FAILURE_LINES = 40;
+const GITHUB_FAILURE_LINE_CHARS = 300;
+/** GitHub Actions' timestamp in front of every log line. */
+const ACTIONS_TIMESTAMP = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z\s?/;
+
+/**
+ * The lines of a failed check's log a person reads first (§4.5 "The log"): GitHub Actions' own `##[error]` lines when it
+ * wrote any, else every line that says it errored or failed, the last {@link GITHUB_FAILURE_LINES} of them.
+ */
+export function githubFailureLines(text: string): string[] {
+  const lines = text.split(/\r?\n/).map((line) => line.replace(ACTIONS_TIMESTAMP, '').trimEnd()).filter((line) => line.trim() !== '');
+  const marked = lines.filter((line) => line.includes('##[error]'));
+  const picked = marked.length > 0
+    ? marked.map((line) => line.replace('##[error]', '').trim())
+    : lines.filter((line) => /\b(error|errors|fail|failed|failure|failing|panic)\b/i.test(line));
+  return picked.slice(-GITHUB_FAILURE_LINES).map((line) => (line.length > GITHUB_FAILURE_LINE_CHARS
+    ? `${line.slice(0, GITHUB_FAILURE_LINE_CHARS - 1)}…`
+    : line));
+}
+
+/**
+ * One required check that failed on the pull request, as the job's `checks` keep it (J-T16): a GITHUB_CHECK whose
+ * `outputTail` is the log's tail (or, for a check that is not a GitHub Actions job, what it said about itself),
+ * followed by the failure lines under the heading the runner uses, so the landing-fix turn reads it as it reads a
+ * runner's check. Redacted here; the result door clips it as it clips every check.
+ */
+export function githubCheckResult(input: {
+  name: string;
+  url: string | null;
+  conclusion: string | null;
+  /** The Actions job's log, when there is one. */
+  log: string | null;
+  /** What the check said about itself: a check run's title, summary and text, or a status's description. */
+  summary: string | null;
+  pullRequest: { number: number; url: string };
+  headSha: string;
+}): IntegrationCheckResult {
+  const text = redactCheckOutput(input.log ?? input.summary ?? '');
+  const lines = text === '' ? [] : input.log ? githubFailureLines(text) : text.split(/\r?\n/).filter((line) => line.trim() !== '').slice(0, GITHUB_FAILURE_LINES);
+  const tail = text.slice(-12_000);
+  return {
+    name: 'GITHUB_CHECK',
+    command: input.name,
+    expectedExitCode: 0,
+    exitCode: 1,
+    timedOut: false,
+    durationMs: 0,
+    outputTail: [tail, ...(lines.length > 0 ? ['', FAILURE_LINES_HEADING, ...lines] : [])].join('\n'),
+    github: {
+      conclusion: input.conclusion ?? 'failure',
+      url: input.url,
+      pullRequest: input.pullRequest,
+      headSha: input.headSha,
+    },
+  };
 }
 
 // ── the read model (§8) ─────────────────────────────────────────────────────────────────────────────────────────

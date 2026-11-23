@@ -19,6 +19,7 @@ import {
   SESSION_REPLY_TURN_KEY_PREFIX,
   WATCH_TURN_KEY_PREFIX,
 } from './watch-turn-key';
+import { PULL_REQUEST_FIX_TURN_KEY_PREFIX } from './pull-request-fix-turn';
 
 /**
  * Whether the control plane wrote this turn itself, rather than filing a message somebody sent.
@@ -30,7 +31,8 @@ import {
  * its reviewer, a reviewer's return to the run, the owner's answers to the reviewer — an evidence
  * revision handed to the session that dispatched its task, and a send-back's note handed to the
  * run that submitted the revision, a coordinator asked for its handoff note (`coordinator-handoff:v1:`),
- * a failed landing handed to its task's own work session (`landing-fix:v1:`),
+ * a failed landing handed to its task's own work session (`landing-fix:v1:`), a session Merge's failed
+ * pull request check handed back to that session (`pull-request-fix:v1:`),
  * and the re-send of any of those after a failed turn
  * (`auto-retry:orbit:`; a re-send of somebody's own words keeps the bare `auto-retry:` key). A coordinator's
  * wake delivery and a criteria decision's reply are keyed by `derivedUuid`, which no client mints.
@@ -63,6 +65,7 @@ export function isOrbitAuthoredTurn(clientTurnId: string | null | undefined): bo
     AUTO_RETRY_ORBIT_TURN_KEY_PREFIX,
     COORDINATOR_HANDOFF_TURN_PREFIX,
     LANDING_FIX_TURN_KEY_PREFIX,
+    PULL_REQUEST_FIX_TURN_KEY_PREFIX,
     UPDATE_NOW_CONTINUATION_TURN_PREFIX,
   ];
   return prefixes.some((prefix) => clientTurnId.startsWith(prefix)) || isDerivedUuid(clientTurnId);

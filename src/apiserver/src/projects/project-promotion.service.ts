@@ -948,6 +948,12 @@ export interface PromotionJobOutcome {
    */
   requeuedUnderConfirmation?: boolean;
   /**
+   * J-T17 (docs/design/protected-branch-landing.md §4.5): the landing's pull request fell behind its target and the
+   * next attempt is already on its way — a generation under the same confirmation, or, for an Automatic one, the
+   * check on the new main. Nobody has anything to fix, so the relay opens no item for it either.
+   */
+  caughtUp?: boolean;
+  /**
    * A moved-main fact this transition produced, for the relay to write into the timeline AFTER the
    * job's own result lines: an automatic landing's recheck (M-T12) or the next generation under an
    * owner's confirmation (J-T13). The promotion decides it; the relay owns the job's claim and round
@@ -1484,6 +1490,13 @@ export async function applyPromotionJobResult(
      *  its merge holds: the receipts say the server recorded it and name it. */
     pullRequest?: MergeReceiptPullRequest;
     landedTreeSha?: string | null;
+    /**
+     * J-T17: the job waited on a pull request whose target moved, and the pull request door ended it `ERROR /
+     * TARGET_MOVED` to catch up (docs/design/protected-branch-landing.md §4.5). `counted` is false for a catch-up —
+     * GitHub said the pull request is behind, or the base moved before Orbit merged — and true for a merge GitHub
+     * refused because the base moved, which counts toward J-T13's three and `AUTOMATIC_MERGE_ATTEMPTS`.
+     */
+    pullRequestCatchUp?: { counted: boolean };
   },
 ): Promise<PromotionJobOutcome | null> {
   const promotion = await tx.projectPromotion.findUnique({
@@ -1583,6 +1596,18 @@ export async function applyPromotionJobResult(
   // LAND_PROMOTION.
   if (input.state === 'READY' && promotion.confirmedAutomatically) {
     return automaticLandingCameBack(tx, promotion, input);
+  }
+  // J-T17 (docs/design/protected-branch-landing.md §4.5): the landing's pull request fell behind main. The next attempt
+  // rebuilds on the new tip, runs Orbit's checks again (M5) and pushes to the same landing branch, so the same pull
+  // request updates: under the same confirmation for the owner's, through the check on the new main for Automatic.
+  if (input.state === 'ERROR' && input.errorCode === 'TARGET_MOVED' && input.pullRequestCatchUp) {
+    const counted = input.pullRequestCatchUp.counted;
+    const next = promotion.confirmedAutomatically
+      ? (counted
+        ? await automaticLandingCameBack(tx, promotion, input)
+        : await checkAgainOnMovedMain(tx, promotion, { endedJobId: input.jobId, moved: null, attempt: 0 }))
+      : await landAgainAfterMovedUpstream(tx, promotion, { ...input, counted });
+    return next.state === 'BLOCKED' || next.openApproval ? next : { ...next, caughtUp: true };
   }
   // J-T13, the owner-confirmed half (owner decision 2026-10-19, option B): the first push that was
   // refused TARGET_MOVED ends this landing only. The candidate keeps the owner's confirmation, and
@@ -1780,7 +1805,12 @@ async function automaticLandingCameBack(
       promotionId: promotion.id,
       kind: 'LAND_PROMOTION',
       confirmedAutomatically: true,
-      state: 'READY',
+      OR: [
+        { state: 'READY' },
+        // A merge GitHub refused because main moved under the landing's pull request counts as one that found main
+        // moved (§4.5); a catch-up does not.
+        { state: 'ERROR', errorCode: 'TARGET_MOVED', errorDetail: { path: ['pullRequestMergeRefused'], equals: true } },
+      ],
       id: { not: input.jobId },
     },
   });
@@ -1881,6 +1911,8 @@ async function landAgainAfterMovedUpstream(
     conflicts: string[];
     sourceSha: string | null;
     movedCommits?: UpstreamMovedCommitsEnriched | null;
+    /** False for a pull request's catch-up (J-T17), which is not one of the three. */
+    counted?: boolean;
   },
 ): Promise<PromotionJobOutcome> {
   const blocked = () => blockPromotion(tx, promotion.id, input.checks as unknown as Prisma.InputJsonValue,
@@ -1893,18 +1925,19 @@ async function landAgainAfterMovedUpstream(
   // the instant the app writes `confirmed_at` a few statements later — so a `created_at` boundary
   // would leave out the first landing of the confirmation. The claim happens after that transaction
   // commits, on both counts.
-  const earlier = await tx.projectIntegrationJob.count({
-    where: {
-      promotionId: promotion.id,
-      kind: 'LAND_PROMOTION',
-      confirmedAutomatically: false,
-      state: 'ERROR',
-      errorCode: 'TARGET_MOVED',
-      id: { not: input.jobId },
-      ...(promotion.confirmedAt ? { claimedAt: { gte: promotion.confirmedAt } } : {}),
-    },
-  });
-  if (earlier + 1 >= PROMOTION_LAND_ATTEMPTS) return blocked();
+  const moved = {
+    promotionId: promotion.id,
+    kind: 'LAND_PROMOTION',
+    confirmedAutomatically: false,
+    state: 'ERROR',
+    errorCode: 'TARGET_MOVED',
+    id: { not: input.jobId },
+    ...(promotion.confirmedAt ? { claimedAt: { gte: promotion.confirmedAt } } : {}),
+  } satisfies Prisma.ProjectIntegrationJobWhereInput;
+  // A pull request's catch-up (J-T17) is none of the three, before or now (§4.5).
+  const earlier = await tx.projectIntegrationJob.count({ where: moved })
+    - await tx.projectIntegrationJob.count({ where: { ...moved, errorDetail: { path: ['pullRequestCatchUp'], equals: true } } });
+  if (input.counted !== false && earlier + 1 >= PROMOTION_LAND_ATTEMPTS) return blocked();
   const codebase = await tx.projectCodebase.findUnique({
     where: { id: promotion.codebaseId },
     select: { canonicalRepoUrl: true },
@@ -1937,7 +1970,9 @@ async function landAgainAfterMovedUpstream(
     // refused, after that attempt's answer.
     movedMain: {
       kind: 'NEXT_GENERATION',
-      text: movedMainText(input.movedCommits ?? null, 're-checking before merging'),
+      text: input.counted === false
+        ? 'main moved since the pull request was opened — catching up with main'
+        : movedMainText(input.movedCommits ?? null, 're-checking before merging'),
       data: {
         nextJobId,
         ...(input.movedCommits ? { upstreamMovedCommits: input.movedCommits } : {}),

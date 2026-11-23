@@ -4660,7 +4660,15 @@ export interface IntegrationCheckSpec {
 }
 
 /** What one check came to. `exitCode` is null when the command never produced one. */
-export interface IntegrationCheckResult extends Omit<IntegrationCheckSpec, 'timeoutSeconds'> {
+export interface IntegrationCheckResult extends Omit<IntegrationCheckSpec, 'timeoutSeconds' | 'name'> {
+  /**
+   * The runner's three checks, or GITHUB_CHECK: a required check GitHub ran on the landing's pull request and that
+   * failed (docs/design/protected-branch-landing.md §4.5 J-T16), written by the server, never reported by a runner.
+   * Its `command` is the check's name on GitHub, `outputTail` the clipped, redacted log, and `github` the rest.
+   */
+  name: IntegrationCheckSpec['name'] | 'GITHUB_CHECK';
+  /** Set on a GITHUB_CHECK only. */
+  github?: IntegrationGithubCheck;
   scope?: 'COMBINED' | 'BASELINE';
   /** The exact tree measured by the baseline check, before it ran (K4). */
   treeSha?: string;
@@ -4674,6 +4682,17 @@ export interface IntegrationCheckResult extends Omit<IntegrationCheckSpec, 'time
   durationMs: number;
   /** The last 16 KB of combined output — what a person reads to know why it is red. */
   outputTail: string;
+}
+
+/** A required check GitHub ran on a landing's pull request, as a GITHUB_CHECK result records it (§4.5). */
+export interface IntegrationGithubCheck {
+  /** GitHub's conclusion: failure, timed_out, cancelled, action_required, startup_failure, or a status's error. */
+  conclusion: string;
+  /** The check's page on GitHub. */
+  url: string | null;
+  pullRequest: { number: number; url: string };
+  /** The head the check ran on: the commit Orbit pushed. */
+  headSha: string;
 }
 
 /**

@@ -1,6 +1,6 @@
 import { Prisma, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
-import { INTEGRATION_CLAIM_STALE_MS } from '@orbit/shared';
+import { INTEGRATION_CLAIM_STALE_MS, type IntegrationGithubCheck } from '@orbit/shared';
 import { RELEASE_WORK_SELECT, releaseFinishedTheWork } from '../common/session-release';
 import { LANDING_FIX_TURN_KEY_PREFIX } from '../sessions/landing-fix-turn-key';
 import { notifyRunnerWakeOnCommit } from '../realtime/runner-wake';
@@ -268,7 +268,9 @@ export interface IntegrationCheckResult {
   skipped?: 'PATHS_EXEMPT' | 'TASK_EXEMPT';
   files?: string[];
   reason?: string;
-  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK';
+  /** GITHUB_CHECK: a required check that failed on the landing's pull request, written by the server (J-T16). */
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK' | 'GITHUB_CHECK';
+  github?: IntegrationGithubCheck;
   command: string;
   expectedExitCode: number;
   exitCode: number | null;

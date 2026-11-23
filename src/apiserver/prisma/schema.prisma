@@ -867,6 +867,8 @@ model GithubPullRequest {
   closedBy       String?   @map("closed_by")
   /// When Orbit last read the pull request from GitHub; the re-read takes the longest unread first (§4.7).
   observedAt     DateTime? @map("observed_at") @db.Timestamptz(3)
+  /// When the owner was told the pull request waits for a review (§4.5, §11.3): once per pull request (1547).
+  reviewAnnouncedAt DateTime? @map("review_announced_at") @db.Timestamptz(3)
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   mergedAt       DateTime? @map("merged_at") @db.Timestamptz(3)
