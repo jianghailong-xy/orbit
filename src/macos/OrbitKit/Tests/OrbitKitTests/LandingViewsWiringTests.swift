@@ -127,10 +127,17 @@ final class LandingViewsWiringTests: XCTestCase {
         // The bar stands below the scroller on the Mac, so it counts toward the window's minimum, which
         // AppKit measures at zero width: a vertically fixed sentence there stands one glyph to a line and
         // pushes the whole window past the screen's edge.
-        let footer = try XCTUnwrap(window.range(of: "private var footer: some View {"))
-        let bar = String(window[footer.lowerBound...].prefix(1_400))
+        // Two bars since revision 42 (board landing-fix-own-session 02 c ③): today's one line, and the ruled
+        // sentence whole while a landing is with its task's session — capped at three lines, never fixed.
+        let oneLine = try XCTUnwrap(window.range(of: "private var oneLineFooter: some View {"))
+        let bar = String(window[oneLine.lowerBound...].prefix(1_400))
         XCTAssertTrue(bar.contains(".lineLimit(1)"), "the bar's sentence is capped")
         XCTAssertFalse(bar.contains(".fixedSize("), "nothing in the bar is vertically fixed")
+        let sessionFirst = try XCTUnwrap(window.range(of: "private var sessionFirstFooter: some View {"))
+        let ruled = String(window[sessionFirst.lowerBound..<oneLine.lowerBound])
+        XCTAssertTrue(ruled.contains("Label(LandingFixCopy.footerSessionFirst, systemImage: \"lock\")"))
+        XCTAssertTrue(ruled.contains(".lineLimit(3)"), "the ruled sentence is capped")
+        XCTAssertFalse(ruled.contains(".fixedSize("), "nothing in the ruled bar is vertically fixed")
         // The line: the mark and its facts on one line, the task's name under them on up to two — a
         // Chinese name wraps rather than being cut to one character.
         let page = code(try appSource("Views/LandingSessionPageView.swift"))

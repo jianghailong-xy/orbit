@@ -18,6 +18,9 @@ final class ProjectLandingsModel {
     private(set) var projectTitle: String?
     private(set) var integration: ProjectIntegrationView?
     private(set) var promotion: ProjectPromotionView?
+    /// The project's open items, read while a landing in hand is with its task's session or handed back
+    /// from it: the failure item's files are what its card's failure line counts (revision 42).
+    private(set) var openItems: ProjectOpenItemsView?
     /// Each landing's own view (`GET /sessions/:id`), when this device last got one, and whether its
     /// last read failed.
     private(set) var details: [String: SessionLandingView] = [:]
@@ -83,6 +86,10 @@ final class ProjectLandingsModel {
         }
         if cards.contains(where: { $0.subject == "PROMOTION" }) {
             promotion = try? await api.currentPromotion(projectID: projectID)
+        }
+        if cards.contains(where: { LandingFix.isFixing(details[$0.sessionId]) || LandingFix.handBack(details[$0.sessionId]) != nil }),
+           let items = try? await api.projectOpenItems(projectID: projectID) {
+            openItems = items
         }
         // A card whose own read says it settled moves into its day now, not at the next read.
         if cards.contains(where: { details[$0.sessionId]?.settledAt != nil }) {
@@ -398,7 +405,52 @@ struct ProjectLandingsWindowView: View {
     /// What this window is and the way to who decides, read only — nothing to type here (LS6): a lock
     /// and the sentence's first half, `Open coordinator` at the trailing edge. One line, on the bar's
     /// own colour, pinned to the bottom edge (owner 2026-11-10, docs/mocks/landings-ui-polish ③).
-    private var footer: some View {
+    @ViewBuilder private var footer: some View {
+        // While a landing is with its task's own session, the ruled sentence whole (board
+        // landing-fix-own-session 02 c ③, after the 11-10 one-line polish): over two lines, the way to the
+        // coordinator under it. Today's one line otherwise.
+        if let model, LandingFix.sessionFirst(model.window, details: model.details) {
+            sessionFirstFooter
+        } else {
+            oneLineFooter
+        }
+    }
+
+    private var sessionFirstFooter: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(LandingFixCopy.footerSessionFirst, systemImage: "lock")
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+                // Wraps, but never `fixedSize`: see the one-line footer below (probe run 41370339640).
+                .lineLimit(3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let coordinator = model?.coordinatorID {
+                HStack {
+                    Spacer(minLength: 0)
+                    Button { open("orbit-session", coordinator) } label: {
+                        Label(LandingPageCopy.openCoordinatorLink, systemImage: "person")
+                            .font(.orbitLabel.weight(.semibold))
+                    }
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.small)
+                    .accessibilityHint(LandingFixCopy.decisionsTheTasksSessionFirst)
+                    .accessibilityIdentifier("landings-open-coordinator")
+                }
+            }
+        }
+        .padding(.leading, 18).padding(.trailing, 12).padding(.vertical, 8)
+        .frame(maxWidth: 760)
+        .frame(maxWidth: .infinity)
+        .background(alignment: .top) {
+            Rectangle().fill(.bar).ignoresSafeArea(edges: .bottom)
+                .overlay(alignment: .top) { Divider() }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("landings-footer-session-first")
+    }
+
+    private var oneLineFooter: some View {
         let words = SessionLandingsCopy.orbitRunsTheseLandings.components(separatedBy: " — ").first ?? ""
         return HStack(spacing: 10) {
             Label(words, systemImage: "lock")
@@ -418,7 +470,7 @@ struct ProjectLandingsWindowView: View {
                 .buttonStyle(.bordered)
                 .buttonBorderShape(.capsule)
                 .controlSize(.small)
-                .accessibilityHint(LandingFixCopy.decisionsTheTasksSessionFirst)
+                .accessibilityHint(LandingPageCopy.decisionsTheCoordinator)
                 .accessibilityIdentifier("landings-open-coordinator")
             }
         }
@@ -634,6 +686,7 @@ struct ProjectLandingsWindowView: View {
                             waitDoors: waitDoors(card, landing: landing, promotion: promotion, model: model),
                             acting: model.acting.contains(id),
                             act: { action in press(action, sessionID: id, landing: landing, row: nil, model: model) },
+                            failureFiles: LandingFix.failedFiles(landing, in: model.openItems),
                             open: open)
                     }
                 }

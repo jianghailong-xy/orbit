@@ -31,6 +31,9 @@ struct LandingStatusCardView: View {
     let waitDoors: [LandingMenuAction]
     let acting: Bool
     let act: (LandingMenuAction) -> Void
+    /// The files the landing's failure item names (`OpenItemFacts.files`), which the Fixing and hand-back
+    /// cards' failure line counts (board landing-fix-own-session 02 c, d); nil where nobody read them.
+    var failureFiles: [String]? = nil
     /// Whether what the card carries is open under its line: its caret's turn.
     var open: Bool = true
     @Environment(AppModel.self) private var app
@@ -101,6 +104,8 @@ struct LandingStatusCardView: View {
                 } else if let card {
                     if fixing {
                         Text(LandingFix.fixingDetail(landing)).font(.orbitMeta).foregroundStyle(.tertiary)
+                    } else if handBack != nil {
+                        Text(LandingFix.handBackDetail(landing)).font(.orbitMeta).foregroundStyle(.tertiary)
                     } else if !card.detail.isEmpty {
                         Text(card.detail).font(.orbitMeta).foregroundStyle(.tertiary)
                     }
@@ -133,8 +138,12 @@ struct LandingStatusCardView: View {
                             Text(push).font(.orbitMeta).foregroundStyle(.secondary)
                         }
                     }
-                    if let failure = card.failure {
+                    // With the task's session, or handed back from it: the board's own failure line, once.
+                    if let failure = (fixing || handBack != nil)
+                        ? LandingFix.failureLine(landing, files: failureFiles) ?? card.failure : card.failure {
                         Text(failure).font(.orbitMeta).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("landing-failure")
                     }
                     if card.timedOut {
                         timedOutDoors(landing)

@@ -163,8 +163,9 @@ final class LandingFixTests: XCTestCase {
         }
         return SessionLandingView(
             sessionId: "L1", projectId: "P1", subject: "TASK", taskId: "t1",
-            currentAttempt: SessionLandingAttempt(jobId: "j1", kind: "LAND_TASK", state: "CONFLICT", claim: 1,
-                                                  sourceSessionId: "s1"),
+            currentAttempt: SessionLandingAttempt(jobId: "j1", kind: "LAND_TASK", state: "CONFLICT", phase: "REBASE",
+                                                  claim: 1, sourceSessionId: "s1",
+                                                  targetRef: "refs/heads/project/34ZZnLsPqC2jVd8CsCFp"),
             todos: [SessionLandingTodo(id: "i1", kind: "INTEGRATION_CONFLICT", state: "OPEN",
                                        waitingSince: "2026-11-23T10:02:00.000Z",
                                        workSessionId: held ? "s1" : nil)],
@@ -226,6 +227,39 @@ final class LandingFixTests: XCTestCase {
         let steps = LandingSteps.steps(view.timeline!.sections[0].entries, kind: "LAND_TASK")
         XCTAssertFalse(steps.flatMap(\.entries).contains { LandingFix.rowKinds.contains($0.entry.kind) })
         XCTAssertTrue(LandingSteps.steps(second.entries, kind: "LAND_TASK").isEmpty)
+    }
+
+    func testTheFailureLineIsTheBoardsOwnSentenceSaidOnce() throws {
+        let view = landing(held: true)
+        XCTAssertEqual(LandingFix.failureLine(view, files: ["a.kt", "b.kt"]),
+                       "Conflict in 2 files while rebasing onto project/34ZZn...CsCFp · nothing was pushed")
+        XCTAssertEqual(LandingFix.failureLine(view, files: nil),
+                       "Conflict while rebasing onto project/34ZZn...CsCFp · nothing was pushed")
+        XCTAssertEqual(LandingFix.failureLine(view, files: ["a.kt"]),
+                       "Conflict in 1 file while rebasing onto project/34ZZn...CsCFp · nothing was pushed")
+        // The hand-back's subtitle says what stopped and where; the line under it says how much.
+        XCTAssertEqual(LandingFix.handBackDetail(landing(held: false, returned: true)),
+                       "conflict · rebasing onto the project branch")
+        // The files are the failure item's own, found by the landing's todo in any group.
+        let items = try decode(ProjectOpenItemsView.self, """
+        {"needsYou": [], "withCoordinator": [{"itemId": "i1", "kind": "INTEGRATION_CONFLICT", "title": "t",
+           "waitingSince": "2026-11-23T10:00:00.000Z", "facts": {"files": ["a.kt", "b.kt"], "nothingLanded": true}}]}
+        """)
+        XCTAssertEqual(LandingFix.failedFiles(view, in: items), ["a.kt", "b.kt"])
+        XCTAssertNil(LandingFix.failedFiles(view, in: ProjectOpenItemsView()))
+    }
+
+    func testTheFooterNamesTheTasksSessionFirstWhileOneHasALanding() {
+        XCTAssertEqual(LandingFixCopy.footerSessionFirst,
+                       "Orbit runs these landings — nothing to type here. "
+                           + "Decisions: the task's own session first, then the coordinator")
+        let fixing = LandingsWindow(days: [], now: [LandingsWindowCard(sessionId: "L1", subject: "TASK",
+                                                                        state: "FIXING", title: "t", at: 0)])
+        XCTAssertTrue(LandingFix.sessionFirst(fixing, details: [:]))
+        let waiting = LandingsWindow(days: [], now: [LandingsWindowCard(sessionId: "L3", subject: "TASK",
+                                                                         state: "AWAITING_DECISION", title: "t", at: 0)])
+        XCTAssertFalse(LandingFix.sessionFirst(waiting, details: ["L3": landing(held: false, returned: true)]))
+        XCTAssertTrue(LandingFix.sessionFirst(waiting, details: ["L3": landing(held: true)]))
     }
 
     // MARK: - the project page

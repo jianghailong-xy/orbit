@@ -43,6 +43,11 @@ public enum LandingFixCopy {
     }
     /// The read-only footer's who-decides, since revision 42 (② c ③).
     public static let decisionsTheTasksSessionFirst = "Decisions: the task's own session first, then the coordinator"
+    /// The footer's whole sentence while a landing is with its task's own session (② c ③), shown as
+    /// text over two lines; today's one-line footer otherwise.
+    public static var footerSessionFirst: String {
+        "\(SessionLandingsCopy.orbitRunsTheseLandings) \(decisionsTheTasksSessionFirst)"
+    }
     /// The hand-off row's second line (② c ②).
     public static let itWroteThisWork = "It wrote this work"
 
@@ -326,6 +331,63 @@ public enum LandingFix {
             lastMessage: words?.isEmpty == false ? words : nil,
             returnedAt: entry.at,
             sessionId: entry.data?["sessionId"]?.stringValue)
+    }
+
+    /// The failure line under the Fixing and hand-back cards' subtitle, as the board words it (② c ①, d ①):
+    /// `Conflict in 2 files while rebasing onto project/34ZZn...CsCFp · nothing was pushed`. The count is the
+    /// failure item's own files (`OpenItemFacts.files`); without them the sentence says the rest. A failed
+    /// check: `Landing check failed on the combined tree · nothing was pushed`. Nil for any other attempt.
+    public static func failureLine(_ landing: SessionLandingView?, files: [String]?) -> String? {
+        guard let attempt = landing?.currentAttempt else { return nil }
+        let branch = shortBranch(TaskLandingLogic.branch(attempt.targetRef))
+        switch attempt.state {
+        case "CONFLICT":
+            let count = (files?.isEmpty == false ? files?.count : nil)
+                .map { " in \($0) \($0 == 1 ? "file" : "files")" } ?? ""
+            return "Conflict\(count) while \(how(attempt.phase)) \(branch) · \(LandingFixCopy.nothingWasPushedClause)"
+        case "CHECK_FAILED":
+            let failed = landing?.checks.first { !$0.passed }
+            let name = failed.map { LandingPageCopy.checkLabel($0.name) } ?? "A check"
+            return "\(name) failed on the combined tree · \(LandingFixCopy.nothingWasPushedClause)"
+        default:
+            return nil
+        }
+    }
+
+    /// The hand-back card's subtitle (② d ①): what stopped and where, `conflict · rebasing onto the project branch`.
+    public static func handBackDetail(_ landing: SessionLandingView) -> String {
+        guard let attempt = landing.currentAttempt else { return "" }
+        let ref = TaskLandingLogic.branch(attempt.targetRef)
+        let target = ref.hasPrefix("project/") ? LandingFixCopy.theProjectBranch : ref
+        switch attempt.state {
+        case "CHECK_FAILED": return "\(SessionLandingsCopy.checksFailed) · on the combined tree"
+        case "ERROR": return SessionLandingsCopy.error
+        default: return "\(SessionLandingsCopy.conflict) · \(how(attempt.phase)) \(target)"
+        }
+    }
+
+    /// How a landing met the target: `rebasing onto`, `syncing main into`, `merging into`.
+    static func how(_ phase: String?) -> String {
+        switch phase {
+        case "REBASE": return "rebasing onto"
+        case "MAIN_SYNC": return "syncing main into"
+        default: return "merging into"
+        }
+    }
+
+    /// The files the landing's failure item names: the open item behind one of its todos, in any group.
+    public static func failedFiles(_ landing: SessionLandingView?, in items: ProjectOpenItemsView?) -> [String]? {
+        guard let landing, let items else { return nil }
+        let ids = Set(landing.todos.map { PublicID.storageKey($0.id) })
+        let rows = items.withWorkSession + items.withCoordinator + items.needsYou
+        guard let row = rows.first(where: { ids.contains(PublicID.storageKey($0.itemId)) }),
+              let files = row.facts?.files, !files.isEmpty else { return nil }
+        return files
+    }
+
+    /// Whether the window's footer names the task's session first: a landing in hand is with its session.
+    public static func sessionFirst(_ window: LandingsWindow, details: [String: SessionLandingView]) -> Bool {
+        window.now.contains { $0.state == "FIXING" || isFixing(details[$0.sessionId]) }
     }
 
     /// `has it · just now` after `Coordinator`, from the moment it came back.
