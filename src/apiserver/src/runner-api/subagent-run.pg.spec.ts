@@ -410,7 +410,7 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     assert.equal(decision.model, 'claude-opus-5-5');
     assert.equal(decision.effort, 'high');
     assert.equal(decision.applied, true);
-    assert.equal(decision.policyVersion, 'p6-subscriptions-first-1');
+    assert.equal(decision.policyVersion, 'p7-model-then-account-1');
     assert.equal(decision.tierNote, 'Tier L, set by the caller');
     assert.equal(decision.note, 'subscription pool, Bob with 80% quota left');
     // The pick names when Bob's quota resets: the fixture's window, relative to now (p5-expiry-first-1).

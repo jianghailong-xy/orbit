@@ -120,6 +120,49 @@ class ScheduleModelsTest {
             ScheduleDisplay.recordParts(3, buildJsonObject { put("endAt", "2026-12-01T00:00:00.000Z") }, ends).text)
     }
 
+    // The change conversation (§8.2)
+
+    private val openingJson = """{"scheduleId":"a","title":"Codex stable check","revision":3,
+        "does":"Check the Codex stable release against our pinned version","when":"Every day at 09:00 · Asia/Shanghai",
+        "runsIn":"apiserver · Codex agent","may":"Check only · reads and reports, edits nothing","costs":"Up to 7 runs a week, 30 min each"}"""
+
+    @Test fun aChangeConversationReadsItsOpeningAndItsAnswer() {
+        val get = ScheduleChangeConversationResponse.parse(json("""{"sessionId":null,"opening":$openingJson}"""))!!
+        assertNull(get.sessionId)
+        val opening = get.opening
+        assertEquals("a", opening.scheduleId)
+        assertEquals("Codex stable check", opening.title)
+        assertEquals(3, opening.revision)
+        assertEquals("Every day at 09:00 · Asia/Shanghai", opening.`when`)
+        assertEquals("Up to 7 runs a week, 30 min each", opening.costs)
+        assertEquals("S9", ScheduleChangeConversationResponse.parse(json("""{"sessionId":"S9","opening":$openingJson}"""))!!.sessionId)
+        // The opening is required; an opening this build cannot read is no answer.
+        assertNull(ScheduleChangeConversationResponse.parse(json("""{"sessionId":null}""")))
+        assertNull(ScheduleChangeConversationResponse.parse(json("""{"sessionId":null,"opening":{"title":"x"}}""")))
+        // POST's answer: created, or found meanwhile (created=false — the words were said in the open one).
+        assertEquals(ScheduleChangeAnswer("S9", true), ScheduleChangeAnswer.parse(json("""{"sessionId":"S9","created":true}""")))
+        assertEquals(ScheduleChangeAnswer("S9", false), ScheduleChangeAnswer.parse(json("""{"sessionId":"S9","created":false}""")))
+        assertNull(ScheduleChangeAnswer.parse(json("""{"created":true}""")))
+    }
+
+    @Test fun theOpeningsRowsAreTheContractsInOrder() {
+        val opening = ScheduleChangeOpening.parse(json(openingJson))!!
+        assertEquals(listOf("Does", "When", "Runs in", "May", "Costs"), scheduleChangeOpeningRows(opening).map { it.label })
+        assertEquals(listOf(opening.does, opening.`when`, opening.runsIn, opening.may, opening.costs),
+            scheduleChangeOpeningRows(opening).map { it.text })
+    }
+
+    @Test fun aRecordReadsTheWordsThatAskedAndASessionReadsItsChangeOpening() {
+        val record = ScheduleChangeRecord.parse(json("""{"scheduleId":"a","revision":4,"changedBy":"USER","sessionId":"S9",
+            "after":{"time":"10:00"},"askedText":"Run it at 10 instead"}"""))!!
+        assertEquals("Run it at 10 instead", record.askedText)
+        assertNull(ScheduleChangeRecord.parse(json("""{"scheduleId":"a","revision":4,"after":{}}"""))!!.askedText)
+        val read = SessionScheduleCardsResponse.parse(json("""{"cards":[],"records":[],"change":$openingJson}"""))!!
+        assertEquals("Codex stable check", read.change?.title)
+        // Servers before it send no change; an unreadable one is none, never a failed read.
+        assertNull(SessionScheduleCardsResponse.parse(json("""{"cards":[],"records":[]}"""))!!.change)
+    }
+
     // The doors
 
     private val handle = SessionHandle(AccountKey("https://orbit.example/", "owner"))
@@ -224,5 +267,18 @@ class ScheduleModelsTest {
         assertEquals(2, view.runsLeft)
         // EVERY without a readable interval is read as weekly, not dropped.
         assertEquals(ScheduleRule.Weekly("09:00", emptyList()), ScheduleRule.parse(json("""{"kind":"EVERY","time":"09:00"}""")))
+    }
+
+    @Test fun theChangeDoorsReadAndOpen() = runTest {
+        val server = Server(body = """{"sessionId":"S9","opening":$openingJson,"created":true}""")
+        val api = ScheduleApi(server, handle)
+        assertEquals("S9", api.change("a").sessionId)
+        assertEquals("Codex stable check", api.change("a").opening.title)
+        assertEquals(ScheduleChangeAnswer("S9", true), api.openChange("a", "Run it at 10 instead"))
+        assertEquals(listOf("GET schedules/a/change", "GET schedules/a/change", "POST schedules/a/change"), server.asked)
+        assertEquals("""{"text":"Run it at 10 instead"}""", server.bodies.last())
+        // A POST that names no session is unreadable, not a wrong id.
+        val refusal = runCatching { ScheduleApi(Server(body = """{"created":true}"""), handle).openChange("a", "x") }.exceptionOrNull()
+        assertTrue(refusal is ProtocolException)
     }
 }

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient, type Query, type QueryFilters } from '@tanstack/react-query';
-import type { WatchView } from '@orbit/shared';
+import { CONTROL_HINT_LIST_SCOPES, type WatchView } from '@orbit/shared';
 import { getToken } from '../api';
 import { streamReport } from './listBudget';
 import { cloneEventOf, hearClone, sameWorkspace } from './workspaceClone';
@@ -238,6 +238,8 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     // When the gap began, and when the browser last came back online.
     let droppedAt = -Infinity;
     let onlineAt = -Infinity;
+    // When the tab came back into view, if that is what asked for the stream now connecting.
+    let returnedAt = -Infinity;
     let fails = 0;
     let lastMsgAt = Date.now();
     // A hidden tab reads nothing on the stream's word (docs/list-freshness-design.md R3).
@@ -321,9 +323,18 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     // without building anything when nothing it shows moved. Before this connection's first hint
     // the session events read the Open lists, so this reads nothing then: a write's read, or a
     // reconnect's, would otherwise read each of them twice.
-    const refetchOpenList = (): void => {
+    //
+    // `scopes`: the workspaces the window's hints named (`hints=list_scopes`), or null when one of them named none, or
+    // when this tab's own write asked: a list filtered to one workspace is read only when its workspace is among them,
+    // and a list with no workspace filter on every hint (docs/realtime-control-plane-stream.md §4.8).
+    const refetchOpenList = (scopes: ReadonlySet<string> | null): void => {
       if (!hinted) return;
-      refresh({ predicate: ({ queryKey }) => isOpenList(queryKey) });
+      refresh({
+        predicate: ({ queryKey }) => isOpenList(queryKey) && (
+          scopes === null || typeof queryKey[2] !== 'string' || !queryKey[2]
+          || [...scopes].some((scope) => sameWorkspace(scope, queryKey[2] as string))
+        ),
+      });
     };
     // The sidebar's tallies (queries.ts workspaceSessionCountsQuery), read at the end of a window in which some
     // session's share of them moved (`tallyShare`), a session's process may have started or ended, or this tab wrote.
@@ -730,6 +741,8 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     const pendingSubjects = new Map<string, SessionSubject>();
     let pendingAnySession = false;
     const pendingFlags = new Set<'openList' | 'watches' | 'counts'>();
+    // The workspaces this window's `sessions.list_changed` named, unioned; null once something asked for every Open list.
+    let pendingOpenScopes: Set<string> | null = new Set();
     // The window's task changes, and whether a task event said nothing of its rows (refetchEntities' `tasks`); the
     // sessions whose schedule cards the window's events named, and whether one named every session's.
     const pendingTasks: TaskScope = { changes: [], any: false };
@@ -746,7 +759,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         if (pending.has('task')) refetchTaskLists();
         if (pending.has('project')) refetchProjects();
         if (pending.has('watch') || pendingFlags.has('watches')) refetchWatches();
-        if (pendingFlags.has('openList')) refetchOpenList();
+        if (pendingFlags.has('openList')) refetchOpenList(pendingOpenScopes);
         // Decided once the window's events are all in: an approval asked and answered inside it moved nothing.
         if (talliesMoved() || pendingFlags.has('counts')) refetchCounts();
         for (const id of pendingSessions) {
@@ -758,6 +771,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         pendingSubjects.clear();
         pendingAnySession = false;
         pendingFlags.clear();
+        pendingOpenScopes = new Set();
         pendingTasks.changes = [];
         pendingTasks.any = false;
         pendingCards.sessions.clear();
@@ -805,7 +819,14 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       // The Open list's hint is the one event whose path is not an entity: it says the list may read
       // differently, and is read through its own delta read rather than through the session events
       // that would read every session list for it (sessions.list_changed names no session).
-      if (type === 'sessions.list_changed') pendingFlags.add('openList');
+      if (type === 'sessions.list_changed') {
+        pendingFlags.add('openList');
+        // A hint naming no workspace (an older server's, or one where any list may have moved) reads every list.
+        const scopes = (data as { scopes?: unknown } | null | undefined)?.scopes;
+        if (Array.isArray(scopes) && scopes.every((scope) => typeof scope === 'string')) {
+          for (const scope of scopes) pendingOpenScopes?.add(scope);
+        } else pendingOpenScopes = null;
+      }
       if (type === 'task.changed') pendingTasks.changes.push(taskChangeOf(data));
       else if (type.startsWith('task.')) pendingTasks.any = true;
       if (type === 'schedule_cards.changed') {
@@ -855,6 +876,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       pendingAnySession = true;
       // The server's hint for the write joins this read in the window.
       pendingFlags.add('openList');
+      pendingOpenScopes = null;
       pendingFlags.add('counts');
       openWindow();
     };
@@ -870,8 +892,14 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     //
     // A browser back online during the gap has already sent this round for the polls it held while
     // offline (React Query resumes them on `online`), so those are not read a second time.
+    //
+    // Likewise a tab back in view: it has just read what came due while it was hidden (`catchUp`), and the stream
+    // that return asked for does not read those a second time. Asked for later, by the backoff, it reads them again.
     const reconcile = (): void => {
-      const resumedFrom = onlineAt > droppedAt ? onlineAt : Infinity;
+      const resumedFrom = Math.min(
+        onlineAt > droppedAt ? onlineAt : Infinity,
+        Number.isFinite(returnedAt) && returnedAt >= droppedAt ? returnedAt : Infinity,
+      );
       answered = (query) => (readStartedAt.get(query.queryHash) ?? -Infinity) >= resumedFrom;
       try {
         refresh({
@@ -904,15 +932,17 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       streamReport.dropped();
       if (stopped) return;
       const backoff = ++fails > QUICK_RETRIES ? SLOW_RETRY_MS : Math.min(1000 * fails, 15000);
-      reconnectTimer = setTimeout(connect, backoff + Math.random() * 500);
+      reconnectTimer = setTimeout(() => connect(), backoff + Math.random() * 500);
     };
-    function connect(): void {
+    function connect(onReturn = -Infinity): void {
       dropped = false;
+      returnedAt = onReturn;
       hinted = false;
       lastMsgAt = Date.now();
-      // `hints=list_changed` asks for the Open list's hint (docs/realtime-control-plane-stream.md §4.8).
+      // `hints=list_changed` asks for the Open list's hint (docs/realtime-control-plane-stream.md §4.8), and `list_scopes`
+      // for the workspaces it names, so a workspace's list is read only for its own moves.
       // `schedule_cards` asks for `schedule_cards.changed` (§4.10), which a session's schedule cards are read on.
-      es = new EventSource(`/api/events?access_token=${encodeURIComponent(getToken() ?? '')}&hints=list_changed,owner_requests,schedule_cards`);
+      es = new EventSource(`/api/events?access_token=${encodeURIComponent(getToken() ?? '')}&hints=list_changed,owner_requests,schedule_cards,${CONTROL_HINT_LIST_SCOPES}`);
       es.onopen = () => {
         lastMsgAt = Date.now();
         setLive(true);
@@ -1040,10 +1070,10 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     connect();
     // A tab coming back into view, or a browser back online, need not wait out the backoff: ask for
     // the stream at once. Nothing to do while one is open or opening.
-    const retryNow = (): void => {
+    const retryNow = (onReturn?: number): void => {
       if (stopped || !dropped || document.visibilityState === 'hidden') return;
       if (reconnectTimer) clearTimeout(reconnectTimer);
-      connect();
+      connect(onReturn);
     };
     // A poll that came due while the tab was hidden: React Query skipped its tick, and would
     // otherwise wait out a whole interval more before reading it.
@@ -1065,10 +1095,19 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     };
     // Back in view, the tab reads once what it was asked to while hidden, and every poll that came
     // due meanwhile (R3).
+    //
+    // A tab the browser froze in the background runs no timer, the watchdog's included: a stream that died meanwhile
+    // may have said nothing, and would pass for live until the watchdog's next tick. One silent past the watchdog's
+    // limit is dropped here, before anything reads, so the reads go by the outage's budget and the stream is asked
+    // for at once. With the stream down, the return's read is the outage's quick first look, and the polls keep its
+    // slowest pace from here (listBudget `returned`).
     const onVisibility = (): void => {
       if (stopped || hidden()) return;
+      const now = Date.now();
+      if (!dropped && now - lastMsgAt > WATCHDOG_SILENCE_MS) drop();
+      if (dropped) streamReport.returned(now);
       catchUp();
-      retryNow();
+      retryNow(now);
     };
     const onOnline = (): void => {
       onlineAt = Date.now();

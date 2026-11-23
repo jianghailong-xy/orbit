@@ -215,4 +215,39 @@ final class SubagentSettingsTests: XCTestCase {
         XCTAssertEqual(String(decoding: try JSONEncoder().encode(UpdatePreferencesRequest(subagentBlockedProviders: ["codex"])),
                               as: UTF8.self), #"{"subagentBlockedProviders":["codex"]}"#)
     }
+
+    /// One model on several providers is one block: its rows together, the first naming it, the others pooled with it.
+    func testTableRowsDrawOneBlockPerModel() throws {
+        let json = """
+        {"providers":[
+          {"slug":"kimi","label":"Kimi Code","kind":"builtin","providerId":null,"billing":"subscription",
+           "models":[{"model":"kimi-code/k3","levels":["S"],"identity":{"key":"k3","name":"Kimi K3"}}]},
+          {"slug":"claude","label":"Claude Code","kind":"builtin","providerId":null,"billing":"subscription",
+           "models":[{"model":"claude-sonnet-5-5","levels":["S","M"],"identity":{"key":"claude-sonnet-5-5","name":"Claude Sonnet 5.5"}}]},
+          {"slug":"moonshot","label":"Kimi (Moonshot)","kind":"key","providerId":"p3","billing":"key",
+           "models":[{"model":"kimi-k3","levels":["S"],"identity":{"key":"k3","name":"Kimi K3"}},
+                     {"model":"old-model","levels":[]}]}
+        ]}
+        """
+        let providers = try JSONDecoder().decode(SubagentTiersResponse.self, from: Data(json.utf8)).providers
+        let rows = SubagentSettings.tableRows(providers)
+        XCTAssertEqual(rows.map { "\($0.provider.slug) \($0.name)" },
+                       ["kimi Kimi K3", "moonshot Kimi K3", "claude Claude Sonnet 5.5", "moonshot old-model"])
+        XCTAssertEqual(rows.map(\.continues), [false, true, false, false])
+        XCTAssertEqual(rows.map(\.continued), [true, false, false, false])
+        XCTAssertEqual(rows[0].pooledWith, ["Kimi (Moonshot)"])
+        XCTAssertEqual(rows[2].pooledWith, [])
+        XCTAssertEqual(rows[3].model.identity, nil, "an older server sends none: the row is its own block")
+    }
+
+    /// "Pooled across N providers" only where there is a figure to explain.
+    func testPooledLineOnlyWithAFigure() {
+        let rated = ModelQuality(tasks: ModelTaskQuality(firstPassRate: 0.8, firstPassTaskCount: 8, completedTaskCount: 10))
+        let unrated = ModelQuality(subagent: ModelSubagentQuality(runCount: 3), tasks: ModelTaskQuality(completedTaskCount: 2))
+        XCTAssertEqual(SubagentSettings.pooledText(SubagentSettings.qualityLines(rated), pooledWith: ["Codex Pool"]),
+                       "Pooled across 2 providers")
+        XCTAssertNil(SubagentSettings.pooledText(SubagentSettings.qualityLines(unrated), pooledWith: ["Codex Pool"]))
+        XCTAssertNil(SubagentSettings.pooledText(SubagentSettings.qualityLines(rated), pooledWith: []))
+        XCTAssertEqual(SubagentSettings.pooledTip(["Cursor CLI", "Codex Pool"]), "Runs on Cursor CLI, Codex Pool are counted too")
+    }
 }

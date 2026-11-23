@@ -98,6 +98,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'lastSeenRunId',
   'envelopeWorkspaceId',
   'createdFromSessionId',
+  // The schedule a change conversation changes (migration 1447).
+  'changeScheduleId',
   // A scheduled task's Waiting on you item (migration 0840): the change request its Allow or Decline answers.
   'scheduleChangeRequestId',
   'authorSessionId',

@@ -780,13 +780,14 @@ test('the detail item is the authored declaration, with no derived verdict besid
     withheld: ['CRITERION_UNSATISFIED', 'CRITERION_UNLANDED'],
   }]);
   // And every number a card prints, counted once from those same answers: on main plus each reason
-  // adds up to the criteria, so no two numbers on one card can disagree.
+  // adds up to the MET criteria, so no two numbers on one card can disagree — and this unmet one is
+  // counted in `criteria` alone, never as "no receipt" (project page parity G1, 2026-11-19).
   assert.deepEqual(project.derivedDone.counts, {
     criteria: 1,
     met: 0,
     landed: 0,
     onMain: 0,
-    byReason: { IN_FLIGHT: 0, ON_PROJECT_BRANCH: 0, NOTHING_TO_LAND: 0, NO_RECEIPT: 1, NO_BRANCH: 0, CODELESS: 0 },
+    byReason: { IN_FLIGHT: 0, ON_PROJECT_BRANCH: 0, NOTHING_TO_LAND: 0, NO_RECEIPT: 0, NO_BRANCH: 0, CODELESS: 0 },
   });
 });
 
