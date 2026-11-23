@@ -198,6 +198,9 @@ export interface PermissionSemantics {
    * newer Claude model.
    */
   shortNote?: string;
+  /** `off` when the runtime's command sandbox is not running for this session: commands run
+   *  unconfined. Absent everywhere else, which says nothing either way. */
+  sandbox?: 'off';
 }
 
 /**
@@ -1283,19 +1286,21 @@ function homeOfReposRoot(reposRoot: string): string {
 }
 
 /** What newFolderRootFor reads of a runner. `capabilities` is what it has reported: a server passes [] for a runner
- *  that has not reported yet (no capabilitiesReportedAt). */
+ *  that has not reported yet (no capabilitiesReportedAt). `up` is whether it is online now, so that those are what its
+ *  running process declares; a managed runner that is not up wakes on its current image, whatever it declared before. */
 export interface NewFolderRunner {
   managed: boolean;
+  up: boolean;
   reposRoot: string | null | undefined;
   capabilities: readonly string[] | null | undefined;
 }
 
 /** Where a new folder named on this runner goes, for every client and the server alike (new-folder-root.fixture.json):
- *  on a managed runner that has not reported yet, its image's home MANAGED_RUNNER_HOME, whatever Repos Folder is stored
- *  from before, so its first workspace can be made before it is up; newFolderRoot on a runner that makes new folders and
- *  has reported its Repos Folder; null on any other, which cannot make one. */
+ *  on a managed runner that is not up, or has not reported yet, its image's home MANAGED_RUNNER_HOME, whatever Repos
+ *  Folder and capabilities are stored from an earlier process, so its first workspace can be made before it is up;
+ *  newFolderRoot on a runner that makes new folders and has reported its Repos Folder; null on any other. */
 export function newFolderRootFor(runner: NewFolderRunner): string | null {
-  if (runner.managed && !runner.capabilities?.length) return MANAGED_RUNNER_HOME;
+  if (runner.managed && (!runner.up || !runner.capabilities?.length)) return MANAGED_RUNNER_HOME;
   const reposRoot = runner.reposRoot?.trim() ?? '';
   if (reposRoot && runner.capabilities?.includes(CREATE_WORKDIR_CAPABILITY)) return newFolderRoot(reposRoot, runner.capabilities);
   return null;

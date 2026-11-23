@@ -439,8 +439,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         // Once the change has been laid out: how far the card stands from where it was brought to, and back by that much.
         withFrameNanos { }; withFrameNanos { }
         val delta = (CardFocus.position(route.id!!, held.key) ?: return@LaunchedEffect) - held.top
-        // Still the record this put-back read: one held again meanwhile has its own top, and this one's is out of date.
-        if (kotlin.math.abs(delta) >= 1f && CardFocus.held(route.id!!) == held) {
+        if (kotlin.math.abs(delta) >= 1f && CardFocus.held(route.id!!)?.key == held.key) {
             positioning = true
             list.scrollBy(delta)
             positioning = false
@@ -921,11 +920,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     item(key = "newer") { if (displayedWindow.newerAfter != null) TextButton(enabled = !displayedLoading, onClick = model::newer) { Text("Load newer messages") } }
                     item(key = "interaction-cards") {
                         Box(Modifier.onSizeChanged { cardsSize = it.height; if (rail.grew(it.height) && placed && follow && state.window.newerAfter == null) repin++ }) {
-                            // The list's height below the floating needs-you bar: a card brought in by its top lands under the bar, not behind it.
-                            // None while an open onto the waiting card has not placed the list at the cards: that card waits for the
-                            // placing, and is not brought in (and held) against a layout still being built.
-                            val cardViewport = if (ontoWaitingCard && !placedAtCards && route.recordId == null) 0 else listHeight.coerceAtLeast(0)
-                            CompositionLocalProvider(LocalCardViewport provides cardViewport) { SessionCards(cards, openLink, discuss = discussCard) }
+                            // Let the rail's initial scroll finish before the card takes focus.
+                            val viewport = if (ontoWaitingCard && !placedAtCards) 0 else listHeight
+                            CompositionLocalProvider(LocalCardViewport provides viewport) { SessionCards(cards, openLink, discuss = discussCard) }
                         }
                     }
                     // A08-4: what is still waiting in the queue, as the turns it will be — after the decisions, before the tail.

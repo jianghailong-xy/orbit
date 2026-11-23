@@ -372,6 +372,15 @@ test('evidence that cites a file', { skip: !URL, concurrency: 1, timeout: 600_00
     assert.deepEqual({ status: theirs.status, json: theirs.json }, { status: nothing.status, json: nothing.json }, 'another account\'s file is a file that is not there');
     const malformed = await submit(work, [work.tool, { kind: 'FILE', ref: 'not an id' }]);
     assert.deepEqual({ status: malformed.status, json: malformed.json }, { status: nothing.status, json: nothing.json });
+    // A drive file (docs/orbit-files-drive-technical-design.md §4.5) by any spelling: its content changes under its name, so
+    // it is refused by name, pointing at file_upload, which makes the evidence copy.
+    for (const ref of ['/home/orbit/Files/Proj/report.md', '~/Files/Proj/report.md', '/run/orbit-files/drive/Proj/report.md', 'orbit-drive:3bXk9sQ2a']) {
+      const drive = await submit(work, [work.tool, { kind: 'FILE', ref }]);
+      assert.equal(drive.status, 400, `${ref}: ${drive.text}`);
+      assert.equal(drive.json.code, 'EVIDENCE_FILE_IS_A_DRIVE_PATH', ref);
+      assert.equal(drive.json.requiredAction, 'UPLOAD_THE_FILE_AND_CITE_ITS_ID', ref);
+      assert.match(drive.json.message, /file_upload/, ref);
+    }
 
     for (const field of [{ sha256: 'a'.repeat(64) }, { width: 1, height: 1 }]) {
       const written = await submit(work, [work.tool, { ...asFile(shot), ...field }]);

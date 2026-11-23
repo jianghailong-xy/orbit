@@ -9,6 +9,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import io.orbitd.android.cards.CardFocus
 import io.orbitd.android.core.auth.AuthState
+import io.orbitd.android.navigation.ObjectId
 import java.io.File
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
@@ -58,11 +59,10 @@ class ProjectRowWaitingShellTest {
     private val headLine = "echo HEAD-OF-THE-WAITING-CARD"
     private val footLine = "echo FOOT-OF-THE-WAITING-CARD"
 
-    /** The wall clock a project row's request to open at the waiting card lapses by (10 s), held still: on a loaded machine the
-     * reader can be drawn more than ten real seconds after the click, and then opens at the tail as a lapsed request should. */
     @After fun realClock() { CardFocus.now = { System.currentTimeMillis() } }
 
     @Before fun start() {
+        // Keep the row's request alive while the reader loads and lays out the card.
         CardFocus.now = { 1_000_000L }
         ProjectShell.reset()
         ProjectShell.waitingEvents = buildJsonArray {
@@ -132,7 +132,13 @@ class ProjectRowWaitingShellTest {
         signIn(); openList()
         compose.onNodeWithTag(row).performClick()
         await { shows(headLine) || shows(footLine) }
+        // The focus request is spent after bring-into-view. Its children can still have empty bounds until layout.
+        await { read() && CardFocus.pending(ProjectShell.WAITING) == null && CardFocus.held(ProjectShell.WAITING)?.key == "approval:a-quota" }
         settle()
+        await {
+            laidOut(hasTestTag("approval:a-quota")) && laidOut(hasText("Run a command?")) &&
+                laidOut(hasText("From Orbit")) && commandHead().singleOrNull()?.isEmpty == false
+        }
         shot(name)
         val list = bounds(compose.onNodeWithTag("transcript-list"))
         val head = commandHead().single()
@@ -161,6 +167,7 @@ class ProjectRowWaitingShellTest {
         await { exists(hasText("Open Session") and hasAnyAncestor(isDialog())) }
         compose.onNode(hasText("Open Session") and hasAnyAncestor(isDialog())).performClick()
         await { shows(footLine) || shows(headLine) }
+        await { read() }
         settle()
         shot("project-row-waiting-member-from-menu")
         val again = bounds(compose.onNodeWithTag("transcript-list"))
@@ -182,8 +189,14 @@ class ProjectRowWaitingShellTest {
         val range = compose.onNodeWithTag("transcript-list").fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange]
         return range.value() >= range.maxValue() - 1f
     }
+    /** The member's own read has landed: its transcript and its cards, fresh. */
+    private fun read() = app().realtime.state.value.session?.let {
+        ObjectId.same(it.id, ProjectShell.WAITING) && it.snapshot != null && it.fresh && it.transcript.seeded
+    } == true
     private fun settle() { repeat(5) { compose.mainClock.advanceTimeBy(500); compose.waitForIdle() } }
     private fun bounds(node: SemanticsNodeInteraction): Rect = node.fetchSemanticsNode().boundsInRoot
+    private fun laidOut(matcher: SemanticsMatcher) =
+        compose.onAllNodes(matcher, useUnmergedTree = true).fetchSemanticsNodes().singleOrNull()?.boundsInRoot?.isEmpty == false
     private fun shows(text: String) = compose.onAllNodesWithText(text, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun exists(matcher: SemanticsMatcher) = compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
     private fun openList() = await { exists(hasTestTag(row)) }

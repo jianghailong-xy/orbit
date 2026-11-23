@@ -5,6 +5,7 @@ import io.orbitd.android.navigation.ObjectId
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -238,12 +239,12 @@ object MachineSetup {
 
     /**
      * Where a new folder named on this runner goes, as the server makes it: port of @orbit/shared `newFolderRootFor`, held to
-     * src/shared/src/new-folder-root.fixture.json. A managed runner that has not reported yet takes its image's home, whatever
-     * Repos Folder is stored from before; a runner that makes new folders and has reported its Repos Folder takes [newFolderRoot]; any
+     * src/shared/src/new-folder-root.fixture.json. A managed runner that is not up, or has not reported yet, takes its image's home,
+     * whatever an earlier process declared; a runner that makes new folders and has reported its Repos Folder takes [newFolderRoot]; any
      * other makes none (null).
      */
-    fun newFolderRootFor(managed: Boolean, reposRoot: String?, capabilities: List<String>?): String? {
-        if (managed && capabilities.isNullOrEmpty()) return ManagedRunner.HOME
+    fun newFolderRootFor(managed: Boolean, up: Boolean, reposRoot: String?, capabilities: List<String>?): String? {
+        if (managed && (!up || capabilities.isNullOrEmpty())) return ManagedRunner.HOME
         val root = reposRoot?.trim().orEmpty()
         if (root.isEmpty() || capabilities?.contains(CREATE_WORKDIR_CAPABILITY) != true) return null
         return newFolderRoot(root, capabilities)
@@ -252,7 +253,12 @@ object MachineSetup {
     /** The setup card's root: [newFolderRootFor], the account's managed runner read as managed while it is set up or asleep. Only a
      *  usable card shows or sends it, and a managed runner always has one, so "" is never drawn. */
     fun setupFolderRoot(runner: JsonObject, managedSetup: Boolean): String =
-        newFolderRootFor(managedSetup || RunnerPage.isManaged(runner), runner.text("reposRoot"), runner.strings("capabilities")).orEmpty()
+        newFolderRootFor(
+            managed = managedSetup || RunnerPage.isManaged(runner),
+            up = (runner["online"] as? JsonPrimitive)?.booleanOrNull == true,
+            reposRoot = runner.text("reposRoot"),
+            capabilities = runner.strings("capabilities"),
+        ).orEmpty()
 
     /**
      * Whether a machine too old to answer gets there by itself: not one that reports its updater off, or unable to write where it is

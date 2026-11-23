@@ -23,6 +23,7 @@ class NewFolderRootFixtureTest {
             val runner = case.getValue("runner").jsonObject
             val got = MachineSetup.newFolderRootFor(
                 managed = runner.getValue("managed").jsonPrimitive.boolean,
+                up = runner.getValue("up").jsonPrimitive.boolean,
                 reposRoot = runner["reposRoot"]?.jsonPrimitive?.contentOrNull,
                 capabilities = runner.getValue("capabilities").jsonArray.map { it.jsonPrimitive.content },
             )
