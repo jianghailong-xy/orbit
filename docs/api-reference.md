@@ -45,10 +45,10 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `public` | 37 |
 | `user` | 495 |
 | `admin` | 31 |
-| `runner` | 213 |
+| `runner` | 212 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **780** |
+| **Total** | **779** |
 
 ## Public routes
 
@@ -760,7 +760,6 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/sessions/:id/naming` | body `SessionNamingDto`; path `id` | `RunnerApiController.sessionNaming` |
 | `POST` | `/api/runner/sessions/:id/notify` | body `NotifyDto`; path `id` | `RunnerApiController.sessionNotify` |
 | `POST` | `/api/runner/sessions/:id/orchestration-credential` | path `id` | `RunnerApiController.refreshOrchestrationCredential` |
-| `POST` | `/api/runner/sessions/:id/release` | body `Object`; path `id` | `RunnerApiController.release` |
 | `POST` | `/api/runner/sessions/:id/release-leases` | body `Object`; path `id` | `RunnerApiController.releaseLeases` |
 | `POST` | `/api/runner/sessions/:id/scheduled-wakeup` | body `ScheduledWakeupDto`; path `id` | `RunnerApiController.scheduledWakeup` |
 | `POST` | `/api/runner/sessions/:id/source/pin` | body `Object`; path `id` | `RunnerApiController.pinSessionSource` |

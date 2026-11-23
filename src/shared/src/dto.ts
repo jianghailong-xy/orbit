@@ -1775,6 +1775,11 @@ export const BROWSER_CLEAR_V1 = 'browser-clear/v1';
  *  the same string. */
 export const BROWSER_OPEN_V1 = 'browser-open/v1';
 
+/** Declared by a managed runner that honours a LoginCommand `browser`: it opens the sign-in link of the attempt waiting
+ *  on it in the runner's browser (docs/runner-browser-engine-sign-in-design.md). A runner without it is refused Use the
+ *  runner's browser. runner-go asserts the same string. */
+export const LOGIN_RUNNER_BROWSER_V1 = 'login-runner-browser/v1';
+
 /** Declared by a runner that keeps a remote SubAgent's conversation when the run ends and continues it on a claim's
  *  `resumeOf` (docs/subagent-design.md §10.2). A resume is refused for a target runner without it, which would start
  *  a new conversation instead. runner-go declares the same string (subagentRemoteResumeCapabilityV1). */
@@ -2275,7 +2280,9 @@ export type AntigravityKeyAvailableByRunner = Record<string, boolean>;
  * machine, which puts back the Google login a replacement had set aside.
  */
 export interface LoginCommand {
-  action: 'start' | 'code' | 'cancel';
+  /** `browser` (to a runner that declares LOGIN_RUNNER_BROWSER_V1): open the attempt's sign-in link in the runner's
+   *  browser, the owner's Use the runner's browser. Redelivered until the runner reports `browser` on that attempt. */
+  action: 'start' | 'code' | 'cancel' | 'browser';
   /** Which CLI to sign in. Absent from an older control plane, which only ever drove claude. A
    *  `cursor` start, Default's included, goes only to a runner that declares `cursor-account-login/v1`:
    *  an older one signs in Claude Code for an engine it does not know. */
@@ -2407,6 +2414,9 @@ export interface LoginResult {
    *  timed out"), which a client answers with a new link rather than a retry. `message` still says it
    *  in words. Absent for every other failure. */
   reason?: LoginFailureReason;
+  /** What became of a LoginCommand `browser`, on a repeat of the attempt's waiting report: the link opened in the
+   *  runner's browser, could not be, or the runner took Claude Code's code from that browser and handed it to the CLI. */
+  browser?: LoginBrowserOutcome;
   /** The `attempt` of the start this reports on. A report about an attempt the control plane has
    *  moved past (cancelled, or replaced by a new sign-in) changes nothing. Absent from an older
    *  runner, whose reports are taken as they come. */
@@ -2741,14 +2751,29 @@ export interface RunnerLoginState {
   /** Why a `failed` sign-in failed, when a client answers it differently (LoginResult.reason).
    *  Present only on such a failure. */
   reason?: LoginFailureReason;
+  /** The owner's Use the runner's browser for this attempt: `requested` until the runner answers, then its answer
+   *  (LoginResult.browser). Present only while a sign-in is waiting on its link and the owner asked for it. */
+  browser?: LoginBrowserState;
 }
 
 /** Why a sign-in failed, when a client answers it differently from any other failure: `expired` is
  *  the sign-in link running out before anyone signed in with it. */
 export type LoginFailureReason = 'expired';
 
+/** LoginResult.browser: what a runner did with a LoginCommand `browser`. */
+export type LoginBrowserOutcome = 'opened' | 'failed' | 'code-taken';
+
+/** RunnerLoginState.browser: the owner asked, and what the runner answered. */
+export type LoginBrowserState = 'requested' | LoginBrowserOutcome;
+
 /** Every LoginFailureReason, for a reader that checks one it is handed. */
 export const LOGIN_FAILURE_REASONS: readonly LoginFailureReason[] = ['expired'];
+
+/** Every LoginBrowserOutcome a runner may report, for a control plane to keep only these. */
+export const LOGIN_BROWSER_OUTCOMES: readonly LoginBrowserOutcome[] = ['opened', 'failed', 'code-taken'];
+
+/** Every LoginBrowserState a sign-in may be in. */
+export const LOGIN_BROWSER_STATES: readonly LoginBrowserState[] = ['requested', ...LOGIN_BROWSER_OUTCOMES];
 
 /** `code` of the 409 a new session gets when its engine is signed out on an online runner. */
 export const ENGINE_SIGNED_OUT = 'ENGINE_SIGNED_OUT';

@@ -32,6 +32,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.shadows.ShadowDialog
 
 /**
  * The worktree bar and its merge operation over a controlled `/api` (iOS WorktreeBar/WorktreeModel): what each
@@ -166,6 +167,83 @@ class WorktreeBarTest {
         listOf("orbit/a06c-worktree-85cfd1", "+12 −3 · 4 files · committed").forEach { text ->
             compose.onNodeWithText(text, useUnmergedTree = true).assertIsDisplayed()
         }
+    }
+
+    @Test @Config(qualifiers = "w360dp-h640dp") @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun commitsOpenFirstAndTheirFilesReturnToTheCommit() {
+        detail = session(
+            "worktreeDirty" to JsonPrimitive(true),
+            "baseSha" to JsonPrimitive("e9f1c074cd"),
+            "mergeTarget" to JsonPrimitive("develop"),
+            "branchCommits" to Wire.json.parseToJsonElement("""[
+                {"sha":"c98e1d4123","subject":"Keep the selected row","body":"Preserve selection on refresh.",
+                 "committedAt":"2026-11-22T10:00:00Z","savedBy":"commit-button",
+                 "files":[{"path":"src/reader/Bar.kt","additions":5,"deletions":1}]},
+                {"sha":"a41c9e2456","subject":"Add the first page","committedAt":"2026-11-22T09:00:00Z","savedBy":"session-end",
+                 "files":[{"path":"src/reader/Page.kt","additions":7,"deletions":2}]}
+            ]"""),
+        )
+        show()
+        val summary = "2 commits + uncommitted · +12 −3"
+        assertKeepsItsSize(summary, compose.onNodeWithText(summary, useUnmergedTree = true))
+        assertKeepsItsSize("Commit", compose.onNodeWithText("Commit"))
+        compose.onNodeWithText("Keep the selected row").assertDoesNotExist()
+        compose.onNodeWithText(summary).performClick()
+        compose.onNodeWithText("Commits 2").assertIsSelected()
+        compose.onNodeWithText("Uncommitted changes").assertIsDisplayed()
+        compose.onNodeWithText("Not committed yet").assertIsDisplayed()
+        compose.onNodeWithText("Saved with Commit").assertIsDisplayed()
+        compose.onNodeWithText("Auto-saved by Orbit").assertIsDisplayed()
+        compose.onNodeWithText("Based on develop @ e9f1c07").assertIsDisplayed()
+
+        compose.onNodeWithText("Keep the selected row").performClick()
+        compose.onNodeWithText("Preserve selection on refresh.").assertIsDisplayed()
+        compose.onNodeWithText("+5 −1 · 1 file", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Some of these files change elsewhere", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("shot.png", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("Page.kt", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("Bar.kt", substring = true, useUnmergedTree = true).performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("+new line", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Back to commit").performClick()
+        compose.onNodeWithText("Preserve selection on refresh.").assertIsDisplayed()
+        compose.runOnIdle { ShadowDialog.getLatestDialog().onBackPressed() }
+        compose.onNodeWithText("Commits 2").assertIsSelected()
+        compose.onNodeWithText("Keep the selected row").performClick()
+        compose.onNodeWithContentDescription("Back to Commits").performClick()
+        compose.onNodeWithText("Commits 2").assertIsSelected()
+
+        compose.onNodeWithText("All changes 4").performClick()
+        compose.onNodeWithText("All changes 4").assertIsSelected()
+        compose.onNodeWithText("shot.png", substring = true, useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("Bar.kt", substring = true, useUnmergedTree = true).performClick()
+        compose.onNodeWithText("‹ Worktree changes").performClick()
+        compose.onNodeWithText("All changes 4").assertIsSelected()
+
+        compose.onNodeWithText("Commits 2").performClick()
+        compose.onNodeWithText("Uncommitted changes").performClick()
+        compose.onNodeWithText("All changes 4").assertIsSelected()
+        compose.onNodeWithText("Done").performClick()
+        compose.onNodeWithText(summary, useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test fun noCommitsOpensAllChanges() {
+        detail = session("branchCommits" to JsonArray(emptyList()), "worktreeDirty" to JsonPrimitive(true))
+        show()
+        compose.onNodeWithText("Uncommitted · 4 files").performClick()
+        // No commit yet: today's file list, with no tabs to switch between (board 02-native, Rules).
+        compose.onNodeWithTag("worktree-files").assertIsDisplayed()
+        compose.onNodeWithText("Commits", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("All changes", substring = true).assertDoesNotExist()
+    }
+
+    @Test fun nullBranchCommitsKeepsTheLegacyBarAndDialog() {
+        detail = session("branchCommits" to JsonNull)
+        show()
+        compose.onNodeWithText("+12 −3 · 4 files · committed").performClick()
+        compose.onNodeWithText("Worktree changes").assertIsDisplayed()
+        compose.onNodeWithTag("worktree-files").assertIsDisplayed()
+        compose.onNodeWithText("Commits", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("All changes", substring = true).assertDoesNotExist()
     }
 
     @Test fun aConflictIsHandedToTheSessionAndAnErrorRetries() {

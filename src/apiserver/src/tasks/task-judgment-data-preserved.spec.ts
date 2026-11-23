@@ -3318,10 +3318,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // row is written, and no trigger, function or DONE fence changes.
       // Written as 1430 on the project line, it was renumbered after main took 1430.
       '1431_managed_runner_update_interrupt',
-      // 1432 drops 0130's claim index session_task_execution_claim_idx CONCURRENTLY (plan step 4.5, release B); 1426's
+      // 1432 creates model_identity (rule_key, canonical_key, name, decided_at), a new table no preserved relation
+      // references; no existing row is written, and no trigger, function or DONE fence changes.
+      '1432_model_identity',
+      // 1433 seeds model_identity with production's model ids, INSERT ... ON CONFLICT (rule_key) DO NOTHING into that
+      // new table only; no preserved relation, trigger, function or DONE fence is touched.
+      '1433_model_identity_seed',
+      // 1444 drops 0130's claim index session_task_execution_claim_idx CONCURRENTLY (plan step 4.5, release B); 1426's
       // index goes on enforcing one live run per task. Session is not a preserved relation, and no function, trigger,
       // type, constraint or DONE fence changes. No INSERT, UPDATE or DELETE.
-      '1432_drop_session_task_execution_claim_idx'],
+      '1444_drop_session_task_execution_claim_idx'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

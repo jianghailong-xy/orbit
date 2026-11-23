@@ -135,13 +135,42 @@ Claude Opus L/XL、Gemini Flash S/M、Gemini L/XL、Composer S、Claude Haiku S�
 owner 什么都没设时 Claude / Codex / Kimi 的行与以前逐字节相同；任务 run 的路由（`routeTaskRun`）不读它。
 
 **先按贴合度**：要的那一档 → 更高的档（近的先）→ 无档位的默认模型 → 更低的档（近的先）。选中的不在要的档时，理由里写明
-（`Nothing in tier M can run: …`）。**同一贴合度内**再按下表：
+（`Nothing in tier M can run: …`）。贴合度在每种模式下都是最外层的键。
+
+**同一贴合度内分两步：先选模型，再选账号**（owner，2026-11-22，策略版本 `p7-model-then-account-1`）。之前所有
+「凭据 × 引擎 × 模型」一起按额度排，结果是哪个账号的额度先过期就由它决定模型（S 档跑成了 Kimi K3 69 次、Sonnet 9 次），
+同一个模型在两个凭据上也被拆成两行报告。现在：
+
+1. **选模型**：同一贴合度里按模型 id 合并（`gpt-6.2-sol` 在 Codex 内置登录和 Codex Pool 上是同一个模型），按模型偏好排：
+   owner 在 Providers 页排的顺序（取这个模型最靠前的那个 Provider × 引擎）→ 档位来源（owner 自己定的档 > 规则：模型家族、实测、
+   preset 目录 > 引擎内置表）→ 表里同一档内原有的顺序。质量分（任务 351Ah51IZjAikVJUEduNc）以后会进这一步，现在路由不读它。
+   Intelligence 在这之前先按「档位上限高的模型先」（例如 L 档里 Opus 先于只到 L 的模型）。
+2. **选账号**：能跑这个模型的所有凭据（引擎自己的登录、号池、key）里，订阅先于计费 key；订阅里额度已知的先，再**先过期的先**，
+   再余量多的先；key 里便宜的先；最后按 owner 的顺序。
+
+严格程度跟 Optimize For（Settings › General，`optimizeForOf`）走：
 
 | Optimize For | 规则 |
 |---|---|
-| Cost（默认） | 订阅先于计费 key；订阅里额度已知的先，再**先过期的先**，再余量多的先；key 里便宜的先 |
-| Balance | 与 Cost 相同：可用的订阅（读得到额度与否）都先于计费 key（owner，2026-11-19）；与 Cost 只差在没给档位时抬到 M |
-| Intelligence | 档位上限高的模型先（例如 L 档里 Opus 先于 Sonnet-high），再额度已知的先，再先过期的先，并列时便宜的先 |
+| Cost | 不分两步，和以前一样：所有候选一起排——订阅先于计费 key，订阅里额度已知的先、再先过期的先、再余量多的先；key 里便宜的先 |
+| Balance（默认） | 先模型后账号，两个例外，同档的另一个模型可以接手：① 首选模型**没有一个订阅还有余量**（都 `quotaNearLimit`，或只有计费 key）时，按偏好的下一个有余量的模型；② 另一个模型的**周 / 月额度 24 小时内重置**（快要作废）、而首选模型没有这样的账号时，重置最早的那个模型。① ② 同时成立时 ② 优先 |
+| Intelligence | 严格先模型后账号：只有首选模型**没有一个账号能跑**（移除、未登录、到额度上限、被拒）时才换下一个模型；快用完、别的额度要作废都不换 |
+
+**「快要作废」的窗口取 24 小时**（`SUBAGENT_WASTE_WINDOW_MS`）：一天够当天的 run 把剩下的额度用掉，又短到首选模型仍拿着
+周窗口七天里的六天。只算窗口本身长于一天的（周、月）：5 小时窗口总在几小时内重置，每几个小时就还回来，不算作废；窗口长度未知的也不算。
+路由时刻由调用方传入（`SubagentRoutingInput.now`），没有时不触发这条。只有一个计费 key 的模型在 Balance 里算「没有余量」：
+免费额度先于花钱（owner，2026-11-19）。
+
+**理由**里写明哪一步定的：`Picked gpt-6.2-sol · low on codex-pool (Balance): model gpt-6.2-sol, preferred in tier S;
+account codex-pool: its quota resets first, a subscription pool whose account … has 70% of its quota left until …`；
+接手时写 `takes over tier S from the preferred claude-sonnet-5-5, which has every account near its limit` 或
+`…: its quota on kimi resets at …, within a day, and would otherwise go to waste`。Cost 的理由和以前逐字相同。
+
+**候选（fallbacks）按同一个顺序**：选中模型的所有账号 → 同档下一个模型的账号 → 下一个贴合度。额度 / 容量失败后换的就是这个顺序（§4.3）。
+
+**任务 run 不变**（`routeTaskRun` 借用这个路由器选候选）：它传 `rankTogether`，在每种模式下都照旧把所有候选一起排
+（Balance 等同 Cost，Intelligence 是上限高的先、再额度、再价格）。原因：默认的 Balance 下两步会改变 Agent 自己的引擎接不了时
+任务 run 拿到的模型，这次没有要这个改变。由 `model-routing-two-step.spec.ts` 钉住。
 
 **先过期的先**（owner，2026-11-19）：和 runner 上选账号同一条规则（`planUsage.ts` `rankAccounts`）——快用完的
 （`quotaNearLimit`：5 小时窗口 ≥ 80%，更长的 ≥ 90%）排最后，其余按额度作废的时刻（`quotaExpiresAt`：最长那个窗口的重置，

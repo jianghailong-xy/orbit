@@ -1076,7 +1076,7 @@ type InstallResultRequest struct {
 // every heartbeat until the runner reports a status that moves the server on, so both actions
 // must be idempotent.
 type LoginCommand struct {
-	Action string `json:"action"` // "start" | "code"
+	Action string `json:"action"` // "start" | "code" | "cancel" | "browser"
 	// Which CLI to sign in: "claude" | "codex" | "kimi". Empty from an older control plane, which only
 	// ever drove claude.
 	Engine string `json:"engine,omitempty"`
@@ -1205,6 +1205,9 @@ type LoginResultRequest struct {
 	// With a failure: why, when a client answers it differently from any other — loginReasonExpired, the
 	// link running out before anyone signed in with it. Omitted for every other failure.
 	Reason string `json:"reason,omitempty"`
+	// What became of a LoginCommand `browser` (login_runner_browser.go), with the waiting report it repeats:
+	// loginBrowserOpened, loginBrowserFailed or loginBrowserCodeTaken. Omitted from every other report.
+	Browser string `json:"browser,omitempty"`
 }
 
 // MergeCommand mirrors @orbit/shared: a request to merge one session's worktree branch into
