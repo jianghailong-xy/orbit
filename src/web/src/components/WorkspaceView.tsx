@@ -4540,7 +4540,18 @@ export function WorkspaceView({
   // Model and Mode have independent dirty guards. If an untouched model is refined by a late
   // Runtime heartbeat after the user explicitly chose Auto, correctness still wins: never keep
   // an invalid pair merely because Mode is dirty.
+  //
+  // Not in the commit a new context arrives in: that commit still holds the previous context's
+  // model and mode, the seeds above having only queued this one's. Judged on those, a stopped Claude
+  // session opened after a Codex one read Codex's model, lost Auto, and its Continue stored Default
+  // (seen on orbitd.io, 2026-11-23). The seeds are clamped already, and the next commit runs this
+  // check again on this context's own values.
+  const clampContextKey = useRef<string | null>(null);
   useEffect(() => {
+    if (clampContextKey.current !== modelContextKey) {
+      clampContextKey.current = modelContextKey;
+      return;
+    }
     if (
       !live &&
       shownProviderCapabilitiesResolved &&
@@ -4555,6 +4566,7 @@ export function WorkspaceView({
     live,
     mode,
     model,
+    modelContextKey,
     runner.modelCatalog,
     shownEngine,
     shownProvider,
