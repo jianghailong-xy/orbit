@@ -329,14 +329,14 @@ counts, and uploads racing at the limit can pass it by at most 25 MiB each.
 ### Monitoring
 
 The `monitoring` Compose profile runs Prometheus beside the stack, with two exporters, and collects the metrics of
-every apiserver, the link gateway, PostgreSQL and the host. It publishes no port on the host, and no monitoring
-container is given the Docker socket.
+every apiserver, the link gateway, PostgreSQL and the host; [Grafana](#grafana) shows them. The only port it
+publishes on the host is Grafana's, on `127.0.0.1`, and no monitoring container is given the Docker socket.
 
 Turn it on by adding `monitoring` to `COMPOSE_PROFILES` in `.env`, then start it:
 
 ```bash
 COMPOSE_PROFILES=runner-link,monitoring      # keep the profiles the line already names
-docker compose up -d --wait prometheus node-exporter postgres-exporter
+docker compose up -d --wait prometheus node-exporter postgres-exporter grafana
 ```
 
 **What it runs.** Every image is pinned by version and digest; set the variable to use another
@@ -347,6 +347,7 @@ docker compose up -d --wait prometheus node-exporter postgres-exporter
 | `prometheus` | Scrapes the targets below every 15 seconds and keeps the series in the `prometheus-data` volume. | 1 GB |
 | `node-exporter` | The host's CPU, memory, load and disks, from the host's `/proc`, `/sys` and `/` mounted read-only, and [the backup metrics](#the-backup-metrics) `pgbackup` writes. | 128 MB |
 | `postgres-exporter` | PostgreSQL's statistics, read as the `orbit_monitor` role. | 128 MB |
+| `grafana` | The dashboards, on `127.0.0.1` only ([below](#grafana)). | 384 MB |
 | `pg-monitor-role` | Runs once each time the profile comes up and exits: it makes `orbit_monitor` and sets its password. | 64 MB |
 
 **What Prometheus scrapes** (`deploy/monitoring/prometheus.yml`):
@@ -456,15 +457,64 @@ network rather than the host's, so that its port is reached by Prometheus alone;
 own container's, not the host's. The host's `/` shows it the path of the Docker socket too, which it cannot open: it
 runs as `nobody`, with every capability dropped, and the socket belongs to root and the `docker` group.
 
+#### Grafana
+
+Grafana shows what Prometheus collects, in four dashboards that ship in the repository
+(`deploy/monitoring/grafana/dashboards/`) and load by themselves. Prometheus is its one data source, provisioned
+(`deploy/monitoring/grafana/provisioning/`); neither can be changed or deleted from Grafana's UI. To change a dashboard,
+edit its file: Grafana picks the change up within a minute.
+
+**It is never on the Orbit origin.** Grafana is published as `127.0.0.1:3030` (`GRAFANA_PORT`) and nowhere else, and
+neither the web gateway nor `gateway/nginx.conf` has a location for it. That is on purpose: the web app keeps its login
+token in the browser's `localStorage`, and a script served from the same origin can read it. Grafana can run scripts
+of its own making (panels and plugins), so it must not share an origin with Orbit. Do not add a `location /grafana`
+to either nginx configuration.
+
+**Reach it** from the host itself at `http://127.0.0.1:3030`, or from your own machine through an SSH tunnel:
+
+```bash
+ssh -L 3030:127.0.0.1:3030 you@your-server      # then open http://localhost:3030
+```
+
+Or serve it from a hostname of its own, one that is not the Orbit origin (not a subdomain's path, not a route of it), with
+a reverse proxy on the host that forwards to `127.0.0.1:3030`, and set `GRAFANA_ROOT_URL` in `.env` to that address.
+Put your own authentication or an IP allow-list in front of it as well: Grafana's login is its only lock.
+
+**Signing in.** The user is `admin`. The password is `GRAFANA_ADMIN_PASSWORD` in `.env`, which a fresh install
+(`scripts/install-server.sh`) and the upgrade script generate (32 hex digits) where `.env` has none, and never replace.
+Without one the `grafana` container refuses to start, so it can never come up on Grafana's own default password.
+Sign-up, creating organizations and anonymous access are off. Grafana stores the password in its database the first
+time it starts, and changing the line later does not change it; to set a new one:
+
+```bash
+docker compose exec grafana grafana cli admin reset-admin-password "$GRAFANA_ADMIN_PASSWORD"
+```
+
+**The dashboards**
+
+| Dashboard | What it answers |
+| --- | --- |
+| Orbit overview | Are the targets up; requests per second, 5xx ratio and p95 latency; the slowest routes; queued work; the fullest disk. |
+| Orbit runners & sessions | Runners by state and the oldest heartbeat; sessions and tasks, queued and running; whether the gauges could be read. |
+| Orbit database | PostgreSQL's connections, transactions, rows, cache hit ratio and size; the apiservers' transaction counters and p95 time; base backup age and WAL-archive failures. |
+| Orbit host | CPU, memory, load, disk space and throughput of the host, and the exporter container's network. |
+
+The runner, session and task gauges are read from the database by every apiserver, so their panels combine them with
+`max`; counters and histograms that each apiserver keeps for its own requests are combined with `sum`. Query the
+same way when you build a panel of your own.
+
+Grafana's own data is in the `grafana-data` volume (a few MB). Its image is pinned like the others
+(`ORBIT_GRAFANA_IMAGE`).
+
 **Retention.** Prometheus keeps 15 days (`ORBIT_PROMETHEUS_RETENTION`) and never more than 4 GB on disk
 (`ORBIT_PROMETHEUS_RETENTION_SIZE`), whichever comes first; the oldest data goes first. It lives in the
 `prometheus-data` volume, in Docker's data root rather than in `./data`, and is not backed up.
 
 **Turn it off.** Remove `monitoring` from `COMPOSE_PROFILES` in `.env`, then stop and remove its containers. The
-apiserver's listener stays open, reached by nothing. The two volumes stay until you remove them:
+apiserver's listener stays open, reached by nothing. The volumes stay until you remove them:
 
 ```bash
-docker compose --profile monitoring rm -sf prometheus node-exporter postgres-exporter pg-monitor-role
+docker compose --profile monitoring rm -sf grafana prometheus node-exporter postgres-exporter pg-monitor-role
 docker volume rm "$(docker compose config --format json | jq -r .name)_prometheus-data"   # only to drop the history
 ```
 
