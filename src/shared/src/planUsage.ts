@@ -210,13 +210,20 @@ function windowsWithLength(snapshot: PlanUsageSnapshot): Array<{ window: PlanUsa
  * to expire.
  */
 export function quotaExpiresAt(snapshot: PlanUsageSnapshot | null | undefined, now: Date): number {
+  return quotaExpiry(snapshot, now).at;
+}
+
+/** quotaExpiresAt's moment, with the length in minutes of the window whose reset it is: null when no window
+ *  ahead says how long it is (or none is ahead). What tells a weekly quota about to go to waste from a 5-hour
+ *  window that always resets within hours. */
+export function quotaExpiry(snapshot: PlanUsageSnapshot | null | undefined, now: Date): { at: number; mins: number | null } {
   const ahead = (snapshot ? windowsWithLength(snapshot) : []).filter(
     ({ window }) => Date.parse(window.resetsAt ?? '') > now.getTime(),
   );
-  if (ahead.length === 0) return Number.POSITIVE_INFINITY;
+  if (ahead.length === 0) return { at: Number.POSITIVE_INFINITY, mins: null };
   const longest = Math.max(...ahead.map(({ mins }) => mins ?? -1));
   const pick = longest >= 0 ? ahead.filter(({ mins }) => (mins ?? -1) === longest) : ahead;
-  return Math.max(...pick.map(({ window }) => Date.parse(window.resetsAt!)));
+  return { at: Math.max(...pick.map(({ window }) => Date.parse(window.resetsAt!))), mins: longest >= 0 ? longest : null };
 }
 
 /** Whether any window of `snapshot` is nearly spent — SHORT_WINDOW_NEAR_LIMIT_UTILIZATION for one of

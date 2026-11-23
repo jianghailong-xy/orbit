@@ -95,71 +95,63 @@ describe('Settings → Providers → Model routing', () => {
     expect(tabs).toEqual([['true', 'SubAgents|727|'], ['false', 'Workflows|9|']]);
   });
 
-  it('SubAgents: a row per model with its tier, price, the tiers it ran at, runs, share done and cost, in sections', () => {
+  it('SubAgents: a row per model with its tier, Quality, price, the tiers it ran at, runs and share done, in sections', () => {
     const html = render(PAGE);
     expect(text(html)).toContain(
-      '|727 runs|, 71 of them workflow calls · |91%| done · |$287.21| · 3 moved on · 16% without a size · |2 models ran outside their tiers|',
+      '|727 runs|, 71 of them workflow calls · |91%| done · 3 moved on · 16% without a size · |2 models ran outside their tiers|',
     );
+    // Each model here is on one account: one row, its provider beside its name, nothing to open.
     expect(rows(html)).toEqual([
       'Routed by tier',
-      '▸|DeepSeek V4 Flash|DeepSeek|S|No runs yet|$0.42|S|64|98%|$11.40',
+      'DeepSeek V4 Flash|DeepSeek|S|No runs yet|$0.42|S|64|98%',
       // Its M runs are outside the S it is set to.
-      '▸|GPT-6.1 Sol|Codex|19 runs at M, outside S|S|No runs yet|Subscription|S|M|28|93%|$0.00',
-      '▸|Claude Sonnet 5.5|Claude Code|S · M|No runs yet|Subscription|M|22|68%|$9.86',
-      '▸|GPT-6.2 Sol|Codex|S–XL by effort|No runs yet|Subscription|L|18|94%|$0.00',
-      '▸|Claude Haiku 5.5|Claude Code|No tier set, but routed 12 times|Not set|No runs yet|Subscription|S|12|92%|$1.20',
-      '▸|Kimi K3|Kimi Code|S · M|No runs yet|Subscription|M|10|100%|$0.00',
-      '▸|Claude Opus 5.5|Claude Code|L · XL|No runs yet|Subscription|L|5|100%|$4.31',
-      '▸|Claude Fable 5.2|Claude Code|L · XL|No runs yet|Subscription|XL|2|100%|$6.80',
-      'kimi-k3.1-pro|Kimi (Moonshot)|L|No runs yet|$10.00|No runs|0|—|—',
+      'GPT-6.1 Sol|Codex|19 runs at M, outside S|S|No runs yet|Subscription|S|M|28|93%',
+      'Claude Sonnet 5.5|Claude Code|S · M|No runs yet|Subscription|M|22|68%',
+      'GPT-6.2 Sol|Codex|S–XL by effort|No runs yet|Subscription|L|18|94%',
+      'Claude Haiku 5.5|Claude Code|No tier set, but routed 12 times|Not set|No runs yet|Subscription|S|12|92%',
+      'Kimi K3|Kimi Code|S · M|No runs yet|Subscription|M|10|100%',
+      'Claude Opus 5.5|Claude Code|L · XL|No runs yet|Subscription|L|5|100%',
+      'Claude Fable 5.2|Claude Code|L · XL|No runs yet|Subscription|XL|2|100%',
+      'kimi-k3.1-pro|Kimi (Moonshot)|L|No runs yet|$10.00|No runs|0|—',
       'Called by name|The SubAgent named its model, so no tier was picked.',
-      'DeepSeek Flash|DeepSeek|Not set|No runs yet|$0.42|Named|171|94%|$81.30',
+      'DeepSeek Flash|DeepSeek|Not set|No runs yet|$0.42|Named|171|94%',
       'Not routed',
-      'DeepSeek Flash|DeepSeek|Not set|No runs yet|$0.42|Not routed|395|89%|$172.34',
+      'DeepSeek Flash|DeepSeek|Not set|No runs yet|$0.42|Not routed|395|89%',
       '▸ No tier, no runs · 1 model',
     ]);
   });
 
-  it("draws one model's rows on different providers as one block, its Quality once, and says it is pooled", () => {
+  it('draws a model on several accounts as one row, closed, with their runs summed and Varies where they differ', () => {
     const k3 = { key: 'kimi-k3', name: 'Kimi K3' };
-    const withK3 = (quality: ModelQuality): SubagentTiersResponse => ({
+    const quality: ModelQuality = {
+      subagent: { averageRating: null, ratedCount: 0, runCount: 3, raters: [] },
+      tasks: { firstPassRate: 0.8, firstPassTaskCount: 8, completedTaskCount: 10 },
+    };
+    const tiers: SubagentTiersResponse = {
       providers: TIERS.providers.map((provider) =>
         provider.slug === 'kimi' ? { ...provider, models: [model('kimi-code/k3', ['S', 'M'], { identity: k3, quality })] }
           : provider.slug === 'moonshot'
             ? { ...provider, models: [...provider.models, model('kimi-k3', ['S'], { editable: false, outputPricePerMTok: 15, identity: k3, quality })] }
             : provider),
-    });
-    const rated: ModelQuality = {
-      subagent: { averageRating: null, ratedCount: 0, runCount: 3, raters: [] },
-      tasks: { firstPassRate: 0.8, firstPassTaskCount: 8, completedTaskCount: 10 },
     };
-    const html = render(PAGE, BOARD_REPORT, undefined, withK3(rated));
+    const html = render(PAGE, BOARD_REPORT, undefined, tiers);
     const listed = rows(html);
-    const at = listed.findIndex((row) => row.includes('|Kimi Code|'));
-    expect(listed[at]).toContain('|80% first pass · 10 tasks|Pooled across 2 providers|');
-    // The row below: its provider alone, its own tier and price, no Quality of its own.
-    expect(listed[at + 1]).toBe('▸|Kimi (Moonshot)|S|$15.00|No runs|0|—|—');
-    expect(html).toContain('aria-label="Kimi K3 on Kimi (Moonshot)"');
-    expect(html).toContain('class="model-routing-continued"');
-
-    // With no figure to explain, nothing is said of pooling.
-    const unrated: ModelQuality = {
-      subagent: { averageRating: null, ratedCount: 0, runCount: 3, raters: [] },
-      tasks: { firstPassRate: null, firstPassTaskCount: 1, completedTaskCount: 2 },
-    };
-    expect(text(render(PAGE, BOARD_REPORT, undefined, withK3(unrated)))).not.toContain('Pooled across');
+    expect(listed).toContain('▸|Kimi K3|2 accounts|Varies|80% first pass · 10 tasks|Varies|M|10|100%');
+    // Closed at first: no account row under it.
+    expect(listed).not.toContain('Kimi Code|S · M ▾|$0.00|M|10|100%');
+    expect(html).not.toContain('model-routing-account');
   });
 
   it("keeps Model tiers' Quality column beside the tier, its footnote under the table", () => {
     const html = render(PAGE);
     const heads = [...html.slice(html.indexOf('<thead>'), html.indexOf('</thead>')).matchAll(/<th[^>]*>([^<]*)<\/th>/g)].map((m) => m[1]);
-    expect(heads).toEqual(['Model', 'Tier', 'Quality', 'Price / M out', 'Ran at', 'Runs', 'Done', 'Cost']);
+    expect(heads).toEqual(['Model', 'Tier', 'Quality', 'Price / M out', 'Ran at', 'Runs', 'Done']);
     expect(text(html)).toContain('Quality is shown, not used for routing.');
   });
 
   it('opens nothing until asked, and folds away the models with no tier and no runs', () => {
     const html = render(PAGE);
-    expect(html).not.toContain('model-routing-tier"');
+    expect(html).not.toContain('model-routing-account');
     expect(text(html)).not.toContain('claude-haiku-5|');
     expect(html).toContain('aria-expanded="false"');
   });
@@ -169,7 +161,7 @@ describe('Settings → Providers → Model routing', () => {
     expect(text(html)).toContain('No SubAgents ran in the last 30 days.');
     expect(rows(html)[0]).toBe('Routed by tier');
     // With no run to name it, a model reads as its id.
-    expect(rows(html)).toContain('claude-sonnet-5-5|Claude Code|S · M|No runs yet|Subscription|No runs|0|—|—');
+    expect(rows(html)).toContain('claude-sonnet-5-5|Claude Code|S · M|No runs yet|Subscription|No runs|0|—');
   });
 
   it('Workflows: a row per name with runs, calls, failed calls, cost and median duration, and its totals', () => {

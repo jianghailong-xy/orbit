@@ -284,13 +284,29 @@ func TestAdoptMountsAgainWhatAPreviousStartPublished(t *testing.T) {
 	// Pod b was unpublished while the plugin was down: the kubelet unmounted its target.
 	delete(w.bound, gone.TargetPath)
 
-	w.runs = nil
-	restarted := New(w.config())
+	cfg := w.config()
+	run := cfg.Run
+	started := make(chan parent.Config, 1)
+	cfg.Run = func(ctx context.Context, conf parent.Config) error {
+		select {
+		case started <- conf:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		return run(ctx, conf)
+	}
+	restarted := New(cfg)
+	t.Cleanup(restarted.Shutdown)
 	if n := restarted.Adopt(context.Background()); n != 1 {
 		t.Fatalf("adopted %d", n)
 	}
-	if len(w.runs) != 1 || w.runs[0].PodUID != "pod-a" || w.runs[0].UID != uid || w.runs[0].Token != "orbit_drive_mount_a" {
-		t.Fatalf("adopted runs %+v", w.runs)
+	select {
+	case adopted := <-started:
+		if adopted.PodUID != "pod-a" || adopted.UID != uid || adopted.Token != "orbit_drive_mount_a" {
+			t.Fatalf("adopted run %+v", adopted)
+		}
+	case <-time.After(cfg.MountTimeout):
+		t.Fatal("the adopted daemon did not start")
 	}
 	if _, err := os.Stat(filepath.Join(w.dir, "state", runnerB+".json")); !os.IsNotExist(err) {
 		t.Fatal("the gone Pod's state is removed")

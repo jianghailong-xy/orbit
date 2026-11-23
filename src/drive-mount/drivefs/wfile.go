@@ -142,7 +142,7 @@ func newUUID() string {
 	return h[0:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:]
 }
 
-// newWfile makes a write state for n, as n's attributes are now (the caller holds no lock).
+// newWfile makes a write state from n's attributes captured under FS.mu.
 func (fs *FS) newWfile(n *node, mode wmode, handleID string, size int64, mtime time.Time, version string) *wfile {
 	if handleID == "" {
 		handleID = newUUID()
@@ -217,17 +217,15 @@ func (wf *wfile) setBaseLocked(m door.Manifest) {
 }
 
 // toTruncLocked empties the file: what an existing file's O_TRUNC or ftruncate to 0 does.
-func (wf *wfile) toTruncLocked() {
+func (wf *wfile) toTruncLocked(continueVersion bool) {
 	for _, c := range wf.chunks {
 		wf.dropChunkLocked(c)
 	}
 	wf.chunks = nil
 	wf.regionStart, wf.firstIdx, wf.size = 0, 0, 0
 	wf.baseChunks, wf.replaceTail, wf.baseVersion, wf.baseSize = nil, nil, "", 0
-	switch wf.mode {
-	case modeNew, modeTrunc:
-		// The version this handle writes is continued: one handle's truncate-and-rewrite is one version.
-	default:
+	// One handle's truncate-and-rewrite continues its version. A fresh truncate starts an overwrite.
+	if !continueVersion || (wf.mode != modeNew && wf.mode != modeTrunc) {
 		wf.mode, wf.version = modeTrunc, ""
 	}
 	wf.mtime = time.Now()
@@ -397,7 +395,7 @@ func (wf *wfile) growZerosLocked(ctx context.Context, size int64) error {
 
 // write puts data at off, or at the end when off is negative (O_APPEND). It answers errInPlace for a write the drive
 // does not take: inside an existing file, or anywhere but its end (§5.6).
-func (wf *wfile) write(ctx context.Context, off int64, data []byte) error {
+func (wf *wfile) write(ctx context.Context, h *handle, off int64, data []byte) error {
 	wf.wmu.Lock()
 	defer wf.wmu.Unlock()
 	wf.mu.Lock()
@@ -408,6 +406,11 @@ func (wf *wfile) write(ctx context.Context, off int64, data []byte) error {
 	atEnd := off < 0
 	if atEnd {
 		off = wf.size
+	}
+	// A reopen can share the previous writer's state before FUSE delivers RELEASE. Only a handle
+	// that created or emptied the file can use that state's permission to rewrite it.
+	if !h.rewrite && off != wf.size {
+		return errInPlace
 	}
 	switch wf.mode {
 	case modeExisting:
@@ -522,7 +525,7 @@ func (wf *wfile) becomeAppendLocked(ctx context.Context) error {
 
 // truncate is ftruncate (§5.2): a new or emptied file to any size; an existing one only to 0 (an overwrite to empty)
 // or to its size (nothing).
-func (wf *wfile) truncate(ctx context.Context, size int64) error {
+func (wf *wfile) truncate(ctx context.Context, h *handle, size int64) error {
 	wf.wmu.Lock()
 	defer wf.wmu.Unlock()
 	wf.mu.Lock()
@@ -533,16 +536,16 @@ func (wf *wfile) truncate(ctx context.Context, size int64) error {
 	if size == wf.size {
 		return nil
 	}
+	rewrite := h != nil && h.rewrite
 	switch {
-	case wf.mode == modeExisting || wf.mode == modeAppend:
-		if size != 0 {
-			return errInPlace
-		}
-		wf.toTruncLocked()
-		return nil
 	case size == 0:
-		wf.toTruncLocked()
+		wf.toTruncLocked(rewrite)
+		if h != nil {
+			h.rewrite = true
+		}
 		return nil
+	case !rewrite || wf.mode == modeExisting || wf.mode == modeAppend:
+		return errInPlace
 	case size > wf.size:
 		if err := wf.growZerosLocked(ctx, size); err != nil {
 			return err
@@ -1378,22 +1381,14 @@ func (fs *FS) writeState(ctx context.Context, n *node, mode wmode, handleID stri
 		if mode == modeTrunc {
 			wf.wmu.Lock()
 			wf.mu.Lock()
-			wf.toTruncLocked()
+			wf.toTruncLocked(false)
 			wf.mu.Unlock()
 			wf.wmu.Unlock()
 		}
 		return wf, nil
 	}
-	size, mtime, version := n.size, n.mtime, n.version
-	fs.mu.Unlock()
-	wf := fs.newWfile(n, mode, handleID, size, mtime, version)
-	fs.mu.Lock()
 	defer fs.mu.Unlock()
-	if other := n.wf; other != nil && !other.gaveUp.Load() {
-		// Another handle made one meanwhile: this one joins it.
-		other.refs++
-		return other, nil
-	}
+	wf := fs.newWfile(n, mode, handleID, n.size, n.mtime, n.version)
 	wf.refs = 1
 	n.wf = wf
 	fs.wfiles[wf] = struct{}{}
