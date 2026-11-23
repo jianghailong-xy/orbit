@@ -77,6 +77,27 @@ public enum SessionRunState: String, Codable, Sendable {
         }
     }
 
+    /// The run state a payload with the new session fields reads as (web `runStateFromPhaseFields`), or nil
+    /// when `phase` or `released` is absent (an older server), which keeps the legacy reading. A release is
+    /// Failed only when the last turn failed and nobody asked for an end; Finished only by `workFinished`
+    /// (else the end reason or a settled landing); any other release is Ended. A held session reads its
+    /// phase: queued, running (parked when `activity` names work outside a turn), or waiting on its reply.
+    public static func fromPhaseFields(phase: SessionPhase?, released: Bool?,
+                                       lastTurnOutcome: SessionTurnOutcome?, endReason: String?,
+                                       workFinished: Bool? = nil, activity: String? = nil,
+                                       isLanding: Bool = false) -> SessionRunState? {
+        guard let phase, let released else { return nil }
+        if released {
+            return afterRelease(endReason: endReason, lastTurnOutcome: lastTurnOutcome,
+                                workFinished: workFinished, isLanding: isLanding)
+        }
+        switch phase {
+        case .pending: return .queued
+        case .running: return (activity ?? "").isEmpty ? .running : .awaitingInput
+        case .idle:    return lastTurnOutcome == .interrupted ? .interrupted : .awaitingInput
+        }
+    }
+
     /// Resolve the new field first, then raw runner status + end reason. The legacy mixed
     /// `sessionState` is intentionally not allowed to override a raw state: an old completed row
     /// commonly says `sessionState=COMPLETED` while its actual run status is CANCELLED.

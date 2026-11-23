@@ -137,14 +137,19 @@ sealed interface TaskRowPhrase {
 
 /** A session ref's run state: the modern `runState`, else the raw runner status, else the legacy mix. */
 fun resolvedRunState(session: JsonObject): String? {
-    // The session facts first when sent: a released session is Finished (its work finished), Failed (a failed turn nobody asked to
-    // end) or Ended, and an unreleased one reads its phase, an interrupted turn staying Interrupted until the release lands.
-    if (SessionFacts.present(session)) {
-        if (SessionFacts.released(session) == true) return SessionFacts.afterRelease(session)
-        when (SessionFacts.phase(session)) {
-            "PENDING" -> return "QUEUED"
-            "RUNNING" -> return "RUNNING"
-            "IDLE" -> return if (SessionFacts.lastTurnOutcome(session) == "INTERRUPTED") "INTERRUPTED" else "AWAITING_INPUT"
+    // The session facts first when sent, as web's task panel reads them (sessionRunStateOf): they count when the phase is a known word
+    // and `released` is present. A released session is Finished (its end reason says task_done, or a settled landing: web ignores
+    // `workFinished` here), Failed (a failed turn nobody asked to end) or Ended; an unreleased one reads its phase, RUNNING with
+    // `activity` set being parked work outside a turn, an interrupted turn staying Interrupted until the release lands.
+    val phase = SessionFacts.phase(session)
+    val released = SessionFacts.released(session)
+    if (phase != null && released != null) {
+        if (released) return SessionFacts.afterRelease(SessionFacts.endReason(session), SessionFacts.lastTurnOutcome(session), null,
+            session.text("sessionKind") == "LANDING")
+        return when (phase) {
+            "PENDING" -> "QUEUED"
+            "RUNNING" -> if (session.text("activity").isNullOrEmpty()) "RUNNING" else "AWAITING_INPUT"
+            else -> if (SessionFacts.lastTurnOutcome(session) == "INTERRUPTED") "INTERRUPTED" else "AWAITING_INPUT"
         }
     }
     session.text("runState")?.takeIf { it != "UNKNOWN" && it in RUN_STATES }?.let { return it }
@@ -918,7 +923,7 @@ object TaskDetailLogic {
             if (route.flag("escalated")) listOf(TaskDetailCopy.usageLimitNote) else emptyList()).joinToString(" · ")
     }
     fun runLabel(session: JsonObject) = when (resolvedRunState(session)) {
-        "QUEUED" -> if (SessionFacts.present(session) && SessionFacts.waitingOn(session) == "HOLD") "On hold" else "Queued"; "FINISHED" -> "Finished"; "RUNNING" -> "Running"; "AWAITING_INPUT" -> "Awaiting reply"; "SUCCEEDED" -> "Finished"
+        "QUEUED" -> "Queued"; "FINISHED" -> "Finished"; "RUNNING" -> "Running"; "AWAITING_INPUT" -> "Awaiting reply"; "SUCCEEDED" -> "Finished"
         "FAILED" -> "Failed"; "INTERRUPTED" -> "Interrupted"; "ENDED" -> "Ended"; else -> "—"
     }
 }
