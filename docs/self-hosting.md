@@ -345,7 +345,7 @@ docker compose up -d --wait prometheus node-exporter postgres-exporter
 | Service | What it does | Memory limit |
 | --- | --- | --- |
 | `prometheus` | Scrapes the targets below every 15 seconds and keeps the series in the `prometheus-data` volume. | 1 GB |
-| `node-exporter` | The host's CPU, memory, load and disks, from the host's `/proc`, `/sys` and `/` mounted read-only. | 128 MB |
+| `node-exporter` | The host's CPU, memory, load and disks, from the host's `/proc`, `/sys` and `/` mounted read-only, and [the backup metrics](#the-backup-metrics) `pgbackup` writes. | 128 MB |
 | `postgres-exporter` | PostgreSQL's statistics, read as the `orbit_monitor` role. | 128 MB |
 | `pg-monitor-role` | Runs once each time the profile comes up and exits: it makes `orbit_monitor` and sets its password. | 64 MB |
 
@@ -365,6 +365,49 @@ so after it is dropped: on a stack whose link gateway was removed, `up{job="link
 later, and none at all in a Prometheus started while the link was off.
 Each apiserver is a target of its own, labelled by its address in the project network, which changes when the
 container is recreated.
+
+**What the apiserver reports.** Beside the database-conflict, Watch and wiki counters it always served, each
+apiserver's `/metrics` carries these. Every label comes from a closed set; none names a runner, a user, a session or a
+task.
+
+| Metric | What it is |
+| --- | --- |
+| `orbit_http_request_duration_seconds` | A histogram of the time from a request reaching the apiserver to its answer being written, labelled `route` (the template, such as `/api/sessions/:id`, never the URL; `unmatched` when no route matched), `method` (`GET`, `POST` and the other five, or `other`) and `status` (`2xx` to `5xx`, or `other`). Recorded when the answer is written, so the status is the one sent, 500s from a failed handler included. Past 1,024 label combinations, new ones are counted in one `overflow` series. |
+| `orbit_runners{state}` | Runners by state: `online` and `draining` were heard from in the last 90 seconds, `draining` taking no new work; `silent` were not, and did not sign off; `offline` signed off. |
+| `orbit_runner_oldest_heartbeat_age_seconds` | Seconds since the least recently heard of the `online` and `draining` runners last beat, 0 with none. Runners beat every 30 seconds, so it sits near 30 and climbs to 90 as beats stop; a runner past that is counted `silent`. |
+| `orbit_sessions{state}` | Sessions not in the Trash whose turn is `queued` for a runner or `running` on one. |
+| `orbit_tasks{state}` | Tasks a session is working on, as the task list shows them: `queued` while its turn waits for a runner, `running` otherwise, which includes a session waiting for something that will wake it. |
+| `orbit_fleet_gauges_up` | 1 when the four above could be read from the database, 0 when they could not; they are then absent. |
+
+The histogram leaves out the requests that are held open on purpose, because their time is what they wait for: the
+event streams (`/api/events`, `/api/sessions/:id/events` and the share-link and guest streams), the approval
+`orbit mcp` waits on for up to 25 seconds, and the model gateways under `/api/gw/`. The browser viewer's WebSocket
+never reaches it. A request whose client left before the answer was written is not counted either; the web gateway's
+access log has it, as a 499. Two routes can still hold for a while when asked to: a merge with `waitSeconds`, and the
+Cursor key check. They are counted under their own routes, so they move only those routes' quantiles.
+
+The runner, session and task gauges are read from the database at most once every 30 seconds by each apiserver, and
+scrapes in between are answered from that read. Every apiserver reads the same rows, so combine them across
+apiservers with `max`, never `sum`; the histogram is each apiserver's own requests, so `sum` it.
+
+#### The backup metrics
+
+`pgbackup` writes `./data/pg-archive/metrics/pgbackup.prom` on every poll, which is at least every 15 minutes, and
+node-exporter serves it from that directory alone, mounted read-only; it does not see the rest of the archive. The
+off-host mirror leaves that directory out.
+
+| Metric | What it is |
+| --- | --- |
+| `orbit_backup_base_last_success_timestamp_seconds` | When the newest completed base backup was finished, in Unix seconds; 0 with none. |
+| `orbit_backup_base_interval_seconds` | `ORBIT_BASE_BACKUP_INTERVAL`, so that a rule can say "older than its interval" without repeating the setting: `time() - orbit_backup_base_last_success_timestamp_seconds > orbit_backup_base_interval_seconds + 3600`. The hour covers the poll and the backup's own run time. |
+| `orbit_backup_wal_archive_failures_total` | Failed WAL archive attempts, `pg_stat_archiver.failed_count`. Postgres retries a failed segment about once a minute, so it keeps climbing while archiving is broken. It restarts from 0 when Postgres's statistics are reset. |
+| `orbit_backup_wal_archive_failing` | 1 while archiving is failing (its last failure is newer than its last success), the state the sidecar logs `ERROR: WAL archiving is failing` in. |
+| `orbit_backup_mirror_failures_total{copy}` | Polls whose off-host copy failed since the sidecar started, by `copy`: `archive`, `files` and `bucket`. A mirror the sidecar refuses counts as failed. Always 0 with no `ORBIT_BACKUP_SYNC_TARGET`. |
+
+The two WAL lines are left out of a poll that could not read `pg_stat_archiver`. node-exporter adds
+`node_textfile_mtime_seconds{file="/textfile/pgbackup.prom"}`, the file's own time: if it stops moving, the sidecar
+has stopped. The sidecar picks up a new `scripts/pg-backup.sh` only when its container is recreated, so after an
+upgrade that changes it, check that the file exists.
 
 **Reading it.** Prometheus is reached inside the project network only. Ask it from its own container:
 
