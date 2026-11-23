@@ -10526,14 +10526,54 @@ button.chat-jump-start:hover {
   border-color: var(--brand-border);
   color: var(--brand);
 }
-/* Use the runner's browser (docs/runner-browser-engine-sign-in-design.md): a second way to the same link, under the
-   card's own. */
+/* The runner's browser (docs/runner-browser-engine-sign-in-design.md, §2 option A): the second way to the same link, in
+   the row beside .rsi-open and of its size, with its line and its progress under the row. */
+.rsi-open-alt {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.rsi-open-alt:hover:not(:disabled) {
+  border-color: var(--brand-border);
+  color: var(--brand);
+}
+.rsi-open-alt:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.rsi .rsi-q + .rsi-actions {
+  margin-top: 8px;
+}
 .rsi-runner-browser {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
-  margin: 10px 0 4px;
+  margin: 2px 0 8px;
+}
+.rsi-runner-browser .rsi-hint .rsi-link {
+  margin-top: 0;
+  font-size: 12px;
+}
+/* The runner's browser at work: apart from the row above it, and its links in one line. */
+.rsi-actions + .rsi-runner-browser-going {
+  margin-top: 10px;
+}
+.rsi-runner-browser .rsi-links .rsi-link {
+  margin-top: 0;
+}
+/* Choosing where to sign in, apart from pasting the code back. */
+.rsi-sep {
+  margin: 12px 0 4px;
+  border-top: 1px solid var(--border);
 }
 .rsi-link {
   margin-top: 8px;
