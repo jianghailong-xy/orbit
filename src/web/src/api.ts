@@ -38,6 +38,9 @@ import type {
   OwnerAnswerCard,
   ProjectStartedCard,
   SessionCapabilities,
+  SessionPhase,
+  SessionTurnOutcome,
+  SessionWaitingOn,
   SessionLandingView,
   SessionMessageCard,
   SessionMessageFrom,
@@ -1961,6 +1964,8 @@ export interface SessionChangedFile {
  * existing row fields remain open. */
 export type SessionListItem = Record<string, any> & {
   id: string;
+  /** The list's order key: moves only when the session changes for its owner. Absent from older servers (createdAt then). */
+  listedAt?: string | null;
   /** The engine the session runs on, recorded at its creation and never changed (null only when an
    *  older replica wrote it and nobody can tell). `provider` is the credential it spends. */
   engine?: string | null;
@@ -2066,6 +2071,12 @@ export interface SessionDetail {
   /** Explicit runner/process state. `status` is its legacy alias. */
   runStatus?: string;
   status?: string;
+  /** The three-state field and the facts beside it (contracts/session-state.contract.json). Absent from an
+   *  older control plane; read through lib/sessionState (sessionPhaseOf, sessionReleasedOf). */
+  phase?: SessionPhase;
+  released?: boolean;
+  lastTurnOutcome?: SessionTurnOutcome | null;
+  waitingOn?: SessionWaitingOn | null;
   title?: string;
   /** The Project this Session coordinates. Null for ordinary Sessions. */
   projectId?: string | null;

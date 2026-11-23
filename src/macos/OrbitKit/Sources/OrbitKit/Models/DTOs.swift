@@ -658,6 +658,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// never-run (queued) session — mirroring web's client-side sort. See `SessionFilter`.
     public let createdAt: String?
     public let lastTurnAt: String?
+    /// The list's order key: moves only when the session changes for its owner (created, a message
+    /// sent, a turn ended on the owner, ended or completed), never on streamed activity. nil from an
+    /// older control plane, which reads as `createdAt`. `lastTurnAt` is the liveness clock instead.
+    public let listedAt: String?
     /// When the turn now in flight was handed to the runner (ISO-8601), or nil when the session is
     /// not mid-turn. Distinct from `lastTurnAt`, which the server rewrites on every state move and
     /// so reads as a few seconds old on *every* running session — a list of them all says "just
@@ -924,6 +928,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         updatedAt = try values.decodeIfPresent(String.self, forKey: .updatedAt)
         createdAt = try values.decodeIfPresent(String.self, forKey: .createdAt)
         lastTurnAt = try values.decodeIfPresent(String.self, forKey: .lastTurnAt)
+        listedAt = try values.decodeIfPresent(String.self, forKey: .listedAt)
         currentTurnStartedAt = try values.decodeIfPresent(String.self, forKey: .currentTurnStartedAt)
         pinnedAt = try values.decodeIfPresent(String.self, forKey: .pinnedAt)
         model = try values.decodeIfPresent(String.self, forKey: .model)
@@ -1003,6 +1008,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 sourceState: String? = nil, sourceRefusalCode: String? = nil,
                 sourceRefusalDetail: SourceRefusalDetail? = nil, forkSource: String? = nil,
                 pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil,
+                listedAt: String? = nil,
                 currentTurnStartedAt: String? = nil,
                 tags: [SessionTag]? = nil, retryAt: String? = nil,
                 poolMemberProviderId: String? = nil, poolKeyId: String? = nil,
@@ -1094,6 +1100,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.pinnedAt = pinnedAt
         self.createdAt = createdAt
         self.lastTurnAt = lastTurnAt
+        self.listedAt = listedAt
         self.currentTurnStartedAt = currentTurnStartedAt
         self.tags = tags
         self.folderId = folderId

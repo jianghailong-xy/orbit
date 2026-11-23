@@ -1,7 +1,9 @@
 package io.orbitd.android
 
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.net.Uri
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -126,6 +128,31 @@ class ProjectRowWaitingShellTest {
     @Test fun theMemberOpensOnTheTopOfItsWaitingCardBelowTheFloatingCapsule() {
         ProjectShell.plainWaiting = true
         opensOnTheCardsTop("project-row-waiting-member-opened-capsule")
+    }
+
+    @Test fun aRecordLinkDoesNotBlockPendingWaitingCardFocus() {
+        val record = "34A06fQuestionRecord01"
+        ProjectShell.waitingAround = buildJsonObject {
+            put("events", Json.parseToJsonElement(ProjectShell.waitingEvents!!))
+            put("hasMore", false)
+            putJsonObject("anchor") { put("kind", "event"); put("id", record); put("seq", 47) }
+        }
+        signIn()
+        compose.activityRule.scenario.onActivity {
+            val launch = it.intent
+            // A record link arrives before the project row's session-scoped request has been consumed.
+            CardFocus.request(ProjectShell.WAITING, CardFocus.WAITING)
+            MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java).apply { isAccessible = true }
+                .invoke(it, Intent(Intent.ACTION_VIEW, Uri.parse("orbit-session:${ProjectShell.WAITING}?at=$record"))
+                    .setClass(it, MainActivity::class.java))
+            it.intent = launch
+        }
+        await { laidOut(hasTestTag("event:47")) && read() }
+        // Bring the rail into composition without a touch, which would cancel the pending request.
+        compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("approval:a-quota"))
+        settle()
+        compose.waitUntil(10_000) { CardFocus.pending(ProjectShell.WAITING) == null }
+        assertEquals("the waiting card took focus", "approval:a-quota", CardFocus.held(ProjectShell.WAITING)?.key)
     }
 
     private fun opensOnTheCardsTop(name: String) {

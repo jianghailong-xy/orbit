@@ -170,6 +170,7 @@ internal object ProjectShell {
     @Volatile var coordinatorWaiting = false
     /** WAITING's transcript (`sessions/WAITING/events/page`) and its pending approvals, as JSON arrays; null answers with none. */
     @Volatile var waitingEvents: String? = null
+    @Volatile var waitingAround: JsonObject? = null
     @Volatile var waitingApprovals: String? = null
     /** Whether WAITING's detail names its project, so its conversation reads the project's open items (the answered-question records). */
     @Volatile var waitingReadsProject = false
@@ -197,7 +198,7 @@ internal object ProjectShell {
         trashed = emptySet(); holdDelete = null; holdMembers = null; attention = null
         quietAttention = null; coordinatorWorking = false
         configRevision = null; automatic = true; maxConcurrentTasks = 2; crossings = null; tasks = null; coordEvents = null; onDecision = null; onMoveBatch = null
-        lineIdle = false; memberWaiting = true; coordinatorWaiting = false; waitingEvents = null; waitingApprovals = null; waitingReadsProject = false; plainWaiting = false
+        lineIdle = false; memberWaiting = true; coordinatorWaiting = false; waitingEvents = null; waitingAround = null; waitingApprovals = null; waitingReadsProject = false; plainWaiting = false
         while (accountEvents.tryReceive().isSuccess) Unit
     }
 
@@ -380,6 +381,7 @@ internal object ProjectShell {
                 ok("{}")
             }
             path == "sessions/$COORD/events/page" && coordEvents != null -> ok("""{"events":$coordEvents,"hasMore":false}""")
+            path == "sessions/$WAITING/events/page" && api.query.any { it.first == "around" } && waitingAround != null -> ok(waitingAround.toString())
             path == "sessions/$WAITING/events/page" && waitingEvents != null -> ok("""{"events":$waitingEvents,"hasMore":false}""")
             path == "sessions/$WAITING/approvals" && waitingApprovals != null -> ok(waitingApprovals!!)
             path.startsWith("sessions/") && path.endsWith("/page") -> ok("""{"events":[],"hasMore":false,"lastSeq":0,"latestSeq":0}""")

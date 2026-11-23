@@ -279,6 +279,9 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       select: VIEW,
     });
     if (created) {
+      // The asking session is now waiting on its owner: its row moves to the top of their list (session.listed_at,
+      // sessions/session-listed-at.ts), before the summary below is published.
+      await this.prisma.session.updateMany({ where: { id: created.askedBySessionId }, data: { listedAt: new Date() } });
       // The request's card is drawn in the session that asked, and only an Open row lights: one the
       // owner had filed in Completed comes back (a Trash one cannot file, above). After the commit,
       // and never a reason for the filing to fail.

@@ -1,6 +1,7 @@
 import { questionsWithCoordinator } from '../sessions/run-question';
 import { KEEP_BACKGROUND_WORK_END_CONTENT } from '../sessions/running-work';
-import { readMergeRecovery, type MergeRecoveryAction } from '@orbit/shared';
+import { readMergeRecovery, type MergeRecoveryAction, type SessionPhaseFields } from '@orbit/shared';
+import { readOneSessionPhaseFields } from '../sessions/session-phase';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
@@ -242,6 +243,13 @@ function scheduleCardsChangedData(payload: Record<string, unknown>): Record<stri
 }
 
 /** Reconstruct lifecycle fields for the legacy session.ended wire event. */
+/** The session-phase fields without the row's end reason, for the one event that sends the end reason it settled with. */
+function withoutEndReason(fields: SessionPhaseFields | null): Omit<SessionPhaseFields, 'endReason'> | null {
+  if (!fields) return null;
+  const { endReason: _fromRow, ...rest } = fields;
+  return rest;
+}
+
 function endedSessionStates(
   status: RunStatus | string,
   endReason: SessionEndReason | string | null,
@@ -1714,6 +1722,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             lifecycleState,
             filingState,
             endReason,
+            // The row as it stands now (sessions/session-phase.ts); absent when the session is gone. The end reason
+            // stays the one the end settled with, as this event has always sent it.
+            ...withoutEndReason(await readOneSessionPhaseFields(this.prisma, sessionId)),
           };
         }
       case ControlEventType.SESSION_ERROR:
@@ -1829,6 +1840,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         sourceRefusalCode: true,
         sourceRefusalDetail: true,
         lastTurnAt: true,
+        listedAt: true,
+        createdAt: true,
         // What the row previews, and the recap the list prefers to it: an already-open list
         // learns a new reply (or a fresh recap) from this event alone, so a summary that omitted
         // them would leave every row on screen previewing the turn before the one just finished.
@@ -1913,6 +1926,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       questionWithCoordinator: s.taskId ? (await questionsWithCoordinator(this.prisma, [sessionId])).get(sessionId) ?? null : null,
       pendingApprovals,
       waitingKind: sessionWaitingKind(approvals, decisions),
+      // phase, released, lastTurnOutcome, waitingOn (sessions/session-phase.ts), over the count above.
+      ...(await readOneSessionPhaseFields(this.prisma, sessionId, pendingApprovals)),
       confirmationUnderReview: underReview
         ? {
           ...underReview,
@@ -1930,6 +1945,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       awaitingReplyFrom: peers?.awaitingReplyFrom ?? [],
       owesReplyTo: peers?.owesReplyTo ?? [],
       lastTurnAt: s.lastTurnAt ? s.lastTurnAt.toISOString() : null,
+      // The list's order key; NULL only on a row an older server inserted mid-deploy, read as its creation.
+      listedAt: (s.listedAt ?? s.createdAt).toISOString(),
       // The two previews, clipped the way the list's own query clips them, and the recap beside
       // them. Null as a value, not "unchanged": a preview the server cleared has to clear on the
       // row holding this summary, and a recap the session does not have is a null.

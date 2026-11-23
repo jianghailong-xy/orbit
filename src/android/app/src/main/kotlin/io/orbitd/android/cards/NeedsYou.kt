@@ -143,6 +143,16 @@ object NeedsYouLogic {
         return if (rows.isEmpty()) said.copy(glyph = NeedsYouGlyph.HAND) else said
     }
 
+    /** The prefix of an owner request's row address: the pending request this conversation filed, drawn inline where it was filed. */
+    const val ownerRequestPrefix = "owner-request:"
+
+    /** The pending owner requests this conversation drew inline (iOS `.ownerRequest` rows of `openBelowRows`), by where each sits:
+     * [placed] is [OwnerRequests.place]'s map (row index, -1 ahead of every loaded row), walked in that order, a row's own
+     * requests oldest first. Not a question: the owner answers it by a door. -1 is drawn only once no older rows remain. */
+    fun ownerRequestRows(placed: Map<Int, List<OwnerRequest>>, hasOlder: Boolean = false): List<BelowRow> =
+        placed.entries.filter { !(it.key < 0 && hasOlder) }.sortedBy { it.key }
+            .flatMap { entry -> entry.value.filter { it.pending }.map { BelowRow(ownerRequestPrefix + it.id, false) } }
+
     /** The address the coordinator's done card is drawn under (`CardFocus`). */
     fun doneKey(projectId: String) = "done:$projectId"
 

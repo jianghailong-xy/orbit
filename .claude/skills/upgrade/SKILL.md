@@ -268,7 +268,8 @@ build host ships it what the deployment's Compose reads from its directory, take
 with `git archive`, never from the working tree: `docker-compose.yml`, `gateway/`,
 `scripts/pg-archive-wal.sh`, `scripts/pg-backup.sh`, `src/link-gateway/nats.conf`, `deploy/runner-link/`, and
 the two Compose files a target lists beside `docker-compose.yml`, `deploy/postgres-pinned.yml` and
-`deploy/db-proxy.yml`, with `deploy/db-proxy/`. They are staged under `.upgrade/release-<commit>/` there, beside
+`deploy/db-proxy.yml`, with `deploy/db-proxy/`, and the monitoring profile's config, `deploy/monitoring/` and
+`scripts/pg-monitor-role.sh`. They are staged under `.upgrade/release-<commit>/` there, beside
 `deploy/two-stage/deploy-stage.sh`, which then, on the target:
 
 1. takes the target's upgrade lock, `/tmp/orbit-upgrade.lock`, as a single host's upgrade takes its own: one
@@ -288,15 +289,20 @@ the two Compose files a target lists beside `docker-compose.yml`, `deploy/postgr
    the reason ([Without a gap](#without-a-gap), below). Where the target runs managed runners on Kubernetes (its
    `.env` sets `ORBIT_MANAGED_RUNNERS_ENABLED=true`, and `profile.json` in `ORBIT_MANAGED_RUNNERS_DIR` says
    `"backend": "kubernetes"`), it also prints the hosted runners' image: `unchanged`, or the profile's
-   `runner.image` and the release's image by digest, `<registry>/orbit-cloud-runner@sha256:<64 hex>`;
+   `runner.image` and the release's image by digest, `<registry>/orbit-cloud-runner@sha256:<64 hex>`, then an
+   `imageRevision` line: `unchanged`, or the profile's `runner.imageRevision` (`(none)` if missing) and the image's
+   source commit, the 40-character sha it was tagged and built with (`ORBIT_SOURCE_SHA`);
 5. stops, having changed nothing, if an image the release runs does not come from the registry: `postgres` and
    `pgbackup` have theirs only from `deploy/postgres-pinned.yml`, so a target whose `COMPOSE_FILE` does not
    list it is refused. `--plan` stops here in any case, with every file put back;
 6. pulls every image the release runs, and stops if one is missing;
 7. writes the release's names into `.env` (below), and, where the plan printed a new hosted runners' image, sets
-   the profile's `runner.image` to it, by a rename, keeping the profile it replaces beside it as
-   `profile.json.bak-<time>-before-<commit>`. The apiserver reads the profile only as it starts, so one the release
-   does not otherwise replace is replaced for it. Once it runs, its manager moves each hosted runner onto the new
+   the profile's `runner.image` to it and `runner.imageRevision` to the image's source commit, in the same rename,
+   keeping the profile it replaces beside it as `profile.json.bak-<time>-before-<commit>`. Kubernetes learns a
+   runner's target revision only from `runner.imageRevision`, and offers Update Now only with it. An unchanged image
+   whose revision is missing or different gets the revision written the same way (a backfill); with both right
+   nothing is written. The apiserver reads the profile only as it starts, so one the release does not otherwise
+   replace is replaced for any write. Once it runs, its manager moves each hosted runner onto the new
    image as soon as that runner is idle: drained like a sleep, and woken at once as the next generation, on the same
    volume (`rollPreviousImage` in `src/apiserver/src/managed-runners/managed-runner-manager.ts`). A busy runner moves
    later, and nothing in flight is cut short;
@@ -334,7 +340,8 @@ back. Make it once, before the first deploy; for the move to `10.66.0.4`, a copy
 `COMPOSE_FILE=docker-compose.yml:deploy/postgres-pinned.yml:deploy/db-proxy.yml`, its `ORBIT_REGISTRY` and its
 pgbackup's `ORBIT_BACKUP_*` (docs/postgres-standby.md). A deploy writes only the block between
 `# >>> The release this host runs` and `# <<< The release this host runs` at its end: `ORBIT_REGISTRY`,
-`ORBIT_IMAGE_TAG`, `ORBIT_LINK_GATEWAY_TAG`, `ORBIT_NGINX_IMAGE` and `ORBIT_NATS_IMAGE` (docs/configuration.md,
+`ORBIT_IMAGE_TAG`, `ORBIT_LINK_GATEWAY_TAG`, `ORBIT_NGINX_IMAGE`, `ORBIT_NATS_IMAGE` and the monitoring profile's six
+images, `ORBIT_PROMETHEUS_IMAGE` to `ORBIT_ALLOY_IMAGE` (docs/configuration.md,
 "Images and the two-stage release"). It replaces the whole file by a rename, every other line as it was, so that
 any later `docker compose` there renders the release that runs, and never builds anything. `COMPOSE_FILE` lists
 `docker-compose.yml` and `deploy/postgres-pinned.yml` on every target, and `deploy/db-proxy.yml` where the
@@ -345,7 +352,8 @@ with each release; a service it adds is left as it is. Its `./data` stays where 
 **Base images.** Each runs by digest, pulled from the registry, which holds them under Docker Hub's own path,
 `library/<name>`. `postgres` and `pgbackup` run PostgreSQL 16.14 as `deploy/postgres-pinned.yml` pins it, never
 the floating `16-alpine` tag, which has moved on, and `db-proxy` the HAProxy `deploy/db-proxy.yml` pins; the
-release's `deploy/two-stage/base-images.env` pins `gateway` (nginx) and `nats`. Each pin is in one file only,
+release's `deploy/two-stage/base-images.env` pins `gateway` (nginx), `nats` and the monitoring profile's Prometheus,
+node-exporter, postgres-exporter, Grafana, Loki and Alloy (their paths in the registry are Docker Hub's, such as `prom/prometheus`). Each pin is in one file only,
 and changes in a commit, so a release and its rollback both name the base images they ran with. A new digest has
 to be copied to the registry, as `base-images.env` says, before a release names it.
 

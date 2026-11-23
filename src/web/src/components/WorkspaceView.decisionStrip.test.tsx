@@ -59,7 +59,16 @@ describe('the strip is handed the exception cards the owner presses', () => {
     expect(SOURCE).toContain('isOwnerExceptionCard(row)');
     expect(SOURCE).toContain('needsYou={ownerExceptionRows.map(');
     // Measured where the sticky bar is measured, off the handle every exception card carries.
-    expect(SOURCE).toContain("querySelectorAll<HTMLElement>('[data-open-item]')");
+    expect(SOURCE).toContain("querySelectorAll<HTMLElement>('[data-open-item], .owner-request-card')");
+  });
+});
+
+describe('the strip is handed the owner requests this conversation filed', () => {
+  it('passes the pending ones whose cards it draws, and which side of the reader each is on', () => {
+    // docs/mocks/owner-request-strip-jump: the same reads the cards are drawn from.
+    expect(SOURCE).toContain('useSessionOwnerRequestPointers(selectedTrashed ? null : selectedId)');
+    expect(SOURCE).toContain('ownerRequests={ownerRequestPointers.map(');
+    expect(SOURCE).toContain("openItemsAbove.split(' ').includes(`owner-request-${request.id}`)");
   });
 });
 

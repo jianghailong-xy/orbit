@@ -21,6 +21,25 @@ class NeedsYouLogicTest {
         agentName?.let { name -> putJsonObject("agent") { put("id", agentId ?: "a"); put("name", name) } }
     }
 
+    private fun ask(id: String, state: String) = OwnerRequest(id = id, kind = "DECISION", state = state, title = "t", createdAt = "2026-11-20T10:00:00Z")
+
+    @Test fun `a pending owner request this session filed counts first and is not a question`() {
+        val placed = mapOf(3 to listOf(ask("r2", "PENDING")), -1 to listOf(ask("r1", "PENDING"), ask("done", "DONE")))
+        val owner = NeedsYouLogic.ownerRequestRows(placed)
+        assertEquals(listOf("owner-request:r1", "owner-request:r2"), owner.map { it.rowId })
+        assertTrue(owner.none { it.isQuestion })
+        val here = NeedsYouLogic.here(owner + BelowRow("q1", true), emptyList(), ReaderSide.ABOVE)!!
+        assertEquals(3, here.count)
+        assertEquals("owner-request:r1", here.rowId)
+        assertEquals("3 waiting above", here.text)
+        assertEquals("1 waiting above", NeedsYouLogic.here(owner.take(1), emptyList(), ReaderSide.ABOVE)?.text)
+    }
+
+    @Test fun `a request that is not pending, or sits ahead of older unloaded rows, does not count`() {
+        assertTrue(NeedsYouLogic.ownerRequestRows(mapOf(0 to listOf(ask("a", "DONE"), ask("b", "DECLINED")))).isEmpty())
+        assertTrue(NeedsYouLogic.ownerRequestRows(mapOf(-1 to listOf(ask("c", "PENDING"))), hasOlder = true).isEmpty())
+    }
+
     // the conversation's own capsule (the owner, 2026-11-15, docs/mocks/needs-you-capsule/07-console-one-capsule; OrbitKit's twin)
 
     /** Its cards first, in their words and direction; its approvals after them, at its tail — so alone they say "below". */

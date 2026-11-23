@@ -38,17 +38,47 @@ controllers and their decorators, so it lists what the server mounts, not what a
 - **Paging.** List routes that page state it in their handler and DTO (`cursor`, `limit`, or a `page` route);
   a route without one returns its whole result.
 
+## Sending a notification
+
+`POST /api/notify` pushes a notification to your own Orbit apps (iOS and Android). It needs a personal access
+token with the `notify` scope (Settings → Access tokens → New token → Custom → Notifications: Send), and reaches
+nothing else with it. Grafana’s "Orbit app" contact point calls it (docs/self-hosting.md, "Monitoring").
+
+```sh
+curl -sS -X POST "$PUBLIC_ORIGIN/api/notify" \
+  -H "Authorization: Bearer $ORBIT_NOTIFY_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Backup finished", "message": "The nightly base backup took 4 minutes.", "priority": "low"}'
+```
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `title` | yes | Up to 100 characters. |
+| `message` | yes | Up to 800 characters. |
+| `priority` | no | `low` (silent), `normal` (the default, with sound) or `high` (also time-sensitive on iOS). |
+| `url` | no | An `http` or `https` link of up to 500 characters, carried in the push payload as `url`. |
+
+A longer or blank field is refused `400`. Each token may send 20 notifications a minute on each apiserver; past that
+it is answered `429` and nothing is sent. Otherwise the answer is `200` and says what happened:
+
+- `{"delivered": true, "devices": 2}`: APNs or FCM accepted it for that many of your devices.
+- `{"delivered": false, "reason": "PUSH_NOT_CONFIGURED"}`: this server has no APNs or FCM credentials
+  (docs/configuration.md), so it sends no push. The call is still accepted; it is not an error.
+- `{"delivered": false, "reason": "NO_DEVICES"}`: no Orbit app is signed in to your account on a device this
+  server can push to.
+- `{"delivered": false, "reason": "NOT_ACCEPTED"}`: APNs and FCM accepted it for none of your devices.
+
 ## Summary
 
 | Caller | Routes |
 | --- | --- |
 | `public` | 39 |
-| `user` | 529 |
+| `user` | 531 |
 | `admin` | 31 |
-| `runner` | 229 |
+| `runner` | 230 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **832** |
+| **Total** | **835** |
 
 ## Public routes
 
@@ -209,6 +239,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/managed-runner/update-now` | body `ManagedRunnerUpdateNowDto` | `ManagedRunnerController.updateNow` |
 | `POST` | `/api/managed-runner/wake` | body `ManagedRunnerWriteDto` | `ManagedRunnerController.wake` |
 | `GET` | `/api/metrics` | — | `MetricsController.read` |
+| `POST` | `/api/notify` | body `SendNotificationDto` | `NotifyController.send` |
 | `GET` | `/api/outcomes/inbox` | query `limit` | `OutcomeSurfacesController.inbox` |
 | `GET` | `/api/owner-requests` | query `state` | `OwnerRequestsController.list` |
 | `GET` | `/api/owner-requests/:id` | path `id` | `OwnerRequestsController.get` |
@@ -338,6 +369,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `DELETE` | `/api/runners/:id/accounts/:engine/:account` | path `account`, `engine`, `id` | `RunnersController.removeAccount` |
 | `PATCH` | `/api/runners/:id/accounts/:engine/:account` | body `RenameAccountDto`; path `account`, `engine`, `id` | `RunnersController.renameAccount` |
 | `POST` | `/api/runners/:id/accounts/:engine/:account/pause` | body `PauseAccountDto`; path `account`, `engine`, `id` | `RunnersController.pauseAccount` |
+| `DELETE` | `/api/runners/:id/accounts/:engine/:account/set-default` | path `account`, `engine`, `id` | `RunnersController.dismissSetDefaultFailure` |
 | `POST` | `/api/runners/:id/accounts/:engine/:account/set-default` | path `account`, `engine`, `id` | `RunnersController.setDefaultAccount` |
 | `POST` | `/api/runners/:id/accounts/:engine/default/restore` | path `engine`, `id` | `RunnersController.restoreDefault` |
 | `POST` | `/api/runners/:id/attention/:kind/fix` | body `Object`; path `id`, `kind` | `RunnerAttentionFixController.fix` |
@@ -813,6 +845,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/sessions/:id/naming` | body `SessionNamingDto`; path `id` | `RunnerApiController.sessionNaming` |
 | `POST` | `/api/runner/sessions/:id/notify` | body `NotifyDto`; path `id` | `RunnerApiController.sessionNotify` |
 | `POST` | `/api/runner/sessions/:id/orchestration-credential` | path `id` | `RunnerApiController.refreshOrchestrationCredential` |
+| `POST` | `/api/runner/sessions/:id/release` | body `Object`; path `id` | `RunnerApiController.release` |
 | `POST` | `/api/runner/sessions/:id/release-leases` | body `Object`; path `id` | `RunnerApiController.releaseLeases` |
 | `POST` | `/api/runner/sessions/:id/scheduled-wakeup` | body `ScheduledWakeupDto`; path `id` | `RunnerApiController.scheduledWakeup` |
 | `POST` | `/api/runner/sessions/:id/source/pin` | body `Object`; path `id` | `RunnerApiController.pinSessionSource` |

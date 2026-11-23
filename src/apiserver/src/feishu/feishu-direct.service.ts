@@ -303,6 +303,8 @@ export class FeishuDirectService {
     try {
       await this.sessions.createTurn(app.ownerId, sessionId, { clientTurnId: feishuTurnKey(app.appId, eventId), content: text }, {
         senderClient: { client: 'feishu' },
+        // A person's message, as at the owner's own doors: the row moves to the top of the list.
+        listed: true,
         externalSender: sender,
         // Written with the turn, so a replay of this clientTurnId records nothing again. The chain is the one the slot
         // was held on, stamped as spoken in; no other chain is written for the session.
@@ -363,6 +365,8 @@ export class FeishuDirectService {
       await this.sessions.createTurn(app.ownerId, sessionId, { clientTurnId: feishuTurnKey(app.appId, eventId), content: text }, {
         ...(translation && langs ? { translated: { content: translation.text, from: langs.owner } } : {}),
         senderClient: { client: 'feishu' },
+        // A person's message, as at the owner's own doors: the row moves to the top of the list.
+        listed: true,
         // Written with the turn, so a second handling — a replay of this clientTurnId — records nothing again.
         onTurnWritten: async (tx, turn) => {
           await this.registerChain(tx, app, message.chatId, root, sessionId);

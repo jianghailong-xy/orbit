@@ -177,7 +177,9 @@ test('managed runners switched off with existing state: nothing is stopped, dele
       title: 'earlier work', prompt: 'the opening prompt', provider: 'claude', provider_builtin: true, status, num_turns: 1,
       runtime_session_id: randomUUID(),
       ...(isReleasedStatus(status) ? {
-        finished_at: new Date(), 
+        finished_at: new Date(),
+        // A failure release carries FAILED on its turn (removal step R2), which is what reads it as one since R7.
+        ...(status === 'FAILED' ? { last_turn_outcome: 'FAILED' } : {}),
       } : {}),
       ...extra,
     };

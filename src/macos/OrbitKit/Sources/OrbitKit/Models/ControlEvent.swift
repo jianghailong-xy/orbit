@@ -160,6 +160,8 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     public let awaitingReplyFrom: [SessionRequestPeer]??
     public let owesReplyTo: [SessionRequestPeer]??
     public let lastTurnAt: String?
+    /// The list's order key; nil from an older control plane (keep the row's).
+    public let listedAt: String?
     /// The rolling recap and when it was written. Doubly optional like `retryAt`: `nil` is an older
     /// control plane that never sends the key (keep the row's), `.some(nil)` is this server saying
     /// the session has none — how a manual refresh that dropped the recap reaches the other clients
@@ -252,6 +254,7 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
             ? .some((try? values.decodeIfPresent([SessionRequestPeer].self, forKey: .owesReplyTo)) ?? [])
             : nil
         lastTurnAt = try values.decodeIfPresent(String.self, forKey: .lastTurnAt)
+        listedAt = try values.decodeIfPresent(String.self, forKey: .listedAt)
         // `contains` rather than `decodeIfPresent` alone, for `retryAt`'s reason: null is this
         // server saying the session has no recap, a missing key is an older one saying nothing.
         recapText = values.contains(.recapText)
