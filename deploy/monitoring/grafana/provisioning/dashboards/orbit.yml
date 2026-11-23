@@ -1,0 +1,11 @@
+# Loads every dashboard in deploy/monitoring/grafana/dashboards, mounted read-only at /var/lib/grafana/dashboards. A
+# change to a file shows up within a minute; a dashboard cannot be deleted from the UI.
+apiVersion: 1
+providers:
+  - name: orbit
+    type: file
+    allowUiUpdates: false
+    disableDeletion: true
+    updateIntervalSeconds: 60
+    options:
+      path: /var/lib/grafana/dashboards

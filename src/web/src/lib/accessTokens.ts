@@ -23,10 +23,17 @@ export const SCOPE_GROUPS: readonly { resource: string; read: string; write?: st
 export const FILES_SCOPE = 'files';
 const FILES_GROUP = { resource: 'Files', read: FILES_SCOPE, write: FILES_SCOPE };
 
+/**
+ * Notifications (POST /api/notify): sends a push to your own Orbit apps and reaches nothing else, the one grant a
+ * monitoring system such as Grafana needs. Not a read, so Read-only leaves it out and Read & write includes it.
+ */
+export const NOTIFY_SCOPE = 'notify';
+
 export const READ_SCOPES: readonly string[] = SCOPE_GROUPS.map((group) => group.read);
 export const ALL_SCOPES: readonly string[] = [
   ...SCOPE_GROUPS.flatMap((group) => (group.write ? [group.read, group.write] : [group.read])),
   FILES_SCOPE,
+  NOTIFY_SCOPE,
 ];
 
 export type ScopePreset = 'read' | 'readWrite' | 'custom';
@@ -56,7 +63,7 @@ export function scopeSummary(scopes: readonly string[]): string {
     if (read) return [`${group.resource}: read`];
     if (write) return [`${group.resource}: write`];
     return [];
-  }).join(' · ');
+  }).concat(scopes.includes(NOTIFY_SCOPE) ? ['Notifications: send'] : []).join(' · ');
 }
 
 /** The lifetimes a token is issued with (§11.1); 90 days unless another is chosen. */
