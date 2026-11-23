@@ -455,8 +455,13 @@ const negated: Array<[string, (stack: Stack, w: World, t: Finished) => Promise<v
   ['1: the work session is in Trash', async (stack, _w, t) => {
     await stack.db.session.update({ where: { id: t.sessionId }, data: { deletedAt: new Date() } });
   }],
-  ['1: the work session\'s cancel was requested', async (stack, _w, t) => {
-    await stack.db.session.update({ where: { id: t.sessionId }, data: { cancelRequestedAt: new Date() } });
+  ['1: a person\'s cancel of the work session was requested', async (stack, _w, t) => {
+    // Open again, and a person's end of it asked for and not honoured yet: condition 2 holds, 1 does not. (The end
+    // its task's DONE asks for, `task_done`, which every session that ended with its DONE carries, is no such cancel.)
+    await stack.db.session.update({
+      where: { id: t.sessionId },
+      data: { status: RunStatus.AWAITING_INPUT, finishedAt: null, cancelRequestedAt: new Date(), endReason: 'ended' },
+    });
   }],
   ['2: a person ended the work session', async (stack, _w, t) => {
     await stack.db.session.update({ where: { id: t.sessionId }, data: { endReason: 'ended', status: RunStatus.CANCELLED } });
