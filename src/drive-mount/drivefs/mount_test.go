@@ -625,6 +625,116 @@ func TestADoorThatRefusesConnectionsIsStillOffline(t *testing.T) {
 	}
 }
 
+func TestALongOpenWriteRidesOutAServerStall(t *testing.T) {
+	// The sleep/wake walk: one handle open for minutes, appending 4 MiB every 3 s, while the walk apiserver's database
+	// stalled for about 20 s, answering nothing. Every request then passed its deadline unanswered, the mount went
+	// offline, and the next write() failed EIO, ending the writer. The bytes only go to the spool: a write in the first
+	// CloseWait of an outage waits for the server rather than failing. Deadlines here are 1 s and the stall 3 s; the
+	// handle is committed while open (fsync, as the periodic commit does) before and after it.
+	const meta = time.Second
+	const step = 1 << 20
+	f, mnt, rep := mountFakeDoor(t, Options{FeedWait: time.Second},
+		door.Config{MetaTimeout: meta, ChunkHeaderTimeout: meta, ProbeInterval: 200 * time.Millisecond})
+	fh, err := os.OpenFile(filepath.Join(mnt, "held.bin"), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Closed before the mount goes, even when the test fails: a process exiting with a handle on its own dead mount
+	// never exits.
+	t.Cleanup(func() { _ = fh.Close() })
+	src := rand.New(rand.NewSource(7))
+	sum := sha256.New()
+	written := 0
+	put := func(what string) {
+		t.Helper()
+		b := make([]byte, step)
+		src.Read(b)
+		if _, err := fh.Write(b); err != nil {
+			t.Fatalf("%s write at %d MiB: %v; errors.log %v", what, written/step, err, rep.Lines())
+		}
+		sum.Write(b)
+		written += step
+	}
+	for i := 0; i < 20; i++ {
+		put("before the stall")
+	}
+	if err := fh.Sync(); err != nil {
+		t.Fatalf("fsync before the stall: %v", err)
+	}
+	var until atomic.Int64
+	f.mu.Lock()
+	f.delay = func(r *http.Request) time.Duration {
+		return time.Until(time.Unix(0, until.Load()))
+	}
+	f.mu.Unlock()
+	until.Store(time.Now().Add(3 * time.Second).UnixNano())
+	// Writes go on through the stall until the mount is offline: nothing is answered, not even the probe.
+	for deadline := time.Now().Add(5 * time.Second); rep.CurrentStatus().Connected; {
+		if time.Now().After(deadline) {
+			t.Fatal("the stall never put the mount offline")
+		}
+		put("during the stall")
+		time.Sleep(100 * time.Millisecond)
+	}
+	put("offline")
+	for i := 0; i < 10; i++ {
+		put("after the stall")
+	}
+	if err := fh.Sync(); err != nil {
+		t.Fatalf("fsync after the stall: %v; errors.log %v", err, rep.Lines())
+	}
+	for i := 0; i < 10; i++ {
+		put("after the commit")
+	}
+	if err := fh.Close(); err != nil {
+		t.Fatalf("close: %v; errors.log %v", err, rep.Lines())
+	}
+	got, _ := f.content("/held.bin")
+	if len(got) != written || sha256.Sum256(got) != [32]byte(sum.Sum(nil)) {
+		t.Fatalf("the drive holds %d bytes of %d, or other bytes", len(got), written)
+	}
+	if lines := strings.Join(rep.Lines(), "\n"); strings.Contains(lines, "EIO") {
+		t.Fatalf("errors.log %s", lines)
+	}
+}
+
+func TestAWriteLongAfterTheServerWentAwayStillFails(t *testing.T) {
+	// The wait is for a stall, not an outage: past CloseWait offline, a write fails at once, and errors.log says why.
+	f, mnt, rep := mountFakeDoor(t, Options{CloseWait: time.Second}, door.Config{MetaTimeout: time.Second, ProbeInterval: 200 * time.Millisecond})
+	fh, err := os.Create(filepath.Join(mnt, "w.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = fh.Close() })
+	if _, err := fh.WriteString("first\n"); err != nil {
+		t.Fatal(err)
+	}
+	f.srv.Close()
+	for deadline := time.Now().Add(5 * time.Second); rep.CurrentStatus().Connected; time.Sleep(50 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("never offline")
+		}
+		_, _ = os.ReadDir(filepath.Join(mnt, "nowhere"))
+	}
+	start := time.Now()
+	if _, err := fh.WriteString("waited\n"); !errors.Is(err, syscall.EIO) {
+		t.Fatalf("write in the outage's first second: %v", err)
+	}
+	if waited := time.Since(start); waited < 500*time.Millisecond || waited > 3*time.Second {
+		t.Fatalf("the first write offline waited %s, not up to CloseWait", waited)
+	}
+	start = time.Now()
+	if _, err := fh.WriteString("at once\n"); !errors.Is(err, syscall.EIO) {
+		t.Fatalf("write long after the outage began: %v", err)
+	}
+	if waited := time.Since(start); waited > 500*time.Millisecond {
+		t.Fatalf("a write past CloseWait offline waited %s", waited)
+	}
+	if lines := strings.Join(rep.Lines(), "\n"); !strings.Contains(lines, "EIO write /home/orbit/Files/w.txt: the drive's server cannot be reached") {
+		t.Fatalf("errors.log %s", lines)
+	}
+}
+
 func TestRefusalsSayWhy(t *testing.T) {
 	_, mnt, rep := mountFake(t, Options{})
 	p := filepath.Join(mnt, "a")

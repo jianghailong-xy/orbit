@@ -73,7 +73,7 @@ export function managedRunnerWorld(db: PrismaClient, options: WorldOptions = {})
   /** What the runner's runtimes are, as its heartbeats say: one signed in, unless a spec says otherwise. */
   const runnerSide: { engines: unknown[] } = { engines: [{ engine: 'claude', installed: true, auth: 'yes' }] };
 
-  async function heartbeat(runnerId: string, workload: Partial<typeof IDLE> = {}, opts: { sleep?: boolean; draining?: boolean } = {}) {
+  async function heartbeat(runnerId: string, workload: Partial<typeof IDLE> & { driveWrites?: number } = {}, opts: { sleep?: boolean; draining?: boolean } = {}) {
     const mapping = (await db.managedRunner.findUnique({ where: { runnerId } }))!;
     const sleep = opts.sleep !== false;
     await db.runner.update({

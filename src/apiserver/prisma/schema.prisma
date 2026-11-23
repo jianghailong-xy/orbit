@@ -1715,6 +1715,10 @@ model ManagedRunner {
   /// DRAINING: the demand revision seen when the drain began. Demand past it before the stop is
   /// asked for ends the drain; demand after that wakes the runner again once it has stopped.
   drainDemandRevision Int?                        @map("drain_demand_revision")
+  /// READY with SLEEPING desired: when the owner asked it to sleep. The drain begins only on a report the instance sent
+  /// after it, so a report from before the request never makes a busy runner drain. Null for a request made before the
+  /// column, which any fresh report answers.
+  sleepRequestedAt    DateTime?                   @map("sleep_requested_at") @db.Timestamptz(3)
   /// DRAINING: when the instance was asked to stop for sleep. Null until then: up to that moment
   /// the drain can still be called off without anything having stopped.
   stopRequestedAt     DateTime?                   @map("stop_requested_at") @db.Timestamptz(3)
