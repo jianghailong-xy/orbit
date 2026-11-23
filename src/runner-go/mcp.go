@@ -72,6 +72,10 @@ type mcpServer struct {
 	// helpAsk: spawned with ORBIT_HELP_ASK=1 for the help center's Ask, it serves the four help reads and nothing else
 	// (mcp_help_ask.go).
 	helpAsk bool
+	// callToolUseID is the engine's id for the tool call being answered (Claude Code's `claudecode/toolUseId`), so a
+	// drive transfer's progress lands on its card; "" outside one, or when the engine names none. Calls are served
+	// one at a time (serve), as rec is.
+	callToolUseID string
 	// rec is what the tool call being answered did, for its receipt (tool_receipt.go); nil outside one.
 	rec *callRecord
 	// Reads the session's live permission mode for Orbit's Plan gate (plan_gate.go); nil reads it from the runner
@@ -279,6 +283,8 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 			// Its calls' events nest under this id, as a delegate call's do.
 			return s.ok(req.ID, s.callWorkflow(p.Arguments, asString(p.Meta["claudecode/toolUseId"]))), true
 		}
+		s.callToolUseID = asString(p.Meta["claudecode/toolUseId"])
+		defer func() { s.callToolUseID = "" }()
 		return s.ok(req.ID, s.invokeTool(p.Name, p.Arguments)), true
 	default:
 		if isNotification {
