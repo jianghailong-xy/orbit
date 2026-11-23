@@ -28,7 +28,7 @@ test('the Watchdog reads no data source and goes to its own contact point', () =
   const watchdog = rules.slice(rules.indexOf('uid: orbit-watchdog'));
   assert.doesNotMatch(watchdog, /datasourceUid: orbit-prometheus/);
   assert.match(read(`${dir}/policies.yml`), /receiver: orbit-watchdog\n\s+object_matchers:\n\s+- \[watchdog, "=", "true"\]/);
-  assert.match(read(`${dir}/contact-points.yml`), /url: \$ORBIT_WATCHDOG_URL/);
+  assert.match(read(`${dir}/contact-points.yml`), /url: \$ORBIT_ALERT_HEARTBEAT_URL/);
 });
 
 test('ntfy is the default contact point, with email and webhook as the alternatives', () => {

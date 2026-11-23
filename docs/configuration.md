@@ -443,7 +443,7 @@ which pins both from `ORBIT_REGISTRY`.
 | `GF_SMTP_USER` | `string` | Optional; empty | The SMTP login. | No | Recreate `grafana` |
 | `GF_SMTP_PASSWORD` | `string` | Optional; empty | The SMTP password. | Yes | Recreate `grafana` |
 | `GF_SMTP_FROM_ADDRESS` | `string` (email) | Optional; `grafana@localhost.localdomain` | The sender address of an alert email. | No | Recreate `grafana` |
-| `ORBIT_WATCHDOG_URL` | `string` (URL) | Optional; Prometheus on this host | The external heartbeat URL the always-firing Watchdog is POSTed to every minute. | No | Recreate `grafana` |
+| `ORBIT_ALERT_HEARTBEAT_URL` | `string` (URL) | Optional; Prometheus on this host | The external heartbeat URL the always-firing Watchdog is POSTed to every minute. | No | Recreate `grafana` |
 | `ORBIT_NOTIFY_TOKEN` | `string` (secret) | Optional; none, and then alerts do not go to the Orbit app | A personal access token holding only the `notify` scope. Every alert but the Watchdog is then also sent to `POST /api/notify` over the project network and pushed to that account's Orbit apps, with this server's `APNS_*` / `FCM_*` keys; without them the call is accepted and nothing is pushed. See [Alerts in the Orbit app](self-hosting.md#alerts-in-the-orbit-app). | Yes | Recreate `grafana` |
 
 ## Runner machine only

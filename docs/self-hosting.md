@@ -607,14 +607,14 @@ Orbit pushes only with this server's own Apple and Firebase keys (`APNS_*`, `FCM
 alert still goes to ntfy. `NO_DEVICES` means no Orbit app is signed in to the token's account. A token may send 20
 notifications a minute, far more than Grafana sends; revoking it in Settings → Access tokens stops the pushes at once.
 
-<a id="the-watchdog"></a>**The Watchdog.** The Watchdog is an alert that always fires. Grafana sends it to `ORBIT_WATCHDOG_URL` once a minute (a ping every 60 seconds, give or take a second), as
+<a id="the-watchdog"></a>**The Watchdog.** The Watchdog is an alert that always fires. Grafana sends it to `ORBIT_ALERT_HEARTBEAT_URL` once a minute (a ping every 60 seconds, give or take a second), as
 a POST with the webhook JSON. It reads no data source, so it stops only when Grafana, or the host, stops. Give the URL
 of a dead-man's-switch service (healthchecks.io, Uptime Kuma's push monitor, Better Stack and the like) and let it
 alert you when the pings stop; set its period to 1 minute and its grace to 3 to 5 minutes. With no URL the heartbeat goes to Prometheus on this host, and nothing leaves it.
 
 **A whole-host outage cannot alert from the host.** If the machine, its network or Docker is down, Grafana is down with
 it and sends nothing, so none of the alerts above can reach you. The only way to hear of it is the off-host Watchdog
-check: the heartbeat service notices the silence. Without `ORBIT_WATCHDOG_URL` pointing at one, a dead host is silent.
+check: the heartbeat service notices the silence. Without `ORBIT_ALERT_HEARTBEAT_URL` pointing at one, a dead host is silent.
 
 **Turn it off.** Remove `monitoring` from `COMPOSE_PROFILES` in `.env` (the last `COMPOSE_PROFILES` line is the one
 Compose takes), and keep the `ORBIT_MONITORING` line: it is the record that makes a later upgrade leave monitoring off.
@@ -2700,5 +2700,5 @@ has no certificate to start with and restarts over and over, which harms nothing
       deliberate choice and this host's services and private networks are firewalled otherwise.
 - [ ] Backups are copied off-host and a restore has been tested.
 - [ ] Container health, disk space, backup failures, and runner availability are monitored.
-- [ ] [Monitoring](#monitoring) is on or off by a deliberate choice; where it is on, you can sign in to Grafana, `ORBIT_NTFY_TOPIC` (or another alert contact) is set and a test alert reached you, `ORBIT_WATCHDOG_URL` points at an off-host dead-man's-switch, and the disk has room for the retention above.
+- [ ] [Monitoring](#monitoring) is on or off by a deliberate choice; where it is on, you can sign in to Grafana, `ORBIT_NTFY_TOPIC` (or another alert contact) is set and a test alert reached you, `ORBIT_ALERT_HEARTBEAT_URL` points at an off-host dead-man's-switch, and the disk has room for the retention above.
 - [ ] The deployment is pinned to a known release or commit and has a documented upgrade cadence.

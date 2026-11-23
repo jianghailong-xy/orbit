@@ -42,7 +42,7 @@ contactPoints:
         type: webhook
         disableResolveMessage: true
         settings:
-          url: $ORBIT_WATCHDOG_URL
+          url: $ORBIT_ALERT_HEARTBEAT_URL
           httpMethod: POST
   - orgId: 1
     name: orbit-app
