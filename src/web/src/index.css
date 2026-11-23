@@ -30471,3 +30471,16 @@ td > .routing-report-tier + .model-routing-flag {
 .project-integration-setting.project-changes-entry {
   display: block;
 }
+/* A blocked account's line: the provider's words, the next trial, and Check again (routing-account-health §8). */
+.re-health {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.re-health-text.needs-action {
+  color: var(--orange, #d46b08);
+}
