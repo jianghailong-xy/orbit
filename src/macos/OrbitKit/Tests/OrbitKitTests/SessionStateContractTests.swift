@@ -116,7 +116,8 @@ final class SessionStateContractTests: XCTestCase {
             let base = try object(json)
             let without = try data(base)
             for (id, fields) in cases {
-                let with = try data(base.merging(fields) { _, new in new })
+                // endReason is an old field on the kinds that already send it: listed, not merged in here.
+                let with = try data(base.merging(fields.filter { $0.key != "endReason" }) { _, new in new })
                 let expected = fields.filter { !($0.value is NSNull) }
                 try check(kind, without, with, fields: expected, label: "\(kind) / \(id)")
             }
