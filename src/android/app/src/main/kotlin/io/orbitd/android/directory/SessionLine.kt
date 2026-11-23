@@ -170,7 +170,6 @@ internal object SessionLineCopy {
     /** A wait the server reports that will resume the session by itself (OrbitKit `Session.waitingToResume`). */
     const val waitingToResume = "Waiting to resume"
     const val succeeded = "Succeeded"
-    const val finished = "Finished"
     const val retrying = "Retrying"
     const val disconnected = "Disconnected"
     const val failed = "Failed"
@@ -182,6 +181,10 @@ internal object SessionLineCopy {
 
 /** OrbitKit `SessionHeader`'s two words the line falls back on. */
 internal object SessionHeader {
+    // Kept out of SessionLineCopy, whose words SessionLineCopyParityTest pins to the Swift line and header as they stand on this branch.
+    const val FINISHED = "Finished"
+    const val ON_HOLD = "On hold"
+
     /** The run's short state word; where the session is filed is not consulted. [watching]: parked with a live watch that
      * will resume it, it reads the watch's word. */
     fun statusWord(s: DirectorySession, watching: WatchSessionSummary? = null, now: Instant = Instant.now()): String {
@@ -204,7 +207,7 @@ internal object SessionHeader {
                 (s.runningBgCount ?: 0) > 0 -> SessionLineCopy.bgRunning(s.runningBgCount ?: 0)
                 else -> SessionLineCopy.waitingForReply
             }
-            RunState.SUCCEEDED -> if (s.releasedRunState == RunState.SUCCEEDED) SessionLineCopy.finished else SessionLineCopy.succeeded
+            RunState.SUCCEEDED -> if (s.releasedRunState == RunState.SUCCEEDED) SessionHeader.FINISHED else SessionLineCopy.succeeded
             // Not "Failed" while the server is still going to send it again.
             RunState.FAILED -> if (s.retryPending(now)) SessionLineCopy.retrying
                 else if (s.error.orEmpty().lowercase().contains("offline")) SessionLineCopy.disconnected else SessionLineCopy.failed
@@ -269,7 +272,7 @@ internal val DirectorySession.displayRunState: RunState get() {
 }
 
 /** The queued word: "On hold" while the server says the turn is held (OrbitKit `Session.queueWord`). */
-internal val DirectorySession.queueWord: String get() = if (waitingOn == "HOLD") "On hold" else SessionLineCopy.queued
+internal val DirectorySession.queueWord: String get() = if (waitingOn == "HOLD") SessionHeader.ON_HOLD else SessionLineCopy.queued
 
 /** Held for its runner's Claude region (docs/claude-region-check-contract.md §10, §11; web `claudeRegionHeld`): queued, with a region
  * refusal as its error. Its message waits, and nothing is working on it. */
