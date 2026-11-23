@@ -324,6 +324,7 @@ public struct SessionRef: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let title: String?
     public let status: RunStatus?
+    public let runStatus: RunStatus?
     public let runState: SessionRunState?
     public let sessionState: SessionState?
     public let endReason: String?
@@ -354,7 +355,8 @@ public struct SessionRef: Codable, Equatable, Sendable, Identifiable {
     public var resolvedRunState: SessionRunState? {
         if let fromFields = SessionRunState.fromPhaseFields(
             phase: phase, released: released, lastTurnOutcome: lastTurnOutcome, endReason: endReason,
-            workFinished: workFinished, activity: activity, isLanding: sessionKind == "LANDING") {
+            workFinished: workFinished, activity: activity, isLanding: sessionKind == "LANDING",
+            legacyStatus: runStatus.flatMap { $0 == .unknown ? nil : $0 } ?? status) {
             return fromFields
         }
         return SessionRunState.resolveOptional(runState, legacy: sessionState,

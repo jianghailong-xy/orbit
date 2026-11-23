@@ -88,6 +88,10 @@ final class UnknownStatusPhaseReadingTests: XCTestCase {
             // The server sends activity TURN on every queued or running row: a turn, not parked work.
             (#""status":"RUNNING","released":false,"phase":"RUNNING","activity":"TURN""#, "Running"),
             (#""status":"PENDING","released":false,"phase":"PENDING","activity":"TURN""#, "Queued"),
+            // A parked session whose engine runs its own turn stays parked: the status decides before the activity.
+            (#""status":"AWAITING_INPUT","released":false,"phase":"RUNNING","activity":"TURN""#, "Awaiting reply"),
+            (#""status":"MYSTERY","released":false,"phase":"RUNNING","activity":"TURN""#, "Running"),
+            (#""status":"MYSTERY","released":false,"phase":"RUNNING","activity":"BACKGROUND_JOB""#, "Awaiting reply"),
             // A job with no turn keeps the parked wording.
             (#""status":"AWAITING_INPUT","released":false,"phase":"RUNNING","activity":"BACKGROUND_JOB""#, "Awaiting reply"),
             // A held queued run reads On hold; a finished run reads Finished by workFinished.
