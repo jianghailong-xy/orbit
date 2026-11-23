@@ -1130,10 +1130,13 @@ test('(14) the landing setting: GitHub workspaces only, Push as me needs a live 
     { kind: 'TERMINAL', terminalId: 't', runnerId: ws.runnerId, machineName: 'm' },
     undefined,
   ]) {
-    assert.equal(await code(controller.update({ userId: ownerId, email: 'x', credential } as never, ws.workspaceId, { landingMode: 'PULL_REQUEST' })),
-      'LANDING_MODE_OWNER_ONLY');
+    // The refusal is thrown before the service is reached, so the call itself throws rather than returning a promise.
+    assert.equal(await code(Promise.resolve().then(() =>
+      controller.update({ userId: ownerId, email: 'x', credential } as never, ws.workspaceId, { landingMode: 'PULL_REQUEST' }))),
+    'LANDING_MODE_OWNER_ONLY');
   }
-  assert.equal(await code(controller.update({ userId: ownerId, email: 'x', credential: { kind: 'LOGIN' } } as never, ws.workspaceId, { landingMode: 'PULL_REQUEST' })), 'OK');
+  assert.equal(await code(Promise.resolve().then(() =>
+    controller.update({ userId: ownerId, email: 'x', credential: { kind: 'LOGIN' } } as never, ws.workspaceId, { landingMode: 'PULL_REQUEST' }))), 'OK');
   assert.equal((await h.prisma.workspace.findUniqueOrThrow({ where: { id: ws.workspaceId } })).landingMode, 'PULL_REQUEST');
   assert.throws(() => sanitizeWorkspaceWrite({ landingMode: 'PUSH_AS_ME' }), (error: { getResponse?: () => { code?: string } }) =>
     error.getResponse?.()?.code === 'HUMAN_ONLY_WORKSPACE_FIELD');
