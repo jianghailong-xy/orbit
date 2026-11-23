@@ -364,6 +364,23 @@ docker compose up -d --wait prometheus node-exporter postgres-exporter grafana l
 | `loki` | Keeps the log lines Alloy sends, in the `loki-data` volume ([Logs](#logs)). | 512 MB |
 | `alloy` | Reads this project's container logs from `/var/lib/docker/containers`, mounted read-only, and sends them to Loki. | 256 MB |
 
+**What it costs.** Measured on a test stack (postgres and one apiserver idle, no runners, no traffic) with the whole profile
+up for about 15 minutes. Memory is `docker stats` in MiB; disk is `du -sb` of the volume, taken three times over 20 minutes.
+
+| Service | Idle memory (MiB) | Limit (MiB) | Disk |
+| --- | --- | --- | --- |
+| `prometheus` | 26.3 | 1024 | About 296 MiB a day measured (736 samples a second, 11,085 series, 0.4 MiB a minute while the data sits in the write-ahead log). At 15 days that exceeds the 4 GB size cap, so the cap is what bounds it |
+| `node-exporter` | 13.1 | 128 | None |
+| `postgres-exporter` | 14.0 | 128 | None |
+| `grafana` | 24.9 | 384 | 50 MiB, fixed (`grafana-data`) |
+| `loki` | 20.9 | 512 | Under 1 MiB on an idle stack; it grows with the lines the containers write, up to 7 days of them |
+| `alloy` | 21.6 | 256 | Under 1 MiB (`alloy-data`) |
+| `pg-monitor-role` | 0 (exited after it runs) | 64 | None |
+| **Total** | **120.7** | | |
+
+A busy stack costs more: memory with more series and logs, and Loki's disk with the log volume. The Prometheus figure is the
+write-ahead log before compaction, so it is an upper bound on the daily growth.
+
 **What Prometheus scrapes** (`deploy/monitoring/prometheus.yml`):
 
 | Job | Target | Found by |
@@ -504,7 +521,7 @@ time it starts, and changing the line later does not change it; to set a new one
 docker compose exec grafana grafana cli admin reset-admin-password "$GRAFANA_ADMIN_PASSWORD"
 ```
 
-**The dashboards**
+##### The dashboards
 
 | Dashboard | What it answers |
 | --- | --- |
@@ -2673,4 +2690,5 @@ has no certificate to start with and restarts over and over, which harms nothing
       deliberate choice and this host's services and private networks are firewalled otherwise.
 - [ ] Backups are copied off-host and a restore has been tested.
 - [ ] Container health, disk space, backup failures, and runner availability are monitored.
+- [ ] [Monitoring](#monitoring) is on or off by a deliberate choice; where it is on, you can sign in to Grafana, `ORBIT_NTFY_TOPIC` (or another alert contact) is set and a test alert reached you, `ORBIT_WATCHDOG_URL` points at an off-host dead-man's-switch, and the disk has room for the retention above.
 - [ ] The deployment is pinned to a known release or commit and has a documented upgrade cadence.
