@@ -108,8 +108,8 @@ test('browser_request_sign_in: a Waiting-on-you card from the Orbit Cloud runner
   };
   const instance = () => ({
     'x-orbit-runner-capabilities': `${INSTANCE_CAPABILITY},${BROWSER_CLEAR}`,
-    'x-orbit-managed-runner-generation': '1',
-    'x-orbit-managed-runner-pod-uid': podUid,
+    'x-orbit-cloud-runner-generation': '1',
+    'x-orbit-cloud-runner-pod-uid': podUid,
   });
   const runnerHeaders = (runnerToken: string, sessionId?: string) => ({
     ...(runnerToken === r.token ? instance() : {}),

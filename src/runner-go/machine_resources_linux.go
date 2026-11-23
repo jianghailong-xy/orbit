@@ -98,8 +98,8 @@ func cgroupMemory(dir string, hostTotal *uint64) (total, available uint64, ok bo
 		return 0, 0, false
 	}
 	if b, err := os.ReadFile(filepath.Join(dir, "memory.stat")); err == nil {
-		if inactive, ok := statField(string(b), "inactive_file"); ok && inactive < current {
-			current -= inactive
+		if inactive, ok := statField(string(b), "inactive_file"); ok {
+			current -= min(current, inactive)
 		}
 	}
 	if current < *limit {

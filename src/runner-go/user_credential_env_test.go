@@ -230,7 +230,7 @@ func userTokenEnvCases() []userTokenEnvCase {
 			name: "shell turn", holds: []string{runner, agent},
 			env: func(t *testing.T, job *ClaimedSession, dir string) []string {
 				out, exit := runShellTurn(context.Background(), dir, "/usr/bin/env", ignore, "user-token-env",
-					job.Agent.Env, shellTurnTimeout)
+					job.Agent.Env, shellTurnTimeout, "")
 				if exit != 0 {
 					t.Fatalf("env exited %d: %s", exit, out)
 				}

@@ -679,7 +679,7 @@ func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDi
 	app.permission = func(permissionCtx context.Context, params map[string]interface{}) map[string]interface{} {
 		return app.bridgeKimiPermission(permissionCtx, t, job, params)
 	}
-	if err := startSessionProcess(cmd); err != nil {
+	if err := startSessionEngine(cmd, job.SessionID); err != nil {
 		_ = stdin.Close()
 		_ = stdout.Close()
 		_ = stderr.Close()

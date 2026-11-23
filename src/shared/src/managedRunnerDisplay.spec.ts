@@ -4,9 +4,9 @@ import { describe, expect, it } from 'vitest';
 // Through the package's own entry: what the clients import is the thing under test.
 import {
   MANAGED_RUNNER_COPY,
-  MANAGED_RUNNER_REPOS_ROOT,
-  MANAGED_RUNNER_UNAVAILABLE,
+  MANAGED_RUNNER_HOME,
   MANAGED_RUNNER_ROW_TONE,
+  MANAGED_RUNNER_UNAVAILABLE,
   firstSessionProvider,
   managedSetupState,
   managedRunnerDisplay,
@@ -120,9 +120,9 @@ describe('managed-runner-states.fixture.json', () => {
     expect(fixture.entry).toEqual(entry);
     expect(fixture.confirm).toEqual(confirm);
     expect(fixture.asleep).toEqual(asleep);
-    const { reposRoot, ...setupCopy } = fixture.setup;
+    const { home, ...setupCopy } = fixture.setup;
     expect(setupCopy).toEqual(setup);
-    expect(reposRoot).toBe(MANAGED_RUNNER_REPOS_ROOT);
+    expect(home).toBe(MANAGED_RUNNER_HOME);
   });
 
   it("tells a setup card how to treat the managed runner: preparing or asleep while it isn't up, as any machine otherwise", () => {

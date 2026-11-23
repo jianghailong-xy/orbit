@@ -1612,6 +1612,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 
 	loopCtx, stopLoop := context.WithCancelCause(context.Background())
 	loopCancel := func() { stopLoop(nil) }
+	defer startMemoryWatchdog(loopCtx, currentManagedInstance() != nil)()
 	// A managed runner takes no new work while its data volume is below its free-space reserve
 	// (managed_disk_reserve.go). Checked once now, before the reclaim and the first claim.
 	if currentManagedInstance() != nil {
@@ -2498,6 +2499,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					login.submitCode(*lr, report)
 				case "cancel":
 					login.cancelLogin(*lr)
+				case "browser":
+					go login.openInBrowser(loopCtx, *lr, runnerBrowser())
 				}
 			}
 			// Install an engine CLI the user asked for from the web. Idempotent for the same

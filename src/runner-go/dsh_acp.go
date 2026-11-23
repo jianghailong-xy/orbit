@@ -90,7 +90,7 @@ func startDshACP(ctx context.Context, spec DshLaunchSpec, mapper *dshEventMapper
 		cancel()
 		return nil, err
 	}
-	if err := startSessionProcess(cmd); err != nil {
+	if err := startSessionEngine(cmd, spec.orbitSessionID); err != nil {
 		_ = stdin.Close()
 		_ = stdout.Close()
 		_ = stderr.Close()

@@ -240,7 +240,8 @@ object ManagedRunner {
         const val COMPOSER = "Your managed runner is asleep. Sending wakes it (about 10 s)."
     }
 
-    const val REPOS_ROOT = "/home/orbit/orbit-repos"
+    /** The managed runner's home, fixed by its image: a new folder goes here before it has reported (@orbit/shared MANAGED_RUNNER_HOME). */
+    const val HOME = "/home/orbit"
     object Setup {
         val NOTICE = mapOf(
             "preparing" to "Orbit is setting up your managed runner. You can create the workspace now; your first session starts when it’s ready.",

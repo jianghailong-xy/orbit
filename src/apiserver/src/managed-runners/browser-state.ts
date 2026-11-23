@@ -18,6 +18,7 @@ import {
 import {
   BROWSER_CLEAR_V1,
   BROWSER_OPEN_V1,
+  LOGIN_RUNNER_BROWSER_V1,
   toUuid,
   uuidToBase62,
   type RunnerBrowserClearResponse,
@@ -25,6 +26,7 @@ import {
   type RunnerBrowserReport,
   type RunnerBrowserState,
   type RunnerBrowserStatus,
+  type RunnerLoginState,
 } from '@orbit/shared';
 
 import { AuthModule } from '../auth/auth.module';
@@ -33,6 +35,7 @@ import { PatForbidden, PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { loginStateOf } from '../runners/login-state';
 import { MANAGED_RUNNER_BROWSER_GATE, type ManagedRunnerBrowserGate } from './managed-runner-browser-gate';
 
 /**
@@ -48,6 +51,10 @@ import { MANAGED_RUNNER_BROWSER_GATE, type ManagedRunnerBrowserGate } from './ma
  *   POST /api/runner/browser/open         browser_open and `orbit browser open [--url]`, by the same credential: the
  *                                         runner's next heartbeat is handed `openBrowser`, and the runner starts the
  *                                         browser (as for Open browser) and opens the page asked for, if any
+ *   POST /api/runners/:id/browser/sign-in Use the runner's browser on an engine's sign-in waiting on its link
+ *                                         (docs/runner-browser-engine-sign-in-design.md): the runner's next heartbeat
+ *                                         is handed a LoginCommand `browser`, and the runner opens that link in its
+ *                                         browser; its report on the attempt is the answer (RunnerLoginState.browser)
  *   POST /api/runners/:id/browser/clear   Clear saved logins: the runner's next heartbeat is handed
  *                                         `clearBrowserProfile`, and the runner stops Chrome and deletes its profile
  *                                         (~/.orbit/browser/profile); its next report's profileClearedAt is the answer
@@ -241,6 +248,29 @@ export class ManagedRunnerBrowserService {
   }
 
   /**
+   * Use the runner's browser: the sign-in this runner is waiting on its link is to be finished in the runner's browser.
+   * Only for a runner that declares login-runner-browser/v1 (409 otherwise), and only while a sign-in waits on its link
+   * (409 otherwise). Bound to that attempt: a sign-in started since is not the one asked about.
+   */
+  async signIn(ownerId: string, rawId: string): Promise<RunnerLoginState> {
+    const runner = await this.ownManagedRunner(ownerId, rawId);
+    if (!runner.capabilities.includes(LOGIN_RUNNER_BROWSER_V1)) {
+      throw new ConflictException('This runner is too old to open a sign-in in its browser: it does not declare login-runner-browser/v1');
+    }
+    const login = await this.prisma.runner.findUniqueOrThrow({ where: { id: runner.id }, select: { loginStatus: true, loginAt: true } });
+    const waiting = login.loginStatus === 'awaiting_code' || login.loginStatus === 'awaiting_approval';
+    const { count } = waiting && login.loginAt
+      ? await this.prisma.runner.updateMany({
+        where: { id: runner.id, loginStatus: login.loginStatus, loginAt: login.loginAt },
+        data: { loginBrowser: 'requested' },
+      })
+      : { count: 0 };
+    if (count === 0) throw new ConflictException('No sign-in on this runner is waiting on its link');
+    this.realtime?.notifyRunnerWake(runner.id);
+    return loginStateOf(await this.prisma.runner.findUniqueOrThrow({ where: { id: runner.id } }));
+  }
+
+  /**
    * `beforeRequest` runs once the clear is known to be deliverable and before it is requested: browser_clear_logins
    * spends the owner's card there (runner-api/runner-browser-clear-approval.ts), and a refusal from it requests nothing.
    */
@@ -266,6 +296,13 @@ export class ManagedRunnerBrowserController {
   @Get()
   state(@CurrentUser() user: AuthUser, @Param('id') id: string): Promise<RunnerBrowserState> {
     return this.browser.state(user.userId, id);
+  }
+
+  @PatForbidden('RUNNER_CONTROL')
+  @Post('sign-in')
+  @HttpCode(202)
+  signIn(@CurrentUser() user: AuthUser, @Param('id') id: string): Promise<RunnerLoginState> {
+    return this.browser.signIn(user.userId, id);
   }
 
   @PatForbidden('RUNNER_CONTROL')
