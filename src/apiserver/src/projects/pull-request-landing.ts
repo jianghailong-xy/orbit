@@ -376,6 +376,7 @@ export interface PullRequestViewRow {
   mergeMethod: string | null;
   mergedSha: string | null;
   refusal: unknown;
+  workspaceId?: string | null;
 }
 
 /** One stored check, as the row keeps it (§7 `checks`). */
@@ -410,6 +411,7 @@ export function pullRequestViewOf(row: PullRequestViewRow): LandingPullRequestVi
     },
     mergeMethod: (row.mergeMethod as PullRequestMergeMethod | null) ?? null,
     mergedSha: row.mergedSha,
+    ...(row.workspaceId ? { workspaceId: row.workspaceId } : {}),
     refusal: refusal && typeof refusal.message === 'string'
       ? { via: refusal.via === 'PUSH_AS_ME' ? 'PUSH_AS_ME' : 'PULL_REQUEST', message: refusal.message }
       : null,
@@ -418,7 +420,7 @@ export function pullRequestViewOf(row: PullRequestViewRow): LandingPullRequestVi
 
 /** The columns `pullRequestViewOf` reads, for a Prisma select. */
 export const PULL_REQUEST_VIEW_SELECT = {
-  number: true, url: true, state: true, condition: true, checks: true, mergeMethod: true, mergedSha: true, refusal: true,
+  number: true, url: true, state: true, condition: true, checks: true, mergeMethod: true, mergedSha: true, refusal: true, workspaceId: true,
 } as const;
 
 /** The blocking reason a landing waiting on its pull request reads as (§8): its checks, or a review. */

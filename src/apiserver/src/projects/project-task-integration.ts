@@ -86,6 +86,7 @@ interface TaskIntegrationRow {
   prMergeMethod?: string | null;
   prMergedSha?: string | null;
   prRefusal?: unknown;
+  prWorkspaceId?: string | null;
   landing: string;
   isCode: boolean;
   lineStarted: boolean;
@@ -280,7 +281,7 @@ function pullRequestOfRow(row: TaskIntegrationRow): LandingPullRequestView | nul
   return pullRequestViewOf({
     number: row.prNumber ?? null, url: row.prUrl ?? null, state: row.prState, condition: row.prCondition ?? null,
     checks: row.prChecks, mergeMethod: row.prMergeMethod ?? null, mergedSha: row.prMergedSha ?? null,
-    refusal: row.prRefusal ?? null,
+    refusal: row.prRefusal ?? null, workspaceId: row.prWorkspaceId ?? null,
   });
 }
 
@@ -519,6 +520,7 @@ export async function readTaskIntegrationViews(
            pr."number" AS "prNumber", pr."url" AS "prUrl", pr."state" AS "prState", pr."condition" AS "prCondition",
            pr."checks" AS "prChecks", pr."merge_method" AS "prMergeMethod", pr."merged_sha" AS "prMergedSha",
            pr."refusal" AS "prRefusal",
+           pr."workspace_id"::text AS "prWorkspaceId",
            failed_check."check" AS "jobFailedCheck",
            -- The claim's own conditions (integration-job-relay.ts claimOne), in the table's order,
            -- for the one state they decide: why a QUEUED attempt has not been claimed yet. Since

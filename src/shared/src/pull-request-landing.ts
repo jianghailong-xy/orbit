@@ -46,6 +46,11 @@ export interface WorkspaceLandingView {
   mode: WorkspaceLandingMode | null;
   pushAsMe: { available: boolean; reason?: 'WORKSPACE_NOT_FROM_GITHUB' | 'GITHUB_NOT_CONNECTED' };
   lastRefusal: PushAsMeRefusalView | null;
+  /**
+   * The workspace's installation has not accepted the permissions landing through a pull request needs (§10): the
+   * account that must accept, and the GitHub page where it does. Absent when accepted or when GitHub could not be asked.
+   */
+  permissionsPending?: { account: string; reviewUrl: string };
 }
 
 /** Where Orbit pushes a landing GitHub refused on its target: `refs/heads/orbit/land/<id>` (§4.1). */
@@ -104,4 +109,6 @@ export interface LandingPullRequestView {
   mergedSha: string | null;
   /** The direct push GitHub refused before this pull request, in GitHub's words. */
   refusal: { via: 'PULL_REQUEST' | 'PUSH_AS_ME'; message: string } | null;
+  /** The workspace the pull request was opened for: clients read its landing setting and link to it. Absent from an older server. */
+  workspaceId?: string;
 }

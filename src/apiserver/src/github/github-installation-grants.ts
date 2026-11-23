@@ -22,6 +22,13 @@ export function pullRequestPermissionsPending(granted: Record<string, string>): 
     .map(([name]) => name);
 }
 
+/** Where an installation's owner reviews the App's new permissions (§10 step 4). */
+export function installationReviewUrl(grant: Pick<GithubInstallationGrant, 'id' | 'account' | 'type'>): string {
+  return grant.type === 'Organization'
+    ? `https://github.com/organizations/${grant.account}/settings/installations/${grant.id}`
+    : `https://github.com/settings/installations/${grant.id}`;
+}
+
 interface HeldGrant {
   at: number;
   grant: GithubInstallationGrant | null;

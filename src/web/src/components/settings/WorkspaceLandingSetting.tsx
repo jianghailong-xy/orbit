@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { WorkspaceLandingMode, WorkspaceLandingView } from '@orbit/shared';
 import { Badge } from '../ui/Badge';
 import { SettingsCard, SettingsSection } from './SettingsBlocks';
@@ -21,7 +22,12 @@ export const LANDING_WORDS = {
   NOT_GITHUB: "Landings push with this machine's Git credential.",
   REFUSED: 'Push refused.',
   CONNECT_AGAIN: 'Connect GitHub again ›',
+  REVIEW: 'Review on GitHub ↗',
 } as const;
+
+export function permissionsText(account: string): string {
+  return `Landing through pull requests starts once ${account} accepts Orbit's updated GitHub permissions.`;
+}
 
 export function refusalText(branch: string, repo: string | null, message: string): string {
   return `GitHub refused your last push to ${branch}${repo ? ` on ${repo}` : ''}: “${message}” Landings here open a pull request until GitHub accepts your push. Connect GitHub again if your rights have changed.`;
@@ -41,6 +47,11 @@ export function WorkspaceLandingSetting({
   onChoose: (mode: WorkspaceLandingMode) => void;
   connectHref?: string;
 }) {
+  // A link to #landing opens the page here.
+  const section = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (window.location.hash === '#landing') section.current?.scrollIntoView?.({ block: 'start' });
+  }, []);
   if (landing.mode === null) {
     return (
       <SettingsSection title={LANDING_WORDS.SECTION} className="workspace-section-landing">
@@ -55,6 +66,7 @@ export function WorkspaceLandingSetting({
   return (
     <SettingsSection title={LANDING_WORDS.SECTION} className="workspace-section-landing">
       <SettingsCard>
+        <div ref={section} id="landing" />
         <p className="landing-setting-lead">{LANDING_WORDS.LEAD}</p>
         <div role="radiogroup" aria-label={LANDING_WORDS.SECTION} className="landing-setting-choices">
           <label className="landing-setting-choice" data-checked={landing.mode === 'PULL_REQUEST'}>
@@ -84,6 +96,12 @@ export function WorkspaceLandingSetting({
             </span>
           </label>
         </div>
+        {landing.permissionsPending ? (
+          <p className="landing-setting-notice" role="status" data-landing-state="permissions-pending">
+            {permissionsText(landing.permissionsPending.account)}{' '}
+            <a href={landing.permissionsPending.reviewUrl} target="_blank" rel="noreferrer">{LANDING_WORDS.REVIEW}</a>
+          </p>
+        ) : null}
         {refusal ? (
           <p className="landing-setting-notice" role="status" data-landing-state="refused">
             <strong>{LANDING_WORDS.REFUSED}</strong> {refusalText(refusal.branch, repo, refusal.message)}{' '}

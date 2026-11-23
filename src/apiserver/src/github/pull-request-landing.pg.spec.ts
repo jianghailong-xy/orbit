@@ -92,6 +92,7 @@ import { GithubConnectionService } from './github-connection.service';
 import { FIRST_REFUSAL_ALERT, PushAsMeService, SECOND_REQUEST_ALERT } from './push-as-me.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { WorkspacesController } from '../workspaces/workspaces.controller';
+import { hashPassword } from '../common/crypto.util';
 import { sanitizeWorkspaceWrite } from '../runner-api/runner-agents.controller';
 import { GithubInstallationGrants } from './github-installation-grants';
 import { GithubWebhookService } from './github-webhook';
@@ -1751,4 +1752,151 @@ test('§4.6 under D5: a session\'s Merge whose check fails is handed the log as 
   assert.equal(closedSession.mergeStatus, 'error');
   assert.match(String(closedSession.mergeError), new RegExp(`@octo-reviewer closed pull request #${closed.number} without merging it`));
   assert.equal((await h.prisma.githubPullRequest.findUniqueOrThrow({ where: { id: closed.prId } })).state, 'CLOSED');
+});
+
+// ── The web board's states (docs/mocks/protected-branch-landing), read as the clients read them ─────────────────────
+
+/** Six required checks, `passed` of them green; the rest still running, or one of them red. */
+function requiredChecks(passed: number, failing = false) {
+  return Array.from({ length: 6 }, (_, i) => ({
+    name: i === 5 ? 'PostgreSQL specs' : `check ${i + 1}`, required: true,
+    status: i < passed || (failing && i === 5) ? 'COMPLETED' : 'IN_PROGRESS',
+    conclusion: i < passed ? 'SUCCESS' : failing && i === 5 ? 'FAILURE' : null,
+    ...(failing && i === 5 ? { jobId: 9101 } : {}),
+  }));
+}
+
+test('(16) every state the web board draws is read, with the pull request block and its workspace, from the real services', { skip: !URL_, concurrency: 1, timeout: 300_000 }, async (t) => {
+  const h = await harness(t);
+  // LANDING_STATES_OUT: the seed for the screenshots. The owners can sign in with this password, and what is written
+  // is the ids the pages are opened by. Without it the case only asserts the read models.
+  const out = process.env.LANDING_STATES_OUT;
+  const PASSWORD = 'landing-board-2026';
+  const owner = await h.newOwner('board');
+  const bare = await h.newOwner('no-github');
+  for (const [id, label] of [[owner, 'board'], [bare, 'no-github']] as const) {
+    await h.prisma.user.update({ where: { id }, data: { email: `${label}@landing-board.test`, passwordHash: hashPassword(PASSWORD) } });
+  }
+  await connectGithub(h, owner);
+  const manifest: Record<string, unknown> = { password: PASSWORD, owners: { board: 'board@landing-board.test', noGithub: 'no-github@landing-board.test' } };
+
+  // a: opened, 2 of 6 checks; d: main moved (the pull request's condition says BEHIND while the attempt is held).
+  const a = await waitingOnPullRequest(h, owner, 'Opened with checks running');
+  a.scenario.checks = requiredChecks(2);
+  await h.door.reread(a.prId);
+  const d = await waitingOnPullRequest(h, owner, 'Main moved meanwhile');
+  d.scenario.checks = requiredChecks(0);
+  await h.door.reread(d.prId);
+  await h.sql.query(`UPDATE "github_pull_request" SET "condition" = 'BEHIND' WHERE "id" = $1::uuid`, [d.prId]);
+
+  // b: every required check green, a review is required.
+  const b = await waitingOnPullRequest(h, owner, 'Waiting for the owner review');
+  b.scenario.checks = requiredChecks(6);
+  b.scenario.reviewDecision = 'REVIEW_REQUIRED';
+  await h.door.reread(b.prId);
+
+  // c: a required check failed on GitHub.
+  const c = await waitingOnPullRequest(h, owner, 'A required check failed');
+  h.github.logs.set(9101, ACTIONS_LOG);
+  c.scenario.checks = requiredChecks(5, true);
+  await h.door.reread(c.prId);
+  assert.equal((await h.job(c.command.jobId)).state, 'CHECK_FAILED');
+
+  // e: approved and merged.
+  const e = await waitingOnPullRequest(h, owner, 'Merged by pull request');
+  e.scenario.checks = requiredChecks(6);
+  e.scenario.reviewDecision = 'APPROVED';
+  e.scenario.mergeStateStatus = 'CLEAN';
+  e.scenario.baseSha = UPSTREAM_TIP;
+  e.scenario.mergeTree = () => SHA('Merged by pull request-tree');
+  await h.door.reread(e.prId);
+  assert.equal((await h.job(e.command.jobId)).state, 'LANDED');
+
+  // closed on GitHub by someone else.
+  const closed = await waitingOnPullRequest(h, owner, 'Closed on GitHub without merging');
+  const pull = h.github.pulls.find((row) => row.number === closed.number)!;
+  pull.state = 'CLOSED';
+  pull.closedBy = 'sam';
+  await h.door.reread(closed.prId);
+  assert.equal((await h.job(closed.command.jobId)).errorCode, 'PULL_REQUEST_CLOSED');
+
+  // f: Push as me refused, fell back to a pull request, and the workspace remembers the refusal.
+  const f = await h.newWorkspace(owner, 'push-refused', { github: true });
+  h.github.granted.set(f.installationId, GRANTED);
+  await h.prisma.workspace.update({ where: { id: f.workspaceId }, data: { landingMode: 'PUSH_AS_ME' } });
+  const fLanding = await h.queuedLanding(owner, f, 'Push as me fell back');
+  const [fCommand] = await beatV2(h, f.runnerId, true);
+  assert.equal(fCommand?.landVia, 'PUSH_AS_ME');
+  const refusedWords = 'GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request.';
+  const fAnswered = await applyIntegrationJobResult(h.prisma as never, {
+    jobId: fCommand.jobId, runnerId: f.runnerId, ownerId: owner,
+    body: { ...h.pullRequestResult(fCommand, SHA('f-head'), SHA('f-tree')), pushRefusal: refusedWords },
+  });
+  const fScenario = h.github.scenario(f.fullName);
+  fScenario.mergeStateStatus = 'BLOCKED';
+  fScenario.checks = requiredChecks(6);
+  fScenario.reviewDecision = 'REVIEW_REQUIRED';
+  await h.door.advance(fAnswered.after!.pullRequestIds!);
+  await pushAsMeDoor(h, f.fullName).service.afterJobResult(fCommand.jobId);
+
+  // The settings: Push as me chosen with nothing refused, a workspace not from GitHub, and an installation that has
+  // not accepted the pull request permissions.
+  const pam = await h.newWorkspace(owner, 'push-as-me-on', { github: true });
+  h.github.granted.set(pam.installationId, GRANTED);
+  await h.prisma.workspace.update({ where: { id: pam.workspaceId }, data: { landingMode: 'PUSH_AS_ME' } });
+  const notGithub = await h.newWorkspace(owner, 'not-from-github', { github: false });
+  const pending = await h.newWorkspace(owner, 'permissions-pending', { github: true });
+  h.github.granted.set(pending.installationId, { contents: 'write', metadata: 'read' });
+  const unconnected = await h.newWorkspace(bare, 'github-not-connected', { github: true });
+  h.github.granted.set(unconnected.installationId, GRANTED);
+
+  // What the clients read.
+  const workspaces = new WorkspacesService(h.prisma as never, undefined, undefined, h.grants);
+  const settings = async (ownerId: string, ws: { workspaceId: string }) => (await workspaces.getWithUsage(ownerId, ws.workspaceId)).landing;
+  assert.equal((await settings(owner, a.cloud)).mode, 'PULL_REQUEST');
+  assert.deepEqual((await settings(owner, a.cloud)).pushAsMe, { available: true });
+  assert.equal((await settings(owner, pam)).mode, 'PUSH_AS_ME');
+  assert.equal((await settings(owner, f)).lastRefusal?.message, refusedWords);
+  assert.equal((await settings(owner, notGithub)).mode, null);
+  const pendingView = await settings(owner, pending);
+  assert.equal(pendingView.permissionsPending?.account, 'owner');
+  assert.match(pendingView.permissionsPending?.reviewUrl ?? '', /^https:\/\/github\.com\/settings\/installations\/\d+$/);
+  assert.equal((await settings(owner, a.cloud)).permissionsPending, undefined);
+  assert.deepEqual((await settings(bare, unconnected)).pushAsMe, { available: false, reason: 'GITHUB_NOT_CONNECTED' });
+
+  const cards = async (projectId: string, jobId: string) => (await readInFlightJobs(h.prisma as never, projectId, jobId))[0]?.pullRequest;
+  const aCard = await cards(a.landing.projectId, a.command.jobId);
+  assert.equal(aCard?.workspaceId, a.cloud.workspaceId);
+  assert.deepEqual([aCard?.condition, aCard?.checks.passed, aCard?.checks.required], ['CHECKS_PENDING', 2, 6]);
+  assert.equal((await cards(b.landing.projectId, b.command.jobId))?.condition, 'REVIEW_REQUIRED');
+  assert.equal((await cards(d.landing.projectId, d.command.jobId))?.condition, 'BEHIND');
+  const fCard = await cards(fLanding.projectId, fCommand.jobId);
+  assert.equal(fCard?.refusal?.via, 'PUSH_AS_ME');
+  assert.equal(fCard?.workspaceId, f.workspaceId);
+  // A landing into main is a promotion's, so its terminal states are read on the landing's own view (§2.9).
+  const landingOf = async (w: { landing: { landingId: string } }) => {
+    const row = await h.prisma.projectLanding.findUniqueOrThrow({ where: { id: w.landing.landingId } });
+    return readLandingView(h.prisma as never, owner, row.sessionId);
+  };
+  const cView = await landingOf(c);
+  assert.equal(cView?.currentAttempt?.state, 'CHECK_FAILED');
+  assert.equal(cView?.pullRequest?.checks.failed[0]?.name, 'PostgreSQL specs');
+  assert.equal((await landingOf(e))?.pullRequest?.state, 'MERGED');
+  assert.equal((await landingOf(closed))?.pullRequest?.state, 'CLOSED');
+
+  if (out) {
+    const writeJson = (await import('node:fs')).writeFileSync;
+    const ids = (w: { landing: { projectId: string; taskId: string }; cloud: { workspaceId: string } }) =>
+      ({ projectId: w.landing.projectId, taskId: w.landing.taskId, workspaceId: w.cloud.workspaceId });
+    manifest.cards = {
+      a: ids(a), b: ids(b), c: ids(c), d: ids(d), e: ids(e), closed: ids(closed),
+      f: { projectId: fLanding.projectId, taskId: fLanding.taskId, workspaceId: f.workspaceId },
+    };
+    manifest.settings = {
+      pullRequest: a.cloud.workspaceId, pushAsMe: pam.workspaceId, refused: f.workspaceId, notFromGithub: notGithub.workspaceId,
+      permissionsPending: pending.workspaceId, notConnected: unconnected.workspaceId,
+    };
+    manifest.grants = Object.fromEntries([...h.github.granted.entries()].map(([id, permissions]) => [String(id), permissions]));
+    writeJson(out, JSON.stringify(manifest, null, 2));
+  }
 });

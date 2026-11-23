@@ -587,6 +587,7 @@ interface InFlightJobRow extends IntegrationCheckSource {
   prMergeMethod?: string | null;
   prMergedSha?: string | null;
   prRefusal?: unknown;
+  prWorkspaceId?: string | null;
   kind: IntegrationJobKind;
   phase: IntegrationJobPhase | null;
   generation: number;
@@ -787,7 +788,7 @@ function inFlightJobOf(row: InFlightJobRow, typicalMs: Map<string, number>): Pro
     ? pullRequestViewOf({
       number: row.prNumber ?? null, url: row.prUrl ?? null, state: row.prState, condition: row.prCondition ?? null,
       checks: row.prChecks, mergeMethod: row.prMergeMethod ?? null, mergedSha: row.prMergedSha ?? null,
-      refusal: row.prRefusal ?? null,
+      refusal: row.prRefusal ?? null, workspaceId: row.prWorkspaceId ?? null,
     })
     : null;
   const limitSeconds = integrationJobLimitSeconds(row);
@@ -1046,6 +1047,7 @@ async function readInFlightJobsForProjects(
            pr."number" AS "prNumber", pr."url" AS "prUrl", pr."state" AS "prState", pr."condition" AS "prCondition",
            pr."checks" AS "prChecks", pr."merge_method" AS "prMergeMethod", pr."merged_sha" AS "prMergedSha",
            pr."refusal" AS "prRefusal",
+           pr."workspace_id"::text AS "prWorkspaceId",
            lock_holder."jobId" AS "lockHolderJobId", lock_holder."ownerId" AS "lockHolderOwnerId",
            lock_holder."kind" AS "lockHolderKind", lock_holder."taskTitle" AS "lockHolderTaskTitle",
            lock_holder."projectTitle" AS "lockHolderProjectTitle"

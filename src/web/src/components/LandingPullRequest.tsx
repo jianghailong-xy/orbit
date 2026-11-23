@@ -1,5 +1,8 @@
 import { useState, type JSX } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import { encodeId } from '../lib/idCodec';
+import { workspacesQuery } from '../lib/queries';
 import type { LandingPullRequestView } from '@orbit/shared';
 
 /**
@@ -32,7 +35,7 @@ export const PULL_REQUEST_WORDS = {
   DISMISS: 'Hide this tip',
 } as const;
 
-export function pullRequestCard(pr: LandingPullRequestView, main: string): PullRequestCardModel {
+export function pullRequestCard(pr: LandingPullRequestView, main: string, workspaceId?: string): PullRequestCardModel {
   const number = pr.number != null ? `#${pr.number}` : '';
   const url = pr.url;
   const view = url ? [{ label: PULL_REQUEST_WORDS.VIEW, href: url }] : [];
@@ -67,7 +70,7 @@ export function pullRequestCard(pr: LandingPullRequestView, main: string): PullR
     return {
       ...base, stage: 'FELL_BACK', tone: 'amber', head: 'Opened a pull request instead', right: 'Push refused',
       detail: `GitHub refused the push to ${main}: “${pr.refusal.message}” Landing through pull request ${number}.`,
-      actions: [...view, { label: PULL_REQUEST_WORDS.SETTINGS, href: '/settings/workspaces' }],
+      actions: [...view, { label: PULL_REQUEST_WORDS.SETTINGS, href: landingSettingsHref(workspaceId) }],
     };
   }
   if (pr.condition === 'BEHIND') {
@@ -94,19 +97,40 @@ const tipHidden = (): boolean => {
   try { return window.localStorage.getItem(TIP_KEY) === '1'; } catch { return false; }
 };
 
+/** Where the tip and the fallback card send the owner: that workspace's settings, at its Landing section. */
+export const landingSettingsHref = (workspaceId: string | undefined): string =>
+  workspaceId ? `/settings/workspaces/${encodeURIComponent(encodeId(workspaceId))}#landing` : '/settings/workspaces';
+
+/** The tip, owner 2026-11-23: dismissible, and not shown once the workspace is on Push as me. */
+function FasterTip({ workspaceId }: { workspaceId?: string }): JSX.Element | null {
+  const [hidden, setHidden] = useState(tipHidden);
+  // Mounted only for a card that names its workspace, so a bare card needs no query client.
+  const mode = (useQuery({ ...workspacesQuery(), enabled: !!workspaceId }).data as
+    Array<{ id: string; landingMode?: string | null }> | undefined)?.find((w) => w.id === workspaceId)?.landingMode;
+  if (hidden || mode === 'PUSH_AS_ME') return null;
+  return (
+    <p className="landing-pr-tip" data-landing-tip="faster">
+      <span>{PULL_REQUEST_WORDS.TIP} <Link to={landingSettingsHref(workspaceId)}>{PULL_REQUEST_WORDS.TIP_LINK}</Link></span>
+      <button type="button" aria-label={PULL_REQUEST_WORDS.DISMISS} onClick={() => {
+        try { window.localStorage.setItem(TIP_KEY, '1'); } catch { /* the tip hides for this view */ }
+        setHidden(true);
+      }}>×</button>
+    </p>
+  );
+}
+
 export function LandingPullRequest({
   pullRequest, main = 'main', pushAsMe = false, sessionHref,
 }: {
   pullRequest: LandingPullRequestView;
   main?: string;
-  /** Push as me is on for the workspace: the tip is not shown. */
+  /** Overrides the workspace's own setting, which the card reads by `pullRequest.workspaceId`. */
   pushAsMe?: boolean;
   /** Where "Open session" goes, on a failed check. */
   sessionHref?: string;
 }): JSX.Element {
-  const model = pullRequestCard(pullRequest, main);
-  const [hidden, setHidden] = useState(tipHidden);
-  const tip = model.stage === 'WAITING_FOR_REVIEW' && !pushAsMe && !hidden;
+  const model = pullRequestCard(pullRequest, main, pullRequest.workspaceId);
+  const tip = model.stage === 'WAITING_FOR_REVIEW' && !pushAsMe;
   return (
     <div className="landing-pr" data-pr-stage={model.stage} data-tone={model.tone}>
       <div className="landing-pr-head">
@@ -125,15 +149,7 @@ export function LandingPullRequest({
           ? <Link key={a.label} to={a.href}>{a.label}</Link>
           : <a key={a.label} href={a.href} target="_blank" rel="noreferrer">{a.label}</a>)}
       </div>
-      {tip ? (
-        <p className="landing-pr-tip" data-landing-tip="faster">
-          <span>{PULL_REQUEST_WORDS.TIP} <Link to="/settings/workspaces">{PULL_REQUEST_WORDS.TIP_LINK}</Link></span>
-          <button type="button" aria-label={PULL_REQUEST_WORDS.DISMISS} onClick={() => {
-            try { window.localStorage.setItem(TIP_KEY, '1'); } catch { /* the tip hides for this view */ }
-            setHidden(true);
-          }}>×</button>
-        </p>
-      ) : null}
+      {tip ? <FasterTip workspaceId={pullRequest.workspaceId} /> : null}
     </div>
   );
 }

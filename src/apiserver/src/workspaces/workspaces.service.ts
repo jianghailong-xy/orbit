@@ -28,6 +28,7 @@ import { worktreeNeedsGit } from './worktree-needs-git';
 import { isNewFolderName, newFolderWorkDirOn, readGithub, type NewWorkspaceTarget } from '../sessions/new-workspace';
 import { RUNNER_BEATS } from '../runners/runner-presence';
 import { workspaceLandingView } from '../projects/pull-request-landing';
+import { GithubInstallationGrants, installationReviewUrl, pullRequestPermissionsPending } from '../github/github-installation-grants';
 
 /** The engines a list names, each once and in the order the router weighs them. Absent stays absent:
  *  a patch that says nothing about the list leaves it as it is. */
@@ -52,6 +53,8 @@ export class WorkspacesService {
      * specs that build this service by hand.
      */
     @Optional() private readonly realtime?: RealtimeService,
+    /** What each installation granted, for the Landing section's "has not accepted the new permissions" notice (§10). */
+    @Optional() private readonly grants?: GithubInstallationGrants,
   ) {}
 
   /** Resolve each machine on the server so changing the chosen runner never guesses at credentials. */
@@ -337,8 +340,18 @@ export class WorkspacesService {
       ...workspace,
       lastActiveAt: lastActive.get(workspace.id) ?? null,
       sessionCount,
-      landing: workspaceLandingView(workspace, connected),
+      landing: { ...workspaceLandingView(workspace, connected), ...(await this.permissionsPending(workspace)) },
     };
+  }
+
+  /** §10: the installation has not accepted the pull request permissions; nothing when it has, or cannot be asked. */
+  private async permissionsPending(
+    workspace: { githubRepoId: bigint | null; githubInstallationId: bigint | null },
+  ): Promise<{ permissionsPending?: { account: string; reviewUrl: string } }> {
+    if (!this.grants || workspace.githubRepoId == null || workspace.githubInstallationId == null) return {};
+    const grant = await this.grants.grant(workspace.githubInstallationId.toString()).catch(() => null);
+    if (!grant || pullRequestPermissionsPending(grant.permissions).length === 0) return {};
+    return { permissionsPending: { account: grant.account, reviewUrl: installationReviewUrl(grant) } };
   }
 
   /** The owner's GitHub connection is one GitHub still takes (§3 rule 4). */
