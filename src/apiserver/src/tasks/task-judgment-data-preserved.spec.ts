@@ -3334,7 +3334,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1447_schedule_change_conversation',
       // 1462 adds one nullable column, login_browser, to runner; no row is written, and no preserved relation,
       // trigger, function or DONE fence changes.
-      '1462_runner_login_browser'],
+      '1462_runner_login_browser',
+      // 1463 re-keys three model_identity rows (qwen3-7, qwen3-8, qwen4 to their -max ids): UPDATEs of that table only,
+      // none of the preserved relations, and no trigger, function or DONE fence changes.
+      '1463_model_identity_max_is_a_name'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
