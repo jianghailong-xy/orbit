@@ -22,8 +22,8 @@ or infer permission from available credentials. Local fixtures are preparation e
 ## Image and build
 
 [Dockerfile](image/Dockerfile) pins the base images by digest, Go 1.27.1, Node 26.10.0, a dated Debian
-package snapshot and every engine Orbit runs: Codex 0.170.0, Claude Code 2.1.328 (which also runs
-Anthropic-dialect API keys, DeepSeek's included), OpenCode 1.19.6, Kimi Code 2.6.3, Antigravity CLI 1.5.12,
+package snapshot and every engine Orbit runs: Codex 0.171.0, Claude Code 2.1.330 (which also runs
+Anthropic-dialect API keys, DeepSeek's included), OpenCode 1.19.6, Kimi Code 2.7.2, Antigravity CLI 1.5.14,
 Cursor CLI 2026.10.14-941492e and DeepSeek Harness 0.2.0-rc.2. [pins.json](image/pins.json) records each
 pin and where its digest comes from. Kimi Code and Antigravity CLI are fetched by URL and checked against
 the SHA-256/SHA-512 their publishers' manifests give; Codex, Claude Code and OpenCode are their npm
