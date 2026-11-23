@@ -3326,7 +3326,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // and a BEFORE UPDATE trigger on session (status, completed_at) that writes listed_at alone. session is not a
       // preserved relation, none of the six preserved triggers/functions is named or replaced, and no DONE fence changes.
       // Written as 1260 on its task branch, it was renumbered after main took 1260.
-      '1434_session_listed_at'],
+      '1434_session_listed_at',
+      // 1447 adds a session_run_source value, two nullable session columns (change_schedule_id with a foreign key to
+      // schedule, schedule_change_opening) and asked_text on schedule_revision and schedule_change_request; no row is
+      // written, and no preserved relation, trigger, function or DONE fence changes.
+      '1447_schedule_change_conversation',
+      // 1462 adds one nullable column, login_browser, to runner; no row is written, and no preserved relation,
+      // trigger, function or DONE fence changes.
+      '1462_runner_login_browser'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
