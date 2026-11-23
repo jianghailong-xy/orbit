@@ -175,6 +175,9 @@ type cursorPermissionBridge struct {
 	wg      sync.WaitGroup
 	// bypassNoted: the notice that Bypass is asking anyway went out in this process.
 	bypassNoted bool
+	// subagent is a SubAgent's child claim, set before ACP starts; nil for a session. A read-only one's requests are
+	// answered by its parent's mode (readonlySubagentAnswer).
+	subagent *ClaimedSession
 	// Prepared before ACP starts; the shell launcher and Auto policy share this result.
 	sandbox        *cursorSandbox
 	sandboxInForce bool
@@ -382,15 +385,30 @@ func (b *cursorPermissionBridge) permission(id interface{}, params map[string]in
 		return
 	}
 	policy := b.policy()
+	parentAllows, parentDecided := readonlySubagentAnswer(b.subagent, ask.Name)
 	switch {
 	// The Files drive is read-only in Plan, whatever a standing rule allows (plan_drive.go).
 	case policy.Mode == "plan" && planDriveWrite(ask.Name, mapValue(ask.Input)):
 		if b.now(id, ask.ToolUseID, cursorSelected(cursorRejectOnce)) {
 			b.note(ask.TurnID, "permission_denied", ask.ToolUseID, ask.Name, planDriveRefusal)
 		}
+	case readonlySubagentRefusesEdit(b.subagent, ask.Name):
+		if b.now(id, ask.ToolUseID, cursorSelected(cursorRejectOnce)) {
+			b.note(ask.TurnID, "permission_denied", ask.ToolUseID, ask.Name, "a read-only SubAgent does not edit files")
+		}
 	case b.preApproved(ask):
 		b.now(id, ask.ToolUseID, cursorSelected(cursorAllowOnce))
-	case policy.Answer == cursorAnswerRefuse:
+	// A read-only SubAgent runs in plan mode, which refuses every request: what it asks is answered by its parent's mode.
+	case parentDecided && parentAllows:
+		if b.now(id, ask.ToolUseID, cursorSelected(cursorAllowOnce)) {
+			b.note(ask.TurnID, "permission_auto_allowed", ask.ToolUseID, ask.Name, "the parent session's mode allows it")
+		}
+	case parentDecided:
+		if b.now(id, ask.ToolUseID, cursorSelected(cursorRejectOnce)) {
+			b.note(ask.TurnID, "permission_denied", ask.ToolUseID, ask.Name, "the parent session's mode refuses without asking")
+		}
+	// Under a parent that asks, a read-only SubAgent's request is put on the card, as the parent's own would be.
+	case policy.Answer == cursorAnswerRefuse && !(b.subagent != nil && b.subagent.readonlySubagent && b.subagent.readonlyParentMode != nil):
 		if b.now(id, ask.ToolUseID, cursorSelected(cursorRejectOnce)) {
 			b.note(ask.TurnID, "permission_denied", ask.ToolUseID, ask.Name, cursorModeName(policy.Mode)+" refuses without asking")
 		}

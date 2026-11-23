@@ -1156,9 +1156,26 @@ public enum ProjectPage {
         public let start: StartProject.PageRow?
         public let done: ProjectDone.PageRow?
         public let needsYou: [ProjectOpenItemRow]
+        /// "Being fixed by its session" (revision 42, §12.7): landing failures in their task's own
+        /// session's hands, drawn under Needs you and counted in nobody's.
+        public let beingFixed: [ProjectOpenItemRow]
+
+        public init(hint: String, start: StartProject.PageRow?, done: ProjectDone.PageRow?,
+                    needsYou: [ProjectOpenItemRow], beingFixed: [ProjectOpenItemRow] = []) {
+            self.hint = hint
+            self.start = start
+            self.done = done
+            self.needsYou = needsYou
+            self.beingFixed = beingFixed
+        }
 
         /// Whether the Needs you group is drawn: anything in it, or the owner's own rows.
         public var drawsNeedsYou: Bool { !needsYou.isEmpty || start != nil || done != nil }
+    }
+
+    /// The group's heading with its count: `Being fixed by its session · 1`.
+    public static func beingFixedHeading(_ count: Int) -> String {
+        "\(LandingFixCopy.beingFixedByItsSession) · \(count)"
     }
 
     /// The header's detail, in web's words. The pause is drawn as a card and not counted, as web
@@ -1177,8 +1194,9 @@ public enum ProjectPage {
             + (start?.request == nil ? 0 : 1)
             + (ProjectDone.live(openItems: items, status: status.rawValue) == nil ? 0 : 1)
         let section = OpenItemsSection(
-            hint: openItemsHint(needsYou: counted), start: start, done: done, needsYou: needsYou)
-        return section.drawsNeedsYou ? section : nil
+            hint: openItemsHint(needsYou: counted), start: start, done: done, needsYou: needsYou,
+            beingFixed: items.withWorkSession)
+        return section.drawsNeedsYou || !section.beingFixed.isEmpty ? section : nil
     }
 
     /// The owner's rows, without the request to record the project done should a server ever list
@@ -1304,6 +1322,7 @@ public enum ProjectPage {
     /// landing, never in Landed.
     private static let integratingStates: Set<String> = [
         "QUEUED", "RUNNING", "CONFLICT", "CHECK_FAILED", "ERROR", "AWAITING_OWNER", "AWAITING_OBSERVATION",
+        "FIXING",
     ]
     private static let landedStates: Set<String> = ["ON_INTEGRATION_LINE", "ON_UPSTREAM"]
 
@@ -1412,6 +1431,9 @@ public enum ProjectPage {
         case "CONFLICT": return Tag(text: "Conflict · \(who)", tone: .danger)
         case "CHECK_FAILED": return Tag(text: "Checks failed · \(who)", tone: .danger)
         case "ERROR": return Tag(text: "Integration error · \(who)", tone: .danger)
+        // Revision 42 (§12.7): the task's own session is fixing the failed landing; pressing the row
+        // opens that session (`fixingSessionID`).
+        case "FIXING": return Tag(text: LandingFixCopy.landingFixing, tone: .verification)
         case "AWAITING_OWNER": return Tag(text: "Awaiting your approval", tone: .warning)
         case "AWAITING_OBSERVATION":
             return Tag(text: waitingToBeSeenOn(RunSettings.mainBranchName(upstreamRef),
@@ -1421,6 +1443,13 @@ public enum ProjectPage {
         case "ON_UPSTREAM": return Tag(text: "On \(RunSettings.mainBranchName(upstreamRef))", tone: .success)
         default: return nil
         }
+    }
+
+    /// The task's own session a FIXING row opens instead of the task (revision 42, §12.7); nil for
+    /// every other row.
+    public static func fixingSessionID(_ t: ProjectTaskRow) -> String? {
+        guard t.integration?.state == "FIXING", let id = t.integration?.workSessionId, !id.isEmpty else { return nil }
+        return id
     }
 
     /// One band of the task list.

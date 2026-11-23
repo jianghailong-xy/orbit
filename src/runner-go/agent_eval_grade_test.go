@@ -832,6 +832,11 @@ func checkNoOrchestrationToolsListed(r *evalRun) (bool, string) {
 		return false, "the session's tool list is not known"
 	}
 	for _, op := range r.ToolsListed {
+		// Revision 42 (§12.7, own_landing.go): a task's work session is offered session_get with orchestration off, for
+		// its own task's landing alone. It reads one record and starts nothing, so it is no orchestration door.
+		if op == "session_get" && r.Scenario != nil && r.Scenario.Setup.TaskLinked {
+			continue
+		}
 		if evalOrchestrationOp(op) {
 			return false, "the tool list offers " + op
 		}

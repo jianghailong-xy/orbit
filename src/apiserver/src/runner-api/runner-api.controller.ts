@@ -8410,7 +8410,7 @@ export class RunnerApiController {
         // The park above wrote this session's finish, which may be the one a DONE task's identity was
         // waiting for (§10.5 O-L4 3). An item it opens is delivered after the commit with this
         // turn's own exception items.
-        const settled = await settleDeliveredIdentityAfterFinish(tx, current);
+        const settled = await settleDeliveredIdentityAfterFinish(tx, { ...current, id: sessionId });
         settledWork = settled === 'FROZEN' || settled === 'IDENTITY_UNKNOWN';
       }
       // NO_REPLY (contract §4.1): the turn has settled, the session is idle and its run goes on. Each
@@ -8717,6 +8717,9 @@ export class RunnerApiController {
       // The exception item that same transaction opened, handed to whoever is responsible for it
       // (contract §4.4 X-D4 1).
       await this.openItems?.deliverForTasks([finalized.taskId]);
+      // §12.5 W7: a failed landing this session held, handed back by the finish its failed turn wrote (TURN_FAILED);
+      // a MAIN line's item names no task, so the task's delivery above does not find it.
+      await this.openItems?.offerLandingFixesTo(sessionId);
     }
     // TURN_END events are flushed before /turn-complete, so their control summary can still see
     // RUNNING. Publish the committed row for every applied non-steer completion; task-bound
@@ -10716,6 +10719,9 @@ export class RunnerApiController {
       if (!outcome.taskReclaimed) this.realtime.publishTaskChanged(sessionId, outcome.taskId);
       await this.tasks?.deliverDispatchRefusalAfterCommit(outcome.taskId);
     }
+    // §12.5 W6: a failed landing handed to this work session while it was on its way to its DONE's end
+    // is delivered now that the end is over — the landing-fix turn revives it. Nothing for any other.
+    if ('taskId' in outcome && outcome.taskId) await this.openItems?.offerLandingFixesTo(sessionId);
     if ('currentWorkTerminalized' in outcome && (outcome.currentWorkTerminalized ?? 0) > 0) {
       this.realtime.publishQueuedTurnsChanged(sessionId);
     }

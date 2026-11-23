@@ -82,6 +82,10 @@ internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, e
     if (card.key.endsWith(":coordinatorDelivery")) {
         CoordinatorDeliveryLineView(card, event, open); return
     }
+    // A failed landing handed to this task's own session (revision 42, board docs/mocks/landing-fix-own-session ② b) is its own card.
+    if (card.key.endsWith(":landingFix")) {
+        LandingFixCardView(card, event, open); return
+    }
     // An exception item delivered to the coordinator is its own card, pointing at the item's card (board card-ui-polish ②).
     if (card.key.endsWith(":openItemDelivery")) {
         OpenItemDeliveryCardView(card, event, open); return
