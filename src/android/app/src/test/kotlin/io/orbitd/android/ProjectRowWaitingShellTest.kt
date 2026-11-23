@@ -86,7 +86,7 @@ class ProjectRowWaitingShellTest {
         compose.onNode(hasTestTag("project-row-line") and hasText("Waiting for your confirmation · Quota retry"), useUnmergedTree = true).assertExists()
         val before = ProjectShell.calls.size
         compose.onNodeWithTag(row).performClick()
-        await { ProjectShell.calls.drop(before).any { it == "GET sessions/${ProjectShell.WAITING}" } && exists(hasContentDescription("Project sessions")) }
+        await { exists(hasContentDescription("Project sessions")) && ProjectShell.calls.drop(before).any { it == "GET sessions/${ProjectShell.WAITING}" } }
         assertFalse("the coordinator is not opened: ${ProjectShell.calls.drop(before)}",
             ProjectShell.calls.drop(before).any { it == "GET sessions/${ProjectShell.COORD}" })
         compose.onNodeWithContentDescription("Back").performClick()
@@ -111,7 +111,7 @@ class ProjectRowWaitingShellTest {
         compose.onAllNodes(hasTestTag("project-row-line") and hasText("Quota retry", substring = true), useUnmergedTree = true).assertCountEquals(0)
         val before = ProjectShell.calls.size
         compose.onNodeWithTag(row).performClick()
-        await { ProjectShell.calls.drop(before).any { it == "GET sessions/${ProjectShell.COORD}" } && exists(hasContentDescription("Project sessions")) }
+        await { exists(hasContentDescription("Project sessions")) && ProjectShell.calls.drop(before).any { it == "GET sessions/${ProjectShell.COORD}" } }
         assertFalse(ProjectShell.calls.drop(before).any { it == "GET sessions/${ProjectShell.WAITING}" })
         compose.onNodeWithContentDescription("Back").performClick()
         await { exists(hasTestTag(row)) }
