@@ -221,8 +221,8 @@ final class ComposerMenuCopyParityTests: XCTestCase {
 
         // Read from the attach items onward: the native menu does gate Command and Skill, and that
         // gate is its own business.
-        guard let first = menu.range(of: "Label(\"Image\"") else {
-            throw ParityError.unparsed("the native `addMenu` offers no `Image` item")
+        guard let first = menu.range(of: "Label(\"Upload Image\"") else {
+            throw ParityError.unparsed("the native `addMenu` offers no `Upload Image` item")
         }
         XCTAssertFalse(
             menu[first.lowerBound...].contains(".disabled"),
