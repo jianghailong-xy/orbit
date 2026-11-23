@@ -178,8 +178,9 @@ if [ "$ENABLE_FIREWALL" -eq 1 ]; then
   if grep -Eq "^[[:space:]]*COMPOSE_PROFILES=.*$FW_PROFILE" .env; then
     die "the managed runners' firewall is on for this deployment already ($FW_PROFILE is in COMPOSE_PROFILES)."
   fi
-  # What an install writes, with the runner link's later line where it wrote one or an upgrade added one.
-  if grep -E '^[[:space:]]*COMPOSE_PROFILES=' .env | grep -vxE 'COMPOSE_PROFILES=managed-runners-docker(,runner-link)?' >/dev/null \
+  # What an install writes, with the runner link's later line where it wrote one or an upgrade added one, and the
+  # monitoring line after it (project 350mFkGGRDovIfipePH2O).
+  if grep -E '^[[:space:]]*COMPOSE_PROFILES=' .env | grep -vxE 'COMPOSE_PROFILES=managed-runners-docker(,runner-link)?(,monitoring)?' >/dev/null \
     || ! grep -qx 'COMPOSE_PROFILES=managed-runners-docker' .env; then
     die ".env's COMPOSE_PROFILES is not the line an install writes (COMPOSE_PROFILES=managed-runners-docker): add
        $FW_PROFILE to it by hand, as docs/managed-runner-docker-operations.md describes."
@@ -363,6 +364,8 @@ if [ "$ENABLE_FIREWALL" -eq 1 ]; then
   # The note an install with --no-managed-runner-firewall left goes too: it would say the firewall is off.
   sed -e "s/^COMPOSE_PROFILES=managed-runners-docker\$/COMPOSE_PROFILES=managed-runners-docker,$FW_PROFILE/" \
       -e "s/^COMPOSE_PROFILES=managed-runners-docker,runner-link\$/COMPOSE_PROFILES=managed-runners-docker,$FW_PROFILE,runner-link/" \
+      -e "s/^COMPOSE_PROFILES=managed-runners-docker,monitoring\$/COMPOSE_PROFILES=managed-runners-docker,$FW_PROFILE,monitoring/" \
+      -e "s/^COMPOSE_PROFILES=managed-runners-docker,runner-link,monitoring\$/COMPOSE_PROFILES=managed-runners-docker,$FW_PROFILE,runner-link,monitoring/" \
       -e "/^# The managed runners' host firewall is OFF:/,/--enable-managed-runner-firewall adds it\.\$/d" .env >"$NEW_ENV"
   if [ -n "$FW_LOCK_LINE" ]; then echo "$FW_LOCK_LINE" >>"$NEW_ENV"; fi
   mv "$NEW_ENV" .env
