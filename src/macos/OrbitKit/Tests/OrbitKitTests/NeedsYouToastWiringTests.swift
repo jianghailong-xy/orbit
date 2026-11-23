@@ -54,8 +54,10 @@ final class NeedsYouToastWiringTests: XCTestCase {
         let notice = try slice(model, from: "private func noticeNewlyWaiting() {", to: "\n    }\n")
         XCTAssertTrue(notice.contains("guard let seen = needsYouSeen else { return }"), "the first look only takes stock")
         XCTAssertTrue(notice.contains("NeedsYouLogic.newlyWaiting(needsYouSessions, seen: seen, excluding: focusedConsoleSessionID)"))
-        XCTAssertTrue(notice.contains("needsYouToasts.removeAll { !keys.contains($0.id) }"))
-        XCTAssertTrue(model.contains("func retakeNeedsYouStock() { needsYouSeen = nil }"))
+        // A conversation's notice goes when it stops waiting; a terminal's is the other look's to
+        // clear (`noticeNewlyWaitingTerminals`, in `TerminalsTests`).
+        XCTAssertTrue(notice.contains("needsYouToasts.removeAll { $0.terminal == nil && !keys.contains($0.id) }"))
+        XCTAssertTrue(model.contains("func retakeNeedsYouStock() {\n        needsYouSeen = nil\n        terminalsSeen = nil\n    }"))
         let app = try String(contentsOf: repoFile("src/ios/Sources/OrbitiOSApp.swift"), encoding: .utf8)
         XCTAssertTrue(app.contains("model.retakeNeedsYouStock()"), "a return to the foreground is not news")
         XCTAssertTrue(model.contains("static let needsYouToastLimit = 3"))

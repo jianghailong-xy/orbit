@@ -31,6 +31,13 @@ export const DEFAULT_ACCOUNT = 'default';
  * has no need of it leaves it out. With it, a pick keeps each account to its share of them
  * (accountToStartOn, accountToMoveTo); without it, it answers by quota alone. A quota gate can go
  * without: an account's share only ever decides between accounts that can run.
+ *
+ * `blockedAccounts` is not a column either but what account health says of the runner's accounts
+ * (docs/routing-account-health-design.md §7.6, withAccountHealth in account-health-blocked.ts). With it,
+ * Automatic's choice inside one engine passes over a blocked account as it passes over a paused one
+ * (accountsOn, accountBlockOn), so a runner with two Cursor accounts moves to the second; without it, it
+ * answers as before health. It is the automatic account choice, not routing: it holds with smart model
+ * selection off too.
  */
 export interface AccountRunner {
   engines: unknown;
@@ -38,7 +45,25 @@ export interface AccountRunner {
   accountPauses: unknown;
   planUsage: unknown;
   activeSessions?: ActiveSessions;
+  blockedAccounts?: BlockedAccounts;
 }
+
+/**
+ * Why account health takes an account out of Automatic's choice, for the line a move off it says
+ * (accountSwitchNotice): the provider refused it in a way only its owner can fix (`needs-action`), it
+ * failed to start runs at no cost (`failing`, the breaker), it hit its usage limit with no reading to go by
+ * (`usage-limit`), or another run is trying it now (`trial`).
+ */
+export type AccountBlockReason = 'needs-action' | 'failing' | 'usage-limit' | 'trial';
+
+/** One account health takes out (§7.1's removing states, on the whole account): until when (ms), and why. */
+export interface AccountBlock {
+  until: number;
+  reason: AccountBlockReason;
+}
+
+/** The accounts account health takes out on one runner, by engine and account id; one with none left out. */
+export type BlockedAccounts = Partial<Record<AccountEngine, Record<string, AccountBlock>>>;
 
 /** How many sessions are at work on each of a runner's accounts of each engine, by account id, an account
  *  with none left out (activeSessionsOn). An engine present here was counted. */
@@ -61,19 +86,50 @@ export function defaultRemovedOn(engine: string | null | undefined, runner: Acco
   return !!engine && !!usedEngine(engine, runner)?.removedDefault;
 }
 
-/** The runner's accounts of `engine` as Orbit uses them, each with the pause it is under at `now` and,
- *  where they were counted, its active sessions. */
+/**
+ * The runner's accounts of `engine` as Orbit uses them, each with the pause it is under at `now` and,
+ * where they were counted, its active sessions. An account health takes out (accountBlockOn) reads as
+ * paused until its block ends, which is how every pick below passes it over: a blocked account is treated
+ * as a paused one (§7.6). Nothing is written as a pause; the owner's own pause stays theirs.
+ */
 export function accountsOn(
   engine: AccountEngine,
   runner: AccountRunner | null | undefined,
   now: Date,
 ): RunnerEngineAccount[] | undefined {
   const active = runner?.activeSessions?.[engine];
-  return usedEngine(engine, runner)?.accounts?.map((account) => ({
-    ...account,
-    pausedUntil: runnerAccountPausedUntil(runner!.accountPauses, engine, account.id, now)?.toISOString(),
-    ...(active ? { activeSessions: active[account.id] ?? 0 } : {}),
-  }));
+  return usedEngine(engine, runner)?.accounts?.map((account) => {
+    const pause = runnerAccountPausedUntil(runner!.accountPauses, engine, account.id, now);
+    const block = accountBlockOn(engine, runner, account.id, now);
+    const until = block && !(pause && pause.getTime() >= block.until) ? new Date(block.until) : pause;
+    return {
+      ...account,
+      pausedUntil: until?.toISOString(),
+      ...(active ? { activeSessions: active[account.id] ?? 0 } : {}),
+    };
+  });
+}
+
+/**
+ * The block account health puts on the runner's `account` of `engine` at `now` (AccountRunner.blockedAccounts),
+ * or null: none, it has run out, or every other signed-in account of the engine is blocked as well. Health then
+ * decides nothing, and the choice is made as it was before health: an account that may refuse is still better
+ * than the session going nowhere, and the routing above holds a task whose every account is out (§7.5).
+ */
+export function accountBlockOn(
+  engine: AccountEngine,
+  runner: AccountRunner | null | undefined,
+  account: string | null | undefined,
+  now: Date,
+): AccountBlock | null {
+  const blocked = runner?.blockedAccounts?.[engine];
+  if (!blocked || !account) return null;
+  const at = now.getTime();
+  const live = (id: string) => ((blocked[id]?.until ?? 0) > at ? blocked[id] : null);
+  const block = live(account);
+  if (!block) return null;
+  const free = usedEngine(engine, runner)?.accounts?.some((other) => other.auth !== 'no' && !live(other.id));
+  return free ? block : null;
 }
 
 /** A runner's planUsage as the account helpers weigh it: its heartbeat snapshot with Antigravity's

@@ -73,12 +73,12 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | Caller | Routes |
 | --- | --- |
 | `public` | 39 |
-| `user` | 530 |
+| `user` | 532 |
 | `admin` | 31 |
 | `runner` | 231 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **835** |
+| **Total** | **837** |
 
 ## Public routes
 
@@ -134,6 +134,8 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/access-tokens/device/:userCode` | path `userCode` | `PatDeviceLoginController.lookup` |
 | `POST` | `/api/access-tokens/device/:userCode/approve` | path `userCode` | `PatDeviceLoginController.approve` |
 | `POST` | `/api/access-tokens/device/:userCode/deny` | path `userCode` | `PatDeviceLoginController.deny` |
+| `GET` | `/api/account-health` | — | `AccountHealthController.list` |
+| `POST` | `/api/account-health/:id/check` | path `id` | `AccountHealthController.check` |
 | `GET` | `/api/account-secrets` | — | `AccountSecretsController.list` |
 | `POST` | `/api/account-secrets` | body `CreateAccountSecretDto` | `AccountSecretsController.create` |
 | `DELETE` | `/api/account-secrets/:id` | path `id`; query `revokeCopies` | `AccountSecretsController.remove` |
@@ -494,6 +496,8 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `PUT` | `/api/sessions/:id/share` | body `PutShareLinkDto`; path `id` | `ShareLinksController.putSessionLink` |
 | `GET` | `/api/sessions/:id/subagents` | path `id` | `SessionsController.subagentRuns` |
 | `PUT` | `/api/sessions/:id/tags` | body `SetSessionTagsDto`; path `id` | `SessionsController.setTags` |
+| `GET` | `/api/sessions/:id/task-moves` | path `id` | `SessionTaskMovesController.list` |
+| `POST` | `/api/sessions/:id/task-moves/decision` | body `DecideTaskMoveBatchDto`; path `id` | `SessionTaskMovesController.decide` |
 | `GET` | `/api/sessions/:id/turns` | path `id`; query `view` | `SessionsController.queuedTurns` |
 | `POST` | `/api/sessions/:id/turns` | body `Object`; path `id` | `SessionsController.turn` |
 | `DELETE` | `/api/sessions/:id/turns/:turnId` | path `id`, `turnId` | `SessionsController.cancelTurn` |

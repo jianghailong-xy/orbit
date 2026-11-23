@@ -52,6 +52,8 @@ extension Font {
     static let orbitCode: Font = .system(.title2, design: .monospaced).weight(.semibold)
     static let orbitSectionLabel: Font = .caption2
     static let orbitMeta: Font = .caption2
+    /// A row's one quiet line under its title (a held task's): 11pt.
+    static let orbitRowNote: Font = .caption2
     static let orbitGlyph: Font = .subheadline
     // Deliberately Dynamic-Type-static: a brand mark, not text (its container doesn't scale).
     static let orbitHeroGlyph: Font = .system(size: 44)
@@ -85,6 +87,8 @@ extension Font {
     static let orbitCode: Font = .system(size: 20, weight: .semibold, design: .monospaced)
     static let orbitSectionLabel: Font = .system(size: 9)
     static let orbitMeta: Font = .caption2
+    /// A row's one quiet line under its title (a held task's): 11pt.
+    static let orbitRowNote: Font = .system(size: 11)
     static let orbitGlyph: Font = .system(size: 15)
     static let orbitHeroGlyph: Font = .system(size: 44)
     static let orbitGraphTitle: Font = .system(size: 12, weight: .semibold)

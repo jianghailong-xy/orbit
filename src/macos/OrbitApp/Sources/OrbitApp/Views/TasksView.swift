@@ -950,6 +950,7 @@ struct TaskRowView: View {
                                   : "Waiting for prerequisites")
                     }
                 }
+                accountHoldLine
                 HStack(spacing: 7) {
                     TaskStatusPill(pill: TaskListLogic.pill(task))
                     Text(task.assignee?.name ?? "Unassigned")
@@ -967,6 +968,16 @@ struct TaskRowView: View {
         }
         .padding(.vertical, 3)
         #endif
+    }
+
+    /// A held task's one quiet line under its title (contract §3): not while it runs or is queued, nor
+    /// when the sign-in hold stands.
+    @ViewBuilder
+    private var accountHoldLine: some View {
+        if TaskAccountHoldCopy.showsOnRow(task.accountHold, signInHold: task.hold, running: task.running == true,
+                                          queued: task.queued == true), let hold = task.accountHold {
+            TaskAccountHoldLine(hold: hold)
+        }
     }
 
     #if os(iOS)
@@ -987,6 +998,7 @@ struct TaskRowView: View {
                         .monospacedDigit()
                 }
             }
+            accountHoldLine
             HStack(spacing: 7) {
                 TaskStatusPill(pill: TaskListLogic.pill(task))
                 phrase
@@ -1554,6 +1566,10 @@ private struct TaskDetailContent: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
                     .accessibilityIdentifier("task-fork-source")
+            }
+            // No account that could run it can run now (contract §3): Held, why, and where to fix it.
+            if let hold = task.accountHold {
+                TaskAccountHoldNote(hold: hold)
             }
             // How this row is judged, which nothing else on the page said.
             if let chip = TaskJudgment.chip(task) { judgmentChip(chip) }
@@ -2942,6 +2958,10 @@ private struct TaskDetailContent: View {
                         .foregroundStyle(Color.purple)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                // A pinned run that went elsewhere says which pin, where it ran and why (contract §3).
+                if let relaxed = session.route?.relaxedRun {
+                    RelaxedRunNote(sentence: relaxed)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -2980,7 +3000,7 @@ private struct TaskDetailContent: View {
         case .queued:        return "Queued"
         case .running:       return "Running"
         case .awaitingInput: return "Awaiting reply"
-        case .succeeded:     return "Succeeded"
+        case .succeeded:     return "Finished"
         case .failed:        return "Failed"
         case .interrupted:   return "Interrupted"
         case .ended:         return "Ended"

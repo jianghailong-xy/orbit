@@ -378,7 +378,7 @@ describe('a session’s Following and Followed by', () => {
         a.getAttribute('href'),
       ]);
     expect(rows(watches[0])).toEqual([
-      ['Succeeded', 'Second', '/sessions/S2'],
+      ['Finished', 'Second', '/sessions/S2'],
       ['Running', 'First', '/sessions/S1'],
     ]);
     expect(rows(watches[1])).toEqual([['Queued', 'Third', '/sessions/S3']]);

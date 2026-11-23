@@ -14,10 +14,8 @@ enum class Destination { WORKSPACES, WORKSPACE, FOLDER, SEARCH, SESSION, DRAFT, 
     LANDINGS,
     WIKI_BROWSE, WIKI_INDEX, WIKI_ARTICLE, WIKI_DOC, WIKI_REVIEW, WIKI_SETTINGS, WIKI_RUN, WIKI_JOB, WIKI_PLAN, WIKI_PLAN_DOC, WIKI_PLAN_SECTION,
     WIKI_ACTIVITY, WIKI_TRASH,
-    /** The owner requests inbox (web `WaitingOnYouPage`): `id` the request whose card opens focused, from a push's action. */
-    WAITING_ON_YOU,
     /** Scheduled tasks (docs/scheduled-tasks-design.md §9.2): account-wide, in the drawer only. `id` the schedule whose detail sheet
-     * opens over the timeline, from a push or a card's Open. */
+     * opens over the timeline, from a push or a card's Open. There is no Waiting on you page (docs/mocks/waiting-on-you-removal). */
     SCHEDULED,
     /** A schedule's draft change conversation (§8.2, board 03-change ③): `id` the schedule. The page reads
      * `GET /schedules/:id/change`; a conversation already open — or opened by the first words sent here — takes its
@@ -209,13 +207,17 @@ object OrbitLinks {
     private val references = mapOf("session" to Destination.SESSION, "task" to Destination.TASK,
         "project" to Destination.PROJECT, "wiki" to Destination.WIKI_ENTRY, "list" to Destination.LIST)
     // `orbit://project/<id>` is a merge push's (A11-9): the project's sessions page. Like `orbit://wiki/<space>`, no iOS DeepLink host.
-    // `orbit://owner-request/<id>` is an owner request push's action: the inbox, that request's card open on its input.
-    // `orbit://terminal-login/<id>` is a terminal asking to be approved: the inbox, whose Open tab heads with its card.
-    // `orbit://schedule/<id>` is a scheduled task's push that names no run session: the Scheduled page, its detail sheet open.
     private val deepLinks = references.filterKeys { it !in setOf("project", "wiki") } +
         mapOf("watch" to Destination.WATCH, "runner" to Destination.RUNNER, "wiki" to Destination.WIKI, "project" to Destination.PROJECT_SESSIONS,
-            "owner-request" to Destination.WAITING_ON_YOU, "terminal-login" to Destination.WAITING_ON_YOU,
+            // `orbit://schedule/<id>`: a scheduled task's push that names no run session opens the Scheduled page, its detail sheet open.
             "schedule" to Destination.SCHEDULED)
+
+    /** `orbit://owner-request/<id>`, an owner request push's action: the request, by its canonical id. It names no page of its own:
+     * the request's read says which conversation asked, and that conversation opens on its card ([io.orbitd.android.cards.OwnerRequestLinks]). */
+    fun ownerRequest(raw: String): String? = try {
+        URI(raw).takeIf { it.scheme.equals("orbit", ignoreCase = true) && it.host.equals("owner-request", ignoreCase = true) }
+            ?.path.orEmpty().trim('/').takeIf { it.isNotEmpty() && '/' !in it }?.let(ObjectId::canonical)
+    } catch (_: Exception) { null }
     /** iOS DeepLink's `case "active", ""` (A05h, DL-1): an `orbit:` link with no host, an empty one or `active` (percent-decoded,
      * in any case) opens the workspaces home, whatever path, query or fragment follows — iOS's URL percent-encodes a blank there
      * and DeepLink never reads it — while a blank in the host is no URL there, so nothing opens. Read off the link itself:
@@ -239,9 +241,19 @@ object OrbitLinks {
         if (scheme.startsWith("orbit-")) {
             kind = references[scheme.removePrefix("orbit-")]
             id = if (kind == Destination.SESSION) uri.schemeSpecificPart.substringBefore('?') else uri.schemeSpecificPart
+        } else if (scheme == "orbit" && uri.host.equals("settings", ignoreCase = true)) {
+            // `orbit://settings/<page>`: a Settings page itself, as the Providers screen a key's alert opens.
+            val page = uri.path.orEmpty().trim('/')
+            return if (page in setOf("providers", "machines", "machines-and-models")) OrbitRoute(Destination.SETTINGS, page, origin = origin) else null
         } else if (scheme == "orbit") {
-            kind = deepLinks[uri.host?.lowercase()]
             val parts = uri.path.orEmpty().trim('/').split('/')
+            // `orbit://terminal-login/<id>`, a terminal asking to be approved: Settings › Machines & models, on its Needs you section,
+            // that request's card lit (docs/mocks/waiting-on-you-removal/02 ④). One answered or expired opens the page all the same.
+            if (uri.host.equals("terminal-login", ignoreCase = true)) {
+                val request = parts.singleOrNull()?.takeIf { it.isNotEmpty() }?.let(ObjectId::canonical) ?: return null
+                return OrbitRoute(Destination.RUNNER, recordId = "terminal:$request", origin = origin)
+            }
+            kind = deepLinks[uri.host?.lowercase()]
             if (parts.size == 1) id = parts.first()
         } else if (scheme in setOf("https", "http") && server != null && uri.userInfo == null) {
             val base = URI(server)

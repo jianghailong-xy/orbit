@@ -62,7 +62,7 @@ export function noAnswersOwed() {
     task: { findMany: async () => [] },
     sessionRequest: noSessionRequests(),
     projectOpenItem: { findMany: async () => [] },
-    ownerRequest: { groupBy: async () => [] },
+    ownerRequest: { findMany: async () => [], groupBy: async () => [] },
     projectHandoffApproval: { findMany: async () => [] },
   };
 }
