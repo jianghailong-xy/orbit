@@ -73,12 +73,12 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | Caller | Routes |
 | --- | --- |
 | `public` | 39 |
-| `user` | 528 |
+| `user` | 529 |
 | `admin` | 31 |
 | `runner` | 230 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **831** |
+| **Total** | **833** |
 
 ## Public routes
 
@@ -369,6 +369,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `DELETE` | `/api/runners/:id/accounts/:engine/:account` | path `account`, `engine`, `id` | `RunnersController.removeAccount` |
 | `PATCH` | `/api/runners/:id/accounts/:engine/:account` | body `RenameAccountDto`; path `account`, `engine`, `id` | `RunnersController.renameAccount` |
 | `POST` | `/api/runners/:id/accounts/:engine/:account/pause` | body `PauseAccountDto`; path `account`, `engine`, `id` | `RunnersController.pauseAccount` |
+| `DELETE` | `/api/runners/:id/accounts/:engine/:account/set-default` | path `account`, `engine`, `id` | `RunnersController.dismissSetDefaultFailure` |
 | `POST` | `/api/runners/:id/accounts/:engine/:account/set-default` | path `account`, `engine`, `id` | `RunnersController.setDefaultAccount` |
 | `POST` | `/api/runners/:id/accounts/:engine/default/restore` | path `engine`, `id` | `RunnersController.restoreDefault` |
 | `POST` | `/api/runners/:id/attention/:kind/fix` | body `Object`; path `id`, `kind` | `RunnerAttentionFixController.fix` |

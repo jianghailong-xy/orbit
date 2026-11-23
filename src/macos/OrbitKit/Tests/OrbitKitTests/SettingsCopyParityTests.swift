@@ -257,7 +257,15 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(words, "return '\(AccessTokensList.scopeSummary(AccessTokensList.allScopes))';", in: Self.accessTokenWords)
         assertSays(words, "return '\(AccessTokensList.scopeSummary(AccessTokensList.readScopes))';", in: Self.accessTokenWords)
         assertSays(words, "[`${group.resource}: read & write`]", in: Self.accessTokenWords)
-        assertSays(words, "}).join(' · ');", in: Self.accessTokenWords)
+        // Files and Notifications (b2cd7e7ee5, 50efbb7f28) are held to the web's words too: the Files group, the
+        // Notifications part after the resources, and both inside Read & write.
+        assertSays(words, "export const FILES_SCOPE = '\(AccessTokensList.filesScope)';", in: Self.accessTokenWords)
+        assertSays(words, "export const NOTIFY_SCOPE = '\(AccessTokensList.notifyScope)';", in: Self.accessTokenWords)
+        assertSays(words, "const FILES_GROUP = { resource: '\(AccessTokensList.filesGroup.resource)', read: FILES_SCOPE, write: FILES_SCOPE };",
+                   in: Self.accessTokenWords)
+        assertSays(words, "}).concat(scopes.includes(NOTIFY_SCOPE) ? ['\(AccessTokensList.scopeSummary([AccessTokensList.notifyScope]))'] : []).join(' · ');",
+                   in: Self.accessTokenWords)
+        XCTAssertEqual(AccessTokensList.scopeSummary(["tasks:read", "files", "notify"]), "Tasks: read · Files: read & write · Notifications: send")
         assertSays(words, "export const NEVER_EXPIRES = '\(AccessTokensList.neverExpires)';", in: Self.accessTokenWords)
         assertSays(words, "return 'in less than an hour';", in: Self.accessTokenWords)
         assertSays(words, "hours === 1 ? 'in 1 hour' : `in ${hours} hours`", in: Self.accessTokenWords)
