@@ -137,8 +137,9 @@ export function ModelRoutingPage() {
           )}
           {/* Absent means off (docs/routing-account-health-design.md §7.5): a pinned task whose account can't run holds. */}
           <SettingsRow
-            title="Run pinned tasks elsewhere"
-            description="When the account a task is pinned to can't run, let it run on another account. Providers you've blocked stay out either way."
+            anchor={S.relaxBlockedPins.anchor}
+            title={S.relaxBlockedPins.title}
+            description={S.relaxBlockedPins.description}
             control={
               <Switch
                 aria-label="Run pinned tasks elsewhere"

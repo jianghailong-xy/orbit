@@ -157,8 +157,7 @@ export const SETTING_ROWS: Readonly<Record<TieredSettingKey, SettingRow>> = {
   defaultEffort: { title: 'Default effort', path: null, anchor: null },
   modelRouting: row(PERSONAL_SETTINGS.modelRouting),
   optimizeFor: row(PERSONAL_SETTINGS.optimizeFor),
-  // No row of its own yet: the owner surface of the design's phase 3 draws it on the Model routing page.
-  relaxBlockedPins: { title: "Run pinned tasks elsewhere when their account can't run", path: null, anchor: null },
+  relaxBlockedPins: row(PERSONAL_SETTINGS.relaxBlockedPins),
   enableOrchestration: row(PERSONAL_SETTINGS.enableOrchestration),
   defaultPermissionMode: row(PERSONAL_SETTINGS.defaultPermissionMode),
   subagentBlockedProviders: { title: 'SubAgent providers', path: null, anchor: null },

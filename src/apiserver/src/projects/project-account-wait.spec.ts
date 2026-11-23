@@ -14,3 +14,12 @@ test('held tasks are one Needs you row, with the hold that lifts first', () => {
   assert.equal(two?.detailLine, 'sooner');
   assert.deepEqual(two?.taskIds, ['t1', 't2']);
 });
+
+import { relaxedRunSentence } from '../tasks/task-route-decision';
+
+test('the relaxed-run sentence is the reason that names the pin, and only that', () => {
+  const said = "Pinned to cursor, which can't run now (Cursor said \"Add a payment method\"); runs on codex instead, on the same engine, at tier M";
+  assert.equal(relaxedRunSentence(['Tier M', said]), said);
+  assert.equal(relaxedRunSentence(['Tier M']), null);
+  assert.equal(relaxedRunSentence(null), null);
+});

@@ -711,8 +711,18 @@ export interface TaskRouteSummary {
   /** One tier above the previous run, because that run failed — the ↑ beside the tier. */
   escalated: boolean;
   reasons: string[];
+  /** The §7.5 sentence when the run went elsewhere because its pin could not run (`relaxedRunSentence`); else null. */
+  relaxedRun: string | null;
   policyVersion: number;
   decidedAt: Date;
+}
+
+/**
+ * The §7.5 sentence of a run that went elsewhere because its pin could not run: which pin, where it ran and why, as
+ * model-routing's relaxedPin and samePinnedModel wrote it into the decision's reasons. Null for any other run.
+ */
+export function relaxedRunSentence(reasons: readonly string[] | null | undefined): string | null {
+  return reasons?.find((r) => r.startsWith('Pinned to ') && r.includes("can't run now")) ?? null;
 }
 
 /** The Route Decision behind each of these Sessions; a Session without one is absent from the map. */
@@ -746,6 +756,7 @@ export async function readTaskRouteSummaries(
     applied: row.applied,
     escalated: (row.features as { escalatedFrom?: unknown } | null)?.escalatedFrom != null,
     reasons: row.reasons,
+    relaxedRun: relaxedRunSentence(row.reasons),
     policyVersion: row.policyVersion,
     decidedAt: row.createdAt,
   }]));

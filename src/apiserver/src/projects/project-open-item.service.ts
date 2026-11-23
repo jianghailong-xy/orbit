@@ -574,6 +574,7 @@ export interface ProjectOpenItems {
 }
 
 /** The hold of one task, as the project row needs it (TasksService.accountHolds). */
+import type { ModelRoutingHold } from '../tasks/model-routing';
 export interface AccountHoldRead {
   reason: string;
   until: string;
@@ -713,6 +714,17 @@ export class ProjectOpenItemService {
       }
     }
     return reader ? reader.signInHolds(ownerId, scope) : new Map();
+  }
+
+  /** `accountHold` of each of these tasks (TasksService.accountHoldsFor), for a project's task rows; none without a reader. */
+  async accountHoldsFor(ownerId: string, taskIds: readonly string[]): Promise<Map<string, ModelRoutingHold>> {
+    try {
+      const { TasksService } = await import('../tasks/tasks.service.js');
+      const tasks = this.moduleRef?.get(TasksService, { strict: false });
+      return tasks ? await tasks.accountHoldsFor(ownerId, taskIds) : new Map();
+    } catch {
+      return new Map();
+    }
   }
 
   /** The project's tasks held for an account (TasksService.accountHolds), one row; none when no reader is reachable. */
