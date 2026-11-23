@@ -50,6 +50,7 @@ import {
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { INTEGRATION_JOB_CLAIM, enqueueForDoneTask } from '../projects/project-integration-job';
 import { readInFlightJobs, stopInFlightJob } from '../projects/project-integration-line';
+import { readTaskIntegrationViews } from '../projects/project-task-integration';
 import { recordSessionMergePullRequest } from '../projects/pull-request-landing';
 import { GITHUB_API, GithubClient } from './github-api.client';
 import { GithubAppConfigService } from './github-app-config.service';
@@ -465,6 +466,15 @@ test('J-T14, the door and J-T15: a protected main lands through a pull request',
   const [checking] = await readInFlightJobs(h.prisma as never, landing.projectId, command.jobId);
   assert.equal(checking?.pullRequest?.number, pr.number);
   assert.deepEqual(checking.pullRequest?.checks, { passed: 1, required: 2, failed: [] });
+  // The task's row reads it as a landing still running, with its pull request and why it waits (§8).
+  const taskRow = (await readTaskIntegrationViews(h.prisma as never, ownerId, landing.projectId, [landing.taskId])).get(landing.taskId);
+  assert.ok(taskRow, 'the task has its row');
+  assert.equal(taskRow.state, 'RUNNING');
+  assert.equal(taskRow.jobId, command.jobId);
+  assert.equal(taskRow.landTask?.state, 'PULL_REQUEST');
+  assert.equal(taskRow.landTask?.blockingReason?.code, 'WAITING_FOR_CHECKS');
+  assert.equal(taskRow.landTask?.pullRequest?.number, pr.number);
+  assert.deepEqual(taskRow.landTask?.pullRequest?.checks, { passed: 1, required: 2, failed: [] });
 
   // A review is required: it waits for it.
   h.github.scenario(cloud.fullName).checks = [

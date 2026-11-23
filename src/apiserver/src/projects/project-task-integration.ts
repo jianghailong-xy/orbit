@@ -346,6 +346,10 @@ function stateForJob(state: string): TaskIntegrationView['state'] | null {
   switch (state) {
     case 'QUEUED': return 'QUEUED';
     case 'RUNNING': return 'RUNNING';
+    // Waiting for GitHub on its pull request (docs/design/protected-branch-landing.md §4.2): still the
+    // platform's to finish and nobody's to act on, so the row reads as a running landing; `landTask`
+    // carries the state, the reason and the pull request.
+    case 'PULL_REQUEST': return 'RUNNING';
     case 'READY': return 'AWAITING_OWNER';
     default: return null;
   }
