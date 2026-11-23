@@ -16,7 +16,7 @@ const CSS = readFileSync(new URL('./Scheduled.css', import.meta.url), 'utf8');
 describe('a workspace’s session list', () => {
   it('draws run sessions only on the Scheduled runs folder’s page, even ones a server sent elsewhere', () => {
     expect(SOURCE).toContain("const onScheduledRuns = !listProjectId && searchParams.get('folder') === SCHEDULED_RUNS_FOLDER;");
-    expect(SOURCE).toContain("const rows = (sessionsQ.data ?? []).filter((row) => (row.runSource === 'SCHEDULE') === onScheduledRuns);");
+    expect(SOURCE).toContain("row.runSource !== 'SCHEDULE_CHANGE' && (row.runSource === 'SCHEDULE') === onScheduledRuns);");
     expect(SOURCE).toContain('scheduled: onScheduledRuns,');
     // Every list the column draws comes from those rows; nothing re-reads the raw answer for rows.
     expect(SOURCE).not.toMatch(/sessionsQ\.data \?\? \[\]\)\.slice\(\)/);
@@ -43,9 +43,8 @@ describe('a conversation', () => {
     expect(SOURCE).toMatch(/\[\.\.\.decisionReceipts, \.\.\.questionRecords, \.\.\.ownerRequestCards, \.\.\.scheduleInserts,/);
   });
 
-  it('opens Change… with the schedule named in a new conversation’s composer, never a form', () => {
-    expect(SOURCE).toContain('const seed = entry?.usr?.composerText;');
-    expect(SOURCE).toContain('setText(seed);');
+  it('no longer seeds a new conversation for Change…: that is the schedule’s change conversation (§8.2)', () => {
+    expect(SOURCE).not.toContain('composerText');
   });
 });
 

@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
 import io.orbitd.android.core.auth.AuthState
@@ -262,6 +263,10 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                         "${card.key}:preview", Modifier.testTag(card.key)) { cards.open(card.key) }
                     // A08-2: a long decision is a compact preview here, answered in its full-height review.
                     preview != null -> CardPreviewView(card, preview) { cards.open(card.key) }
+                    // Board-4: the criteria decision's receipt is orange with what it approved folded under it, and the start's receipt
+                    // says what the project was started on and with — each its own card, never a list of the record's fields.
+                    card.key.startsWith("receipt:") && card.family == CardFamily.CRITERIA_CHANGE -> CriteriaReceiptCard(card)
+                    card.key.startsWith("receipt:") && card.family == CardFamily.ACCEPTANCE -> StartReceiptCard(card)
                     // A11b hook: the coordinator's request draws the start card (iOS `StartProjectCardView`), not the generic card.
                     card.family == CardFamily.START -> CoordinatorStartCard(card, session.snapshot?.standing.orEmpty(), fresh, result, open, discuss, submit = submit)
                     CoordinatorQueue.isSent(card) -> SentToCoordinatorLine(card)
@@ -507,15 +512,15 @@ private fun RecordFooter(record: CardRecord) {
 /** What a recorded acceptance confirmation opens to (web `AcceptanceReceiptFold`): closed, a brand-coloured reading control; open,
  * the change rows, the numbered words, a note and the seal. */
 @Composable
-private fun ReceiptFold(receipt: AcceptanceReceipt) {
+internal fun ReceiptFold(receipt: AcceptanceReceipt, tag: String = "card-review", indent: Dp = 22.dp) {
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val colors = LocalOrbitColors.current
     var open by rememberSaveable { mutableStateOf(false) }
     Text(if (open) CardPreviews.receiptCloseLabel else receipt.openLabel,
-        Modifier.padding(start = 22.dp, top = 6.dp).clickable { open = !open }.testTag("card-review:receipt-toggle"),
+        Modifier.padding(start = indent, top = 6.dp).clickable { open = !open }.testTag("$tag:receipt-toggle"),
         style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.primary)
     if (!open) return
-    Column(Modifier.padding(start = 22.dp, top = 6.dp).testTag("card-review:receipt-fold"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(Modifier.padding(start = indent, top = 6.dp).testTag("$tag:receipt-fold"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         receipt.changes.forEach { row ->
             val tone = when (row.mark) { "+" -> colors.success; "↑" -> colors.needsYou; else -> secondary }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

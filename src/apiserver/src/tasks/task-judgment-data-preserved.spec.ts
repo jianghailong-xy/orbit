@@ -3318,13 +3318,30 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // row is written, and no trigger, function or DONE fence changes.
       // Written as 1430 on the project line, it was renumbered after main took 1430.
       '1431_managed_runner_update_interrupt',
-      // 1432 creates model_identity, and 1433 seeds only that table. Neither changes a preserved
-      // relation, trigger, function or DONE fence.
+      // 1432 creates model_identity (rule_key, canonical_key, name, decided_at), a new table no preserved relation
+      // references; no existing row is written, and no trigger, function or DONE fence changes.
       '1432_model_identity',
+      // 1433 seeds model_identity with production's model ids, INSERT ... ON CONFLICT (rule_key) DO NOTHING into that
+      // new table only; no preserved relation, trigger, function or DONE fence is touched.
       '1433_model_identity_seed',
-      // 1434 adds a nullable concurrency ceiling to managed_runner. It writes no rows and
+      // 1434 rewrites runner.repos_root from /var/lib/orbit/home to /home/orbit for managed runners only (6a7106f95b): an
+      // UPDATE of runner rows, none of the preserved relations, and no trigger, function or DONE fence changes.
+      '1434_managed_runner_repos_root_home_orbit',
+      // 1447 adds SCHEDULE_CHANGE to session_run_source, two nullable session columns (change_schedule_id, with its
+      // foreign key to schedule ON DELETE SET NULL and a partial index, and schedule_change_opening), and a nullable
+      // asked_text to schedule_revision and schedule_change_request; no row is written, and none of the preserved
+      // relations, their triggers, functions or the DONE fence changes.
+      '1447_schedule_change_conversation',
+      // 1462 adds one nullable column, login_browser, to runner; no row is written, and no preserved relation,
+      // trigger, function or DONE fence changes.
+      '1462_runner_login_browser',
+      // 1463 re-keys three model_identity rows (qwen3-7, qwen3-8, qwen4 to their -max ids): UPDATEs of that table only,
+      // none of the preserved relations, and no trigger, function or DONE fence changes.
+      '1463_model_identity_max_is_a_name',
+      // 1464 adds a nullable concurrency ceiling to managed_runner. It writes no rows and
       // changes no preserved relation, trigger, function or DONE fence.
-      '1434_managed_runner_oom_recovery'],
+      // Written as 1434 on the project line, it was renumbered after main took 1434.
+      '1464_managed_runner_oom_recovery'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

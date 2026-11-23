@@ -2499,6 +2499,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					login.submitCode(*lr, report)
 				case "cancel":
 					login.cancelLogin(*lr)
+				case "browser":
+					go login.openInBrowser(loopCtx, *lr, runnerBrowser())
 				}
 			}
 			// Install an engine CLI the user asked for from the web. Idempotent for the same

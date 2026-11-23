@@ -248,10 +248,28 @@ test('subagent_rate: the parent rates its own run, and the Model tiers view read
     const agy = pooled.providers.find((p) => p.slug === 'antigravity' && p.kind === 'builtin')!;
     const agySonnet = agy.models.find((m) => m.model === SONNET)!;
     assert.deepEqual(agySonnet.quality, sonnet, 'the same id on another engine is the same model');
-    assert.deepEqual(agySonnet.identity, { key: SONNET, name: null });
+    // Named by the seed migration 1433 (069b42dd64), which knows production's ids.
+    assert.deepEqual(agySonnet.identity, { key: SONNET, name: 'Claude Sonnet 5.5' });
     const alias = agy.models.find((m) => m.model === HAIKU_ALIAS)!;
     assert.deepEqual(alias.quality, haiku, 'an id model_identity ties to Haiku reads Haiku');
     assert.deepEqual(alias.identity, { key: HAIKU, name: 'Claude Haiku 5.5' });
     await prisma.modelIdentity.delete({ where: { ruleKey: HAIKU_ALIAS } });
+
+    // An Antigravity id with its level is its base model: a run there on `claude-sonnet-5-5-high` counts for Sonnet.
+    await prisma.subagentRun.create({ data: {
+      ownerId: mine.ownerId, sessionId: parent, toolUseId: `toolu_${randomUUID()}`, type: 'general', definitionSource: 'builtin',
+      status: 'DONE', endedAt: new Date(),
+      decision: { level: 'M', engine: 'antigravity', provider: 'antigravity', model: SONNET, effort: 'high', applied: true, reasons: [] },
+      attempts: [{ engine: 'antigravity', provider: 'antigravity', model: `${SONNET}-high`, effort: 'high', attempt: 1, outcome: 'DONE',
+        startedAt: new Date().toISOString() }],
+    } });
+    const folded = await subagentTierView(prisma as never, mine.ownerId);
+    const claudeSonnet = folded.providers.find((p) => p.slug === 'claude' && p.kind === 'builtin')!.models.find((m) => m.model === SONNET)!;
+    assert.equal(claudeSonnet.quality.subagent.runCount, sonnet.subagent.runCount + 1, "an Antigravity level folds into its base model");
+
+    // 1463: the seed's `-max` models are keyed by their whole id, so Qwen3.7 Max is never taken for a plain Qwen3.7.
+    const max = await prisma.modelIdentity.findMany({ where: { ruleKey: { in: ['qwen3-7', 'qwen3-7-max', 'qwen4', 'qwen4-max'] } } });
+    assert.deepEqual(max.map((r) => [r.ruleKey, r.canonicalKey, r.name]).sort(),
+      [['qwen3-7-max', 'qwen3-7-max', 'Qwen3.7 Max'], ['qwen4-max', 'qwen4-max', 'Qwen4 Max']]);
   });
 });

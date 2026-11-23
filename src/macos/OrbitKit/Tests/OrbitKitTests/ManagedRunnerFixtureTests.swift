@@ -99,7 +99,7 @@ final class ManagedRunnerFixtureTests: XCTestCase {
                     lastAgentID: nil, section: .agents, selectedAgentID: nil, selectedSessionID: nil,
                     firstOnlineMachine: runnerID), .machine(runnerID))
                 let root = MachineSetup.setupFolderRoot(runner, managedState: setup)
-                XCTAssertEqual(root, ManagedRunnerCopy.Setup.reposRoot)
+                XCTAssertEqual(root, ManagedRunnerCopy.Setup.home)
                 let folder = try XCTUnwrap(MachineSetup.uncheckedFolder(name: "app", root: root))
                 XCTAssertNil(MachineSetup.uncheckedFolder(name: "../app", root: root))
                 let request = MachineSetup.createRequest(folder: folder, name: "My app", runnerID: runnerID)
@@ -122,7 +122,7 @@ final class ManagedRunnerFixtureTests: XCTestCase {
     func testSetupCopyMatchesTheSharedFixture() throws {
         let setup = try XCTUnwrap(Self.fixture()["setup"] as? [String: Any])
         let expected: [String: Any] = [
-            "reposRoot": ManagedRunnerCopy.Setup.reposRoot,
+            "home": ManagedRunnerCopy.Setup.home,
             "notice": ["preparing": ManagedRunnerCopy.Setup.Notice.preparing,
                        "asleep": ManagedRunnerCopy.Setup.Notice.asleep],
             "folderUnchecked": ["preparing": ManagedRunnerCopy.Setup.FolderUnchecked.preparing,

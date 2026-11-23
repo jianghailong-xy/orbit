@@ -283,6 +283,7 @@ export function scheduleRecordView(scheduleId: string, title: string, revision: 
     after: fields.after,
     undoOfRevision: revision.undoOfRevision,
     undoneByRevision: undoneBy,
+    askedText: revision.askedText ?? null,
     createdAt: revision.createdAt.toISOString(),
     undo: revision.revision > 1 && undoneBy === null
       ? { method: 'POST', path: `/api/schedules/${scheduleId}/undo`, body: { revision: revision.revision } }
