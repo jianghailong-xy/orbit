@@ -494,6 +494,8 @@ export class SessionsController {
     return this.sessions.createTurn(user.userId, id, dto, {
       translate: true,
       senderClient: senderClientOfRequest(user.credential, client, device),
+      // The owner's own message: the session moves to the top of their list (session.listed_at).
+      listed: true,
     });
   }
 
@@ -513,6 +515,8 @@ export class SessionsController {
     return this.sessions.createTurn(user.userId, id, dto, {
       translate: true,
       senderClient: senderClientOfRequest(user.credential, client, device),
+      // The owner's own message: the session moves to the top of their list (session.listed_at).
+      listed: true,
     });
   }
 
@@ -609,6 +613,7 @@ export class SessionsController {
       credential: user.credential,
       translate: true,
       senderClient: senderClientOfRequest(user.credential, client, device),
+      listed: true,
     });
   }
 
@@ -680,7 +685,7 @@ export class SessionsController {
     @Body(PublicIdPipe.forFields('attachmentIds')) dto?: SessionInterruptDto,
   ) {
     assertClientTurnIdNotReserved(dto?.clientTurnId);
-    return this.sessions.interrupt(user.userId, id, dto, { translate: true });
+    return this.sessions.interrupt(user.userId, id, dto, { translate: true, listed: true });
   }
 
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
