@@ -1602,6 +1602,19 @@ const planUsageReadings = Object.fromEntries(
 
 /** Ids a runner-gate request carries that name nothing of an account's to reach, with why and where. */
 export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
+  // ── Push as me's credential door (docs/design/protected-branch-landing.md §5.2) ───────────────────────────
+  'POST /runner/git-credential body jobId':
+    "read only by (id, the runner's owner) and only when its source session's workspace is the named one, which is first "
+    + "read by (id, the calling runner, its owner, not deleted) (github/push-as-me.service.ts:67, :113); another account's "
+    + "job answers 403 PUSH_AS_ME_REFUSED, as an id that names nothing does, and nothing is written. pull-request-landing.pg.spec.ts "
+    + 'case 11 sends it for another runner, lease and generation',
+  'POST /runner/git-credential body sessionId':
+    "read only by (id, the runner's owner) and only when it is a session of the named workspace on the calling runner "
+    + "(github/push-as-me.service.ts:67, :136); another account's session answers 403 PUSH_AS_ME_REFUSED, as an id that names "
+    + 'nothing does, and nothing is written. pull-request-landing.pg.spec.ts case 13 sends it with another operation',
+  'POST /runner/git-credential body mergeOperationId':
+    "compared with the merge operation of a session already found as the runner owner's own (github/push-as-me.service.ts:136); "
+    + "it names nothing of its own, and one that is not that session's current operation answers 403 PUSH_AS_ME_REFUSED",
   'GET /runner/landings/:id header x-orbit-session-id':
     "the calling session is taken only as a work session of the runner's owner on this runner (sessions/sessions.service.ts:3454), "
     + 'so another account\'s session there finds nothing and the read answers 404 LANDING_NOT_THIS_SESSIONS_TASK, writing nothing; '

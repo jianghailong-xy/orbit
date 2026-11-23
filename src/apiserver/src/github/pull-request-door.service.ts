@@ -102,24 +102,35 @@ export class PullRequestDoorService implements OnApplicationBootstrap, OnModuleD
    * §3 and §4.6 for a session's Merge: the mode each command lands by, for a runner that declared
    * `session-merge-pull-request/v1`. The landing branch is `orbit/land/<session id>`; a session whose pull request into
    * this target is open updates it. A merge recovery's operation keeps its own path, and so does every command handed
-   * to a runner without the capability.
+   * to a runner without the capability. A workspace whose owner chose Push as me lands as the owner (§3 rule 4) on a
+   * runner that declared `push-as-me/v1`, while the owner's GitHub connection is live.
    */
-  async withMergeLanding(commands: MergeCommand[], runnerDeclares: boolean): Promise<MergeCommand[]> {
+  async withMergeLanding(commands: MergeCommand[], runnerDeclares: boolean, pushAsMeDeclared = false): Promise<MergeCommand[]> {
     if (!runnerDeclares || commands.length === 0) return commands;
     const ids = commands.map((command) => command.sessionId);
     const [sessions, open] = await Promise.all([
       this.prisma.session.findMany({
         where: { id: { in: ids } },
-        select: { id: true, workspace: { select: { githubRepoId: true, githubInstallationId: true } } },
+        select: {
+          id: true,
+          ownerId: true,
+          workspace: { select: { githubRepoId: true, githubInstallationId: true, landingMode: true } },
+        },
       }),
       this.prisma.githubPullRequest.findMany({
         where: { sessionId: { in: ids }, state: { in: ['OPENING', 'OPEN'] } },
         select: { sessionId: true, headSha: true, baseRef: true },
       }),
     ]);
+    const pushAsMeOwners = pushAsMeDeclared
+      ? await this.liveConnections([...new Set(sessions
+        .filter((session) => session.workspace?.landingMode === 'PUSH_AS_ME')
+        .map((session) => session.ownerId))])
+      : new Set<string>();
     return Promise.all(commands.map(async (command) => {
       if (command.recoveryAction) return command;
-      const workspace = sessions.find((session) => session.id === command.sessionId)?.workspace ?? null;
+      const session = sessions.find((row) => row.id === command.sessionId) ?? null;
+      const workspace = session?.workspace ?? null;
       const target = command.targetBranch ? `refs/heads/${command.targetBranch}` : '';
       const pr = open.find((row) => row.sessionId === command.sessionId && (target === '' || row.baseRef === target)) ?? null;
       const installationId = workspace?.githubInstallationId?.toString() ?? null;
@@ -132,9 +143,20 @@ export class PullRequestDoorService implements OnApplicationBootstrap, OnModuleD
         permissionsGranted: granted,
         landingKey: command.sessionId,
         openPullRequest: pr ? { headSha: pr.headSha } : null,
+        pushAsMe: workspace?.landingMode === 'PUSH_AS_ME' && !!session && pushAsMeOwners.has(session.ownerId),
       });
       return { ...command, ...landingCommandFields(mode, runnerDeclares) };
     }));
+  }
+
+  /** The owners among `ownerIds` whose GitHub connection is one GitHub still takes (§3 rule 4). */
+  private async liveConnections(ownerIds: string[]): Promise<Set<string>> {
+    if (ownerIds.length === 0) return new Set();
+    const rows = await this.prisma.githubConnection.findMany({
+      where: { ownerId: { in: ownerIds }, refreshExpiresAt: { gt: new Date() } },
+      select: { ownerId: true },
+    });
+    return new Set(rows.map((row) => row.ownerId));
   }
 
   /** After the commit that left these pull requests waiting (J-T14, a session's `pull_request`): open and read them. */

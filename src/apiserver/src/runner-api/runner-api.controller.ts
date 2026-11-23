@@ -3,8 +3,8 @@ import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from
 import { DRAIN_SKIPS_HELD, translationLanguages, turnTranslationOf } from '../sessions/turn-translation';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
-import { BG_OWNER_STOP_V1, BROWSER_CLEAR_V1, BROWSER_OPEN_V1, type BackgroundJobStopCommand, CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery, SESSION_MERGE_PULL_REQUEST_CAPABILITY } from '@orbit/shared';
-import { recordSessionMergePullRequest } from '../projects/pull-request-landing';
+import { BG_OWNER_STOP_V1, BROWSER_CLEAR_V1, BROWSER_OPEN_V1, type BackgroundJobStopCommand, CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery, SESSION_MERGE_PULL_REQUEST_CAPABILITY, PUSH_AS_ME_CAPABILITY } from '@orbit/shared';
+import { recordSessionMergePullRequest, storedBypassedRules } from '../projects/pull-request-landing';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import { ConditionsService } from '../conditions/conditions.service';
 import { GithubWorkspaceService } from '../github/github-workspace.service';
@@ -308,6 +308,7 @@ import { queueLandingObservationAfterCommit } from '../projects/landing-observat
 import { settleTaskSegmentAfterReceipt } from '../projects/landing-session';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { PullRequestDoorService } from '../github/pull-request-door.service';
+import { PushAsMeService } from '../github/push-as-me.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { CoordinatorFactQueueService } from '../projects/coordinator-fact-queue.service';
@@ -1808,6 +1809,8 @@ export class RunnerApiController {
     /** docs/design/protected-branch-landing.md §4: the pull request door a landing waiting on GitHub is handed to.
      *  Last, so a spec that builds this controller with fewer arguments is unchanged. */
     @Optional() private readonly pullRequestDoor?: PullRequestDoorService,
+    /** Push as me's outcomes on the workspace (docs/design/protected-branch-landing.md §5.5). */
+    @Optional() private readonly pushAsMe?: PushAsMeService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -2853,7 +2856,11 @@ export class RunnerApiController {
           if (this.pullRequestDoor && mergeRequests.length > 0) {
             const drained = mergeRequests;
             mergeRequests = await this.pullRequestDoor
-              .withMergeLanding(drained, runnerSupportsCapability(capabilities, SESSION_MERGE_PULL_REQUEST_CAPABILITY))
+              .withMergeLanding(
+                drained,
+                runnerSupportsCapability(capabilities, SESSION_MERGE_PULL_REQUEST_CAPABILITY),
+                runnerSupportsCapability(capabilities, PUSH_AS_ME_CAPABILITY),
+              )
               .catch((error) => {
                 this.logger.warn(`runner ${runner.id}: merge landing modes not read (${(error as Error)?.message})`);
                 return drained;
@@ -3187,6 +3194,8 @@ export class RunnerApiController {
       throw integrationJobHttpError(error);
     }
     await this.afterIntegrationResult(applied.after, applied.answer.openItemId);
+    // docs/design/protected-branch-landing.md §5.5: a Push as me landing's outcome stays on its workspace.
+    if (applied.answer.accepted) await this.pushAsMe?.afterJobResult(jobId);
     return applied.answer;
   }
 
@@ -11129,6 +11138,7 @@ export class RunnerApiController {
           mergeRecoveryAction: string | null;
           mergeRecovery: unknown;
           mergeRequestedBy: string | null;
+          mergeOwnerTokenFor: string | null;
         }>
       >`
         SELECT status, "finished_at" AS "finishedAt", "inbox_lease_owner" AS "inboxLeaseOwner",
@@ -11140,7 +11150,8 @@ export class RunnerApiController {
                "merge_checkpoint_id" AS "mergeCheckpointId",
                "merge_recovery_action" AS "mergeRecoveryAction",
                "merge_recovery" AS "mergeRecovery",
-               "merge_requested_by" AS "mergeRequestedBy"
+               "merge_requested_by" AS "mergeRequestedBy",
+               "merge_owner_token_for" AS "mergeOwnerTokenFor"
         FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runner.id}::uuid
         FOR UPDATE
@@ -11329,6 +11340,11 @@ export class RunnerApiController {
               taskId: current.taskId,
               commitSha: sourceSha,
             })),
+          // docs/design/protected-branch-landing.md §5.2: pushed with the owner's own token, as the credential door
+          // answered it for this very operation — never on the runner's word alone.
+          ...(merged && dto.pushedAs === 'OWNER' && operationId && current.mergeOwnerTokenFor === operationId
+            ? { pushedAs: { pushedAs: 'OWNER' as const, bypassedRules: storedBypassedRules(dto.bypassedRules) } }
+            : {}),
         });
         if (task?.projectId) openedOwnerItems.set(task.projectId, written.ownerItemIds);
         if (receiptResult === 'MERGED' || receiptResult === 'ALREADY_MERGED') {
@@ -11368,6 +11384,8 @@ export class RunnerApiController {
     }
     // §4.6 step 3: the Merge waits on its pull request, which the door opens on GitHub now that the row committed.
     if (waitingPullRequestId) await this.pullRequestDoor?.advance([waitingPullRequestId]);
+    // §5.5: a Push as me Merge's outcome stays on its workspace.
+    if (!released) await this.pushAsMe?.afterMergeResult(sessionId, dto);
     // The checkout is free again. A message the user sent while this merge executed is
     // parked PENDING behind the claim fence (see trySessionClaim); re-drive the queue so it
     // gets a slot now instead of on the next ≤5s poll. Not on `released`: the operation is

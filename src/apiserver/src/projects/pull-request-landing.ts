@@ -11,6 +11,7 @@ import {
   type PullRequestMergeMethod,
   type PullRequestState,
   type SessionMergeResultRequest,
+  type WorkspaceLandingView,
 } from '@orbit/shared';
 import { redactSecrets } from '../common/secret-redaction';
 import { appendIntegrationJobEvent } from './project-integration-event';
@@ -44,6 +45,12 @@ export interface LandingModeFacts {
   landingKey: string | null;
   /** The subject's open pull request, which it finishes through whatever the rules say now (§3). */
   openPullRequest: { headSha: string | null } | null;
+  /**
+   * §3 rule 4: the workspace's landing mode is PUSH_AS_ME, the owner's GitHub connection is live, and the process can
+   * carry the owner's token (it declared `push-as-me/v1` and, for an integration job, the claim is v2, whose push
+   * boundary gates the token). Absent is false.
+   */
+  pushAsMe?: boolean;
 }
 
 /** Which of §3's rules decided, for the logs and for a refusal that has to say what to fix. */
@@ -54,6 +61,7 @@ export type LandingModeRule =
   | 'RUNNER_OUTDATED'
   | 'PERMISSIONS_PENDING'
   | 'NO_LANDING_SUBJECT'
+  | 'PUSH_AS_ME'
   | 'DEFAULT';
 
 /** §3's answer, as the command carries it. */
@@ -69,7 +77,8 @@ export interface LandingMode {
  * §3, in order. A subject with an open Orbit pull request finishes through it. Otherwise an Orbit branch, a workspace
  * not cloned from GitHub, a runner without the capability and an installation that has not accepted the permissions
  * all push as today (PUSH); every other GitHub landing pushes as today and opens a pull request when GitHub refuses
- * (PULL_REQUEST). Rule 4, Push as me, is the Push as me task's (§17 P3): until it lands, no workspace reads PUSH_AS_ME.
+ * (PULL_REQUEST), or, where the owner chose Push as me and it can be carried (rule 4), pushes the target with the
+ * owner's own token and opens a pull request when GitHub refuses (PUSH_AS_ME).
  */
 export function landingModeOf(facts: LandingModeFacts): LandingMode {
   if (facts.openPullRequest && facts.landingKey && facts.runnerDeclares && facts.githubRepoId != null) {
@@ -87,6 +96,7 @@ export function landingModeOf(facts: LandingModeFacts): LandingMode {
   if (!facts.runnerDeclares) return { landVia: 'PUSH', rule: 'RUNNER_OUTDATED' };
   if (facts.permissionsGranted !== true) return { landVia: 'PUSH', rule: 'PERMISSIONS_PENDING' };
   if (!facts.landingKey) return { landVia: 'PUSH', rule: 'NO_LANDING_SUBJECT' };
+  if (facts.pushAsMe) return { landVia: 'PUSH_AS_ME', rule: 'PUSH_AS_ME', landingRef: landingRefFor(facts.landingKey) };
   return { landVia: 'PULL_REQUEST', rule: 'DEFAULT', landingRef: landingRefFor(facts.landingKey) };
 }
 
@@ -240,6 +250,58 @@ export async function recordPullRequestResult(
   return { pullRequestId };
 }
 
+// ── §5: Push as me ──────────────────────────────────────────────────────────────────────────────────────────────
+
+/** The most rules a receipt keeps of GitHub's "Bypassed rule violations" lines, and the longest of each. */
+export const BYPASSED_RULES_MAX = 20;
+export const BYPASSED_RULE_MAX_CHARS = 300;
+
+/** GitHub's "Bypassed rule violations" lines as a receipt keeps them: strings only, redacted and clipped. */
+export function storedBypassedRules(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((rule): rule is string => typeof rule === 'string' && rule.trim() !== '')
+    .slice(0, BYPASSED_RULES_MAX)
+    .map((rule) => redactSecrets(rule.trim()).text.slice(0, BYPASSED_RULE_MAX_CHARS));
+}
+
+/**
+ * §5.2's "pushed as the owner", for a LANDED result: the claim was handed out as PUSH_AS_ME, the credential door
+ * answered the owner's token for this very claim generation, and the runner says the target push carried it. Any
+ * one missing and the landing is recorded as it always was.
+ */
+export function pushedAsOwnerOf(
+  job: { landVia: string | null; ownerTokenGeneration: bigint | null; claimGeneration: bigint },
+  body: Pick<IntegrationJobResultRequest, 'pushedAs' | 'bypassedRules'>,
+): { pushedAs: 'OWNER'; bypassedRules: string[] } | null {
+  if (job.landVia !== 'PUSH_AS_ME' || body.pushedAs !== 'OWNER') return null;
+  if (job.ownerTokenGeneration === null || job.ownerTokenGeneration !== job.claimGeneration) return null;
+  return { pushedAs: 'OWNER', bypassedRules: storedBypassedRules(body.bypassedRules) };
+}
+
+/**
+ * A workspace's `landing` block (§8, §11.1): its setting (null for a workspace not cloned from GitHub, which has no
+ * choice), whether Push as me can be chosen and why not, and the last refusal GitHub gave a Push as me landing there.
+ */
+export function workspaceLandingView(
+  workspace: { githubRepoId: bigint | null; landingMode: string | null; pushAsMeRefusal: unknown },
+  githubConnected: boolean,
+): WorkspaceLandingView {
+  if (workspace.githubRepoId == null) {
+    return { mode: null, pushAsMe: { available: false, reason: 'WORKSPACE_NOT_FROM_GITHUB' }, lastRefusal: null };
+  }
+  const raw = workspace.pushAsMeRefusal as { at?: unknown; branch?: unknown; message?: unknown } | null;
+  const lastRefusal = raw && typeof raw === 'object' && typeof raw.message === 'string'
+    && typeof raw.at === 'string' && typeof raw.branch === 'string'
+    ? { at: raw.at, branch: raw.branch, message: raw.message }
+    : null;
+  return {
+    mode: workspace.landingMode === 'PUSH_AS_ME' ? 'PUSH_AS_ME' : 'PULL_REQUEST',
+    pushAsMe: githubConnected ? { available: true } : { available: false, reason: 'GITHUB_NOT_CONNECTED' },
+    lastRefusal,
+  };
+}
+
 // ── the read model (§8) ─────────────────────────────────────────────────────────────────────────────────────────
 
 /** A pull request row as the read models take it. */
@@ -386,7 +448,9 @@ export async function recordSessionMergePullRequest(
   if (authority.decision !== 'ALLOWED') throw new ConflictException(`${authority.decision}: ${authority.detail}`);
   const baseRef = `refs/heads/${targetBranch}`;
   const message = storedRefusal(dto.pushRefusal);
-  const refusal = message ? { via: 'PULL_REQUEST', message, at: new Date().toISOString() } : null;
+  // §5.4: a Merge handed out as PUSH_AS_ME says so, and its refusal is the owner's push that GitHub (or Orbit) refused.
+  const via = dto.landVia === 'PUSH_AS_ME' ? 'PUSH_AS_ME' : 'PULL_REQUEST';
+  const refusal = message ? { via, message, at: new Date().toISOString() } : null;
   // One open pull request per session (`github_pull_request_open_session_key`), beside the session row this
   // transaction holds (rank 30 → 60).
   const [open] = await tx.$queryRaw<Array<{ id: string; baseRef: string }>>(Prisma.sql`

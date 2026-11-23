@@ -21,6 +21,8 @@ export const GITHUB_LIST_CACHE_MS = 60_000;
 export const GITHUB_REPO_PAGE = 30;
 /** A token this close to its expiry is refreshed first. */
 const REFRESH_MARGIN_MS = 60_000;
+/** A Push as me push is handed a token with at least this long left, refreshed first otherwise (§5.2). */
+export const PUSH_TOKEN_MIN_VALIDITY_MS = 15 * 60_000;
 /** What an expiry GitHub did not give is stored as: a token that does not expire. */
 const NEVER = new Date('9999-12-31T00:00:00Z');
 const DEFAULT_RETURN = '/settings/integrations/github';
@@ -349,27 +351,41 @@ export class GithubConnectionService {
     }
   }
 
-  private async accessToken(ownerId: string, app: GithubAppCredentials): Promise<string> {
+  /**
+   * The owner's own user-to-server token for one Push as me push (docs/design/protected-branch-landing.md §5.2),
+   * refreshed first when less than PUSH_TOKEN_MIN_VALIDITY_MS of it is left, with when it expires. GitHub off answers
+   * GITHUB_NOT_CONFIGURED; no live connection, GITHUB_NOT_CONNECTED. Never cached outside the stored connection.
+   */
+  async ownerPushToken(ownerId: string): Promise<{ token: string; expiresAt: Date }> {
+    const app = await this.config.credentials();
+    if (!app) throw notConfigured();
+    const token = await this.accessToken(ownerId, app, PUSH_TOKEN_MIN_VALIDITY_MS);
+    const row = await this.prisma.githubConnection.findUnique({ where: { ownerId }, select: { accessExpiresAt: true } });
+    if (!row) throw notConnected();
+    return { token, expiresAt: row.accessExpiresAt };
+  }
+
+  private async accessToken(ownerId: string, app: GithubAppCredentials, margin = REFRESH_MARGIN_MS): Promise<string> {
     const row = await this.prisma.githubConnection.findUnique({ where: { ownerId } });
     if (!row) throw notConnected();
-    if (row.accessExpiresAt.getTime() - REFRESH_MARGIN_MS > Date.now()) {
+    if (row.accessExpiresAt.getTime() - margin > Date.now()) {
       const plain = this.decrypt(row.accessTokenEnc);
       if (plain !== null) return plain;
     }
     // One refresh per account at a time: GitHub retires a refresh token the first time it is used.
     let pending = this.refreshing.get(ownerId);
     if (!pending) {
-      pending = this.refresh(row, app).finally(() => this.refreshing.delete(ownerId));
+      pending = this.refresh(row, app, margin).finally(() => this.refreshing.delete(ownerId));
       this.refreshing.set(ownerId, pending);
     }
     return pending;
   }
 
-  private async refresh(read: GithubConnection, app: GithubAppCredentials): Promise<string> {
+  private async refresh(read: GithubConnection, app: GithubAppCredentials, margin = REFRESH_MARGIN_MS): Promise<string> {
     // Read again: a refresh that ended between the first read and this one already stored a new pair.
     const row = await this.prisma.githubConnection.findUnique({ where: { id: read.id } });
     if (!row) throw notConnected();
-    if (row.accessExpiresAt.getTime() - REFRESH_MARGIN_MS > Date.now()) {
+    if (row.accessExpiresAt.getTime() - margin > Date.now()) {
       const plain = this.decrypt(row.accessTokenEnc);
       if (plain !== null) return plain;
     }

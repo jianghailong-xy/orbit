@@ -43,7 +43,8 @@ import { createHmac, generateKeyPairSync, randomBytes, randomUUID } from 'node:c
 import { test } from 'node:test';
 import { RunStatus, RunnerStatus, type PrismaClient } from '@prisma/client';
 import {
-  INTEGRATION_PULL_REQUEST_CAPABILITY, SESSION_MERGE_PULL_REQUEST_CAPABILITY, type IntegrationCheckResult, type IntegrationJobCommand,
+  INTEGRATION_PULL_REQUEST_CAPABILITY, PUSH_AS_ME_CAPABILITY, SESSION_MERGE_PULL_REQUEST_CAPABILITY, type IntegrationCheckResult,
+  type IntegrationJobCommand,
 } from '@orbit/shared';
 import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -56,7 +57,7 @@ import {
   receiveIntegrationJobProgress,
 } from '../runner-api/integration-job-relay';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
-import { INTEGRATION_JOB_CLAIM, enqueueForDoneTask } from '../projects/project-integration-job';
+import { INTEGRATION_JOB_CLAIM, INTEGRATION_PROGRESS_V2, enqueueForDoneTask } from '../projects/project-integration-job';
 import { readInFlightJobs, stopInFlightJob } from '../projects/project-integration-line';
 import { readLandingView } from '../projects/landing-view';
 import { readTaskIntegrationViews } from '../projects/project-task-integration';
@@ -64,6 +65,11 @@ import { ProjectPromotionService } from '../projects/project-promotion.service';
 import { recordSessionMergePullRequest } from '../projects/pull-request-landing';
 import { GITHUB_API, GithubClient } from './github-api.client';
 import { GithubAppConfigService } from './github-app-config.service';
+import { GithubConnectionService } from './github-connection.service';
+import { FIRST_REFUSAL_ALERT, PushAsMeService, SECOND_REQUEST_ALERT } from './push-as-me.service';
+import { WorkspacesService } from '../workspaces/workspaces.service';
+import { WorkspacesController } from '../workspaces/workspaces.controller';
+import { sanitizeWorkspaceWrite } from '../runner-api/runner-agents.controller';
 import { GithubInstallationGrants } from './github-installation-grants';
 import { GithubWebhookService } from './github-webhook';
 import { PullRequestDoorService, REREAD_WITHOUT_DELIVERIES_MS, REREAD_WITH_DELIVERIES_MS } from './pull-request-door.service';
@@ -790,4 +796,345 @@ test('§4.7: the webhook is checked, de-duplicated and read again; the re-read k
   const quiet = reads();
   await h.door.tick(now);
   assert.equal(reads(), quiet + 1);
+});
+
+// ── Push as me (docs/design/protected-branch-landing.md §3 rule 4, §5) ─────────────────────────────────────────────
+//
+//   (10) §3 rule 4 at the hand-out: PUSH_AS_ME only for a workspace whose owner chose it, with a live GitHub
+//        connection, to a runner that declared push-as-me/v1, on a v2 claim; any one missing lands PULL_REQUEST.
+//   (11) §5.2's credential door: refused before the push boundary, for another lease, another path and a landing not
+//        handed out PUSH_AS_ME; answered once at the boundary with the owner's token; a second request refused and
+//        announced. The LANDED result says pushed as the owner on its receipts, with GitHub's bypassed rules, only
+//        when the door answered for that claim.
+//   (12) A Push as me push GitHub refused lands through a pull request whose refusal says so, and the workspace keeps
+//        the refusal (announced the first time) until a Push as me landing is accepted.
+//   (13) A session's Merge: PUSH_AS_ME with the capability and a live connection, its token once per operation, and a
+//        refused one's pull request labelled PUSH_AS_ME.
+//   (14) The setting: only a workspace cloned from GitHub takes it, PUSH_AS_ME only with a live connection, only from
+//        the owner signed in, and the read carries the landing block.
+
+const OWNER_TOKEN = `ghu_${'o'.repeat(36)}`;
+
+async function connectGithub(h: Awaited<ReturnType<typeof harness>>, ownerId: string, options: { live: boolean } = { live: true }) {
+  const at = options.live ? Date.now() + 8 * 3_600_000 : Date.now() - 1_000;
+  await h.prisma.githubConnection.create({
+    data: {
+      ownerId, githubUserId: BigInt(90_000_000 + Math.floor(Math.random() * 9_000_000)), login: 'owner-login',
+      accessTokenEnc: encryptSecret(OWNER_TOKEN), refreshTokenEnc: encryptSecret(`ghr_${'r'.repeat(36)}`),
+      accessExpiresAt: new Date(at), refreshExpiresAt: new Date(options.live ? Date.now() + 180 * 86_400_000 : Date.now() - 1_000),
+    },
+  });
+}
+
+/** One heartbeat of a v2 runner process, with or without push-as-me/v1. */
+function beatV2(h: Awaited<ReturnType<typeof harness>>, runnerId: string, pushAsMe: boolean): Promise<IntegrationJobCommand[]> {
+  return h.relay.dispatch({
+    runnerId, leaseOwner: randomUUID(), draining: false,
+    capabilities: [INTEGRATION_JOB_CLAIM, INTEGRATION_PROGRESS_V2, INTEGRATION_PULL_REQUEST_CAPABILITY, ...(pushAsMe ? [PUSH_AS_ME_CAPABILITY] : [])],
+  });
+}
+
+function pushAsMeDoor(h: Awaited<ReturnType<typeof harness>>, fullName: string) {
+  const config = new GithubAppConfigService(h.prisma as never, h.client);
+  const connections = new GithubConnectionService(h.prisma as never, config, h.client);
+  const alerts: Array<{ ownerId: string; title: string; message: string }> = [];
+  const push = { notifyOwner: async (ownerId: string, input: { title: string; message: string }) => { alerts.push({ ownerId, ...input }); return { delivered: true, devices: 1 }; } };
+  // The owner's sight of the repository is GitHub's answer to the owner's token; the fake answers it by name.
+  const workspaces = { repositoryFullName: async () => fullName };
+  return { service: new PushAsMeService(h.prisma as never, workspaces as never, connections, push as never), alerts };
+}
+
+async function refusedWith(promise: Promise<unknown>): Promise<string> {
+  try {
+    await promise;
+  } catch (error) {
+    const response = (error as { getResponse?: () => unknown }).getResponse?.() as { code?: string; message?: string } | string | undefined;
+    if (response && typeof response === 'object') return `${response.code}: ${response.message}`;
+    return String((error as Error).message);
+  }
+  return 'ANSWERED';
+}
+
+test('(10) §3 rule 4: Push as me is handed out only where it can be carried', { skip: !URL_, concurrency: 1, timeout: 300_000 }, async (t) => {
+  const h = await harness(t);
+  const ownerId = await h.newOwner('push-as-me-modes');
+  await connectGithub(h, ownerId);
+  const chosen = await h.newWorkspace(ownerId, 'chose-push-as-me', { github: true });
+  h.github.granted.set(chosen.installationId, GRANTED);
+  await h.prisma.workspace.update({ where: { id: chosen.workspaceId }, data: { landingMode: 'PUSH_AS_ME' } });
+
+  // A runner without push-as-me/v1: a pull request landing, as the default.
+  const first = await h.queuedLanding(ownerId, chosen, 'no capability');
+  const [withoutCapability] = await beatV2(h, chosen.runnerId, false);
+  assert.equal(withoutCapability?.jobId, first.jobId);
+  assert.equal(withoutCapability.landVia, 'PULL_REQUEST');
+  await h.prisma.projectIntegrationJob.update({ where: { id: first.jobId }, data: { state: 'CANCELLED', finishedAt: new Date() } });
+
+  // A legacy claim (no v2 push boundary to gate the token on): PULL_REQUEST.
+  const second = await h.queuedLanding(ownerId, chosen, 'a legacy claim');
+  const [legacy] = await h.relay.dispatch({
+    runnerId: chosen.runnerId, leaseOwner: randomUUID(), draining: false,
+    capabilities: [INTEGRATION_JOB_CLAIM, INTEGRATION_PULL_REQUEST_CAPABILITY, PUSH_AS_ME_CAPABILITY],
+  });
+  assert.equal(legacy?.jobId, second.jobId);
+  assert.equal(legacy.landVia, 'PULL_REQUEST');
+  await h.prisma.projectIntegrationJob.update({ where: { id: second.jobId }, data: { state: 'CANCELLED', finishedAt: new Date() } });
+
+  // Everything holds: PUSH_AS_ME, with the landing branch to fall back to, recorded on the job.
+  const third = await h.queuedLanding(ownerId, chosen, 'push as me');
+  const [asMe] = await beatV2(h, chosen.runnerId, true);
+  assert.equal(asMe?.jobId, third.jobId);
+  assert.equal(asMe.landVia, 'PUSH_AS_ME');
+  assert.match(asMe.landingRef ?? '', /^refs\/heads\/orbit\/land\//);
+  assert.equal((await h.job(third.jobId)).landVia, 'PUSH_AS_ME');
+  assert.equal(asMe.reportBeforePush, true);
+
+  // The owner's connection is no longer one GitHub takes: PULL_REQUEST.
+  const other = await h.newOwner('push-as-me-disconnected');
+  await connectGithub(h, other, { live: false });
+  const stale = await h.newWorkspace(other, 'stale-connection', { github: true });
+  h.github.granted.set(stale.installationId, GRANTED);
+  await h.prisma.workspace.update({ where: { id: stale.workspaceId }, data: { landingMode: 'PUSH_AS_ME' } });
+  await h.queuedLanding(other, stale, 'a spent connection');
+  const [spent] = await beatV2(h, stale.runnerId, true);
+  assert.equal(spent?.landVia, 'PULL_REQUEST');
+
+  // The setting off: PULL_REQUEST.
+  const off = await h.newWorkspace(ownerId, 'push-as-me-off', { github: true });
+  h.github.granted.set(off.installationId, GRANTED);
+  await h.queuedLanding(ownerId, off, 'the default');
+  const [byDefault] = await beatV2(h, off.runnerId, true);
+  assert.equal(byDefault?.landVia, 'PULL_REQUEST');
+});
+
+test('(11) §5.2: the owner\'s token is answered once, at the push boundary, and the landing says it went as the owner', { skip: !URL_, concurrency: 1, timeout: 300_000 }, async (t) => {
+  const h = await harness(t);
+  const ownerId = await h.newOwner('push-as-me-door');
+  await connectGithub(h, ownerId);
+  const ws = await h.newWorkspace(ownerId, 'push-as-me-door', { github: true });
+  h.github.granted.set(ws.installationId, GRANTED);
+  await h.prisma.workspace.update({ where: { id: ws.workspaceId }, data: { landingMode: 'PUSH_AS_ME', pushAsMeRefusal: { at: new Date().toISOString(), branch: 'main', message: 'an older refusal' } } });
+  const landing = await h.queuedLanding(ownerId, ws, 'Land as the owner');
+  const [command] = await beatV2(h, ws.runnerId, true);
+  assert.equal(command?.landVia, 'PUSH_AS_ME');
+  const { service, alerts } = pushAsMeDoor(h, ws.fullName);
+  const runner = { id: ws.runnerId, ownerId };
+  const ask = (overrides: Record<string, unknown> = {}) => service.ownerCredential(runner, {
+    workspaceId: ws.workspaceId, host: 'github.com', path: `${ws.fullName}.git`,
+    jobId: command.jobId, claimGeneration: command.claimGeneration, leaseOwner: command.leaseOwner, ...overrides,
+  });
+
+  // Before the synchronous PUSH report: refused.
+  assert.match(await refusedWith(ask()), /^PUSH_AS_ME_REFUSED: That landing has not reached its push yet/);
+  await receiveIntegrationJobProgress(h.prisma as never, ws.runnerId, command.jobId, {
+    claimGeneration: command.claimGeneration, leaseOwner: command.leaseOwner, phase: 'PUSH',
+    testedSha: SHA('tested-Land as the owner'), testedTreeSha: SHA('tested-tree-Land as the owner'), sourceSha: WORK_TIP, targetShaBefore: UPSTREAM_TIP,
+  }, ownerId);
+  // Another lease, another repository, another runner, another host: refused, and none of them spends the answer.
+  assert.match(await refusedWith(ask({ leaseOwner: randomUUID() })), /^PUSH_AS_ME_REFUSED: This runner does not hold/);
+  assert.match(await refusedWith(ask({ claimGeneration: String(BigInt(command.claimGeneration) + 1n) })), /^PUSH_AS_ME_REFUSED: This runner does not hold/);
+  assert.match(await refusedWith(ask({ path: 'owner/another-repository' })), /^PUSH_AS_ME_REFUSED: That path is not this workspace's repository/);
+  assert.match(await refusedWith(ask({ host: 'gitlab.com' })), /^PUSH_AS_ME_REFUSED/);
+  assert.match(await refusedWith(service.ownerCredential({ id: randomUUID(), ownerId }, {
+    workspaceId: ws.workspaceId, host: 'github.com', path: ws.fullName,
+    jobId: command.jobId, claimGeneration: command.claimGeneration, leaseOwner: command.leaseOwner,
+  })), /^WORKSPACE_NOT_FOUND/);
+  assert.equal((await h.job(command.jobId)).ownerTokenGeneration, null, 'no refused request spent the answer');
+
+  // At the boundary: the owner's own token, once.
+  const answer = await ask();
+  assert.equal(answer.password, OWNER_TOKEN);
+  assert.ok(Date.parse(answer.expiresAt) > Date.now() + 15 * 60_000);
+  assert.equal((await h.job(command.jobId)).ownerTokenGeneration, BigInt(command.claimGeneration));
+  // A second request for the same claim: refused, and the owner is told.
+  assert.match(await refusedWith(ask()), /^PUSH_AS_ME_ALREADY_ANSWERED/);
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0]!.title, SECOND_REQUEST_ALERT);
+
+  // GitHub accepted the push, past main's rules: LANDED, and the receipts say it went as the owner.
+  const result = await applyIntegrationJobResult(h.prisma as never, {
+    jobId: command.jobId, runnerId: ws.runnerId, ownerId,
+    body: {
+      claimGeneration: command.claimGeneration, leaseOwner: command.leaseOwner, state: 'LANDED', phase: 'VERIFY',
+      sourceSha: WORK_TIP, targetShaBefore: UPSTREAM_TIP, upstreamSha: UPSTREAM_TIP,
+      testedSha: SHA('tested-Land as the owner'), testedTreeSha: SHA('tested-tree-Land as the owner'), landedSha: SHA('tested-Land as the owner'), landedTreeSha: SHA('tested-tree-Land as the owner'),
+      aheadOfUpstream: 1, checks: [],
+      pushedAs: 'OWNER', bypassedRules: ['Changes must be made through a pull request.', 'Required status check "check" is expected.'],
+    },
+  });
+  assert.equal(result.answer.state, 'LANDED');
+  const receipts = await h.prisma.sessionMergeReceipt.findMany({ where: { ownerId, detail: { path: ['integrationJobId'], equals: command.jobId } } });
+  assert.ok(receipts.length > 0, 'the landing wrote its receipts');
+  for (const receipt of receipts) {
+    const detail = receipt.detail as { pushedAs?: string; bypassedRules?: string[] };
+    assert.equal(receipt.recordedBy, 'RUNNER');
+    assert.equal(detail.pushedAs, 'OWNER');
+    assert.deepEqual(detail.bypassedRules, ['Changes must be made through a pull request.', 'Required status check "check" is expected.']);
+  }
+  await service.afterJobResult(command.jobId);
+  assert.equal((await h.prisma.workspace.findUniqueOrThrow({ where: { id: ws.workspaceId } })).pushAsMeRefusal, null,
+    'an accepted Push as me clears the last refusal');
+  void landing;
+
+  // A runner's word alone is not enough: a landing whose token was never answered records no owner push.
+  const plainWs = await h.newWorkspace(ownerId, 'push-as-me-unasked', { github: true });
+  h.github.granted.set(plainWs.installationId, GRANTED);
+  await h.prisma.workspace.update({ where: { id: plainWs.workspaceId }, data: { landingMode: 'PUSH_AS_ME' } });
+  await h.queuedLanding(ownerId, plainWs, 'Never asked for the token');
+  const [unasked] = await beatV2(h, plainWs.runnerId, true);
+  await applyIntegrationJobResult(h.prisma as never, {
+    jobId: unasked!.jobId, runnerId: plainWs.runnerId, ownerId,
+    body: {
+      claimGeneration: unasked!.claimGeneration, leaseOwner: unasked!.leaseOwner, state: 'LANDED', phase: 'VERIFY',
+      sourceSha: WORK_TIP, targetShaBefore: UPSTREAM_TIP, upstreamSha: UPSTREAM_TIP,
+      testedSha: SHA('tested-Never asked for the token'), testedTreeSha: SHA('tested-tree-Never asked for the token'), landedSha: SHA('tested-Never asked for the token'), landedTreeSha: SHA('tested-tree-Never asked for the token'),
+      aheadOfUpstream: 1, checks: [], pushedAs: 'OWNER', bypassedRules: ['x'],
+    },
+  });
+  const unaskedReceipts = await h.prisma.sessionMergeReceipt.findMany({ where: { ownerId, detail: { path: ['integrationJobId'], equals: unasked!.jobId } } });
+  assert.ok(unaskedReceipts.length > 0);
+  assert.ok(unaskedReceipts.every((receipt) => (receipt.detail as { pushedAs?: string }).pushedAs === undefined));
+
+  // A landing handed out PULL_REQUEST is never answered the owner's token.
+  const prWs = await h.newWorkspace(ownerId, 'pull-request-only', { github: true });
+  h.github.granted.set(prWs.installationId, GRANTED);
+  await h.queuedLanding(ownerId, prWs, 'Default mode');
+  const [prCommand] = await beatV2(h, prWs.runnerId, true);
+  assert.equal(prCommand?.landVia, 'PULL_REQUEST');
+  await receiveIntegrationJobProgress(h.prisma as never, prWs.runnerId, prCommand!.jobId, {
+    claimGeneration: prCommand!.claimGeneration, leaseOwner: prCommand!.leaseOwner, phase: 'PUSH',
+  }, ownerId);
+  const prDoor = pushAsMeDoor(h, prWs.fullName);
+  assert.match(await refusedWith(prDoor.service.ownerCredential({ id: prWs.runnerId, ownerId }, {
+    workspaceId: prWs.workspaceId, host: 'github.com', path: prWs.fullName,
+    jobId: prCommand!.jobId, claimGeneration: prCommand!.claimGeneration, leaseOwner: prCommand!.leaseOwner,
+  })), /^PUSH_AS_ME_REFUSED: That landing was not handed out to push as you/);
+});
+
+test('(12) a refused Push as me lands through a pull request and the workspace says why', { skip: !URL_, concurrency: 1, timeout: 300_000 }, async (t) => {
+  const h = await harness(t);
+  const ownerId = await h.newOwner('push-as-me-refused');
+  await connectGithub(h, ownerId);
+  const ws = await h.newWorkspace(ownerId, 'enforce-admins', { github: true });
+  h.github.granted.set(ws.installationId, GRANTED);
+  await h.prisma.workspace.update({ where: { id: ws.workspaceId }, data: { landingMode: 'PUSH_AS_ME' } });
+  await h.queuedLanding(ownerId, ws, 'Refused for the owner too');
+  const [command] = await beatV2(h, ws.runnerId, true);
+  assert.equal(command?.landVia, 'PUSH_AS_ME');
+  const refusedWords = 'GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request.';
+  const answered = await applyIntegrationJobResult(h.prisma as never, {
+    jobId: command.jobId, runnerId: ws.runnerId, ownerId,
+    body: { ...h.pullRequestResult(command, SHA('refused-head'), SHA('refused-tree')), pushRefusal: refusedWords },
+  });
+  assert.equal(answered.answer.state, 'PULL_REQUEST');
+  const waiting = await h.job(command.jobId);
+  const pr = await h.prisma.githubPullRequest.findUniqueOrThrow({ where: { id: waiting.pullRequestId! } });
+  assert.deepEqual({ via: (pr.refusal as { via: string }).via, message: (pr.refusal as { message: string }).message }, { via: 'PUSH_AS_ME', message: refusedWords });
+  const { service, alerts } = pushAsMeDoor(h, ws.fullName);
+  await service.afterJobResult(command.jobId);
+  const recorded = (await h.prisma.workspace.findUniqueOrThrow({ where: { id: ws.workspaceId } })).pushAsMeRefusal as { branch: string; message: string };
+  assert.equal(recorded.branch, 'main');
+  assert.equal(recorded.message, refusedWords);
+  assert.equal(alerts.length, 1, 'the first refusal on a workspace is announced');
+  assert.equal(alerts[0]!.title, FIRST_REFUSAL_ALERT);
+  await service.afterJobResult(command.jobId);
+  assert.equal(alerts.length, 1, 'and only the first');
+  // The landing view quotes it as the owner's refused push (§5.5).
+  const [inFlight] = await readInFlightJobs(h.prisma as never, (await h.job(command.jobId)).projectId, command.jobId);
+  assert.equal(inFlight?.pullRequest?.refusal?.via, 'PUSH_AS_ME');
+});
+
+test('(13) a session\'s Merge pushes as the owner once per operation', { skip: !URL_, concurrency: 1, timeout: 300_000 }, async (t) => {
+  const h = await harness(t);
+  const ownerId = await h.newOwner('push-as-me-merge');
+  await connectGithub(h, ownerId);
+  const ws = await h.newWorkspace(ownerId, 'merge-as-me', { github: true });
+  h.github.granted.set(ws.installationId, GRANTED);
+  await h.prisma.workspace.update({ where: { id: ws.workspaceId }, data: { landingMode: 'PUSH_AS_ME' } });
+  const sessionId = randomUUID();
+  const operationId = randomUUID();
+  const leaseOwner = randomUUID();
+  await h.prisma.session.create({
+    data: {
+      id: sessionId, ownerId, creatorId: ownerId, workspaceId: ws.workspaceId, assignedRunnerId: ws.runnerId,
+      title: 'Merge as me', prompt: 'merge', branch: `orbit/me-${sessionId.slice(0, 6)}`, isolationStatus: 'worktree',
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 60_000),
+      mergeStatus: 'pending', mergeOperationId: operationId, mergeOperationOwner: leaseOwner, mergeTarget: 'main',
+    },
+  });
+  const merge = { sessionId, operationId, leaseOwner, branch: 'orbit/me', workDir: '/srv/merge-as-me', targetBranch: 'main' };
+  assert.equal((await h.door.withMergeLanding([merge], true, true))[0]?.landVia, 'PUSH_AS_ME');
+  assert.equal((await h.door.withMergeLanding([merge], true, false))[0]?.landVia, 'PULL_REQUEST', 'no push-as-me/v1: the default');
+
+  const { service, alerts } = pushAsMeDoor(h, ws.fullName);
+  const ask = (overrides: Record<string, unknown> = {}) => service.ownerCredential({ id: ws.runnerId, ownerId }, {
+    workspaceId: ws.workspaceId, host: 'github.com', path: ws.fullName, sessionId, mergeOperationId: operationId, leaseOwner, ...overrides,
+  });
+  assert.match(await refusedWith(ask({ mergeOperationId: randomUUID() })), /^PUSH_AS_ME_REFUSED: This runner does not hold that Merge/);
+  assert.match(await refusedWith(ask({ jobId: randomUUID() })), /^PUSH_AS_ME_REFUSED: A Push as me request names one landing/);
+  assert.equal((await ask()).password, OWNER_TOKEN);
+  assert.equal((await h.prisma.session.findUniqueOrThrow({ where: { id: sessionId } })).mergeOwnerTokenFor, operationId);
+  assert.match(await refusedWith(ask()), /^PUSH_AS_ME_ALREADY_ANSWERED/);
+  assert.equal(alerts[0]?.title, SECOND_REQUEST_ALERT);
+
+  // Refused by GitHub: the Merge's pull request is labelled as the owner's refused push, and the workspace keeps it.
+  h.github.pushed.set(`orbit/land/${sessionId}`, SHA('merge-head'));
+  const dto = {
+    operationId, leaseOwner, status: 'pull_request' as const, sourceSha: SHA('merge-source'), pushedSha: SHA('merge-head'),
+    rebaseBaseSha: SHA('merge-base'), targetBranch: 'main', landVia: 'PUSH_AS_ME' as const,
+    pushRefusal: 'GH013: Repository rule violations found for refs/heads/main.',
+  };
+  const prId = await h.prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${sessionId}::uuid FOR UPDATE`;
+    return recordSessionMergePullRequest(tx as never, {
+      sessionId, current: { ownerId, taskId: null, mergeCheckpointId: null, mergeRecoveryAction: null }, dto, modern: true,
+    });
+  });
+  assert.equal(((await h.prisma.githubPullRequest.findUniqueOrThrow({ where: { id: prId } })).refusal as { via: string }).via, 'PUSH_AS_ME');
+  await service.afterMergeResult(sessionId, dto);
+  assert.match(String(((await h.prisma.workspace.findUniqueOrThrow({ where: { id: ws.workspaceId } })).pushAsMeRefusal as { message: string }).message), /GH013/);
+  // Accepted: the refusal is cleared.
+  await service.afterMergeResult(sessionId, { ...dto, status: 'merged', pushedAs: 'OWNER' });
+  assert.equal((await h.prisma.workspace.findUniqueOrThrow({ where: { id: ws.workspaceId } })).pushAsMeRefusal, null);
+});
+
+test('(14) the landing setting: GitHub workspaces only, Push as me needs a live connection, the owner signed in', { skip: !URL_, concurrency: 1, timeout: 300_000 }, async (t) => {
+  const h = await harness(t);
+  const ownerId = await h.newOwner('landing-setting');
+  const ws = await h.newWorkspace(ownerId, 'landing-setting', { github: true });
+  const machine = await h.newWorkspace(ownerId, 'landing-setting-machine', { github: false });
+  const workspaces = new WorkspacesService(h.prisma as never);
+  const code = async (promise: Promise<unknown>) => {
+    try { await promise; } catch (error) { return ((error as { getResponse?: () => { code?: string } }).getResponse?.())?.code ?? String(error); }
+    return 'OK';
+  };
+  assert.equal(await code(workspaces.update(ownerId, machine.workspaceId, { landingMode: 'PULL_REQUEST' })), 'WORKSPACE_NOT_FROM_GITHUB');
+  assert.equal(await code(workspaces.update(ownerId, ws.workspaceId, { landingMode: 'PUSH_AS_ME' })), 'GITHUB_NOT_CONNECTED');
+  let read = await workspaces.getWithUsage(ownerId, ws.workspaceId);
+  assert.deepEqual(read.landing, { mode: 'PULL_REQUEST', pushAsMe: { available: false, reason: 'GITHUB_NOT_CONNECTED' }, lastRefusal: null });
+  assert.deepEqual((await workspaces.getWithUsage(ownerId, machine.workspaceId)).landing,
+    { mode: null, pushAsMe: { available: false, reason: 'WORKSPACE_NOT_FROM_GITHUB' }, lastRefusal: null });
+  await connectGithub(h, ownerId);
+  assert.equal(await code(workspaces.update(ownerId, ws.workspaceId, { landingMode: 'PUSH_AS_ME' })), 'OK');
+  read = await workspaces.getWithUsage(ownerId, ws.workspaceId);
+  assert.deepEqual(read.landing, { mode: 'PUSH_AS_ME', pushAsMe: { available: true }, lastRefusal: null });
+  // Saving another field leaves the setting where it is.
+  await workspaces.update(ownerId, ws.workspaceId, { description: 'unrelated' });
+  assert.equal((await h.prisma.workspace.findUniqueOrThrow({ where: { id: ws.workspaceId } })).landingMode, 'PUSH_AS_ME');
+
+  // Only a signed-in owner chooses it: a token (a PAT an agent could hold, a terminal) is refused, and so is an agent's
+  // MCP write, which names it as a field only the owner sets.
+  const controller = new WorkspacesController(workspaces, {} as never);
+  for (const credential of [
+    { kind: 'PAT', tokenId: 't', scopes: ['workspaces:write'], workspaceIds: [] },
+    { kind: 'TERMINAL', terminalId: 't', runnerId: ws.runnerId, machineName: 'm' },
+    undefined,
+  ]) {
+    assert.equal(await code(controller.update({ userId: ownerId, email: 'x', credential } as never, ws.workspaceId, { landingMode: 'PULL_REQUEST' })),
+      'LANDING_MODE_OWNER_ONLY');
+  }
+  assert.equal(await code(controller.update({ userId: ownerId, email: 'x', credential: { kind: 'LOGIN' } } as never, ws.workspaceId, { landingMode: 'PULL_REQUEST' })), 'OK');
+  assert.equal((await h.prisma.workspace.findUniqueOrThrow({ where: { id: ws.workspaceId } })).landingMode, 'PULL_REQUEST');
+  assert.throws(() => sanitizeWorkspaceWrite({ landingMode: 'PUSH_AS_ME' }), (error: { getResponse?: () => { code?: string } }) =>
+    error.getResponse?.()?.code === 'HUMAN_ONLY_WORKSPACE_FIELD');
 });

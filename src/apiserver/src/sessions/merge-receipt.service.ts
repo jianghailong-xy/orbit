@@ -100,6 +100,13 @@ export interface MergeReceiptPullRequest {
   mergedBy: string | null;
 }
 
+/** A landing pushed with the owner's own GitHub token (docs/design/protected-branch-landing.md §5.2, Push as me): the
+ *  receipt keeps `recordedBy = RUNNER` and its detail says so, with the rules GitHub said the push bypassed. */
+export interface MergeReceiptPushedAs {
+  pushedAs: 'OWNER';
+  bypassedRules: string[];
+}
+
 /**
  * The merge receipt writer and reader (contract §13.7).
  *
@@ -726,6 +733,8 @@ export class MergeReceiptService {
       /** The session's Merge landed through a pull request GitHub merged (docs/design/protected-branch-landing.md
        *  §4.6): the server recorded it from GitHub's answer, and the receipt names the pull request. */
       pullRequest?: MergeReceiptPullRequest;
+      /** The target push carried the owner's own token (Push as me, §5.2). */
+      pushedAs?: MergeReceiptPushedAs;
     },
   ): Promise<{
     /** The owner items this result opened (O-R3), for the caller's commit to push once (§7.6 V12). */
@@ -772,6 +781,7 @@ export class MergeReceiptService {
           detail: {
             source: args.pullRequest ? 'pull-request' : 'merge-result',
             ...(args.pullRequest ? { pullRequest: { ...args.pullRequest } } : {}),
+            ...(args.pushedAs ? { pushedAs: args.pushedAs.pushedAs, bypassedRules: args.pushedAs.bypassedRules } : {}),
             ...(args.message ? { message: args.message } : {}),
             ...(args.operationId ? { operationId: args.operationId } : {}),
             ...(args.requestedBy ? { requestedBy: args.requestedBy } : {}),
@@ -861,6 +871,8 @@ export class MergeReceiptService {
       recoveryHeld?: ReadonlySet<string>;
       /** A landing GitHub merged as a pull request (J-T15): the server recorded it, and the receipt names it. */
       pullRequest?: MergeReceiptPullRequest;
+      /** The target push carried the owner's own token (Push as me, §5.2). */
+      pushedAs?: MergeReceiptPushedAs;
     },
   ): Promise<string[]> {
     const sourceSha = normalizeSha(args.sourceSha, 'sourceSha');
@@ -892,6 +904,7 @@ export class MergeReceiptService {
           source: 'integration-job',
           integrationJobId: args.jobId,
           ...(args.pullRequest ? { pullRequest: { ...args.pullRequest } } : {}),
+          ...(args.pushedAs ? { pushedAs: args.pushedAs.pushedAs, bypassedRules: args.pushedAs.bypassedRules } : {}),
           ...(args.testedTreeSha ? { testedTreeSha: args.testedTreeSha } : {}),
           ...(args.landedTreeSha ? { landedTreeSha: args.landedTreeSha } : {}),
           ...(args.mainSyncSha ? { mainSyncSha: args.mainSyncSha } : {}),

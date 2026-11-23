@@ -5,6 +5,7 @@ import { SessionsModule } from '../sessions/sessions.module';
 import { GithubModule } from './github.module';
 import { GithubWebhookController, GithubWebhookService } from './github-webhook';
 import { PullRequestDoorService } from './pull-request-door.service';
+import { PushAsMeService } from './push-as-me.service';
 
 /**
  * Landing on a protected GitHub branch through a pull request (docs/design/protected-branch-landing.md §4): the door
@@ -14,7 +15,7 @@ import { PullRequestDoorService } from './pull-request-door.service';
 @Module({
   imports: [GithubModule, ProjectsModule, SessionsModule, PushModule],
   controllers: [GithubWebhookController],
-  providers: [PullRequestDoorService, GithubWebhookService],
-  exports: [PullRequestDoorService],
+  providers: [PullRequestDoorService, GithubWebhookService, PushAsMeService],
+  exports: [PullRequestDoorService, PushAsMeService],
 })
 export class PullRequestLandingModule {}

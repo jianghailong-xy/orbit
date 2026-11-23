@@ -13,7 +13,7 @@ import type { IntegrationJobPhase, PromotionTask, UpstreamMovedCommitsEnriched }
 import { PrismaService } from '../prisma/prisma.service';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { type MergeReceiptResult, resultLanded } from '../sessions/merge-receipt';
-import { MergeReceiptService, type MergeReceiptPullRequest } from '../sessions/merge-receipt.service';
+import { MergeReceiptService, type MergeReceiptPullRequest, type MergeReceiptPushedAs } from '../sessions/merge-receipt.service';
 import {
   IntegrationCheckResult,
   LandingRetryRequest,
@@ -1484,6 +1484,8 @@ export async function applyPromotionJobResult(
      *  its merge holds: the receipts say the server recorded it and name it. */
     pullRequest?: MergeReceiptPullRequest;
     landedTreeSha?: string | null;
+    /** The upstream push carried the owner's own token (Push as me, docs/design/protected-branch-landing.md §5.2). */
+    pushedAs?: MergeReceiptPushedAs;
   },
 ): Promise<PromotionJobOutcome | null> {
   const promotion = await tx.projectPromotion.findUnique({
@@ -1606,6 +1608,7 @@ export async function applyPromotionJobResult(
       testedTreeSha: input.testedTreeSha,
       recoveryHeld: input.recoveryHeld,
       ...(input.pullRequest ? { pullRequest: input.pullRequest, landedTreeSha: input.landedTreeSha ?? null } : {}),
+      ...(input.pushedAs ? { pushedAs: input.pushedAs } : {}),
     });
     await tx.projectPromotion.update({
       where: { id: promotion.id },
@@ -2154,6 +2157,8 @@ async function writeUpstreamReceipts(
      *  the receipts, naming it, with the tree GitHub's merge actually holds. */
     pullRequest?: MergeReceiptPullRequest;
     landedTreeSha?: string | null;
+    /** The upstream push carried the owner's own token (Push as me, §5.2). */
+    pushedAs?: MergeReceiptPushedAs;
   },
 ): Promise<string[]> {
   // Both ids a receipt is written against are history references (0423, 0424), and both are foreign
@@ -2203,6 +2208,7 @@ async function writeUpstreamReceipts(
       recoveredUnknownPush: input.recoveredUnknownPush,
       recoveryHeld: input.recoveryHeld,
       ...(input.pullRequest ? { pullRequest: input.pullRequest } : {}),
+      ...(input.pushedAs ? { pushedAs: input.pushedAs } : {}),
     });
     receiptIds.push(...written);
   }

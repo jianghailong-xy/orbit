@@ -20,6 +20,7 @@ import {
   UpstreamMovedCommits,
   UpstreamMovedCommitsEnriched,
   INTEGRATION_PULL_REQUEST_CAPABILITY,
+  PUSH_AS_ME_CAPABILITY,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { baselineHoldSql } from '../projects/baseline-hold';
@@ -93,6 +94,7 @@ import {
   landingCommandFields,
   landingModeOf,
   pullRequestResultRefusal,
+  pushedAsOwnerOf,
   recordPullRequestResult,
   type LandingMode,
 } from '../projects/pull-request-landing';
@@ -336,6 +338,9 @@ interface HeldClaim {
   landingSessionId?: string | null;
   openPullRequestHeadSha?: string | null;
   pullRequestOpen?: boolean | null;
+  /** §3 rule 4: the workspace's landing setting, and whether the owner's GitHub connection is live. */
+  workspaceLandingMode?: string | null;
+  ownerGithubConnected?: boolean | null;
 }
 
 /** The row the claim statement returns: the claim it made, and what the row was before it. */
@@ -380,6 +385,7 @@ export async function dispatchIntegrationJobs(
   // docs/design/protected-branch-landing.md §3, §9 item 7: how this process's landings may reach a protected branch.
   const landing: LandingHandOut = {
     runnerDeclares: heartbeat.capabilities?.includes(INTEGRATION_PULL_REQUEST_CAPABILITY) === true,
+    pushAsMeDeclared: heartbeat.capabilities?.includes(PUSH_AS_ME_CAPABILITY) === true,
     pullRequestsGranted,
   };
 
@@ -607,6 +613,8 @@ async function handOut(
 interface LandingHandOut {
   /** The process declared `integration-pull-request/v1`. */
   runnerDeclares: boolean;
+  /** The process declared `push-as-me/v1`: it asks for the owner's token at the push boundary (§5.2). */
+  pushAsMeDeclared?: boolean;
   pullRequestsGranted?: (installationId: string) => Promise<boolean | null>;
 }
 
@@ -645,6 +653,12 @@ async function landingModeAtHandOut(
     permissionsGranted: granted,
     landingKey: row.landingSessionId ?? null,
     openPullRequest: row.pullRequestOpen ? { headSha: row.openPullRequestHeadSha ?? null } : null,
+    // §3 rule 4 and §5.2: the owner's token is answered only after a v2 claim's synchronous PUSH report, so a legacy
+    // claim never lands as the owner.
+    pushAsMe: landing.pushAsMeDeclared === true
+      && row.progressProtocol === INTEGRATION_PROGRESS_V2_PROTOCOL
+      && row.workspaceLandingMode === 'PUSH_AS_ME'
+      && row.ownerGithubConnected === true,
   });
   const recorded = await prisma.projectIntegrationJob.updateMany({
     where: { id: row.id, state: 'RUNNING', claimGeneration: row.claimGeneration },
@@ -977,7 +991,12 @@ const HELD_CLAIM_COLUMNS = Prisma.sql`
         WHERE pr."landing_id" = j."landing_id" AND pr."state" IN ('OPENING', 'OPEN')
         LIMIT 1) AS "openPullRequestHeadSha",
       EXISTS (SELECT 1 FROM "github_pull_request" pr
-        WHERE pr."landing_id" = j."landing_id" AND pr."state" IN ('OPENING', 'OPEN')) AS "pullRequestOpen"`;
+        WHERE pr."landing_id" = j."landing_id" AND pr."state" IN ('OPENING', 'OPEN')) AS "pullRequestOpen",
+      -- §3 rule 4: the owner chose Push as me for this workspace, and their GitHub connection is one GitHub still
+      -- takes (a refused token or a spent refresh token stamps both expiries to the moment it was seen).
+      w."landing_mode" AS "workspaceLandingMode",
+      EXISTS (SELECT 1 FROM "github_connection" c
+        WHERE c."owner_id" = j."owner_id" AND c."refresh_expires_at" > now()) AS "ownerGithubConnected"`;
 
 /**
  * The claims this process holds and has gone silent on, to be handed to it again under the claim
@@ -2210,6 +2229,8 @@ export async function applyIntegrationJobResult(
         // docs/design/protected-branch-landing.md §4.2: how the attempt was handed out to land, and the pull request
         // it waits on.
         landVia: true, landingRef: true, pullRequestId: true,
+        // §5.2: the claim generation the owner's token was answered for, which a Push as me landing is judged by.
+        ownerTokenGeneration: true,
       },
     });
     if (!job) throw new IntegrationJobRefused('NOT_FOUND');
@@ -2765,6 +2786,9 @@ export async function applyIntegrationJobResult(
         ...promotionSessions,
       ]);
     }
+    // docs/design/protected-branch-landing.md §5.2: a landing the runner pushed with the owner's own token, as this
+    // claim was handed out to and as the credential door answered for it — never on the runner's word alone.
+    const pushedAs = state === 'LANDED' && !pullRequestEnd ? pushedAsOwnerOf(job, body) : null;
     const receiptIds = receiptState && session && !job.promotionId
       ? await MergeReceiptService.fromIntegrationJob(tx, {
         ownerId: job.ownerId,
@@ -2784,6 +2808,7 @@ export async function applyIntegrationJobResult(
         mainSyncSha: body.mainSyncSha ?? null,
         recoveryHeld,
         ...(pullRequestEnd ? { pullRequest: pullRequestReceipt(pullRequestEnd) } : {}),
+        ...(pushedAs ? { pushedAs } : {}),
       })
       : [];
     // The visible signal J-T5 owes a person when the line says it was handed a branch carrying
@@ -2877,6 +2902,7 @@ export async function applyIntegrationJobResult(
         ...(pullRequestEnd
           ? { pullRequest: pullRequestReceipt(pullRequestEnd), landedTreeSha: body.landedTreeSha ?? null }
           : {}),
+        ...(pushedAs ? { pushedAs } : {}),
       })
       : null;
     const promotionReceiptIds = promotion?.receiptIds ?? [];
