@@ -12,6 +12,7 @@ import {
 import { recordHttpRequest, resetHttpRequestMetrics } from '../common/http-request-metrics';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { resetFleetGauges } from './fleet-metrics';
 import { MetricsController, renderMetrics } from './metrics.controller';
 
@@ -89,8 +90,8 @@ test('the body carries the request histogram and the runner, session and task ga
   recordHttpRequest({ route: '/api/sessions/:id', method: 'GET', status: 200, durationSeconds: 0.02 });
   // Answers the fleet read alone; the Watch and wiki reads fail, and say so in their own up gauges.
   const prisma = {
-    $queryRaw: async (query: { strings?: readonly string[]; sql?: string }) => {
-      if (!(query.strings ?? [query.sql ?? '']).join('').includes('runner_state')) throw new Error('not this read');
+    $queryRaw: async (...args: unknown[]) => {
+      if (!renderRawQuery(args).text.includes('runner_state')) throw new Error('not this read');
       return [{
       runners_online: 2, runners_draining: 0, runners_silent: 1, runners_offline: 4, oldest_beat_age_seconds: 12,
       sessions_queued: 1, sessions_running: 2, tasks_queued: 0, tasks_running: 1,
