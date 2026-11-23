@@ -1,0 +1,45 @@
+$ cd src/macos/OrbitKit && DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer PATH=/usr/bin:$PATH swift test
+# environment: DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer PATH=/usr/bin:$PATH:/opt/homebrew/bin (exported by the runner script)
+# at b63cd16f7bf3ac0fee195b186ecb3b7e85a7b15b, 2026-11-23T21:41:44Z
+# last 40 lines:
+Test Suite 'WorktreeCommitToastWiringTests' passed at 2026-11-24 05:41:44.779.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.011 (0.011) seconds
+Test Suite 'WorktreeCommitsTests' started at 2026-11-24 05:41:44.779.
+Test Case '-[OrbitKitTests.WorktreeCommitsTests testACommitSaysWhenItsDiffsShowMoreThanItself]' started.
+Test Case '-[OrbitKitTests.WorktreeCommitsTests testACommitSaysWhenItsDiffsShowMoreThanItself]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.WorktreeCommitsTests testStatAndBase]' started.
+Test Case '-[OrbitKitTests.WorktreeCommitsTests testStatAndBase]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.WorktreeCommitsTests testTheBarAndTheSheetAreWiredToTheCommits]' started.
+Test Case '-[OrbitKitTests.WorktreeCommitsTests testTheBarAndTheSheetAreWiredToTheCommits]' passed (0.004 seconds).
+Test Case '-[OrbitKitTests.WorktreeCommitsTests testTheCountReadsAsTheWebDoes]' started.
+Test Case '-[OrbitKitTests.WorktreeCommitsTests testTheCountReadsAsTheWebDoes]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.WorktreeCommitsTests testTheDetailReadsTheBranchCommitsAndKeepsNullApart]' started.
+Test Case '-[OrbitKitTests.WorktreeCommitsTests testTheDetailReadsTheBranchCommitsAndKeepsNullApart]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.WorktreeCommitsTests testTheRunnersOwnCommitsAreLabelled]' started.
+Test Case '-[OrbitKitTests.WorktreeCommitsTests testTheRunnersOwnCommitsAreLabelled]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.WorktreeCommitsTests testTheSheetOpensOnCommitsOnlyWhenThereAreSome]' started.
+Test Case '-[OrbitKitTests.WorktreeCommitsTests testTheSheetOpensOnCommitsOnlyWhenThereAreSome]' passed (0.000 seconds).
+Test Suite 'WorktreeCommitsTests' passed at 2026-11-24 05:41:44.784.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.005 (0.005) seconds
+Test Suite 'WorktreeFileTests' started at 2026-11-24 05:41:44.784.
+Test Case '-[OrbitKitTests.WorktreeFileTests testFailuresDistinguishMissingOfflineTimeoutAndDeleted]' started.
+Test Case '-[OrbitKitTests.WorktreeFileTests testFailuresDistinguishMissingOfflineTimeoutAndDeleted]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.WorktreeFileTests testOtherReadErrorsOfferRetryAndReadableServerReason]' started.
+Test Case '-[OrbitKitTests.WorktreeFileTests testOtherReadErrorsOfferRetryAndReadableServerReason]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.WorktreeFileTests testOversizeErrorIsPreservedForThePreview]' started.
+Test Case '-[OrbitKitTests.WorktreeFileTests testOversizeErrorIsPreservedForThePreview]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.WorktreeFileTests testReadsExactRelativePathAndUnmodifiedBinaryBytesWithoutCache]' started.
+Test Case '-[OrbitKitTests.WorktreeFileTests testReadsExactRelativePathAndUnmodifiedBinaryBytesWithoutCache]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.WorktreeFileTests testSamePathIsReadAgainAndDoesNotReusePreviousBytes]' started.
+Test Case '-[OrbitKitTests.WorktreeFileTests testSamePathIsReadAgainAndDoesNotReusePreviousBytes]' passed (0.000 seconds).
+Test Suite 'WorktreeFileTests' passed at 2026-11-24 05:41:44.786.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'OrbitKitTests.xctest' passed at 2026-11-24 05:41:44.786.
+	 Executed 6040 tests, with 5 tests skipped and 0 failures (0 unexpected) in 49.975 (50.316) seconds
+Test Suite 'All tests' passed at 2026-11-24 05:41:44.787.
+	 Executed 6040 tests, with 5 tests skipped and 0 failures (0 unexpected) in 49.975 (50.317) seconds
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.
+exit=0

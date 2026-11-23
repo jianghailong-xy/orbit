@@ -1,0 +1,45 @@
+$ cd src/macos/OrbitApp && DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer PATH=/usr/bin:$PATH swift build
+# environment: DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer PATH=/usr/bin:$PATH:/opt/homebrew/bin (exported by the runner script)
+# at b63cd16f7bf3ac0fee195b186ecb3b7e85a7b15b, 2026-11-23T21:43:27Z
+# last 40 lines:
+/Users/long/.orbit/remote-subagents/352lJW0G0IPh9bvS2awvJ/tree/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:3373:41: [1;33mwarning: [1;39m'weak' ownership of capture 'self' differs from implicitly-captured strong reference in outer scope[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/implicit-strong-capture\ImplicitStrongCapture]8;;\]
+[0;36m3361 |[0;0m         guard let api else { return }
+[0;36m3362 |[0;0m         let name = agents?.agent(workspaceID)?.name
+[0;36m3363 |[0;0m         Task { @MainActor in
+     [0;36m|[0;0m              |- [1;39mnote: [1;39m'self' implicitly strongly captured here[0;0m
+     [0;36m|[0;0m              `- [1;39mnote: [1;39madd 'self' as a capture list item to silence[0;0m
+[0;36m3364 |[0;0m             do { _ = try await api.updateAgent(workspaceID, UpdateAgentRequest(enableWorktree: on)) }
+[0;36m3365 |[0;0m             catch {
+     [0;36m:[0;0m
+[0;36m3371 |[0;0m                 showToast(WorktreeBarLogic.worktreeIsolationOff(workspaceName: name),
+[0;36m3372 |[0;0m                           detail: WorktreeBarLogic.worktreeIsolationOffDetail, tone: .neutral,
+[0;36m3373 |[0;0m                           undo: { [weak self] in self?.setWorktreeIsolation(true, inWorkspace: workspaceID) },
+     [0;36m|[0;0m                                         |- [1;33mwarning: [1;39m'weak' ownership of capture 'self' differs from implicitly-captured strong reference in outer scope[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/implicit-strong-capture\ImplicitStrongCapture]8;;\]
+     [0;36m|[0;0m                                         `- [1;39mnote: [1;39mexplicitly assign the capture list item to silence[0;0m
+[0;36m3374 |[0;0m                           key: "keep-shared-\(workspaceID)")
+[0;36m3375 |[0;0m             }
+
+[#ImplicitStrongCapture]: <https://docs.swift.org/compiler/documentation/diagnostics/implicit-strong-capture>
+/Users/long/.orbit/remote-subagents/352lJW0G0IPh9bvS2awvJ/tree/src/macos/OrbitApp/Sources/OrbitApp/Views/MainView.swift:189:13: [1;33mwarning: [1;39minitialization of immutable value 'agents' was never used; consider replacing with assignment to '_' or removing it[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/no-usage\NoUsage]8;;\]
+[0;36m187 |[0;0m 
+[0;36m188 |[0;0m     var body: some View {
+[0;36m189 |[0;0m         let agents = model.agents
+    [0;36m|[0;0m             `- [1;33mwarning: [1;39minitialization of immutable value 'agents' was never used; consider replacing with assignment to '_' or removing it[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/no-usage\NoUsage]8;;\]
+[0;36m190 |[0;0m         // One read of the models, one snapshot: the work rows (the Wiki's visibility is DATA here),
+[0;36m191 |[0;0m         // the Workspaces rows and the open projects. Each area draws one ForEach over its rows.
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+/Users/long/.orbit/remote-subagents/352lJW0G0IPh9bvS2awvJ/tree/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:130:14: [1;33mwarning: [1;39m'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead.[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m128 |[0;0m                        value: spun)
+[0;36m129 |[0;0m             .onAppear { spun = running }
+[0;36m130 |[0;0m             .onChange(of: running) { spun = $0 }
+    [0;36m|[0;0m              `- [1;33mwarning: [1;39m'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead.[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m131 |[0;0m     }
+[0;36m132 |[0;0m }
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[301 / 305] OrbitApp-product
+[303 / 305] OrbitApp-product
+[304 / 305] OrbitApp-product
+Build complete! (96.00 sec)
+exit=0

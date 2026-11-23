@@ -1,0 +1,45 @@
+$ cd src/ios && xcodegen generate && xcodebuild -project Orbit.xcodeproj -scheme Orbit -destination 'platform=iOS Simulator,id=5DC6920A-2A6D-45BA-84E4-EAAD1A637CD6' -derivedDataPath /tmp/dd-352 build
+# environment: DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer PATH=/usr/bin:$PATH:/opt/homebrew/bin (exported by the runner script)
+# at b63cd16f7bf3ac0fee195b186ecb3b7e85a7b15b, 2026-11-23T21:44:44Z
+# last 40 lines:
+    builtin-infoPlistUtility /Users/long/.orbit/remote-subagents/352lJW0G0IPh9bvS2awvJ/tree/src/ios/Support/Info.plist -producttype com.apple.product-type.application -genpkginfo /tmp/dd-352/Build/Products/Debug-iphonesimulator/Orbit.app/PkgInfo -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /tmp/dd-352/Build/Intermediates.noindex/Orbit.build/Debug-iphonesimulator/Orbit.build/assetcatalog_generated_info.plist -scanforprivacyfile /tmp/dd-352/Build/Products/Debug-iphonesimulator/Orbit.app/PlugIns/OrbitShare.appex -o /tmp/dd-352/Build/Products/Debug-iphonesimulator/Orbit.app/Info.plist
+
+CodeSign /tmp/dd-352/Build/Products/Debug-iphonesimulator/Orbit.app/Orbit.debug.dylib (in target 'Orbit' from project 'Orbit')
+    cd /Users/long/.orbit/remote-subagents/352lJW0G0IPh9bvS2awvJ/tree/src/ios
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /tmp/dd-352/Build/Products/Debug-iphonesimulator/Orbit.app/Orbit.debug.dylib
+
+CodeSign /tmp/dd-352/Build/Products/Debug-iphonesimulator/Orbit.app/__preview.dylib (in target 'Orbit' from project 'Orbit')
+    cd /Users/long/.orbit/remote-subagents/352lJW0G0IPh9bvS2awvJ/tree/src/ios
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /tmp/dd-352/Build/Products/Debug-iphonesimulator/Orbit.app/__preview.dylib
+/tmp/dd-352/Build/Products/Debug-iphonesimulator/Orbit.app/__preview.dylib: replacing existing signature
+
+CodeSign /tmp/dd-352/Build/Products/Debug-iphonesimulator/Orbit.app (in target 'Orbit' from project 'Orbit')
+    cd /Users/long/.orbit/remote-subagents/352lJW0G0IPh9bvS2awvJ/tree/src/ios
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /tmp/dd-352/Build/Intermediates.noindex/Orbit.build/Debug-iphonesimulator/Orbit.build/Orbit.app.xcent --timestamp\=none --generate-entitlement-der /tmp/dd-352/Build/Products/Debug-iphonesimulator/Orbit.app
+
+ValidateEmbeddedBinary /tmp/dd-352/Build/Products/Debug-iphonesimulator/Orbit.app/PlugIns/OrbitShare.appex (in target 'Orbit' from project 'Orbit')
+    cd /Users/long/.orbit/remote-subagents/352lJW0G0IPh9bvS2awvJ/tree/src/ios
+    /Applications/Xcode.app/Contents/Developer/usr/bin/embeddedBinaryValidationUtility /tmp/dd-352/Build/Products/Debug-iphonesimulator/Orbit.app/PlugIns/OrbitShare.appex -signing-cert - -info-plist-path /tmp/dd-352/Build/Products/Debug-iphonesimulator/Orbit.app/Info.plist
+
+Validate /tmp/dd-352/Build/Products/Debug-iphonesimulator/Orbit.app (in target 'Orbit' from project 'Orbit')
+    cd /Users/long/.orbit/remote-subagents/352lJW0G0IPh9bvS2awvJ/tree/src/ios
+    builtin-validationUtility /tmp/dd-352/Build/Products/Debug-iphonesimulator/Orbit.app -shallow-bundle -infoplist-subpath Info.plist
+
+PruneExplicitPrecompiledModules /tmp/dd-352/SDKExplicitPrecompiledModules
+
+PruneExplicitPrecompiledModules /tmp/dd-352/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules
+
+PruneExplicitPrecompiledModules /tmp/dd-352/Build/Intermediates.noindex/ExplicitPrecompiledModules
+
+** BUILD SUCCEEDED **
+
+exit=0
