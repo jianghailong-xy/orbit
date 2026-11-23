@@ -2,7 +2,8 @@ import Foundation
 import XCTest
 @testable import OrbitKit
 
-/// macOS puts a new folder where the server makes it: `MachineSetup.newFolderRootFor` and `newFolderPath` held to
+/// macOS puts a new folder and a clone where the server makes them: `MachineSetup.newFolderRootFor`, `cloneRootFor` and
+/// `newFolderPath` held to
 /// src/shared/src/new-folder-root.fixture.json, the file @orbit/shared, the server and Android are held to as well.
 /// A missing file fails, never skips.
 final class NewFolderRootFixtureTests: XCTestCase {
@@ -24,6 +25,16 @@ final class NewFolderRootFixtureTests: XCTestCase {
             let root = MachineSetup.newFolderRootFor(managed: runner["managed"] as? Bool ?? false,
                                                      reposRoot: runner["reposRoot"] as? String,
                                                      capabilities: runner["capabilities"] as? [String])
+            XCTAssertEqual(root, entry["root"] as? String, name)
+            XCTAssertEqual(root.map { MachineSetup.newFolderPath(root: $0, name: "app") }, entry["path"] as? String, name)
+        }
+        let clones = try XCTUnwrap(fixture["clones"] as? [[String: Any]])
+        XCTAssertGreaterThanOrEqual(clones.count, 6)
+        for entry in clones {
+            let name = entry["name"] as? String ?? "?"
+            let runner = try XCTUnwrap(entry["runner"] as? [String: Any], name)
+            let root = MachineSetup.cloneRootFor(reposRoot: runner["reposRoot"] as? String,
+                                                 capabilities: runner["capabilities"] as? [String])
             XCTAssertEqual(root, entry["root"] as? String, name)
             XCTAssertEqual(root.map { MachineSetup.newFolderPath(root: $0, name: "app") }, entry["path"] as? String, name)
         }
