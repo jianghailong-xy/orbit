@@ -737,11 +737,65 @@ services:
     expose:
       - "9187"
 
+  # Grafana (docs/self-hosting.md, "Monitoring"): the dashboards, with Prometheus provisioned as its one data source. It
+  # is published on this host's loopback alone, never on the web gateway or the Orbit origin: a script served from that
+  # origin can read the login token in the browser's localStorage, so Grafana, which can run scripts of its own
+  # making, never shares it. Reach it by SSH tunnel, or from a hostname of your own that is not the Orbit origin. The
+  # admin password is GRAFANA_ADMIN_PASSWORD in .env, which a fresh install and the upgrade script generate; with
+  # none, the container refuses to start rather than fall back to Grafana's own default. Sign-up, creating
+  # organizations and anonymous access are off.
+  grafana:
+    profiles: [monitoring]
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}${ORBIT_GRAFANA_IMAGE:-grafana/grafana:12.2.0@sha256:74144189b38447facf737dfd0f3906e42e0776212bf575dc3334c3609183adf7}
+    container_name: orbit-grafana
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 384m
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    entrypoint:
+      - /bin/sh
+      - -c
+      - '[ -n "$$GF_SECURITY_ADMIN_PASSWORD" ] || { echo "GRAFANA_ADMIN_PASSWORD is not set in .env" >&2; exit 1; }; exec /run.sh'
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_ALLOW_ORG_CREATE: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_LOG_MODE: console
+      GF_SERVER_HTTP_ADDR: 0.0.0.0
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:${GRAFANA_PORT:-3030}/}
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    volumes:
+      - ./deploy/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    tmpfs:
+      - /tmp
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3030}:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
 volumes:
   # Only the Postgres socket directory: the archive itself is a bind mount under ./data
   # so backups are visible (and copyable off the host) without docker.
   pg-socket:
-  # The monitoring profile's: Prometheus's time series, and the password postgres-exporter signs in with, which
-  # pg-monitor-role generates once (docs/self-hosting.md, "Monitoring").
+  # The monitoring profile's: Prometheus's time series, the password postgres-exporter signs in with, which
+  # pg-monitor-role generates once (docs/self-hosting.md, "Monitoring"), and Grafana's database.
   prometheus-data:
   pg-monitor-secret:
+  grafana-data:

@@ -242,13 +242,15 @@ const PROMETHEUS = 'prometheus';
 const NODE_EXPORTER = 'node-exporter';
 const PG_MONITOR_ROLE = 'pg-monitor-role';
 const POSTGRES_EXPORTER = 'postgres-exporter';
-const MONITORING = [PROMETHEUS, NODE_EXPORTER, PG_MONITOR_ROLE, POSTGRES_EXPORTER];
+const GRAFANA = 'grafana';
+const MONITORING = [PROMETHEUS, NODE_EXPORTER, PG_MONITOR_ROLE, POSTGRES_EXPORTER, GRAFANA];
 // Each image by version and index digest, the default its ORBIT_*_IMAGE variable falls back to.
 const PROMETHEUS_IMAGE = 'prom/prometheus:v3.16.0@sha256:e04987641b57704f408e31f6373ba4138ecf27cb4a165d24aabb6c38fddd0f06';
 const NODE_EXPORTER_IMAGE = 'prom/node-exporter:v1.13.1@sha256:7296504d4ada44b7d7ab4431e27e9f9900d8488f8d55842f4b12ae2704e16dfe';
 const POSTGRES_EXPORTER_IMAGE = 'prometheuscommunity/postgres-exporter:v0.21.1@sha256:3b8e05a84282cd1199ad2fb6c66f362738bf4c68c1547d8f4226a34a7dd6d8d7';
 // Its two named volumes, the last lines of the file, and the comment above them.
-const MONITORING_VOLUMES = ['  prometheus-data:', '  pg-monitor-secret:'];
+const GRAFANA_IMAGE = 'grafana/grafana:12.2.0@sha256:74144189b38447facf737dfd0f3906e42e0776212bf575dc3334c3609183adf7';
+const MONITORING_VOLUMES = ['  prometheus-data:', '  pg-monitor-secret:', '  grafana-data:'];
 // pg-monitor-role is the one approved addition that is not resident: it runs once each time the profile comes up.
 const ONE_SHOT = [PG_MONITOR_ROLE];
 const APPROVED_ADDITIONS = [WIKI_WORKER, DOCKER_CHANNEL, MANAGED_RUNNER_FIREWALL, LINK_GATEWAY, NATS, ...MONITORING];
@@ -347,7 +349,7 @@ test('the approved configuration commits still have exactly the five surviving s
 
 test('(a) Compose declares exactly the five surviving services, the wiki worker, the Docker channel, the managed runners\' firewall, the runner link gateway, its NATS and the monitoring profile\'s four', () => {
   assert.deepEqual([...currentServices.keys()].sort(), [...EXPECTED_SERVICES, ...APPROVED_ADDITIONS].sort());
-  assert.equal(currentServices.size, 14);
+  assert.equal(currentServices.size, 15);
 });
 
 test('(b) no removed sidecar is named anywhere in Compose', () => {
@@ -388,7 +390,7 @@ test('(c) nothing was added back: no new service, no new always-on process, no i
     [NATS, [`    profiles: [${LINK_PROFILE}]`]],
     ...MONITORING.map((name) => [name, [`    profiles: [${MONITORING_PROFILE}]`]]),
   ]);
-  assert.equal(current.match(/^\s+profiles:/gm).length, 8);
+  assert.equal(current.match(/^\s+profiles:/gm).length, 9);
   assert.doesNotMatch(current, /^\s+restart: (on-failure|always)$/m);
   assert.doesNotMatch(current, /\bexecutable-acceptance-dead-man\b/);
 });
@@ -425,7 +427,8 @@ test('(s) the two-stage release names each image through variables, and changes 
       `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_PROMETHEUS_IMAGE:-${PROMETHEUS_IMAGE}}`,
       `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_NODE_EXPORTER_IMAGE:-${NODE_EXPORTER_IMAGE}}`,
       '    image: postgres:16-alpine',
-      `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_POSTGRES_EXPORTER_IMAGE:-${POSTGRES_EXPORTER_IMAGE}}`]);
+      `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_POSTGRES_EXPORTER_IMAGE:-${POSTGRES_EXPORTER_IMAGE}}`,
+      `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_GRAFANA_IMAGE:-${GRAFANA_IMAGE}}`]);
 });
 
 /** What Compose acts on: comments and blank lines document a block, they cannot run a process. */
@@ -1267,13 +1270,33 @@ test('(t) every monitoring service has a memory limit, logs like the rest, and p
     const block = services(current).get(name);
     assert.match(block, /^ {4}mem_limit: \d+[mg]$/m, `${name} has no memory limit`);
     assert.match(block, /^ {4}logging: \*logging$/m, `${name} does not rotate its log`);
-    assert.doesNotMatch(block, /^ {4}(ports|network_mode|pid|privileged|cap_add):/m, `${name} publishes a port or widens its sandbox`);
+    assert.doesNotMatch(block, /^ {4}(network_mode|pid|privileged|cap_add):/m, `${name} widens its sandbox`);
+    // Grafana alone publishes a port, on this host's loopback.
+    if (name !== GRAFANA) assert.doesNotMatch(block, /^ {4}ports:/m, `${name} publishes a port`);
   }
 });
 
-test('(t) the monitoring profile adds exactly two named volumes, and the file ends with them', () => {
+// Grafana is never on the Orbit origin (the task of 2026-11-23, "Grafana on loopback"): the web app keeps its login token
+// in localStorage, and a script served from the same origin can read it. So its one published port is on 127.0.0.1, with
+// no location for it in either nginx configuration, and it cannot start with Grafana's default password.
+test('(t) Grafana is published on 127.0.0.1 only, is on no nginx route, and signs nobody up or in without the generated password', () => {
+  const block = currentServices.get(GRAFANA);
+  assert.deepEqual([...block.matchAll(/^ {4}ports:\n((?: {6}- .*\n)+)/gm)].map((m) => m[1].trim()),
+    ['- "127.0.0.1:${GRAFANA_PORT:-3030}:3000"']);
+  for (const file of ['gateway/nginx.conf', 'src/web/nginx.conf']) {
+    assert.doesNotMatch(readFileSync(path.join(repo, file), 'utf8'), /grafana/i, `${file} routes to Grafana`);
+  }
+  for (const [name, value] of [['GF_USERS_ALLOW_SIGN_UP', 'false'], ['GF_AUTH_ANONYMOUS_ENABLED', 'false']]) {
+    assert.match(block, new RegExp(`^ {6}${name}: "${value}"$`, 'm'));
+  }
+  assert.match(block, /^ {6}GF_SECURITY_ADMIN_PASSWORD: \$\{GRAFANA_ADMIN_PASSWORD:-\}$/m);
+  assert.match(block, /\[ -n "\$\$GF_SECURITY_ADMIN_PASSWORD" \] \|\|/, 'Grafana starts with no password');
+  assert.match(block, /^ {4}mem_limit: \d+m$/m);
+});
+
+test('(t) the monitoring profile adds exactly three named volumes, and the file ends with them', () => {
   assert.ok(asWritten.endsWith(`${MONITORING_VOLUMES.join('\n')}\n`), 'docker-compose.yml no longer ends with the monitoring volumes');
-  assert.deepEqual([...asWritten.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)].map((m) => m[1]).slice(-3), ['pg-socket', 'prometheus-data', 'pg-monitor-secret']);
+  assert.deepEqual([...asWritten.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)].map((m) => m[1]).slice(-4), ['pg-socket', 'prometheus-data', 'pg-monitor-secret', 'grafana-data']);
 });
 
 test('(t) Prometheus scrapes the apiservers by their shared name on the internal listener, and the link gateway by its own name', () => {
