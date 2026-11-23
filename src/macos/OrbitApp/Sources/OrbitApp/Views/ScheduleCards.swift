@@ -380,27 +380,27 @@ struct ScheduleRunStripView: View {
 ///   * ③ Queued · runner full: the queue's sentence, the wait and when it gives up; Cancel run and Open schedule.
 ///   * ④ Started on try N: why this try stopped; Open the run, to the session the run went on in.
 struct ScheduleRunStatusCardView: View {
-    @Environment(AppModel.self) private var appModel
-    let console: ConsoleModel
+    /// The four doors the card offers; the owner of the card says what each does (and answers a refusal's sentence).
+    enum Door { case runNow, openSchedule, cancelRun, openRun }
+
     let run: ScheduleRunView
     let status: ScheduleRunSessionStatus
     let kind: ScheduleRunStatus.Kind
+    /// The machine and the engine of this session, named in the card's sentences.
+    let runner: String?
+    let engine: String
+    let perform: (Door) async -> String?
     @State private var busy = false
     @State private var said: String?
 
     private typealias A = ScheduleRunStatusCopy.Actions
-
-    private var runner: String { console.runnerName ?? "" }
-    private var engine: String {
-        ProviderEngines.names.first { $0.engine == console.engine }?.name ?? console.engine
-    }
 
     var body: some View {
         let zone = TimeZone.current.identifier
         VStack(alignment: .leading, spacing: 10) {
             switch kind {
             case .didntRun:
-                let text = ScheduleRunStatus.didntRunText(run: run, status: status, runner: runner, now: Date(), timezone: zone)
+                let text = ScheduleRunStatus.didntRunText(run: run, status: status, runner: runner ?? "", now: Date(), timezone: zone)
                 title(text.title, tone: .secondary)
                 body(text.reason)
                 HStack(spacing: 6) {
@@ -413,28 +413,27 @@ struct ScheduleRunStatusCardView: View {
                 if let gaveUp = text.gaveUp { meta(gaveUp) }
                 if let next = text.next { meta(next) }
                 doors {
-                    door(A.runNow, primary: true) { await appModel.scheduled?.runNow(run.scheduleId) }
-                    door(A.openSchedule) { appModel.openSchedule(run.scheduleId); return nil }
+                    door(A.runNow, primary: true) { await perform(.runNow) }
+                    door(A.openSchedule) { await perform(.openSchedule) }
                 }
             case .queuedFull:
                 if let gate = status.queue {
-                    let text = ScheduleRunStatus.queuedText(gate: gate, machine: console.runnerName, now: Date(), timezone: zone)
+                    let text = ScheduleRunStatus.queuedText(gate: gate, machine: runner, now: Date(), timezone: zone)
                     title(text.title, tone: .scheduleWarn)
                     body(text.body)
                     meta(text.waited)
                     doors {
-                        door(A.cancelRun) { await appModel.scheduled?.stop(runID: run.id, scheduleID: run.scheduleId) }
-                        door(A.openSchedule) { appModel.openSchedule(run.scheduleId); return nil }
+                        door(A.cancelRun) { await perform(.cancelRun) }
+                        door(A.openSchedule) { await perform(.openSchedule) }
                     }
                 }
             case .startedOn:
-                if let text = ScheduleRunStatus.startedOnText(run: run, status: status, engine: engine, runner: runner,
-                                                               timezone: zone),
-                   let current = run.sessionId {
+                if let text = ScheduleRunStatus.startedOnText(run: run, status: status, engine: engine, runner: runner ?? "",
+                                                               timezone: zone), run.sessionId != nil {
                     title(text.title, tone: .green)
                     body(text.body)
                     doors {
-                        door(A.openRun, primary: true) { appModel.openScheduleRun(sessionID: current); return nil }
+                        door(A.openRun, primary: true) { await perform(.openRun) }
                     }
                 }
             }
@@ -486,7 +485,6 @@ struct ScheduleRunStatusCardView: View {
         busy = true
         Task { @MainActor in
             said = await action()
-            await console.refreshScheduleCards(force: true)
             busy = false
         }
     }
@@ -563,7 +561,22 @@ struct ScheduleConsoleCard: View {
                 let card = console.scheduleRunCard
                 ScheduleRunStripView(schedule: found.schedule, run: found.run, notStarted: card != nil)
                 if let card, let status = console.scheduleCards?.runStatus {
-                    ScheduleRunStatusCardView(console: console, run: found.run, status: status, kind: card)
+                    ScheduleRunStatusCardView(
+                        run: found.run, status: status, kind: card, runner: console.runnerName,
+                        engine: ProviderEngines.names.first { $0.engine == console.engine }?.name ?? console.engine,
+                        perform: { door in
+                            let said: String?
+                            switch door {
+                            case .runNow: said = await appModel.scheduled?.runNow(found.run.scheduleId)
+                            case .cancelRun: said = await appModel.scheduled?.stop(runID: found.run.id, scheduleID: found.run.scheduleId)
+                            case .openSchedule: appModel.openSchedule(found.run.scheduleId); said = nil
+                            case .openRun:
+                                if let session = found.run.sessionId { appModel.openScheduleRun(sessionID: session) }
+                                said = nil
+                            }
+                            await console.refreshScheduleCards(force: true)
+                            return said
+                        })
                 }
             }
         case .scheduleRunReport:
