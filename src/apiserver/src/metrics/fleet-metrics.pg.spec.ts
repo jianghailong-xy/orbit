@@ -98,12 +98,13 @@ test('the fleet gauges count runners by state, queued and running sessions and t
       if (extra.task) {
         task = randomUUID();
         await sql.query(
-          `INSERT INTO task (id, title, owner_id, creator_type, creator_id, updated_at) VALUES ($1, 'fleet', $2, 'USER', $2, now())`,
+          `INSERT INTO task (id, title, owner_id, creator_type, creator_id, completion_criterion, updated_at) VALUES ($1, 'fleet', $2, 'USER', $2, 'OWNER_CONFIRMED', now())`,
           [task, owner]);
       }
       await sql.query(
-        `INSERT INTO "session" ("id", "provider", "owner_id", "status", "task_id", "starts_task_work", "deleted_at", "running_bg_jobs")
-         VALUES ($1, 'claude', $2, $3::run_status, $4, $5, ${extra.deleted ? 'now()' : 'NULL'}, $6)`,
+        `INSERT INTO "session" ("id", "title", "prompt", "creator_id", "provider", "owner_id", "status", "task_id", "starts_task_work", "deleted_at", "running_bg_jobs", "updated_at", "finished_at")
+         VALUES ($1, 'fleet', 'fleet', $2, 'claude', $2, $3::run_status, $4, $5, ${extra.deleted ? 'now()' : 'NULL'}, $6, now(),
+                 CASE WHEN $3 IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
         [randomUUID(), owner, status, task, extra.task ?? false, extra.bgJob ? ['bgj_fleet'] : []]);
     };
     await session('PENDING');
