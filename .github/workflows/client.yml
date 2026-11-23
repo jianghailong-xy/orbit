@@ -55,6 +55,10 @@ on:
         description: "Also run the iOS http://ip ATS probe (simulator, A/B against no ATS keys)"
         type: boolean
         default: false
+      list_order_probe:
+        description: "Also photograph the iPhone session list before/after the listedAt order change"
+        type: boolean
+        default: false
 
 concurrency:
   group: client-${{ github.ref }}
@@ -411,3 +415,97 @@ jobs:
           git commit -q -m "macOS runtime crash gate for ${{ github.sha }} (run ${{ github.run_id }})"
           git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
             results:refs/heads/probe/macos-runtime-results
+
+  # The session list's order is a thing only a picture shows: the real CompactShell, against a stub
+  # with five running sessions and one asking a question, photographed as first served and again
+  # after activity-only changes. `before` is the tree without the listedAt change (BEFORE_SHA),
+  # `after` the dispatched ref. Off by default like the probes above; pictures go to
+  # `probe/list-order-shots-results`, the branch a plain clone can read.
+  list-order-shots:
+    name: Session list order probe (iPhone, before and after)
+    if: github.event_name == 'workflow_dispatch' && inputs.list_order_probe
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      BEFORE_SHA: be4a41a4d1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Stage the harness in both trees
+        run: |
+          git worktree add ../before "$BEFORE_SHA"
+          for tree in . ../before; do
+            mkdir -p "$tree/.lo-probe"
+            cp -R docs/evidence/session-list-order/probe-harness/. "$tree/.lo-probe/"
+          done
+      - name: Photograph before
+        id: before
+        continue-on-error: true
+        run: |
+          cd ../before
+          OUT="$GITHUB_WORKSPACE/shots/before" bash .lo-probe/run.sh 2>&1 | tee "$GITHUB_WORKSPACE/before-run.log"
+          exit "${PIPESTATUS[0]}"
+      - name: Photograph after
+        id: after
+        continue-on-error: true
+        run: |
+          OUT="$GITHUB_WORKSPACE/shots/after" bash .lo-probe/run.sh 2>&1 | tee "$GITHUB_WORKSPACE/after-run.log"
+          exit "${PIPESTATUS[0]}"
+      - name: Keep the outcomes beside the shots
+        if: always()
+        run: |
+          mkdir -p shots
+          cp before-run.log after-run.log shots/ 2>/dev/null || true
+          echo "before=${{ steps.before.outcome }}" > shots/outcomes.txt
+          echo "after=${{ steps.after.outcome }}" >> shots/outcomes.txt
+          echo "sha=${{ github.sha }}" >> shots/outcomes.txt
+          echo "before_sha=$BEFORE_SHA" >> shots/outcomes.txt
+          echo "run=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> shots/outcomes.txt
+          find shots -name 'xcodebuild-*.log' -size +20M -exec gzip -9 {} \;
+          rm -rf shots/*/attachments
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: list-order-shots
+          path: shots
+          include-hidden-files: true
+      - name: Fail as the captures did
+        if: steps.before.outcome != 'success' || steps.after.outcome != 'success'
+        run: exit 1
+
+  list-order-publish:
+    name: Push the list-order shots where a clone can read them
+    needs: [list-order-shots]
+    if: always() && github.event_name == 'workflow_dispatch' && inputs.list_order_probe
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: out
+      - name: Push to probe/list-order-shots-results
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd out
+          {
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "sha: ${{ github.sha }}"
+            echo "shots: ${{ needs.list-order-shots.result }}"
+          } > RESULTS.txt
+          git init -q
+          git config user.name "orbit-probe"
+          git config user.email "probe@orbit.invalid"
+          git checkout -q -b results
+          git add -A
+          git commit -q -m "list-order probe results for ${{ github.sha }} (run ${{ github.run_id }})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
+            results:refs/heads/probe/list-order-shots-results
