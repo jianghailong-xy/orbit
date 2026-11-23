@@ -399,7 +399,8 @@ func driveToolDescriptors(obj func(map[string]interface{}, ...string) map[string
 		{
 			"name": "drive_put",
 			"description": "Copy a local file into the owner's Orbit Files drive. Creates missing parent folders and " +
-				"keeps the previous version when overwriting a file. Returns an orbit-drive: link for replies.",
+				"keeps the previous version when overwriting a file. Returns an orbit-drive: link for replies. The file is " +
+				"sent in 8 MiB chunks and has no size limit: file_upload's 25 MiB cap does not apply here.",
 			"inputSchema": obj(map[string]interface{}{
 				"localPath": map[string]interface{}{"type": "string", "description": "A file in this session's checkout or uploads directory."},
 				"path":      drivePath,

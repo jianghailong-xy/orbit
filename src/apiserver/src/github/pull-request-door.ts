@@ -4,10 +4,6 @@ import type { GithubPullRequestCheck, GithubPullRequestReading } from './github-
 /**
  * What one read of a pull request decides (docs/design/protected-branch-landing.md §4.3), as a pure function of the row
  * and GitHub's whole answer: Orbit acts on what GitHub says when it is asked, never on a webhook's payload.
- *
- * The failure transitions — a required check that failed (J-T16), a target that moved (J-T17), a pull request closed on
- * GitHub (J-T19) or one whose head Orbit did not push (J-T20) — are decided here and acted on by the failure-path task.
- * Until it lands, each of them leaves the landing waiting with the condition GitHub reported, which the clients show.
  */
 export type PullRequestDecision =
   /** GitHub says it merged, Orbit's merge or a person's: check the result, then land (J-T15). */
@@ -18,8 +14,17 @@ export type PullRequestDecision =
   | { kind: 'CLOSED' }
   /** The head is not the commit Orbit pushed (J-T20): Orbit merges only what it checked. */
   | { kind: 'HEAD_CHANGED' }
-  /** Nothing to do until GitHub says something else: the checks, a review, GitHub working out mergeability — or a
-   *  failure transition the failure-path task acts on. */
+  /** A required check on the head failed (J-T16): these, in GitHub's order. */
+  | { kind: 'CHECK_FAILED'; failed: GithubPullRequestCheck[] }
+  /**
+   * The target moved under the head (J-T17): GitHub says the pull request is behind (the repository requires
+   * up-to-date branches) or conflicting, or it could merge but the base tip is not the one the head was built on. A
+   * catch-up: the next attempt rebuilds on the new tip and updates the same pull request, and it is not counted
+   * against J-T13's three or `AUTOMATIC_MERGE_ATTEMPTS` (§4.5). The one GitHub's merge call refuses for it is decided
+   * where that call is made, and is counted.
+   */
+  | { kind: 'TARGET_MOVED' }
+  /** Nothing to do until GitHub says something else: the checks, a review, GitHub working out mergeability. */
   | { kind: 'WAIT' };
 
 /** The row facts a decision reads. */
@@ -46,10 +51,11 @@ export function decidePullRequest(row: PullRequestFacts, reading: GithubPullRequ
   if (reading.merged || reading.state === 'MERGED') return verdict({ kind: 'MERGED' }, null);
   if (reading.state === 'CLOSED') return verdict({ kind: 'CLOSED' }, null);
   if (!row.headSha || reading.headSha !== row.headSha) return verdict({ kind: 'HEAD_CHANGED' }, null);
-  if (required.some((check) => check.state === 'FAILED')) return verdict({ kind: 'WAIT' }, 'CHECK_FAILED');
+  const failed = required.filter((check) => check.state === 'FAILED');
+  if (failed.length > 0) return verdict({ kind: 'CHECK_FAILED', failed }, 'CHECK_FAILED');
   if (reading.mergeQueueEnabled || reading.inMergeQueue) return verdict({ kind: 'WAIT' }, 'MERGE_QUEUE');
-  if (reading.mergeStateStatus === 'BEHIND') return verdict({ kind: 'WAIT' }, 'BEHIND');
-  if (reading.mergeable === 'CONFLICTING' || reading.mergeStateStatus === 'DIRTY') return verdict({ kind: 'WAIT' }, 'CONFLICTING');
+  if (reading.mergeStateStatus === 'BEHIND') return verdict({ kind: 'TARGET_MOVED' }, 'BEHIND');
+  if (reading.mergeable === 'CONFLICTING' || reading.mergeStateStatus === 'DIRTY') return verdict({ kind: 'TARGET_MOVED' }, 'CONFLICTING');
   if (reading.reviewDecision === 'CHANGES_REQUESTED') return verdict({ kind: 'WAIT' }, 'CHANGES_REQUESTED');
   if (required.some((check) => check.state === 'PENDING')) return verdict({ kind: 'WAIT' }, 'CHECKS_PENDING');
   if (reading.reviewDecision === 'REVIEW_REQUIRED') return verdict({ kind: 'WAIT' }, 'REVIEW_REQUIRED');
@@ -58,7 +64,7 @@ export function decidePullRequest(row: PullRequestFacts, reading: GithubPullRequ
     // is J-T17's to rebuild on, in a repository that does not require up-to-date branches as in one that does.
     return reading.baseSha && reading.baseSha === row.baseSha
       ? verdict({ kind: 'MERGE' }, 'MERGEABLE')
-      : verdict({ kind: 'WAIT' }, 'BEHIND');
+      : verdict({ kind: 'TARGET_MOVED' }, 'BEHIND');
   }
   // BLOCKED with no failing or pending required check and no review asked for: GitHub is waiting on a required check
   // that has not reported yet. DRAFT and UNKNOWN: GitHub has not worked it out.
@@ -93,4 +99,9 @@ export function mergeMethodFor(
 export function mergeMethodRefused(message: string | null): boolean {
   const said = (message ?? '').toLowerCase();
   return said.includes('not allowed') || said.includes('merge commit') || said.includes('linear history');
+}
+
+/** Whether GitHub's 405 to a merge says the base moved since Orbit read it (J-T17, counted, §4.5). */
+export function mergeRefusedForMovedBase(message: string | null): boolean {
+  return (message ?? '').toLowerCase().includes('base branch was modified');
 }

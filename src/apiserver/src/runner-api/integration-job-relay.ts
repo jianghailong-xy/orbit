@@ -56,6 +56,7 @@ import {
   openItemKindForJobState,
   pushBoundaryPassed,
   queueLandingBehindTheWork,
+  queueLandingRetry,
   queueBaselineHeld,
   queueSkippedLandingAfterStop,
   shortBranchName,
@@ -2113,9 +2114,12 @@ export interface IntegrationResultAftermath {
 }
 
 /**
- * Set only by the pull request door (docs/design/protected-branch-landing.md §4.2 J-T15): GitHub merged the attempt's
- * pull request — Orbit's merge or a person's on GitHub — and the server, not a runner, writes the landing. The job is
- * `PULL_REQUEST` and names this pull request; the receipts say `SERVER` and name it too.
+ * Set only by the pull request door (docs/design/protected-branch-landing.md §4.2): GitHub answered about the attempt's
+ * pull request and the server, not a runner, ends the attempt. J-T15: it merged — Orbit's merge or a person's on
+ * GitHub — and the landing is written, its receipts saying `SERVER` and naming it. J-T16: a required check failed
+ * (`CHECK_FAILED`, the GitHub check in `checks`). J-T17: the target moved (`ERROR / TARGET_MOVED`, `catchUp`). J-T19:
+ * it was closed on GitHub (`ERROR / PULL_REQUEST_CLOSED`, `closedBy`). J-T20: its head is not Orbit's push
+ * (`ERROR / PULL_REQUEST_HEAD_CHANGED`). The job is `PULL_REQUEST` and names this pull request.
  */
 export interface IntegrationJobPullRequestEnd {
   pullRequestId: string;
@@ -2123,6 +2127,22 @@ export interface IntegrationJobPullRequestEnd {
   url: string;
   mergeMethod: string | null;
   mergedBy: string | null;
+  /** J-T17: the next attempt is queued in this transaction; `counted` for a merge GitHub refused because the base
+   *  moved (§4.5), not for a catch-up. */
+  catchUp?: { counted: boolean };
+  /** J-T19: who closed it on GitHub. */
+  closedBy?: string | null;
+}
+
+/** What the pull request door may end an attempt as, beside J-T15's LANDED (§4.2). */
+function pullRequestEndRefusal(state: string, errorCode: string | null | undefined, end: IntegrationJobPullRequestEnd): string | null {
+  if (state === 'LANDED' || state === 'CHECK_FAILED') return end.catchUp ? 'only a moved target catches up' : null;
+  if (state !== 'ERROR') return 'the pull request door writes a landing or one of its failures, and nothing else';
+  if (errorCode === 'TARGET_MOVED') return end.catchUp ? null : 'a moved target names its catch-up';
+  if (errorCode === 'PULL_REQUEST_CLOSED' || errorCode === 'PULL_REQUEST_HEAD_CHANGED') {
+    return end.catchUp ? 'only a moved target catches up' : null;
+  }
+  return `the pull request door does not end an attempt with ${errorCode ?? 'no error code'}`;
 }
 
 /**
@@ -2159,8 +2179,11 @@ export async function applyIntegrationJobResult(
   if (!REPORTABLE_JOB_STATES.includes(state as never) || (!isTerminalJobState(state) && !waitsOnPullRequest)) {
     throw new IntegrationJobRefused('INVALID_RESULT', `${state} is not a result`);
   }
-  if (pullRequestEnd && state !== 'LANDED') {
-    throw new IntegrationJobRefused('INVALID_RESULT', 'the pull request door writes a landing and nothing else');
+  const pullRequestMisfit = pullRequestEnd ? pullRequestEndRefusal(state, body.errorCode, pullRequestEnd) : null;
+  if (pullRequestMisfit) throw new IntegrationJobRefused('INVALID_RESULT', pullRequestMisfit);
+  // A required check GitHub ran on a pull request is the server's to record (J-T16), never a runner's to report.
+  if (!pullRequestEnd && (body.checks ?? []).some((check) => check.name === 'GITHUB_CHECK')) {
+    throw new IntegrationJobRefused('INVALID_RESULT', 'GITHUB_CHECK is recorded by the server, not reported by a runner');
   }
   for (const check of body.checks ?? []) {
     if (check.skipped === undefined) continue;
@@ -2317,6 +2340,11 @@ export async function applyIntegrationJobResult(
         throw new IntegrationJobRefused('STALE_CLAIM', 'the job no longer waits on this pull request');
       }
       body = { ...body, claimGeneration: job.claimGeneration.toString(), leaseOwner: job.claimLeaseOwner ?? '' };
+      // J-T17 for a task's own landing queues its next generation below, which `queueLandingRetry` does under the
+      // task's row lock (rank 50) — taken here, before this transaction's first rank-60 write, as DONE takes it.
+      if (pullRequestEnd.catchUp && job.kind === 'LAND_TASK' && job.taskId) {
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "task" WHERE "id" = ${job.taskId}::uuid FOR UPDATE`);
+      }
     } else if (!platformEnd && (
       job.claimLeaseOwner !== body.leaseOwner
       || job.claimGeneration !== BigInt(body.claimGeneration)
@@ -2345,7 +2373,7 @@ export async function applyIntegrationJobResult(
       const { pullRequestId } = await recordPullRequestResult(tx, job, body, checks, {
         id: workspace.id, githubRepoId: workspace.githubRepoId, githubInstallationId: workspace.githubInstallationId,
       });
-      await appendCheckResultEvents(tx, { job, checks, finishedAt: new Date() });
+      await appendCheckResultEvents(tx, { job, checks: checks.filter(isRunnerCheck), finishedAt: new Date() });
       // The claim is over (§4.6 X-E5): no runner holds the job now, so an item about its silence is answered.
       await resolveLeaseExpiredItems(tx, job.id);
       return {
@@ -2899,10 +2927,12 @@ export async function applyIntegrationJobResult(
         movedCommits: upstreamMovedCommits,
         recoveryHeld,
         // J-T15: the merge GitHub made, which the receipts say the server recorded, with its real tree.
-        ...(pullRequestEnd
+        ...(pullRequestEnd && state === 'LANDED'
           ? { pullRequest: pullRequestReceipt(pullRequestEnd), landedTreeSha: body.landedTreeSha ?? null }
           : {}),
         ...(pushedAs ? { pushedAs } : {}),
+        // J-T17: the pull request's catch-up, which is not one of J-T13's three unless GitHub refused the merge.
+        ...(pullRequestEnd?.catchUp ? { pullRequestCatchUp: pullRequestEnd.catchUp } : {}),
       })
       : null;
     const promotionReceiptIds = promotion?.receiptIds ?? [];
@@ -2968,18 +2998,27 @@ export async function applyIntegrationJobResult(
         data: terminalData,
       });
       if (landed.count !== 1) throw new IntegrationJobRefused('STALE_CLAIM', 'the job no longer waits on this pull request');
-      await tx.githubPullRequest.update({
-        where: { id: pullRequestEnd.pullRequestId },
-        data: {
-          state: 'MERGED',
-          mergedSha: body.landedSha ?? null,
-          mergedBy: pullRequestEnd.mergedBy,
-          mergeMethod: pullRequestEnd.mergeMethod,
-          mergedAt: terminalData.finishedAt,
-          observedAt: terminalData.finishedAt,
-          condition: null,
-        },
-      });
+      if (state === 'LANDED') {
+        await tx.githubPullRequest.update({
+          where: { id: pullRequestEnd.pullRequestId },
+          data: {
+            state: 'MERGED',
+            mergedSha: body.landedSha ?? null,
+            mergedBy: pullRequestEnd.mergedBy,
+            mergeMethod: pullRequestEnd.mergeMethod,
+            mergedAt: terminalData.finishedAt,
+            observedAt: terminalData.finishedAt,
+            condition: null,
+          },
+        });
+      } else if (body.errorCode === 'PULL_REQUEST_CLOSED') {
+        // J-T19: closed on GitHub. A retry opens the subject's next pull request.
+        await tx.githubPullRequest.update({
+          where: { id: pullRequestEnd.pullRequestId },
+          data: { state: 'CLOSED', closedBy: pullRequestEnd.closedBy ?? null, closedAt: terminalData.finishedAt, condition: null },
+        });
+      }
+      // J-T16, J-T17 and J-T20 leave it open: the subject's next attempt pushes to the same landing branch.
     } else {
       await tx.projectIntegrationJob.update({ where: { id: job.id }, data: terminalData });
     }
@@ -3023,6 +3062,13 @@ export async function applyIntegrationJobResult(
     // have queued.
     await queueReopenedDone();
     await queueSkippedLanding(effectiveState);
+
+    // J-T17 for a task's own landing (docs/design/protected-branch-landing.md §4.5): its next generation, as J-T1b's,
+    // rebuilt on the new tip and pushed to the same landing branch — the task's segment is still open, so it names the
+    // same pull request. A promotion's is queued by its own transition above.
+    const caughtUp = pullRequestEnd?.catchUp !== undefined && (promotion?.caughtUp === true
+      || (job.kind === 'LAND_TASK' && job.taskId !== null && !cancelRequested
+        && (await queueLandingRetry(tx, { ownerId: job.ownerId, projectId: job.projectId, taskId: job.taskId, cause: 'RETRY' })) !== null));
 
     // §2.6: a failed job is somebody's to look at, and the platform does not retry it by itself.
     let openItemId: string | null = null;
@@ -3108,7 +3154,7 @@ export async function applyIntegrationJobResult(
     // confirmation. Nobody is being asked to fix anything — the candidate is still the owner's, and
     // the new landing is already queued — so an item would be a todo whose only answer is "wait".
     // The third consecutive one is BLOCKED instead, and that result opens its item as any failure.
-    if (itemKind && !candidateMovedOn && !cancelRequested && promotion?.requeuedUnderConfirmation !== true) {
+    if (itemKind && !candidateMovedOn && !cancelRequested && promotion?.requeuedUnderConfirmation !== true && !caughtUp) {
       // A promotion's item is named after the merge it is about: into the project's main branch.
       const mainBranch = job.kind === 'LAND_TASK'
         ? null
@@ -3258,7 +3304,7 @@ export async function applyIntegrationJobResult(
     // target and the job is LANDED with the real tree — J2's one exception, recorded rather than hidden — and this
     // item, opened in the same transaction, asks for the project's check to run on the target. Opened after the
     // landing answered the task's open items above, so the landing does not close the item it is the reason for.
-    if (pullRequestEnd && body.landedTreeSha !== body.testedTreeSha) {
+    if (pullRequestEnd && state === 'LANDED' && body.landedTreeSha !== body.testedTreeSha) {
       const landingSessionId = job.landingId
         ? (await tx.projectLanding.findUnique({ where: { id: job.landingId }, select: { sessionId: true } }))?.sessionId ?? null
         : null;
@@ -3383,7 +3429,7 @@ export async function applyIntegrationJobResult(
  */
 async function appendCheckResultEvents(
   tx: Prisma.TransactionClient,
-  input: { job: ResultJobRow; checks: IntegrationCheckResult[]; finishedAt: Date },
+  input: { job: ResultJobRow; checks: RunnerCheckResult[]; finishedAt: Date },
 ): Promise<void> {
   const job = input.job;
   const claim = Number(job.claimGeneration);
@@ -3496,7 +3542,11 @@ async function appendResultEvents(
   const round = job.round ?? null;
   const phase = input.body.phase ?? null;
 
-  await appendCheckResultEvents(tx, { job, checks: input.checks, finishedAt: input.finishedAt });
+  // A required check GitHub ran on the pull request (J-T16) is not one of the runner's: its line is the pull request
+  // door's (`PULL_REQUEST`), and the runner's own were written when the attempt began to wait (J-T14).
+  await appendCheckResultEvents(tx, {
+    job, checks: input.checks.filter(isRunnerCheck), finishedAt: input.finishedAt,
+  });
 
   // J-T13 / M-T12: the push was refused because the upstream moved, with the control plane's own
   // reading of each commit (`outsideQueue`, and `landedBy` — ids for this account, only the reason
@@ -3557,8 +3607,9 @@ async function appendResultEvents(
     at: input.finishedAt,
   });
 
-  // docs/design/protected-branch-landing.md §14: the landing timeline's own line for the merge GitHub made.
-  if (input.pullRequestEnd) {
+  // docs/design/protected-branch-landing.md §14: the landing timeline's own line for the merge GitHub made. The door's
+  // failure ends (J-T16 to J-T20) write their own line after the commit.
+  if (input.pullRequestEnd && input.requestedState === 'LANDED') {
     await appendIntegrationJobEvent(tx, {
       jobId: job.id,
       key: 'pull-request:merged',
@@ -4020,6 +4071,13 @@ function fullyAppliedComment(input: {
     + where;
 }
 
+/** A check one of the runner's own steps ran: every check but a GITHUB_CHECK (J-T16). */
+type RunnerCheckResult = IntegrationCheckResult & { name: Exclude<IntegrationCheckResult['name'], 'GITHUB_CHECK'> };
+
+function isRunnerCheck(check: IntegrationCheckResult): check is RunnerCheckResult {
+  return check.name !== 'GITHUB_CHECK';
+}
+
 /** What a person is shown about a failure (§4.2's payload column). */export function failurePayload(
   state: string,
   detail: {
@@ -4098,7 +4156,8 @@ function fullyAppliedComment(input: {
     const failed = detail.checks.find((check) => !check.skipped && check.exitCode !== check.expectedExitCode)
       ?? detail.checks[detail.checks.length - 1];
     // A check stopped at its budget carries that budget, so its item says the limit it hit.
-    const budget = failed?.timedOut && detail.checkBudgets ? checkTimeoutSeconds(failed.name, detail.checkBudgets) : null;
+    const budget = failed?.timedOut && detail.checkBudgets && isRunnerCheck(failed)
+      ? checkTimeoutSeconds(failed.name, detail.checkBudgets) : null;
     return {
       jobKind: detail.kind,
       check: failed ? { ...failed, ...(budget != null ? { timeoutSeconds: budget } : {}) } : null,

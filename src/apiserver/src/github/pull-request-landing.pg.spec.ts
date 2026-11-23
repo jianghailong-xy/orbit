@@ -34,6 +34,25 @@
  *       the pull requests a delivery is about read again.
  *   (9) The re-read's cadence with a fake clock: every minute when no delivery arrived in the last hour, every ten
  *       minutes while deliveries arrive.
+ *
+ * The failure paths (design §4.2 J-T16 to J-T20, §4.5, §4.6 under D5):
+ *  (10) J-T16: a required check that fails on the pull request ends the landing CHECK_FAILED with the GitHub check and
+ *       its Actions log (redacted) in its checks; the item goes to the task's own work session (W4), whose landing-fix
+ *       turn names the check, its failure lines, the log and the pull request that stays open (W6); the fix — the
+ *       candidate W7 queues — is handed the open pull request, pushes to the same landing branch, and that same pull
+ *       request merges.
+ *  (11) J-T17: a pull request GitHub reports behind ends its attempt ERROR / TARGET_MOVED and queues the next
+ *       generation under the same confirmation, into the same pull request, with no item and not counted (three
+ *       catch-ups in a row block nothing); a merge GitHub refuses because the base moved is counted, and the third
+ *       blocks the candidate.
+ *  (12) J-T19 and J-T20: closed on GitHub ends the landing ERROR / PULL_REQUEST_CLOSED naming who closed it, the row
+ *       CLOSED; a head Orbit did not push ends it ERROR / PULL_REQUEST_HEAD_CHANGED and nothing is merged. Each opens
+ *       its item.
+ *  (13) A required review: the landing waits, reads WAITING_FOR_REVIEW with the pull request's link, the owner is told
+ *       once with the link however often it is read, and the approval merges it.
+ *  (14) A session's Merge (§4.6, D5): a failing check records `error` naming it and hands the log to the session as
+ *       one turn per head, whose own transaction owes the merge after the turn, at most two rounds; a moved target
+ *       queues the merge again; closed records `error` with who closed it.
  */
 process.env.PROVIDER_SECRET_KEY = process.env.PROVIDER_SECRET_KEY || `pull-request-landing-pg-${Math.random()}`;
 process.env.PUBLIC_ORIGIN = 'https://orbit.example.test';
@@ -63,6 +82,10 @@ import { readLandingView } from '../projects/landing-view';
 import { readTaskIntegrationViews } from '../projects/project-task-integration';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
 import { recordSessionMergePullRequest } from '../projects/pull-request-landing';
+import { landingFixMessage, readLandingFixFacts } from '../projects/landing-fix-turn';
+import { queueTaskBranchCandidate } from '../projects/project-integration-job';
+import { supersedeLiveCandidates } from '../projects/project-promotion.service';
+import { pullRequestFixTurnId } from '../sessions/pull-request-fix-turn';
 import { GITHUB_API, GITHUB_WEB, GithubClient } from './github-api.client';
 import { GithubAppConfigService } from './github-app-config.service';
 import { GithubConnectionService } from './github-connection.service';
@@ -96,14 +119,19 @@ interface FakePull {
   state: 'OPEN' | 'CLOSED' | 'MERGED';
   mergedBy: string | null;
   mergeCommit: { oid: string; tree: string } | null;
+  closedBy?: string | null;
 }
 
 /** What GitHub says about a pull request's merge: one scenario a case sets. */
 interface Scenario {
   mergeStateStatus: string;
   reviewDecision: string | null;
-  checks: Array<{ name: string; required: boolean; status: string; conclusion: string | null }>;
+  checks: Array<{ name: string; required: boolean; status: string; conclusion: string | null; jobId?: number; summary?: string }>;
   baseSha: string | null;
+  /** GitHub's `mergeable`; MERGEABLE unless a case says otherwise. */
+  mergeable?: string;
+  /** The merge call answers 405 "Base branch was modified" (J-T17, counted). */
+  baseModified?: boolean;
   allowed: { merge: boolean; rebase: boolean; squash: boolean };
   /** Methods the merge call answers 405 "… not allowed" for. */
   refuses: string[];
@@ -118,6 +146,8 @@ class PullRequestGithub {
   readonly repos = new Map<number, string>();
   readonly scenarios = new Map<string, Scenario>();
   readonly deleted: string[] = [];
+  /** The GitHub Actions jobs' logs, by job id. */
+  readonly logs = new Map<number, string>();
   private nextNumber = 100;
   /** §16 Q1: the user-token refreshes and revokes GitHub was asked for, in order, and how it answers them. */
   readonly tokenCalls: Array<{ kind: 'REFRESH'; refreshToken: string } | { kind: 'REVOKE'; accessToken: string; basic: string }> = [];
@@ -194,6 +224,7 @@ class PullRequestGithub {
     if (method === 'PUT' && (match = url.pathname.match(/^\/repos\/([^/]+\/[^/]+)\/pulls\/(\d+)\/merge$/))) {
       const scenario = this.scenario(match[1]);
       const pull = this.pulls.find((row) => row.number === Number(match![2]))!;
+      if (scenario.baseModified) return json(405, { message: 'Base branch was modified. Review and try the merge again.' });
       if (scenario.refuses.includes(body.merge_method)) {
         return json(405, { message: `${body.merge_method[0].toUpperCase()}${body.merge_method.slice(1)} merges are not allowed on this repository.` });
       }
@@ -202,6 +233,10 @@ class PullRequestGithub {
       pull.mergedBy = 'orbitd-cloud[bot]';
       pull.mergeCommit = { oid: SHA(`merge-${pull.number}`), tree: scenario.mergeTree(pull) };
       return json(200, { sha: pull.mergeCommit.oid, merged: true, message: 'Pull Request successfully merged' });
+    }
+    if (method === 'GET' && (match = url.pathname.match(/^\/repos\/[^/]+\/[^/]+\/actions\/jobs\/(\d+)\/logs$/))) {
+      const log = this.logs.get(Number(match[1]));
+      return log === undefined ? json(404, { message: 'Not Found' }) : new Response(log, { status: 200, headers: { 'content-type': 'text/plain' } });
     }
     if (method === 'DELETE' && (match = url.pathname.match(/^\/repos\/[^/]+\/[^/]+\/git\/refs\/heads\/(.+)$/))) {
       this.deleted.push(decodeURIComponent(match[1]));
@@ -222,11 +257,14 @@ class PullRequestGithub {
               merged: pull.state === 'MERGED', mergedBy: pull.mergedBy ? { login: pull.mergedBy } : null,
               mergeCommit: pull.mergeCommit ? { oid: pull.mergeCommit.oid, tree: { oid: pull.mergeCommit.tree } } : null,
               headRefOid: pull.headSha, baseRefName: pull.base, baseRef: { target: { oid: scenario.baseSha } },
-              mergeable: 'MERGEABLE', mergeStateStatus: pull.state === 'MERGED' ? 'UNKNOWN' : scenario.mergeStateStatus,
+              mergeable: scenario.mergeable ?? 'MERGEABLE', mergeStateStatus: pull.state === 'MERGED' ? 'UNKNOWN' : scenario.mergeStateStatus,
               reviewDecision: scenario.reviewDecision, isInMergeQueue: false, isMergeQueueEnabled: false,
+              timelineItems: { nodes: pull.closedBy ? [{ actor: { login: pull.closedBy } }] : [] },
               commits: { nodes: [{ commit: { statusCheckRollup: { contexts: { nodes: scenario.checks.map((check) => ({
                 __typename: 'CheckRun', name: check.name, status: check.status, conclusion: check.conclusion,
-                detailsUrl: `https://github.com/${fullName}/actions/runs/1`, isRequired: check.required,
+                detailsUrl: `https://github.com/${fullName}/actions/runs/1${check.jobId ? `/job/${check.jobId}` : ''}`, isRequired: check.required,
+                databaseId: check.jobId ?? null, title: null, summary: check.summary ?? null, text: null,
+                checkSuite: { app: { slug: check.jobId ? 'github-actions' : 'some-ci' } },
               })) } } } }] },
             },
           },
@@ -394,7 +432,14 @@ async function harness(t: { after(fn: () => Promise<void> | void): void }) {
 
   const job = (jobId: string) => prisma.projectIntegrationJob.findUniqueOrThrow({ where: { id: jobId } });
 
-  return { prisma, sql, github, client, grants, relay, door, webhooks, webhookSecret, tasks, newOwner, newWorkspace, queuedLanding, beat, pullRequestResult, job };
+  /** A door with the owner's devices and the sessions service faked: what it told the owner, and asked of sessions. */
+  function doorWith(fakes: { push?: unknown; sessions?: unknown }): PullRequestDoorService {
+    return new PullRequestDoorService(
+      prisma as never, config, client, grants, promotions, undefined, undefined, fakes.push as never, undefined, undefined, fakes.sessions as never,
+    );
+  }
+
+  return { prisma, sql, github, client, grants, relay, door, doorWith, promotions, webhooks, webhookSecret, tasks, newOwner, newWorkspace, queuedLanding, beat, pullRequestResult, job };
 }
 
 const GRANTED = { contents: 'write', metadata: 'read', pull_requests: 'write', checks: 'read', statuses: 'read', actions: 'read', workflows: 'write' };
@@ -1313,4 +1358,397 @@ test('(15) §16 Q1: the owner\'s token is retired once the push reports back, an
   assert.deepEqual(mergeCalls.map((call) => call.kind), ['REFRESH', 'REVOKE']);
   assert.equal((mergeCalls[1] as { accessToken: string }).accessToken, OWNER_TOKEN);
   assert.equal(await merge.service.afterMergeResult(sessionId, mergeResult), null, 'once');
+});
+
+// ── the failure paths (design §4.2 J-T16 to J-T20, §4.5, §4.6) ─────────────────────────────────────────────────────
+
+type Harness = Awaited<ReturnType<typeof harness>>;
+
+/** A protected main's landing, waiting on its open pull request (J-T14, then the door opened it). */
+async function waitingOnPullRequest(h: Harness, ownerId: string, label: string) {
+  const cloud = await h.newWorkspace(ownerId, label.replace(/[^a-z0-9]+/gi, '-').toLowerCase(), { github: true });
+  h.github.granted.set(cloud.installationId, GRANTED);
+  const landing = await h.queuedLanding(ownerId, cloud, label);
+  const [command] = await h.beat(cloud.runnerId, true);
+  assert.equal(command?.landVia, 'PULL_REQUEST');
+  const head = SHA(`${label}-head`);
+  const answered = await applyIntegrationJobResult(h.prisma as never, {
+    jobId: command.jobId, runnerId: cloud.runnerId, ownerId, body: h.pullRequestResult(command, head, SHA(`${label}-tree`)),
+  });
+  assert.equal(answered.answer.state, 'PULL_REQUEST');
+  const scenario = h.github.scenario(cloud.fullName);
+  scenario.mergeStateStatus = 'BLOCKED';
+  scenario.checks = [{ name: 'PostgreSQL specs', required: true, status: 'IN_PROGRESS', conclusion: null }];
+  await h.door.advance(answered.after!.pullRequestIds!);
+  const prId = (await h.job(command.jobId)).pullRequestId!;
+  const pr = await h.prisma.githubPullRequest.findUniqueOrThrow({ where: { id: prId } });
+  assert.equal(pr.state, 'OPEN');
+  return { cloud, landing, command, head, prId, number: pr.number!, scenario };
+}
+
+/** The runner's next generation answering PULL_REQUEST: it pushed `head` to the same landing branch. */
+async function pushAgain(h: Harness, ownerId: string, cloud: { runnerId: string }, command: IntegrationJobCommand, head: string, source = WORK_TIP) {
+  const body = { ...h.pullRequestResult(command, head, SHA(`tree-of-${head}`)), sourceSha: source };
+  for (const pull of h.github.pulls) if (pull.head === (command.landingRef ?? '').replace('refs/heads/', '') && pull.state === 'OPEN') pull.headSha = head;
+  return applyIntegrationJobResult(h.prisma as never, { jobId: command.jobId, runnerId: cloud.runnerId, ownerId, body });
+}
+
+const ACTIONS_LOG = [
+  '2026-11-23T10:00:00.0000000Z ##[group]Run npm run test:pg',
+  '2026-11-23T10:00:01.0000000Z > orbit@ test:pg',
+  '2026-11-23T10:00:02.0000000Z token=ghp_abcdefghijklmnopqrstuvwxyz0123456789',
+  '2026-11-23T10:00:03.0000000Z not ok 14 - the review wait merges after approval',
+  '2026-11-23T10:00:04.0000000Z ##[error]AssertionError: expected LANDED, got PULL_REQUEST',
+  '2026-11-23T10:00:05.0000000Z ##[error]Process completed with exit code 1.',
+].join('\n');
+
+test('J-T16 and W4–W6: a failing required check goes back to the task\'s session with its log, and its fix updates the same pull request', { skip: !URL_, concurrency: 1, timeout: 300_000 }, async (t) => {
+  const h = await harness(t);
+  const ownerId = await h.newOwner('red-check');
+  const w = await waitingOnPullRequest(h, ownerId, 'Add the landing timeline');
+  // W4 hands a failure to the task's own work session when its DONE ended it.
+  const work = await h.prisma.session.findFirstOrThrow({ where: { taskId: w.landing.taskId } });
+  await h.prisma.session.update({ where: { id: work.id }, data: { endReason: 'task_done' } });
+
+  h.github.logs.set(9001, ACTIONS_LOG);
+  w.scenario.checks = [
+    { name: 'PostgreSQL specs', required: true, status: 'COMPLETED', conclusion: 'FAILURE', jobId: 9001 },
+    { name: 'lint', required: true, status: 'COMPLETED', conclusion: 'SUCCESS' },
+  ];
+  await h.door.reread(w.prId);
+
+  // J-T16: CHECK_FAILED, the GitHub check and its log kept in the job's checks; nothing merged; the pull request open.
+  const failed = await h.job(w.command.jobId);
+  assert.equal(failed.state, 'CHECK_FAILED');
+  assert.ok(failed.finishedAt);
+  const checks = failed.checks as unknown as IntegrationCheckResult[];
+  const github = checks.find((check) => check.name === 'GITHUB_CHECK');
+  assert.ok(github, `the GitHub check is in the job's checks: ${JSON.stringify(checks.map((check) => check.name))}`);
+  assert.equal(github.command, 'PostgreSQL specs');
+  assert.equal(github.github?.pullRequest.number, w.number);
+  assert.equal(github.github?.headSha, w.head);
+  assert.equal(github.github?.conclusion, 'failure');
+  assert.match(github.outputTail, /AssertionError: expected LANDED, got PULL_REQUEST/);
+  assert.doesNotMatch(github.outputTail, /ghp_abcdefghijklmnopqrstuvwxyz0123456789/, 'the log is redacted before it is stored');
+  assert.ok(!h.github.calls.some((call) => call.method === 'PUT'), 'nothing was merged');
+  const pr = await h.prisma.githubPullRequest.findUniqueOrThrow({ where: { id: w.prId } });
+  assert.equal(pr.state, 'OPEN');
+  assert.equal(pr.condition, 'CHECK_FAILED');
+  const line = await h.prisma.projectIntegrationJobEvent.findFirst({ where: { jobId: w.command.jobId, kind: 'PULL_REQUEST', text: { startsWith: 'Required check' } } });
+  assert.equal(line?.text, `Required check "PostgreSQL specs" failed on pull request #${w.number}`);
+
+  // W4/W5: the item is the task's own work session's.
+  const item = await h.prisma.projectOpenItem.findFirstOrThrow({ where: { integrationJobId: w.command.jobId } });
+  assert.equal(item.kind, 'INTEGRATION_CHECK_FAILED');
+  assert.equal(item.state, 'OPEN');
+  assert.equal(item.workSessionId, work.id, 'W4 hands a GitHub check failure to the session that wrote the work');
+  // W6's pull request text, from the rows the failure wrote.
+  const facts = await readLandingFixFacts(h.prisma as never, { integrationJobId: w.command.jobId, title: item.title, payload: item.payload });
+  assert.ok(facts);
+  const turn = landingFixMessage(facts);
+  assert.match(turn, new RegExp(`The required check "PostgreSQL specs" failed on pull request #${w.number} \\(${w.head.slice(0, 7)}\\):`));
+  assert.match(turn, /AssertionError: expected LANDED, got PULL_REQUEST/);
+  assert.match(turn, /Full log: https:\/\/github\.com\/.+\/actions\/runs\/1\/job\/9001/);
+  assert.match(turn, new RegExp(`main is unchanged, and pull request #${w.number} stays open`));
+  assert.match(turn, new RegExp(`Orbit updates pull request #${w.number} with your commit`));
+
+  // The fix: W7 on a MAIN line supersedes the failed candidate with one for the new commit, in the same round.
+  const fixedTip = SHA('the fixed tip');
+  const candidate = await h.prisma.$transaction(async (tx) => {
+    const codebase = await tx.projectCodebase.findFirstOrThrow({
+      where: { projectId: w.landing.projectId }, select: { id: true, canonicalRepoUrl: true, integrationRef: true, upstreamRef: true },
+    });
+    await supersedeLiveCandidates(tx, w.landing.projectId, `refs/heads/${work.branch}`);
+    return queueTaskBranchCandidate(tx, {
+      ownerId, projectId: w.landing.projectId, taskId: w.landing.taskId, codebase,
+      session: { id: work.id, branch: work.branch!, runnerId: w.cloud.runnerId },
+    });
+  });
+  assert.ok(candidate);
+  const [check] = await h.beat(w.cloud.runnerId, true);
+  assert.equal(check?.kind, 'CHECK_PROMOTION');
+  await applyIntegrationJobResult(h.prisma as never, {
+    jobId: check.jobId, runnerId: w.cloud.runnerId, ownerId,
+    body: {
+      claimGeneration: check.claimGeneration, leaseOwner: check.leaseOwner, state: 'READY', phase: 'CHECK',
+      sourceSha: fixedTip, targetShaBefore: UPSTREAM_TIP, upstreamSha: UPSTREAM_TIP, testedSha: SHA('fixed tested'),
+      testedTreeSha: SHA('fixed tree'), aheadOfUpstream: 2, filesChanged: 1, checks: [GREEN_CHECK],
+    },
+  });
+  await h.promotions.confirm({ userId: ownerId }, w.landing.projectId, candidate.promotionId, fixedTip);
+  const [land] = await h.beat(w.cloud.runnerId, true);
+  assert.equal(land?.kind, 'LAND_PROMOTION');
+  assert.equal(land.pullRequestOpen, true, 'the fix is handed the open pull request');
+  assert.equal(land.landingRef, w.command.landingRef, 'and the same landing branch');
+  assert.equal(land.landingRefSha, w.head, 'leased on the head Orbit pushed before');
+  const fixedHead = SHA('the fixed head');
+  const again = await pushAgain(h, ownerId, w.cloud, land, fixedHead, fixedTip);
+  assert.deepEqual(again.after?.pullRequestIds, [w.prId], 'the same pull request');
+  const updated = await h.prisma.githubPullRequest.findUniqueOrThrow({ where: { id: w.prId } });
+  assert.equal(updated.headSha, fixedHead);
+  assert.equal(updated.condition, null, 'what GitHub said about the old head no longer holds');
+
+  // GitHub runs the checks again on the new head; they pass, and the same pull request merges.
+  w.scenario.checks = [
+    { name: 'PostgreSQL specs', required: true, status: 'COMPLETED', conclusion: 'SUCCESS', jobId: 9002 },
+    { name: 'lint', required: true, status: 'COMPLETED', conclusion: 'SUCCESS' },
+  ];
+  w.scenario.mergeStateStatus = 'CLEAN';
+  w.scenario.baseSha = UPSTREAM_TIP;
+  w.scenario.mergeTree = () => SHA(`tree-of-${fixedHead}`);
+  await h.door.advance(again.after!.pullRequestIds!);
+  const landed = await h.job(land.jobId);
+  assert.equal(landed.state, 'LANDED');
+  assert.equal(landed.pullRequestId, w.prId);
+  assert.equal(h.github.calls.filter((call) => call.method === 'POST' && call.path === `/repos/${w.cloud.fullName}/pulls`).length, 1,
+    'one pull request was opened, and the fix updated it');
+  assert.deepEqual(h.github.calls.find((call) => call.method === 'PUT')?.body, { sha: fixedHead, merge_method: 'rebase' });
+  assert.equal((await h.prisma.githubPullRequest.findUniqueOrThrow({ where: { id: w.prId } })).state, 'MERGED');
+});
+
+test('J-T17: a pull request behind main catches up into the same pull request, uncounted; a merge refused for a moved base counts', { skip: !URL_, concurrency: 1, timeout: 300_000 }, async (t) => {
+  const h = await harness(t);
+  const ownerId = await h.newOwner('moved');
+  const w = await waitingOnPullRequest(h, ownerId, 'Catch up with main');
+  const promotionId = (await h.job(w.command.jobId)).promotionId!;
+
+  // Three catch-ups in a row: each ends its attempt TARGET_MOVED and queues the next under the same confirmation.
+  let command = w.command;
+  for (let round = 1; round <= 3; round += 1) {
+    w.scenario.checks = [{ name: 'PostgreSQL specs', required: true, status: 'COMPLETED', conclusion: 'SUCCESS' }];
+    w.scenario.mergeStateStatus = 'BEHIND';
+    await h.door.reread(w.prId);
+    const moved = await h.job(command.jobId);
+    assert.equal(moved.state, 'ERROR', `catch-up ${round}`);
+    assert.equal(moved.errorCode, 'TARGET_MOVED');
+    assert.equal((moved.errorDetail as { pullRequestCatchUp?: boolean }).pullRequestCatchUp, true);
+    const items = await h.prisma.projectOpenItem.findMany({ where: { integrationJobId: command.jobId }, select: { kind: true, title: true, payload: true } });
+    assert.deepEqual(items, [], 'a catch-up asks nobody for anything');
+    const promotion = await h.prisma.projectPromotion.findUniqueOrThrow({ where: { id: promotionId } });
+    assert.equal(promotion.state, 'CONFIRMED', `catch-up ${round} is not one of J-T13's three`);
+    const line = await h.prisma.projectIntegrationJobEvent.findFirst({ where: { jobId: command.jobId, kind: 'NEXT_GENERATION' } });
+    assert.match(String(line?.text), /catching up with main/);
+    assert.equal((await h.prisma.githubPullRequest.findUniqueOrThrow({ where: { id: w.prId } })).state, 'OPEN');
+    const [following] = await h.beat(w.cloud.runnerId, true);
+    assert.equal(following?.kind, 'LAND_PROMOTION');
+    assert.equal(following.jobId, promotion.landJobId);
+    assert.equal(following.pullRequestOpen, true);
+    assert.equal(following.landingRef, w.command.landingRef, 'the next generation pushes to the same landing branch');
+    const answered = await pushAgain(h, ownerId, w.cloud, following, SHA(`caught-up-${round}`));
+    assert.deepEqual(answered.after?.pullRequestIds, [w.prId]);
+    command = following;
+  }
+
+  // A merge GitHub refuses because main moved counts: the third in a row blocks the candidate.
+  for (let refused = 1; refused <= 3; refused += 1) {
+    w.scenario.mergeStateStatus = 'CLEAN';
+    w.scenario.baseSha = UPSTREAM_TIP;
+    w.scenario.baseModified = true;
+    await h.door.reread(w.prId);
+    const ended = await h.job(command.jobId);
+    assert.equal(ended.state, 'ERROR', `refused merge ${refused}`);
+    assert.equal(ended.errorCode, 'TARGET_MOVED');
+    assert.equal((ended.errorDetail as { pullRequestMergeRefused?: boolean }).pullRequestMergeRefused, true);
+    const promotion = await h.prisma.projectPromotion.findUniqueOrThrow({ where: { id: promotionId } });
+    if (refused < 3) {
+      assert.equal(promotion.state, 'CONFIRMED');
+      const [following] = await h.beat(w.cloud.runnerId, true);
+      assert.equal(following?.pullRequestOpen, true);
+      await pushAgain(h, ownerId, w.cloud, following, SHA(`after-refusal-${refused}`));
+      command = following;
+    } else {
+      assert.equal(promotion.state, 'BLOCKED', 'the third refused merge in a row blocks the candidate (J-T13)');
+      assert.equal(await h.prisma.projectOpenItem.count({ where: { integrationJobId: command.jobId, kind: 'INTEGRATION_ERROR' } }), 1);
+    }
+  }
+});
+
+test('J-T19 and J-T20: a pull request closed on GitHub, and one whose head Orbit did not push', { skip: !URL_, concurrency: 1, timeout: 300_000 }, async (t) => {
+  const h = await harness(t);
+  const ownerId = await h.newOwner('closed');
+
+  const closed = await waitingOnPullRequest(h, ownerId, 'Closed on GitHub');
+  const pull = h.github.pulls.find((row) => row.number === closed.number)!;
+  pull.state = 'CLOSED';
+  pull.closedBy = 'octo-reviewer';
+  await h.door.reread(closed.prId);
+  const ended = await h.job(closed.command.jobId);
+  assert.equal(ended.state, 'ERROR');
+  assert.equal(ended.errorCode, 'PULL_REQUEST_CLOSED');
+  assert.match(String((ended.errorDetail as { message?: string }).message), new RegExp(`@octo-reviewer closed pull request #${closed.number} without merging it`));
+  const closedRow = await h.prisma.githubPullRequest.findUniqueOrThrow({ where: { id: closed.prId } });
+  assert.equal(closedRow.state, 'CLOSED');
+  assert.equal(closedRow.closedBy, 'octo-reviewer');
+  const closedItem = await h.prisma.projectOpenItem.findFirstOrThrow({ where: { integrationJobId: closed.command.jobId } });
+  assert.equal(closedItem.kind, 'INTEGRATION_ERROR');
+  assert.equal((closedItem.payload as { errorCode?: string }).errorCode, 'PULL_REQUEST_CLOSED');
+
+  const foreign = await waitingOnPullRequest(h, ownerId, 'Somebody pushed the landing branch');
+  h.github.pulls.find((row) => row.number === foreign.number)!.headSha = SHA('a commit Orbit never checked');
+  foreign.scenario.mergeStateStatus = 'CLEAN';
+  foreign.scenario.checks = [{ name: 'PostgreSQL specs', required: true, status: 'COMPLETED', conclusion: 'SUCCESS' }];
+  await h.door.reread(foreign.prId);
+  const changed = await h.job(foreign.command.jobId);
+  assert.equal(changed.state, 'ERROR');
+  assert.equal(changed.errorCode, 'PULL_REQUEST_HEAD_CHANGED');
+  assert.equal((changed.errorDetail as { foundSha?: string }).foundSha, SHA('a commit Orbit never checked'));
+  assert.ok(!h.github.calls.some((call) => call.method === 'PUT'), 'Orbit merges only what it pushed');
+  assert.equal((await h.prisma.projectOpenItem.findFirstOrThrow({ where: { integrationJobId: foreign.command.jobId } })).kind, 'INTEGRATION_ERROR');
+});
+
+test('A required review: the landing waits for it with the link, the owner is told once, and the approval merges it', { skip: !URL_, concurrency: 1, timeout: 300_000 }, async (t) => {
+  const h = await harness(t);
+  const ownerId = await h.newOwner('review');
+  const told: Array<{ ownerId: string; title: string; message: string; url?: string }> = [];
+  const door = h.doorWith({ push: { notifyOwner: async (owner: string, input: { title: string; message: string; url?: string }) => { told.push({ ownerId: owner, ...input }); return { delivered: true, devices: 1 }; } } });
+  const w = await waitingOnPullRequest(h, ownerId, 'Wait for the owner\'s review');
+  w.scenario.checks = [{ name: 'PostgreSQL specs', required: true, status: 'COMPLETED', conclusion: 'SUCCESS' }];
+  w.scenario.reviewDecision = 'REVIEW_REQUIRED';
+  w.scenario.mergeStateStatus = 'BLOCKED';
+  await door.reread(w.prId);
+  await door.reread(w.prId);
+  await door.tick(new Date(Date.now() + 3_600_000));
+
+  const [waiting] = await readInFlightJobs(h.prisma as never, w.landing.projectId, w.command.jobId);
+  assert.equal(waiting?.state, 'PULL_REQUEST');
+  assert.equal(waiting.blockingReason?.code, 'WAITING_FOR_REVIEW');
+  assert.equal(waiting.blockingReason?.summary, `Waiting for review on pull request #${w.number}`);
+  assert.equal(waiting.pullRequest?.url, `https://github.com/${w.cloud.fullName}/pull/${w.number}`);
+  assert.equal(waiting.pullRequest?.condition, 'REVIEW_REQUIRED');
+  const landingSession = await h.prisma.projectLanding.findUniqueOrThrow({ where: { id: w.landing.landingId } });
+  const view = await readLandingView(h.prisma as never, ownerId, landingSession.sessionId);
+  assert.equal(view?.pullRequest?.url, `https://github.com/${w.cloud.fullName}/pull/${w.number}`);
+  assert.deepEqual(told, [{
+    ownerId, title: 'Waiting for review', message: `Pull request #${w.number} is waiting for review`, priority: 'normal',
+    url: `https://github.com/${w.cloud.fullName}/pull/${w.number}`,
+  }], 'the owner is told once, with the link');
+  assert.ok((await h.prisma.githubPullRequest.findUniqueOrThrow({ where: { id: w.prId } })).reviewAnnouncedAt);
+  const line = await h.prisma.projectIntegrationJobEvent.findFirst({ where: { jobId: w.command.jobId, kind: 'PULL_REQUEST', text: { startsWith: 'Waiting for review' } } });
+  assert.equal(line?.text, `Waiting for review on pull request #${w.number}`);
+  assert.ok(!h.github.calls.some((call) => call.method === 'PUT'), 'nothing merges before the review');
+
+  // Approved: merged and landed.
+  w.scenario.reviewDecision = 'APPROVED';
+  w.scenario.mergeStateStatus = 'CLEAN';
+  w.scenario.baseSha = UPSTREAM_TIP;
+  w.scenario.mergeTree = () => SHA('Wait for the owner\'s review-tree');
+  await door.reread(w.prId);
+  assert.equal((await h.job(w.command.jobId)).state, 'LANDED');
+  assert.equal(told.length, 1);
+});
+
+test('§4.6 under D5: a session\'s Merge whose check fails is handed the log as a turn that merges again, at most twice; a moved target merges again; closed is an error', { skip: !URL_, concurrency: 1, timeout: 300_000 }, async (t) => {
+  const h = await harness(t);
+  const ownerId = await h.newOwner('session-fix');
+  const cloud = await h.newWorkspace(ownerId, 'session-fix', { github: true });
+  const turns: Array<{ sessionId: string; clientTurnId: string; content: string }> = [];
+  const mergedAgain: Array<{ sessionId: string; pullRequestId: string; target: string }> = [];
+  const sessions = {
+    // The real createTurn writes the turn and calls the hook in its transaction; this one does the same two writes.
+    createTurn: async (_owner: string, sessionId: string, dto: { clientTurnId: string; content: string }, opts: { participateSendTransaction?: (tx: never) => Promise<void> }) => {
+      await h.prisma.$transaction(async (tx) => {
+        await opts.participateSendTransaction?.(tx as never);
+        const seq = await tx.conversationTurn.count({ where: { sessionId } });
+        await tx.conversationTurn.create({ data: { sessionId, seq: seq + 1, clientTurnId: dto.clientTurnId, content: dto.content } as never });
+      });
+      turns.push({ sessionId, clientTurnId: dto.clientTurnId, content: dto.content });
+    },
+    mergeAgainForPullRequest: async (sessionId: string, pullRequestId: string, target: string) => {
+      mergedAgain.push({ sessionId, pullRequestId, target });
+      return 'QUEUED';
+    },
+  };
+  const door = h.doorWith({ sessions });
+
+  async function sessionWaiting(label: string) {
+    const sessionId = randomUUID();
+    await h.prisma.session.create({
+      data: {
+        id: sessionId, ownerId, creatorId: ownerId, workspaceId: cloud.workspaceId, assignedRunnerId: cloud.runnerId,
+        title: label, prompt: 'do it', branch: `orbit/s-${sessionId.slice(0, 6)}`, isolationStatus: 'worktree',
+        status: RunStatus.AWAITING_INPUT, mergeStatus: 'pending', mergeOperationId: randomUUID(), mergeTarget: 'main',
+      },
+    });
+    const head = SHA(`${label}-head-1`);
+    h.github.pushed.set(`orbit/land/${sessionId}`, head);
+    const prId = await h.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${sessionId}::uuid FOR UPDATE`;
+      return recordSessionMergePullRequest(tx as never, {
+        sessionId, current: { ownerId, taskId: null, mergeCheckpointId: null, mergeRecoveryAction: null }, modern: true,
+        dto: { operationId: randomUUID(), leaseOwner: 'x', status: 'pull_request', sourceSha: SHA(`${label}-source`), pushedSha: head, rebaseBaseSha: UPSTREAM_TIP, targetBranch: 'main' },
+      });
+    });
+    await door.advance([prId]);
+    return { sessionId, prId, head, number: (await h.prisma.githubPullRequest.findUniqueOrThrow({ where: { id: prId } })).number! };
+  }
+  /** The merge again after the fix turn: the runner pushed `head` to the same landing branch. */
+  async function mergedWith(s: { sessionId: string; prId: string }, head: string) {
+    h.github.pushed.set(`orbit/land/${s.sessionId}`, head);
+    const pull = h.github.pulls.find((row) => row.head === `orbit/land/${s.sessionId}`)!;
+    pull.headSha = head;
+    await h.prisma.session.update({ where: { id: s.sessionId }, data: { mergeStatus: 'pending', mergeAfterTurnAt: null } });
+    await h.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${s.sessionId}::uuid FOR UPDATE`;
+      return recordSessionMergePullRequest(tx as never, {
+        sessionId: s.sessionId, current: { ownerId, taskId: null, mergeCheckpointId: null, mergeRecoveryAction: null }, modern: true,
+        dto: { operationId: randomUUID(), leaseOwner: 'x', status: 'pull_request', sourceSha: SHA(`${head}-source`), pushedSha: head, rebaseBaseSha: UPSTREAM_TIP, targetBranch: 'main' },
+      });
+    });
+  }
+
+  const s = await sessionWaiting('Tidy the settings page');
+  const scenario = h.github.scenario(cloud.fullName);
+  h.github.logs.set(7001, ACTIONS_LOG);
+  scenario.checks = [{ name: 'PostgreSQL specs', required: true, status: 'COMPLETED', conclusion: 'FAILURE', jobId: 7001 }];
+  scenario.mergeStateStatus = 'BLOCKED';
+  await door.reread(s.prId);
+  let session = await h.prisma.session.findUniqueOrThrow({ where: { id: s.sessionId } });
+  assert.equal(session.mergeStatus, 'error');
+  assert.match(String(session.mergeError), new RegExp(`The required check "PostgreSQL specs" failed on pull request #${s.number}`));
+  assert.ok(session.mergeAfterTurnAt, 'the fix turn owes the merge after it, written in the turn\'s own transaction');
+  assert.equal(session.mergeAfterTurnTarget, 'main');
+  assert.equal(turns.length, 1);
+  assert.equal(turns[0]!.clientTurnId, pullRequestFixTurnId(s.prId, s.head));
+  assert.match(turns[0]!.content, /AssertionError: expected LANDED, got PULL_REQUEST/);
+  assert.match(turns[0]!.content, new RegExp(`your commit updates pull request #${s.number}`));
+  assert.match(turns[0]!.content, /fix round 1 of 2/);
+  assert.doesNotMatch(turns[0]!.content, /ghp_abcdefghijklmnopqrstuvwxyz0123456789/);
+  // Read again on the same head: no second turn.
+  await h.prisma.session.update({ where: { id: s.sessionId }, data: { mergeStatus: 'pull_request' } });
+  await door.reread(s.prId);
+  assert.equal(turns.length, 1, 'one failed head is one turn');
+  assert.equal((await h.prisma.githubPullRequest.findUniqueOrThrow({ where: { id: s.prId } })).state, 'OPEN', 'the pull request stays open');
+
+  // Round 2 on the fix's head, and nothing more after it.
+  await mergedWith(s, SHA('fix-1'));
+  await door.reread(s.prId);
+  assert.equal(turns.length, 2);
+  assert.match(turns[1]!.content, /fix round 2 of 2/);
+  await mergedWith(s, SHA('fix-2'));
+  await door.reread(s.prId);
+  assert.equal(turns.length, 2, 'at most two rounds (D5)');
+  session = await h.prisma.session.findUniqueOrThrow({ where: { id: s.sessionId } });
+  assert.equal(session.mergeStatus, 'error');
+  assert.equal(await h.prisma.githubPullRequest.count({ where: { sessionId: s.sessionId } }), 1, 'every round updated the same pull request');
+
+  // The target moved: the merge is queued again, into the same pull request.
+  scenario.checks = [{ name: 'PostgreSQL specs', required: true, status: 'IN_PROGRESS', conclusion: null }];
+  scenario.mergeStateStatus = 'BLOCKED';
+  const moved = await sessionWaiting('Fix the toolbar');
+  scenario.checks = [{ name: 'PostgreSQL specs', required: true, status: 'COMPLETED', conclusion: 'SUCCESS' }];
+  scenario.mergeStateStatus = 'BEHIND';
+  await door.reread(moved.prId);
+  assert.deepEqual(mergedAgain, [{ sessionId: moved.sessionId, pullRequestId: moved.prId, target: 'main' }]);
+
+  // Closed on GitHub: an error naming who closed it.
+  scenario.mergeStateStatus = 'BLOCKED';
+  const closed = await sessionWaiting('Rename the menu');
+  const pull = h.github.pulls.find((row) => row.number === closed.number)!;
+  pull.state = 'CLOSED';
+  pull.closedBy = 'octo-reviewer';
+  await door.reread(closed.prId);
+  const closedSession = await h.prisma.session.findUniqueOrThrow({ where: { id: closed.sessionId } });
+  assert.equal(closedSession.mergeStatus, 'error');
+  assert.match(String(closedSession.mergeError), new RegExp(`@octo-reviewer closed pull request #${closed.number} without merging it`));
+  assert.equal((await h.prisma.githubPullRequest.findUniqueOrThrow({ where: { id: closed.prId } })).state, 'CLOSED');
 });

@@ -1,8 +1,8 @@
 # Landing on protected GitHub branches: pull request by default, Push as me on request
 
-> Status: the owner ruled on D1–D4 on 2026-11-23 (§15). D5 carries the coordinator's recommendation, and the owner rules
-> on it when confirming this doc. Waiting for the owner's confirmation (task `3521xdraWnphpIOwOdJrk`, project
-> `3521vwqnFuax4FvYLRUXL`). Nothing here is built.
+> Status: the owner ruled on D1–D4 on 2026-11-23 and confirmed this doc that day, ruling on D5 with the recommended
+> option (§15). Project `3521vwqnFuax4FvYLRUXL`. P1 (task `3521xduVqwmXO68Z6Fzwk`) and P2's failure paths (task
+> `3521xdvIBQ9mlLrFSCztZ`, contract revision 44) are built; the rest of §17 is not.
 > Code baseline: main `3566f7d76a`. Line numbers refer to that commit.
 > Previews: the coordinator's mockups of the workspace setting (options A and B, attachment `352Sth5yNcWquLuQxS7to`) and
 > of the landing card's states (attachment `352Sti0nvUtq94aoDHebt`). The design board task (`3521xdsf8WFT3GSUtyf5P`)
@@ -316,8 +316,9 @@ rule, and the card says so.
    - Merged: `merge_status = 'merged'` and a `MERGED` receipt (`recorded_by = SERVER`), whose `target_sha_after` is
      GitHub's commit.
    - A required check failed: `merge_status = 'error'`, with `merge_error` naming the check. Under D5 the log is also
-     sent to the session as a platform turn, and its next commit re-runs the merge into the same pull request, at most
-     twice.
+     sent to the session as a platform turn, `pull-request-fix:v1:<pull request id>:<head>`, one per failed head. The
+     turn's own transaction writes `merge_after_turn_at`, so when the turn ends the merge runs again and its commit
+     updates the same pull request. At most two turns per pull request; after that the error stays for the user.
    - The target moved: the merge is queued again (`pending`), into the same landing branch.
    - Closed on GitHub: `error`, with the reason.
 5. Pressing Merge again while the pull request is open updates that pull request.
@@ -839,8 +840,8 @@ M7, O2, J1 and W0 do not change.
 
 ## 15. Decisions
 
-Each decision names the choice taken and, beside it, the option not taken. D1 to D4 are the owner's rulings of
-2026-11-23. D5 is the coordinator's recommendation, and the owner rules on it when confirming this doc.
+Each decision names the choice taken and, beside it, the option not taken. D1 to D5 are the owner's rulings of
+2026-11-23; D5 was ruled when the owner confirmed this doc.
 
 | # | Question | Taken | Not taken |
 |---|---|---|---|
@@ -848,7 +849,7 @@ Each decision names the choice taken and, beside it, the option not taken. D1 to
 | D2 | What Pull request mode does on a branch GitHub accepts a direct push to | **Owner's ruling:** push directly when GitHub accepts the push, and open a pull request only when it refuses (§3, §4.1). This doc had recommended the other option | A pull request every time, even on an unprotected branch |
 | D3 | How Orbit learns what happened on GitHub | **Owner's ruling:** a webhook plus a slow re-read of open pull requests (§4.7). This adds a fourth use to the contract's G3 (§14) | Webhook only; polling only |
 | D4 | The App's new permissions | **Owner's ruling:** Pull requests: write, Checks: read, Commit statuses: read, Actions: read and Workflows: write (§10). Workflows: write lets Orbit push changes to CI workflow files, which can read repository secrets | The same without Workflows: write; the same without Actions: read |
-| D5 | A required check fails on the pull request of a session outside a project | **Coordinator's recommendation (the owner rules on it when confirming this doc):** hand the failing check's log back to the session automatically, and let its next commit update the same pull request, at most two rounds (§4.6). Outside a project, each automatic round is a model turn the user did not ask for by name | Show "Fix in session" on the merge row, and send nothing until it is pressed |
+| D5 | A required check fails on the pull request of a session outside a project | **Owner's ruling (2026-11-23, the recommended option):** hand the failing check's log back to the session automatically, and let its next commit update the same pull request, at most two rounds (§4.6). Outside a project, each automatic round is a model turn the user did not ask for by name | Show "Fix in session" on the merge row, and send nothing until it is pressed |
 
 What the rulings change against the first draft:
 

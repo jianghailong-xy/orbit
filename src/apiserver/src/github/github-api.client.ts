@@ -74,6 +74,12 @@ export interface GithubPullRequestCheck {
   /** PASSED (success, neutral, skipped), FAILED, or PENDING (not finished, or expected and not reported). */
   state: 'PASSED' | 'FAILED' | 'PENDING';
   url: string | null;
+  /** GitHub's own word, lower case: a check run's conclusion, or a commit status's state; null while running. */
+  conclusion: string | null;
+  /** A check run GitHub Actions ran: its job id, whose log Orbit downloads for a failure (§4.5). Null otherwise. */
+  actionsJobId: number | null;
+  /** What the check said about itself: a check run's title, summary and text, or a status's description. */
+  summary: string | null;
 }
 
 /** One read of a pull request in full (§4.3): what GitHub says now, which is all Orbit acts on. */
@@ -98,6 +104,8 @@ export interface GithubPullRequestReading {
   reviewDecision: string | null;
   inMergeQueue: boolean;
   mergeQueueEnabled: boolean;
+  /** Who closed it, for one closed without merging (§4.2 J-T19); null when GitHub does not say. */
+  closedBy: string | null;
   checks: GithubPullRequestCheck[];
   /** The merge methods the repository allows. */
   allowed: { merge: boolean; rebase: boolean; squash: boolean };
@@ -124,6 +132,7 @@ export const PULL_REQUEST_QUERY = `query($owner: String!, $name: String!, $numbe
       reviewDecision
       isInMergeQueue
       isMergeQueueEnabled
+      timelineItems(last: 1, itemTypes: [CLOSED_EVENT]) { nodes { ... on ClosedEvent { actor { login } } } }
       commits(last: 1) {
         nodes {
           commit {
@@ -131,8 +140,11 @@ export const PULL_REQUEST_QUERY = `query($owner: String!, $name: String!, $numbe
               contexts(first: 100) {
                 nodes {
                   __typename
-                  ... on CheckRun { name status conclusion detailsUrl isRequired(pullRequestNumber: $number) }
-                  ... on StatusContext { context state targetUrl isRequired(pullRequestNumber: $number) }
+                  ... on CheckRun {
+                    name status conclusion detailsUrl databaseId title summary text isRequired(pullRequestNumber: $number)
+                    checkSuite { app { slug } }
+                  }
+                  ... on StatusContext { context state targetUrl description isRequired(pullRequestNumber: $number) }
                 }
               }
             }
@@ -155,6 +167,33 @@ function checkState(node: Record<string, unknown>): GithubPullRequestCheck['stat
   const conclusion = String(node.conclusion ?? '');
   if (conclusion === 'SUCCESS' || conclusion === 'NEUTRAL' || conclusion === 'SKIPPED') return 'PASSED';
   return conclusion === '' ? 'PENDING' : 'FAILED';
+}
+
+/** One context of the head's status rollup, folded (§4.3, §4.5). */
+function checkOf(node: Record<string, unknown>): GithubPullRequestCheck {
+  const status = node.__typename === 'StatusContext';
+  const text = (value: unknown) => (typeof value === 'string' && value.trim() !== '' ? value.trim() : null);
+  const app = (node.checkSuite as { app?: { slug?: unknown } | null } | null | undefined)?.app?.slug;
+  const said = status
+    ? [text(node.description)]
+    : [text(node.title), text(node.summary), text(node.text)];
+  const conclusion = status ? text(node.state) : text(node.conclusion);
+  return {
+    name: String(status ? node.context ?? '' : node.name ?? ''),
+    required: node.isRequired === true,
+    state: checkState(node),
+    url: typeof (node.detailsUrl ?? node.targetUrl) === 'string' ? String(node.detailsUrl ?? node.targetUrl) : null,
+    conclusion: conclusion ? conclusion.toLowerCase() : null,
+    actionsJobId: !status && app === 'github-actions' && typeof node.databaseId === 'number' ? node.databaseId : null,
+    summary: said.filter((line): line is string => line !== null).join('\n\n') || null,
+  };
+}
+
+/** The login of whoever closed the pull request, from its last CLOSED_EVENT. */
+function closedByOf(timeline: unknown): string | null {
+  const nodes = (timeline as { nodes?: Array<{ actor?: { login?: unknown } | null } | null> } | null | undefined)?.nodes ?? [];
+  const login = nodes[nodes.length - 1]?.actor?.login;
+  return typeof login === 'string' && login !== '' ? login : null;
 }
 
 /** A user-to-server token, as GitHub hands it out. Null expiries: the App's user tokens do not expire. */
@@ -354,12 +393,8 @@ export class GithubClient {
       reviewDecision: typeof pr.reviewDecision === 'string' ? pr.reviewDecision : null,
       inMergeQueue: pr.isInMergeQueue === true,
       mergeQueueEnabled: pr.isMergeQueueEnabled === true,
-      checks: contexts.map((node) => ({
-        name: String(node.__typename === 'StatusContext' ? node.context ?? '' : node.name ?? ''),
-        required: node.isRequired === true,
-        state: checkState(node),
-        url: typeof (node.detailsUrl ?? node.targetUrl) === 'string' ? String(node.detailsUrl ?? node.targetUrl) : null,
-      })),
+      closedBy: closedByOf(pr.timelineItems),
+      checks: contexts.map(checkOf),
       allowed: {
         merge: repository.mergeCommitAllowed !== false,
         rebase: repository.rebaseMergeAllowed !== false,
@@ -379,6 +414,29 @@ export class GithubClient {
     );
     if (answer.merged !== true || typeof answer.sha !== 'string') throw new GithubCallError(502, 'unexpected answer');
     return { sha: answer.sha };
+  }
+
+  /**
+   * GET /repos/{repo}/actions/jobs/{id}/logs: the plain-text log of the GitHub Actions job behind a failed check run
+   * (§4.5, Actions: read). GitHub answers with a redirect to a short-lived download, which is followed; the
+   * authorization header is not sent across that redirect. Only the last `maxBytes` are kept.
+   */
+  async actionsJobLog(token: string, fullName: string, jobId: number, maxBytes = 262_144): Promise<string> {
+    const route = `/repos/${fullName}/actions/jobs/${encodeURIComponent(String(jobId))}/logs`;
+    let response: Response;
+    try {
+      response = await this.request(`${GITHUB_API}${route}`, {
+        method: 'GET',
+        headers: { authorization: `Bearer ${token}`, 'user-agent': 'Orbit', 'x-github-api-version': '2022-11-28' },
+        redirect: 'follow',
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    } catch {
+      throw new GithubCallError(502, 'unreachable');
+    }
+    if (!response.ok) throw new GithubCallError(response.status, null);
+    const text = await response.text();
+    return text.length > maxBytes ? text.slice(text.length - maxBytes) : text;
   }
 
   /** DELETE the landing branch once its pull request merged (§4.8). Already gone (404, 422) is done too. */

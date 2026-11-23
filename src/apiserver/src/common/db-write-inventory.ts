@@ -1894,6 +1894,29 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: 'The runner is only told about the operation after this returns.',
     answer: 'Typed 503; the button can be pressed again.',
   },
+  // docs/design/protected-branch-landing.md §4.6 (J-T16, J-T17, J-T19, J-T20 for a session's Merge).
+  {
+    at: 'github/pull-request-door.service.ts#failSessionMerge',
+    shape: 'TX_RETRIED',
+    locks: "session FOR UPDATE by id and owner (rank 30), then — only while it still waits on this pull request (`merge_status = pull_request`, `merge_pull_request_id` this row) — for a pull request closed on GitHub one UPDATE of its github_pull_request row (rank 60) to CLOSED by id and state OPEN, a compare-and-set, and for every answer but a moved target the one write of the session row (rank 30, held: I3) to `error` with the reason.",
+    identity: "The session's wait on this pull request: the write moves it off `pull_request`, so a second read of the same answer — a webhook and the re-read at once — finds it no longer waiting and writes nothing.",
+    isolation: '',
+    attempts: 4,
+    replay: 'Everything is re-read under the session lock on every attempt.',
+    effects: "None inside. After commit: a moved target queues the merge again (sessions.service.ts#mergeAgainForPullRequest, its own unit); a failed check hands its log to the session (D5) through sessions.createTurn, its own unit; the session is announced.",
+    answer: 'Logged by the door; the session keeps waiting and the next delivery or re-read decides again.',
+  },
+  {
+    at: 'sessions/sessions.service.ts#mergeAgainForPullRequest',
+    shape: 'TX_RETRIED',
+    locks: "session FOR UPDATE (rank 30), then a plain read of its row; only while it still waits on the pull request named, exactly one UPDATE of it: queueMerge's, which queues the merge again; or, while a turn runs, the merge owed after it (`merge_after_turn_at`); or a refusal recorded as a failed merge. One write of the row (I3).",
+    identity: "The session's wait on the pull request: queueing moves it to `pending`, so a second call finds it no longer waiting and writes nothing.",
+    isolation: '',
+    attempts: 4,
+    replay: 'Everything is re-read under the lock on every attempt; a rolled-back attempt takes its queued operation with it.',
+    effects: 'None inside. After commit: the runner is woken for a queued merge (notifyRunnerWake) and the session is announced (publishSessionUpdated).',
+    answer: "Logged by the pull request door; the session keeps waiting on the pull request and the next re-read, which still finds it behind, asks again.",
+  },
   {
     at: 'sessions/sessions.service.ts#mergeAfterOwnTurn',
     shape: 'TX_RETRIED',
@@ -3313,6 +3336,7 @@ export interface TransactionParticipant {
  * silently.
  */
 export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
+  { at: 'github/pull-request-door.service.ts#oweMergeAfterFixTurn', under: "sessions.createTurn's send transaction, as its participateSendTransaction hook for the D5 fix turn (docs/design/protected-branch-landing.md §4.6, `pull-request-fix:v1:`), under the Session lock createTurn holds (rank 30): one UPDATE of that session row writing merge_after_turn_at and merge_after_turn_target, so the turn and the merge it owes commit or roll back together" },
   { at: 'projects/pull-request-landing.ts#recordPullRequestResult', under: "runnerApi.integrationJobResult through runner-api/integration-job-relay.ts#applyIntegrationJobResult, after its claim fence (docs/design/protected-branch-landing.md §4.2 J-T14): the subject's OPENING or OPEN github_pull_request row taken FOR UPDATE by landing_id (rank 60), then its UPDATE with the new head or the INSERT of a new OPENING row (its owner foreign key takes `user` FOR KEY SHARE), then one UPDATE of the job row the result transaction holds (rank 60) to PULL_REQUEST with its lease cleared, and its timeline fact through appendIntegrationJobEvent" },
   { at: 'projects/pull-request-landing.ts#recordSessionMergePullRequest', under: "runnerApi.mergeResult, under the session row it holds FOR UPDATE (rank 30) and after its operation fence (docs/design/protected-branch-landing.md §4.6): the session's OPENING or OPEN github_pull_request row FOR UPDATE by session_id (rank 60), its UPDATE or the INSERT of a new OPENING row, then the one write of the session row (rank 30, held: I3) to `pull_request`. No receipt: nothing has landed" },
   { at: 'runner-api/model-identity.ts#learnModelIdentities', under: "its one caller, ProvidersController's Model tiers view (providers.controller.ts, through subagentTierView's sightings hook), hands it the root client and does not await it (62caf021ee): so it is one model_identity INSERT ... ON CONFLICT DO NOTHING (createMany skipDuplicates) in its own implicit transaction, keyed by rule_key, after a read of the keys already decided. Two views asking at once insert each key once; a failure writes nothing and is asked again after the back-off" },
@@ -3852,6 +3876,8 @@ export interface StatementUnit {
  * whose writes are not atomic with each other.
  */
 export const STATEMENT_UNITS: readonly StatementUnit[] = [
+  { at: 'github/pull-request-door.service.ts#announceReview', class: 'ONE_ROW_CAS', statements: 1, note: "§4.5 \"Review required\": the first read that finds the pull request waiting for a review, outside any transaction, one UPDATE of the github_pull_request row by id, state OPEN and review_announced_at NULL, writing review_announced_at (1547). Only the read that wrote it tells the owner; every other matches nothing." },
+  { at: 'github/pull-request-door.service.ts#fail', class: 'ONE_ROW_CAS', statements: 1, note: "J-T19 for a pull request nobody waits on any more (docs/design/protected-branch-landing.md §4.2): one UPDATE of the row by id and state OPEN to CLOSED with who closed it. A waiting job or session closes it in its own unit (applyIntegrationJobResult, failSessionMerge) instead." },
   { at: 'github/pull-request-door.service.ts#readOnce', class: 'ONE_ROW_CAS', statements: 1, note: "One read of a pull request (docs/design/protected-branch-landing.md §4.3): after GitHub answered, outside any transaction, one UPDATE of the github_pull_request row by id and state OPEN with the condition, the checks and observed_at. No foreign key moves and no trigger names the table; a row merged or closed meanwhile matches nothing." },
   { at: 'github/pull-request-door.service.ts#open', class: 'ONE_ROW_CAS', statements: 1, note: "§4.1 step 5: once GitHub opened the pull request (or answered the one already open for the head), one UPDATE of the row by id and state OPENING to OPEN with its number and url. Two openers race to the same answer; the loser matches nothing." },
   { at: 'github/pull-request-door.service.ts#merge', class: 'ONE_ROW_CAS', statements: 1, note: "§4.4: after GitHub merged it, one UPDATE of the row's merge_method by id and state OPEN. The landing itself is written from GitHub's next answer, through applyIntegrationJobResult or landSessionMerge." },
