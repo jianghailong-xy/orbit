@@ -1,7 +1,7 @@
 import {
-  isAuthErrorText,
-  isUsageLimitErrorText,
   PermissionMode,
+  RunFailureKind,
+  runFailureKind,
   SUBAGENT_RUN_STATUSES,
   type SubagentAttempt,
   type SubagentAttemptOutcome,
@@ -14,6 +14,7 @@ import {
   type SubagentRunCreateRequest,
   type SubagentRunUpdateRequest,
   type SubagentSize,
+  type RunFailure,
 } from '@orbit/shared';
 import {
   ArrayMaxSize,
@@ -30,7 +31,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { IsPublicId } from '../common/public-id';
-import { MODEL_AT_CAPACITY_ERROR_MARKER, subagentFitLine, type SubagentRoutingDecision } from '../tasks/model-routing';
+import { subagentFitLine, type SubagentRoutingDecision } from '../tasks/model-routing';
 import { stripNul } from './strip-nul';
 
 /**
@@ -175,6 +176,16 @@ export class SubagentFallbackDto implements SubagentFallbackRequest {
   @MaxLength(20_000)
   error!: string;
 
+  /** The child's failure as its engine adapter classified it (§5.1); read by movableFailure, kinds it does not know
+   *  fall back to the text. */
+  @IsOptional()
+  @IsObject()
+  failure?: RunFailure;
+
+  @IsOptional()
+  @IsBoolean()
+  admission?: boolean;
+
   @IsOptional()
   @IsBoolean()
   readonly?: boolean;
@@ -191,31 +202,21 @@ export const SUBAGENT_MAX_MOVES = 2;
 export const SUBAGENT_ATTEMPT_ERROR_MAX = 500;
 
 /**
- * A child's failure as §4.3 moves it: a spent quota (USAGE_LIMIT_ERROR_MARKERS, opening the text) or a model at
- * capacity (MODEL_AT_CAPACITY_ERROR_MARKER). Null for every other failure, which goes back to the parent as is.
+ * A child's failure as §4.3 moves it, read through runFailureKind: the kind its engine adapter sent, else the legacy
+ * markers of its words. A spent quota, a model at capacity or a refused credential moves; null for every other
+ * failure, which goes back to the parent as is. Moving on the newer account kinds is phase 2 of
+ * docs/routing-account-health-design.md (§7.3, §10).
  */
-export function limitFailure(error: string): Extract<SubagentAttemptOutcome, 'USAGE_LIMIT' | 'AT_CAPACITY'> | null {
-  if (isUsageLimitErrorText(error)) return 'USAGE_LIMIT';
-  return error.toLowerCase().includes(MODEL_AT_CAPACITY_ERROR_MARKER) ? 'AT_CAPACITY' : null;
-}
-
-/** How a sign-in failure may open when the engine does not wrap it in `Failed to authenticate` (Codex, OAuth). */
-const LOGIN_FAILURE_OPENINGS = ['not logged in', 'oauth session expired'];
-
-/**
- * Whether a child failed on its engine's login: the runtime's `Failed to authenticate` (isAuthErrorText, which
- * leaves out a dropped connection), or a text that opens as `Not logged in` / `OAuth session expired`. Kept in sync
- * with isSubagentLoginFailure in runner-go/subagent_fallback.go.
- */
-export function isLoginFailureText(error: string): boolean {
-  if (isAuthErrorText(error)) return true;
-  const opening = error.trimStart().toLowerCase();
-  return LOGIN_FAILURE_OPENINGS.some((marker) => opening.startsWith(marker));
-}
-
-/** A child's failure as §4.3 moves it: a limit or capacity (limitFailure), else a failed login; null otherwise. */
-export function movableFailure(error: string): Extract<SubagentAttemptOutcome, 'USAGE_LIMIT' | 'AT_CAPACITY' | 'AUTH_FAILED'> | null {
-  return limitFailure(error) ?? (isLoginFailureText(error) ? 'AUTH_FAILED' : null);
+export function movableFailure(
+  error: string,
+  failure?: { kind?: string } | null,
+): Extract<SubagentAttemptOutcome, 'USAGE_LIMIT' | 'AT_CAPACITY' | 'AUTH_FAILED'> | null {
+  switch (runFailureKind({ failureKind: failure?.kind ?? null, error })) {
+    case RunFailureKind.USAGE_LIMIT: return 'USAGE_LIMIT';
+    case RunFailureKind.CAPACITY: return 'AT_CAPACITY';
+    case RunFailureKind.CREDENTIAL_REFUSED: return 'AUTH_FAILED';
+    default: return null;
+  }
 }
 
 /** The first entry of a run's attempts: where it was opened to run. */

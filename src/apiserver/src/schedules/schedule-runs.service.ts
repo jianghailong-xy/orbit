@@ -47,7 +47,7 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
-import { SCHEDULE_COPY, scheduleFill, isUsageLimitErrorText } from '@orbit/shared';
+import { SCHEDULE_COPY, scheduleFill, RunFailureKind, runFailureKind } from '@orbit/shared';
 import { Prisma, RunStatus, type Schedule, type ScheduleRun } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 
@@ -654,7 +654,7 @@ export class ScheduleRunsService {
           select: {
             status: true, finishedAt: true, endReason: true, lastTurnOutcome: true, completedAt: true, archivedAt: true,
             deletedAt: true,
-            cancelRequestedAt: true, error: true, runningBgJobs: true,
+            cancelRequestedAt: true, error: true, failureKind: true, runningBgJobs: true,
           },
         })
       : null;
@@ -675,7 +675,7 @@ export class ScheduleRunsService {
     // Released by a failure (common/session-release.ts). An end that was asked for and not honoured is a stop, below.
     if (releaseWasFailure(session)) {
       if (delivered) return this.fail(runId, 'ENGINE_CRASHED', { sessionId });
-      return this.fail(runId, isUsageLimitErrorText(session.error) ? 'QUOTA' : 'ENGINE_CRASHED_BEFORE_START', { sessionId });
+      return this.fail(runId, runFailureKind(session) === RunFailureKind.USAGE_LIMIT ? 'QUOTA' : 'ENGINE_CRASHED_BEFORE_START', { sessionId });
     }
     const ended = session.deletedAt !== null || session.completedAt !== null || session.archivedAt !== null
       || session.cancelRequestedAt !== null

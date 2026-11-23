@@ -2179,6 +2179,15 @@ model Session {
   startedAt            DateTime? @map("started_at")
   finishedAt           DateTime? @map("finished_at")
   error                String?
+  // What a failed run failed with, as its runner's engine adapter classified it (docs/routing-account-health-design.md
+  // §5.1, migration 1493), written with `error` by turn-complete and finalize and cleared with it on a revive. Read
+  // through runFailureKind (@orbit/shared), which falls back to `error`'s legacy markers when the kind is null (an
+  // older runner, or a failure no adapter rule matched). A null failureScope is the whole account; a null
+  // admissionFailure: the runner did not say.
+  failureKind          String?   @map("failure_kind")
+  failureScope         String?   @map("failure_scope")
+  failureSaid          String?   @map("failure_said")
+  admissionFailure     Boolean?  @map("admission_failure")
   result               String?
   // Why the session ended, orthogonal to `status` (which collapses every graceful end
   // to CANCELLED). Set by the path that requests the end — endLive (user end/complete/

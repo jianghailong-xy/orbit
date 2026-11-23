@@ -1,4 +1,5 @@
 import { readSessionCoordinatorHandoffs } from '../projects/coordinator-handoff';
+import { CLEARED_RUN_FAILURE } from '../runner-api/run-failure-columns';
 import type { BackgroundJobStopResponse, BackgroundJobTailResponse, HelpAskMarker, SubagentRunView, WorkflowRunView } from '@orbit/shared';
 import { BG_JOB_STOPPED_BY_OWNER, BG_JOB_TAIL_MAX_BYTES, BG_OUTPUT_TAIL_V1, BG_OWNER_STOP_V1, cloneRootFor, newFolderPath } from '@orbit/shared';
 import { RunnerHints } from '../realtime/runner-hints';
@@ -11728,6 +11729,8 @@ export class SessionsService {
           // Held again (design §4.2).
           finishedAt: null,
           error: null,
+          // The failure's classification goes with its error (routing-account-health-design §5.1).
+          ...CLEARED_RUN_FAILURE,
           result: null,
           lastTurnAt: new Date(),
           // Previewed from enqueue, as in createTurn: a revive waits for a slot like any other

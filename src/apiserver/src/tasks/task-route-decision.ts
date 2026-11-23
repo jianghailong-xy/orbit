@@ -5,7 +5,8 @@ import {
   accountCapWindows,
   cursorUsageRead,
   isEngine,
-  USAGE_LIMIT_ERROR_MARKERS,
+  RunFailureKind,
+  runFailureKind,
   runnerCatalogRow,
   quotaExpiry,
   quotaNearLimit,
@@ -41,7 +42,6 @@ import { taskRunSeed } from '../workspaces/start-anchor';
 import { RUNNER_BEATS } from '../runners/runner-presence';
 import { readExecutableAcceptanceOutcome } from './executable-acceptance-round';
 import {
-  MODEL_AT_CAPACITY_ERROR_MARKER,
   MODEL_ROUTING_LEVELS,
   priorLevel,
   routeTaskRun,
@@ -368,20 +368,6 @@ async function routeEngines(
   return { verifiedRunEngine: task.verifiesTaskId ? await lastRunEngine(reads, task.verifiesTaskId) : null };
 }
 
-/** `autoRunHoldOff`'s reading: an error naming a spent quota says nothing about the task (§3.3). */
-function quotaFailure(error: string | null): boolean {
-  const text = error?.toLowerCase() ?? '';
-  return USAGE_LIMIT_ERROR_MARKERS.some((marker) => text.includes(marker));
-}
-
-/**
- * "Selected model is at capacity": the provider turned the run away at admission, for minutes and
- * across models, so like a spent quota it says nothing about the task.
- */
-function capacityFailure(error: string | null): boolean {
-  return error?.toLowerCase().includes(MODEL_AT_CAPACITY_ERROR_MARKER) ?? false;
-}
-
 /**
  * The task's work runs as the router reads them (§3.3): newest first, numbered in the order they
  * were started ("run 1" is the first), each with the tier its own Route Decision named — a shadow
@@ -401,7 +387,7 @@ async function readRunHistory(
     where: { ownerId, taskId, startsTaskWork: true },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     select: {
-      id: true, createdAt: true, ...RELEASE_FAILURE_SELECT, error: true,
+      id: true, createdAt: true, ...RELEASE_FAILURE_SELECT, error: true, failureKind: true,
       engine: true, provider: true, providerBuiltin: true, ownerId: true, model: true, effort: true,
     },
   });
@@ -426,11 +412,14 @@ async function readRunHistory(
     const failed = releaseWasFailure(run);
     const next = runs[index + 1]?.createdAt;
     const judged = (at: Date) => at >= run.createdAt && (!next || at < next);
+    // A spent quota or a model at capacity says nothing about the task (§3.3): the runner's kind, else the legacy
+    // markers of its error (runFailureKind), the reading autoRunHoldOff's budget uses too.
+    const kind = failed ? runFailureKind(run) : null;
     return {
       ordinal: index + 1,
       status: run.status,
-      quotaFailure: failed && quotaFailure(run.error),
-      capacityFailure: failed && capacityFailure(run.error),
+      quotaFailure: kind === RunFailureKind.USAGE_LIMIT,
+      capacityFailure: kind === RunFailureKind.CAPACITY,
       level: MODEL_ROUTING_LEVELS.find((level) => level === levels.get(run.id)) ?? null,
       model: run.model,
       effort: run.effort,

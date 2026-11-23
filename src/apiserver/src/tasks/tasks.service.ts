@@ -35,7 +35,7 @@ import {
   RunEventType,
   SessionEndReason,
   TaskStatus,
-  USAGE_LIMIT_ERROR_MARKERS,
+  RunFailureKind,
   uuidToBase62,
   type ControlTaskChanged,
   type PlanUsage,
@@ -252,6 +252,7 @@ import {
   QUOTA_BLIND_RETRY_BACKOFF_MS,
   autoRunEnd,
 } from './task-retry-policy';
+import { failureKindIs, failureKindIsNot } from '../common/run-failure-kind-filter';
 import {
   heldFilter,
   heldStatusFilter,
@@ -13115,24 +13116,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const held = new Map<string, Date | null>();
     const uniqueIds = [...new Set(taskIds)];
     const now = this.now().getTime();
-    const usageLimitIs = (negated: boolean) => {
-      const clauses = USAGE_LIMIT_ERROR_MARKERS.map((marker) => ({
-        error: { contains: marker, mode: Prisma.QueryMode.insensitive },
-      }));
-      return negated ? { NOT: { OR: clauses } } : { OR: clauses };
-    };
     for (let offset = 0; offset < uniqueIds.length; offset += TASK_ID_QUERY_CHUNK) {
       const ids = uniqueIds.slice(offset, offset + TASK_ID_QUERY_CHUNK);
       const failures = await this.prisma.session.groupBy({
         by: ['taskId'],
         where: {
           taskId: { in: ids },
-          // Released by a failure (common/session-release.ts).
-          AND: [releaseWasFailureFilter()],
-          // A run that failed with no error text matches no usage-limit marker, so it is an
-          // ordinary failure and counts. Said explicitly: the runner's /finalize omits `error` when
-          // its engine died without a message, and a negated match alone is not true of a NULL.
-          OR: [{ error: null }, usageLimitIs(true)],
+          // Released by a failure (common/session-release.ts), and not on a spent quota: the runner's kind, else
+          // the legacy markers of its error (runFailureKind). A run that failed with no kind and no error text is an
+          // ordinary failure and counts (failureKindIsNot keeps the NULLs a negated match would drop).
+          AND: [releaseWasFailureFilter(), failureKindIsNot([RunFailureKind.USAGE_LIMIT])],
         },
         _count: { _all: true },
         _max: { createdAt: true },
@@ -13195,8 +13188,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         by: ['taskId'],
         where: {
           taskId: { in: blindIds },
-          AND: [releaseWasFailureFilter()],
-          ...usageLimitIs(false),
+          AND: [releaseWasFailureFilter(), failureKindIs([RunFailureKind.USAGE_LIMIT])],
         },
         _max: { createdAt: true },
       });

@@ -957,7 +957,7 @@ export class RunnerSubagentsController {
     @Body() dto: SubagentFallbackDto,
   ): Promise<SubagentFallbackResponse> {
     await this.assertParentOfRunner(sessionId, runner);
-    const failure = movableFailure(dto.error);
+    const failure = movableFailure(dto.error, dto.failure);
     // Refusals still close the failed attempt, so they are thrown after the transaction commits.
     const outcome = await withTransactionRetry(this.prisma, async (tx) => {
       await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR UPDATE`;

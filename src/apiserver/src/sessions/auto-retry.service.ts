@@ -15,10 +15,11 @@ import {
   RUNNER_UPDATE_INTERRUPT_REASON,
   RunEventType,
   isAccountEngine,
-  isAuthErrorText,
   isRetryableApiErrorText,
   isUsageLimitErrorText,
   planUsageBlockedUntil,
+  RunFailureKind,
+  runFailureKind,
   withEnginePlanUsage,
   type PlanUsage,
   type SessionMessageCard,
@@ -1129,8 +1130,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
    * (§8 criterion 22), and the moment the message it would re-send is the failed one. A run that FAILED
    * is; so is one parked idle with a retry armed or claimed for it, or whose latest reply is one of the
    * failures the card offers Retry on — a spent quota, a provider that could not answer, a sign-in that
-   * lapsed — read the way the transcript reads them (`isUsageLimitErrorText`, `isRetryableApiErrorText`,
-   * `isAuthErrorText`). Anything else is not: a session working on a turn, the re-send of a press among
+   * lapsed — read the way the transcript reads them (runFailureKind's USAGE_LIMIT and CREDENTIAL_REFUSED, and
+   * `isRetryableApiErrorText`). Anything else is not: a session working on a turn, the re-send of a press among
    * them, or one whose latest message was answered.
    */
   private async stoppedOnFailure(
@@ -1139,7 +1140,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
   ): Promise<boolean> {
     const session = await db.session.findUnique({
       where: { id: sessionId },
-      select: { ...RELEASE_FAILURE_SELECT, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true },
+      select: { ...RELEASE_FAILURE_SELECT, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true, failureKind: true },
     });
     if (!session) return false;
     if (releaseWasFailure(session)) return true;
@@ -1155,7 +1156,10 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       select: { payload: true },
     });
     const latest = replies.map(workspaceReplyText).find((text) => text);
-    return !!latest && (isUsageLimitErrorText(latest) || isRetryableApiErrorText(latest) || isAuthErrorText(latest));
+    if (!latest) return false;
+    // A spent quota or a refused credential, by the runner's kind or else the reply's own words (runFailureKind).
+    const kind = runFailureKind({ failureKind: session.failureKind, error: latest });
+    return kind === RunFailureKind.USAGE_LIMIT || kind === RunFailureKind.CREDENTIAL_REFUSED || isRetryableApiErrorText(latest);
   }
 
   /**

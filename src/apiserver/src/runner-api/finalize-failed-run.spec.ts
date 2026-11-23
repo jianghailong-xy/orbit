@@ -237,3 +237,81 @@ test('runner-loss finalize writes an IN_FLIGHT CURRENT_WORK UNCONFIRMED receipt 
     'the durable receipt must be written before the blanket ANSWERED drain',
   );
 });
+
+/**
+ * The failure's kind on the session (docs/routing-account-health-design.md §5.1, §10 Mixed versions): a runner that
+ * classifies its failure has the kind stored beside `error`, in the same write; an older runner sends no kind, and its
+ * failure is stored with nulls and decided through the legacy markers exactly as before.
+ */
+const CURSOR_PAYMENT_ERROR =
+  'Cursor said: "Add a payment method to continue." The Cursor account needs this before the session can go on.';
+
+test('a new runner: the failure kind, its scope, the provider words and the admission flag are stored with the error', async () => {
+  const h = makeController({ numTurns: 0 });
+
+  await finalize(h.controller, {
+    status: SharedRunStatus.FAILED,
+    error: CURSOR_PAYMENT_ERROR,
+    failure: { kind: 'ACCOUNT_ACTION_REQUIRED' as never, said: 'Add a payment method to continue' },
+    admission: true,
+  });
+
+  assert.equal(h.updates[0].error, CURSOR_PAYMENT_ERROR);
+  assert.equal(h.updates[0].failureKind, 'ACCOUNT_ACTION_REQUIRED');
+  assert.equal(h.updates[0].failureScope, null, 'no scope is the whole account');
+  assert.equal(h.updates[0].failureSaid, 'Add a payment method to continue');
+  assert.equal(h.updates[0].admissionFailure, true);
+  assert.equal(h.updates[0].retryAt, undefined, 'an account action is no quota wait');
+});
+
+test('an old runner: no kind is stored and a quota refusal is still read from its words', async () => {
+  const h = makeController({ numTurns: 0 });
+
+  await finalize(h.controller, { status: SharedRunStatus.FAILED, error: QUOTA_ERROR });
+
+  assert.equal(h.updates[0].failureKind, null);
+  assert.equal(h.updates[0].admissionFailure, null, 'an older runner did not say');
+  assert.ok(h.updates[0].retryAt instanceof Date, 'the legacy marker still arms the quota retry');
+});
+
+test("the runner's kind decides over the words: a sign-in sentence classified as a dropped connection is no sign-in", async () => {
+  const h = makeController({ numTurns: 0, provider: 'claude', workspaceId: 'workspace-1' });
+
+  await finalize(h.controller, {
+    status: SharedRunStatus.FAILED,
+    error: SIGNED_OUT_ERROR,
+    failure: { kind: 'TRANSPORT' as never },
+    admission: true,
+  });
+
+  assert.equal(h.updates[0].failureKind, 'TRANSPORT');
+  assert.equal(h.updates[0].retryAt, undefined);
+});
+
+test('a kind this server does not know is stored as none and read through the markers', async () => {
+  const h = makeController({ numTurns: 0 });
+
+  await finalize(h.controller, {
+    status: SharedRunStatus.FAILED,
+    error: QUOTA_ERROR,
+    failure: { kind: 'A_NEWER_KIND' as never },
+    admission: false,
+  });
+
+  assert.equal(h.updates[0].failureKind, null);
+  assert.equal(h.updates[0].admissionFailure, false);
+  assert.ok(h.updates[0].retryAt instanceof Date, 'the words still say a quota');
+});
+
+test('a run that did not fail stores no failure, whatever the runner sent', async () => {
+  const h = makeController({ numTurns: 2 });
+
+  await finalize(h.controller, {
+    status: SharedRunStatus.SUCCEEDED,
+    failure: { kind: 'CAPACITY' as never },
+    admission: true,
+  });
+
+  assert.equal(h.updates[0].failureKind, null);
+  assert.equal(h.updates[0].admissionFailure, null);
+});

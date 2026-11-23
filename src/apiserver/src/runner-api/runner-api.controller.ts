@@ -3,6 +3,7 @@ import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from
 import { DRAIN_SKIPS_HELD, translationLanguages, turnTranslationOf } from '../sessions/turn-translation';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
+import { runFailureColumns } from './run-failure-columns';
 import { BG_OWNER_STOP_V1, BROWSER_CLEAR_V1, BROWSER_OPEN_V1, type BackgroundJobStopCommand, CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import { ConditionsService } from '../conditions/conditions.service';
@@ -106,6 +107,8 @@ import {
   IntegrationJobResultResponse,
   isUsageLimitErrorText,
   parseQuotaResetAt,
+  RunFailureKind,
+  runFailureKind,
   usageLimitResetsAt,
   workflowLaunchReceipt,
   delegateLaunchReceipt,
@@ -7824,7 +7827,7 @@ export class RunnerApiController {
         && completedTurn?.kind === 'message'
         && current.retryAt == null
         && usageLimitEngine
-        && isUsageLimitErrorText(failureText)
+        && runFailureKind({ failureKind: dto.failure?.kind, error: failureText }) === RunFailureKind.USAGE_LIMIT
           ? await this.usageLimitRetry(tx, runner.id, usageLimitEngine, current, failureText!)
           : null;
       const filed = current.completedAt != null || current.archivedAt != null || current.deletedAt != null;
@@ -8244,6 +8247,9 @@ export class RunnerApiController {
                 // reporting the engine's words, which for this shape are nothing: the runtime
                 // released the turn without a reply. Its own sentence follows when it gave one.
                 error: (acceptanceFailureReason ?? (swallowed ? swallowedMessageError(failureText) : failureText)) || 'run failed',
+                // What the engine adapter classified the failure as, beside the error it wrote (design §5.1). An
+                // acceptance failure is the server's own verdict on the work, not the engine's: no kind.
+                ...runFailureColumns(acceptanceFailureReason ? {} : dto, true),
                 finishedAt: new Date(),
                 // Released for the turn that failed (design §4.2), in the statement that writes FAILED.
                 cancelRequestedAt: new Date(),
@@ -10219,8 +10225,10 @@ export class RunnerApiController {
       // back" for every quota failure rather than only the ones that got far enough to talk. Never
       // an overwrite: an ingestion-armed retry already knows more than the terminal message does.
       const failedRun = effectiveStatus === RunStatus.FAILED;
+      // The failure's kind: the runner's, else the legacy markers of its error (runFailureKind).
+      const failureKind = failedRun ? runFailureKind({ failureKind: dto.failure?.kind, error: dto.error }) : null;
       const quotaSpent =
-        failedRun && current.retryAt == null && isUsageLimitErrorText(dto.error);
+        failedRun && current.retryAt == null && failureKind === RunFailureKind.USAGE_LIMIT;
       // A run that ended because its account refused the sign-in, on the runner's own login for its
       // engine. Most often the runner's check before it starts the engine (engineAuthPreflight) finds
       // the account signed out and ends the run with the message it took undelivered. Moved below.
@@ -10228,7 +10236,7 @@ export class RunnerApiController {
         effectiveStatus === RunStatus.FAILED
         && current.retryAt == null
         && !quotaSpent
-        && isAuthErrorText(dto.error)
+        && failureKind === RunFailureKind.CREDENTIAL_REFUSED
         && isAccountEngine(current.provider)
         && isBuiltinProvider(current.provider, current.providerBuiltin)
         && (recordedEngine(current.engine) ?? current.provider) === current.provider
@@ -10314,6 +10322,8 @@ export class RunnerApiController {
           status: effectiveStatus,
           result: dto.result,
           error: dto.error,
+          // The runner's classification of the failure it ends with, in the statement that writes `error` (design §5.1).
+          ...runFailureColumns(dto, failedRun),
           // `claudeSessionId` is a legacy alias older runners still send; both name the same
           // id, so it only serves as a fallback here and is never persisted on its own.
           runtimeSessionId: dto.runtimeSessionId ?? dto.claudeSessionId ?? undefined,
