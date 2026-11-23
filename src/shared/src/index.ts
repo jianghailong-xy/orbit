@@ -60,6 +60,7 @@ export * from './wikiSystemModel';
 export * from './wikiChat';
 export * from './feishu';
 export * from './github';
+export * from './pull-request-landing';
 export * from './translation';
 export * from './help';
 export * from './prompt-optimizer';
