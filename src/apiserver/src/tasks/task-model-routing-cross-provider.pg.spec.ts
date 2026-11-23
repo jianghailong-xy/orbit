@@ -303,7 +303,7 @@ test('the engines list on an Agent is still the owner\'s to write: the user API 
     const services = connect();
     try {
       // The user API validates with a whitelist (main.ts): engines with a tier table are kept, nothing else.
-      for (const Dto of [CreateWorkspaceDto, UpdateWorkspaceDto]) {
+      for (const Dto of [CreateWorkspaceDto, UpdateWorkspaceDto] as Array<typeof UpdateWorkspaceDto>) {
         const ok = plainToInstance(Dto, { name: 'agent', modelRoutingProviders: ['codex', 'claude'] });
         assert.deepEqual(await validate(ok, { whitelist: true }), []);
         assert.deepEqual(ok.modelRoutingProviders, ['codex', 'claude'], `${Dto.name} keeps it`);

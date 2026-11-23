@@ -554,7 +554,7 @@ test('the switch is the owner\'s: the user API turns it on and off, the agent to
     const services = connect();
     try {
       // The user API validates with a whitelist (main.ts): a boolean is kept, anything else is refused.
-      for (const Dto of [CreateWorkspaceDto, UpdateWorkspaceDto]) {
+      for (const Dto of [CreateWorkspaceDto, UpdateWorkspaceDto] as Array<typeof UpdateWorkspaceDto>) {
         const ok = plainToInstance(Dto, { name: 'agent', modelRouting: true });
         assert.deepEqual(await validate(ok, { whitelist: true }), []);
         assert.equal(ok.modelRouting, true, `${Dto.name} keeps it`);
