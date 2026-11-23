@@ -3391,7 +3391,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1465 adds runner.burst_concurrent (NOT NULL DEFAULT 2, a check >= 0), the nullable session.over_capacity_turn_id
       // and a partial index on session; no row is written, and no preserved relation, trigger, function or DONE fence
       // changes. Written as 1430 on its task branch, it was renumbered after main took 1430 to 1464.
-      '1465_session_run_now_over_capacity'],
+      '1465_session_run_now_over_capacity',
+      // 1491 sets feishu_app.message_detail's default to FULL and moves every TITLES_ONLY row to FULL: an ALTER and an
+      // UPDATE of that table only, none of the preserved relations, and no trigger, function or DONE fence changes.
+      '1491_feishu_details_by_default'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
