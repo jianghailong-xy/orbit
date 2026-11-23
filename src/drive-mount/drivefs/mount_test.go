@@ -2,12 +2,14 @@ package drivefs
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
 	"math/rand"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -16,6 +18,7 @@ import (
 	"time"
 
 	"github.com/hanwen/go-fuse/v2/fuse"
+	"golang.org/x/sys/unix"
 
 	"orbit/drive-mount/door"
 )
@@ -113,6 +116,76 @@ func TestOverwritesMakeVersionsAndAppendsDoNot(t *testing.T) {
 	}
 	if got, err := os.ReadFile(p); err != nil || string(got) != string(data) {
 		t.Fatalf("read back %q %v", got, err)
+	}
+}
+
+func TestVimSavesKeepTheCommitMtime(t *testing.T) {
+	vim, err := exec.LookPath("vim")
+	if err != nil {
+		t.Skip("vim is required")
+	}
+	// Vim's default backupskip matches /tmp/*, so mount outside /tmp for the first save.
+	t.Setenv("TMPDIR", "/var/tmp")
+	f, mnt, rep := mountFake(t, Options{})
+	p := filepath.Join(mnt, "v.txt")
+	if err := os.WriteFile(p, []byte("line x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stat := func() unix.Statx_t {
+		t.Helper()
+		var st unix.Statx_t
+		if err := unix.Statx(unix.AT_FDCWD, p, unix.AT_STATX_FORCE_SYNC, unix.STATX_MTIME|unix.STATX_INO, &st); err != nil {
+			t.Fatal(err)
+		}
+		return st
+	}
+	save := func(commands ...string) {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		args := append([]string{"--not-a-term", "-u", "DEFAULTS", "-i", "NONE"}, commands...)
+		cmd := exec.CommandContext(ctx, vim, append(args, "-c", "wq", p)...)
+		cmd.Env = append(cmd.Environ(), "TMPDIR=/tmp")
+		// Vim can fall back to reading from stderr on a prompt. Give it a file so it sees EOF.
+		output, err := os.Create(filepath.Join(t.TempDir(), "vim.log"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer output.Close()
+		cmd.Stdout, cmd.Stderr = output, output
+		if err := cmd.Run(); err != nil {
+			out, _ := os.ReadFile(output.Name())
+			t.Fatalf("vim %v: %v\n%s", commands, err, out)
+		}
+	}
+	original := stat()
+	save("-c", "s/x/y/")
+	first := stat()
+	save("-c", "set backupcopy=yes", "-c", "s/y/z/")
+	before := stat()
+	if first.Ino == original.Ino || before.Ino != first.Ino {
+		t.Fatalf("default save should replace the inode and backupcopy=yes should keep it: %d, %d, %d", original.Ino, first.Ino, before.Ino)
+	}
+	if got, err := os.ReadFile(p); err != nil || string(got) != "line z\n" {
+		t.Fatalf("after both saves: %q, %v", got, err)
+	}
+	f.mu.Lock()
+	committed := f.at("/v.txt").mtime
+	f.mu.Unlock()
+	polledAfter := time.Now()
+	for {
+		feed := rep.CurrentStatus().ChangeFeedAt
+		if feed != nil && feed.After(polledAfter) {
+			break
+		}
+		if time.Since(polledAfter) > 5*time.Second {
+			t.Fatal("no change feed poll after the save")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	after := stat()
+	if before.Mtime != after.Mtime || !time.Unix(before.Mtime.Sec, int64(before.Mtime.Nsec)).Equal(committed) {
+		t.Fatalf("mtime before feed: %+v, after feed: %+v, door: %v", before.Mtime, after.Mtime, committed)
 	}
 }
 

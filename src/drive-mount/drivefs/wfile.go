@@ -910,7 +910,7 @@ func (wf *wfile) commit(ctx context.Context, wait time.Duration) error {
 	done, err := wf.commitHeld(ctx, wait)
 	wf.wmu.Unlock()
 	if done != nil {
-		wf.fs.committed(wf.n, done.result, done.manifest, done.mtime == nil)
+		wf.fs.committed(wf.n, done.result, done.manifest)
 		if done.mtime != nil {
 			wf.fs.applyMtime(wf.n, *done.mtime, done.session)
 		}
@@ -1133,6 +1133,8 @@ func (wf *wfile) appliedLocked(r door.CommitResult, gen uint64) *applied {
 		out.mtime = &t
 		wf.pendingMtime = nil
 		wf.mtime = t
+	} else if !wf.dirty && !r.Mtime.IsZero() {
+		wf.mtime = r.Mtime
 	}
 	wf.showLocked()
 	return out
@@ -1329,22 +1331,22 @@ func (wf *wfile) fail(err error) {
 
 // ── what the file system does with write states ─────────────────────────────────────────────────────
 
-// committed records on the node what a commit made: its size, seq and version, and the chunk list when known.
-func (fs *FS) committed(n *node, r door.CommitResult, m *door.Manifest, mtimeNow bool) {
+// committed records the door's attributes for this commit, and the chunk list when known.
+func (fs *FS) committed(n *node, r door.CommitResult, m *door.Manifest) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 	if r.Seq < n.seq {
 		return
 	}
 	n.seq, n.size, n.version = r.Seq, r.SizeBytes, r.VersionID
-	if mtimeNow {
-		n.mtime = time.Now()
+	if !r.Mtime.IsZero() {
+		n.mtime = r.Mtime
 	}
 	n.manifest, n.sha = m, ""
 	if m != nil && len(m.Chunks) == 1 {
 		n.sha = m.Chunks[0].SHA256
 	}
-	n.fetched, n.stale = time.Now(), false
+	n.fetched, n.stale = time.Now(), r.Mtime.IsZero()
 }
 
 // applyMtime sets an mtime that arrived while a write was not committed yet (`cp -p`, `tar x`), after its commit.

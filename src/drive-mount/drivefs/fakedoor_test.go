@@ -436,7 +436,7 @@ func (f *fakeDoor) commit(w http.ResponseWriter, body map[string]interface{}) {
 	}
 	e.mtime = time.Now()
 	f.change(e, "UPSERT")
-	res.VersionID, res.SizeBytes, res.Seq = cur.id, f.size(cur), e.seq
+	res.VersionID, res.SizeBytes, res.Seq, res.Mtime = cur.id, f.size(cur), e.seq, e.mtime
 	f.commits[c.CommitID] = res
 	if f.loseCommitAnswers > 0 {
 		f.loseCommitAnswers--
