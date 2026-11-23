@@ -373,10 +373,16 @@ up for about 15 minutes. Memory is `docker stats` in MiB; disk is `du -sb` of th
 | `node-exporter` | 13.1 | 128 | None |
 | `postgres-exporter` | 14.0 | 128 | None |
 | `grafana` | 24.9 | 384 | 50 MiB, fixed (`grafana-data`) |
-| `loki` | 20.9 | 512 | Under 1 MiB on an idle stack; it grows with the lines the containers write, up to 7 days of them |
+| `loki` | 20.9 | 512 | Follows the logs: about 7 MiB a day in, so about 48 MiB for 7 days if Loki compressed nothing, and about 5 MiB at the 10x gzip measured on these logs (estimate; see below). Under 1 MiB on an idle stack |
 | `alloy` | 21.6 | 256 | Under 1 MiB (`alloy-data`) |
 | `pg-monitor-role` | 0 (exited after it runs) | 64 | None |
 | **Total** | **120.7** | | |
+
+Loki's figure is an estimate from the json-file logs of Compose stacks on one host that had run for about a day
+(`du` of each container's `*-json.log`, divided by its age): the web gateway wrote 0.7 to 4.0 MiB a day, the link gateway
+0.1 to 6.3 MiB, PostgreSQL 0.14 MiB, so one stack is about 7 MiB a day. Those logs compress 7 to 26 times with gzip, 13 times
+in the median; Loki's own ratio was not measured, so the table's upper figure assumes none. The apiserver's log, which
+dominates on a loaded deployment, had no steady-state window and is not in it. Multiply by your own traffic.
 
 A busy stack costs more: memory with more series and logs, and Loki's disk with the log volume. The Prometheus figure is the
 write-ahead log before compaction, so it is an upper bound on the daily growth.
@@ -678,6 +684,10 @@ its volume is on is more than 90% full, Loki refuses every line (it logs `disk u
 logs pushes answered `500 … Ingester is shutting down`). Logs therefore never take the last tenth of the disk that
 `./data` and the database usually share; what arrives meanwhile is lost to Loki, and stays in `docker logs`. Free
 space and it accepts lines again by itself.
+
+**When disk is tight,** shorten the retention: set `ORBIT_LOKI_RETENTION` in `.env` to fewer hours (`72h` keeps 3 days, `24h` one),
+then `docker compose up -d loki`. The compactor deletes the older lines within two hours. Prometheus has its own
+setting: lower `ORBIT_PROMETHEUS_RETENTION_SIZE`.
 
 **Check it.** Both stay inside the project network. Ask from Grafana's container:
 
