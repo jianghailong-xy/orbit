@@ -807,7 +807,16 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     }
     public var isReleased: Bool { released ?? effectiveRunStatus.isTerminal }
     public var effectiveRunState: SessionRunState {
-        SessionRunState.resolve(runState, legacy: sessionState,
+        // A held session whose status word this build does not know reads its phase, as web does (a release is
+        // worded by `displayRunState`). A known status keeps its reading: a parked turn with a background job
+        // says so, which the phase alone cannot.
+        if released == false, effectiveRunStatus == .unknown, (runState ?? .unknown) == .unknown,
+           let held = SessionRunState.fromPhaseFields(phase: phase, released: released,
+                                                      lastTurnOutcome: lastTurnOutcome, endReason: endReason,
+                                                      activity: activity) {
+            return held
+        }
+        return SessionRunState.resolve(runState, legacy: sessionState,
                                 status: effectiveRunStatus, endReason: endReason)
     }
     /// Whether to draw this session as working — a port of the web console's `isGenerating`.
