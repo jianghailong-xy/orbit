@@ -85,7 +85,7 @@ class WaitingCardHoldShellTest {
         focusTimeMs += 11_000
         val before = bounds(stepRow())
         serve(approval("a-late", 1, "LATE-DECISION", tall))
-        arrive { shows("LATE-DECISION") }
+        arrive(::lateApprovalLanded)
         assertEquals("the late card did not carry the list away from the reader", before, bounds(stepRow()))
     }
 
@@ -98,7 +98,7 @@ class WaitingCardHoldShellTest {
         readAlittle()
         val before = bounds(stepRow())
         serve(approval("a-late", 1, "LATE-DECISION", tall))
-        arrive { shows("LATE-DECISION") }
+        arrive(::lateApprovalLanded)
         assertEquals("the late card did not carry the list away from the reader", before, bounds(stepRow()))
     }
 
@@ -185,12 +185,15 @@ class WaitingCardHoldShellTest {
     private fun readAlittle() { compose.onNodeWithTag("transcript-list").performTouchInput { swipe(Offset(centerX, 150f), Offset(centerX, 190f), 200) }; settle() }
     private fun readHistory() { compose.onNodeWithTag("transcript-list").performTouchInput { swipeDown() }; settle() }
     /** Wait for the refreshed content before pumping the layout and the reader's two-frame put-back. */
-    private fun arrive(visible: () -> Boolean) {
+    private fun arrive(landed: () -> Boolean) {
         val before = snapshotReads()
         app().realtime.refreshSession()
-        await { snapshotReads() > before && read() && visible() }
+        await { snapshotReads() > before && read() && landed() }
         repeat(5) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
     }
+    // An approval below the viewport may never be composed after the reader scrolls away.
+    private fun lateApprovalLanded() = app().realtime.state.value.session?.snapshot?.approvals
+        ?.any { it["id"]?.jsonPrimitive?.content == "a-late" } == true
     private fun snapshotReads() = app().realtime.state.value.session?.snapshotReads ?: 0L
     /** The member's own read has landed: its transcript and its cards, fresh. */
     private fun read() = app().realtime.state.value.session?.let {
