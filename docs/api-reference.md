@@ -42,13 +42,13 @@ controllers and their decorators, so it lists what the server mounts, not what a
 
 | Caller | Routes |
 | --- | --- |
-| `public` | 39 |
-| `user` | 527 |
+| `public` | 40 |
+| `user` | 528 |
 | `admin` | 31 |
 | `runner` | 229 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **830** |
+| **Total** | **832** |
 
 ## Public routes
 
@@ -75,6 +75,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/help/articles/:slug` | path `slug` | `HelpController.article` |
 | `GET` | `/api/help/search` | query `q` | `HelpController.search` |
 | `GET` | `/api/integrations/github/callback` | query `code`, `error`, `setup_action`, `state` | `GithubCallbackController.callback` |
+| `POST` | `/api/integrations/github/webhook` | — | `GithubWebhookController.receive` |
 | `POST` | `/api/runner/device/poll` | body `Object` | `RunnerApiController.devicePoll` |
 | `POST` | `/api/runner/device/start` | body `Object` | `RunnerApiController.deviceStart` |
 | `POST` | `/api/runner/register` | body `Object` | `RunnerApiController.register` |
@@ -338,6 +339,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `DELETE` | `/api/runners/:id/accounts/:engine/:account` | path `account`, `engine`, `id` | `RunnersController.removeAccount` |
 | `PATCH` | `/api/runners/:id/accounts/:engine/:account` | body `RenameAccountDto`; path `account`, `engine`, `id` | `RunnersController.renameAccount` |
 | `POST` | `/api/runners/:id/accounts/:engine/:account/pause` | body `PauseAccountDto`; path `account`, `engine`, `id` | `RunnersController.pauseAccount` |
+| `DELETE` | `/api/runners/:id/accounts/:engine/:account/set-default` | path `account`, `engine`, `id` | `RunnersController.dismissSetDefaultFailure` |
 | `POST` | `/api/runners/:id/accounts/:engine/:account/set-default` | path `account`, `engine`, `id` | `RunnersController.setDefaultAccount` |
 | `POST` | `/api/runners/:id/accounts/:engine/default/restore` | path `engine`, `id` | `RunnersController.restoreDefault` |
 | `POST` | `/api/runners/:id/attention/:kind/fix` | body `Object`; path `id`, `kind` | `RunnerAttentionFixController.fix` |
