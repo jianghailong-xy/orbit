@@ -1,6 +1,7 @@
 import { LANDING_CHECK_COPY, baselineTitle } from '../lib/landingCheck';
 import { useCallback, useId, useState, useSyncExternalStore, type JSX, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { UserOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type {
   CoordinatorFuseUsage,
@@ -32,6 +33,7 @@ import {
 import { JOB_PHASES, jobPhases, landingClockTime, landingRoundClause } from './ProjectPanoramaHeader';
 import { decisionReceiptAnchor, type ReceiptPlacement } from '../lib/decisionReceipt';
 import { encodeId } from '../lib/idCodec';
+import { LANDING_FIX_COPY, heldByItsSession, openItemFixLine, openItemFixTitle } from '../lib/landingFix';
 import { abandonJob } from '../lib/projectMerge';
 import {
   projectCoordinatorStatusQuery,
@@ -3328,11 +3330,14 @@ export function ProjectOpenItems({
     ...(items.data?.needsYou ?? []).filter((row) => row.kind !== 'FUSE_PAUSED' && row.kind !== 'DONE_REQUEST'),
   ];
   const signIns = items.data?.signIns ?? [];
+  // Landing failures their task's own session is fixing (revision 42, §12.7; web d ①): listed apart, and waiting on
+  // nobody — not counted in Needs you.
+  const fixing = (items.data?.withWorkSession ?? []).filter(heldByItsSession);
   const ownStart = start?.kind === 'own' && onStartProject ? onStartProject : null;
   const ownDone = items.data !== undefined && !doneRequest && onRecordDone ? onRecordDone : null;
   if (
     !projectId
-    || (paused.length + needsYou.length + signIns.length === 0 && !ownStart && !ownDone)
+    || (paused.length + needsYou.length + signIns.length + fixing.length === 0 && !ownStart && !ownDone)
   ) return null;
 
   return (
@@ -3386,7 +3391,40 @@ export function ProjectOpenItems({
           </ul>
         </>
       ) : null}
+      {fixing.length > 0 ? (
+        <>
+          <div className="project-open-items-group is-fixing">{`${LANDING_FIX_COPY.GROUP} · ${fixing.length}`}</div>
+          <ul className="project-open-items-list">
+            {fixing.map((row) => <LandingFixItemRowView key={row.itemId} row={row} now={now} />)}
+          </ul>
+        </>
+      ) : null}
     </section>
+  );
+}
+
+/**
+ * One failure its task's own session is fixing (web d ①): a person for the mark, `Landing conflict · <task>`, how long
+ * the session has had it and which round, and the one door the board gives it — into that session.
+ */
+function LandingFixItemRowView({ row, now }: { row: ProjectOpenItemRow; now: number }): JSX.Element {
+  const sessionId = row.workSession?.sessionId ?? null;
+  return (
+    <li className="project-open-item-row is-fixing" data-kind={row.kind} data-landing-fix-item={row.itemId}>
+      <span className="project-open-item-fix-mark" aria-hidden="true"><UserOutlined /></span>
+      <div className="project-open-item-main">
+        <div className="project-open-item-title">{openItemFixTitle(row)}</div>
+        <div className="project-open-item-line">{openItemFixLine(row, now)}</div>
+      </div>
+      <div className="project-open-item-who" />
+      <div className="project-open-item-press">
+        {sessionId ? (
+          <Link className="landing-fix-link" to={`/sessions/${encodeURIComponent(encodeId(sessionId))}`}>
+            {`${LANDING_FIX_COPY.OPEN_SESSION_LINK} ›`}
+          </Link>
+        ) : null}
+      </div>
+    </li>
   );
 }
 

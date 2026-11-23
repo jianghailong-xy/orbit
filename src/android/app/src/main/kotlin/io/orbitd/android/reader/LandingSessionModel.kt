@@ -285,7 +285,9 @@ data class LandingGates(val stop: Boolean = false, val cancel: Boolean = false, 
     val recheck: Boolean = false)
 
 /** What a landing menu row does; the page owns the navigation and the press. */
-enum class LandingMenuAction { OPEN_TASK, OPEN_SOURCE_SESSION, OPEN_COORDINATOR, REVIEW_CARD, STOP, CANCEL, ABANDON, RETRY, RERUN_THE_CHECK }
+enum class LandingMenuAction { OPEN_TASK, OPEN_SOURCE_SESSION, OPEN_COORDINATOR, REVIEW_CARD, STOP, CANCEL, ABANDON, RETRY, RERUN_THE_CHECK,
+    /** The task's own work session that has (or had) the failure (revision 42, §12.7): Open session. */
+    OPEN_WORK_SESSION }
 
 /** One row of the menu a landing's long-press opens (the old landing page's ⋯). */
 data class LandingMenuItem(val key: String, val action: LandingMenuAction, val label: String, val sub: String? = null, val danger: Boolean = false)

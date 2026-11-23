@@ -140,6 +140,7 @@ import {
   supportsSteerWithdraw,
   supportsTargetBoundCurrentWorkSteer,
   uuidToBase62,
+  toUuid,
   accountToMoveTo,
   isAccountEngine,
   planUsageBlockedUntil,
@@ -235,7 +236,7 @@ import { isCodelessTaskRun } from './codeless-checkout';
 import { readWikiChatContext, sameWikiChatContext, wikiContextOutsideChat } from '../wiki/wiki-chat-context';
 import { branchName } from '../projects/project-criterion-landing';
 import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
-import { INTEGRATION_ITEM_KINDS, openItemOwed, openItemVisible } from '../projects/project-open-item';
+import { INTEGRATION_ITEM_KINDS, openItemInWorkSessionHands, openItemOwed, openItemVisible } from '../projects/project-open-item';
 import { landingContainerStatus, readSourceLanding } from '../projects/landing-session';
 import { readLandingIntegrationLog, type IntegrationLogSelectors } from '../projects/project-integration-log';
 import {
@@ -430,7 +431,7 @@ import {
   terminalizePendingCurrentWorkSteers,
 } from './current-work-delivery';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
-import { returnQueuedTurns } from '../projects/project-open-item';
+import { handBackLandingFixesOfSession, returnQueuedTurns } from '../projects/project-open-item';
 import { type OpenListBase, OpenListDeltaStore } from './open-list-delta';
 import { type OpenListVersionParts, openListEtag, readOpenListVersion, readOpenListVersionParts } from './open-list-version';
 import {
@@ -3428,6 +3429,47 @@ export class SessionsService {
   }
 
   /**
+   * Revision 42 (§12.5 W6, §12.7): a task's own work session reading its task's landing — `session_get` on the landing
+   * session id its landing-fix turn names, or on `task_get`'s `integration.landTask.landingSessionId` — whether or not
+   * the account has Session orchestration on. The landing is about the work this session wrote, and fixing it needs
+   * the record.
+   *
+   * Answers only when the calling session is a work session of this runner that is not deleted, the id is a landing of the project this session's task is in, and that landing's task is this session's task; then it
+   * is the same detail `getForOrchestration` serves for it. Null in every other case, which leaves the request to the
+   * orchestration door and its refusals unchanged.
+   */
+  async ownTaskLandingForWorkSession(
+    ownerId: string,
+    runnerId: string,
+    callingSessionId: string | undefined,
+    id: string,
+  ) {
+    const raw = callingSessionId?.trim();
+    if (!raw) return null;
+    let caller: string;
+    try {
+      caller = toUuid(raw);
+    } catch {
+      return null;
+    }
+    const session = await this.prisma.session.findFirst({
+      where: {
+        // Not `cancel_requested_at`: a session revived for its landing-fix round keeps the end its task's DONE asked
+        // for (R3 resumes it without clearing that), and this is exactly the session that must read its landing.
+        id: caller, ownerId, assignedRunnerId: runnerId, startsTaskWork: true, deletedAt: null, taskId: { not: null },
+      },
+      select: { taskId: true, task: { select: { projectId: true } } },
+    });
+    if (!session?.taskId || !session.task?.projectId) return null;
+    const landing = await this.prisma.projectLanding.findFirst({
+      where: { sessionId: id, ownerId, taskId: session.taskId, projectId: session.task.projectId },
+      select: { sessionId: true },
+    });
+    if (!landing) return null;
+    return this.getForOrchestration(ownerId, landing.sessionId);
+  }
+
+  /**
    * Owner-scoped detail returned to an orchestrating workspace. Keep this deliberately
    * narrower than the UI detail query: the full Workspace row contains injected env,
    * MCP config, prompts, and other configuration that must not become model output.
@@ -5129,6 +5171,7 @@ export class SessionsService {
                    AND oi.kind IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
                    AND ${openItemOwed('oi')}
                    AND ${openItemVisible('oi')}
+                   AND NOT ${openItemInWorkSessionHands('oi')}
                    AND (oi.task_id = l.task_id
                         OR oi.promotion_id = l.promotion_id
                         OR EXISTS (
@@ -5142,6 +5185,20 @@ export class SessionsService {
                           SELECT j.promotion_id FROM project_integration_job j
                            WHERE j.landing_id = l.id AND j.promotion_id IS NOT NULL))
               ) THEN 'AWAITING_DECISION'
+              -- Revision 42 (§12.7): a failure of this segment in its task's own work session's hands is being fixed
+              -- there; no coordinator has it yet, and no decision is awaited.
+              WHEN EXISTS (
+                SELECT 1 FROM project_open_item oi
+                 WHERE oi.state = 'OPEN'
+                   AND oi.project_id = l.project_id
+                   AND oi.kind IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
+                   AND ${openItemOwed('oi')}
+                   AND ${openItemInWorkSessionHands('oi')}
+                   AND (oi.task_id = l.task_id
+                        OR EXISTS (
+                          SELECT 1 FROM project_integration_job j
+                           WHERE j.id = oi.integration_job_id AND j.landing_id = l.id))
+              ) THEN 'FIXING'
               ELSE 'IN_FLIGHT'
             END,
             'settledAs', l.settled_as,
@@ -10376,7 +10433,25 @@ export class SessionsService {
     );
     await reprojectAfterSettledChecks(this.prisma, ended.checksSettled, this.logger);
     if (ended.settledProjectId) await this.routeSettledFacts(ended.settledProjectId);
+    if (ended.settledProjectId || (ended.changed && lifecycle === 'deletedAt')) {
+      await this.deliverLandingFixesAfterFinish(sessionId);
+    }
     return ended;
+  }
+
+  /**
+   * Revision 42 (§12.5 W7): an end that finished a work session here — one that never ran — or moved it to Trash may have
+   * handed back the failed landing it held (SESSION_ENDED); it is the coordinator's from that commit, and delivered now. Found by
+   * `ModuleRef` as `routeSettledFacts` finds its router; without one, the coordinator's next turn end delivers it.
+   */
+  private async deliverLandingFixesAfterFinish(sessionId: string): Promise<void> {
+    if (!this.moduleRef) return;
+    try {
+      const { ProjectOpenItemService } = await import('../projects/project-open-item.service.js');
+      await this.moduleRef.get(ProjectOpenItemService, { strict: false }).offerLandingFixesTo(sessionId);
+    } catch (e) {
+      this.logger.warn(`landing fixes handed back by an end not delivered: ${e instanceof Error ? e.message : e}`);
+    }
   }
 
   /**
@@ -10595,6 +10670,12 @@ export class SessionsService {
         clientTurnId: randomUUID(),
         ...(endTurnContent !== undefined ? { content: endTurnContent } : {}),
       });
+    }
+    // Revision 42 (§12.5 W7): a work session moved to Trash hands back the failed landing it holds, SESSION_ENDED, in
+    // this transaction (the items are rank 60, after this Session's rank 30). Its finish cannot decide it: a trashed
+    // session is no work a delivered identity is read from (`readDeliveredIdentity`), so no settlement reaches W7.
+    if (lifecycle === 'deletedAt' && session.startsTaskWork) {
+      await handBackLandingFixesOfSession(tx, sessionId, 'SESSION_ENDED');
     }
     return {
       changed: true,
