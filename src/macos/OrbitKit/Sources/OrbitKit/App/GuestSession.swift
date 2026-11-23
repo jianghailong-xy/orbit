@@ -97,6 +97,8 @@ extension GuestSessionState {
         if completed { return "Completed" }
         if releasedRunState == .succeeded { return "Finished" }
         if displayRunState == .queued && waitingOn == .hold { return "On hold" }
+        // A payload without the release facts keeps its old word; the task panel's run label now says Finished.
+        if displayRunState == .succeeded { return "Succeeded" }
         return ShareMarkdown.runLabel(displayRunState)
     }
 
