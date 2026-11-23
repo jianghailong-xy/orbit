@@ -12,11 +12,11 @@ class SessionListEveningUtcTest {
     private fun s(id: String, listedAt: String) = DirectorySession(id, title = id, status = "AWAITING_INPUT", runState = "AWAITING_INPUT",
         createdAt = "2026-10-08T08:00:00Z", lastTurnAt = listedAt, listedAt = listedAt)
 
-    private fun titles(zone: String) = directoryGroups(listOf(s("today", "2026-11-23T19:32:00Z"), s("older", "2026-11-20T19:33:00Z")),
+    private fun titles(zone: String) = directoryGroups(listOf(s("today", "2026-11-23T15:00:00Z"), s("older", "2026-11-20T19:33:00Z")),
         SessionView.OPEN, Grouping.RECENCY, now, ZoneId.of(zone)).map { it.title }
 
     @Test fun theOlderRowIsInTwoToSevenDaysUnderAnEveningUtcInstantInEitherZone() {
-        // Shanghai is on 11-24 here: the 19:32Z row is Yesterday, the 11-20 row 4 days back.
+        // Shanghai is on 11-24 here (03:33): the 15:00Z row, 23:00 on 11-23 there, is Yesterday, the 11-20 row 4 days back.
         assertEquals(listOf("Yesterday", "2–7 days ago"), titles("Asia/Shanghai"))
         assertEquals(listOf("Today", "2–7 days ago"), titles("UTC"))
     }
