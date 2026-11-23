@@ -49,7 +49,8 @@ internal object ManagedRunnerCopy {
 }
 
 /** One build of the managed runner image: its source commit, and when it was built, if known. */
-data class ManagedBuild(val sha: String, val builtAt: String? = null)
+/** `version` is the release it was published for (`0.1.261-beta.83`); null for an image built from a checkout. */
+data class ManagedBuild(val sha: String, val builtAt: String? = null, val version: String? = null)
 
 /** The runner runs an older build than the current image's. `available`: READY on the older build; `updating`: on its way to the next container. */
 data class ManagedUpdate(val running: ManagedBuild, val current: ManagedBuild, val phase: String, val waitsForIdle: Boolean = false)
@@ -85,9 +86,9 @@ internal object ManagedRunnerUpdateLogic {
     fun buildLine(build: ManagedBuild, zone: ZoneId = ZoneId.systemDefault()): String =
         dayLabel(build.builtAt, zone)?.let { ManagedRunnerCopy.buildLineBuilt(shortSha(build.sha), it) } ?: ManagedRunnerCopy.buildLine(shortSha(build.sha))
 
-    /** How a card names a build: `the Nov 18 build`, or `the 1a2b3c4 build` when it has no date. */
+    /** How a card names a build: its release version (`0.1.261-beta.83`), else `the Nov 18 build`, or `the 1a2b3c4 build` when it has no date. */
     fun buildName(build: ManagedBuild, zone: ZoneId = ZoneId.systemDefault()): String =
-        ManagedRunnerCopy.buildNamed(dayLabel(build.builtAt, zone) ?: shortSha(build.sha))
+        build.version?.takeIf { it.isNotEmpty() } ?: ManagedRunnerCopy.buildNamed(dayLabel(build.builtAt, zone) ?: shortSha(build.sha))
 
     /** The build a runner's `managed-<sha>` version names, with the date the status knows for it. */
     fun runningBuild(version: String?, known: ManagedBuild?): ManagedBuild? {
@@ -179,7 +180,11 @@ internal object ManagedRunnerUpdateLogic {
         fun build(name: String): ManagedBuild? {
             val b = o[name] as? JsonObject ?: return null
             val sha = (b["sha"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull ?: return null
-            return ManagedBuild(sha, (b["builtAt"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull)
+            return ManagedBuild(
+                sha,
+                (b["builtAt"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull,
+                (b["version"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull,
+            )
         }
         return ManagedUpdate(build("running") ?: return null, build("current") ?: return null,
             (o["phase"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull ?: return null,

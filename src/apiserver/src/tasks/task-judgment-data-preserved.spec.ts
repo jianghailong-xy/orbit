@@ -3403,7 +3403,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1490_session_listed_at',
       // 1491 sets feishu_app.message_detail's default to FULL and moves every TITLES_ONLY row to FULL: an ALTER and an
       // UPDATE of that table only, none of the preserved relations, and no trigger, function or DONE fence changes.
-      '1491_feishu_details_by_default'],
+      '1491_feishu_details_by_default',
+      // 1537 adds a nullable managed_runner.current_image_version (no default); `managed_runner` is none of the
+      // preserved relations, no row is written, and no trigger, function or DONE fence changes.
+      '1537_managed_runner_current_image_version'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

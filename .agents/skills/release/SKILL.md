@@ -46,8 +46,10 @@ Then:
    `origin/main` with nothing uncommitted. Read the notes, then merge the release commit into `main`.
 2. **Tag and watch**, in the background: `delegate({ description: "Tag and watch release <version>", size: "S",
    background: true, prompt: <the tag brief> })`. End the turn: Orbit wakes this session with the result.
-3. **Report** the tag, the run's link, each job's outcome, the TestFlight and Android state, and any job that
-   failed with its log lines. A failed job is reported, not retried: re-running or deleting a tag is the
+3. **Publish the Orbit Cloud runner image** on orbit-ws04, in the background, once the tag is pushed (see
+   [Orbit Cloud runner image](#orbit-cloud-runner-image)).
+4. **Report** the tag, the run's link, each job's outcome, the TestFlight and Android state, the Orbit Cloud runner
+   image, and any job that failed with its log lines. A failed job is reported, not retried: re-running or deleting a tag is the
    session's decision (see Notes).
 
 The prepare brief: fill in `<version>` and `<previous tag>` (the newest `v*` tag, `git describe --tags --abbrev=0
@@ -94,6 +96,36 @@ and report at the first step that fails; do not retry, re-run, delete a tag or p
    lines.
 ```
 
+## Orbit Cloud runner image
+
+The tag also publishes the Orbit Cloud (managed) runners' image, `10.66.0.1:5000/orbit-cloud-runner:<version>`, whose
+runner reports the release version (docs/release-process.md, "Orbit Cloud runner image comes from the release tag").
+It is built and pushed on the build host, workspace **orbit-ws04** (wikova): the registry is reached only over
+WireGuard, so `release.yml` cannot. Once the tag is on `origin`, start it beside the tag brief, in the background:
+
+`delegate({ description: "Publish Orbit Cloud runner <version>", size: "S", workspace: "orbit-ws04", background: true,
+prompt: <the publish brief> })`
+
+It is idempotent: a tag whose image is in the registry already is skipped, so a failed or repeated run is simply run
+again. A two-stage deploy of the tag's commit, or of a later one, uses this image and builds none; until it is
+published, a deploy stops before changing anything and names the command. Report its result with the release's.
+
+The publish brief: fill in `<version>`.
+
+```text
+Publish the Orbit Cloud runner image of release tag v<version> on this host. Answer in English. Stop and report at
+the first step that fails; do not improvise around a guard. Never push to git, never tag, never deploy.
+
+1. The tag is on origin: `git -C /root/orbit fetch --quiet origin "refs/tags/v<version>:refs/tags/v<version>"`.
+2. W=/dev/shm/wkdir-publish-cloud-runner-<version>; `git -C /root/orbit worktree add --detach "$W" "v<version>"`.
+   Do not check out or change anything in /root/orbit itself.
+3. `cd "$W" && ORBIT_REGISTRY=10.66.0.1:5000 deploy/two-stage/publish-managed-runner.sh v<version>`. It builds from
+   the tag's commit (several minutes, about 4.4 GiB) and pushes, or says the image is in the registry already. It
+   must end with a line starting `✓ 10.66.0.1:5000/orbit-cloud-runner:<version> is in 10.66.0.1:5000`.
+4. `git -C /root/orbit worktree remove --force "$W"`.
+5. Hand back: whether it was built or already there, the digest it printed, and on failure the last 40 lines.
+```
+
 ## Workflow
 
 1. Resolve the version. `release.sh next` prints the one tag to cut next, resolved from the package version alone; old tags are never read as a sequence:
@@ -132,7 +164,13 @@ and report at the first step that fails; do not retry, re-run, delete a tag or p
 
    The helper runs the same identity gate as CI (`node scripts/release-identity.mjs check-tag vX.Y.Z`): it refuses a tag that disagrees with `package.json`, missing or placeholder notes, tracked uncommitted changes and an already-used tag (local or remote), then creates an annotated tag and pushes it to `origin`.
 
-6. Watch the shared workflow and report every job result:
+6. Publish the Orbit Cloud runner image on the build host (orbit-ws04), from the tag just pushed; from another workspace through the SubAgent in [Orbit Cloud runner image](#orbit-cloud-runner-image):
+
+   ```bash
+   ORBIT_REGISTRY=10.66.0.1:5000 deploy/two-stage/publish-managed-runner.sh v0.2.0-beta.3
+   ```
+
+7. Watch the shared workflow and report every job result:
 
    ```bash
    gh run watch "$(gh run list --workflow release.yml -L 1 --json databaseId -q '.[0].databaseId')"
