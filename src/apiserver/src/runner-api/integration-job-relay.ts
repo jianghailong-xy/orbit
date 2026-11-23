@@ -1346,10 +1346,10 @@ async function readCandidateWork(
   return { taskId: session.taskId, sessions: await readLandingWorkSessions(tx, session.taskId) };
 }
 
-/** Why a report was refused, in the shape the controller turns into a status code. */
 /** Thrown inside the result transaction when a PULL_REQUEST answers a claim somebody asked to stop (J-T14, J-T8). */
 class CancelInsteadOfPullRequest extends Error {}
 
+/** Why a report was refused, in the shape the controller turns into a status code. */
 export type IntegrationResultRefusal = 'STALE_CLAIM' | 'NOT_FOUND' | 'ALREADY_FINAL' | 'INVALID_RESULT';
 
 export const INTEGRATION_RESULT_REFUSAL_STATUS: Record<IntegrationResultRefusal, number> = {
@@ -2166,9 +2166,7 @@ export async function applyIntegrationJobResult(
     if (unreadable) throw new IntegrationJobRefused('INVALID_RESULT', unreadable);
   }
 
-  let applied: { answer: IntegrationJobResultResponse; after: IntegrationResultAftermath | null };
-  try {
-  applied = await withTransactionRetry(prisma, async (tx) => {
+  const applied = await withTransactionRetry(prisma, async (tx) => {
     // Found among the reporting runner's owner's jobs only, before anything about it is answered: a
     // runner of another account is told neither that the job exists, nor the state it ended in, nor
     // that it is still live — an id that names nothing is what it gets (T2 of the tenant isolation
@@ -3299,17 +3297,17 @@ export async function applyIntegrationJobResult(
         receiptIds: [...receiptIds, ...promotionReceiptIds, ...recoveredReceiptIds],
       },
     };
-  }, onRetry);
-  } catch (error) {
+  }, onRetry).catch((error: unknown) => {
+    if (error instanceof CancelInsteadOfPullRequest) return null;
+    throw error;
+  });
+  if (!applied) {
     // J-T14 with a stop asked of the claim: the attempt pushed only its landing branch, and it ends as the stop
     // asked — through this same door, as a runner's CANCELLED would, in a transaction of its own.
-    if (error instanceof CancelInsteadOfPullRequest) {
-      return applyIntegrationJobResult(prisma, {
-        ...input,
-        body: { ...input.body, state: 'CANCELLED', phase: 'PUSH' },
-      }, onRetry);
-    }
-    throw error;
+    return applyIntegrationJobResult(prisma, {
+      ...input,
+      body: { ...input.body, state: 'CANCELLED', phase: 'PUSH' },
+    }, onRetry);
   }
   // §2.9 LS3: the landing / cancellation fact is committed, so the subjects it settles close in
   // their own transaction — never inside this one, and never from a claim. Idempotent: a resend
