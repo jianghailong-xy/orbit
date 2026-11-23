@@ -999,7 +999,8 @@ test('J-T17: a pull request behind main catches up into the same pull request, u
     assert.equal(moved.state, 'ERROR', `catch-up ${round}`);
     assert.equal(moved.errorCode, 'TARGET_MOVED');
     assert.equal((moved.errorDetail as { pullRequestCatchUp?: boolean }).pullRequestCatchUp, true);
-    assert.equal(await h.prisma.projectOpenItem.count({ where: { integrationJobId: command.jobId } }), 0, 'a catch-up asks nobody for anything');
+    const items = await h.prisma.projectOpenItem.findMany({ where: { integrationJobId: command.jobId }, select: { kind: true, title: true, payload: true } });
+    assert.deepEqual(items, [], 'a catch-up asks nobody for anything');
     const promotion = await h.prisma.projectPromotion.findUniqueOrThrow({ where: { id: promotionId } });
     assert.equal(promotion.state, 'CONFIRMED', `catch-up ${round} is not one of J-T13's three`);
     const line = await h.prisma.projectIntegrationJobEvent.findFirst({ where: { jobId: command.jobId, kind: 'NEXT_GENERATION' } });
@@ -1208,6 +1209,8 @@ test('§4.6 under D5: a session\'s Merge whose check fails is handed the log as 
   assert.equal(await h.prisma.githubPullRequest.count({ where: { sessionId: s.sessionId } }), 1, 'every round updated the same pull request');
 
   // The target moved: the merge is queued again, into the same pull request.
+  scenario.checks = [{ name: 'PostgreSQL specs', required: true, status: 'IN_PROGRESS', conclusion: null }];
+  scenario.mergeStateStatus = 'BLOCKED';
   const moved = await sessionWaiting('Fix the toolbar');
   scenario.checks = [{ name: 'PostgreSQL specs', required: true, status: 'COMPLETED', conclusion: 'SUCCESS' }];
   scenario.mergeStateStatus = 'BEHIND';
@@ -1215,6 +1218,7 @@ test('§4.6 under D5: a session\'s Merge whose check fails is handed the log as 
   assert.deepEqual(mergedAgain, [{ sessionId: moved.sessionId, pullRequestId: moved.prId, target: 'main' }]);
 
   // Closed on GitHub: an error naming who closed it.
+  scenario.mergeStateStatus = 'BLOCKED';
   const closed = await sessionWaiting('Rename the menu');
   const pull = h.github.pulls.find((row) => row.number === closed.number)!;
   pull.state = 'CLOSED';

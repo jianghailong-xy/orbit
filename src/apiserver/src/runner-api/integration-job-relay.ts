@@ -3278,7 +3278,7 @@ export async function applyIntegrationJobResult(
     // target and the job is LANDED with the real tree — J2's one exception, recorded rather than hidden — and this
     // item, opened in the same transaction, asks for the project's check to run on the target. Opened after the
     // landing answered the task's open items above, so the landing does not close the item it is the reason for.
-    if (pullRequestEnd && body.landedTreeSha !== body.testedTreeSha) {
+    if (pullRequestEnd && state === 'LANDED' && body.landedTreeSha !== body.testedTreeSha) {
       const landingSessionId = job.landingId
         ? (await tx.projectLanding.findUnique({ where: { id: job.landingId }, select: { sessionId: true } }))?.sessionId ?? null
         : null;
@@ -3581,8 +3581,9 @@ async function appendResultEvents(
     at: input.finishedAt,
   });
 
-  // docs/design/protected-branch-landing.md §14: the landing timeline's own line for the merge GitHub made.
-  if (input.pullRequestEnd) {
+  // docs/design/protected-branch-landing.md §14: the landing timeline's own line for the merge GitHub made. The door's
+  // failure ends (J-T16 to J-T20) write their own line after the commit.
+  if (input.pullRequestEnd && input.requestedState === 'LANDED') {
     await appendIntegrationJobEvent(tx, {
       jobId: job.id,
       key: 'pull-request:merged',
