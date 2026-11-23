@@ -11,6 +11,7 @@ import { httpRequestMetrics } from './common/http-request-metrics';
 import { PublicIdExceptionFilter } from './common/public-id.filter';
 import { publicIdHeaders } from './common/public-id-headers';
 import { PublicIdInterceptor } from './common/public-id.interceptor';
+import { apiserverLogger, requestIdContext } from './common/request-log';
 import { RunnerLinkErrorFilter } from './common/runner-link-error.filter';
 import { SlowRequestInterceptor } from './common/slow-request.interceptor';
 import { TransientDbConflictFilter } from './common/transient-db-conflict.filter';
@@ -39,8 +40,12 @@ async function bootstrap() {
   const ready = new Promise<{ app: INestApplication; listeners: DrainableServer[] }>((resolve) => (started = resolve));
   stopOnSignals(ready);
 
-  const app = await NestFactory.create(AppModule, { bodyParser: false });
+  // JSON lines with each request's id under ORBIT_LOG_FORMAT=json, as Compose runs it (common/request-log.ts).
+  const app = await NestFactory.create(AppModule, { bodyParser: false, logger: apiserverLogger() });
   const config = app.get(ConfigService);
+
+  // Before everything else, so every line written for a request carries the id the web gateway gave it.
+  app.use(requestIdContext);
 
   // First, so its clock covers everything below: the request histogram, recorded when the answer has been written,
   // which is when its status is known (common/http-request-metrics.ts).
@@ -107,8 +112,7 @@ async function bootstrap() {
   holdIdleConnections(app.getHttpServer());
   const listeners = [drainable(app.getHttpServer())];
   await app.listen(port);
-  // eslint-disable-next-line no-console
-  console.log(`orbit control plane listening on :${port}`);
+  new Logger('Main').log(`orbit control plane listening on :${port}`);
   // The link gateway's own door to the same routes, when the runner link is on (runner-link-call.ts).
   const linkServer = await listenForRunnerLinkCalls(app, {
     port: config.get<string>('RUNNER_LINK_INTERNAL_PORT'),
