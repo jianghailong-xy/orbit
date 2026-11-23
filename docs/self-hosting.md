@@ -584,7 +584,7 @@ Orbit pushes only with this server's own Apple and Firebase keys (`APNS_*`, `FCM
 alert still goes to ntfy. `NO_DEVICES` means no Orbit app is signed in to the token's account. A token may send 20
 notifications a minute, far more than Grafana sends; revoking it in Settings → Access tokens stops the pushes at once.
 
-**The Watchdog.** The Watchdog is an alert that always fires. Grafana sends it to `ORBIT_WATCHDOG_URL` once a minute (a ping every 60 seconds, give or take a second), as
+<a id="the-watchdog"></a>**The Watchdog.** The Watchdog is an alert that always fires. Grafana sends it to `ORBIT_WATCHDOG_URL` once a minute (a ping every 60 seconds, give or take a second), as
 a POST with the webhook JSON. It reads no data source, so it stops only when Grafana, or the host, stops. Give the URL
 of a dead-man's-switch service (healthchecks.io, Uptime Kuma's push monitor, Better Stack and the like) and let it
 alert you when the pings stop; set its period to 1 minute and its grace to 3 to 5 minutes. With no URL the heartbeat goes to Prometheus on this host, and nothing leaves it.
