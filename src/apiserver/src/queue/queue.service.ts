@@ -576,9 +576,10 @@ export class QueueService {
                             SELECT a.provider_id FROM "provider_slug_alias" a WHERE a.slug = s.provider))
                       AND mp.enabled
                       AND mp.runtime = ANY(CASE s."engine"
-                        -- Claude Code also runs an OpenAI key, through /api/gw/anthropic, with the deployment flag on.
+                        -- Claude Code also runs an OpenAI or OpenAI-compatible key, through /api/gw/anthropic, with the
+                        -- deployment flag on.
                         WHEN 'claude' THEN CASE WHEN ${anthropicGatewayEnabled()}
-                          THEN ARRAY['claude', 'dsh', 'codex'] ELSE ARRAY['claude', 'dsh'] END
+                          THEN ARRAY['claude', 'dsh', 'codex', 'kimi'] ELSE ARRAY['claude', 'dsh'] END
                         WHEN 'dsh' THEN ARRAY['claude', 'dsh']
                         WHEN 'opencode' THEN ARRAY['claude', 'codex', 'kimi', 'antigravity', 'dsh']
                         ELSE ARRAY[s."engine"]
