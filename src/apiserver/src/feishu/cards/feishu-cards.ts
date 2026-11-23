@@ -46,8 +46,11 @@ export type FeishuAlert =
   | { kind: 'approval'; sessionTitle: string; approvals: FeishuApprovalItem[]; startedBy?: string | null }
   /** `settleAlert`'s answer: `body` is the recap or the failure line. */
   | { kind: 'finished' | 'failed'; sessionTitle: string; body: string }
-  /** An agent's `notify`: `message` is what it wrote. */
-  | { kind: 'agent-message'; sessionTitle: string; message: string }
+  /**
+   * An agent's `notify`: `message` is what it wrote. `sessionless` when it came from outside any session (a script's
+   * `orbit notify`): `sessionTitle` is then the machine's name, and there is no session to reply to.
+   */
+  | { kind: 'agent-message'; sessionTitle: string; message: string; sessionless?: boolean }
   /** `ownerItemAlert`'s answer, and the project it belongs to. */
   | { kind: 'owner-item'; projectTitle: string | null; alert: OwnerItemAlert }
   /** Any other push: its kind in words, its title, and the body the push carries. */
@@ -277,7 +280,7 @@ function build(
       subtitle = 'The agent sent you a message';
       template = 'blue';
       if (full) elements.push(text(cut(alert.message)));
-      if (live) elements.push(note(REPLY_HINT));
+      if (live && !alert.sessionless) elements.push(note(REPLY_HINT));
       break;
     }
     case 'owner-item': {
