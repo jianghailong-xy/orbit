@@ -206,7 +206,8 @@ final class LandingViewsWiringTests: XCTestCase {
         let page = code(try appSource("Views/LandingSessionPageView.swift"))
         XCTAssertTrue(page.contains("line(kind: card.stoppedOnFailure || card.timedOut ? .failed : .running,"),
                       "the status card's line takes the attempt's failure")
-        XCTAssertTrue(page.contains(".foregroundStyle(kind == .failed ? Color.red : Color.secondary)"),
+        // Revision 42's Fixing line (board landing-fix-own-session 02 c) wears the accent; a failed one stays red.
+        XCTAssertTrue(page.contains(".foregroundStyle(kind == .failed ? Color.red : kind == .fixing ? Color.accentColor : Color.secondary)"),
                       "a failed line's word is red")
         let head = code(try appSource("Views/ProjectLandingRow.swift"))
         guard let start = head.range(of: "struct ProjectLandingHead: View {"),
