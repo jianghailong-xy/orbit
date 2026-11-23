@@ -3408,10 +3408,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1491 sets feishu_app.message_detail's default to FULL and moves every TITLES_ONLY row to FULL: an ALTER and an
       // UPDATE of that table only, none of the preserved relations, and no trigger, function or DONE fence changes.
       '1491_feishu_details_by_default',
-      // 1495 adds a partial index on activity. No preserved relation or row is changed.
-      // Written as 1461 on its task branch, it was renumbered to 1470 after main took 1462, then to 1495 after main
-      // took 1491.
-      '1495_default_permission_mode_audit'],
+      // 1540 adds a partial index on activity. No preserved relation or row is changed.
+      // Written as 1461 on its task branch, it was renumbered to 1470 after main took 1462, to 1495 after main took
+      // 1491, and to 1540 after other branches took 1495 (1537 the highest on any branch then).
+      '1540_default_permission_mode_audit'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
