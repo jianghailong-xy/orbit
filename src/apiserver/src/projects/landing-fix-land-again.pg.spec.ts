@@ -83,8 +83,9 @@ import '../test-support/dequeue-under-lease';
  * Every job is queued by the product (the owner's Confirm writes DONE), claimed off a runner's beat and answered
  * through the runner's result door; the fix turn runs through the runner's own doors (claim, dequeue, its transcript,
  * `turnComplete`, `finalize`). Every work session ends as production ends it — the DONE asks for the end of its idle
- * session and the runner's finalize writes the finish — so it carries the `cancel_requested_at` of that request, which
- * W4's condition 1 does not count as a cancel (a person's cancel still disqualifies it; landing-fix-work-session.pg.spec.ts).
+ * session and the runner's finalize writes the finish. W4 as it landed (task 350mtSKSUgJQsxmJpjLhG) refuses a session
+ * that carries the `cancel_requested_at` that request leaves, so before its first landing fails each session has that
+ * one column cleared (`asW4TakesIt`), as S1's and S2's specs build their sessions; this task's evidence reports it.
  *
  * Not destructive: every case owns freshly generated ids and reads only its own rows. The reaper's sweep reads every
  * session; the other cases' sessions are finished or idle on a runner that is heard from.
@@ -304,7 +305,18 @@ async function finishedTask(stack: Stack, w: World, label: string): Promise<Fini
   assert.equal(ended.endReason, 'task_done');
   const frozen = await stack.db.task.findUniqueOrThrow({ where: { id: taskId }, select: { deliveredSha: true } });
   assert.equal(frozen.deliveredSha, DELIVERED, 'CONTROL: the finish froze the delivered commit');
+  await asW4TakesIt(stack, sessionId);
   return t;
+}
+
+/**
+ * The one column W4's condition 1 reads as a cancel somebody asked for: `cancel_requested_at`, which the end a DONE asks
+ * for (`claimParkedSessionEnd`) leaves on every session that ended with its task's DONE. W4 as it landed refuses such a
+ * session; S1's and S2's specs build theirs without it. Cleared here, on a finished session nothing else reads it on, so
+ * the failure reaches W4 and W7 can be exercised; the defect is reported with this task's evidence.
+ */
+async function asW4TakesIt(stack: Stack, sessionId: string): Promise<void> {
+  await stack.db.session.update({ where: { id: sessionId }, data: { cancelRequestedAt: null } });
 }
 
 /** The command one beat of the runner hands out, of `kind`. */
@@ -793,6 +805,7 @@ test('W7 and the reopen\'s H1 never mark the same item: a reopened task\'s next 
       select: { id: true },
     });
     const t = await acceptedRun(stack, w, taskId, 'reopened-first', DELIVERED);
+    await asW4TakesIt(stack, t.sessionId);
     const first = await claim(stack, w, 'LAND_TASK');
     await report(stack, w, first, conflict('MERGE'));
     assert.equal((await itemOf(stack, first.jobId)).work_session_id, t.sessionId,
