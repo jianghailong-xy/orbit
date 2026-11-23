@@ -952,6 +952,23 @@ export class RunnersService {
   }
 
   /**
+   * Dismiss a Set as default that failed: the runner's swap state goes back to none, so the failure
+   * the page shows under that account goes away on every client. Only a `failed` swap of that account
+   * is cleared, in the statement itself; a pending or done one, or one for another account, is left as
+   * it is. Orbit's own record, so the runner need not be online and is not woken.
+   */
+  async dismissSetDefaultFailure(ownerId: string, id: string, engine: LoginEngine, account: string): Promise<{ ok: true }> {
+    if (engine !== 'claude') throw new BadRequestException('Only a Claude Code account can be made the Default');
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId }, select: { id: true } });
+    if (!runner) throw new NotFoundException('runner not found');
+    await this.prisma.runner.updateMany({
+      where: { id, ownerId, claudeAccountSwapStatus: 'failed', claudeAccountSwapAccount: account },
+      data: { claudeAccountSwapStatus: null, claudeAccountSwapMessage: null },
+    });
+    return { ok: true };
+  }
+
+  /**
    * Remove this runner's Default of `engine` from Orbit. The machine keeps it and its sign-in, and the
    * CLI in a terminal there keeps working on it; Orbit stops listing and using it. Orbit's own record,
    * kept in `runner.default_removed`, so the runner takes no part: no relay row, no wake, no
