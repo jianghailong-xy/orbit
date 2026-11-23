@@ -485,7 +485,7 @@ func (fs *FS) emptyFile(ctx context.Context, n *node, drivePath string) fuse.Sta
 	if err != nil {
 		return fs.failed("truncate", drivePath, err)
 	}
-	fs.committed(n, result, &door.Manifest{EntryID: n.id, VersionID: result.VersionID, Seq: result.Seq}, true)
+	fs.committed(n, result, &door.Manifest{EntryID: n.id, VersionID: result.VersionID, Seq: result.Seq})
 	return fuse.OK
 }
 

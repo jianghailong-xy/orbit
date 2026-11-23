@@ -160,13 +160,14 @@ type Commit struct {
 
 // CommitResult is the door's answer to a commit.
 type CommitResult struct {
-	EntryID           string  `json:"entryId"`
-	VersionID         string  `json:"versionId"`
-	NewVersion        bool    `json:"newVersion"`
-	ReplacedVersionID *string `json:"replacedVersionId"`
-	SizeBytes         int64   `json:"sizeBytes"`
-	Seq               int64   `json:"seq"`
-	Replayed          bool    `json:"replayed"`
+	EntryID           string    `json:"entryId"`
+	VersionID         string    `json:"versionId"`
+	NewVersion        bool      `json:"newVersion"`
+	ReplacedVersionID *string   `json:"replacedVersionId"`
+	SizeBytes         int64     `json:"sizeBytes"`
+	Seq               int64     `json:"seq"`
+	Mtime             time.Time `json:"mtime"`
+	Replayed          bool      `json:"replayed"`
 }
 
 // Tail is the last chunk of a version, as a 409 DRIVE_TAIL_MOVED answers it.
@@ -704,6 +705,12 @@ func (c *Client) Commit(ctx context.Context, commit Commit) (CommitResult, *Tail
 			}
 		}
 		return r, nil, err
+	}
+	// Older doors and saved receipts may omit mtime. Use a stat only if it still describes this commit.
+	if r.Mtime.IsZero() {
+		if e, err := c.StatID(ctx, r.EntryID); err == nil && e.Seq == r.Seq {
+			r.Mtime = e.Mtime
+		}
 	}
 	return r, nil, nil
 }

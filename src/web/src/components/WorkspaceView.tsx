@@ -8640,8 +8640,10 @@ export function WorkspaceView({
         shownOnOwnModels ? undefined : shownModel,
         runner.runsAsRoot,
         runner.modelCatalog,
+        // The open session's runner reported Codex's sandbox cannot start there: Auto says it is off.
+        selected?.codexSandboxUnavailable === true,
       ),
-    [shownEngine, shownOnOwnModels, shownModel, runner.runsAsRoot, runner.modelCatalog],
+    [shownEngine, shownOnOwnModels, shownModel, runner.runsAsRoot, runner.modelCatalog, selected?.codexSandboxUnavailable],
   );
   // Model, Mode, Effort & Provider can be changed any time on a live session (the runner must be
   // online to act on it), and none of them aborts the running turn. When the change lands is the

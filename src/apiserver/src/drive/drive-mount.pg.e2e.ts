@@ -844,7 +844,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
     d.push('"Directory not empty", exit 1; EINVAL, which mv prints as "cannot move … to a subdirectory of itself", exit 1');
   });
 
-  await row('20', 'editor saves: vim with its defaults, python os.replace, sed -i', async (d) => {
+  await row('20', 'editor saves: vim (defaults and backupcopy=yes), python os.replace, sed -i', async (d) => {
     ok(await sh(a, 'printf "line x\\n" > $F/v20.txt; printf "line x\\n" > $F/p20.txt; printf "line x\\n" > $F/s20.txt'), 'setup');
     const ids = { v: (await mustEntry('/v20.txt')).id, p: (await mustEntry('/p20.txt')).id, s: (await mustEntry('/s20.txt')).id };
     /** The VERSION group a save added for entry `id`, holding `previous`. */
@@ -867,6 +867,17 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
     assert.equal((await trashedContent(backup.id)).toString(), 'line x\n');
     const vimItems = vimGroups.flatMap((g) => g.items.map((i) => i.name)).sort();
     d.push(`(a) vim: content line y, exit 0; v20.txt is a new entry; Trash gained ${vimGroups.length} group(s): ${vimItems.join(', ')}`);
+
+    const beforeVimCopy = await trash();
+    ok(await sh(a, `
+      vim --not-a-term -u DEFAULTS -i NONE -c "set backupcopy=yes" -c "s/y/z/" -c wq $F/v20.txt </dev/null > ~/vim20-copy.log 2>&1 ||
+        { rc=$?; cat ~/vim20-copy.log >&2; exit "$rc"; }
+    `), 'vim backupcopy=yes');
+    assert.equal((await content('/v20.txt')).toString(), 'line z\n');
+    assert.equal((await mustEntry('/v20.txt')).id, vimNow, 'v20.txt keeps its entry id');
+    await versionOf(await newGroups(beforeVimCopy), vimNow, 'line y\n');
+    d.push('(a) vim backupcopy=yes: content line z, exit 0; v20.txt keeps its entry id; the previous content is a version in Trash');
+
     // (b) python writing p20.tmp then os.replace onto p20.txt (§3.2).
     const beforePy = await trash();
     ok(await sh(a, `python3 -c "import os; open('$F/p20.tmp','w').write('line y\\\\n'); os.replace('$F/p20.tmp','$F/p20.txt')"`), 'os.replace');

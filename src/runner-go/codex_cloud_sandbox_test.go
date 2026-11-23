@@ -226,3 +226,35 @@ func TestCodexCloudSandboxOffOnlyChangesAuto(t *testing.T) {
 		}
 	}
 }
+
+// sandboxReports is every event of the launch that reports the sandbox unavailable to the server
+// (`sandboxUnavailable: true`, read by apiserver codex-sandbox-report.ts).
+func (r *codexSandboxEvents) sandboxReports() []map[string]interface{} {
+	var out []map[string]interface{}
+	for _, e := range r.snapshot() {
+		if e["sandboxUnavailable"] == true {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// The runner reports the probe's outcome for the session: once when the probe fails, so the server's
+// permission semantics say the sandbox is off, and never when it passes or on a self-registered runner.
+func TestCodexCloudSandboxProbeOutcomeIsReportedToTheServer(t *testing.T) {
+	failed := launchCodexAuto(t, true, "1")
+	if n := len(failed.events.sandboxReports()); n != 1 {
+		t.Fatalf("a failed probe sent %d sandbox-unavailable reports, want 1: %#v", n, failed.events.snapshot())
+	}
+	for _, c := range []struct {
+		name      string
+		managed   bool
+		probeExit string
+	}{{"passing probe", true, "0"}, {"self-registered runner", false, "1"}} {
+		got := launchCodexAuto(t, c.managed, c.probeExit)
+		got.events.waitStderr(t)
+		if n := len(got.events.sandboxReports()); n != 0 {
+			t.Errorf("%s sent %d sandbox-unavailable reports, want none", c.name, n)
+		}
+	}
+}
