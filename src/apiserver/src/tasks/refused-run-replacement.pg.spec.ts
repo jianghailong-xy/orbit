@@ -4,7 +4,7 @@ import test from 'node:test';
 
 import { ConflictException } from '@nestjs/common';
 import { CreatorType, Prisma, PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
-import { RunFailureKind, RunStatus as SharedRunStatus } from '@orbit/shared';
+import { RunFailureKind, RunStatus as SharedRunStatus, SESSION_RELEASE_V1 } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -212,6 +212,42 @@ test('a task that does not auto-run gets one replacement after a refusal, on ano
       // An ordinary failure is not replaced.
       await s.db.session.update({ where: { id: replacement }, data: { status: RunStatus.FAILED, finishedAt: new Date(), error: 'tests failed' } });
       assert.equal(await s.tasks.replaceRefusedRun(replacement), null);
+    } finally {
+      await s.db.$disconnect();
+    }
+  });
+
+test('under the release protocol the failed turn holds the task, and its release is what is replaced; the block stands',
+  { skip, timeout: 120_000 }, async () => {
+    assertCoordinatorPgUrlIsIsolated(URL!);
+    const s = connect();
+    try {
+      const f = await fixture(s.db, 'release');
+      const taskId = await taskIn(s.db, f);
+      const run1 = await runNow(s, f, taskId);
+      const turnId = await claimed(s, f, run1);
+      // SESSION_RELEASE_V1: the failed turn's report releases nothing; the runner's release report follows.
+      await s.api.turnComplete({ id: f.runnerId }, run1, {
+        turnId, status: SharedRunStatus.FAILED, subtype: 'error', numTurns: 1, costUsd: 0, error: CURSOR_ERROR,
+        failure: { kind: RunFailureKind.ACCOUNT_ACTION_REQUIRED, said: PAYMENT }, admission: true,
+      } as never, SESSION_RELEASE_V1);
+      const held = await s.db.session.findUniqueOrThrow({ where: { id: run1 }, select: { finishedAt: true, failureKind: true, accountHealthEffect: true } });
+      assert.equal(held.finishedAt, null, 'held until its release');
+      assert.equal(held.failureKind, RunFailureKind.ACCOUNT_ACTION_REQUIRED);
+      assert.equal(held.accountHealthEffect, 'BLOCKED', 'the turn report told account health');
+      assert.equal(await s.tasks.replaceRefusedRun(run1), null, 'not while the run still holds the task');
+
+      await s.api.release({ id: f.runnerId }, run1, {} as never, SESSION_RELEASE_V1);
+      const released = await s.db.session.findUniqueOrThrow({ where: { id: run1 }, select: { status: true, finishedAt: true, failureKind: true } });
+      assert.equal(released.status, RunStatus.FAILED);
+      assert.ok(released.finishedAt);
+      assert.equal(released.failureKind, RunFailureKind.ACCOUNT_ACTION_REQUIRED, 'the release keeps the turn report\'s classification');
+      const [row] = await s.db.accountHealth.findMany({ where: { ownerId: f.ownerId, clearedAt: null } });
+      assert.equal(row?.state, 'BLOCKED', 'the release is read as the failure it is, not as the account working');
+
+      const answer = await s.tasks.replaceRefusedRun(run1);
+      assert.equal(answer?.ok, true, JSON.stringify(answer));
+      assert.equal((await runOf(s.db, answer!.sessionId!)).provider, 'claude');
     } finally {
       await s.db.$disconnect();
     }
