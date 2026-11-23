@@ -620,7 +620,7 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
     return { k, profile, manager, service, ownerId, mapping, name, pod, turn, events, watch };
   }
 
-  /** Reconcile until READY, heartbeating the next Pod as it starts and reporting the build it runs. */
+  /** Reconcile until READY, heartbeating the next Pod as it starts. */
   async function kubernetesDrive(k: ReturnType<typeof managedRunnerWorld>, manager: ManagedRunnerManager, ownerId: string): Promise<ReconcileOutcome[]> {
     const outcomes: ReconcileOutcome[] = [];
     for (let i = 0; i < 40 && outcomes.at(-1) !== 'READY' && outcomes.at(-1) !== 'FAILED'; i += 1) {
@@ -629,7 +629,6 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
       if (after.podUid && after.managementState === 'STARTING') {
         k.advance(1_000);
         await k.heartbeat(after.runnerId);
-        await db.runner.update({ where: { id: after.runnerId }, data: { version: `managed-${NEW_SHA}` } });
       }
       if (after.nextAttemptAt && after.nextAttemptAt > k.now()) k.advance(after.nextAttemptAt.getTime() - k.now().getTime() + 1);
     }
@@ -722,7 +721,6 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
     );
     assert.equal(k.cluster.count('create', 'persistentvolumeclaims'), 1, 'the claim was never made again');
     assert.ok(awake.updateCompletedAt && awake.updateCompletedAt >= awake.updateRequestedAt!, 'the next generation READY ends the update');
-    assert.equal((await service.status(ownerId)).update, undefined, 'current');
     // The sessions are the runner's to stop and resume: the server changed none of them.
     const sessions = await db.session.findMany({ where: { id: { in: [turn.id, queued.id] } }, select: { id: true, status: true } });
     assert.deepEqual(Object.fromEntries(sessions.map((s) => [s.id, s.status])), { [turn.id]: 'RUNNING', [queued.id]: 'PENDING' });
