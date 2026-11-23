@@ -117,9 +117,9 @@ class SessionFactsSitesTest {
         assertEquals("turns", sendEndpoint(row("""{"status":"AWAITING_INPUT","released":false,"phase":"IDLE"$caps}""")))
         assertEquals("turns", sendEndpoint(row("""{"status":"MYSTERY","released":false,"phase":"RUNNING"$caps}""")))
     }
-    @Test fun withoutTheReleaseFieldCapabilitiesFallBackToTheStatus() {
+    @Test fun withoutTheReleaseFieldCapabilitiesDecideAsBefore() {
         val caps = ""","capabilities":{"canSend":true,"canResume":true}"""
-        assertEquals("resume", sendEndpoint(row("""{"status":"FAILED"$caps}""")))
+        assertEquals("turns", sendEndpoint(row("""{"status":"FAILED"$caps}""")))
         assertEquals("turns", sendEndpoint(row("""{"status":"AWAITING_INPUT"$caps}""")))
         assertEquals("turns", sendEndpoint(row("""{"status":"AWAITING_INPUT","capabilities":{"canSend":true,"canResume":false}}""")))
     }
