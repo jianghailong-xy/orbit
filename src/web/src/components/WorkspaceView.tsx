@@ -13040,31 +13040,46 @@ export function SessionComposer({
           // array's last entry is the one beside the `+` — while the native menu
           // (ComposerView.swift `addMenu`) hands its items to the system with the first one
           // nearest the button and gets them back reversed. Hence the native source reads
-          // Command…File and this reads File…Command: both clients put Command under the
-          // thumb and File at the far end, and a divider between the two groups. Pinned by
+          // Command…File and this reads Files…Command: both clients put Command under the
+          // thumb and the attachments at the far end, and a divider between the two. Pinned by
           // WorkspaceView.composerMenu.test.tsx, drawn in
           // docs/mocks/composer-attach-menu-phone.html.
           items={[
+              // Grouped by where the file comes from, Orbit's own Files first (owner's call on
+              // docs/mocks/composer-attach-labels, option B): "File" and "From Files" read alike.
               {
-                key: 'file',
-                icon: <PaperClipOutlined />,
-                label: 'File',
-                onSelect: () => fileInputRef.current?.click(),
+                key: 'from-orbit',
+                type: 'group',
+                label: 'From Orbit',
+                children: [
+                  {
+                    key: 'drive',
+                    icon: <FolderOpenOutlined />,
+                    label: 'Files',
+                    onSelect: () => setTimeout(() => setDrivePickerOpen(true), 0),
+                  },
+                ],
               },
               {
-                key: 'image',
-                icon: <PictureOutlined />,
-                // One word per action, the way the native composer's `+` menu writes them
-                // (ComposerView.swift `addMenu`). Offered unconditionally too: a state the
-                // upload can't work in says so on pick, rather than greying the item out.
-                label: 'Image',
-                onSelect: () => imageInputRef.current?.click(),
-              },
-              {
-                key: 'drive',
-                icon: <FolderOpenOutlined />,
-                label: 'From Files',
-                onSelect: () => setTimeout(() => setDrivePickerOpen(true), 0),
+                key: 'from-device',
+                type: 'group',
+                label: 'From this device',
+                children: [
+                  {
+                    key: 'file',
+                    icon: <PaperClipOutlined />,
+                    label: 'File',
+                    onSelect: () => fileInputRef.current?.click(),
+                  },
+                  {
+                    key: 'image',
+                    icon: <PictureOutlined />,
+                    // Offered unconditionally: a state the upload can't work in says so on
+                    // pick, rather than greying the item out.
+                    label: 'Image',
+                    onSelect: () => imageInputRef.current?.click(),
+                  },
+                ],
               },
               { key: 'divider', type: 'separator' },
               {

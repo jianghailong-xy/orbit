@@ -138,8 +138,9 @@ describe('the composer + menu', { timeout: 60_000 }, () => {
 
   /** What the menu draws, top to bottom. The divider counts as a row: it is what groups them. */
   const drawn = (menu: HTMLElement): (string | undefined)[] =>
-    [...menu.querySelectorAll('[role="menuitem"], [role="separator"]')].map((el) => {
+    [...menu.querySelectorAll('.orbit-menu-group-label, [role="menuitem"], [role="separator"]')].map((el) => {
       if (el.getAttribute('role') === 'separator') return '─';
+      if (el.classList.contains('orbit-menu-group-label')) return `# ${el.textContent?.trim()}`;
       // Shell appends what one particular session cannot do. Which session this is has nothing to
       // do with the order the menu draws its rows in, which is what this test is about.
       return el.textContent?.trim().replace(/ \(session unavailable\)$/, '');
@@ -217,7 +218,7 @@ describe('the composer + menu', { timeout: 60_000 }, () => {
   it('draws the native menu: command group under the thumb, media group above the rule', async () => {
     const menu = await openMenu();
 
-    expect(drawn(menu)).toEqual(['File', 'Image', 'From Files', '─', 'Shell', 'Skill', 'Command']);
+    expect(drawn(menu)).toEqual(['# From Orbit', 'Files', '# From this device', 'File', 'Image', '─', 'Shell', 'Skill', 'Command']);
     // …in the variant that sizes it like the native one on a phone (below).
     expect(menu.dataset.variant).toBe('attachment');
   });
