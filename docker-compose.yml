@@ -789,7 +789,7 @@ services:
       GF_SMTP_HOST: ${GF_SMTP_HOST:-localhost:25}
       GF_SMTP_USER: ${GF_SMTP_USER:-}
       GF_SMTP_PASSWORD: ${GF_SMTP_PASSWORD:-}
-      GF_SMTP_FROM_ADDRESS: ${GF_SMTP_FROM_ADDRESS:-grafana@localhost}
+      GF_SMTP_FROM_ADDRESS: ${GF_SMTP_FROM_ADDRESS:-grafana@localhost.localdomain}
     depends_on:
       prometheus:
         condition: service_healthy

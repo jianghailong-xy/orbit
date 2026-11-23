@@ -333,7 +333,18 @@ every apiserver, the link gateway, PostgreSQL and the host; [Grafana](#grafana) 
 container logs, which Alloy ships to it ([Logs](#logs)). The only port it publishes on the host is Grafana's, on
 `127.0.0.1`, and no monitoring container is given the Docker socket.
 
-Turn it on by adding `monitoring` to `COMPOSE_PROFILES` in `.env`, then start it:
+**It is on by default.** A fresh install (`scripts/install-server.sh`) writes `ORBIT_MONITORING=on`, a generated
+`GRAFANA_ADMIN_PASSWORD` and a last `COMPOSE_PROFILES` line that repeats the profiles above it with `monitoring`, then
+starts the six services. The first upgrade (`/upgrade`'s script) of a deployment whose `.env` has no `ORBIT_MONITORING`
+does the same, the way it adds the [runner link](#runner-link): it appends those lines at the end of `.env`, leaves every
+line already there as it was, and starts the services. postgres-exporter's password is not in `.env`: the `pg-monitor-role`
+service makes it into a volume. An upgrade that finds `ORBIT_MONITORING` in `.env` never adds the profile, whatever
+`COMPOSE_PROFILES` says, so it happens once. A deployment that already lists `monitoring` has only `ORBIT_MONITORING=on`
+recorded. A two-stage release (`ORBIT_REGISTRY`) leaves `.env` alone, as it does for the runner link: add the profile by hand.
+The upgrade also warns when the disk is over 90% full, since Loki refuses every write past that, and Alloy reads each
+container's log file from its start the first time it runs, dropping lines older than an hour.
+
+To turn it on by hand, add `monitoring` to `COMPOSE_PROFILES` in `.env`, then start it:
 
 ```bash
 COMPOSE_PROFILES=runner-link,monitoring      # keep the profiles the line already names
@@ -484,7 +495,7 @@ a reverse proxy on the host that forwards to `127.0.0.1:3030`, and set `GRAFANA_
 Put your own authentication or an IP allow-list in front of it as well: Grafana's login is its only lock.
 
 **Signing in.** The user is `admin`. The password is `GRAFANA_ADMIN_PASSWORD` in `.env`, which a fresh install
-(`scripts/install-server.sh`) generates (32 hex digits), and the upgrade script adds where `.env` turns `monitoring` on and has none; neither replaces one.
+(`scripts/install-server.sh`) generates (32 hex digits), and the upgrade script adds where it turns `monitoring` on or `.env` lists it and has none; neither replaces one.
 Without one the `grafana` container refuses to start, so it can never come up on Grafana's own default password.
 Sign-up, creating organizations and anonymous access are off. Grafana stores the password in its database the first
 time it starts, and changing the line later does not change it; to set a new one:
@@ -559,8 +570,9 @@ alert you when the pings stop; set its period to 1 minute and its grace to 3 to 
 it and sends nothing, so none of the alerts above can reach you. The only way to hear of it is the off-host Watchdog
 check: the heartbeat service notices the silence. Without `ORBIT_WATCHDOG_URL` pointing at one, a dead host is silent.
 
-**Turn it off.** Remove `monitoring` from `COMPOSE_PROFILES` in `.env`, then stop and remove its containers. The
-apiserver's listener stays open, reached by nothing. The volumes stay until you remove them:
+**Turn it off.** Remove `monitoring` from `COMPOSE_PROFILES` in `.env` (the last `COMPOSE_PROFILES` line is the one
+Compose takes), and keep the `ORBIT_MONITORING` line: it is the record that makes a later upgrade leave monitoring off.
+Then stop and remove its containers. The apiserver's listener stays open, reached by nothing. The volumes stay until you remove them:
 
 ```bash
 docker compose --profile monitoring rm -sf grafana prometheus node-exporter postgres-exporter pg-monitor-role loki alloy
