@@ -52,6 +52,26 @@ const CLASSIFIED: ReadonlySet<string> = new Set(['ACCOUNT_ACTION_REQUIRED', 'CRE
 
 export type Ladder = 'CLASSIFIED' | 'BREAKER';
 
+/** §8: the breaker's alert point. A classified refusal alerts at its first occurrence; a guess waits for the third trip. */
+export const BREAKER_ALERT_TRIP = 3;
+
+/** Whether `kind` is one the provider stated in its own words (§4): the three that alert at their first occurrence. */
+export function isClassifiedKind(kind: string): boolean {
+  return CLASSIFIED.has(kind);
+}
+
+/**
+ * §8: does the row `next`, just written, owe the owner an `account-needs-action` push? `notifiedKind` is what the live
+ * row last alerted for (null: not yet). A cleared row is gone, so the next streak starts with null and alerts at its own
+ * alert point; a still-blocked account alerts again only when refused with a different classified kind. Not a later
+ * trip of the same kind, not a refused trial, not a classified streak turning unclassified, not a cool-down.
+ */
+export function alertDue(next: Pick<AccountHealthRow, 'state' | 'kind' | 'trips'>, notifiedKind: string | null): boolean {
+  if (next.state !== 'BLOCKED') return false;
+  if (CLASSIFIED.has(next.kind)) return notifiedKind !== next.kind;
+  return next.kind === UNCLASSIFIED_ADMISSION && notifiedKind === null && next.trips === BREAKER_ALERT_TRIP;
+}
+
 /**
  * How long trip `trip` (1-based, consecutive) blocks the account on `ladder`. The step is read from the column of
  * the kind that caused THIS trip at the shared count (§6.4), so a breaker streak followed by a classified refusal

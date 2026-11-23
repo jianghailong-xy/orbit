@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AdminRoleGuard } from '../users/admin-role.guard';
+import { AccountHealthController } from './account-health.controller';
 import { AccountHealthService } from './account-health.service';
 import { AdminProvidersController } from './admin-providers.controller';
 import { AnthropicGatewayController } from './anthropic-gateway.controller';
@@ -27,7 +28,7 @@ import { SharedPoolsService } from './shared-pools.service';
 
 @Module({
   controllers: [
-    ProvidersController, AdminProvidersController, SharedPoolsController, PoolGatewayController, AnthropicGatewayController,
+    ProvidersController, AccountHealthController, AdminProvidersController, SharedPoolsController, PoolGatewayController, AnthropicGatewayController,
   ],
   // AdminRoleGuard depends only on the global PrismaService, so provide it here too (it is
   // not exported from UsersModule) for the admin controller's @UseGuards.
