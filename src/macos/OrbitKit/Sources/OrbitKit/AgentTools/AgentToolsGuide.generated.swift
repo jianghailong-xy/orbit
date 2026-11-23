@@ -739,7 +739,7 @@ let agentToolsGuideJSON = #"""
     },
     {
       "id": "files",
-      "label": "Files",
+      "label": "Documents",
       "tools": [
         "drive_delete",
         "drive_get",
