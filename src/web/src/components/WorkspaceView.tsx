@@ -12354,7 +12354,6 @@ export function SessionComposer({
   const fileInputRef = useRef<HTMLInputElement>(null);
   // The `+` menu's "From Files" picker (board docs/mocks/orbit-files, 02-web frame 8).
   const [drivePickerOpen, setDrivePickerOpen] = useState(false);
-  const driveFilesChip = useRef<HTMLButtonElement>(null);
   // Manual composer height (px). null = autoSize auto-grow (up to maxRows); once the user
   // drags the top handle, that height wins over autoSize until they double-click to reset.
   const [composerHeight, setComposerHeight] = useState<number | null>(null);
@@ -13121,11 +13120,9 @@ export function SessionComposer({
             onOpenChange={setDrivePickerOpen}
             disabled={composerDisabled}
             popupClassName="drive-picker-popover"
-            trigger={
-              <button ref={driveFilesChip} type="button" className="composer-pill composer-drive-chip" aria-label="Add from Files">
-                <FolderOpenOutlined /> Files
-              </button>
-            }
+            // No chip of its own: the picker opens from the `+` menu's From Files, and this
+            // zero-width, unfocusable button only anchors it beside the `+`.
+            trigger={<button type="button" className="composer-drive-anchor" tabIndex={-1} aria-hidden="true" />}
           >
             <DriveFilePicker projectFolder={projectFolder} onClose={() => setDrivePickerOpen(false)} onPick={insertDriveFiles} />
           </Popover>
