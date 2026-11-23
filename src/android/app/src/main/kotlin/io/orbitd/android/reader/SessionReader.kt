@@ -12,9 +12,11 @@ import androidx.compose.foundation.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.edit
 import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,7 +24,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -31,6 +35,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -40,6 +45,8 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -214,7 +221,18 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val list = rememberLazyListState()
     // Opened from a project row onto the card a member waits on you with (owner 2026-11-14): placed at the cards, not the tail.
     val ontoWaitingCard = remember(route.id) { CardFocus.pending(route.id!!) == CardFocus.WAITING }
-    DisposableEffect(route.id) { onDispose { if (CardFocus.pending(route.id!!) == CardFocus.WAITING) CardFocus.spend(route.id!!) } }
+    DisposableEffect(route.id) { onDispose { if (CardFocus.pending(route.id!!) == CardFocus.WAITING) CardFocus.spend(route.id!!); CardFocus.release(route.id!!) } }
+    // The record a jump landed on, held there like the opened card: the line's seq and the offset it was placed at.
+    var recordHeld by remember(model) { mutableStateOf<Pair<Long, Int>?>(null) }
+    val recordAt = remember(model) { LongArray(1) }
+    // Rows start after the items the list draws ahead of them ("loading", "older", "handoff-note", "created-workspace"); the list's
+    // builder writes it, so a jump counts what is there.
+    val rowsStart = remember(model) { IntArray(1) { 1 } }
+    val releaseHolds = {
+        CardFocus.release(route.id!!); recordHeld = null
+        if (CardFocus.pending(route.id!!) == CardFocus.WAITING) CardFocus.spend(route.id!!)
+    }
+    val latestRelease by rememberUpdatedState(releaseHolds)
     var follow by rememberSaveable { mutableStateOf(route.recordId == null && !ontoWaitingCard) }
     var placed by remember(model) { mutableStateOf(false) }
     var dragging by remember { mutableStateOf(false) }
@@ -294,7 +312,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         val target = state.targetSeq?.let { anchorRow(currentRows, it) }
         if (target != null) {
             follow = false
-            list.scrollToItem(currentRows.indexOf(target) + 1, state.targetOffset)
+            list.scrollToItem(rowsStart[0] + currentRows.indexOf(target), state.targetOffset)
+            recordHeld = target.event.seq to state.targetOffset; recordAt[0] = CardFocus.now()
         } else if (follow) list.scrollToItem((list.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
         placed = true; positioning = false
     }
@@ -307,6 +326,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     val item = visible.firstOrNull { it.key.toString().startsWith("event:") }
                     val seq = item?.key?.toString()?.substringAfter(':')?.toLongOrNull()
                     if (seq != null) model.position(seq, -item.offset, follow)
+                    // A reader resting on the cards, with no transcript row in view, still decides whether a resync may reseed under them.
+                    else model.reading(follow)
                 }
             }
     }
@@ -402,6 +423,39 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // own top into view. Once per open; a jump the open itself asked for (a record) wins.
     var placedAtCards by remember(model) { mutableStateOf(false) }
     var listHeight by remember { mutableIntStateOf(0) }
+    var cardsSize by remember { mutableIntStateOf(0) }
+    // Held in place (web `landingRef`): the opened card, or a jumped-to record, is put back whenever the conversation changes around
+    // it, until the reader takes the scroller, goes to the tail, or nothing has changed for HOLD_QUIET_MS.
+    val heldCard = CardFocus.held(route.id!!)
+    LaunchedEffect(heldCard?.key, state.window.events, cardsSize, state.session?.let(cards::shown)?.size) {
+        val held = heldCard ?: return@LaunchedEffect
+        if (!CardFocus.reapply(route.id!!)) return@LaunchedEffect
+        // Once the change has been laid out: how far the card stands from where it was brought to, and back by that much.
+        withFrameNanos { }; withFrameNanos { }
+        val delta = (CardFocus.position(route.id!!, held.key) ?: return@LaunchedEffect) - held.top
+        // Still the record this put-back read: one held again meanwhile has its own top, and this one's is out of date.
+        if (kotlin.math.abs(delta) >= 1f && CardFocus.held(route.id!!) == held) {
+            positioning = true
+            list.scrollBy(delta)
+            positioning = false
+            CardFocus.moved(route.id!!)
+        }
+    }
+    LaunchedEffect(recordHeld, state.window.events, rowsStart[0], cardsSize) {
+        val (seq, offset) = recordHeld ?: return@LaunchedEffect
+        // Nothing has moved it for HOLD_QUIET_MS: let it go; otherwise put it back, and the quiet starts again.
+        if (CardFocus.now() - recordAt[0] >= CardFocus.HOLD_QUIET_MS) { recordHeld = null; return@LaunchedEffect }
+        val target = anchorRow(currentRows, seq)
+        if (target != null && !positioning) {
+            positioning = true
+            val before = list.firstVisibleItemIndex to list.firstVisibleItemScrollOffset
+            list.scrollToItem(rowsStart[0] + currentRows.indexOf(target), offset)
+            positioning = false
+            // Only a put-back that moved the view restarts the quiet (web `keepLanding`).
+            if (before != (list.firstVisibleItemIndex to list.firstVisibleItemScrollOffset)) recordAt[0] = CardFocus.now()
+        }
+    }
+    LaunchedEffect(follow) { if (follow) { CardFocus.release(route.id!!); recordHeld = null } }
     LaunchedEffect(placed) {
         if (!placed || !ontoWaitingCard || placedAtCards || route.recordId != null) return@LaunchedEffect
         placedAtCards = true
@@ -468,6 +522,17 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val worktreeState by worktree.state.collectAsState()
     LaunchedEffect(worktreeState.detail, snapshotDetail) { console.detail = worktreeState.detail ?: snapshotDetail }
     val sessionDetail = worktreeState.detail ?: snapshotDetail
+    // Held by its GitHub workspace's clone: the waiting card says what is cloning and how far (web `useCloneWait`). A failed clone keeps
+    // the plain sentence; the detail's workspace says which repository, the stream how far.
+    val cloneHeld = listRow?.takeIf {
+        it.effectiveLifecycleState != "TRASH" && it.effectiveRunState == RunState.QUEUED && !it.regionHeld && QueuedClone.isHeld(it.queuedGate)
+    }?.queuedGate
+    val heardClonesNow by app.clones.all.collectAsState()
+    val cloneReadAt = remember(sessionDetail) { System.currentTimeMillis() }
+    val cloneWait = if (cloneHeld == null || !QueuedClone.isCloning(cloneHeld)) null else {
+        val workspace = sessionDetail?.get("workspace") as? JsonObject
+        QueuedClone.wait(workspace, workspace?.string("id")?.let { heardClonesNow[WorkspaceClone.keyOf(it)] }, cloneReadAt)
+    }
     val workspaceOfSession = (sessionDetail?.get("workspace") as? JsonObject)?.string("id") ?: sessionDetail?.string("workspaceId")
     LaunchedEffect(workspaceOfSession) { mainCheckout.bind(workspaceOfSession) }
     // What a Retry re-sends when it is the reader's: the newest message of a person the window holds.
@@ -714,10 +779,11 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 }.nestedScroll(nested).pointerInput(model) {
                     // Do not consume the gesture: native selection/links still receive it.
                     // A touch pauses following so a live update cannot move text under a selection.
-                    awaitEachGesture { awaitFirstDown(requireUnconsumed = false); follow = false }
+                    awaitEachGesture { awaitFirstDown(requireUnconsumed = false); follow = false; latestRelease() }
                 }.testTag("transcript-list").lastPageProbe(lastPage, list, view), state = list,
                     // No room under the rows but the tail row's own: every follow and jump lands on it (iOS 9d3751ec2).
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    // iOS `rowInsets`: 16 at the sides, 6 above and below every row, so 12 between two.
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (!displayedWindow.seeded) item(key = "loading") { LoadingMessage("Loading messages…") }
                     item(key = "older") {
                         if (displayedWindow.hasOlder) TextButton(enabled = !displayedLoading, onClick = { follow = false; model.older() }) { Text(if (displayedLoading) "Loading messages…" else "Load earlier messages") }
@@ -729,6 +795,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     }
                     // Board 02 ③: a successor opens with the note its predecessor wrote, and the waits that moved here.
                     val receivedHandoff = CoordinatorHandoff.received(detail)
+                    rowsStart[0] = (if (!displayedWindow.seeded) 1 else 0) + 1 + (if (receivedHandoff != null && displayedWindow.seeded && !displayedWindow.hasOlder) 1 else 0) +
+                        (if (createdWorkspaceLine != null && !displayedWindow.hasOlder) 1 else 0)
                     if (receivedHandoff != null && displayedWindow.seeded && !displayedWindow.hasOlder) item(key = "handoff-note") { Box(Modifier.conversationCard()) {
                         HandoffNoteCard(receivedHandoff, io.orbitd.android.core.cards.CoordinatorCleanStart.history(
                             detail?.text("createdAt"), session?.snapshot?.standing.orEmpty(), cards.merged)) { open(OrbitRoute(Destination.SESSION, it)) }
@@ -802,7 +870,13 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     // Held by its runner's update with no message of the reader's to put the foot row under: the queued page's
                     // explanation, centred on an empty conversation (web `RunnerUpdatingQueued`).
                     val runnerUpdatingPage = runnerUpdatingGate?.takeIf { RunnerUpdating.isRunnerUpdating(it) && displayedWindow.seeded && live != null && heldSeq == null && !tailHeld && accepted.isEmpty() }
-                    if (runnerUpdatingPage != null) item(key = "runner-updating") {
+                    val cloneCard = cloneHeld != null && displayedWindow.seeded && live != null && heldSeq == null && !tailHeld && accepted.isEmpty()
+                    if (cloneCard) item(key = "clone-wait") {
+                        if (displayedRows.isEmpty()) Box(Modifier.fillParentMaxHeight(0.8f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            CloneWaitNotice(cloneWait, QueuedClone.isFailed(cloneHeld), runnerUpdatingMachine, compact = false)
+                        } else CloneWaitNotice(cloneWait, QueuedClone.isFailed(cloneHeld), runnerUpdatingMachine, compact = true)
+                    }
+                    else if (runnerUpdatingPage != null) item(key = "runner-updating") {
                         val openTurn: (String) -> Unit = { open(OrbitRoute(Destination.SESSION, it)) }
                         if (displayedRows.isEmpty()) Box(Modifier.fillParentMaxHeight(0.8f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                             RunnerUpdatingQueued(runnerUpdatingPage, runnerUpdatingMachine, openTurn, later = runnerUpdatingLater)
@@ -828,9 +902,12 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     }
                     item(key = "newer") { if (displayedWindow.newerAfter != null) TextButton(enabled = !displayedLoading, onClick = model::newer) { Text("Load newer messages") } }
                     item(key = "interaction-cards") {
-                        Box(Modifier.onSizeChanged { if (rail.grew(it.height) && placed && follow && state.window.newerAfter == null) repin++ }) {
+                        Box(Modifier.onSizeChanged { cardsSize = it.height; if (rail.grew(it.height) && placed && follow && state.window.newerAfter == null) repin++ }) {
                             // The list's height below the floating needs-you bar: a card brought in by its top lands under the bar, not behind it.
-                            CompositionLocalProvider(LocalCardViewport provides listHeight.coerceAtLeast(0)) { SessionCards(cards, openLink, discuss = discussCard) }
+                            // None while an open onto the waiting card has not placed the list at the cards: that card waits for the
+                            // placing, and is not brought in (and held) against a layout still being built.
+                            val cardViewport = if (ontoWaitingCard && !placedAtCards && route.recordId == null) 0 else listHeight.coerceAtLeast(0)
+                            CompositionLocalProvider(LocalCardViewport provides cardViewport) { SessionCards(cards, openLink, discuss = discussCard) }
                         }
                     }
                     // A08-4: what is still waiting in the queue, as the turns it will be — after the decisions, before the tail.
@@ -850,14 +927,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     // A06-12: the room the fade lies over, so a list at its tail has nothing in it — and the 1 dp anchor it always was.
                     item(key = "tail") { Spacer(Modifier.height(COMPOSER_BAND_FADE + 1.dp).testTag("transcript-tail")) }
                 }
-                }
-                // Android's jump stays a row under the list (iOS floats a disc 6 pt above the fade): below the list, so never in its fade.
-                if (!follow || state.window.newerAfter != null) Row(Modifier.fillMaxWidth().testTag("transcript-jump"), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    TextButton(onClick = {
-                        val last = shownRows.lastOrNull { it.event.type == "user" }
-                        if (last != null) model.show(last.event.seq)
-                    }, enabled = shownRows.any { it.event.type == "user" }) { Text("Last question") }
-                    TextButton(onClick = { follow = true; model.latest() }) { Text("Jump to latest") }
+                // iOS's floating disc (`scrollToBottomButton`): over the list's bottom centre, 6 dp above the fade, while the tail is
+                // out of view. "Your question" is the capsule over the list, as on iOS, so there is no "Last question" here.
+                if (!follow || state.window.newerAfter != null)
+                    JumpToLatestDisc(Modifier.align(Alignment.BottomCenter).padding(bottom = COMPOSER_BAND_FADE + 6.dp)) { follow = true; model.latest() }
                 }
                 // Android's own, as iOS's console shows no connection: only while the stream is being made again (A06-18), under
                 // the list so its coming and going never moves the line being read, and folded with the chrome while a phone types.
@@ -990,6 +1063,20 @@ internal fun LiveMessage(label: String, parent: String, text: String, open: (Str
             CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) { StreamingText(text, open) }
             ReplyTranslationFoot(null, pending = true, flipped = false, onFlip = {}, retry = null)
         } else StreamingText(text, open)
+    }
+}
+
+/** iOS `scrollToBottomButton`: a 40 dp opaque disc with a down arrow in a 48 dp target, lifted off the transcript by its shadow alone. */
+@Composable
+private fun JumpToLatestDisc(modifier: Modifier, onClick: () -> Unit) {
+    Box(modifier.size(48.dp).clip(CircleShape).clickable(onClickLabel = null, role = Role.Button, onClick = onClick)
+        .semantics { contentDescription = "Jump to latest" }.testTag("transcript-jump"), contentAlignment = Alignment.Center) {
+        Surface(Modifier.size(40.dp), shape = CircleShape, // iOS `floatingDiscSurface`: white in light, a raised grey in dark (the transcript's own surface would hide it).
+            color = MaterialTheme.colorScheme.run { if (surface.luminance() < 0.5f) surfaceVariant else Color.White }, shadowElevation = 3.dp) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(painterResource(R.drawable.ic_arrow_up), null, Modifier.size(18.dp).rotate(180f), tint = MaterialTheme.colorScheme.onSurface)
+            }
+        }
     }
 }
 

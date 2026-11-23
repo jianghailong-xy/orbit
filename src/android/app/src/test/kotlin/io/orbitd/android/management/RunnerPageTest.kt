@@ -139,7 +139,7 @@ class RunnerPageTest {
         assertEquals("Kept up to date by Orbit", RunnerPage.hostLine(runner("orbit-cloud"), managed = true))
         assertEquals("Kept up to date by Orbit", RunnerPage.versionValue(runner("orbit-cloud"), "0.1.197", managed = true))
         assertEquals("v0.1.190", RunnerPage.hostLine(runner("orbit-cloud", version = "0.1.190"), managed = true))
-        assertEquals("0.1.190 · Orbit updates this machine for you.", RunnerPage.versionValue(runner("orbit-cloud", version = "0.1.190"), "0.1.197", managed = true))
+        assertEquals("0.1.190 · Orbit moves it to each new build.", RunnerPage.versionValue(runner("orbit-cloud", version = "0.1.190"), "0.1.197", managed = true))
         assertFalse(RunnerPage.hostLine(runner("orbit-cloud"), managed = true).contains("managed-"))
 
         // The head's line leads with the country its IP is in, once a check has decided one; the words are OrbitKit's.
@@ -551,6 +551,24 @@ class RunnerPageTest {
         val none = Json.parseToJsonElement("""{"agentFix":{"workspaceId":null,"workspaceName":null,"engine":null,"engineName":null,
             "blocked":{"code":"noWorkspace","message":"No workspace runs on this machine yet."},"fixing":[]}}""").jsonObject
         assertEquals(AgentFix(null, null, null, null, "noWorkspace", "No workspace runs on this machine yet.", emptyList()), RunnerPage.agentFixOf(none))
+    }
+
+    // The transcript's missing-bubblewrap warning (docs/mocks/codex-sandbox-fix-with-agent).
+    @Test fun theSandboxWarningOffersTheAgentThenShowsTheOneThatFinished() {
+        fun runner(blocked: String? = null, fixing: String = "", handled: String = "") =
+            Json.parseToJsonElement("""{"id":"r1","agentFix":{"workspaceId":"w1","workspaceName":"orbit-develop",
+                "engine":"codex","engineName":"Codex","blocked":${blocked?.let { """{"code":"$it","message":"Why: $it."}""" } ?: "null"},
+                "fixing":[$fixing],"handled":[$handled]}}""").jsonObject
+
+        assertEquals(SandboxFixView.Ready("Starts a session in orbit-develop on this machine, with Codex."),
+            RunnerPage.sandboxFixView(runner()))
+        assertEquals(SandboxFixView.Fixing(AgentFixing("sandboxMissing", "codex", "s1", "w1", "orbit-dev")),
+            RunnerPage.sandboxFixView(runner(fixing = fixingEntry("sandboxMissing", "codex"))))
+        assertEquals(SandboxFixView.Handled("s2", "orbit-develop"), RunnerPage.sandboxFixView(runner(handled =
+            """{"kind":"sandboxMissing","engine":"codex","sessionId":"s2","workspaceId":"w1","workspaceName":"orbit-develop","status":"SUCCEEDED"}""")))
+        assertEquals(SandboxFixView.Blocked("Why: engineSignedOut. Sign in to Codex on the machine page to use this."),
+            RunnerPage.sandboxFixView(runner(blocked = "engineSignedOut")))
+        assertNull("an older server sends no agentFix", RunnerPage.sandboxFixView(buildJsonObject { put("id", "r1") }))
     }
 
     @Test fun onlyAnEngineThatWontUpdateAndARunnerThatCantUpdateItselfGetTheButton() {

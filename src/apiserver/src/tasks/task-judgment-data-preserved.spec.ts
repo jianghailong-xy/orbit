@@ -3190,6 +3190,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // preserved relation, and no trigger, function or DONE fence changes.
       '1201_turn_outcome',
       '1202_turn_outcome_backfill',
+      // 1210 adds nullable managed_runner.image_outdated_since and current_image_sha (no default); `managed_runner`
+      // is none of the preserved relations, no row is written, and no trigger, function or DONE fence changes.
+      '1210_managed_runner_image_outdated',
       // 1213 adds a nullable session.branch_commits (JSONB, no default); no row is written, and no preserved
       // relation, trigger, function or DONE fence changes.
       '1213_session_branch_commits',
@@ -3225,6 +3228,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // stored row passes and a partial unique index; no row is written, and no preserved relation, trigger, function
       // or DONE fence changes.
       '1273_owner_request_settings_change',
+      // 1290 adds nullable managed_runner.update_requested_at, update_requested_by and update_completed_at (no
+      // default); `managed_runner` is none of the preserved relations, no row is written, and no trigger, function or
+      // DONE fence changes.
+      '1290_managed_runner_update_now',
       // 1304 adds two nullable columns on schedule, max_runs (with a CHECK that NULL passes) and planned_end_told_at,
       // marks every ENDED schedule told (an UPDATE of schedule rows only), and adds two partial indexes; schedule and
       // schedule_run are not preserved relations, and no trigger, function or DONE fence changes.
@@ -3282,7 +3289,28 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1426 builds the partial unique index session_task_execution_claim_idx_finished_at on session(task_id) CONCURRENTLY
       // beside 0130's claim index (plan step 4.5, release A), dropping a leftover INVALID one first. Session is not a
       // preserved relation, and no function, trigger, type, constraint or DONE fence changes. No INSERT, UPDATE or DELETE.
-      '1426_session_task_execution_claim_finished_at_idx'],
+      '1426_session_task_execution_claim_finished_at_idx',
+      // 1427 is one UPDATE of session: it clears retry_at and retry_claimed_at on completed or trashed sessions, arms
+      // the auto-retry sweep can never fire. Session is not a preserved relation; it creates, alters or drops nothing,
+      // and names none of the preserved triggers or functions.
+      '1427_clear_dormant_session_retry_arms',
+      // 1428 replaces 0512's `open_list_bump_owner` so that a workspace UPDATE changing only heartbeat-probe columns
+      // bumps no Open-list counter. It creates, alters or drops no table, column, constraint or trigger, and it names
+      // or replaces none of the preserved triggers or functions. No INSERT, UPDATE or DELETE runs at apply time.
+      // Written as 1423 and then 1427 on the project line, it was renumbered after main took 1427.
+      '1428_open_list_workspace_probes',
+      // 1429 adds six nullable rating columns, a check on rating_score and an (owner_id, created_at) index on
+      // subagent_run; no row is written, and no preserved relation, trigger, function or DONE fence changes.
+      // Written as 1420 on its task branch, it was renumbered after main took 1420 to 1428.
+      '1429_subagent_run_rating',
+      // 1430 adds one nullable column, capacity_held_at, to schedule_run; no row is written, and no preserved
+      // relation, trigger, function or DONE fence changes.
+      '1430_schedule_run_capacity_held_at',
+      // 1431 adds managed_runner.update_interrupt_turns, BOOLEAN NOT NULL with a constant default (catalog-only, no
+      // rewrite), for an owner's Update Now of a busy runner; `managed_runner` is none of the preserved relations, no
+      // row is written, and no trigger, function or DONE fence changes.
+      // Written as 1430 on the project line, it was renumbered after main took 1430.
+      '1431_managed_runner_update_interrupt'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

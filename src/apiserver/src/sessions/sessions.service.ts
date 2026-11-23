@@ -173,8 +173,7 @@ import { GithubConnectionService } from '../github/github-connection.service';
 import { githubRepoUrl } from '../github/github-workspace.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PREPARED_STATEMENT } from '../prisma/prisma-client';
-import { RUNNER_DISK_BELOW_FLOOR, diskBelowFloor, sessionDiskHoldSql } from '../common/runner-disk-gate';
-import { workspaceCloneHoldSql, workspaceCloneReasonSql } from '../common/workspace-clone-gate';
+import { diskBelowFloor } from '../common/runner-disk-gate';
 import {
   reprojectAfterSettledChecks,
   settleChecksOfEndedRun,
@@ -217,6 +216,7 @@ import {
   treeCeiling,
 } from '../common/session-tree-sql';
 import { queuedRunnerUpdateOf } from '../common/runner-self-update';
+import { queuedReasonSql } from './queued-reason-sql';
 import { QueueService } from '../queue/queue.service';
 import { mergeDispatchGate } from '../projects/task-checkpoint.service';
 import {
@@ -364,7 +364,6 @@ import {
   pendingWorktreeOperationMayBeExecuting,
   mergeFencesTurn,
   retireSessionInboxGeneration,
-  worktreeOperationFenceSql,
 } from '../common/session-inbox-fence';
 import {
   TaskCompletionPolicyValue,
@@ -465,7 +464,6 @@ import {
   RUNNER_BEATS,
   runnerIsOnline,
   runnerLastBeatSql,
-  runnerOfflineSql,
   withRunnerLastBeat,
 } from '../runners/runner-presence';
 
@@ -545,7 +543,10 @@ const OPEN_LIST_OVERLAY_SOURCES: ReadonlySet<string> = new Set([
   'confirmation_request', 'confirmation_claim', 'confirmation_review', 'confirmation_review_record',
   'completion_evidence', 'evidence_decision', 'criteria_decision', 'criteria_authorship',
   'ratified_intent', 'ratified_commit', 'standard_set_confirmation', 'criterion_definition', 'task_status_count',
-  // Read only by a LANDING row's summary, and a LANDING row is in no flat list.
+  // A LANDING row's summary reads these, and so does every coordinator conversation in the flat list:
+  // project_open_item (OPEN owner items), promotion and integration_job (an item's owed state), codebase
+  // (a merge approval's main branch) and merge_receipt (a LANDING_UNOBSERVED item, via taskLandingSql).
+  // None of them leaves the hint token (docs/list-freshness-scope-hints.md §5.4, D1 withdrawn).
   'promotion', 'integration_job', 'project_open_item', 'merge_receipt', 'codebase',
 ]);
 
@@ -4319,7 +4320,21 @@ export class SessionsService {
       visibility: view === 'system'
         ? visibility
         : filters.scheduled
-          ? Prisma.sql`(${visibility}) AND s.run_source = 'SCHEDULE'`
+          // Not a try that ended before its first turn reached the engine (board scheduled-run-not-started, owner's
+          // C1): it did nothing to read, and the run it tried for is reached from the schedule's history and from
+          // the card on the session that started it. A try still waiting for a slot is listed.
+          ? Prisma.sql`(${visibility}) AND s.run_source = 'SCHEDULE'
+              AND NOT (
+                s.finished_at IS NOT NULL
+                AND s.num_turns = 0
+                AND NOT EXISTS (
+                  SELECT 1 FROM conversation_turn ct
+                   WHERE ct.session_id = s.id
+                     -- openingTurnKey(s.id): the run's first turn.
+                     AND ct.client_turn_id = 'initial-' || s.id::text
+                     AND ct.delivered_at IS NOT NULL
+                )
+              )`
           : Prisma.sql`(${visibility}) AND s.run_source <> 'SCHEDULE'`,
       orderBy,
       pageLimit,
@@ -5144,45 +5159,7 @@ export class SessionsService {
       LEFT JOIN LATERAL (
         SELECT reason, active, "limit", held FROM (
           SELECT
-            CASE
-              -- First, because it subsumes every gate below: a runner that is not polling will
-              -- not claim this row whatever the counts say, and "waiting for a slot" on an idle
-              -- machine is the least useful thing the UI could tell someone. Same rule
-              -- deriveSessionCapabilities resumes on, so one runner cannot read online here and
-              -- offline there.
-              WHEN r.id IS NULL OR ${runnerOfflineSql('r')}
-                THEN 'runner_offline'
-              -- A GitHub workspace whose clone is not READY (docs/github-workspace-design.md §6): the claim's own gate,
-              -- named before capacity, because a slot coming free would not start this session.
-              WHEN ${workspaceCloneHoldSql(Prisma.sql`s.workspace_id`)}
-                THEN ${workspaceCloneReasonSql(Prisma.sql`s.workspace_id`)}
-              -- Keep Free (runner-disk-gate.ts): the claim's own gate on a session that has never run. Before capacity,
-              -- because a slot coming free would not start it; it lifts when the runner reports space above its floor.
-              WHEN ${sessionDiskHoldSql('s')}
-                THEN ${RUNNER_DISK_BELOW_FLOOR}::text
-              -- Second, for the offline gate's reason: a runner draining for a self-update claims
-              -- nothing whatever its counts say (runner drainForUpdate), so naming a capacity gate
-              -- here would send the reader to the wrong cause. Ends only when the update does.
-              WHEN r.heartbeat_draining IS TRUE
-                THEN 'runner_updating'
-              -- Turns plus the sessions its background jobs hold a slot for: what the runner itself
-              -- admits against (runnerBackgroundHeldSessions). Turns alone read 10 of 16 on a machine
-              -- whose other 6 slots were held by bg_run jobs, and this row said nothing at all.
-              WHEN ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)}
-                   + ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`)} >= r.max_concurrent
-                THEN 'runner_at_capacity'
-              WHEN s.root_session_id IS NOT NULL
-                   AND ${treeActiveTurns('s')} >= ${treeCeiling(Prisma.sql`s.assigned_runner_id`)}
-                THEN 'tree_at_capacity'
-              WHEN s.batch_id IS NOT NULL
-                   AND ${batchActiveTurns('s')} >= s.batch_max_concurrent
-                THEN 'batch_at_capacity'
-              -- Last, so a row that was already explained by capacity keeps that explanation.
-              -- This one holds for seconds while a merge/commit finishes on the checkout, and
-              -- it is the claim's own fence, not a second copy of it.
-              WHEN ${worktreeOperationFenceSql('s')}
-                THEN 'worktree_op_pending'
-            END AS reason,
+            ${queuedReasonSql()} AS reason,
             ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)} AS runner_active,
             ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`)} AS runner_held,
             r.max_concurrent AS runner_limit,
@@ -10438,6 +10415,9 @@ export class SessionsService {
       /** @deprecated Rolling-version compatibility mirror. */
       archivedAt?: Date;
       deletedAt?: Date;
+      /** A completed or trashed session is out of the auto-retry sweep for good: its arm could never fire. */
+      retryAt?: null;
+      retryClaimedAt?: null;
     } = {};
     let finalCompletedAt = session.completedAt ?? session.archivedAt;
     let finalDeletedAt = session.deletedAt;
@@ -10445,10 +10425,14 @@ export class SessionsService {
       lifecycleData.completedAt = now;
       // Keep old replicas and clients coherent during the compatibility window.
       lifecycleData.archivedAt = now;
+      lifecycleData.retryAt = null;
+      lifecycleData.retryClaimedAt = null;
       finalCompletedAt = now;
     }
     if (lifecycle === 'deletedAt' && session.deletedAt == null) {
       lifecycleData.deletedAt = now;
+      lifecycleData.retryAt = null;
+      lifecycleData.retryClaimedAt = null;
       finalDeletedAt = now;
     }
     const lifecycleState = deriveSessionLifecycleState({

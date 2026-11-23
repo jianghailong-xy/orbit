@@ -791,10 +791,12 @@ test('task.changed carries a bounded row set or an explicit full-resync signal',
   await delay(30);
   sub.unsubscribe();
 
-  assert.deepEqual(events.map((event) => event.data), [
-    { taskId: 'taskA', taskIds: ['taskA', 'taskB'], resync: false },
-    { taskIds: [], resync: true },
-  ]);
+  // A bounded change reads who created its rows first (scoped-list-events.spec.ts), so the resync published after it
+  // can arrive first: the order of two nudges is no part of either.
+  const data = events.map((event) => event.data);
+  assert.equal(data.length, 2);
+  assert.deepEqual(data.find((d) => d.resync === false), { taskId: 'taskA', taskIds: ['taskA', 'taskB'], resync: false });
+  assert.deepEqual(data.find((d) => d.resync === true), { taskIds: [], resync: true });
 });
 
 test('publishForAllUsers reaches every stream (shared provider catalog)', async () => {

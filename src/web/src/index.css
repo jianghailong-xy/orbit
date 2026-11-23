@@ -2327,6 +2327,15 @@ button.toast--pill:focus-visible {
   background: var(--warning-bg);
   border-color: var(--warning-border);
 }
+/* Orbit Cloud's Updated card (board 4): green, for the day after its update. */
+.rd-update-card.done {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+}
+.rd-update-card.done .rd-update-tag {
+  color: var(--success);
+  font-weight: 500;
+}
 .rd-update-head {
   display: flex;
   align-items: baseline;
@@ -9921,6 +9930,34 @@ button.chat-jump-start:hover {
   font-weight: 600;
 }
 
+/* A clone's progress in the waiting card (docs/mocks/clone-progress-wait-card ②): git's percentage between
+   the title and where it runs, on the bar the conversation's first line uses, drawn wider here. */
+.chat-clone-meter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.chat-clone-meter .msc-clone-bar {
+  width: 220px;
+}
+.chat-clone-meter .msc-clone-pct {
+  min-width: 34px;
+  text-align: left;
+}
+.chat-queued-desc.chat-clone-desc {
+  max-width: 480px;
+}
+.chat-queued-desc b {
+  color: var(--text-2);
+  font-weight: 600;
+}
+.chat-slot-wait.chat-clone-wait {
+  gap: 8px;
+  padding: 14px 16px;
+}
+
 /* How long the wait above has been going. Rides inside the title so it shares that line, at
    normal weight because .chat-slot-wait bolds its first child. Tabular figures so the ticking
    second does not shift the title beside it once a second. */
@@ -10276,6 +10313,32 @@ button.chat-jump-start:hover {
 .chat-notice.chat-diagnostic .chat-diagnostic-text a {
   color: inherit;
   text-decoration: underline;
+}
+
+/* Fix with an agent under the transcript's sandbox warning
+   (docs/mocks/codex-sandbox-fix-with-agent): the button and the line saying where its session runs,
+   or the agent's session while it is open, or the one that already finished with the warning. */
+.chat-sandbox-fix {
+  margin: 10px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-subtle);
+}
+.chat-sandbox-fix-line {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.chat-sandbox-fix.fixing .chat-sandbox-fix-line,
+.chat-sandbox-fix.handled .chat-sandbox-fix-line {
+  margin-top: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 4px;
+  color: var(--text-2);
 }
 
 /* Sign-in failure: a remedy card, not an error line. Sits at message width so it reads as
@@ -29277,6 +29340,29 @@ button.agent-progress-agent:hover {
   font-size: 12px;
   color: var(--text-3);
 }
+/* The Quality column (docs/subagent-design.md §7.1, board docs/mocks/model-quality/01-board.png): two lines per model. */
+.model-tiers-quality {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.model-tiers-quality-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  line-height: 19px;
+  width: max-content;
+}
+.model-tiers-quality-source {
+  min-width: 57px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.model-tiers-muted {
+  color: var(--text-3);
+}
+.model-tiers-rated {
+  cursor: help;
+}
 
 /* Settings → Routing report (docs/subagent-design.md §7, board docs/mocks/subagent-workflow/08-report.html). */
 .routing-report-filters {
@@ -29389,6 +29475,89 @@ button.agent-progress-agent:hover {
   font-size: 12px;
   color: var(--text-3);
   line-height: 1.6;
+}
+
+/* Settings → Providers → Model routing: each model's tier beside how its runs went. */
+.model-routing-table td {
+  vertical-align: middle;
+}
+.model-routing-section td {
+  padding: 7px 10px;
+  background: var(--fill-inset);
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.model-routing-section-note {
+  margin-left: 8px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-3);
+}
+.model-routing-fold,
+.model-routing-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+.model-routing-open > span[aria-hidden] {
+  color: var(--text-3);
+  font-size: 10px;
+}
+.model-routing-flag {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--warning);
+}
+td > .routing-report-tier + .model-routing-flag {
+  display: inline;
+  margin-left: 8px;
+}
+.model-routing-outside {
+  color: var(--warning);
+}
+.model-routing-tier td {
+  padding-top: 5px;
+  padding-bottom: 5px;
+  background: var(--fill-inset);
+}
+.model-routing-tier td:first-child {
+  padding-left: 28px;
+}
+.model-routing-bar {
+  display: flex;
+  width: 150px;
+  height: 16px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--fill-inset);
+}
+.model-routing-bar i {
+  min-width: 3px;
+  font-style: normal;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  color: #fff;
+}
+.model-routing-bar-S { background: #7aa7d9; }
+.model-routing-bar-M { background: #4f86c6; }
+.model-routing-bar-L { background: #2f5f9e; }
+.model-routing-bar-XL { background: #1d3d6b; }
+.model-routing-bar i.is-outside {
+  background: repeating-linear-gradient(45deg, #f59e0b, #f59e0b 3px, #fbbf24 3px, #fbbf24 6px);
+  color: #5a3300;
 }
 
 /* The Agent's SubAgents group (docs/subagent-design.md §7). */

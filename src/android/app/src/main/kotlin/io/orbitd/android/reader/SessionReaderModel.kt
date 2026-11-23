@@ -98,6 +98,14 @@ internal class SessionReaderModel(private val auth: AuthSession, private val han
         saveJob?.cancel()
         saveJob = owner.launch { delay(300); save() }
     }
+    /** The reader rests where no transcript row is in view (on the cards): whether they follow still decides if a resync reseeds under them. */
+    fun reading(follow: Boolean) {
+        if (following == follow) return
+        following = follow
+        bookmark = bookmark.copy(following = follow)
+        saveJob?.cancel()
+        saveJob = owner.launch { delay(300); save() }
+    }
     private suspend fun save() {
         if (mutable.value.denied) return
         val window = mutable.value.window

@@ -13,7 +13,7 @@ import Foundation
 //       Result:
 //         <the result, four spaces in>          — or —   (no result)
 //       … the next run …
-//       <two sentences for the agent>
+//       <the sentences for the agent>
 //     </orbit-subagent-finished>
 //
 // The web reads the same note with `parseSubagentFinished` (src/web/src/lib/subagentFinished.ts). The
