@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 39 |
-| `user` | 527 |
+| `user` | 528 |
 | `admin` | 31 |
 | `runner` | 229 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **830** |
+| **Total** | **831** |
 
 ## Public routes
 
