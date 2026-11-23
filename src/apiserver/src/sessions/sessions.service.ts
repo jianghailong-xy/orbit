@@ -3433,8 +3433,7 @@ export class SessionsService {
    * the account has Session orchestration on. The landing is about the work this session wrote, and fixing it needs
    * the record.
    *
-   * Answers only when the calling session is a live work session of this runner (not deleted, not asked to end), the
-   * id is a landing of the project this session's task is in, and that landing's task is this session's task; then it
+   * Answers only when the calling session is a work session of this runner that is not deleted, the id is a landing of the project this session's task is in, and that landing's task is this session's task; then it
    * is the same detail `getForOrchestration` serves for it. Null in every other case, which leaves the request to the
    * orchestration door and its refusals unchanged.
    */
@@ -3454,8 +3453,9 @@ export class SessionsService {
     }
     const session = await this.prisma.session.findFirst({
       where: {
-        id: caller, ownerId, assignedRunnerId: runnerId, startsTaskWork: true,
-        deletedAt: null, cancelRequestedAt: null, taskId: { not: null },
+        // Not `cancel_requested_at`: a session revived for its landing-fix round keeps the end its task's DONE asked
+        // for (R3 resumes it without clearing that), and this is exactly the session that must read its landing.
+        id: caller, ownerId, assignedRunnerId: runnerId, startsTaskWork: true, deletedAt: null, taskId: { not: null },
       },
       select: { taskId: true, task: { select: { projectId: true } } },
     });
