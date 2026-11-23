@@ -61,7 +61,9 @@ data class LandingHead(val right: String, val isClock: Boolean, val detail: Stri
 data class LandingCard(val word: String, val title: String, val state: String, val running: Boolean, val timedOut: Boolean, val what: String?,
     val jobs: List<Job>, val target: String?, val clock: String, val clockLabel: String, val wait: String?, val updated: String?,
     val liveness: LandingLiveness?, val detail: String?, val retryJobId: String?, val mergeJob: Boolean = false,
-    val skipTaskId: String? = null, val skipNote: String? = null) {
+    val skipTaskId: String? = null, val skipNote: String? = null,
+    /** The `pullRequest` block of the one job in flight, when the landing waits on GitHub (design §8). */
+    val pullRequest: JsonObject? = null) {
     /** One job in flight, as the card's body draws it: its task's title (null for a job that lands no task) and its own state.
      * `landingSessionId` is the landing it belongs to (§2.9), or null where the server named none; `mergeJob` is a round of
      * merging into main, whose way in is the merge card — its row carries no "Open landing ›". */
@@ -285,7 +287,8 @@ object ProjectPage {
         return LandingCard(line.word, if (several) listOfNotNull(line.word, line.what).joinToString(" ") else line.word, line.state, line.running,
             line.timedOut, if (several) null else line.what, jobs, lead?.let { landingTarget(view, it.jobId) }, line.clock, line.clockLabel, line.wait,
             line.updated, line.liveness, if (line.timedOut) lead?.detail else null, lead?.takeIf { it.retryable }?.jobId,
-            !several && ProjectMergeCard.isMergeJob(view.obj("inFlight")), skipTaskId, skipNote)
+            !several && ProjectMergeCard.isMergeJob(view.obj("inFlight")), skipTaskId, skipNote,
+            if (several) null else LandingPullRequest.of(view.obj("inFlight")))
     }
 
     /** The branch a job lands on, short, off the project's own landings (`landTasks[].integration.landTask`) — the task page's Target

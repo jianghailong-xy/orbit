@@ -234,6 +234,8 @@ data class LandingView(
     val checks: List<LandingCheckResult>,
     val currentAttempt: LandingAttempt?,
     val timeline: LandingTimeline?,
+    /** The pull request the landing waits on or ended in (design §8); null without one and from a server that predates it. */
+    val pullRequest: JsonObject? = null,
 )
 
 /** One page of one check's output (`GET /sessions/:id/landing/log`). */
@@ -353,7 +355,7 @@ object LandingSessionModel {
             checks = json.objects("checks").map {
                 LandingCheckResult(it.text("name"), it.number("exitCode"), it.number("expectedExitCode"), it.flag("timedOut"), it.number("durationMs"), it.text("scope"))
             },
-            currentAttempt = attempt, timeline = timeline,
+            currentAttempt = attempt, timeline = timeline, pullRequest = json.obj("pullRequest"),
         )
     }
 
