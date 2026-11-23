@@ -5,6 +5,7 @@ import {
   EXPIRY_OPTIONS,
   NEVER_EXPIRES_WARNING,
   FILES_SCOPE,
+  NOTIFY_SCOPE,
   SCOPE_GROUPS,
   SCOPE_PRESETS,
   type ScopePreset,
@@ -87,7 +88,7 @@ function NewTokenForm({
   // Writing a resource needs reading it to be of use, so the two move together: write brings read
   // along, and giving up read gives up write.
   const toggle = (scope: string, on: boolean) => {
-    if (scope === FILES_SCOPE) {
+    if (scope === FILES_SCOPE || scope === NOTIFY_SCOPE) {
       setPicked((current) => (on ? [...new Set([...current, scope])] : current.filter((s) => s !== scope)));
       return;
     }
@@ -151,12 +152,19 @@ function NewTokenForm({
               </Checkbox>
               <span />
             </div>
+            <div className="access-token-scope-row">
+              <span>Notifications</span>
+              <Checkbox checked={picked.includes(NOTIFY_SCOPE)} onCheckedChange={(on) => toggle(NOTIFY_SCOPE, on)}>
+                Send
+              </Checkbox>
+              <span />
+            </div>
           </div>
         ) : (
           <div className="access-token-help">
             {preset === 'read'
               ? 'Reads tasks, projects, sessions, workspaces, runners, the wiki and live events. Changes nothing.'
-              : 'Reads and changes tasks, projects, sessions, workspaces, the wiki and Files, and reads runners and live events.'}
+              : 'Reads and changes tasks, projects, sessions, workspaces, the wiki and Files, reads runners and live events, and sends notifications to your Orbit apps.'}
           </div>
         )}
         <div className="access-token-help">

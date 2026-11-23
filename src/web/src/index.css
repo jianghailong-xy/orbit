@@ -18887,6 +18887,16 @@ button.chat-jump-start:hover {
 }
 /* Drift, not breakage: an engine nobody has updated in a week still works today. Amber says
    "this needs a person eventually", which is the truth — red would say "this is down". */
+/* A panel the owner can close: its ✕ sits in the top right corner, clear of the text. */
+.re-panel:has(> .re-panel-close) {
+  position: relative;
+  padding-right: 34px;
+}
+.re-panel-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
 .re-panel.warn {
   background: var(--warning-bg);
   border-color: var(--warning-border);

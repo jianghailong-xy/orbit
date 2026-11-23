@@ -268,7 +268,8 @@ build host ships it what the deployment's Compose reads from its directory, take
 with `git archive`, never from the working tree: `docker-compose.yml`, `gateway/`,
 `scripts/pg-archive-wal.sh`, `scripts/pg-backup.sh`, `src/link-gateway/nats.conf`, `deploy/runner-link/`, and
 the two Compose files a target lists beside `docker-compose.yml`, `deploy/postgres-pinned.yml` and
-`deploy/db-proxy.yml`, with `deploy/db-proxy/`. They are staged under `.upgrade/release-<commit>/` there, beside
+`deploy/db-proxy.yml`, with `deploy/db-proxy/`, and the monitoring profile's config, `deploy/monitoring/` and
+`scripts/pg-monitor-role.sh`. They are staged under `.upgrade/release-<commit>/` there, beside
 `deploy/two-stage/deploy-stage.sh`, which then, on the target:
 
 1. takes the target's upgrade lock, `/tmp/orbit-upgrade.lock`, as a single host's upgrade takes its own: one
@@ -339,7 +340,8 @@ back. Make it once, before the first deploy; for the move to `10.66.0.4`, a copy
 `COMPOSE_FILE=docker-compose.yml:deploy/postgres-pinned.yml:deploy/db-proxy.yml`, its `ORBIT_REGISTRY` and its
 pgbackup's `ORBIT_BACKUP_*` (docs/postgres-standby.md). A deploy writes only the block between
 `# >>> The release this host runs` and `# <<< The release this host runs` at its end: `ORBIT_REGISTRY`,
-`ORBIT_IMAGE_TAG`, `ORBIT_LINK_GATEWAY_TAG`, `ORBIT_NGINX_IMAGE` and `ORBIT_NATS_IMAGE` (docs/configuration.md,
+`ORBIT_IMAGE_TAG`, `ORBIT_LINK_GATEWAY_TAG`, `ORBIT_NGINX_IMAGE`, `ORBIT_NATS_IMAGE` and the monitoring profile's six
+images, `ORBIT_PROMETHEUS_IMAGE` to `ORBIT_ALLOY_IMAGE` (docs/configuration.md,
 "Images and the two-stage release"). It replaces the whole file by a rename, every other line as it was, so that
 any later `docker compose` there renders the release that runs, and never builds anything. `COMPOSE_FILE` lists
 `docker-compose.yml` and `deploy/postgres-pinned.yml` on every target, and `deploy/db-proxy.yml` where the
@@ -350,7 +352,8 @@ with each release; a service it adds is left as it is. Its `./data` stays where 
 **Base images.** Each runs by digest, pulled from the registry, which holds them under Docker Hub's own path,
 `library/<name>`. `postgres` and `pgbackup` run PostgreSQL 16.14 as `deploy/postgres-pinned.yml` pins it, never
 the floating `16-alpine` tag, which has moved on, and `db-proxy` the HAProxy `deploy/db-proxy.yml` pins; the
-release's `deploy/two-stage/base-images.env` pins `gateway` (nginx) and `nats`. Each pin is in one file only,
+release's `deploy/two-stage/base-images.env` pins `gateway` (nginx), `nats` and the monitoring profile's Prometheus,
+node-exporter, postgres-exporter, Grafana, Loki and Alloy (their paths in the registry are Docker Hub's, such as `prom/prometheus`). Each pin is in one file only,
 and changes in a commit, so a release and its rollback both name the base images they ran with. A new digest has
 to be copied to the registry, as `base-images.env` says, before a release names it.
 

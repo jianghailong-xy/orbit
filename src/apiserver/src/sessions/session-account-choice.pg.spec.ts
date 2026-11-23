@@ -215,6 +215,8 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
         ...(isReleasedStatus(fixtureStatus) ? {
           finishedAt: extra.finishedAt ?? new Date(),
         } : {}),
+        // A failure release carries FAILED on its turn (removal step R2), which is what reads it as one since R7.
+        ...(fixtureStatus === RunStatus.FAILED && extra.lastTurnOutcome === undefined ? { lastTurnOutcome: 'FAILED' } : {}),
       },
     });
     return id;
@@ -428,13 +430,13 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     await refused(sessions.updateConfig(m.ownerId, await onKey(m, await apiKey(m.ownerId)), { account: WORK }), 400, 'an account with no switch');
 
     // An ended session takes the same pick with the message that revives it.
-    const ended = await onKey(m, await apiKey(m.ownerId), { status: RunStatus.FAILED, finishedAt: new Date() });
+    const ended = await onKey(m, await apiKey(m.ownerId), { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', finishedAt: new Date() });
     await sessions.resume(m.ownerId, ended, { content: 'go on', clientTurnId: randomUUID(), provider: 'claude', account: WORK });
     assert.deepEqual(
       { account: (await row(ended)).claude_account, pinned: (await row(ended)).claude_account_pinned },
       { account: WORK, pinned: true },
     );
-    const endedAuto = await onKey(m, await apiKey(m.ownerId), { status: RunStatus.FAILED, finishedAt: new Date() });
+    const endedAuto = await onKey(m, await apiKey(m.ownerId), { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', finishedAt: new Date() });
     await sessions.resume(m.ownerId, endedAuto, { content: 'go on', clientTurnId: randomUUID(), provider: 'claude' });
     assert.equal((await row(endedAuto)).claude_account, WORK);
   });

@@ -626,8 +626,9 @@ test('one session’s message to another is signed, delivered as such, and bound
       data: {
         status: parkedAs, retryAt: armedAt, retryAttempts: 0,
         // A provider error settles the run FAILED and asks the process to stop (`sweep`'s own note).
+        // The settled turn's FAILED is copied to the session (removal step R2), which is what reads it as failed (R7).
         ...(parkedAs === RunStatus.FAILED
-          ? { cancelRequestedAt: new Date(), finishedAt: new Date()}
+          ? { cancelRequestedAt: new Date(), finishedAt: new Date(), lastTurnOutcome: 'FAILED' }
           : { finishedAt: null}),
       },
     });
