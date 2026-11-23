@@ -35,7 +35,9 @@ export interface LandingFixFacts {
   /** The upstream tip the job read. Equal to `targetSha` on a line that does not exist on origin yet. */
   upstreamSha: string | null;
   conflicts: string[];
-  check: { name: string; command: string; exitCode: number | null } | null;
+  check: { name: string; command: string; exitCode: number | null; url?: string | null } | null;
+  /** The pull request a required GitHub check failed on (docs/design/protected-branch-landing.md §4.5, J-T16). */
+  pullRequest?: { number: number; url: string; headSha: string } | null;
   testedSha: string | null;
   failureLines: string[];
   landingSessionId: string | null;
@@ -117,7 +119,10 @@ export async function readLandingFixFacts(
     targetSha: job.targetShaBefore,
     upstreamSha: job.upstreamSha,
     conflicts: job.conflicts,
-    check: check ? { name: check.name, command: check.command, exitCode: check.exitCode } : null,
+    check: check
+      ? { name: check.name, command: check.command, exitCode: check.exitCode, ...(check.github ? { url: check.github.url } : {}) }
+      : null,
+    ...(check?.github ? { pullRequest: { ...check.github.pullRequest, headSha: check.github.headSha } } : {}),
     testedSha: job.testedSha,
     failureLines,
     landingSessionId: landing?.sessionId
@@ -125,8 +130,36 @@ export async function readLandingFixFacts(
   };
 }
 
+/**
+ * W6's pull request variant (docs/design/protected-branch-landing.md §4.5): a required check GitHub ran on the
+ * landing's pull request failed, the pull request stays open, and the fix lands into it.
+ */
+function pullRequestLandingFixMessage(facts: LandingFixFacts, pr: { number: number; url: string; headSha: string }): string {
+  const target = facts.targetBranch;
+  const which = `pull request #${pr.number}`;
+  return [
+    `Orbit could not land your work for "${facts.taskTitle}" on ${target}.`,
+    '',
+    `The required check "${facts.check?.command ?? 'a check'}" failed on ${which} (${pr.headSha.slice(0, 7)}):`,
+    ...(facts.failureLines.length > 0 ? facts.failureLines : ['(GitHub gave no failure lines; the full log is at the link below)']),
+    `Full log: ${facts.check?.url ?? pr.url}`,
+    '',
+    `Nothing was merged. ${target} is unchanged, and ${which} stays open: ${pr.url}`,
+    '',
+    'Fix it on your own branch, in this checkout:',
+    '1. Run what failed until it passes.',
+    '2. Commit, then end your turn.',
+    '',
+    `Orbit updates ${which} with your commit, and GitHub runs the checks again. Do not push ${target}.`,
+    'If this is not yours to fix, end your turn without committing and say why; '
+      + 'the project\'s coordinator takes it from there.',
+    `The full record: landing ${facts.landingSessionId ? uuidToBase62(facts.landingSessionId) : 'not recorded'}.`,
+  ].join('\n');
+}
+
 /** The turn's words (§12.5 W6). Product copy: English. */
 export function landingFixMessage(facts: LandingFixFacts): string {
+  if (facts.state === 'CHECK_FAILED' && facts.pullRequest) return pullRequestLandingFixMessage(facts, facts.pullRequest);
   const target = facts.targetBranch;
   const upstream = facts.upstreamBranch !== target ? facts.upstreamBranch : null;
   // A line that does not exist on origin yet starts at the upstream's tip (the runner reads its T0 as U), and

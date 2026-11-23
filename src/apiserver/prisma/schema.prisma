@@ -397,6 +397,7 @@ model User {
   /// The GitHub account connected through the deployment's App, and connections in flight (migration 0820).
   githubConnection GithubConnection?
   githubOAuthFlows GithubOAuthFlow[]
+  githubPullRequests GithubPullRequest[]
   /// Owner-identity codes the account generated for its Feishu app and has not used yet (migration 0494).
   feishuConnectCodes FeishuConnectCode[]
   /// The Feishu groups the account connected, or is connecting, to Orbit (migration 0496).
@@ -774,6 +775,9 @@ model GithubAppConfig {
   clientId        String   @map("client_id")
   clientSecretEnc String   @map("client_secret_enc")
   privateKeyEnc   String   @map("private_key_enc")
+  /// The secret GitHub signs its webhook deliveries with (migration 1527, docs/design/protected-branch-landing.md
+  /// §4.7), encrypted as the client secret is; '' is none saved. Write-only.
+  webhookSecretEnc String  @default("") @map("webhook_secret_enc")
   /// The administrator who saved it last. An id rather than a relation.
   updatedById     String?  @map("updated_by_id") @db.Uuid
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -819,6 +823,80 @@ model GithubOAuthFlow {
   @@index([expiresAt], map: "github_oauth_flow_expires_at_idx")
   @@index([ownerId], map: "github_oauth_flow_owner_id_idx")
   @@map("github_oauth_flow")
+}
+
+/// One pull request Orbit opened to land work (migration 1527, docs/design/protected-branch-landing.md §7): a
+/// landing whose direct push GitHub refused because of the branch's rules, pushed to `headRef` instead. Exactly one
+/// of `landingId` (a `project_landing`: a task segment or a promotion round) and `sessionId` (a session's own Merge
+/// outside a project), both history references with no relation, as the job's are. At most one OPENING or OPEN row
+/// per landing subject, per session and per head branch (partial unique indexes in the migration). Orbit acts only
+/// on what GitHub answers when it reads the pull request again, never on a webhook's payload (§4.3).
+model GithubPullRequest {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  ownerId        String    @map("owner_id") @db.Uuid
+  owner          User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "github_pull_request_owner_id_fkey")
+  workspaceId    String    @map("workspace_id") @db.Uuid
+  githubRepoId   BigInt    @map("github_repo_id")
+  installationId BigInt    @map("installation_id")
+  landingId      String?   @map("landing_id") @db.Uuid
+  sessionId      String?   @map("session_id") @db.Uuid
+  /// `refs/heads/main`.
+  baseRef        String    @map("base_ref")
+  /// `refs/heads/orbit/land/<id>`.
+  headRef        String    @map("head_ref")
+  /// NULL while OPENING: GitHub has not numbered it yet.
+  number         Int?
+  url            String?
+  /// OPENING | OPEN | MERGED | CLOSED (`github_pull_request_state_chk`).
+  state          String
+  /// What Orbit last pushed to `headRef`, the base tip it was built and checked on, and the tested tree.
+  headSha        String?   @map("head_sha") @db.Char(40)
+  baseSha        String?   @map("base_sha") @db.Char(40)
+  /// The source commit the head was built from, which the receipt names when the pull request merges.
+  sourceSha      String?   @map("source_sha") @db.Char(40)
+  testedTreeSha  String?   @map("tested_tree_sha") @db.Char(40)
+  /// merge | rebase | squash: the method Orbit merges with (§4.4).
+  mergeMethod    String?   @map("merge_method")
+  /// GitHub's answer at the last read (`github_pull_request_condition_chk`, @orbit/shared PullRequestCondition).
+  condition      String?
+  /// `[{ name, required, state, url }]`: the head's checks at the last read.
+  checks         Json      @default("[]")
+  /// `{ via, message, at }`: the direct push GitHub refused before this pull request, in GitHub's words.
+  refusal        Json?
+  mergedSha      String?   @map("merged_sha") @db.Char(40)
+  /// GitHub logins.
+  mergedBy       String?   @map("merged_by")
+  closedBy       String?   @map("closed_by")
+  /// When Orbit last read the pull request from GitHub; the re-read takes the longest unread first (§4.7).
+  observedAt     DateTime? @map("observed_at") @db.Timestamptz(3)
+  /// When the owner was told the pull request waits for a review (§4.5, §11.3): once per pull request (1547).
+  reviewAnnouncedAt DateTime? @map("review_announced_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  mergedAt       DateTime? @map("merged_at") @db.Timestamptz(3)
+  closedAt       DateTime? @map("closed_at") @db.Timestamptz(3)
+
+  @@unique([githubRepoId, number], map: "github_pull_request_repo_number_key")
+  @@index([ownerId, createdAt], map: "github_pull_request_owner_idx")
+  @@map("github_pull_request")
+}
+
+/// GitHub's webhook deliveries (migration 1527, docs/design/protected-branch-landing.md §4.7), kept only to
+/// de-duplicate them by GitHub's delivery id and as the committed fact the re-read that follows is about. No
+/// payload: Orbit reads the pull request from GitHub again rather than trusting what a delivery says.
+model GithubWebhookDelivery {
+  /// X-GitHub-Delivery.
+  id             String    @id
+  event          String
+  action         String?
+  installationId BigInt?   @map("installation_id")
+  githubRepoId   BigInt?   @map("github_repo_id")
+  pullNumber     Int?      @map("pull_number")
+  receivedAt     DateTime  @default(now()) @map("received_at") @db.Timestamptz(3)
+  appliedAt      DateTime? @map("applied_at") @db.Timestamptz(3)
+
+  @@index([receivedAt], map: "github_webhook_delivery_received_idx")
+  @@map("github_webhook_delivery")
 }
 
 /// Owner-scoped APNs/FCM registration. Token uniqueness is global; Android also replaces the
@@ -1580,6 +1658,12 @@ model Workspace {
   // Which credential the clone used, as the runner reported it: `machine` or `github-app`, held by
   // `workspace_clone_credential_chk` (migration 0880). NULL until a report names one.
   cloneCredential      String?   @map("clone_credential")
+  // How finished work reaches a protected GitHub branch (docs/design/protected-branch-landing.md §3, migration
+  // 1527): NULL is PULL_REQUEST, the default; PUSH_AS_ME is the owner's opt-in (`workspace_landing_mode_chk`).
+  landingMode          String?   @map("landing_mode")
+  // The last refusal GitHub gave a Push as me landing here, in GitHub's words: `{ at, branch, message }`.
+  // Cleared by the next accepted Push as me (§5.5, §11.1).
+  pushAsMeRefusal      Json?     @map("push_as_me_refusal")
   ownerId             String    @map("owner_id") @db.Uuid
   owner               User      @relation(fields: [ownerId], references: [id])
   createdAt           DateTime  @default(now()) @map("created_at")
@@ -2455,7 +2539,14 @@ model Session {
   // mergeStatus drives the button: 'pending' (queued for the next heartbeat of the
   // session's assigned runner) → 'merged' (mergedAt set) | 'conflict' | 'error'
   // (mergeError carries git's message / the failed precondition). All null until asked.
+  // 'pull_request' (migration 1527): GitHub refused the target, the runner pushed the landing branch, and the
+  // merge waits on the pull request `mergePullRequestId` names (docs/design/protected-branch-landing.md §4.6).
   mergeStatus          String?   @map("merge_status")
+  /// The pull request this session's Merge waits on or landed through (migration 1527, §4.6). A history
+  /// reference with no relation.
+  mergePullRequestId   String?   @map("merge_pull_request_id") @db.Uuid
+  /// The merge operation the owner's GitHub token was answered for, once per operation (migration 1527, §5.2).
+  mergeOwnerTokenFor   String?   @map("merge_owner_token_for")
   mergeError           String?   @map("merge_error")
   mergeRecovery        Json?     @map("merge_recovery")
   mergeRecoveryAction  String?   @map("merge_recovery_action")
@@ -4529,6 +4620,18 @@ model ProjectIntegrationJob {
   /// RELATION, for 0423/0424's reason: a landing row is never deleted while its attempts outlive it,
   /// and a foreign key would turn that into a cascade or a refused delete.
   landingId String? @map("landing_id") @db.Uuid
+
+  /// How this attempt reaches its target (migration 1527, docs/design/protected-branch-landing.md §3): PUSH,
+  /// PULL_REQUEST or PUSH_AS_ME, fixed when the attempt is handed out (`project_integration_job_land_via_chk`).
+  /// NULL is PUSH: every attempt handed out before it, and every one handed to a runner without the capability.
+  landVia String? @map("land_via")
+  /// The branch the tested commit goes to when GitHub refuses the target (`refs/heads/orbit/land/<id>`, §4.1).
+  landingRef String? @map("landing_ref")
+  /// The pull request this attempt waits on or landed through (§4.2): a HISTORY REFERENCE WITH NO RELATION,
+  /// for 0424's reason.
+  pullRequestId String? @map("pull_request_id") @db.Uuid
+  /// The claim generation the owner's GitHub token was answered for, once per generation (§5.2).
+  ownerTokenGeneration BigInt? @map("owner_token_generation")
 
   /// The chunks of check output uploaded under this attempt (migration 0437).
   logs ProjectIntegrationJobLog[]

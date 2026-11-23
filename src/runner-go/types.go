@@ -775,6 +775,18 @@ type IntegrationJobCommand struct {
 	// waiting to be observed, each with the commit its work was delivered as. Absent on every other
 	// kind. TargetRef and SourceRef both name the integration line on such a job.
 	ObserveTasks []IntegrationObserveTask `json:"observeTasks,omitempty"`
+	// LandVia is how a LAND_TASK or LAND_PROMOTION reaches its target (docs/design/protected-branch-landing.md §3):
+	// PUSH, PULL_REQUEST or PUSH_AS_ME, fixed when the control plane handed the attempt out. Sent only to a runner
+	// that declared integrationPullRequestCapabilityV1; empty, the target is pushed as it always was.
+	LandVia string `json:"landVia,omitempty"`
+	// LandingRef is the branch the tested commit goes to when GitHub refuses the target because of the branch's
+	// rules: refs/heads/orbit/land/<landing session id> (§4.1).
+	LandingRef string `json:"landingRef,omitempty"`
+	// LandingRefSha is what Orbit last pushed to LandingRef, the landing push's lease; empty when it pushed none.
+	LandingRefSha string `json:"landingRefSha,omitempty"`
+	// PullRequestOpen says the landing subject's pull request is open: the target is not tried, only the landing
+	// branch is pushed, and a commit already there with the tested tree on the same base is reused (§9 item 2).
+	PullRequestOpen bool `json:"pullRequestOpen,omitempty"`
 	// scratchRoot is where this job stages its throwaway worktree; empty means the runner's
 	// worktreesDir. It is never on the wire and no control plane sets it: it exists so a test
 	// that runs in parallel — and so cannot set ORBIT_HOME for the whole process — can give each
@@ -1003,6 +1015,16 @@ type IntegrationJobResultRequest struct {
 	// (§10.6 O-S3). A pointer so an observation of no task still says so with an empty list, while
 	// every other answer leaves the field out.
 	Observations *[]IntegrationObservation `json:"observations,omitempty"`
+	// With PULL_REQUEST, and only there (docs/design/protected-branch-landing.md §4.2 J-T14): the commit the landing
+	// branch holds after the push, read back from the remote, and GitHub's words for the refused target push ("" when
+	// the subject's pull request was already open and the target was not tried).
+	LandingRefSha string `json:"landingRefSha,omitempty"`
+	PushRefusal   string `json:"pushRefusal,omitempty"`
+	// With LANDED, and only for a Push as me landing (§5.2): "OWNER" when the target push carried the owner's own
+	// GitHub token and GitHub took it, and the rules GitHub said that push bypassed, its "Bypassed rule violations"
+	// lines.
+	PushedAs      string   `json:"pushedAs,omitempty"`
+	BypassedRules []string `json:"bypassedRules,omitempty"`
 }
 
 // IntegrationUpstreamMovedCommits is the list of commits that moved the upstream under a landing, as
@@ -1248,6 +1270,14 @@ type MergeCommand struct {
 	RecoveryAction    string                  `json:"recoveryAction,omitempty"`
 	Recovery          *MergeRecovery          `json:"recovery,omitempty"`
 	Check             *MergeRecoveryCheckSpec `json:"check,omitempty"`
+	// How this merge reaches its target (docs/design/protected-branch-landing.md §3, §4.6), and the landing branch
+	// the replayed tip goes to when GitHub refuses the target because of its rules — refs/heads/orbit/land/<session
+	// id> — with what Orbit last pushed there. Sent only to a runner that declared sessionMergePullRequestCapabilityV1.
+	LandVia       string `json:"landVia,omitempty"`
+	LandingRef    string `json:"landingRef,omitempty"`
+	LandingRefSha string `json:"landingRefSha,omitempty"`
+	// PullRequestOpen: the session's pull request for this target is open, so only the landing branch is pushed.
+	PullRequestOpen bool `json:"pullRequestOpen,omitempty"`
 }
 
 // ImportResultRequest settles a session's pending transcript import: ok clears the
@@ -1353,9 +1383,23 @@ type MergeResultRequest struct {
 	OperationID string `json:"operationId,omitempty"`
 	LeaseOwner  string `json:"leaseOwner,omitempty"`
 	// "released" is not an outcome: this process drained before touching the repo, so the
-	// request goes back to unclaimed and the successor performs it.
-	Status    string `json:"status"` // "merged" | "conflict" | "error" | "released"
+	// request goes back to unclaimed and the successor performs it. "pull_request" is reported only
+	// for a command that named LandVia: GitHub refused the target because of its rules and the
+	// replayed tip went to the landing branch instead (PushedSha).
+	Status    string `json:"status"` // "merged" | "conflict" | "error" | "released" | "pull_request"
 	MergedSha string `json:"mergedSha,omitempty"`
+	// With "pull_request": the commit the landing branch holds, read back from the remote, and GitHub's
+	// words for the refused target push ("" when the session's pull request was open and the target was
+	// not tried).
+	PushedSha   string `json:"pushedSha,omitempty"`
+	PushRefusal string `json:"pushRefusal,omitempty"`
+	// LandVia is the command's own, echoed on a "merged" or "pull_request" answer: PUSH_AS_ME says the target push
+	// that was refused, or taken, was the owner's (docs/design/protected-branch-landing.md §5.4). With "merged" and a
+	// target push GitHub took with the owner's token, PushedAs is "OWNER" and BypassedRules what GitHub said it
+	// bypassed.
+	LandVia       string   `json:"landVia,omitempty"`
+	PushedAs      string   `json:"pushedAs,omitempty"`
+	BypassedRules []string `json:"bypassedRules,omitempty"`
 	// SourceSha is the immutable source-branch tip captured before the rebase. A successful
 	// merge records exactly which version of the session branch landed in the target.
 	SourceSha string `json:"sourceSha,omitempty"`

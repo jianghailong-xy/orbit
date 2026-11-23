@@ -469,6 +469,7 @@ import {
   runnerLastBeatSql,
   withRunnerLastBeat,
 } from '../runners/runner-presence';
+import { PULL_REQUEST_VIEW_SELECT, pullRequestViewOf } from '../projects/pull-request-landing';
 
 /**
  * A turn the control plane queued with no words of anybody's, whose content is written in at delivery:
@@ -1092,7 +1093,9 @@ type ReadSeed = AgentProviderSeed & Partial<Pick<AnchorSeed, 'anchor'>>;
  */
 function settledWorktreeStateCleared(session: Pick<Session, 'mergeStatus' | 'commitStatus'>): Prisma.SessionUncheckedUpdateInput {
   return {
-    ...(session.mergeStatus && session.mergeStatus !== 'pending'
+    // A Merge waiting on its pull request (`pull_request`, docs/design/protected-branch-landing.md §4.6) has not
+    // settled either: GitHub's merge of it is what the pull request door records against this row.
+    ...(session.mergeStatus && session.mergeStatus !== 'pending' && session.mergeStatus !== 'pull_request'
       ? {
           mergeStatus: null,
           mergeOperationId: null,
@@ -5780,6 +5783,13 @@ export class SessionsService {
       lastUserFromOrbit: lastUserFromOrbitOf({ lastUserFromOrbit }),
       lastUserFromExternal: lastUserFromExternalOf({ lastUserFromExternalSource, lastUserFromExternalName }),
       sourceLanding,
+      // docs/design/protected-branch-landing.md §4.6, §8: the pull request this session's Merge waits on or landed
+      // through, for the merge row. Null for a merge that pushed directly, and for every session that never merged.
+      mergePullRequest: session.mergePullRequestId
+        ? await this.prisma.githubPullRequest.findFirst({
+          where: { id: session.mergePullRequestId, ownerId }, select: PULL_REQUEST_VIEW_SELECT,
+        }).then((row) => (row ? pullRequestViewOf(row) : null))
+        : null,
       // A coordinator's handoff (projects/coordinator-handoff.ts): `coordinatorHandoff` on the outgoing
       // one, `coordinatorHandoffReceived` on its successor, null on every other session.
       ...(await readSessionCoordinatorHandoffs(this.prisma, session.id)),
@@ -9915,6 +9925,52 @@ export class SessionsService {
     }, loggedRetry(this.logger, 'sessions.mergeAfterOwnTurn'));
     if (queuedOn) this.realtime.notifyRunnerWake(queuedOn);
     if (wrote) this.realtime.publishSessionUpdated(id);
+    return outcome;
+  }
+
+  /**
+   * The target of a session's Merge moved under the pull request it waits on (docs/design/protected-branch-landing.md
+   * §4.6 step 4, J-T17): the merge is queued again through {@link queueMerge}, for whoever asked for the first one,
+   * and rebuilds on the new tip into the same landing branch, so the same pull request updates. A turn running now is
+   * waited out (`mergeAfterTurnAt`, which {@link mergeAfterOwnTurn} takes up when it ends). A session no longer waiting
+   * on this pull request is left alone; a refusal is recorded as a failed merge, because nobody is waiting on a
+   * response to read it from.
+   */
+  async mergeAgainForPullRequest(id: string, pullRequestId: string, target: string): Promise<'QUEUED' | 'AFTER_TURN' | 'MOVED_ON' | 'REFUSED'> {
+    let queuedOn: string | null = null;
+    const outcome = await withTransactionRetry(this.prisma, async (tx) => {
+      queuedOn = null;
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session" WHERE id = ${id}::uuid FOR UPDATE`;
+      if (locked.length === 0) return 'MOVED_ON' as const;
+      const session = await tx.session.findUniqueOrThrow({
+        where: { id },
+        select: {
+          ownerId: true, status: true, finishedAt: true, cancelRequestedAt: true, mergeStatus: true,
+          mergePullRequestId: true, mergeRequestedBy: true,
+        },
+      });
+      if (session.mergeStatus !== 'pull_request' || session.mergePullRequestId !== pullRequestId) return 'MOVED_ON' as const;
+      if (SessionsService.mergeWaitsForTurn(session)) {
+        await tx.session.update({ where: { id }, data: { mergeAfterTurnAt: new Date(), mergeAfterTurnTarget: target } });
+        return 'AFTER_TURN' as const;
+      }
+      const requestedBy = session.mergeRequestedBy === 'USER' || session.mergeRequestedBy === 'AGENT'
+        ? session.mergeRequestedBy as MergeRequester
+        : undefined;
+      try {
+        const queued = await this.queueMerge(tx, session.ownerId, id, target, { requestedBy });
+        queuedOn = queued.queuedOn;
+        return queued.operationId ? 'QUEUED' as const : 'MOVED_ON' as const;
+      } catch (error) {
+        // queueMerge refuses before it writes anything, so this transaction is still good to write in.
+        if (!(error instanceof HttpException)) throw error;
+        await tx.session.update({ where: { id }, data: { mergeStatus: 'error', mergeError: error.message } });
+        return 'REFUSED' as const;
+      }
+    }, loggedRetry(this.logger, 'sessions.mergeAgainForPullRequest'));
+    if (queuedOn) this.realtime.notifyRunnerWake(queuedOn);
+    this.realtime.publishSessionUpdated(id);
     return outcome;
   }
 

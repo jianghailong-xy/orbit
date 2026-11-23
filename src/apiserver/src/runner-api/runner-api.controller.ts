@@ -5,7 +5,8 @@ import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
 import { AccountHealthService, makeTrialDue } from '../providers/account-health.service';
 import { runFailureColumns } from './run-failure-columns';
-import { BG_OWNER_STOP_V1, BROWSER_CLEAR_V1, BROWSER_OPEN_V1, type BackgroundJobStopCommand, CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
+import { BG_OWNER_STOP_V1, BROWSER_CLEAR_V1, BROWSER_OPEN_V1, type BackgroundJobStopCommand, CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery, SESSION_MERGE_PULL_REQUEST_CAPABILITY, PUSH_AS_ME_CAPABILITY } from '@orbit/shared';
+import { recordSessionMergePullRequest, storedBypassedRules } from '../projects/pull-request-landing';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import { ConditionsService } from '../conditions/conditions.service';
 import { GithubWorkspaceService } from '../github/github-workspace.service';
@@ -296,7 +297,8 @@ import { backgroundJobStopsFor } from './background-job-stops';
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
-import { followWikiDocsAfterReceipts, followWikiDocsAfterSessionMerge } from '../wiki/wiki-docs-follow';
+import { followWikiDocsAfterSessionMerge } from '../wiki/wiki-docs-follow';
+import { deliverIntegrationAftermath } from './integration-aftermath';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
 import { appendWikiChatNotes } from '../wiki/wiki-chat-notes';
 import { appendScheduleChangeNote } from '../schedules/schedule-change-conversation';
@@ -309,6 +311,8 @@ import { enqueueForDoneTask, settleDeliveredIdentityAfterFinish } from '../proje
 import { queueLandingObservationAfterCommit } from '../projects/landing-observation';
 import { settleTaskSegmentAfterReceipt } from '../projects/landing-session';
 import { ProjectFuseService } from '../projects/project-fuse.service';
+import { PullRequestDoorService } from '../github/pull-request-door.service';
+import { PushAsMeService } from '../github/push-as-me.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { CoordinatorFactQueueService } from '../projects/coordinator-fact-queue.service';
@@ -1810,6 +1814,10 @@ export class RunnerApiController {
     @Optional() private readonly coordinatorFacts?: CoordinatorFactQueueService,
     /** Account health (docs/routing-account-health-design.md §6.3): told of every run's end; absent in hand-built specs. */
     @Optional() private readonly accountHealth?: AccountHealthService,
+    /** docs/design/protected-branch-landing.md §4: the pull request door a landing waiting on GitHub is handed to. */
+    @Optional() private readonly pullRequestDoor?: PullRequestDoorService,
+    /** Push as me's outcomes on the workspace (docs/design/protected-branch-landing.md §5.5). */
+    @Optional() private readonly pushAsMe?: PushAsMeService,
     /**
      * The managed runner runtime, for the profile a managed runner's concurrency ceiling is read from
      * (managed-runners/managed-runner-concurrency.ts). `@Optional()` like the rest: without it no ceiling is applied.
@@ -2927,6 +2935,21 @@ export class RunnerApiController {
         // clean up minutes later — the successor process claims these instead.
         if (!draining) {
           mergeRequests = await this.realtime.drainMergeRequests(runner.id, heartbeatLeaseOwner);
+          // docs/design/protected-branch-landing.md §4.6: how each Merge reaches a protected target, for a runner that
+          // can land one through a pull request. A failure costs only the fallback: the merge goes out as before.
+          if (this.pullRequestDoor && mergeRequests.length > 0) {
+            const drained = mergeRequests;
+            mergeRequests = await this.pullRequestDoor
+              .withMergeLanding(
+                drained,
+                runnerSupportsCapability(capabilities, SESSION_MERGE_PULL_REQUEST_CAPABILITY),
+                runnerSupportsCapability(capabilities, PUSH_AS_ME_CAPABILITY),
+              )
+              .catch((error) => {
+                this.logger.warn(`runner ${runner.id}: merge landing modes not read (${(error as Error)?.message})`);
+                return drained;
+              });
+          }
           commitRequests = await this.realtime.drainCommitRequests(
             runner.id,
             heartbeatLeaseOwner,
@@ -3266,6 +3289,8 @@ export class RunnerApiController {
       throw integrationJobHttpError(error);
     }
     await this.afterIntegrationResult(applied.after, applied.answer.openItemId);
+    // docs/design/protected-branch-landing.md §5.5: a Push as me landing's outcome stays on its workspace.
+    if (applied.answer.accepted) await this.pushAsMe?.afterJobResult(jobId);
     return applied.answer;
   }
 
@@ -3274,45 +3299,17 @@ export class RunnerApiController {
     after: Awaited<ReturnType<IntegrationJobRelay['applyResult']>>['after'],
     openItemId: string | null,
   ): Promise<void> {
-    if (after) {
-      if (after.considerPromotionProjectId) {
-        // M-F1 / M-F4, after the commit and from the committed rows: "the queue is empty" is only
-        // true of rows that landed, and this job's own is one of them. The service logs and swallows
-        // its own failures — a candidate not made now is made by the next landing.
-        //
-        // BEFORE the facts below, and that order is the closing guardrail's (D5): the merge into
-        // the upstream this queues is work still in flight, and a settled project whose last
-        // landing has just finished must be read with it queued. Read a moment earlier, the project
-        // looks finished while its work is about to go to the upstream — the gap a judgment once
-        // filed a needless "merge into main" task in (`project-looks-finished.ts`).
-        await this.promotions?.considerCandidate(after.considerPromotionProjectId);
-      }
-      // J10: the receipt is the fact the tasks downstream were waiting for, and the item is what
-      // somebody has to look at. Both are announcements of rows that are already committed, so a
-      // failure here is logged and never raised — the runner's result was taken either way.
-      await this.mergeReceipts
-        ?.deliverProjectFactsAfterCommit(after.projectId, after.landedTaskIds ?? after.landedTaskId, {
-          observed: after.observed === true,
-          // §7.6 V12: a LANDED_WITHOUT_CONFIRMATION this result opened — O-R3 of an observation, the
-          // deploy-time pass's one item per project, or a check that saw the work on main (O-L6).
-          ownerItemIds: after.ownerItemIds,
-        })
-        .catch((error) => this.logger.warn(`integration landing facts not delivered: ${(error as Error)?.message}`));
-      // A landing into main — a task's on a MAIN line, or a project's promotion — is a fact the wiki follows (contract
-      // `docs.follow.triggers.landing`): the receipts the result wrote, after the commit, logged and never raised.
-      if ((after.receiptIds?.length ?? 0) > 0) await followWikiDocsAfterReceipts(this.prisma, after.receiptIds ?? []);
-      if (after.openItemIds.length > 0) {
-        await this.openItems?.deliverForItems(after.openItemIds)
-          .catch((error) => this.logger.warn(`integration exception item not delivered: ${(error as Error)?.message}`));
-      }
-      // §7.6 V12 / criterion 13: the merge approval this result may have opened is one of the four
-      // things only the account owner can answer, so their devices are told. Handed the item id
-      // rather than a decision: which items reach a phone is `notifyOwnerItem`'s to decide, and the
-      // exception items opened above — still the coordinator's — answer null there and send nothing.
-      if (openItemId) {
-        void this.push.notifyOwnerItem(openItemId);
-      }
-    }
+    await deliverIntegrationAftermath({
+      prisma: this.prisma,
+      logger: this.logger,
+      promotions: this.promotions,
+      mergeReceipts: this.mergeReceipts,
+      openItems: this.openItems,
+      push: this.push,
+    }, after, openItemId);
+    // docs/design/protected-branch-landing.md §4.1 step 5: a landing that now waits on its pull request is opened
+    // on GitHub after the commit. The door logs its own failures; the re-read opens a row left OPENING (§4.7).
+    if (after?.pullRequestIds?.length) await this.pullRequestDoor?.advance(after.pullRequestIds);
   }
 
   /** The repository-operation queue, or the reason a request about one cannot be answered without it. */
@@ -11221,7 +11218,8 @@ export class RunnerApiController {
       dto?.status !== 'merged' &&
       dto?.status !== 'conflict' &&
       dto?.status !== 'error' &&
-      dto?.status !== 'released'
+      dto?.status !== 'released' &&
+      dto?.status !== 'pull_request'
     ) {
       throw new BadRequestException('invalid merge result status');
     }
@@ -11259,6 +11257,9 @@ export class RunnerApiController {
     // The landed merge this request recorded, which the wiki follows after the commit (contract
     // `docs.follow.triggers.merge`). Keyed by session, so a retried closure overwrites rather than accumulates.
     const landedMerges = new Map<string, { sessionId: string; sourceSha: string; targetBranch: string }>();
+    // docs/design/protected-branch-landing.md §4.6: the pull request a `pull_request` result left this Merge waiting
+    // on, for the door to open after the commit. Reset by every attempt of the closure.
+    let waitingPullRequestId: string | null = null;
     // Retried whole. The worktree-op claim is re-read under its row lock inside the closure, so a
     // re-run either still owns the operation it is reporting on or finds it reclaimed — the same
     // two outcomes a first attempt has.
@@ -11279,6 +11280,7 @@ export class RunnerApiController {
           mergeRecoveryAction: string | null;
           mergeRecovery: unknown;
           mergeRequestedBy: string | null;
+          mergeOwnerTokenFor: string | null;
         }>
       >`
         SELECT status, "finished_at" AS "finishedAt", "inbox_lease_owner" AS "inboxLeaseOwner",
@@ -11290,7 +11292,8 @@ export class RunnerApiController {
                "merge_checkpoint_id" AS "mergeCheckpointId",
                "merge_recovery_action" AS "mergeRecoveryAction",
                "merge_recovery" AS "mergeRecovery",
-               "merge_requested_by" AS "mergeRequestedBy"
+               "merge_requested_by" AS "mergeRequestedBy",
+               "merge_owner_token_for" AS "mergeOwnerTokenFor"
         FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runner.id}::uuid
         FOR UPDATE
@@ -11324,6 +11327,11 @@ export class RunnerApiController {
           where: { id: sessionId },
           data: { mergeOperationOwner: null },
         });
+        return;
+      }
+      waitingPullRequestId = null;
+      if (dto.status === 'pull_request') {
+        waitingPullRequestId = await recordSessionMergePullRequest(tx, { sessionId, current, dto, modern: modernAttempt });
         return;
       }
       const approved = readMergeRecovery(current.mergeRecovery);
@@ -11474,6 +11482,11 @@ export class RunnerApiController {
               taskId: current.taskId,
               commitSha: sourceSha,
             })),
+          // docs/design/protected-branch-landing.md §5.2: pushed with the owner's own token, as the credential door
+          // answered it for this very operation — never on the runner's word alone.
+          ...(merged && dto.pushedAs === 'OWNER' && operationId && current.mergeOwnerTokenFor === operationId
+            ? { pushedAs: { pushedAs: 'OWNER' as const, bypassedRules: storedBypassedRules(dto.bypassedRules) } }
+            : {}),
         });
         if (task?.projectId) openedOwnerItems.set(task.projectId, written.ownerItemIds);
         if (receiptResult === 'MERGED' || receiptResult === 'ALREADY_MERGED') {
@@ -11511,6 +11524,10 @@ export class RunnerApiController {
         .catch((error) => this.logger.warn(
           `landing settlement after merge-result failed: ${(error as Error)?.message ?? error}`));
     }
+    // §4.6 step 3: the Merge waits on its pull request, which the door opens on GitHub now that the row committed.
+    if (waitingPullRequestId) await this.pullRequestDoor?.advance([waitingPullRequestId]);
+    // §5.5: a Push as me Merge's outcome stays on its workspace.
+    if (!released) await this.pushAsMe?.afterMergeResult(sessionId, dto);
     // The checkout is free again. A message the user sent while this merge executed is
     // parked PENDING behind the claim fence (see trySessionClaim); re-drive the queue so it
     // gets a slot now instead of on the next ≤5s poll. Not on `released`: the operation is
