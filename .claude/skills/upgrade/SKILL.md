@@ -235,13 +235,18 @@ runs: this host's own containers, `.env` and runner link are left as they are.
 **Build stage, on this host.** A release is named by the commit it was built from:
 `<registry>/orbit-apiserver:<commit>`, which `wiki-worker` runs too, `<registry>/orbit-web:<commit>`, and
 `<registry>/orbit-link-gateway:<commit>`, where that commit is the last one under `src/link-gateway`, its
-whole build context, so that a release which does not change the gateway recreates nothing, and
-`<registry>/orbit-cloud-runner:<commit>`, the hosted runners' image, where that commit is the last one that
-changed what `deploy/managed-runner/image` builds it from (the runner's Go sources but its tests, its module
-files, DeepSeek Harness's lockfile, and the image's directory), so that a release which does not change the
-runner builds none and moves no hosted runner. A commit without `deploy/managed-runner/image` has none. A tag names one
+whole build context, so that a release which does not change the gateway recreates nothing. A tag names one
 build: one that is in the registry already is kept and never pushed again (to rebuild it, delete it from the
-registry first). For each image that is not there yet:
+registry first).
+
+The hosted runners' image is **not** built here. It is `<registry>/orbit-cloud-runner:<version>`, published from a
+release tag when /release creates it (`deploy/two-stage/publish-managed-runner.sh <tag>`, below), and its runner
+reports that version. A release uses the image of the newest `v*` tag at or behind its commit, so a deploy between
+two releases moves no hosted runner. Where that image is not in the registry, a release stops before its build and a
+deploy or plan before it changes anything, naming the command that publishes it. A commit without
+`deploy/managed-runner/image`, with no release tag behind it, or whose newest tag predates release-built images (its
+Dockerfile takes no `ORBIT_RELEASE_VERSION`) names none: the deploy says so and leaves the hosted runners' profile as it
+is. For each other image that is not there yet:
 
 0. Room first. A build needs `ORBIT_BUILD_MIN_FREE_GB` (15 unless set) free on the disk that holds Docker's data.
    Below that, before anything is built, it removes this registry's earlier release images on this host
@@ -256,10 +261,21 @@ registry first). For each image that is not there yet:
    passed as `PREVIOUS_RELEASE_IMAGE`. Before the target serves any, this host's own `orbit-web` is.
 2. `scripts/image-boot-check.sh` boots the apiserver and web images, as CI does, before either is pushed.
 3. The link gateway: `docker build --provenance=false`, as a single host builds it.
-4. The hosted runners' image: `docker build --provenance=false -f deploy/managed-runner/image/Dockerfile`, with
-   `ORBIT_SOURCE_SHA` its tag, so its runner reports `managed-<tag>`. It is about 4.4 GiB, and takes several
-   minutes the first time.
-5. `docker push` of each.
+4. `docker push` of each.
+
+**Publishing the hosted runners' image of a release tag**, on this host (/release does it right after it pushes the
+tag; docs/release-process.md, "Orbit Cloud runner image comes from the release tag"):
+
+```bash
+ORBIT_REGISTRY=10.66.0.1:5000 deploy/two-stage/publish-managed-runner.sh v0.1.261-beta.83
+```
+
+It fetches the tag from origin if this checkout lacks it, checks that the tag's `package.json` names that version, and
+skips a tag whose image is in the registry already. Otherwise it builds `deploy/managed-runner/image/Dockerfile` from
+the tag's commit (`git archive`, never the working tree; the checkout is not moved) with `ORBIT_SOURCE_SHA` the tag's
+commit and `ORBIT_RELEASE_VERSION` the version, checks the image's `org.opencontainers.image.revision` and
+`org.opencontainers.image.version` labels and the version its runner reports, and pushes it. The image is about 4.4 GiB
+and takes several minutes the first time. `--no-cache` applies to the build.
 
 **Deploy stage, on the target, driven from here over ssh.** The deploy stage needs no checkout and no runner on the
 target, and reads neither: `10.66.0.4` has both, for orbit-prod (see
@@ -289,17 +305,19 @@ the two Compose files a target lists beside `docker-compose.yml`, `deploy/postgr
    `.env` sets `ORBIT_MANAGED_RUNNERS_ENABLED=true`, and `profile.json` in `ORBIT_MANAGED_RUNNERS_DIR` says
    `"backend": "kubernetes"`), it also prints the hosted runners' image: `unchanged`, or the profile's
    `runner.image` and the release's image by digest, `<registry>/orbit-cloud-runner@sha256:<64 hex>`, then an
-   `imageRevision` line: `unchanged`, or the profile's `runner.imageRevision` (`(none)` if missing) and the image's
-   source commit, the 40-character sha it was tagged and built with (`ORBIT_SOURCE_SHA`);
+   `imageRevision` line: `unchanged`, or the profile's `runner.imageRevision` (`(none)` if missing) and the release
+   tag's commit, which the image was built from (`ORBIT_SOURCE_SHA`), and an `imageVersion` line the same way for
+   `runner.imageVersion` and the release version its runner reports;
 5. stops, having changed nothing, if an image the release runs does not come from the registry: `postgres` and
    `pgbackup` have theirs only from `deploy/postgres-pinned.yml`, so a target whose `COMPOSE_FILE` does not
    list it is refused. `--plan` stops here in any case, with every file put back;
 6. pulls every image the release runs, and stops if one is missing;
 7. writes the release's names into `.env` (below), and, where the plan printed a new hosted runners' image, sets
-   the profile's `runner.image` to it and `runner.imageRevision` to the image's source commit, in the same rename,
-   keeping the profile it replaces beside it as `profile.json.bak-<time>-before-<commit>`. Kubernetes learns a
-   runner's target revision only from `runner.imageRevision`, and offers Update Now only with it. An unchanged image
-   whose revision is missing or different gets the revision written the same way (a backfill); with both right
+   the profile's `runner.image` to it, `runner.imageRevision` to the tag's commit and `runner.imageVersion` to the
+   release version, in the same rename, keeping the profile it replaces beside it as
+   `profile.json.bak-<time>-before-<commit>`. Kubernetes learns a runner's target build only from
+   `runner.imageRevision` and `runner.imageVersion`, and offers Update Now only with them. An unchanged image whose
+   revision or version is missing or different gets it written the same way (a backfill); with all three right
    nothing is written. The apiserver reads the profile only as it starts, so one the release does not otherwise
    replace is replaced for any write. Once it runs, its manager moves each hosted runner onto the new
    image as soon as that runner is idle: drained like a sleep, and woken at once as the next generation, on the same
