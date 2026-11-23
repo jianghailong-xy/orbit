@@ -83,6 +83,15 @@ class ManagedRunnerUpdateTest {
         assertFalse(ManagedRunnerUpdateLogic.showsDot(s))
     }
 
+    @Test fun restarting_comes_from_the_server_alone_never_from_a_press_remembered() {
+        // An Update Now noted with one interrupted turn, which the server did not take (or which ended unwatched): the
+        // status says available, so the card is Available with its button, not Restarting (production, 2026-11-23).
+        val card = req(ManagedRunnerUpdateLogic.card(status(ManagedUpdate(running, current, "available")), pendingTurns = 1, zone = utc))
+        assertEquals("available", card.phase)
+        assertTrue(card.canUpdateNow)
+        assertFalse(card.body.contains("interrupted"))
+    }
+
     @Test fun updated_card_follows_a_finished_restart_for_a_day() {
         val before = status(ManagedUpdate(running, current, "updating"))
         val after = status(null)

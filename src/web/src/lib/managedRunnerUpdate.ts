@@ -83,6 +83,8 @@ export function notePendingUpdate(runnerId: string, interruptedTurns: number, to
 }
 /** The Update Now pressed and not yet seen through: how many turns it interrupted. Null when none is. */
 export const pendingUpdateTurns = (runnerId: string): number | null => read<PendingUpdate>('pending', runnerId)?.interruptedTurns ?? null;
+/** When the pending Update Now was noted; null when none is. */
+export const pendingUpdateAt = (runnerId: string): number | null => read<PendingUpdate>('pending', runnerId)?.at ?? null;
 
 /**
  * Once the runner is READY again with no `update`, a pending Update Now has finished: how long it took
@@ -101,6 +103,14 @@ export function settlePendingUpdate(runnerId: string, now = Date.now()): Managed
   write('pending', runnerId, null);
   return outcome;
 }
+/**
+ * A pending Update Now the server no longer reports as in progress while a build is still available to move to: either
+ * it ended unwatched before a newer build came out, or it never took. Its note is dropped with no outcome, so that it
+ * neither shows Restarting nor records an Updated card it cannot time.
+ */
+export function dropPendingUpdate(runnerId: string): void {
+  write('pending', runnerId, null);
+}
 export const readUpdateOutcome = (runnerId: string): ManagedUpdateOutcome | null => read<ManagedUpdateOutcome>('updated', runnerId);
 
 export interface ManagedUpdateCard {
@@ -115,17 +125,18 @@ export interface ManagedUpdateCard {
 
 /**
  * The card the managed status calls for, or null (the runner runs the current build, or is not running).
- * Restarting: the status's `updating`, or an Update Now of ours still waiting for the runner to be back.
+ * Restarting comes from the server alone: its status says `updating`, which it does from the accepted Update Now until
+ * the next generation is READY. A press this browser remembers never shows it: a refused or lost request, or one that
+ * ended while nobody watched, would otherwise read Restarting for good.
  */
 export function managedUpdateCard(
   status: ManagedRunnerStatus,
-  pending: boolean,
   outcome: ManagedUpdateOutcome | null,
   nowMs: number,
   interruptedTurns: number,
 ): ManagedUpdateCard | null {
   const update = status.update;
-  if (update?.phase === 'available' && !pending) {
+  if (update?.phase === 'available') {
     return {
       phase: 'available',
       tone: 'quiet',
@@ -135,12 +146,11 @@ export function managedUpdateCard(
       to: update.current,
     };
   }
-  if (update?.phase === 'updating' || pending) {
-    const to = update?.current ?? readPendingTarget(status);
+  if (update?.phase === 'updating') {
     return {
       phase: 'restarting',
       tone: 'warn',
-      title: managedUpdateRestartingTitle(to ? buildName(to) : ''),
+      title: managedUpdateRestartingTitle(buildName(update.current)),
       tag: RUNNER_UPDATE_TAG_RESTARTING,
       body: !interruptedTurns
         ? RUNNER_UPDATE_RESTARTING_BODY
@@ -157,9 +167,6 @@ export function managedUpdateCard(
     };
   }
   return null;
-}
-function readPendingTarget(status: ManagedRunnerStatus): ManagedRunnerBuild | null {
-  return status.runnerId ? read<PendingUpdate>('pending', status.runnerId)?.to ?? null : null;
 }
 
 /**

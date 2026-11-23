@@ -66,7 +66,9 @@ beforeEach(() => {
     if (path === '/managed-runner') return status;
     if (path === '/managed-runner/update-now') {
       if (busy && !options?.body?.interruptTurns) throw new ApiError('busy', 409, 'MANAGED_RUNNER_BUSY', BUSY);
-      return { ...status, update: { ...AVAILABLE, phase: 'updating' } };
+      // Accepted: from now on the server's status says updating, as the real one does until the next generation.
+      status = { ...status, update: { ...AVAILABLE, phase: 'updating' } };
+      return status;
     }
     if (path === '/runners') {
       return [
@@ -178,9 +180,46 @@ describe("Orbit Cloud's Update card", () => {
     await click(red);
     expect(posts()).toHaveLength(2);
     expect(posts()[1][1]).toMatchObject({ body: { interruptTurns: true } });
-    // The press is remembered, so Restarting says what it interrupted.
+    // The server's answer says updating at once, and the press is remembered, so Restarting says what it interrupted.
+    expect(card(p)?.getAttribute('data-phase')).toBe('restarting');
+    expect(card(p)?.textContent).toContain('2 interrupted turns continue once it is back.');
+    status = { ...READY, update: { ...AVAILABLE, phase: 'updating' } };
     const after = await page(MANAGED);
     expect(card(after)?.textContent).toContain('2 interrupted turns continue once it is back.');
+  });
+
+  it('a refused Update Now never shows Restarting', async () => {
+    busy = true;
+    activeSessions = 2;
+    const p = await page(MANAGED);
+    await click(updateNowButton(p));
+    // The server refuses the interrupting press (a conflict), so nothing is restarting.
+    apiMock.mockImplementation((async (path: string) => {
+      if (path === '/auth/capabilities') return ON;
+      if (path === '/managed-runner') return status;
+      if (path === '/managed-runner/update-now') throw new ApiError('conflict', 409, 'MANAGED_RUNNER_REVISION_CONFLICT', {});
+      if (path === '/runners') return [runner(MANAGED, 'managed', { version: 'managed-95884b154feb3d4e2a575fb012c4185b20c282ac' })];
+      return [];
+    }) as typeof api);
+    await click(buttonNamed('Interrupt 2 Turns and Update'));
+    expect(card(p)?.getAttribute('data-phase')).toBe('available');
+    expect(localStorage.getItem(`orbit.managedUpdate.pending.${MANAGED}`)).toBeNull();
+    const again = await page(MANAGED);
+    expect(card(again)?.getAttribute('data-phase')).toBe('available');
+  });
+
+  it('an Update Now that ended unwatched before a newer build came out does not read Restarting (production, 2026-11-23)', async () => {
+    // Pressed for the previous build, with one turn interrupted; nobody looked while it finished, and the server now
+    // offers a newer build. The server says available, so the card does, and the old note goes.
+    const pending = `orbit.managedUpdate.pending.${MANAGED}`;
+    localStorage.setItem(pending, JSON.stringify({ at: Date.now() - 3 * 3_600_000, interruptedTurns: 1, to: AVAILABLE.running }));
+    const p = await page(MANAGED);
+    expect(card(p)?.getAttribute('data-phase')).toBe('available');
+    expect(card(p)?.textContent).not.toContain('Restarting');
+    expect(card(p)?.textContent).not.toContain('interrupted turn');
+    expect(updateNowButton(p)).toBeTruthy();
+    expect(localStorage.getItem(pending)).toBeNull();
+    expect(localStorage.getItem(`orbit.managedUpdate.updated.${MANAGED}`)).toBeNull();
   });
 
   it('a busy answer found after the first dialog still lists the turns', async () => {
