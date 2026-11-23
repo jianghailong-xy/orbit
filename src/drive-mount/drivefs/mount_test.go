@@ -230,12 +230,13 @@ func TestAWriteInsideAnExistingFileIsRefused(t *testing.T) {
 	f, mnt, rep := mountFake(t, Options{})
 	p := filepath.Join(mnt, "h.txt")
 	if err := os.WriteFile(p, []byte("hello\n"), 0o644); err != nil {
-		t.Fatal(err)
+		t.Fatalf("create and write: %v, errors.log: %v", err, rep.Lines())
 	}
 	fh, err := os.OpenFile(p, os.O_WRONLY, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = fh.Close() })
 	if _, err := fh.WriteAt([]byte("X"), 2); !errors.Is(err, syscall.EOPNOTSUPP) {
 		t.Fatalf("a write inside: %v", err)
 	}
@@ -257,7 +258,7 @@ func TestAWriteInsideAnExistingFileIsRefused(t *testing.T) {
 	}
 	// ftruncate to 0 is an overwrite to empty: a version.
 	if err := os.Truncate(p, 0); err != nil {
-		t.Fatal(err)
+		t.Fatalf("truncate to zero: %v, errors.log: %v", err, rep.Lines())
 	}
 	if data, versions := f.content("/h.txt"); len(data) != 0 || versions != 2 {
 		t.Fatalf("%q, %d versions", data, versions)
