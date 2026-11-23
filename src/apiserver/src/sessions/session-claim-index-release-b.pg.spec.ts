@@ -205,7 +205,9 @@ function ran(w: World, taskId: string, status: RunStatus, extra: Record<string, 
     assignedRunnerId: w.runnerId, title: `rehearsal ${status}`, prompt: 'rehearsal', provider: 'claude',
     providerBuiltin: true, startsTaskWork: true, numTurns: 1, engineTurnActive: false,
     runtimeSessionId: randomUUID(), startedAt: new Date(), status,
-    finishedAt: TERMINAL.includes(status) ? new Date() : null, ...extra,
+    finishedAt: TERMINAL.includes(status) ? new Date() : null,
+    // A failure is the turn's outcome copied to the session (design §12): deploy 3 no longer reads status FAILED alone.
+    ...(status === RunStatus.FAILED ? { lastTurnOutcome: 'FAILED' } : {}), ...extra,
   };
 }
 
@@ -213,7 +215,11 @@ async function moveTo(db: PrismaClient, sessionId: string, status: RunStatus): P
   await db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
     await tx.session.update({
-      where: { id: sessionId }, data: { status, finishedAt: TERMINAL.includes(status) ? new Date() : null },
+      where: { id: sessionId },
+      data: {
+        status, finishedAt: TERMINAL.includes(status) ? new Date() : null,
+        ...(status === RunStatus.FAILED ? { lastTurnOutcome: 'FAILED' } : {}),
+      },
     });
   });
 }

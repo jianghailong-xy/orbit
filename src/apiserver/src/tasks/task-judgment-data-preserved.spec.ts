@@ -3351,6 +3351,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1439_drive_entry_name_trgm',
       // 1440 adds the drive Trash marking flag and its partial index; it changes no preserved relation or fence.
       '1440_drive_trash_group_marking',
+      // 1441 to 1443, deploy 3 of design §12.6 (removal steps R6 to R8; written as 1428, 1429 and 1431, then 1433 to 1435,
+      // renumbered above what main and the other lines took). 1441 writes session.last_turn_outcome (FAILED on a release
+      // the status alone records as a failure, CANCELLED on the residual A2 shape) and conversation_turn.outcome and error
+      // on the carrying turn; 1442 re-creates 1425's three ended-triggers without the status bridge; 1443 drops
+      // session_release_cause_chk and session.release_cause after checking pg_depend. Session and conversation_turn are
+      // not preserved relations: no preserved relation is read, written or dropped, and the DONE fence is unchanged.
+      '1441_session_turn_outcome_backfill',
+      '1442_ended_triggers_drop_status_bridge',
+      '1443_session_release_cause_drop',
       // 1444 drops 0130's claim index session_task_execution_claim_idx CONCURRENTLY (plan step 4.5, release B); 1426's
       // index goes on enforcing one live run per task. Session is not a preserved relation, and no function, trigger,
       // type, constraint or DONE fence changes. No INSERT, UPDATE or DELETE.
