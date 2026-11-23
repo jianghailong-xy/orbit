@@ -134,7 +134,7 @@ object ScheduleCopy {
         "LANDING_FAILED" to "could not land on main",
     )
     val runReasonTexts: Map<String, String> = mapOf(
-        "OVER_BUDGET" to "Not started: it had already started as many runs in the past 7 days as you allowed.",
+        "OVER_BUDGET" to "Not started: it had already started as many scheduled runs in the past 7 days as you allowed.",
     )
     val failureReasonsWithSummary: Map<String, String> = mapOf(
         "REPORTED_FAILED" to "reported a failure: {summary}",

@@ -83,7 +83,7 @@ import type { ConditionFiring } from '../conditions/conditions.service';
 import { sampleHolds } from '../conditions/condition-evaluation';
 import { RUN_BLOCK_MAX_SAMPLES, scheduledRunTurn, type RunBlockFiring } from './schedule-run-block';
 import {
-  scheduleBudgetStarts,
+  scheduleAgentPressStarts,
   scheduleOverBudget,
   scheduleOverBudgetMessage,
   scheduleRunsStarted,
@@ -508,9 +508,9 @@ export class ScheduleRunsService {
           }
           return { outcome: 'HELD', alerts };
         }
-        // §4: the envelope's runs per week bound the runs that start, not only the rule, counted on the slots they
-        // were planned for. A slot over budget is MISSED (OVER_BUDGET) and the schedule goes on; a MANUAL run is the
-        // owner's press (runNow refuses anyone else's over budget).
+        // §4: the envelope's runs per week bound the automatic runs that start, not only the rule, counted on the
+        // slots they were planned for. A slot over budget is MISSED (OVER_BUDGET) and the schedule goes on. A MANUAL
+        // run was checked when it was pressed (runNow), and no Run now counts here.
         if (run.trigger !== 'MANUAL' && (await scheduleOverBudget(tx, schedule, run.plannedAt))) {
           return { outcome: 'MISSED', alerts: await this.missOverBudget(tx, schedule, run, now) };
         }
@@ -1078,11 +1078,12 @@ export class ScheduleRunsService {
           throw refusal('CONFLICT', 'SCHEDULE_HELD', `The schedule is held (${schedule.heldReason}); resume it first.`);
         }
         const now = this.clock();
-        // §8.4: only the owner's own press (the owner-interactive channel) starts over budget. A session, or a personal
-        // access token (what an agent with a shell on the runner holds), may not spend runs the owner did not allow.
-        // The run it would write is planned at now.
-        if (actor.kind !== 'OWNER') {
-          const started = await scheduleBudgetStarts(tx, schedule, now);
+        // §8.4: the owner's own press (the owner-interactive channel) counts toward no budget. A session's or a personal
+        // access token's (what an agent with a shell on the runner holds) counts toward a budget of its own, kept apart
+        // from the automatic runs', so it never takes a slot's place. The run it would write is planned at now.
+        const byOwner = actor.kind === 'OWNER';
+        if (!byOwner) {
+          const started = await scheduleAgentPressStarts(tx, schedule, now);
           if (started >= schedule.envelopeRunsPerWeek) {
             throw refusal(
               'CONFLICT',
@@ -1093,7 +1094,7 @@ export class ScheduleRunsService {
         }
         await this.skipQueued(tx, scheduleId, now);
         return tx.scheduleRun.create({
-          data: { scheduleId, scheduleRevision: schedule.revision, plannedAt: now, trigger: 'MANUAL', state: 'QUEUED' },
+          data: { scheduleId, scheduleRevision: schedule.revision, plannedAt: now, trigger: 'MANUAL', state: 'QUEUED', byOwner },
         });
       },
       loggedRetry(this.logger, 'scheduleRuns.runNow'),

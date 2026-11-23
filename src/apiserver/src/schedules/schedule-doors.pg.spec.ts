@@ -770,14 +770,14 @@ test('over the weekly budget: schedule_run_now from a session and a PAT\'s run a
   const w = await world('budget');
   const s = await createdThroughCard(w);
   assert.equal(s.envelope.runsPerWeek, 7);
-  // Seven runs started in the past 7 days: the budget is used.
+  // Seven Run now presses by sessions or tokens in the past 7 days: their budget is used (§8.4).
   const now = Date.now();
   for (let i = 1; i <= 7; i++) {
     const at = new Date(now - i * 60 * 60_000);
     // Delivered: only a run whose first turn reached its engine counts toward the budget (§4).
     const runId = randomUUID();
     await db.scheduleRun.create({
-      data: { id: runId, scheduleId: s.id, scheduleRevision: 1, plannedAt: at, trigger: 'SCHEDULED', state: 'NO_CHANGE', startedAt: at, endedAt: at },
+      data: { id: runId, scheduleId: s.id, scheduleRevision: 1, plannedAt: at, trigger: 'MANUAL', state: 'NO_CHANGE', startedAt: at, endedAt: at },
     });
     const sessionId = await makeSession(w.ownerId, w.workspaceId, PermissionMode.PLAN, null, { scheduleRunId: runId });
     await db.conversationTurn.create({
@@ -810,7 +810,7 @@ test('over the weekly budget: schedule_run_now from a session and a PAT\'s run a
   assert.equal(pressed.run.trigger, 'MANUAL');
   const started = await db.scheduleRun.findUniqueOrThrow({ where: { id: pressed.run.id } });
   assert.equal(started.state, 'RUNNING', "the owner's own press starts over budget");
-  assert.ok(started.startedAt, 'and it counts as a start');
+  assert.equal(started.byOwner, true, 'and counts toward no budget');
 });
 
 // -----------------------------------------------------------------------------------------------------------------

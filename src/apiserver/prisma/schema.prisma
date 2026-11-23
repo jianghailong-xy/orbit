@@ -10895,6 +10895,9 @@ model ScheduleRun {
   /// The last time the watch pass found the run's session, not yet delivered, held by a full runner, run or batch
   /// (§7.2, migration 1430): such a run waits for a slot, and the 10-minute undelivered limit counts from here.
   capacityHeldAt   DateTime?          @map("capacity_held_at") @db.Timestamptz(3)
+  /// A MANUAL run the owner pressed themselves (§8.4, migration 1432): it counts toward no budget. False for every
+  /// other run, including a Run now by a session or a personal access token, which counts toward theirs.
+  byOwner          Boolean            @default(false) @map("by_owner")
   createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   sessions         Session[]
 

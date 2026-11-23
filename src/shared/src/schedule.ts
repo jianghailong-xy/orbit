@@ -208,7 +208,7 @@ export const SCHEDULE_COPY = {
   },
   /** A run's reasonText as the server writes it (ScheduleRunView.reasonText), for the reasons whose sentence is shared. */
   runReasonTexts: {
-    OVER_BUDGET: 'Not started: it had already started as many runs in the past 7 days as you allowed.',
+    OVER_BUDGET: 'Not started: it had already started as many scheduled runs in the past 7 days as you allowed.',
   },
   /** A failure that reported what went wrong says it, in the failure card and its push (one line, 120 characters). */
   failureReasonsWithSummary: {
