@@ -3039,10 +3039,12 @@ export interface SubagentCandidateTarget {
   level?: SubagentSize | null;
 }
 
-/** How one attempt of a SubAgent run ended: still running, a usage-limit, capacity or login failure it moved on from,
- *  or the run's end. */
+/** How one attempt of a SubAgent run ended: still running, a failure it moved on from (a usage limit, capacity, a
+ *  failed login, an account that needed action or denied the use, or an unclassified refusal before it started:
+ *  docs/routing-account-health-design.md §7.3), or the run's end. */
 export type SubagentAttemptOutcome =
-  'RUNNING' | 'USAGE_LIMIT' | 'AT_CAPACITY' | 'AUTH_FAILED' | Exclude<SubagentRunStatus, 'RUNNING'>;
+  | 'RUNNING' | 'USAGE_LIMIT' | 'AT_CAPACITY' | 'AUTH_FAILED' | 'ACCOUNT_ACTION_REQUIRED' | 'ACCESS_DENIED' | 'ADMISSION_FAILED'
+  | Exclude<SubagentRunStatus, 'RUNNING'>;
 
 /** One entry of `subagent_run.attempts`: a child process the run started, in order (§4.3). */
 export interface SubagentAttempt extends SubagentCandidateTarget {

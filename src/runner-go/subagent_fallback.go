@@ -10,10 +10,6 @@ import (
 	"time"
 )
 
-// subagentMaxMoves is how many times one delegate call moves to another candidate after its child failed on a
-// usage limit, capacity or a failed login (docs/subagent-design.md §4.3). The server holds the same bound (SUBAGENT_MAX_MOVES).
-const subagentMaxMoves = 2
-
 // subagentUsageLimitMarkers are @orbit/shared USAGE_LIMIT_ERROR_MARKERS: the providers' own words for a spent
 // quota. Keep them identical.
 var subagentUsageLimitMarkers = []string{
@@ -60,14 +56,15 @@ func isSubagentLoginFailure(text string) bool {
 // subagentLimitFailure is a child's end as §4.3 moves it, with the engine's own words for it: a spent quota or a
 // failed login — which Claude Code reports as its whole reply with a "success" result — or a model at capacity
 // (isCodexCapacityError), which only a failed end is read for. False for a run that ended any other way, whose
-// end is its result. The server decides whether a failed login moves (not when the caller named the model).
+// end is its result. The server decides whether a move is made (not on an account's failure when the caller named
+// the model) and holds the bound on moves (SUBAGENT_MAX_MOVES).
 func subagentLimitFailure(res ExecResult, err error) (string, bool) {
-	// What the child's adapter classified decides first (§7.3), over the moves of today: a spent quota, a model at
-	// capacity, a refused sign-in. Any other classified kind is the run's result; moving on those comes with the
-	// server's phase 2, and the kind already goes with every ask (nextSubagentCandidate).
+	// What the child's adapter classified decides first (docs/routing-account-health-design.md §7.3): a spent
+	// quota, a model at capacity, and an account that refused the run — its credential, an action it needs, or a
+	// use it does not allow. Any other classified kind (a connection failure, a refused request) is the run's result.
 	if res.Failure != nil {
 		switch res.Failure.Kind {
-		case failureUsageLimit, failureCapacity, failureCredentialRefused:
+		case failureUsageLimit, failureCapacity, failureCredentialRefused, failureAccountAction, failureAccessDenied:
 			if text := strings.TrimSpace(firstNonEmpty(res.ErrorMsg, res.Result)); text != "" {
 				return text, true
 			}
@@ -94,7 +91,27 @@ func subagentLimitFailure(res ExecResult, err error) (string, bool) {
 			return strings.TrimSpace(text), true
 		}
 	}
+	// An unclassified failure before the engine produced anything (§5.2) moves too: the account would not start it.
+	// Not a dropped connection, which says nothing of the account; the server reads the words the same way.
+	if res.Admission != nil && *res.Admission {
+		for _, text := range texts {
+			if isConnectionFailure(text) {
+				return "", false
+			}
+		}
+		if text := strings.TrimSpace(firstNonEmpty(res.ErrorMsg, res.Result, errorText(err))); text != "" {
+			return text, true
+		}
+	}
 	return "", false
+}
+
+// errorText is err's message, "" for none.
+func errorText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 // subagentFallbackResponse is the server's answer to the ask for the next candidate (SubagentFallbackResponse).

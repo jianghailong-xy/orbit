@@ -44,8 +44,8 @@ test('movableFailure: the runner\'s kind decides, the words decide only when it 
   assert.equal(movableFailure('Kimi Code failed this turn (APIProviderOverloadedError)', { kind: 'CAPACITY' }), 'AT_CAPACITY');
   assert.equal(movableFailure(SIGNED_OUT, { kind: 'TRANSPORT' }), null);
   assert.equal(movableFailure(CODEX_LIMIT, { kind: 'REQUEST_REFUSED' }), null);
-  // Moving on the account kinds is phase 2 (§7.3): not yet.
-  assert.equal(movableFailure(CURSOR_PAYMENT, { kind: 'ACCOUNT_ACTION_REQUIRED' }), null);
+  // The account kinds move too (§7.3, phase 2); subagent-move.spec.ts covers every kind.
+  assert.equal(movableFailure(CURSOR_PAYMENT, { kind: 'ACCOUNT_ACTION_REQUIRED' }), 'ACCOUNT_ACTION_REQUIRED');
   // A kind this server does not know reads through the words.
   assert.equal(movableFailure(CODEX_LIMIT, { kind: 'A_NEWER_KIND' }), 'USAGE_LIMIT');
 });
