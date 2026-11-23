@@ -1,0 +1,18 @@
+# Which contact point takes which alert. The Watchdog goes to the heartbeat URL, once a minute for as long as it fires;
+# everything else goes to the contact point ORBIT_ALERT_CONTACT names (orbit-ntfy unless .env says otherwise).
+apiVersion: 1
+policies:
+  - orgId: 1
+    receiver: $ORBIT_ALERT_CONTACT
+    group_by: [alertname]
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h
+    routes:
+      - receiver: orbit-watchdog
+        object_matchers:
+          - [watchdog, "=", "true"]
+        group_by: [alertname]
+        group_wait: 0s
+        group_interval: 1m
+        repeat_interval: 1m

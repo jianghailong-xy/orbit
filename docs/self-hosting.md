@@ -513,6 +513,52 @@ Grafana's own data is in the `grafana-data` volume (a few MB). Its image is pinn
 (`ORBIT_PROMETHEUS_RETENTION_SIZE`), whichever comes first; the oldest data goes first. It lives in the
 `prometheus-data` volume, in Docker's data root rather than in `./data`, and is not backed up.
 
+#### Alerts
+
+Grafana's own alerting watches the metrics and sends to your phone. There is no Alertmanager. Every rule, contact point
+and routing choice is a file in `deploy/monitoring/grafana/provisioning/alerting/`, loaded when Grafana starts and not
+editable from its UI; to change a threshold, edit `rules.yml` and restart `grafana`.
+
+| Alert | Fires when | For |
+| --- | --- | --- |
+| Apiserver down | No apiserver target is up. Judged across all of them, so a two-stage handover, where `apiserver-next` runs beside `apiserver` and one or the other is briefly gone, does not fire it. | 2 min |
+| High HTTP 5xx rate | More than 5% of the answers of the last 5 minutes were 5xx. | 5 min |
+| High p95 latency | The p95 of the last 5 minutes is over 2.5 s. The merge routes and provider key checks, which can hold for minutes on request, are left out. | 10 min |
+| Work queued with no runner online | Sessions are queued, no runner is `online`, and the gauges could be read. | 10 min |
+| Disk over 85% | Any filesystem the host mounts (tmpfs, overlay and the like left out) is over 85% full. | 5 min |
+| Base backup older than its interval | The newest base backup is older than `ORBIT_BASE_BACKUP_INTERVAL` plus an hour. | 10 min |
+| WAL archiving failing | `pg_stat_archiver`'s last failure is newer than its last success. | 5 min |
+| Off-host backup mirror failing | A poll's off-host copy failed in the last hour. | at once |
+| Postgres conflict spike | Conflict 503s plus PostgreSQL deadlocks exceed 0.1 per second. | 5 min |
+| Watchdog | Always. See [the Watchdog](#the-watchdog). | |
+
+A rule that cannot read Prometheus raises a "DatasourceError" alert of its own, so a broken Prometheus is not silent.
+
+**Where alerts go.** Set these in `.env`, then `docker compose up -d grafana`:
+
+| Variable | Meaning |
+| --- | --- |
+| `ORBIT_ALERT_CONTACT` | `orbit-ntfy` (the default), `orbit-email` or `orbit-webhook`. |
+| `ORBIT_NTFY_SERVER` | The ntfy server; `https://ntfy.sh` by default. |
+| `ORBIT_NTFY_TOPIC` | The topic your phone subscribes to. With none, ntfy refuses every alert and Grafana's contact point shows the error. |
+| `ORBIT_ALERT_EMAIL` | `orbit-email`: the addresses, separated by `;`. Also set `GF_SMTP_ENABLED=true`, `GF_SMTP_HOST`, `GF_SMTP_USER`, `GF_SMTP_PASSWORD` and `GF_SMTP_FROM_ADDRESS`. |
+| `ORBIT_ALERT_WEBHOOK_URL` | `orbit-webhook`: Grafana POSTs its standard webhook JSON here. |
+
+**ntfy, the default.** Install the ntfy app on your phone, subscribe to a topic name, and put the same name in
+`ORBIT_NTFY_TOPIC`. Pick a long random one (`openssl rand -hex 16`): on the public `ntfy.sh` service the topic is the
+only secret, and anyone who knows it can read your alerts and send you fake ones. The service also sees the alert text
+(the alert's name and summary, and a mount point for a disk alert); nothing else leaves the host. To keep alerts off a
+public service, run your own ntfy server and set `ORBIT_NTFY_SERVER` to it, or choose email or a webhook.
+
+**The Watchdog.** The Watchdog is an alert that always fires. Grafana sends it to `ORBIT_WATCHDOG_URL` once a minute, as
+a POST with the webhook JSON. It reads no data source, so it stops only when Grafana, or the host, stops. Give the URL
+of a dead-man's-switch service (healthchecks.io, Uptime Kuma's push monitor, Better Stack and the like) and let it
+alert you when the pings stop. With no URL the heartbeat goes to Prometheus on this host, and nothing leaves it.
+
+**A whole-host outage cannot alert from the host.** If the machine, its network or Docker is down, Grafana is down with
+it and sends nothing, so none of the alerts above can reach you. The only way to hear of it is the off-host Watchdog
+check: the heartbeat service notices the silence. Without `ORBIT_WATCHDOG_URL` pointing at one, a dead host is silent.
+
 **Turn it off.** Remove `monitoring` from `COMPOSE_PROFILES` in `.env`, then stop and remove its containers. The
 apiserver's listener stays open, reached by nothing. The volumes stay until you remove them:
 

@@ -1,0 +1,17 @@
+# The words of a phone alert (ntfy's title and message). Plain text: ntfy shows it as it is.
+apiVersion: 1
+templates:
+  - orgId: 1
+    name: orbit
+    template: |
+      {{ define "orbit.title" -}}
+      [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}
+      {{- end }}
+      {{ define "orbit.message" -}}
+      {{ range .Alerts -}}
+      {{ .Annotations.summary }}{{ if .Labels.mountpoint }} ({{ .Labels.mountpoint }}){{ end }}
+      {{ end }}
+      {{- end }}
+      {{ define "orbit.ntfy" -}}
+      {{ coll.Dict "topic" .Vars.topic "title" (tmpl.Exec "orbit.title" . | strings.TrimSpace) "message" (tmpl.Exec "orbit.message" . | strings.TrimSpace) "priority" (or (and (eq .Status "firing") 4) 3) "tags" (coll.Slice (or (and (eq .Status "firing") "rotating_light") "white_check_mark")) | data.ToJSON }}
+      {{- end }}

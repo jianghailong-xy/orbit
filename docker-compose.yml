@@ -775,6 +775,21 @@ services:
       GF_LOG_MODE: console
       GF_SERVER_HTTP_ADDR: 0.0.0.0
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:${GRAFANA_PORT:-3030}/}
+      # Read by the alerting files under provisioning/alerting (docs/self-hosting.md, "Monitoring", "Alerts"). Each has a
+      # default that provisions cleanly and sends nothing anywhere useful: with no ORBIT_NTFY_TOPIC, ntfy refuses the
+      # alert and Grafana's contact point shows the failure; with no ORBIT_WATCHDOG_URL, the Watchdog's heartbeat is a
+      # request to Prometheus, so nothing leaves this host.
+      ORBIT_ALERT_CONTACT: ${ORBIT_ALERT_CONTACT:-orbit-ntfy}
+      ORBIT_NTFY_SERVER: ${ORBIT_NTFY_SERVER:-https://ntfy.sh}
+      ORBIT_NTFY_TOPIC: ${ORBIT_NTFY_TOPIC:-}
+      ORBIT_ALERT_EMAIL: ${ORBIT_ALERT_EMAIL:-alerts@example.invalid}
+      ORBIT_ALERT_WEBHOOK_URL: ${ORBIT_ALERT_WEBHOOK_URL:-http://prometheus:9090/api/v1/labels}
+      ORBIT_WATCHDOG_URL: ${ORBIT_WATCHDOG_URL:-http://prometheus:9090/api/v1/labels}
+      GF_SMTP_ENABLED: ${GF_SMTP_ENABLED:-false}
+      GF_SMTP_HOST: ${GF_SMTP_HOST:-localhost:25}
+      GF_SMTP_USER: ${GF_SMTP_USER:-}
+      GF_SMTP_PASSWORD: ${GF_SMTP_PASSWORD:-}
+      GF_SMTP_FROM_ADDRESS: ${GF_SMTP_FROM_ADDRESS:-grafana@localhost}
     depends_on:
       prometheus:
         condition: service_healthy
