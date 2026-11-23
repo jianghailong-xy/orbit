@@ -667,3 +667,248 @@
   color: inherit;
   text-decoration: none;
 }
+
+/* An agent's drive_put / drive_get calls in the chat (DriveTransferCard; board docs/mocks/agent-drive-transfer). The
+   bar is the upload tray's, a little taller. */
+.drive-xfer {
+  margin: 6px 12px 10px;
+  max-width: var(--chat-card-max, 720px);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  font-size: 13px;
+  overflow: hidden;
+}
+.drive-xfer button {
+  border: 0;
+  background: none;
+  color: var(--brand);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+.drive-xfer-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 0;
+  flex-wrap: wrap;
+}
+.drive-xfer-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--brand);
+  background: var(--brand-tint);
+}
+.drive-xfer-icon.is-get,
+.drive-xfer-icon.is-ok {
+  color: var(--success);
+  background: var(--success-bg);
+}
+.drive-xfer-icon.is-bad {
+  color: var(--error);
+  background: var(--error-bg);
+}
+.drive-xfer-title {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.drive-xfer-folder {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.drive-xfer-actions {
+  display: flex;
+  gap: 12px;
+  margin-left: auto;
+  font-size: 12.5px;
+}
+.drive-xfer-sum {
+  padding: 8px 14px 10px;
+}
+.drive-xfer-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--fill-muted);
+  overflow: hidden;
+}
+.drive-xfer-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--brand);
+  transition: width 0.4s ease;
+}
+.drive-xfer-bar.is-ok span {
+  background: var(--success-solid);
+}
+.drive-xfer-bar.is-off span {
+  background: var(--text-4);
+}
+.drive-xfer-bar.is-warn span {
+  background: var(--warning-solid);
+}
+.drive-xfer-bar.is-bad span {
+  background: var(--success-solid);
+}
+.drive-xfer-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin-top: 6px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.drive-xfer-stats b {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.drive-xfer-pace {
+  margin-left: auto;
+}
+.drive-xfer-pace.is-stalled {
+  color: var(--warning);
+}
+.drive-xfer-list {
+  list-style: none;
+  margin: 0;
+  padding: 2px 14px 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+.drive-xfer-dir {
+  padding: 8px 0 2px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.drive-xfer-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  align-items: center;
+  padding: 4px 0;
+  font-variant-numeric: tabular-nums;
+}
+.drive-xfer-row > .drive-xfer-bar,
+.drive-xfer-row > .drive-xfer-error {
+  grid-column: 2 / 4;
+}
+.drive-xfer-row > .drive-xfer-bar {
+  height: 3px;
+}
+.drive-xfer-mark {
+  text-align: center;
+  font-size: 12px;
+}
+.drive-xfer-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-1);
+}
+.drive-xfer-size {
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.drive-xfer-row.is-done .drive-xfer-mark {
+  color: var(--success);
+}
+.drive-xfer-row.is-running .drive-xfer-mark {
+  color: var(--brand);
+}
+.drive-xfer-row.is-waiting .drive-xfer-name,
+.drive-xfer-row.is-waiting .drive-xfer-mark,
+.drive-xfer-row.is-stopped .drive-xfer-name {
+  color: var(--text-4);
+}
+.drive-xfer-row.is-failed .drive-xfer-mark,
+.drive-xfer-row.is-failed .drive-xfer-size,
+.drive-xfer-error {
+  color: var(--error);
+}
+.drive-xfer-error {
+  font-size: 12px;
+  line-height: 1.5;
+}
+.drive-xfer-more {
+  padding: 4px 0 2px 24px;
+  font-size: 12px;
+}
+.drive-xfer-link {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+}
+.drive-xfer .drive-xfer-name .drive-xfer-link {
+  color: var(--text-1);
+}
+.drive-xfer-link:hover,
+.drive-xfer .drive-xfer-name .drive-xfer-link:hover {
+  color: var(--brand);
+  text-decoration: underline;
+}
+/* A finished run, or a single file: one line, in the steps line's tone with a tick. */
+.drive-xfer-fold {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 12px 10px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.drive-xfer-fold-open {
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+.drive-xfer-fold-open:hover {
+  color: var(--text-1);
+  text-decoration: underline;
+}
+.drive-xfer-tick {
+  color: var(--success);
+  font-weight: 700;
+}
+.drive-xfer-arrow {
+  color: var(--brand);
+  font-weight: 700;
+}
+.drive-xfer-muted {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.drive-xfer-fold.is-failed {
+  color: var(--error);
+}
+.drive-xfer-fold.is-going > .drive-xfer-bar {
+  width: 96px;
+  height: 4px;
+}
+.drive-xfer-fold .drive-xfer-link {
+  color: var(--brand);
+}

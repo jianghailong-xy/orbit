@@ -1,5 +1,7 @@
+import { parseDriveProgress } from './driveTransfer';
+
 /**
- * Broadcast-only output snapshots for foreground user shells.
+ * Broadcast-only output snapshots for foreground user shells, and the byte counts of drive transfers.
  *
  * Unlike a text delta, every `tool_output` carries the whole output currently retained by the
  * runner. Replacing the value (rather than appending it) avoids duplicate prefixes and lets an
@@ -26,9 +28,16 @@ type ToolOutputEvent = {
   payload?: Record<string, unknown> | null;
 };
 
-function toolUseId(payload: Record<string, unknown>): string | undefined {
+/**
+ * A foreground shell's id, or the id of a drive transfer whose snapshot is its byte count (lib/driveTransfer.ts). A
+ * drive call's tool_result clears its entry as a shell's does.
+ */
+function toolUseId(payload: Record<string, unknown>, eventType: string): string | undefined {
   const value = payload.toolUseId ?? payload.tool_use_id;
-  return typeof value === 'string' && value.startsWith('shell-') ? value : undefined;
+  if (typeof value !== 'string' || !value) return undefined;
+  if (value.startsWith('shell-')) return value;
+  if (eventType !== 'tool_output' || parseDriveProgress(payload.content)) return value;
+  return undefined;
 }
 
 function snapshotSeq(payload: Record<string, unknown>): number | undefined {
@@ -44,7 +53,7 @@ export function reduceLiveToolOutputs(
   event: ToolOutputEvent,
 ): LiveToolOutputs {
   const payload = event.payload ?? {};
-  const id = toolUseId(payload);
+  const id = toolUseId(payload, event.type);
 
   if (event.type === 'tool_output') {
     // Missing content is a malformed event; an explicitly empty snapshot is meaningful and must

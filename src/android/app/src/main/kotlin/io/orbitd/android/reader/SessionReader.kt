@@ -365,14 +365,19 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
     val ownerRunner = remember(data.runners) { runnerNames(data.runners) }
     // The cross-project requests its project was asked, as cards in the conversation that coordinates it (`CrossingCards`): read
-    // behind each of the session's snapshot reads, as the owner requests are. Only a coordinator's session names a project.
+    // behind each of the session's snapshot reads, as the owner requests are. Only a coordinator's session names a project. The move
+    // batches come from the session's own read as well, so the session that ASKED for them draws the same card (iOS
+    // `ConsoleModel.refreshTaskMoves`); that read follows the row's waiting signal and its last turn too, because an answer given
+    // at the other end drops the count to the "0" of a row that never waited, and only another read says it moved.
     val coordinated = snapshotDetail?.text("projectId")
     val crossingStore = remember(handle) { CrossingCardStore.of(app.session, handle, app.processScope) { app.canWrite(handle) } }
     val crossingState by crossingStore.state.collectAsState()
     LaunchedEffect(crossingStore, coordinated, state.session?.snapshotReads) { coordinated?.let(crossingStore::load) }
+    LaunchedEffect(crossingStore, route.id, state.session?.snapshotReads, listed?.pendingApprovals, listed?.waitingKind, listed?.taskMoves,
+        listed?.lastTurnAt) { crossingStore.loadMoves(route.id!!) }
     // A review open here is this conversation's: leaving it closes it.
     DisposableEffect(crossingStore) { onDispose { crossingStore.close() } }
-    val crossingBatches = remember(crossingState.rows, coordinated) { coordinated?.let { crossingState.batches(it) }.orEmpty() }
+    val crossingBatches = remember(crossingState.rows, crossingState.sessionMoves, coordinated, route.id) { crossingState.batches(coordinated, route.id) }
     // The scheduled tasks' cards this conversation asked and the changes it made, each where it happened; a run's own session gets
     // its strip at its planned time and its report after its end (docs/scheduled-tasks-design.md §8.1, §4, §7.4). Read behind each of the
     // session's snapshot reads, as the owner requests are.
@@ -781,6 +786,18 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // Inside the row it follows, so no list index moves: the reader's jumps count rows.
                 val ownerPlaced = remember(displayedRows, ownerRequests) { OwnerRequests.place(displayedRows.map { it.event.ts }, ownerRequests) }
                 val crossingPlaced = remember(displayedRows, crossingBatches) { CrossingCards.place(displayedRows.map { it.event.ts }, crossingBatches) }
+                // An owner request's link opened this conversation onto its card (OwnerRequestLinks): once the reader has placed itself, the
+                // row the card follows is scrolled to, and the card brings itself into view when drawn (OwnerRequestInConversation).
+                val ownerFocus = CardFocus.pending(route.id!!)?.takeIf { it.startsWith(CardFocus.OWNER_REQUEST) }
+                LaunchedEffect(ownerFocus, ownerPlaced, placed) {
+                    if (ownerFocus == null || !placed) return@LaunchedEffect
+                    val index = ownerPlaced.entries.firstOrNull { (_, asked) -> asked.any { CardFocus.ownerRequest(it.id) == ownerFocus } }?.key
+                        ?: return@LaunchedEffect
+                    follow = false
+                    // Ahead of the rows: the loading line until the window is seeded, the older-messages item, and the created-workspace line.
+                    val lead = (if (displayedWindow.seeded) 0 else 1) + 1 + (if (createdWorkspaceLine != null && !displayedWindow.hasOlder) 1 else 0)
+                    list.scrollToItem(if (index < 0) 0 else index + lead)
+                }
                 val schedulePlaced = remember(displayedRows, scheduleInserts) { ScheduleInsert.place(displayedRows.map { it.event.ts }, scheduleInserts) }
                 val live = transcript.takeIf { displayedWindow.newerAfter == null }
                 // A turn running now, read at the live tail: only there is the window's newest head the turn in hand. Not a run that is
@@ -814,7 +831,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         if (displayedWindow.hasOlder) TextButton(enabled = !displayedLoading, onClick = { follow = false; model.older() }) { Text(if (displayedLoading) "Loading messages…" else "Load earlier messages") }
                         else if (ownerPlaced[-1] != null || crossingPlaced[-1] != null || schedulePlaced[-1] != null) Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             schedulePlaced[-1]?.forEach { drawSchedule(it) }
-                            ownerPlaced[-1]?.forEach { key(it.id) { Box(Modifier.conversationCard()) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, discussCard) } } }
+                            ownerPlaced[-1]?.forEach { key(it.id) { Box(Modifier.conversationCard()) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, route.id, discussCard) } } }
                             crossingPlaced[-1]?.forEach { key(it.id) { Box(Modifier.conversationCard()) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } } }
                         }
                     }
@@ -889,7 +906,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         else Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             drawRow()
                             scheduleThings?.forEach { drawSchedule(it) }
-                            asked?.forEach { key(it.id) { Box(Modifier.conversationCard()) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, discussCard) } } }
+                            asked?.forEach { key(it.id) { Box(Modifier.conversationCard()) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, route.id, discussCard) } } }
                             crossings?.forEach { key(it.id) { Box(Modifier.conversationCard()) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } } }
                         }
                     }
@@ -1071,7 +1088,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         }
         }
         if (!state.denied) CardReviewSheet(cards, reviewStates, openLink, discussCard)
-        if (!state.denied) CrossingReviewSheet(crossingStore, coordinated)
+        if (!state.denied) CrossingReviewSheet(crossingStore, coordinated, route.id)
         if (!state.denied) CardReceiptSheet(cards, openLanding = { open(OrbitRoute(Destination.SESSION, it)) })
         if (!state.denied) EvidenceFilesSheet(cards)
         if (settings && !state.denied) SessionSettingsPage(state.session, api, handle.account.server, data.tags,
