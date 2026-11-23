@@ -59,13 +59,11 @@ class ProjectRowWaitingShellTest {
     private val headLine = "echo HEAD-OF-THE-WAITING-CARD"
     private val footLine = "echo FOOT-OF-THE-WAITING-CARD"
 
-    /** The clock a row's request to open at the waiting card lapses by (10 s): the test's, still. On the real clock a slow machine
-     * spends those seconds between the press and the card being drawn, and the member then opens wherever its tail is. */
-    private val wall = 1_000_000L
     @After fun realClock() { CardFocus.now = { System.currentTimeMillis() } }
 
     @Before fun start() {
-        CardFocus.now = { wall }
+        // Keep the row's request alive while the reader loads and lays out the card.
+        CardFocus.now = { 1_000_000L }
         ProjectShell.reset()
         ProjectShell.waitingEvents = buildJsonArray {
             (1..24).forEach { n ->
@@ -88,7 +86,7 @@ class ProjectRowWaitingShellTest {
         compose.onNode(hasTestTag("project-row-line") and hasText("Waiting for your confirmation · Quota retry"), useUnmergedTree = true).assertExists()
         val before = ProjectShell.calls.size
         compose.onNodeWithTag(row).performClick()
-        await { ProjectShell.calls.drop(before).any { it == "GET sessions/${ProjectShell.WAITING}" } && exists(hasContentDescription("Project sessions")) }
+        await { exists(hasContentDescription("Project sessions")) && ProjectShell.calls.drop(before).any { it == "GET sessions/${ProjectShell.WAITING}" } }
         assertFalse("the coordinator is not opened: ${ProjectShell.calls.drop(before)}",
             ProjectShell.calls.drop(before).any { it == "GET sessions/${ProjectShell.COORD}" })
         compose.onNodeWithContentDescription("Back").performClick()
@@ -113,7 +111,7 @@ class ProjectRowWaitingShellTest {
         compose.onAllNodes(hasTestTag("project-row-line") and hasText("Quota retry", substring = true), useUnmergedTree = true).assertCountEquals(0)
         val before = ProjectShell.calls.size
         compose.onNodeWithTag(row).performClick()
-        await { ProjectShell.calls.drop(before).any { it == "GET sessions/${ProjectShell.COORD}" } && exists(hasContentDescription("Project sessions")) }
+        await { exists(hasContentDescription("Project sessions")) && ProjectShell.calls.drop(before).any { it == "GET sessions/${ProjectShell.COORD}" } }
         assertFalse(ProjectShell.calls.drop(before).any { it == "GET sessions/${ProjectShell.WAITING}" })
         compose.onNodeWithContentDescription("Back").performClick()
         await { exists(hasTestTag(row)) }
@@ -134,10 +132,13 @@ class ProjectRowWaitingShellTest {
         signIn(); openList()
         compose.onNodeWithTag(row).performClick()
         await { shows(headLine) || shows(footLine) }
-        // The read lands off the main thread, in real time: the card is measured once the open has brought it in and laid it out.
+        // The focus request is spent after bring-into-view. Its children can still have empty bounds until layout.
         await { read() && CardFocus.pending(ProjectShell.WAITING) == null && CardFocus.held(ProjectShell.WAITING)?.key == "approval:a-quota" }
         settle()
-        await { !bounds(compose.onNodeWithText("Run a command?", useUnmergedTree = true)).isEmpty }
+        await {
+            laidOut(hasTestTag("approval:a-quota")) && laidOut(hasText("Run a command?")) &&
+                laidOut(hasText("From Orbit")) && commandHead().singleOrNull()?.isEmpty == false
+        }
         shot(name)
         val list = bounds(compose.onNodeWithTag("transcript-list"))
         val head = commandHead().single()
@@ -194,6 +195,8 @@ class ProjectRowWaitingShellTest {
     } == true
     private fun settle() { repeat(5) { compose.mainClock.advanceTimeBy(500); compose.waitForIdle() } }
     private fun bounds(node: SemanticsNodeInteraction): Rect = node.fetchSemanticsNode().boundsInRoot
+    private fun laidOut(matcher: SemanticsMatcher) =
+        compose.onAllNodes(matcher, useUnmergedTree = true).fetchSemanticsNodes().singleOrNull()?.boundsInRoot?.isEmpty == false
     private fun shows(text: String) = compose.onAllNodesWithText(text, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun exists(matcher: SemanticsMatcher) = compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
     private fun openList() = await { exists(hasTestTag(row)) }
