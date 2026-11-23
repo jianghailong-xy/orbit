@@ -1,6 +1,7 @@
 import { Prisma, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { INTEGRATION_CLAIM_STALE_MS } from '@orbit/shared';
+import { RELEASE_WORK_SELECT, releaseFinishedTheWork } from '../common/session-release';
 import { notifyRunnerWakeOnCommit } from '../realtime/runner-wake';
 import { LANDING_SESSION_CANDIDATES, LANDING_WORK_SESSION_SELECT, landingWorkSession } from './landing-source-branch';
 import {
@@ -959,7 +960,8 @@ export function skippedMergeCheck(job: {
 export interface LandingRetryRequest {
   /** The failed generation this one runs again. */
   ofJobId: string;
-  failureClass: RetryableLandingFailureClass;
+  /** CONFLICT only for the generation a task's own work session fixed (§12.5 W7; 1444 admits it, ruling R1). */
+  failureClass: LandingRetryFailureClass;
   reason: string;
   /** Exactly one requester is recorded by migration 0380. */
   requestedBySessionId?: string;
@@ -1102,7 +1104,8 @@ export async function queueBaselineHeld(
 
 /**
  * Queue the next generation of a task's landing because its coordinator asked for it (§2.3 J-T1b) —
- * the explicit retry door for a stopped landing (J5); K5 queues baseline-held work in its result transaction.
+ * the explicit retry door for a stopped landing (J5) — or because the task's own work session fixed
+ * it (§12.5 W7, `landAgainAfterLandingFix`); K5 queues baseline-held work in its result transaction.
  *
  * The branch is the one a DONE written now would hand the line (`landingWorkSession`), not the one
  * the failed generation was handed: a task that was run again after its landing failed has its work
@@ -1246,6 +1249,115 @@ export async function landingFixWorkSession(
   });
   if (rounds >= LANDING_FIX_ROUNDS) return null;
   return input.sessionId;
+}
+
+/** W7's `retry_reason` (§12.4): the generation a task's own work session fixed, which it is the requester of. */
+export const LANDING_FIX_RETRY_REASON = "Fixed by the task's own session";
+
+/**
+ * W7 (§12.5, ruling R2; W-T2): the finish of a work session that holds its task's failed landing — the item W5 handed
+ * it, which W6's landing-fix turn revived it for — decides that landing, and the ordinary route does not run: both
+ * reach `queueLandTask`'s per-generation key, and the first insert wins.
+ *
+ * Called by `settleDeliveredIdentity` in the transaction that wrote the finish, after it froze the identity from the
+ * branch as it now stands (§10.5 O-L4, no exception: W6 cleared the old one with the turn). `deliveredSha` is the
+ * commit it froze, or null when the settled work names none.
+ *
+ *   * Not this edge, but the hand-backs of task 350mtSNTuKUVNMbsj7Srd: a release that did not finish the work — a
+ *     failed turn, a session somebody ended — is TURN_FAILED or SESSION_ENDED, and work that settled on the commit the
+ *     failed job was handed is NO_NEW_COMMIT. Nothing is queued, and the item stays in the session's hands.
+ *   * Any other commit lands again: the next generation, with the work session as requester and the failed
+ *     generation's class copied (CONFLICT too, R1) — a LAND_TASK through `queueLandingRetry`, or on a MAIN line the
+ *     check of a new candidate (`recheckFixedCandidate`), which the item is then about. The item is marked H1 by its
+ *     id, and that generation's result closes it: H2 when it lands or its check is READY (W-T3), H3 when it fails
+ *     again (W-T4).
+ *
+ * False when the session holds no such item: the ordinary route decides.
+ */
+async function landAgainAfterLandingFix(
+  tx: Prisma.TransactionClient,
+  input: { ownerId: string; projectId: string; taskId: string; sessionId: string | null; deliveredSha: string | null },
+): Promise<boolean> {
+  if (!input.sessionId) return false;
+  // By the project's OPEN items, as `project_open_item_project_state_idx` reads them: a MAIN line's item names no task.
+  const [held] = await tx.projectOpenItem.findMany({
+    where: {
+      projectId: input.projectId, state: 'OPEN', workSessionId: input.sessionId,
+      workSessionOfferedAt: { not: null }, workSessionReturnedAt: null,
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: 1,
+    select: { id: true, integrationJobId: true },
+  });
+  if (!held?.integrationJobId) return false;
+  const finished = await tx.session.findUniqueOrThrow({
+    where: { id: input.sessionId },
+    select: RELEASE_WORK_SELECT,
+  });
+  // TURN_FAILED or SESSION_ENDED, and below NO_NEW_COMMIT: the hand-backs, not this edge.
+  if (!releaseFinishedTheWork(finished)) return true;
+  const failed = await tx.projectIntegrationJob.findUniqueOrThrow({
+    where: { id: held.integrationJobId },
+    select: { id: true, kind: true, state: true, checks: true, baselineRed: true, sourceSha: true, promotionId: true },
+  });
+  if (input.deliveredSha !== null && input.deliveredSha === failed.sourceSha) return true;
+
+  const retry: LandingRetryRequest = {
+    ofJobId: failed.id,
+    // W4 hands off only a CONFLICT or a CHECK_FAILED.
+    failureClass: landingFailureClass(failed)!,
+    reason: LANDING_FIX_RETRY_REASON,
+    requestedBySessionId: input.sessionId,
+  };
+  const handling = { sessionId: input.sessionId, reason: LANDING_FIX_RETRY_REASON };
+  if (failed.kind === 'LAND_TASK') {
+    const queued = await queueLandingRetry(tx, {
+      ownerId: input.ownerId, projectId: input.projectId, taskId: input.taskId, retry,
+    });
+    if (queued) await markOpenItemsHandling(tx, [held.id], { ...handling, jobId: queued.jobId });
+    return true;
+  }
+  const candidate = await recheckFixedCandidate(tx, { ...input, promotionId: failed.promotionId, retry });
+  if (candidate) {
+    // The candidate the item now waits on: `openItemOwed` keeps it owed while that one is live, where the retired one
+    // would have the escalation backstop close it before the check answers.
+    await tx.projectOpenItem.update({ where: { id: held.id }, data: { promotionId: candidate.promotionId } });
+    await markOpenItemsHandling(tx, [held.id], { ...handling, jobId: candidate.jobId });
+  }
+  return true;
+}
+
+/**
+ * W7 on a MAIN line: the delivered commit does not move the candidate that failed (M-T6 is a new candidate's), and the
+ * candidates' index holds one live candidate per branch, so that one is superseded first — M-T6, which leaves the
+ * handed-off item OPEN — and a candidate named by the delivered commit (O-L5) is checked again, its CHECK_PROMOTION
+ * carrying the retry columns (0368 admits them on a check). Null when nothing was queued.
+ */
+async function recheckFixedCandidate(
+  tx: Prisma.TransactionClient,
+  input: { ownerId: string; projectId: string; taskId: string; promotionId: string | null; retry: LandingRetryRequest },
+): Promise<{ promotionId: string; jobId: string } | null> {
+  const { work } = await doneTaskLandingWork(tx, input.ownerId, input.taskId);
+  const codebase = await tx.projectCodebase.findFirst({
+    where: { projectId: input.projectId, slot: 'primary' },
+    select: { id: true, canonicalRepoUrl: true, integrationRef: true, upstreamRef: true },
+  });
+  if (!work || !codebase || codebase.integrationRef !== codebase.upstreamRef) return null;
+  const failed = input.promotionId
+    ? await tx.projectPromotion.findUnique({ where: { id: input.promotionId }, select: { sourceRef: true } })
+    : null;
+  // project-promotion.service imports this module, so it is loaded when the edge runs, as the completion router does.
+  const { supersedeLiveCandidates } = await import('./project-promotion.service.js');
+  await supersedeLiveCandidates(tx, input.projectId, failed?.sourceRef ?? `refs/heads/${work.branch}`);
+  return queueTaskBranchCandidate(tx, {
+    ownerId: input.ownerId,
+    projectId: input.projectId,
+    taskId: input.taskId,
+    codebase,
+    session: { id: work.id, branch: work.branch, runnerId: work.assignedRunnerId },
+    cause: 'RETRY',
+    retry: input.retry,
+  });
 }
 
 /**
@@ -1575,7 +1687,13 @@ export async function settleDeliveredIdentity(
       // §12.15 P-M1: a DONE written while this work still moved queued nothing and started no line
       // (`queueForDoneTask` answered WORK_MOVING), so the route it owes is decided here, on the
       // identity just frozen — nothing for a branch with no commit of its own, today's route else.
-      if (input.after === 'WORK_FINISHED') await queueForDoneTask(tx, ownerId, taskId, await finishSource());
+      // §12.5 W7: unless the session that finished holds its task's failed landing, which decides it.
+      if (input.after === 'WORK_FINISHED' && !(await landAgainAfterLandingFix(tx, {
+        ownerId, projectId: reading.projectId, taskId,
+        sessionId: input.finishedSessionId ?? null, deliveredSha: reading.identity.sha,
+      }))) {
+        await queueForDoneTask(tx, ownerId, taskId, await finishSource());
+      }
       await deliveredIdentityFrozen(tx, { ownerId, projectId: reading.projectId, taskId });
     }
     return 'FROZEN';
@@ -1585,7 +1703,11 @@ export async function settleDeliveredIdentity(
   // session), which the DONE transaction holds when it queues and the generation counter is read under.
   if (input.after === 'WORK_FINISHED') {
     await tx.$queryRaw(Prisma.sql`SELECT 1 FROM "task" WHERE "id" = ${taskId}::uuid FOR NO KEY UPDATE`);
-    await queueForDoneTask(tx, ownerId, taskId, await finishSource());
+    if (!(await landAgainAfterLandingFix(tx, {
+      ownerId, projectId: reading.projectId, taskId, sessionId: input.finishedSessionId ?? null, deliveredSha: null,
+    }))) {
+      await queueForDoneTask(tx, ownerId, taskId, await finishSource());
+    }
   }
   const binding = await tx.projectCodebase.findFirst({
     where: { projectId: reading.projectId, slot: 'primary' },
@@ -1619,11 +1741,11 @@ export async function settleDeliveredIdentity(
  */
 export async function settleDeliveredIdentityAfterFinish(
   tx: Prisma.TransactionClient,
-  session: { id?: string; ownerId: string; taskId: string | null; startsTaskWork: boolean } | null,
+  session: { id: string; ownerId: string; taskId: string | null; startsTaskWork: boolean } | null,
 ): Promise<DeliveredIdentitySettlement | null> {
   if (!session?.taskId || !session.startsTaskWork) return null;
   return settleDeliveredIdentity(tx, {
-    ownerId: session.ownerId, taskId: session.taskId, after: 'WORK_FINISHED', finishedSessionId: session.id ?? null,
+    ownerId: session.ownerId, taskId: session.taskId, after: 'WORK_FINISHED', finishedSessionId: session.id,
   });
 }
 
@@ -2056,7 +2178,11 @@ async function emptyBranchRoute(
   return 'WORK_ELSEWHERE';
 }
 
-/** Mark the OPEN integration cards for an earlier LAND_TASK generation as H1 handling. */
+/**
+ * Mark the OPEN integration cards for an earlier LAND_TASK generation as H1 handling. Not one still in its task's own
+ * work session's hands: W7 marks that one by its id, at that session's finish (`landAgainAfterLandingFix`), so the two
+ * never mark the same item.
+ */
 async function markEarlierLandingItemsHandling(
   tx: Prisma.TransactionClient,
   input: { taskId: string; jobId: string; source: DoneTaskSource },
@@ -2076,6 +2202,7 @@ async function markEarlierLandingItemsHandling(
        AND item."state" = 'OPEN'
        AND item."kind" IN (${Prisma.join(INTEGRATION_ITEM_KINDS.map((kind) => Prisma.sql`${kind}`))})
        AND item."assignee" = ${'userId' in input.source ? 'OWNER' : 'COORDINATOR'}
+       AND NOT (item."work_session_offered_at" IS NOT NULL AND item."work_session_returned_at" IS NULL)
        AND failed."kind" = 'LAND_TASK'
        AND failed."task_id" = ${input.taskId}::uuid
        AND failed."generation" < ${job.generation}
@@ -2464,6 +2591,8 @@ export async function queueTaskBranchCandidate(
     session: { id: string; branch: string; runnerId: string | null };
     /** Which door offered it, for the enqueue event's sentence. */
     cause?: EnqueueCause;
+    /** Set only for the candidate a task's own work session fixed (§12.5 W7): its check reruns the one that failed. */
+    retry?: LandingRetryRequest;
   },
 ): Promise<{ promotionId: string; jobId: string } | null> {
   const promotionId = randomUUID();
@@ -2508,6 +2637,7 @@ export async function queueTaskBranchCandidate(
       sessionId: input.session.id,
     },
     canonicalRepoUrl: input.codebase.canonicalRepoUrl,
+    retry: input.retry,
     cause: input.cause,
   });
   await tx.projectPromotion.update({ where: { id: promotionId }, data: { checkJobId: jobId } });
@@ -2623,7 +2753,8 @@ export async function queuePromotionJob(
     promotion: PromotionJobSubject;
     canonicalRepoUrl: string;
     confirmedAutomatically?: boolean;
-    /** Set only for the check a coordinator asked to run again (§4.7 H1, migration 0368). */
+    /** Set only for the check a coordinator asked to run again (§4.7 H1, migration 0368), or the one a task's own
+     *  work session's fix asks for (§12.5 W7). */
     retry?: LandingRetryRequest;
     /** Which door queued it, for the enqueue event's sentence (`enqueuedText`). */
     cause?: EnqueueCause;

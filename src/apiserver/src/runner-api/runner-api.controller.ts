@@ -8331,7 +8331,7 @@ export class RunnerApiController {
         // The park above wrote this session's finish, which may be the one a DONE task's identity was
         // waiting for (§10.5 O-L4 3). An item it opens is delivered after the commit with this
         // turn's own exception items.
-        const settled = await settleDeliveredIdentityAfterFinish(tx, current);
+        const settled = await settleDeliveredIdentityAfterFinish(tx, { ...current, id: sessionId });
         settledWork = settled === 'FROZEN' || settled === 'IDENTITY_UNKNOWN';
       }
       // NO_REPLY (contract §4.1): the turn has settled, the session is idle and its run goes on. Each
