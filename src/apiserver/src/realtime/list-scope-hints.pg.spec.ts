@@ -456,6 +456,8 @@ test('soundness: whenever a tick sends no hint naming W, a since= read of W\'s c
     ['a session completed or reopened', async () => {
       const id = any();
       const completing = live.includes(id);
+      // Keep both kinds on hand for the writes that pick one: at least three Open sessions and two closed ones.
+      if (completing ? live.length <= 3 : closed.length <= 2) return;
       await db.session.update({ where: { id }, data: { completedAt: completing ? new Date() : null } });
       if (completing) live.splice(live.indexOf(id), 1), closed.push(id);
       else closed.splice(closed.indexOf(id), 1), live.push(id);
