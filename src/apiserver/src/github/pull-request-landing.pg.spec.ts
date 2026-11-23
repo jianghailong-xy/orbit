@@ -48,7 +48,7 @@ import {
 } from '@orbit/shared';
 import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
-import { encryptSecret } from '../providers/provider-crypto';
+import { decryptSecret, encryptSecret } from '../providers/provider-crypto';
 import { TasksService } from '../tasks/tasks.service';
 import {
   IntegrationJobRefused,
@@ -1210,7 +1210,6 @@ test('(15) §16 Q1: the owner\'s token is retired once the push reports back, an
     const connection = () => h.prisma.githubConnection.findUniqueOrThrow({ where: { ownerId } });
     return { ownerId, command, door, logged, ask, land, connection };
   }
-  const { decryptSecret } = await import('../providers/provider-crypto');
   const calls = () => h.github.tokenCalls.splice(0);
 
   // Accepted: refreshed, then the handed token revoked by name, in that order; the connection lives on, rotated.
