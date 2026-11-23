@@ -147,7 +147,7 @@ test('the documents scope opens /documents/* and its /drive/* alias to a token, 
     for (const prefix of ['/documents', '/drive']) {
       const read = await api('GET', `${prefix}/entries`, storedOld);
       assert.equal(read.status, 200, `${label}: GET ${prefix}/entries ${read.text}`);
-      const write = await api('POST', `${prefix}/folders`, storedOld, { name: `${label} ${prefix} ${RUN}` });
+      const write = await api('POST', `${prefix}/folders`, storedOld, { name: `${label} ${prefix.slice(1)} ${RUN}` });
       assert.equal(write.status, 201, `${label}: POST ${prefix}/folders ${write.text}`);
     }
   };
