@@ -1192,9 +1192,7 @@ const HANDED_OFF_FAILURE_CLASSES: ReadonlySet<LandingFailureClass> = new Set(['C
  * CHECK_FAILED, or the same two on a MAIN line's TASK_BRANCH candidate check or landing; a
  * PROJECT_BRANCH promotion has no task and so no task's session. The session is the one the job was
  * queued from (`job.session_id`, the delivered branch's), and all four of W4's conditions hold:
- *  1. it is a CONVERSATION that starts task work, not in Trash, with no cancel requested — but the end its
- *     task's DONE asks for (`claimParkedSessionEnd`, `task_done`), which every session that ended with its
- *     DONE still carries, and which condition 2 admits;
+ *  1. it is a CONVERSATION that starts task work, not in Trash, with no cancel requested;
  *  2. it is still open, or it ended because its task was done (`task_done`) — a session a person ended
  *     is not revived;
  *  3. the task is still DONE and this session is still its newest work session;
@@ -1229,7 +1227,7 @@ export async function landingFixWorkSession(
     },
   });
   if (!session || session.sessionKind !== 'CONVERSATION' || !session.startsTaskWork
-    || session.deletedAt !== null || (session.cancelRequestedAt !== null && session.endReason !== 'task_done')
+    || session.deletedAt !== null || session.cancelRequestedAt !== null
     || session.taskId !== input.taskId) return null;
   if (session.finishedAt !== null && session.endReason !== 'task_done') return null;
 
