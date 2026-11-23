@@ -104,7 +104,7 @@ sealed interface PickedFolder {
 
     data class Existing(override val path: String, val note: String) : PickedFolder
     data class New(val name: String, override val path: String) : PickedFolder
-    /** A clone of one of the person's GitHub repositories into `<reposRoot>/<name>` (docs/github-workspace-design.md §5.3). */
+    /** A clone of one of the person's GitHub repositories into `<cloneRoot>/<name>` (cloneRootFor, docs/github-workspace-design.md §5.3). */
     data class Github(val pick: GithubPick) : PickedFolder {
         override val path: String get() = pick.path
     }
@@ -154,6 +154,8 @@ object MachineSetup {
     const val CREATE_WORKDIR_CAPABILITY = "create-workdir/v1"
     /** What a runner declares when it clones a GitHub repository on request (docs/github-workspace-design.md §6). */
     const val CLONE_WORKDIR_CAPABILITY = "clone-workdir/v1"
+    /** A runner that clones into its home, the directory its reposRoot sits in, rather than into reposRoot. */
+    const val CLONE_WORKDIR_HOME_CAPABILITY = "clone-workdir/v2"
 
     /** A runner that makes a new folder in its home, the directory its reposRoot (`<home>/orbit-repos`) sits in. */
     const val CREATE_WORKDIR_HOME_CAPABILITY = "create-workdir/v2"
@@ -170,8 +172,20 @@ object MachineSetup {
      * Whether a machine clones a GitHub repository on request: it declares clone-workdir/v1 and has reported the Repos Folder the clone
      * goes in. POST /sessions refuses either missing.
      */
-    fun clonesRepositories(runner: JsonObject): Boolean =
-        CLONE_WORKDIR_CAPABILITY in runner.strings("capabilities") && !runner.text("reposRoot")?.trim().isNullOrEmpty()
+    fun clonesRepositories(runner: JsonObject): Boolean = cloneRootOf(runner) != null
+
+    /**
+     * Where a GitHub workspace's clone goes, as the server puts it: port of @orbit/shared `cloneRootFor`, held to
+     * src/shared/src/new-folder-root.fixture.json `clones`. Home on a runner that declares clone-workdir/v2, reposRoot on an older one,
+     * null on one that does not clone or has not reported its reposRoot.
+     */
+    fun cloneRootFor(reposRoot: String?, capabilities: List<String>?): String? {
+        val root = reposRoot?.trim().orEmpty()
+        if (root.isEmpty() || capabilities?.contains(CLONE_WORKDIR_CAPABILITY) != true) return null
+        return if (CLONE_WORKDIR_HOME_CAPABILITY in capabilities) homeOfReposRoot(root) else trimReposRoot(root)
+    }
+
+    fun cloneRootOf(runner: JsonObject): String? = cloneRootFor(runner.text("reposRoot"), runner.strings("capabilities"))
 
     private val homePrefix = Regex("""^(?:/Users/[^/]+|/home/[^/]+|/root)(?=/|$)""")
 
@@ -204,10 +218,18 @@ object MachineSetup {
      * The directory a runner's new folders go in: its home, the parent of its reposRoot, when it declares create-workdir/v2, else
      * reposRoot itself. The separator is the one the root is written with. Port of @orbit/shared `newFolderRoot`.
      */
-    fun newFolderRoot(reposRoot: String, capabilities: List<String>?): String {
+    fun newFolderRoot(reposRoot: String, capabilities: List<String>?): String =
+        if (capabilities?.contains(CREATE_WORKDIR_HOME_CAPABILITY) == true) homeOfReposRoot(reposRoot) else trimReposRoot(reposRoot)
+
+    private fun trimReposRoot(reposRoot: String): String {
         var root = reposRoot.trim()
         while (root.length > 1 && (root.endsWith("/") || root.endsWith("\\"))) root = root.dropLast(1)
-        if (capabilities?.contains(CREATE_WORKDIR_HOME_CAPABILITY) != true) return root
+        return root
+    }
+
+    /** The directory a reported reposRoot sits in: the machine's home (`<home>/orbit-repos`). */
+    private fun homeOfReposRoot(reposRoot: String): String {
+        val root = trimReposRoot(reposRoot)
         val cut = maxOf(root.lastIndexOf('/'), root.lastIndexOf('\\'))
         if (cut < 0) return root
         // `/orbit-repos` sits in `/`, and `C:\orbit-repos` in `C:\`.
