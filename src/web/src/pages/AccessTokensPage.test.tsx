@@ -358,12 +358,16 @@ describe('Settings → Access tokens', { timeout: 60_000 }, () => {
     for (const resource of ['Tasks', 'Projects', 'Sessions', 'Workspaces', 'Runners', 'Wiki', 'Events']) {
       expect(isChecked(box(resource, 'Read')), resource).toBe(true);
     }
-    expect(form.querySelectorAll('.access-token-scope-row')).toHaveLength(7);
+    // Files is its own row, one grant for reading and changing the drive, and not part of read-only.
+    expect(form.querySelectorAll('.access-token-scope-row')).toHaveLength(8);
+    expect(row('Files')).toBeTruthy();
+    expect(isChecked(choice(row('Files'), 'checkbox', 'Read & write')!)).toBe(false);
     expect(isChecked(box('Tasks', 'Write'))).toBe(false);
 
     // Untick every read but the wiki's, then write the wiki, then untick the projects' read again.
     for (const resource of ['Tasks', 'Projects', 'Sessions', 'Workspaces', 'Runners', 'Events']) await click(box(resource, 'Read'), resource);
     await click(box('Wiki', 'Write'), 'Wiki write');
+    await click(choice(row('Files'), 'checkbox', 'Read & write'), 'Files');
     // Writing sessions brings reading them along.
     await click(box('Sessions', 'Write'), 'Sessions write');
     expect(isChecked(box('Sessions', 'Read'))).toBe(true);
@@ -375,7 +379,7 @@ describe('Settings → Access tokens', { timeout: 60_000 }, () => {
     await vi.waitFor(() => expect(issueAccessToken).toHaveBeenCalledTimes(1));
     expect(issueAccessToken).toHaveBeenCalledWith({
       name: 'Wiki bot',
-      scopes: ['wiki:read', 'wiki:write'],
+      scopes: ['wiki:read', 'wiki:write', 'files'],
       workspaceIds: [],
       expiresInDays: 90,
     });

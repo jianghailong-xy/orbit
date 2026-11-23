@@ -204,8 +204,8 @@ describe('a runner with two Claude accounts', () => {
     const page = mount([runner({ accounts: [DEFAULT, WORK] })]);
     const workRow = rows(page, '.re-acct')[1];
     await click(button(workRow, 'Sign in'));
-    await click(button(page, 'Sign in to Claude Code'));
-    expect(loginPosts()).toEqual([{ engine: 'claude', account: WORK.id }]);
+    // The row's press starts it: there is no second button to press.
+    await vi.waitFor(() => expect(loginPosts()).toEqual([{ engine: 'claude', account: WORK.id }]));
   });
 
   it('removes an added account on its own route once asked', async () => {

@@ -369,6 +369,23 @@ export const SCHEDULE_COPY = {
     minutes: '{minutes} min',
     noEnd: 'no end',
   },
+  /** A schedule's change conversation (§8.2, board 03-change): Orbit's opening, its strip, its input. */
+  changeConversation: {
+    title: 'Change {title}',
+    lead: 'What should change about {title}? This is what it does now:',
+    does: 'Does',
+    when: 'When',
+    runsIn: 'Runs in',
+    may: 'May',
+    costs: 'Costs',
+    tail:
+      'I can change the time, the days, what it checks and how it reports right away, and you can undo it. More runs, '
+      + 'longer runs, more access or another workspace need your Allow.',
+    placeholder: 'Say what to change…',
+    openSchedule: 'Open',
+    openInScheduled: 'Open in Scheduled',
+    conversation: 'conversation',
+  },
   record: {
     changed: 'Changed {title}: {change}',
     ended: 'Ended {title}: {reason} · {by}',
@@ -719,8 +736,53 @@ export interface ScheduleChangeRecord {
   after: Record<string, unknown>;
   undoOfRevision: number | null;
   undoneByRevision: number | null;
+  /** The person's words that asked for it, when it came from the schedule's change conversation (§8.2). */
+  askedText: string | null;
   createdAt: string;
   undo: ScheduleUndoDoor | null;
+}
+
+/**
+ * Orbit's opening of a change conversation (§8.2): the schedule as it was when the conversation was opened, drawn
+ * by every client from `SCHEDULE_COPY.changeConversation`. Kept on the session, so it still reads as the start of
+ * the conversation after the schedule has changed.
+ */
+export interface ScheduleChangeOpening {
+  scheduleId: string;
+  title: string;
+  revision: number;
+  /** The read-back ("What it does"). */
+  does: string;
+  /** "Every day at 09:00 · Asia/Shanghai". */
+  when: string;
+  /** "apiserver · Codex agent". */
+  runsIn: string;
+  /** "Open a PR · edits in its own worktree and opens a PR; can't merge or deploy". */
+  may: string;
+  /** "Up to 7 runs a week, 30 min each". */
+  costs: string;
+}
+
+/**
+ * `GET /api/schedules/:id/change`: the schedule's open change conversation if it has one, and the opening a new one
+ * would start with. `POST /api/schedules/:id/change {text}` opens one with the person's first words and answers
+ * `{ sessionId }`.
+ */
+export interface ScheduleChangeConversationResponse {
+  sessionId: string | null;
+  opening: ScheduleChangeOpening;
+}
+
+/** The opening's rows, in order, as label and text. */
+export function scheduleChangeOpeningRows(opening: ScheduleChangeOpening): Array<{ label: string; text: string }> {
+  const T = C.changeConversation;
+  return [
+    { label: T.does, text: opening.does },
+    { label: T.when, text: opening.when },
+    { label: T.runsIn, text: opening.runsIn },
+    { label: T.may, text: opening.may },
+    { label: T.costs, text: opening.costs },
+  ];
 }
 
 export interface ScheduleCardDecision {
@@ -868,12 +930,61 @@ export interface ScheduleDraftAnswer {
   session: unknown;
 }
 
+/** One try of a run (§7.2): the session it opened, and how far that session got. */
+export interface ScheduleRunTry {
+  sessionId: string;
+  /** When the try's session was opened. */
+  startedAt: string;
+  /** Whether a runner claimed the session (its engine was started, or tried to be). */
+  claimed: boolean;
+  /** Whether the session's first turn reached its engine. */
+  reachedEngine: boolean;
+}
+
+/** The full runner, run or batch a run's current session waits behind (sessions/queued-reason-sql.ts). */
+export interface ScheduleRunQueueGate {
+  queuedReason: 'runner_at_capacity' | 'tree_at_capacity' | 'batch_at_capacity' | (string & {});
+  queuedActive: number | null;
+  queuedLimit: number | null;
+  queuedHeldByJobs: number | null;
+  /** When the session went PENDING: what the wait counts from. */
+  since: string;
+  /** The run's catch-up deadline: past it, the run is MISSED (RUNNER_FULL). */
+  deadline: string;
+}
+
+/**
+ * What a run's session shows of the run it serves beside `run` (board docs/mocks/scheduled-run-not-started ②③④):
+ * its tries, when it gave up, its next try, the schedule's next run, and the queue its session waits in.
+ */
+export interface ScheduleRunSessionStatus {
+  /** Every try the run made, oldest first. */
+  tries: ScheduleRunTry[];
+  /** Which of `tries` this session is, from 1; null when it is none of them. */
+  thisTry: number | null;
+  /** When a run that ended with no try reaching its engine gave up; null otherwise. */
+  gaveUpAt: string | null;
+  /** A QUEUED run's next try. */
+  notBeforeAt: string | null;
+  /** The schedule's next run. */
+  nextDueAt: string | null;
+  /** The gate holding the run's current session while a full runner, run or batch does; null otherwise. */
+  queue: ScheduleRunQueueGate | null;
+}
+
 /** `GET /api/sessions/:id/schedule-cards`. */
 export interface SessionScheduleCardsResponse {
   /** A scheduled run's session (runSource SCHEDULE): the run it serves, however old; null for any other session. */
   run: ScheduleRunView | null;
+  /** Beside `run`: where it stands for this session. Null when `run` is; absent from servers before it. */
+  runStatus?: ScheduleRunSessionStatus | null;
   cards: ScheduleCard[];
   records: ScheduleChangeRecord[];
+  /**
+   * A schedule's change conversation (§8.2): Orbit's opening, as the schedule was when it was opened, for its strip
+   * and its first message. Null on every other session (and on servers before it).
+   */
+  change?: ScheduleChangeOpening | null;
 }
 
 /**
@@ -2030,4 +2141,194 @@ export function scheduleReportedText(
   if (run.key) parts.push(run.key);
   if (opts.notified) parts.push(C.row.notified);
   return parts.join(C.separator);
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// A run's session when the run did not get under way in it (board docs/mocks/scheduled-run-not-started ②③④)
+// ---------------------------------------------------------------------------------------------------------------
+
+/**
+ * The card a run's session shows in place of its report and composer when the run never reached its engine there
+ * (owner's B1): it did not run, it waits on a full runner, or it started on a later try. Not yet in
+ * contracts/schedule.contract.json: OrbitKit and Android take it there when they draw the card.
+ */
+export const SCHEDULE_RUN_STATUS_COPY = {
+  /** The strip of a run that did not start in this session: no start time to name. */
+  strip: 'Scheduled run · planned {planned} · access {access}',
+  didntRun: {
+    title: "Didn't run",
+    /** RUNNER_UNAVAILABLE: the runner was there and did not take it. */
+    notPickedUp: "{runner} didn't pick it up on any of {tries} tries, so the run never started.",
+    notPickedUpOnce: "{runner} didn't pick it up, so the run never started.",
+    /** RUNNER_FULL: it waited in the runner's queue until its window closed. */
+    full: '{runner} was full the whole time, so the run never started.',
+    /** ENGINE_CRASHED_BEFORE_START. */
+    engineFailed: "{runner} couldn't start the engine on any of {tries} tries, so the run never started.",
+    engineFailedOnce: "{runner} couldn't start the engine, so the run never started.",
+    quota: "The engine's usage limit was reached, so the run never started.",
+    cancelled: 'You cancelled the run before it started.',
+    nothingChanged: 'Nothing was changed.',
+    gaveUp: 'gave up {time}',
+    nextRun: 'Next run: {when}',
+  },
+  queued: {
+    /** `Queued · runner full`; the gate's own tag for a full run or batch. */
+    title: 'Queued · {tag}',
+    waited: '{waited} · gives up at {deadline}',
+    givesUp: 'Gives up at {deadline}',
+  },
+  startedOn: {
+    title: 'Started on try {try}',
+    body: 'This try stopped before its engine started ({why}). Try {try} started at {time}.',
+    engineExited: '{engine} exited',
+    notPickedUp: "{runner} didn't pick it up",
+  },
+  actions: {
+    runNow: 'Run now',
+    openSchedule: 'Open schedule',
+    cancelRun: 'Cancel run',
+    openRun: 'Open the run →',
+  },
+} as const;
+
+const RS = SCHEDULE_RUN_STATUS_COPY;
+
+/** Which card a run's session shows, if any: ② `DIDNT_RUN`, ③ `QUEUED_FULL`, ④ `STARTED_ON`. */
+export type ScheduleRunStatusKind = 'DIDNT_RUN' | 'QUEUED_FULL' | 'STARTED_ON';
+
+const GAVE_UP_STATES: readonly ScheduleRunState[] = ['MISSED', 'CANCELLED', 'SKIPPED'];
+
+/**
+ * The card for this session of the run, or null when its run reached its engine here (its report and composer are
+ * the session's own then), or is between tries with nothing to say yet.
+ *
+ *   * ② the run ended with no try reaching its engine: from any of its tries' sessions;
+ *   * ③ the run's current session waits on a full runner, run or batch: from it and from earlier tries;
+ *   * ④ this try did not reach its engine, and the run's current session did.
+ */
+export function scheduleRunStatusKind(
+  run: Pick<ScheduleRunView, 'state' | 'sessionId'>,
+  status: ScheduleRunSessionStatus | null | undefined,
+): ScheduleRunStatusKind | null {
+  if (!status || status.thisTry === null) return null;
+  const mine = status.tries[status.thisTry - 1];
+  if (!mine || mine.reachedEngine) return null;
+  if (status.gaveUpAt && GAVE_UP_STATES.includes(run.state)) return 'DIDNT_RUN';
+  if (status.queue && run.state === 'RUNNING') return 'QUEUED_FULL';
+  const current = run.sessionId ? status.tries.find((t) => t.sessionId === run.sessionId) : undefined;
+  if (current && current.sessionId !== mine.sessionId && current.reachedEngine) return 'STARTED_ON';
+  return null;
+}
+
+/** "Scheduled run · planned 03:32 · access Edit and land on main". */
+export function scheduleRunNotStartedStripText(
+  run: Pick<ScheduleRunView, 'plannedAt'>,
+  accessLevel: ScheduleAccessLevel,
+  timezone: string,
+): string {
+  return scheduleFill(RS.strip, { planned: localParts(new Date(run.plannedAt), timezone).time, access: C.access[accessLevel].label });
+}
+
+/** "tomorrow 06:00", "Monday 06:00", "Nov 24 06:00": a time inside a sentence. */
+function inlineWhenText(at: Date, now: Date, timezone: string): string {
+  return lowerDay(scheduleWhenText(at, now, timezone));
+}
+
+function lowerDay(text: string): string {
+  for (const [day, lower] of [[C.dates.today, C.dates.todayLower], [C.dates.tomorrow, C.dates.tomorrowLower]] as const) {
+    if (text.startsWith(day)) return lower + text.slice(day.length);
+  }
+  return text;
+}
+
+/** ② The reason a run did not run, as one sentence, then "Nothing was changed.". */
+export function scheduleDidntRunReasonText(
+  run: Pick<ScheduleRunView, 'failureReason'>,
+  tries: number,
+  runner: string,
+): string {
+  const n = { runner, tries };
+  let reason: string;
+  switch (run.failureReason) {
+    case 'RUNNER_FULL':
+      reason = scheduleFill(RS.didntRun.full, n);
+      break;
+    case 'CANCELLED_BY_OWNER':
+      reason = RS.didntRun.cancelled;
+      break;
+    case 'QUOTA':
+      reason = RS.didntRun.quota;
+      break;
+    case 'ENGINE_CRASHED_BEFORE_START':
+      reason = scheduleFill(tries > 1 ? RS.didntRun.engineFailed : RS.didntRun.engineFailedOnce, n);
+      break;
+    default:
+      reason = scheduleFill(tries > 1 ? RS.didntRun.notPickedUp : RS.didntRun.notPickedUpOnce, n);
+  }
+  return `${reason} ${RS.didntRun.nothingChanged}`;
+}
+
+/** ② The card's words: its title, reason, each try's time, when it gave up and the next run. */
+export function scheduleDidntRunText(input: {
+  run: Pick<ScheduleRunView, 'failureReason'>;
+  status: Pick<ScheduleRunSessionStatus, 'tries' | 'gaveUpAt' | 'nextDueAt'>;
+  runner: string;
+  now: Date;
+  timezone: string;
+}): { title: string; reason: string; tries: string[]; gaveUp: string | null; next: string | null } {
+  const { status, timezone } = input;
+  return {
+    title: RS.didntRun.title,
+    reason: scheduleDidntRunReasonText(input.run, status.tries.length, input.runner),
+    tries: status.tries.map((t) => localParts(new Date(t.startedAt), timezone).time),
+    gaveUp: status.gaveUpAt
+      ? scheduleFill(RS.didntRun.gaveUp, { time: localParts(new Date(status.gaveUpAt), timezone).time })
+      : null,
+    next: status.nextDueAt
+      ? scheduleFill(RS.didntRun.nextRun, { when: inlineWhenText(new Date(status.nextDueAt), input.now, timezone) })
+      : null,
+  };
+}
+
+/**
+ * ③ The card's title and its foot: "Queued · runner full", "Waiting 1 h 12 min · gives up at 03:32 tomorrow". The
+ * sentence between them is the queued message's own (web queuedCapacity `capacityHeldMessageText`), said of the run.
+ */
+export function scheduleQueuedFullText(input: {
+  tag: string;
+  waited: string | null;
+  deadline: string;
+  now: Date;
+  timezone: string;
+}): { title: string; waited: string } {
+  const at = new Date(input.deadline);
+  const time = localParts(at, input.timezone).time;
+  const day = scheduleDayText(at, input.now, input.timezone);
+  const deadline = day === C.dates.today ? time : `${time} ${lowerDay(day)}`;
+  return {
+    title: scheduleFill(RS.queued.title, { tag: input.tag }),
+    waited: scheduleFill(input.waited ? RS.queued.waited : RS.queued.givesUp, { waited: input.waited ?? '', deadline }),
+  };
+}
+
+/** ④ "Started on try 3", and why this try stopped: "This try stopped before its engine started (Claude Code exited)…". */
+export function scheduleStartedOnText(input: {
+  run: Pick<ScheduleRunView, 'sessionId'>;
+  status: Pick<ScheduleRunSessionStatus, 'tries' | 'thisTry'>;
+  engine: string;
+  runner: string;
+  timezone: string;
+}): { title: string; body: string } | null {
+  const { tries } = input.status;
+  const index = tries.findIndex((t) => t.sessionId === input.run.sessionId);
+  const mine = input.status.thisTry === null ? undefined : tries[input.status.thisTry - 1];
+  if (index < 0 || !mine) return null;
+  const n = index + 1;
+  const why = mine.claimed
+    ? scheduleFill(RS.startedOn.engineExited, { engine: input.engine })
+    : scheduleFill(RS.startedOn.notPickedUp, { runner: input.runner });
+  return {
+    title: scheduleFill(RS.startedOn.title, { try: n }),
+    body: scheduleFill(RS.startedOn.body, { why, try: n, time: localParts(new Date(tries[index]!.startedAt), input.timezone).time }),
+  };
 }

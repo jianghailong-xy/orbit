@@ -80,6 +80,7 @@ Usage:
   orbit watch <command>             Wait on Orbit tasks and sessions without polling
   orbit wiki <command>              Read the Orbit wiki and propose to it
   orbit file <command>              Keep files in Orbit instead of in the repository
+  orbit drive <command>             Work with the owner's Orbit Files drive
   orbit subagent <command>          Rate a SubAgent run this session started
   orbit secret exec NAME -- CMD     Run CMD with a secret the owner delivered to this runner
   orbit notify --message TEXT       Alert this account's devices with a line you write
@@ -240,6 +241,7 @@ running it when the machine is idle. Disable the periodic check with ORBIT_NO_EN
 	"watch":     watchHelp,
 	"wiki":      wikiHelp,
 	"file":      fileHelp,
+	"drive":     driveHelp,
 	"subagent":  subagentHelp,
 	"settings":  settingsHelp,
 	"token":     tokenHelp,
@@ -328,6 +330,7 @@ var leafHelpFamilies = map[string]bool{
 	"watch":     true,
 	"wiki":      true,
 	"file":      true,
+	"drive":     true,
 	"subagent":  true,
 	"settings":  true,
 	"session":   true,
@@ -336,6 +339,8 @@ var leafHelpFamilies = map[string]bool{
 	// same omission, found while checking that provider's was reachable.
 	"agent":  true,
 	"runner": true,
+	// Only routed while the browser switch is on (browser_tools.go); off, `orbit browser --help` is an unknown command.
+	"browser": true,
 }
 
 func ownsLeafHelp(cmd string) bool { return leafHelpFamilies[cmd] }
@@ -361,6 +366,10 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == browserMCPCommand {
 		cmdBrowserMCP()
 		return
+	}
+	// BROWSER's and xdg-open's command for an engine on the Orbit Cloud runner (browser_opener.go).
+	if len(os.Args) > 1 && os.Args[1] == browserOpenerCommand {
+		os.Exit(runBrowserOpener(os.Args[2:], os.Stdout, os.Stderr))
 	}
 	// The credential helper every network git command is given (network_git.go). git runs it, and it
 	// answers git and does nothing else.
@@ -468,6 +477,8 @@ func runOrbitCLI(args []string, in io.Reader, out, errW io.Writer) error {
 		return runCLICommand("orbit wiki", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdWikiCLI(args[1:], in, out) })
 	case "file":
 		return runCLICommand("orbit file", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdFileCLI(args[1:], out) })
+	case "drive":
+		return runCLICommand("orbit drive", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdDriveCLI(args[1:], out) })
 	case "subagent":
 		return runCLICommand("orbit subagent", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdSubagentCLI(args[1:], out) })
 	case "settings":
@@ -518,6 +529,12 @@ func runOrbitCLI(args []string, in io.Reader, out, errW io.Writer) error {
 		cmdHook(args[1:])
 	case "version", "--version", "-v":
 		fmt.Fprintln(out, version)
+	case "browser":
+		// Off means absent (browser_tools.go): with the browser switch off this is an unknown command like any other.
+		if !browserToolsEnabledFromEnv() {
+			return fmt.Errorf("unknown command: %s\n\n%s", cmd, usage)
+		}
+		return runCLICommand("orbit browser", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdBrowserCLI(args[1:], out) })
 	default:
 		return fmt.Errorf("unknown command: %s\n\n%s", cmd, usage)
 	}
@@ -951,6 +968,8 @@ func cmdRun() {
 		fmt.Fprintln(os.Stderr, "managed runner instance:", err)
 		os.Exit(1)
 	}
+	// A runner that receives the Orbit Files drive shows it to its agents as ~/Files (drive_link.go).
+	ensureDriveLink(func(format string, args ...interface{}) { fmt.Fprintf(os.Stderr, format+"\n", args...) })
 	// A managed runner's volume has to survive its node's power loss (volume_durability.go): before
 	// anything runs Git there, it looks at what the last stop left.
 	recoverManagedRepositories()

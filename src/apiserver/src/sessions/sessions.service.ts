@@ -1,6 +1,6 @@
 import { readSessionCoordinatorHandoffs } from '../projects/coordinator-handoff';
 import type { BackgroundJobStopResponse, BackgroundJobTailResponse, HelpAskMarker, SubagentRunView, WorkflowRunView } from '@orbit/shared';
-import { BG_JOB_STOPPED_BY_OWNER, BG_JOB_TAIL_MAX_BYTES, BG_OUTPUT_TAIL_V1, BG_OWNER_STOP_V1 } from '@orbit/shared';
+import { BG_JOB_STOPPED_BY_OWNER, BG_JOB_TAIL_MAX_BYTES, BG_OUTPUT_TAIL_V1, BG_OWNER_STOP_V1, cloneRootFor, newFolderPath } from '@orbit/shared';
 import { RunnerHints } from '../realtime/runner-hints';
 import { boundTailLines } from './background-job-tail';
 import { modelLabels, subagentRunView } from '../runner-api/subagent-run';
@@ -208,15 +208,10 @@ import { orchestrationEnabled } from '../common/orchestration-switch';
 import { isStopping } from '../common/graceful-stop';
 import { normalizePermissionRules } from '../common/permission-rules';
 import { reachesPastOneMcpTool } from './remember-rules';
-import {
-  batchActiveTurns,
-  runnerActiveTurns,
-  runnerBackgroundHeldSessions,
-  treeActiveTurns,
-  treeCeiling,
-} from '../common/session-tree-sql';
+import { runnerActiveTurns, runnerBackgroundHeldSessions } from '../common/session-tree-sql';
 import { queuedRunnerUpdateOf } from '../common/runner-self-update';
-import { queuedReasonSql } from './queued-reason-sql';
+import { queuedGateLateral, queuedRunNowOf } from './queued-gate';
+import { grantRunNow, refuseRunNowForSession } from './run-now';
 import { QueueService } from '../queue/queue.service';
 import { mergeDispatchGate } from '../projects/task-checkpoint.service';
 import {
@@ -270,7 +265,6 @@ import {
   folderNameOf,
   folderOfRepoName,
   freeWorkspaceName,
-  newFolderWorkDir,
   newFolderWorkDirOn,
   readNewWorkspace,
   type NewWorkspaceGithubAsk,
@@ -1386,6 +1380,12 @@ export class SessionsService {
        * session's own INSERT so no claim can see the session before it names its run.
        */
       scheduleRunId?: string;
+      /**
+       * The schedule this session changes, and the opening Orbit drew for it (docs/scheduled-tasks-design.md §8.2).
+       * Internal: set only by its Change… door (schedules/schedule-change-conversation.ts), with
+       * `runSource: SCHEDULE_CHANGE`.
+       */
+      changeSchedule?: { scheduleId: string; opening: unknown };
     },
   ) {
     refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
@@ -1913,6 +1913,12 @@ export class SessionsService {
         dispatchOrigin: opts?.dispatchOrigin ?? SessionDispatchOrigin.USER,
         runSource: opts?.runSource ?? SessionRunSource.MANUAL,
         ...(opts?.scheduleRunId ? { scheduleRunId: opts.scheduleRunId } : {}),
+        ...(opts?.changeSchedule
+          ? {
+            changeScheduleId: opts.changeSchedule.scheduleId,
+            scheduleChangeOpening: opts.changeSchedule.opening as Prisma.InputJsonValue,
+          }
+          : {}),
         startsTaskWork: opts?.startsTaskWork ?? false,
         // A task session must remain discoverable in Open even if an internal caller
         // accidentally asks for the legacy "system" provenance.
@@ -2070,7 +2076,7 @@ export class SessionsService {
     }
     const runner = await this.prisma.runner.findFirst({
       where: { id: ask.runnerId, ownerId },
-      select: { id: true, reposRoot: true, capabilities: true, capabilitiesReportedAt: true, managedRunner: { select: { id: true } } },
+      select: { id: true, reposRoot: true, capabilities: true, capabilitiesReportedAt: true, managedRunner: { select: { id: true } }, status: true, ...RUNNER_BEATS },
     });
     if (!runner) throw new ForbiddenException('runner not found');
     if (ask.workDir !== undefined) {
@@ -2109,9 +2115,10 @@ export class SessionsService {
         message: 'Your GitHub account cannot reach that repository through Orbit\'s GitHub App. Add it to the App on GitHub, or pick another.',
       });
     }
-    const reposRoot = runner.reposRoot?.trim();
-    const clones = !!runner.capabilitiesReportedAt && runner.capabilities.includes(CLONE_WORKDIR_CAPABILITY);
-    if (!clones || !reposRoot) {
+    const capabilities = runner.capabilitiesReportedAt ? runner.capabilities : [];
+    const clones = capabilities.includes(CLONE_WORKDIR_CAPABILITY);
+    const cloneRoot = cloneRootFor({ reposRoot: runner.reposRoot, capabilities });
+    if (cloneRoot === null) {
       throw new ConflictException({
         code: 'CLONE_UNSUPPORTED',
         message: clones
@@ -2126,7 +2133,7 @@ export class SessionsService {
     }
     return {
       runnerId: runner.id,
-      workDir: newFolderWorkDir(reposRoot, folder),
+      workDir: newFolderPath(cloneRoot, folder),
       name: folder,
       autoCreateWorkDir: false,
       clone: {
@@ -3381,7 +3388,7 @@ export class SessionsService {
         // grouping's `includeLanding` (a later task), never here.
         sessionKind: SESSION_KIND_CONVERSATION,
         // A scheduled task's run is reached by id (session_get), not listed (scheduled-tasks-design.md §7.4).
-        runSource: { not: SessionRunSource.SCHEDULE },
+        runSource: { notIn: [SessionRunSource.SCHEDULE, SessionRunSource.SCHEDULE_CHANGE] as SessionRunSource[] },
         ...(filters.status ? { status: filters.status } : {}),
         ...(filters.parentSessionId ? { parentSessionId: filters.parentSessionId } : {}),
         ...runnerScopeWhere(filters.scope),
@@ -3645,7 +3652,7 @@ export class SessionsService {
               LEFT JOIN conversation_turn ct
                 ON ct.id = e.turn_id AND ct.session_id = e.session_id
               WHERE s.owner_id = ${ownerId}::uuid
-                AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
+                AND s.kind = 'CONVERSATION' AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')
                 AND e.type IN ('user', 'assistant')
                 -- Keep the exact indexed expression as the cheap candidate filter. On an ordinary
                 -- delivery it contains the authored user text. A reclaimed continuation can
@@ -3758,7 +3765,7 @@ export class SessionsService {
             SELECT s.id
             FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
-              AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
+              AND s.kind = 'CONVERSATION' AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')
               AND s.id = ${norm.sessionId}::uuid
             UNION
             -- Workspaces and logs commonly shorten a UUID to its first 8–12 hex characters. At this
@@ -3767,7 +3774,7 @@ export class SessionsService {
             SELECT s.id
             FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
-              AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
+              AND s.kind = 'CONVERSATION' AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')
               AND replace(s.id::text, '-', '') LIKE ${
                 norm.sessionIdPrefix ? `${norm.sessionIdPrefix}%` : null
               }
@@ -3780,7 +3787,7 @@ export class SessionsService {
             SELECT s.id
             FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
-              AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
+              AND s.kind = 'CONVERSATION' AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')
               AND ${sessionPredicate}
             UNION
             -- Joined names resolve against their own tiny tables first (~10 workspaces, ~500 tasks),
@@ -3788,14 +3795,14 @@ export class SessionsService {
             -- index instead would mean reindexing every session whenever a workspace is renamed.
             SELECT s.id FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
-              AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
+              AND s.kind = 'CONVERSATION' AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')
               AND s.workspace_id IN (
                 SELECT id FROM workspace WHERE ${matches(stripMarks(Prisma.sql`name`))}
               )
             UNION
             SELECT s.id FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
-              AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
+              AND s.kind = 'CONVERSATION' AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')
               AND s.task_id IN (
                 SELECT id FROM task WHERE ${matches(stripMarks(Prisma.sql`title`))}
               )
@@ -3961,7 +3968,7 @@ export class SessionsService {
           LEFT JOIN workspace a ON a.id = s.workspace_id
           LEFT JOIN task  t ON t.id = s.task_id
           WHERE s.owner_id = ${ownerId}::uuid
-            AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
+            AND s.kind = 'CONVERSATION' AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')
             AND s.deleted_at IS NULL
           ORDER BY s.last_turn_at DESC NULLS LAST, s.created_at DESC
           LIMIT ${take}::int
@@ -4025,7 +4032,7 @@ export class SessionsService {
       // means only that its subject is open. It counts in no workspace tally.
       sessionKind: SESSION_KIND_CONVERSATION,
       // Nor does a scheduled task's run, which is in no list (docs/scheduled-tasks-design.md §7.4).
-      runSource: { not: SessionRunSource.SCHEDULE },
+      runSource: { notIn: [SessionRunSource.SCHEDULE, SessionRunSource.SCHEDULE_CHANGE] as SessionRunSource[] },
     } as const;
     const [active, running, jobs, blocked, jobCards] = await Promise.all([
       this.prisma.session.groupBy({
@@ -4317,11 +4324,26 @@ export class SessionsService {
       // A scheduled task's run is listed only in its workspace's Scheduled runs folder (`scheduled`), never among
       // a workspace's own sessions (docs/scheduled-tasks-design.md §7.4): every other view, folder and project read,
       // and the delta that reads this, leave it out. `listRowsByIds` names its sessions: a link card to a run is by id.
+      // A schedule's change conversation (§8.2) is in no list at all: it is reached from its schedule.
       visibility: view === 'system'
         ? visibility
         : filters.scheduled
-          ? Prisma.sql`(${visibility}) AND s.run_source = 'SCHEDULE'`
-          : Prisma.sql`(${visibility}) AND s.run_source <> 'SCHEDULE'`,
+          // Not a try that ended before its first turn reached the engine (board scheduled-run-not-started, owner's
+          // C1): it did nothing to read, and the run it tried for is reached from the schedule's history and from
+          // the card on the session that started it. A try still waiting for a slot is listed.
+          ? Prisma.sql`(${visibility}) AND s.run_source = 'SCHEDULE'
+              AND NOT (
+                s.finished_at IS NOT NULL
+                AND s.num_turns = 0
+                AND NOT EXISTS (
+                  SELECT 1 FROM conversation_turn ct
+                   WHERE ct.session_id = s.id
+                     -- openingTurnKey(s.id): the run's first turn.
+                     AND ct.client_turn_id = 'initial-' || s.id::text
+                     AND ct.delivered_at IS NOT NULL
+                )
+              )`
+          : Prisma.sql`(${visibility}) AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')`,
       orderBy,
       pageLimit,
     } };
@@ -4845,6 +4867,7 @@ export class SessionsService {
       providerBuiltin: boolean;
       model: string | null;
       permissionMode: string | null;
+      codexSandboxUnavailable: boolean;
       effort: string | null;
       fastMode: boolean;
       /** SCHEDULE marks a scheduled run's session, which only a workspace's Scheduled runs folder lists. */
@@ -4909,6 +4932,15 @@ export class SessionsService {
       queuedActive: number | null;
       queuedLimit: number | null;
       queuedHeldByJobs: number | bigint | null;
+      queuedRunnerActive: number | bigint | null;
+      queuedRunnerHeld: number | bigint | null;
+      queuedRunnerLimit: number | null;
+      queuedRunnerBurst: number | null;
+      queuedRunnerOverflow: boolean | null;
+      queuedPassPending: boolean | null;
+      runnerLabel: string | null;
+      overLimitActive: number | bigint | null;
+      overLimitLimit: number | null;
       queuedRunnerSelfUpdate: Prisma.JsonValue;
       queuedRunnerTurns: Array<{ id: string; title: string | null }> | null;
       queuedSince: Date | null;
@@ -4960,6 +4992,7 @@ export class SessionsService {
         s.source, s.engine, s.provider, s.model,
         s.provider_builtin AS "providerBuiltin",
         s.permission_mode AS "permissionMode",
+        s.codex_sandbox_unavailable AS "codexSandboxUnavailable",
         s.effort,
         s.fast_mode       AS "fastMode",
         s.run_source      AS "runSource",
@@ -5111,6 +5144,22 @@ export class SessionsService {
         q.active  AS "queuedActive",
         q."limit" AS "queuedLimit",
         q.held    AS "queuedHeldByJobs",
+        -- Run now (docs/mocks/queued-run-now): what the runner's counts, burst and capability say about starting
+        -- this queued message over the limit (runNowOf), and the name its sentences use.
+        q."runnerActive" AS "queuedRunnerActive",
+        q."runnerHeld"   AS "queuedRunnerHeld",
+        q."runnerLimit"  AS "queuedRunnerLimit",
+        q."runnerBurst"  AS "queuedRunnerBurst",
+        q."runnerOverflow" AS "queuedRunnerOverflow",
+        q."passPending"  AS "queuedPassPending",
+        COALESCE(NULLIF(btrim(r.display_name), ''), r.name) AS "runnerLabel",
+        -- A turn running over the limit (an overflow claim keeps the pass; an ordinary claim clears it): the
+        -- runner's count against its limit, for "over limit · 17/16". Only such a row pays for the counts.
+        CASE WHEN s.status = 'RUNNING' AND s.over_capacity_turn_id IS NOT NULL THEN
+          ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)}
+            + ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`)}
+        END AS "overLimitActive",
+        CASE WHEN s.status = 'RUNNING' AND s.over_capacity_turn_id IS NOT NULL THEN r.max_concurrent END AS "overLimitLimit",
         -- What the runner_updating explanation names (docs/runner-update-drain-design.md §3): the
         -- release it is updating to, the owner's turns it waits for, and the clock "Waiting 38 min"
         -- counts from. Read only for a row that gate holds; every other row pays nothing for it.
@@ -5142,43 +5191,7 @@ export class SessionsService {
       -- ceiling here is the SAME fragment the claim decides with (session-tree-sql.ts) — a
       -- second copy would drift, and confidently naming the wrong gate is worse than naming
       -- none. Only PENDING rows carry an answer; for the rest the lateral yields NULLs.
-      LEFT JOIN LATERAL (
-        SELECT reason, active, "limit", held FROM (
-          SELECT
-            ${queuedReasonSql()} AS reason,
-            ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)} AS runner_active,
-            ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`)} AS runner_held,
-            r.max_concurrent AS runner_limit,
-            ${treeActiveTurns('s')} AS tree_active,
-            ${treeCeiling(Prisma.sql`s.assigned_runner_id`)} AS tree_limit,
-            ${batchActiveTurns('s')} AS batch_active,
-            s.batch_max_concurrent AS batch_limit
-        ) g,
-        LATERAL (
-          SELECT
-            CASE g.reason
-              -- The turns the drain waits for: every one in flight on the runner.
-              WHEN 'runner_updating'    THEN g.runner_active
-              WHEN 'runner_at_capacity' THEN g.runner_active + g.runner_held
-              WHEN 'tree_at_capacity'   THEN g.tree_active
-              WHEN 'batch_at_capacity'  THEN g.batch_active
-            END AS active,
-            CASE g.reason
-              WHEN 'runner_at_capacity' THEN g.runner_limit
-              WHEN 'tree_at_capacity'   THEN g.tree_limit
-              WHEN 'batch_at_capacity'  THEN g.batch_limit
-            END AS "limit",
-            -- Of active, the slots background jobs hold (runner_at_capacity only): the part of a
-            -- full runner its list of running turns does not show.
-            CASE g.reason WHEN 'runner_at_capacity' THEN g.runner_held END AS held
-        ) n
-        -- Asked inside, behind OFFSET 0, rather than on the join: as a join condition the planner flattened
-        -- this subquery and computed every gate's counts for every row of the list, then dropped all but the
-        -- PENDING ones (production, 2026-11-19: 1,297 rows for 15, 130k of the statement's 154k buffers and
-        -- 175 ms of its 289). Here it is a one-time filter, so the counts run only for a PENDING row.
-        WHERE s.status = 'PENDING' AND s.cancel_requested_at IS NULL
-        OFFSET 0
-      ) q ON true
+      LEFT JOIN LATERAL (${queuedGateLateral()}) q ON true
       WHERE s.owner_id = ${ownerId}::uuid
         ${scope}
         AND (${visibility})
@@ -5215,6 +5228,7 @@ export class SessionsService {
         providerBuiltin: r.providerBuiltin,
         model: r.model,
         permissionMode: r.permissionMode,
+        codexSandboxUnavailable: r.codexSandboxUnavailable,
         effort: r.effort,
         fastMode: r.fastMode,
         runSource: r.runSource,
@@ -5284,6 +5298,12 @@ export class SessionsService {
         queuedHeldByJobs: r.queuedHeldByJobs == null ? null : Number(r.queuedHeldByJobs),
         // Only beside queuedReason 'runner_updating'; null on every other row.
         queuedRunnerUpdate: queuedRunnerUpdateOf(r),
+        // Run now (docs/mocks/queued-run-now) beside a slot gate, and how far over the runner may go.
+        ...queuedRunNowOf(r),
+        // A turn its owner started over the runner's limit, while it runs: "over limit · 17/16".
+        runningOverLimit: r.overLimitActive == null || r.overLimitLimit == null
+          ? null
+          : { active: Number(r.overLimitActive), limit: r.overLimitLimit, runnerName: r.runnerLabel },
       }),
     );
     // What each row says about who is waiting on whom (`listOverlay`): given by a caller that already
@@ -12947,6 +12967,27 @@ export class SessionsService {
     return { ok: true };
   }
 
+  /**
+   * `POST /sessions/:id/run-now` (docs/mocks/queued-run-now): start this session's queued message over its runner's
+   * limit, one turn (run-now.ts). The runner is woken at once so its claim takes it.
+   */
+  async runNow(ownerId: string, id: string, actingSessionId: string | null) {
+    refuseRunNowForSession(actingSessionId);
+    assertEngineSessionRow(await this.get(ownerId, id)); // ownership check (404s otherwise); a landing is the platform's
+    const granted = await withTransactionRetry(this.prisma, async (tx) => {
+      // The session row first, as every turn write takes it: the seed and the pass are then one decision about it.
+      const [session] = await tx.$queryRaw<Array<{
+        id: string; prompt: string; importedAt: Date | null; wikiChatSpaceId: string | null;
+      }>>`SELECT id, prompt, imported_at AS "importedAt", wiki_chat_space_id AS "wikiChatSpaceId"
+            FROM "session" WHERE id = ${id}::uuid AND owner_id = ${ownerId}::uuid FOR UPDATE`;
+      if (!session) throw new NotFoundException('session not found');
+      return grantRunNow(tx, ownerId, id, () => this.ensurePromptSeeded(tx, session));
+    }, loggedRetry(this.logger, 'sessions.runNow'));
+    if (!granted.alreadyPassed) this.realtime.publishSessionUpdated(id);
+    this.queue.notifySessionQueued(granted.runnerId);
+    return { ok: true, turnId: granted.turnId, alreadyPassed: granted.alreadyPassed };
+  }
+
   /** Remove a session's pin, dropping it back into time order. */
   async unpin(ownerId: string, id: string) {
     assertEngineSessionRow(await this.get(ownerId, id)); // ownership check (404s otherwise)
@@ -13312,7 +13353,7 @@ export class SessionsService {
     const filed = folders.length
       ? await this.prisma.session.groupBy({
           by: ['folderId'],
-          where: { ownerId, deletedAt: null, runSource: { not: SessionRunSource.SCHEDULE }, folderId: { in: folders.map((f) => f.id) } },
+          where: { ownerId, deletedAt: null, runSource: { notIn: [SessionRunSource.SCHEDULE, SessionRunSource.SCHEDULE_CHANGE] as SessionRunSource[] }, folderId: { in: folders.map((f) => f.id) } },
           _count: { _all: true },
         })
       : [];

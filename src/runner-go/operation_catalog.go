@@ -57,6 +57,7 @@ const (
 	objectPermission    operationObject = "permission"
 	objectMergeReceipt  operationObject = "merge_receipt"
 	objectSchedule      operationObject = "schedule"
+	objectBrowser       operationObject = "browser"
 	// The catalogue itself: what the guide reads to say which operation answers a request.
 	objectCatalog operationObject = "catalog"
 )
@@ -3178,9 +3179,13 @@ func buildOperationCatalog() []*operation {
 	// (wiki_tools.go; they are left out entirely when the wiki is off).
 	add(gateAlways, wikiToolDescriptors(obj)...)
 	add(gateAlways, fileToolDescriptors(obj)...)
+	add(gateAlways, driveToolDescriptors(obj)...)
 	// The owner's own Settings (settings_tools.go): listed whether or not Session orchestration is on, since they fix
 	// ordinary settings and turning orchestration off is itself a proposal (docs/settings-from-conversation-design.md §7).
 	add(gateAlways, settingsToolDescriptors(obj)...)
+	// The Orbit Cloud browser (browser_tools.go): any session of the account may read it, and the tools are left out
+	// entirely while the server's browser switch is off.
+	add(gateAlways, browserToolDescriptors(obj)...)
 	// Always advertised: an agent that cannot see the tool falls back to
 	// Bash(run_in_background), and a session without the runner socket gets a
 	// refusal that says why rather than a silently engine-owned process.
@@ -3721,8 +3726,8 @@ func fileToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 				"path": map[string]interface{}{
 					"type": "string",
 					"description": "The file or directory, absolute or relative to the working directory. Its real " +
-						"location, links resolved, has to be inside this session's checkout or its uploads directory, " +
-						"as with a file a reply links; anywhere else is refused, so copy a file there first.",
+						"location, links resolved, has to be inside this session's checkout, its uploads directory, " +
+						"or the mounted Orbit Files drive on Orbit Cloud.",
 				},
 				"taskId": map[string]interface{}{
 					"type": "string",
@@ -4560,8 +4565,10 @@ func finishOperationCatalog(ops []*operation) []*operation {
 		{"wiki", wikiCLICapabilities},
 		{"wiki", wikiImportCLICapabilities},
 		{"file", fileCLICapabilities},
+		{"drive", driveCLICapabilities},
 		{"subagent", subagentCLICapabilities},
 		{"settings", settingsCLICapabilities},
+		{"browser", browserCLICapabilities},
 		{"account", userCLICapabilities},
 		{"guide", guideCLICapabilities},
 	}
@@ -5379,6 +5386,27 @@ var catalogMetadata = map[string]operationMeta{
 		Object: objectFile,
 		Intent: "See the files this session keeps.",
 	},
+	"drive_put": {
+		Object: objectFile,
+		Intent: "Copy a local file into the owner's Orbit Files drive.",
+	},
+	"drive_get": {
+		Object: objectFile,
+		Intent: "Download a drive file into this session's uploads directory.",
+	},
+	"drive_list": {
+		Object: objectFile,
+		Intent: "See the contents of a drive folder.",
+	},
+	"drive_move": {
+		Object: objectFile,
+		Intent: "Move or rename an entry on the drive.",
+	},
+	"drive_delete": {
+		Object:      objectFile,
+		Intent:      "Move an entry to the owner's Trash.",
+		Destructive: true,
+	},
 	"bg_run": {
 		Object: objectBackgroundJob,
 		Intent: "Run a command in the background on this runner.",
@@ -5438,6 +5466,35 @@ var catalogMetadata = map[string]operationMeta{
 		Object: objectAccount,
 		Intent: "Call any user REST route with the person's own token.",
 		Risk:   riskHigh,
+	},
+
+	// ── the Orbit Cloud browser ──
+	"browser_status": {
+		Object:          objectBrowser,
+		Intent:          "Read the state of the account's Orbit Cloud browser.",
+		SuccessEvidence: "Whether the browser is running, the session holding it, the viewers and whether saved logins exist.",
+		Returns:         "The browser's status (JSON): enabled, runnerId, state, running, holderSessionId, holderTitle, viewers, savedLogins, reportedAt.",
+	},
+	"browser_clear_logins": {
+		Object:          objectBrowser,
+		Intent:          "Stop the account's Orbit Cloud browser and delete its saved logins, after the owner confirms.",
+		Approval:        approvalKindCard,
+		ApprovalKey:     "orbit_browser_clear_logins",
+		Destructive:     true,
+		SuccessEvidence: "outcome CONFIRMED with the requestedAt the clear was sent to the runner at; DECLINED or EXPIRED cleared nothing.",
+		Returns:         "The outcome (JSON): outcome (CONFIRMED, DECLINED or EXPIRED), cleared, runnerId, requestedAt, approvalId, message.",
+	},
+	"browser_open": {
+		Object:          objectBrowser,
+		Intent:          "Start the account's Orbit Cloud browser and get its tab's address, optionally opening a page in it.",
+		SuccessEvidence: "The browser tab's address, and the runner reporting the browser running.",
+		Returns:         "The open (JSON): enabled, runnerId, tabUrl, url, requestedAt, running, message.",
+	},
+	"browser_request_sign_in": {
+		Object:          objectBrowser,
+		Intent:          "Ask the account owner to sign in to a site in the Orbit Cloud runner's browser, and wait for their answer.",
+		SuccessEvidence: "A Waiting-on-you card the owner answered: signed in, or not now.",
+		Returns:         "The answer (JSON): requestId, site, answer (SIGNED_IN, NOT_NOW, EXPIRED or WITHDRAWN), leaseReleased, leaseRetaken, message.",
 	},
 
 	// ── the guide ──
@@ -5505,6 +5562,8 @@ func catalogSurfaceSwitch(parts []string, op *operation) []string {
 		parts = append(parts, "watch_switch")
 	case op.CLIFamily == "wiki":
 		parts = append(parts, "wiki_switch")
+	case op.CLIFamily == "browser":
+		parts = append(parts, "browser_switch")
 	}
 	if len(parts) > 1 && parts[0] == "always" {
 		return parts[1:]

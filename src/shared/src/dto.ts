@@ -198,6 +198,9 @@ export interface PermissionSemantics {
    * newer Claude model.
    */
   shortNote?: string;
+  /** `off` when the runtime's command sandbox is not running for this session: commands run
+   *  unconfined. Absent everywhere else, which says nothing either way. */
+  sandbox?: 'off';
 }
 
 /**
@@ -925,6 +928,9 @@ export interface RunnerBrowserReport {
   viewers: number;
   /** When this runner last cleared the saved logins (RFC 3339); absent if it never has since it started. */
   profileClearedAt?: string;
+  /** Whether the saved profile holds a cookie store, so saved logins may exist. Only that: never which sites. Absent
+   *  from a runner that predates it. */
+  savedLogins?: boolean;
 }
 
 /** GET /runners/:id/browser: the owner's managed runner browser, as its last heartbeat reported it. */
@@ -942,11 +948,63 @@ export interface RunnerBrowserState {
   clearRequestedAt: string | null;
   /** When the runner last reported clearing the saved logins. */
   profileClearedAt: string | null;
+  /** Whether saved logins exist, as the last report said (RunnerBrowserReport.savedLogins); null when no report said
+   *  it. Never which sites. */
+  savedLogins: boolean | null;
+}
+
+/**
+ * GET /runner/browser: browser_status and `orbit browser status`, the account's Orbit Cloud browser for any session of
+ * the account. Answered only while the browser switch is on (404 otherwise), so `enabled` is always true here; a client
+ * that gets a 404 reports it off.
+ */
+export interface RunnerBrowserStatus {
+  enabled: true;
+  /** The account's Orbit Cloud (managed) runner, or null when the account has none. */
+  runnerId: string | null;
+  state: RunnerBrowserState['state'];
+  /** Chrome is started. */
+  running: boolean;
+  /** The session holding the browser lease (public id), or null. */
+  holderSessionId: string | null;
+  holderTitle: string | null;
+  /** How many viewers are connected. */
+  viewers: number;
+  /** Whether saved logins exist; null when the runner has not said. Never which sites. */
+  savedLogins: boolean | null;
+  /** When the heartbeat this was read from arrived, or null. */
+  reportedAt: string | null;
+}
+
+/** The body of POST /runner/browser/open (browser_open, `orbit browser open [--url]`). */
+export interface RunnerBrowserOpenRequest {
+  /** A page for the remote Chrome to open (http or https). Absent: the browser is started and left on its page. */
+  url?: string;
+}
+
+/** Its answer: the open is handed to the Orbit Cloud runner's next heartbeat, which the runner is woken for at once. */
+export interface RunnerBrowserOpenResponse {
+  /** The account's Orbit Cloud runner. */
+  runnerId: string;
+  /** The browser's tab on this server (`/runners/:id/browser`, absolute), for a person to watch or take control in. */
+  tabUrl: string;
+  /** The page asked for, or null when none was. */
+  url: string | null;
+  requestedAt: string;
 }
 
 /** POST /runners/:id/browser/clear: Clear saved logins, accepted and waiting for the runner's next heartbeat. */
 export interface RunnerBrowserClearResponse {
   requestedAt: string;
+}
+
+/**
+ * `POST /runner/browser/clear` (browser_clear_logins, `orbit browser clear-logins`): the clear the owner's card allowed,
+ * requested of the account's Orbit Cloud runner, and the card it spent.
+ */
+export interface RunnerBrowserClearLoginsResponse extends RunnerBrowserClearResponse {
+  runnerId: string;
+  approvalId: string;
 }
 
 /** What a runner's self-updater last found:
@@ -1206,19 +1264,52 @@ export const CREATE_WORKDIR_CAPABILITY = 'create-workdir/v1';
  *  `<reposRoot>/<name>`. */
 export const CREATE_WORKDIR_HOME_CAPABILITY = 'create-workdir/v2';
 
+/** A managed runner's home, fixed by its image (deploy/managed-runner/image). A new folder on a managed runner that has
+ *  not reported yet goes here, as it does once it has: every managed image declares create-workdir/v2. */
+export const MANAGED_RUNNER_HOME = '/home/orbit';
+
 /** The directory a runner's new folders go in: its home, the parent of its reposRoot, when it declares
  *  CREATE_WORKDIR_HOME_CAPABILITY, else reposRoot itself. The separator is the one the root is written with. */
-/** A managed runner's repos folder, fixed by its image (deploy/managed-runner/image/entrypoint.py). A new folder on a
- *  managed runner that has not reported yet goes here: every runner version can make one inside its reposRoot. */
-export const MANAGED_RUNNER_REPOS_ROOT = '/home/orbit/orbit-repos';
-
 export function newFolderRoot(reposRoot: string, capabilities: readonly string[] | null | undefined): string {
-  const root = reposRoot.trim().replace(/(?<=.)[\\/]+$/, '');
-  if (!capabilities?.includes(CREATE_WORKDIR_HOME_CAPABILITY)) return root;
+  return capabilities?.includes(CREATE_WORKDIR_HOME_CAPABILITY) ? homeOfReposRoot(reposRoot) : trimReposRoot(reposRoot);
+}
+
+const trimReposRoot = (reposRoot: string): string => reposRoot.trim().replace(/(?<=.)[\\/]+$/, '');
+
+/** The directory a reported reposRoot sits in: the machine's home (`<home>/orbit-repos`). */
+function homeOfReposRoot(reposRoot: string): string {
+  const root = trimReposRoot(reposRoot);
   const cut = Math.max(root.lastIndexOf('/'), root.lastIndexOf('\\'));
   if (cut < 0) return root;
   // `/orbit-repos` sits in `/`, and `C:\orbit-repos` in `C:\`.
   return cut === 0 || root[cut - 1] === ':' ? root.slice(0, cut + 1) : root.slice(0, cut);
+}
+
+/** What newFolderRootFor reads of a runner. `capabilities` is what it has reported: a server passes [] for a runner
+ *  that has not reported yet (no capabilitiesReportedAt). `up` is whether it is online now, so that those are what its
+ *  running process declares; a managed runner that is not up wakes on its current image, whatever it declared before. */
+export interface NewFolderRunner {
+  managed: boolean;
+  up: boolean;
+  reposRoot: string | null | undefined;
+  capabilities: readonly string[] | null | undefined;
+}
+
+/** Where a new folder named on this runner goes, for every client and the server alike (new-folder-root.fixture.json):
+ *  on a managed runner that is not up, or has not reported yet, its image's home MANAGED_RUNNER_HOME, whatever Repos
+ *  Folder and capabilities are stored from an earlier process, so its first workspace can be made before it is up;
+ *  newFolderRoot on a runner that makes new folders and has reported its Repos Folder; null on any other. */
+export function newFolderRootFor(runner: NewFolderRunner): string | null {
+  if (runner.managed && (!runner.up || !runner.capabilities?.length)) return MANAGED_RUNNER_HOME;
+  const reposRoot = runner.reposRoot?.trim() ?? '';
+  if (reposRoot && runner.capabilities?.includes(CREATE_WORKDIR_CAPABILITY)) return newFolderRoot(reposRoot, runner.capabilities);
+  return null;
+}
+
+/** `<root>/<name>`: the separator the root is written with, never doubled. A new folder's path and a clone's. */
+export function newFolderPath(root: string, name: string): string {
+  const separator = root.includes('\\') && !root.includes('/') ? '\\' : '/';
+  return `${root.replace(/[\\/]+$/, '')}${separator}${name}`;
 }
 
 /** A runner that reports its machine's CPU, memory and disk on every heartbeat (RunnerHeartbeatRequest.resources).
@@ -1344,6 +1435,20 @@ export interface NewWorkspaceGithub {
 /** What a runner declares when it clones a GitHub workspace's repository on request (cloneRequests,
  *  docs/github-workspace-design.md §6). POST /sessions makes a GitHub workspace only on a runner that declares it. */
 export const CLONE_WORKDIR_CAPABILITY = 'clone-workdir/v1';
+
+/** What a runner declares when it clones into its home directory, the directory its reported reposRoot sits in:
+ *  a GitHub workspace's folder is then `<home>/<folder>` (cloneRootFor) rather than `<reposRoot>/<folder>`. */
+export const CLONE_WORKDIR_HOME_CAPABILITY = 'clone-workdir/v2';
+
+/** Where a GitHub workspace's clone goes on this runner, for every client and the server alike
+ *  (new-folder-root.fixture.json `clones`): its home on a runner that declares CLONE_WORKDIR_HOME_CAPABILITY, its
+ *  reposRoot on an older one; null on a runner that does not clone or has not reported its reposRoot. `capabilities` is
+ *  what it has reported ([] before it reports). */
+export function cloneRootFor(runner: { reposRoot?: string | null; capabilities?: readonly string[] | null }): string | null {
+  const reposRoot = runner.reposRoot?.trim() ?? '';
+  if (!reposRoot || !runner.capabilities?.includes(CLONE_WORKDIR_CAPABILITY)) return null;
+  return runner.capabilities.includes(CLONE_WORKDIR_HOME_CAPABILITY) ? homeOfReposRoot(reposRoot) : trimReposRoot(reposRoot);
+}
 
 /** A workspace's clone state (Workspace.cloneState); null for a workspace that does not come from GitHub. */
 export type WorkspaceCloneState = 'PENDING' | 'CLONING' | 'READY' | 'FAILED';
@@ -1521,6 +1626,9 @@ export interface RunnerHeartbeatResponse {
    *  adopts this live on each heartbeat, so a UI/API change to it takes effect within
    *  one heartbeat without restarting the runner. */
   maxConcurrent: number;
+  /** Extra sessions on demand (the editable DB value): how many turns past maxConcurrent an overflow claim
+   *  (`ClaimedSession.overCapacity`) may run at once. Adopted live like maxConcurrent. Absent on older control planes. */
+  burstConcurrent?: number;
   /** Branch merges the user requested from the UI for sessions this runner ran. The
    *  runner merges each session's branch into main on its local repo and reports the
    *  outcome back via POST /runner/sessions/:id/merge-result. Absent on older control
@@ -1597,6 +1705,11 @@ export interface RunnerHeartbeatResponse {
    *  Set once per request and cleared as it is handed over, like `checkSelfUpdate`; only a runner that declares
    *  BROWSER_CLEAR_V1 is asked, and its `browser.profileClearedAt` is the answer. */
   clearBrowserProfile?: boolean;
+  /** A session's browser_open (POST /runner/browser/open): start the browser if it is not running, and when `url` is
+   *  set open that page in it, unless another session than `sessionId` holds the browser's lease. Set once per request
+   *  and cleared as it is handed over, like `clearBrowserProfile`; only a runner that declares BROWSER_OPEN_V1 is
+   *  asked. */
+  openBrowser?: { sessionId: string; url?: string };
   /** This machine's free-space floor in MB (Runner.minFreeDiskMb), the same number the auto-run
    *  disk gate reads. Sent so the runner can apply it to work only it can see — reclaiming the
    *  session checkouts on its own disk — without keeping a second copy of the setting.
@@ -1706,6 +1819,16 @@ export const SELF_UPDATE_NOW_V1 = 'self-update-now/v1';
  *  refused a clear. runner-go asserts the same string. */
 export const BROWSER_CLEAR_V1 = 'browser-clear/v1';
 
+/** Declared by a managed runner that honours a session's browser_open (`openBrowser`): it starts the browser and opens
+ *  the page asked for through Chrome's DevTools. A runner without it is refused an open as too old. runner-go asserts
+ *  the same string. */
+export const BROWSER_OPEN_V1 = 'browser-open/v1';
+
+/** Declared by a managed runner that honours a LoginCommand `browser`: it opens the sign-in link of the attempt waiting
+ *  on it in the runner's browser (docs/runner-browser-engine-sign-in-design.md). A runner without it is refused Use the
+ *  runner's browser. runner-go asserts the same string. */
+export const LOGIN_RUNNER_BROWSER_V1 = 'login-runner-browser/v1';
+
 /** Declared by a runner that keeps a remote SubAgent's conversation when the run ends and continues it on a claim's
  *  `resumeOf` (docs/subagent-design.md §10.2). A resume is refused for a target runner without it, which would start
  *  a new conversation instead. runner-go declares the same string (subagentRemoteResumeCapabilityV1). */
@@ -1722,6 +1845,15 @@ export const SUBAGENT_REMOTE_IN_PLACE_V1 = 'subagent-remote-in-place/v1';
  *  BG_JOB_STOPPED_BY_OWNER. The stop is refused for a session whose runner does not declare it, and that runner's
  *  jobs are listed as not stoppable. runner-go declares the same string (bgOwnerStopCapabilityV1). */
 export const BG_OWNER_STOP_V1 = 'bg-owner-stop/v1';
+
+/** Declared by a runner that admits a turn the server claimed over its limit (`ClaimedSession.overCapacity`, Run now,
+ *  docs/mocks/queued-run-now): past maxConcurrent up to maxConcurrent + burstConcurrent, evicting no running turn for
+ *  it. No overflow claim is made for a runner without it, and Run now on its sessions is refused as too old.
+ *  runner-go declares the same string. */
+export const OVER_CAPACITY_V1 = 'over-capacity/v1';
+
+/** The most Extra sessions on demand (Runner.burstConcurrent) a runner may be given; its default is 2. */
+export const RUNNER_BURST_CONCURRENT_MAX = 32;
 
 /** The reason a bg_run job killed by its session's owner from the app carries, on its terminal background_task, its
  *  wake and its row of GET /sessions/:id/background. runner-go names the kill the same (bgStoppedByOwnerReason). */
@@ -2206,7 +2338,9 @@ export type AntigravityKeyAvailableByRunner = Record<string, boolean>;
  * machine, which puts back the Google login a replacement had set aside.
  */
 export interface LoginCommand {
-  action: 'start' | 'code' | 'cancel';
+  /** `browser` (to a runner that declares LOGIN_RUNNER_BROWSER_V1): open the attempt's sign-in link in the runner's
+   *  browser, the owner's Use the runner's browser. Redelivered until the runner reports `browser` on that attempt. */
+  action: 'start' | 'code' | 'cancel' | 'browser';
   /** Which CLI to sign in. Absent from an older control plane, which only ever drove claude. A
    *  `cursor` start, Default's included, goes only to a runner that declares `cursor-account-login/v1`:
    *  an older one signs in Claude Code for an engine it does not know. */
@@ -2338,6 +2472,9 @@ export interface LoginResult {
    *  timed out"), which a client answers with a new link rather than a retry. `message` still says it
    *  in words. Absent for every other failure. */
   reason?: LoginFailureReason;
+  /** What became of a LoginCommand `browser`, on a repeat of the attempt's waiting report: the link opened in the
+   *  runner's browser, could not be, or the runner took Claude Code's code from that browser and handed it to the CLI. */
+  browser?: LoginBrowserOutcome;
   /** The `attempt` of the start this reports on. A report about an attempt the control plane has
    *  moved past (cancelled, or replaced by a new sign-in) changes nothing. Absent from an older
    *  runner, whose reports are taken as they come. */
@@ -2672,14 +2809,29 @@ export interface RunnerLoginState {
   /** Why a `failed` sign-in failed, when a client answers it differently (LoginResult.reason).
    *  Present only on such a failure. */
   reason?: LoginFailureReason;
+  /** The owner's Use the runner's browser for this attempt: `requested` until the runner answers, then its answer
+   *  (LoginResult.browser). Present only while a sign-in is waiting on its link and the owner asked for it. */
+  browser?: LoginBrowserState;
 }
 
 /** Why a sign-in failed, when a client answers it differently from any other failure: `expired` is
  *  the sign-in link running out before anyone signed in with it. */
 export type LoginFailureReason = 'expired';
 
+/** LoginResult.browser: what a runner did with a LoginCommand `browser`. */
+export type LoginBrowserOutcome = 'opened' | 'failed' | 'code-taken';
+
+/** RunnerLoginState.browser: the owner asked, and what the runner answered. */
+export type LoginBrowserState = 'requested' | LoginBrowserOutcome;
+
 /** Every LoginFailureReason, for a reader that checks one it is handed. */
 export const LOGIN_FAILURE_REASONS: readonly LoginFailureReason[] = ['expired'];
+
+/** Every LoginBrowserOutcome a runner may report, for a control plane to keep only these. */
+export const LOGIN_BROWSER_OUTCOMES: readonly LoginBrowserOutcome[] = ['opened', 'failed', 'code-taken'];
+
+/** Every LoginBrowserState a sign-in may be in. */
+export const LOGIN_BROWSER_STATES: readonly LoginBrowserState[] = ['requested', ...LOGIN_BROWSER_OUTCOMES];
 
 /** `code` of the 409 a new session gets when its engine is signed out on an online runner. */
 export const ENGINE_SIGNED_OUT = 'ENGINE_SIGNED_OUT';
@@ -3182,8 +3334,12 @@ export interface ProviderModelTier {
   supersededBy?: string;
   /** USD per million output tokens, when known (models.dev); null for a subscription or an unpriced key. */
   outputPricePerMTok: number | null;
-  /** How well this model completed work, for display only: routing never reads it (docs/subagent-design.md §7.1). */
+  /** How well this model completed work, for display only: routing never reads it (docs/subagent-design.md §7.1).
+   *  Pooled over every row of the same `identity`, on any provider or engine. */
   quality: ModelQuality;
+  /** Which model this is on any provider or engine (apiserver model-identity.ts): rows with one `key` are one
+   *  model, `name` its vendor name (null when none is known). Display only. */
+  identity?: { key: string; name: string | null };
 }
 
 /** How far back the Model tiers quality reads, in days. */
@@ -3330,6 +3486,13 @@ export interface ClaimedSession {
   codelessCheckout?: boolean;
   /** The branch a `codelessCheckout` run makes at finalize if it changed anything. */
   codelessBranch?: string;
+  /** Run now (docs/mocks/queued-run-now): this claim takes the session past the runner's maxConcurrent, as the turn
+   *  its owner let start over the limit (`overCapacityTurnId`). Sent only to a runner that declares OVER_CAPACITY_V1,
+   *  which admits it up to maxConcurrent + burstConcurrent and evicts no running turn for it. When that turn ends the
+   *  slot is returned: the session's next message is claimed as any other. Absent on every ordinary claim. */
+  overCapacity?: boolean;
+  /** The conversation turn the overflow covers, beside `overCapacity`. */
+  overCapacityTurnId?: string;
   /** Agent opt-in: if workDir isn't a git repo, the runner `git init`s it (default
    *  .gitignore + baseline commit) so the session can still be worktree-isolated. */
   autoInitGit?: boolean;
@@ -3391,6 +3554,10 @@ export interface ClaimedSession {
    *  ORBIT_WIKI, wiki/wiki-rollout.ts). Injected as ORBIT_WIKI=off so `orbit mcp` and the CLI leave out the wiki
    *  tools. Absent means on. */
   wikiDisabled?: boolean;
+  /** Present, and true, only while the Orbit Cloud browser is switched on on this server
+   *  (ORBIT_MANAGED_RUNNER_BROWSER_ENABLED with managed runners on, managed-runner-browser-gate.ts). Injected as
+   *  ORBIT_BROWSER=on so `orbit mcp` and the CLI offer the browser tools; absent, they are not there at all. */
+  browserEnabled?: boolean;
   /** Present, and true, only when this session's Agent may not start a workflow: its Workflows switch is off, or its
    *  SubAgents are (docs/subagent-workflow-design.md §9 D2). Injected as ORBIT_WORKFLOWS=off so `orbit mcp` leaves out
    *  the `workflow` tool; `delegate` is not affected. Absent means on. */
@@ -3871,6 +4038,8 @@ export interface ReclaimSession {
   watchesDisabled?: boolean;
   /** The wiki not switched on for the owner, cf. ClaimedSession.wikiDisabled. */
   wikiDisabled?: boolean;
+  /** The Orbit Cloud browser switched on, cf. ClaimedSession.browserEnabled. */
+  browserEnabled?: boolean;
   /** Workflows not on for the session's Agent, cf. ClaimedSession.workflowsDisabled. */
   workflowsDisabled?: boolean;
   /** A scheduled task's run, cf. ClaimedSession.scheduleRun. */

@@ -392,7 +392,7 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 // The command capabilities advertises must also be pre-approved, or the agent hits a permission
 // prompt for something the document just told it to run.
 func TestProjectCommandsArePreApprovedForAgents(t *testing.T) {
-	rules := strings.Join(orbitCLIAllowedTools("/usr/local/bin/orbit", false), "\n")
+	rules := strings.Join(orbitCLIAllowedTools("/usr/local/bin/orbit", false, false), "\n")
 	// Every verb capabilities advertises, individually. A write the document names but that is not
 	// pre-approved stalls on a permission prompt the agent cannot answer headless. The three reads
 	// and writes that joined the family later — crossings, resolve-blocker, merge-evidence — are

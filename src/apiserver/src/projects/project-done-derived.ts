@@ -173,19 +173,22 @@ export interface DerivedDoneCriterion {
 /**
  * Every number a card prints about this project's criteria, counted once, here, from the same
  * answers `criteria` carries — so "1 criterion has no merge receipt" and "0 with no merge receipt"
- * can no longer sit on one card (2026-10-01). `onMain` and `byReason` partition the criteria:
- * they add up to `criteria`.
+ * can no longer sit on one card (2026-10-01). `onMain` and `byReason` partition the MET criteria:
+ * they add up to `met`. An unmet criterion is counted in `criteria` and nowhere else, because its
+ * landing lane describes work still to do, not anything that happened — "landed", "merged outside
+ * Orbit" or "ran without a branch" said of it would be false (2026-11-19, project page parity G1).
+ * Whether the project is done never reads these: that is `withheld`, over every criterion.
  */
 export interface DerivedDoneCounts {
   /** The stated criteria. */
   criteria: number;
   /** Satisfied by the work filed under them. */
   met: number;
-  /** LANDED, however: on main by work of their own, or with nothing to land. */
+  /** Met and LANDED, however: on main by work of their own, or with nothing to land. */
   landed: number;
-  /** LANDED with work of their own on the upstream — `landingReason` null. */
+  /** Met and LANDED with work of their own on the upstream — `landingReason` null. */
   onMain: number;
-  /** Every other criterion, by its `landingReason`. */
+  /** Every other met criterion, by its `landingReason`. */
   byReason: Record<CriterionLandingReason, number>;
 }
 
@@ -281,15 +284,17 @@ export function derivedDoneCounts(criteria: readonly DerivedDoneCriterion[]): De
   const byReason = Object.fromEntries(
     CRITERION_LANDING_REASONS.map((reason) => [reason, 0]),
   ) as Record<CriterionLandingReason, number>;
+  // Only a met criterion is tallied by where its work is; an unmet one is in `criteria` alone.
+  const met = criteria.filter((criterion) => criterion.satisfied);
   let onMain = 0;
-  for (const criterion of criteria) {
+  for (const criterion of met) {
     if (criterion.landingReason === null) onMain += 1;
     else byReason[criterion.landingReason] += 1;
   }
   return {
     criteria: criteria.length,
-    met: criteria.filter((criterion) => criterion.satisfied).length,
-    landed: criteria.filter((criterion) => criterion.landing === 'LANDED').length,
+    met: met.length,
+    landed: met.filter((criterion) => criterion.landing === 'LANDED').length,
     onMain,
     byReason,
   };

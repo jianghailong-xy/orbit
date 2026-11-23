@@ -58,8 +58,6 @@ const SESSION = {
   runState: 'QUEUED',
   provider: 'claude',
   numTurns: 0,
-  // The server names no gate: it is simply not claimed yet (runnerSlots `queuedLabel`).
-  queuedReason: null,
   createdAt: TS,
   updatedAt: TS,
 };
@@ -91,6 +89,8 @@ const mounted: { root: Root; el: HTMLDivElement }[] = [];
 let client: QueryClient;
 /** What the active view lists now: the opening until the echo lands, then nothing. */
 let activeRows: ActiveSessionTurn[] = [];
+let sessionRow: Record<string, unknown>;
+let sessionDetail: Record<string, unknown>;
 
 async function openConsole(): Promise<HTMLDivElement> {
   vi.mocked(listQueuedTurns).mockImplementation(async () => activeRows);
@@ -143,6 +143,9 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   activeRows = [openingRow];
+  // The list names no gate: the opening is simply not claimed yet.
+  sessionRow = { ...SESSION, queuedReason: null };
+  sessionDetail = SESSION;
   FakeEventSource.open = [];
   vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
   vi.stubGlobal('EventSource', FakeEventSource);
@@ -160,9 +163,9 @@ beforeEach(() => {
       if (path.includes('/diff')) return reply({ files: [] });
       if (path.includes('/turns') || path.includes('/approvals') || path.includes('/background')) return reply([]);
       if (path.includes('/created-tasks')) return reply({ total: 0, running: 0, failed: 0, done: 0, items: [], projects: [] });
-      return reply(SESSION);
+      return reply(sessionDetail);
     }
-    if (path.startsWith('/sessions')) return reply([SESSION]);
+    if (path.startsWith('/sessions')) return reply([sessionRow]);
     if (path.startsWith('/tasks/evidence-decisions/pending')) {
       return reply({ decidingSessionId: null, count: 0, oldestAgeSeconds: null, pending: [], waitingOnYou: [] });
     }
@@ -219,5 +222,49 @@ describe('a session no runner has claimed yet', { timeout: 60_000 }, () => {
 
     expect(bubbles(el)).toEqual([OPENING]);
     expect(el.querySelectorAll('[data-seq]').length, 'the bubble is the echo, not the placeholder').toBeGreaterThan(0);
+  });
+
+  it('posts Run now immediately and marks only the running overflow turn with its tooltip', async () => {
+    sessionRow = {
+      ...SESSION, queuedReason: 'runner_at_capacity', queuedActive: 16, queuedLimit: 16, runNowAvailable: true,
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === `/api/sessions/${SESSION_PUBLIC}`) return new Response(JSON.stringify(sessionDetail));
+      if (url !== `/api/sessions/${SESSION_PUBLIC}/run-now`) return new Response('[]');
+      sessionDetail = {
+        ...SESSION, status: 'RUNNING', runState: 'RUNNING', engineStartedAt: TS,
+      };
+      sessionRow = {
+        ...sessionDetail,
+        runningOverLimit: { active: 17, limit: 16, runnerName: 'HPC' },
+      };
+      return new Response(JSON.stringify({ ok: true, turnId: OPENING_TURN, alreadyPassed: false }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const el = await openConsole();
+    await drawn(() => expect(el.querySelector('.chat-runner-updating-reason')?.textContent).toBe('runner full'));
+    await act(async () => el.querySelector<HTMLButtonElement>('.chat-runner-updating-reason')!.click());
+    const button = document.querySelector<HTMLButtonElement>('.queued-run-now-action button')!;
+    expect(button.textContent).toBe('Run now');
+    await act(async () => button.click());
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/sessions/${SESSION_PUBLIC}/run-now`, expect.objectContaining({ method: 'POST' }),
+    );
+
+    activeRows = [];
+    await publish([
+      { seq: 1, type: 'user', turnId: OPENING_TURN, ts: TS, payload: { text: OPENING } },
+      { seq: 2, type: 'user', ts: TS, payload: { text: 'One more detail', steer: true } },
+    ]);
+    await drawn(() => expect(el.querySelector('.chat-over-limit')?.textContent).toBe('over limit · 17/16'));
+    const tag = el.querySelector<HTMLElement>('.chat-over-limit')!;
+    expect(tag.parentElement?.textContent).toBe('Runningover limit · 17/16');
+    expect(tag.closest('.chat-user-meta')?.previousElementSibling?.textContent).toContain(OPENING);
+    await act(async () => tag.focus());
+    await drawn(() => expect(document.querySelector('[role="tooltip"]')?.textContent).toBe("Started over HPC's limit by you"));
+
+    sessionDetail = { ...sessionDetail, status: 'AWAITING_INPUT', runState: 'AWAITING_INPUT' };
+    await act(async () => client.invalidateQueries({ queryKey: ['session'] }));
+    await drawn(() => expect(el.querySelector('.chat-over-limit')).toBeNull());
   });
 });

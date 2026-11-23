@@ -74,6 +74,8 @@ import { closeUnknownItems } from '../conditions/condition-attention';
 import { assertConditionRoom, createConditionRow } from '../conditions/conditions.service';
 import { MANAGED_RUNNER_DEMAND, type ManagedRunnerDemand } from '../managed-runners/managed-runner-demand';
 import { RealtimeService } from '../realtime/realtime.service';
+import { isBackgroundWakeTurn } from '../runner-api/background-job-wake';
+import { isSessionReplyTurn } from '../sessions/session-request';
 import { SCHEDULE_ACCESS_NOT_ENFORCEABLE, scheduleRunMode } from './schedule-access';
 import { scheduleRunsStarted, scheduleStartCheck } from './schedule-start-check';
 import { workspaceNames } from './schedule-views';
@@ -234,6 +236,8 @@ interface ResolvedActor {
   session: { mode: string; engine: string | null; workspaceId: string | null } | null;
   /** The schedule the calling session serves a run of (`session.scheduleRunId`), or null. */
   servesScheduleId: string | null;
+  /** The person's words that asked for the change, when it comes from the schedule's change conversation (§8.2). */
+  askedText?: string | null;
 }
 
 /** What a run's own session may do to its schedule (§8.3): change it inside the envelope, or end it. */
@@ -400,6 +404,18 @@ function needOf(s: { workspaceId: string; accessLevel: AccessLevel; rule: unknow
     runLimitMinutes: s.runLimitMinutes,
     commandHash: ruleCommandHash(rule),
   };
+}
+
+/** The person's latest message in a session: the words a change from it was asked with. */
+async function personsLatestWords(tx: Tx, sessionId: string): Promise<string | null> {
+  const turns = await tx.conversationTurn.findMany({
+    where: { sessionId, kind: 'message', senderSessionId: null },
+    orderBy: { seq: 'desc' },
+    take: 10,
+    select: { content: true, clientTurnId: true },
+  });
+  const said = turns.find((t) => !isBackgroundWakeTurn(t.clientTurnId) && !isSessionReplyTurn(t.clientTurnId) && t.content?.trim());
+  return said?.content?.trim().slice(0, 2000) ?? null;
 }
 
 function envelopeOf(s: Schedule): Envelope {
@@ -780,6 +796,7 @@ export class SchedulesService {
             sessionId: request.askedBySessionId,
             session: null,
             servesScheduleId: null,
+            askedText: request.askedText,
           };
           const patch = this.patchFromJson(request.proposed as unknown as FieldValues);
           const result = await this.applyLocked(tx, schedule, patch, who, { widen: true, undoOf: null });
@@ -1051,6 +1068,7 @@ export class SchedulesService {
         kind: 'UPDATE',
         askedBy: who.changedBy,
         askedBySessionId: who.sessionId,
+        askedText: who.askedText ?? null,
         baseRevision: schedule.revision,
         proposed: this.patchJson(patch),
         envelopeBefore: envelopeOf(schedule) as unknown as Prisma.InputJsonValue,
@@ -1200,6 +1218,7 @@ export class SchedulesService {
         revision,
         changedBy: who.changedBy,
         sessionId: who.sessionId,
+        askedText: who.askedText ?? null,
         fields: { before, after } as Prisma.InputJsonValue,
         undoOfRevision: opts.undoOf,
       },
@@ -1417,13 +1436,18 @@ export class SchedulesService {
         engine: true,
         workspaceId: true,
         scheduleRun: { select: { scheduleId: true } },
+        changeScheduleId: true,
         owner: { select: { preferences: true } },
       },
     });
     if (!session) throw refusal('NOT_FOUND', 'SESSION_NOT_FOUND', 'The calling session does not exist.');
     const isRun = scheduleId !== null && session.scheduleRun?.scheduleId === scheduleId;
+    // The schedule's own change conversation speaks for the person (§8.2): what it changes is theirs, in their words.
+    // It is still judged as a session (§4): what grows the envelope waits for the owner's Allow.
+    const isChange = scheduleId !== null && session.changeScheduleId === scheduleId;
     return {
-      changedBy: isRun ? 'RUN' : 'SESSION',
+      changedBy: isRun ? 'RUN' : isChange ? 'USER' : 'SESSION',
+      ...(isChange ? { askedText: await personsLatestWords(tx, session.id) } : {}),
       sessionId: session.id,
       servesScheduleId: session.scheduleRun?.scheduleId ?? null,
       session: {

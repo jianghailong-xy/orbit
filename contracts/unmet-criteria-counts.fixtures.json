@@ -1,0 +1,97 @@
+{
+  "$comment": "Unmet criteria are never counted or labelled by their landing reason (project 34zzTeZx49jI9ndWIsQEF, criterion 5; board gaps G1/G2). A project shaped like Coordinator handoff v2: four unmet criteria whose landing lanes say NO_RECEIPT (two) and NO_BRANCH (two: one never run, one never run and declared codeless, which since 2caec7aae9 no longer decides landing), and one met criterion IN_FLIGHT. The server's derivedDone.counts tally only met criteria by where their work is (onMain + byReason add up to met); landed counts met LANDED criteria only. Clients count unmet criteria apart ('N not met'), and the done card's 'N items running' is read from the criteria (landingReason IN_FLIGHT, met or not), not from counts.byReason. Whether the project can be recorded as done is unchanged: derivedDone.withheld is read over every criterion. Read by the apiserver's project-looks-finished.pg.spec.ts case (6), which also holds the done check (doneCheck: severity, code, criterion ordinal) to it, web's projectDone.unmetCounts.test.ts, and the iOS (OrbitKit) and Android tests of the Done tally / Record as done confirmation.",
+  "project": {
+    "title": "Coordinator handoff v2",
+    "main": "main",
+    "confirmation": "CONFIRMED",
+    "nonCode": false
+  },
+  "criteria": [
+    {
+      "ordinal": 1,
+      "name": "unmet, its work merged nowhere Orbit can see",
+      "satisfied": false,
+      "landing": "UNKNOWN",
+      "landingReason": "NO_RECEIPT"
+    },
+    {
+      "ordinal": 2,
+      "name": "unmet, its work merged nowhere Orbit can see",
+      "satisfied": false,
+      "landing": "UNKNOWN",
+      "landingReason": "NO_RECEIPT"
+    },
+    {
+      "ordinal": 3,
+      "name": "unmet, its task ran without a branch",
+      "satisfied": false,
+      "landing": "UNKNOWN",
+      "landingReason": "NO_BRANCH"
+    },
+    {
+      "ordinal": 4,
+      "name": "met, its work being landed right now",
+      "satisfied": true,
+      "landing": "UNKNOWN",
+      "landingReason": "IN_FLIGHT"
+    },
+    {
+      "ordinal": 5,
+      "name": "unmet, its only task never run (declared codeless, which no longer decides landing)",
+      "satisfied": false,
+      "landing": "UNKNOWN",
+      "landingReason": "NO_BRANCH"
+    }
+  ],
+  "expect": {
+    "counts": {
+      "criteria": 5,
+      "met": 1,
+      "landed": 0,
+      "onMain": 0,
+      "byReason": {
+        "IN_FLIGHT": 1,
+        "ON_PROJECT_BRANCH": 0,
+        "NOTHING_TO_LAND": 0,
+        "NO_RECEIPT": 0,
+        "NO_BRANCH": 0,
+        "CODELESS": 0
+      }
+    },
+    "countsBeforeTheChange": {
+      "criteria": 5,
+      "met": 1,
+      "landed": 1,
+      "onMain": 0,
+      "byReason": {
+        "IN_FLIGHT": 1,
+        "ON_PROJECT_BRANCH": 0,
+        "NOTHING_TO_LAND": 0,
+        "NO_RECEIPT": 2,
+        "NO_BRANCH": 1,
+        "CODELESS": 1
+      }
+    },
+    "done": false,
+    "withheld": [
+      "CRITERION_UNSATISFIED",
+      "CRITERION_UNLANDED"
+    ],
+    "doneCheck": [
+      "REFUSE DONE_CRITERION_UNSATISFIED 1",
+      "REFUSE DONE_CRITERION_UNSATISFIED 2",
+      "REFUSE DONE_CRITERION_UNSATISFIED 3",
+      "REFUSE DONE_CRITERION_UNSATISFIED 5",
+      "REFUSE DONE_INTEGRATION_IN_FLIGHT",
+      "WARN DONE_CRITERION_UNLANDED 4"
+    ],
+    "notMet": 4,
+    "running": 1,
+    "text": {
+      "doneTally": "5 criteria · 1 met · 0 landed on main · 1 in flight · 4 not met",
+      "doneCardTally": "1 met · 0 landed on main · 4 not met",
+      "whyNotDoneTally": "5 criteria · 0 on main · 1 in flight · 4 not met",
+      "orbitChecked": "Orbit checked: 1 of 5 criteria are met by their work · 1 item running · no open items"
+    }
+  }
+}

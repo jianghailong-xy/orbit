@@ -546,15 +546,30 @@ function nothingToLandCount(counts: ProjectDoneCounts): number {
   return (counts.byReason?.NOTHING_TO_LAND ?? 0) + (counts.byReason?.CODELESS ?? 0);
 }
 
+/** How many criteria are not met. The server tallies only met criteria by where their work is
+ *  (`onMain`, `byReason`), so an unmet one is counted here and never under a landing reason. */
+function notMetCount(counts: ProjectDoneCounts): number {
+  return Math.max(0, counts.criteria - counts.met);
+}
+
+/** How many criteria are landing right now, met or not: the "N items running" of the done card.
+ *  Read off the criteria, since `counts.byReason` tallies met criteria only. */
+export function criteriaInFlightCount(derivedDone: Pick<ProjectDerivedDone, 'criteria'> | undefined): number {
+  return derivedDone?.criteria.filter((criterion) => criterion.landingReason === 'IN_FLIGHT').length ?? 0;
+}
+
 /** Counts are deliberately read from `derivedDone.counts`; this function never inspects tasks. The
- *  tallies say where work landed on `main`, the project's main branch by name. */
+ *  tallies say where met work landed on `main`, the project's main branch by name, and count the
+ *  unmet criteria apart. */
 export function projectDoneTally(counts: ProjectDoneCounts | undefined, main: string = DEFAULT_MAIN_BRANCH): string {
   if (!counts) return '';
+  const notMet = notMetCount(counts);
   return [
     `${counts.criteria} criteria`,
     `${counts.met} met`,
     `${counts.onMain} ${landedOn(main)}`,
     ...reasonParts(counts),
+    ...(notMet > 0 ? [`${notMet} ${PROJECT_DONE_COPY.notMet}`] : []),
   ].join(' · ');
 }
 
@@ -576,11 +591,15 @@ export function projectDoneCardTally(
   }
   const noBranch = counts.byReason?.NO_BRANCH ?? 0;
   const nothing = nothingToLandCount(counts);
+  // The unmet criteria, apart from any landing reason; those waiting for a confirmation are said by
+  // their own part, so they are not counted twice.
+  const notMet = Math.max(0, notMetCount(counts) - waiting);
   return [
     `${counts.met} met`,
     `${counts.onMain} ${landedOn(main)}`,
     ...(noBranch > 0 ? [`${noBranch} ${REASON_LABELS.NO_BRANCH}`] : []),
     ...(nothing > 0 ? [`${nothing} ${PROJECT_DONE_COPY.nothingToLand}`] : []),
+    ...(notMet > 0 ? [`${notMet} ${PROJECT_DONE_COPY.notMet}`] : []),
     ...waitPart,
   ].join(' · ');
 }
@@ -715,6 +734,16 @@ export function landingReasonLabel(reason: CriterionLandingReason | null, main: 
     case 'CODELESS': return LANDING_NO_CODE_TO_LAND;
     default: return `Landed on ${main}`;
   }
+}
+
+/** A criterion's landing half-sentence on the project page (decision D2 A): the Done card's words for
+ *  its `landingReason`, and none for a criterion its work has not met — that work has not landed
+ *  anywhere yet, whatever the landing lane says (src/shared/src/project-page-labels.fixture.json). */
+export function criterionLandingHalfSentence(
+  criterion: { satisfied?: boolean; landingReason: CriterionLandingReason | null },
+  main: string = DEFAULT_MAIN_BRANCH,
+): string | null {
+  return criterion.satisfied ? landingReasonLabel(criterion.landingReason, main) : null;
 }
 
 export function isWaitingOnWork(reason: CriterionLandingReason | null): boolean {

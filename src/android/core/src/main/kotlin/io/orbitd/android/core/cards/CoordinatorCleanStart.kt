@@ -45,6 +45,7 @@ object CoordinatorCleanStart {
         val stamp = when {
             card.family == CardFamily.QUESTION_RECORD -> card.source.text("resolvedAt")
             card.key.startsWith("receipt:") && card.family in setOf(CardFamily.CRITERIA_CHANGE, CardFamily.EVIDENCE) -> card.source.text("decidedAt")
+            card.key.startsWith("receipt:") && card.family == CardFamily.ACCEPTANCE -> card.source.text("confirmedAt")
             card.family == CardFamily.ACCEPTANCE && card.source.text("state") == "CONFIRMED" -> card.source.obj("confirmation")?.text("confirmedAt")
             card.family == CardFamily.PROMOTION && PromotionCards.stage(card.source) == PromotionStage.BLOCKED -> card.source.text("decidedAt")
             else -> return true

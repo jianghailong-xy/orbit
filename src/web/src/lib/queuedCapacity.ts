@@ -18,6 +18,49 @@ export interface CapacityGate extends QueuedGate {
   queuedHeldByJobs?: number | null;
   /** When the session went PENDING: the wait's clock. */
   lastTurnAt?: string | null;
+  runNowAvailable?: boolean;
+  runNowRefusal?: string | null;
+}
+
+export interface RunningOverLimit {
+  active: number;
+  limit: number;
+  runnerName: string | null;
+}
+
+export const RUN_NOW = 'Run now';
+export const RUN_NOW_FAILED = "Couldn't run now";
+export const EXTRA_SESSIONS_ON_DEMAND = 'Extra sessions on demand';
+
+const ordinalRules = new Intl.PluralRules('en', { type: 'ordinal' });
+
+export function runNowNote(
+  gate: CapacityGate,
+  machine: string | null | undefined,
+  runnerActive?: number,
+  runnerLimit?: number,
+): string | null {
+  if (!isCapacityHeld(gate)) return null;
+  if (gate.runNowRefusal) return gate.runNowRefusal;
+  if (gate.runNowAvailable !== true) return null;
+  const runnerFull = gate.queuedReason === 'runner_at_capacity';
+  const active = runnerFull ? gate.queuedActive ?? runnerActive : runnerActive;
+  const limit = runnerFull ? gate.queuedLimit ?? runnerLimit : runnerLimit;
+  if (active == null || limit == null) return 'Starts this turn now. The limit stays the same.';
+  const next = active + 1;
+  const category = ordinalRules.select(next);
+  const suffix = category === 'one' ? 'st' : category === 'two' ? 'nd' : category === 'few' ? 'rd' : 'th';
+  const where = machine?.trim() ? `on ${machine.trim()}` : 'on this runner';
+  return `Starts it as the ${next}${suffix} session ${where}. This turn only; the limit stays ${limit}.`;
+}
+
+export function runningOverLimitTag({ active, limit }: RunningOverLimit): string {
+  return `over limit · ${active}/${limit}`;
+}
+
+export function runningOverLimitHint({ runnerName }: RunningOverLimit): string {
+  const runner = runnerName?.trim();
+  return runner ? `Started over ${runner}'s limit by you` : "Started over the runner's limit by you";
 }
 
 export const RUNNER_FULL_TITLE = 'Runner full';
@@ -115,4 +158,12 @@ export function capacityHeldWaited(gate: CapacityGate, now: number): string | nu
   if (minutes < 60) return `Waiting ${minutes} min`;
   const rest = minutes % 60;
   return `Waiting ${Math.floor(minutes / 60)} h${rest ? ` ${rest} min` : ''}`;
+}
+
+/**
+ * The popover's sentence said of a scheduled run waiting for its first turn (board scheduled-run-not-started ③):
+ * `HPC is running 20 of 20 sessions. The run starts as soon as one finishes.`
+ */
+export function capacityHeldRunText(gate: CapacityGate, machine?: string | null): string {
+  return capacityHeldMessageText(gate, machine).replace('This message is sent', 'The run starts');
 }

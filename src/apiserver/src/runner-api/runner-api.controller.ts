@@ -3,7 +3,7 @@ import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from
 import { DRAIN_SKIPS_HELD, translationLanguages, turnTranslationOf } from '../sessions/turn-translation';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
-import { BG_OWNER_STOP_V1, BROWSER_CLEAR_V1, type BackgroundJobStopCommand, CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
+import { BG_OWNER_STOP_V1, BROWSER_CLEAR_V1, BROWSER_OPEN_V1, type BackgroundJobStopCommand, CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import { ConditionsService } from '../conditions/conditions.service';
 import { GithubWorkspaceService } from '../github/github-workspace.service';
@@ -58,6 +58,7 @@ import { CreatorType, Prisma, RunStatus, TaskStatus, type Runner } from '@prisma
 import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
 import { latestAgentToolsReport } from './agent-tools-report';
+import { reportsCodexSandboxUnavailable } from './codex-sandbox-report';
 import { withActiveSessions } from '../providers/active-sessions';
 import { accountAfterSignOut, accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount, waitsForWarmCache } from '../providers/plan-usage-accounts';
 import {
@@ -128,7 +129,9 @@ import {
   CodexAccountRemoveResult,
   InstallCommand,
   InstallResult,
+  LOGIN_BROWSER_OUTCOMES,
   LOGIN_FAILURE_REASONS,
+  LOGIN_RUNNER_BROWSER_V1,
   LoginCommand,
   LoginEngine,
   LoginResult,
@@ -289,6 +292,7 @@ import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout'
 import { followWikiDocsAfterReceipts, followWikiDocsAfterSessionMerge } from '../wiki/wiki-docs-follow';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
 import { appendWikiChatNotes } from '../wiki/wiki-chat-notes';
+import { appendScheduleChangeNote } from '../schedules/schedule-change-conversation';
 import {
   type TaskFailure,
   recordTaskFailure,
@@ -574,12 +578,14 @@ import {
 import { storedBrowserState } from '../managed-runners/browser-state';
 import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-delete';
 import { DELETE_APPROVAL_TOOL_NAMES, deleteCardInput } from './runner-delete-approval';
+import { BROWSER_CLEAR_APPROVAL_TOOL_NAME, browserClearCardInput } from './runner-browser-clear-approval';
 import { sanitizeWorkspaceWrite } from './runner-agents.controller';
 import { workspaceWriteCardInput } from './runner-workspace-approval';
 import { turnOutcomeOf } from './turn-outcome';
 import { carryingTurnOf, recordCarryingTurnOutcome } from '../common/carrying-turn';
 import { authorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
+import { browserClaimFields, MANAGED_RUNNER_BROWSER_GATE, type ManagedRunnerBrowserGate } from '../managed-runners/managed-runner-browser-gate';
 import {
   managedRunnerHeartbeat,
   sanitizeManagedWorkload,
@@ -706,6 +712,7 @@ const INGEST_SESSION_SELECT = {
   // Same one-shot-per-run reason as runtimeSessionId: the stamp ingestEvents takes is only taken
   // while this is still null, and the row is held FOR UPDATE across that decision.
   engineStartedAt: true,
+  codexSandboxUnavailable: true,
   enginePhase: true,
   // Which task this run executes and which door created it — read only when a user turn in
   // this batch is the one that delivers the task's brief (`readTurnCards`).
@@ -733,8 +740,8 @@ interface IngestOutcome {
   /** The batch's events not stored because their seq holds another event, and the door they came by. */
   seqConflicts: RunEventSeqConflict[];
   door: RunEventDoor;
-  /** This batch stamped Session.engineStartedAt: the run left its starting state. */
-  engineStarted: boolean;
+  /** This batch changed the session's starting state or permission semantics. */
+  sessionUpdated: boolean;
 }
 /**
  * A merged link call's own transaction, as each of its batches' ingest runs inside it (ingestLinkEventCall): the
@@ -936,6 +943,7 @@ const INGESTED_SESSION_COLUMNS: Record<string, { column: string; type: 'text' | 
   lastTurnAt: { column: 'last_turn_at', type: 'timestamp' },
   runtimeSessionId: { column: 'runtime_session_id', type: 'text' },
   engineStartedAt: { column: 'engine_started_at', type: 'timestamp' },
+  codexSandboxUnavailable: { column: 'codex_sandbox_unavailable', type: 'boolean' },
   lastAssistantText: { column: 'last_assistant_text', type: 'text' },
   lastToolUse: { column: 'last_tool_use', type: 'text' },
   contextTokens: { column: 'context_tokens', type: 'integer' },
@@ -1759,6 +1767,8 @@ export class RunnerApiController {
      */
     @Optional() private readonly coordinatorHandoffs?: CoordinatorHandoffService,
     @Optional() private readonly conditions?: ConditionsService,
+    /** The browser switch, said on every reclaim as on a claim (browserClaimFields); absent in hand-built specs: off. */
+    @Optional() @Inject(MANAGED_RUNNER_BROWSER_GATE) private readonly browserGate?: ManagedRunnerBrowserGate,
     @Optional() private readonly coordinatorFacts?: CoordinatorFactQueueService,
   ) {
     this.files = files ?? new FilesService(prisma);
@@ -2782,6 +2792,7 @@ export class RunnerApiController {
     let postponeSelfUpdateUntil: RunnerHeartbeatResponse['postponeSelfUpdateUntil'];
     let selfUpdateNow: RunnerHeartbeatResponse['selfUpdateNow'];
     let clearBrowserProfile: RunnerHeartbeatResponse['clearBrowserProfile'];
+    let openBrowser: RunnerHeartbeatResponse['openBrowser'];
     let regionCheckRequest: RunnerHeartbeatResponse['regionCheckRequest'];
     let forkSnapshotsOpen: RunnerHeartbeatResponse['forkSnapshotsOpen'];
     try {
@@ -2863,6 +2874,11 @@ export class RunnerApiController {
       if (runnerSupportsCapability(capabilities, BROWSER_CLEAR_V1)) {
         clearBrowserProfile = await this.drainBrowserClearRequest(runner.id);
       }
+      // A session's browser_open (managed-runners/browser-state.ts#open), claimed the same way, by a runner that
+      // declares browser-open/v1 only.
+      if (runnerSupportsCapability(capabilities, BROWSER_OPEN_V1)) {
+        openBrowser = await this.drainBrowserOpenRequest(runner.id);
+      }
       // The owner's Check again, redelivered rather than claimed: a beat that skips it costs nothing, so it is last.
       regionCheckRequest = await this.drainRegionCheckRequest(runner.id, capabilities);
       // A listing, read on every full beat like agentDirs; a beat that fails before it states nothing, which the
@@ -2917,6 +2933,8 @@ export class RunnerApiController {
       ...(keepWorkSessionIds.length > 0 ? { keepWorkSessionIds } : {}),
       leaseLostSessionIds: ownershipLostSessionIds,
       maxConcurrent: updated.maxConcurrent,
+      // Run now's headroom past it (ClaimedSession.overCapacity), adopted the same way.
+      burstConcurrent: updated.burstConcurrent,
       minFreeDiskMb: managedStorage ? managedStorage.minFreeDiskMb : updated.minFreeDiskMb,
       mergeRequests,
       commitRequests,
@@ -2937,6 +2955,7 @@ export class RunnerApiController {
       postponeSelfUpdateUntil,
       selfUpdateNow,
       ...(clearBrowserProfile ? { clearBrowserProfile } : {}),
+      ...(openBrowser ? { openBrowser } : {}),
       // Only when a claim holds a command for this process: an older runner's response stays the shape
       // it always was, and a direct caller comparing responses sees no new key.
       ...(codexRateLimitResetRequest ? { codexRateLimitResetRequest } : {}),
@@ -3313,6 +3332,24 @@ export class RunnerApiController {
    * the claim, predicated on the time read, so a second press written between the read and the clear stays for the
    * next beat. The runner's `browser.profileClearedAt` is the answer.
    */
+  /** A session's browser_open, claimed by the beat that hands it over: what it asks for, or undefined. */
+  private async drainBrowserOpenRequest(runnerId: string): Promise<RunnerHeartbeatResponse['openBrowser']> {
+    const row = await this.prisma.runner.findUnique({
+      where: { id: runnerId },
+      select: { browserOpenRequestedAt: true, browserOpenRequest: true },
+    });
+    const at = row?.browserOpenRequestedAt;
+    if (!at) return undefined;
+    const claimed = await this.prisma.runner.updateMany({
+      where: { id: runnerId, browserOpenRequestedAt: at },
+      data: { browserOpenRequestedAt: null, browserOpenRequest: Prisma.DbNull },
+    });
+    if (claimed.count === 0) return undefined;
+    const asked = (row.browserOpenRequest ?? {}) as { sessionId?: unknown; url?: unknown };
+    const sessionId = typeof asked.sessionId === 'string' ? asked.sessionId : '';
+    return typeof asked.url === 'string' && asked.url !== '' ? { sessionId, url: asked.url } : { sessionId };
+  }
+
   private async drainBrowserClearRequest(runnerId: string): Promise<true | undefined> {
     const row = await this.prisma.runner.findUnique({ where: { id: runnerId }, select: { browserClearRequestedAt: true } });
     const at = row?.browserClearRequestedAt;
@@ -3754,6 +3791,7 @@ export class RunnerApiController {
         loginRegion: true,
         loginCode: true,
         loginAt: true,
+        loginBrowser: true,
         // Whether a Claude sign-in may go out at all (the region check, below), and the machine its refusal names.
         name: true,
         displayName: true,
@@ -3855,6 +3893,15 @@ export class RunnerApiController {
         attempt,
         ...(r.loginAccount ? { account: r.loginAccount } : {}),
       };
+    }
+    // The owner's Use the runner's browser (docs/runner-browser-engine-sign-in-design.md): redelivered until the
+    // runner's report on the attempt says what became of it (loginResult), and only to a process that declares it.
+    if (
+      r.loginBrowser === 'requested'
+      && (r.loginStatus === 'awaiting_code' || r.loginStatus === 'awaiting_approval')
+      && (parseRunnerCapabilities(capabilities) ?? []).includes(LOGIN_RUNNER_BROWSER_V1)
+    ) {
+      return { action: 'browser', engine, attempt, ...(r.loginAccount ? { account: r.loginAccount } : {}) };
     }
     return undefined;
   }
@@ -4208,6 +4255,9 @@ export class RunnerApiController {
     // than this has its report taken all the same, without them.
     const expiresAt = typeof body.expiresAt === 'string' ? new Date(body.expiresAt) : null;
     const reason = LOGIN_FAILURE_REASONS.find((known) => known === body.reason) ?? null;
+    // What the runner did with the owner's Use the runner's browser: kept while the link waits, and a waiting report
+    // that says nothing of it (a rejected code's) leaves it as it was. Gone with the link.
+    const browser = LOGIN_BROWSER_OUTCOMES.find((known) => known === body.browser) ?? null;
     const { count } = await this.prisma.runner.updateMany({
       where: { id: runner.id, ...(attempt ? { loginAt: attempt, loginStatus: { not: 'cancelling' } } : {}) },
       data: {
@@ -4222,6 +4272,7 @@ export class RunnerApiController {
         // How long the link at loginUrl lasts, kept while it waits and dropped with it.
         loginExpiresAt: waiting && expiresAt && !Number.isNaN(expiresAt.getTime()) ? expiresAt : null,
         loginReason: status === 'failed' ? reason : null,
+        ...(waiting ? (browser ? { loginBrowser: browser } : {}) : { loginBrowser: null }),
         // Which account is signing in. For a new one this is the first the control plane hears of
         // the slot the runner added for it.
         ...(body.account ? { loginAccount: body.account } : {}),
@@ -4741,6 +4792,8 @@ export class RunnerApiController {
         ...watchClaimFields(watchRollout, s.ownerId),
         // And the wiki, on the same rule (wiki/wiki-rollout.ts).
         ...wikiClaimFields(wikiRollout, s.ownerId),
+        // And the browser switch (managed-runner-browser-gate.ts), read as the claim path reads it.
+        ...browserClaimFields(this.browserGate),
         // cf. the claim path: the Agent's Workflows switch, which may have moved since the session was first claimed.
         ...workflowClaimFields(workspace),
         // cf. the claim path: a scheduled run's session lists schedule_run_report.
@@ -6164,6 +6217,8 @@ export class RunnerApiController {
             },
             // A wiki chat's messages carry its notes (appendWikiChatNotes, below).
             wikiChatSpaceId: true,
+            // A schedule's change conversation names its schedule on every message (appendScheduleChangeNote).
+            changeScheduleId: true,
           },
         });
         // A message turn that already produced runtime output is a lease re-delivery.
@@ -6264,6 +6319,15 @@ export class RunnerApiController {
               sessionId,
               turn: { seq: t.seq, kind: t.kind, wikiContext: t.wikiContext },
             }, content);
+          }
+          // A schedule's change conversation (scheduled-tasks-design.md §8.2): each message carries the schedule it
+          // changes, read now, after the person's words. Not on a steer, which joins a turn that already has it.
+          if (t.kind === 'message' && sessionContext?.changeScheduleId) {
+            content = await appendScheduleChangeNote(
+              tx,
+              { ownerId: sessionContext.ownerId, scheduleId: sessionContext.changeScheduleId },
+              content,
+            );
           }
           // Another Orbit session's message says so, in a block after its words (session-message.ts,
           // contract §2.2): without it the recipient reads another agent as the account owner. After
@@ -6758,6 +6822,9 @@ export class RunnerApiController {
     // session's own, is refused before it is filed, since no answer to it could be acted on.
     const deleting = await deleteCardInput(this.prisma, { ownerId, ...asker }, toolName, input);
     if (deleting) return deleting as unknown as Prisma.InputJsonValue;
+    // So does browser_clear_logins' card, and the clear goes through only against it (runner-browser-clear-approval.ts).
+    const clearing = await browserClearCardInput(this.prisma, this.browserGate, ownerId, toolName);
+    if (clearing) return clearing as unknown as Prisma.InputJsonValue;
     // So does a workspace write's, and the write goes through only against it (runner-workspace-approval.ts).
     if (WORKSPACE_WRITE_APPROVAL_TOOL_NAMES.has(toolName)) {
       const write = sanitizeWorkspaceWrite(PublicIdPipe.forFields('runnerId').transform(input, { type: 'body' }));
@@ -6820,6 +6887,8 @@ export class RunnerApiController {
     // Deleting a runner or a workspace is asked every time; the delete routes refuse a card no person
     // answered, so a rule that answered it would only turn the owner's "always" into a refusal.
     if (DELETE_APPROVAL_TOOL_NAMES.has(dto.toolName)) return false;
+    // And clearing the browser's saved logins: the clear route refuses a card no person answered.
+    if (dto.toolName === BROWSER_CLEAR_APPROVAL_TOOL_NAME) return false;
     // The same for a workspace write: each one is its own question, about values no rule has read.
     if (WORKSPACE_WRITE_APPROVAL_TOOL_NAMES.has(dto.toolName)) return false;
     // A card that names only a server may be about any of its tools, and a rule cannot have been
@@ -7226,6 +7295,8 @@ export class RunnerApiController {
           mergeRepairTurnEndedAt: true,
           // And whether this session asked to merge itself during the turn that just ended.
           mergeAfterTurnAt: true,
+          // The turn Run now started over the runner's limit, if this session runs one (sessions/run-now.ts).
+          overCapacityTurnId: true,
         },
       });
       // Read the row being completed before changing it. A reserved shell turn is the one path
@@ -8083,10 +8154,16 @@ export class RunnerApiController {
               status: 'PENDING',
             },
           });
+      // Run now's pass covered this one turn (decision B): answered, it is spent and the slot over the limit is
+      // returned. A turn put back in the queue has not been answered and keeps it.
+      const overCapacityEnded = current.overCapacityTurnId != null
+        && completedTurn?.id === current.overCapacityTurnId
+        && !(unanswered && !swallowed);
       // A stopped engine passes no slot on: a message queued behind the stop waits for a claim, where the hold decides.
+      // Nor does a turn that ran over the limit: its follow-up queues for a slot like any other message.
       const nextStatus = failSession
         ? RunStatus.FAILED
-        : regionStopped
+        : regionStopped || overCapacityEnded
           ? (pendingExecutable > 0 ? RunStatus.PENDING : RunStatus.AWAITING_INPUT)
           : statusAfterTurnCompleted(pendingExecutable > 0);
       // OWNER_CONFIRMED: a run that declared its work finished and has stopped working asks its
@@ -8229,6 +8306,7 @@ export class RunnerApiController {
           // Folded into the park so the row is written once (I3). The park is conditional, so
           // the branch below covers the case where it matched nothing.
           ...(clearsMergedState ? CLEARED_MERGE_STATE : {}),
+          ...(overCapacityEnded ? { overCapacityTurnId: null } : {}),
         },
       });
       if (parked.count === 0) {
@@ -8426,6 +8504,8 @@ export class RunnerApiController {
         currentWorkTerminalized,
         currentWorkRequeued,
         status: nextStatus,
+        // A follow-up the overflow turn left queued waits for a claim: the runner is woken below.
+        overCapacityRequeued: overCapacityEnded && nextStatus === RunStatus.PENDING,
         failSession,
         // What the STATUS below announces beside FAILED: a usage limit this turn armed is a retry
         // on its way, and the clients draw Retrying rather than Failed.
@@ -8574,6 +8654,7 @@ export class RunnerApiController {
     // RUNNING. Publish the committed row for every applied non-steer completion; task-bound
     // summaries carry taskId and clear the running overlay without waiting for reconciliation.
     if (finalized.applied && !finalized.steer) {
+      if ('overCapacityRequeued' in finalized && finalized.overCapacityRequeued) this.queue.notifySessionQueued(runner.id);
       // The turn's reply, registered to go back to the session's Feishu chain (docs/feishu-bot-design.md §7.5): after
       // the commit, one statement of its own, a failure only logged — the turn never waits on Feishu nor fails for it
       // (§1.3 item 6). A worker on any replica sends it (feishu/feishu-outbox.ts).
@@ -9066,7 +9147,7 @@ export class RunnerApiController {
         // finds its seqs stored, and is announced again (restated).
         const told = this.realtime.sendNotices(committed.ingested.flatMap(({ batch, outcome }) => (
           isHeld(outcome.session)
-            ? this.realtime.batchNotices(batch.sessionId, outcome.events.filter((e) => !isNoiseSystemEvent(e)), outcome.engineStarted, outcome.restated)
+            ? this.realtime.batchNotices(batch.sessionId, outcome.events.filter((e) => !isNoiseSystemEvent(e)), outcome.sessionUpdated, outcome.restated)
             : []
         ))).then(() => null, (error: unknown) => error);
         for (const { batch, outcome, coordinator } of committed.ingested) {
@@ -9612,6 +9693,9 @@ export class RunnerApiController {
           : {}),
         ...retry,
       });
+      // A new Codex process can repeat the notice. Only the first report changes the session.
+      const sandboxReportChanged = !session.codexSandboxUnavailable && reportsCodexSandboxUnavailable(durable);
+      if (sandboxReportChanged) sessionData.codexSandboxUnavailable = true;
 
       const toolUses = events.filter((e) => e.type === RunEventType.TOOL_USE);
 
@@ -9939,7 +10023,7 @@ export class RunnerApiController {
       return {
         session, currentWorkAcknowledged, abandonedApprovals: [...abandonedApprovals, ...jobCardsCollected],
         accountReload, events, durable, alreadyStored: stored.size,
-        restated, seqConflicts, door: link ? 'link' : 'https', engineStarted,
+        restated, seqConflicts, door: link ? 'link' : 'https', sessionUpdated: engineStarted || sandboxReportChanged,
       };
     };
     return ingest.call(this);
@@ -10001,16 +10085,13 @@ export class RunnerApiController {
       // call tells them itself (ingestLinkEventCall), so only this replica is left. Alone, the batch is
       // answered once they have heard: a notice that could not be sent fails the answer once the rest is
       // announced, and the batch sent again finds its seqs stored and announces them again (restated).
-      // A batch that ended the starting state is followed by a session_updated: the clients read that
-      // state off the session row, and no event the engine sends re-reads it (controlTypeFor), so the
-      // "Getting the session ready" notice stayed up over the engine's tool calls until a list's
-      // one-minute safety read.
+      // Refresh clients that read the starting state and permission semantics from the session row.
       const published = events.filter((e) => !isNoiseSystemEvent(e));
-      if (merged) this.realtime.publishBatchHere(sessionId, published, eventOutcome.engineStarted, eventOutcome.restated);
+      if (merged) this.realtime.publishBatchHere(sessionId, published, eventOutcome.sessionUpdated, eventOutcome.restated);
       else {
         told = (async () => {
           try {
-            await this.realtime.publishBatch(sessionId, published, eventOutcome.engineStarted, eventOutcome.restated);
+            await this.realtime.publishBatch(sessionId, published, eventOutcome.sessionUpdated, eventOutcome.restated);
             return null;
           } catch (error) {
             return error;
