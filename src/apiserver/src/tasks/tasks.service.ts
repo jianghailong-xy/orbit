@@ -314,9 +314,6 @@ import {
 } from './task-route-decision';
 import { claimTrialByKey } from '../providers/account-health.service';
 import type { ModelRoutingHold } from './model-routing';
-
-/** How many accounts a dispatch may find already being tried before it takes the route it has (§6.5). */
-const TRIAL_CLAIM_ROUNDS = 3;
 import {
   TASK_RUN_TRIGGER,
   taskRunBatchId,
@@ -1299,6 +1296,9 @@ export function mayBeSweepCandidate(task: {
   return task.status === TaskStatus.OPEN && task.autoRunWhenReady === true
     && (task.assigneeId ?? task.assignee?.id) != null;
 }
+
+/** How many accounts a dispatch may find already being tried before it takes the route it has (§6.5). */
+const TRIAL_CLAIM_ROUNDS = 3;
 
 const AUTO_RUN_READY_SQL = Prisma.sql`
   t.status = 'OPEN'::task_status
@@ -16080,7 +16080,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // pins and names no effort, as before routing. A RESUME or ADOPT is never
     // routed: that run has already started. With the account's switch off there is no decision at
     // all (planTaskRunRoute), and the run is planned as before routing existed.
-    const planned_route = planned.kind === 'CREATE'
+    const plannedRoute = planned.kind === 'CREATE'
       ? await this.routeFreshRun(
         taskRouteReads(this.prisma, ownerId, this.now()),
         task,
@@ -16092,8 +16092,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Nothing can run it (docs/routing-account-health-design.md §7.5): no run is started on an account that cannot run,
     // and the task waits for the first trial due. An automatic start stands down, released, so the same moment starts
     // it then; a person's start is told why and when.
-    if (planned_route?.hold) {
-      const hold = planned_route.hold;
+    if (plannedRoute?.hold) {
+      const hold = plannedRoute.hold;
       if (auto) {
         return this.standDownReleasing(lease, { ok: false as const, skipped: 'account-needs-action' as const });
       }
@@ -16105,8 +16105,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         hold,
       });
     }
-    const route: TaskRunRoute | null = planned_route
-      ? (({ hold: _hold, trial: _trial, ...kept }) => kept)(planned_route)
+    const route: TaskRunRoute | null = plannedRoute
+      ? (({ hold: _hold, trial: _trial, ...kept }) => kept)(plannedRoute)
       : null;
     // Only a fresh run decides a mode, and it is the account's default: a paused run keeps its own.
     if (actingSessionId && planned.kind === 'CREATE') {
@@ -16282,6 +16282,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (![...health.values()].some((entries) => entries.some((entry) => entry.state !== 'suspect' && entry.state !== 'trial-due'))) {
         return null;
       }
+      // The task's own run is an account's trial now: it is not waiting, it is taking the trial (§7.5).
+      const [ownTrial] = await this.prisma.$queryRaw<Array<{ one: number }>>`
+        SELECT 1 AS "one" FROM "account_health" h JOIN "session" s ON s."id" = h."trial_session_id"
+         WHERE h."owner_id" = ${ownerId}::uuid AND h."cleared_at" IS NULL AND s."task_id" = ${task.id}::uuid
+         LIMIT 1`;
+      if (ownTrial) return null;
       const workspace = task.assigneeId
         ? await this.prisma.workspace.findFirst({ where: { id: task.assigneeId, ownerId }, select: { id: true, runnerId: true } })
         : null;
