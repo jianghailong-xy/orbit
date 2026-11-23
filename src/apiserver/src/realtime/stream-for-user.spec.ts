@@ -37,6 +37,9 @@ type Row = {
     lastHeartbeatAt: Date | null;
   } | null;
   lastTurnAt: Date | null;
+  /** The list's order key (session.listed_at, migration 1434), and the creation it is read as where it is NULL. */
+  listedAt: Date | null;
+  createdAt: Date;
   workspace: { id: string; name: string | null; model: string | null; effort: string | null } | null;
   coordinatorForProject?: { id: string; title: string } | null;
   folderId?: string | null;
@@ -148,6 +151,9 @@ const rowA: Row = {
     lastHeartbeatAt: new Date(),
   },
   lastTurnAt: new Date('2026-06-26T00:00:00.000Z'),
+  // Behind lastTurnAt, as on a session whose latest activity was not its owner's: the summary carries this one.
+  listedAt: new Date('2026-06-25T23:00:00.000Z'),
+  createdAt: new Date('2026-06-25T22:00:00.000Z'),
   workspace: { id: 'workspaceA', name: 'builder', model: 'opus', effort: 'high' },
   coordinatorForProject: { id: 'projectA', title: 'Fix the project' },
   // The SOURCE columns, as migration 0231 leaves them on every session that resolves no baseline:
@@ -207,6 +213,7 @@ test('a STATUS event reaches the owner as session.updated with a full summary', 
   });
   assert.equal(data.pendingApprovals, 3);
   assert.equal(data.lastTurnAt, '2026-06-26T00:00:00.000Z');
+  assert.equal(data.listedAt, '2026-06-25T23:00:00.000Z');
   assert.deepEqual(data.agent, {
     id: 'workspaceA',
     name: 'builder',

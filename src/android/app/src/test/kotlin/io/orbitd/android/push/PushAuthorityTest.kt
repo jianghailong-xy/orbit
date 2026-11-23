@@ -405,6 +405,30 @@ class PushAuthorityTest {
     /** The server's one push per drain with the owner's work waiting (docs/runner-update-drain-design.md D3): it parses exactly as the
      * server sends it (the shared fixture's sample), names no engine, opens the runner, and stands while GET /runners lists the runner's
      * drainWaiting. Without its runner it is no notification. */
+    /** docs/account-health-owner-surface-contract.md §1: it opens its machine, names the row Check again takes, and stands only while
+     * GET /account-health lists that row. A key's push names no machine and no link. */
+    @Test fun anAccountNeedsActionPushOpensItsMachineAndStandsWhileTheBlockDoes() = runBlocking {
+        val push = message("account-needs-action", "runnerID" to runnerId, "accountHealthID" to "h1")
+        assertEquals(PushType.ALERT, push.type)
+        assertEquals("h1", push.payload.accountHealthId)
+        assertEquals(Destination.RUNNER, OrbitLinks.parse(push.link!!)!!.destination)
+        // A key or pool login has no machine: the Providers screen, where its row is.
+        val providers = message("account-needs-action", "accountHealthID" to "h2", "subjectKey" to "provider:k1").link
+        assertEquals("orbit://settings/providers", providers)
+        assertEquals(OrbitRoute(Destination.SETTINGS, "providers"), OrbitLinks.parse(providers!!)!!.copy(origin = OrbitRoute(Destination.SETTINGS).origin))
+        assertNull("it names its health row", runCatching { message("account-needs-action", "runnerID" to runnerId) }.getOrNull())
+        authorityFixture { authority, server, _ ->
+            var blocks = """[{"id":"h1"}]"""
+            server.respond = { request ->
+                assertEquals("/api/account-health", request.path)
+                response("""{"blocks":$blocks}""")
+            }
+            assertEquals(PushCheck.ACTIVE, authority.check(push))
+            blocks = "[]"
+            assertEquals("cleared by Check again", PushCheck.STALE, authority.check(push))
+        }
+    }
+
     @Test fun aRunnerUpdatingPushOpensItsRunnerAndStandsWhileWorkWaits() = runBlocking {
         val sample = pushFixture()["samples"]!!.jsonArray.map { it.jsonObject }
             .single { it["name"]!!.jsonPrimitive.content == "runner-updating" }

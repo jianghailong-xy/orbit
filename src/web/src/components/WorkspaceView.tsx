@@ -206,6 +206,7 @@ import { moveProject } from './ProjectRunSettings';
 import { SidebarNavIcon } from './SidebarNavIcon';
 import {
   type SessionTagRef,
+  compareListed,
   sessionTagSections,
   sessionTimeSections,
   sessionsWithTag,
@@ -1570,7 +1571,7 @@ export function SessionTitleRow({
           <TeamOutlined />
         </span>
       )}
-      <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
+      <span className="session-time">{fmtTime(s.listedAt ?? s.createdAt)}</span>
       <CoordinatorBadge projectId={s.projectId} />
     </div>
   );
@@ -1744,7 +1745,7 @@ export function SessionProjectRowContent({ project }: { project: SessionProjectR
       <div className="session-main">
         <div className="session-title-row">
           <div className="session-title">{project.title}</div>
-          <span className="session-time">{fmtTime(project.lastTurnAt ?? project.createdAt ?? undefined)}</span>
+          <span className="session-time">{fmtTime(project.listedAt ?? project.createdAt ?? undefined)}</span>
         </div>
         <div className="session-sub">
           <span
@@ -3216,9 +3217,8 @@ export function WorkspaceView({
     return rows.sort((a, b) => {
       // Pinned sessions float to the top; among themselves they keep time order.
       if (!!a.pinnedAt !== !!b.pinnedAt) return a.pinnedAt ? -1 : 1;
-      const ta = a.lastTurnAt ?? a.createdAt;
-      const tb = b.lastTurnAt ?? b.createdAt;
-      return ta < tb ? 1 : -1;
+      // listedAt, never lastTurnAt: streamed activity must not move a row (contracts/session-list-order.fixtures.json).
+      return compareListed(a, b);
     });
   }, [sessionsQ.data, effectiveView, onScheduledRuns]);
   const selectedFromList = useMemo(
@@ -3602,8 +3602,8 @@ export function WorkspaceView({
   const pageMerges = useMemo(() => (Array.isArray(pageMergesQ.data) ? pageMergesQ.data : []), [pageMergesQ.data]);
   const allProjectMembers = useMemo(() => [...new Map(
     [...(projectSessionsQ.data ?? []), ...(completedProjectSessionsQ.data ?? [])].map((s) => [s.id, s]),
-  ).values()].sort((a, b) => (Date.parse(b.lastTurnAt ?? b.createdAt ?? '') || 0) -
-    (Date.parse(a.lastTurnAt ?? a.createdAt ?? '') || 0)), [projectSessionsQ.data, completedProjectSessionsQ.data]);
+  ).values()].sort((a, b) => (Date.parse(b.listedAt ?? b.createdAt ?? '') || 0) -
+    (Date.parse(a.listedAt ?? a.createdAt ?? '') || 0)), [projectSessionsQ.data, completedProjectSessionsQ.data]);
   // A project's LANDING sessions are its subject's, not conversations: they are counted nowhere on
   // this page — not in "Project · N sessions", not in the running count, not among the status dots,
   // not in the timeline — and are summed up once, in the Landings row below the coordinator.
@@ -3867,6 +3867,7 @@ export function WorkspaceView({
         }))
       : sessionTimeSections(folderListing.entries, {
           pinnedFirst: view === 'open' && !tagFilter,
+          attention: view === 'open',
         }).map((s) => ({
           key: s.title,
           tag: null as SessionTagRef | null,
@@ -3883,7 +3884,7 @@ export function WorkspaceView({
       if (!openProjectId) return [];
       const coordinator = pageCoordinator ? [{ key: 'Coordinator', title: SESSION_PROJECT_COPY.coordinatorSection, tag: null,
         sessions: [{ ...pageCoordinator, kind: 'session' as const }] }] : [];
-      const timeline = sessionTimeSections(projectMembers.filter((s) => s.id !== pageCoordinator?.id), { pinnedFirst: false })
+      const timeline = sessionTimeSections(projectMembers.filter((s) => s.id !== pageCoordinator?.id), { pinnedFirst: false, attention: true })
         .map((s) => ({ key: s.title, title: s.title, tag: null,
           sessions: s.sessions.map((session) => ({ ...session, kind: 'session' as const })) }));
       // The Landings row sits below the coordinator and above the timeline, for a project that has

@@ -99,7 +99,7 @@ internal object ScheduledRunsFolderCopy {
 internal object SessionListTime {
     fun format(session: DirectorySession, now: Instant = Instant.now()): String? =
         if (session.isRunning()) session.currentTurnStartedAt?.let { TaskTime.elapsed(it, now) }
-        else (session.lastTurnAt ?: session.createdAt)?.let { WikiDate.relative(it, now) }
+        else (session.listedAt ?: session.createdAt)?.let { WikiDate.relative(it, now) }
 }
 
 /**

@@ -494,14 +494,14 @@ export class SessionGuestsService {
     const ended = await this.hasEnded(sessionId);
     if (!ended) {
       try {
-        const sent = await this.sessions.createTurn(invitation.ownerId, sessionId, dto, { externalSender, onTurnWritten });
+        const sent = await this.sessions.createTurn(invitation.ownerId, sessionId, dto, { externalSender, onTurnWritten, listed: true });
         return { ...answerOf(sent), revived: false };
       } catch (error) {
         // It ended between the read above and the turn's own lock: resume it, as below.
         if (!(error instanceof SessionNotSendable)) throw error;
       }
     }
-    const resumed = await this.sessions.resume(invitation.ownerId, sessionId, dto, { externalSender, onTurnWritten });
+    const resumed = await this.sessions.resume(invitation.ownerId, sessionId, dto, { externalSender, onTurnWritten, listed: true });
     return { ...answerOf(resumed), revived: resumed.revived };
   }
 
