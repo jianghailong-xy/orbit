@@ -78,7 +78,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `runner` | 230 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **832** |
+| **Total** | **833** |
 
 ## Public routes
 
