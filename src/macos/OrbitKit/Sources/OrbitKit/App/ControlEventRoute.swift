@@ -46,7 +46,7 @@ public enum ControlEventRoute: Equatable, Sendable {
     case folders
     /// `wiki.changed`: what the Wiki has loaded, and the wiki chat.
     case wiki
-    /// `terminals.changed`: the approve card's requests and Settings → Terminals.
+    /// `terminals.changed`: the approve card's requests and each machine page's Terminals.
     case terminals
     /// `translation.status_changed`: the account (`GET /users/me`), whose `translationUnavailableUntil`
     /// the composer's language tag reads.

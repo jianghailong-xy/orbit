@@ -88,7 +88,7 @@ public enum ShareMarkdown {
         switch state {
         case .queued: return "Queued"
         case .running: return "Running"
-        case .succeeded: return "Succeeded"
+        case .succeeded: return "Finished"
         case .failed: return "Failed"
         case .awaitingInput: return "Awaiting reply"
         case .interrupted: return "Interrupted"

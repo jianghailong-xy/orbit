@@ -104,6 +104,9 @@ type agyApprovalPolicy struct {
 	AnswerWithinMs  int64    `json:"answerWithinMs"`
 	// SubagentRunID is set when this agy runs as a SubAgent: its cards name the run (subagentApprovalBody).
 	SubagentRunID string `json:"subagentRunId,omitempty"`
+	// ReadonlyParentMode is set when this agy runs as a read-only SubAgent: the parent session's mode when it
+	// started, which answers what the hook does not refuse (readonlySubagentAnswer's table). Its writes are refused.
+	ReadonlyParentMode string `json:"readonlyParentMode,omitempty"`
 }
 
 // agyHookInput is the PreToolUse payload agy writes on the hook's stdin (contract §5.4). Unlike the
@@ -173,6 +176,9 @@ func decideAntigravityToolCall(policy *agyApprovalPolicy, in *agyHookInput) agyA
 			return agyApprovalVerdict{"deny", "A permission rule of this workspace denies " + name + " (" + strings.TrimSpace(rule) + ")."}
 		}
 	}
+	if policy.ReadonlyParentMode != "" && writes && !(artifacts != "" && pathWithin(target, artifacts)) {
+		return agyApprovalVerdict{"deny", "This is a read-only SubAgent: it does not write files."}
+	}
 	if agyOrbitMCPCall(raw, args) {
 		return agyApprovalVerdict{"allow", ""}
 	}
@@ -212,6 +218,15 @@ func decideAntigravityToolCall(policy *agyApprovalPolicy, in *agyHookInput) agyA
 			(policy.Mode == "acceptEdits" && inSession && !agyConfigPath(target)) {
 			return agyApprovalVerdict{"allow", ""}
 		}
+	}
+	switch policy.ReadonlyParentMode {
+	case "":
+	case "auto", "bypassPermissions":
+		return agyApprovalVerdict{"allow", ""}
+	case "dontAsk":
+		return agyApprovalVerdict{"deny", "The parent session's permission mode does not ask for approval, and nothing approved " + name + "."}
+	default:
+		return agyApprovalVerdict{"ask", ""}
 	}
 	if antigravityAsksForApproval(policy.Mode) {
 		return agyApprovalVerdict{"ask", ""}
@@ -618,6 +633,9 @@ func installAntigravityApprovalGate(ctx context.Context, job *ClaimedSession, ex
 		DisallowedTools: job.Agent.DisallowedTools,
 		AnswerWithinMs:  agyApprovalAnswerWithin(timeout).Milliseconds(),
 		SubagentRunID:   strings.TrimSpace(job.Agent.Env[envSubagentRunID]),
+	}
+	if job.readonlySubagent && job.readonlyParentMode != nil {
+		policy.ReadonlyParentMode = firstNonEmpty(job.readonlyParentMode(), "default")
 	}
 	body, err := json.MarshalIndent(policy, "", "  ")
 	if err != nil {

@@ -83,15 +83,6 @@ class OwnerRequestTranslationTest {
         compose.waitForIdle()
     }
 
-    /** The Waiting-on-you inbox, with the request's row. */
-    private fun showInbox(translation: String?) {
-        val store = store(translation)
-        compose.setContent { OrbitTheme(darkTheme = false) {
-            CompositionLocalProvider(LocalTranslation provides account) { WaitingOnYouScreen(store, emptyList(), null, 0, {}) }
-        } }
-        compose.waitForIdle()
-    }
-    private fun rowTitle() = compose.onNodeWithTag("waiting-on-you:row:$id:title", useUnmergedTree = true)
     private fun tag(part: String) = compose.onNodeWithTag("owner-request:$id:$part", useUnmergedTree = true)
     private fun has(text: String) = compose.onAllNodesWithText(text, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun bodies(door: String) = fixture.posts().filter { it.path == "/api/owner-requests/$id/$door" }.map { Json.parseToJsonElement(it.body).jsonObject }
@@ -117,20 +108,10 @@ class OwnerRequestTranslationTest {
         tag("title").assertTextEquals("ステージングはどのリージョンで動かす？")
     }
 
-    @Test fun theInboxRowDrawsTheTranslatedTitle() {
-        showInbox(japanese)
-        rowTitle().assertTextEquals("ステージングはどのリージョンで動かす？")
-    }
-
-    @Test fun theInboxRowDrawsTheOriginalTitleWithAFailedTranslation() {
-        showInbox("""{"lang":"ja","failed":true}""")
-        rowTitle().assertTextEquals("Which region should staging run in?")
-    }
-
     @Test fun aTranslationInAnotherLanguageThanTheOwnersIsDrawnAsTheOriginal() {
         account = AccountTranslation(enabled = true, available = true, language = "zh-Hans")
-        showInbox(japanese)
-        rowTitle().assertTextEquals("Which region should staging run in?")
+        show(japanese)
+        tag("title").assertTextEquals("Which region should staging run in?")
     }
 
     @Test fun aTranslatedOptionStillAnswersByItsIndex() {

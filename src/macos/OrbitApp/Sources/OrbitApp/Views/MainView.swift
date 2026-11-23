@@ -144,7 +144,7 @@ struct MainView: View {
 
 #if os(macOS)
 /// macOS's leftmost rail (docs/mocks/macos-sidebar, 01): the iPad's sidebar — the iPhone's drawer —
-/// in a Mac source list. The work leads (Projects, Tasks, Wiki, Waiting on you, with the drawer's
+/// in a Mac source list. The work leads (Projects, Tasks, Wiki, with the drawer's
 /// amber counts), then the Workspaces one line each with the drawer's state slot, then every open
 /// project. Mac-sized rows, the system's selection and foldable groups; no New session here (⌘N and
 /// File ▸ New Session start one), and no Following, Settings or Admin rows: the footer's gear opens
@@ -205,9 +205,6 @@ struct SectionSidebar: View {
             ForEach(sections) { row in
                 sectionRow(row)
             }
-            // "Waiting on you", raised as a sheet over whatever is selected.
-            OwnerRequestInboxEntry()
-
             Section(isExpanded: $workspacesExpanded) {
                 workspaceRows(shortcutIndex: commandHeld ? shortcutIndex : [:])
             } header: {

@@ -2964,6 +2964,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0590 adds one nullable TIMESTAMP(3) `self_update_now_requested_at` on `runner` (no default, catalog-only); no
       // preserved rows, triggers or DONE fence change, and no row is written.
       '0590_runner_self_update_now',
+      // 0591 adds statement triggers on owner_request and project_handoff_approval that call 0511's
+      // `open_list_bump_owner`, so the Open list's version moves when an owner request or a task move
+      // changes; they write `open_list_epoch` alone. No preserved rows, preserved triggers or DONE fence change.
+      '0591_open_list_owner_requests_and_moves',
+      // 0592 adds one partial index on owner_request (PENDING rows by asking session); no preserved rows,
+      // triggers or DONE fence change.
+      '0592_pending_owner_question_indexes',
       // 0595 adds one nullable TIMESTAMP(3) `drain_waiting_pushed_at` on `runner` (no default, catalog-only); no
       // preserved rows, triggers or DONE fence change, and no row is written.
       '0595_runner_drain_waiting_push',
