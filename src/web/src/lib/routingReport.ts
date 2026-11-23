@@ -171,7 +171,7 @@ export interface RoutingModelBlock extends RunFigures {
 
 /** The SubAgents view's models, in its sections. */
 export interface RoutingSections {
-  /** Every model with a tier, and every model routed at one: most runs first, then the tier list's order. A model's
+  /** Every model with a tier, and every model routed at one: by name. A model's
    *  accounts with no tier and no runs are listed with it here rather than folded away. */
   tiered: RoutingModelBlock[];
   /** Runs that named their model, so routing picked no tier. */
@@ -183,6 +183,30 @@ export interface RoutingSections {
 }
 
 const rowKey = (provider: string | null, model: string | null) => `${provider ?? ''}\n${model ?? ''}`;
+
+/**
+ * A model id with an engine's wrapping taken off, as the server's modelRuleKey (apiserver model-identity.ts) spells it:
+ * lower case, a `["vendor", "model"]` token read as its model, a `[variant]` dropped, a `vendor/` prefix dropped, a dot
+ * between digits written as a dash. A trailing `-max` stays: it names a model (`qwen3.7-max`). For a row the tier list does not have, so has no identity:
+ * `gpt-6.2-sol` there is still GPT-6.2 Sol's `gpt-6-2-sol`.
+ */
+export function modelRuleKey(model: string): string {
+  let id = model.trim();
+  if (id.startsWith('[')) {
+    try {
+      const parts: unknown = JSON.parse(id);
+      if (Array.isArray(parts) && typeof parts[parts.length - 1] === 'string') id = parts[parts.length - 1] as string;
+    } catch {
+      // Not a token: read as written.
+    }
+  }
+  id = id.toLowerCase().replace(/\[.*\]$/, '');
+  id = id.slice(id.lastIndexOf('/') + 1);
+  return id.replace(/(\d)\.(?=\d)/g, '$1-') || model;
+}
+
+/** Model names in reading order, the numbers in them as numbers: GPT-5.6 Sol, GPT-6.1 Sol, GPT-6.2 Sol. */
+const byName = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
 
 const sum = (groups: readonly RunFigures[]): RunFigures =>
   groups.reduce<RunFigures>(
@@ -209,7 +233,8 @@ export function routingSections(providers: readonly ProviderTierRow[], groups: r
     }
 
   // Which model a row is: the tier list's identity, so one model's accounts on every provider are one block.
-  const identityOf = (key: string) => listed.get(key)?.model.identity?.key ?? key;
+  // A row the tier list does not have falls back to its id's rule key, so it still joins its model.
+  const identityOf = (key: string) => listed.get(key)?.model.identity?.key ?? modelRuleKey(key.slice(key.indexOf('\n') + 1));
 
   const byKind = { routed: new Map<string, SubagentReportGroup[]>(), named: new Map<string, SubagentReportGroup[]>(), notRouted: new Map<string, SubagentReportGroup[]>() };
   for (const group of groups) {
@@ -252,13 +277,14 @@ export function routingSections(providers: readonly ProviderTierRow[], groups: r
       });
       return {
         key: accounts[0].key,
-        modelLabel: accounts[0].modelLabel,
+        // The vendor's name where an account has one, so an unlisted account's id does not name the model.
+        modelLabel: accounts.find((account) => account.model?.identity?.name)?.model?.identity?.name ?? accounts[0].modelLabel,
         accounts,
         ...sum(accounts),
         tiers,
         outsideRuns: accounts.reduce((total, account) => total + account.outsideRuns, 0),
       };
-    }).sort(byRuns);
+    }).sort((a, b) => byName.compare(a.modelLabel, b.modelLabel));
   };
 
   const tiered: RoutingModelRow[] = [];
