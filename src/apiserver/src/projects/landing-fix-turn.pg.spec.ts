@@ -432,6 +432,27 @@ test('W6: a conflict\'s landing-fix turn names the phase, the commit and the fil
   }
 });
 
+// Task 352ZEtmx7cOXY91yIodUk: on a line that is not on origin yet the job's T0 is the upstream's tip, and there is
+// no line branch to merge: the turn names main alone.
+test('W6: a fresh line\'s red check (T0 = U) tells the session to merge main, not the missing line branch',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'fresh-line');
+      const t = await finishedTask(stack, w, 'fresh-line');
+      const command = await claimJob(stack, w, 'LAND_TASK');
+      const itemId = await fail(stack, w, command, { ...redCheck(), targetShaBefore: UPSTREAM });
+      await deliver(stack, w, itemId);
+      const [turn, ...more] = await turnOf(stack, t.sessionId, command.jobId);
+      assert.ok(turn, 'the task\'s own red was not handed to its session');
+      assert.deepEqual(more, []);
+      assert.ok(turn.content!.includes('\n1. Merge main into your branch and resolve what conflicts.\n'), turn.content!);
+      assert.ok(!turn.content!.includes(`Merge project/${w.projectId}`), turn.content!);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
 test('W6: a MAIN line\'s task-branch candidate that conflicts reaches the task\'s session the same way',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();

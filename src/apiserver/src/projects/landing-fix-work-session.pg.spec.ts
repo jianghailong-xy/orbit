@@ -691,6 +691,39 @@ test('W-T6: a BASELINE_RED landing goes to the coordinator as today', { skip }, 
   }
 });
 
+// Task 352ZEtmx7cOXY91yIodUk: the first landing on a line that is not on origin yet measures against main's own
+// tip (T0 = U, nothing absorbed). A red main is attributed there now (K3 on T0), and that result stays off the
+// task's session: no hand-off, no landing-fix turn, one baseline item keyed on (U, U).
+test('W-T6: a BASELINE_RED first landing on a fresh line (T0 = U, no absorb) never reaches the task\'s session',
+  { skip }, async () => {
+    const stack = await connect();
+    try {
+      const check = redCheck().checks[0]!;
+      const { w, t, jobId, item } = await landing(stack, 'fresh-line-baseline-red', redCheck({
+        baselineRed: true,
+        targetShaBefore: UPSTREAM,
+        checks: [check, { ...check, scope: 'BASELINE', treeSha: sha('8') }],
+      }));
+      assert.equal(item.kind, 'INTEGRATION_CHECK_FAILED');
+      assertCoordinatorsAsToday(item, 'a fresh line\'s BASELINE_RED');
+      const [row] = await stack.db.$queryRaw<Array<{ dedupe_key: string; failure_class: string | null; baseline_red: boolean }>>(Prisma.sql`
+        SELECT i."dedupe_key", i."payload"->>'failureClass' AS "failure_class", j."baseline_red"
+          FROM "project_open_item" i JOIN "project_integration_job" j ON j."id" = i."integration_job_id"
+         WHERE i."id" = ${item.id}::uuid`);
+      assert.equal(row!.baseline_red, true, 'the job did not record baseline_red');
+      assert.equal(row!.failure_class, 'BASELINE_RED');
+      assert.ok(row!.dedupe_key.startsWith('ICB:') && row!.dedupe_key.endsWith(`:${UPSTREAM}:${UPSTREAM}`), row!.dedupe_key);
+      await stack.openItems.deliverOwed(w.projectId);
+      assert.equal(
+        await stack.db.conversationTurn.count({
+          where: { sessionId: t.sessionId, clientTurnId: { startsWith: 'landing-fix:v1:' } },
+        }), 0, 'a baseline-red landing handed the task\'s session a landing-fix turn');
+      assert.ok(jobId);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
 test('W-T6: a CHECK_TIMED_OUT landing goes to the coordinator as today', { skip }, async () => {
   const stack = await connect();
   try {

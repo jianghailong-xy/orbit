@@ -32,6 +32,8 @@ export interface LandingFixFacts {
   targetBranch: string;
   upstreamBranch: string;
   targetSha: string | null;
+  /** The upstream tip the job read. Equal to `targetSha` on a line that does not exist on origin yet. */
+  upstreamSha: string | null;
   conflicts: string[];
   check: { name: string; command: string; exitCode: number | null } | null;
   testedSha: string | null;
@@ -80,7 +82,8 @@ export async function readLandingFixFacts(
   const job = await db.projectIntegrationJob.findUnique({
     where: { id: item.integrationJobId },
     select: {
-      state: true, phase: true, targetRef: true, upstreamRef: true, targetShaBefore: true, testedSha: true,
+      state: true, phase: true, targetRef: true, upstreamRef: true, targetShaBefore: true, upstreamSha: true,
+      testedSha: true,
       conflicts: true, checks: true, claimGeneration: true, round: true, landingId: true,
     },
   });
@@ -112,6 +115,7 @@ export async function readLandingFixFacts(
     targetBranch: shortBranchName(job.targetRef),
     upstreamBranch: shortBranchName(job.upstreamRef),
     targetSha: job.targetShaBefore,
+    upstreamSha: job.upstreamSha,
     conflicts: job.conflicts,
     check: check ? { name: check.name, command: check.command, exitCode: check.exitCode } : null,
     testedSha: job.testedSha,
@@ -125,6 +129,10 @@ export async function readLandingFixFacts(
 export function landingFixMessage(facts: LandingFixFacts): string {
   const target = facts.targetBranch;
   const upstream = facts.upstreamBranch !== target ? facts.upstreamBranch : null;
+  // A line that does not exist on origin yet starts at the upstream's tip (the runner reads its T0 as U), and
+  // there is no line branch to merge. The same words fit a line sitting at that tip: merging it adds nothing.
+  const lineAtUpstream = upstream !== null && facts.targetSha !== null && facts.targetSha === facts.upstreamSha;
+  const toMerge = lineAtUpstream ? upstream : `${target}${upstream ? ` and ${upstream}` : ''}`;
   const failure = facts.state === 'CONFLICT'
     ? [
         `Conflict while ${conflictVerb(facts.phase, facts.upstreamBranch)} ${target}`
@@ -148,7 +156,7 @@ export function landingFixMessage(facts: LandingFixFacts): string {
     `Nothing was pushed. ${target} is unchanged.`,
     '',
     'Fix it on your own branch, in this checkout:',
-    `1. Merge ${target}${upstream ? ` and ${upstream}` : ''} into your branch and resolve what conflicts.`,
+    `1. Merge ${toMerge} into your branch and resolve what conflicts.`,
     '2. Run what failed until it passes.',
     '3. Commit, then end your turn.',
     '',
