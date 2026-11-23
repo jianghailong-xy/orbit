@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -42,8 +45,11 @@ const loginBrowserCaptureEvery = 500 * time.Millisecond
 // loginBrowserTargets reads Chrome's pages. A var so a test can stand in for Chrome.
 var loginBrowserTargets = browserTargets
 
-// loginBrowserOpenTab opens a page in a new tab. A var for the same reason.
-var loginBrowserOpenTab = openBrowserTab
+// loginBrowserOpenTab opens a page in a new tab and answers its target id. A var for the same reason.
+var loginBrowserOpenTab = openBrowserTabID
+
+// loginBrowserCloseTab closes the sign-in's tab once it succeeded. A var for the same reason.
+var loginBrowserCloseTab = closeSignInTab
 
 // loginBrowser is the part of the browser supervisor a sign-in uses.
 type loginBrowser interface {
@@ -112,11 +118,30 @@ func (r *loginRelay) openInLoginBrowser(ctx context.Context, lr LoginCommand, b 
 	openCtx, cancel := context.WithTimeout(ctx, browserOpenNavigateWait)
 	defer cancel()
 	browserDevToolsReady(endpoint)
-	if err := loginBrowserOpenTab(openCtx, endpoint, published.URL); err != nil {
+	tabID, err := loginBrowserOpenTab(openCtx, endpoint, published.URL)
+	if err != nil {
 		b.EndEngineSignIn(run.attempt)
 		fail(err.Error())
 		return
 	}
+	// The tab goes once the machine is signed in: the page has nothing more to say, and the owner watching the
+	// browser is left on what was there before. A sign-in that failed or was cancelled keeps it, for what it said.
+	go func() {
+		<-run.ctx.Done()
+		r.mu.Lock()
+		done := run.reportedDone
+		r.mu.Unlock()
+		if !done || tabID == "" {
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := loginBrowserCloseTab(ctx, endpoint, tabID); err != nil {
+			logln("login: the sign-in tab could not be closed:", err)
+			return
+		}
+		logln("login: the sign-in tab was closed")
+	}()
 	r.mu.Lock()
 	run.browser = loginBrowserOpened
 	r.mu.Unlock()
@@ -125,6 +150,47 @@ func (r *loginRelay) openInLoginBrowser(ctx context.Context, lr LoginCommand, b 
 	if callback, state, ok := claudeCodeCallback(lr.Engine, published.URL); ok {
 		go r.takeCodeFromBrowser(run, lr, endpoint, callback, state, func() { answer(loginBrowserCodeTaken) })
 	}
+}
+
+// closeSignInTab closes the tab with target id in the Chrome whose DevTools listen at endpoint, if it is still open.
+// Chrome quits when its last tab closes, so a sign-in tab that is the only one is first given a blank tab beside it.
+// Nothing else is closed, and nothing of the page is logged.
+func closeSignInTab(ctx context.Context, endpoint, id string) error {
+	targets, err := loginBrowserTargets(ctx, endpoint)
+	if err != nil {
+		return err
+	}
+	found, pages := false, 0
+	for _, t := range targets {
+		if t.Type != "page" || strings.HasPrefix(t.URL, "devtools://") {
+			continue
+		}
+		pages++
+		if t.ID == id {
+			found = true
+		}
+	}
+	if !found {
+		return nil // the owner closed it already
+	}
+	if pages == 1 {
+		if _, err := loginBrowserOpenTab(ctx, endpoint, "about:blank"); err != nil {
+			return err
+		}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+"/json/close/"+url.PathEscape(id), nil)
+	if err != nil {
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return errors.New("The browser's DevTools do not answer")
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("The browser's DevTools answered %d to closing a tab", resp.StatusCode)
+	}
+	return nil
 }
 
 // claudeCodeCallback is where Claude Code's sign-in page sends the browser with the code, and the state it must carry:
