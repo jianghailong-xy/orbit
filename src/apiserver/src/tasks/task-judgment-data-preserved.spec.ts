@@ -3385,7 +3385,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1465_session_run_now_over_capacity',
       // 1491 sets feishu_app.message_detail's default to FULL and moves every TITLES_ONLY row to FULL: an ALTER and an
       // UPDATE of that table only, none of the preserved relations, and no trigger, function or DONE fence changes.
-      '1491_feishu_details_by_default'],
+      '1491_feishu_details_by_default',
+      // 1527 lands on a protected GitHub branch through a pull request (docs/design/protected-branch-landing.md §7). Of
+      // the preserved relations it adds two nullable columns to session (merge_pull_request_id, merge_owner_token_for)
+      // and widens session_merge_receipt_recorded_by_check by SERVER, a CHECK every stored row passes; it writes no row
+      // of either. Beside them: nullable workspace and project_integration_job columns, the PULL_REQUEST job state in
+      // project_integration_job_state_chk, J3's index and project_integration_job_terminal_guard (a function of that
+      // table, none of the preserved ones), PULL_REQUEST in project_integration_job_event_kind_chk,
+      // github_app_config.webhook_secret_enc, and the new github_pull_request and github_webhook_delivery tables. No
+      // DONE fence changes. It takes its locks in short tries inside one DO.
+      '1527_pull_request_landing'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

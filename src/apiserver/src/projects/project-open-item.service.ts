@@ -187,7 +187,7 @@ import {
   supersedeStaleDoneRequest,
 } from './project-done-request';
 import { sessionHeldSql } from '../common/session-release';
-import { IN_FLIGHT_JOB_STATES, IN_FLIGHT_JOB_STATES_SQL } from './in-flight-job-states';
+import { IN_FLIGHT_JOB_STATES, IN_FLIGHT_JOB_STATES_SQL, isInFlightJobState } from './in-flight-job-states';
 
 /**
  * Who is asking for an item to be put in front of the project's coordinator conversation.
@@ -849,7 +849,7 @@ export class ProjectOpenItemService {
         where: { id: item.handlingJobId },
         select: { state: true },
       });
-      if (handling && (handling.state === 'QUEUED' || handling.state === 'RUNNING')) return;
+      if (handling && isInFlightJobState(handling.state)) return;
     }
     // THE SWITCH DECIDES AUTOMATIC HAND-OVERS, AND ONLY THOSE. `coordinatorEnabled` is the owner
     // saying the coordinator may not act on its own, and an item handed over by the platform is
@@ -2752,7 +2752,7 @@ export class ProjectOpenItemService {
         select: { id: true, generation: true, state: true, checks: true, phase: true },
       });
       if (ownerRequester && newestLanding
-        && (newestLanding.state === 'QUEUED' || newestLanding.state === 'RUNNING')) {
+        && isInFlightJobState(newestLanding.state)) {
         return this.skipInFlightLandingCheck(tx, {
           ownerId, projectId, taskId, taskStatus: locked.status, jobId: newestLanding.id, reason,
         });

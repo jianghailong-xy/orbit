@@ -16,6 +16,7 @@ import { INTEGRATION_JOB_CLAIM } from './project-integration-job';
 import { baselineHoldSql } from './baseline-hold';
 import { IN_FLIGHT_JOB_STATES, IN_FLIGHT_JOB_STATES_SQL } from './in-flight-job-states';
 import { pullRequestBlockingCode, pullRequestViewOf, pullRequestWaitSummary } from './pull-request-landing';
+import { isInFlightJobState } from './in-flight-job-states';
 
 /**
  * Where each task on a page sits between "done" and "on main"
@@ -377,7 +378,7 @@ export function taskIntegrationOf(row: TaskIntegrationRow, now: Date): TaskInteg
   // link is the evidence that the new queued/running job is answering that failure; an unrelated
   // job must not hide an outstanding exception.
   const retryInFlight = row.itemHandlingJobId !== null && row.itemHandlingJobId === row.jobId
-    && (row.jobState === 'QUEUED' || row.jobState === 'RUNNING');
+    && row.jobState !== null && isInFlightJobState(row.jobState);
   if (itemState && !retryInFlight && row.queueBlockCode !== 'WAITING_BASELINE') {
     return {
       ...none,
