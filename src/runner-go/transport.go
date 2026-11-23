@@ -99,6 +99,7 @@ func init() {
 		promotionAutomaticLandCapabilityV1,
 		integrationPullRequestCapabilityV1,
 		sessionMergePullRequestCapabilityV1,
+		pushAsMeCapabilityV1,
 		codexAccountLoginCapabilityV1,
 		antigravityGoogleLoginCapabilityV1,
 		codexAccountRemoveCapabilityV1,

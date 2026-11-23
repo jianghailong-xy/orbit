@@ -1625,6 +1625,11 @@ type mergeOutcome struct {
 	// branch holds after the push, and GitHub's words for the refused target push.
 	PushedSha   string
 	PushRefusal string
+	// The command's landVia, echoed on "merged" and "pull_request" (mergeToMain), and with "merged" after a Push as
+	// me push GitHub took (§5.2): PushedAs "OWNER" and the rules GitHub said it bypassed.
+	LandVia       string
+	PushedAs      string
+	BypassedRules []string
 }
 
 // mergeLanding is a merge's pull-request fallback (docs/design/protected-branch-landing.md §4.6): how the control
@@ -1636,15 +1641,40 @@ type mergeLanding struct {
 	ref      string
 	expected string
 	open     bool
+	// The merge operation this runner holds, which a Push as me request for the owner's token names (§5.2).
+	sessionID   string
+	operationID string
+	leaseOwner  string
 }
 
 func mergeLandingOf(req MergeCommand) mergeLanding {
-	return mergeLanding{landVia: req.LandVia, ref: req.LandingRef, expected: req.LandingRefSha, open: req.PullRequestOpen}
+	return mergeLanding{
+		landVia: req.LandVia, ref: req.LandingRef, expected: req.LandingRefSha, open: req.PullRequestOpen,
+		sessionID: req.SessionID, operationID: req.OperationID, leaseOwner: req.LeaseOwner,
+	}
 }
 
 // viaPullRequest reports whether a refused target push falls back to the landing branch.
 func (l mergeLanding) viaPullRequest() bool {
 	return landsThroughPullRequest(l.landVia, l.ref, false)
+}
+
+// pushesAsOwner reports whether this merge's target push carries the owner's own GitHub token (Push as me, §5.2).
+func (l mergeLanding) pushesAsOwner() bool {
+	return pushesAsOwner(l.landVia, l.viaPullRequest(), l.open)
+}
+
+// ownerCredential asks for the owner's token for this merge's target push, naming the merge operation. A refusal
+// answers the sentence the landing branch's pull request says instead of GitHub's words.
+func (l mergeLanding) ownerCredential(tmp string) (*orbitGitCredential, string) {
+	credential, err := askOwnerGitCredential(tmp, "origin", RunnerGitCredentialRequest{
+		SessionID: l.sessionID, MergeOperationID: l.operationID, LeaseOwner: l.leaseOwner,
+	})
+	if err != nil {
+		logln("merge of session", l.sessionID, "could not have the owner's GitHub token for its push; pushing its landing branch:", err)
+		return nil, pushAsMeUnavailablePrefix + err.Error()
+	}
+	return credential, ""
 }
 
 // toLandingBranch pushes the replayed tip in the staging checkout tmp to the landing branch and answers
@@ -1702,7 +1732,13 @@ func (l mergeLanding) toLandingBranch(tmp, source, sourceSha, base, refusal stri
 // returns "error" with an actionable message; the UI keeps a copyable `git merge` fallback. The
 // session branch is never rewritten or deleted. Serialized by mergeLock so concurrent merges
 // don't race on the repo.
-func mergeToMain(req MergeCommand) mergeOutcome {
+func mergeToMain(req MergeCommand) (res mergeOutcome) {
+	// The command's landVia, echoed on every answer that landed or went to the landing branch (§5.4).
+	defer func() {
+		if res.Status == "merged" || res.Status == "pull_request" {
+			res.LandVia = req.LandVia
+		}
+	}()
 	mergeLock.Lock()
 	defer mergeLock.Unlock()
 	// And the checkout's own lock, which the main checkout actions (move, commit, push, Save & clean)
@@ -2083,6 +2119,10 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 	// Whether origin already accepted the rebased commits. It decides what a failure to advance the
 	// LOCAL target means: the work is upstream either way, and only this machine's checkout lags.
 	pushed := false
+	// Push as me (§5.2): the owner's token, asked for once before the first target push and held for this merge's
+	// push attempts alone, and what GitHub said when it took the push.
+	var owner *orbitGitCredential
+	var ownerSaid string
 
 	// Replay the temp branch onto target and, when origin tracks target, push the result so
 	// origin/<target> advances in lockstep. A push that origin rejects (it moved under us) is
@@ -2134,14 +2174,35 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 		if !pushToOrigin {
 			break // local-only target (or no origin): nothing to push.
 		}
+		if owner == nil && landing.pushesAsOwner() {
+			credential, refusal := landing.ownerCredential(tmp)
+			if refusal != "" {
+				base, _ := git(repoRoot, "rev-parse", "refs/heads/"+target)
+				return landing.toLandingBranch(tmp, source, sourceSha, base, refusal)
+			}
+			owner = credential
+		}
 		// Push the rebased commits, fast-forwarding origin/<target> (target == origin/<target> after
 		// the reconcile, so origin is an ancestor of the rebased tip unless it just moved).
-		out, err := pushMergeResult(tmp, target)
+		var out string
+		if owner != nil {
+			ownerSaid, err = pushAsOwner(tmp, "origin", owner, "HEAD:refs/heads/"+target)
+		} else {
+			out, err = pushMergeResult(tmp, target)
+		}
 		if err == nil {
 			pushed = true
 			break
 		}
 		combined := strings.TrimSpace(out + "\n" + gitStderr(err))
+		// §5.2 "No second credential": the owner's push refused by the branch's rules, or the owner's token not
+		// accepted, goes to the landing branch; the target is never pushed again with another credential.
+		if owner != nil {
+			if refusal, ok := ownerPushRefusal(ownerSaid, err); ok {
+				base, _ := git(repoRoot, "rev-parse", "refs/heads/"+target)
+				return landing.toLandingBranch(tmp, source, sourceSha, base, refusal)
+			}
+		}
 		// §4.6 step 2: GitHub refused the push because of the branch's rules, which is never a race to retry. A merge
 		// the control plane said goes through a pull request pushes its landing branch instead; any other one says
 		// the branch is protected, in GitHub's words. A control plane that named no landVia is told as before.
@@ -2195,7 +2256,11 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 
 	sha, _ := git(repoRoot, "rev-parse", target)
 	logln(fmt.Sprintf("rebased %s onto %s (%s) for session %s", source, target, shortSha(sha), sessionID))
-	return mergeOutcome{Status: "merged", MergedSha: sha, SourceSha: sourceSha}
+	merged := mergeOutcome{Status: "merged", MergedSha: sha, SourceSha: sourceSha}
+	if owner != nil && pushed {
+		merged.PushedAs, merged.BypassedRules = pushedAsOwner, bypassedRulesOf(ownerSaid)
+	}
+	return merged
 }
 
 // ffClash returns the paths that both the rebased result (in worktree `tmp`) and the target's

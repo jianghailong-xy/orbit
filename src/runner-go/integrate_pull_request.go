@@ -26,8 +26,8 @@ const (
 	landViaPush = "PUSH"
 	// The target as today, then the landing branch when GitHub refuses the target because of its rules.
 	landViaPullRequest = "PULL_REQUEST"
-	// The same, with the owner's own GitHub token on the target push (§5). Until this runner can ask for that token
-	// (the Push as me task), the target push carries today's credential and the fallback is the same.
+	// The same, with the owner's own GitHub token on the target push (§5, push_as_me.go). Sent only to a runner that
+	// declared pushAsMeCapabilityV1.
 	landViaPushAsMe = "PUSH_AS_ME"
 )
 

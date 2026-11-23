@@ -1020,6 +1020,11 @@ type IntegrationJobResultRequest struct {
 	// the subject's pull request was already open and the target was not tried).
 	LandingRefSha string `json:"landingRefSha,omitempty"`
 	PushRefusal   string `json:"pushRefusal,omitempty"`
+	// With LANDED, and only for a Push as me landing (§5.2): "OWNER" when the target push carried the owner's own
+	// GitHub token and GitHub took it, and the rules GitHub said that push bypassed, its "Bypassed rule violations"
+	// lines.
+	PushedAs      string   `json:"pushedAs,omitempty"`
+	BypassedRules []string `json:"bypassedRules,omitempty"`
 }
 
 // IntegrationUpstreamMovedCommits is the list of commits that moved the upstream under a landing, as
@@ -1378,6 +1383,13 @@ type MergeResultRequest struct {
 	// not tried).
 	PushedSha   string `json:"pushedSha,omitempty"`
 	PushRefusal string `json:"pushRefusal,omitempty"`
+	// LandVia is the command's own, echoed on a "merged" or "pull_request" answer: PUSH_AS_ME says the target push
+	// that was refused, or taken, was the owner's (docs/design/protected-branch-landing.md §5.4). With "merged" and a
+	// target push GitHub took with the owner's token, PushedAs is "OWNER" and BypassedRules what GitHub said it
+	// bypassed.
+	LandVia       string   `json:"landVia,omitempty"`
+	PushedAs      string   `json:"pushedAs,omitempty"`
+	BypassedRules []string `json:"bypassedRules,omitempty"`
 	// SourceSha is the immutable source-branch tip captured before the rebase. A successful
 	// merge records exactly which version of the session branch landed in the target.
 	SourceSha string `json:"sourceSha,omitempty"`
