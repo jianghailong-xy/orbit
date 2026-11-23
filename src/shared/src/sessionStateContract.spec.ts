@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { LEGACY_END_REASONS, SessionEndReason } from './enums';
 import type { LinkPreviewSession } from './link-preview';
 import type { ControlSessionEnded, ControlSessionSummary } from './realtime';
 import type { GuestSessionSummary } from './session-guests';
@@ -23,12 +24,13 @@ const ROOT = path.resolve(__dirname, '../../..');
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const CONTRACT = JSON.parse(readFileSync(path.join(ROOT, 'contracts/session-state.contract.json'), 'utf8')) as any;
 
-/** The four fields on each shared wire type, as a key list the compiler checks: a field leaving a type fails here. */
+/** The fields on each shared wire type, as a key list the compiler checks: a field leaving a type fails here. */
 type Carried<T> = { [K in keyof SessionPhaseFields]-?: K extends keyof T ? true : never };
-const SUMMARY: Carried<ControlSessionSummary> = { phase: true, released: true, lastTurnOutcome: true, waitingOn: true };
-const ENDED: Carried<ControlSessionEnded> = { phase: true, released: true, lastTurnOutcome: true, waitingOn: true };
-const PREVIEW: Carried<LinkPreviewSession> = { phase: true, released: true, lastTurnOutcome: true, waitingOn: true };
-const GUEST: Carried<GuestSessionSummary> = { phase: true, released: true, lastTurnOutcome: true, waitingOn: true };
+const ALL = { phase: true, released: true, lastTurnOutcome: true, waitingOn: true, endReason: true, workFinished: true } as const;
+const SUMMARY: Carried<ControlSessionSummary> = ALL;
+const ENDED: Carried<ControlSessionEnded> = ALL;
+const PREVIEW: Carried<LinkPreviewSession> = ALL;
+const GUEST: Carried<GuestSessionSummary> = ALL;
 const SHARED_TYPES: Record<string, Record<string, true>> = {
   ControlSessionSummary: SUMMARY,
   ControlSessionEnded: ENDED,
@@ -43,7 +45,7 @@ describe('session-state contract', () => {
     expect(existsSync(path.join(ROOT, CONTRACT.doc))).toBe(true);
   });
 
-  it('lists the four fields in the order the shared constant names them', () => {
+  it('lists the fields in the order the shared constant names them', () => {
     expect(Object.keys(CONTRACT.fields)).toEqual([...SESSION_PHASE_FIELD_NAMES]);
   });
 
@@ -55,6 +57,10 @@ describe('session-state contract', () => {
     expect(CONTRACT.fields.lastTurnOutcome.values).toEqual([...SESSION_TURN_OUTCOMES]);
     expect(CONTRACT.fields.lastTurnOutcome.sharedConstant).toBe('SESSION_TURN_OUTCOMES');
     expect(CONTRACT.fields.released.type).toBe('boolean');
+    expect(CONTRACT.fields.workFinished.type).toBe('boolean');
+    expect(CONTRACT.fields.workFinished.decidedBy).toBe('releaseFinishedTheWork');
+    expect(CONTRACT.fields.endReason.decidedBy).toBe('session.end_reason');
+    expect(CONTRACT.fields.endReason.values).toEqual([...Object.values(SessionEndReason), ...LEGACY_END_REASONS]);
   });
 
   it('never names a release cause or a succeeded word for a session (decisions D9 and D2)', () => {
@@ -67,7 +73,7 @@ describe('session-state contract', () => {
     expect(CONTRACT.legacyFields).toEqual(['status', 'runStatus', 'runState', 'sessionState', 'filingState']);
   });
 
-  it('lists every payload kind with all four fields, and each named shared type carries them', () => {
+  it('lists every payload kind with all six fields, and each named shared type carries them', () => {
     expect(Object.keys(CONTRACT.payloads)).toEqual([
       'listRow', 'detail', 'sessionSummary', 'sessionEnded', 'linkPreview', 'guestRow', 'sharedHead',
     ]);
@@ -93,6 +99,13 @@ describe('session-state contract', () => {
       if (e.waitingOn === 'HOLD') expect(e.phase, vector.id).toBe('PENDING');
       if (e.waitingOn === 'WAKE') expect(e.phase, vector.id).toBe('IDLE');
       if (e.phase === 'RUNNING') expect([null, 'PERSON'], vector.id).toContain(e.waitingOn);
+      expect(typeof e.workFinished, vector.id).toBe('boolean');
+      if (e.endReason !== null) expect(CONTRACT.fields.endReason.values, vector.id).toContain(e.endReason);
+      // releaseFinishedTheWork: released, and task_done or a landing container with no end reason.
+      expect(e.workFinished, vector.id).toBe(e.released
+        && (e.endReason === 'task_done' || (vector.given.sessionKind === 'LANDING' && e.endReason === null)));
+      // The end reason is the row's, as given.
+      expect(e.endReason, vector.id).toBe(vector.given.endReason ?? null);
     }
   });
 
@@ -100,7 +113,7 @@ describe('session-state contract', () => {
     const ids = CONTRACT.vectors.map((v: { id: string }) => v.id);
     expect(ids).toEqual(expect.arrayContaining([
       'PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED', 'SUCCEEDED', 'FAILED', 'CANCELLED',
-      'job running', 'waiting on an approval', 'watch armed', 'paused account',
+      'job running', 'waiting on an approval', 'watch armed', 'paused account', 'settled landing',
     ]));
   });
 });

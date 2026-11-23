@@ -84,6 +84,7 @@ export interface LinkPreviewSession<Instant = string> {
   released?: boolean;
   lastTurnOutcome?: SessionTurnOutcome | null;
   waitingOn?: SessionWaitingOn | null;
+  workFinished?: boolean;
   pendingApprovals: number;
   waitingKind: SessionWaitingKind | null;
   runningBgCount: number;

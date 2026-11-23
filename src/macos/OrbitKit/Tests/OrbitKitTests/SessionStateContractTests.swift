@@ -3,10 +3,11 @@ import XCTest
 @testable import OrbitKit
 
 /// Holds OrbitKit's session decoders to `contracts/session-state.contract.json` (plan step 5.1): every payload kind
-/// the contract lists now carries `phase`, `released`, `lastTurnOutcome` and `waitingOn`, and no client reads them
-/// yet. So each decoder must take a payload with the four fields present — every value the contract's vectors
-/// give them — and decode it to exactly what it decodes without them: the old fields read as before, and nothing
-/// fails on the new keys. The TypeScript side is held to the same file by `sessionStateContract.spec.ts` and
+/// the contract lists now carries `phase`, `released`, `lastTurnOutcome` and `waitingOn`, and since plan phase 5
+/// `endReason` and `workFinished`. So each decoder must take a payload with the new fields present — every value the
+/// contract's vectors give them — and decode it to exactly what it decodes without them: the old fields read as
+/// before, and nothing fails on the new keys. `endReason` is an old field on the kinds that already sent it (list row,
+/// detail, `session.ended`, link preview), so it is listed but not merged in here. The TypeScript side is held to the same file by `sessionStateContract.spec.ts` and
 /// `session-payloads-phase.pg.spec.ts`.
 final class SessionStateContractTests: XCTestCase {
     private struct ContractMissing: Error, CustomStringConvertible {
@@ -91,7 +92,8 @@ final class SessionStateContractTests: XCTestCase {
         XCTAssertEqual(Set(kinds.keys), Set(Self.payloads.keys))
         for (kind, entry) in kinds {
             let fields = try XCTUnwrap((entry as? [String: Any])?["fields"] as? [String], "\(kind) lists no fields")
-            XCTAssertEqual(fields, ["phase", "released", "lastTurnOutcome", "waitingOn"], kind)
+            XCTAssertEqual(
+                fields, ["phase", "released", "lastTurnOutcome", "waitingOn", "endReason", "workFinished"], kind)
         }
     }
 
@@ -102,7 +104,7 @@ final class SessionStateContractTests: XCTestCase {
             let base = try object(json)
             let without = try data(base)
             for (id, fields) in cases {
-                let with = try data(base.merging(fields) { _, new in new })
+                let with = try data(base.merging(fields.filter { $0.key != "endReason" }) { _, new in new })
                 XCTAssertTrue(try decodesAlike(kind, without, with), "\(kind) / \(id): the new fields changed the decode")
             }
         }
@@ -114,7 +116,7 @@ final class SessionStateContractTests: XCTestCase {
             let payload = try object(try XCTUnwrap(Self.payloads[kind]))
             let envelope: [String: Any] = [
                 "type": type, "sessionId": "s1", "agentId": "a1", "ts": "2026-11-22T00:00:00.000Z",
-                "data": payload.merging(fields) { _, new in new },
+                "data": payload.merging(fields.filter { $0.key != "endReason" }) { _, new in new },
             ]
             let event = try JSONDecoder().decode(ControlEvent.self, from: data(envelope))
             if kind == "sessionSummary" {
