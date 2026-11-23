@@ -175,6 +175,13 @@
 // Prometheus's data and the role's password. The apiserver gains two fixed environment lines, the internal listener
 // Prometheus scrapes (src/apiserver/src/metrics/metrics-listener.ts), which serves /metrics alone and is published
 // nowhere. A deployment whose .env does not name the profile renders exactly what it did, but for those two lines.
+//
+// Its logs phase (task 350mIJ1Dm9cOVsvHhJAhm) adds two more services under the same profile, which (t) pins line by line:
+// loki, which keeps the lines, publishes no port and has a retention, and alloy, which ships this project's container
+// logs to it from /var/lib/docker/containers mounted read-only, never from the Docker socket, and leaves out managed
+// runners' containers (deploy/monitoring/alloy). Two named volumes are added, Loki's data and Alloy's read positions.
+// The apiserver gains one environment line, ORBIT_LOG_FORMAT (json unless the host's .env says text), its JSON log lines
+// carrying the web gateway's request id (src/apiserver/src/common/request-log.ts).
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -243,14 +250,18 @@ const NODE_EXPORTER = 'node-exporter';
 const PG_MONITOR_ROLE = 'pg-monitor-role';
 const POSTGRES_EXPORTER = 'postgres-exporter';
 const GRAFANA = 'grafana';
-const MONITORING = [PROMETHEUS, NODE_EXPORTER, PG_MONITOR_ROLE, POSTGRES_EXPORTER, GRAFANA];
+const LOKI = 'loki';
+const ALLOY = 'alloy';
+const MONITORING = [PROMETHEUS, NODE_EXPORTER, PG_MONITOR_ROLE, POSTGRES_EXPORTER, GRAFANA, LOKI, ALLOY];
 // Each image by version and index digest, the default its ORBIT_*_IMAGE variable falls back to.
 const PROMETHEUS_IMAGE = 'prom/prometheus:v3.16.0@sha256:e04987641b57704f408e31f6373ba4138ecf27cb4a165d24aabb6c38fddd0f06';
 const NODE_EXPORTER_IMAGE = 'prom/node-exporter:v1.13.1@sha256:7296504d4ada44b7d7ab4431e27e9f9900d8488f8d55842f4b12ae2704e16dfe';
 const POSTGRES_EXPORTER_IMAGE = 'prometheuscommunity/postgres-exporter:v0.21.1@sha256:3b8e05a84282cd1199ad2fb6c66f362738bf4c68c1547d8f4226a34a7dd6d8d7';
 // Its two named volumes, the last lines of the file, and the comment above them.
 const GRAFANA_IMAGE = 'grafana/grafana:12.2.0@sha256:74144189b38447facf737dfd0f3906e42e0776212bf575dc3334c3609183adf7';
-const MONITORING_VOLUMES = ['  prometheus-data:', '  pg-monitor-secret:', '  grafana-data:'];
+const LOKI_IMAGE = 'grafana/loki:3.7.10@sha256:b43c257ccfc925d4a50b8717cac61a3b51df8c48d01847936057e5c4075a24a7';
+const ALLOY_IMAGE = 'grafana/alloy:v1.22.0@sha256:9acc2529bc1edb7f5b2bd801dd8334ebc80c158e3a9e5526ecd7c9a273d43189';
+const MONITORING_VOLUMES = ['  prometheus-data:', '  pg-monitor-secret:', '  grafana-data:', '  loki-data:', '  alloy-data:'];
 // pg-monitor-role is the one approved addition that is not resident: it runs once each time the profile comes up.
 const ONE_SHOT = [PG_MONITOR_ROLE];
 const APPROVED_ADDITIONS = [WIKI_WORKER, DOCKER_CHANNEL, MANAGED_RUNNER_FIREWALL, LINK_GATEWAY, NATS, ...MONITORING];
@@ -349,7 +360,7 @@ test('the approved configuration commits still have exactly the five surviving s
 
 test('(a) Compose declares exactly the five surviving services, the wiki worker, the Docker channel, the managed runners\' firewall, the runner link gateway, its NATS and the monitoring profile\'s four', () => {
   assert.deepEqual([...currentServices.keys()].sort(), [...EXPECTED_SERVICES, ...APPROVED_ADDITIONS].sort());
-  assert.equal(currentServices.size, 15);
+  assert.equal(currentServices.size, 17);
 });
 
 test('(b) no removed sidecar is named anywhere in Compose', () => {
@@ -390,7 +401,7 @@ test('(c) nothing was added back: no new service, no new always-on process, no i
     [NATS, [`    profiles: [${LINK_PROFILE}]`]],
     ...MONITORING.map((name) => [name, [`    profiles: [${MONITORING_PROFILE}]`]]),
   ]);
-  assert.equal(current.match(/^\s+profiles:/gm).length, 9);
+  assert.equal(current.match(/^\s+profiles:/gm).length, 11);
   assert.doesNotMatch(current, /^\s+restart: (on-failure|always)$/m);
   assert.doesNotMatch(current, /\bexecutable-acceptance-dead-man\b/);
 });
@@ -428,7 +439,9 @@ test('(s) the two-stage release names each image through variables, and changes 
       `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_NODE_EXPORTER_IMAGE:-${NODE_EXPORTER_IMAGE}}`,
       '    image: postgres:16-alpine',
       `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_POSTGRES_EXPORTER_IMAGE:-${POSTGRES_EXPORTER_IMAGE}}`,
-      `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_GRAFANA_IMAGE:-${GRAFANA_IMAGE}}`]);
+      `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_GRAFANA_IMAGE:-${GRAFANA_IMAGE}}`,
+      `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_LOKI_IMAGE:-${LOKI_IMAGE}}`,
+      `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_ALLOY_IMAGE:-${ALLOY_IMAGE}}`]);
 });
 
 /** What Compose acts on: comments and blank lines document a block, they cannot run a process. */
@@ -484,6 +497,11 @@ const APPROVED_APISERVER_BLOCKS = [
   // ORBIT_RUN_STOPPED_WAKE_MODE to off. It comes right after the Wiki's canary owners in the file, before PORT.
   [
     '      ORBIT_RUN_STOPPED_WAKE: "${ORBIT_RUN_STOPPED_WAKE_MODE:-on}"',
+  ],
+  // The log format (2026-11-23, task 350mIJ1Dm9cOVsvHhJAhm, the top of this file): JSON lines with the request id unless
+  // the host's .env says text. It comes right after PORT in the file, before CORS_ORIGINS.
+  [
+    '      ORBIT_LOG_FORMAT: "${ORBIT_LOG_FORMAT:-json}"',
   ],
   // Claude Code on an OpenAI key (2026-11-11, the top of this file): its flag, the flag of the owner's own Codex login
   // pool, and the upstream hosts an admin lists besides api.openai.com, each empty unless the host's .env sets it. They
@@ -1294,9 +1312,77 @@ test('(t) Grafana is published on 127.0.0.1 only, is on no nginx route, and sign
   assert.match(block, /^ {4}mem_limit: \d+m$/m);
 });
 
-test('(t) the monitoring profile adds exactly three named volumes, and the file ends with them', () => {
+test('(t) the monitoring profile adds exactly five named volumes, and the file ends with them', () => {
   assert.ok(asWritten.endsWith(`${MONITORING_VOLUMES.join('\n')}\n`), 'docker-compose.yml no longer ends with the monitoring volumes');
-  assert.deepEqual([...asWritten.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)].map((m) => m[1]).slice(-4), ['pg-socket', 'prometheus-data', 'pg-monitor-secret', 'grafana-data']);
+  assert.deepEqual([...asWritten.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)].map((m) => m[1]).slice(-6),
+    ['pg-socket', 'prometheus-data', 'pg-monitor-secret', 'grafana-data', 'loki-data', 'alloy-data']);
+});
+
+// The logs phase (task 350mIJ1Dm9cOVsvHhJAhm, the top of this file), every directive of both services in order. Loki: no
+// port, a read-only root, no capability, a memory limit and ORBIT_LOKI_RETENTION. Alloy: Docker's containers directory
+// read-only and never the Docker socket, nor any other host path; it tells this project's containers from others, and from
+// managed runners', by their own records there (deploy/monitoring/alloy/log-targets.sh).
+test('(t) Loki keeps the logs with a bounded retention, and Alloy reads them without the Docker socket', () => {
+  assert.deepEqual(directives(currentServices.get(LOKI)), [
+    '  loki:',
+    `    profiles: [${MONITORING_PROFILE}]`,
+    `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_LOKI_IMAGE:-${LOKI_IMAGE}}`,
+    '    container_name: orbit-loki',
+    '    restart: unless-stopped',
+    '    mem_limit: 512m',
+    '    read_only: true',
+    '    cap_drop: [ALL]',
+    '    security_opt: ["no-new-privileges:true"]',
+    '    command: ["-config.file=/etc/loki/loki.yml", "-config.expand-env=true"]',
+    '    environment:',
+    '      ORBIT_LOKI_RETENTION: "${ORBIT_LOKI_RETENTION:-168h}"',
+    '    volumes:',
+    '      - ./deploy/monitoring/loki.yml:/etc/loki/loki.yml:ro',
+    '      - loki-data:/loki',
+    '    tmpfs:',
+    '      - /tmp',
+    '    expose:',
+    '      - "3100"',
+  ]);
+  const loki = readFileSync(path.join(repo, 'deploy/monitoring/loki.yml'), 'utf8');
+  assert.match(loki, /^ {2}retention_period: \$\{ORBIT_LOKI_RETENTION:-168h\}$/m);
+  assert.match(loki, /^ {2}retention_enabled: true$/m);
+  assert.deepEqual(directives(currentServices.get(ALLOY)), [
+    '  alloy:',
+    `    profiles: [${MONITORING_PROFILE}]`,
+    `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_ALLOY_IMAGE:-${ALLOY_IMAGE}}`,
+    '    container_name: orbit-alloy',
+    '    restart: unless-stopped',
+    '    init: true',
+    '    mem_limit: 256m',
+    '    read_only: true',
+    '    cap_drop: [ALL]',
+    '    security_opt: ["no-new-privileges:true"]',
+    '    entrypoint: ["/bin/bash", "/etc/orbit-alloy/run.sh"]',
+    '    environment:',
+    '      ORBIT_COMPOSE_PROJECT: "${COMPOSE_PROJECT_NAME}"',
+    '    depends_on:',
+    '      loki:',
+    '        condition: service_started',
+    '    volumes:',
+    '      - ./deploy/monitoring/alloy:/etc/orbit-alloy:ro',
+    '      - /var/lib/docker/containers:/var/lib/docker/containers:ro',
+    '      - alloy-data:/var/lib/alloy/data',
+    '    tmpfs:',
+    '      - /run/orbit-alloy',
+    '      - /tmp',
+    '    healthcheck:',
+    '      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/12345 && printf \'GET /-/ready HTTP/1.0\\\\r\\\\n\\\\r\\\\n\' >&3 && grep -q \' 200 \' <&3"]',
+    '      interval: 10s',
+    '      timeout: 5s',
+    '      retries: 6',
+    '      start_period: 30s',
+  ]);
+  // No monitoring service is given the Docker socket, by any path to it.
+  for (const name of MONITORING) assert.doesNotMatch(currentServices.get(name), /docker\.sock|\/var\/run\/docker|\/run\/docker/, `${name} mounts the Docker socket`);
+  // Alloy's list leaves a managed runner out on its own labels, before anything else matches.
+  const targets = readFileSync(path.join(repo, 'deploy/monitoring/alloy/log-targets.sh'), 'utf8');
+  assert.match(targets, /grep -qE '"orbit\\.managed-runner\\.\[a-z-\]\+":' "\$cfg" && continue/);
 });
 
 test('(t) Prometheus scrapes the apiservers by their shared name on the internal listener, and the link gateway by its own name', () => {

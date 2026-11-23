@@ -230,6 +230,9 @@ services:
       # `docker compose up -d apiserver`. Set it on the host as ORBIT_RUN_STOPPED_WAKE_MODE.
       ORBIT_RUN_STOPPED_WAKE: "${ORBIT_RUN_STOPPED_WAKE_MODE:-on}"
       PORT: "3000"
+      # How the apiserver writes its log (src/apiserver/src/common/request-log.ts): json, one object a line carrying the
+      # web gateway's request id, which Alloy ships to Loki (docs/self-hosting.md, "Logs"); text, Nest's own lines.
+      ORBIT_LOG_FORMAT: "${ORBIT_LOG_FORMAT:-json}"
       CORS_ORIGINS: "http://localhost:2086"
       # Where runners reach this deployment — the origin the web image bakes in below. A session on a
       # shared Codex pool is handed <origin>/api/gw/codex as its OpenAI endpoint (providers/shared-pool.ts).
@@ -737,7 +740,7 @@ services:
     expose:
       - "9187"
 
-  # Grafana (docs/self-hosting.md, "Monitoring"): the dashboards, with Prometheus provisioned as its one data source. It
+  # Grafana (docs/self-hosting.md, "Monitoring"): the dashboards, with Prometheus and Loki provisioned as its data sources. It
   # is published on this host's loopback alone, never on the web gateway or the Orbit origin: a script served from that
   # origin can read the login token in the browser's localStorage, so Grafana, which can run scripts of its own
   # making, never shares it. Reach it by SSH tunnel, or from a hostname of your own that is not the Orbit origin. The
@@ -790,12 +793,76 @@ services:
       retries: 6
       start_period: 30s
 
+  # Logs (docs/self-hosting.md, "Logs"): Loki keeps them, Alloy ships them, under the monitoring profile. Loki publishes
+  # no port and has no authentication of its own; Alloy and Grafana reach it inside this project's network. It keeps
+  # ORBIT_LOKI_RETENTION of lines, seven days by default, in a volume of its own (deploy/monitoring/loki.yml). Its image
+  # has no shell to run a health check with, so Alloy waits only for it to start, and retries what it could not send.
+  loki:
+    profiles: [monitoring]
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}${ORBIT_LOKI_IMAGE:-grafana/loki:3.7.10@sha256:b43c257ccfc925d4a50b8717cac61a3b51df8c48d01847936057e5c4075a24a7}
+    container_name: orbit-loki
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 512m
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    command: ["-config.file=/etc/loki/loki.yml", "-config.expand-env=true"]
+    environment:
+      ORBIT_LOKI_RETENTION: "${ORBIT_LOKI_RETENTION:-168h}"
+    volumes:
+      - ./deploy/monitoring/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+    tmpfs:
+      - /tmp
+    expose:
+      - "3100"
+
+  # This project's container logs, from Docker's json-file logs in /var/lib/docker/containers, mounted read-only. It is
+  # never given the Docker socket: which files are this project's it reads from each container's config.v2.json beside
+  # them, by Compose's project label, and it leaves out every managed runner's container (deploy/monitoring/alloy). It
+  # runs as root, which those files need, with every capability dropped, so it reads only what root owns there. It can
+  # read every container's record there, environment included, which makes it as trusted as the host's Docker.
+  alloy:
+    profiles: [monitoring]
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}${ORBIT_ALLOY_IMAGE:-grafana/alloy:v1.22.0@sha256:9acc2529bc1edb7f5b2bd801dd8334ebc80c158e3a9e5526ecd7c9a273d43189}
+    container_name: orbit-alloy
+    restart: unless-stopped
+    logging: *logging
+    init: true
+    mem_limit: 256m
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    entrypoint: ["/bin/bash", "/etc/orbit-alloy/run.sh"]
+    environment:
+      ORBIT_COMPOSE_PROJECT: "${COMPOSE_PROJECT_NAME}"
+    depends_on:
+      loki:
+        condition: service_started
+    volumes:
+      - ./deploy/monitoring/alloy:/etc/orbit-alloy:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - alloy-data:/var/lib/alloy/data
+    tmpfs:
+      - /run/orbit-alloy
+      - /tmp
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/12345 && printf 'GET /-/ready HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q ' 200 ' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
 volumes:
   # Only the Postgres socket directory: the archive itself is a bind mount under ./data
   # so backups are visible (and copyable off the host) without docker.
   pg-socket:
   # The monitoring profile's: Prometheus's time series, the password postgres-exporter signs in with, which
-  # pg-monitor-role generates once (docs/self-hosting.md, "Monitoring"), and Grafana's database.
+  # pg-monitor-role generates once (docs/self-hosting.md, "Monitoring"), Grafana's database, Loki's index and chunks, and
+  # where Alloy has read each log file to.
   prometheus-data:
   pg-monitor-secret:
   grafana-data:
+  loki-data:
+  alloy-data:
