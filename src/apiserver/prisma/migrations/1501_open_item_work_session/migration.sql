@@ -1,4 +1,5 @@
--- 1444 — a landing failure goes first to the task's own work session
+-- 1501 — a landing failure goes first to the task's own work session
+-- (Written as 1444 on the project line; renumbered when main took 1444 for the claim-index drop.)
 -- (docs/project-integration-line-contract.md §12.4, revision 42 part one, ruling R1).
 --
 -- WHAT IT ADDS

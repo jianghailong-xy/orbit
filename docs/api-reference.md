@@ -844,6 +844,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/runner/sessions/:id/naming` | body `SessionNamingDto`; path `id` | `RunnerApiController.sessionNaming` |
 | `POST` | `/api/runner/sessions/:id/notify` | body `NotifyDto`; path `id` | `RunnerApiController.sessionNotify` |
 | `POST` | `/api/runner/sessions/:id/orchestration-credential` | path `id` | `RunnerApiController.refreshOrchestrationCredential` |
+| `POST` | `/api/runner/sessions/:id/release` | body `Object`; path `id` | `RunnerApiController.release` |
 | `POST` | `/api/runner/sessions/:id/release-leases` | body `Object`; path `id` | `RunnerApiController.releaseLeases` |
 | `POST` | `/api/runner/sessions/:id/scheduled-wakeup` | body `ScheduledWakeupDto`; path `id` | `RunnerApiController.scheduledWakeup` |
 | `POST` | `/api/runner/sessions/:id/source/pin` | body `Object`; path `id` | `RunnerApiController.pinSessionSource` |

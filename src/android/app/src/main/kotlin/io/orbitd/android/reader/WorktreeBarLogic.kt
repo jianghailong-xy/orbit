@@ -1,5 +1,6 @@
 package io.orbitd.android.reader
 
+import io.orbitd.android.core.protocol.SessionFacts
 import kotlinx.serialization.json.*
 
 /** One changed file of a session's worktree, as `SessionDetail.changedFiles` carries it; binary when its counts are negative. */
@@ -67,6 +68,15 @@ internal object WorktreeBarLogic {
         "AWAITING_INPUT", "INTERRUPTED" -> sending || (runningSubagents ?: 0) > 0
         else -> false
     }
+
+    /**
+     * Whether the runner finalized the worktree: what gates Commit versus Merge. With the session facts it is `released` (no runner
+     * holds the session), or a queued turn with nothing yet running; without them (an older server) the status is not
+     * RUNNING, AWAITING_INPUT or INTERRUPTED.
+     */
+    fun committed(detail: JsonObject, runStatus: String?): Boolean =
+        SessionFacts.released(detail)?.let { it || SessionFacts.phase(detail) == "PENDING" }
+            ?: (runStatus !in setOf("RUNNING", "AWAITING_INPUT", "INTERRUPTED"))
 
     /** The sub-agents still at work: the detail's `runningSubagents` ids, or the session list row's `runningSubagentCount`. */
     fun runningSubagents(detail: JsonObject): Int? =

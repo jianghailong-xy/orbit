@@ -36,8 +36,8 @@ import { ProjectOpenItemService } from './project-open-item.service';
 /**
  * Nothing settled before the deploy changes hands (revision 42 part one, the project's rule for the
  * migration task): an OPEN integration item, a DONE task with a frozen delivered identity and its work
- * session ended `task_done` — all three as a database holds them before migration 1444 — are untouched
- * by applying 1444 and by the first boot after it.
+ * session ended `task_done` — all three as a database holds them before migration 1501 — are untouched
+ * by applying 1501 and by the first boot after it.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/landing-fix-boot-untouched.pg.spec.ts
  *
@@ -45,8 +45,8 @@ import { ProjectOpenItemService } from './project-open-item.service';
  * the runner claims the landing, its CONFLICT opens the item for the coordinator, delivered). The item is
  * opened while the work session counts as ended by a person, so the hand-off of W4 does not apply; the
  * session is then marked `task_done`, the end that WOULD qualify it, which is the case a backfill would
- * be tempted to pick up. The database is then put back to its pre-1444 shape — the four columns dropped,
- * 0513's retry-class check restored — and the rows are read. Then 1444's own migration.sql is applied, as
+ * be tempted to pick up. The database is then put back to its pre-1501 shape — the four columns dropped,
+ * 0513's retry-class check restored — and the rows are read. Then 1501's own migration.sql is applied, as
  * `prisma migrate deploy` applies it, and the boot passes that read open items or delivered identity
  * run: the landing-observation backfill and the landing-regression repair
  * (`LandingObservationBackfillAtBoot`), the escalation tick's backstop and sweep
@@ -62,13 +62,13 @@ const skip = !URL;
 const CAPABILITIES = ['integration-job/v1', 'integration-observe/v1'];
 const sha = (nibble: string) => nibble.repeat(40);
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000);
-const MIGRATION = path.resolve(__dirname, '../../prisma/migrations/1444_open_item_work_session/migration.sql');
+const MIGRATION = path.resolve(__dirname, '../../prisma/migrations/1501_open_item_work_session/migration.sql');
 const WORK_SESSION_COLUMNS = [
   'work_session_id', 'work_session_offered_at', 'work_session_returned_at', 'work_session_return_reason',
 ];
 
-/** The database as it stood before 1444: the four columns gone, the retry-class check as 0513 left it. */
-const PRE_1444 = `
+/** The database as it stood before 1501: the four columns gone, the retry-class check as 0513 left it. */
+const PRE_1501 = `
   ALTER TABLE "project_open_item"
     DROP CONSTRAINT "project_open_item_work_session_chk",
     DROP CONSTRAINT "project_open_item_work_session_return_chk",
@@ -83,7 +83,7 @@ const PRE_1444 = `
       "retry_failure_class" IS NULL
       OR "retry_failure_class" IN ('CHECK_FAILED', 'CHECK_TIMED_OUT', 'ERROR', 'BASELINE_RED'));`;
 
-test('a pre-existing OPEN integration item, DONE task and task_done session are untouched by 1444 and the first boot after it',
+test('a pre-existing OPEN integration item, DONE task and task_done session are untouched by 1501 and the first boot after it',
   { skip, timeout: 180_000 }, async () => {
     assertCoordinatorPgUrlIsIsolated(URL);
     const sql = new Client({ connectionString: URL, connectionTimeoutMillis: 5_000 });
@@ -178,8 +178,8 @@ test('a pre-existing OPEN integration item, DONE task and task_done session are 
       // The session's end as a DONE writes it: the end W4 would revive.
       await db.session.update({ where: { id: sessionId }, data: { endReason: 'task_done' } });
 
-      // ── Back to the database before 1444, and read it ─────────────────────────────────────────────
-      await sql.query(PRE_1444);
+      // ── Back to the database before 1501, and read it ─────────────────────────────────────────────
+      await sql.query(PRE_1501);
       const rows = async () => {
         const item = await sql.query(
           `SELECT to_jsonb(i) AS row FROM "project_open_item" i WHERE i."integration_job_id" = $1::uuid`, [command.jobId]);
@@ -206,10 +206,10 @@ test('a pre-existing OPEN integration item, DONE task and task_done session are 
       assert.ok(before.task.delivered_sha && before.task.delivered_at, 'CONTROL: the task\'s identity is frozen');
       assert.equal(before.session.end_reason, 'task_done', 'CONTROL: the work session ended task_done');
       for (const column of WORK_SESSION_COLUMNS) {
-        assert.equal(column in before.item, false, `CONTROL: ${column} does not exist before 1444`);
+        assert.equal(column in before.item, false, `CONTROL: ${column} does not exist before 1501`);
       }
 
-      // ── 1444, then the first boot ────────────────────────────────────────────────────────────────
+      // ── 1501, then the first boot ────────────────────────────────────────────────────────────────
       await sql.query(readFileSync(MIGRATION, 'utf8'));
       const backfill = await runLandingObservationBackfill(prisma, { databaseUrl: URL!, log: console });
       const unknown = backfill.projects.flatMap((project) => project.left
@@ -222,7 +222,7 @@ test('a pre-existing OPEN integration item, DONE task and task_done session are 
 
       const after = await rows();
       for (const column of WORK_SESSION_COLUMNS) {
-        assert.ok(column in after.item, `${column} exists after 1444`);
+        assert.ok(column in after.item, `${column} exists after 1501`);
         assert.equal(after.item[column], null, `${column} was written on an item that was open at deploy`);
       }
       const withoutNew = Object.fromEntries(Object.entries(after.item).filter(([key]) => !WORK_SESSION_COLUMNS.includes(key)));

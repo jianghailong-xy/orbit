@@ -331,7 +331,7 @@ describe('a conversation still going', () => {
     added = [at(rows.OLDER_PROGRESS_1, 209)];
 
     await elapse(4_000);
-    expect(pill()).toBe('Succeeded');
+    expect(pill()).toBe('Finished');
     expect(container.textContent).toContain(FIRST);
     // It moved as it ended, so it is asked once more, in case the last of it was still on its way.
     await elapse(4_000);
@@ -555,7 +555,7 @@ describe('a conversation still going', () => {
       await mountRunning();
       expect(pill()).toBe('Running');
       await wires[0].send({ seq: 0, type: 'head', payload: headOf({ ...rows.THIS_RUN, status: 'SUCCEEDED' }) });
-      expect(pill()).toBe('Succeeded');
+      expect(pill()).toBe('Finished');
       expect(followReads()).toEqual([]);
     });
 

@@ -965,7 +965,7 @@ export function skippedMergeCheck(job: {
 export interface LandingRetryRequest {
   /** The failed generation this one runs again. */
   ofJobId: string;
-  /** CONFLICT only for the generation a task's own work session fixed (§12.5 W7; 1444 admits it, ruling R1). */
+  /** CONFLICT only for the generation a task's own work session fixed (§12.5 W7; 1501 admits it, ruling R1). */
   failureClass: LandingRetryFailureClass;
   reason: string;
   /** Exactly one requester is recorded by migration 0380. */

@@ -509,6 +509,7 @@ const APPROVED_APISERVER_BLOCKS = [
   [
     '      ORBIT_CLAUDE_OPENAI_GATEWAY: "${ORBIT_CLAUDE_OPENAI_GATEWAY:-}"',
     '      ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY: "${ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY:-}"',
+    '      ORBIT_SESSION_RELEASE_V1: "${ORBIT_SESSION_RELEASE_V1:-}"',
     '      ORBIT_GATEWAY_UPSTREAM_HOSTS: "${ORBIT_GATEWAY_UPSTREAM_HOSTS:-}"',
   ],
   // The proxies in front of the gateway (2026-10-28, the top of this file), empty unless the host's .env sets it.
