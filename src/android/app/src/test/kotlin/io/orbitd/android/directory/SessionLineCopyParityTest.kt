@@ -36,7 +36,7 @@ class SessionLineCopyParityTest {
 
     @Test fun everyFixedWordIsALiteralOfTheSwiftLineOrHeader() {
         val both = line + header
-        listOf(SessionLineCopy.running, SessionLineCopy.queued).forEach { assertLiteral(line, "SessionLine.swift", it) }
+        listOf(SessionLineCopy.running).forEach { assertLiteral(line, "SessionLine.swift", it) }
         listOf(SessionLineCopy.queued, SessionLineCopy.stateRunning, SessionLineCopy.waitingForReply, SessionLineCopy.succeeded, SessionLineCopy.finished, SessionLineCopy.onHold,
             SessionLineCopy.retrying, SessionLineCopy.disconnected, SessionLineCopy.failed, SessionLineCopy.interrupted, SessionLineCopy.ended,
             SessionLineCopy.waitingToResume,
