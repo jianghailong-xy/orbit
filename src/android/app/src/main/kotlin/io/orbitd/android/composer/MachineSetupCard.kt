@@ -89,7 +89,7 @@ internal fun MachineSetupCard(
     val offline = !online
     val usable = MachineSetup.answersDirProbe(runner) && MachineSetup.makesNewFolders(runner)
     val disabled = managedSetup == null && (offline || !usable)
-    val root = if (managedSetup != null && runner.text("reposRoot").isNullOrBlank()) ManagedRunner.REPOS_ROOT else MachineSetup.newFolderRootOf(runner)
+    val root = MachineSetup.setupFolderRoot(runner, managedSetup != null)
 
     var typed by remember(runnerId) { mutableStateOf("") }
     // The answer, with the path it is about: an answer about a name since changed says nothing.

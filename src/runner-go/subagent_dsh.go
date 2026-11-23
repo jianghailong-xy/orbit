@@ -51,6 +51,8 @@ var prepareDshChildLaunch = func(ctx context.Context, child *ClaimedSession, cwd
 		return DshLaunchSpec{}, err
 	}
 	spec.Executable, spec.Args = dshCommand(node, spec.Executable, spec.Args...)
+	// On the Orbit Cloud runner with the browser on, a tool the agent runs opens its pages there (browser_opener.go).
+	spec.Env = browserOpenerEnv(spec.Env, child.BrowserEnabled)
 	return spec, nil
 }
 

@@ -334,7 +334,7 @@ func TestTaskProgressAgentTextSaysWhatProgressIs(t *testing.T) {
 	}
 
 	const exe = "/usr/local/bin/orbit"
-	inside := orbitCLIInstructions(exe, true, true, true)
+	inside := orbitCLIInstructions(exe, true, true, true, true)
 	for _, phrase := range []string{
 		"report it with task_progress_report",
 		"never from your Bash output or transcript",
@@ -345,7 +345,7 @@ func TestTaskProgressAgentTextSaysWhatProgressIs(t *testing.T) {
 			t.Errorf("a task session's instructions do not say %q", phrase)
 		}
 	}
-	if strings.Contains(orbitCLIInstructions(exe, false, true, true), "task_progress_report") {
+	if strings.Contains(orbitCLIInstructions(exe, false, true, true, true), "task_progress_report") {
 		t.Error("a session running no task is told to report a task's progress")
 	}
 	paragraph := orbitProgressInstructions(true)
@@ -354,7 +354,7 @@ func TestTaskProgressAgentTextSaysWhatProgressIs(t *testing.T) {
 			t.Fatalf("the progress paragraph must stay ASCII for codex's context value; byte %d is %q", i, paragraph[i])
 		}
 	}
-	if allowed := strings.Join(orbitCLIAllowedTools(exe, false), "\n"); !strings.Contains(allowed, "Bash("+exe+" task progress *)") {
+	if allowed := strings.Join(orbitCLIAllowedTools(exe, false, false), "\n"); !strings.Contains(allowed, "Bash("+exe+" task progress *)") {
 		t.Error("orbit task progress is not pre-approved for the sessions its instructions send to it")
 	}
 }

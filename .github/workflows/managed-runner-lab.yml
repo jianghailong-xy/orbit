@@ -1,0 +1,115 @@
+name: Managed-runner lab
+
+# The managed-runner lab (docs/managed-runner-lab.md) on a GitHub-hosted runner: the lab VM (k3s,
+# Ceph, Ceph-CSI) under KVM, the test control plane, the runner image built from the dispatched
+# ref, and one scenario from scripts/managed-runner/lab/scenarios/ run on it. Started by hand only:
+#
+#   gh workflow run managed-runner-lab.yml --ref probe/<name> -f scenario=<scenario>
+#
+# The lab uses the fake model (scripts/managed-runner/lab/fake-model.py), so the job needs no
+# secrets. Screenshots, logs and the scenario's result.json are uploaded as the artifact
+# managed-runner-lab-<scenario>; the job fails when the scenario does. See
+# scripts/managed-runner/lab/scenarios/README.md.
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: "Scenario to run: the name of a file in scripts/managed-runner/lab/scenarios/, without .sh"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: managed-runner-lab-${{ github.ref }}-${{ inputs.scenario }}
+  cancel-in-progress: false
+
+jobs:
+  lab:
+    name: Lab scenario ${{ inputs.scenario }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      SCENARIO: ${{ inputs.scenario }}
+      # On the root disk: /mnt is not mounted on these runners, and a systemd unit naming a path under it
+      # fails on its mnt.mount dependency. Not under /opt either, whose default ACL leaves the lab's SSH
+      # key readable by others, which ssh refuses.
+      LAB_DIR: /var/lib/managed-runner-lab
+      LAB_OUT: ${{ github.workspace }}/lab-out
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.ms-playwright
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check the scenario name
+        run: |
+          [[ "$SCENARIO" =~ ^[a-z0-9_]+$ ]] || { echo "::error::scenario must be a lowercase name"; exit 1; }
+          [ -f "scripts/managed-runner/lab/scenarios/$SCENARIO.sh" ] \
+            || { echo "::error::no scenario scripts/managed-runner/lab/scenarios/$SCENARIO.sh at $GITHUB_SHA"; exit 1; }
+      # The documented way to give the runner user /dev/kvm on GitHub-hosted Linux runners.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+      # Room for the VM's disks, Ceph's images and the runner image: preinstalled SDKs the lab
+      # never uses leave the root disk.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/share/swift
+          sudo install -d -m 0755 "$LAB_DIR"
+          # No inherited ACL: the lab's private files (its SSH key) must stay 0600.
+          sudo setfacl -b -k "$LAB_DIR" 2>/dev/null || true
+          getfacl -p "$(dirname "$LAB_DIR")" "$LAB_DIR" 2>/dev/null || true
+          df -h /
+          free -m
+          nproc
+      - name: Install the lab's host tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -yq --no-install-recommends qemu-system-x86 qemu-utils genisoimage socat jq
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.x'
+          cache-dependency-path: src/link-gateway/go.sum
+      - name: Install dependencies and build the apiserver and web
+        run: |
+          npm ci
+          npm run prisma:generate
+          npm run build -w @orbit/shared
+          npm run build -w @orbit/apiserver
+          npm run build -w @orbit/web
+          (cd src/web && npx playwright install --with-deps chromium)
+      # The lab's scripts run as root (systemd-run, /dev/kvm) and name /usr/local/bin/node; lab.env
+      # names the lab's directory and sizes the VM.
+      #
+      # The VM gets 10 GiB here instead of lab.env's 6 GiB, which is HPC's cap. At 6 GiB with no swap, a second
+      # session's engine starting beside the first one and Chrome brought the VM under the kubelet's 256Mi hard
+      # eviction threshold, and the kubelet evicted the runner Pod ("The node was low on resource: memory"; lab run
+      # 44851855851). A 4-CPU runner has 16 GB, which leaves the host its own room.
+      - name: Point the lab at this runner
+        run: |
+          sudo ln -sf "$(command -v node)" /usr/local/bin/node
+          sed -i -e "s#^LAB_DIR=.*#LAB_DIR=$LAB_DIR#" \
+            -e "s#^LAB_MEMORY_MIB=.*#LAB_MEMORY_MIB=10240#" \
+            -e "s#^LAB_UNIT_MEMORY_MAX=.*#LAB_UNIT_MEMORY_MAX=10752M#" scripts/managed-runner/lab/lab.env
+          grep -nE '^(LAB_DIR|LAB_MEMORY_MIB|LAB_UNIT_MEMORY_MAX)=' scripts/managed-runner/lab/lab.env
+      - name: Run the scenario
+        run: |
+          mkdir -p "$LAB_OUT"
+          sudo --preserve-env=LAB_OUT,PLAYWRIGHT_BROWSERS_PATH env "PATH=$PATH" \
+            bash scripts/managed-runner/lab/scenarios/run.sh "$SCENARIO" 2>&1 | tee "$LAB_OUT/run.log"
+          # The scenario's verdict is result.json's, which run.sh writes on every exit.
+          python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); print("result:", r["result"]); sys.exit(r["result"] != "pass")' "$LAB_OUT/result.json"
+      - name: Upload screenshots, logs and the result
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: managed-runner-lab-${{ inputs.scenario }}
+          path: ${{ env.LAB_OUT }}
+          if-no-files-found: warn
+          retention-days: 30

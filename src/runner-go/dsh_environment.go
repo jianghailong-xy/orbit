@@ -34,6 +34,8 @@ type DshAgentOverlay struct {
 	// Uploads is the session's uploads directory, a writable root of its shell sandbox beside the shared cache
 	// root (dshSandboxCacheRootPlugin). Empty leaves the cache root alone.
 	Uploads string
+	// Drive is the Orbit Files drive's roots (the parent included), writable beside Uploads; empty when none is mounted.
+	Drive []string
 }
 
 func (i DshLaunchInput) String() string {
@@ -66,10 +68,13 @@ const dshMissingKeyMessage = "DSH_CREDENTIAL_MISSING: DeepSeek Harness runs on a
 
 // PrepareDshSessionLaunch uses the same Agent.Env populated by encrypted provider dispatch.
 func PrepareDshSessionLaunch(ctx context.Context, job *ClaimedSession, executionDir, fileMode string) (DshLaunchSpec, error) {
-	return prepareDshLaunch(ctx, DshLaunchInput{
+	spec, err := prepareDshLaunch(ctx, DshLaunchInput{
 		OrbitSessionID: job.SessionID, ExecutionDir: executionDir,
 		APIKey: job.Agent.Env["ORBIT_DSH_API_KEY"], BaseURL: job.Agent.Env["ORBIT_DSH_BASE_URL"], FileMode: fileMode,
 	}, dshSessionAgentOverlay(job))
+	// On the Orbit Cloud runner with the browser on, a tool the agent runs opens its pages there (browser_opener.go).
+	spec.Env = browserOpenerEnv(spec.Env, err == nil && job.BrowserEnabled)
+	return spec, err
 }
 
 func PrepareDshLaunch(ctx context.Context, input DshLaunchInput) (DshLaunchSpec, error) {
@@ -411,8 +416,13 @@ func dshAgentOverlayPatch(home string, agent DshAgentOverlay) ([]byte, error) {
 	// the runner name one directory.
 	// The session's uploads directory rides beside it (extra), as Claude Code's --add-dir does.
 	rootsConfig := map[string]interface{}{"root": runnerCacheRoot()}
+	var extra []string
 	if strings.TrimSpace(agent.Uploads) != "" {
-		rootsConfig["extra"] = []string{agent.Uploads}
+		extra = append(extra, agent.Uploads)
+	}
+	extra = append(extra, agent.Drive...)
+	if len(extra) > 0 {
+		rootsConfig["extra"] = extra
 	}
 	if err := insert("orbit-sandbox-cache-root", "sandbox-cache-root", dshSandboxCacheRootPlugin, rootsConfig); err != nil {
 		return nil, err
@@ -430,11 +440,12 @@ func dshAgentOverlayPatch(home string, agent DshAgentOverlay) ([]byte, error) {
 // agent's own prompt, its appended prompt, then Orbit's CLI guidance.
 func dshSessionAgentOverlay(job *ClaimedSession) *DshAgentOverlay {
 	configured := strings.TrimSpace(strings.Join([]string{strings.TrimSpace(job.Agent.SystemPrompt), job.appendSystemPrompt()}, "\n\n"))
-	overlay := &DshAgentOverlay{AppendSystemPrompt: withOrbitCLIInstructions(configured, orbitCLIExecutable(), job.insideRecordedWork(), job.watchesOn(), agentDelegates(job.Agent))}
+	overlay := &DshAgentOverlay{AppendSystemPrompt: withOrbitCLIInstructions(configured, orbitCLIExecutable(), job.insideRecordedWork(), job.watchesOn(), agentDelegates(job.Agent), job.workflowsOn())}
 	// Created up front, as Claude Code's --add-dir is: a sandbox bind of a missing directory fails the command.
 	if upDir := uploadsDir(job.SessionID); os.MkdirAll(upDir, 0o755) == nil {
 		overlay.Uploads = upDir
 	}
+	overlay.Drive = driveGrantRoots()
 	return overlay
 }
 

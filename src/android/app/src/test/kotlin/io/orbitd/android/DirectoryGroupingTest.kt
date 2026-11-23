@@ -49,6 +49,17 @@ class DirectoryGroupingTest {
         assertEquals(listOf(run), ScheduledRunsFolder.sessions(rows, "w"))
     }
 
+    @Test fun aChangeConversationIsNoRunAndShowsInNoList() {
+        // A SCHEDULE_CHANGE session (§8.2): a realtime upsert can bring a row in, and it must not appear in an ordinary
+        // list or count — exactly where a SCHEDULE run is kept out — nor in the Scheduled runs folder, which it is not.
+        val change = DirectorySession("change", workspaceId = "w", runSource = "SCHEDULE_CHANGE")
+        assertTrue(change.isScheduleChange)
+        assertFalse(change.isScheduledRun)
+        val rows = listOf(change, DirectorySession("manual", workspaceId = "w"))
+        assertEquals(listOf("manual"), rows.withoutScheduledRuns().map { it.id })
+        assertEquals(emptyList<DirectorySession>(), ScheduledRunsFolder.sessions(rows, "w"))
+    }
+
     @Test fun scheduledFolderShowsWithRunsInFolderViewsAndCountsSessionsNeedingReply() {
         val rows = listOf(
             DirectorySession("running", status = "RUNNING", workspaceId = "w", runSource = "SCHEDULE"),

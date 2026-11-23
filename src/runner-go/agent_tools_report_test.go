@@ -43,6 +43,9 @@ func claudeInitFrame(t *testing.T, status string, withSkill bool) map[string]int
 func agentToolsServedForTest(sw agentToolsSwitches) []string {
 	var names []string
 	for _, op := range operationCatalog().Ops {
+		if op.Object == objectBrowser && !sw.Browser {
+			continue // off means absent (browser_tools.go)
+		}
 		if agentToolsFamilyOf(op) != "" && agentToolsWithheldBy(op, sw) == "" && op.Tool != scheduleRunReportTool {
 			names = append(names, op.Tool)
 		}
@@ -79,6 +82,9 @@ func TestClaudeInitBecomesTheAgentToolsReport(t *testing.T) {
 			if f.Served != 0 || f.Total == 0 || f.Reason != "orchestration" {
 				t.Errorf("orchestration family = %+v, want none served, said why", f)
 			}
+		case f.ID == "browser":
+			// The session was spawned with the browser switch off: off means absent, so the report has no such family.
+			t.Errorf("browser family = %+v, want none with the switch off", f)
 		case f.Served != f.Total || f.Reason != "":
 			t.Errorf("family %s = %+v, want all served", f.ID, f)
 		}
@@ -282,7 +288,7 @@ func TestAgentToolsReportReadsTheRecordedEngineFrames(t *testing.T) {
 	job := agentToolsJob() // orchestration off, as the probe's orbit mcp was spawned
 	r := claudeAgentToolsReport(job, init)
 	// Claude enumerated the tools in the recording. Keep the count from that probe as the catalogue grows.
-	const recordedClaudeTools = 94
+	const recordedClaudeTools = 99
 	if r.MCP.Status != "connected" || r.MCP.Tools != recordedClaudeTools {
 		t.Errorf("recorded Claude init read as %+v, want connected with %d tools", r.MCP, recordedClaudeTools)
 	}

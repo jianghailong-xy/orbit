@@ -28,6 +28,9 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /tasks/:taskId/evidence/decision',
   'POST /tasks/:taskId/evidence/:revision/restart',
   'POST /sessions/:id/approvals/:approvalId/decision',
+  // Run now (docs/mocks/queued-run-now decision E): starting a queued message over the runner's limit is a person's
+  // act, so agents cannot skip the queue for themselves. It also refuses an acting session, RUN_NOW_OWNER_CHANNEL_ONLY.
+  'POST /sessions/:id/run-now',
   // Session guests (docs/session-guests-design.md §3): who may drive the agent on the owner's machine, with the
   // owner's accounts, is the owner's to decide and to see.
   'GET /sessions/:id/guests',

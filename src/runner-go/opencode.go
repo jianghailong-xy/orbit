@@ -488,6 +488,7 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 		"ORBIT_ALLOW_ORCHESTRATION":       orchestrationEnv(job.AllowOrchestration),
 		envWatches:                        watchesEnv(job.WatchesDisabled),
 		envWiki:                           wikiEnv(job.WikiDisabled),
+		envBrowser:                        browserEnv(job.BrowserEnabled),
 		envWorkflows:                      workflowsEnv(job.WorkflowsDisabled),
 		envScheduleRun:                    scheduleRunEnv(job.ScheduleRun),
 		envOrchestrationToken:             job.OrchestrationToken,
@@ -508,6 +509,8 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 	// its shell tool with detached:true (its own process group), which is the case
 	// terminateSessionProcessTree's ppid walk exists to catch. Stage 4 verdict.
 	cmd.Env = append(cmd.Env, bgJobEnvPairs(job.SessionID)...)
+	// On the Orbit Cloud runner with the browser on, a tool the agent runs opens its pages there (browser_opener.go).
+	cmd.Env = browserOpenerEnv(cmd.Env, job.BrowserEnabled)
 	cmd.Stdin = strings.NewReader(prompt)
 	configureSessionProcessTree(cmd)
 	stdout, err := cmd.StdoutPipe()
@@ -889,7 +892,7 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 	}
 	appendPrompt := strings.TrimSpace(strings.Join(nonEmptyStrings(
 		job.appendSystemPrompt(),
-		openCodeOrbitCLIInstructions(executable, job.insideRecordedWork(), job.watchesOn(), agentDelegates(job.Agent)),
+		openCodeOrbitCLIInstructions(executable, job.insideRecordedWork(), job.watchesOn(), agentDelegates(job.Agent), job.workflowsOn()),
 	), "\n\n"))
 	if appendPrompt != "" {
 		instructionsPath := filepath.Join(scratchDir, "opencode-instructions.txt")
@@ -924,6 +927,7 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 			"ORBIT_ALLOW_ORCHESTRATION": orchestrationEnv(job.AllowOrchestration),
 			envWatches:                  watchesEnv(job.WatchesDisabled),
 			envWiki:                     wikiEnv(job.WikiDisabled),
+			envBrowser:                  browserEnv(job.BrowserEnabled),
 			envWorkflows:                workflowsEnv(job.WorkflowsDisabled),
 			envScheduleRun:              scheduleRunEnv(job.ScheduleRun),
 			envOrchestrationToken:       job.OrchestrationToken,
@@ -979,8 +983,8 @@ func nonEmptyStrings(values ...string) []string {
 	return out
 }
 
-func openCodeOrbitCLIInstructions(executable string, insideRecordedWork, watches, delegates bool) string {
-	return strings.Replace(orbitCLIInstructions(executable, insideRecordedWork, watches, delegates), "mcp__orbit__*", "orbit_*", 1)
+func openCodeOrbitCLIInstructions(executable string, insideRecordedWork, watches, delegates, workflows bool) string {
+	return strings.Replace(orbitCLIInstructions(executable, insideRecordedWork, watches, delegates, workflows), "mcp__orbit__*", "orbit_*", 1)
 }
 
 func appendConfigString(value interface{}, addition string) []string {
@@ -1093,6 +1097,19 @@ func applyOpenCodePermissions(permission map[string]interface{}, agent AgentExec
 		// Non-interactive OpenCode rejects an "ask" decision, preserving plan mode
 		// even for shell commands that could otherwise mutate the checkout.
 		permission["bash"] = "ask"
+	}
+
+	// The Orbit Files drive is a workspace root: outside the checkout, so its external-directory check is told. Plan
+	// keeps its denial of every edit above, so there the drive is only read (design §7.2).
+	if guarded {
+		if roots := driveGrantRoots(); len(roots) > 0 {
+			external := map[string]interface{}{"*": permission["*"]}
+			for _, root := range roots {
+				external[root] = "allow"
+				external[root+"/**"] = "allow"
+			}
+			permission["external_directory"] = external
+		}
 	}
 
 	// A workspace symlink whose target resolves outside the checkout: OpenCode's lexical

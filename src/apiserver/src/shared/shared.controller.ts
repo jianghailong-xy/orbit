@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Header,
+  Headers,
   MessageEvent,
   NotFoundException,
   Param,
@@ -16,9 +17,11 @@ import {
 import type { Response } from 'express';
 import type { Observable } from 'rxjs';
 import { PublicIdPipe } from '../common/public-id';
+import { DriveContentService, parseRange } from '../drive/drive-content.service';
 import { AttachmentsService } from '../attachments/attachments.service';
 import { publicOrigin } from '../email/email-settings.service';
 import { streamable } from '../files/files.service';
+import { attachmentDisposition, inlineType } from '../files/user-file-response';
 import { SessionsService } from '../sessions/sessions.service';
 import { parseMaxPayload } from '../sessions/truncate-payload';
 import { ViewerStreamService } from '../sessions/viewer-stream.service';
@@ -49,6 +52,7 @@ export class SharedController {
     private readonly sessions: SessionsService,
     private readonly attachments: AttachmentsService,
     private readonly viewerStreams: ViewerStreamService,
+    private readonly drive: DriveContentService,
   ) {}
 
   /**
@@ -78,9 +82,46 @@ export class SharedController {
         ? { ...head, root: await this.links.taskPage(link) }
         : link.kind === 'WIKI'
           ? { ...head, root: await this.links.wikiPage(link) }
+          : link.kind === 'DRIVE_FILE'
+            ? { ...head, root: await this.driveFile(link) }
           : { ...head, ...(await this.links.projectPage(link)) };
     if (preview !== '1') await this.links.recordView(link.id);
     return body;
+  }
+
+  /**
+   * A drive file link's bytes: the version the link was pinned to, whatever the file holds now, with `Range` (206). A type
+   * off the inline list leaves as a download, and the answer is sandboxed and never sniffed, as every user file is.
+   */
+  @Get(':token/content')
+  async content(
+    @Param('token') token: string,
+    @Headers('range') rangeHeader: string | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const link = await this.links.resolve(token);
+    if (link.kind !== 'DRIVE_FILE') throw linkNotFound();
+    const file = await this.links.driveFilePage(link);
+    const type = driveFileType(file.name);
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Content-Security-Policy', 'sandbox');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('ETag', `"${file.versionId}"`);
+    const range = parseRange(rangeHeader, file.sizeBytes);
+    if (range === 'unsatisfiable') {
+      res.status(416).setHeader('Content-Range', `bytes */${file.sizeBytes}`);
+      return new StreamableFile(Buffer.alloc(0), { type, length: 0 });
+    }
+    const opened = await this.drive.open(link.ownerId, file.versionId, range ?? undefined);
+    if (range) {
+      res.status(206).setHeader('Content-Range', `bytes ${range.start}-${range.end}/${file.sizeBytes}`);
+    }
+    res.once('close', () => opened.content.destroy());
+    return new StreamableFile(opened.content, {
+      type,
+      disposition: inlineType(type) ? 'inline' : attachmentDisposition(file.name),
+      length: range ? range.end - range.start + 1 : file.sizeBytes,
+    });
   }
 
   /**
@@ -287,6 +328,12 @@ export class SharedController {
     );
   }
 
+  /** A drive file link's root page: its name, size and type, and the address of its bytes. */
+  private async driveFile(link: OpenLink) {
+    const file = await this.links.driveFilePage(link);
+    return { name: file.name, sizeBytes: file.sizeBytes, mimeType: driveFileType(file.name), preview: inlineType(driveFileType(file.name)) !== null };
+  }
+
   /** The transcript routes serve a session root only; on any other link they are not there. */
   private async sessionLink(token: string): Promise<OpenLink & { sessionId: string }> {
     const link = await this.links.resolve(token);
@@ -298,4 +345,15 @@ export class SharedController {
 /** The events as the link shows them: whole, or — Tool output off — with only the tools' names. */
 function shown<E extends { type: string; payload: unknown; truncated?: true }>(link: OpenLink, events: E[]): E[] {
   return link.include.toolOutput ? events : events.map(withoutToolOutput);
+}
+
+/** The types a drive file may be shown as, by its name; every other file is bytes to download. */
+const FILE_TYPES: Record<string, string> = {
+  pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
+  avif: 'image/avif', bmp: 'image/bmp', ico: 'image/x-icon', tif: 'image/tiff', tiff: 'image/tiff', heic: 'image/heic', heif: 'image/heif',
+};
+
+function driveFileType(name: string): string {
+  const dot = name.lastIndexOf('.');
+  return (dot >= 0 && FILE_TYPES[name.slice(dot + 1).toLowerCase()]) || 'application/octet-stream';
 }

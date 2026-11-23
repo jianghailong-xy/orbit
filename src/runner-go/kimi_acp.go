@@ -614,6 +614,7 @@ func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDi
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
 		envWatches+"="+watchesEnv(job.WatchesDisabled),
 		envWiki+"="+wikiEnv(job.WikiDisabled),
+		envBrowser+"="+browserEnv(job.BrowserEnabled),
 		envWorkflows+"="+workflowsEnv(job.WorkflowsDisabled),
 		envScheduleRun+"="+scheduleRunEnv(job.ScheduleRun),
 		envMCPPermissionPrompt+"=0",
@@ -643,6 +644,8 @@ func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDi
 	// The session's private Kimi home (see kimi_home.go), so runner-owned
 	// configuration never lands in the user's own ~/.kimi-code.
 	cmd.Env = envWithValue(cmd.Env, "KIMI_CODE_HOME", kimiHome)
+	// On the Orbit Cloud runner with the browser on, a tool the agent runs opens its pages there (browser_opener.go).
+	cmd.Env = browserOpenerEnv(cmd.Env, job.BrowserEnabled)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		cancel()
@@ -1073,12 +1076,12 @@ func kimiNameValuePairs(value interface{}) []map[string]string {
 	return pairs
 }
 
-func kimiAgentInstructions(agent AgentExecConfig, orbitExe string, insideRecordedWork, watches bool) string {
+func kimiAgentInstructions(agent AgentExecConfig, orbitExe string, insideRecordedWork, watches, workflows bool) string {
 	parts := []string{}
 	if strings.TrimSpace(agent.SystemPrompt) != "" {
 		parts = append(parts, agent.SystemPrompt)
 	}
-	if appendPrompt := strings.TrimSpace(withOrbitCLIInstructions(agent.AppendSystemPrompt, orbitExe, insideRecordedWork, watches, agentDelegates(agent))); appendPrompt != "" {
+	if appendPrompt := strings.TrimSpace(withOrbitCLIInstructions(agent.AppendSystemPrompt, orbitExe, insideRecordedWork, watches, agentDelegates(agent), workflows)); appendPrompt != "" {
 		parts = append(parts, appendPrompt)
 	}
 	if len(agent.AllowedTools) > 0 {
@@ -1090,8 +1093,8 @@ func kimiAgentInstructions(agent AgentExecConfig, orbitExe string, insideRecorde
 	return strings.Join(parts, "\n\n")
 }
 
-func kimiPromptText(agent AgentExecConfig, orbitExe, text string, insideRecordedWork, watches bool) string {
-	instructions := kimiAgentInstructions(agent, orbitExe, insideRecordedWork, watches)
+func kimiPromptText(agent AgentExecConfig, orbitExe, text string, insideRecordedWork, watches, workflows bool) string {
+	instructions := kimiAgentInstructions(agent, orbitExe, insideRecordedWork, watches, workflows)
 	if instructions == "" {
 		return text
 	}
@@ -1143,7 +1146,7 @@ func prepareKimiPrompt(ctx context.Context, t *Transport, job *ClaimedSession, r
 			feedText = note
 		}
 	}
-	feedText = kimiPromptText(job.instructionAgent(), orbitCLIExecutable(), feedText, job.insideRecordedWork(), job.watchesOn())
+	feedText = kimiPromptText(job.instructionAgent(), orbitCLIExecutable(), feedText, job.insideRecordedWork(), job.watchesOn(), job.workflowsOn())
 	if feedText != "" || len(blocks) == 0 {
 		blocks = append(blocks, map[string]interface{}{"type": "text", "text": feedText})
 	}
@@ -2428,10 +2431,16 @@ func kimiAutomaticPermissionOption(job *ClaimedSession, toolName string, input i
 			return selectDecision(false)
 		}
 	}
+	// The Files drive is read-only in Plan: Kimi's plan mode asks about every shell call, and one that writes the
+	// drive is refused here rather than put on a card or allowed by a rule (plan_drive.go).
+	if job.Agent.PermissionMode == "plan" && planDriveWrite(toolName, mapValue(input)) {
+		return selectDecision(false)
+	}
 	allowed := appendUnique(job.Agent.AllowedTools,
 		orbitCLIAllowedTools(
 			orbitCLIPermissionExecutable(orbitCLIExecutable()),
 			job.AllowOrchestration && strings.TrimSpace(job.OrchestrationToken) != "",
+			job.BrowserEnabled,
 		)...)
 	for _, rule := range allowed {
 		if kimiToolMatchesRule(rule, toolName, input) {

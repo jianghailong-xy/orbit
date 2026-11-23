@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { DriveModule } from '../drive/drive.module';
 import { AttachmentsModule } from '../attachments/attachments.module';
 import { SessionsModule } from '../sessions/sessions.module';
 import { ShareLinksModule } from '../share-links/share-links.module';
@@ -11,7 +12,7 @@ import { SharedStreamGuard } from './shared-stream.guard';
 // exported by theirs); its one provider of its own is the per-visitor budget PublicSurfaceGuard
 // spends — one per process, at SHARED_RATE_LIMIT.
 @Module({
-  imports: [ShareLinksModule, SessionsModule, AttachmentsModule],
+  imports: [ShareLinksModule, SessionsModule, AttachmentsModule, DriveModule],
   controllers: [SharedController],
   providers: [{ provide: SharedRateLimiter, useValue: new SharedRateLimiter() }, SharedStreamGuard],
 })

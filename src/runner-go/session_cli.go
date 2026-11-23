@@ -167,7 +167,9 @@ Usage:
   orbit session get SESSION_ID [--summary] [--json]
 
 Reports status, numTurns and lastTurnAt, so a headless poller can tell whether a
-long-lived session has finished the turn it was given.
+long-lived session has finished the turn it was given. When the server sends them it also reports
+phase (PENDING, RUNNING, IDLE), released (true: the session is over), lastTurnOutcome and waitingOn
+(PERSON, HOLD, WAKE or null); status and its values are unchanged.
 
 --summary prints what the session_get tool answers by default: a record over 20,000 characters is
 shortened to fit, the prompt first, then changedFiles, lastToolUse, lastUserText and error;

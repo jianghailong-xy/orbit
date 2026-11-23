@@ -1,6 +1,6 @@
 # How agents use Orbit
 
-> Generated from `src/runner-go/agent_tools_guide.go` — do not edit by hand. Guide 1.0.0, written from Agent Contract 1.11.0, operation catalogue 1.9.0 and primer 1.4.4.
+> Generated from `src/runner-go/agent_tools_guide.go` — do not edit by hand. Guide 1.0.0, written from Agent Contract 1.12.0, operation catalogue 1.10.0 and primer 1.4.5.
 
 This is the person's side of the [Orbit Agent Contract](orbit-agent-contract.md): what an agent in an Orbit session does with Orbit, and why. The agent learns the same rules from its primer, its tools' descriptions and the `guide` tool. The web console and the macOS app show this guide in **Agent tools**: a session's More actions → Agent tools, and Workspace settings → Agent environment → Agent tools, beside what that session or workspace is actually given. The same rows make the playbooks skill Orbit gives Claude Code and Codex, and a test holds this file, the apps' copy and the skill to them.
 
@@ -64,7 +64,7 @@ Each request goes to the object that answers its question; when two fit, the sma
 | R1.8 | What is the state of this project, task or session? | none | `project_get`, `task_get`, `task_list`, `session_get` |
 | R1.9 | Wait for it to finish | watch | `task_await`, `session_await`, `watch_create` |
 | R1.10 | Remember this lesson or pitfall about a file or a pattern | wiki | `wiki_search`, `wiki_propose`, `wiki_note` |
-| R1.11 | Keep this file, or read one back | file | `file_upload`, `file_fetch`, `file_list` |
+| R1.11 | Keep this file, or read one back | file | `file_upload`, `file_fetch`, `file_list`, `drive_put`, `drive_get`, `drive_list`, `drive_move`, `drive_delete` |
 | R1.12 | This class of work needs its own dispatch policy | task_list | `tasklist_create`, `tasklist_update` |
 | R1.13 | Which agent should run this, or change an agent's defaults | agent | `agent_list`, `agent_create`, `agent_update` |
 | R1.14 | Answer, explain, or edit code | none | nothing to record |
@@ -311,7 +311,7 @@ Try asking: *"What is still open in the agent-contract project?"* · *"Where is 
 | 1? | `project_get` | `orbit project get` | none | A project's goal, acceptance criteria, instructions, blockers and task counts. |
 | 2 | `task_get` | `orbit task get` | none | One task in full, with its comments and sessions; with no id, the task this session runs. |
 | 3? | `task_list` | `orbit task list` | none | Tasks filtered by project, status, list or label, as compact rows. |
-| 4? | `session_get` | `orbit session get` | none | One session's record. |
+| 4? | `session_get` | `orbit session get` | none | One session's record: over when `released`; failed when released with `lastTurnOutcome` FAILED and no endReason; working when `phase` is RUNNING; `waitingOn` names what holds it. |
 
 **Done when:** The document the read returned; quote ids from it, not from memory.
 
@@ -346,9 +346,14 @@ Try asking: *"Keep this screenshot with the task."*
 
 | Step | MCP | CLI | Approval | Why |
 | --- | --- | --- | --- | --- |
-| 1 | `file_upload` | `orbit file upload` | none | Keep the file; it reads only this session's checkout and uploads directory. |
+| 1 | `file_upload` | `orbit file upload` | none | Keep a file from this session's checkout, uploads directory or a mounted Orbit Files drive. |
 | 2? | `file_list` | `orbit file list` | none | What this task's sessions have uploaded. |
 | 3? | `file_fetch` | `orbit file fetch` | none | Read a file back by id. |
+| 4? | `drive_put` | `orbit drive put` | none | Keep a local file on the owner's drive. |
+| 5? | `drive_get` | `orbit drive get` | none | Download a drive file into session uploads. |
+| 6? | `drive_list` | `orbit drive ls` | none | List a folder on the owner's drive. |
+| 7? | `drive_move` | `orbit drive mv` | none | Move a drive entry. |
+| 8? | `drive_delete` | `orbit drive rm` | none | Move a drive entry to the owner's Trash. |
 
 **Done when:** file_upload answers the file's id, sha256, sizeBytes and an orbit-attachment: link to put in a reply.
 
@@ -401,7 +406,7 @@ In the order each engine puts them in front of its model, with the role it reads
 | 1 | Claude Code's system prompt *(unless the workspace replaces it)* | System | The engine | The engine's own. |
 | 2 | This workspace's base instructions *(when the workspace sets base instructions)* | System | The workspace | In place of Claude Code's own system prompt (--system-prompt). |
 | 3 | This workspace's runtime instructions *(when the workspace has instructions)* | System · appended | The workspace | Appended to the system prompt (--append-system-prompt), before Orbit's. |
-| 4 | Orbit's runtime instructions | System · appended | Orbit | The primer 1.4.4, then the CLI's absolute path, files, evidence, progress, waits and the wiki. Appended to the system prompt, so a compaction does not touch them. |
+| 4 | Orbit's runtime instructions | System · appended | Orbit | The primer 1.4.5, then the CLI's absolute path, files, evidence, progress, waits and the wiki. Appended to the system prompt, so a compaction does not touch them. |
 | 5 | CLAUDE.md files | Project context | The repository | Put by Claude Code at the top of your first message, as a reminder that they override its defaults. Orbit neither reads nor changes them. |
 | 6 | Your messages | User | You | With the task or project context Orbit attaches to them. |
 | 7 | Orbit MCP server instructions | System message | Orbit | The primer again, in the system message Claude Code adds after your first message, beside the environment and the list of skills. |
@@ -416,11 +421,11 @@ In the order each engine puts them in front of its model, with the role it reads
 | 3 | Orbit playbooks · orbit-playbooks | On demand | Orbit | Listed among Codex's skills by name and description; its recipes are read only when the agent opens it, and nothing depends on it. |
 | 4 | AGENTS.md files | Project context | The repository | Read by Codex from the checkout. Orbit neither reads nor changes them. |
 | 5 | This workspace's runtime instructions *(when the workspace has instructions; Codex 0.135 and later)* | Developer | The workspace | Application context, just before Orbit's. |
-| 6 | Orbit's runtime instructions *(Codex 0.135 and later)* | Developer | Orbit | The primer 1.4.4, then the CLI's absolute path, files, evidence, progress, waits and the wiki. Application context, sent with every turn, so a compaction cannot drop them. |
+| 6 | Orbit's runtime instructions *(Codex 0.135 and later)* | Developer | Orbit | The primer 1.4.5, then the CLI's absolute path, files, evidence, progress, waits and the wiki. Application context, sent with every turn, so a compaction cannot drop them. |
 | 7 | This workspace's runtime instructions *(when the workspace has instructions; Codex 0.125 to 0.134)* | Developer | The workspace | In the same developer message as Orbit's, before them. |
-| 8 | Orbit's runtime instructions *(Codex 0.125 to 0.134)* | Developer | Orbit | The primer 1.4.4, then the CLI's absolute path, files, evidence, progress, waits and the wiki. One developer message, sent again after a compaction. |
+| 8 | Orbit's runtime instructions *(Codex 0.125 to 0.134)* | Developer | Orbit | The primer 1.4.5, then the CLI's absolute path, files, evidence, progress, waits and the wiki. One developer message, sent again after a compaction. |
 | 9 | This workspace's runtime instructions *(when the workspace has instructions; Codex before 0.125)* | User · turn input | The workspace | In the same block as Orbit's, before them. |
-| 10 | Orbit's runtime instructions *(Codex before 0.125)* | User · turn input | Orbit | The primer 1.4.4, then the CLI's absolute path, files, evidence, progress, waits and the wiki. At the top of every turn's input. |
+| 10 | Orbit's runtime instructions *(Codex before 0.125)* | User · turn input | Orbit | The primer 1.4.5, then the CLI's absolute path, files, evidence, progress, waits and the wiki. At the top of every turn's input. |
 | 11 | Your messages | User | You | Codex's own base instructions put your message ahead of a skill or a repository file. |
 | 12 | Orbit MCP server instructions | With the tools | Orbit | Shown with Orbit's tools, cut to their first 250 characters; the runtime instructions above carry the whole primer either way. |
 
@@ -452,11 +457,12 @@ Agent tools on a session counts each family as that session's engine lists it. T
 | Task lists (6) | `tasklist_create`, `tasklist_delete`, `tasklist_get`, `tasklist_list`, `tasklist_propose_dag`, `tasklist_update` |
 | Schedules (12) | `condition_get`, `schedule_create`, `schedule_delete`, `schedule_end`, `schedule_get`, `schedule_list`, `schedule_pause`, `schedule_resume`, `schedule_run_now`, `schedule_run_report`, `schedule_run_stop`, `schedule_update` |
 | Waits (6) | `task_await`, `watch_cancel`, `watch_create`, `watch_get`, `watch_list`, `watch_update` |
-| Files (4) | `file_fetch`, `file_list`, `file_pin`, `file_upload` |
+| Files (9) | `drive_delete`, `drive_get`, `drive_list`, `drive_move`, `drive_put`, `file_fetch`, `file_list`, `file_pin`, `file_upload` |
 | SubAgents (1) | `subagent_rate` |
 | Background jobs (5) | `bg_kill`, `bg_list`, `bg_output`, `bg_run`, `schedule_wakeup` |
 | Questions for you (8) | `ask_owner`, `notify`, `open_item_hand_over`, `request_owner_action`, `settings_get`, `settings_propose`, `task_request_confirmation`, `withdraw_owner_request` |
 | Wiki (5) | `wiki_draft`, `wiki_get`, `wiki_note`, `wiki_propose`, `wiki_search` |
+| Orbit Cloud browser (4) | `browser_clear_logins`, `browser_open`, `browser_request_sign_in`, `browser_status` |
 | Providers (4) | `provider_create`, `provider_delete`, `provider_list`, `provider_update` |
 | Merge receipts (3) | `merge_receipt`, `merge_receipts`, `project_merge_evidence` |
 | Guide (1) | `guide` |

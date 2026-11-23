@@ -78,8 +78,9 @@ export function runnerActiveTurns(runnerIdSql: Prisma.Sql): Prisma.Sql {
  * not RUNNING, and named by the runner's last beat (runner_presence.background_job_session_ids,
  * migration 0780; runners/runner-background-holders.ts). The runner itself admits against turns
  * plus these (src/runner-go/session_pool.go), so a count of turns alone reads a full machine as
- * having room. Only the queued explanation reads it; the server's own claim gate counts turns,
- * and the runner holds back its claims by itself. Ask it only of a runner known to be online: a
+ * having room. The queued explanation reads it, and so does Run now's overflow claim, which may go
+ * past the limit only up to max + burst of what the runner admits against; the ordinary claim gate
+ * counts turns, and the runner holds back its claims by itself. Ask it only of a runner known to be online: a
  * stale presence row still names the holders of its last beat.
  */
 export function runnerBackgroundHeldSessions(runnerIdSql: Prisma.Sql): Prisma.Sql {
@@ -102,4 +103,15 @@ export function batchActiveTurns(sessionAlias: string): Prisma.Sql {
     WHERE ba."batch_id" = ${s}."batch_id"
       AND ba."status" = 'RUNNING'
   )`;
+}
+
+/** Whether session `alias` holds a Run now pass whose turn is still queued: what the overflow claim takes it on. */
+export function overCapacityPassPendingSql(alias: string): Prisma.Sql {
+  const s = Prisma.raw(alias);
+  return Prisma.sql`(${s}."over_capacity_turn_id" IS NOT NULL AND EXISTS (
+    SELECT 1 FROM "conversation_turn" pass
+     WHERE pass."id" = ${s}."over_capacity_turn_id"
+       AND pass."session_id" = ${s}."id"
+       AND pass."status" = 'PENDING'
+  ))`;
 }

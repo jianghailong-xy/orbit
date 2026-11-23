@@ -782,7 +782,7 @@ test('the duplicate shapes the unit tests construct are the ones this server pro
         .catch((e: unknown) => e) as { code?: string; meta?: Record<string, unknown> };
 
       for (const [name, error, constraint, field] of [
-        // Since 1432 (release B) the claim is 1426's index alone, and it is the one PostgreSQL names.
+        // Since 1444 (release B) the claim is 1426's index alone, and it is the one PostgreSQL names.
         ['claim index', claim, 'session_task_execution_claim_idx_finished_at', 'task_id'],
         ['primary key', pkey, 'session_pkey', 'id'],
       ] as const) {

@@ -240,6 +240,8 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 			WakeOnExit:   wakeOnExit,
 			WakeOnOutput: wakeOnOutput,
 			WakeOnStall:  wakeOnStall,
+			// A tool the job runs opens its pages as one the engine's shell runs does (browser_opener.go).
+			BrowserOpener: s.job != nil && s.job.BrowserEnabled,
 		}
 		if err := validateBgJobSpec(spec); err != nil {
 			return bgSocketResponse{Error: err.Error()}
@@ -295,6 +297,11 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 	case browserMCPAcquireOp:
 		// One browser tool call by this session (browser_mcp.go).
 		return s.serveBrowserAcquire()
+	case browserSignInYieldOp:
+		// browser_request_sign_in gives the lease up while the owner signs in (browser_tools.go).
+		return s.serveBrowserSignInYield()
+	case browserSignInEndOp:
+		return s.serveBrowserSignInEnd(getBool(args, "retake"))
 
 	case "secret_scan":
 		return s.secretScan(getString(args, "path"))
@@ -460,7 +467,7 @@ func startSessionBgJobService(ctx context.Context, t *Transport, bg *bgTailer, j
 		token:              token,
 		execDir:            execDir,
 		scratchDir:         scratchDir,
-		extraDirs:          []string{uploadsDir(job.SessionID)},
+		extraDirs:          append([]string{uploadsDir(job.SessionID)}, driveGrantRoots()...),
 		env:                job.Agent.Env,
 		sessionID:          job.SessionID,
 		mode:               liveMode.current,

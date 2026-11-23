@@ -67,6 +67,9 @@ public enum Approvals {
     /// the card reads `WorkspaceWritePreview`.
     public static func isWorkspaceCreate(toolName: String) -> Bool { toolName == "orbit_agent_create" }
     public static func isWorkspaceUpdate(toolName: String) -> Bool { toolName == "orbit_agent_update" }
+    /// Clearing the Orbit Cloud browser's saved logins (browser_clear_logins). The server clears only on a card a
+    /// person answered, and files it with its own copy, which the plain card shows. Web keys it off its tool name.
+    public static func isBrowserClearLogins(toolName: String) -> Bool { toolName == "orbit_browser_clear_logins" }
     /// Every ask Orbit raises for itself. What they share is how they are answered: a refusal is a
     /// conversation rather than a press (the composer is armed with the reason), and none of them
     /// can be waived with a standing rule — what is being asked for differs each time.
@@ -77,6 +80,7 @@ public enum Approvals {
             || isSkipMergeCheck(toolName: toolName)
             || isRunnerDelete(toolName: toolName) || isWorkspaceDelete(toolName: toolName)
             || isWorkspaceCreate(toolName: toolName) || isWorkspaceUpdate(toolName: toolName)
+            || isBrowserClearLogins(toolName: toolName)
     }
     /// A provider write — one of the owner's own providers created, changed or removed. Drawn and
     /// refused as a plain tool card (its input is the provider as it would be written, the key
@@ -208,6 +212,7 @@ public enum Approvals {
         if isBlockerResolve(toolName: toolName) { return "Leaving this open: " }
         if isRunnerDelete(toolName: toolName) || isWorkspaceDelete(toolName: toolName) { return "Keeping it: " }
         if isWorkspaceUpdate(toolName: toolName) { return "Leaving it as it is: " }
+        if isBrowserClearLogins(toolName: toolName) { return "Keeping the saved logins: " }
         return "Not creating: "
     }
 

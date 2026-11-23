@@ -27,9 +27,12 @@ import {
   workflowTotals,
   type ReportPeriod,
   type ReportView,
+  type RoutingModelBlock,
   type RoutingModelRow,
+  type RunFigures,
+  type TierRuns,
 } from '../../lib/routingReport';
-import { priceText, QUALITY_FOOT, subagentTiersQuery, tierText, type ProviderTierRow } from '../../lib/subagentTiers';
+import { modelTierText, priceText, QUALITY_FOOT, subagentTiersQuery, tierText, type ProviderTierRow } from '../../lib/subagentTiers';
 import { usePreferences } from './preferences';
 import { PERSONAL_SETTINGS as S } from './settingsIndex';
 
@@ -44,7 +47,11 @@ export const ROUTING_HINTS = {
   },
   optimizeFor: {
     short: S.optimizeFor.description,
-    full: 'Cost spends subscriptions before metered keys. Balance spends the quota that expires first, then the most room. Intelligence puts the strongest model first.',
+    full:
+      'SubAgents pick a model, then the account that runs it. Cost: whichever quota expires first, on any model of the tier, subscriptions before metered keys. ' +
+      'Balance: your preferred model, on its account whose quota expires first; another model of the tier takes over when every account of it is near its limit, ' +
+      "or when another's weekly quota is about to reset unused. Intelligence: the strongest model, kept while any of its accounts can run. " +
+      'Task runs still rank every account by quota.',
   },
 } as const;
 
@@ -230,8 +237,6 @@ function ModelsView({
               <b>{done}%</b> done
             </>
           )}
-          {' · '}
-          <b>{costText(totals.costUsd)}</b>
           {` · ${totals.movedOn} moved on`}
           {noSize !== null && ` · ${noSize}% without a size`}
           {outside > 0 && (
@@ -255,32 +260,34 @@ function ModelsView({
               <th>Ran at</th>
               <th className="is-num">Runs</th>
               <th className="is-num">Done</th>
-              <th className="is-num">Cost</th>
             </tr>
           </thead>
           <tbody>
             {sections.tiered.length > 0 && <SectionRow title="Routed by tier" />}
-            {sections.tiered.map((row) => (
-              <ModelRow key={row.key} row={row} ranAt="tiers" open={open.has(row.key)} onToggle={() => toggle(row.key)} />
+            {sections.tiered.map((block) => (
+              <ModelBlock key={block.key} block={block} ranAt="tiers" open={open.has(block.key)} onToggle={() => toggle(block.key)} />
             ))}
             {sections.named.length > 0 && <SectionRow title="Called by name" note="The SubAgent named its model, so no tier was picked." />}
-            {sections.named.map((row) => (
-              <ModelRow key={row.key} row={row} ranAt="Named" />
+            {sections.named.map((block) => (
+              <ModelBlock key={block.key} block={block} ranAt="Named" open={open.has(`named:${block.key}`)} onToggle={() => toggle(`named:${block.key}`)} />
             ))}
             {sections.notRouted.length > 0 && <SectionRow title="Not routed" />}
-            {sections.notRouted.map((row) => (
-              <ModelRow key={row.key} row={row} ranAt="Not routed" />
+            {sections.notRouted.map((block) => (
+              <ModelBlock key={block.key} block={block} ranAt="Not routed" open={open.has(`not-routed:${block.key}`)}
+                onToggle={() => toggle(`not-routed:${block.key}`)} />
             ))}
             {sections.idle.length > 0 && (
               <tr className="model-routing-section">
-                <td colSpan={8}>
+                <td colSpan={COLUMNS}>
                   <button type="button" className="model-routing-fold" aria-expanded={showIdle} onClick={() => setShowIdle(!showIdle)}>
                     {showIdle ? '▾' : '▸'} No tier, no runs · {plural(sections.idle.length, 'model')}
                   </button>
                 </td>
               </tr>
             )}
-            {showIdle && sections.idle.map((row) => <ModelRow key={row.key} row={row} ranAt="tiers" />)}
+            {showIdle && sections.idle.map((block) => (
+              <ModelBlock key={block.key} block={block} ranAt="tiers" open={open.has(`idle:${block.key}`)} onToggle={() => toggle(`idle:${block.key}`)} />
+            ))}
           </tbody>
         </table>
       </div>
@@ -290,10 +297,13 @@ function ModelsView({
   );
 }
 
+/** The table's columns: Model, Tier, Quality, Price, Ran at, Runs, Done. */
+const COLUMNS = 7;
+
 function SectionRow({ title, note }: { title: string; note?: string }) {
   return (
     <tr className="model-routing-section">
-      <td colSpan={8}>
+      <td colSpan={COLUMNS}>
         {title}
         {note && <span className="model-routing-section-note">{note}</span>}
       </td>
@@ -302,96 +312,115 @@ function SectionRow({ title, note }: { title: string; note?: string }) {
 }
 
 /**
- * One model: its name and provider, its tier (a menu where the owner may set it), its price, the tiers its runs were
- * routed at as a bar (striped where that tier is not one it is set to now), and its runs, share done and cost. A routed
- * row opens to its runs tier by tier.
+ * One model: its name, Quality and the runs of every account listing it, summed. A model on one account is one row,
+ * its provider beside its name. A model on several reads "N accounts" and opens, closed at first, to a row per account:
+ * its provider, its tier (a menu where the owner may set it), its price and its runs. The model's own Tier and Price are
+ * its accounts' when they all agree, else "Varies".
  */
-function ModelRow({
-  row,
+function ModelBlock({
+  block,
   ranAt,
-  open = false,
+  open,
   onToggle,
 }: {
-  row: RoutingModelRow;
+  block: RoutingModelBlock;
   ranAt: 'tiers' | 'Named' | 'Not routed';
-  open?: boolean;
-  onToggle?: () => void;
+  open: boolean;
+  onToggle: () => void;
 }) {
-  const share = percent(row.done, row.ended);
-  const opens = ranAt === 'tiers' && row.tiers.length > 0 && !!onToggle;
-  const outsideTiers = row.tiers.filter((tier) => tier.outside).map((tier) => tier.tier);
+  const single = block.accounts.length === 1 ? block.accounts[0] : null;
+  const first = block.accounts[0];
+  const quality = block.accounts.find((account) => account.model)?.model ?? null;
+  const tiers = new Set(block.accounts.map((account) => (account.model ? modelTierText(account.model) : '—')));
+  const prices = new Set(block.accounts.map((account) => (account.provider && account.model ? priceText(account.model, account.provider.billing) : '—')));
+  const varies = <span className="model-tiers-muted">Varies</span>;
   return (
     <>
       <tr className={open ? 'is-open' : undefined}>
         <td>
-          {opens ? (
+          {single ? (
+            // The arrow's room kept, so every model's name starts in the same place whether or not it opens.
+            <span className="model-routing-open model-routing-no-open">
+              <span aria-hidden="true">▸</span>
+              <span className="routing-report-model">{block.modelLabel}</span>
+            </span>
+          ) : (
             <button type="button" className="model-routing-open" aria-expanded={open} onClick={onToggle}>
               <span aria-hidden="true">{open ? '▾' : '▸'}</span>
-              <span className="routing-report-model">{row.modelLabel}</span>
+              <span className="routing-report-model">{block.modelLabel}</span>
             </button>
-          ) : (
-            <span className="routing-report-model">{row.modelLabel}</span>
           )}
-          {row.providerLabel && <span className="routing-report-provider">{row.providerLabel}</span>}
-          {ranAt === 'tiers' && row.outsideRuns > 0 && (
-            <div className="model-routing-flag">
-              {row.model && row.model.levels.length === 0
-                ? `No tier set, but routed ${plural(row.outsideRuns, 'time')}`
-                : `${plural(row.outsideRuns, 'run')} at ${outsideTiers.join(' · ')}, outside ${tierText(row.model?.levels ?? [])}`}
-            </div>
+          <span className="routing-report-provider">{single ? single.providerLabel : plural(block.accounts.length, 'account')}</span>
+          {ranAt === 'tiers' && block.outsideRuns > 0 && (
+            <div className="model-routing-flag">{single ? outsideText(single) : `${plural(block.outsideRuns, 'run')} outside its tier`}</div>
           )}
         </td>
-        <td>{row.provider && row.model ? <ModelTierCell provider={row.provider} model={row.model} /> : '—'}</td>
-        <td className="model-tiers-quality">{row.model ? <QualityCell model={row.model} /> : '—'}</td>
-        <td className="model-tiers-price">{row.provider && row.model ? priceText(row.model, row.provider.billing) : '—'}</td>
         <td>
-          {ranAt !== 'tiers' ? (
-            <span className="routing-report-tier-word">{ranAt}</span>
-          ) : row.runs === 0 ? (
-            <span className="routing-report-tier-word">No runs</span>
-          ) : (
-            <TierBar row={row} />
-          )}
+          {single?.provider && single.model ? <ModelTierCell provider={single.provider} model={single.model} />
+            : tiers.size === 1 ? [...tiers][0] : varies}
         </td>
-        <td className={`is-num${row.runs === 0 ? ' is-zero' : ''}`}>{row.runs}</td>
-        <td className={`is-num${share === null ? ' is-zero' : ''}`}>{share === null ? '—' : `${share}%`}</td>
-        <td className={`is-num${row.runs === 0 ? ' is-zero' : ''}`}>{row.runs === 0 ? '—' : costText(row.costUsd)}</td>
+        <td className="model-tiers-quality">{quality ? <QualityCell model={quality} /> : '—'}</td>
+        <td className="model-tiers-price">{prices.size === 1 ? [...prices][0] : varies}</td>
+        <RunCells figures={block} tiers={block.tiers} ranAt={ranAt} />
       </tr>
-      {open &&
-        row.tiers.map((tier) => {
-          const tierShare = percent(tier.done, tier.ended);
-          return (
-            <tr key={tier.tier} className="model-routing-tier">
-              <td>
-                <span className="routing-report-tier">{tier.tier}</span>
-                {tier.outside && <span className="model-routing-flag">outside its tier</span>}
-              </td>
-              <td colSpan={4} className="is-zero">
-                {tier.movedOn > 0 ? `${tier.movedOn} moved on` : ''}
-              </td>
-              <td className="is-num">{tier.runs}</td>
-              <td className="is-num">{tierShare === null ? '—' : `${tierShare}%`}</td>
-              <td className="is-num">{costText(tier.costUsd)}</td>
-            </tr>
-          );
-        })}
+      {open && !single && block.accounts.map((account) => (
+        <tr key={account.key} className="model-routing-account">
+          <td>
+            <span className="model-routing-account-name">{account.providerLabel ?? first.providerLabel}</span>
+            {ranAt === 'tiers' && account.outsideRuns > 0 && <div className="model-routing-flag">{outsideText(account)}</div>}
+          </td>
+          <td>{account.provider && account.model ? <ModelTierCell provider={account.provider} model={account.model} /> : '—'}</td>
+          <td />
+          <td className="model-tiers-price">{account.provider && account.model ? priceText(account.model, account.provider.billing) : '—'}</td>
+          <RunCells figures={account} tiers={account.tiers} ranAt={ranAt} />
+        </tr>
+      ))}
     </>
   );
 }
 
-/** The share of a model's runs at each tier, S to XL; a tier it is not set to now is striped. */
-function TierBar({ row }: { row: RoutingModelRow }) {
-  const label = row.tiers.map((tier) => `${tier.tier} ${tier.runs}${tier.outside ? ' (outside its tier)' : ''}`).join(', ');
+/** "20 runs at S, outside M", or for a model with no tier "No tier set, but routed 12 times". */
+function outsideText(account: RoutingModelRow): string {
+  const at = account.tiers.filter((tier) => tier.outside).map((tier) => tier.tier);
+  return account.model && account.model.levels.length === 0
+    ? `No tier set, but routed ${plural(account.outsideRuns, 'time')}`
+    : `${plural(account.outsideRuns, 'run')} at ${at.join(' · ')}, outside ${tierText(account.model?.levels ?? [])}`;
+}
+
+/** Ran at, Runs and Done of a model or one of its accounts. */
+function RunCells({ figures, tiers, ranAt }: { figures: RunFigures; tiers: TierRuns[]; ranAt: 'tiers' | 'Named' | 'Not routed' }) {
+  const share = percent(figures.done, figures.ended);
+  return (
+    <>
+      <td>
+        {ranAt !== 'tiers' ? (
+          <span className="routing-report-tier-word">{ranAt}</span>
+        ) : figures.runs === 0 ? (
+          <span className="routing-report-tier-word">No runs</span>
+        ) : (
+          <TierBar tiers={tiers} runs={figures.runs} />
+        )}
+      </td>
+      <td className={`is-num${figures.runs === 0 ? ' is-zero' : ''}`}>{figures.runs}</td>
+      <td className={`is-num${share === null ? ' is-zero' : ''}`}>{share === null ? '—' : `${share}%`}</td>
+    </>
+  );
+}
+
+/** The tiers a model's runs were routed at, as one bar: a segment per tier, striped where it is outside the tier. Its
+ *  tooltip, per segment, gives that tier's runs and share done. */
+function TierBar({ tiers, runs }: { tiers: TierRuns[]; runs: number }) {
+  const label = tiers.map((tier) => `${tier.tier} ${tier.runs}${tier.outside ? ' (outside its tier)' : ''}`).join(', ');
   return (
     <div className="model-routing-bar" role="img" aria-label={`Ran at ${label}`}>
-      {row.tiers.map((tier) => (
+      {tiers.map((tier) => (
         <Fragment key={tier.tier}>
           <i
             className={`model-routing-bar-${tier.tier}${tier.outside ? ' is-outside' : ''}`}
             style={{ flexGrow: tier.runs }}
-            title={`${tier.tier}: ${plural(tier.runs, 'run')}`}
+            title={`${tier.tier}: ${plural(tier.runs, 'run')}${percent(tier.done, tier.ended) === null ? '' : `, ${percent(tier.done, tier.ended)}% done`}`}
           >
-            {tier.runs / row.runs >= 0.15 ? tier.tier : ''}
+            {tier.runs / runs >= 0.15 ? tier.tier : ''}
           </i>
         </Fragment>
       ))}
