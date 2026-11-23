@@ -88,6 +88,9 @@ type dshPermissionBridge struct {
 	// uploads is the session's uploads directory, outside the checkout: Claude Code and Codex take it as a
 	// working directory of their own (--add-dir), so Auto writes there without a card here too.
 	uploads string
+	// subagent is a SubAgent's child claim; nil for a session. A read-only one's escalations are answered by its
+	// parent's mode (readonlySubagentAnswer).
+	subagent *ClaimedSession
 }
 
 func newDshPermissionBridge(policy func() dshPermissionPolicy, lookup func(string) (dshPermissionAsk, bool),
@@ -140,6 +143,7 @@ func (b *dshPermissionBridge) request(id interface{}, params map[string]interfac
 	b.mu.Lock()
 	open := b.open
 	b.mu.Unlock()
+	parentAllows, parentDecided := readonlySubagentAnswer(b.subagent, ask.Name)
 	switch {
 	case !open:
 		b.answer(id, "")
@@ -153,9 +157,30 @@ func (b *dshPermissionBridge) request(id interface{}, params map[string]interfac
 		note("permission_denied", "approval requested for a tool call Orbit has not received")
 		b.answer(id, dshRejectOnce)
 		return
+	case readonlySubagentRefusesEdit(b.subagent, ask.Name):
+		note("permission_denied", "a read-only SubAgent does not edit files")
+		b.answer(id, dshRejectOnce)
+		return
 	case !b.policy().Ask:
 		note("permission_denied", "Don't Ask refuses without asking")
 		b.answer(id, dshRejectOnce)
+		return
+	case parentDecided && !parentAllows:
+		note("permission_denied", "the parent session's mode refuses without asking")
+		b.answer(id, dshRejectOnce)
+		return
+	case parentDecided:
+		b.mu.Lock()
+		allowed := b.open
+		if allowed {
+			b.answer(id, dshAllowOnce)
+		} else {
+			b.answer(id, "")
+		}
+		b.mu.Unlock()
+		if allowed {
+			note("permission_auto_allowed", "the parent session's mode allows it")
+		}
 		return
 	case b.policy().RoutineEscalations && dshAutoUploadsEdit(ask, b.workspace, b.uploads):
 		b.mu.Lock()
