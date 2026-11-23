@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux && !race
 
 package sandbox
 
@@ -13,6 +13,7 @@ import (
 )
 
 // The filter is applied in a child process of the test binary: once applied it cannot be taken off.
+// This test uses a pure Go binary because syscall.AllThreadsSyscall returns ENOTSUP with the cgo-linked race detector.
 func TestLockdownRefusesWhatAFUSEServerNeverCalls(t *testing.T) {
 	if os.Getenv("ORBIT_SANDBOX_CHILD") == "1" {
 		child()
