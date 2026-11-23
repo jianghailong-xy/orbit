@@ -84,6 +84,8 @@ export interface FilesConfig {
   s3Mirror?: boolean;
   /** The most one account may keep (ORBIT_FILES_QUOTA_BYTES). Unset: no limit, a self-hosted deployment's default. */
   quotaBytes?: number;
+  /** Configured capacity of the S3 store, shared by all accounts. */
+  storeQuotaBytes?: number;
   /**
    * How far back a retained Postgres backup reaches: ORBIT_BASE_BACKUP_INTERVAL × (ORBIT_BASE_BACKUP_KEEP + 1), from the two
    * values the backup sidecar keeps its base backups by. A backup stays until that many newer ones have finished, and each
@@ -162,7 +164,8 @@ export function filesConfigFrom(env: NodeJS.ProcessEnv = process.env): FilesConf
   if (!/^https?:\/\//.test(s3.endpoint)) {
     throw new Error(`ORBIT_FILES_S3_ENDPOINT must be an http:// or https:// URL, not "${s3.endpoint}"`);
   }
-  return { dir, storage: 's3', s3, ...limits };
+  const storeQuotaBytes = positiveIntegerFrom(env, 'ORBIT_FILES_STORE_QUOTA_BYTES');
+  return { dir, storage: 's3', s3, ...limits, ...(storeQuotaBytes ? { storeQuotaBytes } : {}) };
 }
 
 /**

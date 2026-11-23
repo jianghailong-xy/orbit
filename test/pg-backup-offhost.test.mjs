@@ -122,7 +122,7 @@ function fingerprint(dir) {
  * With `server` the target is reached through a stand-in ssh that runs the far side's real rsync, printing OpenSSH's warning first
  * if `server.warns`. `locked`, given the directories, names a directory of the target and the mode it has for the length of each poll.
  */
-function round({ prepare, system = CLUSTER, due = [], database = 'up', interval = 86_400, rsyncFailsOn = null, cut = null, server = null, locked = null, mirror = false, database_container = null }) {
+function round({ prepare, system = CLUSTER, due = [], database = 'up', interval = 86_400, rsyncFailsOn = null, cut = null, server = null, locked = null, mirror = false, bucketCopyFails = false, database_container = null }) {
   // The far side has to reach this directory as the unprivileged account when this runs as root, so not through a private TMPDIR.
   const scratch = mkdtempSync(path.join(AS_ROOT ? '/tmp' : tmpdir(), 'pg-backup-offhost-'));
   try {
@@ -162,6 +162,7 @@ esac`,
       // A base backup is taken at the start of the round only when none is recent, which `prepare` decides.
       pg_basebackup: 'for arg; do case "$arg" in --pgdata=*) mkdir -p "${arg#--pgdata=}"; echo backup > "${arg#--pgdata=}/base.tar.gz" ;; esac; done',
       pg_archivecleanup: ':',
+      rclone: bucketCopyFails ? 'exit 1' : ':',
       ssh: server ? `while [ $# -gt 0 ]; do case "$1" in -p|-i|-o|-l) shift 2 ;; -*) shift ;; *) break ;; esac; done
 shift
 ${server.warns ? SSH_WARNING.map((line) => `printf '%s\\r\\n' '${line}' >&2`).join('\n') : ''}
@@ -188,7 +189,13 @@ exec '${realRsync}' "$@"`,
           ORBIT_BACKUP_SYNC_TARGET: server ? `backup-host:${dirs.target}` : dirs.target,
           ORBIT_BACKUP_MIN_FREE_MB: '0',
           ORBIT_BASE_BACKUP_INTERVAL: String(interval),
-          ...(mirror ? { ORBIT_FILES_S3_MIRROR: '1' } : {}),
+          ...(mirror ? {
+            ORBIT_FILES_S3_MIRROR: '1',
+            ORBIT_FILES_S3_ENDPOINT: 'http://127.0.0.1:9',
+            ORBIT_FILES_S3_BUCKET: 'orbit',
+            ORBIT_FILES_S3_ACCESS_KEY_ID: 'key',
+            ORBIT_FILES_S3_SECRET_ACCESS_KEY: 'secret',
+          } : {}),
         },
         timeout: 30_000,
       });
@@ -1217,6 +1224,14 @@ test('without ORBIT_FILES_S3_MIRROR=1 the bucket mirror is left alone, whatever 
   assert.doesNotMatch(result.log, /-bucket/);
 });
 
+test('a failed bucket copy leaves the bucket mirror alone even when pruning is due', () => {
+  const gone = NAME('a');
+  const result = round({ mirror: true, bucketCopyFails: true, due: [gone], prepare: prepareBucket([gone]) });
+  assert.deepEqual(onBucket(result), [inCopy(gone)], result.log);
+  assert.match(result.log, /ERROR: copying the bucket .* failed/);
+  assert.doesNotMatch(result.queries, /storage = 's3'/);
+});
+
 test('an empty local directory does not stop the bucket mirror pruning, which is not a copy of it', () => {
   const gone = NAME('a');
   const result = round({ mirror: true, due: [gone], prepare: prepareBucket([gone], []) });
@@ -1249,9 +1264,9 @@ test('against a real Postgres, the bucket mirror loses the object whose off_host
     inOrbit(`insert into file_blob values
       ('${due}', 's3', now() at time zone 'utc' - interval '1 day'),
       ('${notYet}', 's3', now() at time zone 'utc' + interval '3 days'),
-      ('${local}', 'local', null)`);
-    const result = round({ mirror: true, database_container: name, prepare: prepareBucket([due, notYet]) });
-    assert.deepEqual(onBucket(result), [inCopy(notYet)], result.log);
+      ('${local}', 'local', now() at time zone 'utc' - interval '1 day')`);
+    const result = round({ mirror: true, database_container: name, prepare: prepareBucket([due, notYet, local]) });
+    assert.deepEqual(onBucket(result), [inCopy(notYet), inCopy(local)], result.log);
     assert.match(result.log, /pruned 1 file\(s\) from .*-bucket/);
   } finally {
     spawnSync('docker', ['rm', '-f', name]);
