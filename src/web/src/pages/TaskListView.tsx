@@ -27,7 +27,7 @@ import { encodeId, routeId } from '../lib/idCodec';
 import { TaskDetailPanel } from '../components/TaskDetailPanel';
 import { WaitingOnYouTaskBadge } from '../components/OwnerRequestCard';
 import { TaskSignInHoldNote } from '../components/TaskSignInHold';
-import { TaskAccountHoldNote } from '../components/TaskAccountHold';
+import { TaskAccountHoldLine } from '../components/TaskAccountHold';
 import { reportTaskRunConflict } from '../components/TaskRunHandoffNotice';
 import { taskRunEntry } from '../lib/taskRunHandoff';
 import { TaskStatusPill } from '../components/TaskStatusPill';
@@ -1205,7 +1205,7 @@ export function TaskListView() {
         <div className="task-status-cell">
           <TaskStatusPill status={r.status} running={r.running} queued={r.queued} />
         </div>
-        <div className="task-title-cell">
+        <div className={`task-title-cell${r.accountHold && !r.hold && !r.running && !r.queued ? ' has-hold' : ''}`}>
           <span className="task-title" title={r.title}>
             {r.title ?? ''}
           </span>
@@ -1213,7 +1213,7 @@ export function TaskListView() {
           {/* The sweep holds it for a sign-in (the server's `hold`): Held, why, and Sign in. */}
           {r.hold && !r.running && !r.queued ? <TaskSignInHoldNote hold={r.hold} /> : null}
           {/* No account that could run it can run now (the server's `accountHold`): the provider's words and the next try. */}
-          {r.accountHold && !r.hold && !r.running && !r.queued ? <TaskAccountHoldNote hold={r.accountHold} /> : null}
+          {r.accountHold && !r.hold && !r.running && !r.queued ? <TaskAccountHoldLine hold={r.accountHold} /> : null}
           {r.blocked ? (
             <Tooltip
               content={r.dependencyState === 'BLOCKED_FAILED' ? 'Prerequisite cancelled — resolve it' : 'Waiting for prerequisites'}

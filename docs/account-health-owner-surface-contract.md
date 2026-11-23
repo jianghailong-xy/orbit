@@ -75,11 +75,15 @@ any claimed trial. The next routed run uses the account as healthy; a refusal af
 
 Every client draws these the same way. Web's reference: `src/web/src/components/TaskAccountHold.tsx`.
 
-- **Task rows and the task view**: `accountHold` is served on the task read, on task list items (`GET /tasks`) and on a project's
-  task rows. Null unless a hold stands. Shape: `{ kind: 'ACCOUNT_NEEDS_ACTION', reason, until, accounts: [{ provider, engine, line, until }], setting? }`.
-  Draw: a **Held** pill, `reason` (it already holds the provider's words and `Next try at HH:MM`), a link **Open account** to the
-  account rows (web: `/settings/machines`), and when `setting` is present (`orbit-settings:relaxBlockedPins`) a second link **Run elsewhere**
-  to that setting. Not drawn while the task is running or queued, or when the sign-in `hold` stands (that one wins).
+- **Task read, list items and project task rows**: `accountHold` is served on the task read, on task list items (`GET /tasks`) and on a
+  project's task rows. Null unless a hold stands. Shape: `{ kind: 'ACCOUNT_NEEDS_ACTION', reason, until, accounts: [{ provider, engine, line, until }], setting? }`.
+- **On a list or project row** the person's own title keeps its normal width and truncation, exactly as on an unheld row. The hold is
+  **one quiet line under the title**, in the row's secondary text style (11 px, tertiary colour), with no chip:
+  `Held · <accounts[0].line, the provider's words> · Next try <time of until>` then the link **Open account** (web: `/settings/machines`).
+  The text truncates; the whole sentence (`… · Open account`) is the line's hover title and its accessible name. With no `accounts`, use `reason`.
+  Not drawn while the task is running or queued, or when the sign-in `hold` stands (that one wins). Web: `TaskAccountHoldLine`.
+- **On the task view** the fuller block may stand: a **Held** pill, `reason` (the provider's words and `Next try at HH:MM`), **Open account**, and when
+  `setting` is present (`orbit-settings:relaxBlockedPins`) **Run elsewhere** to that setting. Web: `TaskAccountHoldNote`.
 - **Relaxed runs**: each session on the task read carries `route.relaxedRun`, a sentence or null: which pin, where it ran and why
   (`Pinned to cursor, which can't run now (Cursor said "…"); runs on codex instead, on the same engine, at tier M`). Draw it, as it is,
   under that run's row on the task view.

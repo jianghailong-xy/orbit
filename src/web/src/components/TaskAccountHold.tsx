@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { pauseResumeTime } from '../lib/accountPause';
 import type { TaskAccountHold } from '../lib/accountHealth';
 import { Badge } from './ui/Badge';
 
@@ -30,4 +31,27 @@ export function TaskAccountHoldNote({ hold }: { hold: TaskAccountHold }) {
 /** A pinned task that ran elsewhere says which pin, where it ran and why (§7.5), in the server's sentence. */
 export function RelaxedRunNote({ sentence }: { sentence: string }) {
   return <div className="tdp-relaxed-run" data-testid="relaxed-run">{sentence}</div>;
+}
+
+/** The hold's text for a row: `Held · Cursor said "…" · Next try 13:19`, the provider's words and the first next trial. */
+export function accountHoldLineText(hold: TaskAccountHold): string {
+  const words = hold.accounts[0]?.line ?? hold.reason;
+  const next = hold.accounts[0] ? ` · Next try ${pauseResumeTime(hold.until)}` : '';
+  return `Held · ${words}${next}`;
+}
+
+/**
+ * The hold on a task list or project row: ONE quiet line under the title, in the row's secondary style, never a chip that
+ * takes the title's room. `Held · <provider's words> · Next try <time>` truncates; the whole sentence is its hover title
+ * and its accessible name, and Open account stays pressable at the end.
+ */
+export function TaskAccountHoldLine({ hold }: { hold: TaskAccountHold }) {
+  const text = accountHoldLineText(hold);
+  const full = `${text} · Open account`;
+  return (
+    <div className="task-hold-line" data-testid="task-account-hold-line" title={full}>
+      <span className="task-hold-line-text" aria-label={full}>{text}</span>
+      <Link className="task-hold-line-action" to={ACCOUNTS_HREF} onClick={stop} onMouseDown={stop}>Open account</Link>
+    </div>
+  );
 }

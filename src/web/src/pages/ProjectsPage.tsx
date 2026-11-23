@@ -25,7 +25,7 @@ import { ProjectBlockersCard, type ProjectBlockers } from '../components/Project
 import { CoordinatorQuestions } from '../components/CoordinatorQuestionCard';
 import { WaitingOnYouTaskBadge } from '../components/OwnerRequestCard';
 import { TaskSignInHoldNote } from '../components/TaskSignInHold';
-import { TaskAccountHoldNote } from '../components/TaskAccountHold';
+import { TaskAccountHoldLine } from '../components/TaskAccountHold';
 import type { TaskAccountHold } from '../lib/accountHealth';
 import { LazyBoundary } from '../components/ErrorBoundary';
 import { ProjectPromotion } from '../components/ProjectPromotionCard';
@@ -2501,8 +2501,6 @@ function ProjectTaskRow({
                       by itself, and it will not until somebody signs in (the server's `hold`). */}
                   {task.hold ? (
                     <TaskSignInHoldNote hold={task.hold} />
-                  ) : task.accountHold ? (
-                    <TaskAccountHoldNote hold={task.accountHold} />
                   ) : workLabel ? (
                     <Badge data-testid="project-task-work-state" tone={tagTone(workLabel.color)}>
                       {workLabel.text}
@@ -2543,6 +2541,8 @@ function ProjectTaskRow({
                   ) : null}
                 </span>
               </h4>
+              {/* No account that could run it can run now (§7.5): one quiet line under the title, never a chip in it. */}
+              {task.accountHold && !task.hold ? <TaskAccountHoldLine hold={task.accountHold} /> : null}
               <div className="orbit-list-item-meta-description">
                 <span className="project-task-row-description">
                   {excerpt(task.acceptanceCriteria, 'No acceptance criteria set')}

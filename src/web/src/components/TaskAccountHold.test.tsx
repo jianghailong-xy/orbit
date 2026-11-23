@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { TaskAccountHold } from '../lib/accountHealth';
-import { RelaxedRunNote, TaskAccountHoldNote } from './TaskAccountHold';
+import { accountHoldLineText, RelaxedRunNote, TaskAccountHoldLine, TaskAccountHoldNote } from './TaskAccountHold';
 
 const hold: TaskAccountHold = {
   kind: 'ACCOUNT_NEEDS_ACTION',
@@ -42,5 +42,16 @@ describe('a task held for an account', () => {
     const sentence = "Pinned to cursor, which can't run now (Cursor said \"Add a payment method\"); runs on codex instead, on the same engine, at tier M";
     act(() => root.render(<RelaxedRunNote sentence={sentence} />));
     expect(host.querySelector('[data-testid="relaxed-run"]')!.textContent).toBe(sentence);
+  });
+
+  it('on a row it is one quiet line: the words, the next try and Open account, the whole sentence as its name', () => {
+    act(() => root.render(<MemoryRouter><TaskAccountHoldLine hold={hold} /></MemoryRouter>));
+    const line = host.querySelector('[data-testid="task-account-hold-line"]')!;
+    const text = accountHoldLineText(hold);
+    expect(text).toMatch(/^Held · Cursor said "Add a payment method to continue" · Next try \d\d:\d\d$/);
+    expect(line.getAttribute('title')).toBe(`${text} · Open account`);
+    expect(line.querySelector('.task-hold-line-text')!.getAttribute('aria-label')).toBe(`${text} · Open account`);
+    expect(line.querySelector('a')!.getAttribute('href')).toBe('/settings/machines');
+    expect(line.querySelector('.badge, [class*="Badge"]')).toBeNull();
   });
 });
