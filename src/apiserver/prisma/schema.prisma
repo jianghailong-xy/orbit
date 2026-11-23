@@ -1723,11 +1723,14 @@ model ManagedRunner {
   /// column, which any fresh report answers.
   sleepRequestedAt    DateTime?                   @map("sleep_requested_at") @db.Timestamptz(3)
   /// DRAINING: when the instance was asked to stop for sleep. Null until then: up to that moment
-  /// the drain can still be called off without anything having stopped.
+  /// the drain can still be called off without anything having stopped. READY: when the owner's
+  /// interrupting Update Now first asked the backend to stop the instance (stopForOwnerUpdate),
+  /// kept on the next generation until another stop is asked.
   stopRequestedAt     DateTime?                   @map("stop_requested_at") @db.Timestamptz(3)
   /// DRAINING: when the instance, with nothing to do, accepted the stop. Set by its heartbeat only
   /// while the drain stands and no demand has come since it began; from then on the drain cannot be
-  /// called off, and the instance exits on its own.
+  /// called off, and the instance exits on its own. For the owner's Update Now: when the host
+  /// reported the exit that followed its stop request (`terminated`), kept like `stopRequestedAt`.
   stopAcknowledgedAt  DateTime?                   @map("stop_acknowledged_at") @db.Timestamptz(3)
   /// DRAINING for an image roll: the image the profile names, which the instance's Pod was not made from. The drain
   /// keeps the runner wanted (desiredState RUNNING), and once it has stopped the runner wakes at once as the next

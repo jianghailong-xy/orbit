@@ -944,8 +944,16 @@ export class ManagedRunnerManager {
    * every pass asks again until its host reports the exit. That report is the stop proof (`terminated`): recorded, the
    * container removed by UID, its volume released, and only then the next generation made from the image the backend
    * makes instances from now, on the same volume and runner. Demand changes none of it.
+   *
+   * The first ask of this request is recorded before it is sent (`stopRequestedAt`, its acknowledgement cleared), and the
+   * host's report of the exit that follows it is recorded as its acknowledgement (`stopAcknowledgedAt`, in
+   * `terminated`), so a rollout can read on the mapping that the owner's stop, and nothing else, restarted the instance.
+   * Both stay on the next generation until another stop is asked of it.
    */
   private async stopForOwnerUpdate(mapping: ManagedRunner, instance: ManagedInstance): Promise<Step> {
+    if (!mapping.stopRequestedAt || mapping.stopRequestedAt.getTime() < mapping.updateRequestedAt!.getTime()) {
+      mapping = await this.commit(mapping, { stopRequestedAt: this.now(), stopAcknowledgedAt: null });
+    }
     this.log.warn(
       `managed runner ${mapping.id}: its owner asked to update it now (${mapping.updateRequestedAt!.toISOString()}), interrupting its turns; `
         + `asking its ${this.backend.terms.instance} ${instance.uid} of generation ${mapping.generation}, made from a previous image `
@@ -1416,9 +1424,12 @@ export class ManagedRunnerManager {
     }
     if (mapping.managementState === 'READY' && instance.previousImage && ownerUpdatePending(mapping) && mapping.updateInterruptTurns) {
       this.log.warn(`${stopped}; stopped for its owner's Update Now, so generation ${mapping.generation + 1} is started on the same volume from the current image`);
+      // The exit after the owner's stop was asked (stopForOwnerUpdate) is that stop's acknowledgement.
+      const asked = !!mapping.stopRequestedAt && mapping.stopRequestedAt.getTime() >= mapping.updateRequestedAt!.getTime();
       return {
         next: await this.commit(mapping, {
           ...recorded,
+          ...(asked ? { stopAcknowledgedAt: now } : {}),
           managementState: 'REQUESTED',
           stateEnteredAt: now,
           attempt: 0,
