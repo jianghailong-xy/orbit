@@ -18,7 +18,7 @@ import {
   isRetryableApiErrorText,
   planUsageBlockedUntil,
   RunFailureKind,
-  runFailureKind,
+  runFailureIs,
   withEnginePlanUsage,
   type PlanUsage,
   type SessionMessageCard,
@@ -1129,7 +1129,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
    * (§8 criterion 22), and the moment the message it would re-send is the failed one. A run that FAILED
    * is; so is one parked idle with a retry armed or claimed for it, or whose latest reply is one of the
    * failures the card offers Retry on — a spent quota, a provider that could not answer, a sign-in that
-   * lapsed — read the way the transcript reads them (runFailureKind's USAGE_LIMIT and CREDENTIAL_REFUSED, and
+   * lapsed — read the way the transcript reads them (runFailureIs over USAGE_LIMIT and CREDENTIAL_REFUSED, and
    * `isRetryableApiErrorText`). Anything else is not: a session working on a turn, the re-send of a press among
    * them, or one whose latest message was answered.
    */
@@ -1156,9 +1156,13 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     });
     const latest = replies.map(workspaceReplyText).find((text) => text);
     if (!latest) return false;
-    // A spent quota or a refused credential, by the runner's kind or else the reply's own words (runFailureKind).
-    const kind = runFailureKind({ failureKind: session.failureKind, error: latest });
-    return kind === RunFailureKind.USAGE_LIMIT || kind === RunFailureKind.CREDENTIAL_REFUSED || isRetryableApiErrorText(latest);
+    // A spent quota or a refused credential, by the runner's kind or else the reply's own words as this check always
+    // read them: the quota sentence opening it, or the runtime's "Failed to authenticate" (isAuthErrorText) alone.
+    return runFailureIs(
+      { failureKind: session.failureKind, error: latest },
+      [RunFailureKind.USAGE_LIMIT, RunFailureKind.CREDENTIAL_REFUSED],
+      { credential: 'authenticate' },
+    ) || isRetryableApiErrorText(latest);
   }
 
   /**
@@ -1513,7 +1517,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       select,
     });
     const answer = own.map(replyText).find((text) => text);
-    return !!answer && !isRetryableApiErrorText(answer) && runFailureKind({ error: answer }) !== RunFailureKind.USAGE_LIMIT;
+    return !!answer && !isRetryableApiErrorText(answer) && !runFailureIs({ error: answer }, [RunFailureKind.USAGE_LIMIT]);
   }
 
   /** The opening turn, found by the fixed seed id. */

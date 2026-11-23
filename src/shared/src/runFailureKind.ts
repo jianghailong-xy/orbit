@@ -1,4 +1,4 @@
-import { isAuthErrorText, isConnectionFailureText, isUsageLimitErrorText } from './events';
+import { isAuthErrorText, isConnectionFailureText, isUsageLimitErrorText, USAGE_LIMIT_ERROR_MARKERS } from './events';
 
 /**
  * What a failed run failed with, as the runner's engine adapter classified it
@@ -70,24 +70,89 @@ export function parseRunFailureKind(kind: unknown): RunFailureKind | null {
 }
 
 /**
+ * How a caller's legacy reading reads a failure's text, so that each site the reader replaced keeps exactly what it
+ * matched before the kinds (docs/routing-account-health-design.md §5.4). The defaults are the shared classifiers.
+ */
+export interface LegacyFailureReading {
+  /**
+   * Where a usage-limit marker may sit: `opening` (isUsageLimitErrorText, within the text's first 40 characters) or
+   * `anywhere` (a plain substring, as the route history and the SQL `contains` filters always read it).
+   */
+  usageLimit?: 'opening' | 'anywhere';
+  /**
+   * Which sign-in wording is a refused credential: `login` (isLoginFailureText, which also takes `Not logged in` and
+   * `OAuth session expired` openings, as the SubAgent move does) or `authenticate` (isAuthErrorText alone).
+   */
+  credential?: 'login' | 'authenticate';
+}
+
+/** Whether a failure's text reads as `kind` through the legacy markers: one kind's own test, independent of the rest. */
+export function legacyRunFailureIs(
+  kind: RunFailureKind,
+  error: string | null | undefined,
+  reading: LegacyFailureReading = {},
+): boolean {
+  if (!error) return false;
+  switch (kind) {
+    case RunFailureKind.USAGE_LIMIT:
+      return reading.usageLimit === 'anywhere'
+        ? USAGE_LIMIT_ERROR_MARKERS.some((marker) => error.toLowerCase().includes(marker))
+        : isUsageLimitErrorText(error);
+    case RunFailureKind.CAPACITY:
+      return error.toLowerCase().includes(MODEL_AT_CAPACITY_ERROR_MARKER);
+    case RunFailureKind.TRANSPORT:
+      return isConnectionFailureText(error);
+    case RunFailureKind.CREDENTIAL_REFUSED:
+      return reading.credential === 'authenticate' ? isAuthErrorText(error) : isLoginFailureText(error);
+    default:
+      // No legacy marker exists for the account kinds: without a structured kind they are unclassified.
+      return false;
+  }
+}
+
+/** The order the legacy markers are asked in when one kind is wanted: today's SubAgent order, then the connection. */
+const LEGACY_ORDER = [
+  RunFailureKind.USAGE_LIMIT,
+  RunFailureKind.CAPACITY,
+  RunFailureKind.TRANSPORT,
+  RunFailureKind.CREDENTIAL_REFUSED,
+] as const;
+
+/**
  * The legacy reading of a failure's text, for runs whose runner sent no kind (older runners, and history from
  * before the kinds). It adds no markers of its own: it is exactly the classifiers that existed before the kinds.
  */
-export function legacyRunFailureKind(error: string | null | undefined): RunFailureKind | null {
-  if (!error) return null;
-  if (isUsageLimitErrorText(error)) return RunFailureKind.USAGE_LIMIT;
-  if (error.toLowerCase().includes(MODEL_AT_CAPACITY_ERROR_MARKER)) return RunFailureKind.CAPACITY;
-  if (isConnectionFailureText(error)) return RunFailureKind.TRANSPORT;
-  if (isLoginFailureText(error)) return RunFailureKind.CREDENTIAL_REFUSED;
-  return null;
+export function legacyRunFailureKind(
+  error: string | null | undefined,
+  reading: LegacyFailureReading = {},
+): RunFailureKind | null {
+  return LEGACY_ORDER.find((kind) => legacyRunFailureIs(kind, error, reading)) ?? null;
 }
 
 /**
  * The failure kind of a released run (§5.4): the runner's, else what the legacy markers say of its error text.
  * The one reader every server decision about a failure's class goes through.
  */
-export function runFailureKind(run: { failureKind?: string | null; error?: string | null }): RunFailureKind | null {
-  return parseRunFailureKind(run.failureKind) ?? legacyRunFailureKind(run.error);
+export function runFailureKind(
+  run: { failureKind?: string | null; error?: string | null },
+  reading: LegacyFailureReading = {},
+): RunFailureKind | null {
+  return parseRunFailureKind(run.failureKind) ?? legacyRunFailureKind(run.error, reading);
+}
+
+/**
+ * runFailureKind asked about some kinds: the runner's kind is one of them, or, when it sent none, the text reads as
+ * one of them by that kind's own legacy test. Each kind is tested on its own, as each replaced site tested its one
+ * marker, so a text carrying two markers answers both as it did before.
+ */
+export function runFailureIs(
+  run: { failureKind?: string | null; error?: string | null },
+  kinds: readonly RunFailureKind[],
+  reading: LegacyFailureReading = {},
+): boolean {
+  const structured = parseRunFailureKind(run.failureKind);
+  if (structured) return kinds.includes(structured);
+  return kinds.some((kind) => legacyRunFailureIs(kind, run.error, reading));
 }
 
 /**

@@ -108,7 +108,7 @@ import {
   isUsageLimitErrorText,
   parseQuotaResetAt,
   RunFailureKind,
-  runFailureKind,
+  runFailureIs,
   usageLimitResetsAt,
   workflowLaunchReceipt,
   delegateLaunchReceipt,
@@ -7827,7 +7827,7 @@ export class RunnerApiController {
         && completedTurn?.kind === 'message'
         && current.retryAt == null
         && usageLimitEngine
-        && runFailureKind({ failureKind: dto.failure?.kind, error: failureText }) === RunFailureKind.USAGE_LIMIT
+        && runFailureIs({ failureKind: dto.failure?.kind, error: failureText }, [RunFailureKind.USAGE_LIMIT])
           ? await this.usageLimitRetry(tx, runner.id, usageLimitEngine, current, failureText!)
           : null;
       const filed = current.completedAt != null || current.archivedAt != null || current.deletedAt != null;
@@ -10225,10 +10225,10 @@ export class RunnerApiController {
       // back" for every quota failure rather than only the ones that got far enough to talk. Never
       // an overwrite: an ingestion-armed retry already knows more than the terminal message does.
       const failedRun = effectiveStatus === RunStatus.FAILED;
-      // The failure's kind: the runner's, else the legacy markers of its error (runFailureKind).
-      const failureKind = failedRun ? runFailureKind({ failureKind: dto.failure?.kind, error: dto.error }) : null;
+      // The failure's kind: the runner's, else the legacy markers of its error (runFailureIs).
+      const failure = { failureKind: dto.failure?.kind, error: dto.error };
       const quotaSpent =
-        failedRun && current.retryAt == null && failureKind === RunFailureKind.USAGE_LIMIT;
+        failedRun && current.retryAt == null && runFailureIs(failure, [RunFailureKind.USAGE_LIMIT]);
       // A run that ended because its account refused the sign-in, on the runner's own login for its
       // engine. Most often the runner's check before it starts the engine (engineAuthPreflight) finds
       // the account signed out and ends the run with the message it took undelivered. Moved below.
@@ -10236,7 +10236,8 @@ export class RunnerApiController {
         effectiveStatus === RunStatus.FAILED
         && current.retryAt == null
         && !quotaSpent
-        && failureKind === RunFailureKind.CREDENTIAL_REFUSED
+        // Without a kind, the runtime's "Failed to authenticate" alone, as this path always read it (isAuthErrorText).
+        && runFailureIs(failure, [RunFailureKind.CREDENTIAL_REFUSED], { credential: 'authenticate' })
         && isAccountEngine(current.provider)
         && isBuiltinProvider(current.provider, current.providerBuiltin)
         && (recordedEngine(current.engine) ?? current.provider) === current.provider

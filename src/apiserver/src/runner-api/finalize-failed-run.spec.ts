@@ -24,6 +24,8 @@ function makeController(
   quota: { planUsage?: unknown; engines?: unknown; workspace?: { env: unknown; codexAccount: string | null } } = {},
 ) {
   const updates: Array<Record<string, unknown>> = [];
+  // Each read of the runner's row: the quota retry's, and the refused sign-in's look for another account.
+  const runnerReads: number[] = [];
   const turnUpdates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
   const tx = {
     $queryRaw: async () => [{ id: SESSION_ID, leaseOwnerMatches: true }],
@@ -72,7 +74,12 @@ function makeController(
     approval: { updateMany: async () => ({ count: 0 }), findMany: async () => [] },
     // Only read when the terminal message is a quota refusal; unless a test says otherwise this
     // runner reports no snapshot, so the reset moment has to come from the message itself.
-    runner: { findUnique: async () => ({ planUsage: quota.planUsage ?? null, engines: quota.engines ?? null }) },
+    runner: {
+      findUnique: async () => {
+        runnerReads.push(1);
+        return { planUsage: quota.planUsage ?? null, engines: quota.engines ?? null };
+      },
+    },
     // Read for a Codex run's quota refusal: its workspace says which account the run spent.
     workspace: { findUnique: async () => quota.workspace ?? null },
     // The drain returns any item turn still queued on the conversation it is ending; this one has
@@ -96,6 +103,7 @@ function makeController(
     controller: new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never),
     updates,
     turnUpdates,
+    runnerReads,
   };
 }
 
@@ -314,4 +322,25 @@ test('a run that did not fail stores no failure, whatever the runner sent', asyn
 
   assert.equal(h.updates[0].failureKind, null);
   assert.equal(h.updates[0].admissionFailure, null);
+});
+
+/**
+ * The refused sign-in path keeps what it matched before the kinds (review of revision 1, point 3): with no kind it
+ * is the runtime's "Failed to authenticate" alone (isAuthErrorText, the old `isAuthErrorText(dto.error)` here), so a
+ * Codex "Not logged in" — which only the SubAgent move ever read as a sign-in — still takes no sign-in path. A
+ * runner's CREDENTIAL_REFUSED takes it whatever the words.
+ */
+test('finalize reads a refused sign-in as it did: "Failed to authenticate" alone, unless the runner says so', async () => {
+  const signInLookups = async (error: string, failure?: { kind: string }) => {
+    const h = makeController({ numTurns: 0, provider: 'codex' });
+    await finalize(h.controller, { status: SharedRunStatus.FAILED, error, ...(failure ? { failure: failure as never } : {}) });
+    return h.runnerReads.length;
+  };
+
+  assert.equal(await signInLookups(SIGNED_OUT_ERROR), 1, "the runtime's sign-in failure looks for another account");
+  assert.equal(await signInLookups('Not logged in. Run codex login.'), 0, 'an old runner\'s "Not logged in" is no sign-in here');
+  assert.equal(await signInLookups('OAuth session expired'), 0, 'nor is an unwrapped "OAuth session expired"');
+  assert.equal(await signInLookups('Not logged in. Run codex login.', { kind: 'CREDENTIAL_REFUSED' }), 1,
+    "the runner's kind decides over the words");
+  assert.equal(await signInLookups(SIGNED_OUT_ERROR, { kind: 'TRANSPORT' }), 0, 'a dropped connection is no sign-in');
 });

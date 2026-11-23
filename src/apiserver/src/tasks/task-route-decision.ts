@@ -6,7 +6,7 @@ import {
   cursorUsageRead,
   isEngine,
   RunFailureKind,
-  runFailureKind,
+  runFailureIs,
   runnerCatalogRow,
   quotaExpiry,
   quotaNearLimit,
@@ -369,6 +369,21 @@ async function routeEngines(
 }
 
 /**
+ * Whether a run failed on a spent quota or a model at capacity, which say nothing about the task (§3.3): the runner's
+ * kind, else the legacy markers of its error as this history always read them — a marker anywhere in the text, the
+ * reading autoRunHoldOff's SQL `contains` uses too (docs/routing-account-health-design.md §5.4).
+ */
+export function runLimitFailures(
+  run: { failureKind: string | null; error: string | null },
+  failed: boolean,
+): { quotaFailure: boolean; capacityFailure: boolean } {
+  return {
+    quotaFailure: failed && runFailureIs(run, [RunFailureKind.USAGE_LIMIT], { usageLimit: 'anywhere' }),
+    capacityFailure: failed && runFailureIs(run, [RunFailureKind.CAPACITY]),
+  };
+}
+
+/**
  * The task's work runs as the router reads them (§3.3): newest first, numbered in the order they
  * were started ("run 1" is the first), each with the tier its own Route Decision named — a shadow
  * one included — and how it ended.
@@ -412,14 +427,10 @@ async function readRunHistory(
     const failed = releaseWasFailure(run);
     const next = runs[index + 1]?.createdAt;
     const judged = (at: Date) => at >= run.createdAt && (!next || at < next);
-    // A spent quota or a model at capacity says nothing about the task (§3.3): the runner's kind, else the legacy
-    // markers of its error (runFailureKind), the reading autoRunHoldOff's budget uses too.
-    const kind = failed ? runFailureKind(run) : null;
     return {
       ordinal: index + 1,
       status: run.status,
-      quotaFailure: kind === RunFailureKind.USAGE_LIMIT,
-      capacityFailure: kind === RunFailureKind.CAPACITY,
+      ...runLimitFailures(run, failed),
       level: MODEL_ROUTING_LEVELS.find((level) => level === levels.get(run.id)) ?? null,
       model: run.model,
       effort: run.effort,

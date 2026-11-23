@@ -5,6 +5,7 @@ import {
   legacyRunFailureKind,
   normalizeRunFailure,
   parseRunFailureKind,
+  runFailureIs,
   runFailureKind,
 } from './runFailureKind';
 
@@ -95,5 +96,41 @@ describe('normalizeRunFailure', () => {
     expect(normalizeRunFailure(undefined)).toBeNull();
     expect(normalizeRunFailure('USAGE_LIMIT')).toBeNull();
     expect(normalizeRunFailure({ kind: 'NEWER_KIND' })).toBeNull();
+  });
+});
+
+describe('runFailureIs and the per-caller legacy reading', () => {
+  const LATE = `Nothing answered this message across 3 deliveries of it to the engine.\n\n${CODEX_LIMIT}`;
+
+  it("reads a usage-limit marker where each replaced site read it", () => {
+    expect(LATE.toLowerCase().indexOf('hit your usage limit')).toBeGreaterThan(40);
+    // The route history and the SQL filters matched a substring anywhere.
+    expect(runFailureIs({ error: LATE }, [RunFailureKind.USAGE_LIMIT], { usageLimit: 'anywhere' })).toBe(true);
+    // isUsageLimitErrorText's callers matched it at the opening only.
+    expect(runFailureIs({ error: LATE }, [RunFailureKind.USAGE_LIMIT])).toBe(false);
+    expect(runFailureIs({ error: CODEX_LIMIT }, [RunFailureKind.USAGE_LIMIT])).toBe(true);
+  });
+
+  it('reads a refused credential as isAuthErrorText alone where that was the test', () => {
+    for (const opening of [CODEX_SIGNED_OUT, 'OAuth session expired']) {
+      expect(runFailureIs({ error: opening }, [RunFailureKind.CREDENTIAL_REFUSED], { credential: 'authenticate' })).toBe(false);
+      expect(runFailureIs({ error: opening }, [RunFailureKind.CREDENTIAL_REFUSED])).toBe(true);
+    }
+    expect(runFailureIs({ error: SIGNED_OUT }, [RunFailureKind.CREDENTIAL_REFUSED], { credential: 'authenticate' })).toBe(true);
+    expect(runFailureIs({ error: EDGE_BLOCK }, [RunFailureKind.CREDENTIAL_REFUSED], { credential: 'authenticate' })).toBe(false);
+  });
+
+  it('tests each kind on its own, so a text with two markers answers both', () => {
+    const both = `${CODEX_LIMIT} The model is at capacity too.`;
+    expect(runFailureIs({ error: both }, [RunFailureKind.USAGE_LIMIT])).toBe(true);
+    expect(runFailureIs({ error: both }, [RunFailureKind.CAPACITY])).toBe(true);
+  });
+
+  it("lets the runner's kind decide over every reading", () => {
+    expect(runFailureIs({ failureKind: 'CAPACITY', error: LATE }, [RunFailureKind.USAGE_LIMIT], { usageLimit: 'anywhere' })).toBe(false);
+    expect(runFailureIs({ failureKind: 'CREDENTIAL_REFUSED', error: CODEX_SIGNED_OUT }, [RunFailureKind.CREDENTIAL_REFUSED],
+      { credential: 'authenticate' })).toBe(true);
+    // A kind this server does not know reads through the words.
+    expect(runFailureIs({ failureKind: 'NEWER', error: CODEX_LIMIT }, [RunFailureKind.USAGE_LIMIT])).toBe(true);
   });
 });
