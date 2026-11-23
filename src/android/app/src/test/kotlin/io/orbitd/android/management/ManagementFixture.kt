@@ -48,6 +48,8 @@ object ManagementFixture {
     /** GET providers (the pickers' catalogue, no ids) and GET providers/mine (the account's own, with ids, endpoints and hasApiKey). */
     @Volatile var providerCatalog = "[]"
     @Volatile var providersMine = "[]"
+    /** GET account-health's body; POST account-health/:id/check clears it, as the server's Check again does. */
+    @Volatile var accountHealth = """{"blocks":[]}"""
     /** Each DeepSeek key's balance answer by provider id, and a gate that holds a key's read until it completes. */
     val balances = java.util.concurrent.ConcurrentHashMap<String, String>()
     val balanceGates = java.util.concurrent.ConcurrentHashMap<String, CompletableDeferred<Unit>>()
@@ -164,7 +166,7 @@ object ManagementFixture {
         agentFixBodies.clear(); onAgentFix = {}; agentFixRefusal = null
         deviceStatus = "PENDING"; deviceConflict = false; deviceLastSeen = null; deviceGate = null
         drop = CompletableDeferred(); opened = 0
-        queries.clear(); modelRouting = null; optimizeFor = null; recaps = null; accessTokens = emptyList(); accessTokensFail = false; terminals = emptyList(); terminalRequests = emptyList(); terminalRefusal = null; TerminalRequestStore.reset(); providerCatalog = "[]"; providersMine = "[]"
+        queries.clear(); modelRouting = null; optimizeFor = null; recaps = null; accessTokens = emptyList(); accessTokensFail = false; terminals = emptyList(); terminalRequests = emptyList(); terminalRefusal = null; TerminalRequestStore.reset(); providerCatalog = "[]"; providersMine = "[]" ; accountHealth = """{"blocks":[]}"""
         balances.clear(); balanceGates.clear(); task = "{}"; evidence = "[]"; project = "{}"
         keyCheckAnswer = """{"ok":true,"keyCheck":"VALID","message":"Cursor accepted this key.","recorded":true,"keyCheckState":"VALID","keyCheckedAt":null}"""
         onKeyCheck = {}
@@ -283,6 +285,7 @@ object ManagementFixture {
             "access-tokens" -> if (accessTokensFail) fail(503, "token list failed") else ok("""{"tokens":${JsonArray(accessTokens)}}""")
             "providers" -> ok(providerCatalog)
             "providers/mine" -> ok(providersMine)
+            "account-health" -> ok(accountHealth)
             "providers/subagent-tiers" -> ok(subagentTiers)
             "tasks/$TASK" -> ok(task)
             "tasks/$TASK/evidence" -> ok(evidence)
@@ -368,6 +371,7 @@ object ManagementFixture {
                         "revokedAt" to JsonPrimitive(now.toString()), "revokedReason" to JsonPrimitive("USER"))) else it }
                     ok("""{"id":"$id","revokedAt":"$now","revokedReason":"USER"}""")
                 }
+                path.startsWith("account-health/") && path.endsWith("/check") && api.method == HttpMethod.POST -> { accountHealth = """{"blocks":[]}"""; ok("""{"cleared":1}""") }
                 path.startsWith("providers/mine/") && path.endsWith("/key-check") && api.method == HttpMethod.POST -> { onKeyCheck(); ok(keyCheckAnswer) }
                 path.startsWith("providers/mine/") && path.endsWith("/balance") -> {
                     val id = path.removePrefix("providers/mine/").removeSuffix("/balance")

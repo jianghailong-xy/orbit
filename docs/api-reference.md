@@ -134,6 +134,8 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/access-tokens/device/:userCode` | path `userCode` | `PatDeviceLoginController.lookup` |
 | `POST` | `/api/access-tokens/device/:userCode/approve` | path `userCode` | `PatDeviceLoginController.approve` |
 | `POST` | `/api/access-tokens/device/:userCode/deny` | path `userCode` | `PatDeviceLoginController.deny` |
+| `GET` | `/api/account-health` | — | `AccountHealthController.list` |
+| `POST` | `/api/account-health/:id/check` | path `id` | `AccountHealthController.check` |
 | `GET` | `/api/account-secrets` | — | `AccountSecretsController.list` |
 | `POST` | `/api/account-secrets` | body `CreateAccountSecretDto` | `AccountSecretsController.create` |
 | `DELETE` | `/api/account-secrets/:id` | path `id`; query `revokeCopies` | `AccountSecretsController.remove` |

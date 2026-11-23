@@ -1,6 +1,7 @@
 import type { OwnerConfirmationNotReviewedReason } from './owner-confirmation-review';
 import type { MainCheckoutRunnerRequest } from './mainCheckoutGit';
 import type { ConditionProbe, ConditionSampleReport } from './condition';
+import type { RunFailure } from './runFailureKind';
 // The wire contract shared by the control plane, the Go runner, the web app and the native
 // clients.
 //
@@ -3042,10 +3043,12 @@ export interface SubagentCandidateTarget {
   level?: SubagentSize | null;
 }
 
-/** How one attempt of a SubAgent run ended: still running, a usage-limit, capacity or login failure it moved on from,
- *  or the run's end. */
+/** How one attempt of a SubAgent run ended: still running, a failure it moved on from (a usage limit, capacity, a
+ *  failed login, an account that needed action or denied the use, or an unclassified refusal before it started:
+ *  docs/routing-account-health-design.md §7.3), or the run's end. */
 export type SubagentAttemptOutcome =
-  'RUNNING' | 'USAGE_LIMIT' | 'AT_CAPACITY' | 'AUTH_FAILED' | Exclude<SubagentRunStatus, 'RUNNING'>;
+  | 'RUNNING' | 'USAGE_LIMIT' | 'AT_CAPACITY' | 'AUTH_FAILED' | 'ACCOUNT_ACTION_REQUIRED' | 'ACCESS_DENIED' | 'ADMISSION_FAILED'
+  | Exclude<SubagentRunStatus, 'RUNNING'>;
 
 /** One entry of `subagent_run.attempts`: a child process the run started, in order (§4.3). */
 export interface SubagentAttempt extends SubagentCandidateTarget {
@@ -3068,6 +3071,10 @@ export interface SubagentAttempt extends SubagentCandidateTarget {
 export interface SubagentFallbackRequest {
   /** The child's failure, in the engine's own words. Refused unless it reads as a usage-limit, capacity or login error. */
   error: string;
+  /** The child's failure as its engine adapter classified it (§5.1); absent from older runners or when unclassified. */
+  failure?: RunFailure;
+  /** True when the child ended before its engine produced any reply, tool call or billed token (§5.2). */
+  admission?: boolean;
   /** The definition's read-only flag and permission mode, as the start sent them. */
   readonly?: boolean;
   permissionMode?: string;
@@ -4097,6 +4104,12 @@ export interface TurnCompleteRequest {
    *  as a reply (Codex). `result` is then the reply the turn got to before it died. Omitted by older
    *  runners, which put the error in `result` only when there was no reply. */
   error?: string;
+  /** What a FAILED turn failed with, as the engine adapter classified it (docs/routing-account-health-design.md
+   *  §5.1). Absent: not classified, or an older runner, whose failure is read through the text markers. */
+  failure?: RunFailure;
+  /** On a FAILED turn: true when it ended before the engine produced any reply, tool call or billed token (§5.2).
+   *  Absent on other turns and from older runners. */
+  admission?: boolean;
   /** Present for a completed shell turn. The control plane consults it only for a
    *  server-generated taskAcceptance delivery. */
   shellExitCode?: number;
@@ -4294,6 +4307,11 @@ export interface RunFinalizeRequest {
   /** Claude Code result `subtype`. */
   subtype?: string;
   error?: string;
+  /** What a FAILED run failed with: its last failed turn's classification (§5.1). Absent: not classified, or an
+   *  older runner, whose failure is read through the text markers. */
+  failure?: RunFailure;
+  /** On a FAILED run: its last failed turn's admission flag (§5.2). Absent on other ends and from older runners. */
+  admission?: boolean;
   /** @deprecated Legacy alias for runtimeSessionId, still sent by older runners. Accepted only
    *  as a fallback when runtimeSessionId is absent; never stored separately. */
   claudeSessionId?: string;

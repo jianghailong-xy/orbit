@@ -1457,6 +1457,22 @@ export interface ProjectSignInWait {
   detailLine: string;
 }
 
+/**
+ * The project's tasks held because no account that could run them can run now
+ * (docs/routing-account-health-design.md §7.5, §8 item 3), as one Needs you row: "2 tasks wait for an account" over the
+ * provider's words and when the first account is tried again. Derived on every read: empty once an account can run them.
+ */
+export interface ProjectAccountWait<Instant = string> {
+  /** The held tasks, oldest first. */
+  taskIds: string[];
+  /** "2 tasks wait for an account". */
+  title: string;
+  /** The hold's own sentence: "Waiting for an account: Cursor said "Add a payment method to continue". Next try at 21:19." */
+  detailLine: string;
+  /** The earliest end among the accounts: the hold lifts then and the held task takes the trial. */
+  until: Instant;
+}
+
 /** The project's open exceptions, split by who is expected to act (§4.8). */
 export interface ProjectOpenItemsView<Instant = string> {
   needsYou: Array<ProjectOpenItemRow<Instant>>;
@@ -1512,6 +1528,8 @@ export interface ProjectOpenItemsView<Instant = string> {
    * Absent from a server that predates it.
    */
   signIns?: ProjectSignInWait[];
+  /** The held-for-an-account Needs you row (`ProjectAccountWait`), or null when no task is held so. Absent from a server that predates it. */
+  accountWait?: ProjectAccountWait<Instant> | null;
 }
 
 /**

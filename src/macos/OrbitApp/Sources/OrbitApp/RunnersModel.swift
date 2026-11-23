@@ -21,6 +21,8 @@ final class RunnersModel {
     /// (`LoadFailureLogic.presentation`).
     private(set) var loadState = ListLoadState()
     var errorText: String?
+    /// The accounts Orbit has stopped routing to (`GET /account-health`); a failed read keeps the last answer.
+    private(set) var healthBlocks: [AccountHealthBlock] = []
 
     private let api: APIClient
     /// Told every list `load` reads: the app's runner snapshot takes it, so a page polling the runners
@@ -45,6 +47,7 @@ final class RunnersModel {
             runners = try await api.runners()
             onRead?(runners)
             agents = (try? await api.agents()) ?? agents
+            healthBlocks = (try? await api.accountHealth()) ?? healthBlocks
             loadState.succeed()
         } catch {
             errorText = friendly(error)
@@ -205,6 +208,17 @@ final class RunnersModel {
     @discardableResult
     func renameAccount(_ id: String, engine: LoginEngine, account: String, name: String) async -> String? {
         await press { _ = try await self.api.renameRunnerAccount(id, engine: engine, account: account, name: name) }
+    }
+
+    /// Reads the blocked accounts alone, for a page that draws them without the runners (keys, pools).
+    func loadHealth() async {
+        healthBlocks = (try? await api.accountHealth()) ?? healthBlocks
+    }
+
+    /// Check again: the account is fixed, so its block is cleared and the next run may use it.
+    @discardableResult
+    func checkAccountAgain(_ block: AccountHealthBlock) async -> String? {
+        await press { try await self.api.checkAccountAgain(block.id) }
     }
 
     func pauseAccount(_ id: String, engine: LoginEngine, account: String, durationMinutes: Int?) async -> String? {

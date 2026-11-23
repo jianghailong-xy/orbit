@@ -3416,6 +3416,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1491 sets feishu_app.message_detail's default to FULL and moves every TITLES_ONLY row to FULL: an ALTER and an
       // UPDATE of that table only, none of the preserved relations, and no trigger, function or DONE fence changes.
       '1491_feishu_details_by_default',
+      // 1493 adds four nullable session columns (failure_kind, failure_scope, failure_said, admission_failure) with no
+      // default, CHECK, index or backfill; no row is written, and no preserved relation, trigger, function or DONE
+      // fence changes.
+      '1493_session_failure_kind',
+      // 1494 creates account_health (docs/routing-account-health-design.md §6): a new table, its partial unique index on
+      // the live row and three foreign-key indexes. No existing row, trigger or judgment column is touched.
+      '1494_account_health',
+      // 1495 adds the nullable session.account_health_effect with a CHECK on its three values and no default, index or
+      // backfill; no row is written, and no preserved relation, trigger, function or DONE fence changes.
+      '1495_session_account_health_effect',
       // 1501 adds four nullable work-session columns and three checks on project_open_item, and widens
       // project_integration_job_retry_failure_class_chk to admit CONFLICT (revision 42, §12.4, R1); no row is
       // written, and no preserved relation, trigger, function or DONE fence changes. Written as 1444 on the project

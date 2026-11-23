@@ -23,6 +23,7 @@ func scrubTurnComplete(req TurnCompleteRequest, sessionID string) TurnCompleteRe
 		return req
 	}
 	req.Result, req.Error, req.Subtype = r.redact(req.Result), r.redact(req.Error), r.redact(req.Subtype)
+	req.Failure = scrubRunFailure(r, req.Failure)
 	if req.ShellOutput != nil {
 		out := r.redact(*req.ShellOutput)
 		req.ShellOutput = &out
@@ -39,8 +40,19 @@ func scrubRunFinalize(req RunFinalizeRequest, sessionID string) RunFinalizeReque
 	}
 	req.Result, req.Error, req.Subtype = r.redact(req.Result), r.redact(req.Error), r.redact(req.Subtype)
 	req.CaptureError = r.redact(req.CaptureError)
+	req.Failure = scrubRunFailure(r, req.Failure)
 	req.ChangedDiff = withoutSecretPatches(req.ChangedDiff, sessionID)
 	return req
+}
+
+// scrubRunFailure is failure with the provider's words scrubbed, as a copy: the same failure is the session's last.
+func scrubRunFailure(r *integrationOutputRedactor, failure *RunFailure) *RunFailure {
+	if failure == nil {
+		return nil
+	}
+	scrubbed := *failure
+	scrubbed.Said = r.redact(scrubbed.Said)
+	return &scrubbed
 }
 
 // withoutSecretPatches leaves out of patches every file whose patch text (or preview) holds a held value, or whose

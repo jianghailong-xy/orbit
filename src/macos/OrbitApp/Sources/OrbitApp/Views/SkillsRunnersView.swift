@@ -167,7 +167,7 @@ struct RunnersListView: View {
                                                open: opensPools ? push : nil)
                     MachinesAndModelsKeysSection(keys: lists.keys, balances: model.agents?.deepSeekBalances ?? [:],
                                               cursorModel: MachinesAndModels.cursorModel(lists.runners.filter { $0.online == true }),
-                                              open: opensPools ? push : nil)
+                                              open: opensPools ? push : nil, health: AccountHealthRows(runners))
                     if let agents = model.agents {
                         InfrastructureModelTiersSection(agents: agents)
                     }

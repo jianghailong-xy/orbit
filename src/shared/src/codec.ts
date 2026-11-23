@@ -65,6 +65,11 @@ export function toUuid(idOrPublicId: string): string {
  *  and every foreign key to one. Accepted in either spelling on the way in (`PublicIdPipe` /
  *  `IsPublicId`); to be rendered base62 on the way out. */
 export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
+  // `account_health.last_session_id`, `account_health.trial_session_id` (1494): the session whose failure last wrote an
+  // account's health, and the one run testing it now (docs/routing-account-health-design.md §6.2). Addresses the
+  // owner surface links to, never fences.
+  'lastSessionId',
+  'trialSessionId',
   'consumedByPromotionId',
   'promotionRequestId',
   // `condition_sample.condition_id`, `condition_event.condition_id` (1030): the condition a sample or an event belongs
