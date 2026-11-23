@@ -4914,7 +4914,7 @@ final class ConsoleModel {
             case .scheduleCard(let requestID):
                 // Create or Allow on the card itself, by pressing.
                 return waiting(scheduleCard(requestID)?.isPending == true, question: false)
-            case .scheduleRecord, .scheduleRunStrip, .scheduleRunReport:
+            case .scheduleRecord, .scheduleChangeOpening, .scheduleRunStrip, .scheduleRunReport:
                 return nil
             }
         }
@@ -5478,6 +5478,9 @@ final class ConsoleModel {
 
     /// The scheduled tasks' cards this conversation asked and the changes it made, as last read.
     private(set) var scheduleCards: SessionScheduleCardsResponse?
+    /// A change conversation's opening (§8.2): Orbit's first message, as the schedule was when the conversation
+    /// was opened; nil for every other session.
+    private(set) var scheduleChangeOpening: ScheduleChangeOpening?
     /// The scheduled task's run this session is, from its own read; nil for every other session.
     private(set) var scheduleRunID: String?
     /// That run and its schedule, once found; the detail for whether its finding was new and told.
@@ -5517,6 +5520,16 @@ final class ConsoleModel {
         let read = try? await api.sessionScheduleCards(sessionID: sessionID)
         if let read {
             if scheduleCards != read { scheduleCards = read }
+            // A change conversation opens with Orbit's message, before the person's first words (§8.2): the
+            // strip naming the schedule and the opening, at the head of the transcript. Placed at the
+            // conversation's creation, which precedes every row; without it there is no moment to place it
+            // by yet, and the next read (a reconnect, the minute) delivers it.
+            if let change = read.change {
+                if scheduleChangeOpening != change { scheduleChangeOpening = change }
+                if let createdAt = conversationCreatedAt {
+                    deliver(.scheduleChangeOpening, placement: .at(createdAt))
+                }
+            }
             var said: [(at: String, kind: DeliveredDecisionCard.Kind)] = []
             for card in read.cards {
                 said.append((at: card.createdAt, kind: DeliveredDecisionCard.Kind.scheduleCard(requestID: card.id)))

@@ -556,6 +556,11 @@ struct ScheduleConsoleCard: View {
                     },
                     open: { appModel.openSchedule(record.scheduleId) })
             }
+        case .scheduleChangeOpening:
+            // A change conversation opens with Orbit's message, before the person's first words (§8.2).
+            if let opening = console.scheduleChangeOpening {
+                ScheduleChangeOpeningView(opening: opening)
+            }
         case .scheduleRunStrip:
             if let found = console.scheduleRun {
                 let card = console.scheduleRunCard

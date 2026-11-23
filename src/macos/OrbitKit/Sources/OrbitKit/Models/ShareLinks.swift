@@ -215,11 +215,25 @@ public struct PutShareLinkRequest: Encodable, Equatable, Sendable {
 }
 
 /// `GET /share-links`: every link the account has made, whatever its state.
+///
+/// A row this build cannot decode (a root kind added later, such as `DRIVE_FILE`) is skipped, so the
+/// links it can draw still list.
 public struct ShareLinkList: Codable, Equatable, Sendable {
     public let links: [ShareLink]
 
     public init(links: [ShareLink]) {
         self.links = links
+    }
+
+    private enum CodingKeys: String, CodingKey { case links }
+    private struct Row: Decodable {
+        let link: ShareLink?
+        init(from decoder: Decoder) throws { link = try? ShareLink(from: decoder) }
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        links = try c.decode([Row].self, forKey: .links).compactMap(\.link)
     }
 }
 

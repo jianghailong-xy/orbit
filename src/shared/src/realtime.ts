@@ -12,6 +12,7 @@ import type { SessionCapabilities } from './dto';
 import type { ConfirmationUnderReview } from './owner-confirmation-review';
 import type { SessionOwnerItem, SessionWaitingKind } from './project-progress';
 import type { ExternalMessageFrom, OrbitMessageFrom, SessionMessageFrom } from './session-message';
+import type { SessionPhase, SessionTurnOutcome, SessionWaitingOn } from './session-phase';
 import type { SessionRequestPeer } from './session-request';
 import type { SessionSourceRefusalDetail, SourceRefusalCode, SourceState } from './source';
 
@@ -97,6 +98,12 @@ export enum ControlEventType {
    *  above), sent to every user. `data` is a `ControlResourceChanged` whose id is `translation` and nothing
    *  else: a nudge to read `GET /users/me` again. Shipped clients treat it as an unknown type. */
   TRANSLATION_STATUS_CHANGED = 'translation.status_changed',
+  /** The owner's drive changed: a write added rows to its change feed (docs/orbit-files-drive-technical-design.md §5.4).
+   *  USER-SCOPED (see above). `data` is a `ControlDriveChanged`: the feed's seq and nothing else, a nudge to read
+   *  `GET /drive/changes`. Sent ONLY to a stream that declared it with `GET /api/events?hints=drive_changed`
+   *  (`CONTROL_HINT_DRIVE_CHANGED`): an agent writing through the mount commits often, and a shipped client re-reads
+   *  everything on a type it does not know. */
+  DRIVE_CHANGED = 'drive.changed',
   /** The owner's Open list may read differently than it did. USER-SCOPED (see above). `data` is a
    *  `ControlListChanged`. Sent ONLY to a stream that declared it with
    *  `GET /api/events?hints=list_changed` (`CONTROL_HINT_LIST_CHANGED`): shipped clients treat a type
@@ -152,6 +159,19 @@ export interface ControlEvent {
  *  Comma-separated with any other hint a later server may learn; unknown values are ignored. */
 export const CONTROL_HINT_LIST_CHANGED = 'list_changed';
 
+/** The `hints=` value a `GET /api/events` connection declares, beside `list_changed`, to be told which
+ *  workspaces' Open lists moved: `scopes` on `sessions.list_changed`. A stream that does not declare it
+ *  never sees the field. */
+export const CONTROL_HINT_LIST_SCOPES = 'list_scopes';
+
+/** The `hints=` value a `GET /api/events` connection declares to receive `drive.changed`. */
+export const CONTROL_HINT_DRIVE_CHANGED = 'drive_changed';
+
+/** `data` for `drive.changed`: the change feed's seq when the write committed, as a decimal string. */
+export interface ControlDriveChanged {
+  seq: string;
+}
+
 /** The `hints=` value a `GET /api/events` connection declares to receive `owner_requests.changed`. */
 export const CONTROL_HINT_OWNER_REQUESTS = 'owner_requests';
 
@@ -177,6 +197,11 @@ export interface ControlListChanged {
    *  nothing but a previous hint's. The first hint a stream gets, shortly after it connects, carries
    *  the current token even when nothing moved. */
   version: string;
+  /** With `hints=list_scopes` only: the public ids of the workspaces whose Open lists may read differently
+   *  since the previous hint to this stream. A list filtered to one workspace reads only when its workspace is
+   *  among them; a list with no workspace filter reads on every hint. Absent: any list may (the first hint
+   *  after a connect, an account-wide source, a clock threshold, a runner change). Never empty. */
+  scopes?: string[];
 }
 
 /** Project membership derived from coordinator, landing, task, context, judgment or root-session
@@ -213,6 +238,14 @@ export interface ControlSessionSummary {
   lifecycleState: SessionLifecycleState;
   /** @deprecated Compatibility representation; use `lifecycleState`. */
   filingState: SessionFilingState;
+  /** The three-state field and the facts beside it (session-phase.ts, contracts/session-state.contract.json).
+   *  Absent from an older control plane. */
+  phase?: SessionPhase;
+  released?: boolean;
+  lastTurnOutcome?: SessionTurnOutcome | null;
+  waitingOn?: SessionWaitingOn | null;
+  endReason?: string | null;
+  workFinished?: boolean;
   /** Server-derived actions; optional for rolling-version compatibility. */
   capabilities?: SessionCapabilities;
   /** The engine the session runs on for good — the CLI on the runner (`claude`, `codex`, `kimi`,
@@ -378,6 +411,13 @@ export interface ControlSessionEnded {
   /** @deprecated Compatibility representation; use `lifecycleState`. */
   filingState: SessionFilingState;
   endReason: SessionEndReason | null;
+  /** The three-state field and the facts beside it (session-phase.ts, contracts/session-state.contract.json).
+   *  Absent from an older control plane. */
+  phase?: SessionPhase;
+  released?: boolean;
+  lastTurnOutcome?: SessionTurnOutcome | null;
+  waitingOn?: SessionWaitingOn | null;
+  workFinished?: boolean;
 }
 
 /** `data` for `session.error`. `recoverable=true` marks a mid-turn (non-fatal) error — e.g. a

@@ -36,6 +36,9 @@ data class WorkspaceRef(val id: String, val name: String = "")
 data class DirectorySession(
     val id: String, val title: String? = null, val status: String = "UNKNOWN",
     val runState: String? = null, val lifecycleState: String? = null,
+    /** The session facts (contracts/session-state.contract.json), as words so a new one decodes; null from an older server. */
+    val phase: String? = null, val released: Boolean? = null, val lastTurnOutcome: String? = null, val waitingOn: String? = null,
+    val workFinished: Boolean? = null,
     val agent: WorkspaceRef? = null, val agentId: String? = null, val workspaceId: String? = null,
     val folderId: String? = null, val pinnedAt: String? = null,
     val createdAt: String? = null, val lastTurnAt: String? = null,
@@ -94,6 +97,8 @@ data class DirectorySession(
     /** Whether this row is a landing session (platform work), not a conversation. */
     val isLanding get() = sessionKind == "LANDING"
     val isScheduledRun get() = runSource == "SCHEDULE"
+    /** A schedule's change conversation (§8.2): not a run, and kept out of the same lists a run is. */
+    val isScheduleChange get() = runSource == "SCHEDULE_CHANGE"
     val workspace get() = workspaceId ?: agentId ?: agent?.id
     val name get() = title?.takeIf(String::isNotBlank) ?: "Untitled session"
 }
@@ -168,7 +173,7 @@ data class SessionGroup(val id: String, val title: String, val sessions: List<Di
 internal fun listShowsFolders(isFolder: Boolean, view: SessionView, tag: String?, grouping: Grouping) =
     !isFolder && view != SessionView.TRASH && tag == null && grouping != Grouping.TAG
 
-internal fun List<DirectorySession>.withoutScheduledRuns() = filterNot { it.isScheduledRun }
+internal fun List<DirectorySession>.withoutScheduledRuns() = filterNot { it.isScheduledRun || it.isScheduleChange }
 
 internal data class FolderRowSummary(val count: Int, val needsYou: Int, val running: Boolean, val jobs: Boolean = false)
 

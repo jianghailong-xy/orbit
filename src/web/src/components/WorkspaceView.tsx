@@ -42,6 +42,7 @@ import {
   MoreOutlined,
   SettingOutlined,
   PaperClipOutlined,
+  FolderOpenOutlined,
   PauseCircleOutlined,
   PauseOutlined,
   PlayCircleOutlined,
@@ -56,6 +57,7 @@ import {
   ThunderboltOutlined,
   UndoOutlined,
   UnorderedListOutlined,
+  UploadOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AgentToolsDrawer, agentToolsMenuStatus } from './AgentToolsDrawer';
@@ -215,6 +217,7 @@ import {
   permissionModeSupported,
   contextWindowFor,
   DEFAULT_MODEL,
+  DEFAULT_PERMISSION_MODE,
   defaultEngineOf,
   defaultModelFor,
   effectiveSessionEffort,
@@ -321,6 +324,7 @@ import {
   completeSession,
   cancelAutoRetry,
   cancelQueuedTurn,
+  runQueuedSessionNow,
   steerQueuedTurn,
   adoptSessionBranch,
   dismissMergeFailure,
@@ -387,7 +391,8 @@ import {
 } from './RunNeverStartedCard';
 import { claudeRegionHeld, claudeRegionHeldWords, useClaudeRegionCheckAgain } from '../lib/claudeRegion';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
-import { AntigravityRepairCard, antigravityRepair, AttachmentImage, QueuedFootCtx, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SandboxFixHelp, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
+import { DriveFilePicker } from './files/DriveFilePicker';
+import { AntigravityRepairCard, antigravityRepair, AttachmentImage, TurnStatusFootCtx, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SandboxFixHelp, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
 import { PendingTray, type PendingTrayRow } from './PendingTray';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
@@ -409,7 +414,7 @@ import {
   type CriteriaDecisionReply,
 } from './CriteriaDecisionCard';
 import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows, coordinatorQuestions } from './CoordinatorQuestionCard';
-import { useSessionOwnerRequestInserts } from './OwnerRequestCard';
+import { useSessionOwnerRequestInserts, useSessionOwnerRequestPointers } from './OwnerRequestCard';
 import { useScheduleRunOfSession, useSessionScheduleCards, useSessionScheduleInserts } from './ScheduleCards';
 import {
   OWNER_REQUEST_CHAT_PLACEHOLDER,
@@ -583,6 +588,7 @@ import {
   isSessionTerminal,
   SESSION_ACTIVITY_WORD,
   sessionActivityOf,
+  sessionWaitingOnOf,
   sessionEndedBanner,
   sessionIsStarting,
   sessionLifecycleLabel,
@@ -670,7 +676,13 @@ import {
   capacityHeldTitle,
   capacityHeldWaited,
   isCapacityHeld,
+  RUN_NOW,
+  RUN_NOW_FAILED,
+  runNowNote,
+  runningOverLimitHint,
+  runningOverLimitTag,
   type CapacityGate,
+  type RunningOverLimit,
 } from '../lib/queuedCapacity';
 import { type QueuedTurn, type RunEvent, useSessionStream } from '../lib/useSessionStream';
 import { SessionConversation } from './SessionConversation';
@@ -1239,6 +1251,12 @@ const parkedWorkLabel = (s: any): ParkedWork | null => {
     : { text: bgRunningLabel(s.runningBgCount), kind, active: backgroundWorkIsActive(s) };
 };
 
+// A queued turn the server says is on hold (`waitingOn` HOLD: the dispatch pause, a paused account, an
+// unavailable provider) where the queue would otherwise say only "Queued": no gate of a runner names it.
+const holdWord = (s: any): string | null =>
+  sessionWaitingOnOf(s) === 'HOLD' && s.queuedReason === null ? ON_HOLD_LABEL : null;
+const ON_HOLD_LABEL = 'On hold';
+
 // The line shown under a session title. For a LIVE (openable) session that's working we
 // surface its current state — the tool in flight, that it's blocked on you, or a bare
 // "Running…" — so the row never collapses to just a title with no sign of progress.
@@ -1430,7 +1448,7 @@ export const sessionLine = (
     // Held by its clone, the row says git's percentage once this tab has heard one (board clone-progress-wait-card ④).
     const cloned = !held && s.queuedReason === 'WORKSPACE_CLONING' ? cloneHeardOf(s.workspace?.id) : null;
     if (cloned?.state === 'CLONING' && cloned.progress !== null) return { text: cloneRowLabel(cloned.progress), tone: 'queued' };
-    return { text: held ?? queuedLabel(s), tone: !held && isRunnerUpdating(s) ? 'warning' : 'queued' };
+    return { text: held ?? holdWord(s) ?? queuedLabel(s), tone: !held && isRunnerUpdating(s) ? 'warning' : 'queued' };
   }
   // Parked (AWAITING_INPUT) but still doing background work — a sub-workspace and/or background
   // shells that outlive the turn — so it doesn't read as idle. A spawned sub-workspace parks the
@@ -1505,9 +1523,16 @@ export function CoordinatorBadge({ projectId }: { projectId?: string | null }) {
 
 /** Where and how the agent runs a guest's message, for the Share dialog's People who can reply: the session's own
  *  runner and permission mode, or the workspace's machine when the session names none. */
-const guestContextOf = (s: any, fallbackRunner: string, managedRunnerId: string | null) => ({
+const guestContextOf = (
+  s: any,
+  fallbackRunner: string,
+  managedRunnerId: string | null,
+  accountPermissionMode: string | undefined,
+) => ({
   runnerName: (s.assignedRunner ? machineName(s.assignedRunner, managedRunnerId) : '') || fallbackRunner,
-  permissionMode: typeof s.permissionMode === 'string' ? s.permissionMode : 'default',
+  // A session that stored no mode runs in the account's, else Auto, as the server resolves it.
+  permissionMode:
+    typeof s.permissionMode === 'string' ? s.permissionMode : (accountPermissionMode ?? DEFAULT_PERMISSION_MODE),
 });
 
 /** What the two-person icon beside a row's time says: people the owner invited can reply here. */
@@ -1818,7 +1843,7 @@ export function statusLabel(session: any, watching?: string | null, machine?: st
   if ((session.pendingApprovals ?? 0) > 0) return waitingLabel(session);
   // Where `Waiting for your confirmation` would be, while the report is with its reviewer (§5 N3).
   if (session.confirmationUnderReview) return UNDER_REVIEW;
-  if (state === 'SUCCEEDED') return 'Succeeded';
+  if (state === 'SUCCEEDED') return 'Finished';
   if (waitingNoticeFor(session)) return startingLabel(session);
   if (isGenerating(session, state)) return 'Running';
   if (state === 'AWAITING_INPUT') {
@@ -1836,7 +1861,7 @@ export function statusLabel(session: any, watching?: string | null, machine?: st
   }
   if (state === 'INTERRUPTED') return 'Interrupted';
   if (state === 'ENDED') return 'Ended';
-  return claudeRegionHeldWords(session, machine) ?? queuedLabel(session); // PENDING
+  return claudeRegionHeldWords(session, machine) ?? holdWord(session) ?? queuedLabel(session); // PENDING
 }
 
 // What a failed session's glyph says — StatusIcon's FAILED tooltips, word for word: the error
@@ -1924,7 +1949,7 @@ export function StatusIcon({ session, watching, machine }: { session: any; watch
     );
   if (state === 'SUCCEEDED')
     return (
-      <Tooltip content="Succeeded">
+      <Tooltip content="Finished">
         <CheckCircleFilled style={{ color: 'var(--success-solid)', fontSize }} />
       </Tooltip>
     );
@@ -2020,7 +2045,7 @@ export function StatusIcon({ session, watching, machine }: { session: any; watch
     );
   // PENDING — waiting for an active turn slot, or held for the Claude region, as the row says.
   return (
-    <Tooltip content={claudeRegionHeldWords(session, machine) ?? queuedTitle(session)}>
+    <Tooltip content={claudeRegionHeldWords(session, machine) ?? holdWord(session) ?? queuedTitle(session)}>
       <ClockCircleOutlined style={{ color: 'var(--scrollbar-hover)', fontSize }} />
     </Tooltip>
   );
@@ -2203,12 +2228,21 @@ export function RunnerUpdatingTag({
 /**
  * The foot-row tag under a message a full runner, run or batch holds (board queued-card-runner-full ②③):
  * `Queued · runner full`, drawn as RunnerUpdatingTag draws its tag (and in its classes), the popover
- * counting how the slots are taken. Nothing to press there: a full machine has no action of its own.
+ * counting how the slots are taken and offering Run now where the server supports it.
  */
-export function CapacityHeldTag({ gate, machine }: { gate: CapacityGate; machine?: string | null }) {
+export function CapacityHeldTag({ gate, machine, runnerActive, runnerLimit, onRunNow, pending }: {
+  gate: CapacityGate;
+  machine?: string | null;
+  runnerActive?: number;
+  runnerLimit?: number;
+  onRunNow?: () => void;
+  pending?: boolean;
+}) {
   const now = useMinuteNow();
   const [open, setOpen] = useState(false);
   const waited = capacityHeldWaited(gate, now);
+  const note = onRunNow ? runNowNote(gate, machine, runnerActive, runnerLimit) : null;
+  if (!isCapacityHeld(gate)) return null;
   return (
     <span className="chat-runner-updating">
       Queued
@@ -2235,8 +2269,30 @@ export function CapacityHeldTag({ gate, machine }: { gate: CapacityGate; machine
               </>
             )}
           </p>
+          {note && (
+            <>
+              <div className="queued-run-now-action">
+                <Button variant="primary" size="small" loading={pending}
+                  disabled={gate.runNowAvailable !== true || !!gate.runNowRefusal} onClick={onRunNow}>
+                  {RUN_NOW}
+                </Button>
+              </div>
+              <p className="queued-run-now-note">{note}</p>
+            </>
+          )}
         </div>
       </Popover>
+    </span>
+  );
+}
+
+function RunningOverLimitFoot({ overflow }: { overflow: RunningOverLimit }) {
+  return (
+    <span className="chat-runner-updating">
+      Running
+      <Tooltip content={runningOverLimitHint(overflow)}>
+        <span className="chat-over-limit" tabIndex={0}>{runningOverLimitTag(overflow)}</span>
+      </Tooltip>
     </span>
   );
 }
@@ -2436,9 +2492,18 @@ export function HeldFoot({ tag, onCancel }: { tag: ReactNode; onCancel: () => vo
   );
 }
 
-/** The seq of the reader's last message in the transcript, or null where there is none. */
-export function lastUserEventSeq(events: ReadonlyArray<{ type: string; seq: number }>): number | null {
-  for (let i = events.length - 1; i >= 0; i--) if (events[i].type === 'user') return events[i].seq;
+/** The seq of the last user message, or the head of the open turn when requested. */
+export function lastUserEventSeq(
+  events: ReadonlyArray<{ type: string; seq: number; payload?: unknown }>,
+  openTurnOnly = false,
+): number | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const { type, seq, payload } = events[i];
+    if (openTurnOnly && type === 'turn_end') return null;
+    if (type !== 'user') continue;
+    if (openTurnOnly && (payload as { steer?: boolean } | null | undefined)?.steer === true) continue;
+    return seq;
+  }
   return null;
 }
 
@@ -2907,8 +2972,9 @@ export function WorkspaceView({
   >(null);
   // The bar while it is drawn: its height is how far its own coming and going moves the transcript.
   const stuckBarRef = useRef<HTMLButtonElement>(null);
-  // The exception cards scrolled wholly above the viewport, by item id and space-joined so an
-  // unchanged answer is no re-render: which way the pinned line's press goes to reach one.
+  // The exception cards scrolled wholly above the viewport, by item id, and the owner request cards,
+  // by their element id (`owner-request-<id>`), space-joined so an unchanged answer is no re-render:
+  // which way the pinned line's press goes to reach one.
   const [openItemsAbove, setOpenItemsAbove] = useState('');
   // Smart auto-scroll: only keep pinned to the bottom when the user is already there, so
   // reading history (or jumping to the sticky prompt) isn't yanked back by streaming updates.
@@ -3084,6 +3150,14 @@ export function WorkspaceView({
   // What a write made here re-reads the lists with: in the stream's coalescing window, which the
   // server's own event for the write joins (W5).
   const refreshSessionLists = useRefreshSessionLists();
+  const runNowMut = useMutation({
+    mutationFn: runQueuedSessionNow,
+    onError: (error: Error) => message.error(RUN_NOW_FAILED, error.message),
+    onSettled: (_data, _error, id) => {
+      refreshSessionLists();
+      return qc.invalidateQueries({ queryKey: ['session', id], exact: true });
+    },
+  });
   const sessionsQ = useQuery({
     ...sessionsOpts,
     enabled: !listProjectId,
@@ -3131,7 +3205,9 @@ export function WorkspaceView({
   const sessions = useMemo(() => {
     // A scheduled task's run is listed only in its workspace's Scheduled runs folder (owner 2026-11-18): the server
     // reads the folder apart, and a row on the wrong side is not drawn here either.
-    const rows = (sessionsQ.data ?? []).filter((row) => (row.runSource === 'SCHEDULE') === onScheduledRuns);
+    // A schedule's change conversation (§8.2) is in no list: it is reached from its schedule.
+    const rows = (sessionsQ.data ?? []).filter((row) =>
+      row.runSource !== 'SCHEDULE_CHANGE' && (row.runSource === 'SCHEDULE') === onScheduledRuns);
     // The Completed view is ordered by the server on completed_at (newest first) and
     // intentionally ignores pinning. The optimistic cache edits
     // (drop/rename/pin) only remove or patch rows in place — never reorder — and a real
@@ -3924,16 +4000,6 @@ export function WorkspaceView({
   // this turn is meant to create a project. Keeping it in the URL makes refresh/back truthful and
   // lets dismissing it return to the byte-for-byte ordinary compose without a second screen/state.
   const projectIntent = composing && searchParams.get('intent') === 'project';
-  // A scheduled task's Change… lands here with the schedule named in the composer (ScheduledPage): it is changed
-  // by talking to a session, never through a form. Read from the browser's own entry (useLocation trails it), once.
-  useEffect(() => {
-    if (!composing) return;
-    const entry = window.history.state as { usr?: { composerText?: string } } | null;
-    const seed = entry?.usr?.composerText;
-    if (!seed) return;
-    setText(seed);
-    window.history.replaceState({ ...entry, usr: { ...entry.usr, composerText: undefined } }, '');
-  }, [composing]);
   const dismissProjectIntent = useCallback(() => {
     setSearchParams(
       (current) => {
@@ -4490,7 +4556,18 @@ export function WorkspaceView({
   // Model and Mode have independent dirty guards. If an untouched model is refined by a late
   // Runtime heartbeat after the user explicitly chose Auto, correctness still wins: never keep
   // an invalid pair merely because Mode is dirty.
+  //
+  // Not in the commit a new context arrives in: that commit still holds the previous context's
+  // model and mode, the seeds above having only queued this one's. Judged on those, a stopped Claude
+  // session opened after a Codex one read Codex's model, lost Auto, and its Continue stored Default
+  // (seen on orbitd.io, 2026-11-23). The seeds are clamped already, and the next commit runs this
+  // check again on this context's own values.
+  const clampContextKey = useRef<string | null>(null);
   useEffect(() => {
+    if (clampContextKey.current !== modelContextKey) {
+      clampContextKey.current = modelContextKey;
+      return;
+    }
     if (
       !live &&
       shownProviderCapabilitiesResolved &&
@@ -4505,6 +4582,7 @@ export function WorkspaceView({
     live,
     mode,
     model,
+    modelContextKey,
     runner.modelCatalog,
     shownEngine,
     shownProvider,
@@ -4836,9 +4914,9 @@ export function WorkspaceView({
     if (top < LOAD_OLDER_AT) loadOlder();
     const topY = el.getBoundingClientRect().top;
     setOpenItemsAbove(
-      Array.from(el.querySelectorAll<HTMLElement>('[data-open-item]'))
+      Array.from(el.querySelectorAll<HTMLElement>('[data-open-item], .owner-request-card'))
         .filter((card) => card.getBoundingClientRect().bottom <= topY + 1)
-        .map((card) => card.getAttribute('data-open-item'))
+        .map((card) => card.getAttribute('data-open-item') ?? card.id)
         .join(' '),
     );
     // A turn the control plane queued is scanned too — it is where the answer under it starts, so the
@@ -4935,7 +5013,14 @@ export function WorkspaceView({
     />
   ) : capacityGate ? (
     // A full runner, run or batch, said in the same places by the same rules (board queued-card-runner-full ②④).
-    <CapacityHeldTag gate={capacityGate} machine={runnerShownName} />
+    <CapacityHeldTag
+      gate={capacityGate}
+      machine={runnerShownName}
+      runnerActive={activeSlots}
+      runnerLimit={runner.maxConcurrent}
+      onRunNow={selectedId && !selectedTrashed ? () => runNowMut.mutate(selectedId) : undefined}
+      pending={runNowMut.isPending && runNowMut.variables === selectedId}
+    />
   ) : null;
   // The reader's own waiting messages sit in the tray, which carries the tag itself; only where nothing
   // anywhere is waiting does it fall back to the last message they sent.
@@ -4965,6 +5050,13 @@ export function WorkspaceView({
             : queuedHeldTag,
         }
       : null;
+  const overflow: RunningOverLimit | null | undefined = selectedSession?.runningOverLimit;
+  const overflowSeq = overflow && !selectedTrashed && sessionRunStateOf(selectedSession) === 'RUNNING'
+    ? lastUserEventSeq(transcriptEvents, true)
+    : null;
+  const turnFoot = overflow && overflowSeq !== null
+    ? { seq: overflowSeq, tag: <RunningOverLimitFoot overflow={overflow} />, running: true }
+    : queuedFoot;
   // What stands in for an empty transcript — exactly one of these, so the loading skeleton can't
   // stack on top of the centered "waiting for a slot" pane. See lib/transcriptPaint.
   const placeholder = transcriptPlaceholder({
@@ -5724,6 +5816,8 @@ export function WorkspaceView({
     transcriptEvents,
     startOwnerRequestChat,
   );
+  // The same requests still waiting on their cards, for the pinned strip to point at.
+  const ownerRequestPointers = useSessionOwnerRequestPointers(selectedTrashed ? null : selectedId);
 
   // A scheduled task's run: its schedule and run (crumb, strip, report), and the cards and change lines a session put
   // up, each where it happened (docs/mocks/scheduled-tasks/web/02-board.png).
@@ -8646,8 +8740,10 @@ export function WorkspaceView({
         shownOnOwnModels ? undefined : shownModel,
         runner.runsAsRoot,
         runner.modelCatalog,
+        // The open session's runner reported Codex's sandbox cannot start there: Auto says it is off.
+        selected?.codexSandboxUnavailable === true,
       ),
-    [shownEngine, shownOnOwnModels, shownModel, runner.runsAsRoot, runner.modelCatalog],
+    [shownEngine, shownOnOwnModels, shownModel, runner.runsAsRoot, runner.modelCatalog, selected?.codexSandboxUnavailable],
   );
   // Model, Mode, Effort & Provider can be changed any time on a live session (the runner must be
   // online to act on it), and none of them aborts the running turn. When the change lands is the
@@ -11026,7 +11122,7 @@ export function WorkspaceView({
             onClose={() => setShareOpen(false)}
             kind="SESSION"
             rootId={selected.id}
-            guests={guestContextOf(selected, runnerShownName, managedRunnerId)}
+            guests={guestContextOf(selected, runnerShownName, managedRunnerId, accountDefaultPermissionMode)}
           />
         )}
         {selected && !selectedTrashed && !composing && (
@@ -11054,7 +11150,7 @@ export function WorkspaceView({
             onClose={() => setShareRow(null)}
             kind="SESSION"
             rootId={shareRow.id}
-            guests={guestContextOf(shareRow, runnerShownName, managedRunnerId)}
+            guests={guestContextOf(shareRow, runnerShownName, managedRunnerId, accountDefaultPermissionMode)}
           />
         )}
         <SessionMoveModal
@@ -11123,6 +11219,10 @@ export function WorkspaceView({
                 return Number.isFinite(at) ? Math.max(0, Math.floor((Date.now() - at) / 1000)) : null;
               })(),
             })) : []}
+            ownerRequests={ownerRequestPointers.map((request) => ({
+              ...request,
+              above: openItemsAbove.split(' ').includes(`owner-request-${request.id}`),
+            }))}
           />
         )}
 
@@ -11250,7 +11350,7 @@ export function WorkspaceView({
               )}
               {/* The transcript, in the contexts its cards read (SessionConversation). */}
               <MainCheckoutCtx.Provider value={mainCheckout.host}>
-              <QueuedFootCtx.Provider value={queuedFoot}>
+              <TurnStatusFootCtx.Provider value={turnFoot}>
               <SessionConversation
                 sessionId={selectedId}
                 stream={stream}
@@ -11274,7 +11374,7 @@ export function WorkspaceView({
                 jobQueuedWakes={jobQueuedWakes}
                 jobWhere={shownWorkspaceName ?? null}
               />
-              </QueuedFootCtx.Provider>
+              </TurnStatusFootCtx.Provider>
               </MainCheckoutCtx.Provider>
               {/* The conversation's last row while it is at rest: its recap whole, the line its list
                   row reads in one (SessionRecapCard). Above the cards that ask the owner something,
@@ -11897,6 +11997,7 @@ export function WorkspaceView({
         <SessionComposer
           text={text}
           setText={setText}
+          projectFolder={selectedSession?.projectMembership ? { id: selectedSession.projectMembership.projectId, title: selectedSession.projectMembership.projectTitle } : null}
           composerRefs={composerRefs}
           setComposerRefs={setComposerRefs}
           histIdx={histIdx}
@@ -12086,6 +12187,8 @@ export function WorkspaceView({
 export interface SessionComposerProps {
   text: string;
   setText: Dispatch<SetStateAction<string>>;
+  /** The session's project, whose folder under Files the picker opens on (D22). */
+  projectFolder?: { id: string; title: string } | null;
   composerRefs: ReferenceMap;
   setComposerRefs: Dispatch<SetStateAction<ReferenceMap>>;
   histIdx: number;
@@ -12171,6 +12274,7 @@ export interface SessionComposerProps {
 export function SessionComposer({
   text,
   setText,
+  projectFolder,
   composerRefs,
   setComposerRefs,
   histIdx,
@@ -12283,6 +12387,8 @@ export function SessionComposer({
   const lastComposerTap = useRef<{ at: number; x: number; y: number; held?: number } | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // The `+` menu's "From Files" picker (board docs/mocks/orbit-files, 02-web frame 8).
+  const [drivePickerOpen, setDrivePickerOpen] = useState(false);
   // Manual composer height (px). null = autoSize auto-grow (up to maxRows); once the user
   // drags the top handle, that height wins over autoSize until they double-click to reset.
   const [composerHeight, setComposerHeight] = useState<number | null>(null);
@@ -12473,6 +12579,23 @@ export function SessionComposer({
   });
   // The `+` menu "Shell" entry: prefix the draft with `!` so onSend routes it as a raw
   // shell command (run on the runner, bypassing claude). The user types the command after.
+  // Files the drive picker returned go into the draft as chips (`#name`, like a `#` reference) that are sent as their
+  // `/home/orbit/Files/…` paths, so the box shows names and the agent gets paths (board 02-web frame 8).
+  const insertDriveFiles = (files: { id: string; name: string; path: string }[]): void => {
+    let refs = composerRefs;
+    let chips = '';
+    for (const file of files) {
+      const taken = refs[file.name];
+      const parent = file.path.split('/').slice(-2, -1)[0] ?? '';
+      const token = taken && taken.path !== file.path ? `${parent}/${file.name}` : file.name;
+      refs = { ...refs, [token]: { kind: 'drive', id: file.id, path: file.path } };
+      chips += `#${token} `;
+    }
+    setComposerRefs(refs);
+    setText((t) => `${t}${t && !/\s$/.test(t) ? ' ' : ''}${chips}`);
+    setDrivePickerOpen(false);
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
   const insertShell = (): void => {
     setText((t) => (t.startsWith('!') ? t : `!${t}`));
     setTimeout(() => taRef.current?.focus(), 0);
@@ -12957,20 +13080,27 @@ export function SessionComposer({
           // WorkspaceView.composerMenu.test.tsx, drawn in
           // docs/mocks/composer-attach-menu-phone.html.
           items={[
+              // Each row says what it does and where the file comes from, with no heading to
+              // miss: "File" and "From Files" read alike (docs/mocks/composer-attach-labels).
               {
                 key: 'file',
-                icon: <PaperClipOutlined />,
-                label: 'File',
+                icon: <UploadOutlined />,
+                label: 'Upload File',
                 onSelect: () => fileInputRef.current?.click(),
               },
               {
                 key: 'image',
                 icon: <PictureOutlined />,
-                // One word per action, the way the native composer's `+` menu writes them
-                // (ComposerView.swift `addMenu`). Offered unconditionally too: a state the
-                // upload can't work in says so on pick, rather than greying the item out.
-                label: 'Image',
+                // Offered unconditionally: a state the upload can't work in says so on pick,
+                // rather than greying the item out.
+                label: 'Upload Image',
                 onSelect: () => imageInputRef.current?.click(),
+              },
+              {
+                key: 'drive',
+                icon: <FolderOpenOutlined />,
+                label: 'Add from Orbit Files',
+                onSelect: () => setTimeout(() => setDrivePickerOpen(true), 0),
               },
               { key: 'divider', type: 'separator' },
               {
@@ -13015,6 +13145,23 @@ export function SessionComposer({
             />
           }
         />
+        )}
+        {!shellMode && (
+          <Popover
+            side="top"
+            align="start"
+            arrow={false}
+            title={null}
+            open={drivePickerOpen}
+            onOpenChange={setDrivePickerOpen}
+            disabled={composerDisabled}
+            popupClassName="drive-picker-popover"
+            // No chip of its own: the picker opens from the `+` menu's From Files, and this
+            // zero-width, unfocusable button only anchors it beside the `+`.
+            trigger={<button type="button" className="composer-drive-anchor" tabIndex={-1} aria-hidden="true" />}
+          >
+            <DriveFilePicker projectFolder={projectFolder} onClose={() => setDrivePickerOpen(false)} onPick={insertDriveFiles} />
+          </Popover>
         )}
         {/* The workspace is only a Select when it can actually be picked (new, unlocked
             session); once read-only it shows as a static pill left of Model below. */}

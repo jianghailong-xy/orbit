@@ -1,6 +1,7 @@
 import { basename } from 'node:path';
 import {
   AgentProvider,
+  antigravityBaseModel,
   credentialEngines,
   ENGINE_CLI_NAMES,
   type ProviderModelTier,
@@ -43,7 +44,8 @@ import {
   type SubagentRoutingInput,
 } from '../tasks/model-routing';
 import { engineState, fullestWindow, quotaTiming, taskRouteReads } from '../tasks/task-route-decision';
-import { addTally, emptyTally, qualityKey, qualityOf, readModelQuality } from './model-quality';
+import { readModelIdentities, type ModelSighting } from './model-identity';
+import { addTally, emptyTally, qualityOf, readModelQuality, type QualityTally } from './model-quality';
 import { modelLabels } from './subagent-run';
 
 /** The account-level preference listing the providers SubAgents may not run on (docs/subagent-design.md §6.2). */
@@ -190,7 +192,8 @@ export async function subagentRouteInput(
     ...(states[slug] ? {
       account: {
         quota: states[slug].quota ?? null, paused: states[slug].paused === true, unreadable: states[slug].quotaUnread === true,
-        expiresAt: states[slug].expiresAt ?? null, nearLimit: states[slug].nearLimit === true,
+        expiresAt: states[slug].expiresAt ?? null, expiryWindowMins: states[slug].expiryWindowMins ?? null,
+        nearLimit: states[slug].nearLimit === true,
         opusUtilization: states[slug].opusUtilization ?? null,
       },
     } : {}),
@@ -215,6 +218,7 @@ export async function subagentRouteInput(
     engines,
     modelCatalog: catalog,
     runtimeDefaultModels: sanitizeRuntimeDefaultModels(runner?.runtimeDefaultModels),
+    now: reads.now.getTime(),
     ...(Object.keys(ownerTiers).length > 0 ? { builtinModelTiers: ownerTiers } : {}),
     ...(args.runnerLabel ? { runnerLabel: args.runnerLabel } : {}),
     ...(args.strictNamedModel ? { strictNamedModel: true } : {}),
@@ -363,8 +367,17 @@ export function markSuperseded(models: readonly ProviderModelTier[], catalog: re
  * runner catalogue is the owner's most recently heard-from runner's that reported one, so the built-in table's
  * rows name the models a SubAgent would get there. A built-in engine lists every model of that catalogue, each
  * the owner's to tier (PATCH /providers/builtin/:engine/model-tier); a key lists its own models. Reads only.
+ *
+ * A model's Quality is pooled over every provider and engine it ran on, by its identity (model-identity.ts), so
+ * `claude-sonnet-5-5` reads the same on Claude Code and on Antigravity. `learn` is handed every model id the view
+ * saw, for the ids nobody has decided to be asked about off the request (learnModelIdentities).
  */
-export async function subagentTierView(db: Prisma.TransactionClient, ownerId: string, now = new Date()): Promise<SubagentTiersResponse> {
+export async function subagentTierView(
+  db: Prisma.TransactionClient,
+  ownerId: string,
+  now = new Date(),
+  learn?: (sightings: ModelSighting[]) => void,
+): Promise<SubagentTiersResponse> {
   const runner = await db.runner.findFirst({
     where: { ownerId, modelCatalog: { not: Prisma.DbNull } },
     orderBy: [{ lastHeartbeatAt: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }],
@@ -389,13 +402,12 @@ export async function subagentTierView(db: Prisma.TransactionClient, ownerId: st
       slug, billing: isLoginEngine(slug) ? 'subscription' : 'key', inScope: true, credential: builtinCredential(slug), engines: [{ engine: slug }],
     },
   }));
-  return {
-    providers: [...builtins, ...configured]
+  const label = (model: string) => labels.get(model) ?? model;
+  const providers = [...builtins, ...configured]
       .filter(({ provider }) => provider.inScope)
       .map((entry, index): ProviderTierRow => {
         const builtin = index < builtins.length;
         const models = new Map<string, ProviderModelTier>();
-        const engines = [...new Set(entry.provider.engines.map((engine) => engine.engine))];
         for (const engine of entry.provider.engines) {
           const rows = subagentEngineRows(engine, catalogInput) as Array<SubagentModelRow & Partial<KeyModelRow>>;
           // A built-in engine lists its whole catalogue, the models no row tiers as Not set; a key on that catalogue
@@ -413,14 +425,8 @@ export async function subagentTierView(db: Prisma.TransactionClient, ownerId: st
               source: null,
               editable: false,
               outputPricePerMTok: null,
-              quality: qualityOf(
-                engines.reduce((sum, engine) => {
-                  const tally = tallies.get(qualityKey(entry.provider.slug, engine, row.model));
-                  if (tally) addTally(sum, tally);
-                  return sum;
-                }, emptyTally()),
-                (model) => labels.get(model) ?? model,
-              ),
+              // Pooled by identity below, once every row is known.
+              quality: qualityOf(emptyTally(), label),
             };
             if (row.level && !seen.levels.includes(row.level)) seen.levels.push(row.level);
             seen.source = seen.source ?? row.source ?? (owned?.[row.model] ? 'owner' : row.level ? 'catalogue' : null);
@@ -447,6 +453,30 @@ export async function subagentTierView(db: Prisma.TransactionClient, ownerId: st
           billing: entry.provider.billing,
           models: ordered,
         };
-      }),
-  };
+      });
+
+  const listed = providers.flatMap((provider) => provider.models.map((model) => ({ provider: provider.slug, model })));
+  const ran = [...tallies].map(([key, tally]) => {
+    const [provider, engine, model] = key.split('\u0000');
+    // Antigravity's ids may carry their level (`claude-opus-5-5-high`): the same model as its base row. Only here, where
+    // the engine is known: elsewhere a trailing `-max` is part of the name (`qwen3.7-max`).
+    return { provider, model: engine === AgentProvider.ANTIGRAVITY ? antigravityBaseModel(model) : model, tally };
+  });
+  const identities = await readModelIdentities(db, [...listed.map(({ model }) => model.model), ...ran.map(({ model }) => model)]);
+  const pooled = new Map<string, QualityTally>();
+  for (const { model, tally } of ran) {
+    const key = identities.get(model)!.key;
+    const sum = pooled.get(key) ?? emptyTally();
+    addTally(sum, tally);
+    pooled.set(key, sum);
+  }
+  for (const { model } of listed) {
+    model.identity = identities.get(model.model)!;
+    model.quality = qualityOf(pooled.get(model.identity.key) ?? emptyTally(), label);
+  }
+  learn?.([
+    ...listed.map(({ provider, model }) => ({ model: model.model, label: labels.get(model.model) ?? null, provider })),
+    ...ran.map(({ provider, model }) => ({ model, provider })),
+  ]);
+  return { providers };
 }

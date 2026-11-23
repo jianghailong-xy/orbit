@@ -145,6 +145,17 @@ func TestLatestLoginURLEndsWithTheLabel(t *testing.T) {
 	}
 }
 
+// Claude Code 2.1.330 prints a short link on claude.ai instead (captured verbatim from `claude auth login` in a pty).
+// Missing it left the card on "Starting sign-in on the runner…" until the relay gave up after 90 seconds.
+func TestLatestLoginURLReadsTheClaudeAiLink(t *testing.T) {
+	const url = "https://claude.ai/oauth/authorize?z-ilwRV8cNZs6Ivh0V4mH0fao90RIUb9ZtZjs0Jn0BoGU"
+	const out = "Opening browser to sign in\u2026\r\nIf the browser didn't open, visit:\r\n" +
+		"\x1b]8;;" + url + "\x07" + url + "\x1b]8;;\x07\r\nPaste code here if prompted > "
+	if got := latestLoginURL(out); got != url {
+		t.Fatalf("latestLoginURL = %q, want %q", got, url)
+	}
+}
+
 // Rejection detection keys on the CLI's actual behaviour, captured from a real bad paste:
 //
 //	Paste code here if prompted > Invalid code. Please make sure the full code was copied.

@@ -744,6 +744,7 @@ func claimedSessionFromReclaim(r ReclaimSession) *ClaimedSession {
 		AllowOrchestration: r.AllowOrchestration,
 		WatchesDisabled:    r.WatchesDisabled,
 		WikiDisabled:       r.WikiDisabled,
+		BrowserEnabled:     r.BrowserEnabled,
 		WorkflowsDisabled:  r.WorkflowsDisabled,
 		ScheduleRun:        r.ScheduleRun,
 		OrchestrationToken: r.OrchestrationToken,
@@ -2074,6 +2075,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			beatTaken = true
 			// Whether the control plane takes a claim scoped to named sessions (drainClaimScope).
 			drainScopedClaims.Store(resp.DrainScopedClaims)
+			// Whether this runner reports a failed turn and the release separately (session_release.go): this answer's word.
+			t.noteSessionReleaseOffer(resp)
 			// Idle sleep: accept the manager's request while there is still nothing to do here, and stop
 			// once the control plane confirms that acceptance — never on the request alone, which the
 			// manager may still withdraw. A process already draining for another reason accepts nothing.
@@ -2129,13 +2132,11 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					return integratingNow[jobID]
 				})
 			}
-			// Adopt the control plane's authoritative max-concurrent (the editable DB
-			// value). 0 means an older server that doesn't report it — keep current.
-			if resp.MaxConcurrent > 0 {
-				if prev := pool.maxConcurrent(); prev != resp.MaxConcurrent {
-					pool.setMax(resp.MaxConcurrent)
-					logln(fmt.Sprintf("max-concurrent updated %d -> %d (from control plane)", prev, resp.MaxConcurrent))
-				}
+			// Apply both limits together so a claim never sees a mix of two heartbeat answers.
+			prev := pool.maxConcurrent()
+			pool.applyConcurrency(resp.MaxConcurrent, resp.BurstConcurrent)
+			if resp.MaxConcurrent > 0 && resp.MaxConcurrent != prev {
+				logln(fmt.Sprintf("max-concurrent updated %d -> %d (from control plane)", prev, resp.MaxConcurrent))
 			}
 			// The machine's free-space floor. Absence REPLACES rather than preserves, unlike
 			// max-concurrent: null is what a runner with no floor configured legitimately has,
@@ -2479,6 +2480,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					login.submitCode(*lr, report)
 				case "cancel":
 					login.cancelLogin(*lr)
+				case "browser":
+					go login.openInBrowser(loopCtx, *lr, runnerBrowser())
 				}
 			}
 			// Install an engine CLI the user asked for from the web. Idempotent for the same
@@ -2535,6 +2538,14 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					}
 					beatNow()
 				}()
+			}
+			// A session's browser_open: start the browser and open the page asked for, on its own goroutine like the
+			// clear, since a Chrome just started takes a moment to answer; the beat it asks for reports it running.
+			if resp.OpenBrowser != nil {
+				go func(cmd BrowserOpenCommand) {
+					handleBrowserOpen(context.Background(), runnerBrowser(), cmd)
+					beatNow()
+				}(*resp.OpenBrowser)
 			}
 			// The owner's Update Now: install the waiting release now, interrupting the turns in flight
 			// (selfUpdateGate.updateNow). The check it asks for takes it.
@@ -3056,12 +3067,13 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// against turn permits alone: a parked session whose runner-hosted build is
 		// still going holds no permit and no engine, and claiming another session on
 		// top of it is how a host with a global-OOM history ends up running three
-		// builds it never counted.
+		// builds it never counted. When only burst room is left, a server claim
+		// needs the Run now flag to acquire a turn permit here.
 		//
 		// Draining for an update, the pool admits nothing, with one exception (drainClaimScope): a session
 		// whose engine is running a turn here and whose queued message moved its row to PENDING.
 		var scope []string
-		if pool.admissionIdleCapacity() <= 0 {
+		if !pool.canClaim() {
 			if scope = drainClaimScope(pool, drainScopedClaims.Load()); len(scope) == 0 {
 				select {
 				case <-loopCtx.Done():

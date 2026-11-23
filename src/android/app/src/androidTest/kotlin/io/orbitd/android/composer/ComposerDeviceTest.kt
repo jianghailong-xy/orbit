@@ -220,7 +220,7 @@ class ComposerDeviceTest {
         try {
             control("""{"uploadFailures":1,"uploadDelay":0.3}""")
             fun pick(shots: Boolean) {
-                compose.onNodeWithTag("composer-plus").performClick(); compose.onNodeWithText("File",useUnmergedTree=true).performClick()
+                compose.onNodeWithTag("composer-plus").performClick(); compose.onNodeWithText("Upload File",useUnmergedTree=true).performClick()
                 selectFilesRoot("Downloads")
                 if (systemNode("List view") != null) systemClick("List view")
                 compose.waitUntil(10000) { systemNode(fileName) != null }
@@ -333,7 +333,7 @@ class ComposerDeviceTest {
         android.media.MediaScannerConnection.scanFile(app,arrayOf(path),arrayOf("image/jpeg")) { _,_ -> scanned.countDown() }
         assertTrue(scanned.await(10,java.util.concurrent.TimeUnit.SECONDS))
         try {
-            compose.onNodeWithTag("composer-plus").performClick();compose.onNodeWithText("Image",useUnmergedTree=true).performClick()
+            compose.onNodeWithTag("composer-plus").performClick();compose.onNodeWithText("Upload Image",useUnmergedTree=true).performClick()
             if (Build.VERSION.SDK_INT < 33) {
                 selectFilesRoot("Images")
                 if (systemNode("List view") != null) systemClick("List view")
@@ -447,6 +447,24 @@ class ComposerDeviceTest {
         compose.waitUntil(10000) { compose.onAllNodes(hasTestTag("new-session-engine")).fetchSemanticsNodes().isEmpty() }
         compose.waitForIdle()
         capture("after-back")
+    }
+
+    /** A full runner holds the reader's next message, accepted but taken by no runner (web e90dc6fb93): its foot row reads
+     * `Queued · runner full · Cancel`, and Cancel takes it back to the composer. */
+    @Test fun aMessageAFullRunnerHoldsCanBeCancelled() = journey("runner-full-cancel") {
+        val held = "01a0cca7-8609-70ed-a0e2-d4b55b832b91"
+        login("""{"status":"PENDING","extraDetail":{"runState":"QUEUED","queuedReason":"runner_at_capacity","queuedActive":4,"queuedLimit":4},
+            "rows":[{"seq":1,"type":"user","turnId":"t-1","payload":{"text":"Start task 6"}},
+            {"seq":2,"type":"assistant","turnId":"t-1","payload":{"text":"Task 6 is filed and waiting for a runner."}},
+            {"seq":3,"type":"turn_end","turnId":"t-1","payload":{"subtype":"success"}}],
+            "queuedTurns":[{"id":"$held","turnId":"$held","kind":"message","placement":"accepted","content":"Why is task 6 still queued?","attachments":[]}]}""")
+        compose.waitUntil(20000) { compose.onAllNodes(hasTestTag("runner-updating-foot:cancel"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        capture("runner-full-cancel")
+        compose.onNodeWithTag("runner-updating-foot:cancel", useUnmergedTree = true).performClick()
+        compose.waitUntil(10000) { model.state.value.draft.text == "Why is task 6 still queued?" }
+        compose.waitUntil(10000) { compose.onAllNodes(hasTestTag("accepted:$held")).fetchSemanticsNodes().isEmpty() }
+        assertTrue(stats()["controls"]!!.jsonArray.any { it.jsonObject["turnId"]?.jsonPrimitive?.content == held })
+        capture("runner-full-cancelled")
     }
 
     @Test fun explicitRejectionRestoresMessageAndAttachmentThenResumes() = journey("rejected-send") {
@@ -719,6 +737,35 @@ class ComposerDeviceTest {
         compose.waitUntil(15000) { composerShown() && compose.onAllNodes(hasText("Reconnect", substring = true)).fetchSemanticsNodes().isEmpty() }
         compose.waitForIdle()
         capture("session-page")
+    }
+
+    /** The reader's own turn as iOS draws it (OrbitApp `UserBubbleView`): a sent screenshot over the trailing bubble, the Chinese the
+     * owner wrote with the English the agent got under it ("Show both languages"), copy · time · the translation foot; the reply under
+     * it the document alone. Compared against the iPhone's frame of the same transcript. */
+    @Test fun userBubbleImageAndBothLanguages() = journey("user-bubble") {
+        val shot = Bitmap.createBitmap(540, 1170, Bitmap.Config.ARGB_8888)
+        android.graphics.Canvas(shot).apply {
+            drawColor(android.graphics.Color.rgb(248, 248, 250))
+            val grey = android.graphics.Paint().apply { color = android.graphics.Color.rgb(200, 200, 206) }
+            for (i in 0 until 14) drawRect(40f, 160f + i * 64f, if (i % 3 == 2) 330f else 500f, 184f + i * 64f, grey)
+            drawRect(30f, 1060f, 510f, 1130f, android.graphics.Paint().apply { color = android.graphics.Color.rgb(30, 110, 220) })
+        }
+        val png = java.io.ByteArrayOutputStream().also { shot.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+        val image = "01a0cca7-8609-70ed-a0e2-d4b55b832b70"
+        login("""{"me":{"id":"a07-user","email":"a07@example.test","name":"A07","translationAvailable":true,
+              "preferences":{"translationEnabled":true,"translationLanguage":"zh-Hans","translationBilingual":true}},
+            "files":{"$image":{"name":"Screenshot_1259.png","mime":"image/png","base64":"${java.util.Base64.getEncoder().encodeToString(png)}"}},
+            "rows":[{"seq":1,"type":"user","turnId":"t-1","ts":"${now(-130)}","payload":{"text":"Please review the rendering of the Android session chat window.",
+                "translation":{"state":"DONE","from":"zh-Hans","original":"Android session 聊天窗口的渲染请 review 下"},
+                "attachments":[{"id":"$image","name":"Screenshot_1259.png","mime":"image/png"}]}},
+              {"seq":2,"type":"assistant","turnId":"t-1","ts":"${now(-100)}","payload":{"text":"I'll compare it with the iPhone frame and send you both.",
+                "translation":{"lang":"zh-Hans","text":"我会把它和 iPhone 的画面对比，然后把两张都发给你。"}}},
+              {"seq":3,"type":"turn_end","turnId":"t-1","payload":{"subtype":"success"}}]}""")
+        awaitText("Hide original")
+        compose.waitUntil(15000) { compose.onAllNodes(hasTestTag("user-turn-image"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("user-bubble", useUnmergedTree = true).performScrollTo()
+        compose.waitForIdle()
+        capture("user-bubble-image-bilingual")
     }
 
     /** The auto-retry card (baseline): a spent quota counts down to its reset, and its switch turns the armed retry off. */

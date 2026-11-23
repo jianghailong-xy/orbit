@@ -98,6 +98,8 @@ export interface ManagedRunnerWorkload {
   operations: number;
   /** Events buffered for the control plane and not yet acknowledged by it. */
   unflushedEvents: number;
+  /** Orbit Files drive handles holding bytes no commit has taken yet; absent from a runner that has no drive. */
+  driveWrites?: number;
   /** How long, in whole seconds, all four have been zero; 0 while any is not. */
   idleSeconds: number;
   /** The `requestedAt` of a sleep request this instance, idle, is ready to honour: its acceptance.
@@ -239,8 +241,8 @@ export interface ManagedRunnerUpdate {
   running: ManagedRunnerBuild;
   current: ManagedRunnerBuild;
   phase: 'available' | 'updating';
-  /** `updating` on a busy runner whose backend cannot stop it (Kubernetes): the owner's Update Now waits for the
-   *  runner to be idle and interrupts nothing. Absent otherwise. */
+  /** `updating` on a busy runner whose backend cannot stop it (neither Docker nor Kubernetes, which both can): the
+   *  owner's Update Now waits for the runner to be idle and interrupts nothing. Absent otherwise. */
   waitsForIdle?: true;
 }
 

@@ -438,9 +438,12 @@ func (s *bgJobService) startOwnerWait(args map[string]interface{}) bgSocketRespo
 	// rest of who is asking: the agent the write is attributed to, the current task, the orchestration
 	// switch. The timeout is cleared so the job waits as long as the owner takes, and only this tool is
 	// served. The request file is unlinked once open, so nothing is left behind however the job ends.
-	command := fmt.Sprintf("{ rm -f %s && ORBIT_AGENT_ID=%s ORBIT_TASK_ID=%s %s=%s %s=%s %s= %s mcp; } < %s",
+	// The browser switch too, which browser_request_sign_in is served under (browser_tools.go).
+	browserOn := s.job != nil && s.job.BrowserEnabled
+	command := fmt.Sprintf("{ rm -f %s && ORBIT_AGENT_ID=%s ORBIT_TASK_ID=%s %s=%s %s=%s %s=%s %s= %s mcp; } < %s",
 		shellQuote(file.Name()), shellQuote(s.agentID), shellQuote(s.taskID),
-		envMCPOrchestration, orchestrationEnv(s.allowOrchestration), envMCPTools, shellQuote(name), envMCPCallTimeout,
+		envMCPOrchestration, orchestrationEnv(s.allowOrchestration), envBrowser, browserEnv(browserOn),
+		envMCPTools, shellQuote(name), envMCPCallTimeout,
 		shellQuote(exe), shellQuote(file.Name()))
 	status, err := s.bg.startJob(bgJobSpec{
 		Command:     command,

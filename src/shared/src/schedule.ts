@@ -369,6 +369,23 @@ export const SCHEDULE_COPY = {
     minutes: '{minutes} min',
     noEnd: 'no end',
   },
+  /** A schedule's change conversation (§8.2, board 03-change): Orbit's opening, its strip, its input. */
+  changeConversation: {
+    title: 'Change {title}',
+    lead: 'What should change about {title}? This is what it does now:',
+    does: 'Does',
+    when: 'When',
+    runsIn: 'Runs in',
+    may: 'May',
+    costs: 'Costs',
+    tail:
+      'I can change the time, the days, what it checks and how it reports right away, and you can undo it. More runs, '
+      + 'longer runs, more access or another workspace need your Allow.',
+    placeholder: 'Say what to change…',
+    openSchedule: 'Open',
+    openInScheduled: 'Open in Scheduled',
+    conversation: 'conversation',
+  },
   record: {
     changed: 'Changed {title}: {change}',
     ended: 'Ended {title}: {reason} · {by}',
@@ -719,8 +736,53 @@ export interface ScheduleChangeRecord {
   after: Record<string, unknown>;
   undoOfRevision: number | null;
   undoneByRevision: number | null;
+  /** The person's words that asked for it, when it came from the schedule's change conversation (§8.2). */
+  askedText: string | null;
   createdAt: string;
   undo: ScheduleUndoDoor | null;
+}
+
+/**
+ * Orbit's opening of a change conversation (§8.2): the schedule as it was when the conversation was opened, drawn
+ * by every client from `SCHEDULE_COPY.changeConversation`. Kept on the session, so it still reads as the start of
+ * the conversation after the schedule has changed.
+ */
+export interface ScheduleChangeOpening {
+  scheduleId: string;
+  title: string;
+  revision: number;
+  /** The read-back ("What it does"). */
+  does: string;
+  /** "Every day at 09:00 · Asia/Shanghai". */
+  when: string;
+  /** "apiserver · Codex agent". */
+  runsIn: string;
+  /** "Open a PR · edits in its own worktree and opens a PR; can't merge or deploy". */
+  may: string;
+  /** "Up to 7 runs a week, 30 min each". */
+  costs: string;
+}
+
+/**
+ * `GET /api/schedules/:id/change`: the schedule's open change conversation if it has one, and the opening a new one
+ * would start with. `POST /api/schedules/:id/change {text}` opens one with the person's first words and answers
+ * `{ sessionId }`.
+ */
+export interface ScheduleChangeConversationResponse {
+  sessionId: string | null;
+  opening: ScheduleChangeOpening;
+}
+
+/** The opening's rows, in order, as label and text. */
+export function scheduleChangeOpeningRows(opening: ScheduleChangeOpening): Array<{ label: string; text: string }> {
+  const T = C.changeConversation;
+  return [
+    { label: T.does, text: opening.does },
+    { label: T.when, text: opening.when },
+    { label: T.runsIn, text: opening.runsIn },
+    { label: T.may, text: opening.may },
+    { label: T.costs, text: opening.costs },
+  ];
 }
 
 export interface ScheduleCardDecision {
@@ -918,6 +980,11 @@ export interface SessionScheduleCardsResponse {
   runStatus?: ScheduleRunSessionStatus | null;
   cards: ScheduleCard[];
   records: ScheduleChangeRecord[];
+  /**
+   * A schedule's change conversation (§8.2): Orbit's opening, as the schedule was when it was opened, for its strip
+   * and its first message. Null on every other session (and on servers before it).
+   */
+  change?: ScheduleChangeOpening | null;
 }
 
 /**

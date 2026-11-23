@@ -210,7 +210,12 @@ let agentToolsGuideJSON = #"""
       "operations": [
         "file_upload",
         "file_fetch",
-        "file_list"
+        "file_list",
+        "drive_put",
+        "drive_get",
+        "drive_list",
+        "drive_move",
+        "drive_delete"
       ],
       "topic": "files"
     },
@@ -736,6 +741,11 @@ let agentToolsGuideJSON = #"""
       "id": "files",
       "label": "Files",
       "tools": [
+        "drive_delete",
+        "drive_get",
+        "drive_list",
+        "drive_move",
+        "drive_put",
         "file_fetch",
         "file_list",
         "file_pin",
@@ -783,6 +793,16 @@ let agentToolsGuideJSON = #"""
         "wiki_note",
         "wiki_propose",
         "wiki_search"
+      ]
+    },
+    {
+      "id": "browser",
+      "label": "Orbit Cloud browser",
+      "tools": [
+        "browser_clear_logins",
+        "browser_open",
+        "browser_request_sign_in",
+        "browser_status"
       ]
     },
     {
@@ -881,7 +901,7 @@ let agentToolsGuideJSON = #"""
         "title": "Orbit's runtime instructions",
         "role": "system",
         "roleLabel": "System · appended",
-        "detail": "The primer 1.4.4, then the CLI's absolute path, files, evidence, progress, waits and the wiki. Appended to the system prompt, so a compaction does not touch them.",
+        "detail": "The primer 1.4.5, then the CLI's absolute path, files, evidence, progress, waits and the wiki. Appended to the system prompt, so a compaction does not touch them.",
         "source": "orbit"
       },
       {
@@ -973,7 +993,7 @@ let agentToolsGuideJSON = #"""
         "title": "Orbit's runtime instructions",
         "role": "developer",
         "roleLabel": "Developer",
-        "detail": "The primer 1.4.4, then the CLI's absolute path, files, evidence, progress, waits and the wiki. Application context, sent with every turn, so a compaction cannot drop them.",
+        "detail": "The primer 1.4.5, then the CLI's absolute path, files, evidence, progress, waits and the wiki. Application context, sent with every turn, so a compaction cannot drop them.",
         "source": "orbit",
         "when": [
           "additional_context"
@@ -996,7 +1016,7 @@ let agentToolsGuideJSON = #"""
         "title": "Orbit's runtime instructions",
         "role": "developer",
         "roleLabel": "Developer",
-        "detail": "The primer 1.4.4, then the CLI's absolute path, files, evidence, progress, waits and the wiki. One developer message, sent again after a compaction.",
+        "detail": "The primer 1.4.5, then the CLI's absolute path, files, evidence, progress, waits and the wiki. One developer message, sent again after a compaction.",
         "source": "orbit",
         "when": [
           "developer_message"
@@ -1019,7 +1039,7 @@ let agentToolsGuideJSON = #"""
         "title": "Orbit's runtime instructions",
         "role": "user",
         "roleLabel": "User · turn input",
-        "detail": "The primer 1.4.4, then the CLI's absolute path, files, evidence, progress, waits and the wiki. At the top of every turn's input.",
+        "detail": "The primer 1.4.5, then the CLI's absolute path, files, evidence, progress, waits and the wiki. At the top of every turn's input.",
         "source": "orbit",
         "when": [
           "turn_input"

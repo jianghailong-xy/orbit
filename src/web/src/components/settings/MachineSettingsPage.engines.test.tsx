@@ -209,8 +209,8 @@ describe('an engine on its machine’s page', () => {
     // Its sign-in opens under the row, on this page.
     expect(here()).toBe(`/settings/machines/${RUNNER_ID}`);
     expect(document.querySelector('[data-testid="elsewhere"]')).toBeNull();
-    const panel = $('.re-panel', claude);
-    await click(button('Sign in to Claude Code', panel));
+    // The row's press starts it (docs/runner-browser-engine-sign-in-design.md §2): no second button to press.
+    expect(text($('.re-panel', claude))).toContain('Starting sign-in on the runner');
     expect(sent).toEqual([{ method: 'POST', path: `/runners/${RUNNER_ID}/login`, body: { engine: 'claude' } }]);
     expect(here()).toBe(`/settings/machines/${RUNNER_ID}`);
   });
@@ -422,6 +422,7 @@ describe('the machine’s own controls over its engines', () => {
       reportedAt: '2026-11-18T05:00:00.000Z',
       clearRequestedAt: null,
       profileClearedAt: null,
+      savedLogins: null,
     };
     await mount(machine(), { ...MANAGED_READY, runnerId: RUNNER_ID });
     expect($$('.machine-section-browser')).toHaveLength(1);

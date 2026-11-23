@@ -40,6 +40,7 @@ func cmdMcp() {
 		allowOrchestration:    mcpOrchestrationEnabled(),
 		watchesOff:            !watchesEnabledFromEnv(),
 		wikiOff:               !wikiEnabledFromEnv(),
+		browserOn:             browserToolsEnabledFromEnv(),
 		workflowsOff:          !workflowsEnabledFromEnv(),
 		scheduleRun:           scheduleRunFromEnv(),
 		onlyTools:             mcpToolsFromEnv(),
@@ -59,6 +60,7 @@ type mcpServer struct {
 	allowOrchestration    bool   // L3: expose session_* tools (the account's orchestration switch)
 	watchesOff            bool   // spawned with ORBIT_WATCHES=off: no watch tools (watch_rollout.go)
 	wikiOff               bool   // spawned with ORBIT_WIKI=off: no wiki tools (wiki_tools.go)
+	browserOn             bool   // spawned with ORBIT_BROWSER=on: the browser tools (browser_tools.go)
 	workflowsOff          bool   // spawned with ORBIT_WORKFLOWS=off: no workflow tool (subagent_workflow.go)
 	scheduleRun           bool   // spawned with ORBIT_SCHEDULE_RUN=1: a scheduled run's session (schedule_tools.go)
 	// Spawned with ORBIT_MCP_TOOLS: these tools and no others, listed or called (the runner-hosted job an
@@ -391,6 +393,49 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	return s.withRecovery(name, args, mark, s.runTool(name, args))
 }
 
+func driveToolDescriptors(obj func(map[string]interface{}, ...string) map[string]interface{}) []map[string]interface{} {
+	drivePath := map[string]interface{}{"type": "string", "description": "A drive path such as /Proj/r.md or ~/Files/Proj/r.md."}
+	return []map[string]interface{}{
+		{
+			"name": "drive_put",
+			"description": "Copy a local file into the owner's Orbit Files drive. Creates missing parent folders and " +
+				"keeps the previous version when overwriting a file. Returns an orbit-drive: link for replies.",
+			"inputSchema": obj(map[string]interface{}{
+				"localPath": map[string]interface{}{"type": "string", "description": "A file in this session's checkout or uploads directory."},
+				"path":      drivePath,
+			}, "localPath", "path"),
+			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
+		},
+		{
+			"name":        "drive_get",
+			"description": "Download a drive file into this session's uploads directory and return its local path and size.",
+			"inputSchema": obj(map[string]interface{}{"path": drivePath}, "path"),
+			"annotations": map[string]interface{}{"readOnlyHint": true},
+		},
+		{
+			"name":        "drive_list",
+			"description": "List one page of a drive folder with each entry's path, kind, size and modification time.",
+			"inputSchema": obj(map[string]interface{}{
+				"path":   map[string]interface{}{"type": "string", "description": "The folder's drive path. Omit it to list the root."},
+				"cursor": map[string]interface{}{"type": "string", "description": "The nextCursor from the previous page."},
+			}),
+			"annotations": map[string]interface{}{"readOnlyHint": true},
+		},
+		{
+			"name":        "drive_move",
+			"description": "Move or rename a drive entry. This overwrites an existing file at the destination.",
+			"inputSchema": obj(map[string]interface{}{"from": drivePath, "to": drivePath}, "from", "to"),
+			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
+		},
+		{
+			"name":        "drive_delete",
+			"description": "Move a drive entry to the owner's Trash. The owner can restore it from the Files page. Agents cannot see Trash.",
+			"inputSchema": obj(map[string]interface{}{"path": drivePath}, "path"),
+			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": true},
+		},
+	}
+}
+
 func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string]interface{} {
 	// Runner-hosted background jobs are not a control-plane call at all: they are
 	// forwarded to the local runner over this session's socket (mcp_bg.go).
@@ -407,8 +452,16 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 	if result, handled := s.callWikiTool(name, args); handled {
 		return result
 	}
+	// And the browser tools: `orbit browser` runs the same runBrowserTool (browser_tools.go).
+	if result, handled := s.callBrowserTool(name, args); handled {
+		return result
+	}
 	// So are the file tools: `orbit file` runs the same runFileTool (file_tools.go).
 	if result, handled := s.callFileTool(name, args); handled {
+		return result
+	}
+	// The Orbit Files drive's tools: `orbit drive` runs the same runDriveTool (drive_tools.go).
+	if result, handled := s.callDriveTool(name, args); handled {
 		return result
 	}
 	// The owner's Settings: `orbit settings` runs the same runSettingsTool (settings_tools.go).
@@ -2140,6 +2193,9 @@ var ownerWaitTools = map[string]bool{
 	"task_create": true, "task_create_batch": true, "project_create": true, "project_blocker_resolve": true,
 	"tasklist_propose_dag": true, "provider_create": true, "provider_update": true, "provider_delete": true,
 	"integration_skip_merge_check": true, "runner_delete": true, "agent_delete": true,
+	"browser_clear_logins": true,
+	// The owner signing in to a site in the Orbit Cloud browser (browser_tools.go).
+	browserRequestSignInTool: true,
 }
 
 // The merge-check fields, in the spelling the server's DTO and the card both use. Everything else
@@ -2992,6 +3048,9 @@ func (s *mcpServer) permissionPrompt(args map[string]interface{}) map[string]int
 	if answer, decided := s.answerOrbitToolPrompt(args); decided {
 		return answer
 	}
+	if s.planDriveWritePrompt(args) {
+		return toolResult(denyJSON(planDriveRefusal), false)
+	}
 	body, refusal := approvalBodyOfPrompt(args)
 	if refusal != "" {
 		return toolResult(denyJSON(refusal), false)
@@ -3072,6 +3131,22 @@ func (s *mcpServer) answerOrbitToolPrompt(args map[string]interface{}) (map[stri
 		return toolResult(denyJSON(refusal), false), true
 	}
 	return toolResult(allowJSON(args["input"], nil), false), true
+}
+
+// planDriveWritePrompt reports whether Claude's permission prompt asks about a write under the Files drive in a
+// session that is in Plan mode now, which is refused without a card (plan_drive.go). The live mode is read only for a
+// call that writes there; a mode that cannot be read leaves the call to the card, as before.
+func (s *mcpServer) planDriveWritePrompt(args map[string]interface{}) bool {
+	input, _ := args["input"].(map[string]interface{})
+	if !planDriveWrite(getString(args, "tool_name"), input) {
+		return false
+	}
+	mode := s.permissionMode
+	if mode == nil {
+		mode = sessionPermissionMode
+	}
+	current, known, err := mode()
+	return known && err == nil && current == "plan"
 }
 
 // askQuestionInput rebuilds AskUserQuestion's input for an allow decision: the

@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
-import { CREATE_WORKDIR_CAPABILITY, MANAGED_RUNNER_REPOS_ROOT, newFolderRoot } from '@orbit/shared';
+import { CREATE_WORKDIR_CAPABILITY, newFolderPath, newFolderRootFor } from '@orbit/shared';
+import { runnerIsOnline, type RunnerBeats } from '../runners/runner-presence';
 
 /**
  * The workspace POST /sessions makes with a session, read from the request (docs/first-workspace-contract.md §3): the
@@ -138,41 +139,38 @@ export function isNewFolderName(value: unknown): value is string {
 }
 
 /**
- * Where a new folder goes on this runner: `<home>/<folder>` on one that declares create-workdir/v2 (home being the directory
- * its reposRoot sits in), `<reposRoot>/<folder>` on an older one (@orbit/shared newFolderRoot), or the 409 when the runner cannot make one — too old
- * to declare `create-workdir/v1`, or without a reported reposRoot. Shared by POST /sessions and POST /workspaces.
- *
- * A managed runner that has not reported yet — still being set up, or never woken since — makes it in its image's
- * fixed repos folder (MANAGED_RUNNER_REPOS_ROOT), so its first workspace can be made before it is up
- * (docs/managed-runner-no-default-workspace.md).
+ * Where a new folder goes on this runner: @orbit/shared newFolderRootFor, the rule every client's setup card shows, with
+ * `capabilities` read as [] until the runner has reported (a runner that declares nothing reads as unreported, as clients see it). A managed runner that has not reported yet makes it in its
+ * image's home (MANAGED_RUNNER_HOME), so its first workspace can be made before it is up
+ * (docs/managed-runner-no-default-workspace.md). Any other runner that cannot make one is the 409: too old to declare
+ * `create-workdir/v1`, or without a reported reposRoot. Shared by POST /sessions and POST /workspaces.
  */
 export function newFolderWorkDirOn(
-  runner: { reposRoot: string | null; capabilities: readonly string[]; capabilitiesReportedAt: Date | null; managedRunner?: { id: string } | null },
+  runner: {
+    reposRoot: string | null;
+    capabilities: readonly string[];
+    capabilitiesReportedAt: Date | null;
+    managedRunner?: { id: string } | null;
+    status: string;
+  } & RunnerBeats,
   folder: string,
 ): string {
-  if (runner.managedRunner && !runner.capabilitiesReportedAt) return newFolderWorkDir(MANAGED_RUNNER_REPOS_ROOT, folder);
-  const reposRoot = runner.reposRoot?.trim();
-  const makesFolders = !!runner.capabilitiesReportedAt && runner.capabilities.includes(CREATE_WORKDIR_CAPABILITY);
-  if (!makesFolders || !reposRoot) {
+  const capabilities = runner.capabilitiesReportedAt ? runner.capabilities : [];
+  const root = newFolderRootFor({ managed: !!runner.managedRunner, up: runnerIsOnline(runner), reposRoot: runner.reposRoot, capabilities });
+  if (root === null) {
     throw new ConflictException({
       code: 'NEW_FOLDER_UNSUPPORTED',
-      message: makesFolders
+      message: capabilities.includes(CREATE_WORKDIR_CAPABILITY)
         ? 'This runner has not reported its Repos Folder, so it cannot make a new folder. Choose an existing folder.'
         : 'This runner is too old to make a new folder — update it, or choose an existing folder.',
     });
   }
-  return newFolderWorkDir(newFolderRoot(reposRoot, runner.capabilities), folder);
+  return newFolderPath(root, folder);
 }
 
 /** A workspace's name from its folder: the path's last segment, trailing separators aside; the path itself for `/`. */
 export function folderNameOf(workDir: string): string {
   return workDir.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || workDir;
-}
-
-/** `<reposRoot>/<folder>`, with the separator the runner's own root is written with, and without doubling it. */
-export function newFolderWorkDir(reposRoot: string, folder: string): string {
-  const separator = reposRoot.includes('\\') && !reposRoot.includes('/') ? '\\' : '/';
-  return `${reposRoot.replace(/[\\/]+$/, '')}${separator}${folder}`;
 }
 
 /** `name`, or the first of `name 2`, `name 3`, … that none of `taken` already is (§3.2). */

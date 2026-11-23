@@ -36,6 +36,7 @@ import {
 } from '@orbit/shared';
 import { api } from '../api';
 import {
+  scheduleChangePath,
   scheduleClock,
   scheduleDetailQuery,
   awaitDraftFrom,
@@ -736,9 +737,8 @@ function ScheduleInspector({ schedule }: { schedule: ScheduleListRow }): JSX.Ele
       return out;
     }, []);
 
-  const change = () => navigate(`/workspaces/${encodeURIComponent(s.workspaceId)}/new`, {
-    state: { composerText: `${s.title}: ` },
-  });
+  // Change… (§8.2): the schedule's change conversation — the open one, or Orbit's opening for a new one.
+  const change = () => navigate(scheduleChangePath(s.id));
 
   const endLine = scheduleEndText(s, now, timezone);
   // The end is the agent's to change, like every other part of a schedule: the composer opens with the ask.
@@ -922,7 +922,23 @@ function ScheduleInspector({ schedule }: { schedule: ScheduleListRow }): JSX.Ele
           return (
             <div key={`rev:${record.revision}`} className="sched-history-row" data-history="revision">
               <span className="sched-history-when">{scheduleWhenText(new Date(entry.at), now, timezone)}</span>
-              <span className="sched-history-what">{scheduleRecordText(record)}</span>
+              <span className="sched-history-what">
+                {scheduleRecordText(record)}
+                {record.askedText ? (
+                  // Asked in the schedule's change conversation (§8.2): the person's words, and the way back to them.
+                  <span className="sched-history-asked">
+                    “{record.askedText}”
+                    {record.sessionId ? (
+                      <>
+                        {C.separator}
+                        <button type="button" className="sched-link" onClick={() => navigate(`/sessions/${encodeURIComponent(record.sessionId!)}`)}>
+                          {C.changeConversation.conversation}
+                        </button>
+                      </>
+                    ) : null}
+                  </span>
+                ) : null}
+              </span>
               <span className="sched-who" data-who={who.who}>{who.text}</span>
               {scheduleRecordUndoable(record) ? (
                 <button type="button" className="sched-link" disabled={undo.isPending} onClick={() => undo.mutate(record)}>

@@ -38,6 +38,9 @@ import type {
   OwnerAnswerCard,
   ProjectStartedCard,
   SessionCapabilities,
+  SessionPhase,
+  SessionTurnOutcome,
+  SessionWaitingOn,
   SessionLandingView,
   SessionMessageCard,
   SessionMessageFrom,
@@ -834,6 +837,9 @@ export const fetchUserAvatarDataUrl = (userId: string): Promise<string> =>
 /** Withdraw a still-queued message (only works before the runner picks it up). */
 export const cancelQueuedTurn = (sessionId: string, turnId: string) =>
   api(`/sessions/${sessionId}/turns/${turnId}`, { method: 'DELETE' });
+
+export const runQueuedSessionNow = (sessionId: string) =>
+  api<{ ok: true; turnId: string; alreadyPassed: boolean }>(`/sessions/${sessionId}/run-now`, { method: 'POST' });
 
 /** Send a message queued for the next turn into the one running now (the tray's Steer). It becomes
  *  the steer it would have been had it been sent that way; with no turn to join, or an engine or
@@ -2063,6 +2069,12 @@ export interface SessionDetail {
   /** Explicit runner/process state. `status` is its legacy alias. */
   runStatus?: string;
   status?: string;
+  /** The three-state field and the facts beside it (contracts/session-state.contract.json). Absent from an
+   *  older control plane; read through lib/sessionState (sessionPhaseOf, sessionReleasedOf). */
+  phase?: SessionPhase;
+  released?: boolean;
+  lastTurnOutcome?: SessionTurnOutcome | null;
+  waitingOn?: SessionWaitingOn | null;
   title?: string;
   /** The Project this Session coordinates. Null for ordinary Sessions. */
   projectId?: string | null;

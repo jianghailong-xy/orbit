@@ -484,6 +484,20 @@
       "minutes": "{minutes} min",
       "noEnd": "no end"
     },
+    "changeConversation": {
+      "title": "Change {title}",
+      "lead": "What should change about {title}? This is what it does now:",
+      "does": "Does",
+      "when": "When",
+      "runsIn": "Runs in",
+      "may": "May",
+      "costs": "Costs",
+      "tail": "I can change the time, the days, what it checks and how it reports right away, and you can undo it. More runs, longer runs, more access or another workspace need your Allow.",
+      "placeholder": "Say what to change…",
+      "openSchedule": "Open",
+      "openInScheduled": "Open in Scheduled",
+      "conversation": "conversation"
+    },
     "record": {
       "changed": "Changed {title}: {change}",
       "ended": "Ended {title}: {reason} · {by}",

@@ -201,10 +201,11 @@ describe('Antigravity Google login across client surfaces', () => {
       if (state === 'google') await clickRunnerMenuItem(engineRow, 'Re-sign in');
       // By its words: a runner that keeps Google accounts puts Add account first.
       else await act(async () => [...engineRow.querySelectorAll<HTMLButtonElement>('.re-act button')].find((b) => b.textContent === 'Sign in')!.click());
-      await act(async () => container.querySelector<HTMLButtonElement>('.rsi-btn')!.click());
+      // The row's press starts it, and opens no tab: the card offers the page once its link is there.
       await vi.waitFor(() => expect(vi.mocked(api)).toHaveBeenCalledWith(`/runners/${fixtures.google.id}/login`, { method: 'POST', body: { engine: 'antigravity' } }));
       await vi.waitFor(() => expect(container.querySelector('.rsi-input')).not.toBeNull());
-      expect(popup.location.replace).toHaveBeenCalledWith('https://example.test/authorize');
+      expect(window.open).not.toHaveBeenCalled();
+      expect(container.querySelector<HTMLAnchorElement>('a.rsi-open')?.getAttribute('href')).toBe('https://example.test/authorize');
       const input = container.querySelector<HTMLInputElement>('.rsi-input')!;
       await act(async () => {
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'google-authorization-code');

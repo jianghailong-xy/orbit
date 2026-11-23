@@ -5,6 +5,8 @@ import {
   OWNER_REQUEST_KINDS,
   OWNER_REQUEST_STATES,
   OwnerRequestNotFileable,
+  browserSignInSite,
+  browserSignInTitle,
   canTransition,
   normalizeOwnerRequest,
   ownerRequestAlert,
@@ -72,5 +74,24 @@ test('each kind has its own push category, the one the clients register its acti
     'ORBIT_OWNER_REQUEST_MANUAL_STEP',
     'ORBIT_OWNER_REQUEST_CONFIRM',
     'ORBIT_OWNER_REQUEST_WIKI_CREATE',
+    'ORBIT_OWNER_REQUEST_BROWSER_SIGN_IN',
   ]);
+});
+
+test('a BROWSER_SIGN_IN is filed only by browser_request_sign_in: request_owner_action\'s door refuses the kind', () => {
+  assert.throws(
+    () => normalizeOwnerRequest({ kind: 'BROWSER_SIGN_IN', title: 'Sign in to github.com', why: 'w' }, new Date()),
+    /filed with browser_request_sign_in/,
+  );
+  assert.deepEqual(ownerRequestAlert('BROWSER_SIGN_IN', browserSignInTitle('github.com')),
+    { title: 'Sign in needed', body: 'Sign in to github.com' });
+});
+
+test('a sign-in site is the host the agent named; a URL is cut to its host, and anything else is refused', () => {
+  assert.equal(browserSignInSite(' GitHub.com '), 'github.com');
+  assert.equal(browserSignInSite('https://user:pw@github.com/login?return_to=%2Facme'), 'github.com');
+  assert.equal(browserSignInSite('accounts.example.com:8443'), 'accounts.example.com:8443');
+  for (const bad of ['', '  ', 'github.com/login', 'not a host', '-x.com', 'x'.repeat(254), 'javascript:alert(1)']) {
+    assert.equal(browserSignInSite(bad), undefined, bad);
+  }
 });

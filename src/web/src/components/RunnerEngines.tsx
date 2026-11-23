@@ -1158,7 +1158,10 @@ function EngineRow({
       )}
       {loginEngine !== null && signIn === engine && (!googleLogin || googleLogin === 'available') && (
         <div className="re-panel">
-          <RunnerSignIn runnerId={runner.id} engine={loginEngine} />
+          {/* The row's Sign in starts the sign-in as the panel opens, as + Account does, and opens no tab: once the link
+              is there the card offers this browser or, on an Orbit Cloud runner, the runner's (docs/runner-browser-engine-
+              sign-in-design.md §2). Kimi asks which site first; Antigravity's Google terms stand on the row before the press. */}
+          <RunnerSignIn runnerId={runner.id} engine={loginEngine} autoStart={loginEngine !== 'kimi'} />
         </div>
       )}
       {addAccountTo && signIn === addAccountPanel(addAccountTo) && (
@@ -1384,6 +1387,13 @@ function AccountRow({
     onSettled: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
     onError: (e: Error) => message.error(runnerAccountSetDefaultFailed(accountNameOf(account)), e.message),
   });
+  // The failure stays on the runner's record until the owner dismisses it here, or asks again.
+  const dismissSwapFailure = useMutation({
+    mutationFn: () =>
+      api<{ ok: true }>(`/runners/${runner.id}/accounts/${engine}/${account.id}/set-default`, { method: 'DELETE' }),
+    onSettled: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
+    onError: (e: Error) => message.error("Couldn't dismiss it", e.message),
+  });
   const canSetDefault = engine === 'claude' && !isDefault;
   const setDefaultBlocked = !runner.online
     ? RUNNER_ACCOUNT_SET_DEFAULT_OFFLINE
@@ -1596,6 +1606,15 @@ function AccountRow({
       {/* The machine could not swap the logins, and put both back: its reason, as a refused removal's. */}
       {swapMine?.status === 'failed' && (
         <div className="re-panel bad re-swap-failed">
+          <button
+            type="button"
+            className="wt-notice-close re-panel-close"
+            aria-label="Dismiss"
+            disabled={dismissSwapFailure.isPending}
+            onClick={() => dismissSwapFailure.mutate()}
+          >
+            ✕
+          </button>
           <div className="re-panel-row">{runnerAccountSetDefaultFailed(accountNameOf(account))}</div>
           {swapMine.message && <div className="re-panel-row">{swapMine.message}</div>}
           <div className="re-panel-hint">{RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED}</div>
@@ -1618,7 +1637,7 @@ function AccountRow({
       )}
       {signIn === panel && (
         <div className="re-panel">
-          <RunnerSignIn runnerId={runner.id} engine={engine} account={account.id} />
+          <RunnerSignIn runnerId={runner.id} engine={engine} account={account.id} autoStart={engine !== 'kimi'} />
         </div>
       )}
     </div>

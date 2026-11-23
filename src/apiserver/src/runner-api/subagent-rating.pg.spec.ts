@@ -10,7 +10,8 @@
  *   2. GET /providers/subagent-tiers (subagentTierView) gives each model its SubAgent runs and the decayed average
  *      of their ratings ("Not enough ratings" below 5: no average), and its done tasks' first-pass rate (none below
  *      10). A run that failed on a usage limit or a model at capacity counts neither as a failure nor as a run, and
- *      another account's runs and tasks are never counted.
+ *      another account's runs and tasks are never counted. A model's figures are pooled over its every row: the
+ *      same id on another engine, and an id model_identity says is the same model.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/subagent-rating.pg.spec.ts
  *
@@ -38,6 +39,8 @@ const DAY = 86_400_000;
 const OPUS = 'claude-opus-5-5';
 const SONNET = 'claude-sonnet-5-5';
 const HAIKU = 'claude-haiku-5-5';
+/** An id the rules cannot tie to Haiku, decided to be Haiku in model_identity (as DeepSeek would): unique per run. */
+const HAIKU_ALIAS = `haiku-alias-${randomUUID()}`;
 
 const silent = (): never =>
   new Proxy({}, { get: (_target, key) => (key === 'then' ? undefined : () => undefined) }) as never;
@@ -65,6 +68,8 @@ test('subagent_rate: the parent rates its own run, and the Model tiers view read
       { value: SONNET, label: 'Sonnet 5.5', priority: 1 },
       { value: HAIKU, label: 'Haiku 5.5', priority: 2 },
     ],
+    // The same Sonnet on another engine, and an alias of Haiku.
+    antigravity: [{ value: SONNET, label: SONNET }, { value: HAIKU_ALIAS, label: HAIKU_ALIAS }],
   };
   async function account() {
     const ownerId = randomUUID();
@@ -96,6 +101,8 @@ test('subagent_rate: the parent rates its own run, and the Model tiers view read
         error: data.error ?? null, ...(data.createdAt ? { createdAt: data.createdAt } : {}),
         // A terminal status is a released session: session_release_fact_chk (1401/1402) wants finished_at with it.
         ...(['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(data.status ?? '') ? { finishedAt: data.createdAt ?? new Date() } : {}),
+        // A failure release carries FAILED on its turn (removal step R2), which is what reads it as one since R7.
+        ...(data.status === RunStatus.FAILED ? { lastTurnOutcome: 'FAILED' } : {}),
       },
     });
     return row.id;
@@ -235,5 +242,36 @@ test('subagent_rate: the parent rates its own run, and the Model tiers view read
     const opus = claude.models.find((m) => m.model === OPUS)!.quality;
     assert.equal(opus.tasks.completedTaskCount, 1);
     assert.equal(opus.tasks.firstPassRate, null, 'below 10 completed tasks: Not enough tasks');
+
+    // One model, many rows: Sonnet on Antigravity reads Claude Code's figures, and an id model_identity ties to
+    // Haiku reads Haiku's, under Haiku's identity.
+    await prisma.modelIdentity.create({ data: { ruleKey: HAIKU_ALIAS, canonicalKey: HAIKU, name: 'Claude Haiku 5.5' } });
+    const pooled = await subagentTierView(prisma as never, mine.ownerId);
+    const agy = pooled.providers.find((p) => p.slug === 'antigravity' && p.kind === 'builtin')!;
+    const agySonnet = agy.models.find((m) => m.model === SONNET)!;
+    assert.deepEqual(agySonnet.quality, sonnet, 'the same id on another engine is the same model');
+    // Named by the seed migration 1433 (069b42dd64), which knows production's ids.
+    assert.deepEqual(agySonnet.identity, { key: SONNET, name: 'Claude Sonnet 5.5' });
+    const alias = agy.models.find((m) => m.model === HAIKU_ALIAS)!;
+    assert.deepEqual(alias.quality, haiku, 'an id model_identity ties to Haiku reads Haiku');
+    assert.deepEqual(alias.identity, { key: HAIKU, name: 'Claude Haiku 5.5' });
+    await prisma.modelIdentity.delete({ where: { ruleKey: HAIKU_ALIAS } });
+
+    // An Antigravity id with its level is its base model: a run there on `claude-sonnet-5-5-high` counts for Sonnet.
+    await prisma.subagentRun.create({ data: {
+      ownerId: mine.ownerId, sessionId: parent, toolUseId: `toolu_${randomUUID()}`, type: 'general', definitionSource: 'builtin',
+      status: 'DONE', endedAt: new Date(),
+      decision: { level: 'M', engine: 'antigravity', provider: 'antigravity', model: SONNET, effort: 'high', applied: true, reasons: [] },
+      attempts: [{ engine: 'antigravity', provider: 'antigravity', model: `${SONNET}-high`, effort: 'high', attempt: 1, outcome: 'DONE',
+        startedAt: new Date().toISOString() }],
+    } });
+    const folded = await subagentTierView(prisma as never, mine.ownerId);
+    const claudeSonnet = folded.providers.find((p) => p.slug === 'claude' && p.kind === 'builtin')!.models.find((m) => m.model === SONNET)!;
+    assert.equal(claudeSonnet.quality.subagent.runCount, sonnet.subagent.runCount + 1, "an Antigravity level folds into its base model");
+
+    // 1463: the seed's `-max` models are keyed by their whole id, so Qwen3.7 Max is never taken for a plain Qwen3.7.
+    const max = await prisma.modelIdentity.findMany({ where: { ruleKey: { in: ['qwen3-7', 'qwen3-7-max', 'qwen4', 'qwen4-max'] } } });
+    assert.deepEqual(max.map((r) => [r.ruleKey, r.canonicalKey, r.name]).sort(),
+      [['qwen3-7-max', 'qwen3-7-max', 'Qwen3.7 Max'], ['qwen4-max', 'qwen4-max', 'Qwen4 Max']]);
   });
 });

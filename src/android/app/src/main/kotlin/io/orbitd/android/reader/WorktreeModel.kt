@@ -25,6 +25,27 @@ internal data class WorktreeState(val detail: JsonObject? = null, val busy: Bool
     /** The session's workspace, read for the notice of a session without a worktree. */
     val workspace: JsonObject? = null)
 
+internal data class BranchCommit(
+    val sha: String,
+    val subject: String,
+    val body: String?,
+    val committedAt: String,
+    val savedBy: String?,
+    val files: List<ChangedFile>,
+    val filesTruncated: Boolean,
+) {
+    companion object {
+        /** An empty array means no commits yet; null means the runner did not report them. */
+        fun of(detail: JsonObject): List<BranchCommit>? =
+            (detail["branchCommits"] as? JsonArray)?.filterIsInstance<JsonObject>()?.mapNotNull { commit ->
+                val sha = commit.string("sha") ?: return@mapNotNull null
+                BranchCommit(sha, commit.string("subject").orEmpty(), commit.string("body"),
+                    commit.string("committedAt").orEmpty(), commit.string("savedBy"),
+                    ChangedFile.parse(commit["files"]), (commit["filesTruncated"] as? JsonPrimitive)?.booleanOrNull == true)
+            }
+    }
+}
+
 /**
  * The worktree bar for one session (iOS `WorktreeModel`): the session detail behind the bar, polled while
  * an outcome is pending (3 s) or the session is live (5 s), the lazily read per-file diffs, and the commit /
