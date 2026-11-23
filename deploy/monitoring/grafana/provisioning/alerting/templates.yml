@@ -8,10 +8,13 @@ templates:
       [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}
       {{- end }}
       {{ define "orbit.message" -}}
-      {{ range .Alerts -}}
-      {{ .Annotations.summary }}{{ if .Labels.mountpoint }} ({{ .Labels.mountpoint }}){{ end }}
-      {{ end }}
+      {{ range $i, $a := .Alerts }}{{ if $i }}
+      {{ end }}{{ $a.Annotations.summary }}{{ if $a.Labels.mountpoint }} ({{ $a.Labels.mountpoint }}){{ end }}{{ end }}
       {{- end }}
       {{ define "orbit.ntfy" -}}
-      {{ coll.Dict "topic" .Vars.topic "title" (tmpl.Exec "orbit.title" . | strings.TrimSpace) "message" (tmpl.Exec "orbit.message" . | strings.TrimSpace) "priority" (or (and (eq .Status "firing") 4) 3) "tags" (coll.Slice (or (and (eq .Status "firing") "rotating_light") "white_check_mark")) | data.ToJSON }}
+      {{ if eq .Status "firing" -}}
+      {{ coll.Dict "topic" .Vars.topic "title" (tmpl.Exec "orbit.title" .) "message" (tmpl.Exec "orbit.message" .) "priority" 4 "tags" (coll.Slice "rotating_light") | data.ToJSON }}
+      {{- else -}}
+      {{ coll.Dict "topic" .Vars.topic "title" (tmpl.Exec "orbit.title" .) "message" (tmpl.Exec "orbit.message" .) "priority" 3 "tags" (coll.Slice "white_check_mark") | data.ToJSON }}
+      {{- end }}
       {{- end }}

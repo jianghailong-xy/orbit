@@ -1,4 +1,4 @@
-# Which contact point takes which alert. The Watchdog goes to the heartbeat URL, once a minute for as long as it fires;
+# Which contact point takes which alert. The Watchdog goes to the heartbeat URL, every minute or two for as long as it fires;
 # everything else goes to the contact point ORBIT_ALERT_CONTACT names (orbit-ntfy unless .env says otherwise).
 apiVersion: 1
 policies:

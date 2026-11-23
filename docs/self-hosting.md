@@ -550,7 +550,7 @@ only secret, and anyone who knows it can read your alerts and send you fake ones
 (the alert's name and summary, and a mount point for a disk alert); nothing else leaves the host. To keep alerts off a
 public service, run your own ntfy server and set `ORBIT_NTFY_SERVER` to it, or choose email or a webhook.
 
-**The Watchdog.** The Watchdog is an alert that always fires. Grafana sends it to `ORBIT_WATCHDOG_URL` once a minute, as
+**The Watchdog.** The Watchdog is an alert that always fires. Grafana sends it to `ORBIT_WATCHDOG_URL` about every two minutes, as
 a POST with the webhook JSON. It reads no data source, so it stops only when Grafana, or the host, stops. Give the URL
 of a dead-man's-switch service (healthchecks.io, Uptime Kuma's push monitor, Better Stack and the like) and let it
 alert you when the pings stop. With no URL the heartbeat goes to Prometheus on this host, and nothing leaves it.
