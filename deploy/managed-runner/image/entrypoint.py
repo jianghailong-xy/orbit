@@ -18,6 +18,9 @@ from urllib.parse import urlsplit
 
 # The user's persistent volume is mounted as the home directory itself.
 ROOT = Path("/home/orbit")
+# The volume's directory the template mounts at /tmp (managed-runner-resources.ts TMP_SUBPATH, channel.py TMP_SUBPATH):
+# filled, it gives the writer ENOSPC like the rest of the volume. The runner empties it (runner-go managed_tmp.go).
+TMP_NAME = ".orbit-tmp"
 UID = GID = 10001
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 GENERATION = re.compile(r"[1-9][0-9]{0,9}")
@@ -60,27 +63,30 @@ INSTANCE_FILE_ENV = "ORBIT_MANAGED_RUNNER_INSTANCE_FILE"
 
 
 def paths():
-    """Home, the runner's state, and the runner's own work directory: the repos folder, never a project in it.
+    """Home, the runner's state, and the runner's own work directory: home itself, never a project in it.
     A managed runner has no default workspace (docs/managed-runner-no-default-workspace.md): each workspace's
-    folder is made in here, or in home, by the runner when its first session is claimed."""
+    folder is made in home, or in orbit-repos for a clone, by the runner when it is first needed. The image makes
+    neither orbit-repos nor anything in it."""
     home = ROOT
     orbit = home / ".orbit"
-    return home, orbit, home / "orbit-repos"
+    return home, orbit, home
 
 
-def legacy_workdir():
-    """The work directory an earlier image created, empty, for the managed default workspace."""
-    return paths()[0] / "orbit-repos" / "default"
+def legacy_workdirs():
+    """The work directories earlier images named: `orbit-repos/default`, made empty for the managed default
+    workspace, and then the repos folder itself (until 2026-11-23)."""
+    repos = paths()[0] / "orbit-repos"
+    return repos / "default", repos
 
 
 def same_workdir(value):
-    """A retained config or marker names this volume's work directory: today's, or the earlier image's."""
-    return value in (str(paths()[2]), str(legacy_workdir()))
+    """A retained config or marker names this volume's work directory: today's, or an earlier image's."""
+    return value in (str(paths()[2]), *map(str, legacy_workdirs()))
 
 
 def directories():
-    home, orbit, workspace = paths()
-    return [home, orbit, home / ".codex", home / ".claude", workspace,
+    home, orbit, _ = paths()
+    return [home, orbit, home / ".codex", home / ".claude",
             *[orbit / name for name in ("runs", "worktrees", "uploads", "codex-state")]]
 
 
@@ -122,6 +128,20 @@ def prepare(initialize=False):
 def init_volume():
     # Scoped one-shot init: no recursive chown, credentials, network, or runner start.
     prepare(initialize=True)
+    prepare_tmp()
+
+
+def prepare_tmp():
+    """The volume's /tmp directory, open to all with the sticky bit as /tmp is. The kubelet makes a subPath it does
+    not find root-owned with the volume root's mode (0700), which UID 10001 cannot write. Anything else in its place
+    (a link, which would mount another directory at /tmp, or a file) is replaced by the directory. Absent, it is
+    left absent: the template that mounts it makes it, and an earlier one has a /tmp of its own."""
+    path = paths()[0] / TMP_NAME
+    if path.is_symlink() or (path.exists() and not path.is_dir()):
+        path.unlink()
+        path.mkdir()
+    if path.is_dir():
+        os.chmod(path, 0o1777)
 
 
 def clean_env():
@@ -232,6 +252,7 @@ def load_identity():
 
 def register():
     home, orbit, workspace = paths()
+    repos = home / "orbit-repos"
     pending = orbit / "registration-pending.json"
     if pending.exists() or (orbit / "container-identity.json").exists():
         raise ValueError("registration result is uncertain; reconcile it without re-enrolling")
@@ -239,9 +260,12 @@ def register():
     if (any(any((orbit / name).iterdir()) for name in state_dirs)
             or any(path.name not in (*state_dirs, "container.lock") for path in orbit.iterdir())
             or any(any((home / name).iterdir()) for name in (".codex", ".claude"))
-            or any(workspace.iterdir())
+            # An earlier image made orbit-repos, empty, before its first registration.
+            or ((repos.exists() or repos.is_symlink())
+                and (repos.is_symlink() or not repos.is_dir() or any(repos.iterdir())))
             # lost+found: an ext4 volume's own, at its root, which is home.
-            or any(path.name not in (".orbit", ".codex", ".claude", "orbit-repos", "lost+found")
+            # TMP_NAME: the template's /tmp, made by the kubelet before any container starts.
+            or any(path.name not in (".orbit", ".codex", ".claude", "orbit-repos", "lost+found", TMP_NAME)
                    for path in home.iterdir())):
         raise ValueError("retained session/repository data has no config; restore the original identity")
     name = os.environ.get("ORBIT_RUNNER_NAME", "").strip()
@@ -574,25 +598,21 @@ def rewrite_earlier_paths():
 
 def retire_legacy_workdir():
     """Move a volume an earlier image ran on to today's work directory, under the volume lock: its config and
-    identity marker name the repos folder instead of `orbit-repos/default`, and that folder goes if it is still the
-    empty one the image made. One with anything in it is somebody's project and stays. Each step is durable and
-    can run again: a start stopped half-way finishes the move on the next one."""
+    identity marker name home instead of `orbit-repos/default` or `orbit-repos`, and `orbit-repos/default` goes if
+    it is still the empty one the image made. One with anything in it is somebody's project and stays, and so does
+    orbit-repos, where the runner keeps its clones. Each step is durable and can run again: a start stopped half-way
+    finishes the move on the next one."""
     _, orbit, workspace = paths()
-    legacy = str(legacy_workdir())
+    old, repos = legacy_workdirs()
     for name in ("config.json", "container-identity.json"):
         path = orbit / name
         if path.exists():
             value = read_json(path)
-            if isinstance(value, dict) and value.get("workDir") == legacy:
+            if isinstance(value, dict) and value.get("workDir") in (str(old), str(repos)):
                 durable_json(path, {**value, "workDir": str(workspace)})
-    old = legacy_workdir()
     if old.is_dir() and not old.is_symlink() and not any(old.iterdir()):
         old.rmdir()
-        directory_fd = os.open(workspace, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
+        fsync_directory(repos)
 
 
 def run():

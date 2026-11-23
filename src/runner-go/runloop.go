@@ -2843,10 +2843,6 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			// secrets: until then the scrubber does not know them (secretStore.waitReady). Bounded, so a control
 			// plane that does not answer holds nothing up for long.
 			secrets.waitReady(loopCtx, secretStartupWait)
-			// A reclaimed turn starts only above the data volume's free-space reserve (managed_disk_reserve.go).
-			if activeAtRegister && j.Reclaimed {
-				waitForAdmission(jobCtx, loopCtx, pool, j.SessionID, dataVolumeCheckInterval)
-			}
 			runInteractiveSession(t, j, jobCtx, loopCtx, dir, codexUsage.mergeCodexRateLimits, pool, live)
 		}(job, execDir, s, initiallyActive)
 	}

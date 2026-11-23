@@ -126,6 +126,13 @@ The channel reports `volumeLimitMode` in `/v1/info` and logs the mode at startup
 [The operations runbook](../../../docs/managed-runner-docker-operations.md#filesystem-limits-for-docker-data-volumes)
 covers host setup, migration and verification.
 
+## `/tmp` on the data volume
+
+Docker mounts the data volume’s `.orbit-tmp` directory at `/tmp` with `VolumeOptions.Subpath`. Before each
+create, the channel makes the directory root-owned with mode 1777 through a temporary container that never
+starts. The runner clears it at startup and after the last active session ends. The API still validates
+`resources.tmpBytes` against `limits.maxTmpBytes` for compatibility. Both paths share the volume’s capacity.
+
 ## Fencing receipt
 
 On one host Docker reports every stop it makes, so the manager needs an operator's receipt only for a
