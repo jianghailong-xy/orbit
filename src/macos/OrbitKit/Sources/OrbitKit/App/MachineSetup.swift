@@ -105,6 +105,8 @@ public enum MachineSetup {
     public static let createWorkDirCapability = "create-workdir/v1"
     /// What a runner declares when it clones a GitHub repository on request (docs/github-workspace-design.md §6).
     public static let cloneWorkDirCapability = "clone-workdir/v1"
+    /// What a runner declares when it clones into its home, the directory its reposRoot sits in, rather than reposRoot.
+    public static let cloneWorkDirHomeCapability = "clone-workdir/v2"
     /// What a runner declares when it makes a new folder in its home, the directory its reposRoot sits in
     /// (`<home>/orbit-repos`): `newFolder` is then `<home>/<name>` rather than `<reposRoot>/<name>`.
     public static let createWorkDirHomeCapability = "create-workdir/v2"
@@ -113,27 +115,40 @@ public enum MachineSetup {
     /// create-workdir/v2, else reposRoot itself (@orbit/shared `newFolderRoot`, as the server joins it). The
     /// separator is the one the root is written with.
     public static func newFolderRoot(reposRoot: String, capabilities: [String]?) -> String {
+        capabilities?.contains(createWorkDirHomeCapability) == true ? homeOfReposRoot(reposRoot) : trimReposRoot(reposRoot)
+    }
+
+    private static func trimReposRoot(_ reposRoot: String) -> String {
         var root = reposRoot.trimmingCharacters(in: .whitespacesAndNewlines)
         while root.count > 1, root.hasSuffix("/") || root.hasSuffix("\\") { root.removeLast() }
-        guard capabilities?.contains(createWorkDirHomeCapability) == true,
-              let cut = root.lastIndex(where: { $0 == "/" || $0 == "\\" }) else { return root }
+        return root
+    }
+
+    /// The directory a reported reposRoot sits in: the machine's home (`<home>/orbit-repos`).
+    private static func homeOfReposRoot(_ reposRoot: String) -> String {
+        let root = trimReposRoot(reposRoot)
+        guard let cut = root.lastIndex(where: { $0 == "/" || $0 == "\\" }) else { return root }
         // `/orbit-repos` sits in `/`, and `C:\orbit-repos` in `C:\`.
         if cut == root.startIndex || root[root.index(before: cut)] == ":" { return String(root[...cut]) }
         return String(root[..<cut])
     }
 
-    /// The directory the folder step's name goes in: the machine's home on one that declares create-workdir/v2,
-    /// its Repos Folder on an older one.
-    public static func newFolderRoot(_ runner: Runner) -> String {
-        newFolderRoot(reposRoot: runner.reposRoot ?? "", capabilities: runner.capabilities)
+    /// Where a new folder named on this runner goes, as the server makes it: port of @orbit/shared `newFolderRootFor`,
+    /// held to src/shared/src/new-folder-root.fixture.json. A managed runner that has not reported yet takes its image's
+    /// home, whatever Repos Folder is stored from before; a runner that makes new folders and has reported its
+    /// Repos Folder takes `newFolderRoot`; any other makes none (nil).
+    public static func newFolderRootFor(managed: Bool, reposRoot: String?, capabilities: [String]?) -> String? {
+        if managed, capabilities?.isEmpty ?? true { return ManagedRunnerCopy.Setup.home }
+        let root = (reposRoot ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !root.isEmpty, capabilities?.contains(createWorkDirCapability) == true else { return nil }
+        return newFolderRoot(reposRoot: root, capabilities: capabilities)
     }
 
-    /// A managed runner can take a new folder before its first heartbeat.
+    /// The setup card's root: `newFolderRootFor`, the account's managed runner read as managed while it is set up or
+    /// asleep. Only a usable card shows or sends it, and a managed runner always has one, so "" is never drawn.
     public static func setupFolderRoot(_ runner: Runner, managedState: ManagedSetupState?) -> String {
-        if managedState != nil, (runner.reposRoot ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return ManagedRunnerCopy.Setup.reposRoot
-        }
-        return newFolderRoot(runner)
+        newFolderRootFor(managed: runner.managed == true || managedState != nil, reposRoot: runner.reposRoot,
+                         capabilities: runner.capabilities) ?? ""
     }
 
     public static func uncheckedFolder(name: String, root: String) -> PickedFolder? {
@@ -154,9 +169,19 @@ public enum MachineSetup {
 
     /// Whether a machine clones a GitHub repository on request: it declares clone-workdir/v1 and has reported the
     /// Repos Folder the clone goes in. POST /sessions refuses either missing.
-    public static func clonesRepositories(_ runner: Runner) -> Bool {
-        runner.capabilities?.contains(cloneWorkDirCapability) == true
-            && !(runner.reposRoot ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    public static func clonesRepositories(_ runner: Runner) -> Bool { cloneRoot(runner) != nil }
+
+    /// Where a GitHub workspace's clone goes, as the server puts it: port of @orbit/shared `cloneRootFor`, held to
+    /// src/shared/src/new-folder-root.fixture.json `clones`. Home on a runner that declares clone-workdir/v2,
+    /// reposRoot on an older one, nil on one that does not clone or has not reported its reposRoot.
+    public static func cloneRootFor(reposRoot: String?, capabilities: [String]?) -> String? {
+        let root = (reposRoot ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !root.isEmpty, let capabilities, capabilities.contains(cloneWorkDirCapability) else { return nil }
+        return capabilities.contains(cloneWorkDirHomeCapability) ? homeOfReposRoot(root) : trimReposRoot(root)
+    }
+
+    public static func cloneRoot(_ runner: Runner) -> String? {
+        cloneRootFor(reposRoot: runner.reposRoot, capabilities: runner.capabilities)
     }
 
     /// A path as the board writes it: the home folder as `~` (`/Users/austin/orbit-repos/x` → `~/orbit-repos/x`).

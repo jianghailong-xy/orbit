@@ -120,6 +120,7 @@ func init() {
 		dirProbeCapabilityV1,
 		createWorkDirCapabilityV1,
 		cloneWorkDirCapabilityV1,
+		cloneWorkDirCapabilityV2,
 		conditionProbeCapabilityV1,
 		createWorkDirCapabilityV2,
 		claudeRegionCapabilityV1,
@@ -142,7 +143,7 @@ func init() {
 	}
 	// Only a runner the managed image's entrypoint started has the browser (browser_supervisor.go).
 	if declaresBrowserClear(os.LookupEnv) {
-		runnerCapabilitiesV1 += "," + browserClearCapabilityV1 + "," + browserOpenCapabilityV1
+		runnerCapabilitiesV1 += "," + browserClearCapabilityV1 + "," + browserOpenCapabilityV1 + "," + loginRunnerBrowserCapabilityV1
 	}
 }
 

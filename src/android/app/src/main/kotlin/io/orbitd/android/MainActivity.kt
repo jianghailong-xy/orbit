@@ -66,6 +66,7 @@ import io.orbitd.android.cards.OwnerRequestStore
 import io.orbitd.android.cards.WaitingOnYouDestination
 import io.orbitd.android.core.schedule.ScheduleCopy
 import io.orbitd.android.schedule.ScheduledDrawerCount
+import io.orbitd.android.schedule.ScheduleChangePage
 import io.orbitd.android.schedule.ScheduledPage
 import io.orbitd.android.schedule.ScheduledStore
 import io.orbitd.android.cards.WaitingOnYouDrawerCount
@@ -530,13 +531,21 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.BUILD -> BuildInformation { navigation = navigation.back() }
                                 Destination.GUEST_SESSION -> route.id?.let { GuestSessionPage(app, signedIn.handle, route, it) }
                                 Destination.WAITING_ON_YOU -> WaitingOnYouDestination(app, signedIn.handle, route, data, revision, ::open, ::openScheduledRun)
-                                // The timeline (board 01 ②) has its own bottom sheet. Change… starts a conversation in the schedule's workspace.
+                                // The timeline (board 01 ②) has its own bottom sheet. Change… opens the schedule's draft
+                                // change conversation (§8.2), no longer a blank new session.
                                 Destination.SCHEDULED -> ScheduledPage(remember(signedIn.handle) { ScheduledStore.of(app.session, signedIn.handle, app.processScope) },
                                     workspaces.map { it.id to it.name }, lastWorkspace.id, route.id,
                                     openSession = { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LIST)) },
                                     openRun = ::openScheduledRun,
-                                    change = { open(OrbitRoute(Destination.DRAFT, workspaceId = it.workspaceId, origin = Origin.LIST)) },
+                                    change = { open(OrbitRoute(Destination.SCHEDULE_CHANGE, ObjectId.canonical(it.id) ?: it.id, origin = Origin.LIST)) },
                                     openTask = { open(OrbitRoute(Destination.TASK, it, origin = Origin.LIST)) })
+                                // A schedule's Change… (§8.2, board 03-change ③): the draft change conversation. The
+                                // conversation it opens — or the one already open — takes the page's place.
+                                Destination.SCHEDULE_CHANGE -> route.id?.let { scheduleId ->
+                                    ScheduleChangePage(remember(signedIn.handle) { ScheduledStore.of(app.session, signedIn.handle, app.processScope) }, scheduleId,
+                                        openSession = { keyboard?.hide(); focus.clearFocus(); navigation = navigation.back().push(OrbitRoute(Destination.SESSION, it, origin = Origin.LIST)) },
+                                        openSchedule = { open(OrbitRoute(Destination.SCHEDULED, ObjectId.canonical(it) ?: it, origin = Origin.LIST)) })
+                                }
                                 else -> ObjectDestination(route, api, data, revision, ::open) { app.realtime.refreshDirectory() }
                             }
                         }
@@ -593,6 +602,8 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     Destination.WAITING_ON_YOU -> WAITING_ON_YOU
     // The page draws its own large "Scheduled" (board 01 ②).
     Destination.SCHEDULED -> ""
+    // The page draws its own "Change {title}" once the opening has been read (board 03-change ③).
+    Destination.SCHEDULE_CHANGE -> ""
     Destination.GUEST_SESSION -> io.orbitd.android.core.guests.GuestCopy.SHARED_WITH_ME
     Destination.SETTINGS -> if (route.id == "workspace") data.workspaces.firstOrNull { ObjectId.same(it.id, route.workspaceId) }?.name
         ?.let { "$it settings" } ?: settingsTitle(route.id) else settingsTitle(route.id, route.recordId)
