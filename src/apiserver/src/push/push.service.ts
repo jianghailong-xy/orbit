@@ -883,7 +883,7 @@ export class PushService {
             sessionId: input.sessionId ?? null,
             openUrl: orbitUrl({ sessionId: input.sessionId }),
             // The whole message: a card has room for more than a banner (FULL only, §6.4).
-            render: async () => ({ kind: 'agent-message', sessionTitle: title, message: input.message.trim() }),
+            render: async () => ({ kind: 'agent-message', sessionTitle: title, message: input.message.trim(), ...(input.sessionId ? {} : { sessionless: true }) }),
           })
           : false,
       ]);

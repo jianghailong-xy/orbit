@@ -44,6 +44,8 @@ async function capturedClaimCapability(supportedProviders: AgentProvider[]): Pro
     // than a tagged template: literal segments in `strings`, bound parameters in `values`.
     $queryRaw: async (...args: unknown[]) => {
       const rendered = renderRawQuery(args);
+      // Only the claim statement: Run now's pass check (an EXISTS) follows a claim that took nothing.
+      if (!rendered.text.includes('UPDATE "session" SET')) return [];
       sql = rendered.text;
       values = [...rendered.values];
       segments = rendered.strings;

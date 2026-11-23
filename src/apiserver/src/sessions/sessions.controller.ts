@@ -8,6 +8,7 @@ import {
   Header,
   Headers,
   HttpCode,
+  HttpStatus,
   MessageEvent,
   Optional,
   Param,
@@ -15,6 +16,7 @@ import {
   Post,
   Put,
   Query,
+  Req,
   Res,
   Sse,
   StreamableFile,
@@ -36,6 +38,7 @@ import { TerminalRoute } from '../auth/terminal-credentials';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { untilStopping } from '../common/graceful-stop';
 import { senderClientOfRequest } from './turn-sender-client';
+import { actingSession } from '../wiki/wiki.controller';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SetSessionTagsDto } from '../session-tags/dto';
@@ -850,6 +853,23 @@ export class SessionsController {
   @Post(':id/pin')
   pin(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.pin(user.userId, id);
+  }
+
+  /**
+   * Run now (docs/mocks/queued-run-now): start this session's queued message at once, over its runner's limit, for that
+   * one turn. A person's own act (decision E): a token is refused here, a terminal by TERMINAL_REFUSED_ROUTES, and a
+   * request carrying an acting session RUN_NOW_OWNER_CHANNEL_ONLY. 409 RUN_NOW_REFUSED with the English reason when
+   * a free slot would not start it, or the runner cannot take one more (run-now.ts).
+   */
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Post(':id/run-now')
+  @HttpCode(HttpStatus.OK)
+  runNow(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.sessions.runNow(user.userId, id, actingSession(request.headers));
   }
 
   /** Remove this session's pin. */

@@ -150,6 +150,19 @@ class PersonalSettingsTest {
         }
     }
 
+    /** A server that lists a kind this build does not draw (DRIVE_FILE) must not take the other links with it. */
+    @Test fun aDriveFileLinkIsSkippedAndTheOtherLinksStillList() {
+        fun link(id: String, kind: String) = """{"id":"$id","token":"t$id","kind":"$kind","state":"ACTIVE","root":{"id":"r$id","title":"x"},"include":{}}"""
+        val listed = sharingList(Json.parseToJsonElement("""{"links":[${link("1", "SESSION")},${link("2", "DRIVE_FILE")},${link("3", "WIKI")}]}""")).list("links")
+        assertEquals(listOf("1", "3"), listed.map { it.text("id") })
+    }
+
+    /** An `orbit-drive:` link in a reply is not a route and not a file this build reads: the link handler says it is unavailable. */
+    @Test fun anOrbitDriveLinkIsNeitherARouteNorAFileRequest() {
+        assertNull(io.orbitd.android.navigation.OrbitLinks.parse("orbit-drive:0123456789abcdef", "https://orbit.example"))
+        assertNull(io.orbitd.android.text.resourceRequest("orbit-drive:0123456789abcdef", "s1"))
+    }
+
     @Test fun malformedShareSuccessCannotAssertPrivateOrEmptyState() {
         val empty = JsonObject(emptyMap())
         listOf<JsonElement>(JsonNull, empty, JsonArray(emptyList()), buildJsonObject { put("links", JsonNull) }).forEach {

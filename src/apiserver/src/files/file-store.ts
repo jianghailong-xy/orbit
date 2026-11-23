@@ -1,6 +1,6 @@
 import type { Logger } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
-import { close, createReadStream, createWriteStream, open as openWithCallback, type ReadStream, type WriteStream } from 'node:fs';
+import { close, createReadStream, createWriteStream, fstat as fstatWithCallback, open as openWithCallback, type ReadStream, type WriteStream } from 'node:fs';
 import { lstat, mkdir, open, readdir, rename, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { Transform, type Readable } from 'node:stream';
@@ -12,6 +12,15 @@ import { promisify } from 'node:util';
  * each content's sha256. `file_blob.storage` names the store a content is in.
  */
 export type FileStorage = 'local' | 's3';
+
+/**
+ * Bytes `start` through `end` of a content, both counted from 0 and both included, as an HTTP `Range: bytes=start-end`
+ * spells them. `end` past the content's last byte reads to its end; `start` past it is an error.
+ */
+export interface ByteRange {
+  start: number;
+  end: number;
+}
 
 /**
  * One store. Content-addressed and write-once: a name always holds the same bytes, so storing a name
@@ -27,13 +36,27 @@ export interface FileStore {
    */
   put(sha256: string, tempPath: string, sizeBytes: number): Promise<void>;
   /**
-   * The bytes named `sha256`, read as a stream that whoever takes it reads to the end or destroys; null when they
-   * are not kept here.
+   * The bytes named `sha256`, or only `range` of them, read as a stream that whoever takes it reads to the end or
+   * destroys; null when they are not kept here.
    */
-  open(sha256: string): Promise<Readable | null>;
+  open(sha256: string, range?: ByteRange): Promise<Readable | null>;
   /** Let the bytes named `sha256` go (file-retention.ts is the one caller). Bytes already gone are no error. */
   remove(sha256: string): Promise<void>;
+  /**
+   * Every object in the store named like a content (`files orphans`, file-integrity.ts): the sha256, the bytes it holds and
+   * when it was last written. Anything else in the directory or bucket is not listed.
+   */
+  list(): AsyncIterable<StoredObject>;
 }
+
+/** One object a store lists. */
+export interface StoredObject {
+  sha256: string;
+  sizeBytes: number;
+  modifiedAt: Date;
+}
+
+export const SHA256_NAME = /^[0-9a-f]{64}$/;
 
 /** The S3-compatible bucket a deployment keeps files in (`ORBIT_FILES_BACKEND=s3`). */
 export interface S3FilesConfig {
@@ -57,8 +80,12 @@ export interface FilesConfig {
   storage: FileStorage;
   /** Set exactly when `storage` is `s3`. */
   s3?: S3FilesConfig;
+  /** The deployment mirrors its bucket off host (ORBIT_FILES_S3_MIRROR=1), so s3 bytes are in the off-host copy as local ones are. */
+  s3Mirror?: boolean;
   /** The most one account may keep (ORBIT_FILES_QUOTA_BYTES). Unset: no limit, a self-hosted deployment's default. */
   quotaBytes?: number;
+  /** Configured capacity of the S3 store, shared by all accounts. */
+  storeQuotaBytes?: number;
   /**
    * How far back a retained Postgres backup reaches: ORBIT_BASE_BACKUP_INTERVAL × (ORBIT_BASE_BACKUP_KEEP + 1), from the two
    * values the backup sidecar keeps its base backups by. A backup stays until that many newer ones have finished, and each
@@ -92,7 +119,11 @@ function fileLimitsFrom(env: NodeJS.ProcessEnv): Pick<FilesConfig, 'quotaBytes' 
   const interval = positiveIntegerFrom(env, 'ORBIT_BASE_BACKUP_INTERVAL', 86_400);
   const keep = positiveIntegerFrom(env, 'ORBIT_BASE_BACKUP_KEEP', 2);
   const quotaBytes = positiveIntegerFrom(env, 'ORBIT_FILES_QUOTA_BYTES');
-  return { ...(quotaBytes ? { quotaBytes } : {}), backupRetentionMs: interval * (keep + 1) * 1000 };
+  return {
+    ...(quotaBytes ? { quotaBytes } : {}),
+    backupRetentionMs: interval * (keep + 1) * 1000,
+    ...(env.ORBIT_FILES_S3_MIRROR?.trim() === '1' ? { s3Mirror: true } : {}),
+  };
 }
 
 /** Where uploads are written while they arrive: inside the files directory, so that keeping one in the
@@ -133,7 +164,8 @@ export function filesConfigFrom(env: NodeJS.ProcessEnv = process.env): FilesConf
   if (!/^https?:\/\//.test(s3.endpoint)) {
     throw new Error(`ORBIT_FILES_S3_ENDPOINT must be an http:// or https:// URL, not "${s3.endpoint}"`);
   }
-  return { dir, storage: 's3', s3, ...limits };
+  const storeQuotaBytes = positiveIntegerFrom(env, 'ORBIT_FILES_STORE_QUOTA_BYTES');
+  return { dir, storage: 's3', s3, ...limits, ...(storeQuotaBytes ? { storeQuotaBytes } : {}) };
 }
 
 /**
@@ -141,6 +173,16 @@ export function filesConfigFrom(env: NodeJS.ProcessEnv = process.env): FilesConf
  * not be left to be collected: a descriptor can be given back when it is (closedWhenDropped).
  */
 const openDescriptor = promisify(openWithCallback);
+const fstat = promisify(fstatWithCallback);
+
+/** Refuse a range that is not one, or that starts past the last byte of a content of `size` bytes. */
+export function assertRange(range: ByteRange, size?: number): void {
+  const { start, end } = range;
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start) {
+    throw new RangeError(`not a byte range: ${start}-${end}`);
+  }
+  if (size !== undefined && start >= size) throw new RangeError(`the range ${start}-${end} starts past the end of ${size} bytes`);
+}
 
 const droppedStreams = new FinalizationRegistry<number>((fd) => close(fd, () => undefined));
 
@@ -162,16 +204,25 @@ export interface HashedTempFile {
   sha256: string;
 }
 
+/** What writeHashedTempFile fails with when the source runs past its `maxBytes`. */
+export class TempFileTooLargeError extends Error {
+  constructor(readonly maxBytes: number) {
+    super(`more than ${maxBytes} bytes`);
+  }
+}
+
 /**
  * Write `source` to a new file in `dir`, hashing the bytes as they pass: the one read of an upload, so it
  * is never held in memory whole. `onPath` is told the file's path before the first byte is written, for a
  * caller that must be able to remove it while it is still being written. The data is flushed to disk
- * before this resolves; on failure the file is removed.
+ * before this resolves; on failure the file is removed. With `maxBytes`, a source that runs past it fails with
+ * TempFileTooLargeError as soon as it does, so no more than that is ever written.
  */
 export async function writeHashedTempFile(
   source: Readable,
   dir: string,
   onPath?: (tempPath: string) => void,
+  maxBytes?: number,
 ): Promise<HashedTempFile> {
   await mkdir(dir, { recursive: true });
   const tempPath = path.join(dir, `upload-${randomUUID()}`);
@@ -182,8 +233,12 @@ export async function writeHashedTempFile(
   let size = 0;
   const hashing = new Transform({
     transform(chunk: Buffer, _encoding, done) {
-      hash.update(chunk);
       size += chunk.length;
+      if (maxBytes !== undefined && size > maxBytes) {
+        done(new TempFileTooLargeError(maxBytes));
+        return;
+      }
+      hash.update(chunk);
       done(null, chunk);
     },
   });
@@ -289,7 +344,7 @@ export class LocalFileStore implements FileStore {
     }
   }
 
-  async open(sha256: string): Promise<Readable | null> {
+  async open(sha256: string, range?: ByteRange): Promise<Readable | null> {
     const file = this.pathOf(sha256);
     let fd: number;
     try {
@@ -298,10 +353,46 @@ export class LocalFileStore implements FileStore {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
       throw error;
     }
-    return closedWhenDropped(createReadStream(file, { fd }), fd);
+    if (range) {
+      try {
+        assertRange(range, (await fstat(fd)).size);
+      } catch (error) {
+        close(fd, () => undefined);
+        throw error;
+      }
+    }
+    return closedWhenDropped(createReadStream(file, { fd, ...(range ? { start: range.start, end: range.end } : {}) }), fd);
   }
 
   async remove(sha256: string): Promise<void> {
     await removeTempFile(this.pathOf(sha256));
+  }
+
+  async *list(): AsyncIterable<StoredObject> {
+    let prefixes: string[];
+    try {
+      prefixes = await readdir(this.dir);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw error;
+    }
+    for (const prefix of prefixes.filter((name) => /^[0-9a-f]{2}$/.test(name)).sort()) {
+      let names: string[];
+      try {
+        names = await readdir(path.join(this.dir, prefix));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT' || (error as NodeJS.ErrnoException).code === 'ENOTDIR') continue;
+        throw error;
+      }
+      for (const name of names.sort()) {
+        if (!SHA256_NAME.test(name) || !name.startsWith(prefix)) continue;
+        try {
+          const entry = await lstat(path.join(this.dir, prefix, name));
+          if (entry.isFile()) yield { sha256: name, sizeBytes: entry.size, modifiedAt: new Date(entry.mtimeMs) };
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        }
+      }
+    }
   }
 }
