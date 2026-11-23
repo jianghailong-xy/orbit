@@ -6,6 +6,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { Logger } from '@nestjs/common';
 import { FileIntegrity, scrubSlotAtOrBefore } from './file-integrity';
 import { sigV4Authorization } from './s3-file-store';
 import { FilesService } from './files.service';
@@ -75,17 +76,26 @@ async function fakeBucket(t: test.TestContext, objects: Map<string, { bytes: Buf
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }
 
-function setup(blobs: Blob[], endpoint: string, dir: string) {
+function setup(blobs: Blob[], endpoint: string, dir: string, driveChunks: ReadonlyMap<string, string> = new Map()) {
   const prisma = {
     fileBlob: {
-      findMany: async (args: { where: { sha256: { in?: string[]; gt?: string } }; take?: number }) => {
-        const w = args.where.sha256;
-        const rows = blobs.filter((b) => (w.in ? w.in.includes(b.sha256) : true) && (w.gt !== undefined ? b.sha256 > w.gt : true) && (args.where as { bytesDeletedAt?: null }).bytesDeletedAt === undefined || b.bytesDeletedAt === null && (w.gt !== undefined ? b.sha256 > w.gt : true));
-        return rows.sort((a, b) => (a.sha256 < b.sha256 ? -1 : 1)).slice(0, args.take ?? 1e9);
+      findMany: async ({ where, take }: { where: { sha256: { in?: string[]; gt?: string }; bytesDeletedAt?: null }; take?: number }) => {
+        const { in: hashes, gt: after } = where.sha256;
+        const rows = blobs.filter((b) =>
+          (hashes === undefined || hashes.includes(b.sha256))
+          && (after === undefined || b.sha256 > after)
+          && (where.bytesDeletedAt === undefined || b.bytesDeletedAt === where.bytesDeletedAt),
+        );
+        return rows.sort((a, b) => a.sha256.localeCompare(b.sha256)).slice(0, take ?? rows.length);
       },
       findUnique: async ({ where }: { where: { sha256: string } }) => blobs.find((b) => b.sha256 === where.sha256) ?? null,
     },
-    driveVersionChunk: { findMany: async () => [{ versionId: 'v1' }] },
+    driveVersionChunk: {
+      findMany: async ({ where }: { where: { sha256: string } }) => {
+        const versionId = driveChunks.get(where.sha256);
+        return versionId === undefined ? [] : [{ versionId }];
+      },
+    },
     attachment: { count: async () => 0 },
   };
   const files = new FilesService(prisma as never, {
@@ -96,7 +106,7 @@ function setup(blobs: Blob[], endpoint: string, dir: string) {
   return new FileIntegrity(prisma as never, files);
 }
 
-test('files orphans lists an object no row names only after the grace period, on both stores, and deletes nothing in report mode', async (t) => {
+test('files orphans finds unreferenced drive bytes after grace and protects drive-only references on local and S3', async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), 'orbit-orphans-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const put = (name: string, ageDays: number) => {
@@ -109,9 +119,9 @@ test('files orphans lists an object no row names only after the grace period, on
     utimesSync(file, at, at);
     return { id, file, bytes, modified: at };
   };
-  const oldOrphan = put('old orphan', 10);
+  const oldOrphan = put('old uncommitted drive chunk', 10);
   const youngOrphan = put('young orphan', 1);
-  const named = put('named', 30);
+  const named = put('committed drive chunk', 30);
   writeFileSync(path.join(dir, 'stray.txt'), 'not a content');
   const bucket = new Map<string, { bytes: Buffer; modified: Date }>();
   const s3 = (name: string, ageDays: number) => {
@@ -119,15 +129,16 @@ test('files orphans lists an object no row names only after the grace period, on
     bucket.set(sha(bytes), { bytes, modified: new Date(NOW.getTime() - ageDays * DAY) });
     return sha(bytes);
   };
-  const s3Old = s3('old orphan', 10);
+  const s3Old = s3('old uncommitted drive chunk', 10);
   const s3Young = s3('young orphan', 2);
-  const s3Named = s3('named', 40);
+  const s3Named = s3('committed drive chunk', 40);
   const s3Old2 = s3('old orphan two', 9);
   const endpoint = await fakeBucket(t, bucket);
   const integrity = setup(
     [{ sha256: named.id, storage: 'local', bytesDeletedAt: null }, { sha256: s3Named, storage: 's3', bytesDeletedAt: null }],
     endpoint,
     dir,
+    new Map([[named.id, 'local-version'], [s3Named, 's3-version']]),
   );
 
   const report = await integrity.orphans({ now: NOW });
@@ -141,35 +152,13 @@ test('files orphans lists an object no row names only after the grace period, on
   assert.deepEqual(new Set(remote.sample), new Set([s3Old, s3Old2]));
   assert.ok(existsSync(oldOrphan.file) && existsSync(youngOrphan.file) && bucket.has(s3Old) && bucket.has(s3Young), 'report mode deletes nothing');
 
-  // The scrub is report mode.
-  assert.equal((await integrity.scrub(NOW)).reduce((n, r) => n + r.removed, 0), 0);
-  assert.ok(existsSync(oldOrphan.file) && bucket.has(s3Old));
-
   const deleted = await integrity.orphans({ now: NOW, remove: true });
   assert.deepEqual(deleted.map((r) => r.removed), [1, 2]);
   assert.ok(!existsSync(oldOrphan.file) && !bucket.has(s3Old) && !bucket.has(s3Old2));
   assert.ok(existsSync(youngOrphan.file) && existsSync(named.file) && bucket.has(s3Young) && bucket.has(s3Named), 'only old orphans go');
 });
 
-test('the scrub is report-only whatever it finds', async (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), 'orbit-scrub-'));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const bytes = Buffer.from('lonely');
-  const id = sha(bytes);
-  mkdirSync(path.join(dir, id.slice(0, 2)), { recursive: true });
-  const file = path.join(dir, id.slice(0, 2), id);
-  writeFileSync(file, bytes);
-  const old = new Date(NOW.getTime() - 100 * DAY);
-  utimesSync(file, old, old);
-  const bucket = new Map<string, { bytes: Buffer; modified: Date }>();
-  const integrity = setup([], await fakeBucket(t, bucket), dir);
-  const [local] = await integrity.scrub(NOW);
-  assert.equal(local!.orphans, 1);
-  assert.equal(local!.removed, 0);
-  assert.ok(existsSync(file));
-});
-
-test('files verify flags a missing blob and a chunk whose bytes do not match its sha256, on both stores', async (t) => {
+test('files verify reports missing and mismatched drive-only chunks on local and S3, and the scheduled scrub logs them without deletion', async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), 'orbit-verify-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const good = Buffer.from('good chunk');
@@ -178,16 +167,25 @@ test('files verify flags a missing blob and a chunk whose bytes do not match its
   const corruptId = sha(corrupt);
   const put = (id: string, bytes: Buffer) => {
     mkdirSync(path.join(dir, id.slice(0, 2)), { recursive: true });
-    writeFileSync(path.join(dir, id.slice(0, 2), id), bytes);
+    const file = path.join(dir, id.slice(0, 2), id);
+    writeFileSync(file, bytes);
+    return file;
   };
   put(goodId, good);
-  put(corruptId, Buffer.from('flipped bytes!'));
+  const corruptFile = put(corruptId, Buffer.from('flipped bytes!'));
   const lostId = sha(Buffer.from('lost'));
   const s3Good = Buffer.from('s3 good');
   const s3Bad = Buffer.from('s3 bad');
+  const s3Lost = sha(Buffer.from('s3 lost'));
+  const orphanBytes = Buffer.from('old orphan');
+  const orphanId = sha(orphanBytes);
+  const old = new Date(NOW.getTime() - 100 * DAY);
+  const orphanFile = put(orphanId, orphanBytes);
+  utimesSync(orphanFile, old, old);
   const bucket = new Map([
     [sha(s3Good), { bytes: s3Good, modified: NOW }],
     [sha(s3Bad), { bytes: Buffer.from('s3 BAD'), modified: NOW }],
+    [orphanId, { bytes: orphanBytes, modified: old }],
   ]);
   const gone = sha(Buffer.from('already deleted'));
   const integrity = setup(
@@ -197,19 +195,44 @@ test('files verify flags a missing blob and a chunk whose bytes do not match its
       { sha256: lostId, storage: 'local', bytesDeletedAt: null },
       { sha256: sha(s3Good), storage: 's3', bytesDeletedAt: null },
       { sha256: sha(s3Bad), storage: 's3', bytesDeletedAt: null },
+      { sha256: s3Lost, storage: 's3', bytesDeletedAt: null },
       { sha256: gone, storage: 'local', bytesDeletedAt: NOW },
     ],
     await fakeBucket(t, bucket),
     dir,
+    new Map([
+      [goodId, 'local-version'], [corruptId, 'local-version'], [lostId, 'local-version'],
+      [sha(s3Good), 's3-version'], [sha(s3Bad), 's3-version'], [s3Lost, 's3-version'],
+    ]),
   );
   const report = await integrity.verify();
-  assert.equal(report.checked, 5, 'a blob whose bytes the sweep deleted is not expected');
+  assert.equal(report.checked, 6, 'a blob whose bytes the sweep deleted is not expected');
+  assert.equal(report.hashed, 4);
   assert.deepEqual(
-    report.problems.map((p) => [p.sha256, p.problem, p.driveVersions]).sort(),
-    [[corruptId, 'mismatch', 1], [lostId, 'missing', 1], [sha(s3Bad), 'mismatch', 1]].sort(),
+    report.problems.map((p) => [p.sha256, p.storage, p.problem, p.driveVersions, p.attachments]).sort(),
+    [
+      [corruptId, 'local', 'mismatch', 1, 0], [lostId, 'local', 'missing', 1, 0],
+      [sha(s3Bad), 's3', 'mismatch', 1, 0], [s3Lost, 's3', 'missing', 1, 0],
+    ].sort(),
   );
   const quick = await integrity.verify({ deep: false });
-  assert.deepEqual(quick.problems.map((p) => p.problem), ['missing'], 'without reading back, only absence shows');
+  assert.deepEqual(quick.problems.map((p) => p.problem), ['missing', 'missing'], 'without reading back, only absence shows');
+
+  const warnings = t.mock.method(Logger.prototype, 'warn', (_message: unknown) => {});
+  const logs = t.mock.method(Logger.prototype, 'log', (_message: unknown) => {});
+  t.mock.timers.enable({ apis: ['Date', 'setInterval'], now: new Date('2026-11-22T02:00:00Z').getTime() });
+  integrity.onApplicationBootstrap();
+  t.after(() => integrity.onModuleDestroy());
+  assert.equal(warnings.mock.callCount(), 0);
+  t.mock.timers.tick(60 * 60 * 1000);
+  await integrity.settled();
+  assert.deepEqual(
+    warnings.mock.calls.map((call) => call.arguments[0]),
+    report.problems.map((p) => `scrub: ${p.problem} ${p.sha256} (${p.storage}): 1 drive version(s), 0 attachment(s)`),
+  );
+  assert.ok(logs.mock.calls.some((call) => call.arguments[0] === 'scrub verify: checked 6, read back 4, problems 4; report only'));
+  assert.ok(existsSync(corruptFile) && bucket.has(sha(s3Bad)), 'the scrub keeps mismatched bytes');
+  assert.ok(existsSync(orphanFile) && bucket.has(orphanId), 'the scrub keeps even orphans past grace');
 });
 
 test('the weekly slot is Sunday 03:00 UTC, and a restart neither scrubs nor delays it', async (t) => {
@@ -223,7 +246,7 @@ test('the weekly slot is Sunday 03:00 UTC, and a restart neither scrubs nor dela
   let scrubs = 0;
   integrity.scrub = async () => {
     scrubs += 1;
-    return [];
+    return { checked: 0, hashed: 0, problems: [] };
   };
   // Boot on Saturday: the timer is armed, but nothing is owed.
   t.mock.timers.enable({ apis: ['Date', 'setInterval'], now: new Date('2026-11-21T10:00:00Z').getTime() });
@@ -241,7 +264,7 @@ test('the weekly slot is Sunday 03:00 UTC, and a restart neither scrubs nor dela
   const rebooted = setup([], await fakeBucket(t, new Map()), dir);
   rebooted.scrub = async () => {
     scrubs += 1;
-    return [];
+    return { checked: 0, hashed: 0, problems: [] };
   };
   t.mock.timers.setTime(new Date('2026-11-22T09:00:00Z').getTime());
   rebooted.onApplicationBootstrap();
