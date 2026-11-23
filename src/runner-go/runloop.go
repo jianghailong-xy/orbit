@@ -1742,11 +1742,11 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// Which engines are installed and signed in here (started below). Made before the quota probes,
 	// since they read by it while idle.
 	engineHealth := &engineHealthProbe{}
+	// Default sign-outs in flight, one per engine (default_sign_out.go).
+	var signOuts defaultSignOuts
 	// Set as default for Claude Code (claude_account_swap_relay.go): once a swap has ended either way the
 	// Claude engine is probed again and the runner beats at once, as after a removal, so the page shows
 	// the exchanged accounts now.
-	// Default sign-outs in flight, one per engine (default_sign_out.go).
-	var signOuts defaultSignOuts
 	claudeSwaps := newClaudeAccountSwapRelay(pool, t.claudeAccountSwapResult, func() {
 		engineHealth.refreshEngine(providerClaude)
 		beatNow()
