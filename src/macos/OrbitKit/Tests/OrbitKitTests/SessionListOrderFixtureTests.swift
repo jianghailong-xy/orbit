@@ -67,7 +67,7 @@ final class SessionListOrderFixtureTests: XCTestCase {
         // A live summary for every row that moves lastTurnAt (and nothing else the owner sees).
         var rows = before
         for (i, row) in before.enumerated() {
-            let json = ##"{"id":"\##(row.id)","status":"\##(row.status.rawValue)","lastTurnAt":"2026-11-20T12:00:\##(String(format: "%02d", i)).000Z","listedAt":"\##(row.listedAt ?? "")"}"##
+            let json = ##"{"id":"\##(row.id)","status":"\##(row.status.rawValue)","pendingApprovals":\##(row.pendingApprovals ?? 0),"lastTurnAt":"2026-11-20T12:00:\##(String(format: "%02d", i)).000Z","listedAt":"\##(row.listedAt ?? "")"}"##
                 .replacingOccurrences(of: ",\"listedAt\":\"\"", with: "")
             let summary = try JSONDecoder().decode(ControlSessionSummary.self, from: Data(json.utf8))
             rows[i] = row.applying(summary)
@@ -82,7 +82,7 @@ final class SessionListOrderFixtureTests: XCTestCase {
         let row = try JSONDecoder().decode(Session.self, from: Data(
             ##"{"id":"a","title":"a","status":"AWAITING_INPUT","listedAt":"2026-11-20T01:00:00.000Z"}"##.utf8))
         let summary = try JSONDecoder().decode(ControlSessionSummary.self, from: Data(
-            ##"{"id":"a","status":"AWAITING_INPUT","listedAt":"2026-11-20T02:00:00.000Z"}"##.utf8))
+            ##"{"id":"a","status":"AWAITING_INPUT","pendingApprovals":0,"listedAt":"2026-11-20T02:00:00.000Z"}"##.utf8))
         XCTAssertEqual(row.applying(summary).listedAt, "2026-11-20T02:00:00.000Z")
     }
 
