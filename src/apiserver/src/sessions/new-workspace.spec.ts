@@ -54,7 +54,7 @@ test('the name is the folder\'s', () => {
 
 test('a new folder goes where every client\'s setup card shows it: new-folder-root.fixture.json', () => {
   const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/new-folder-root.fixture.json'), 'utf8')) as {
-    cases: { name: string; runner: { managed: boolean; reposRoot: string | null; capabilities: string[] }; path: string | null }[];
+    cases: { name: string; runner: { managed: boolean; up: boolean; reposRoot: string | null; capabilities: string[] }; path: string | null }[];
   };
   for (const c of fixture.cases) {
     // The fixture's [] is a runner that has not reported; the server reads that from capabilitiesReportedAt.
@@ -63,6 +63,9 @@ test('a new folder goes where every client\'s setup card shows it: new-folder-ro
       capabilities: c.runner.capabilities,
       capabilitiesReportedAt: c.runner.capabilities.length ? new Date() : null,
       managedRunner: c.runner.managed ? { id: 'managed' } : null,
+      // `up` as the runner list reads it: heard from just now, or never.
+      status: c.runner.up ? 'ONLINE' : 'OFFLINE',
+      lastHeartbeatAt: c.runner.up ? new Date() : null,
     };
     if (c.path === null) assert.throws(() => newFolderWorkDirOn(runner, 'app'), /NEW_FOLDER_UNSUPPORTED|cannot make|too old/, c.name);
     else assert.equal(newFolderWorkDirOn(runner, 'app'), c.path, c.name);
@@ -135,11 +138,20 @@ test('making a workspace logs one line, success or failure, with the path and ne
 
 
 test('an unreported managed runner uses the image home; after reporting it follows the advertised folder rule', () => {
-  const managed = { managedRunner: { id: 'managed' }, reposRoot: null, capabilities: [], capabilitiesReportedAt: null };
+  const managed = {
+    managedRunner: { id: 'managed' }, reposRoot: null, capabilities: [], capabilitiesReportedAt: null,
+    status: 'OFFLINE', lastHeartbeatAt: null,
+  };
   assert.equal(newFolderWorkDirOn(managed, 'app'), '/home/orbit/app');
-  const reported = { ...managed, reposRoot: '/home/orbit/orbit-repos', capabilitiesReportedAt: new Date(), capabilities: ['create-workdir/v1', 'create-workdir/v2'] };
+  const reported = {
+    ...managed, reposRoot: '/home/orbit/orbit-repos', capabilitiesReportedAt: new Date(),
+    capabilities: ['create-workdir/v1', 'create-workdir/v2'], status: 'ONLINE', lastHeartbeatAt: new Date(),
+  };
   assert.equal(newFolderWorkDirOn(reported, 'app'), '/home/orbit/app');
   assert.equal(newFolderWorkDirOn({ ...reported, capabilities: ['create-workdir/v1'] }, 'app'), '/home/orbit/orbit-repos/app');
+  // Asleep since an image that declared v1 only: it wakes on the current one, so the image's home.
+  const asleep = { ...reported, capabilities: ['create-workdir/v1'], status: 'OFFLINE', lastHeartbeatAt: new Date('2026-11-17T15:45:00Z') };
+  assert.equal(newFolderWorkDirOn(asleep, 'app'), '/home/orbit/app');
   // A runner that declares nothing reads as one that has not reported, as every client reads it.
   assert.equal(newFolderWorkDirOn({ ...reported, capabilities: [] }, 'app'), '/home/orbit/app');
   assert.throws(() => newFolderWorkDirOn({ ...reported, capabilities: ['dir-probe/v1'] }, 'app'), /old/);
