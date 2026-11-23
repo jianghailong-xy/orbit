@@ -19,6 +19,9 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -141,7 +144,14 @@ internal data class LandingSessionRead(
     val refusal: String? = null,
     val acting: Boolean = false,
     val offline: LandingJobSnapshot? = null,
+    /** The project's open item for this task's landing that its own work session holds or handed back (revision 42, §12.7). */
+    val workItem: JsonObject? = null,
+    /** What that session said last, quoted once it handed the item back (board ② d): its own `lastAssistantText`. */
+    val workSessionWords: String? = null,
 ) {
+    /** The item's `workSession`: who has the failure, since when, and the round. */
+    val workSession: LandingWorkSession? get() = LandingFix.workSession(workItem)
+
     /** The coordinator conversation that decides this work, when the project has a live one to open. */
     val coordinatorId: String? get() = coordinator?.obj("coordination")?.obj("session")?.text("id")
 
@@ -179,6 +189,15 @@ internal object LandingSessionReads {
             attempt { projects.integration(landing.projectId) }?.let { snapshots.remember(handle, landing.projectId, it); next = next.copy(integration = it) }
             attempt { projects.coordinator(landing.projectId) }?.let { next = next.copy(coordinator = it) }
             if (landing.subject == "PROMOTION") attempt { projects.currentPromotion(landing.projectId) }?.let { next = next.copy(promotion = it) }
+            // Revision 42 (§12.7): whether the task's own session has this failure, or handed it back — and then what it said last.
+            if (landing.subject == "TASK") attempt { projects.openItems(landing.projectId) }?.let { items ->
+                val item = LandingFix.itemForTask(items, landing.taskId)
+                next = next.copy(workItem = item)
+                val work = LandingFix.workSession(item)
+                if (work != null && !work.held) attempt { api.objectRead(listOf("sessions", work.sessionId)) }?.let { session ->
+                    next = next.copy(workSessionWords = LandingFix.lastWords(session.text("lastAssistantText")))
+                }
+            }
         } else if (landing.subject == "PROMOTION") {
             attempt { projects.mergedPromotions(landing.projectId) }?.let { next = next.copy(mergedPromotions = it) }
         }
@@ -242,7 +261,9 @@ internal fun LandingRecord(view: LandingView, now: Instant, zone: ZoneId, onLog:
 }
 
 /** How a landing's line says it stands. */
-internal enum class LandingLineKind { OK, MERGE, QUIET, FAILED, RUNNING }
+internal enum class LandingLineKind { OK, MERGE, QUIET, FAILED, RUNNING,
+    /** The task's own session is fixing it (revision 42, board ② c ①): the blue ring, and the word in blue. */
+    FIXING }
 
 /** The tag a card's task name keeps, as the window's tests and the device rounds read it. */
 private const val CARD_NAME_TAG = "landing:task-name"
@@ -271,10 +292,12 @@ internal fun LandingLine(kind: LandingLineKind, title: String, name: String?, st
                     LandingLineKind.QUIET -> Icon(painterResource(R.drawable.ic_minus), null, Modifier.size(15.dp), tint = muted)
                     LandingLineKind.RUNNING -> Icon(painterResource(R.drawable.ic_clock), null, Modifier.size(15.dp), tint = muted)
                     LandingLineKind.MERGE -> Text("⇢", style = label, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                    LandingLineKind.FIXING -> Icon(painterResource(R.drawable.ic_refresh), null, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.primary)
                 }
             }
             Text(title, Modifier.weight(1f, fill = false).testTag(titleTag), style = label,
-                color = if (kind == LandingLineKind.FAILED) red else muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                color = when (kind) { LandingLineKind.FAILED -> red; LandingLineKind.FIXING -> MaterialTheme.colorScheme.primary; else -> muted },
+                fontWeight = if (kind == LandingLineKind.FIXING) FontWeight.SemiBold else null, maxLines = 1, overflow = TextOverflow.Ellipsis)
             status?.takeIf { it.isNotEmpty() }?.let {
                 Text(it, Modifier.background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), RoundedCornerShape(4.dp))
                     .padding(horizontal = 5.dp, vertical = 1.dp).testTag(statusTag),
@@ -308,7 +331,7 @@ internal fun LandingLine(kind: LandingLineKind, title: String, name: String?, st
 @Composable
 internal fun LandingStatusCard(state: LandingSessionRead, view: LandingView?, card: LandingAttemptCard?, outcome: LandingOutcomeCard?,
     now: Instant, onPress: (LandingMenuAction) -> Unit, modifier: Modifier = Modifier, taskName: String? = null, expanded: Boolean = false,
-    waitDoors: List<LandingMenuAction> = emptyList()) {
+    waitDoors: List<LandingMenuAction> = emptyList(), fixing: LandingWorkSession? = null, handedBack: LandingWorkSession? = null) {
     val success = LocalOrbitColors.current.success
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     // A round's word (Merge check, Merge to main) says which of its jobs this is.
@@ -339,6 +362,9 @@ internal fun LandingStatusCard(state: LandingSessionRead, view: LandingView?, ca
                 outcome.right, null, expanded, modifier, CARD_NAME_TAG, titleTag = "landing-head:title", statusTag = "landing-head:right",
                 markTag = if (outcome.ok) "landing-head:done" else null)
             card == null -> LandingLine(LandingLineKind.RUNNING, LandingSessionCopy.QUEUED, taskName, null, null, expanded, modifier, CARD_NAME_TAG)
+            // Revision 42 (board ② c ①): the task's own session has the failure — `Fixing`, in blue, not a red Not landed.
+            fixing != null -> LandingLine(LandingLineKind.FIXING, LandingFixWindowCopy.FIXING, name, null, null, expanded, modifier, CARD_NAME_TAG,
+                titleTag = "landing-head:right", markTag = "landing-head:fixing")
             // The old head's tags, on the parts that now say the same: the word (or, when its right slot holds a word, that word),
             // the clock, the failure's or the timeout's mark.
             else -> LandingLine(if (card.stoppedOnFailure || card.timedOut) LandingLineKind.FAILED else LandingLineKind.RUNNING,
@@ -364,7 +390,10 @@ internal fun LandingStatusCard(state: LandingSessionRead, view: LandingView?, ca
                 outcome.checkLine?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = success) }
                 outcome.treeLine?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = muted) }
             } else if (card != null) {
-                card.detail.takeIf { it.isNotEmpty() }?.let {
+                // While its own session fixes it, the head's clause says who is on it rather than that it stopped (board ② c ①).
+                val detail = if (fixing != null) "${card.detail.substringBefore(" · ").let { if (it == LandingSessionCopy.COULD_NOT_MERGE) LandingSessionCopy.CONFLICT else it }} · " +
+                    LandingFixWindowCopy.ITS_OWN_SESSION_IS_ON_IT else card.detail
+                detail.takeIf { it.isNotEmpty() }?.let {
                     Text(it, Modifier.testTag("landing-head:detail"), style = MaterialTheme.typography.bodySmall, color = muted.copy(alpha = 0.7f))
                 }
                 card.budget?.let { budget ->
@@ -409,14 +438,23 @@ internal fun LandingStatusCard(state: LandingSessionRead, view: LandingView?, ca
                     }
                 }
             }
+            // Revision 42 (board ② c ①): whose hands it is in, since when and which round, and the way into that session and the task.
+            if (fixing != null) LandingFixingPanel(fixing, now, waitDoors, onPress)
+            // Revision 42 (board ② d ①): handed back — what the task's session said last, before the coordinator's doors.
+            if (handedBack != null) LandingHandBackQuote(handedBack, state.workSessionWords)
             // A landing that waits for a decision names who decides, then the doors to them: the coordinator first, then the task or
             // the round's card — on a quiet panel, as the chat's own waiting cards stand.
-            if (waitDoors.isNotEmpty()) Column(Modifier.fillMaxWidth().background(muted.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+            if (fixing == null && waitDoors.isNotEmpty()) Column(Modifier.fillMaxWidth().background(muted.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
                 .padding(horizontal = 12.dp, vertical = 10.dp).testTag("landing:wait"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (LandingMenuAction.OPEN_COORDINATOR in waitDoors) Row(verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                     Icon(painterResource(R.drawable.ic_person), null, Modifier.size(14.dp), tint = muted)
-                    Text(LandingSessionCopy.DECISIONS_THE_COORDINATOR, Modifier.testTag("landing:wait-line"),
+                    // Handed back (board ② d): the coordinator has it, from the moment it came back.
+                    if (handedBack != null) Text(buildAnnotatedString {
+                        withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)) { append(LandingFixWindowCopy.COORDINATOR) }
+                        append("  ${LandingFixWindowCopy.hasIt(LandingFix.age(handedBack.returnedAt, now))}")
+                    }, Modifier.testTag("landing:wait-line"), style = MaterialTheme.typography.bodySmall, color = muted)
+                    else Text(LandingSessionCopy.DECISIONS_THE_COORDINATOR, Modifier.testTag("landing:wait-line"),
                         style = MaterialTheme.typography.bodySmall, color = muted)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -424,6 +462,7 @@ internal fun LandingStatusCard(state: LandingSessionRead, view: LandingView?, ca
                         val label = when (action) {
                             LandingMenuAction.OPEN_COORDINATOR -> LandingSessionCopy.OPEN_COORDINATOR
                             LandingMenuAction.OPEN_TASK -> LandingSessionCopy.OPEN_TASK
+                            LandingMenuAction.OPEN_WORK_SESSION -> LandingFixWindowCopy.OPEN_SESSION
                             else -> LandingSessionCopy.REVIEW_CARD
                         }
                         val tag = Modifier.testTag("landing:wait:${action.name.lowercase()}")
@@ -433,6 +472,45 @@ internal fun LandingStatusCard(state: LandingSessionRead, view: LandingView?, ca
                 }
             }
         }
+    }
+}
+
+/** Whose hands a failure is in while the task's own session fixes it (board ② c ①): `The task's session is fixing it · 4m · round 1 of 2`,
+ *  then its doors — the session first, the primary, then the task — on the blue panel the Fixing state wears. */
+@Composable
+private fun LandingFixingPanel(work: LandingWorkSession, now: Instant, doors: List<LandingMenuAction>, onPress: (LandingMenuAction) -> Unit) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val blue = MaterialTheme.colorScheme.primary
+    Column(Modifier.fillMaxWidth().background(blue.copy(alpha = 0.07f), RoundedCornerShape(10.dp)).border(1.dp, blue.copy(alpha = 0.18f), RoundedCornerShape(10.dp))
+        .padding(horizontal = 12.dp, vertical = 10.dp).testTag("landing:fixing"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            Icon(painterResource(R.drawable.ic_person), null, Modifier.size(14.dp), tint = blue)
+            Text(buildAnnotatedString {
+                withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)) { append(LandingFixWindowCopy.THE_TASKS_SESSION) }
+                append("  ${LandingFixWindowCopy.isFixingIt(LandingFix.age(work.offeredAt, now), work.round)}")
+            }, Modifier.testTag("landing:fixing-line"), style = MaterialTheme.typography.bodySmall, color = muted)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            doors.forEachIndexed { index, action ->
+                val label = if (action == LandingMenuAction.OPEN_WORK_SESSION) LandingFixWindowCopy.OPEN_SESSION else LandingSessionCopy.OPEN_TASK
+                val tag = Modifier.testTag("landing:fixing:${action.name.lowercase()}")
+                if (index == 0) Button(onClick = { onPress(action) }, modifier = tag) { Text(label) }
+                else OutlinedButton(onClick = { onPress(action) }, modifier = tag) { Text(label) }
+            }
+        }
+    }
+}
+
+/** What the task's session said last, as the hand-back quotes it (board ② d ①): why it came back, then its words, in quotes. */
+@Composable
+private fun LandingHandBackQuote(work: LandingWorkSession, words: String?) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(10.dp))
+        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 10.dp)
+        .testTag("landing:hand-back"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(LandingFixWindowCopy.handBackLead(work.returnReason), Modifier.testTag("landing:hand-back-lead"), style = MaterialTheme.typography.bodySmall, color = muted)
+        words?.let { Text("“$it”", Modifier.testTag("landing:hand-back-words"), style = MaterialTheme.typography.bodyMedium, maxLines = 8,
+            overflow = TextOverflow.Ellipsis) }
     }
 }
 
@@ -480,7 +558,12 @@ internal fun LandingTimelineSectionView(section: LandingSection, view: LandingVi
     val attempt = view.currentAttempt
     val live = current && attempt?.state == "RUNNING" && !attempt.timedOut
     var openLog by remember(section.jobId) { mutableStateOf<LandingLogSelectors?>(null) }
-    val steps = remember(section, view.checks, attempt) { LandingSteps.steps(LandingSessionModel.scopedEntries(section.entries, view, section.jobId), section.kind) }
+    // Revision 42 (§12.7): the hand-off, the fix landing again and the hand-back are lines of their own, not a step's: the fix opens its
+    // generation, the other two close theirs (board ② c ②, ② d ②).
+    val steps = remember(section, view.checks, attempt) {
+        LandingSteps.steps(LandingSessionModel.scopedEntries(section.entries, view, section.jobId).filter { it.kind !in LandingFix.KINDS }, section.kind)
+    }
+    val fixLines = remember(section) { section.entries.withIndex().filter { it.value.kind in LandingFix.KINDS } }
     Column(Modifier.fillMaxWidth().testTag("landing:section:${section.jobId}"), verticalArrangement = Arrangement.spacedBy(3.dp)) {
         if ((view.timeline?.sections?.size ?: 0) > 1) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(section.title, Modifier.testTag("landing:section-title:${section.jobId}"), style = MaterialTheme.typography.labelLarge,
@@ -497,6 +580,7 @@ internal fun LandingTimelineSectionView(section: LandingSection, view: LandingVi
                     ProjectPage.landingClock(max(0.0, ProjectTime.between(ProjectTime.parse(check.startedAt) ?: now, now))), onLog)
             }
         }
+        fixLines.filter { it.value.kind == "FIXED_BY_SESSION" }.forEach { (index, entry) -> LandingFixLine(view, index, entry, zone) }
         steps.forEachIndexed { index, step ->
             val last = index == steps.lastIndex
             val status = when {
@@ -517,6 +601,7 @@ internal fun LandingTimelineSectionView(section: LandingSection, view: LandingVi
         }
         // A check streaming before its attempt wrote any line has no step to sit in.
         if (steps.isEmpty()) liveCheck()
+        fixLines.filter { it.value.kind != "FIXED_BY_SESSION" }.forEach { (index, entry) -> LandingFixLine(view, index, entry, zone) }
         if (current) LandingSessionModel.noReportBand(view, zone)?.let {
             Text(it, Modifier.fillMaxWidth().background(muted.copy(alpha = 0.08f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 6.dp)
                 .testTag("landing:no-report"), style = MaterialTheme.typography.bodySmall, color = muted)
@@ -525,6 +610,52 @@ internal fun LandingTimelineSectionView(section: LandingSection, view: LandingVi
 }
 
 private enum class StepStatus { OK, FAILED, RUNNING, PENDING, SKIPPED }
+
+/**
+ * One of revision 42's lines (§12.7; board ② c ②, ② d ②), drawn as the board draws it rather than as a step: its time and mark, then
+ * `Handed to the task's session` over `It wrote this work · round 1 of 2`, `Fixed in 4be19c2 · landing again`, or `Returned to the
+ * coordinator · no new commit`. The first two wear the Fixing state's blue wash.
+ */
+@Composable
+private fun LandingFixLine(view: LandingView, index: Int, entry: LandingEntry, zone: ZoneId) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val blue = MaterialTheme.colorScheme.primary
+    val washed = entry.kind != "RETURNED_TO_COORDINATOR"
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp).testTag("landing:fix-line:${entry.kind.lowercase()}"),
+        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+        Text(ProjectTime.parse(entry.at)?.let { ProjectPage.landingClockTime(it, zone) } ?: "", Modifier.padding(top = 6.dp).testTag("landing:entry-time:$index"),
+            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace), color = muted)
+        Icon(painterResource(when (entry.kind) {
+            "HANDED_TO_SESSION" -> R.drawable.ic_person
+            "FIXED_BY_SESSION" -> R.drawable.ic_arrow_up
+            else -> R.drawable.ic_arrow_forward
+        }), null, Modifier.padding(top = 7.dp).size(14.dp).testTag("landing:mark:$index"), tint = blue)
+        Column(Modifier.weight(1f).then(if (washed) Modifier.background(blue.copy(alpha = 0.08f), RoundedCornerShape(8.dp)) else Modifier)
+            .padding(horizontal = if (washed) 10.dp else 0.dp, vertical = 5.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            when (entry.kind) {
+                "HANDED_TO_SESSION" -> {
+                    Text(LandingFixWindowCopy.HANDED_TO_THE_TASKS_SESSION, Modifier.testTag("landing:entry:$index"), style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold)
+                    Text(LandingFixWindowCopy.itWroteThisWork(LandingFix.handOffRound(view, entry)), style = MaterialTheme.typography.bodySmall, color = muted)
+                }
+                "FIXED_BY_SESSION" -> {
+                    val sha = LandingFix.fixedSha(entry)
+                    Text(buildAnnotatedString {
+                        if (sha == null) append(entry.text) else {
+                            append("${LandingFixWindowCopy.FIXED_IN} ")
+                            withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f))) { append(" $sha ") }
+                            append(" · ${LandingFixWindowCopy.LANDING_AGAIN}")
+                        }
+                    }, Modifier.testTag("landing:entry:$index"), style = MaterialTheme.typography.bodyMedium)
+                }
+                else -> Text(buildAnnotatedString {
+                    withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(LandingFixWindowCopy.RETURNED_TO_THE_COORDINATOR) }
+                    LandingFixWindowCopy.returnReason(entry.data?.text("returnReason") ?: entry.reason)?.let { append(" · $it") }
+                }, Modifier.testTag("landing:entry:$index"), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
 
 /** One step as the session chat's tool row on Android: the tone bar, the caret, its name in the mono face, its summary line and the
  *  word that says how it stands (`Complete`, `Failed`, `Running`), as the chat's own tool rows say it. No time on a phone's row; the

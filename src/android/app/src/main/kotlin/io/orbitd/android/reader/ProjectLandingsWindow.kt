@@ -363,6 +363,8 @@ internal fun ProjectLandingsWindow(app: OrbitApplication, handle: SessionHandle,
             LandingMenuAction.OPEN_TASK -> view?.taskId?.let { open(OrbitRoute(Destination.TASK, it, origin = Origin.LINK)) }
             LandingMenuAction.OPEN_SOURCE_SESSION -> view?.currentAttempt?.sourceSessionId?.let { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LINK)) }
             LandingMenuAction.OPEN_COORDINATOR -> coordinator?.let { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LINK)) }
+            LandingMenuAction.OPEN_WORK_SESSION -> (state.cards[id] ?: state.records[id])?.workSession?.sessionId
+                ?.let { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LINK)) }
             LandingMenuAction.REVIEW_CARD -> if (view == null || view.settledAt != null) receipt = promotion
                 else view.promotionId?.let { review = it; scope.launch { merge.load(force = true) } }
             else -> press(id, action)
@@ -540,18 +542,28 @@ private fun LandingWindowCard(card: LandingsWindowCard, read: LandingSessionRead
     val menuItems = view?.let { LandingSessionModel.menuItems(it, gates, coordinatorId != null, read.currentPromotion() != null, nothingPushed) }
     // A landing that waits for a decision carries the doors to the people who make it (board 02 d): the coordinator, and the task (or
     // the round's own card). A timed-out one has its own doors.
-    val waitDoors = if (view == null || card.state != "AWAITING_DECISION" || view.settledAt != null || attemptCard?.timedOut == true) emptyList()
+    // Revision 42 (§12.7, board ② c, d): the task's own session has the failure — Fixing, with that session's door first — or handed it
+    // back, when the coordinator's doors carry that session's too.
+    val work = read.workSession
+    val fixing = work?.takeIf { it.held && view?.settledAt == null }
+    val handedBack = work?.takeIf { !it.held && fixing == null && card.state == "AWAITING_DECISION" && view?.settledAt == null }
+    val hasTask = view?.subject == "TASK" && !view.taskId.isNullOrEmpty()
+    val waitDoors = if (view == null || view.settledAt != null || attemptCard?.timedOut == true) emptyList()
+        else if (fixing != null) listOfNotNull(LandingMenuAction.OPEN_WORK_SESSION, LandingMenuAction.OPEN_TASK.takeIf { hasTask })
+        else if (card.state != "AWAITING_DECISION") emptyList()
         else listOfNotNull(
             LandingMenuAction.OPEN_COORDINATOR.takeIf { coordinatorId != null },
-            LandingMenuAction.OPEN_TASK.takeIf { view.subject == "TASK" && !view.taskId.isNullOrEmpty() },
+            LandingMenuAction.OPEN_WORK_SESSION.takeIf { handedBack != null },
+            LandingMenuAction.OPEN_TASK.takeIf { hasTask },
             LandingMenuAction.REVIEW_CARD.takeIf { view.subject == "PROMOTION" && read.currentPromotion() != null })
     val toggle by rememberUpdatedState(onToggle)
     val menu by rememberUpdatedState(onMenu)
     val settled = view?.settledAt != null
     val running = !settled && attempt?.state == "RUNNING" && !attempt.timedOut
     val timedOut = !settled && attempt?.timedOut == true
-    val waiting = !settled && card.state == "AWAITING_DECISION"
-    // What needs a look stays open: a landing that runs, waits for a decision or timed out (docs/mocks/landings-chat-tools-native g).
+    val waiting = !settled && (card.state == "AWAITING_DECISION" || card.state == "FIXING")
+    // What needs a look stays open: a landing that runs, waits for a decision, is being fixed or timed out
+    // (docs/mocks/landings-chat-tools-native g).
     val open = expanded || running || waiting || timedOut
     Column(Modifier.fillMaxWidth().then(outline(outlined, RoundedCornerShape(14.dp))).testTag("landing-entry:${card.sessionId}"),
         verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -569,7 +581,7 @@ private fun LandingWindowCard(card: LandingsWindowCard, read: LandingSessionRead
                         onClick { toggle(); true }
                         onLongClick("Landing actions") { menu(); true }
                     }.testTag("landing:card-line"),
-                taskName = card.title, expanded = open, waitDoors = waitDoors)
+                taskName = card.title, expanded = open, waitDoors = waitDoors, fixing = fixing, handedBack = handedBack)
             LandingEntryMenu(menuOpen && menuItems?.isEmpty() != true, menuItems, onMenuDismiss, onAction)
         }
         read.refusal?.let { refusal ->
@@ -641,7 +653,8 @@ private fun LandingsFooter(coordinatorId: String?, onOpenCoordinator: () -> Unit
                 Text(words.substringBefore(" — "), Modifier.weight(1f).semantics { contentDescription = words }.testTag("landings:footer-line"),
                     style = MaterialTheme.typography.bodyMedium, color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (coordinatorId != null) OutlinedButton(onClick = onOpenCoordinator, modifier = Modifier.testTag("landings:open-coordinator")
-                    .semantics { stateDescription = LandingSessionCopy.DECISIONS_THE_COORDINATOR },
+                    // Revision 42 (board ② c ③): a task's own session decides first, then the coordinator.
+                    .semantics { stateDescription = LandingFixWindowCopy.DECISIONS_SESSION_FIRST },
                     contentPadding = PaddingValues(start = 12.dp, end = 16.dp)) {
                     Icon(painterResource(R.drawable.ic_person), null, Modifier.size(ButtonDefaults.IconSize))
                     Spacer(Modifier.width(ButtonDefaults.IconSpacing))
