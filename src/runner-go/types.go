@@ -474,6 +474,8 @@ type HeartbeatResponse struct {
 	// Server-authoritative max-concurrent (the editable DB value). 0 from an older
 	// control plane that doesn't send it — the runner keeps its current value then.
 	MaxConcurrent int `json:"maxConcurrent"`
+	// Extra sessions on demand. Nil from an older control plane, zero disables burst admission.
+	BurstConcurrent *int `json:"burstConcurrent,omitempty"`
 	// Branch merges the user requested for sessions this runner ran: merge each one's
 	// branch into the repo's main, then POST the outcome to /merge-result. Omitted by
 	// older control planes (the field is simply absent → no merges).
@@ -1556,6 +1558,8 @@ type ClaimedSession struct {
 	Provider  string          `json:"provider,omitempty"`
 	Prompt    string          `json:"prompt"`
 	Agent     AgentExecConfig `json:"agent"`
+	// OverCapacity authorizes this turn to use the runner's burst headroom.
+	OverCapacity bool `json:"overCapacity,omitempty"`
 	// liveMode is the session's permission mode as the goroutines serving its socket read it
 	// (background_gate.go); nil until that service starts.
 	liveMode *sessionLiveMode

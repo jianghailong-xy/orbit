@@ -52,6 +52,7 @@ import { Dialog } from '../ui/Dialog';
 import { Input } from '../ui/Input';
 import { Menu, type MenuItem } from '../ui/Menu';
 import { NumberInput } from '../ui/NumberInput';
+import { EXTRA_SESSIONS_ON_DEMAND } from '../../lib/queuedCapacity';
 import { Select } from '../ui/Select';
 import { Spinner } from '../ui/Spinner';
 import { copyText } from '../../lib/clipboard';
@@ -160,6 +161,8 @@ const WORKSPACES_ON_MACHINE = 'Workspaces on this machine';
 const DELETE_MACHINE = 'Delete machine';
 const DELETE_MACHINE_NOTE =
   'This removes the runner and its workspaces from your account. Re-register the machine to add it back.';
+// The ceiling enforced by UpdateRunnerDto for burstConcurrent.
+const MAX_EXTRA_SESSIONS = 32;
 
 const fmtTime = (d?: string | null): string =>
   d
@@ -304,10 +307,10 @@ export function MachineSettingsPage() {
   const [maxDraft, setMaxDraft] = useState<number | null>(null);
   const maxTyped = useRef<number | null>(null);
   const maxButton = useRef<HTMLButtonElement>(null);
-  // Capacity saves as it changes — Max Concurrent on its dialog's Save, Keep Free on pick. The value goes
+  // Capacity saves as it changes — Max Concurrent on its dialog's Save, dropdowns on pick. The value goes
   // into the runner list at once, so a control doesn't snap back to the old number while the save lands.
   const capacityMut = useMutation({
-    mutationFn: (patch: { maxConcurrent?: number; minFreeDiskMb?: number | null }) =>
+    mutationFn: (patch: { maxConcurrent?: number; burstConcurrent?: number; minFreeDiskMb?: number | null }) =>
       api(`/runners/${runnerId}`, { method: 'PATCH', body: patch }),
     onMutate: async (patch) => {
       await qc.cancelQueries({ queryKey: ['runners'] });
@@ -324,8 +327,9 @@ export function MachineSettingsPage() {
       if (context?.previous) qc.setQueryData(['runners'], context.previous);
       message.error("Couldn't save the capacity", e.message);
     },
-    onSettled: () => {
+    onSettled: (_data, _error, patch) => {
       void qc.invalidateQueries({ queryKey: ['runners'] });
+      if (patch.burstConcurrent !== undefined) void qc.invalidateQueries({ queryKey: ['sessions'] });
     },
   });
   // Where the disk card's "Set a Reserve…" lands.
@@ -1015,6 +1019,26 @@ export function MachineSettingsPage() {
                 </Button>
               }
             />
+            {typeof runner.burstConcurrent === 'number' && (
+              <SettingsRow
+                title={EXTRA_SESSIONS_ON_DEMAND}
+                control={
+                  <Select
+                    aria-label={EXTRA_SESSIONS_ON_DEMAND}
+                    size="small"
+                    value={String(runner.burstConcurrent)}
+                    options={Array.from({ length: MAX_EXTRA_SESSIONS + 1 }, (_, slots) => ({
+                      value: String(slots),
+                      label: String(slots),
+                    }))}
+                    onValueChange={(value) => {
+                      if (value !== null) capacityMut.mutate({ burstConcurrent: Number(value) });
+                    }}
+                    disabled={capacityMut.isPending}
+                  />
+                }
+              />
+            )}
             <SettingsRow
               title={RUNNER_KEEP_FREE}
               control={

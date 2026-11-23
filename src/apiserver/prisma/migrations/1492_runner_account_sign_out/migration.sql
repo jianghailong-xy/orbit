@@ -11,9 +11,10 @@
 -- ADD COLUMN with no default, and with a constant default, is catalog-only: no stored row is
 -- rewritten.
 --
--- 1465: the highest number on main, every project/* and pushed orbit/* branch below 1470 and every
--- session worktree below 1470 was 1464 (1464_open_list_scope_keys) when this was written
--- (2026-11-23); 1470 and 1490/1491 are taken on other branches.
+-- Written as 1465 (2026-11-23), when main and every branch stopped at 1464; renumbered to 1492
+-- after main took 1465 (1465_session_run_now_over_capacity) and 1491 (1491_feishu_details_by_default).
+-- 1492 was on no branch or session worktree then. It was never on main, so no deployment applied it
+-- under its old name.
 
 ALTER TABLE "runner" ADD COLUMN "account_remove_action" TEXT;
 ALTER TABLE "runner" ADD COLUMN "account_remove_force" BOOLEAN NOT NULL DEFAULT false;

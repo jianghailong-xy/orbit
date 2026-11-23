@@ -3379,10 +3379,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // no INSERT, UPDATE or DELETE at apply time.
       // Written as 1434 on the project line, it was renumbered after main took 1434.
       '1464_open_list_scope_keys',
-      // 1465 adds two columns to runner for a Default sign-out on the account-removal relay: account_remove_action, a
+      // 1465 adds runner.burst_concurrent (NOT NULL DEFAULT 2, a check >= 0), the nullable session.over_capacity_turn_id
+      // and a partial index on session; no row is written, and no preserved relation, trigger, function or DONE fence
+      // changes. Written as 1430 on its task branch, it was renumbered after main took 1430 to 1464.
+      '1465_session_run_now_over_capacity',
+      // 1491 sets feishu_app.message_detail's default to FULL and moves every TITLES_ONLY row to FULL: an ALTER and an
+      // UPDATE of that table only, none of the preserved relations, and no trigger, function or DONE fence changes.
+      '1491_feishu_details_by_default',
+      // 1492 adds two columns to runner for a Default sign-out on the account-removal relay: account_remove_action, a
       // nullable TEXT, and account_remove_force, a BOOLEAN with a constant false default (both catalog-only); no row is
-      // written, and no preserved relation, trigger, function or DONE fence changes.
-      '1465_runner_account_sign_out'],
+      // written, and no preserved relation, trigger, function or DONE fence changes. Written as 1465 on its task branch, it
+      // was renumbered after main took 1465 and 1491.
+      '1492_runner_account_sign_out'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

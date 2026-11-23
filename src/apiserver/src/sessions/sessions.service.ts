@@ -208,15 +208,10 @@ import { orchestrationEnabled } from '../common/orchestration-switch';
 import { isStopping } from '../common/graceful-stop';
 import { normalizePermissionRules } from '../common/permission-rules';
 import { reachesPastOneMcpTool } from './remember-rules';
-import {
-  batchActiveTurns,
-  runnerActiveTurns,
-  runnerBackgroundHeldSessions,
-  treeActiveTurns,
-  treeCeiling,
-} from '../common/session-tree-sql';
+import { runnerActiveTurns, runnerBackgroundHeldSessions } from '../common/session-tree-sql';
 import { queuedRunnerUpdateOf } from '../common/runner-self-update';
-import { queuedReasonSql } from './queued-reason-sql';
+import { queuedGateLateral, queuedRunNowOf } from './queued-gate';
+import { grantRunNow, refuseRunNowForSession } from './run-now';
 import { QueueService } from '../queue/queue.service';
 import { mergeDispatchGate } from '../projects/task-checkpoint.service';
 import {
@@ -4937,6 +4932,15 @@ export class SessionsService {
       queuedActive: number | null;
       queuedLimit: number | null;
       queuedHeldByJobs: number | bigint | null;
+      queuedRunnerActive: number | bigint | null;
+      queuedRunnerHeld: number | bigint | null;
+      queuedRunnerLimit: number | null;
+      queuedRunnerBurst: number | null;
+      queuedRunnerOverflow: boolean | null;
+      queuedPassPending: boolean | null;
+      runnerLabel: string | null;
+      overLimitActive: number | bigint | null;
+      overLimitLimit: number | null;
       queuedRunnerSelfUpdate: Prisma.JsonValue;
       queuedRunnerTurns: Array<{ id: string; title: string | null }> | null;
       queuedSince: Date | null;
@@ -5140,6 +5144,22 @@ export class SessionsService {
         q.active  AS "queuedActive",
         q."limit" AS "queuedLimit",
         q.held    AS "queuedHeldByJobs",
+        -- Run now (docs/mocks/queued-run-now): what the runner's counts, burst and capability say about starting
+        -- this queued message over the limit (runNowOf), and the name its sentences use.
+        q."runnerActive" AS "queuedRunnerActive",
+        q."runnerHeld"   AS "queuedRunnerHeld",
+        q."runnerLimit"  AS "queuedRunnerLimit",
+        q."runnerBurst"  AS "queuedRunnerBurst",
+        q."runnerOverflow" AS "queuedRunnerOverflow",
+        q."passPending"  AS "queuedPassPending",
+        COALESCE(NULLIF(btrim(r.display_name), ''), r.name) AS "runnerLabel",
+        -- A turn running over the limit (an overflow claim keeps the pass; an ordinary claim clears it): the
+        -- runner's count against its limit, for "over limit · 17/16". Only such a row pays for the counts.
+        CASE WHEN s.status = 'RUNNING' AND s.over_capacity_turn_id IS NOT NULL THEN
+          ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)}
+            + ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`)}
+        END AS "overLimitActive",
+        CASE WHEN s.status = 'RUNNING' AND s.over_capacity_turn_id IS NOT NULL THEN r.max_concurrent END AS "overLimitLimit",
         -- What the runner_updating explanation names (docs/runner-update-drain-design.md §3): the
         -- release it is updating to, the owner's turns it waits for, and the clock "Waiting 38 min"
         -- counts from. Read only for a row that gate holds; every other row pays nothing for it.
@@ -5171,43 +5191,7 @@ export class SessionsService {
       -- ceiling here is the SAME fragment the claim decides with (session-tree-sql.ts) — a
       -- second copy would drift, and confidently naming the wrong gate is worse than naming
       -- none. Only PENDING rows carry an answer; for the rest the lateral yields NULLs.
-      LEFT JOIN LATERAL (
-        SELECT reason, active, "limit", held FROM (
-          SELECT
-            ${queuedReasonSql()} AS reason,
-            ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)} AS runner_active,
-            ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`)} AS runner_held,
-            r.max_concurrent AS runner_limit,
-            ${treeActiveTurns('s')} AS tree_active,
-            ${treeCeiling(Prisma.sql`s.assigned_runner_id`)} AS tree_limit,
-            ${batchActiveTurns('s')} AS batch_active,
-            s.batch_max_concurrent AS batch_limit
-        ) g,
-        LATERAL (
-          SELECT
-            CASE g.reason
-              -- The turns the drain waits for: every one in flight on the runner.
-              WHEN 'runner_updating'    THEN g.runner_active
-              WHEN 'runner_at_capacity' THEN g.runner_active + g.runner_held
-              WHEN 'tree_at_capacity'   THEN g.tree_active
-              WHEN 'batch_at_capacity'  THEN g.batch_active
-            END AS active,
-            CASE g.reason
-              WHEN 'runner_at_capacity' THEN g.runner_limit
-              WHEN 'tree_at_capacity'   THEN g.tree_limit
-              WHEN 'batch_at_capacity'  THEN g.batch_limit
-            END AS "limit",
-            -- Of active, the slots background jobs hold (runner_at_capacity only): the part of a
-            -- full runner its list of running turns does not show.
-            CASE g.reason WHEN 'runner_at_capacity' THEN g.runner_held END AS held
-        ) n
-        -- Asked inside, behind OFFSET 0, rather than on the join: as a join condition the planner flattened
-        -- this subquery and computed every gate's counts for every row of the list, then dropped all but the
-        -- PENDING ones (production, 2026-11-19: 1,297 rows for 15, 130k of the statement's 154k buffers and
-        -- 175 ms of its 289). Here it is a one-time filter, so the counts run only for a PENDING row.
-        WHERE s.status = 'PENDING' AND s.cancel_requested_at IS NULL
-        OFFSET 0
-      ) q ON true
+      LEFT JOIN LATERAL (${queuedGateLateral()}) q ON true
       WHERE s.owner_id = ${ownerId}::uuid
         ${scope}
         AND (${visibility})
@@ -5314,6 +5298,12 @@ export class SessionsService {
         queuedHeldByJobs: r.queuedHeldByJobs == null ? null : Number(r.queuedHeldByJobs),
         // Only beside queuedReason 'runner_updating'; null on every other row.
         queuedRunnerUpdate: queuedRunnerUpdateOf(r),
+        // Run now (docs/mocks/queued-run-now) beside a slot gate, and how far over the runner may go.
+        ...queuedRunNowOf(r),
+        // A turn its owner started over the runner's limit, while it runs: "over limit · 17/16".
+        runningOverLimit: r.overLimitActive == null || r.overLimitLimit == null
+          ? null
+          : { active: Number(r.overLimitActive), limit: r.overLimitLimit, runnerName: r.runnerLabel },
       }),
     );
     // What each row says about who is waiting on whom (`listOverlay`): given by a caller that already
@@ -12975,6 +12965,27 @@ export class SessionsService {
     assertEngineSessionRow(await this.get(ownerId, id)); // ownership check (404s otherwise)
     await this.prisma.session.update({ where: { id }, data: { pinnedAt: new Date() } });
     return { ok: true };
+  }
+
+  /**
+   * `POST /sessions/:id/run-now` (docs/mocks/queued-run-now): start this session's queued message over its runner's
+   * limit, one turn (run-now.ts). The runner is woken at once so its claim takes it.
+   */
+  async runNow(ownerId: string, id: string, actingSessionId: string | null) {
+    refuseRunNowForSession(actingSessionId);
+    assertEngineSessionRow(await this.get(ownerId, id)); // ownership check (404s otherwise); a landing is the platform's
+    const granted = await withTransactionRetry(this.prisma, async (tx) => {
+      // The session row first, as every turn write takes it: the seed and the pass are then one decision about it.
+      const [session] = await tx.$queryRaw<Array<{
+        id: string; prompt: string; importedAt: Date | null; wikiChatSpaceId: string | null;
+      }>>`SELECT id, prompt, imported_at AS "importedAt", wiki_chat_space_id AS "wikiChatSpaceId"
+            FROM "session" WHERE id = ${id}::uuid AND owner_id = ${ownerId}::uuid FOR UPDATE`;
+      if (!session) throw new NotFoundException('session not found');
+      return grantRunNow(tx, ownerId, id, () => this.ensurePromptSeeded(tx, session));
+    }, loggedRetry(this.logger, 'sessions.runNow'));
+    if (!granted.alreadyPassed) this.realtime.publishSessionUpdated(id);
+    this.queue.notifySessionQueued(granted.runnerId);
+    return { ok: true, turnId: granted.turnId, alreadyPassed: granted.alreadyPassed };
   }
 
   /** Remove a session's pin, dropping it back into time order. */

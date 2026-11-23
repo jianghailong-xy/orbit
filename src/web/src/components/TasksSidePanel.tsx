@@ -259,6 +259,7 @@ export interface Runner {
   displayName?: string | null;
   online?: boolean;
   maxConcurrent?: number;
+  burstConcurrent?: number;
   // Persisted order of Infrastructure's machine cards; null until assigned by migration or a reorder.
   position?: number | null;
   // Live sessions currently occupying this runner's slots (of maxConcurrent).
