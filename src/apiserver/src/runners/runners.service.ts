@@ -958,9 +958,11 @@ export class RunnersService {
    * it is. Orbit's own record, so the runner need not be online and is not woken.
    */
   async dismissSetDefaultFailure(ownerId: string, id: string, engine: LoginEngine, account: string): Promise<{ ok: true }> {
-    if (engine !== 'claude') throw new BadRequestException('Only a Claude Code account can be made the Default');
+    // The runner first, as setDefaultAccount does (1b1c7a8e71): another account's runner is not found, whatever the
+    // engine named, and nothing is written.
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId }, select: { id: true } });
     if (!runner) throw new NotFoundException('runner not found');
+    if (engine !== 'claude') throw new BadRequestException('Only a Claude Code account can be made the Default');
     await this.prisma.runner.updateMany({
       where: { id, ownerId, claudeAccountSwapStatus: 'failed', claudeAccountSwapAccount: account },
       data: { claudeAccountSwapStatus: null, claudeAccountSwapMessage: null },

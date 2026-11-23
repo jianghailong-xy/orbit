@@ -192,6 +192,10 @@ export interface ManagedInstance {
    *  `org.opencontainers.image.revision` label; Docker: as the channel reports it, Kubernetes: the profile's
    *  `runner.imageRevision`). Absent when the host or profile does not say. */
   readonly currentImageRevision?: string;
+  /** With `currentImageRevision`: the release that image was published for, which its runner reports as its version
+   *  (its `org.opencontainers.image.version` label; Docker: as the channel reports it, Kubernetes: the profile's
+   *  `runner.imageVersion`). Absent for an image built from a checkout, and when the host or profile does not say. */
+  readonly currentImageVersion?: string;
 }
 
 /** A fencing receipt left for an instance, and what reading it concluded. */

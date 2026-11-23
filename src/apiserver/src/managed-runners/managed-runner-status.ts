@@ -55,8 +55,18 @@ function storedReason(value: unknown): ManagedRunnerReason | null {
   return { code, message, retryable: retryable === true };
 }
 
-/** The build a managed runner image's runner reports as its version (deploy/managed-runner/image/Dockerfile). */
+/** The build a managed runner image's runner reports as its version (deploy/managed-runner/image/Dockerfile): `managed-<sha>`
+ *  for an image built from a checkout (images before release-built ones, and a single host's own), or the release
+ *  version for an image published from a release tag. */
 const MANAGED_VERSION = /^managed-([0-9a-f]{7,40})$/;
+const RELEASE_VERSION = /^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$/;
+
+/** The build a runner reports, by its version: a source commit, or a release version. Null when it names neither. */
+function reportedBuild(version: string | null | undefined): { sha: string } | { version: string } | null {
+  const sha = MANAGED_VERSION.exec(version ?? '')?.[1];
+  if (sha) return { sha };
+  return version && RELEASE_VERSION.test(version) ? { version } : null;
+}
 
 /**
  * The owner's Update Now is in progress: asked for (`updateRequestedAt`) and not yet ended by the next generation
@@ -82,22 +92,39 @@ const UPDATING_STATES: ReadonlySet<ManagedRunner['managementState']> = new Set([
 
 /**
  * `update`: the manager found the READY instance made from an older image than the current one, whose build it
- * recorded (`currentImageSha`), and the runner reports the build it runs, another one. While an image roll drains
- * it, or the owner's Update Now is on its way to the next generation, `updating` — and `waitsForIdle` while a busy
- * runner's Update Now is still READY on a backend that cannot stop it (`stopsInstances` false). Nothing when it is
- * current, not running, or either build is unknown.
+ * recorded (`currentImageSha`, and `currentImageVersion` for an image published from a release tag), and the runner
+ * reports the build it runs, another one. The two are compared by version when both have one (a runner of a release
+ * image against a current release image), and otherwise by commit, which a runner reporting `managed-<sha>` names (an
+ * older image, or a single host's own build). While an image roll drains it, or the owner's Update Now is on its way to
+ * the next generation, `updating` — and `waitsForIdle` while a busy runner's Update Now is still READY on a backend that
+ * cannot stop it (`stopsInstances` false). Nothing when it is current, not running, or the two cannot be compared.
  */
 function managedRunnerUpdate(mapping: ManagedRunner, version: string | null | undefined, stopsInstances?: boolean): ManagedRunnerUpdate | undefined {
   const phase = ownerUpdatePending(mapping) && UPDATING_STATES.has(mapping.managementState) ? 'updating'
     : mapping.managementState === 'READY' ? 'available'
     : mapping.managementState === 'DRAINING' && mapping.imageRollTo ? 'updating' : null;
   const current = mapping.currentImageSha;
-  const running = MANAGED_VERSION.exec(version ?? '')?.[1];
-  if (!phase || !mapping.imageOutdatedSince || !current || !running) return undefined;
-  // One side may be abbreviated: the same commit is no update, whatever the record says of the image.
-  if (current.startsWith(running) || running.startsWith(current)) return undefined;
+  const currentVersion = mapping.currentImageVersion;
+  const reported = reportedBuild(version);
+  if (!phase || !mapping.imageOutdatedSince || !current || !reported) return undefined;
+  let running: ManagedRunnerUpdate['running'];
+  if ('version' in reported) {
+    // A runner of a release image names no commit: only a current image of a release can be compared with it, and the
+    // same release is no update.
+    if (!currentVersion || reported.version === currentVersion) return undefined;
+    running = { sha: '', version: reported.version };
+  } else {
+    // One side may be abbreviated: the same commit is no update, whatever the record says of the image.
+    if (current.startsWith(reported.sha) || reported.sha.startsWith(current)) return undefined;
+    running = { sha: reported.sha };
+  }
   const waitsForIdle = phase === 'updating' && mapping.managementState === 'READY' && mapping.updateInterruptTurns && stopsInstances === false;
-  return { running: { sha: running }, current: { sha: current }, phase, ...(waitsForIdle ? { waitsForIdle: true as const } : {}) };
+  return {
+    running,
+    current: { sha: current, ...(currentVersion ? { version: currentVersion } : {}) },
+    phase,
+    ...(waitsForIdle ? { waitsForIdle: true as const } : {}),
+  };
 }
 
 /**

@@ -27,7 +27,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { returnWaitingSessionsToOpen } from '../sessions/return-to-open';
 import { postRunFailureComment, reclaimStalledTask } from '../tasks/reclaim-stalled-task';
 import { RealtimeService } from './realtime.service';
-import { announceParkedSessionEnd, claimParkedSessionEnd } from './parked-session-end';
+import { announceParkedSessionEnd, claimParkedSessionEnd, fixingLandingWithWakeSource } from './parked-session-end';
 import { readRuntimeStartupFacts, runtimeStartupClock, runtimeStartupOverdue } from './runtime-startup-clock';
 import {
   classifyTransactionFault,
@@ -772,7 +772,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         // durable end claim starts the cancel grace timer, whose later sweep can finalize
         // without that runner. Ordinary parked sessions still returned above.
         if (shouldEndTerminalTask) {
-          await this.endParked(s.id, s.assignedRunnerId, taskEndReason);
+          await this.endParked(s.id, s.assignedRunnerId, taskEndReason, offline);
         }
       } catch (e) {
         // Isolate per-session failures so one doesn't skip the rest; retried next sweep. A failure
@@ -1185,6 +1185,8 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     // WORK_ELSEWHERE item its frozen identity opened (§12.15 P-M1).
     if ('identitySettled' in outcome && outcome.identitySettled && taskId) {
       await this.openItems?.deliverForTasks([taskId]);
+      // §12.5 W7: a failed landing this session held, handed back by this finish (TURN_FAILED), whatever it names.
+      await this.openItems?.offerLandingFixesTo(sessionId);
       // And the project facts the deferred landing held (PROJECT_TASKS_SETTLED / looks-finished),
       // re-derived now that it is decided. The dependents themselves are the 60 s ready sweep's.
       if (this.completionInputs) {
@@ -1217,6 +1219,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     sessionId: string,
     runnerId: string | null,
     reason: SessionEndReason,
+    runnerOffline: boolean,
   ): Promise<void> {
     // Claim the teardown atomically: re-evaluate the trigger at execution time and put
     // the cancelRequestedAt flip + the 'end' turn in ONE transaction so a seq P2002
@@ -1226,9 +1229,15 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     // makes at once for its task's idle work (parked-session-end.ts, §12.15 P-M1);
     // this sweep is the backstop for what that one left.
     // Retried whole, for the same reason as forceFinalize above.
+    // R2 (§12.5 W6, W7): not a session its task's failed landing revived that something will still wake — it
+    // ends at its own park, or on a later sweep, once nothing does — unless its runner is gone, when nothing will.
     const done = await withTransactionRetry(
       this.prisma,
-      (tx) => claimParkedSessionEnd(tx, sessionId, reason),
+      async (tx) => {
+        if (reason === SessionEndReason.TASK_DONE && !runnerOffline
+          && (await fixingLandingWithWakeSource(tx, sessionId))) return false;
+        return claimParkedSessionEnd(tx, sessionId, reason);
+      },
       loggedRetry(this.log, 'reaper.endParked'),
     );
     if (!done) return;

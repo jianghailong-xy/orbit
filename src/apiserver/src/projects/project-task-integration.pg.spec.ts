@@ -540,7 +540,10 @@ test('a DONE task’s landing through the heartbeat and result routes: every que
       assert.equal((await read(stack, w, second)).landTask?.state, 'RUNNING');
       await report(stack, w, next[0]!, RED_MERGE_CHECK);
       const red = await read(stack, w, second);
-      assert.equal(red.state, 'CHECK_FAILED', 'the exception item still decides the row');
+      // Revision 42 (W4, §12.7): the failed check went first to the task's own work session, which the row names; the
+      // item still decides the row.
+      assert.equal(red.state, 'FIXING', 'the exception item still decides the row');
+      assert.equal(red.workSessionId, second.sessionId, 'the row does not name the session fixing it');
       assert.ok(red.openItemId);
       assert.equal(red.landTask?.state, 'CHECK_FAILED');
       assert.equal(red.landTask?.phase, 'CHECK');
@@ -586,6 +589,11 @@ test('an open MAIN_SYNC conflict holds the next landing as a project-line sync, 
       const conflicted = await doneTask(stack, w, 'conflicted');
       const claimed = await beat(stack, w);
       assert.equal(claimed.length, 1);
+      // Revision 42 (W4): a conflict goes first to its task's own work session while that session could take it. This
+      // case is about the coordinator's MAIN_SYNC item, so a person ended the work session first (W-T6).
+      await stack.db.session.update({
+        where: { id: conflicted.sessionId }, data: { endReason: 'ended', finishedAt: new Date() },
+      });
       await report(stack, w, claimed[0]!, SYNC_CONFLICT);
       const stopped = await read(stack, w, conflicted);
       assert.equal(stopped.state, 'CONFLICT');

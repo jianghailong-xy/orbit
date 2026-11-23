@@ -19,8 +19,6 @@ import {
 } from '@nestjs/common';
 import {
   type AgentExecConfig,
-  AgentProvider,
-  PermissionMode,
   type RemoteSubagentClaim,
   type RemoteSubagentEventBatch,
   type RemoteSubagentEventsPage,
@@ -41,6 +39,7 @@ import {
   isWiderThanParent,
   modesASubagentMayRunIn,
   resolvePermissionMode,
+  subagentChildMode,
   widerModeRefusal,
 } from '../common/permission-mode';
 import { dispatchAllowedTools } from '../common/permission-rules';
@@ -737,6 +736,7 @@ export class RunnerSubagentsController {
         background: run.background,
         prompt: facts.prompt,
         exec: built.exec,
+        parentPermissionMode: built.parentMode ?? null,
         resumeOf: facts.resumeOf ?? null,
         inPlace: facts.inPlace === true && facts.readonly === true,
       };
@@ -911,11 +911,9 @@ export class RunnerSubagentsController {
           `run in (${modesASubagentMayRunIn({ mode: parentMode, engine: provider }, provider).join(', ')}).`,
       );
     }
-    // A read-only Claude child keeps the parent's mode: the runner withholds its edit tools, and Plan would ask
-    // about every Bash call. Every other engine keeps Plan, its read-only (Codex and DSH read their own sandboxes).
-    const childMode = (dto.readonly
-      ? (provider === AgentProvider.CLAUDE ? parentMode : PermissionMode.PLAN)
-      : dto.permissionMode ?? parentMode) as PermissionMode;
+    // The parent's mode on every engine, read-only or not: the runner keeps a read-only child read-only and answers
+    // what it asks the way the parent's mode does (§5.3).
+    const childMode = subagentChildMode(parentMode, { readonly: dto.readonly, asked: dto.permissionMode }, provider);
     // A scheduled run's SubAgent is held to the run's level, as the run is: Auto on Claude Code, the level's denials
     // on every engine (schedule-access.ts). It never waits on a card nobody is there to answer.
     const level = runAccessLevel(session.scheduleRun);

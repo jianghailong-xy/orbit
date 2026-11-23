@@ -752,8 +752,9 @@ suite('(q) the core tables keep every trigger that predates this project', async
   // rewrite of a forked task's start and writes nothing. `session` 25 since 0850 added
   // `session_help_ask_guard`, which refuses an UPDATE that would make a session an Ask or not, and
   // writes nothing. `task` 37 since 1060 added `condition_ended_with_task`, which ends a task's
-  // condition when the task is cancelled, done or failed, and writes only `condition`.
-  assert.deepEqual(counts, { run_event: 1, session: 25, task: 37 });
+  // condition when the task is cancelled, done or failed, and writes only `condition`. `session` 26 since 1490 added
+  // `session_listed_at_settle`, which sets the row's own `listed_at` when it settles and writes no other relation.
+  assert.deepEqual(counts, { run_event: 1, session: 26, task: 37 });
 
   // And every one that went is named, so a reader can tell a removal from an accident.
   for (const trigger of [
