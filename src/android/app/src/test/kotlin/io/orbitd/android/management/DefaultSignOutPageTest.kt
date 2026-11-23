@@ -189,7 +189,7 @@ class DefaultSignOutPageTest {
 
     private val output: File by lazy {
         val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }.first { File(it, "src/android/settings.gradle.kts").isFile }
-        File(root, "src/android/build/evidence/set-default-android").also { it.mkdirs() }
+        File(root, "src/android/build/evidence/default-sign-out-android").also { it.mkdirs() }
     }
 
     /** Every window the app has open, the activity's first: a menu and a dialog are windows of their own. */
