@@ -558,7 +558,8 @@ function unreadable(now: number, observation: { updatedAt?: number; failed?: boo
  *  project's main branch by name, which a sync names. */
 /** The job facts §7.2 V6 reads, as both `inFlight` and every `inFlightJobs` entry carry them. */
 interface LandingJobFacts {
-  state: 'RUNNING' | 'QUEUED';
+  /** `PULL_REQUEST`: no runner holds it, so no liveness is drawn (docs/design/protected-branch-landing.md §4.2). */
+  state: 'RUNNING' | 'QUEUED' | 'PULL_REQUEST';
   phase?: IntegrationJobPhase | null;
   startedAt: string;
   heartbeatAt?: string | null;

@@ -54,6 +54,8 @@ export const LANDING_LABELS: Record<IntegrationJobState, string> = {
   CANCELLED: 'Landing cancelled',
   SUPERSEDED: 'Landing superseded',
   OBSERVED: 'Observed',
+  // docs/design/protected-branch-landing.md §11.2 (a): the landing waits for GitHub on its pull request.
+  PULL_REQUEST: 'Pull request open',
 };
 
 const TONES: Record<IntegrationJobState, Tone> = {
@@ -69,6 +71,7 @@ const TONES: Record<IntegrationJobState, Tone> = {
   CANCELLED: 'muted',
   SUPERSEDED: 'muted',
   OBSERVED: 'muted',
+  PULL_REQUEST: 'blue',
 };
 
 /**
