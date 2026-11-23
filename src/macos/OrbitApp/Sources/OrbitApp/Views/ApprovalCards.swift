@@ -2536,6 +2536,11 @@ struct DeliveredDecisionCardView: View {
                 CrossingDecisionCard(console: console, batchID: batchID)
             case .scheduleCard, .scheduleRecord, .scheduleRunStrip, .scheduleRunReport:
                 ScheduleConsoleCard(console: console, kind: card.kind)
+            case .permissionModeChange(let change):
+                Label(change.line, systemImage: "shield")
+                    .font(.orbitLabel)
+                    .foregroundStyle(console.modeChangeShowsGap(change) ? Color.orange : Color.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .environment(\.approvalReviewTarget, .delivered(card))
@@ -2544,6 +2549,7 @@ struct DeliveredDecisionCardView: View {
         // answered in a browser while a phone is asleep, and the phone has to find that out by
         // asking rather than by being told.
         .task {
+            if case .permissionModeChange = card.kind { return }
             // Both reads, and each is a no-op where it does not apply: the project's questions
             // belong to a coordinator conversation, the confirmation to a task's run — and a
             // receipt of one of these cards is on screen in the same conversation as the card was.
