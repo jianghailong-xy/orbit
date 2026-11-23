@@ -205,9 +205,7 @@ function ran(w: World, taskId: string, status: RunStatus, extra: Record<string, 
     assignedRunnerId: w.runnerId, title: `rehearsal ${status}`, prompt: 'rehearsal', provider: 'claude',
     providerBuiltin: true, startsTaskWork: true, numTurns: 1, engineTurnActive: false,
     runtimeSessionId: randomUUID(), startedAt: new Date(), status,
-    finishedAt: TERMINAL.includes(status) ? new Date() : null,
-    // A failure is the turn's outcome copied to the session (design §12): deploy 3 no longer reads status FAILED alone.
-    ...(status === RunStatus.FAILED ? { lastTurnOutcome: 'FAILED' } : {}), ...extra,
+    finishedAt: TERMINAL.includes(status) ? new Date() : null, ...extra,
   };
 }
 
@@ -215,11 +213,7 @@ async function moveTo(db: PrismaClient, sessionId: string, status: RunStatus): P
   await db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
     await tx.session.update({
-      where: { id: sessionId },
-      data: {
-        status, finishedAt: TERMINAL.includes(status) ? new Date() : null,
-        ...(status === RunStatus.FAILED ? { lastTurnOutcome: 'FAILED' } : {}),
-      },
+      where: { id: sessionId }, data: { status, finishedAt: TERMINAL.includes(status) ? new Date() : null },
     });
   });
 }
@@ -458,8 +452,8 @@ test('one live run per task, release B (migration 1444): rehearsal before and af
   const migrations = (await sql.query(
     `SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL ORDER BY 1`,
   )).rows.map((r: { migration_name: string }) => r.migration_name);
-  // Later migrations (main's 1447, 1462) sit above 1444: the template is at this branch's head, 1444 among them.
-  assert.ok(migrations.includes(RELEASE_B), 'the template was migrated to this branch\'s head, 1444 applied');
+  // Not "last": main's later migrations (1447, 1462, ...) number above 1444, and the rehearsal only needs 1444 applied.
+  assert.ok(migrations.includes(RELEASE_B), 'the template was migrated to this branch\'s head, 1444 among it');
   if ((await claimIndexes(sql)).some(([name]) => name === OLD_INDEX) === false) {
     await sql.query(`DROP INDEX "${NEW_INDEX}"`);
     await sql.query(OLD_DEF);

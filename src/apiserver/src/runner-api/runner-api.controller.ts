@@ -8194,15 +8194,15 @@ export class RunnerApiController {
               status: 'PENDING',
             },
           });
+      // A failed turn under the new protocol (SESSION_RELEASE_V1) releases nothing: the session stays held, RUNNING on
+      // the runner's slot while it tears its engine down, until its release report. Everything else the failure writes
+      // below is written as for the old protocol; what only a release writes waits for that report.
+      const releaseOwed = failSession && releasesSeparately;
       // Run now's pass covered this one turn (decision B): answered, it is spent and the slot over the limit is
       // returned. A turn put back in the queue has not been answered and keeps it.
       const overCapacityEnded = current.overCapacityTurnId != null
         && completedTurn?.id === current.overCapacityTurnId
         && !(unanswered && !swallowed);
-      // A failed turn under the new protocol (SESSION_RELEASE_V1) releases nothing: the session stays held, RUNNING on
-      // the runner's slot while it tears its engine down, until its release report. Everything else the failure writes
-      // below is written as for the old protocol; what only a release writes waits for that report.
-      const releaseOwed = failSession && releasesSeparately;
       // A stopped engine passes no slot on: a message queued behind the stop waits for a claim, where the hold decides.
       // Nor does a turn that ran over the limit: its follow-up queues for a slot like any other message.
       const nextStatus = failSession

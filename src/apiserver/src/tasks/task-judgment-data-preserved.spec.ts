@@ -3332,8 +3332,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // row is written, and no trigger, function or DONE fence changes.
       // Written as 1430 on the project line, it was renumbered after main took 1430.
       '1431_managed_runner_update_interrupt',
-      // 1432 creates model_identity (rule_key, canonical_key, name, decided_at) and 1433 seeds it with INSERTs: a new
-      // table, not a preserved relation; no preserved relation, trigger, function or DONE fence is read or changed.
+      // 1432 creates model_identity (rule_key, canonical_key, name, decided_at), a new table no preserved relation
+      // references; no existing row is written, and no trigger, function or DONE fence changes.
       '1432_model_identity',
       // 1433 seeds model_identity with production's model ids, INSERT ... ON CONFLICT (rule_key) DO NOTHING into that
       // new table only; no preserved relation, trigger, function or DONE fence is touched.
@@ -3363,8 +3363,6 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1444 drops 0130's claim index session_task_execution_claim_idx CONCURRENTLY (plan step 4.5, release B); 1426's
       // index goes on enforcing one live run per task. Session is not a preserved relation, and no function, trigger,
       // type, constraint or DONE fence changes. No INSERT, UPDATE or DELETE.
-      // Written as 1432 on the project line, it was renumbered after main took 1432 and 1433 (model_identity); it runs
-      // after deploy 3's 1441 to 1443, and neither reads what the other changes.
       '1444_drop_session_task_execution_claim_idx',
       // 1447 adds SCHEDULE_CHANGE to session_run_source, two nullable session columns (change_schedule_id, with its
       // foreign key to schedule ON DELETE SET NULL and a partial index, and schedule_change_opening), and a nullable

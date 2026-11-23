@@ -311,9 +311,9 @@ test('the quiet answer to a draining beat says the claim takes a drain scope', (
 // A runner declares SESSION_RELEASE_V1 only on this word in its latest answer (runner-go session_release.go), so the
 // quiet answer says it as the full one does while the operator's switch is on, and neither says it while it is off.
 test('the quiet answer says the server offers the release protocol only while the switch is on', () => {
-  assert.equal(quietHeartbeatAnswer({ maxConcurrent: 4, minFreeDiskMb: 2048 }, { sessionRelease: true }).sessionReleaseV1, true);
-  assert.equal('sessionReleaseV1' in quietHeartbeatAnswer({ maxConcurrent: 4, minFreeDiskMb: 2048 }, { sessionRelease: false }), false);
-  assert.equal('sessionReleaseV1' in quietHeartbeatAnswer({ maxConcurrent: 4, minFreeDiskMb: 2048 }, {}), false);
+  assert.equal(quietHeartbeatAnswer({ maxConcurrent: 4, burstConcurrent: 2, minFreeDiskMb: 2048 }, { sessionRelease: true }).sessionReleaseV1, true);
+  assert.equal('sessionReleaseV1' in quietHeartbeatAnswer({ maxConcurrent: 4, burstConcurrent: 2, minFreeDiskMb: 2048 }, { sessionRelease: false }), false);
+  assert.equal('sessionReleaseV1' in quietHeartbeatAnswer({ maxConcurrent: 4, burstConcurrent: 2, minFreeDiskMb: 2048 }, {}), false);
 });
 
 test('the release protocol switch is off unless ORBIT_SESSION_RELEASE_V1 says on', () => {
