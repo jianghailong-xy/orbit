@@ -40,6 +40,20 @@ final class UnknownStatusPhaseReadingTests: XCTestCase {
                           SessionStatusGlyph.make(for: try session(#""status":"AWAITING_INPUT""#)))
     }
 
+    func testHeldUnknownStatusWithActivityTurnReadsRunning() throws {
+        XCTAssertEqual(SessionHeader.statusWord(for: try session(#""status":"MYSTERY","released":false,"phase":"RUNNING","activity":"TURN""#)), "Running")
+        XCTAssertEqual(SessionHeader.statusWord(for: try session(#""status":"MYSTERY","released":false,"phase":"PENDING","activity":"TURN""#)), "Queued")
+    }
+
+    /// Apple resumes a released session whatever the capabilities say about canSend (the server sends both true).
+    func testAReleasedSessionResumesWhenCapabilitiesSayBoth() {
+        let both = SessionCapabilities(canSend: true, canResume: true, canComplete: true, canRestore: false)
+        XCTAssertTrue(ComposerLogic.shouldResume(status: .awaitingInput, released: true, capabilities: both))
+        XCTAssertFalse(ComposerLogic.shouldResume(status: .awaitingInput, released: false, capabilities: both))
+        XCTAssertTrue(ComposerLogic.shouldResume(status: .failed, released: nil, capabilities: both))
+        XCTAssertFalse(ComposerLogic.shouldResume(status: .awaitingInput, released: nil, capabilities: both))
+    }
+
     func testUnknownStatusWithoutTheFieldsKeepsItsOldReading() throws {
         XCTAssertEqual(SessionHeader.statusWord(for: try session(#""status":"MYSTERY""#)), "Ended")
         // `phase` without `released` is not the new fields.
@@ -71,9 +85,18 @@ final class UnknownStatusPhaseReadingTests: XCTestCase {
             (#""status":"SUCCEEDED""#, "Finished"),
             (#""status":"MYSTERY""#, "Ended"),
             (#""status":"RUNNING","released":true"#, "Running"),
+            // The server sends activity TURN on every queued or running row: a turn, not parked work.
+            (#""status":"RUNNING","released":false,"phase":"RUNNING","activity":"TURN""#, "Running"),
+            (#""status":"PENDING","released":false,"phase":"PENDING","activity":"TURN""#, "Queued"),
+            // A job with no turn keeps the parked wording.
+            (#""status":"AWAITING_INPUT","released":false,"phase":"RUNNING","activity":"BACKGROUND_JOB""#, "Awaiting reply"),
+            // A held queued run reads On hold; a finished run reads Finished by workFinished.
+            (#""status":"PENDING","released":false,"phase":"PENDING","activity":"TURN","waitingOn":"HOLD""#, "On hold"),
+            (#""status":"SUCCEEDED","released":true,"phase":"IDLE","workFinished":true"#, "Finished"),
+            (#""status":"SUCCEEDED","released":true,"phase":"IDLE","lastTurnOutcome":"ANSWERED""#, "Ended"),
         ]
         for (json, label) in cases {
-            XCTAssertEqual(ShareMarkdown.runLabel(try run(json).resolvedRunState), label, json)
+            XCTAssertEqual(ShareMarkdown.runLabel(try run(json)), label, json)
         }
     }
 }

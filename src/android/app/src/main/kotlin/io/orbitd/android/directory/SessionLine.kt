@@ -262,7 +262,8 @@ internal val DirectorySession.effectiveRunState: RunState get() {
     // A known status keeps its reading: a parked turn with a background job says so, which the phase alone cannot.
     if (released == false && (runStatus ?: status) !in KNOWN_RUN_STATUSES && RunState.entries.none { it != RunState.UNKNOWN && it.name == runState }) when (phase) {
         "PENDING" -> return RunState.QUEUED
-        "RUNNING" -> return if (activity.isNullOrEmpty()) RunState.RUNNING else RunState.AWAITING_INPUT
+        // `activity` is TURN on every queued or running row; only another one (a background job, a wait) is a parked session.
+        "RUNNING" -> return if (activity.isNullOrEmpty() || activity == "TURN") RunState.RUNNING else RunState.AWAITING_INPUT
         "IDLE" -> return if (lastTurnOutcome == "INTERRUPTED") RunState.INTERRUPTED else RunState.AWAITING_INPUT
     }
     RunState.entries.firstOrNull { it != RunState.UNKNOWN && it.name == runState }?.let { return it }

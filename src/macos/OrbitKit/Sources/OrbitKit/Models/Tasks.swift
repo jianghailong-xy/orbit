@@ -348,16 +348,18 @@ public struct SessionRef: Codable, Equatable, Sendable, Identifiable {
     @LenientSessionField public private(set) var phase: SessionPhase?
     @LenientSessionField public private(set) var released: Bool?
     @LenientSessionField public private(set) var lastTurnOutcome: SessionTurnOutcome?
+    @LenientSessionField public private(set) var workFinished: Bool?
+    @LenientSessionField public private(set) var waitingOn: SessionWaitingOn?
     public let activity: String?
     public let sessionKind: String?
 
     /// Resolve the task detail's run state from the session facts when sent, as web's task panel does
-    /// (`sessionRunStateOf`: it reads `endReason`, not `workFinished`), else the modern run state, retaining
+    /// (the run state function), else the modern run state, retaining
     /// compatibility with older servers that only returned the raw runner status or the legacy mixed state.
     public var resolvedRunState: SessionRunState? {
         if let fromFields = SessionRunState.fromPhaseFields(
             phase: phase, released: released, lastTurnOutcome: lastTurnOutcome, endReason: endReason,
-            activity: activity, isLanding: sessionKind == "LANDING") {
+            workFinished: workFinished, activity: activity, isLanding: sessionKind == "LANDING") {
             return fromFields
         }
         return SessionRunState.resolveOptional(runState, legacy: sessionState,
