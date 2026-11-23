@@ -1,0 +1,83 @@
+Building for debugging...
+[Computing dependencies]
+[Pre-planning 1 / 307]
+[Planning deferred tasks]
+[20 / 62]
+[21 / 45] OrbitApp
+/Users/long/.orbit/remote-subagents/352m9jygtjYgzlBstU6rO/tree/src/macos/OrbitApp/Sources/OrbitApp/Views/MainView.swift:189:13: [1;33mwarning: [1;39minitialization of immutable value 'agents' was never used; consider replacing with assignment to '_' or removing it[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/no-usage\NoUsage]8;;\]
+[0;36m187 |[0;0m 
+[0;36m188 |[0;0m     var body: some View {
+[0;36m189 |[0;0m         let agents = model.agents
+    [0;36m|[0;0m             `- [1;33mwarning: [1;39minitialization of immutable value 'agents' was never used; consider replacing with assignment to '_' or removing it[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/no-usage\NoUsage]8;;\]
+[0;36m190 |[0;0m         // One read of the models, one snapshot: the work rows (the Wiki's visibility is DATA here),
+[0;36m191 |[0;0m         // the Workspaces rows and the open projects. Each area draws one ForEach over its rows.
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+[30 / 54] OrbitApp
+[38 / 54] OrbitApp
+/Users/long/.orbit/remote-subagents/352m9jygtjYgzlBstU6rO/tree/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:3029:57: [1;33mwarning: [1;39m'weak' ownership of capture 'self' differs from implicitly-captured strong reference in outer scope[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/implicit-strong-capture\ImplicitStrongCapture]8;;\]
+[0;36m3018 |[0;0m     func pauseProject(_ row: SessionProjectRow) {
+[0;36m3019 |[0;0m         guard let api else { return }
+[0;36m3020 |[0;0m         Task { @MainActor in
+     [0;36m|[0;0m              |- [1;39mnote: [1;39m'self' implicitly strongly captured here[0;0m
+     [0;36m|[0;0m              `- [1;39mnote: [1;39madd 'self' as a capture list item to silence[0;0m
+[0;36m3021 |[0;0m             do { _ = try await api.pauseProject(row.projectId) }
+[0;36m3022 |[0;0m             catch {
+     [0;36m:[0;0m
+[0;36m3027 |[0;0m             showToast(SessionProjectCopy.pausedTitle, subtitle: row.title,
+[0;36m3028 |[0;0m                       detail: SessionProjectCopy.pausedStill(running: row.runningCount),
+[0;36m3029 |[0;0m                       icon: "pause.fill", undo: { [weak self] in self?.resumeProject(row) })
+     [0;36m|[0;0m                                                         |- [1;33mwarning: [1;39m'weak' ownership of capture 'self' differs from implicitly-captured strong reference in outer scope[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/implicit-strong-capture\ImplicitStrongCapture]8;;\]
+     [0;36m|[0;0m                                                         `- [1;39mnote: [1;39mexplicitly assign the capture list item to silence[0;0m
+[0;36m3030 |[0;0m         }
+[0;36m3031 |[0;0m     }
+
+/Users/long/.orbit/remote-subagents/352m9jygtjYgzlBstU6rO/tree/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:3284:41: [1;33mwarning: [1;39m'weak' ownership of capture 'self' differs from implicitly-captured strong reference in outer scope[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/implicit-strong-capture\ImplicitStrongCapture]8;;\]
+[0;36m3272 |[0;0m         guard let api else { return }
+[0;36m3273 |[0;0m         let name = agents?.agent(workspaceID)?.name
+[0;36m3274 |[0;0m         Task { @MainActor in
+     [0;36m|[0;0m              |- [1;39mnote: [1;39m'self' implicitly strongly captured here[0;0m
+     [0;36m|[0;0m              `- [1;39mnote: [1;39madd 'self' as a capture list item to silence[0;0m
+[0;36m3275 |[0;0m             do { _ = try await api.updateAgent(workspaceID, UpdateAgentRequest(enableWorktree: on)) }
+[0;36m3276 |[0;0m             catch {
+     [0;36m:[0;0m
+[0;36m3282 |[0;0m                 showToast(WorktreeBarLogic.worktreeIsolationOff(workspaceName: name),
+[0;36m3283 |[0;0m                           detail: WorktreeBarLogic.worktreeIsolationOffDetail, tone: .neutral,
+[0;36m3284 |[0;0m                           undo: { [weak self] in self?.setWorktreeIsolation(true, inWorkspace: workspaceID) },
+     [0;36m|[0;0m                                         |- [1;33mwarning: [1;39m'weak' ownership of capture 'self' differs from implicitly-captured strong reference in outer scope[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/implicit-strong-capture\ImplicitStrongCapture]8;;\]
+     [0;36m|[0;0m                                         `- [1;39mnote: [1;39mexplicitly assign the capture list item to silence[0;0m
+[0;36m3285 |[0;0m                           key: "keep-shared-\(workspaceID)")
+[0;36m3286 |[0;0m             }
+
+[#ImplicitStrongCapture]: <https://docs.swift.org/compiler/documentation/diagnostics/implicit-strong-capture>
+/Users/long/.orbit/remote-subagents/352m9jygtjYgzlBstU6rO/tree/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:130:14: [1;33mwarning: [1;39m'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead.[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m128 |[0;0m                        value: spun)
+[0;36m129 |[0;0m             .onAppear { spun = running }
+[0;36m130 |[0;0m             .onChange(of: running) { spun = $0 }
+    [0;36m|[0;0m              `- [1;33mwarning: [1;39m'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead.[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m131 |[0;0m     }
+[0;36m132 |[0;0m }
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[40 / 54] OrbitApp
+[44 / 55] OrbitAppTests-product
+[46 / 68]
+[48 / 68]
+[49 / 68]
+[57 / 68] OrbitAppTests-product
+[62 / 68] OrbitAppTests-product
+[64 / 68] OrbitAppTests-product
+[65 / 68] OrbitAppTests-product
+[66 / 68] OrbitAppTests-product
+Build complete! (104.99 sec)
+Test Suite 'Selected tests' started at 2026-11-24 05:11:51.967.
+Test Suite 'OrbitAppTests.xctest' started at 2026-11-24 05:11:51.969.
+Test Suite 'SignOutShotsTests' started at 2026-11-24 05:11:51.969.
+Test Case '-[OrbitAppTests.SignOutShotsTests testSignOutFramesFromRealCopyAndRules]' started.
+Test Case '-[OrbitAppTests.SignOutShotsTests testSignOutFramesFromRealCopyAndRules]' passed (0.269 seconds).
+Test Suite 'SignOutShotsTests' passed at 2026-11-24 05:11:52.238.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.269 (0.269) seconds
+Test Suite 'OrbitAppTests.xctest' passed at 2026-11-24 05:11:52.238.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.269 (0.269) seconds
+Test Suite 'Selected tests' passed at 2026-11-24 05:11:52.238.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.269 (0.271) seconds
