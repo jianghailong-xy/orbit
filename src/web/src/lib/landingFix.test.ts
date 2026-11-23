@@ -113,7 +113,7 @@ describe('the landing window’s reading', () => {
   it('is FIXING while the newest of the three rows is the hand-off, with its round and its session', () => {
     const landing = { settledAt: null, timeline: { truncated: false, facts: [], sections: [section('j1', [failedResult, handed])] } };
     expect(landingFixStanding(landing as never)).toEqual({
-      state: 'FIXING', sessionId: 'S1', at: handed.at, round: 1, returnReason: null,
+      state: 'FIXING', sessionId: 'S1', at: handed.at, round: 1, returnReason: null, lastMessage: null,
     });
     const events = landingFixEvents(landing as never);
     expect(landingFixEventSub(events[0], events, false)).toBe('It wrote this work · round 1 of 2');
