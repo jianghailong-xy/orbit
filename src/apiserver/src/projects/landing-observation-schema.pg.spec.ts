@@ -143,6 +143,8 @@ interface JobFields {
   serialKey?: string;
   observations?: unknown;
   landed?: boolean;
+  /** A job waiting on its pull request names what `project_integration_job_pull_request_chk` holds it to (1527). */
+  pullRequest?: boolean;
   errorCode?: string;
   /** Appended verbatim: `ON CONFLICT … DO NOTHING`. */
   onConflict?: string;
@@ -167,6 +169,12 @@ async function insertJob(
     upstream_ref: MAIN, source_ref: line.integrationRef, error_code: fields.errorCode ?? null,
     idempotency_key: `ij:v1:${kind}:${line.projectId}:${generation}:${id}`, updated_at: new Date(),
     ...(fields.landed ? { landed_sha: sha('8'), tested_tree_sha: sha('7'), landed_tree_sha: sha('7') } : {}),
+    ...(fields.pullRequest
+      ? {
+        land_via: 'PULL_REQUEST', landing_ref: `refs/heads/orbit/land/${randomUUID()}`, pull_request_id: randomUUID(),
+        tested_sha: sha('6'), tested_tree_sha: sha('7'),
+      }
+      : {}),
     ...(fields.observations !== undefined ? { observations: JSON.stringify(fields.observations) } : {}),
   };
   const columns = Object.keys(row);
@@ -441,7 +449,9 @@ test('0453 §10.4 on a database every migration ran on from empty', { skip, time
         });
       }
       for (const state of INTEGRATION_JOB_STATES) {
-        await insertJob(sql, ownerId, every, { kind: 'CHECK_PROMOTION', state, serialKey: key(), landed: state === 'LANDED' });
+        await insertJob(sql, ownerId, every, {
+          kind: 'CHECK_PROMOTION', state, serialKey: key(), landed: state === 'LANDED', pullRequest: state === 'PULL_REQUEST',
+        });
       }
       for (const phase of INTEGRATION_JOB_PHASES) {
         await insertJob(sql, ownerId, every, { kind: 'CHECK_PROMOTION', state: 'ERROR', phase, serialKey: key() });
