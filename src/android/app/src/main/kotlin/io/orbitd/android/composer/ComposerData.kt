@@ -608,7 +608,8 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
             (runner.flag("runsAsRoot") == true && mode == "bypassPermissions") ||
                 (mode == "auto" && engine == ProviderEngines.CLAUDE && row(provider) == null &&
                     if (reported?.get("permissionModes") is JsonArray) "auto" !in reported.strings("permissionModes")
-                    else model !in setOf("claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-fable-5", "claude-sonnet-5"))
+                    else model !in setOf("claude-opus-5-5", "claude-opus-5", "claude-fable-5-2", "claude-fable-5-1", "claude-fable-5",
+                        "claude-sonnet-5-5", "claude-sonnet-5", "claude-haiku-5-5"))
         }
     }
 

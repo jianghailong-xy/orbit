@@ -217,6 +217,7 @@ import {
   permissionModeSupported,
   contextWindowFor,
   DEFAULT_MODEL,
+  DEFAULT_PERMISSION_MODE,
   defaultEngineOf,
   defaultModelFor,
   effectiveSessionEffort,
@@ -1515,9 +1516,16 @@ export function CoordinatorBadge({ projectId }: { projectId?: string | null }) {
 
 /** Where and how the agent runs a guest's message, for the Share dialog's People who can reply: the session's own
  *  runner and permission mode, or the workspace's machine when the session names none. */
-const guestContextOf = (s: any, fallbackRunner: string, managedRunnerId: string | null) => ({
+const guestContextOf = (
+  s: any,
+  fallbackRunner: string,
+  managedRunnerId: string | null,
+  accountPermissionMode: string | undefined,
+) => ({
   runnerName: (s.assignedRunner ? machineName(s.assignedRunner, managedRunnerId) : '') || fallbackRunner,
-  permissionMode: typeof s.permissionMode === 'string' ? s.permissionMode : 'default',
+  // A session that stored no mode runs in the account's, else Auto, as the server resolves it.
+  permissionMode:
+    typeof s.permissionMode === 'string' ? s.permissionMode : (accountPermissionMode ?? DEFAULT_PERMISSION_MODE),
 });
 
 /** What the two-person icon beside a row's time says: people the owner invited can reply here. */
@@ -4540,7 +4548,18 @@ export function WorkspaceView({
   // Model and Mode have independent dirty guards. If an untouched model is refined by a late
   // Runtime heartbeat after the user explicitly chose Auto, correctness still wins: never keep
   // an invalid pair merely because Mode is dirty.
+  //
+  // Not in the commit a new context arrives in: that commit still holds the previous context's
+  // model and mode, the seeds above having only queued this one's. Judged on those, a stopped Claude
+  // session opened after a Codex one read Codex's model, lost Auto, and its Continue stored Default
+  // (seen on orbitd.io, 2026-11-23). The seeds are clamped already, and the next commit runs this
+  // check again on this context's own values.
+  const clampContextKey = useRef<string | null>(null);
   useEffect(() => {
+    if (clampContextKey.current !== modelContextKey) {
+      clampContextKey.current = modelContextKey;
+      return;
+    }
     if (
       !live &&
       shownProviderCapabilitiesResolved &&
@@ -4555,6 +4574,7 @@ export function WorkspaceView({
     live,
     mode,
     model,
+    modelContextKey,
     runner.modelCatalog,
     shownEngine,
     shownProvider,
@@ -11092,7 +11112,7 @@ export function WorkspaceView({
             onClose={() => setShareOpen(false)}
             kind="SESSION"
             rootId={selected.id}
-            guests={guestContextOf(selected, runnerShownName, managedRunnerId)}
+            guests={guestContextOf(selected, runnerShownName, managedRunnerId, accountDefaultPermissionMode)}
           />
         )}
         {selected && !selectedTrashed && !composing && (
@@ -11120,7 +11140,7 @@ export function WorkspaceView({
             onClose={() => setShareRow(null)}
             kind="SESSION"
             rootId={shareRow.id}
-            guests={guestContextOf(shareRow, runnerShownName, managedRunnerId)}
+            guests={guestContextOf(shareRow, runnerShownName, managedRunnerId, accountDefaultPermissionMode)}
           />
         )}
         <SessionMoveModal
