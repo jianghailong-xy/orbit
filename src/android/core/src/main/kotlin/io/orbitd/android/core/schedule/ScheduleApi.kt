@@ -81,6 +81,14 @@ class ScheduleApi(private val api: OrbitApi, private val handle: SessionHandle) 
     suspend fun sessionCards(sessionId: String): SessionScheduleCardsResponse =
         read(get(listOf("sessions", sessionId, "schedule-cards")), SessionScheduleCardsResponse::parse)
 
+    /** Change… (§8.2): the schedule's open change conversation, if any, and the opening a new one would start with. */
+    suspend fun change(id: String): ScheduleChangeConversationResponse =
+        read(get(listOf("schedules", id, "change")), ScheduleChangeConversationResponse::parse)
+
+    /** Opens the schedule's change conversation with the person's first words, or says them in the one still open. */
+    suspend fun openChange(id: String, text: String): ScheduleChangeAnswer =
+        read(send(listOf("schedules", id, "change"), HttpMethod.POST, buildJsonObject { put("text", text) }), ScheduleChangeAnswer::parse)
+
     private suspend fun decide(id: String, door: String, body: JsonObject): ScheduleDecisionOutcome = try {
         val answer = send(listOf("schedule-requests", id, door), HttpMethod.POST, body)
         ScheduleDecisionOutcome.Decided(ScheduleCard.parse((parse(answer) as? JsonObject)?.get("card")))

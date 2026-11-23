@@ -97,6 +97,7 @@ class RunnerUpdatingShellTest : ComposerShellTest() {
             .map { it.config[SemanticsProperties.Text].joinToString("") { t -> t.text } }
         assertEquals(listOf("Queued", "·", "runner updating"), foot)
         assertFalse("the foot row says it, not the page's block", has(hasTestTag("runner-updating"), unmerged = true))
+        assertRightAligned(compose.onNodeWithTag("runner-updating-foot", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot)
         shot("android-runner-updating")
         compose.onNodeWithTag("runner-updating-foot:reason", useUnmergedTree = true).performClick()
         await { has(hasTestTag("runner-updating-pop"), unmerged = true) }
@@ -135,6 +136,7 @@ class RunnerUpdatingShellTest : ComposerShellTest() {
         val message = compose.onNodeWithTag("accepted:$heldId").fetchSemanticsNode().boundsInRoot
         val row = compose.onNodeWithTag("runner-updating-foot", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertTrue("the foot row is under the waiting message", row.top >= message.bottom)
+        assertRightAligned(row)
         shot("android-runner-full-cancel")
         compose.onNodeWithTag("composer-input").performTextInput("a draft")
         compose.onNodeWithTag("runner-updating-foot:cancel", useUnmergedTree = true).performClick()
@@ -159,6 +161,12 @@ class RunnerUpdatingShellTest : ComposerShellTest() {
         await { has(hasTestTag("runner-updating-foot"), unmerged = true) }
         assertEquals(listOf("Queued", "·", "runner full"), foot())
         assertFalse(has(hasTestTag("runner-updating-foot:cancel"), unmerged = true))
+    }
+
+    /** Under the reader's own message the row stands at the bubble's right edge, as on iOS and web, not at the list's left. */
+    private fun assertRightAligned(row: androidx.compose.ui.geometry.Rect) {
+        val width = compose.activity.window.decorView.width
+        assertTrue("the foot row is on the right (left=${row.left}, right=${row.right}, width=$width)", row.left > width / 2f)
     }
 
     private fun shot(name: String) = draw(name, compose.activity.window.decorView)

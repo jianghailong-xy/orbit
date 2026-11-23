@@ -323,7 +323,9 @@ test('SubAgent quota fallback: moves, attempts, the reason, the bound and the re
       "the parent session's pool fields are unchanged");
   });
   await t.test("a Codex pool is a fallback target: its account's token, recorded on the attempt, never on the parent", async () => {
-    await prisma.user.update({ where: { id: ownerId }, data: { preferences: { subagentBlockedProviders: [first, second] } } });
+    // The Claude pool the case before left behind runs the same Sonnet, so routing (model first, then the account:
+    // docs/subagent-design.md §4.2) would move there first; blocked, the next model is the Codex pool's.
+    await prisma.user.update({ where: { id: ownerId }, data: { preferences: { subagentBlockedProviders: [first, second, `crew-${tag}`] } } });
     // A machine with Claude signed in at 10% used, and codex installed but signed out.
     const machineId = randomUUID();
     const inAnHour = new Date(Date.now() + 3_600_000);

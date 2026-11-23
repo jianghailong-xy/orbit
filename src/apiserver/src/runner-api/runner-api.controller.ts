@@ -129,7 +129,9 @@ import {
   CodexAccountRemoveResult,
   InstallCommand,
   InstallResult,
+  LOGIN_BROWSER_OUTCOMES,
   LOGIN_FAILURE_REASONS,
+  LOGIN_RUNNER_BROWSER_V1,
   LoginCommand,
   LoginEngine,
   LoginResult,
@@ -290,6 +292,7 @@ import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout'
 import { followWikiDocsAfterReceipts, followWikiDocsAfterSessionMerge } from '../wiki/wiki-docs-follow';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
 import { appendWikiChatNotes } from '../wiki/wiki-chat-notes';
+import { appendScheduleChangeNote } from '../schedules/schedule-change-conversation';
 import {
   type TaskFailure,
   recordTaskFailure,
@@ -3784,6 +3787,7 @@ export class RunnerApiController {
         loginRegion: true,
         loginCode: true,
         loginAt: true,
+        loginBrowser: true,
         // Whether a Claude sign-in may go out at all (the region check, below), and the machine its refusal names.
         name: true,
         displayName: true,
@@ -3885,6 +3889,15 @@ export class RunnerApiController {
         attempt,
         ...(r.loginAccount ? { account: r.loginAccount } : {}),
       };
+    }
+    // The owner's Use the runner's browser (docs/runner-browser-engine-sign-in-design.md): redelivered until the
+    // runner's report on the attempt says what became of it (loginResult), and only to a process that declares it.
+    if (
+      r.loginBrowser === 'requested'
+      && (r.loginStatus === 'awaiting_code' || r.loginStatus === 'awaiting_approval')
+      && (parseRunnerCapabilities(capabilities) ?? []).includes(LOGIN_RUNNER_BROWSER_V1)
+    ) {
+      return { action: 'browser', engine, attempt, ...(r.loginAccount ? { account: r.loginAccount } : {}) };
     }
     return undefined;
   }
@@ -4238,6 +4251,9 @@ export class RunnerApiController {
     // than this has its report taken all the same, without them.
     const expiresAt = typeof body.expiresAt === 'string' ? new Date(body.expiresAt) : null;
     const reason = LOGIN_FAILURE_REASONS.find((known) => known === body.reason) ?? null;
+    // What the runner did with the owner's Use the runner's browser: kept while the link waits, and a waiting report
+    // that says nothing of it (a rejected code's) leaves it as it was. Gone with the link.
+    const browser = LOGIN_BROWSER_OUTCOMES.find((known) => known === body.browser) ?? null;
     const { count } = await this.prisma.runner.updateMany({
       where: { id: runner.id, ...(attempt ? { loginAt: attempt, loginStatus: { not: 'cancelling' } } : {}) },
       data: {
@@ -4252,6 +4268,7 @@ export class RunnerApiController {
         // How long the link at loginUrl lasts, kept while it waits and dropped with it.
         loginExpiresAt: waiting && expiresAt && !Number.isNaN(expiresAt.getTime()) ? expiresAt : null,
         loginReason: status === 'failed' ? reason : null,
+        ...(waiting ? (browser ? { loginBrowser: browser } : {}) : { loginBrowser: null }),
         // Which account is signing in. For a new one this is the first the control plane hears of
         // the slot the runner added for it.
         ...(body.account ? { loginAccount: body.account } : {}),
@@ -6196,6 +6213,8 @@ export class RunnerApiController {
             },
             // A wiki chat's messages carry its notes (appendWikiChatNotes, below).
             wikiChatSpaceId: true,
+            // A schedule's change conversation names its schedule on every message (appendScheduleChangeNote).
+            changeScheduleId: true,
           },
         });
         // A message turn that already produced runtime output is a lease re-delivery.
@@ -6296,6 +6315,15 @@ export class RunnerApiController {
               sessionId,
               turn: { seq: t.seq, kind: t.kind, wikiContext: t.wikiContext },
             }, content);
+          }
+          // A schedule's change conversation (scheduled-tasks-design.md §8.2): each message carries the schedule it
+          // changes, read now, after the person's words. Not on a steer, which joins a turn that already has it.
+          if (t.kind === 'message' && sessionContext?.changeScheduleId) {
+            content = await appendScheduleChangeNote(
+              tx,
+              { ownerId: sessionContext.ownerId, scheduleId: sessionContext.changeScheduleId },
+              content,
+            );
           }
           // Another Orbit session's message says so, in a block after its words (session-message.ts,
           // contract §2.2): without it the recipient reads another agent as the account owner. After

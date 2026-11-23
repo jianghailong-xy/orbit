@@ -248,7 +248,8 @@ test('subagent_rate: the parent rates its own run, and the Model tiers view read
     const agy = pooled.providers.find((p) => p.slug === 'antigravity' && p.kind === 'builtin')!;
     const agySonnet = agy.models.find((m) => m.model === SONNET)!;
     assert.deepEqual(agySonnet.quality, sonnet, 'the same id on another engine is the same model');
-    assert.deepEqual(agySonnet.identity, { key: SONNET, name: null });
+    // Named by the seed migration 1433 (069b42dd64), which knows production's ids.
+    assert.deepEqual(agySonnet.identity, { key: SONNET, name: 'Claude Sonnet 5.5' });
     const alias = agy.models.find((m) => m.model === HAIKU_ALIAS)!;
     assert.deepEqual(alias.quality, haiku, 'an id model_identity ties to Haiku reads Haiku');
     assert.deepEqual(alias.identity, { key: HAIKU, name: 'Claude Haiku 5.5' });
