@@ -183,7 +183,7 @@ test('the Orbit Files drive is the one addition: exactly its CSI volume, mounted
   tampered((pod) => void (driveVolume(pod).csi.nodePublishSecretRef = { name: 'mrf-x' }), 'a publish Secret');
   tampered((pod) => void pod.spec.volumes!.push({ name: 'orbit-files-2', csi: { driver: 'files.orbit.dev', volumeAttributes: { runnerId: RUNNER } } }), 'a second drive volume');
   tampered((pod) => void pod.spec.volumes!.push({ name: 'rbd', csi: { driver: 'rbd.csi.ceph.com', volumeAttributes: {} } }), 'any other CSI volume');
-  tampered((pod) => void (driveMount(pod).mountPath = '/home/orbit/Files'), 'mounted elsewhere');
+  tampered((pod) => void (driveMount(pod).mountPath = '/home/orbit/Documents'), 'mounted elsewhere');
   tampered((pod) => void (driveMount(pod).mountPropagation = 'Bidirectional'), 'Bidirectional propagation');
   tampered((pod) => void delete driveMount(pod).mountPropagation, 'no propagation');
   tampered((pod) => void (driveMount(pod).readOnly = true), 'mounted read-only');

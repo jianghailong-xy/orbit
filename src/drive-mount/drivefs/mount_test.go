@@ -268,7 +268,7 @@ func TestAWriteInsideAnExistingFileIsRefused(t *testing.T) {
 	if data, versions := f.content("/h.txt"); string(data) != "hello\nend\n" || versions != 1 {
 		t.Fatalf("%q, %d versions", data, versions)
 	}
-	if !strings.Contains(strings.Join(rep.Lines(), "\n"), "EOPNOTSUPP write /home/orbit/Files/h.txt at offset 2: the drive does not change a file in place") {
+	if !strings.Contains(strings.Join(rep.Lines(), "\n"), "EOPNOTSUPP write /home/orbit/Documents/h.txt at offset 2: the drive does not change a file in place") {
 		t.Fatalf("errors.log %v", rep.Lines())
 	}
 	// ftruncate to 0 is an overwrite to empty: a version.
@@ -528,7 +528,7 @@ func TestACloseThatCannotReachTheServerKeepsTheBytes(t *testing.T) {
 	if data, _ := os.ReadFile(files[0]); string(data) != "kept bytes\n" {
 		t.Fatalf("unsent bytes %q", data)
 	}
-	if !strings.Contains(strings.Join(rep.Lines(), "\n"), "EIO close /home/orbit/Files/w.txt") {
+	if !strings.Contains(strings.Join(rep.Lines(), "\n"), "EIO close /home/orbit/Documents/w.txt") {
 		t.Fatalf("errors.log %v", rep.Lines())
 	}
 	// Offline, a write fails at write() itself, so a shell redirection sees it (§5.7).
@@ -730,7 +730,7 @@ func TestAWriteLongAfterTheServerWentAwayStillFails(t *testing.T) {
 	if waited := time.Since(start); waited > 500*time.Millisecond {
 		t.Fatalf("a write past CloseWait offline waited %s", waited)
 	}
-	if lines := strings.Join(rep.Lines(), "\n"); !strings.Contains(lines, "EIO write /home/orbit/Files/w.txt: the drive's server cannot be reached") {
+	if lines := strings.Join(rep.Lines(), "\n"); !strings.Contains(lines, "EIO write /home/orbit/Documents/w.txt: the drive's server cannot be reached") {
 		t.Fatalf("errors.log %s", lines)
 	}
 }
@@ -779,7 +779,7 @@ func TestRefusalsSayWhy(t *testing.T) {
 		t.Fatalf("a name not UTF-8: %v", err)
 	}
 	log := strings.Join(rep.Lines(), "\n")
-	for _, want := range []string{"EPERM link", "EPERM symlink", "EPERM mknod", "EPERM chmod /home/orbit/Files/a to 0755", "ENOLCK flock", "ENAMETOOLONG", "EINVAL create"} {
+	for _, want := range []string{"EPERM link", "EPERM symlink", "EPERM mknod", "EPERM chmod /home/orbit/Documents/a to 0755", "ENOLCK flock", "ENAMETOOLONG", "EINVAL create"} {
 		if !strings.Contains(log, want) {
 			t.Fatalf("errors.log lacks %q:\n%s", want, log)
 		}

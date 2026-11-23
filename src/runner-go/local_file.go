@@ -16,7 +16,9 @@ import (
 var (
 	mountinfoPath  = "/proc/self/mountinfo"
 	driveMountPath = "/run/orbit-files/drive"
-	driveHomePath  = "/home/orbit/Files"
+	driveHomePath  = "/home/orbit/Documents"
+	// driveLegacyHomePath is where the drive was shown before it was renamed Documents; still accepted in paths.
+	driveLegacyHomePath = "/home/orbit/Files"
 	// driveParentPath is the plain directory the daemon mounts below. A sandbox that binds paths is given this one:
 	// it receives a remount of drive/, where a bind of drive/ itself would keep the dead mount (design §7.2).
 	driveParentPath = "/run/orbit-files"
@@ -49,7 +51,7 @@ func driveUncommittedHandles() int {
 	return status.UncommittedHandles
 }
 
-// driveGrantRoots is what an engine's sandbox or working-directory grant names for the Orbit Files drive: the parent
+// driveGrantRoots is what an engine's sandbox or working-directory grant names for the Documents drive: the parent
 // and both spellings of the drive, or nothing on a runner that has no drive mounted (design §7.1, §7.2).
 func driveGrantRoots() []string {
 	if !driveMounted() {

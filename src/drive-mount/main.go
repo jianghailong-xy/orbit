@@ -1,5 +1,5 @@
-// Command orbit-files-mount presents the account's Orbit Files drive at /run/orbit-files/drive (docs/orbit-files-
-// drive-technical-design.md §5), which the runner shows its agents as /home/orbit/Files.
+// Command orbit-files-mount presents the account's Documents drive at /run/orbit-files/drive (docs/orbit-files-
+// drive-technical-design.md §5), which the runner shows its agents as /home/orbit/Documents.
 //
 //	orbit-files-mount mount --root /run/orbit-files --spool /var/lib/orbit-files-spool/<runner> --server URL \
 //	    --token-file FILE --generation N --pod-uid UID [serve flags...]
@@ -84,7 +84,7 @@ func (f *serveFlags) register(fs *flag.FlagSet) {
 	fs.StringVar(&f.podUID, "pod-uid", "", "the runner instance's UID (the Pod UID on Kubernetes)")
 	fs.StringVar(&f.stateDir, "state-dir", "", "the plain parent directory holding errors.log, status.json and unsent/")
 	fs.StringVar(&f.shownStateDir, "shown-state-dir", "/run/orbit-files", "the parent directory as agents know it")
-	fs.StringVar(&f.displayRoot, "display-root", "/home/orbit/Files", "the drive's path as agents know it")
+	fs.StringVar(&f.displayRoot, "display-root", "/home/orbit/Documents", "the drive's path as agents know it")
 	fs.IntVar(&f.errorsFD, "errors-fd", -1, "errors.log, opened by the parent")
 	fs.IntVar(&f.statusFD, "status-fd", -1, "status.json, opened by the parent")
 	fs.IntVar(&f.whoisFD, "whois-fd", -1, "a socket to the parent, which tells a caller's session")
