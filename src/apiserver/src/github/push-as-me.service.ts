@@ -4,7 +4,7 @@ import type { PushAsMeRefusalView, RunnerGitCredentialAnswer, SessionMergeResult
 import { storedRefusal } from '../projects/pull-request-landing';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
-import { GithubConnectionService } from './github-connection.service';
+import { GithubConnectionService, type OwnerTokenRetirement } from './github-connection.service';
 import { GITHUB_GIT_HOST, GithubWorkspaceService, githubRepoPath } from './github-workspace.service';
 
 /** What a PUSH_AS_ME request names (docs/design/protected-branch-landing.md §5.2): one landing's push. */
@@ -30,6 +30,12 @@ export const FIRST_REFUSAL_ALERT = 'GitHub refused a push as you';
 /** The owner is told this when a second request is refused (§5.3, §11.3). */
 export const SECOND_REQUEST_ALERT = 'Orbit refused a second request for your GitHub token during a landing';
 
+/** How long this process remembers a token it handed out, for its retirement: a user token's own lifetime. */
+export const HANDED_TOKEN_MEMORY_MS = 8 * 3_600_000;
+
+const jobKey = (jobId: string, generation: bigint | string) => `job:${jobId}:${generation}`;
+const mergeKey = (sessionId: string, operationId: string) => `merge:${sessionId}:${operationId}`;
+
 const refused = (message: string) => new ForbiddenException({ code: PUSH_AS_ME_REFUSED, message });
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const GENERATION = /^[0-9]{1,18}$/;
@@ -51,6 +57,12 @@ const GENERATION = /^[0-9]{1,18}$/;
 @Injectable()
 export class PushAsMeService {
   private readonly log = new Logger('PushAsMe');
+  /**
+   * The token each attempt was handed, by attempt, until it is retired (§16 Q1). Only a hint: the retirement revokes
+   * the token stored before its refresh, which is the one handed out unless something rotated it meanwhile, and this
+   * names that other one too. Kept for a token's lifetime at most, and in this process only.
+   */
+  private readonly handed = new Map<string, { token: string; at: number }>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -93,6 +105,7 @@ export class PushAsMeService {
       throw error;
     });
     this.log.log(`owner's GitHub token answered for ${forJob ? `integration job ${target.id} claim ${target.generation}` : `session ${target.id} merge ${target.operation}`}`);
+    this.remember(forJob ? jobKey(target.id, target.generation as bigint) : mergeKey(target.id, target.operation as string), token.token);
     return { username: 'x-access-token', password: token.token, expiresAt: token.expiresAt.toISOString() };
   }
 
@@ -173,36 +186,54 @@ export class PushAsMeService {
    * the workspace's last refusal; one that fell back to a pull request records the refusal there, in the words the
    * pull request row kept, and the first refusal on a workspace is announced. Never throws: it is a display fact.
    */
-  async afterJobResult(jobId: string): Promise<void> {
+  async afterJobResult(jobId: string): Promise<OwnerTokenRetirement | null> {
+    let retirement: OwnerTokenRetirement | null = null;
     try {
       const job = await this.prisma.projectIntegrationJob.findUnique({
         where: { id: jobId },
-        select: { landVia: true, state: true, kind: true, targetRef: true, upstreamRef: true, sessionId: true, pullRequestId: true },
+        select: {
+          ownerId: true, landVia: true, state: true, kind: true, targetRef: true, upstreamRef: true, sessionId: true,
+          pullRequestId: true, claimGeneration: true, ownerTokenGeneration: true,
+        },
       });
-      if (!job || job.landVia !== 'PUSH_AS_ME' || !job.sessionId) return;
+      if (!job || job.landVia !== 'PUSH_AS_ME') return null;
+      // §16 Q1: the push this claim was handed the owner's token for has reported back, whatever it came to.
+      if (job.ownerTokenGeneration !== null && job.ownerTokenGeneration === job.claimGeneration) {
+        retirement = await this.retire(job.ownerId, jobKey(jobId, job.claimGeneration), `integration job ${jobId} claim ${job.claimGeneration}`);
+      }
+      if (!job.sessionId) return retirement;
       const session = await this.prisma.session.findUnique({ where: { id: job.sessionId }, select: { workspaceId: true } });
-      if (!session?.workspaceId) return;
       const branch = (job.kind === 'LAND_PROMOTION' ? job.upstreamRef : job.targetRef).replace(/^refs\/heads\//, '');
+      if (!session?.workspaceId) return retirement;
       if (job.state === 'LANDED' && job.pullRequestId === null) {
         await this.clearRefusal(session.workspaceId);
-        return;
+        return retirement;
       }
-      if (job.state !== 'PULL_REQUEST' || !job.pullRequestId) return;
+      if (job.state !== 'PULL_REQUEST' || !job.pullRequestId) return retirement;
       const pr = await this.prisma.githubPullRequest.findUnique({ where: { id: job.pullRequestId }, select: { refusal: true } });
       const refusal = pr?.refusal as { via?: unknown; message?: unknown } | null | undefined;
-      if (refusal?.via !== 'PUSH_AS_ME' || typeof refusal.message !== 'string') return;
+      if (refusal?.via !== 'PUSH_AS_ME' || typeof refusal.message !== 'string') return retirement;
       await this.recordRefusal(session.workspaceId, branch, refusal.message);
     } catch (error) {
       this.log.warn(`Push as me outcome of job ${jobId} not recorded: ${(error as Error)?.message}`);
     }
+    return retirement;
   }
 
   /** The same for a session's Merge (§4.6), from the result the runner reported. */
-  async afterMergeResult(sessionId: string, dto: SessionMergeResultRequest): Promise<void> {
-    if (dto.landVia !== 'PUSH_AS_ME') return;
+  async afterMergeResult(sessionId: string, dto: SessionMergeResultRequest): Promise<OwnerTokenRetirement | null> {
+    let retirement: OwnerTokenRetirement | null = null;
     try {
-      const session = await this.prisma.session.findUnique({ where: { id: sessionId }, select: { workspaceId: true } });
-      if (!session?.workspaceId) return;
+      const session = await this.prisma.session.findUnique({
+        where: { id: sessionId }, select: { ownerId: true, workspaceId: true, mergeOwnerTokenFor: true },
+      });
+      if (!session) return null;
+      // §16 Q1: the Merge this operation was handed the owner's token for has reported back, whatever it came to.
+      const operation = dto.operationId ?? null;
+      if (operation !== null && session.mergeOwnerTokenFor === operation) {
+        retirement = await this.retire(session.ownerId, mergeKey(sessionId, operation), `session ${sessionId} merge ${operation}`);
+      }
+      if (dto.landVia !== 'PUSH_AS_ME' || !session.workspaceId) return retirement;
       if (dto.status === 'merged' && dto.pushedAs === 'OWNER') {
         await this.clearRefusal(session.workspaceId);
       } else if (dto.status === 'pull_request') {
@@ -212,6 +243,36 @@ export class PushAsMeService {
     } catch (error) {
       this.log.warn(`Push as me outcome of session ${sessionId}'s merge not recorded: ${(error as Error)?.message}`);
     }
+    return retirement;
+  }
+
+  /**
+   * §16 Q1: retire the token one attempt was handed — the connection refreshed, then the old token revoked — once.
+   * A failure is recorded (logged with the attempt) and changes nothing else: the landing has already ended as it
+   * ended, the connection stays, and the attempt's own row still refuses a second handout.
+   */
+  private async retire(ownerId: string, key: string, what: string): Promise<OwnerTokenRetirement | null> {
+    const handed = this.handed.get(key);
+    if (handed === undefined && this.retiredKeys.has(key)) return null;
+    this.handed.delete(key);
+    this.retiredKeys.add(key);
+    const retirement = await this.connections.retireOwnerToken(ownerId, handed?.token ?? null);
+    if (retirement.failure) {
+      this.log.warn(`the owner's GitHub token for ${what} was not fully retired (refreshed: ${retirement.refreshed}, revoked: ${retirement.revoked}): ${retirement.failure}`);
+    } else {
+      this.log.log(`the owner's GitHub token for ${what} was retired: the connection refreshed and ${retirement.revoked} token(s) revoked`);
+    }
+    return retirement;
+  }
+
+  /** The attempts this process already retired a token for: a result sent twice retires once. */
+  private readonly retiredKeys = new Set<string>();
+
+  private remember(key: string, token: string): void {
+    const now = Date.now();
+    for (const [held, entry] of this.handed) if (now - entry.at > HANDED_TOKEN_MEMORY_MS) this.handed.delete(held);
+    if (this.retiredKeys.size > 10_000) this.retiredKeys.clear();
+    this.handed.set(key, { token, at: now });
   }
 
   private async clearRefusal(workspaceId: string): Promise<void> {

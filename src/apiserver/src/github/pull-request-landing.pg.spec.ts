@@ -63,7 +63,7 @@ import { readLandingView } from '../projects/landing-view';
 import { readTaskIntegrationViews } from '../projects/project-task-integration';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
 import { recordSessionMergePullRequest } from '../projects/pull-request-landing';
-import { GITHUB_API, GithubClient } from './github-api.client';
+import { GITHUB_API, GITHUB_WEB, GithubClient } from './github-api.client';
 import { GithubAppConfigService } from './github-app-config.service';
 import { GithubConnectionService } from './github-connection.service';
 import { FIRST_REFUSAL_ALERT, PushAsMeService, SECOND_REQUEST_ALERT } from './push-as-me.service';
@@ -119,6 +119,11 @@ class PullRequestGithub {
   readonly scenarios = new Map<string, Scenario>();
   readonly deleted: string[] = [];
   private nextNumber = 100;
+  /** §16 Q1: the user-token refreshes and revokes GitHub was asked for, in order, and how it answers them. */
+  readonly tokenCalls: Array<{ kind: 'REFRESH'; refreshToken: string } | { kind: 'REVOKE'; accessToken: string; basic: string }> = [];
+  refreshFails = false;
+  revokeFails = false;
+  private nextToken = 1;
 
   scenario(fullName: string): Scenario {
     let held = this.scenarios.get(fullName);
@@ -134,13 +139,31 @@ class PullRequestGithub {
 
   readonly fetch = (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const url = new URL(String(input));
-    assert.equal(url.origin, GITHUB_API, `the door reached ${url.origin}`);
     const method = init?.method ?? 'GET';
+    if (url.origin === GITHUB_WEB && url.pathname === '/login/oauth/access_token' && method === 'POST') {
+      const form = new URLSearchParams(String(init?.body ?? ''));
+      assert.equal(form.get('grant_type'), 'refresh_token');
+      this.tokenCalls.push({ kind: 'REFRESH', refreshToken: form.get('refresh_token') ?? '' });
+      if (this.refreshFails) {
+        return new Response(JSON.stringify({ error: 'bad_refresh_token' }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      const n = this.nextToken++;
+      return new Response(JSON.stringify({
+        access_token: `ghu_rotated${n}${'x'.repeat(26)}`, expires_in: 28_800,
+        refresh_token: `ghr_rotated${n}${'y'.repeat(26)}`, refresh_token_expires_in: 15_638_400, token_type: 'bearer', scope: '',
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    assert.equal(url.origin, GITHUB_API, `the door reached ${url.origin}`);
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
     this.calls.push({ method, path: url.pathname + url.search, body });
     const json = (status: number, value: unknown) =>
       new Response(value === undefined ? null : JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } });
     let match: RegExpMatchArray | null;
+    if (method === 'DELETE' && /^\/applications\/[^/]+\/token$/.test(url.pathname)) {
+      const headers = new Headers(init?.headers);
+      this.tokenCalls.push({ kind: 'REVOKE', accessToken: body.access_token, basic: headers.get('authorization') ?? '' });
+      return this.revokeFails ? json(500, { message: 'Server Error' }) : new Response(null, { status: 204 });
+    }
     if (method === 'GET' && (match = url.pathname.match(/^\/app\/installations\/(\d+)$/))) {
       const id = Number(match[1]);
       return json(200, { id, account: { login: 'owner', type: 'User' }, permissions: this.granted.get(id) ?? { contents: 'write', metadata: 'read' } });
@@ -1140,4 +1163,149 @@ test('(14) the landing setting: GitHub workspaces only, Push as me needs a live 
   assert.equal((await h.prisma.workspace.findUniqueOrThrow({ where: { id: ws.workspaceId } })).landingMode, 'PULL_REQUEST');
   assert.throws(() => sanitizeWorkspaceWrite({ landingMode: 'PUSH_AS_ME' }), (error: { getResponse?: () => { code?: string } }) =>
     error.getResponse?.()?.code === 'HUMAN_ONLY_WORKSPACE_FIELD');
+});
+
+//   (15) §16 Q1, early revocation: once a Push as me push reports back, the server refreshes the owner's connection
+//        (the stored refresh token traded for a new pair, stored) and then revokes the token it handed out, by name,
+//        with the App's credential — never the grant. The connection stays live under the new token. A refresh or a
+//        revoke GitHub refuses still ends the landing as it ended, is recorded, leaves the connection live, and does
+//        not reopen the attempt's one handout. A result reported once more retires nothing twice.
+
+test('(15) §16 Q1: the owner\'s token is retired once the push reports back, and a failure is only recorded', { skip: !URL_, concurrency: 1, timeout: 300_000 }, async (t) => {
+  const h = await harness(t);
+
+  /** A Push as me landing past its push boundary, the owner's token answered for it. */
+  async function answeredLanding(label: string) {
+    const ownerId = await h.newOwner(label);
+    await connectGithub(h, ownerId);
+    const ws = await h.newWorkspace(ownerId, label, { github: true });
+    h.github.granted.set(ws.installationId, GRANTED);
+    await h.prisma.workspace.update({ where: { id: ws.workspaceId }, data: { landingMode: 'PUSH_AS_ME' } });
+    await h.queuedLanding(ownerId, ws, label);
+    const [command] = await beatV2(h, ws.runnerId, true);
+    assert.equal(command?.landVia, 'PUSH_AS_ME');
+    await receiveIntegrationJobProgress(h.prisma as never, ws.runnerId, command.jobId, {
+      claimGeneration: command.claimGeneration, leaseOwner: command.leaseOwner, phase: 'PUSH',
+      testedSha: SHA(`tested-${label}`), testedTreeSha: SHA(`tested-tree-${label}`), sourceSha: WORK_TIP, targetShaBefore: UPSTREAM_TIP,
+    }, ownerId);
+    const door = pushAsMeDoor(h, ws.fullName);
+    const logged: string[] = [];
+    (door.service as unknown as { log: unknown }).log = { log: (line: string) => logged.push(line), warn: (line: string) => logged.push(`WARN ${line}`) };
+    const ask = () => door.service.ownerCredential({ id: ws.runnerId, ownerId }, {
+      workspaceId: ws.workspaceId, host: 'github.com', path: ws.fullName,
+      jobId: command.jobId, claimGeneration: command.claimGeneration, leaseOwner: command.leaseOwner,
+    });
+    assert.equal((await ask()).password, OWNER_TOKEN);
+    const land = (state: 'LANDED' | 'PULL_REQUEST') => applyIntegrationJobResult(h.prisma as never, {
+      jobId: command.jobId, runnerId: ws.runnerId, ownerId,
+      body: state === 'LANDED'
+        ? {
+          claimGeneration: command.claimGeneration, leaseOwner: command.leaseOwner, state: 'LANDED', phase: 'VERIFY',
+          sourceSha: WORK_TIP, targetShaBefore: UPSTREAM_TIP, upstreamSha: UPSTREAM_TIP,
+          testedSha: SHA(`tested-${label}`), testedTreeSha: SHA(`tested-tree-${label}`),
+          landedSha: SHA(`tested-${label}`), landedTreeSha: SHA(`tested-tree-${label}`), aheadOfUpstream: 1, checks: [], pushedAs: 'OWNER',
+        }
+        : { ...h.pullRequestResult(command, SHA(`tested-${label}`), SHA(`tested-tree-${label}`)), pushRefusal: 'GH006: Protected branch update failed for refs/heads/main.' },
+    });
+    const connection = () => h.prisma.githubConnection.findUniqueOrThrow({ where: { ownerId } });
+    return { ownerId, command, door, logged, ask, land, connection };
+  }
+  const { decryptSecret } = await import('../providers/provider-crypto');
+  const calls = () => h.github.tokenCalls.splice(0);
+
+  // Accepted: refreshed, then the handed token revoked by name, in that order; the connection lives on, rotated.
+  const ok = await answeredLanding('retire-accepted');
+  calls();
+  assert.equal((await ok.land('LANDED')).answer.state, 'LANDED');
+  const retired = await ok.door.service.afterJobResult(ok.command.jobId);
+  assert.deepEqual(retired, { refreshed: true, revoked: 1, failure: null });
+  const made = calls();
+  assert.deepEqual(made.map((call) => call.kind), ['REFRESH', 'REVOKE'], 'the refresh comes first, then the revoke');
+  assert.equal((made[0] as { refreshToken: string }).refreshToken, `ghr_${'r'.repeat(36)}`, 'the stored refresh token is traded');
+  assert.equal((made[1] as { accessToken: string }).accessToken, OWNER_TOKEN, 'the token handed out is the one revoked');
+  assert.equal((made[1] as { basic: string }).basic, `Basic ${Buffer.from('Iv1.prfake:client-secret').toString('base64')}`);
+  assert.ok(!h.github.calls.some((call) => /\/grant$/.test(call.path)), 'the grant is never revoked');
+  let row = await ok.connection();
+  assert.match(decryptSecret(row.accessTokenEnc), /^ghu_rotated/, 'the new token is stored');
+  assert.match(decryptSecret(row.refreshTokenEnc), /^ghr_rotated/);
+  assert.ok(row.refreshExpiresAt.getTime() > Date.now() + 100 * 86_400_000, 'the connection is live');
+  assert.ok(ok.logged.some((line) => line.includes(ok.command.jobId) && line.includes('was retired')));
+  // Once: the same result reported again retires nothing more.
+  assert.equal(await ok.door.service.afterJobResult(ok.command.jobId), null);
+  assert.deepEqual(calls(), []);
+  // And no second handout for that claim, whatever happened since.
+  assert.match(await refusedWith(ok.ask()), /^PUSH_AS_ME_ALREADY_ANSWERED/);
+
+  // A refused push that fell back to a pull request is retired the same way: the token was handed either way.
+  const fell = await answeredLanding('retire-refused');
+  calls();
+  assert.equal((await fell.land('PULL_REQUEST')).answer.state, 'PULL_REQUEST');
+  assert.deepEqual(await fell.door.service.afterJobResult(fell.command.jobId), { refreshed: true, revoked: 1, failure: null });
+  assert.deepEqual(calls().map((call) => call.kind), ['REFRESH', 'REVOKE']);
+
+  // GitHub refuses the refresh: nothing stored is revoked (the connection would be left with a dead token), the
+  // connection is untouched and live, the landing stays LANDED, and the failure is recorded.
+  const noRefresh = await answeredLanding('retire-refresh-fails');
+  calls();
+  h.github.refreshFails = true;
+  const before = await noRefresh.connection();
+  assert.equal((await noRefresh.land('LANDED')).answer.state, 'LANDED');
+  const refreshFailed = await noRefresh.door.service.afterJobResult(noRefresh.command.jobId);
+  h.github.refreshFails = false;
+  assert.equal(refreshFailed?.refreshed, false);
+  assert.equal(refreshFailed?.revoked, 0);
+  assert.match(String(refreshFailed?.failure), /^the refresh failed: GitHub answered 400 bad_refresh_token/);
+  assert.deepEqual(calls().map((call) => call.kind), ['REFRESH'], 'no revoke without a new token stored');
+  row = await noRefresh.connection();
+  assert.equal(row.accessTokenEnc, before.accessTokenEnc);
+  assert.equal(row.refreshExpiresAt.getTime(), before.refreshExpiresAt.getTime(), 'the connection is not marked dead');
+  assert.equal((await h.job(noRefresh.command.jobId)).state, 'LANDED');
+  assert.ok(noRefresh.logged.some((line) => line.startsWith('WARN') && line.includes(noRefresh.command.jobId) && line.includes('not fully retired')));
+  assert.match(await refusedWith(noRefresh.ask()), /^PUSH_AS_ME_ALREADY_ANSWERED/, 'a failed retirement reopens no handout');
+
+  // GitHub refuses the revoke: the new pair is stored and the connection live; the failure is recorded.
+  const noRevoke = await answeredLanding('retire-revoke-fails');
+  calls();
+  h.github.revokeFails = true;
+  assert.equal((await noRevoke.land('LANDED')).answer.state, 'LANDED');
+  const revokeFailed = await noRevoke.door.service.afterJobResult(noRevoke.command.jobId);
+  h.github.revokeFails = false;
+  assert.equal(revokeFailed?.refreshed, true);
+  assert.equal(revokeFailed?.revoked, 0);
+  assert.match(String(revokeFailed?.failure), /^a revoke failed: GitHub answered 500/);
+  assert.deepEqual(calls().map((call) => call.kind), ['REFRESH', 'REVOKE']);
+  row = await noRevoke.connection();
+  assert.match(decryptSecret(row.accessTokenEnc), /^ghu_rotated/);
+  assert.ok(row.refreshExpiresAt.getTime() > Date.now());
+  assert.equal((await h.job(noRevoke.command.jobId)).state, 'LANDED');
+  assert.ok(noRevoke.logged.some((line) => line.startsWith('WARN') && line.includes('not fully retired')));
+  assert.match(await refusedWith(noRevoke.ask()), /^PUSH_AS_ME_ALREADY_ANSWERED/);
+
+  // A session's Merge: retired once its result reports back, refresh then revoke.
+  const ownerId = await h.newOwner('retire-merge');
+  await connectGithub(h, ownerId);
+  const ws = await h.newWorkspace(ownerId, 'retire-merge', { github: true });
+  await h.prisma.workspace.update({ where: { id: ws.workspaceId }, data: { landingMode: 'PUSH_AS_ME' } });
+  const sessionId = randomUUID();
+  const operationId = randomUUID();
+  const leaseOwner = randomUUID();
+  await h.prisma.session.create({
+    data: {
+      id: sessionId, ownerId, creatorId: ownerId, workspaceId: ws.workspaceId, assignedRunnerId: ws.runnerId,
+      title: 'Retire after a merge', prompt: 'merge', branch: `orbit/ret-${sessionId.slice(0, 6)}`, isolationStatus: 'worktree',
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 60_000),
+      mergeStatus: 'pending', mergeOperationId: operationId, mergeOperationOwner: leaseOwner, mergeTarget: 'main',
+    },
+  });
+  const merge = pushAsMeDoor(h, ws.fullName);
+  assert.equal((await merge.service.ownerCredential({ id: ws.runnerId, ownerId }, {
+    workspaceId: ws.workspaceId, host: 'github.com', path: ws.fullName, sessionId, mergeOperationId: operationId, leaseOwner,
+  })).password, OWNER_TOKEN);
+  calls();
+  const mergeResult = { operationId, leaseOwner, status: 'merged' as const, landVia: 'PUSH_AS_ME' as const, pushedAs: 'OWNER' as const, targetBranch: 'main' };
+  assert.deepEqual(await merge.service.afterMergeResult(sessionId, mergeResult), { refreshed: true, revoked: 1, failure: null });
+  const mergeCalls = calls();
+  assert.deepEqual(mergeCalls.map((call) => call.kind), ['REFRESH', 'REVOKE']);
+  assert.equal((mergeCalls[1] as { accessToken: string }).accessToken, OWNER_TOKEN);
+  assert.equal(await merge.service.afterMergeResult(sessionId, mergeResult), null, 'once');
 });

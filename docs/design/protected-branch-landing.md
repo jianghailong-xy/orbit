@@ -861,8 +861,29 @@ What the rulings change against the first draft:
 
 1. **Can Orbit retire the owner's token right after a Push as me push?** For example, by refreshing it and revoking the
    old one, without ending the owner's connection. If it can, a copy read during the push stops working within seconds
-   instead of up to 8 hours later. The Push as me task (`3521xdwAZYZxGaCznpWKJ`) should test it on the scratch
-   repository before it ships.
+   instead of up to 8 hours later.
+   - **Built (task `3521xdwAZYZxGaCznpWKJ`, coordinator's ruling of 2026-11-24).** When an attempt that was handed the
+     owner's token reports back, whatever it came to (landed, fell back to a pull request, or failed), the server
+     refreshes the owner's connection: it trades the stored refresh token for a new pair and stores it. It then revokes
+     the token it handed out with `DELETE /applications/{client_id}/token`, naming that token. It never revokes the
+     grant, so the connection stays live under its new token.
+     - Push as me hands out the stored token, so the token revoked is the one stored before the refresh. If this
+       process remembers handing out a different one, it revokes that one too.
+     - If GitHub refuses the refresh, nothing stored is revoked, because that would leave the connection with a dead
+       token. If GitHub refuses the revoke, the token lives to its expiry. Either failure is logged with the attempt and
+       changes nothing else: the landing ends as it ended, the connection stays live, and the attempt still allows only
+       one handout.
+     - A server call that meets a 401 because a retirement rotated the token mid-call is made once more with the new
+       token, rather than marking the connection dead.
+     - The code: `GithubConnectionService.retireOwnerToken` and `PushAsMeService.afterJobResult` / `afterMergeResult`.
+       Specified with GitHub faked in `pull-request-landing.pg.spec.ts` case 15.
+   - **Not yet shown.** Whether GitHub then refuses the old token within seconds while the new one works was not tested
+     against GitHub. That takes the App's client secret, which only the production server holds. The check belongs to
+     task `352YvikwDv5L0LNvD11kI` ("Real runs on production after promotion"): after a real Push as me push, read the
+     old token back (`GET /user`, `git ls-remote`) and time when it is refused, and read the new one.
+   - **Limits.** A runner that dies before it reports back leaves the token to its 8 hours. Two Push as me landings of
+     one owner in flight at once share the stored token, so the first retirement can make the second push fail
+     authentication. That landing then lands through a pull request and says GitHub did not accept the token.
 2. **Does the token reach a repository outside the installation?** The token test could not show it, because the
    owner's installation covers all of the owner's repositories (§5.1).
 3. **Merge queues.** v1 waits and says so (§4.3). Adding the pull request to the queue is a later step.
