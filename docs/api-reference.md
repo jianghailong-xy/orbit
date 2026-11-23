@@ -75,10 +75,10 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `public` | 39 |
 | `user` | 529 |
 | `admin` | 31 |
-| `runner` | 230 |
+| `runner` | 231 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **833** |
+| **Total** | **834** |
 
 ## Public routes
 
