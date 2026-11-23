@@ -443,12 +443,7 @@ export class PullRequestDoorService implements OnApplicationBootstrap, OnModuleD
       rounds: SESSION_FIX_ROUNDS,
     });
     await this.sessions.createTurn(row.ownerId, sessionId, { clientTurnId: key, content, intent: 'NEXT_TURN' }, {
-      participateSendTransaction: async (tx) => {
-        await tx.session.update({
-          where: { id: sessionId },
-          data: { mergeAfterTurnAt: this.now(), mergeAfterTurnTarget: branchOf(row.baseRef) },
-        });
-      },
+      participateSendTransaction: (tx) => oweMergeAfterFixTurn(tx, sessionId, branchOf(row.baseRef), this.now()),
     }).catch((error) => this.logger.warn(`the failing check of pull request #${reading.number} was not handed to its session: ${describe(error)}`));
   }
 
@@ -823,6 +818,14 @@ export class PullRequestDoorService implements OnApplicationBootstrap, OnModuleD
   private announce(row: Pick<GithubPullRequest, 'sessionId'>): void {
     if (row.sessionId) this.realtime?.publishSessionUpdated(row.sessionId);
   }
+}
+
+/**
+ * D5's merge after the fix turn (§4.6), written in the turn's own send transaction under the Session lock createTurn
+ * holds: the turn and the merge it owes commit together, and `mergeAfterOwnTurn` takes it up when the turn ends.
+ */
+async function oweMergeAfterFixTurn(tx: Prisma.TransactionClient, sessionId: string, target: string, at: Date): Promise<void> {
+  await tx.session.update({ where: { id: sessionId }, data: { mergeAfterTurnAt: at, mergeAfterTurnTarget: target } });
 }
 
 /** The error code and detail a job's J-T17, J-T19 or J-T20 is written with; a J-T16 has none. */
