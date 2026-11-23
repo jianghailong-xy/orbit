@@ -41,6 +41,10 @@ object ManagementFixture {
     @Volatile var accessTokensFail = false
     /** GET terminals' live terminals, newest first; DELETE terminals/:id revokes one, which leaves the list. */
     @Volatile var terminals: List<JsonObject> = emptyList()
+    /** GET terminals/requests: the terminals asking to be approved; POST terminals/requests/:id/approve|deny takes one off, or answers
+     * [terminalRefusal] (the server's 404 for one already decided or expired). */
+    @Volatile var terminalRequests: List<JsonObject> = emptyList()
+    @Volatile var terminalRefusal: String? = null
     /** GET providers (the pickers' catalogue, no ids) and GET providers/mine (the account's own, with ids, endpoints and hasApiKey). */
     @Volatile var providerCatalog = "[]"
     @Volatile var providersMine = "[]"
@@ -160,7 +164,7 @@ object ManagementFixture {
         agentFixBodies.clear(); onAgentFix = {}; agentFixRefusal = null
         deviceStatus = "PENDING"; deviceConflict = false; deviceLastSeen = null; deviceGate = null
         drop = CompletableDeferred(); opened = 0
-        queries.clear(); modelRouting = null; optimizeFor = null; recaps = null; accessTokens = emptyList(); accessTokensFail = false; terminals = emptyList(); providerCatalog = "[]"; providersMine = "[]"
+        queries.clear(); modelRouting = null; optimizeFor = null; recaps = null; accessTokens = emptyList(); accessTokensFail = false; terminals = emptyList(); terminalRequests = emptyList(); terminalRefusal = null; TerminalRequestStore.reset(); providerCatalog = "[]"; providersMine = "[]"
         balances.clear(); balanceGates.clear(); task = "{}"; evidence = "[]"; project = "{}"
         keyCheckAnswer = """{"ok":true,"keyCheck":"VALID","message":"Cursor accepted this key.","recorded":true,"keyCheckState":"VALID","keyCheckedAt":null}"""
         onKeyCheck = {}
@@ -275,6 +279,7 @@ object ManagementFixture {
                 ok(user())
             }
             "terminals" -> ok("""{"terminals":${JsonArray(terminals)}}""")
+            "terminals/requests" -> ok("""{"requests":${JsonArray(terminalRequests)}}""")
             "access-tokens" -> if (accessTokensFail) fail(503, "token list failed") else ok("""{"tokens":${JsonArray(accessTokens)}}""")
             "providers" -> ok(providerCatalog)
             "providers/mine" -> ok(providersMine)
@@ -345,6 +350,13 @@ object ManagementFixture {
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/default") && api.method == HttpMethod.DELETE ->
                     defaultRemoveRefusal?.let { fail(400, it) }
                         ?: run { onAccountWrite(path); ok("""{"engine":"${path.split('/')[3]}","account":"default","status":"done","message":null}""") }
+                path.startsWith("terminals/requests/") && api.method == HttpMethod.POST -> {
+                    val (id, door) = path.removePrefix("terminals/requests/").split('/').let { it[0] to it[1] }
+                    terminalRefusal?.let { fail(404, it) } ?: run {
+                        terminalRequests = terminalRequests.filterNot { it["id"]?.jsonPrimitive?.content == id }
+                        ok("""{"id":"$id","status":"${if (door == "approve") "APPROVED" else "DENIED"}"}""")
+                    }
+                }
                 path.startsWith("terminals/") && api.method == HttpMethod.DELETE -> {
                     val id = path.removePrefix("terminals/")
                     terminals = terminals.filterNot { it["id"]?.jsonPrimitive?.content == id }

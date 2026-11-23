@@ -50,6 +50,7 @@ function serve({ schedules = LIST_ROWS, drafts = [DRAFT_CARD], list }: Served = 
     if (detail) return scheduleDetail(decodeURIComponent(detail[1]!));
     if (path === '/workspaces') return [WS.apiserver, WS.web, WS.baseline];
     if (path === '/sessions/sess-codex-watch') return { id: 'sess-codex-watch', title: 'Codex release watch' };
+    if (path.startsWith('/owner-requests')) return { requests: [] };
     throw new Error(`unserved ${method} ${path}`);
   }) as never);
 }

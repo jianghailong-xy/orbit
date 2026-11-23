@@ -6,10 +6,10 @@ routes: []
 errors: []
 platforms: [android]
 common: false
-updated: 2026-11-14
+updated: 2026-11-17
 ---
 
-The Android app shows the same account as the web: workspaces and sessions, projects, tasks and lists, the wiki, watches, machines and Waiting on you. It needs Android 10 or later.
+The Android app shows the same account as the web: workspaces and sessions, projects, tasks and lists, the wiki, watches and machines. It needs Android 10 or later.
 
 ## Install it
 
@@ -22,7 +22,7 @@ Each Orbit release attaches a signed APK, `orbit-android-<version>.apk`, to its 
 
 ## Settings
 
-**Settings** starts with **Machines & models**, then **Preferences** (Sessions, Notifications, Appearance), **Account** (Email, Instance, Shared links, Access tokens, Terminals, Change password, Admin for administrators), **About** and **Sign out**.
+**Settings** starts with **Machines & models**, then **Preferences** (Sessions, Notifications, Appearance), **Account** (Email, Instance, Shared links, Access tokens, Change password, Admin for administrators), **About** and **Sign out**. Terminals asking to sign in are approved on their machine's page under **Machines & models**, where approved terminals are listed with **Revoke**; a new request shows a one-time **Approve a terminal** toast.
 
 ::: platform android
 

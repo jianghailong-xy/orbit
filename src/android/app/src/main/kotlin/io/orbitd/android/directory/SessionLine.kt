@@ -14,9 +14,11 @@ import io.orbitd.android.core.cards.CoordinatorDeliveryLine
 import io.orbitd.android.tasks.TaskDetailCopy
 import io.orbitd.android.watch.WatchSessionSummary
 import java.time.Instant
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 
 /**
  * The line under a session's title (OrbitKit `SessionLine`, a port of web's `sessionLine`): for a live session that is
@@ -217,25 +219,53 @@ internal object SessionHeader {
     /** What a session waiting on you says, in the words of whatever is waiting: the kind the server named, when this build has
      * words for it, else the row's long-standing approval word. */
     fun waitingWord(s: DirectorySession): String =
-        waitingWord(s.waitingKind, NeedsYouLogic.ownerItems(s.ownerItems.orEmpty().filterIsInstance<JsonObject>()))
+        waitingWord(s.waitingKind, NeedsYouLogic.ownerItems(s.ownerItems.orEmpty().filterIsInstance<JsonObject>()), s.ownerRequests, s.taskMoves)
 
     /** The same words from the wire's own fields, for a reader holding the raw row (the needs-you notice). */
-    fun waitingWord(waitingKind: String?, ownerItems: List<OwnerItem>): String = when (waitingKind) {
+    fun waitingWord(waitingKind: String?, ownerItems: List<OwnerItem>, ownerRequests: JsonArray? = null,
+        taskMoves: JsonArray? = null): String = when (waitingKind) {
         "OWNER_CONFIRMATION" -> OwnerConfirmationCopy.waitingForConfirmation
         "OWNER_ITEM" -> NeedsYouLogic.oldestItemWord(ownerItems) ?: SessionLineCopy.unnamedWord
         "START_REQUEST" -> StartProjectCopy.readyToStart
         "DONE_REQUEST" -> ProjectDone.readyToClose
         "RECORD_AS_DONE" -> ProjectDone.recordAsDoneRow
-        "OWNER_REQUEST" -> OwnerRequests.waitingOnYou
+        "OWNER_REQUEST", "MOVE_REQUEST" -> OwnerRequestRowWords.word(waitingKind, ownerRequests, taskMoves) ?: SessionLineCopy.unnamedWord
         else -> SessionLineCopy.unnamedWord
+    }
+}
+
+/** What a row waiting on a session's own question says (`@orbit/shared` `ownerRequestRowWord`, held to it word for word by
+ * SessionLineTest): an open owner request by its kind, and task moves by how many wait. A row the server calls `OWNER_REQUEST` holds
+ * requests of one kind only; two kinds are a mix, which the server sends under another kind and the row keeps "Waiting for approval". */
+internal object OwnerRequestRowWords {
+    val requestWords = mapOf("DECISION" to "Decision for you", "SECRET" to "Key needed", "MANUAL_STEP" to "Steps for you",
+        "CONFIRM" to "Confirm for you", "WIKI_CREATE" to "Create wiki")
+    fun taskMoves(moves: Int) = if (moves == 1) "Approve task move" else "Approve $moves task moves"
+
+    /** The word, or null when the kind is neither or the list it needs is missing or empty (an older control plane). */
+    fun word(kind: String?, ownerRequests: JsonArray?, taskMoves: JsonArray?): String? = when (kind) {
+        "OWNER_REQUEST" -> ((ownerRequests?.firstOrNull() as? JsonObject)?.get("kind") as? JsonPrimitive)?.contentOrNull?.let(requestWords::get)
+        "MOVE_REQUEST" -> taskMoves.orEmpty().sumOf { ((it as? JsonObject)?.get("count") as? JsonPrimitive)?.intOrNull ?: 0 }
+            .takeIf { it > 0 }?.let(::taskMoves)
+        else -> null
     }
 }
 
 /** OrbitKit `SessionRunState`: what the run is doing or how it ended, apart from where the session is filed. */
 internal enum class RunState { QUEUED, RUNNING, AWAITING_INPUT, INTERRUPTED, SUCCEEDED, FAILED, ENDED, UNKNOWN }
 
+private val KNOWN_RUN_STATUSES = setOf("PENDING", "RUNNING", "AWAITING_INPUT", "SUCCEEDED", "FAILED", "INTERRUPTED", "CANCELLED")
+
 /** `SessionRunState.resolve`: the server's `runState` first, then its raw run status and end reason. */
 internal val DirectorySession.effectiveRunState: RunState get() {
+    // A held session whose status word this build does not know reads the phase, as web does (a release is worded by [displayRunState]).
+    // A known status keeps its reading: a parked turn with a background job says so, which the phase alone cannot.
+    if (released == false && (runStatus ?: status) !in KNOWN_RUN_STATUSES && RunState.entries.none { it != RunState.UNKNOWN && it.name == runState }) when (phase) {
+        "PENDING" -> return RunState.QUEUED
+        // `activity` is TURN on every queued or running row; only another one (a background job, a wait) is a parked session.
+        "RUNNING" -> return if (activity.isNullOrEmpty() || activity == "TURN") RunState.RUNNING else RunState.AWAITING_INPUT
+        "IDLE" -> return if (lastTurnOutcome == "INTERRUPTED") RunState.INTERRUPTED else RunState.AWAITING_INPUT
+    }
     RunState.entries.firstOrNull { it != RunState.UNKNOWN && it.name == runState }?.let { return it }
     return when (runStatus ?: status) {
         "PENDING" -> RunState.QUEUED

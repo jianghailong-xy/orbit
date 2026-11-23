@@ -5,10 +5,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  LIST_ROWS,
   PSQL_APPROVAL,
   RUN_WIDEN_CARD,
   SCHEDULE_NOW,
   WAITING_ITEMS,
+  WS,
+  listAnswer,
   scheduleDetail,
 } from '../test/scheduleFixtures';
 
@@ -18,7 +21,7 @@ vi.mock('../lib/schedules', async (importOriginal) => ({
   viewerTimezone: () => 'Asia/Shanghai',
 }));
 const { api } = await import('../api');
-const { WaitingOnYouPage } = await import('./WaitingOnYouPage');
+const { ScheduledPage } = await import('../pages/ScheduledPage');
 const apiMock = vi.mocked(api);
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -36,8 +39,9 @@ function serve(detailOf: (id: string) => ReturnType<typeof scheduleDetail> = sch
     if (method !== 'GET') return {};
     if (path === '/owner-requests?state=open') return { requests: WAITING_ITEMS };
     if (path.startsWith('/owner-requests')) return { requests: [] };
-    if (path === '/projects/sidebar' || path.startsWith('/projects')) return [];
-    if (path.startsWith('/terminal')) return { requests: [] };
+    if (path.startsWith('/schedules?') || path === '/schedules') return listAnswer(LIST_ROWS);
+    if (path === '/schedules/drafts') return { drafts: [] };
+    if (path === '/workspaces') return [WS.apiserver, WS.web, WS.baseline];
     if (path === '/sessions/sess-pg-run-nov14/approvals?status=PENDING') return [PSQL_APPROVAL];
     if (path === `/schedule-requests/${RUN_WIDEN_CARD.id}`) return RUN_WIDEN_CARD;
     const detail = /^\/schedules\/([^/?]+)$/.exec(path);
@@ -62,9 +66,9 @@ async function open() {
   await act(async () => {
     root!.render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={['/waiting']}>
+        <MemoryRouter initialEntries={['/scheduled']}>
           <Routes>
-            <Route path="/waiting" element={<WaitingOnYouPage />} />
+            <Route path="/scheduled" element={<ScheduledPage />} />
             <Route path="*" element={<Where />} />
           </Routes>
         </MemoryRouter>
@@ -102,13 +106,17 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('Waiting on you: a scheduled task’s four kinds of card (board 2/2 ④)', () => {
-  it('draws them whole, newest first, in the owner-request frame', async () => {
+// There is no Waiting on you page (docs/mocks/waiting-on-you-removal, owner ruling 2026-11-16): a scheduled task's
+// cards are drawn on the Scheduled page, above its timeline, and in the run's session where they were filed.
+describe('Scheduled: a scheduled task’s four kinds of card (board 2/2 ④)', () => {
+  it('draws them whole, newest first, in the owner-request frame, above the timeline', async () => {
     serve();
     await open();
     const drawn = [...host.querySelectorAll<HTMLElement>('[data-schedule-waiting] .owner-request-card')].map((c) => c.dataset.kind);
     expect(drawn).toEqual(['SCHEDULE_FAILED', 'SCHEDULE_APPROVAL', 'SCHEDULE_WIDEN', 'SCHEDULE_HELD']);
-    expect(host.querySelector('.owner-inbox-empty')).toBeNull();
+    const list = host.querySelector('[data-schedule-waiting]')!;
+    const firstGroup = host.querySelector('.sched-group')!;
+    expect(list.compareDocumentPosition(firstGroup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('a failure: Open run and Pause schedule', async () => {

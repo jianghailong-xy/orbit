@@ -6,7 +6,7 @@ routes: [/, /runners/register, /settings/general]
 errors: []
 platforms: [web, macos, ios, android]
 common: false
-updated: 2026-11-14
+updated: 2026-11-17
 ---
 
 Orbit gives a coding agent a computer and a task, and keeps the conversation and its results in one place, on the web and on your phone.
@@ -28,8 +28,9 @@ Orbit gives a coding agent a computer and a task, and keeps the conversation and
 
 ## Where things that need you show up
 
-- **Waiting on you** in the sidebar collects questions, confirmations and anything else an agent needs from you.
-- Approval cards appear in the session itself.
+- Questions, confirmations and approval cards appear in the session that asked. Its row in the session list gets an amber dot and says what it wants, such as **Decision for you**.
+- Terminals asking to sign in wait on their machine's page under **Settings → Machines**, and scheduled runs that need you wait on the **Scheduled** page.
+- [Find what needs you](orbit:/help/projects-and-tasks/find-what-needs-you) lists every kind.
 - Your phone can notify you; see the article on notifications.
 
 Full guide: [Onboarding, step by step](../../onboarding.md).

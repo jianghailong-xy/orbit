@@ -725,7 +725,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       // `realtime.publishedWhen`).
       if (type.startsWith('wiki.')) return ['wiki'];
       // The owner's terminals: one asked to be approved, a request was decided or collected, or one was revoked
-      // (`terminals.changed`). The approve card and Settings → Terminals both declare `terminal`.
+      // (`terminals.changed`). The approve cards and each machine's Terminals both declare `terminal`.
       if (type === 'terminals.changed') return ['terminal'];
       // The owner's drive: a write committed (`drive.changed`, asked for with `hints=drive_changed`). The Files page's
       // reads declare `drive`; the feed's seq it carries is not needed to re-read what is on screen.
