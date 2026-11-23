@@ -59,5 +59,7 @@ export function failureKindIsSql(alias: string, kinds: readonly SqlFailureKind[]
     legacyMarkers(kinds).map((marker) => Prisma.sql`lower(coalesce(${s}.error, '')) LIKE ${`%${marker}%`}`),
     ' OR ',
   );
-  return Prisma.sql`(${s}.failure_kind IN (${Prisma.join([...kinds])}) OR (${s}.failure_kind IS NULL AND (${markers})))`;
+  // Never NULL: `failure_kind IN (...)` is NULL for a run with no kind, and a reader that negates this (the routing
+  // report's NOT (failed AND ...)) would then drop every ordinary failure with no kind instead of counting it.
+  return Prisma.sql`((${s}.failure_kind IS NOT NULL AND ${s}.failure_kind IN (${Prisma.join([...kinds])})) OR (${s}.failure_kind IS NULL AND (${markers})))`;
 }

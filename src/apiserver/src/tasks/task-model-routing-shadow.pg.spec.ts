@@ -558,7 +558,7 @@ test('missing hint infers a tier from current features while hint and pin keep p
         const index = target.taskIds.indexOf(taskId);
         assert.equal(row.level, index === 0 ? 'L' : index === 1 ? 'S' : null);
         assert.equal(row.applied, index !== 2, 'a decided tier is applied; the pin decides none');
-        assert.equal(row.policyVersion, 2);
+        assert.equal(row.policyVersion, 3);
         if (index === 0) {
           assert.match(row.reasons[0], /\[rule\] Rule inference/);
           assert.equal((row.features as Record<string, unknown>).isForeman, true);

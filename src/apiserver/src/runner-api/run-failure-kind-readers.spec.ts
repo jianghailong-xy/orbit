@@ -73,7 +73,8 @@ test('failureKindIsNot keeps the runs with no kind and no error, which a negated
 
 test('failureKindIsSql reads the column first and the markers only when it is null', () => {
   const sql = failureKindIsSql('s', [RunFailureKind.USAGE_LIMIT, RunFailureKind.CAPACITY]);
-  assert.match(sql.sql, /^\(s\.failure_kind IN \(\?,\?\) OR \(s\.failure_kind IS NULL AND \(/);
+  // The kind's half is guarded, so the whole is never NULL for a run with no kind: a NOT of it still counts that run.
+  assert.match(sql.sql, /^\(\(s\.failure_kind IS NOT NULL AND s\.failure_kind IN \(\?,\?\)\) OR \(s\.failure_kind IS NULL AND \(/);
   assert.deepEqual(sql.values, [
     'USAGE_LIMIT',
     'CAPACITY',
