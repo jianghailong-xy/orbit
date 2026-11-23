@@ -1,5 +1,6 @@
 package io.orbitd.android.tasks
 
+import io.orbitd.android.core.protocol.SessionFacts
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.navigation.ObjectId
@@ -136,6 +137,20 @@ sealed interface TaskRowPhrase {
 
 /** A session ref's run state: the modern `runState`, else the raw runner status, else the legacy mix. */
 fun resolvedRunState(session: JsonObject): String? {
+    // The session facts first when sent: a released session is Finished (its work finished), Failed (a failed turn nobody asked to
+    // end) or Ended, and an unreleased one reads its phase, an interrupted turn staying Interrupted until the release lands.
+    if (SessionFacts.present(session)) {
+        if (SessionFacts.released(session) == true) return when {
+            SessionFacts.finished(session) -> "FINISHED"
+            SessionFacts.failed(session) -> "FAILED"
+            else -> "ENDED"
+        }
+        when (SessionFacts.phase(session)) {
+            "PENDING" -> return "QUEUED"
+            "RUNNING" -> return "RUNNING"
+            "IDLE" -> return if (SessionFacts.lastTurnOutcome(session) == "INTERRUPTED") "INTERRUPTED" else "AWAITING_INPUT"
+        }
+    }
     session.text("runState")?.takeIf { it != "UNKNOWN" && it in RUN_STATES }?.let { return it }
     session.text("status")?.let { status ->
         return when (status) {
@@ -907,7 +922,7 @@ object TaskDetailLogic {
             if (route.flag("escalated")) listOf(TaskDetailCopy.usageLimitNote) else emptyList()).joinToString(" · ")
     }
     fun runLabel(session: JsonObject) = when (resolvedRunState(session)) {
-        "QUEUED" -> "Queued"; "RUNNING" -> "Running"; "AWAITING_INPUT" -> "Awaiting reply"; "SUCCEEDED" -> "Succeeded"
+        "QUEUED" -> if (SessionFacts.present(session) && SessionFacts.waitingOn(session) == "HOLD") "On hold" else "Queued"; "FINISHED" -> "Finished"; "RUNNING" -> "Running"; "AWAITING_INPUT" -> "Awaiting reply"; "SUCCEEDED" -> "Succeeded"
         "FAILED" -> "Failed"; "INTERRUPTED" -> "Interrupted"; "ENDED" -> "Ended"; else -> "—"
     }
 }
