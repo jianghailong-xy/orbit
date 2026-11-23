@@ -311,6 +311,10 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 			"jobs": s.bg.listJobs(getBool(args, "includeFinished")), "liveCount": s.bg.liveJobCount(),
 		}}
 
+	case driveProgressOp:
+		// How far a drive_put or drive_get call has got, as its live tool_output (drive_progress.go).
+		return s.serveDriveProgress(args)
+
 	case planGateModeOp:
 		// The session's permission mode as it is now, for Orbit's own Plan gate (plan_gate.go): `orbit mcp` and
 		// the in-session CLI ask before a write, because only this process sees the mode change mid-session.
