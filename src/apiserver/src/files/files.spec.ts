@@ -589,6 +589,8 @@ const cases = {
     const stream = await open();
     const { fd } = stream;
     for await (const chunk of stream) void chunk;
+    // A ReadStream closes its descriptor after 'end'; opening before that can get another number.
+    if (!stream.closed) await once(stream, 'close');
     kept = openSync(new LocalFileStore(FILES_DIR).pathOf(NAME), 'r');
     if (kept !== fd) throw new Error('the next file got another number');
   },
