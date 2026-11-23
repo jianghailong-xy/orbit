@@ -90,6 +90,9 @@ data class DirectorySession(
     /** Beside queuedReason `runner_updating` only, kept as the JSON it came as and read by [QueuedRunnerUpdate.of]. */
     val queuedRunnerUpdate: JsonElement? = null,
     val runSource: String? = null,
+    /** When the session last changed for its owner, the order the Open list keeps (contracts/session-list-order.fixtures.json). Unlike
+     *  [lastTurnAt] it does not move with streamed text or background output. Null from an older server: the row reads as [createdAt]. */
+    val listedAt: String? = null,
 ) {
     /** Whether this row is a landing session (platform work), not a conversation. */
     val isLanding get() = sessionKind == "LANDING"
@@ -187,11 +190,27 @@ internal object ScheduledRunsFolder {
         else null
 }
 
+/** Where the Open list places a row: its `listedAt`, or `createdAt` from an older server. */
+internal fun DirectorySession.listedInstant(): Instant? = runCatching { Instant.parse(listedAt ?: createdAt) }.getOrNull()
+
+/** Open's first three sections, ahead of the day sections (contracts/session-list-order.fixtures.json). */
+internal const val NEEDS_YOU_GROUP = "section:needs-you"
+internal const val WORKING_GROUP = "section:working"
+
+/** Pending approvals, or a failure the server is not retrying. */
+internal fun DirectorySession.needsOwner() = pendingApprovals > 0 || (status == "FAILED" && retryAt == null)
+
+internal fun DirectorySession.isWorkingForList() = status == "RUNNING" || status == "PENDING" || (status == "FAILED" && retryAt != null)
+
 fun directoryGroups(sessions: List<DirectorySession>, view: SessionView, grouping: Grouping,
     now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): List<SessionGroup> {
-    fun date(s: DirectorySession) = runCatching { Instant.parse(s.lastTurnAt ?: s.createdAt) }.getOrNull()
-    val sorted = if (view == SessionView.COMPLETED) sessions else sessions.sortedWith(compareByDescending<DirectorySession> { view == SessionView.OPEN && it.pinnedAt != null }
-        .thenByDescending { date(it) ?: Instant.MIN }.thenBy { it.id })
+    val open = view == SessionView.OPEN
+    // Open orders by listedAt, which only moves when the session changes for its owner; the other views and tag groups keep the
+    // activity clock they always had.
+    fun date(s: DirectorySession) = if (open) s.listedInstant() else runCatching { Instant.parse(s.lastTurnAt ?: s.createdAt) }.getOrNull()
+    fun created(s: DirectorySession) = runCatching { Instant.parse(s.createdAt) }.getOrNull() ?: Instant.MIN
+    val sorted = if (view == SessionView.COMPLETED) sessions else sessions.sortedWith(compareByDescending<DirectorySession> { open && it.pinnedAt != null }
+        .thenByDescending { date(it) ?: Instant.MIN }.thenByDescending { if (open) created(it) else Instant.MIN }.thenBy { it.id })
     if (grouping == Grouping.TAG) {
         val tags = sorted.mapNotNull { it.tags.firstOrNull() }.distinctBy { it.id }
             .sortedWith(compareByDescending<Tag> { it.isSystem }.thenBy { it.position }.thenBy { it.name })
@@ -199,9 +218,22 @@ fun directoryGroups(sessions: List<DirectorySession>, view: SessionView, groupin
             listOfNotNull(sorted.filter { it.tags.isEmpty() }.takeIf { it.isNotEmpty() }?.let { SessionGroup("bucket:untagged", "Untagged", it) })
     }
     val today = now.atZone(zone).toLocalDate()
-    val buckets = sorted.groupBy { s -> if (view == SessionView.OPEN && s.pinnedAt != null) 0 else recencyBucket(date(s), today, zone) }
-    return recencyTitles.mapIndexedNotNull { i, title -> buckets[i]?.let { SessionGroup("time:$i", title, it) } }
+    // 0 Pinned, then (Open only) Needs you and Working, then the day sections by [recencyBucket].
+    fun bucket(s: DirectorySession) = when {
+        open && s.pinnedAt != null -> 0
+        open && s.needsOwner() -> NEEDS_YOU_BUCKET
+        open && s.isWorkingForList() -> WORKING_BUCKET
+        else -> recencyBucket(date(s), today, zone)
+    }
+    val buckets = sorted.groupBy(::bucket)
+    return listOfNotNull(buckets[0]?.let { SessionGroup("time:0", recencyTitles[0], it) },
+        buckets[NEEDS_YOU_BUCKET]?.let { SessionGroup(NEEDS_YOU_GROUP, "Needs you", it) },
+        buckets[WORKING_BUCKET]?.let { SessionGroup(WORKING_GROUP, "Working", it) }) +
+        (1 until recencyTitles.size).mapNotNull { i -> buckets[i]?.let { SessionGroup("time:$i", recencyTitles[i], it) } }
 }
+
+private const val NEEDS_YOU_BUCKET = -1
+private const val WORKING_BUCKET = -2
 
 /** The list's sections in order, Pinned first; [recencyBucket] indexes into them. */
 internal val recencyTitles = listOf("Pinned", "Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older")
