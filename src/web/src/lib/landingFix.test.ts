@@ -69,7 +69,7 @@ const fixed = entry('FIXED_BY_SESSION', '2026-11-20T02:09:00Z', {
   actor: { type: 'TASK_SESSION', sessionId: 'S1' }, data: { sessionId: 'S1', sourceSha: '4be19c2deadbeef' }, text: 'Fixed in 4be19c2 · landing again',
 });
 const returned = entry('RETURNED_TO_COORDINATOR', '2026-11-20T02:31:00Z', {
-  reason: 'NO_NEW_COMMIT', data: { itemId: 'i1', sessionId: 'S1', returnReason: 'NO_NEW_COMMIT' }, text: 'Returned to the coordinator: no new commit',
+  reason: 'NO_NEW_COMMIT', data: { itemId: 'i1', sessionId: 'S1', returnReason: 'NO_NEW_COMMIT', lastMessage: ' It is not mine to fix. ' }, text: 'Returned to the coordinator: no new commit',
 });
 const failedResult = entry('RESULT', '2026-11-20T02:02:20Z', { data: { state: 'CONFLICT' } });
 
@@ -128,7 +128,9 @@ describe('the landing window’s reading', () => {
 
   it('is RETURNED after a hand-back, with its reason, and says where the last words are', () => {
     const landing = { settledAt: null, timeline: { truncated: false, facts: [], sections: [section('j1', [failedResult, handed, returned])] } };
-    expect(landingFixStanding(landing as never)).toMatchObject({ state: 'RETURNED', returnReason: 'NO_NEW_COMMIT', round: 1 });
+    expect(landingFixStanding(landing as never)).toMatchObject({ state: 'RETURNED', returnReason: 'NO_NEW_COMMIT', round: 1, lastMessage: 'It is not mine to fix.' });
+    const silent = entry('RETURNED_TO_COORDINATOR', '2026-11-20T02:31:00Z', { reason: 'TURN_FAILED', data: { itemId: 'i1', sessionId: 'S1', returnReason: 'TURN_FAILED', lastMessage: null } });
+    expect(landingFixStanding({ settledAt: null, timeline: { truncated: false, facts: [], sections: [section('j1', [handed, silent])] } } as never)?.lastMessage).toBeNull();
     const events = landingFixEvents(landing as never);
     expect(landingFixEventSub(events[0], events, false)).toBe('round 1 of 2');
     expect(landingFixEventSub(events[1], events, false)).toBe(LANDING_FIX_COPY.LAST_WORDS_BELOW);
