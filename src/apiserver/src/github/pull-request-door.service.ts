@@ -530,14 +530,19 @@ export class PullRequestDoorService implements OnApplicationBootstrap, OnModuleD
     const job = await this.prisma.projectIntegrationJob.findFirst({
       where: { pullRequestId: row.id },
       orderBy: { createdAt: 'desc' },
-      select: { kind: true, taskId: true, projectId: true, sourceRef: true, checks: true, landingId: true },
+      select: { kind: true, taskId: true, sessionId: true, projectId: true, sourceRef: true, checks: true, landingId: true },
     });
-    const task = job?.taskId ? await this.prisma.task.findFirst({ where: { id: job.taskId }, select: { title: true } }) : null;
+    const projectBranch = job?.kind === 'LAND_PROMOTION' && job.sourceRef.startsWith('refs/heads/project/');
+    // A promotion's job names no task; a task branch's promotion is still that task's work, named by its session.
+    const taskId = job?.taskId ?? (!projectBranch && job?.sessionId
+      ? (await this.prisma.session.findUnique({ where: { id: job.sessionId }, select: { taskId: true } }))?.taskId ?? null
+      : null);
+    const task = taskId ? await this.prisma.task.findFirst({ where: { id: taskId }, select: { title: true } }) : null;
     const project = job ? await this.prisma.project.findFirst({ where: { id: job.projectId }, select: { title: true } }) : null;
     const landing = row.landingId
       ? await this.prisma.projectLanding.findUnique({ where: { id: row.landingId }, select: { sessionId: true } })
       : null;
-    const title = clipTitle(job?.kind === 'LAND_PROMOTION' && job.sourceRef.startsWith('refs/heads/project/')
+    const title = clipTitle(projectBranch && job
       ? `Merge ${branchOf(job.sourceRef)} into ${base}: ${project?.title ?? 'an Orbit project'}`
       : task?.title?.trim() || `Land Orbit work on ${base}`);
     const checks = (Array.isArray(job?.checks) ? job.checks : []) as Array<{ name?: unknown; skipped?: unknown }>;

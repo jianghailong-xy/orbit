@@ -6,18 +6,24 @@
  *   bash scripts/run-pg-spec.sh src/apiserver/src/github/pull-request-landing.pg.spec.ts
  *
  * What it is held to:
+ *   The landings into main are what a protected main refuses: a MAIN line's task-branch candidate, checked clean and
+ *   confirmed by the owner, whose LAND_PROMOTION the runner claims (design §3's table). A LAND_TASK lands on the
+ *   project's own branch.
+ *
  *   (1) §3 at the hand-out: a runner without integration-pull-request/v1 is handed today's command and nothing is
  *       recorded; with it, an installation that has not accepted the permissions, an Orbit branch and a workspace not
  *       cloned from GitHub land PUSH; a GitHub workspace whose installation granted them lands PULL_REQUEST, its
  *       landing branch named after the landing session, both recorded on the job.
  *   (2) J-T14: the runner's PULL_REQUEST result moves the job to PULL_REQUEST and writes the subject's pull request
  *       row (OPENING, head, base, tested tree, GitHub's refusal); no runner holds it (a late report is STALE_CLAIM); it
- *       is in flight (J3 holds the task's next landing, the in-flight read says PULL_REQUEST, never timed out, waiting
- *       for checks); a PULL_REQUEST from an attempt handed out PUSH is refused.
- *   (3) The door opens the pull request as the App (head orbit/land/<id>, base main), waits while the required checks
- *       run and while a review is required, merges with sha = the pushed head once GitHub allows, and on GitHub's
- *       merged answer lands the job (J-T15): LANDED with GitHub's commit, a receipt recorded by SERVER naming the pull
- *       request, the pull request MERGED, the landing branch deleted, the landing settled.
+ *       is in flight (no second landing is queued for the task's branch, the in-flight read says PULL_REQUEST, never
+ *       timed out, waiting for checks; the landing view carries the pull request); a PULL_REQUEST from an attempt
+ *       handed out PUSH is refused.
+ *   (3) The door opens the pull request as the App (head orbit/land/<id>, base main, the task's title), waits while
+ *       the required checks run and while a review is required, merges with sha = the pushed head once GitHub allows,
+ *       and on GitHub's merged answer lands the job (J-T15): LANDED with GitHub's commit, a receipt recorded by SERVER
+ *       naming the pull request, the pull request MERGED, the landing branch deleted, the landing settled, and the
+ *       task reading as on main.
  *   (4) The merge method: a method the repository refuses is replaced by the next it allows.
  *   (5) §4.4's recorded exception: a merge whose tree is not the tested tree lands with the real tree and opens the
  *       INTEGRATION_ERROR item that asks for the project's check on main.
@@ -36,7 +42,9 @@ import assert from 'node:assert/strict';
 import { createHmac, generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { RunStatus, RunnerStatus, type PrismaClient } from '@prisma/client';
-import { INTEGRATION_PULL_REQUEST_CAPABILITY, SESSION_MERGE_PULL_REQUEST_CAPABILITY, type IntegrationJobCommand } from '@orbit/shared';
+import {
+  INTEGRATION_PULL_REQUEST_CAPABILITY, SESSION_MERGE_PULL_REQUEST_CAPABILITY, type IntegrationCheckResult, type IntegrationJobCommand,
+} from '@orbit/shared';
 import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { encryptSecret } from '../providers/provider-crypto';
@@ -50,7 +58,9 @@ import {
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { INTEGRATION_JOB_CLAIM, enqueueForDoneTask } from '../projects/project-integration-job';
 import { readInFlightJobs, stopInFlightJob } from '../projects/project-integration-line';
+import { readLandingView } from '../projects/landing-view';
 import { readTaskIntegrationViews } from '../projects/project-task-integration';
+import { ProjectPromotionService } from '../projects/project-promotion.service';
 import { recordSessionMergePullRequest } from '../projects/pull-request-landing';
 import { GITHUB_API, GithubClient } from './github-api.client';
 import { GithubAppConfigService } from './github-app-config.service';
@@ -61,6 +71,12 @@ import { PullRequestDoorService, REREAD_WITHOUT_DELIVERIES_MS, REREAD_WITH_DELIV
 const URL_ = process.env.COORDINATOR_PG_URL;
 const SHA = (seed: string) => createHmac('sha1', 'pr').update(seed).digest('hex');
 const WORK_REPORTED = [{ path: 'src/a.ts', status: 'M', additions: 3, deletions: 1 }];
+/** The task branch's tip the owner confirms, and main's tip it was checked and pushed on. */
+const WORK_TIP = SHA('the task branch tip');
+const UPSTREAM_TIP = SHA('main before the landing');
+const GREEN_CHECK: IntegrationCheckResult = {
+  name: 'MERGE_CHECK', command: 'npm test', expectedExitCode: 0, exitCode: 0, timedOut: false, durationMs: 1_200, outputTail: 'ok\n',
+};
 
 // ── GitHub, faked ─────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -232,6 +248,7 @@ async function harness(t: { after(fn: () => Promise<void> | void): void }) {
   const door = new PullRequestDoorService(prisma as never, config, client, grants);
   const webhooks = new GithubWebhookService(prisma as never, config, grants, door);
   const tasks = new TasksService(prisma as never, {} as never, { publishTaskChanged() {}, publishForUser() {} } as never);
+  const promotions = new ProjectPromotionService(prisma as never);
 
   async function newOwner(label: string): Promise<string> {
     const ownerId = randomUUID();
@@ -262,7 +279,11 @@ async function harness(t: { after(fn: () => Promise<void> | void): void }) {
     return { runnerId, workspaceId, repoId, installationId, fullName };
   }
 
-  /** A DONE task of a project whose line is `line` (MAIN lands on main itself), its work finished, and its landing queued. */
+  /**
+   * A DONE task's landing, queued as design §3's table has it. On a `MAIN` line the task's branch is a candidate: its
+   * check comes back clean on main and the owner confirms it, which queues the LAND_PROMOTION into main — the push a
+   * protected main refuses. On a `PROJECT_BRANCH` line, a LAND_TASK onto the project's own branch.
+   */
   async function queuedLanding(ownerId: string, workspace: { runnerId: string; workspaceId: string; fullName: string }, label: string, line: 'MAIN' | 'PROJECT_BRANCH' = 'MAIN') {
     const projectId = randomUUID();
     await prisma.project.create({ data: { id: projectId, ownerId, title: `The project ${label} lands into` } });
@@ -280,19 +301,46 @@ async function harness(t: { after(fn: () => Promise<void> | void): void }) {
     const done = await sql.query(
       `UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1::uuid AND "status" IN ('OPEN', 'IN_PROGRESS')`, [task.id]);
     assert.equal(done.rowCount, 1);
+    // Not off the task id: a v7 id's first characters are its clock, shared by tasks made together.
+    const branch = `orbit/work-${randomUUID().slice(0, 8)}`;
     await prisma.session.create({
       data: {
         id: randomUUID(), ownerId, creatorId: ownerId, taskId: task.id, workspaceId: workspace.workspaceId,
-        assignedRunnerId: workspace.runnerId, title: `ran ${label}`, prompt: 'do the work', branch: `orbit/pr-${task.id}`,
+        assignedRunnerId: workspace.runnerId, title: `ran ${label}`, prompt: 'do the work', branch,
         isolationStatus: 'worktree', status: RunStatus.SUCCEEDED, baseSha: SHA(`base-${label}`), startsTaskWork: true,
-        worktreeBranch: `orbit/pr-${task.id}`, worktreeDirty: false,
+        worktreeBranch: branch, worktreeDirty: false,
         changedFiles: WORK_REPORTED as never, createdAt: new Date(Date.now() - 2 * 86_400_000), finishedAt: new Date(Date.now() - 2 * 86_400_000),
       },
     });
     const queued = await prisma.$transaction((tx) => enqueueForDoneTask(tx, ownerId, task.id));
-    assert.ok(queued.enqueued, `no landing was queued: ${JSON.stringify(queued)}`);
-    const job = await prisma.projectIntegrationJob.findFirstOrThrow({ where: { taskId: task.id, kind: 'LAND_TASK' }, select: { id: true } });
-    return { projectId, taskId: task.id, jobId: job.id };
+    if (line === 'PROJECT_BRANCH') {
+      assert.ok(queued.enqueued, `no landing was queued: ${JSON.stringify(queued)}`);
+      const landTask = await prisma.projectIntegrationJob.findFirstOrThrow({
+        where: { taskId: task.id, kind: 'LAND_TASK' }, select: { id: true, landingId: true },
+      });
+      return { projectId, taskId: task.id, jobId: landTask.id, landingId: landTask.landingId as string };
+    }
+    assert.ok(queued.enqueued && queued.kind === 'PROMOTION', `no candidate was queued: ${JSON.stringify(queued)}`);
+    // The candidate's check, by a runner process that lands nothing yet: clean on main, so the owner is asked.
+    const handed = await relay.dispatch({
+      runnerId: workspace.runnerId, leaseOwner: randomUUID(), draining: false, capabilities: [INTEGRATION_JOB_CLAIM],
+    });
+    const check = handed.find((command) => command.kind === 'CHECK_PROMOTION');
+    assert.ok(check, `the candidate's check was not handed out: ${JSON.stringify(handed.map((command) => command.kind))}`);
+    const checked = await applyIntegrationJobResult(prisma as never, {
+      jobId: check.jobId, runnerId: workspace.runnerId, ownerId,
+      body: {
+        claimGeneration: check.claimGeneration, leaseOwner: check.leaseOwner, state: 'READY', phase: 'CHECK',
+        sourceSha: WORK_TIP, targetShaBefore: UPSTREAM_TIP, upstreamSha: UPSTREAM_TIP, testedSha: SHA(`tested-${label}`),
+        testedTreeSha: SHA(`tested-tree-${label}`), aheadOfUpstream: 1, filesChanged: 1, checks: [GREEN_CHECK],
+      },
+    });
+    assert.ok(checked.answer.accepted, `the check was refused: ${JSON.stringify(checked.answer)}`);
+    await promotions.confirm({ userId: ownerId }, projectId, queued.promotionId, WORK_TIP);
+    const landPromotion = await prisma.projectIntegrationJob.findFirstOrThrow({
+      where: { promotionId: queued.promotionId, kind: 'LAND_PROMOTION' }, select: { id: true, landingId: true },
+    });
+    return { projectId, taskId: task.id, jobId: landPromotion.id, landingId: landPromotion.landingId as string };
   }
 
   /** One heartbeat of a runner process, with or without the pull request capability. */
@@ -308,10 +356,10 @@ async function harness(t: { after(fn: () => Promise<void> | void): void }) {
     github.pushed.set((command.landingRef ?? '').replace('refs/heads/', ''), head);
     return {
       claimGeneration: command.claimGeneration, leaseOwner: command.leaseOwner, state: 'PULL_REQUEST' as const, phase: 'PUSH' as const,
-      sourceSha: SHA(`source-${command.jobId}`), targetShaBefore: SHA(`main-${command.jobId}`), upstreamSha: SHA(`main-${command.jobId}`),
-      testedSha: head, testedTreeSha: tree, landingRefSha: head,
+      sourceSha: WORK_TIP, targetShaBefore: UPSTREAM_TIP, upstreamSha: UPSTREAM_TIP, testedSha: head, testedTreeSha: tree, landingRefSha: head,
       pushRefusal: 'GH006: Protected branch update failed for refs/heads/main. Changes must be made through a pull request.',
-      checks: [{ name: 'TASK_ACCEPTANCE' as const, command: 'true', expectedExitCode: 0, exitCode: 0, timedOut: false, durationMs: 1200, outputTail: '' }],
+      // An upstream that has not moved since the check reproduces the tree that passed and runs nothing again (M5).
+      checks: [],
     };
   }
 
@@ -373,7 +421,7 @@ test('§3: how a landing reaches main is decided at the hand-out and recorded on
   h.github.granted.set(cloud.installationId, GRANTED);
   const landing = await h.queuedLanding(ownerId, cloud, 'a protected main');
   const [command] = await h.beat(cloud.runnerId, true);
-  const landingSession = await h.prisma.projectLanding.findFirstOrThrow({ where: { taskId: landing.taskId } });
+  const landingSession = await h.prisma.projectLanding.findUniqueOrThrow({ where: { id: landing.landingId } });
   assert.equal(command?.landVia, 'PULL_REQUEST');
   assert.equal(command.landingRef, `refs/heads/orbit/land/${landingSession.sessionId}`);
   assert.equal(command.pullRequestOpen, undefined);
@@ -385,7 +433,7 @@ test('§3: how a landing reaches main is decided at the hand-out and recorded on
   // head for its lease and told to push only the landing branch — even once the installation's grant no longer reads.
   const reopened = await h.newWorkspace(ownerId, 'open-pull-request', { github: true });
   const again = await h.queuedLanding(ownerId, reopened, 'its pull request is already open');
-  const subject = await h.prisma.projectLanding.findFirstOrThrow({ where: { taskId: again.taskId } });
+  const subject = await h.prisma.projectLanding.findUniqueOrThrow({ where: { id: again.landingId } });
   const openHead = SHA('the head Orbit pushed before');
   await h.prisma.githubPullRequest.create({
     data: {
@@ -438,13 +486,13 @@ test('J-T14, the door and J-T15: a protected main lands through a pull request',
   assert.equal(await refusal(receiveIntegrationJobProgress(h.prisma as never, cloud.runnerId, command.jobId, {
     claimGeneration: command.claimGeneration, leaseOwner: command.leaseOwner, phase: 'VERIFY',
   }, ownerId)), 'STALE_CLAIM');
-  // It is in flight: never timed out, waiting for checks, and J3 holds the task's next landing.
+  // It is in flight: never timed out, waiting for checks, and the task's branch queues no second landing meanwhile.
   const [inFlight] = await readInFlightJobs(h.prisma as never, landing.projectId, command.jobId);
   assert.equal(inFlight?.state, 'PULL_REQUEST');
   assert.equal(inFlight.timedOut, false);
   assert.equal(inFlight.blockingReason?.code, 'WAITING_FOR_CHECKS');
   const again = await h.prisma.$transaction((tx) => enqueueForDoneTask(tx, ownerId, landing.taskId));
-  assert.equal(again.enqueued, false, 'J3: one landing in flight per task, a pull request included');
+  assert.equal(again.enqueued, false, 'one landing in flight for the task\'s branch, a pull request included');
 
   // The door opens it as the App; GitHub's required checks run: it waits.
   h.github.scenario(cloud.fullName).mergeStateStatus = 'BLOCKED';
@@ -468,15 +516,15 @@ test('J-T14, the door and J-T15: a protected main lands through a pull request',
   const [checking] = await readInFlightJobs(h.prisma as never, landing.projectId, command.jobId);
   assert.equal(checking?.pullRequest?.number, pr.number);
   assert.deepEqual(checking.pullRequest?.checks, { passed: 1, required: 2, failed: [] });
-  // The task's row reads it as a landing still running, with its pull request and why it waits (§8).
-  const taskRow = (await readTaskIntegrationViews(h.prisma as never, ownerId, landing.projectId, [landing.taskId])).get(landing.taskId);
-  assert.ok(taskRow, 'the task has its row');
-  assert.equal(taskRow.state, 'RUNNING');
-  assert.equal(taskRow.jobId, command.jobId);
-  assert.equal(taskRow.landTask?.state, 'PULL_REQUEST');
-  assert.equal(taskRow.landTask?.blockingReason?.code, 'WAITING_FOR_CHECKS');
-  assert.equal(taskRow.landTask?.pullRequest?.number, pr.number);
-  assert.deepEqual(taskRow.landTask?.pullRequest?.checks, { passed: 1, required: 2, failed: [] });
+  // The landing's own view, which a client opens from the landing card, carries the pull request and its checks (§8).
+  const landingSession = await h.prisma.projectLanding.findUniqueOrThrow({ where: { id: landing.landingId } });
+  const view = await readLandingView(h.prisma as never, ownerId, landingSession.sessionId);
+  assert.ok(view, 'the landing has its view');
+  assert.equal(view.pullRequest?.number, pr.number);
+  assert.equal(view.pullRequest?.state, 'OPEN');
+  assert.equal(view.pullRequest?.condition, 'CHECKS_PENDING');
+  assert.deepEqual(view.pullRequest?.checks, { passed: 1, required: 2, failed: [] });
+  assert.match(String(view.pullRequest?.refusal?.message), /GH006/);
 
   // A review is required: it waits for it.
   h.github.scenario(cloud.fullName).checks = [
@@ -516,8 +564,12 @@ test('J-T14, the door and J-T15: a protected main lands through a pull request',
   assert.equal(receipt.targetShaAfter, landed.landedSha);
   assert.equal((receipt.detail as { pullRequest?: { number?: number } }).pullRequest?.number, pr.number);
   assert.deepEqual(h.github.deleted, [command.landingRef!.replace('refs/heads/', '')]);
-  const settled = await h.prisma.projectLanding.findFirstOrThrow({ where: { taskId: landing.taskId } });
+  const settled = await h.prisma.projectLanding.findUniqueOrThrow({ where: { id: landing.landingId } });
   assert.equal(settled.settledAs, 'LANDED');
+  // And the task reads as landed: on main, by the receipt the server wrote.
+  const taskRow = (await readTaskIntegrationViews(h.prisma as never, ownerId, landing.projectId, [landing.taskId])).get(landing.taskId);
+  assert.ok(taskRow, 'the task has its row');
+  assert.equal(taskRow.state, 'ON_UPSTREAM');
   const merged = await h.prisma.projectIntegrationJobEvent.findFirst({ where: { jobId: command.jobId, key: 'pull-request:merged' } });
   assert.match(String(merged?.text), new RegExp(`^Merged pull request #${pr.number}`));
   const [after] = await readInFlightJobs(h.prisma as never, landing.projectId, command.jobId);
