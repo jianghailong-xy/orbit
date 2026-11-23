@@ -49,6 +49,7 @@ final class ScheduleRunStatusShotsTests: XCTestCase {
                                           perform: { _ in nil })
             }
             .environment(AppModel())
+            .environment(\.controlActiveState, .key)
             .padding(16)
             .frame(width: width, alignment: .topLeading)
             .background(Color(nsColor: .windowBackgroundColor))
@@ -56,9 +57,10 @@ final class ScheduleRunStatusShotsTests: XCTestCase {
             host.frame = NSRect(x: 0, y: 0, width: width, height: 420)
             let size = host.fittingSize
             host.frame = NSRect(x: 0, y: 0, width: width, height: size.height)
-            let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+            let window = KeyWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
             window.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
             window.contentView = host
+            window.makeKeyAndOrderFront(nil)
             host.layoutSubtreeIfNeeded()
             RunLoop.current.run(until: Date().addingTimeInterval(0.2))
             let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
@@ -70,6 +72,8 @@ final class ScheduleRunStatusShotsTests: XCTestCase {
     }
 
     func testFrames() throws {
+        NSApplication.shared.setActivationPolicy(.regular)
+        NSApplication.shared.activate(ignoringOtherApps: true)
         let planned = iso(14, "03:32")
         let didnt = ScheduleRunView(id: "r", scheduleId: "sch", plannedAt: planned, trigger: "MANUAL", state: "MISSED", attempt: 5,
                                     sessionId: "s5", failureReason: "RUNNER_UNAVAILABLE")
@@ -88,4 +92,9 @@ final class ScheduleRunStatusShotsTests: XCTestCase {
             try frame("4-started-on-try-3", width: width, run: started, status: startedStatus)
         }
     }
+}
+
+/// A borderless window that can be key, so the accent draws as it does in the app (an inactive window greys it).
+private final class KeyWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
 }

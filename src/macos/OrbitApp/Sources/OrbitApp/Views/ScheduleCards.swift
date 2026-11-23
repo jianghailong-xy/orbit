@@ -405,7 +405,7 @@ struct ScheduleRunStatusCardView: View {
                 body(text.reason)
                 HStack(spacing: 6) {
                     ForEach(Array(text.tries.enumerated()), id: \.offset) { _, time in
-                        Text(time).font(.orbitMono).padding(.horizontal, 8).padding(.vertical, 3)
+                        Text(time).font(.orbitLabel).padding(.horizontal, 8).padding(.vertical, 3)
                             .background(Color.secondary.opacity(0.12), in: Capsule())
                     }
                 }
@@ -443,8 +443,8 @@ struct ScheduleRunStatusCardView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(Color.scheduleWarn.opacity(0.03), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.scheduleWarn.opacity(0.7), lineWidth: 1.5))
+        .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.secondary.opacity(0.3)))
         .disabled(busy)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("schedule-run-card-\(kind.rawValue)")
@@ -567,7 +567,10 @@ struct ScheduleConsoleCard: View {
                         perform: { door in
                             let said: String?
                             switch door {
-                            case .runNow: said = await appModel.scheduled?.runNow(found.run.scheduleId)
+                            case .runNow:
+                                let started = await appModel.scheduled?.runNowSession(found.run.scheduleId)
+                                said = started?.said
+                                if let session = started?.sessionID { appModel.openScheduleRun(sessionID: session) }
                             case .cancelRun: said = await appModel.scheduled?.stop(runID: found.run.id, scheduleID: found.run.scheduleId)
                             case .openSchedule: appModel.openSchedule(found.run.scheduleId); said = nil
                             case .openRun:
