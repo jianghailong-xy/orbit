@@ -1,0 +1,198 @@
+{
+  "about": [
+    "Project page and coordinator cards: iOS/web/Android parity (board docs/mocks/ios-project-page-and-coordinator-cards/ board-4,",
+    "criterion 7). Two of the three cards a coordinator conversation draws after a project starts, with the words each says. The",
+    "third, the criteria-decision receipt, has its own fixture (criteria-decision-receipt.fixture.json).",
+    "Web reads it in src/web/src/components/CoordinatorStartCards.fixture.test.tsx, Android in",
+    "io.orbitd.android.core.cards.CoordinatorStartCardsFixtureTest and io.orbitd.android.cards.CoordinatorStartCardsViewTest.",
+    "",
+    "`startReceipts`: a recorded confirmation (`GET /projects/:id/acceptance/confirmation` -> `confirmation`) drawn as its receipt",
+    "(web `AcceptanceConfirmationReceipt`, OrbitKit `AcceptanceConfirmationReceiptCard`). `expected.settings` is the run-settings",
+    "line (web `runSettingsParts`, OrbitKit `RunSettings.parts`) joined with \" · \", null where the record started nothing.",
+    "`expected.stamp` is read at `clock` (`now`, `timeZone`, `locale`), the receipt-time rule of project-page-labels.fixture.json.",
+    "",
+    "`projectStarted`: the `projectStarted` payload a user turn carries (web `parseProjectStarted` / `ProjectStartedCard`, OrbitKit",
+    "`ProjectStarted` / `ProjectStartedCardView`). `expected.meta` is the foot line without its relative time. `expected.tasks` are",
+    "the titles listed before the fold opens, `expected.toggle` the fold's control (null where every listed task shows) and",
+    "`expected.more` the link to the tasks the message did not list, drawn once every listed task is on screen (null where",
+    "there are none)."
+  ],
+  "clock": { "now": "2026-11-20T08:00:00Z", "timeZone": "Asia/Shanghai", "locale": "en-GB" },
+  "startReceipts": [
+    {
+      "name": "the start, on five criteria, with the settings it was pressed with",
+      "confirmation": {
+        "criteriaDigest": "7219d1bad2120000000000000000000000000000000000000000000000000000",
+        "criteriaMaterial": [
+          { "key": "c1", "text": "The iOS criteria receipt is orange", "verificationMethod": "Screenshot" },
+          { "key": "c2", "text": "A met criterion's landing reads landingReason", "verificationMethod": "Unit tests" },
+          { "key": "c3", "text": "Receipt times show the date when not today", "verificationMethod": "Unit tests" },
+          { "key": "c4", "text": "No count calls an unmet criterion landed", "verificationMethod": "pg spec" },
+          { "key": "c5", "text": "Android draws the three cards", "verificationMethod": "Compose tests" }
+        ],
+        "confirmedAt": "2026-11-16T15:45:31.000Z",
+        "confirmedById": "owner-1",
+        "startedWith": {
+          "settings": {
+            "line": "PROJECT_BRANCH",
+            "projectBranchName": "refs/heads/project/34ycaQ1bT0kE7vLmN3pR5",
+            "automatic": true,
+            "maxConcurrentTasks": 3,
+            "mergeCheckCommand": "npm run build",
+            "upstreamRef": "refs/heads/main"
+          },
+          "differsFromRequest": ["maxConcurrentTasks"]
+        },
+        "changes": null,
+        "criteria": [
+          { "key": "c1", "ordinal": 1, "text": "The iOS criteria receipt is orange", "verificationMethod": "Screenshot", "since": "UNCHANGED" },
+          { "key": "c2", "ordinal": 2, "text": "A met criterion's landing reads landingReason", "verificationMethod": "Unit tests", "since": "UNCHANGED" },
+          { "key": "c3", "ordinal": 3, "text": "Receipt times show the date when not today", "verificationMethod": "Unit tests", "since": "UNCHANGED" },
+          { "key": "c4", "ordinal": 4, "text": "No count calls an unmet criterion landed", "verificationMethod": "pg spec", "since": "UNCHANGED" },
+          { "key": "c5", "ordinal": 5, "text": "Android draws the three cards", "verificationMethod": "Compose tests", "since": "UNCHANGED" }
+        ],
+        "wordingRecorded": true
+      },
+      "expected": {
+        "heading": "Decision recorded",
+        "line": "You started the project on 5 criteria",
+        "settings": "project/34yca… · Automatic on · 3 tasks at a time · merge check set",
+        "differs": ["3 tasks at a time"],
+        "stamp": "by you at 11/16 23:45",
+        "foldLabel": "What this confirmed · 5 criteria",
+        "seal": "Seal 7219d1bad212"
+      }
+    },
+    {
+      "name": "a later confirmation that started nothing, one criterion added, today",
+      "confirmation": {
+        "criteriaDigest": "9c4f7a1bb0010000000000000000000000000000000000000000000000000000",
+        "criteriaMaterial": [
+          { "key": "c1", "text": "The web suite passes", "verificationMethod": "EXECUTABLE" },
+          { "key": "c2", "text": "The receipt folds out what it approved", "verificationMethod": "Screenshot" }
+        ],
+        "confirmedAt": "2026-11-20T01:30:00.000Z",
+        "confirmedById": "owner-1",
+        "changes": {
+          "added": [{ "key": "c2", "ordinal": 2, "text": "The receipt folds out what it approved", "verificationMethod": "Screenshot" }],
+          "stricter": [],
+          "revised": [],
+          "removed": [],
+          "unchanged": ["c1"]
+        },
+        "criteria": [
+          { "key": "c1", "ordinal": 1, "text": "The web suite passes", "verificationMethod": "EXECUTABLE", "since": "UNCHANGED" },
+          { "key": "c2", "ordinal": 2, "text": "The receipt folds out what it approved", "verificationMethod": "Screenshot", "since": "UNCHANGED" }
+        ],
+        "wordingRecorded": true
+      },
+      "expected": {
+        "heading": "Decision recorded",
+        "line": "You confirmed 2 criteria · 1 new, 1 unchanged",
+        "settings": null,
+        "differs": [],
+        "stamp": "by you at 09:30",
+        "foldLabel": "What this confirmed · 2 criteria",
+        "seal": "Seal 9c4f7a1bb001"
+      }
+    }
+  ],
+  "projectStarted": [
+    {
+      "name": "started on five criteria, one task set to start by hand",
+      "payload": {
+        "projectStarted": {
+          "by": "CONFIRMATION",
+          "projectId": "34ycaQ1bT0kE7vLmN3pR5",
+          "projectTitle": "Coordinator handoff v2",
+          "criteriaCount": 5,
+          "held": [{ "id": "34ycbR2cU1lF8wMnO4qS6", "title": "Walkthrough: a real coordinator handoff with pending work, on a deployed build" }],
+          "heldCount": 1,
+          "settings": {
+            "line": "PROJECT_BRANCH",
+            "projectBranchName": "refs/heads/project/34ycaQ1bT0kE7vLmN3pR5",
+            "automatic": true,
+            "maxConcurrentTasks": 3,
+            "mergeCheckCommand": "npm run build"
+          },
+          "differsFromRequest": []
+        }
+      },
+      "expected": {
+        "label": "Project started",
+        "kind": "Criteria confirmed",
+        "title": "Coordinator handoff v2",
+        "settings": "project/34yca… · Automatic on · 3 tasks at a time · merge check set",
+        "lead": "1 task is set to start by hand, so it waits for the coordinator:",
+        "tasks": ["Walkthrough: a real coordinator handoff with pending work, on a deployed build"],
+        "toggle": null,
+        "more": null,
+        "meta": "Started by you, confirming 5 criteria · a notification, not an interruption",
+        "told": "What the coordinator was told"
+      }
+    },
+    {
+      "name": "five listed of seven waiting, directly into master",
+      "payload": {
+        "projectStarted": {
+          "by": "CONFIRMATION",
+          "projectId": "34ycaQ1bT0kE7vLmN3pR5",
+          "projectTitle": "Release train",
+          "criteriaCount": 1,
+          "held": [
+            { "id": "34ycbR2cU1lF8wMnO4qS1", "title": "First" },
+            { "id": "34ycbR2cU1lF8wMnO4qS2", "title": "Second" },
+            { "id": "34ycbR2cU1lF8wMnO4qS3", "title": "Third" },
+            { "id": "34ycbR2cU1lF8wMnO4qS4", "title": "Fourth" },
+            { "id": "34ycbR2cU1lF8wMnO4qS5", "title": "Fifth" }
+          ],
+          "heldCount": 7,
+          "settings": {
+            "line": "MAIN",
+            "automatic": false,
+            "maxConcurrentTasks": 1,
+            "mergeCheckCommand": null,
+            "upstreamRef": "refs/heads/master"
+          },
+          "differsFromRequest": ["automatic"]
+        }
+      },
+      "expected": {
+        "label": "Project started",
+        "kind": "Criteria confirmed",
+        "title": "Release train",
+        "settings": "Directly into master · Automatic off · 1 task at a time · no merge check",
+        "lead": "7 tasks are set to start by hand, so they wait for the coordinator:",
+        "tasks": ["First", "Second", "Third"],
+        "toggle": "Show 2 more",
+        "more": "2 more in the project ↗",
+        "meta": "Started by you, confirming 1 criterion · a notification, not an interruption",
+        "told": "What the coordinator was told"
+      }
+    },
+    {
+      "name": "switched on, nothing waiting, no settings recorded",
+      "payload": {
+        "projectStarted": {
+          "by": "SWITCH",
+          "projectId": "34ycaQ1bT0kE7vLmN3pR5",
+          "projectTitle": "Coordinator handoff v2",
+          "held": [],
+          "heldCount": 0
+        }
+      },
+      "expected": {
+        "label": "Project switched on",
+        "kind": "Automatic on",
+        "title": "Coordinator handoff v2",
+        "settings": null,
+        "lead": "Every open task starts on its own.",
+        "tasks": [],
+        "toggle": null,
+        "more": null,
+        "meta": "Switched on by you · a notification, not an interruption",
+        "told": "What the coordinator was told"
+      }
+    }
+  ]
+}

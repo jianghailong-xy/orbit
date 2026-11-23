@@ -414,7 +414,7 @@ public enum CrossingBatches {
         switch standing {
         case .live: return nil
         case .recorded(let verdict, let at):
-            return "✓ \(verdictWord(verdict)) by you at \(at.map(CriteriaDecisions.receiptClock) ?? "")"
+            return "✓ \(verdictWord(verdict)) by you at \(at.map { CriteriaDecisions.receiptClock($0) } ?? "")"
         case .elsewhere(let verdict):
             return "\(verdictWord(verdict)) at another end"
         }

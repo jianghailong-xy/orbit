@@ -1,6 +1,7 @@
 import { basename } from 'node:path';
 import {
   AgentProvider,
+  antigravityBaseModel,
   credentialEngines,
   ENGINE_CLI_NAMES,
   type ProviderModelTier,
@@ -456,8 +457,10 @@ export async function subagentTierView(
 
   const listed = providers.flatMap((provider) => provider.models.map((model) => ({ provider: provider.slug, model })));
   const ran = [...tallies].map(([key, tally]) => {
-    const [provider, , model] = key.split('\u0000');
-    return { provider, model, tally };
+    const [provider, engine, model] = key.split('\u0000');
+    // Antigravity's ids may carry their level (`claude-opus-5-5-high`): the same model as its base row. Only here, where
+    // the engine is known: elsewhere a trailing `-max` is part of the name (`qwen3.7-max`).
+    return { provider, model: engine === AgentProvider.ANTIGRAVITY ? antigravityBaseModel(model) : model, tally };
   });
   const identities = await readModelIdentities(db, [...listed.map(({ model }) => model.model), ...ran.map(({ model }) => model)]);
   const pooled = new Map<string, QualityTally>();
