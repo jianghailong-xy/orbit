@@ -810,10 +810,11 @@ func cursorAgentInstructions(job *ClaimedSession) string {
 	if strings.TrimSpace(job.Agent.SystemPrompt) != "" {
 		parts = append(parts, strings.TrimSpace(job.Agent.SystemPrompt))
 	}
-	appended := strings.TrimSpace(withOrbitCLIInstructions(job.appendSystemPrompt(), orbitCLIExecutable(), job.insideRecordedWork(), job.watchesOn(), agentDelegates(job.Agent)))
+	appended := strings.TrimSpace(withOrbitCLIInstructions(job.appendSystemPrompt(), orbitCLIExecutable(), job.insideRecordedWork(), job.watchesOn(), agentDelegates(job.Agent), job.workflowsOn()))
 	if appended != "" {
 		appended = strings.Replace(appended, "the `mcp__orbit__*` tools", "the tools of the `orbit` MCP server", 1)
-		parts = append(parts, strings.Replace(appended, orbitDelegateClaudeCodeLoad, "", 1))
+		appended = strings.Replace(appended, orbitDelegateClaudeCodeLoad, "", 1)
+		parts = append(parts, strings.Replace(appended, orbitWorkflowClaudeCodeLoad, "", 1))
 	}
 	return strings.Join(parts, "\n\n")
 }

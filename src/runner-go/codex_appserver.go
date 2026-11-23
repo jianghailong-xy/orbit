@@ -353,7 +353,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		return stFailed, true, false
 	}
 	if !resumedThread && app.currentInstructionMode() == codexInstructionsInjectItems {
-		if err := app.injectAgentContext(ctx, threadID, job.Agent, job.insideRecordedWork(), job.watchesOn()); err != nil {
+		if err := app.injectAgentContext(ctx, threadID, job.Agent, job.insideRecordedWork(), job.watchesOn(), job.workflowsOn()); err != nil {
 			// Some downstream builds can report a newer-looking user agent while
 			// omitting the experimental method. Preserve discoverability through
 			// the lower-priority user-input fallback instead of failing the session.
@@ -1416,7 +1416,7 @@ func (a *codexAppServer) startOrResumeThread(ctx context.Context, job *ClaimedSe
 
 func (a *codexAppServer) startTurn(ctx context.Context, threadID string, job *ClaimedSession, execDir, upDir, orbitTurnID, prompt string, imagePaths []string) (string, error) {
 	mode, generation := a.prepareInstructionContext(func() error {
-		return a.injectAgentContext(ctx, threadID, job.instructionAgent(), job.insideRecordedWork(), job.watchesOn())
+		return a.injectAgentContext(ctx, threadID, job.instructionAgent(), job.insideRecordedWork(), job.watchesOn(), job.workflowsOn())
 	})
 	prompt = a.turnPrompt(prompt, job.insideRecordedWork())
 	if codexCloudSandboxOff(job, codexPermissionMode(job)) && a.cloudSandboxNoted.CompareAndSwap(false, true) && a.emit != nil {
@@ -1448,8 +1448,9 @@ func (a *codexAppServer) injectAgentContext(
 	agent AgentExecConfig,
 	insideRecordedWork bool,
 	watches bool,
+	workflows bool,
 ) error {
-	items := codexInjectedAgentItems(agent, a.orbitExecutable, insideRecordedWork, watches)
+	items := codexInjectedAgentItems(agent, a.orbitExecutable, insideRecordedWork, watches, workflows)
 	if len(items) == 0 {
 		return nil
 	}
@@ -1460,16 +1461,16 @@ func (a *codexAppServer) injectAgentContext(
 	return err
 }
 
-func codexAgentContext(agent AgentExecConfig, executable string, insideRecordedWork, watches bool) string {
-	context := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable, insideRecordedWork, watches, agentDelegates(agent))
+func codexAgentContext(agent AgentExecConfig, executable string, insideRecordedWork, watches, workflows bool) string {
+	context := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable, insideRecordedWork, watches, agentDelegates(agent), workflows)
 	if strings.TrimSpace(context) == "" {
 		return codexImageDeliveryInstructions
 	}
 	return context + "\n\n" + codexImageDeliveryInstructions
 }
 
-func codexInjectedAgentItems(agent AgentExecConfig, executable string, insideRecordedWork, watches bool) []map[string]interface{} {
-	context := codexAgentContext(agent, executable, insideRecordedWork, watches)
+func codexInjectedAgentItems(agent AgentExecConfig, executable string, insideRecordedWork, watches, workflows bool) []map[string]interface{} {
+	context := codexAgentContext(agent, executable, insideRecordedWork, watches, workflows)
 	return []map[string]interface{}{
 		{
 			"type": "message",
@@ -1654,6 +1655,7 @@ func codexAgentAdditionalContext(
 	generation uint64,
 	insideRecordedWork bool,
 	watches bool,
+	workflows bool,
 ) map[string]interface{} {
 	context := map[string]interface{}{}
 	prefix := fmt.Sprintf("orbit_%08d_", generation)
@@ -1663,7 +1665,7 @@ func codexAgentAdditionalContext(
 	}
 	// Orbit's instructions, the agent primer first, as whole paragraphs: one value of their length
 	// would pass the 1,000-token cap, and Codex would keep only part of it.
-	for i, part := range codexContextParagraphs(orbitCLIInstructions(executable, insideRecordedWork, watches, agentDelegates(agent)), codexContextValueMaxBytes) {
+	for i, part := range codexContextParagraphs(orbitCLIInstructions(executable, insideRecordedWork, watches, agentDelegates(agent), workflows), codexContextValueMaxBytes) {
 		context[fmt.Sprintf("%scli_%08d", prefix, i)] = map[string]interface{}{
 			"kind":  "application",
 			"value": part,
@@ -1678,15 +1680,15 @@ func codexAgentAdditionalContext(
 	return context
 }
 
-func codexLegacyAgentContext(agent AgentExecConfig, executable string, insideRecordedWork, watches bool) string {
-	context := codexAgentContext(agent, executable, insideRecordedWork, watches)
+func codexLegacyAgentContext(agent AgentExecConfig, executable string, insideRecordedWork, watches, workflows bool) string {
+	context := codexAgentContext(agent, executable, insideRecordedWork, watches, workflows)
 	return "<orbit_application_context>\n" + context + "\n</orbit_application_context>"
 }
 
 func codexTurnParams(threadID string, job *ClaimedSession, execDir, upDir, orbitTurnID, prompt string, imagePaths []string, contextOptions codexTurnContextOptions) map[string]interface{} {
 	input := []map[string]interface{}{}
 	if contextOptions.Mode == codexInstructionsUserInput {
-		if context := codexLegacyAgentContext(job.instructionAgent(), contextOptions.Executable, job.insideRecordedWork(), job.watchesOn()); context != "" {
+		if context := codexLegacyAgentContext(job.instructionAgent(), contextOptions.Executable, job.insideRecordedWork(), job.watchesOn(), job.workflowsOn()); context != "" {
 			input = append(input, map[string]interface{}{"type": "text", "text": context})
 		}
 	}
@@ -1710,7 +1712,7 @@ func codexTurnParams(threadID string, job *ClaimedSession, execDir, upDir, orbit
 	}
 	if contextOptions.Mode == codexInstructionsAdditionalContext {
 		if additional := codexAgentAdditionalContext(
-			job.instructionAgent(), contextOptions.Executable, contextOptions.Generation, job.insideRecordedWork(), job.watchesOn(),
+			job.instructionAgent(), contextOptions.Executable, contextOptions.Generation, job.insideRecordedWork(), job.watchesOn(), job.workflowsOn(),
 		); len(additional) > 0 {
 			// Application context becomes developer-role fragments without replacing
 			// local/project developer_instructions. Keys stay stable across ordinary
