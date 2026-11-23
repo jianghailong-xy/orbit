@@ -115,7 +115,10 @@ struct LandingFixAgainLine: View {
     var body: some View {
         if let source = console.worktree.detail?.sourceLanding, !source.landingSessionId.isEmpty {
             let asked = (landingID: source.landingSessionId, state: source.state)
-            Group {
+            // A stack, not a Group: until the line exists there is nothing else to hang the read on, and an
+            // empty Group is no view, so its `.task` would never run.
+            VStack(spacing: 0) {
+                Color.clear.frame(height: 0)
                 if let line = LandingFix.againLine(landing, by: console.sessionID) {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(Color.accentColor)
