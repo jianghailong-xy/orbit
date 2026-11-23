@@ -108,16 +108,24 @@ export class FileIntegrity implements OnApplicationBootstrap, OnModuleDestroy {
     return this.running ?? Promise.resolve();
   }
 
-  /** The weekly scrub: orphans of every store this deployment has, reported and never removed. */
-  async scrub(now: Date = new Date()): Promise<OrphanReport[]> {
-    const reports = await this.orphans({ now });
-    for (const r of reports) {
+  /** Verify stored bytes and report orphans on the weekly schedule. Both checks are read-only. */
+  async scrub(now: Date = new Date()): Promise<VerifyReport> {
+    const report = await this.verify();
+    for (const p of report.problems) {
+      this.logger.warn(
+        `scrub: ${p.problem} ${p.sha256} (${p.storage}): ${p.driveVersions} drive version(s), ${p.attachments} attachment(s)`,
+      );
+    }
+    this.logger.log(
+      `scrub verify: checked ${report.checked}, read back ${report.hashed}, problems ${report.problems.length}; report only`,
+    );
+    for (const r of await this.orphans({ now })) {
       this.logger.log(
         `scrub (${r.storage}): ${r.scanned} object(s), ${r.orphans} orphan(s) older than the grace period (${r.orphanBytes} bytes), `
           + `${r.withinGrace} younger; nothing removed`,
       );
     }
-    return reports;
+    return report;
   }
 
   /**

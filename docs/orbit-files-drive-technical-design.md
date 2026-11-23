@@ -1097,7 +1097,8 @@ All three are part of the RGW provisioning step (§11), for the owner to approve
 5. Run **`files orphans`**: it lists objects in the store (local directory or bucket) that no `file_blob` row names,
    which restoring the database to an earlier point leaves behind (the sweep cannot see them, §2.4). It deletes an orphan
    only when the object is older than the grace period, because a later restore to a newer point could still name it,
-   and reports its count and bytes. It also runs weekly, report-only, as a scrub.
+   and reports its count and bytes. The weekly scrub runs deep `files verify` and reports orphans. It writes both
+   reports to the apiserver log without deleting any bytes.
 6. Mounters reconnect, see a `seq` lower than they had seen, and drop their metadata caches (§5.4). Writes that
    committed after the restore point are lost with the database, as any write after the point is.
 

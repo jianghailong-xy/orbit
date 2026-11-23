@@ -56,7 +56,7 @@ const report = async (next: RunnerLoginState) => {
 const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
 
 /** The card on a runner that declares the capability (or not) and whose browser answers (or is absent). */
-async function mount(initial: RunnerLoginState, { engine = 'claude', declares = true, browser = true }: { engine?: LoginEngine; declares?: boolean; browser?: boolean } = {}) {
+async function mount(initial: RunnerLoginState, { engine = 'claude', declares = true, browser = true, autoStart = false }: { engine?: LoginEngine; declares?: boolean; browser?: boolean; autoStart?: boolean } = {}) {
   current = initial;
   opened = [];
   vi.spyOn(window, 'open').mockImplementation((url?: string | URL, target?: string) => {
@@ -68,6 +68,10 @@ async function mount(initial: RunnerLoginState, { engine = 'claude', declares = 
     if (path === `/runners/${RUNNER}/browser`) {
       if (!browser) throw Object.assign(new (await import('../api')).ApiError('Not found'), { status: 404 });
       return { runnerId: RUNNER, state: 'IDLE' };
+    }
+    if (path === `/runners/${RUNNER}/login` && options?.method === 'POST') {
+      current = state({ status: 'pending', engine });
+      return current;
     }
     if (path === `/runners/${RUNNER}/browser/sign-in` && options?.method === 'POST') {
       current = { ...current, browser: 'requested' };
@@ -83,7 +87,7 @@ async function mount(initial: RunnerLoginState, { engine = 'claude', declares = 
   act(() =>
     root!.render(
       <QueryClientProvider client={qc}>
-        <RunnerSignIn runnerId={RUNNER} engine={engine} />
+        <RunnerSignIn runnerId={RUNNER} engine={engine} autoStart={autoStart} />
       </QueryClientProvider>,
     ),
   );
@@ -160,5 +164,26 @@ describe("Use the runner's browser on the sign-in card", () => {
     );
     expect(text(card.querySelector('.rsi-usercode'))).toBe('ABCD-1234');
     expect(text(card.querySelector('.rsi-runner-browser .rsi-row'))).toBe("Finish signing in in the runner's browser.");
+  });
+
+  it('started from the row, opens no tab, and offers both browsers once the link is there', async () => {
+    const card = await mount(state({}), { autoStart: true });
+    expect(apiMock).toHaveBeenCalledWith(`/runners/${RUNNER}/login`, { method: 'POST', body: { engine: 'claude' } });
+    expect(text(card.querySelector('.rsi-row'))).toBe('Starting sign-in on the runner…');
+    expect(card.querySelector('.rsi-btn')).toBeNull();
+    await report(claudeLink());
+    await settle();
+    await settle();
+    await settle();
+    expect(text(card.querySelector('a.rsi-open'))).toBe('Open the sign-in page');
+    expect(useButton(card)).toBeDefined();
+    expect(opened).toEqual([]);
+  });
+
+  it('opened again while its sign-in waits on the link, takes that one up instead of starting another', async () => {
+    const card = await mount(claudeLink({ browser: 'opened' }), { autoStart: true });
+    const starts = apiMock.mock.calls.filter(([path, options]) => path === `/runners/${RUNNER}/login` && (options as { method?: string })?.method === 'POST');
+    expect(starts).toEqual([]);
+    expect(text(card.querySelector('.rsi-runner-browser .rsi-row'))).toBe("Finish signing in in the runner's browser. Orbit takes the code from there.");
   });
 });

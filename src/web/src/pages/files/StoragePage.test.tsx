@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
-import { driveUsageQuery, meQuery, storageUsageQuery, type StorageUsage } from '../../lib/queries';
+import { driveUsageQuery, meQuery, storageUsageQuery, type DriveUsage, type StorageUsage } from '../../lib/queries';
 import { StorageSettingsPage } from './StoragePage';
 
 const MB = 1024 * 1024;
@@ -27,7 +27,7 @@ function usage(extra: Partial<StorageUsage> = {}): StorageUsage {
 }
 
 /** The page with this answer in the cache, or none at all, as while it is being read. */
-function render(answer?: StorageUsage, drive?: { totalBytes: number; driveBytes: number; trashBytes: number; otherBytes: number }) {
+function render(answer?: StorageUsage, drive?: DriveUsage) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(meQuery().queryKey, { id: 'u1', email: 'a@b.c', name: 'A', preferences: {} });
   if (answer) qc.setQueryData(storageUsageQuery().queryKey, answer);
@@ -92,5 +92,19 @@ describe('Files → Storage', () => {
     expect(text).toContain('Drive|Including 20.0 MB in Trash|200.0 MB|');
     expect(text).toContain('Everything else|');
     expect(text).toContain('|100.0 MB|');
+  });
+
+  it('shows the S3 quota warning from 80% and the drive storage full message from 100%', () => {
+    const drive = { totalBytes: 300, driveBytes: 200, trashBytes: 20, otherBytes: 100 };
+    const quota = { ...drive, storeQuotaBytes: 1000 };
+    expect(render(usage(), drive)).not.toContain('Orbit Files storage');
+    expect(render(usage(), { ...quota, storeUsedBytes: 799, nearQuota: false })).not.toContain('Orbit Files storage');
+    for (const percent of [80, 83]) {
+      const html = render(usage(), { ...quota, storeUsedBytes: percent * 10, nearQuota: true });
+      expect(html).toContain(`Orbit Files storage is ${percent}% full. Uploads stop at 100%. Ask the operator to raise the limit.`);
+    }
+    const full = render(usage(), { ...quota, storeUsedBytes: 1000, nearQuota: true });
+    expect(full).toContain('The drive&#x27;s storage is full. Ask the operator to raise the limit.');
+    expect(full).not.toContain('Orbit Files storage is 100% full');
   });
 });

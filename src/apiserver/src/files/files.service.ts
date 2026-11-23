@@ -78,6 +78,7 @@ const FILE_LIST_LIMIT = 200;
 
 /** How often `open` says that one store made it answer from `data`: a store gone bad does that on every read. */
 const STORE_FALLBACK_WARNING_MS = 60_000;
+const STORE_USAGE_CACHE_MS = 3 * 60_000;
 
 /** The code of an upload refused because the account has used its quota (ORBIT_FILES_QUOTA_BYTES). */
 export const FILE_QUOTA_EXCEEDED = 'FILE_QUOTA_EXCEEDED';
@@ -108,6 +109,9 @@ export interface DriveUsage {
   driveBytes: number;
   trashBytes: number;
   otherBytes: number;
+  storeUsedBytes?: number;
+  storeQuotaBytes?: number;
+  nearQuota?: boolean;
 }
 
 /** How many files one page of a Storage file list holds. */
@@ -321,6 +325,7 @@ export class FilesService implements OnApplicationBootstrap {
   private readonly s3: S3FileStore | null;
   /** When each store last made `open` say so, and how many reads it has made it answer from `data` since. */
   private readonly storeFallbacks = new Map<string, { warnedAt: number; readsSince: number }>();
+  private storeUsageCache?: { bytes: Promise<number>; expiresAt: number };
 
   constructor(
     private readonly prisma: PrismaService,
@@ -929,7 +934,28 @@ export class FilesService implements OnApplicationBootstrap {
              (SELECT COALESCE(SUM(size), 0) FROM other)::bigint AS other`;
     const driveBytes = Number(row.drive);
     const otherBytes = Number(row.other);
-    return { totalBytes: driveBytes + otherBytes, driveBytes, trashBytes: Number(row.trash), otherBytes };
+    const usage = { totalBytes: driveBytes + otherBytes, driveBytes, trashBytes: Number(row.trash), otherBytes };
+    const { storeQuotaBytes } = this.config;
+    if (storeQuotaBytes === undefined) return usage;
+    const storeUsedBytes = await this.s3StoreUsedBytes();
+    return { ...usage, storeUsedBytes, storeQuotaBytes, nearQuota: storeUsedBytes >= storeQuotaBytes - Math.floor(storeQuotaBytes / 5) };
+  }
+
+  /** Count the bytes Orbit still keeps in S3. Refresh on request and share the read across concurrent callers. */
+  private s3StoreUsedBytes(): Promise<number> {
+    if (this.storeUsageCache && Date.now() < this.storeUsageCache.expiresAt) return this.storeUsageCache.bytes;
+    const bytes = this.prisma.fileBlob.aggregate({
+      where: { storage: 's3', bytesDeletedAt: null },
+      _sum: { sizeBytes: true },
+    }).then(({ _sum }) => {
+      this.storeUsageCache = { bytes, expiresAt: Date.now() + STORE_USAGE_CACHE_MS };
+      return _sum.sizeBytes ?? 0;
+    }).catch((error: unknown) => {
+      this.storeUsageCache = undefined;
+      throw error;
+    });
+    this.storeUsageCache = { bytes, expiresAt: Infinity };
+    return bytes;
   }
 
   /** What Settings shows of an account's files (§2.10): what it keeps, where most of that is, and how fast it grows. */

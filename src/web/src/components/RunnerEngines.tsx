@@ -1158,7 +1158,10 @@ function EngineRow({
       )}
       {loginEngine !== null && signIn === engine && (!googleLogin || googleLogin === 'available') && (
         <div className="re-panel">
-          <RunnerSignIn runnerId={runner.id} engine={loginEngine} />
+          {/* The row's Sign in starts the sign-in as the panel opens, as + Account does, and opens no tab: once the link
+              is there the card offers this browser or, on an Orbit Cloud runner, the runner's (docs/runner-browser-engine-
+              sign-in-design.md §2). Kimi asks which site first; Antigravity's Google terms stand on the row before the press. */}
+          <RunnerSignIn runnerId={runner.id} engine={loginEngine} autoStart={loginEngine !== 'kimi'} />
         </div>
       )}
       {addAccountTo && signIn === addAccountPanel(addAccountTo) && (
@@ -1618,7 +1621,7 @@ function AccountRow({
       )}
       {signIn === panel && (
         <div className="re-panel">
-          <RunnerSignIn runnerId={runner.id} engine={engine} account={account.id} />
+          <RunnerSignIn runnerId={runner.id} engine={engine} account={account.id} autoStart={engine !== 'kimi'} />
         </div>
       )}
     </div>
