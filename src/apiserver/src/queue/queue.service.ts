@@ -122,6 +122,7 @@ import { branchName } from '../projects/project-criterion-landing';
 import { codelessClaimFields } from '../sessions/codeless-checkout';
 import { managedRunnerInstanceClaimable, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
+import { browserClaimFields, MANAGED_RUNNER_BROWSER_GATE, type ManagedRunnerBrowserGate } from '../managed-runners/managed-runner-browser-gate';
 import { DISPATCH_PAUSED } from './dispatch-pause';
 import { CLAUDE_REGION_ERROR_PREFIX, claudeRegionHold } from '../runners/runner-region';
 import { openingTurnId } from '../sessions/orbit-authored-turn';
@@ -189,6 +190,8 @@ export class QueueService {
     @Optional() @Inject(MANAGED_RUNNER_GATE) private readonly managedGate?: ManagedRunnerGate,
     /** The runner link's hints (realtime/runner-hints.ts); absent in the specs that build this service by hand. */
     @Optional() private readonly hints?: RunnerHints,
+    /** The browser switch, said on every claim (browserClaimFields); absent in the specs that build this by hand: off. */
+    @Optional() @Inject(MANAGED_RUNNER_BROWSER_GATE) private readonly browserGate?: ManagedRunnerBrowserGate,
   ) {}
 
   /**
@@ -1246,6 +1249,9 @@ export class QueueService {
       // The same for the wiki (ORBIT_WIKI, wiki/wiki-rollout.ts): `wikiDisabled` when it is not on for the owner, so
       // the runner spawns the session without the wiki tools.
       ...wikiClaimFields(currentWikiRollout(), session.ownerId),
+      // The browser switch (managed-runner-browser-gate.ts): `browserEnabled` while it is on, so the runner spawns the
+      // session with the browser tools; absent, they are not there.
+      ...browserClaimFields(this.browserGate),
       // The Agent's Workflows switch (runner-api/workflow-run.ts): `workflowsDisabled` when its sessions may not start
       // a workflow, so the runner spawns the session without the `workflow` tool. Absent otherwise.
       ...workflowClaimFields(workspace),

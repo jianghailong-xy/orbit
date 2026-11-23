@@ -40,6 +40,7 @@ func cmdMcp() {
 		allowOrchestration:    mcpOrchestrationEnabled(),
 		watchesOff:            !watchesEnabledFromEnv(),
 		wikiOff:               !wikiEnabledFromEnv(),
+		browserOn:             browserToolsEnabledFromEnv(),
 		workflowsOff:          !workflowsEnabledFromEnv(),
 		scheduleRun:           scheduleRunFromEnv(),
 		onlyTools:             mcpToolsFromEnv(),
@@ -59,6 +60,7 @@ type mcpServer struct {
 	allowOrchestration    bool   // L3: expose session_* tools (the account's orchestration switch)
 	watchesOff            bool   // spawned with ORBIT_WATCHES=off: no watch tools (watch_rollout.go)
 	wikiOff               bool   // spawned with ORBIT_WIKI=off: no wiki tools (wiki_tools.go)
+	browserOn             bool   // spawned with ORBIT_BROWSER=on: the browser tools (browser_tools.go)
 	workflowsOff          bool   // spawned with ORBIT_WORKFLOWS=off: no workflow tool (subagent_workflow.go)
 	scheduleRun           bool   // spawned with ORBIT_SCHEDULE_RUN=1: a scheduled run's session (schedule_tools.go)
 	// Spawned with ORBIT_MCP_TOOLS: these tools and no others, listed or called (the runner-hosted job an
@@ -405,6 +407,10 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 	// The wiki tools are the same kind of call: they act for this session, and `orbit wiki` runs the
 	// same runWikiTool (wiki_tools.go).
 	if result, handled := s.callWikiTool(name, args); handled {
+		return result
+	}
+	// And the browser tools: `orbit browser` runs the same runBrowserTool (browser_tools.go).
+	if result, handled := s.callBrowserTool(name, args); handled {
 		return result
 	}
 	// So are the file tools: `orbit file` runs the same runFileTool (file_tools.go).
@@ -2140,6 +2146,9 @@ var ownerWaitTools = map[string]bool{
 	"task_create": true, "task_create_batch": true, "project_create": true, "project_blocker_resolve": true,
 	"tasklist_propose_dag": true, "provider_create": true, "provider_update": true, "provider_delete": true,
 	"integration_skip_merge_check": true, "runner_delete": true, "agent_delete": true,
+	"browser_clear_logins": true,
+	// The owner signing in to a site in the Orbit Cloud browser (browser_tools.go).
+	browserRequestSignInTool: true,
 }
 
 // The merge-check fields, in the spelling the server's DTO and the card both use. Everything else

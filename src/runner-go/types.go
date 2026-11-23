@@ -535,6 +535,10 @@ type HeartbeatResponse struct {
 	// over once and cleared, like CheckSelfUpdate; sent only to a runner that declares browser-clear/v1. The answer is
 	// the browser report's profileClearedAt on the beats that follow.
 	ClearBrowserProfile bool `json:"clearBrowserProfile,omitempty"`
+	// A session's browser_open: start the browser if it is not running and open URL in it, unless another session
+	// than SessionID holds the lease (browser_open.go, handleBrowserOpen). Handed over once and cleared, like
+	// ClearBrowserProfile; sent only to a runner that declares browser-open/v1.
+	OpenBrowser *BrowserOpenCommand `json:"openBrowser,omitempty"`
 	// The control plane takes a claim scoped to named sessions (GET /runner/sessions/claim?drainScope=):
 	// a pool draining for an update claims only for sessions whose engine is running a turn here
 	// (drainClaimScope). False/absent on older control planes, which would ignore the scope, so the
@@ -1068,7 +1072,7 @@ type InstallResultRequest struct {
 // every heartbeat until the runner reports a status that moves the server on, so both actions
 // must be idempotent.
 type LoginCommand struct {
-	Action string `json:"action"` // "start" | "code"
+	Action string `json:"action"` // "start" | "code" | "cancel" | "browser"
 	// Which CLI to sign in: "claude" | "codex" | "kimi". Empty from an older control plane, which only
 	// ever drove claude.
 	Engine string `json:"engine,omitempty"`
@@ -1197,6 +1201,9 @@ type LoginResultRequest struct {
 	// With a failure: why, when a client answers it differently from any other — loginReasonExpired, the
 	// link running out before anyone signed in with it. Omitted for every other failure.
 	Reason string `json:"reason,omitempty"`
+	// What became of a LoginCommand `browser` (login_runner_browser.go), with the waiting report it repeats:
+	// loginBrowserOpened, loginBrowserFailed or loginBrowserCodeTaken. Omitted from every other report.
+	Browser string `json:"browser,omitempty"`
 }
 
 // MergeCommand mirrors @orbit/shared: a request to merge one session's worktree branch into
@@ -1592,6 +1599,10 @@ type ClaimedSession struct {
 	// ORBIT_WIKI=off, which leaves the wiki tools out of the MCP server and the wiki commands out of
 	// `orbit capabilities` (wiki_tools.go). Absent means on.
 	WikiDisabled bool `json:"wikiDisabled,omitempty"`
+	// BrowserEnabled is set while the Orbit Cloud browser is switched on on the server (its
+	// ORBIT_MANAGED_RUNNER_BROWSER_ENABLED with managed runners on); injected as ORBIT_BROWSER=on, which is what puts the
+	// browser tools in the MCP server and `orbit browser` in the CLI (browser_tools.go). Absent means off: absent tools.
+	BrowserEnabled bool `json:"browserEnabled,omitempty"`
 	// WorkflowsDisabled is set when the session's Agent may not start a workflow: its Workflows switch is off, or its
 	// SubAgents are. Injected as ORBIT_WORKFLOWS=off, which leaves the workflow tool out of `orbit mcp`
 	// (subagent_workflow.go); delegate is not affected. Absent means on.
@@ -1853,6 +1864,8 @@ type ReclaimSession struct {
 	// may have moved since the session was first claimed.
 	WatchesDisabled bool `json:"watchesDisabled,omitempty"`
 	WikiDisabled    bool `json:"wikiDisabled,omitempty"`
+	// BrowserEnabled, cf. ClaimedSession.BrowserEnabled, said on reclaim for the same reason.
+	BrowserEnabled bool `json:"browserEnabled,omitempty"`
 	// WorkflowsDisabled, cf. ClaimedSession: the Agent's switch may have moved since the session was first claimed.
 	WorkflowsDisabled bool `json:"workflowsDisabled,omitempty"`
 	// ScheduleRun, cf. ClaimedSession.ScheduleRun.

@@ -45,10 +45,10 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `public` | 37 |
 | `user` | 495 |
 | `admin` | 31 |
-| `runner` | 208 |
+| `runner` | 212 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **774** |
+| **Total** | **779** |
 
 ## Public routes
 
@@ -637,6 +637,10 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/runner/agents` | — | `RunnerAgentsController.listWorkspaces` |
 | `POST` | `/api/runner/agents` | body `Object` | `RunnerAgentsController.createWorkspace` |
 | `PATCH` | `/api/runner/agents/:id` | body `Object`; path `id` | `RunnerAgentsController.updateWorkspace` |
+| `GET` | `/api/runner/browser` | — | `RunnerBrowserController.status` |
+| `POST` | `/api/runner/browser/clear` | body `Object` | `RunnerBrowserController.clear` |
+| `POST` | `/api/runner/browser/open` | body `Object` | `RunnerBrowserController.open` |
+| `POST` | `/api/runner/browser/sign-in-requests` | body `BrowserSignInRequestDto` | `RunnerBrowserController.requestSignIn` |
 | `POST` | `/api/runner/claude-account-swap-result` | body `Object` | `RunnerApiController.claudeAccountSwapResult` |
 | `POST` | `/api/runner/claude-history-result` | body `Object` | `RunnerApiController.claudeHistoryResult` |
 | `POST` | `/api/runner/codex-account-remove-result` | body `Object` | `RunnerApiController.codexAccountRemoveResult` |

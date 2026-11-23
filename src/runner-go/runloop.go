@@ -744,6 +744,7 @@ func claimedSessionFromReclaim(r ReclaimSession) *ClaimedSession {
 		AllowOrchestration: r.AllowOrchestration,
 		WatchesDisabled:    r.WatchesDisabled,
 		WikiDisabled:       r.WikiDisabled,
+		BrowserEnabled:     r.BrowserEnabled,
 		WorkflowsDisabled:  r.WorkflowsDisabled,
 		ScheduleRun:        r.ScheduleRun,
 		OrchestrationToken: r.OrchestrationToken,
@@ -2479,6 +2480,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					login.submitCode(*lr, report)
 				case "cancel":
 					login.cancelLogin(*lr)
+				case "browser":
+					go login.openInBrowser(loopCtx, *lr, runnerBrowser())
 				}
 			}
 			// Install an engine CLI the user asked for from the web. Idempotent for the same
@@ -2535,6 +2538,14 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					}
 					beatNow()
 				}()
+			}
+			// A session's browser_open: start the browser and open the page asked for, on its own goroutine like the
+			// clear, since a Chrome just started takes a moment to answer; the beat it asks for reports it running.
+			if resp.OpenBrowser != nil {
+				go func(cmd BrowserOpenCommand) {
+					handleBrowserOpen(context.Background(), runnerBrowser(), cmd)
+					beatNow()
+				}(*resp.OpenBrowser)
 			}
 			// The owner's Update Now: install the waiting release now, interrupting the turns in flight
 			// (selfUpdateGate.updateNow). The check it asks for takes it.

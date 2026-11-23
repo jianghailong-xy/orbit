@@ -116,8 +116,8 @@ export function workflowTotals(groups: readonly WorkflowReportGroup[]): Workflow
 export const SUBAGENTS_FOOT =
   'Each run counts under the model Orbit picked for it, workflow calls included; Ran at splits its runs by the tier they ' +
   'were routed at. Done: ended runs that finished. Moved on: the pick hit a usage limit and the run went on with the ' +
-  "next model. No size: the call gave no size, so its type's default tier applied. A subscription that reports no " +
-  'price adds $0. Preset tiers and prices follow the catalogue. A model with no tier still runs SubAgents, after every ' +
+  "next model. No size: the call gave no size, so its type's default tier applied. A model on several accounts opens " +
+  'to each. Preset tiers and prices follow the catalogue. A model with no tier still runs SubAgents, after every ' +
   'model whose tier fits.';
 
 export const WORKFLOWS_FOOT =
@@ -155,16 +155,31 @@ export interface RoutingModelRow extends RunFigures {
   outsideRuns: number;
 }
 
-/** The SubAgents view's rows, in its sections. */
+/**
+ * One model in a section: its accounts (the providers listing it, by the tier list's `identity`), and their runs
+ * summed. One account's block draws as a single row; several open to their accounts.
+ */
+export interface RoutingModelBlock extends RunFigures {
+  key: string;
+  modelLabel: string;
+  /** Most runs first, then the tier list's order. */
+  accounts: RoutingModelRow[];
+  /** The accounts' runs by tier, S to XL; a tier is outside when any account ran there outside its own tiers. */
+  tiers: TierRuns[];
+  outsideRuns: number;
+}
+
+/** The SubAgents view's models, in its sections. */
 export interface RoutingSections {
-  /** Every model with a tier, and every model routed at one: most runs first, then the tier list's order. */
-  tiered: RoutingModelRow[];
+  /** Every model with a tier, and every model routed at one: most runs first, then the tier list's order. A model's
+   *  accounts with no tier and no runs are listed with it here rather than folded away. */
+  tiered: RoutingModelBlock[];
   /** Runs that named their model, so routing picked no tier. */
-  named: RoutingModelRow[];
+  named: RoutingModelBlock[];
   /** Runs routing left alone. */
-  notRouted: RoutingModelRow[];
+  notRouted: RoutingModelBlock[];
   /** Models with no tier that ran nothing in the period, folded away. */
-  idle: RoutingModelRow[];
+  idle: RoutingModelBlock[];
 }
 
 const rowKey = (provider: string | null, model: string | null) => `${provider ?? ''}\n${model ?? ''}`;
@@ -193,6 +208,9 @@ export function routingSections(providers: readonly ProviderTierRow[], groups: r
       if (!listed.has(key)) listed.set(key, { provider, model, order: listed.size });
     }
 
+  // Which model a row is: the tier list's identity, so one model's accounts on every provider are one block.
+  const identityOf = (key: string) => listed.get(key)?.model.identity?.key ?? key;
+
   const byKind = { routed: new Map<string, SubagentReportGroup[]>(), named: new Map<string, SubagentReportGroup[]>(), notRouted: new Map<string, SubagentReportGroup[]>() };
   for (const group of groups) {
     const into = group.tier === 'named' ? byKind.named : group.tier === 'not-routed' ? byKind.notRouted : byKind.routed;
@@ -213,7 +231,7 @@ export function routingSections(providers: readonly ProviderTierRow[], groups: r
       key,
       provider: entry?.provider ?? null,
       model: entry?.model ?? null,
-      modelLabel: first?.modelLabel ?? entry?.model.model ?? 'No model',
+      modelLabel: entry?.model.identity?.name ?? first?.modelLabel ?? entry?.model.model ?? 'No model',
       providerLabel: entry?.provider.label ?? first?.providerLabel ?? null,
       ...sum(picked),
       tiers,
@@ -221,7 +239,27 @@ export function routingSections(providers: readonly ProviderTierRow[], groups: r
     };
   };
   const order = (key: string) => listed.get(key)?.order ?? Number.MAX_SAFE_INTEGER;
-  const byRuns = (a: RoutingModelRow, b: RoutingModelRow) => b.runs - a.runs || order(a.key) - order(b.key);
+  const byRuns = (a: { runs: number; key: string }, b: { runs: number; key: string }) =>
+    b.runs - a.runs || order(a.key) - order(b.key);
+  // A section's rows as one block per model: the first account names it, the accounts' runs are summed.
+  const blocks = (rows: RoutingModelRow[]): RoutingModelBlock[] => {
+    const byModel = new Map<string, RoutingModelRow[]>();
+    for (const row of [...rows].sort(byRuns)) byModel.set(identityOf(row.key), [...(byModel.get(identityOf(row.key)) ?? []), row]);
+    return [...byModel.values()].map((accounts): RoutingModelBlock => {
+      const tiers = TIER_LEVELS.flatMap((tier): TierRuns[] => {
+        const at = accounts.flatMap((account) => account.tiers.filter((runs) => runs.tier === tier));
+        return at.length === 0 ? [] : [{ tier, ...sum(at), outside: at.some((runs) => runs.outside) }];
+      });
+      return {
+        key: accounts[0].key,
+        modelLabel: accounts[0].modelLabel,
+        accounts,
+        ...sum(accounts),
+        tiers,
+        outsideRuns: accounts.reduce((total, account) => total + account.outsideRuns, 0),
+      };
+    }).sort(byRuns);
+  };
 
   const tiered: RoutingModelRow[] = [];
   const idle: RoutingModelRow[] = [];
@@ -232,6 +270,13 @@ export function routingSections(providers: readonly ProviderTierRow[], groups: r
     else if (!ranAtAll) idle.push(row(key, []));
   }
   for (const [key, picked] of byKind.routed) tiered.push(row(key, picked));
-  const rest = (map: Map<string, SubagentReportGroup[]>) => [...map].map(([key, picked]) => row(key, picked)).sort(byRuns);
-  return { tiered: tiered.sort(byRuns), named: rest(byKind.named), notRouted: rest(byKind.notRouted), idle };
+  // An idle account of a model that has a tiered block is one of that model's accounts, not a model of its own.
+  const tieredModels = new Set(tiered.map((account) => identityOf(account.key)));
+  const rest = (map: Map<string, SubagentReportGroup[]>) => blocks([...map].map(([key, picked]) => row(key, picked)));
+  return {
+    tiered: blocks([...tiered, ...idle.filter((account) => tieredModels.has(identityOf(account.key)))]),
+    named: rest(byKind.named),
+    notRouted: rest(byKind.notRouted),
+    idle: blocks(idle.filter((account) => !tieredModels.has(identityOf(account.key)))),
+  };
 }

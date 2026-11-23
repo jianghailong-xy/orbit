@@ -414,8 +414,14 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         queuedTail(state.session?.snapshot?.queuedTurns.orEmpty(), state.window.events).any { it.inTray && it.heldByUpdate }
     }
     // A07-14: the turn the runner has taken, until its echo or its end — drawn where the echo will land, as the echo will be.
-    val accepted = remember(state.session?.snapshot?.queuedTurns, state.window.events) {
+    // One the reader took back with Cancel under the held tag is gone at once, before the queue's re-read says so.
+    val accepted = remember(state.session?.snapshot?.queuedTurns, state.window.events, composerState.withdrawn) {
         acceptedHeads(state.session?.snapshot?.queuedTurns.orEmpty(), state.window.events)
+            .filterNot { head -> (ObjectId.canonical(head.turnId!!) ?: head.turnId) in composerState.withdrawn }
+    }
+    // That head, while a full runner, run or batch (or an update) holds it, is still the reader's to take back (web `cancellableHeldTurn`).
+    val heldCancel = remember(state.session?.snapshot?.queuedTurns, state.window.events) {
+        cancellableHeldTurn(state.session?.snapshot?.queuedTurns.orEmpty(), state.window.events)
     }
     val liveTail = transcript != null && state.window.newerAfter == null
     val queuedShown = if (liveTail) queued.size else 0
@@ -769,7 +775,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // A turn on the queued tail the update holds says so on its own line instead (docs/mocks/queued-card-runner-updating ②).
                 // So does the reader's own waiting message in the tray, whose row says it (docs/mocks/queued-card-runner-full ②).
                 val tailHeld = runnerUpdatingGate != null && live != null && (queued.any { it.heldByUpdate } || trayHeld)
-                val heldSeq = if (runnerUpdatingGate == null || live == null || tailHeld) null
+                // The accepted head, when there is one, is the reader's last message: the foot row goes under it (iOS c2cc655ac8).
+                val heldHead = if (runnerUpdatingGate == null || live == null || tailHeld) null else accepted.lastOrNull()
+                val heldSeq = if (runnerUpdatingGate == null || live == null || tailHeld || heldHead != null) null
                     else displayedRows.lastOrNull { it.event.type == "user" && it.steps.isEmpty() && it.exchanges.isEmpty() }?.event?.seq
                 val targetSeq = state.targetSeq
                 Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -855,7 +863,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                             if (head == null && held == null) TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1), target = targetSeq)
                             else Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1), target = targetSeq)
-                                held?.let { RunnerUpdatingFoot(it, runnerUpdatingMachine, later = runnerUpdatingLater) }
+                                // Under the reader's own message, so it stands at the bubble's right edge, as on iOS and web.
+                                held?.let { RunnerUpdatingFoot(it, runnerUpdatingMachine, Modifier.align(Alignment.End), later = runnerUpdatingLater) }
                                 head?.let { TurnHeadLine(it, ticking = sessionLive && row.event.seq == newestHead) }
                             }
                         }
@@ -893,7 +902,16 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         // A07-14: the accepted head at the history's end, ahead of the decisions and the queue, as the transcript draws
                         // a person's turn — no dashes, no "Queued", no Cancel: the runner has it.
                         items(accepted, key = { "accepted:${it.turnId}" }) { head ->
-                            Box(Modifier.testTag("accepted:${head.turnId}")) { TranscriptRowView(TranscriptRow(head), model, live, openLink) }
+                            val gate = runnerUpdatingGate?.takeIf { heldHead != null && head.turnId == heldHead.turnId }
+                            if (gate == null) Box(Modifier.testTag("accepted:${head.turnId}")) { TranscriptRowView(TranscriptRow(head), model, live, openLink) }
+                            else Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Box(Modifier.testTag("accepted:${head.turnId}")) { TranscriptRowView(TranscriptRow(head), model, live, openLink) }
+                                // ` · Cancel` beside the tag: the turn withdrawn as the tray's is, its words back in the composer.
+                                val withdraw = heldCancel?.takeIf { it.turnId == head.turnId }?.let { held ->
+                                    { composer.withdraw(held.turnId, held.words, steer = false, engine = console.engine) }
+                                }
+                                RunnerUpdatingFoot(gate, runnerUpdatingMachine, Modifier.align(Alignment.End), later = runnerUpdatingLater, cancel = withdraw)
+                            }
                         }
                     }
                     // At the live tail, under everything the conversation said and above the cards that ask the owner something.

@@ -3199,6 +3199,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1220 sets fastupdate = off on run_event's trigram index and merges its pending list; no row is written, and
       // no preserved relation, trigger, function or DONE fence changes.
       '1220_run_event_text_trgm_fastupdate_off',
+      // 1237 adds two nullable columns with no default (browser_open_requested_at, browser_open_request) to `runner`,
+      // which is not a preserved relation; no row is written, and no trigger, function or DONE fence changes.
+      '1237_runner_browser_open_request',
       // 1240 adds a plain index on project_coordinator_wake (idempotency_key); no row is written, and no preserved
       // relation, trigger, function or DONE fence changes.
       '1240_project_coordinator_wake_key_idx',
@@ -3248,6 +3251,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // and task.landing_check_exempt_owner_set_at; neither table is a preserved relation, and no trigger,
       // function or DONE fence changes.
       '1390_project_setting_change',
+      // 1393 restates owner_request's kind CHECK to admit BROWSER_SIGN_IN beside 1273's SETTINGS_CHANGE and adds two
+      // nullable columns with a CHECK that every existing row passes; no row is written, and no preserved relation,
+      // trigger, function or DONE fence changes.
+      '1393_owner_request_browser_sign_in',
       // 1400 adds three nullable columns, a foreign key and a partial index on owner_request_secret and account_secret;
       // no row is written, and no preserved relation, trigger, function or DONE fence changes.
       '1400_owner_secret_saved_links',
@@ -3310,7 +3317,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // rewrite), for an owner's Update Now of a busy runner; `managed_runner` is none of the preserved relations, no
       // row is written, and no trigger, function or DONE fence changes.
       // Written as 1430 on the project line, it was renumbered after main took 1430.
-      '1431_managed_runner_update_interrupt'],
+      '1431_managed_runner_update_interrupt',
+      // 1432 creates model_identity (rule_key, canonical_key, name, decided_at), a new table no preserved relation
+      // references; no existing row is written, and no trigger, function or DONE fence changes.
+      '1432_model_identity',
+      // 1433 seeds model_identity with production's model ids, INSERT ... ON CONFLICT (rule_key) DO NOTHING into that
+      // new table only; no preserved relation, trigger, function or DONE fence is touched.
+      '1433_model_identity_seed'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

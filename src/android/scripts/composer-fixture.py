@@ -26,6 +26,8 @@ class State:
         self.extraDetail={}; self.runnerExtra={}; self.providers=None; self.pools=[]; self.retryMessage={'text':'last failed message'}
         # GET /users/me, for a scenario that needs the account's preferences (translation): None answers as before.
         self.me=None
+        # Rows the turns listing carries as the server placed them (`placement` accepted/queued), beside the turns this fixture took.
+        self.queuedTurns=[]
     def detail(self):
         return {'id':SESSION,'title':'Composer conversation','workspaceId':WORKSPACE,'assignedRunnerId':RUNNER,
             'status':self.status,'runState':self.status,'lifecycleState':'OPEN','provider':'codex','model':'fixture-model',
@@ -63,7 +65,7 @@ class Handler(BaseHTTPRequestHandler):
             with state.lock:
                 if body.get('reset'): state.reset()
                 for k in ['losses','uploadFailures','uploadDelay','denial','status','expired','discussion','rejectTurnOnce','rejectTurnStatus',
-                          'extraDetail','runnerExtra','providers','pools','retryMessage','rows','me']:
+                          'extraDetail','runnerExtra','providers','pools','retryMessage','rows','me','queuedTurns']:
                     if k in body: setattr(state,k,body[k])
                 # Account events (a clone's `agent.changed` frame) to relay once on the next poll of /api/events.
                 state.sendEvents=state.sendEvents+body.get('events',[])
@@ -130,7 +132,8 @@ class Handler(BaseHTTPRequestHandler):
             state.status='AWAITING_INPUT'; state.controls.append({'action':'interrupt'}); return self.reply({'ok':True})
         if '/turns/' in path and method=='DELETE':
             turn=path.split('/')[-1]; state.controls.append({'action':'withdraw','turnId':turn})
-            state.turns={k:v for k,v in state.turns.items() if v['turnId']!=turn}; return self.reply({'ok':True})
+            state.turns={k:v for k,v in state.turns.items() if v['turnId']!=turn}
+            state.queuedTurns=[t for t in state.queuedTurns if t.get('turnId')!=turn]; return self.reply({'ok':True})
         if path.endswith('/retry-message') or path.endswith('/auto-retry'):
             state.controls.append({'action':path.split('/')[-1],'method':method,'body':body})
             # The armed retry is the session's: turning it off clears it, putting it back arms it at the moment sent.
@@ -174,7 +177,7 @@ class Handler(BaseHTTPRequestHandler):
         if path==f'/api/sessions/{SESSION}': return self.reply(state.detail())
         if path==f'/api/sessions/{CREATED}': return self.reply({**state.detail(),'id':CREATED,'title':'Created conversation'})
         if path.endswith('/events/page'): return self.reply({'events':state.rows[-200:],'hasMore':False})
-        if path.endswith('/turns'): return self.reply([{'id':v['turnId'],'turnId':v['turnId'],'content':v['request']['content'],'kind':v['kind']} for v in state.turns.values() if v['kind']!='steer'])
+        if path.endswith('/turns'): return self.reply(state.queuedTurns+[{'id':v['turnId'],'turnId':v['turnId'],'content':v['request']['content'],'kind':v['kind']} for v in state.turns.values() if v['kind']!='steer'])
         if path.endswith('/retry-message'): return self.reply(state.retryMessage)
         if path==f'/api/runners/{RUNNER}/codex-rate-limit-reset': return self.reply({'active':None,'latest':None})
         if path.startswith(f'/api/runners/{RUNNER}/codex-rate-limit-reset/'): return self.reply({'id':'a07c-reset-1','runnerId':RUNNER,

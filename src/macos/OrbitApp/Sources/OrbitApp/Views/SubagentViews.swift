@@ -161,10 +161,12 @@ struct InfrastructureModelTiersSection: View {
                 }
             } else {
                 columnHeads
-                ForEach(providers) { provider in
-                    ForEach(provider.models) { model in
-                        row(provider, model)
-                    }
+                // One block per model (as web's Model routing): its first row names it and carries its Quality, the
+                // rows under it name only their provider, with no rule between them.
+                ForEach(SubagentSettings.tableRows(providers)) { entry in
+                    row(entry)
+                        .listRowSeparator(entry.continues ? .hidden : .automatic, edges: .top)
+                        .listRowSeparator(entry.continued ? .hidden : .automatic, edges: .bottom)
                 }
             }
         } header: {
@@ -206,35 +208,44 @@ struct InfrastructureModelTiersSection: View {
         .foregroundStyle(.secondary)
     }
 
-    @ViewBuilder private func row(_ provider: ProviderTierRow, _ model: ProviderModelTier) -> some View {
+    @ViewBuilder private func row(_ entry: ModelTierTableRow) -> some View {
+        let provider = entry.provider
+        let model = entry.model
         #if os(iOS)
-        // A phone has no room for four columns: the model runs the row's full width under the rest.
+        // A phone has no room for four columns: the model runs the row's full width under the rest. A block's later
+        // rows are the provider's line alone.
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 10) {
                 Text(provider.label).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
                 tierCell(provider, model).frame(width: Self.tierWidth, alignment: .leading)
                 priceCell(provider, model)
             }
-            Text(model.model)
-                .font(.orbitListSubtitle.monospaced())
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            // The Quality lines under the model name (board docs/mocks/model-quality/01-board.png, note E).
-            ModelQualityCell(quality: model.quality)
-                .font(.orbitListSubtitle)
-                .padding(.top, 2)
+            if !entry.continues {
+                Text(entry.name)
+                    .font(.orbitListSubtitle.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                // The Quality lines under the model name (board docs/mocks/model-quality/01-board.png, note E).
+                ModelQualityCell(quality: model.quality, pooledWith: entry.pooledWith)
+                    .font(.orbitListSubtitle)
+                    .padding(.top, 2)
+            }
         }
         #else
         HStack(spacing: 10) {
             Text(provider.label).lineLimit(1).frame(width: 110, alignment: .leading)
-            Text(model.model)
+            Text(entry.continues ? "" : entry.name)
                 .font(.body.monospaced())
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)
             tierCell(provider, model).frame(width: Self.tierWidth, alignment: .leading)
-            ModelQualityCell(quality: model.quality).frame(width: 250, alignment: .leading)
+            Group {
+                if entry.continues { Color.clear.frame(height: 1) }
+                else { ModelQualityCell(quality: model.quality, pooledWith: entry.pooledWith) }
+            }
+            .frame(width: 250, alignment: .leading)
             priceCell(provider, model)
         }
         #endif
@@ -307,7 +318,10 @@ struct InfrastructureModelTiersSection: View {
 /// is the SubAgents line's tooltip on the Mac, and a popover a tap opens on the phone.
 struct ModelQualityCell: View {
     let quality: ModelQuality
+    /// The other providers listing the same model: its figures count their runs too.
+    var pooledWith: [String] = []
     @State private var showsRaters = false
+    @State private var showsPooled = false
 
     #if os(iOS)
     private static let sourceWidth: CGFloat = 80
@@ -323,6 +337,9 @@ struct ModelQualityCell: View {
             VStack(alignment: .leading, spacing: 1) {
                 raters(line(SubagentSettings.qualitySubagents, lines.subagents), lines.raters)
                 line(SubagentSettings.qualityTasks, lines.tasks)
+                if let pooled = SubagentSettings.pooledText(lines, pooledWith: pooledWith) {
+                    pooledLine(pooled, SubagentSettings.pooledTip(pooledWith))
+                }
             }
         }
     }
@@ -341,6 +358,25 @@ struct ModelQualityCell: View {
                 .foregroundStyle(line.muted ? .secondary : .primary)
                 .lineLimit(1)
         }
+    }
+
+    /// "Pooled across N providers", the providers named in its tooltip on the Mac and a popover a tap opens on the phone.
+    @ViewBuilder private func pooledLine(_ text: String, _ tip: String) -> some View {
+        let content = Text(text).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(1)
+        #if os(iOS)
+        content
+            .contentShape(Rectangle())
+            .onTapGesture { showsPooled.toggle() }
+            .accessibilityHint(tip)
+            .popover(isPresented: $showsPooled) {
+                Text(tip)
+                    .font(.orbitListSubtitle)
+                    .padding(10)
+                    .presentationCompactAdaptation(.popover)
+            }
+        #else
+        content.help(tip)
+        #endif
     }
 
     @ViewBuilder private func raters(_ content: some View, _ raters: String?) -> some View {
