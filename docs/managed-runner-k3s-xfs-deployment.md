@@ -199,7 +199,6 @@ apiserver's private Compose env file.
 
 Durability for Files bytes comes from Ceph replication. The owner is scaling out Ceph to increase
 replica placement and capacity. Run without a ZFS mirror and leave `ORBIT_FILES_S3_MIRROR` unset.
-Retain the former mirror dataset `data/orbit-files-mirror` and its data.
 
 As Ceph grows, check the cluster's usable capacity and agree on a new Files pool ceiling in bytes.
 From the cluster's administration environment, set and verify the new quota.
