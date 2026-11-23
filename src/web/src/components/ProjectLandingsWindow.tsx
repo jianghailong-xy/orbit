@@ -87,7 +87,6 @@ import {
   LANDING_FIX_RETURNED_BECAUSE,
   landingFixEventSub,
   landingFixEvents,
-  landingFixLastWords,
   landingFixSince,
   landingFixStanding,
   type LandingFixEvent,
@@ -922,10 +921,7 @@ function LandingWindowCard({
   const fixing = fix?.state === 'FIXING' || (entry.state === 'FIXING' && !settledAt && !timedOut);
   const waiting = entry.state === 'AWAITING_DECISION' && !settledAt && !timedOut && !fixing;
   const handedBack = waiting && fix?.state === 'RETURNED' ? fix : null;
-  const handedBy = useQuery({ ...sessionQuery(handedBack?.sessionId ?? null), enabled: handedBack?.sessionId != null });
-  const lastWords = handedBack
-    ? landingFixLastWords((handedBy.data as { lastAssistantText?: string | null } | undefined)?.lastAssistantText)
-    : null;
+  const lastWords = handedBack?.lastMessage ?? null;
   const waitDoors = waiting && landing ? [
     ...(facts.coordinatorId ? ['OPEN_COORDINATOR' as const] : []),
     ...(handedBack?.sessionId ? ['OPEN_SESSION' as const] : []),

@@ -174,7 +174,7 @@ export async function readLandingTimeline(
         },
         select: {
           id: true, integrationJobId: true, workSessionId: true, workSessionOfferedAt: true,
-          workSessionReturnedAt: true, workSessionReturnReason: true,
+          workSessionReturnedAt: true, workSessionReturnReason: true, payload: true,
         },
         orderBy: [{ workSessionOfferedAt: 'asc' }, { id: 'asc' }],
       })
@@ -454,7 +454,10 @@ export async function readLandingTimeline(
           claim,
           actor: { type: 'PLATFORM' },
           reason: item.workSessionReturnReason,
-          data: { itemId: item.id, sessionId: item.workSessionId, returnReason: item.workSessionReturnReason },
+          data: {
+            itemId: item.id, sessionId: item.workSessionId, returnReason: item.workSessionReturnReason,
+            lastMessage: handBackLastMessage(item.payload),
+          },
           text: returnedToCoordinatorText(item.workSessionReturnReason),
         }));
       }
@@ -665,4 +668,10 @@ async function readAutomaticAttempts(
     out.set(job.id, { attempt: earlier + 1, limit: AUTOMATIC_MERGE_ATTEMPTS });
   }
   return out;
+}
+
+/** The work session's last words a hand-back froze on the item's payload (§12.5 W7), or null when it said none. */
+function handBackLastMessage(payload: unknown): string | null {
+  const last = (payload as { workSession?: { lastMessage?: unknown } } | null)?.workSession?.lastMessage;
+  return typeof last === 'string' && last !== '' ? last : null;
 }
