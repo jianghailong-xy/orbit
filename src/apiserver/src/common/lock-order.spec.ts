@@ -440,7 +440,7 @@ test('the Open-list counters are taken without waiting, as their compatibility a
   assert.match(bump, /FROM open_list_epoch[\s\S]*FOR UPDATE SKIP LOCKED/, 'a counter row is taken in a way that can wait');
   assert.match(bump, /nextval\('open_list_epoch_shard_seq'\)/, 'a new counter row is keyed some other way');
   assert.doesNotMatch(bump, /ON CONFLICT/i, 'an insert that can conflict waits for the transaction holding the key');
-  for (const fn of ['open_list_bump_owner', 'open_list_bump_via_project', 'open_list_bump_via_session', 'open_list_bump_session']) {
+  for (const fn of ['open_list_bump_owner', 'open_list_bump_via_project', 'open_list_bump_via_session', 'open_list_bump_session', 'open_list_bump_watch']) {
     const body = lastFunctionBody(fn);
     assert.match(body, /PERFORM open_list_bump\(/, `${fn} no longer bumps through open_list_bump`);
     assert.doesNotMatch(body, /open_list_epoch/, `${fn} writes open_list_epoch itself`);

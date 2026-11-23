@@ -174,7 +174,13 @@ export function MachineSetupCard({
   const disabled = offline || !usable;
   // Where the server will make it (@orbit/shared newFolderRootFor). Only a usable card shows or sends a root, and a
   // managed runner always has one, so '' is never drawn.
-  const root = newFolderRootFor({ managed: !!runner.managed || !!managedState, reposRoot: runner.reposRoot, capabilities: runner.capabilities }) ?? '';
+  const root =
+    newFolderRootFor({
+      managed: !!runner.managed || !!managedState,
+      up: runner.online === true,
+      reposRoot: runner.reposRoot,
+      capabilities: runner.capabilities,
+    }) ?? '';
 
   const [typed, setTyped] = useState('');
   const folder = typed.trim();

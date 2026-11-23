@@ -295,6 +295,9 @@ type loginRun struct {
 	// and reports again with what became of it. Both read and written with the relay's mu held.
 	report    func(LoginResultRequest)
 	published *LoginResultRequest
+	// reportedDone: this attempt reported loginDone, the machine signed in (login_runner_browser.go closes its tab
+	// then). Read and written with the relay's mu held.
+	reportedDone bool
 	// browser is how far a sign-in in the runner's browser got for this attempt (login_runner_browser.go): "",
 	// browserOpening while the tab is being opened, loginBrowserOpened once it is.
 	browser string
@@ -421,6 +424,13 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 	var self *loginRun
 	report = func(res LoginResultRequest) {
 		res.Attempt, res.Account = attempt, account
+		if res.Status == loginDone {
+			r.mu.Lock()
+			if self != nil {
+				self.reportedDone = true
+			}
+			r.mu.Unlock()
+		}
 		if (res.Status == loginAwaitingCode || res.Status == loginAwaitingApproval) && res.URL != "" && res.Browser == "" {
 			r.mu.Lock()
 			if self != nil {

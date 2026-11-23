@@ -2084,7 +2084,7 @@ export class SessionsService {
     }
     const runner = await this.prisma.runner.findFirst({
       where: { id: ask.runnerId, ownerId },
-      select: { id: true, reposRoot: true, capabilities: true, capabilitiesReportedAt: true, managedRunner: { select: { id: true } } },
+      select: { id: true, reposRoot: true, capabilities: true, capabilitiesReportedAt: true, managedRunner: { select: { id: true } }, status: true, ...RUNNER_BEATS },
     });
     if (!runner) throw new ForbiddenException('runner not found');
     if (ask.workDir !== undefined) {

@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -90,6 +93,7 @@ type runnerBrowserRig struct {
 	mu      sync.Mutex
 	reports []LoginResultRequest
 	opened  []string
+	closed  []string
 	pages   []browserTarget
 }
 
@@ -110,11 +114,17 @@ func newRunnerBrowserRig(t *testing.T, engine string, published LoginResultReque
 	run.published = &published
 	rig.run = run
 	rig.relay = &loginRelay{runs: map[string]*loginRun{run.key: run}}
-	oldOpen, oldTargets, oldReady := loginBrowserOpenTab, loginBrowserTargets, browserDevToolsReady
-	loginBrowserOpenTab = func(_ context.Context, _ string, target string) error {
+	oldOpen, oldClose, oldTargets, oldReady := loginBrowserOpenTab, loginBrowserCloseTab, loginBrowserTargets, browserDevToolsReady
+	loginBrowserOpenTab = func(_ context.Context, _ string, target string) (string, error) {
 		rig.mu.Lock()
+		defer rig.mu.Unlock()
 		rig.opened = append(rig.opened, target)
-		rig.mu.Unlock()
+		return fmt.Sprintf("TAB%d", len(rig.opened)), nil
+	}
+	loginBrowserCloseTab = func(_ context.Context, _ string, id string) error {
+		rig.mu.Lock()
+		defer rig.mu.Unlock()
+		rig.closed = append(rig.closed, id)
 		return nil
 	}
 	loginBrowserTargets = func(context.Context, string) ([]browserTarget, error) {
@@ -126,7 +136,7 @@ func newRunnerBrowserRig(t *testing.T, engine string, published LoginResultReque
 	t.Cleanup(func() {
 		cancel()
 		_ = stdinR.Close()
-		loginBrowserOpenTab, loginBrowserTargets, browserDevToolsReady = oldOpen, oldTargets, oldReady
+		loginBrowserOpenTab, loginBrowserCloseTab, loginBrowserTargets, browserDevToolsReady = oldOpen, oldClose, oldTargets, oldReady
 	})
 	return rig
 }
@@ -256,7 +266,7 @@ func TestLoginInTheRunnersBrowserOpensTheLinkARealSignInPublished(t *testing.T) 
 	fakeKimi(t, kimiHelpWithRegion, "")
 	opened := make(chan string, 2)
 	oldOpen, oldReady := loginBrowserOpenTab, browserDevToolsReady
-	loginBrowserOpenTab = func(_ context.Context, _ string, target string) error { opened <- target; return nil }
+	loginBrowserOpenTab = func(_ context.Context, _ string, target string) (string, error) { opened <- target; return "TAB1", nil }
 	browserDevToolsReady = func(string) {}
 	t.Cleanup(func() { loginBrowserOpenTab, browserDevToolsReady = oldOpen, oldReady })
 
@@ -358,5 +368,123 @@ func TestLoginRunnerBrowserWireNames(t *testing.T) {
 	body, _ := json.Marshal(LoginResultRequest{Status: loginAwaitingCode, URL: "https://a", Browser: loginBrowserOpened})
 	if !strings.Contains(string(body), `"browser":"opened"`) {
 		t.Fatalf("login result body: %s", body)
+	}
+}
+
+func (rig *runnerBrowserRig) closedTabs() []string {
+	rig.mu.Lock()
+	defer rig.mu.Unlock()
+	return append([]string(nil), rig.closed...)
+}
+
+// The sign-in's tab closes once the machine is signed in, and only then.
+func TestLoginClosesItsTabInTheRunnersBrowserOnceSignedIn(t *testing.T) {
+	rig := newRunnerBrowserRig(t, providerCodex, LoginResultRequest{Status: loginAwaitingApproval, URL: "https://auth.openai.com/codex/device", UserCode: "ABCD-1234"})
+	rig.relay.openInLoginBrowser(context.Background(), LoginCommand{Action: "browser", Engine: providerCodex, Attempt: "A1"}, &fakeLoginBrowser{})
+	rig.relay.mu.Lock()
+	rig.run.reportedDone = true
+	rig.relay.mu.Unlock()
+	rig.cancel()
+	deadline := time.Now().Add(2 * time.Second)
+	for len(rig.closedTabs()) == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := rig.closedTabs(); len(got) != 1 || got[0] != "TAB1" {
+		t.Fatalf("closed %v, want the sign-in's own tab", got)
+	}
+}
+
+func TestLoginKeepsItsTabInTheRunnersBrowserWhenNotSignedIn(t *testing.T) {
+	rig := newRunnerBrowserRig(t, providerCodex, LoginResultRequest{Status: loginAwaitingApproval, URL: "https://auth.openai.com/codex/device", UserCode: "ABCD-1234"})
+	rig.relay.openInLoginBrowser(context.Background(), LoginCommand{Action: "browser", Engine: providerCodex, Attempt: "A1"}, &fakeLoginBrowser{})
+	rig.cancel() // failed, timed out or cancelled: never reported done
+	time.Sleep(200 * time.Millisecond)
+	if got := rig.closedTabs(); len(got) != 0 {
+		t.Fatalf("closed %v after a sign-in that did not succeed", got)
+	}
+}
+
+// A relay's real report marks the attempt done, which is what closes the tab.
+func TestLoginRelayMarksAReportedSignInDone(t *testing.T) {
+	fakeKimi(t, kimiHelpWithRegion, "")
+	relay := &loginRelay{}
+	t.Cleanup(relay.stop)
+	done := make(chan struct{})
+	var once sync.Once
+	var run *loginRun
+	relay.start(LoginCommand{Action: "start", Engine: providerKimi, Attempt: "K1"}, func(res LoginResultRequest) {
+		if res.Status == loginAwaitingApproval {
+			relay.mu.Lock()
+			for _, r := range relay.runs {
+				run = r
+			}
+			relay.mu.Unlock()
+		}
+		if res.Status == loginDone {
+			once.Do(func() { close(done) })
+		}
+	})
+	select {
+	case <-done:
+	case <-time.After(15 * time.Second):
+		t.Fatal("the sign-in never finished")
+	}
+	relay.mu.Lock()
+	defer relay.mu.Unlock()
+	if run == nil || !run.reportedDone {
+		t.Fatalf("the run was not marked done: %+v", run)
+	}
+}
+
+// closeSignInTab against a stand-in for Chrome's DevTools: it closes only the tab it is given, gives Chrome a blank tab
+// first when that tab is the last one, and does nothing for a tab that is already gone.
+func TestCloseSignInTab(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		pages     []browserTarget
+		wantNew   bool
+		wantClose bool
+	}{
+		{"the only tab", []browserTarget{{ID: "T1", Type: "page", URL: "https://a"}}, true, true},
+		{"beside another", []browserTarget{{ID: "T1", Type: "page", URL: "https://a"}, {ID: "T2", Type: "page", URL: "https://b"}}, false, true},
+		{"already closed", []browserTarget{{ID: "T2", Type: "page", URL: "https://b"}}, false, false},
+		{"only beside devtools", []browserTarget{{ID: "T1", Type: "page", URL: "https://a"}, {ID: "D", Type: "page", URL: "devtools://x"}}, true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var mu sync.Mutex
+			var calls []string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				calls = append(calls, r.Method+" "+r.URL.Path+"?"+r.URL.RawQuery)
+				mu.Unlock()
+				switch {
+				case r.URL.Path == "/json/list":
+					_ = json.NewEncoder(w).Encode(tc.pages)
+				case r.URL.Path == "/json/new":
+					_, _ = w.Write([]byte(`{"id":"BLANK"}`))
+				default:
+					_, _ = w.Write([]byte("ok"))
+				}
+			}))
+			defer srv.Close()
+			if err := closeSignInTab(context.Background(), srv.URL, "T1"); err != nil {
+				t.Fatal(err)
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			joined := strings.Join(calls, " | ")
+			if got := strings.Contains(joined, "PUT /json/new?about%3Ablank"); got != tc.wantNew {
+				t.Errorf("blank tab opened = %v, want %v: %s", got, tc.wantNew, joined)
+			}
+			if got := strings.Contains(joined, "GET /json/close/T1"); got != tc.wantClose {
+				t.Errorf("T1 closed = %v, want %v: %s", got, tc.wantClose, joined)
+			}
+			if strings.Contains(joined, "/json/close/T2") {
+				t.Errorf("another tab was closed: %s", joined)
+			}
+			if tc.wantNew && strings.Index(joined, "/json/new") > strings.Index(joined, "/json/close") {
+				t.Errorf("the blank tab came after the close: %s", joined)
+			}
+		})
 	}
 }
