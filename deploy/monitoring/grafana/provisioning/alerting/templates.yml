@@ -1,4 +1,4 @@
-# The words of a phone alert (ntfy's title and message). Plain text: ntfy shows it as it is.
+# The words of a phone alert (ntfy's title and message, and the Orbit app's). Plain text: both show it as it is.
 apiVersion: 1
 templates:
   - orgId: 1
@@ -16,5 +16,12 @@ templates:
       {{ coll.Dict "topic" .Vars.topic "title" (tmpl.Exec "orbit.title" .) "message" (tmpl.Exec "orbit.message" .) "priority" 4 "tags" (coll.Slice "rotating_light") | data.ToJSON }}
       {{- else -}}
       {{ coll.Dict "topic" .Vars.topic "title" (tmpl.Exec "orbit.title" .) "message" (tmpl.Exec "orbit.message" .) "priority" 3 "tags" (coll.Slice "white_check_mark") | data.ToJSON }}
+      {{- end }}
+      {{- end }}
+      {{ define "orbit.app" -}}
+      {{ if eq .Status "firing" -}}
+      {{ coll.Dict "title" (tmpl.Exec "orbit.title" .) "message" (tmpl.Exec "orbit.message" .) "priority" "high" | data.ToJSON }}
+      {{- else -}}
+      {{ coll.Dict "title" (tmpl.Exec "orbit.title" .) "message" (tmpl.Exec "orbit.message" .) "priority" "normal" | data.ToJSON }}
       {{- end }}
       {{- end }}

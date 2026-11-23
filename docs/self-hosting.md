@@ -554,12 +554,35 @@ A rule that cannot read Prometheus raises a "DatasourceError" alert of its own, 
 | `ORBIT_NTFY_TOPIC` | The topic your phone subscribes to. With none, ntfy refuses every alert and Grafana's contact point shows the error. |
 | `ORBIT_ALERT_EMAIL` | `orbit-email`: the addresses, separated by `;`. Also set `GF_SMTP_ENABLED=true`, `GF_SMTP_HOST`, `GF_SMTP_USER`, `GF_SMTP_PASSWORD` and `GF_SMTP_FROM_ADDRESS`. |
 | `ORBIT_ALERT_WEBHOOK_URL` | `orbit-webhook`: Grafana POSTs its standard webhook JSON here. |
+| `ORBIT_NOTIFY_TOKEN` | Also push every alert but the Watchdog to your Orbit app. See [the Orbit app](#alerts-in-the-orbit-app). |
 
 **ntfy, the default.** Install the ntfy app on your phone, subscribe to a topic name, and put the same name in
 `ORBIT_NTFY_TOPIC`. Pick a long random one (`openssl rand -hex 16`): on the public `ntfy.sh` service the topic is the
 only secret, and anyone who knows it can read your alerts and send you fake ones. The service also sees the alert text
 (the alert's name and summary, and a mount point for a disk alert); nothing else leaves the host. To keep alerts off a
 public service, run your own ntfy server and set `ORBIT_NTFY_SERVER` to it, or choose email or a webhook.
+
+<a id="alerts-in-the-orbit-app"></a>**Alerts in the Orbit app.** Grafana can also push each alert to the Orbit app on your
+iPhone or Android phone, through the "Orbit app" contact point (`orbit-app`). It calls this server's
+[`POST /api/notify`](api-reference.md#sending-a-notification) over the project's own network, at
+`http://orbit-apiservers:3000`, never through the public origin, and Orbit pushes the alert to the devices signed in to
+the account that owns the token. To turn it on:
+
+1. Sign in to Orbit as the account whose phone should ring, open Settings → Access tokens → New token, name it (for
+   example "Grafana alerts"), choose Custom, untick every Read box, tick Notifications: Send, and create it. The token
+   can send notifications to that account's apps and do nothing else.
+2. Put it in `.env` as `ORBIT_NOTIFY_TOKEN=orbit_pat_…`, then `docker compose up -d grafana`.
+
+Every alert but the Watchdog then goes to the Orbit app as well as to `ORBIT_ALERT_CONTACT`; firing alerts are sent at
+high priority, resolved ones at normal. ntfy (or email, or the webhook) keeps receiving all of them, and has to: when the
+apiserver is down there is nothing to send the push, so "Apiserver down" reaches you only there. With
+`ORBIT_NOTIFY_TOKEN` empty, the route to the Orbit app matches nothing and alerts go to `ORBIT_ALERT_CONTACT` alone.
+
+Orbit pushes only with this server's own Apple and Firebase keys (`APNS_*`, `FCM_*`, see
+[configuration](configuration.md)). A server without them still accepts the call and answers
+`{"delivered": false, "reason": "PUSH_NOT_CONFIGURED"}`: Grafana counts that as sent, nothing reaches the phone, and the
+alert still goes to ntfy. `NO_DEVICES` means no Orbit app is signed in to the token's account. A token may send 20
+notifications a minute, far more than Grafana sends; revoking it in Settings → Access tokens stops the pushes at once.
 
 **The Watchdog.** The Watchdog is an alert that always fires. Grafana sends it to `ORBIT_WATCHDOG_URL` once a minute (a ping every 60 seconds, give or take a second), as
 a POST with the webhook JSON. It reads no data source, so it stops only when Grafana, or the host, stops. Give the URL

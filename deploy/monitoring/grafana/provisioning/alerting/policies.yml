@@ -1,5 +1,7 @@
 # Which contact point takes which alert. The Watchdog goes to the heartbeat URL, every minute for as long as it fires;
-# everything else goes to the contact point ORBIT_ALERT_CONTACT names (orbit-ntfy unless .env says otherwise).
+# everything else goes to the contact point ORBIT_ALERT_CONTACT names (orbit-ntfy unless .env says otherwise) and, once
+# ORBIT_NOTIFY_TOKEN is set, to the Orbit app as well. ntfy keeps every alert either way: apiserver down above all,
+# which the Orbit app cannot carry, because the apiserver is what sends its push.
 apiVersion: 1
 policies:
   - orgId: 1
@@ -19,3 +21,11 @@ policies:
         # interval pings every 60 s.
         group_interval: 30s
         repeat_interval: 45s
+      # ORBIT_APP_ALERTS is ".+" when ORBIT_NOTIFY_TOKEN is set and empty when it is not (docker-compose.yml): every
+      # alert has a name, so this route takes every alert the Watchdog route left, or none. It continues, so the
+      # route below still gives each one to ORBIT_ALERT_CONTACT.
+      - receiver: orbit-app
+        object_matchers:
+          - [alertname, "=~", "$ORBIT_APP_ALERTS"]
+        continue: true
+      - receiver: $ORBIT_ALERT_CONTACT

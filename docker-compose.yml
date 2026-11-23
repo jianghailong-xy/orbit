@@ -785,6 +785,11 @@ services:
       ORBIT_ALERT_EMAIL: ${ORBIT_ALERT_EMAIL:-alerts@example.invalid}
       ORBIT_ALERT_WEBHOOK_URL: ${ORBIT_ALERT_WEBHOOK_URL:-http://prometheus:9090/api/v1/labels}
       ORBIT_WATCHDOG_URL: ${ORBIT_WATCHDOG_URL:-http://prometheus:9090/api/v1/labels}
+      # The Orbit app contact point: a personal access token holding `notify`, sent to POST /api/notify over this
+      # project's network. ORBIT_APP_ALERTS is the regex policies.yml routes to it by: every alert while a token is set,
+      # none while it is not, and then alerts go to ORBIT_ALERT_CONTACT alone.
+      ORBIT_NOTIFY_TOKEN: ${ORBIT_NOTIFY_TOKEN:-}
+      ORBIT_APP_ALERTS: ${ORBIT_NOTIFY_TOKEN:+.+}
       GF_SMTP_ENABLED: ${GF_SMTP_ENABLED:-false}
       GF_SMTP_HOST: ${GF_SMTP_HOST:-localhost:25}
       GF_SMTP_USER: ${GF_SMTP_USER:-}
