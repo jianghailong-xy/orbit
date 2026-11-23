@@ -33,8 +33,9 @@ export interface ManagedRunnerStatusInput {
   firstSessionKey?: { slug: string; engine: ManagedEngine } | null;
   now: Date;
   heartbeatFreshMs: number;
-  /** Whether the backend the mapping runs on can stop its instance (`stopInstance`: Docker), so that the owner's Update
-   *  Now of a busy runner interrupts its turns rather than waiting for idle. Absent: unknown, and nothing is said. */
+  /** Whether the backend the mapping runs on can stop its instance (`stopInstance`: Docker and Kubernetes), so that the
+   *  owner's Update Now of a busy runner interrupts its turns rather than waiting for idle. Absent: unknown, and nothing
+   *  is said. */
   stopsInstances?: boolean;
 }
 

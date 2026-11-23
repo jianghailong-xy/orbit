@@ -1,7 +1,7 @@
 # Orbit Cloud: "new version available" and Update Now
 
 Status: proposed 2026-11-18; the owner chose confirm-and-interrupt for a busy runner and idle rolls on Docker. Server:
-the idle path and the busy path are built (2026-11-22).
+the idle path and the busy path are built (2026-11-22); the busy path on Kubernetes too (2026-11-23).
 Board: `docs/mocks/managed-runner-update-now/`.
 
 ## Why
@@ -64,8 +64,17 @@ is no administrator command".
      meanwhile calls its drain off, and the instance's acceptance does not wait for them (`ownerUpdateDrain`). What
      came meanwhile waits for the next generation, which wakes at once. An automatic idle roll is still called off by
      demand, as before.
-   - **Kubernetes has no `stopInstance`.** There, a busy runner's Update Now waits for idle and the status says so
-     (`update.waitsForIdle`). There is no Kubernetes deployment today.
+   - **Kubernetes stops the Pod the same way** (owner's decision, 2026-11-23, after production — which runs on
+     Kubernetes — recorded a busy runner's Update Now with `waitsForIdle: true` and never restarted it).
+     `KubernetesBackend.stopInstance` deletes the recorded Pod by UID with the termination grace every managed Pod is
+     made with (240 s), never shorter and never forced. The kubelet's SIGTERM gives the runner the same shutdown as on
+     Docker. The stop proof is the kubelet's terminal report, which the stop-report finalizer keeps on the deleted Pod
+     (`podStopConfirmed`). Nothing is made on the claim until that Pod is gone and its volume detached, and a Pod on an
+     unreachable node, with no report, proves nothing. No Update Now waits for idle on either backend, so
+     `update.waitsForIdle` no longer appears. A request recorded earlier with `waitsForIdle: true` has the same columns
+     (`updateInterruptTurns`), so the next pass takes it up and stops the Pod. Only the owner's Update Now stops a Pod
+     (`ownerStopsOnly`). An overdue sleep, a disabled owner's drain and a silent previous image are still never forced
+     on Kubernetes, as docs/managed-runner-design.md records.
    - **A runner made before the `/home/orbit` volume layout** (an image before 2026-11-17, a944a7f362) has its volume
      in the earlier layout, which the owner chose not to migrate. Recreated on the current image, as Update Now and
      every other recreation does, it starts on an empty home beside the old one (`home/`), so its sign-ins,

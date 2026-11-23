@@ -452,6 +452,12 @@ function itemsWhere(db: PrismaClient, where: { taskId?: string; promotionId?: st
 async function failedLanding(stack: Stack, w: World, label: string) {
   const task = await doneCodeTask(stack, w, label);
   const landing = await onlyClaim(stack, w, 'LAND_TASK');
+  // Revision 42 (W4): a red landing goes first to its task's own work session while that session could take it. These
+  // cases are about the coordinator's item, so a person ended the work session first and the failure is the
+  // coordinator's from the start (W-T6).
+  await stack.db.session.update({
+    where: { id: task.sessionId }, data: { endReason: 'ended', finishedAt: new Date() },
+  });
   assert.equal((await report(stack, w, landing, RED_LANDING)).accepted, true);
   const [item] = await itemsWhere(stack.db, { taskId: task.taskId });
   assert.ok(item, 'the red landing opened an item');

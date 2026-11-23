@@ -417,9 +417,12 @@ test('W-T1: a task landing\'s CHECK_FAILED of its own making is handed off, and 
       // W9's second door: "Chat about this" stays — it is not in the door table (§4.7: it writes nothing),
       // and the project's open-items read still offers it for the item, toward the coordinator, while no
       // press (no door of the coordinator's or the owner's) is drawn on the card.
+      // §12.7: it is read under "Being fixed by its session", and in neither of the other two groups.
       const read = await stack.openItems.list(w.ownerId, w.projectId);
-      const row = [...read.needsYou, ...read.withCoordinator].find((candidate) => candidate.itemId === item.id);
+      const row = read.withWorkSession.find((candidate) => candidate.itemId === item.id);
       assert.ok(row, 'the item in the work session\'s hands is still read');
+      assert.equal([...read.needsYou, ...read.withCoordinator].some((candidate) => candidate.itemId === item.id), false,
+        'the item in the work session\'s hands is listed in a group that waits on somebody');
       assert.deepEqual(row.chat, { sessionId: w.coordinatorSessionId, stage: 'WITH_COORDINATOR', refusal: null },
         'Chat about this is not offered for the item in the work session\'s hands');
       assert.deepEqual(row.actions, [], 'the card draws a press the item in the work session\'s hands refuses');

@@ -775,6 +775,13 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
 
 /** Runner-gate routes the census cannot stand up, each with why and the reading that proves it. */
 export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  // Revision 42 (§12.7): a task's own work session reading its task's landing. The census's runner fixture has no
+  // landing subject with a work session of its task, so A's own request could not be answered by the route here.
+  'GET /runner/landings/:id':
+    "the calling session is read by (id, the runner's owner, this runner, a work session of a task) and the landing by "
+    + "(session id, the runner's owner, that task, its project) (sessions/sessions.service.ts:3454, 3463); anything else is "
+    + "404 LANDING_NOT_THIS_SESSIONS_TASK and nothing is written; landing-fix-reads.pg.spec.ts case 5 sends its own landing, "
+    + "another task's, another session's id, another runner and a session of no task",
   'GET /runner/help-ask/:read':
     ':read names one of four account reads, never an object; the reads answer only an Ask session found by (the session header, the runner\'s owner, this runner) and read only that owner\'s rows (help/help-ask-reads.ts:224); help-ask.pg.spec.ts 6 sends them from another machine and another account',
   // ── scheduled tasks: a session's schedule_* tools (runner-api/runner-schedules.controller.ts) ─────────
@@ -1586,6 +1593,10 @@ const planUsageReadings = Object.fromEntries(
 
 /** Ids a runner-gate request carries that name nothing of an account's to reach, with why and where. */
 export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
+  'GET /runner/landings/:id header x-orbit-session-id':
+    "the calling session is taken only as a work session of the runner's owner on this runner (sessions/sessions.service.ts:3454), "
+    + 'so another account\'s session there finds nothing and the read answers 404 LANDING_NOT_THIS_SESSIONS_TASK, writing nothing; '
+    + 'landing-fix-reads.pg.spec.ts case 5 sends it from another runner and as a session of no task',
   // ── the managed runner browser (docs/runner-browser-design.md §5) ─────────────────────────────────────
   'POST /runner/heartbeat body browser.holderSessionId':
     "the runner's own word about which of its sessions holds its browser, stored as text in the calling runner's own "

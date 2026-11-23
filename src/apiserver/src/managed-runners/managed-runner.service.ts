@@ -348,8 +348,8 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
    *     start) and how many background jobs a new container would end. Nothing is written.
    *   - Busy, with `interruptTurns: true`, the owner's word: recorded as a request that may interrupt its turns
    *     (`updateInterruptTurns`). The manager asks the backend to stop the instance, and its host's report of the exit
-   *     starts the next generation from the current image on the same volume and runner. On a backend that cannot stop
-   *     an instance (Kubernetes) it waits for idle instead, and the status says so (`update.waitsForIdle`).
+   *     starts the next generation from the current image on the same volume and runner (Docker and Kubernetes). On a
+   *     backend that cannot stop an instance it waits for idle instead, and the status says so (`update.waitsForIdle`).
    *
    * Accepted, one transaction records when, by whom and whether it may interrupt on the mapping, by a compare-and-set
    * on the revision read, and a `managed_runner.update_now` activity naming the sessions whose turns it interrupts; then
