@@ -2,6 +2,8 @@
 
 Status: design, nothing built · 2026-11-22 · task 351lKeumGIjTw8S8IoUzt (list-freshness project 34tKYCMLgan4tpcxkUn44)
 
+Built since: §9 task 0 (migration 1428), task 1 (§5.0), and tasks 4–6 (Option A: migration 1464, `hints=list_scopes`, the web filter), task 3527hS20sC7Fl5tmSIfvp, 2026-11-23.
+
 Builds on:
 - [list-freshness-design.md](./list-freshness-design.md): §3 (hints), P2 and P4.
 - [realtime-control-plane-stream.md](./realtime-control-plane-stream.md): §4.8 (`sessions.list_changed`) and §4.9 (the opt-in precedent).
@@ -246,7 +248,7 @@ The inputs that are not counters (`steady`, share links, foreign turns) are pick
 - `workspace` (the workspace row).
 
 Each bumps `<source>@<scope>`, where `<scope>` is one of two values:
-- `w:<workspace uuid>` for a row that is in an Open list on either side of the statement: CONVERSATION, not completed, archived or deleted, not a scheduled run, not an Ask (`sessions.service.ts:4255-4262, 4310-4318`);
+- `w:<workspace uuid>` for a row that is in an Open list on either side of the statement: CONVERSATION, not completed, archived or deleted, not a scheduled run or a schedule-change conversation, not an Ask (`sessions.service.ts` listShape);
 - `c:<workspace uuid>` otherwise.
 
 Shards keep their suffix after the key, as in `session@w:…#12`. Every other source keeps its plain account-wide key, as today.
@@ -259,8 +261,10 @@ Shards keep their suffix after the key, as in `session@w:…#12`. Every other so
    - a held question reads the recipient's row and its delivery turn (`questions`, `sessions.service.ts:4644-4654`);
    - an open request shows the peer's title.
 
-   So the poller keeps, per account, the pairs (asker workspace, recipient workspace) of the account's OPEN requests. A move in a recipient's scope (`w:` or `c:`) also moves the asker's scope, and the other way round. The map is one small statement on `session_request`'s partial OPEN indexes (`0350_session_request`). It is re-read when a `session_request` key, or the account-wide `session` key, moved, and on each clock tick.
-4. **Always-rebuilt rows.** A `since=` read rebuilds a PENDING row, and a row whose root is a landing, on every read, whatever its token says (`always`, `:4693`). A queued row's gate counts other sessions on its runner, in any workspace. So the workspaces that hold such an Open row move whenever any scope moves. The poller reads them with the dependency map: the owner's Open PENDING rows, through `(owner_id, status, task_id)` (`prisma/schema.prisma:2593`), plus the rows whose root is a LANDING session. It re-reads them on every tick in which a `session` key moved, because PENDING is the session's own status.
+   So the poller keeps, per account, the pairs (asker workspace, recipient workspace) of the account's OPEN requests. A move in a recipient's scope (`w:` or `c:`) also moves the asker's scope, and the other way round. A pair whose peers sit in one workspace W is kept too: a peer outside every Open list (completed, archived, a scheduled run, an Ask) moves only `c:W`, and the Open peer beside it still draws it. The map is one small statement on `session_request`'s partial OPEN indexes (`0350_session_request`). As built, it is part of the poller's statement on every tick (about 0.1 ms on production's account).
+4. **Always-rebuilt rows.** A `since=` read rebuilds a PENDING row, and a row whose root is a landing, on every read, whatever its token says (`always`, `:4693`). A queued row's gate counts other sessions on its runner, in any workspace. So the workspaces that hold an Open PENDING row move whenever any scope moves. The poller reads them with the dependency map: the owner's Open PENDING rows, through `(owner_id, status, task_id)` (`prisma/schema.prisma:2593`). It re-reads them on every tick in which a `session` key moved, because PENDING is the session's own status.
+
+   A row rooted in a LANDING session is left out, as built. Neither its root's writes nor the landing's progress needs it: a LANDING session's own writes move no counter (`open_list_bump_session` counts CONVERSATION rows only), so no poller ever hinted for them, and a landing's progress writes integration sources, which stay account-wide and give a hint with no scopes. Reading those rows would only let them ride along with unrelated moves in other workspaces. Nothing indexes them, either: on production's account (11,471 sessions, 1,520 LANDING) that read was a sequential scan of 12.96 ms returning no rows, nearly all of a 13.6 ms tick.
 
 **What stays account-wide.** Everything a row reads by task or project:
 - `task`, `project`, `coordinator_wake`, `criterion_definition`, `task_status_count`;
@@ -292,7 +296,7 @@ The token is §5.0's: the counters plus the clock part cached at the last clock 
 
 **Cost per tick per account, measured** [L1]. The counter statement reading 456 keys took 0.29 ms (15 shared buffers), against 0.10 ms for today's per-owner sum. The dependency map adds two small statements:
 - the open requests, read when requests move;
-- the owner's Open PENDING and landing-rooted rows, read on ticks where a `session` key moved.
+- the owner's Open PENDING rows, read on ticks where a `session` key moved (landing-rooted rows are not read; see rule 4).
 
 Both run on partial or prefix indexes; they are not measured here. They come on top of §5.0's saving: no version read on a second in which only counters moved.
 
