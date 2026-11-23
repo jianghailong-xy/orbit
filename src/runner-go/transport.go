@@ -136,7 +136,7 @@ func init() {
 		subagentRemoteInPlaceCapabilityV1,
 		bgOwnerStopCapabilityV1,
 		bgOutputTailCapabilityV1,
-	}, cursorAccountCapabilities()...), declaredSteerCapabilities()...), ",")
+	}, append(cursorAccountCapabilities(), defaultSignOutCapabilities()...)...), declaredSteerCapabilities()...), ",")
 	// Where 0600 means something (secret_file_unix.go); a Windows runner is never handed a secret.
 	if secretFilesSupported {
 		runnerCapabilitiesV1 += "," + ownerSecretCapabilityV1

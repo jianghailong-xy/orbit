@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/exec"
@@ -80,10 +81,12 @@ func claudeAddedLoginFolder(id string) (claudeLoginFolder, error) {
 }
 
 // claudeCredentialStore reads and writes the whole credentials blob of a folder: the JSON whose
-// claudeAiOauth key is the login.
+// claudeAiOauth key is the login. remove deletes it, wherever the folder keeps it — a sign-out
+// (signOutDefault); a folder that holds none is already what was asked for.
 type claudeCredentialStore interface {
 	read(ctx context.Context, f claudeLoginFolder) ([]byte, error)
 	write(ctx context.Context, f claudeLoginFolder, blob []byte) error
+	remove(ctx context.Context, f claudeLoginFolder) error
 }
 
 // claudeFileCredentials keeps a folder's credentials in <dir>/.credentials.json (Linux, and macOS
@@ -103,12 +106,20 @@ func (claudeFileCredentials) write(_ context.Context, f claudeLoginFolder, blob 
 	return writeFileAtomically(path, blob, perm)
 }
 
+// remove deletes <dir>/.credentials.json and nothing beside it.
+func (claudeFileCredentials) remove(_ context.Context, f claudeLoginFolder) error {
+	if err := os.Remove(filepath.Join(f.dir, ".credentials.json")); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
 // claudeKeychainCredentials is the macOS store. Storage is per folder (contract, "macOS: measured"):
 // a folder whose login-Keychain item (claudeKeychainService) exists keeps its login there, and one
 // without keeps it in <dir>/.credentials.json, Claude Code's plaintext fallback. One Mac can hold both
 // at once, so each read and write looks the folder's storage up again, and a swap moves claudeAiOauth
-// between whatever the two are while each folder keeps its own. An item is only ever updated, never
-// created or removed, so a folder's storage cannot change under a swap.
+// between whatever the two are while each folder keeps its own. A swap only ever updates an item, never
+// creates or removes one, so a folder's storage cannot change under a swap; only a sign-out removes one.
 type claudeKeychainCredentials struct{}
 
 // claudeSecurityBin is the macOS `security` tool; tests point it at a fake.
@@ -192,6 +203,29 @@ func (k claudeKeychainCredentials) write(ctx context.Context, f claudeLoginFolde
 		return fmt.Errorf("the Keychain refused %s's login: %w", f.label, err)
 	}
 	return nil
+}
+
+// claudeKeychainDeleteLimit bounds how many items one service may hold that a sign-out deletes: each
+// `delete-generic-password` takes the first match, and a loop that never saw "not found" must end.
+const claudeKeychainDeleteLimit = 8
+
+// remove deletes every Keychain item of the folder's service, then the plaintext fallback file too:
+// a folder whose Keychain was once unusable can hold both, and a sign-out leaves neither.
+func (k claudeKeychainCredentials) remove(ctx context.Context, f claudeLoginFolder) error {
+	service := claudeKeychainService(f.envDir)
+	for i := 0; ; i++ {
+		_, code, err := k.security(ctx, f, "delete-generic-password", "-s", service)
+		if code == claudeKeychainNotFound {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("the Keychain kept %s's login: %w", f.label, err)
+		}
+		if i+1 >= claudeKeychainDeleteLimit {
+			return fmt.Errorf("the Keychain still holds %s's login after %d deletions", f.label, claudeKeychainDeleteLimit)
+		}
+	}
+	return claudeFileCredentials{}.remove(ctx, f)
 }
 
 // claudeCredentialStoreForOS is the store the CLI on this machine uses.

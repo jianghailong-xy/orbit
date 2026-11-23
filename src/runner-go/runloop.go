@@ -1745,6 +1745,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// Set as default for Claude Code (claude_account_swap_relay.go): once a swap has ended either way the
 	// Claude engine is probed again and the runner beats at once, as after a removal, so the page shows
 	// the exchanged accounts now.
+	// Default sign-outs in flight, one per engine (default_sign_out.go).
+	var signOuts defaultSignOuts
 	claudeSwaps := newClaudeAccountSwapRelay(pool, t.claudeAccountSwapResult, func() {
 		engineHealth.refreshEngine(providerClaude)
 		beatNow()
@@ -2631,7 +2633,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			// codex-named one is what a control plane older than accounts-per-engine sends. A
 			// runner that answered a Claude request on the codex field would remove a path that
 			// never existed and report "done".
-			if rr := resp.AccountRemoveRequest; rr != nil {
+			//
+			// A sign-out of Default (default_sign_out.go) rides on the engine-named field and runs
+			// off this goroutine: it may wait on a `codex logout` or a Keychain dialog.
+			if rr := resp.AccountRemoveRequest; rr != nil && rr.Action == accountRemoveActionSignOut {
+				signOuts.handle(*rr, &heartbeatOps, pool.sessionIDs, t.accountRemoveResult, engineHealth.refreshEngine, beatNow)
+			} else if rr := resp.AccountRemoveRequest; rr != nil {
 				kind, ok := accountSlotKindFor(rr.Engine)
 				if !ok {
 					logln("account-remove: unknown engine", rr.Engine)

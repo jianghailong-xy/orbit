@@ -119,6 +119,15 @@ func runFakeSecurity(dir string, args []string) int {
 			return 1
 		}
 		return 0
+	case "delete-generic-password":
+		if !found {
+			fmt.Fprintln(os.Stderr, "security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain.")
+			return 44
+		}
+		if err := os.Remove(path); err != nil {
+			return 1
+		}
+		return 0
 	}
 	fmt.Fprintln(os.Stderr, "fake security: unknown command", args[0])
 	return 2
@@ -414,6 +423,10 @@ type failingStoreWrite struct {
 
 func (w *failingStoreWrite) read(ctx context.Context, f claudeLoginFolder) ([]byte, error) {
 	return w.inner.read(ctx, f)
+}
+
+func (w *failingStoreWrite) remove(ctx context.Context, f claudeLoginFolder) error {
+	return w.inner.remove(ctx, f)
 }
 
 func (w *failingStoreWrite) write(ctx context.Context, f claudeLoginFolder, blob []byte) error {
