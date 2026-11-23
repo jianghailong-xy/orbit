@@ -1241,7 +1241,9 @@ func buildOperationCatalog() []*operation {
 				"do NOT query the production database directly — these are the same facts, served by the " +
 				"interface that is allowed to serve them. Read only. The acting session must belong to " +
 				"the project (its coordinator, a session of one of its tasks, or a child of one); another " +
-				"project's session is refused, and another account's project answers 404. jobId names " +
+				"project's session is refused, and another account's project answers 404. A task's own " +
+				"work session reads its own task's landing here — including one handed to it to fix — " +
+				"as a session of the project. jobId names " +
 				"one attempt and serves what its checks printed under `log` and its timeline under " +
 				"`timeline`; claim, round and check narrow either page, cursor continues the log " +
 				"page and timelineCursor continues the timeline page. Without jobId the line is " +
@@ -2933,7 +2935,7 @@ func buildOperationCatalog() []*operation {
 			},
 			map[string]interface{}{
 				"name":        "session_get",
-				"description": fmt.Sprintf("Get one session's current status and latest output (to collect a spawned sub-task's result). To wait for a session, call session_await instead of calling this in a loop. A record over %d characters is shortened to fit: the prompt first, then changedFiles, lastToolUse, lastUserText and error; lastAssistantText and result stay whole unless nothing else is left to shorten. What was shortened is named in truncatedFields; summary=false returns the full record."+sessionStateFieldsNote, toolResultBudget),
+				"description": fmt.Sprintf("Get one session's current status and latest output (to collect a spawned sub-task's result). To wait for a session, call session_await instead of calling this in a loop. A record over %d characters is shortened to fit: the prompt first, then changedFiles, lastToolUse, lastUserText and error; lastAssistantText and result stay whole unless nothing else is left to shorten. What was shortened is named in truncatedFields; summary=false returns the full record. A landing session id (task_get's integration.landTask.landingSessionId, or the landing a landing-fix turn names) returns that landing's view: its attempts, timeline and open items. A task's own work session may read its own task's landing this way."+sessionStateFieldsNote, toolResultBudget),
 				"inputSchema": obj(map[string]interface{}{
 					"sessionId": sessionIDProp,
 					"summary":   map[string]interface{}{"type": "boolean", "description": "Default true: the record held under the budget. false returns it in full."},

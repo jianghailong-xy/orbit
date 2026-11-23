@@ -13,7 +13,12 @@
  *   (2) a cut the old process's spool re-sends after the next generation ended the update, stamped before that end, is
  *       the update's too;
  *   (3) every other cut keeps the restart's own continuation: under a request that interrupts nothing (an idle
- *       runner's), from before the request, after the update ended, and on a runner with no mapping.
+ *       runner's), from before the request, after the update ended, and on a runner with no mapping;
+ *   (4) production's hang (2026-11-23): an older runner image's DeepSeek Harness ended its turn INTERRUPTED at the
+ *       Update Now's stop, with no cut of its own: the completion queues the update's continuation once (the design's
+ *       fallback, queueUpdateNowContinuation), the session stays RUNNING for it, the next generation is handed it, and
+ *       once it ends the session settles: never RUNNING with nothing running;
+ *   (5) nothing is queued for an INTERRUPTED turn the update did not stop.
  *
  * Not destructive: every id is freshly generated and every assertion is scoped to the rows it made.
  */
@@ -63,7 +68,7 @@ test('a turn an Orbit Cloud runner\'s Update Now cut is handed back as the updat
     }).dequeueTurn.call(api, sessionId, runnerId, generation);
 
   /** An owner's runner with a workspace; with `window`, an Orbit Cloud runner whose mapping records that Update Now. */
-  async function runnerOf(window?: { updateRequestedAt: Date | null; updateCompletedAt?: Date | null; updateInterruptTurns: boolean }) {
+  async function runnerOf(window?: { updateRequestedAt: Date | null; updateCompletedAt?: Date | null; updateInterruptTurns: boolean; stopRequestedAt?: Date | null }) {
     const ownerId = randomUUID(), runnerId = randomUUID(), workspaceId = randomUUID();
     await db.user.create({ data: { id: ownerId, email: `${ownerId}@update-cut.invalid`, name: 'Update cut test', passwordHash: 'x' } });
     await db.runner.create({ data: { id: runnerId, ownerId, name: 'Orbit Cloud', tokenHash: randomUUID(), status: 'ONLINE', lastHeartbeatAt: new Date() } });
@@ -73,6 +78,7 @@ test('a turn an Orbit Cloud runner\'s Update Now cut is handed back as the updat
         ownerId, runnerId, backend: 'docker', clusterKey: `update-cut-${randomUUID().slice(0, 8)}`, namespace: 'update-cut',
         pvcName: `mr-data-${runnerId}`, managementState: 'READY', desiredState: 'RUNNING', updateRequestedBy: ownerId,
         updateRequestedAt: window.updateRequestedAt, updateCompletedAt: window.updateCompletedAt ?? null, updateInterruptTurns: window.updateInterruptTurns,
+        stopRequestedAt: window.stopRequestedAt ?? null, currentImageSha: 'f81f7aeab2770000000000000000000000000000',
       } });
     }
     return { ownerId, runnerId, workspaceId };
@@ -114,6 +120,94 @@ test('a turn an Orbit Cloud runner\'s Update Now cut is handed back as the updat
     const stored = await db.runEvent.findFirstOrThrow({ where: { sessionId, seq: 3 }, select: { payload: true } });
     return { sessionId, turnId: turn.id, p2, handed, stored: stored.payload as Record<string, unknown> };
   }
+
+  /**
+   * Production's hang (2026-11-23), up to the completion: process P1 of an older runner image is handed a dsh message,
+   * runs a tool, and at its runner's stop cancels the turn and reports it INTERRUPTED — no runner cut — as that image's
+   * DeepSeek Harness did. Optionally a Stop of the session's own came first.
+   */
+  async function endedInterruptedAtTheStop(f: { ownerId: string; runnerId: string; workspaceId: string }, opts: { ownStop?: boolean } = {}) {
+    const sessionId = randomUUID();
+    await db.session.create({ data: {
+      id: sessionId, ownerId: f.ownerId, creatorId: f.ownerId, workspaceId: f.workspaceId, assignedRunnerId: f.runnerId, title: 'Ticks',
+      prompt: 'append ticks', provider: 'claude', status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER,
+      startedAt: new Date(), runClaimedAt: new Date(Date.now() - 10 * 60_000), runtimeSessionId: randomUUID(),
+    } });
+    const turn = await db.conversationTurn.create({
+      data: { sessionId, seq: 1, clientTurnId: randomUUID(), kind: 'message', content: 'append a tick every minute to ticks3.txt', status: 'PENDING' },
+      select: { id: true },
+    });
+    const runner = { id: f.runnerId };
+    const p1 = randomUUID(), g1 = randomUUID();
+    await api.takeoverLeases(runner, sessionId, { leaseOwner: p1, expectedLeaseOwner: null } as never);
+    await api.activateLeases(runner, sessionId, { leaseGeneration: g1, leaseOwner: p1 } as never);
+    assert.equal((await fetchTurn(f.runnerId, sessionId, g1))?.turnId, turn.id);
+    const ts = () => new Date().toISOString();
+    await api.events(runner, sessionId, { leaseOwner: p1, events: [
+      { seq: 1, type: RunEventType.USER, ts: ts(), turnId: turn.id, payload: { text: 'append a tick every minute to ticks3.txt' } },
+      { seq: 2, type: RunEventType.TOOL_USE, ts: ts(), turnId: turn.id, payload: { id: 'call_1', name: 'shell', input: { command: 'date >> ticks3.txt; sleep 60' } } },
+      { seq: 3, type: RunEventType.ASSISTANT, ts: ts(), turnId: turn.id, payload: { text: 'Tick 09:35:44 appended; waiting a minute.' } },
+      { seq: 4, type: RunEventType.TURN_END, ts: ts(), turnId: turn.id, payload: { subtype: 'interrupted', stopReason: 'cancelled' } },
+    ] } as never);
+    if (opts.ownStop) {
+      await db.conversationTurn.create({ data: { sessionId, seq: 2, clientTurnId: randomUUID(), kind: 'interrupt', content: '', status: 'DELIVERED' } });
+    }
+    await api.turnComplete(runner, sessionId, { leaseOwner: p1, turnId: turn.id, status: 'INTERRUPTED', subtype: 'interrupted', numTurns: 1 } as never);
+    return { sessionId, turnId: turn.id, p1 };
+  }
+
+  await t.test('(4) an older runner ends a turn INTERRUPTED at the owner\'s Update Now\'s stop: the update\'s continuation is queued, the session stays RUNNING, and the next generation is handed it (production, 2026-11-23)', async () => {
+    const asked = new Date(Date.now() - 3 * 60_000);
+    const f = await runnerOf({ updateRequestedAt: asked, updateInterruptTurns: true, stopRequestedAt: new Date(asked.getTime() + 60_000) });
+    const ended = await endedInterruptedAtTheStop(f);
+    const turns = await db.conversationTurn.findMany({
+      where: { sessionId: ended.sessionId }, orderBy: { seq: 'asc' }, select: { id: true, kind: true, status: true, clientTurnId: true },
+    });
+    assert.deepEqual(turns.map((turn) => [turn.kind, turn.status]), [['message', 'ANSWERED'], ['message', 'PENDING']], 'the cut turn answered, its continuation queued');
+    assert.equal(turns[1].clientTurnId, `update-now-continue:v1:${ended.turnId}`);
+    assert.equal((await db.session.findUniqueOrThrow({ where: { id: ended.sessionId } })).status, RunStatus.RUNNING, 'RUNNING for the continuation');
+
+    // The completion again (a retry, or the next process's kept copy): nothing queued twice.
+    await api.turnComplete({ id: f.runnerId }, ended.sessionId, { leaseOwner: ended.p1, turnId: ended.turnId, status: 'INTERRUPTED', subtype: 'interrupted', numTurns: 1 } as never);
+    assert.equal(await db.conversationTurn.count({ where: { sessionId: ended.sessionId } }), 2);
+
+    // The next generation takes the session over and is handed the continuation, the update's, quoting the message.
+    const p2 = randomUUID(), g2 = randomUUID();
+    await api.takeoverLeases({ id: f.runnerId }, ended.sessionId, { leaseOwner: p2, expectedLeaseOwner: ended.p1 } as never);
+    await api.activateLeases({ id: f.runnerId }, ended.sessionId, { leaseGeneration: g2, leaseOwner: p2 } as never);
+    const handed = await fetchTurn(f.runnerId, ended.sessionId, g2);
+    assert.equal(handed?.turnId, turns[1].id);
+    const content = handed?.content ?? '';
+    assert.ok(content.startsWith(`[Orbit] ${RUNNER_UPDATE_RESUME_NOTE} Orbit updated its runner to managed-f81f7aeab2 at the owner's request`), content);
+    assert.match(content, /The interrupted message:\nappend a tick every minute to ticks3.txt$/);
+    // It runs and ends: the session settles, never RUNNING with nothing running.
+    await api.events({ id: f.runnerId }, ended.sessionId, { leaseOwner: p2, events: [
+      { seq: 5, type: RunEventType.USER, ts: new Date().toISOString(), turnId: turns[1].id, payload: { text: content } },
+      { seq: 6, type: RunEventType.ASSISTANT, ts: new Date().toISOString(), turnId: turns[1].id, payload: { text: 'Resumed the ticks from the file.' } },
+    ] } as never);
+    await api.turnComplete({ id: f.runnerId }, ended.sessionId, { leaseOwner: p2, turnId: turns[1].id, status: 'SUCCEEDED', numTurns: 1 } as never);
+    const settled = await db.session.findUniqueOrThrow({ where: { id: ended.sessionId } });
+    assert.notEqual(settled.status, RunStatus.RUNNING);
+    assert.equal(await db.conversationTurn.count({ where: { sessionId: ended.sessionId, kind: 'message', status: { not: 'ANSWERED' } } }), 0);
+  });
+
+  await t.test('(5) nothing is queued for an INTERRUPTED turn the update did not stop', async () => {
+    const asked = new Date(Date.now() - 3 * 60_000);
+    const stop = new Date(asked.getTime() + 60_000);
+    const cases = [
+      { label: 'the stop not asked yet', window: { updateRequestedAt: asked, updateInterruptTurns: true }, ownStop: false },
+      { label: 'a Stop of the session\'s own', window: { updateRequestedAt: asked, updateInterruptTurns: true, stopRequestedAt: stop }, ownStop: true },
+      { label: 'an update already ended', window: { updateRequestedAt: asked, updateCompletedAt: new Date(asked.getTime() + 120_000), updateInterruptTurns: true, stopRequestedAt: stop }, ownStop: false },
+      { label: 'an idle runner\'s request', window: { updateRequestedAt: asked, updateInterruptTurns: false, stopRequestedAt: stop }, ownStop: false },
+      { label: 'a runner with no mapping', window: undefined, ownStop: false },
+    ];
+    for (const { label, window, ownStop } of cases) {
+      const ended = await endedInterruptedAtTheStop(await runnerOf(window), { ownStop });
+      const queued = await db.conversationTurn.count({ where: { sessionId: ended.sessionId, clientTurnId: { startsWith: 'update-now-continue:' } } });
+      assert.equal(queued, 0, `${label}: nothing queued`);
+      assert.notEqual((await db.session.findUniqueOrThrow({ where: { id: ended.sessionId } })).status, RunStatus.RUNNING, `${label}: settled`);
+    }
+  });
 
   await t.test('(1) cut while the owner\'s Update Now stops the runner: stored as the update\'s, and handed back as its continuation', async () => {
     const asked = new Date(Date.now() - 3 * 60_000);

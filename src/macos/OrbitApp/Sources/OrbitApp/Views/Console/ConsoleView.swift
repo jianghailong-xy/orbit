@@ -387,6 +387,9 @@ struct ConsoleView: View {
             .modifier(TypingFold(folded: foldsChrome(console)))
             // The landing this conversation's work fed, at the session's own bottom (owner
             // 2026-10-19, board v4 06 e): absent from a session that produced no landing work.
+            // A fix this task's session committed, queued to land again (revision 42; board
+            // landing-fix-own-session 02 b ③): the one line the session gains.
+            LandingFixAgainLine(console: console)
             SourceLandingChip(console: console)
             // A coordinator handing itself over (board 02): the note being written, the handover, or
             // its failure above the composer; the composer locked while it runs; and once it is done,

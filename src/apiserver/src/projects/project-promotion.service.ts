@@ -905,15 +905,22 @@ async function resolveApprovalItem(
  * the card, so whichever runs first, the owner's answer on it stands.
  *
  * SUPERSEDED when a newer candidate took this one's place, RESOLVED for every other way out.
+ *
+ * `keepHandedOff`, for M-T6 (§12.5 W7): an item still in the hands of its task's own work session is the failure the
+ * newer candidate was made to answer, and stays OPEN for that candidate's check to close (W-T3, W-T4).
  */
 async function closePromotionItems(
   tx: Prisma.TransactionClient,
   projectId: string,
   promotionId: string,
   state: 'SUPERSEDED' | 'RESOLVED',
+  keepHandedOff = false,
 ): Promise<void> {
   await tx.projectOpenItem.updateMany({
-    where: { projectId, promotionId, state: 'OPEN', kind: { in: INTEGRATION_ITEM_KINDS } },
+    where: {
+      projectId, promotionId, state: 'OPEN', kind: { in: INTEGRATION_ITEM_KINDS },
+      ...(keepHandedOff ? { NOT: { workSessionOfferedAt: { not: null }, workSessionReturnedAt: null } } : {}),
+    },
     data: {
       state,
       resolution: 'PROMOTION_MOVED_ON',
@@ -1102,14 +1109,15 @@ function storedChecks(promotion: PromotionRow): IntegrationCheckResult[] {
 
 /**
  * M-T6: retire the candidates standing on one source, their check jobs, their cards and the failures
- * they had open (§4.2, `closePromotionItems`).
+ * they had open (§4.2, `closePromotionItems`) — all but one still in its task's own work session's hands,
+ * which the candidate replacing them is there to answer (§12.5 W7, `landAgainAfterLandingFix`).
  *
  * `keepJobIds` names a job whose result is being applied right now: a terminal job row is written
  * once (`project_integration_job_terminal_guard`), so cancelling that one here would make the very
  * update that records what it answered fail — the whole result, and with it the retirement, would
  * roll back. Every other caller leaves it empty and takes the job out of the queue too.
  */
-async function supersedeLiveCandidates(
+export async function supersedeLiveCandidates(
   tx: Prisma.TransactionClient,
   projectId: string,
   sourceRef: string,
@@ -1151,7 +1159,7 @@ async function supersedeLiveCandidates(
         },
       });
     }
-    await closePromotionItems(tx, projectId, row.id, 'SUPERSEDED');
+    await closePromotionItems(tx, projectId, row.id, 'SUPERSEDED', true);
   }
 }
 
