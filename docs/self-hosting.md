@@ -329,14 +329,15 @@ counts, and uploads racing at the limit can pass it by at most 25 MiB each.
 ### Monitoring
 
 The `monitoring` Compose profile runs Prometheus beside the stack, with two exporters, and collects the metrics of
-every apiserver, the link gateway, PostgreSQL and the host; [Grafana](#grafana) shows them. The only port it
-publishes on the host is Grafana's, on `127.0.0.1`, and no monitoring container is given the Docker socket.
+every apiserver, the link gateway, PostgreSQL and the host; [Grafana](#grafana) shows them. Loki keeps the stack's
+container logs, which Alloy ships to it ([Logs](#logs)). The only port it publishes on the host is Grafana's, on
+`127.0.0.1`, and no monitoring container is given the Docker socket.
 
 Turn it on by adding `monitoring` to `COMPOSE_PROFILES` in `.env`, then start it:
 
 ```bash
 COMPOSE_PROFILES=runner-link,monitoring      # keep the profiles the line already names
-docker compose up -d --wait prometheus node-exporter postgres-exporter grafana
+docker compose up -d --wait prometheus node-exporter postgres-exporter grafana loki alloy
 ```
 
 **What it runs.** Every image is pinned by version and digest; set the variable to use another
@@ -349,6 +350,8 @@ docker compose up -d --wait prometheus node-exporter postgres-exporter grafana
 | `postgres-exporter` | PostgreSQL's statistics, read as the `orbit_monitor` role. | 128 MB |
 | `grafana` | The dashboards, on `127.0.0.1` only ([below](#grafana)). | 384 MB |
 | `pg-monitor-role` | Runs once each time the profile comes up and exits: it makes `orbit_monitor` and sets its password. | 64 MB |
+| `loki` | Keeps the log lines Alloy sends, in the `loki-data` volume ([Logs](#logs)). | 512 MB |
+| `alloy` | Reads this project's container logs from `/var/lib/docker/containers`, mounted read-only, and sends them to Loki. | 256 MB |
 
 **What Prometheus scrapes** (`deploy/monitoring/prometheus.yml`):
 
@@ -460,8 +463,8 @@ runs as `nobody`, with every capability dropped, and the socket belongs to root 
 #### Grafana
 
 Grafana shows what Prometheus collects, in four dashboards that ship in the repository
-(`deploy/monitoring/grafana/dashboards/`) and load by themselves. Prometheus is its one data source, provisioned
-(`deploy/monitoring/grafana/provisioning/`); neither can be changed or deleted from Grafana's UI. To change a dashboard,
+(`deploy/monitoring/grafana/dashboards/`) and load by themselves. Prometheus and [Loki](#logs) are its data sources,
+provisioned (`deploy/monitoring/grafana/provisioning/`); none of these can be changed or deleted from Grafana's UI. To change a dashboard,
 edit its file: Grafana picks the change up within a minute.
 
 **It is never on the Orbit origin.** Grafana is published as `127.0.0.1:3030` (`GRAFANA_PORT`) and nowhere else, and
@@ -514,8 +517,71 @@ Grafana's own data is in the `grafana-data` volume (a few MB). Its image is pinn
 apiserver's listener stays open, reached by nothing. The volumes stay until you remove them:
 
 ```bash
-docker compose --profile monitoring rm -sf grafana prometheus node-exporter postgres-exporter pg-monitor-role
+docker compose --profile monitoring rm -sf grafana prometheus node-exporter postgres-exporter pg-monitor-role loki alloy
 docker volume rm "$(docker compose config --format json | jq -r .name)_prometheus-data"   # only to drop the history
+docker volume rm "$(docker compose config --format json | jq -r .name)_loki-data"         # only to drop the logs
+```
+
+#### Logs
+
+Loki keeps the container logs of this Compose project, and Grafana searches them (**Explore**, data source **Loki**).
+`docker compose logs` and `docker logs` read the same lines as before, from Docker's own files.
+
+**What is collected.** Alloy reads Docker's json-file logs from `/var/lib/docker/containers`, mounted read-only. It
+has no Docker socket, so it cannot ask Docker which container is which. Every 5 seconds it reads each container's
+`config.v2.json` in that directory instead and keeps a container only when Compose's `com.docker.compose.project`
+label names this project. It leaves out any container with an `orbit.managed-runner.*` label, which the Docker channel
+puts on every [managed runner](#managed-runners) it makes, even when another label matches. A runner's log file, or
+another project's on the same host, is therefore never opened, and nothing of a runner's reaches Loki. The list it
+writes is in `deploy/monitoring/alloy/log-targets.sh`, the pipeline in `deploy/monitoring/alloy/config.alloy`. Lines a
+container wrote more than an hour before Alloy read them are dropped, so that its first start sends no backlog. Docker
+in another data root than `/var/lib/docker` needs that mount changed.
+
+**Labels.** Every stream has `service` (the Compose service: `apiserver`, `gateway`, `postgres`…), `container` and
+`stream` (`stdout` or `stderr`); an apiserver's also has `level` (`log`, `warn`, `error`…). The request id is not a
+label, since there is one per request: it is carried as structured metadata named `request_id`.
+
+**The request id.** The web gateway makes a 32-hex-digit id for every request (nginx's `$request_id`), writes it as
+the last field of its access-log line and sends it to the apiserver as `X-Request-Id`, replacing any header of that
+name a client sent. The apiserver writes its log as one JSON object a line (`ORBIT_LOG_FORMAT=json`, which Compose
+sets), with `level`, `timestamp` (Unix milliseconds), `message` and `context`, a `stack` for an error, and
+`requestId` on each line written while it served that request. The apiserver writes lines for few requests: slow
+ones, failures and the events it logs anyway. One request's gateway line and apiserver lines are found together with:
+
+```logql
+{service=~"gateway|apiserver.*"} | request_id="3f1c9a0b5d7e4f2a8c6b1d0e9f8a7b6c"
+```
+
+And, for instance, an apiserver's errors: `{service=~"apiserver.*", level="error"}`.
+
+**Reading logs with grep.** Each apiserver message is the text it always was, inside the JSON line, so every
+`docker compose logs apiserver | grep …` in these docs matches as before. A line that is not JSON, such as the
+migration's at boot, is written as it was. Set `ORBIT_LOG_FORMAT=text` in `.env` and recreate the apiserver to get
+Nest's text lines back; their messages carry no request id.
+
+**Who can read them.** The logs hold what the containers print: the web gateway's access log has every client's
+address, user agent and request line (a query's `access_token` is removed first, as before), and the apiserver's lines
+name ids of accounts, sessions and runners, and error messages. They are not credentials, but they are not public.
+
+- Anyone signed in to Grafana with a role that can query a data source, which is `admin` unless you add users. Give
+  others Grafana access only as you would give them the host's `docker logs`.
+- Anyone who can run `docker` on the host, as before: root and the `docker` group.
+- Any container on this project's network can query Loki, which has no login and publishes no port. Do not attach a
+  container you do not trust to that network.
+
+Alloy runs as root, which reading `/var/lib/docker/containers` takes, with every capability dropped. That directory
+also holds each container's settings, environment included, so treat Alloy as you treat Docker itself.
+
+**Retention.** Loki keeps 7 days (`ORBIT_LOKI_RETENTION`, in hours: `168h`) in the `loki-data` volume, in Docker's
+data root rather than in `./data`, and it is not backed up. Its compactor deletes older lines every 10 minutes, at
+most two hours after they expire. Alloy keeps where it has read each file to in the `alloy-data` volume. Loki checks
+no size, so its disk use grows with traffic until lines start to expire.
+
+**Check it.** Both stay inside the project network. Ask from Grafana's container:
+
+```bash
+docker compose exec grafana wget -qO- 'http://loki:3100/loki/api/v1/labels'
+docker compose exec grafana wget -qO- 'http://loki:3100/loki/api/v1/label/service/values'
 ```
 
 ## Google sign-in
