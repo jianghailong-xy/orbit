@@ -34,7 +34,7 @@ func TestPerActionHelpDocumentsEveryAdvertisedFlag(t *testing.T) {
 
 	for _, list := range [][]cliCapabilitySpec{
 		baseCLICapabilities, providerCLICapabilities, projectCLICapabilities,
-		notifyCLICapabilities, sessionCLICapabilities, agentCLICapabilities,
+		notifyCLICapabilities, ownerRequestCLICapabilities, sessionCLICapabilities, agentCLICapabilities,
 		runnerCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities,
 		fileCLICapabilities, driveCLICapabilities, subagentCLICapabilities, browserCLICapabilities, userCLICapabilities, guideCLICapabilities,
 	} {
