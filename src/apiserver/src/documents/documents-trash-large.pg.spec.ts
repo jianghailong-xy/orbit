@@ -138,7 +138,7 @@ test('Orbit Files drive: bounded Trash operations on folders of 100,000 entries'
 
   const call = (who: string, method: string, route: string) => {
     caller = who;
-    return fetch(`${origin}/api/drive${route}`, { method, headers: { authorization: 'Bearer signed-in' } });
+    return fetch(`${origin}/api/documents${route}`, { method, headers: { authorization: 'Bearer signed-in' } });
   };
   const one = async (text: string, ...values: unknown[]) => (await sql.query(text, values)).rows[0] as Record<string, number | string | boolean | null>;
   /** The drive transactions since `from`, each bounded as §1.4 says. */

@@ -66,7 +66,7 @@ export class DocumentsDownloadLinks {
     const claims: Claims = { sub: ownerId, e: entryId, v: version, k: KIND };
     const token = await this.jwt.signAsync(claims, { expiresIn: DRIVE_DOWNLOAD_LINK_TTL_SECONDS });
     return {
-      path: `/api/drive/dl/${token}`,
+      path: `/api/documents/dl/${token}`,
       expiresAt: new Date(Date.now() + DRIVE_DOWNLOAD_LINK_TTL_SECONDS * 1000).toISOString(),
     };
   }

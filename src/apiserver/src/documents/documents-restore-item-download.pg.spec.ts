@@ -98,7 +98,7 @@ test('Orbit Files drive: restore one item out of Trash, and the minted download 
 
   const call = (who: string, method: string, route: string, body?: unknown) => {
     caller = who;
-    return fetch(`${origin}/api/drive${route}`, {
+    return fetch(`${origin}/api/documents${route}`, {
       method,
       headers: { authorization: 'Bearer signed-in', ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -232,7 +232,7 @@ test('Orbit Files drive: restore one item out of Trash, and the minted download 
     const reply = await mint(owner, report);
     assert.equal(reply.status, 200, await reply.clone().text());
     const link = (await reply.json()) as { path: string; expiresAt: string };
-    assert.match(link.path, /^\/api\/drive\/dl\/[^/]+$/);
+    assert.match(link.path, /^\/api\/documents\/dl\/[^/]+$/);
     assert.ok(Date.parse(link.expiresAt) > Date.now() && Date.parse(link.expiresAt) <= Date.now() + 5 * 60_000 + 1000);
     const whole = await open(link.path);
     assert.equal(whole.status, 200);
@@ -254,7 +254,7 @@ test('Orbit Files drive: restore one item out of Trash, and the minted download 
     const forged = link.path.slice(0, -4) + (link.path.endsWith('AAAA') ? 'BBBB' : 'AAAA');
     const answers = [];
     answers.push(await open(forged));
-    answers.push(await open('/api/drive/dl/not-a-token'));
+    answers.push(await open('/api/documents/dl/not-a-token'));
     // Minted ten minutes ago: expired five minutes later.
     const realNow = Date.now;
     Date.now = () => realNow() - 10 * 60_000;

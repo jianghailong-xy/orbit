@@ -1,4 +1,5 @@
 import { evidence, type Tenant, type TenantRequest } from './tenant-isolation-cases';
+import { underEveryDocumentsPrefix } from '../documents/documents-routes';
 
 /**
  * The tenant isolation census, second half (docs/google-sign-in-design.md §5.6, §11 T2). The first
@@ -2113,12 +2114,13 @@ export const SHARED_BY_HAND: Readonly<Record<string, string>> = {
  * answered alike whoever made the one that does.
  */
 export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
-  'GET /drive/dl/:token':
-    'a download URL the owner\'s Files page minted (POST /drive/entries/:id/download-link, behind the owner\'s login): the '
+  // The same handler under /documents and its /drive alias (documents/documents-routes.ts).
+  ...Object.fromEntries(underEveryDocumentsPrefix('GET /documents/dl/:token').map((route) => [route,
+    'a download URL the owner\'s Files page minted (POST /documents/entries/:id/download-link, behind the owner\'s login): the '
     + 'token is the credential, signed with a key of its own and expiring in five minutes, and it names its owner, file '
     + 'and version itself; the version is read WHERE id, owner and file are the token\'s, and a forged, expired or stale '
     + 'one is the one 404 — documents-download-links.ts:78, :84; nothing in the request but the token names an object — '
-    + 'documents.controller.ts:279',
+    + 'documents.controller.ts:279'])),
   'GET /health':
     'a constant `{status:"ok"}` that touches no table — health/health.controller.ts:27',
   'ALL /gw/codex':

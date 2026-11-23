@@ -13,10 +13,11 @@ import { DocumentsUploadsService } from './documents-uploads.service';
 import { FilesService, type DriveUsage } from '../files/files.service';
 import { DocumentsService } from './documents.service';
 import { DocumentsDownloadLinks } from './documents-download-links';
+import { DOCUMENTS_ROUTE_PREFIXES } from './documents-routes';
 import { CreateDocumentsFolderDto, DocumentsDownloadLinkDto, OpenDocumentsUploadDto, RestoreDocumentsVersionDto, UpdateDocumentsEntryDto } from './dto';
 
-/** What every drive route declares for a token: the files scope; a drive holds no workspace, so a confined token is refused. */
-export const DRIVE_PAT = () => PatScope('files', { workspaceConfinable: false });
+/** What every Documents route declares for a token: the documents scope; Documents hold no workspace, so a confined token is refused. */
+export const DOCUMENTS_PAT = () => PatScope('documents', { workspaceConfinable: false });
 
 const limitOf = (limit?: string) => (limit === undefined ? undefined : Number.parseInt(limit, 10));
 
@@ -24,10 +25,10 @@ const limitOf = (limit?: string) => (limit === undefined ? undefined : Number.pa
  * The owner's drive routes (docs/orbit-files-drive-technical-design.md §4.1), under the owner's login: folders and files,
  * versions, Trash and the change feed. The owner is always the credential's; another account's entry, version or group
  * is not found. Usage and the share check are their own tasks' routes. A token reaches them with the
- * `files` scope (DRIVE_PAT), declared on each handler like every scope; without it the guard refuses with the scope's 403.
+ * `documents` scope (DOCUMENTS_PAT), declared on each handler like every scope; without it the guard refuses with the scope's 403.
  */
 @UseGuards(JwtAuthGuard)
-@Controller('drive')
+@Controller(DOCUMENTS_ROUTE_PREFIXES)
 export class DocumentsController {
   constructor(
     private readonly drive: DocumentsService,
@@ -39,13 +40,13 @@ export class DocumentsController {
   ) {}
 
   // What Files → Storage shows: the drive's share and the rest, each content once (§2.5).
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Get('usage')
   usage(@CurrentUser() user: AuthUser): Promise<DriveUsage> {
     return this.files.driveUsage(user.userId);
   }
 
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Get('entries')
   list(
     @CurrentUser() user: AuthUser,
@@ -57,69 +58,69 @@ export class DocumentsController {
   }
 
   /** Live entries whose name contains `q`, anywhere in the drive, each with its folder path. */
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Get('search')
   search(@CurrentUser() user: AuthUser, @Query('q') q?: string, @Query('cursor') cursor?: string, @Query('limit') limit?: string) {
     return this.drive.search(user.userId, { q, cursor, limit: limitOf(limit) });
   }
 
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Get('entries/:id')
   get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.drive.get(user.userId, id);
   }
 
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Get('resolve')
   resolve(@CurrentUser() user: AuthUser, @Query('path') path?: string) {
     return this.drive.resolve(user.userId, path ?? '');
   }
 
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Post('folders')
   createFolder(@CurrentUser() user: AuthUser, @Body() dto: CreateDocumentsFolderDto) {
     return this.drive.createFolder(user.userId, { parentId: dto.parentId ?? null, name: dto.name, onClash: 'SUFFIX' });
   }
 
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Patch('entries/:id')
   update(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateDocumentsEntryDto) {
     return this.drive.rename(user.userId, id, { name: dto.name, parentId: dto.parentId, replace: false });
   }
 
   /** Move to Trash; answers the group, which the web's undo restores. */
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Delete('entries/:id')
   moveToTrash(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.drive.moveToTrash(user.userId, id);
   }
 
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Get('entries/:id/versions')
   versions(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.drive.versions(user.userId, id);
   }
 
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Post('versions/:id/restore')
   @HttpCode(HttpStatus.OK)
   restoreVersion(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: RestoreDocumentsVersionDto) {
     return this.drive.restoreVersion(user.userId, id, dto.as);
   }
 
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Delete('versions/:id')
   deleteVersion(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.drive.deleteVersion(user.userId, id);
   }
 
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Get('trash')
   trash(@CurrentUser() user: AuthUser, @Query('cursor') cursor?: string, @Query('limit') limit?: string) {
     return this.drive.trash(user.userId, { cursor, limit: limitOf(limit) });
   }
 
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Get('trash/groups/:id')
   trashGroup(
     @CurrentUser() user: AuthUser,
@@ -131,7 +132,7 @@ export class DocumentsController {
     return this.drive.trashGroup(user.userId, id, { parentId, cursor, limit: limitOf(limit) });
   }
 
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Post('trash/groups/:id/restore')
   @HttpCode(HttpStatus.OK)
   restoreGroup(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
@@ -139,7 +140,7 @@ export class DocumentsController {
   }
 
   /** Restore one item of a group, and what hangs under it, leaving the rest in Trash (board frame 6, rule 3). */
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Post('trash/groups/:id/items/:entryId/restore')
   @HttpCode(HttpStatus.OK)
   restoreItem(
@@ -151,21 +152,21 @@ export class DocumentsController {
   }
 
   /** Delete a group for good. */
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Delete('trash/groups/:id')
   deleteGroup(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.drive.deleteGroup(user.userId, id);
   }
 
   /** Empty Trash. */
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Delete('trash')
   emptyTrash(@CurrentUser() user: AuthUser) {
     return this.drive.emptyTrash(user.userId);
   }
 
   /** The change feed (§5.4): `since` is the cursor the previous call answered. Also announced as `drive.changed`. */
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Get('changes')
   changes(@CurrentUser() user: AuthUser, @Query('since') since?: string) {
     return this.drive.changes(user.userId, since);
@@ -174,7 +175,7 @@ export class DocumentsController {
   // ── uploads and downloads (§4.1) ──────────────────────────────────────────────────────────────
 
   /** Open a resumable upload: answers the staging id and the chunk size every chunk but the last must have. */
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Post('uploads')
   openUpload(@CurrentUser() user: AuthUser, @Body() dto: OpenDocumentsUploadDto) {
     return this.uploads.open(user.userId, {
@@ -183,14 +184,14 @@ export class DocumentsController {
   }
 
   /** Which chunks have arrived. */
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Get('uploads/:id')
   uploadStatus(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.uploads.status(user.userId, id);
   }
 
   /** One chunk, at most 8 MiB, as the raw request body, with its sha256 in `X-Orbit-Chunk-Sha256`. Sent again, it replaces. */
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Put('uploads/:id/chunks/:idx')
   async putChunk(
     @CurrentUser() user: AuthUser,
@@ -211,21 +212,21 @@ export class DocumentsController {
   }
 
   /** Create the file and commit it; sent again after it applied, it answers the same file. */
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Post('uploads/:id/complete')
   @HttpCode(HttpStatus.OK)
   completeUpload(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.uploads.complete(user.userId, id);
   }
 
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Delete('uploads/:id')
   abandonUpload(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.uploads.abandon(user.userId, id);
   }
 
   /** Download the current version, with `Range` (206) and an ETag of `"<versionId>.<seq>"`. */
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Get('entries/:id/content')
   async download(
     @CurrentUser() user: AuthUser,
@@ -242,7 +243,7 @@ export class DocumentsController {
    * A short-lived URL that downloads the current version (or `versionId`) without a login header, for the browser to
    * navigate to and stream to disk itself (D12: no size limit). Answers `{ path, expiresAt }`; `path` is under /api.
    */
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Post('entries/:id/download-link')
   @HttpCode(HttpStatus.OK)
   downloadLink(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: DocumentsDownloadLinkDto) {
@@ -250,7 +251,7 @@ export class DocumentsController {
   }
 
   /** Download one version, current or replaced. */
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Get('versions/:id/content')
   async downloadVersion(
     @CurrentUser() user: AuthUser,
@@ -264,7 +265,7 @@ export class DocumentsController {
   }
 
   /** The secret scan before sharing a file (§9): warns, naming the shape and line, and never blocks. */
-  @DRIVE_PAT()
+  @DOCUMENTS_PAT()
   @Post('entries/:id/share-check')
   @HttpCode(HttpStatus.OK)
   async shareCheck(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
@@ -285,11 +286,11 @@ function send(content: DriveContent, res: Response): StreamableFile | undefined 
 }
 
 /**
- * The download URL a Files page minted (`POST /drive/entries/:id/download-link`), opened by a navigation that carries no
+ * The download URL a Files page minted (`POST /documents/entries/:id/download-link`), opened by a navigation that carries no
  * login: the signed token is the credential, bound to one owner, file and version, and expired, forged or stale it is the
  * one 404. Range, If-Range and If-None-Match work as on the owner's content route.
  */
-@Controller('drive')
+@Controller(DOCUMENTS_ROUTE_PREFIXES)
 export class DocumentsDownloadController {
   constructor(private readonly downloadLinks: DocumentsDownloadLinks) {}
 

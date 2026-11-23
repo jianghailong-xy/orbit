@@ -92,7 +92,7 @@ test('Orbit Files drive: resumable upload and ranged download', { skip: !URL, co
   app.use(json());
   app.setGlobalPrefix('api');
   await app.listen(0, '127.0.0.1');
-  const base = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}/api/drive`;
+  const base = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}/api/documents`;
   t.after(async () => {
     await app.close();
     await db.$disconnect().catch(() => undefined);
