@@ -107,6 +107,9 @@ type browserSupervisor struct {
 	clearedAt time.Time
 	// signIn is the session waiting for the owner to sign in (nil: none). Nothing of the site is kept here.
 	signIn *browserLease
+	// engineSignIn is the engine sign-in the owner is finishing in this browser (login_runner_browser.go): the
+	// attempt's id, "" when none. While it is set no session's browser call is taken, the holder's included.
+	engineSignIn string
 }
 
 // newRunnerBrowser is this runner's browser supervisor: nil unless the managed image's entrypoint started it
@@ -204,6 +207,9 @@ func (b *browserSupervisor) Acquire(sessionID, title string) error {
 	if b.signIn != nil {
 		return fmt.Errorf("The browser is waiting for the owner to sign in, asked by session %s; try again after they answer", b.signIn.name())
 	}
+	if b.engineSignIn != "" {
+		return errors.New("The browser is in use while the owner signs an engine in on this runner; try again in a few minutes")
+	}
 	return b.acquireLocked(sessionID, title)
 }
 
@@ -245,6 +251,9 @@ func (b *browserSupervisor) YieldForSignIn(sessionID, title string) (held bool, 
 	}
 	if b.signIn != nil {
 		return false, fmt.Errorf("The browser is already waiting for the owner to sign in, asked by session %s; try again after they answer", b.signIn.name())
+	}
+	if b.engineSignIn != "" {
+		return false, errors.New("The browser is in use while the owner signs an engine in on this runner; try again in a few minutes")
 	}
 	if b.lease != nil && b.lease.sessionID != sessionID {
 		return false, fmt.Errorf("The browser is in use by session %s; try again after it finishes", b.lease.name())
@@ -290,6 +299,43 @@ func (b *browserSupervisor) EndSignIn(sessionID, title string, retake bool) erro
 	}
 	b.log("browser: lease taken back after the owner answered")
 	return nil
+}
+
+// ReserveForEngineSignIn starts the browser for the owner's engine sign-in (attempt names it) and keeps every
+// session's browser call out until EndEngineSignIn: the owner's clicks and an agent's must not land in each other.
+// The session holding the lease keeps it; its calls wait. The owner is never refused, so a newer attempt simply
+// takes the reservation over.
+func (b *browserSupervisor) ReserveForEngineSignIn(attempt string) error {
+	if b == nil {
+		return errBrowserUnavailable
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if !b.offered || b.stopAfterTurn {
+		return errBrowserUnavailable
+	}
+	if err := b.ensureStartedLocked(); err != nil {
+		return err
+	}
+	b.engineSignIn = attempt
+	b.touchLocked()
+	b.log("browser: reserved while the owner signs an engine in")
+	return nil
+}
+
+// EndEngineSignIn ends attempt's reservation, if it is still the one held.
+func (b *browserSupervisor) EndEngineSignIn(attempt string) {
+	if b == nil {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.engineSignIn == "" || b.engineSignIn != attempt {
+		return
+	}
+	b.engineSignIn = ""
+	b.touchLocked()
+	b.log("browser: the owner's engine sign-in ended")
 }
 
 // SignInWaiting is the session waiting for the owner to sign in ("" when none).
@@ -488,14 +534,14 @@ func (b *browserSupervisor) touchLocked() {
 		b.idle = nil
 	}
 	// Nor while the owner is asked to sign in: the page the agent was on waits for them.
-	if b.procs == nil || b.viewers > 0 || b.signIn != nil {
+	if b.procs == nil || b.viewers > 0 || b.signIn != nil || b.engineSignIn != "" {
 		return
 	}
 	var t poolTimer
 	t = b.clock.AfterFunc(browserIdleStop, func() {
 		b.mu.Lock()
 		defer b.mu.Unlock()
-		if b.idle != t || b.viewers > 0 || b.signIn != nil {
+		if b.idle != t || b.viewers > 0 || b.signIn != nil || b.engineSignIn != "" {
 			return
 		}
 		b.idle = nil
