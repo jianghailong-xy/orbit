@@ -13045,8 +13045,9 @@ export function SessionComposer({
           // WorkspaceView.composerMenu.test.tsx, drawn in
           // docs/mocks/composer-attach-menu-phone.html.
           items={[
-              // Grouped by where the file comes from, Orbit's own Files first (owner's call on
-              // docs/mocks/composer-attach-labels, option B): "File" and "From Files" read alike.
+              // Orbit's own Files on top under a From Orbit heading, a rule, then this device's
+              // File and Image (owner's call on docs/mocks/composer-attach-labels): "File" and
+              // "From Files" read alike.
               {
                 key: 'from-orbit',
                 type: 'group',
@@ -13060,26 +13061,20 @@ export function SessionComposer({
                   },
                 ],
               },
+              { key: 'orbit-divider', type: 'separator' },
               {
-                key: 'from-device',
-                type: 'group',
-                label: 'From this device',
-                children: [
-                  {
-                    key: 'file',
-                    icon: <PaperClipOutlined />,
-                    label: 'File',
-                    onSelect: () => fileInputRef.current?.click(),
-                  },
-                  {
-                    key: 'image',
-                    icon: <PictureOutlined />,
-                    // Offered unconditionally: a state the upload can't work in says so on
-                    // pick, rather than greying the item out.
-                    label: 'Image',
-                    onSelect: () => imageInputRef.current?.click(),
-                  },
-                ],
+                key: 'file',
+                icon: <PaperClipOutlined />,
+                label: 'File',
+                onSelect: () => fileInputRef.current?.click(),
+              },
+              {
+                key: 'image',
+                icon: <PictureOutlined />,
+                // Offered unconditionally: a state the upload can't work in says so on pick,
+                // rather than greying the item out.
+                label: 'Image',
+                onSelect: () => imageInputRef.current?.click(),
               },
               { key: 'divider', type: 'separator' },
               {

@@ -75,29 +75,29 @@
       </ol>
     </div>
     <div class="b-col">
-      <h2>③ 方案 B：分组小标题</h2><span class="b-tag">备选</span>
+      <h2>③ 定稿：B 改</h2><span class="b-tag rec">已选</span>
       <div class="b-stage">
         <div class="b-menu">
-          <div class="b-hd">From this device</div>
+          <div class="b-hd">From Orbit</div>
+          <div class="b-it good"><svg viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v9H3z"/></svg>Files</div>
+          <div class="b-sep"></div>
           <div class="b-it"><svg viewBox="0 0 24 24"><path d="M8 12l6-6a3 3 0 014 4l-8 8a5 5 0 01-7-7l7-7"/></svg>File</div>
           <div class="b-it"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 16l5-5 5 5 3-3 5 5"/></svg>Image</div>
-          <div class="b-hd">From Orbit</div>
-          <div class="b-it"><svg viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v9H3z"/></svg>Files</div>
           <div class="b-sep"></div>
           <div class="b-it">Shell</div><div class="b-it">Skill</div>
         </div>
         <div class="b-comp"><div class="b-bar">＋ Auto</div></div>
       </div>
       <ol>
-        <li>标题说来源，条目保持一个词</li>
-        <li>多两行标题，菜单变高（Command 被挤出画面）</li>
-        <li>iOS/Android 原生菜单不画小标题，两端会不一样</li>
+        <li><span class="b-mk g">1</span>From Orbit 放最上面，只有这一个小标题</li>
+        <li><span class="b-mk g">2</span>Files 下面一条分隔线，File / Image 不加标题</li>
+        <li>Command 在画面外，仍在菜单最下面</li>
       </ol>
     </div>
   </div>
   <div class="b-dec">
     <h2>待定 · 要你拍板</h2>
-    <p><b>D1 用哪种：</b>方案 A（推荐，菜单不变高，每项自己说清楚） / 方案 B。</p>
+    <p><b>D1（已定）：</b>方案 B 改：From Orbit 置顶，去掉 From this device，改用分隔线。</p>
     <p><b>D2 原生端：</b>iOS、macOS、Android 的「+」菜单只有 File 和 Image（没有 From Files）。A：一起改成 Upload File / Upload Image，三端一致（推荐）；B：只改 web。</p>
     <p><b>落地（按代价排）：</b>web 三个 label + 一个图标 + composerMenu 测试 → 原生 ComposerView.swift addMenu、SessionComposer.kt 两个 label。</p>
   </div>
