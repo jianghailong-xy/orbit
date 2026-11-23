@@ -23,6 +23,7 @@ final class NewFolderRootFixtureTests: XCTestCase {
             let name = entry["name"] as? String ?? "?"
             let runner = try XCTUnwrap(entry["runner"] as? [String: Any], name)
             let root = MachineSetup.newFolderRootFor(managed: runner["managed"] as? Bool ?? false,
+                                                     up: runner["up"] as? Bool ?? false,
                                                      reposRoot: runner["reposRoot"] as? String,
                                                      capabilities: runner["capabilities"] as? [String])
             XCTAssertEqual(root, entry["root"] as? String, name)
