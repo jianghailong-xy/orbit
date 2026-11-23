@@ -61,6 +61,13 @@ public struct ProjectCriterion: Codable, Equatable, Sendable, Identifiable {
     public let unmet: [ProjectCriterionUnmet]
     /// `LANDED`, `UNKNOWN` (no receipt either way — never "not landed") or `ON_INTEGRATION_LINE`.
     public let landing: String?
+    /// Why its work is where it is — the done read's `derivedDone.criteria[].landingReason`, which
+    /// decides a met criterion's landing half-sentence in the Done card's words (owner decision D2 A).
+    /// Nil with `landingReasonRead` true is on main by work of its own.
+    public var landingReason: CriterionLandingReason?
+    /// Whether a landing reason was read for it at all: absent — a public page, an older server, a
+    /// non-code project — the row keeps the half-sentence `landing` gives it.
+    public var landingReasonRead: Bool
     /// How the owner said anybody would know this criterion holds.
     public let verificationMethod: String?
     /// Its text revision — what a confirmation names, and what a change of mode restates.
@@ -79,7 +86,8 @@ public struct ProjectCriterion: Codable, Equatable, Sendable, Identifiable {
                 verificationMethod: String? = nil, revision: Int? = nil,
                 satisfiedBy: CriterionSatisfiedBy = .tasks,
                 confirmation: CriterionConfirmationStanding? = nil,
-                completionCriterionOverrideReason: String? = nil, movedFrom: CriterionMovedFrom? = nil) {
+                completionCriterionOverrideReason: String? = nil, movedFrom: CriterionMovedFrom? = nil,
+                landingReason: CriterionLandingReason? = nil, landingReasonRead: Bool = false) {
         self.id = id
         self.key = key
         self.ordinal = ordinal
@@ -87,6 +95,8 @@ public struct ProjectCriterion: Codable, Equatable, Sendable, Identifiable {
         self.satisfied = satisfied
         self.unmet = unmet
         self.landing = landing
+        self.landingReason = landingReason
+        self.landingReasonRead = landingReasonRead || landingReason != nil
         self.verificationMethod = verificationMethod
         self.revision = revision
         self.satisfiedBy = satisfiedBy
@@ -104,6 +114,14 @@ public struct ProjectCriterion: Codable, Equatable, Sendable, Identifiable {
         satisfied = try c.decodeIfPresent(Bool.self, forKey: .satisfied)
         unmet = try c.decodeIfPresent([ProjectCriterionUnmet].self, forKey: .unmet) ?? []
         landing = try c.decodeIfPresent(String.self, forKey: .landing)
+        // A value this client does not know is no reason it can say; the row keeps `landing`.
+        if c.contains(.landingReason), let reason = try? c.decode(CriterionLandingReason?.self, forKey: .landingReason) {
+            landingReason = reason
+            landingReasonRead = true
+        } else {
+            landingReason = nil
+            landingReasonRead = false
+        }
         verificationMethod = try c.decodeIfPresent(String.self, forKey: .verificationMethod)
         revision = try? c.decodeIfPresent(Int.self, forKey: .revision)
         satisfiedBy = (try? c.decodeIfPresent(CriterionSatisfiedBy.self, forKey: .satisfiedBy)) ?? .tasks
@@ -111,6 +129,28 @@ public struct ProjectCriterion: Codable, Equatable, Sendable, Identifiable {
         completionCriterionOverrideReason = try? c.decodeIfPresent(String.self,
                                                                    forKey: .completionCriterionOverrideReason)
         movedFrom = try? c.decodeIfPresent(CriterionMovedFrom.self, forKey: .movedFrom)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, key, ordinal, text, satisfied, unmet, landing, landingReason, verificationMethod, revision,
+             satisfiedBy, confirmation, completionCriterionOverrideReason, movedFrom
+    }
+
+    /// Each criterion with its `landingReason` from the done read, matched by id — the items do not
+    /// carry it. A non-code project's reasons are all null by design (it reads no landing), so it
+    /// keeps the rows it always drew. Web's `withLandingReasons`.
+    public static func withLandingReasons(_ criteria: [ProjectCriterion],
+                                          derivedDone: ProjectDerivedDone?) -> [ProjectCriterion] {
+        guard let derivedDone, !derivedDone.nonCode, !derivedDone.criteria.isEmpty else { return criteria }
+        let byId = Dictionary(derivedDone.criteria.map { ($0.definitionId, $0.landingReason) },
+                              uniquingKeysWith: { first, _ in first })
+        return criteria.map { criterion in
+            guard let reason = byId[criterion.id] else { return criterion }
+            var joined = criterion
+            joined.landingReason = reason
+            joined.landingReasonRead = true
+            return joined
+        }
     }
 
     /// The criterion as the done cards name it.
@@ -254,7 +294,8 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         self.coordinatorSessionId = coordinatorSessionId
         self.coordinatorWorkspaceId = coordinatorWorkspaceId
         self.taskCount = taskCount
-        self.acceptanceCriteriaItems = acceptanceCriteriaItems
+        self.acceptanceCriteriaItems = ProjectCriterion.withLandingReasons(acceptanceCriteriaItems,
+                                                                          derivedDone: derivedDone)
         self.integration = integration
         self.tasksByStatus = tasksByStatus
         self.blockers = blockers
@@ -295,8 +336,10 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         coordinatorSessionId = try c.decodeIfPresent(String.self, forKey: .coordinatorSessionId)
         coordinatorWorkspaceId = try? c.decodeIfPresent(String.self, forKey: .coordinatorWorkspaceId)
         taskCount = try c.decodeIfPresent(Counts.self, forKey: .counts)?.tasks ?? 0
-        acceptanceCriteriaItems = try c.decodeIfPresent([ProjectCriterion].self,
-                                                        forKey: .acceptanceCriteriaItems) ?? []
+        let derivedDone = try? c.decodeIfPresent(ProjectDerivedDone.self, forKey: .derivedDone)
+        acceptanceCriteriaItems = ProjectCriterion.withLandingReasons(
+            try c.decodeIfPresent([ProjectCriterion].self, forKey: .acceptanceCriteriaItems) ?? [],
+            derivedDone: derivedDone)
         integration = try c.decodeIfPresent(ProjectIntegrationSettings.self, forKey: .integration)
         tasksByStatus = try? c.decodeIfPresent([String: Int].self, forKey: .tasksByStatus)
         blockers = try? c.decodeIfPresent(ProjectBlockers.self, forKey: .blockers)
@@ -304,7 +347,7 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt)
         pausedAt = try c.decodeIfPresent(String.self, forKey: .pausedAt)
         maxConcurrentTasks = try? c.decodeIfPresent(Int.self, forKey: .maxConcurrentTasks)
-        derivedDone = try? c.decodeIfPresent(ProjectDerivedDone.self, forKey: .derivedDone)
+        self.derivedDone = derivedDone
         doneBy = try? c.decodeIfPresent(ProjectDoneBy.self, forKey: .doneBy)
         doneAt = try? c.decodeIfPresent(String.self, forKey: .doneAt)
         acceptedGaps = ((try? c.decodeIfPresent([AcceptedGap].self, forKey: .acceptedGaps)) ?? nil) ?? []
@@ -1282,13 +1325,20 @@ public struct ProjectTaskRow: Codable, Equatable, Sendable, Identifiable {
     public let integration: ProjectTaskIntegration?
     /// Finished prerequisites not yet landed on the project's integration line.
     public let landingWaitCount: Int?
+    /// Why a RUNNING row runs (`TURN`, `BACKGROUND_JOB`, `WAITING`), and whether its background jobs
+    /// have said nothing for ten minutes.
+    public let runReason: String?
+    public let runStalled: Bool?
 
     public init(id: String, title: String, status: String = "OPEN", parentTaskId: String? = nil,
                 childCount: Int = 0, unmetCount: Int = 0, blocksCount: Int = 0, topoLevel: Int = 0,
                 dependencyState: String? = "READY", workState: String? = nil,
                 completionPolicy: String? = nil, verifiesTaskId: String? = nil,
                 verificationState: String? = nil, autoRunWhenReady: Bool? = nil,
-                integration: ProjectTaskIntegration? = nil, landingWaitCount: Int? = nil) {
+                integration: ProjectTaskIntegration? = nil, landingWaitCount: Int? = nil,
+                runReason: String? = nil, runStalled: Bool? = nil) {
+        self.runReason = runReason
+        self.runStalled = runStalled
         self.id = id
         self.title = title
         self.status = status
@@ -1325,6 +1375,8 @@ public struct ProjectTaskRow: Codable, Equatable, Sendable, Identifiable {
         autoRunWhenReady = try c.decodeIfPresent(Bool.self, forKey: .autoRunWhenReady)
         integration = try? c.decodeIfPresent(ProjectTaskIntegration.self, forKey: .integration)
         landingWaitCount = try c.decodeIfPresent(Int.self, forKey: .landingWaitCount)
+        runReason = try? c.decodeIfPresent(String.self, forKey: .runReason)
+        runStalled = try? c.decodeIfPresent(Bool.self, forKey: .runStalled)
     }
 }
 

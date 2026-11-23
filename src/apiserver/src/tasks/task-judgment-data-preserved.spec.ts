@@ -3324,16 +3324,17 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1433 seeds model_identity with production's model ids, INSERT ... ON CONFLICT (rule_key) DO NOTHING into that
       // new table only; no preserved relation, trigger, function or DONE fence is touched.
       '1433_model_identity_seed',
-      // 1434 is one UPDATE of runner.repos_root for managed runners still under /var/lib/orbit/home; runner is not a
-      // preserved relation, it creates, alters or drops nothing, and no trigger, function or DONE fence changes.
+      // 1434 rewrites runner.repos_root from /var/lib/orbit/home to /home/orbit for managed runners only (6a7106f95b): an
+      // UPDATE of runner rows, none of the preserved relations, and no trigger, function or DONE fence changes.
       '1434_managed_runner_repos_root_home_orbit',
       // 1437 (renumbered from 1317 to sit after main's migrations) adds two nullable columns on session,
       // actual_permission_mode and actual_permission_mode_at, and a new append-only table session_permission_mode_change
       // (cascades with its session); no row is written, and no preserved relation, trigger, function or DONE fence changes.
       '1437_session_actual_permission_mode',
-      // 1447 adds a session_run_source value, two nullable session columns (change_schedule_id with a foreign key to
-      // schedule, schedule_change_opening) and asked_text on schedule_revision and schedule_change_request; no row is
-      // written, and no preserved relation, trigger, function or DONE fence changes.
+      // 1447 adds SCHEDULE_CHANGE to session_run_source, two nullable session columns (change_schedule_id, with its
+      // foreign key to schedule ON DELETE SET NULL and a partial index, and schedule_change_opening), and a nullable
+      // asked_text to schedule_revision and schedule_change_request; no row is written, and none of the preserved
+      // relations, their triggers, functions or the DONE fence changes.
       '1447_schedule_change_conversation',
       // 1462 adds one nullable column, login_browser, to runner; no row is written, and no preserved relation,
       // trigger, function or DONE fence changes.
