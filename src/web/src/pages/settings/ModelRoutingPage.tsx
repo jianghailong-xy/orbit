@@ -47,7 +47,11 @@ export const ROUTING_HINTS = {
   },
   optimizeFor: {
     short: S.optimizeFor.description,
-    full: 'Cost spends subscriptions before metered keys. Balance spends the quota that expires first, then the most room. Intelligence puts the strongest model first.',
+    full:
+      'SubAgents pick a model, then the account that runs it. Cost: whichever quota expires first, on any model of the tier, subscriptions before metered keys. ' +
+      'Balance: your preferred model, on its account whose quota expires first; another model of the tier takes over when every account of it is near its limit, ' +
+      "or when another's weekly quota is about to reset unused. Intelligence: the strongest model, kept while any of its accounts can run. " +
+      'Task runs still rank every account by quota.',
   },
 } as const;
 
