@@ -39,7 +39,7 @@ import {
 } from '../../lib/help/stillStuck';
 import { useVisibleHelpErrors } from '../../lib/help/useVisibleHelpErrors';
 import { sessionQuery } from '../../lib/queries';
-import { isSessionLive, isSessionTerminal, sessionRunStatusOf } from '../../lib/sessionState';
+import { isSessionLive, isSessionQueued, isSessionTerminal, sessionRunStatusOf } from '../../lib/sessionState';
 import { useSessionStream } from '../../lib/useSessionStream';
 import { useToast } from '../../lib/toast';
 import { claudeModelName } from '../../lib/workspaceDefaults';
@@ -388,7 +388,7 @@ export function AskConversation({
   const meta = [machine, [engine, row?.model ? claudeModelName(row.model) : null].filter(Boolean).join(' · '), typeof row?.costUsd === 'number' ? `$${row.costUsd.toFixed(2)}` : null]
     .filter(Boolean)
     .join(' · ');
-  const working = !stream.idle || sessionRunStatusOf((row ?? {}) as never) === 'PENDING';
+  const working = !stream.idle || isSessionQueued((row ?? {}) as never);
   // Down to the newest words, and once more when the answer ends and "Did this answer it?" appears under it.
   useEffect(() => {
     bottom.current?.scrollIntoView?.({ block: 'end' });

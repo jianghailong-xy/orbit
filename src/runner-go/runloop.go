@@ -2077,6 +2077,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			beatTaken = true
 			// Whether the control plane takes a claim scoped to named sessions (drainClaimScope).
 			drainScopedClaims.Store(resp.DrainScopedClaims)
+			// Whether this runner reports a failed turn and the release separately (session_release.go): this answer's word.
+			t.noteSessionReleaseOffer(resp)
 			// Idle sleep: accept the manager's request while there is still nothing to do here, and stop
 			// once the control plane confirms that acceptance — never on the request alone, which the
 			// manager may still withdraw. A process already draining for another reason accepts nothing.

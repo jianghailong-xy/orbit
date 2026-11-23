@@ -60,6 +60,11 @@ internal object CursorRuntime {
      * session in Accept Edits (web `fallbackPermissionMode`). */
     fun fallbackMode(engine: String) = if (engine == ENGINE) DEFAULT_PERMISSION_MODE else "default"
 
+    /** The mode a session that stores none runs in when the account names no default: Auto, the server's floor (apiserver
+     * common/permission-mode.ts), except on Cursor CLI, which the server starts in Accept Edits. Not [fallbackMode], which is
+     * where a mode the engine refuses goes. */
+    fun unsetMode(engine: String?) = if (engine == ENGINE) DEFAULT_PERMISSION_MODE else "auto"
+
     // A runner
 
     /** Why a runner can't start Cursor CLI, most fundamental first, or [READY] — with the words a picker row or a machine's row says. */

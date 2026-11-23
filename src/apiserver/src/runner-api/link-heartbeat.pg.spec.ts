@@ -257,7 +257,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
       { ...quiet.answer, linkHints: undefined },
       {
         // A runner created without a Keep Free has the column's default: 10 GB since 0990_runner_keep_free_default.
-        // Likewise its Extra sessions on demand: 2, burst_concurrent's default since 1465_session_run_now_over_capacity.
+        // And burst_concurrent's default, 2 (1465_session_run_now_over_capacity): a Run now's room over the limit.
         cancelSessionIds: [], leaseLostSessionIds: [], maxConcurrent: 1, burstConcurrent: 2, minFreeDiskMb: 10240,
         mergeRequests: [], commitRequests: [], artifactRequests: [], linkHints: undefined,
       },

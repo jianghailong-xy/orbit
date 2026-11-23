@@ -11,6 +11,8 @@ import {
 } from '../lib/runnerCopy';
 import {
   buildName,
+  dropPendingUpdate,
+  pendingUpdateAt,
   pendingUpdateTurns,
   managedBusyOf,
   managedUpdateCard,
@@ -22,7 +24,7 @@ import {
   settlePendingUpdate,
   type ManagedBusy,
 } from '../lib/managedRunnerUpdate';
-import type { ManagedRunner } from '../lib/managedRunner';
+import { managedRunnerStatusQuery, type ManagedRunner } from '../lib/managedRunner';
 import { useToast } from '../lib/toast';
 import { Button } from './ui/Button';
 import { useConfirm } from './ui/ConfirmDialog';
@@ -64,23 +66,33 @@ export function ManagedUpdateCard({ managed, machine, runnerId, idle, onChange }
   const [, bump] = useState(0);
   const { status } = managed;
   const interrupted = pendingUpdateTurns(runnerId);
-  const pending = interrupted !== null;
+  const notedAt = pendingUpdateAt(runnerId);
+  // Only a status read after the note says anything about it: a render with the one shown before the press does not.
+  const readAt = qc.getQueryState(managedRunnerStatusQuery().queryKey)?.dataUpdatedAt ?? 0;
+  const pending = notedAt !== null && readAt > notedAt;
 
-  // The runner is back on the current build: the Update Now we were waiting for is done.
+  // The server no longer says the Update Now we noted is in progress. Back on the current build, it is done; with a
+  // build still to move to, it ended unwatched before a newer one came out, or never took, and its note goes.
   useEffect(() => {
-    if (pending && status.managementState === 'READY' && status.usable && !status.update && settlePendingUpdate(runnerId)) {
-      bump((n) => n + 1);
+    if (!pending || status.managementState !== 'READY' || !status.usable || status.update?.phase === 'updating') return;
+    if (!status.update) {
+      if (!settlePendingUpdate(runnerId)) return;
       onChange?.();
+    } else {
+      dropPendingUpdate(runnerId);
     }
+    bump((n) => n + 1);
   }, [pending, status, runnerId, onChange]);
 
   const outcome = readUpdateOutcome(runnerId);
-  const card = managedUpdateCard(status, pending, outcome, Date.now(), interrupted ?? 0);
+  const card = managedUpdateCard(status, outcome, Date.now(), interrupted ?? 0);
   if (!card) return null;
 
   const run = async (to: ManagedRunnerBuild, interruptTurns: boolean, turns: number) => {
-    await managedUpdateNow(interruptTurns);
-    notePendingUpdate(runnerId, turns, to);
+    const answered = await managedUpdateNow(interruptTurns);
+    // The server's answer is the status from now on, so the card reads what it accepted, not what was shown before.
+    qc.setQueryData(managedRunnerStatusQuery().queryKey, answered);
+    if (answered.update?.phase === 'updating') notePendingUpdate(runnerId, turns, to);
     bump((n) => n + 1);
     void qc.invalidateQueries({ queryKey: ['managed-runner'] });
     void qc.invalidateQueries({ queryKey: ['runners'] });

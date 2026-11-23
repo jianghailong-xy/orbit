@@ -1,14 +1,20 @@
 # syntax=docker/dockerfile:1.7.1@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 # Optional image only. Build from the repository root with an explicit source SHA.
+# ORBIT_RELEASE_VERSION, the release tag without its "v" (0.1.261-beta.83), is what a release's image is built with
+# (deploy/two-stage/publish-managed-runner.sh, from the tag's commit): its runner reports that version, as every other
+# runner of the release does. Without it, as a single host builds orbit-managed-runner:local from its checkout, the
+# runner reports managed-<source sha>.
 FROM golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5 AS orbit-build
 ARG ORBIT_SOURCE_SHA
+ARG ORBIT_RELEASE_VERSION=
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local
 WORKDIR /src/runner-go
 COPY src/runner-go/ ./
 RUN test "$(go env GOVERSION)" = go1.27.1 \
  && printf '%s\n' "$ORBIT_SOURCE_SHA" | grep -Eq '^[0-9a-f]{40}$' \
+ && { [ -z "$ORBIT_RELEASE_VERSION" ] || printf '%s\n' "$ORBIT_RELEASE_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; } \
  && go build -buildvcs=false -trimpath \
-      -ldflags="-s -w -X main.sourceSHA=$ORBIT_SOURCE_SHA -X main.version=managed-$ORBIT_SOURCE_SHA" \
+      -ldflags="-s -w -X main.sourceSHA=$ORBIT_SOURCE_SHA -X main.version=${ORBIT_RELEASE_VERSION:-managed-$ORBIT_SOURCE_SHA}" \
       -o /out/orbit .
 
 FROM node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1 AS codex
@@ -175,8 +181,11 @@ RUN install -d -o root -g root -m 0755 /var/lib/orbit && ln -s /home/orbit /var/
 COPY --from=orbit-build --chmod=0755 /out/orbit /usr/local/bin/orbit
 COPY --chmod=0755 deploy/managed-runner/image/entrypoint.py /usr/local/bin/orbit-container
 ARG ORBIT_SOURCE_SHA
+ARG ORBIT_RELEASE_VERSION=
+# The version label is empty on an image built without a release version, which the Docker channel reports as none.
 LABEL org.opencontainers.image.title="Orbit optional managed runner" \
-      org.opencontainers.image.revision="$ORBIT_SOURCE_SHA"
+      org.opencontainers.image.revision="$ORBIT_SOURCE_SHA" \
+      org.opencontainers.image.version="$ORBIT_RELEASE_VERSION"
 # Record actual build-time versions without a login, registration or model call.
 RUN <<'SH'
 set -eu
@@ -249,6 +258,9 @@ for tool, expected in expected_versions.items():
 orbit = json.loads(version('orbit', 'capabilities', '--json'))
 if orbit['sourceSha'] != os.environ['ORBIT_SOURCE_SHA']:
     raise SystemExit('Orbit source SHA did not reach the binary')
+expected_cli = os.environ.get('ORBIT_RELEASE_VERSION') or 'managed-' + os.environ['ORBIT_SOURCE_SHA']
+if orbit['cliVersion'] != expected_cli:
+    raise SystemExit(f"Orbit version: expected {expected_cli}, got {orbit['cliVersion']}")
 # The runner's autoInitGit baseline (src/runner-go/worktree.go initGitRepo) with no identity
 # configured anywhere but the image, then a repository identity, which must win over it.
 repo = Path('/tmp/orbit-version-check/identity')

@@ -609,9 +609,14 @@ test('(s) no compose service, daemon or replacement acceptance executor is intro
   // nats is the runner link's message bus, which the runner link project added on 2026-10-25 beside link-gateway,
   // under the same Compose profile (docs/runner-link-design.md §6.3; project 34bc0CsOzPh9KshG7H3DW, task B1), not
   // this removal; test/compose-topology.test.mjs (p) pins it.
+  // prometheus, node-exporter, pg-monitor-role, postgres-exporter, grafana, loki and alloy, and the volumes
+  // prometheus-data, pg-monitor-secret, grafana-data, loki-data and alloy-data, are the monitoring profile the account
+  // owner decided on 2026-11-20 (project 350mFkGGRDovIfipePH2O), not this removal; test/compose-topology.test.mjs (t)
+  // pins them.
   assert.deepEqual(services,
     ['postgres', 'pgbackup', 'apiserver', 'wiki-worker', 'web', 'gateway', 'docker-channel', 'managed-runner-firewall',
-      'link-gateway', 'nats']);
+      'link-gateway', 'nats', 'prometheus', 'node-exporter', 'pg-monitor-role', 'postgres-exporter', 'grafana', 'loki',
+      'alloy']);
   for (const word of ['admission', 'acceptance', 'dead-man', 'watchdog', 'coordinator']) {
     assert.equal(compose.toLowerCase().includes(word), false,
       `docker-compose.yml names ${word}: this removal adds no service`);

@@ -62,7 +62,7 @@ import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 import '../test-support/dequeue-under-lease';
-import { settleDeliveredIdentityAfterFinish } from './project-integration-job';
+import { landingFixWorkSession, settleDeliveredIdentityAfterFinish } from './project-integration-job';
 
 /**
  * Exception items (docs/project-integration-line-contract.md §4): a task FAILED from any door opens
@@ -614,8 +614,9 @@ async function claimedLanding(
   stack: Stack,
   w: World,
   label: string,
+  options: { personEndsWorkSession?: boolean } = {},
 ): Promise<{ task: Attempt; job: IntegrationJobCommand }> {
-  const a = await queuedLanding(stack, w, label);
+  const a = await queuedLanding(stack, w, label, options);
   const claimed = await stack.jobs.dispatch({
     runnerId: w.runnerId,
     leaseOwner: `lease-${label}`,
@@ -631,12 +632,13 @@ async function queuedLanding(
   stack: Stack,
   w: World,
   label: string,
-  options: { fixesOpenItemId?: string } = {},
+  options: { fixesOpenItemId?: string; personEndsWorkSession?: boolean } = {},
 ): Promise<Attempt> {
+  const { personEndsWorkSession, ...attemptOptions } = options;
   const a = await attempt(stack, w, label, {
     acceptance: { command: 'exit 0', expectedExitCode: 0 },
     branch: `orbit/${label}`,
-    ...options,
+    ...attemptOptions,
   });
   await answerTurn(stack, w.runnerId, a.sessionId, a.turnId, 'the work is on the branch');
   await stack.api.turnComplete({ id: w.runnerId }, a.sessionId, {
@@ -645,6 +647,10 @@ async function queuedLanding(
   });
   const acceptance = await dequeue(stack, a.sessionId, w.runnerId);
   assert.equal(acceptance?.taskAcceptance, true, 'the acceptance command was queued for this task');
+  // W4 false on purpose (§12.3 condition 1), for the cases about the coordinator's and the owner's doors: a person
+  // ends the work session while its acceptance command runs, so it ends `ended`, not with its task's DONE
+  // (`task_done`), and is never handed the failure (as integration-retry.pg.spec.ts does).
+  if (personEndsWorkSession) await stack.sessions.end(w.ownerId, a.sessionId);
   await stack.api.turnComplete({ id: w.runnerId }, a.sessionId, {
     turnId: acceptance!.turnId,
     status: SharedRunStatus.SUCCEEDED,
@@ -653,6 +659,12 @@ async function queuedLanding(
     shellOutput: '',
   });
   assert.equal(await taskStatus(stack.db, a.taskId), TaskStatus.DONE, 'the acceptance command agreed');
+  if (personEndsWorkSession) {
+    assert.equal(
+      (await stack.db.session.findUniqueOrThrow({ where: { id: a.sessionId }, select: { endReason: true } })).endReason,
+      'ended', 'CONTROL: the work session is one a person ended, which W4 does not hand a failure',
+    );
+  }
 
   // The session that produced this branch has stopped moving: the runner commits a worktree when it
   // FINISHES the session (SR13), and a landing is not handed over before that (J-T1a,
@@ -670,6 +682,18 @@ async function queuedLanding(
     select: { inboxLeaseOwner: true },
   });
   if (await drainRequestedEnd(stack, w, a.sessionId, inboxLeaseOwner ?? undefined)) return a;
+  if (personEndsWorkSession) {
+    // The end a person asked of the running session queued its `end` turn; the runner drains it with its finalize,
+    // the finish door that answers that turn and settles the DONE's delivered identity.
+    await stack.api.finalize({ id: w.runnerId }, a.sessionId, {
+      status: SharedRunStatus.SUCCEEDED,
+      subtype: 'success',
+      numTurns: 2,
+      costUsd: 0,
+      ...(inboxLeaseOwner ? { leaseOwner: inboxLeaseOwner } : {}),
+    });
+    return a;
+  }
   await stack.db.$transaction(async (tx) => {
     // The finish settles the DONE's delivered identity in the transaction that writes it, as every
     // finish door does — and decides the route a DONE written while this work moved left to it
@@ -686,6 +710,33 @@ async function queuedLanding(
     await settleDeliveredIdentityAfterFinish(tx, finished);
   });
   return a;
+}
+
+/**
+ * The CONTROL an (a) case carries: W4 (§12.3) is false for this job, read through W4's own function from the rows
+ * as they stand, so the failure it is about to report opens the coordinator's item exactly as before revision 42.
+ */
+async function assertW4False(db: PrismaClient, jobId: string): Promise<void> {
+  const job = await db.projectIntegrationJob.findUniqueOrThrow({
+    where: { id: jobId },
+    select: { kind: true, sessionId: true, taskId: true, landingId: true, promotionId: true },
+  });
+  const candidate = job.promotionId
+    ? await db.projectPromotion.findUniqueOrThrow({
+      where: { id: job.promotionId }, select: { sourceKind: true, taskId: true },
+    })
+    : null;
+  for (const failureClass of ['CONFLICT', 'CHECK_FAILED'] as const) {
+    const handedTo = await db.$transaction((tx) => landingFixWorkSession(tx, {
+      jobKind: job.kind,
+      sessionId: job.sessionId,
+      taskId: job.kind === 'LAND_TASK' ? job.taskId : candidate?.taskId ?? null,
+      landingId: job.landingId,
+      failureClass,
+      candidateSourceKind: candidate?.sourceKind ?? null,
+    }));
+    assert.equal(handedTo, null, `CONTROL: W4 is false for job ${jobId}, so its ${failureClass} is the coordinator's`);
+  }
 }
 
 /** The result a runner posts for a job that did not land, over the route it posts it on. */
@@ -1212,7 +1263,9 @@ test('a merge conflict opens one item owned by the coordinator, and queues it on
     const stack = await connect();
     try {
       const w = await integratingWorld(stack, 'conflict', 'PARKED');
-      const { task, job } = await claimedLanding(stack, w, 'conflict');
+      // (a) The conflict is the coordinator's item, delivered to it: W4 false on purpose, a person ended the work session.
+      const { task, job } = await claimedLanding(stack, w, 'conflict', { personEndsWorkSession: true });
+      await assertW4False(stack.db, job.jobId);
       // The project settled the moment its one task's acceptance derived DONE — in the transaction
       // that queued this landing. Nobody is told or judged while the work is on its way (project
       // closing, D5): a judgment opened in that gap once filed a "merge into main" task for work
@@ -1274,7 +1327,9 @@ test('a check that failed on the combined tree opens one item owned by the coord
     const stack = await connect();
     try {
       const w = await integratingWorld(stack, 'check-failed', 'PARKED');
-      const { task, job } = await claimedLanding(stack, w, 'check-failed');
+      // (a) The red check is the coordinator's item, delivered to it: W4 false on purpose, a person ended the work session.
+      const { task, job } = await claimedLanding(stack, w, 'check-failed', { personEndsWorkSession: true });
+      await assertW4False(stack.db, job.jobId);
       assert.deepEqual(
         job.checks.map((check) => ({ name: check.name, command: check.command })),
         [{ name: 'TASK_ACCEPTANCE', command: 'exit 0' }],
@@ -1342,7 +1397,10 @@ test('every state the integration pipeline fails on opens exactly one item, and 
       for (const state of failing) {
         const label = `census-${state.toLowerCase().replace(/_/g, '-')}`;
         const w = await integratingWorld(stack, label, 'PARKED');
-        const { task, job } = await claimedLanding(stack, w, label);
+        // (a) The census is of the items the coordinator is told about: W4 false on purpose, a person ended the work
+        // session (ERROR is not a class W4 hands off in any case).
+        const { task, job } = await claimedLanding(stack, w, label, { personEndsWorkSession: true });
+        await assertW4False(stack.db, job.jobId);
         const answer = await reportFailure(stack, w, job, {
           state,
           phase: state === 'CONFLICT' ? 'REBASE' : 'CHECK',
@@ -1588,7 +1646,10 @@ test('a landing answers the conflict item an earlier generation of the same task
     const stack = await connect();
     try {
       const w = await integratingWorld(stack, 'landed-after-conflict', 'PARKED');
-      const { task, job } = await claimedLanding(stack, w, 'landed-after-conflict');
+      // (a) The conflict item is the coordinator's, left open while the task is reworked by hand: W4 false on purpose,
+      // a person ended the work session.
+      const { task, job } = await claimedLanding(stack, w, 'landed-after-conflict', { personEndsWorkSession: true });
+      await assertW4False(stack.db, job.jobId);
       await reportFailure(stack, w, job, {
         state: 'CONFLICT',
         phase: 'REBASE',
@@ -1632,7 +1693,10 @@ test('a MAIN_SYNC conflict holds the line\'s other landings, but not the next la
       // branch changed, and a branch that now contains both tips is how the conflict is resolved.
       // Before this, that landing waited on the item it was there to answer.
       const w = await integratingWorld(stack, 'main-sync-held', 'PARKED');
-      const { task, job } = await claimedLanding(stack, w, 'main-sync-held');
+      // (a) The MAIN_SYNC item is the coordinator's, which holds the line: W4 false on purpose, a person ended the work
+      // session.
+      const { task, job } = await claimedLanding(stack, w, 'main-sync-held', { personEndsWorkSession: true });
+      await assertW4False(stack.db, job.jobId);
       await reportFailure(stack, w, job, {
         state: 'CONFLICT',
         phase: 'MAIN_SYNC',
@@ -1710,7 +1774,10 @@ test('a task filed to fix the MAIN_SYNC conflict lands past it, and nothing else
       })).taskId;
 
       // Another item of the same project first: a REBASE conflict, which holds nothing.
-      const rebased = await claimedLanding(stack, w, 'main-sync-fix-rebase');
+      // (a) The conflicts here, the fix task's own included, are the coordinator's items, which it files and lands
+      // fixes for: W4 false on purpose, a person ended each work session.
+      const rebased = await claimedLanding(stack, w, 'main-sync-fix-rebase', { personEndsWorkSession: true });
+      await assertW4False(stack.db, rebased.job.jobId);
       await reportFailure(stack, w, rebased.job, {
         state: 'CONFLICT',
         phase: 'REBASE',
@@ -1721,7 +1788,8 @@ test('a task filed to fix the MAIN_SYNC conflict lands past it, and nothing else
       const otherItem = await onlyItemFor(stack.db, w, rebased.task.taskId, 'the rebase conflicted');
 
       // Then the absorb of the upstream conflicts.
-      const { task: conflicted, job } = await claimedLanding(stack, w, 'main-sync-fix-conflicted');
+      const { task: conflicted, job } = await claimedLanding(stack, w, 'main-sync-fix-conflicted', { personEndsWorkSession: true });
+      await assertW4False(stack.db, job.jobId);
       await reportFailure(stack, w, job, {
         state: 'CONFLICT',
         phase: 'MAIN_SYNC',
@@ -1742,7 +1810,9 @@ test('a task filed to fix the MAIN_SYNC conflict lands past it, and nothing else
       });
       const unrelated = await queuedLanding(stack, w, 'main-sync-fix-unrelated');
       const otherFix = await queuedLanding(stack, w, 'main-sync-fix-other-fix', { fixesOpenItemId: otherItem.id });
-      const fix = await queuedLanding(stack, w, 'main-sync-fix-fix', { fixesOpenItemId: item.id });
+      const fix = await queuedLanding(stack, w, 'main-sync-fix-fix', {
+        fixesOpenItemId: item.id, personEndsWorkSession: true,
+      });
 
       // What the readers say about each row, read before the claim and checked after it, so a claim
       // that holds the fix fails on the claim itself.
@@ -1756,6 +1826,7 @@ test('a task filed to fix the MAIN_SYNC conflict lands past it, and nothing else
         [fix.taskId],
         `the fix's landing is claimed, and only it — ${await jobsOf(stack.db, w.projectId)}`,
       );
+      await assertW4False(stack.db, first[0]!.jobId);
       assert.equal(views.get(unrelated.taskId)?.landTask?.blockingReason?.code, 'WAITING_MAIN_SYNC');
       assert.equal(views.get(otherFix.taskId)?.landTask?.blockingReason?.code, 'WAITING_MAIN_SYNC');
       assert.notEqual(views.get(fix.taskId)?.landTask?.blockingReason?.code, 'WAITING_MAIN_SYNC',
@@ -1848,7 +1919,10 @@ test('the message an integration item is delivered as carries what its payload k
     try {
       // A conflict: the file names are the one thing a reader acts on, and they live in the payload.
       const conflicted = await integratingWorld(stack, 'message-conflict', 'PARKED');
-      const first = await claimedLanding(stack, conflicted, 'message-conflict');
+      // (a) The message is the one the coordinator is delivered: W4 false on purpose, a person ended the work sessions
+      // of the conflict and the red check (ERROR is not a class W4 hands off).
+      const first = await claimedLanding(stack, conflicted, 'message-conflict', { personEndsWorkSession: true });
+      await assertW4False(stack.db, first.job.jobId);
       await reportFailure(stack, conflicted, first.job, {
         state: 'CONFLICT',
         phase: 'REBASE',
@@ -1869,7 +1943,8 @@ test('the message an integration item is delivered as carries what its payload k
 
       // A red check: which check disagreed, and what it returned.
       const checked = await integratingWorld(stack, 'message-check', 'PARKED');
-      const second = await claimedLanding(stack, checked, 'message-check');
+      const second = await claimedLanding(stack, checked, 'message-check', { personEndsWorkSession: true });
+      await assertW4False(stack.db, second.job.jobId);
       await reportFailure(stack, checked, second.job, {
         state: 'CHECK_FAILED',
         phase: 'CHECK',
@@ -2180,7 +2255,9 @@ test('items opened while the coordinator is down stay the coordinator\'s, and re
       const coordinator = w.coordinatorSessionId!;
       await knockDown(stack, w);
 
-      const { task, job } = await claimedLanding(stack, w, 'down');
+      // (a) The conflict waits for the coordinator that is down: W4 false on purpose, a person ended the work session.
+      const { task, job } = await claimedLanding(stack, w, 'down', { personEndsWorkSession: true });
+      await assertW4False(stack.db, job.jobId);
       await reportFailure(stack, w, job, {
         state: 'CONFLICT',
         phase: 'MERGE',
@@ -2451,7 +2528,10 @@ async function conflictedLanding(
   label: string,
 ): Promise<{ w: World; task: Attempt; item: ItemRow }> {
   const w = await integratingWorld(stack, label, 'PARKED');
-  const { task, job } = await claimedLanding(stack, w, label);
+  // The cases that use this are about the doors to the coordinator's item, so W4 is false on purpose: a person ended
+  // the work session.
+  const { task, job } = await claimedLanding(stack, w, label, { personEndsWorkSession: true });
+  await assertW4False(stack.db, job.jobId);
   await reportFailure(stack, w, job, {
     state: 'CONFLICT',
     phase: 'REBASE',
@@ -2476,6 +2556,7 @@ test('the coordinator closes a conflicting landing it handled, and the reason an
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
+      // (a) The doors to the coordinator's item: conflictedLanding makes W4 false on purpose.
       const { w, item } = await conflictedLanding(stack, 'handled');
       const note = '已在集成线上：这批工作是协调会话自己重放落地的（cherry-pick + ff），'
         + '集成线重放同一条分支才会与 main 上那份内容相撞，没有东西要再集成一次';
@@ -2514,6 +2595,7 @@ test('nobody but the assignee closes an item: a stranger session and the owner\'
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
+      // (a) The doors to the coordinator's item: conflictedLanding makes W4 false on purpose.
       const { w, task, item } = await conflictedLanding(stack, 'not-assignee');
       const other = await integratingWorld(stack, 'not-assignee-elsewhere', 'PARKED');
 
@@ -2557,6 +2639,7 @@ test('an item that has already ended keeps the ending it got, and cannot be rewr
     try {
       // Ended by a platform fact first — the task was cancelled, so nobody is going to land it
       // (§4.2) — and then pressed by the conversation that was carrying it.
+      // (a) The doors to the coordinator's item: conflictedLanding makes W4 false on purpose.
       const { w, task, item } = await conflictedLanding(stack, 'already-ended');
       await stack.tasks.update(w.ownerId, task.taskId, { status: DeclaredTaskStatus.CANCELLED });
       const ended = await itemNow(stack, w, item.id);
@@ -2640,6 +2723,7 @@ test('the coordinator withdraws its own question, and a question is not another 
 test('the reason is required: a press with no note writes nothing', { skip, timeout: 180_000 }, async () => {
   const stack = await connect();
   try {
+    // (a) The doors to the coordinator's item: conflictedLanding makes W4 false on purpose.
     const { w, item } = await conflictedLanding(stack, 'note-required');
     for (const note of ['', '   ', '\n\t ']) {
       const refused = await denied(() => door(stack)(w, item.id, {

@@ -810,6 +810,8 @@ test('a session row says when the message it previews is Orbit’s own', {
       data: {
         status: RunStatus.FAILED, retryAt: armedAt, retryAttempts: 0,
         cancelRequestedAt: new Date(), finishedAt: new Date(),
+        // The settled turn's FAILED, copied (removal step R2): what reads the session as failed since R7.
+        lastTurnOutcome: 'FAILED',
       },
     });
     // A resume refuses a runner that has not been heard from in 90s, and this file runs for minutes.

@@ -189,6 +189,20 @@ export class RunnersController {
     return this.runners.setDefaultAccount(user.userId, id, engine, account);
   }
 
+  // Dismissing a Set as default that failed, so its reason stops showing under the account. Orbit's own
+  // record, so the runner need not be online; owner-scoped in the service like the swap.
+  @PatForbidden('RUNNER_CONTROL')
+  @Delete(':id/accounts/:engine/:account/set-default')
+  dismissSetDefaultFailure(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('engine') engine: string,
+    @Param('account') account: string,
+  ) {
+    if (!isLoginEngine(engine)) throw new BadRequestException('Unknown engine');
+    return this.runners.dismissSetDefaultFailure(user.userId, id, engine, account);
+  }
+
   // Bringing back a Default the removal above took out of Orbit. Orbit's own record again, so the
   // runner need not be online; owner-scoped in the service like the removal.
   @PatForbidden('RUNNER_CONTROL')

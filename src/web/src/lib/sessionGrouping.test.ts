@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import fixture from '../../../../contracts/session-list-order.fixtures.json';
 import {
+  sessionNeedsOwner,
   sessionTagSections,
   sessionTimeSections,
   sessionsWithTag,
@@ -16,7 +18,7 @@ const at = (y: number, m: number, d: number, h = 12): string =>
 
 const session = (
   id: string,
-  o: { lastTurnAt?: string; createdAt?: string; pinnedAt?: string; tags?: SessionTagRef[] } = {},
+  o: { listedAt?: string; createdAt?: string; pinnedAt?: string; tags?: SessionTagRef[] } = {},
 ) => ({ id, ...o });
 
 const titles = (s: Parameters<typeof sessionTimeSections>[0]) =>
@@ -26,11 +28,11 @@ describe('sessionTimeSections', () => {
   it('buckets by calendar day', () => {
     const out = sessionTimeSections(
       [
-        session('today', { lastTurnAt: at(2026, 7, 8, 9) }),
-        session('yesterday', { lastTurnAt: at(2026, 7, 7, 23) }),
-        session('prev7', { lastTurnAt: at(2026, 7, 5) }), // 3 days
-        session('prev30', { lastTurnAt: at(2026, 6, 18) }), // 20 days
-        session('older', { lastTurnAt: at(2026, 5, 9) }), // 60 days
+        session('today', { listedAt: at(2026, 7, 8, 9) }),
+        session('yesterday', { listedAt: at(2026, 7, 7, 23) }),
+        session('prev7', { listedAt: at(2026, 7, 5) }), // 3 days
+        session('prev30', { listedAt: at(2026, 6, 18) }), // 20 days
+        session('older', { listedAt: at(2026, 5, 9) }), // 60 days
       ],
       { now: NOW },
     );
@@ -53,8 +55,8 @@ describe('sessionTimeSections', () => {
   it('lifts pinned sessions to a leading section regardless of date', () => {
     const out = sessionTimeSections(
       [
-        session('pin-old', { lastTurnAt: at(2026, 5, 1), pinnedAt: at(2026, 1, 1) }),
-        session('today', { lastTurnAt: at(2026, 7, 8, 9) }),
+        session('pin-old', { listedAt: at(2026, 5, 1), pinnedAt: at(2026, 1, 1) }),
+        session('today', { listedAt: at(2026, 7, 8, 9) }),
       ],
       { now: NOW },
     );
@@ -64,22 +66,22 @@ describe('sessionTimeSections', () => {
 
   it('buckets pinned by time when pinnedFirst is off', () => {
     // Completed/Trash: a stale pinnedAt must NOT spawn a "Pinned" section.
-    const s = [session('pin', { lastTurnAt: at(2026, 7, 8, 9), pinnedAt: at(2026, 1, 1) })];
+    const s = [session('pin', { listedAt: at(2026, 7, 8, 9), pinnedAt: at(2026, 1, 1) })];
     expect(sessionTimeSections(s, { pinnedFirst: false, now: NOW }).map((x) => x.title)).toEqual([
       'Today',
     ]);
   });
 
   it('drops empty buckets', () => {
-    expect(titles([session('a', { lastTurnAt: at(2026, 7, 8, 8) })])).toEqual(['Today']);
+    expect(titles([session('a', { listedAt: at(2026, 7, 8, 8) })])).toEqual(['Today']);
   });
 
   it('preserves order within a bucket', () => {
     // Input is already recency-sorted; the bucket must keep that order.
     const out = sessionTimeSections(
       [
-        session('newer', { lastTurnAt: at(2026, 7, 8, 11) }),
-        session('older', { lastTurnAt: at(2026, 7, 8, 7) }),
+        session('newer', { listedAt: at(2026, 7, 8, 11) }),
+        session('older', { listedAt: at(2026, 7, 8, 7) }),
       ],
       { now: NOW },
     );
@@ -89,19 +91,19 @@ describe('sessionTimeSections', () => {
   it('falls back to createdAt, then to Older', () => {
     expect(titles([session('queued', { createdAt: at(2026, 7, 8, 6) })])).toEqual(['Today']);
     expect(titles([session('ghost')])).toEqual(['Older']);
-    expect(titles([session('bad', { lastTurnAt: 'not-a-date' })])).toEqual(['Older']);
+    expect(titles([session('bad', { listedAt: 'not-a-date' })])).toEqual(['Older']);
   });
 
   it('puts a future timestamp in Today', () => {
-    expect(titles([session('skew', { lastTurnAt: at(2026, 7, 20) })])).toEqual(['Today']);
+    expect(titles([session('skew', { listedAt: at(2026, 7, 20) })])).toEqual(['Today']);
   });
 
   it('splits on the 7- and 30-day boundaries', () => {
     expect(
       titles([
-        session('d7', { lastTurnAt: at(2026, 7, 1) }), // exactly 7 days → 2–7 days ago
-        session('d8', { lastTurnAt: at(2026, 6, 30) }), // 8 days → 8–30 days ago
-        session('d31', { lastTurnAt: at(2026, 6, 7) }), // 31 days → Older
+        session('d7', { listedAt: at(2026, 7, 1) }), // exactly 7 days → 2–7 days ago
+        session('d8', { listedAt: at(2026, 6, 30) }), // 8 days → 8–30 days ago
+        session('d31', { listedAt: at(2026, 6, 7) }), // 31 days → Older
       ]),
     ).toEqual(['2–7 days ago', '8–30 days ago', 'Older']);
   });
@@ -154,5 +156,51 @@ describe('sessionsWithTag', () => {
     ];
     expect(sessionsWithTag(s, 'b').map((x) => x.id)).toEqual(['m']);
     expect(sessionsWithTag(s, 'a').map((x) => x.id)).toEqual(['m', 'n']);
+  });
+});
+
+// The shared contract every client is tested against (contracts/session-list-order.fixtures.json).
+// The fixture is stated in UTC, so the day buckets are computed in UTC here.
+process.env.TZ = 'UTC';
+
+describe('session list order fixture', () => {
+  const open = fixture.sessions.filter((s) => !s.completedAt && !s.deletedAt);
+  const sections = (rows: typeof open) =>
+    sessionTimeSections(rows, { pinnedFirst: true, attention: true, now: new Date(fixture.now) });
+  const shape = (rows: typeof open) => sections(rows).map((s) => ({ section: s.title, ids: s.sessions.map((x) => x.id) }));
+
+  it('groups and orders the Open list as the fixture expects', () => {
+    expect(shape(open)).toEqual(fixture.expected);
+    expect(fixture.expected.map((e) => e.section)).toEqual(
+      fixture.sectionTitles.filter((t) => fixture.expected.some((e) => e.section === t)),
+    );
+  });
+
+  it('gives the same sections whatever order the rows arrive in', () => {
+    expect(shape([...open].reverse())).toEqual(fixture.expected);
+  });
+
+  it('derives needsOwner as the fixture states it', () => {
+    for (const s of open) expect(sessionNeedsOwner(s), s.id).toBe(s.needsOwner);
+  });
+
+  it('never moves a row for activity alone (lastTurnAt, status text, pending preview)', () => {
+    // Every row streams: lastTurnAt jumps to now, and a preview-only field changes. listedAt,
+    // pinnedAt, status and approvals — the things that mean something to the owner — stay put.
+    const busy = open.map((s, i) => ({
+      ...s,
+      lastTurnAt: new Date(Date.parse(fixture.now) + (i + 1) * 1000).toISOString(),
+      lastAssistantText: `streaming ${i}`,
+    }));
+    expect(shape(busy)).toEqual(fixture.expected);
+    const quiet = open.map((s) => ({ ...s, lastTurnAt: null }));
+    expect(shape(quiet)).toEqual(fixture.expected);
+  });
+
+  it('moves a row when its listedAt moves: a turn that ends on the owner lands in Needs you', () => {
+    const asked = open.map((s) => (s.id === 'work-ci' ? { ...s, pendingApprovals: 1, listedAt: fixture.now } : s));
+    const out = shape(asked);
+    expect(out.find((s) => s.section === 'Needs you')?.ids[0]).toBe('work-ci');
+    expect(out.find((s) => s.section === 'Working')?.ids).not.toContain('work-ci');
   });
 });

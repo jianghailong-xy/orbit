@@ -1421,6 +1421,11 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	lastClaimJob := job
 	respawns := 0
 	terminalAckSettled := false
+	// failedTurnHeld: a failed turn this run reported under the session-release protocol holds the session for this
+	// run's release, or may (session_release.go failedTurnHold). The run ends then by the release alone, with the
+	// failure's permanent commit; nothing else this supervisor does takes another turn.
+	failedTurnHeld := false
+	hold := holdNone
 	leaseResetGeneration := ""
 	retirePendingGeneration := func() error {
 		if leaseResetGeneration == "" {
@@ -1476,7 +1481,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			break
 		}
 		permitGeneration := pool.permitGeneration(live)
-		next, err := t.turnComplete(turnAckCtx, sessionID, kept)
+		next, declared, err := t.turnCompleteReporting(turnAckCtx, sessionID, kept)
 		completions.settle(kept.TurnID, unansweredAtStop(err))
 		if err != nil {
 			switch {
@@ -1498,11 +1503,16 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			leaseResetGeneration = ""
 			break
 		}
+		if heldByFailedTurn(declared, next) {
+			failedTurnHeld, hold = true, holdConfirmed
+			status = stFailed
+			break
+		}
 		if !retainsTurnPermit(next) {
 			pool.park(live, permitGeneration)
 		}
 	}
-	for !terminalAckSettled {
+	for !terminalAckSettled && !failedTurnHeld {
 		if sessionCtx.Err() != nil || shutdownCtx.Err() != nil {
 			break
 		}
@@ -1670,7 +1680,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				}
 			} else {
 				syncManagedVolume("a failed turn", execDir)
-				terminalAckStatus, terminalAckErr = t.turnComplete(turnAckCtx, sessionID, ack.request)
+				var declared bool
+				terminalAckStatus, declared, terminalAckErr = t.turnCompleteReporting(turnAckCtx, sessionID, ack.request)
 				completions.settle(ack.request.TurnID, unansweredAtStop(terminalAckErr))
 				if isLeaseOwnershipError(terminalAckErr) {
 					markOwnershipLost(terminalAckErr)
@@ -1684,10 +1695,23 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				// finalized as it always was, with the cancel's reason standing.
 				regionReport := ack.request.Subtype == claudeRegionRefusedSubtype || ack.request.Subtype == claudeRegionStoppedSubtype
 				regionHold := regionReport && (terminalAckStatus == stPending || terminalAckStatus == stAwaitingInput)
-				if terminalAckErr == nil && !terminalTurnCompleteStatus(terminalAckStatus) && !regionHold {
+				// Under the session-release protocol the failure is the turn's, and the session is held for the
+				// release this run sends once its engine and checkout are done with (session_release.go). Its
+				// inbox generation is released below, as after any engine that stopped.
+				if h := holdAfterReport(declared, terminalAckStatus, terminalAckErr); h != holdNone {
+					if h == holdUnknown {
+						logln("failed turn of", sessionID, "reported as its outcome, with no answer ("+terminalAckErr.Error()+"); the session may be held, so it ends by its release")
+					} else {
+						logln("failed turn of", sessionID, "reported as its outcome; the session is held for its release")
+					}
+					failedTurnHeld, hold = true, h
+					terminalAckErr = nil
+					status = stFailed
+					pendingTerminalAck.clear(ack.request.TurnID)
+				} else if terminalAckErr == nil && !terminalTurnCompleteStatus(terminalAckStatus) && !regionHold {
 					terminalAckErr = fmt.Errorf("failed-turn turn-complete returned non-terminal status %q", terminalAckStatus)
 				}
-				if terminalAckErr == nil {
+				if terminalAckErr == nil && !failedTurnHeld {
 					terminalAckSettled = true
 					status = terminalAckStatus
 					pendingTerminalAck.clear(ack.request.TurnID)
@@ -1736,7 +1760,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			}
 			break
 		}
-		if terminalAckSettled {
+		if terminalAckSettled || failedTurnHeld {
 			break
 		}
 		firstSpawn = false
@@ -1817,12 +1841,14 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		case <-time.After(time.Duration(respawns) * crashRespawnBackoff):
 		}
 	}
-	if ctx.Err() != nil && !terminalAckSettled {
+	// A held failed turn is not turned into a stop by the teardown cancel its own report asked for: its release reports
+	// the failure, and its commit is the permanent one (finalizeWorktreeReport).
+	if ctx.Err() != nil && !terminalAckSettled && !failedTurnHeld {
 		status = stCancelled
 	}
 	// Events the link gave up end the session as failed, with why (markEventsGivenUp), unless it was cancelled, settled
 	// or lost to another process first.
-	if givenUp := eventsGivenUp.Load(); givenUp != nil && ctx.Err() == nil && !terminalAckSettled && !ownershipLost.Load() {
+	if givenUp := eventsGivenUp.Load(); givenUp != nil && ctx.Err() == nil && !terminalAckSettled && !failedTurnHeld && !ownershipLost.Load() {
 		status = stFailed
 		finalizeSubtype = ""
 		lastErrMu.Lock()
@@ -1938,10 +1964,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	}
 	// The finalize commit and the engine's last writes are on the volume before the end is reported.
 	syncManagedVolume("the session's end", execDir)
-	err := retryIdempotentWhile(finalizeCtx, func(attemptCtx context.Context) error {
-		_, attemptErr := t.finalizeRun(attemptCtx, job.SessionID, finalizeRequest)
-		return attemptErr
-	}, isRetryableTransportError)
+	// The release under the session-release protocol, the finalize under the old one (session_release.go endRun).
+	protocol, err := endRun(finalizeCtx, t, job.SessionID, finalizeRequest, hold)
 	if isLeaseOwnershipError(err) {
 		markOwnershipLost(err)
 		logln(fmt.Sprintf("⏏ interactive run %s — detached before stale finalization", job.SessionID))
@@ -1950,7 +1974,11 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	if err != nil {
 		logln("run finalization failed for", job.SessionID+":", err)
 	} else {
-		logln(fmt.Sprintf("■ interactive run %s → %s", job.SessionID, status))
+		if protocol == "release" {
+			logln(fmt.Sprintf("■ interactive run %s → %s (released)", job.SessionID, status))
+		} else {
+			logln(fmt.Sprintf("■ interactive run %s → %s", job.SessionID, status))
+		}
 		// After the end is on the record and still inside the finalization fence, so no claim of this
 		// session can be setting its checkout up meanwhile. A finalize that failed keeps everything: the
 		// branch is then the only record of what the chat was on.
