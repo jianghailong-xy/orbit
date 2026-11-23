@@ -11914,10 +11914,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       where: { id: sessionId },
       select: {
         id: true, ownerId: true, taskId: true, status: true, startsTaskWork: true, runSource: true, failureKind: true,
-        error: true, accountHealthEffect: true, admissionFailure: true, retryAt: true, createdAt: true,
+        error: true, accountHealthEffect: true, admissionFailure: true, retryAt: true, createdAt: true, finishedAt: true,
       },
     });
-    if (!run) return null;
+    // Not until it is released: a failed turn's report can precede its release, and the run still holds the task until
+    // then. The release asks again.
+    if (!run?.finishedAt) return null;
     const kind = replacementOf(run);
     if (!kind || !run.taskId) return null;
     const taskId = run.taskId;
