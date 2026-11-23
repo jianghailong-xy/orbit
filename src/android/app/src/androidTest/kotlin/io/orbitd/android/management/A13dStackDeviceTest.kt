@@ -128,14 +128,14 @@ class A13dStackDeviceTest {
         // A13-14: the switch is written alone, and the server keeps what was written.
         val routingBefore = read("users/me").jsonObject["preferences"]?.jsonObject?.get("modelRouting")
         ok("smart model selection starts on on the server ($routingBefore)", routingBefore == null || routingBefore == JsonPrimitive(true))
-        // The switch is on Sessions' page (docs/mocks/ios-settings-order).
-        click(hasText("Sessions") and hasClickAction()); await("Route by tier")
+        // The switch is on Providers → Model routing, as the web has it.
+        click(hasText("Providers") and hasClickAction()); click(hasTestTag("model-routing")); await("Route by tier")
         click(hasText("Route by tier") and isToggleable())
         eventually("preferences.modelRouting is false") { read("users/me").jsonObject["preferences"]!!.jsonObject["modelRouting"] == JsonPrimitive(false) }
         click(hasText("Route by tier") and isToggleable())
         eventually("preferences.modelRouting is true again") { read("users/me").jsonObject["preferences"]!!.jsonObject["modelRouting"] == JsonPrimitive(true) }
         capture("stack-smart-selection-on")
-        back(); await("Appearance")
+        back(); back(); await("Appearance")
 
         // A13-7: the tokens the account issued on the web, and one revoked from here.
         val issued = keep("server-access-tokens-before", "access-tokens").jsonObject["tokens"]!!.objects()

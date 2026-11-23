@@ -47,7 +47,7 @@ import kotlinx.serialization.json.*
 
 /** Settings' own pages; "workspace" is the workspace list's gear, "profile" the header's edit card and "account" the Profile row's page;
  * "machines" and "providers" are the two halves of the Machines & models page, whose pool and key pages ("machines-and-models" with a
- * record) are one push further. */
+ * record) are one push further, as is Providers' Model routing ("model-routing"). */
 @Composable
 fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: (OrbitRoute) -> Unit, back: () -> Unit,
     logout: () -> Unit, changed: () -> Unit, workspaceDeleted: () -> Unit, deviceAlerts: () -> Boolean?,
@@ -68,6 +68,7 @@ private fun SettingsPages(api: ManagementApi, route: OrbitRoute, revision: Long,
         "machines-and-models" -> MachinesAndModelsSettings(api, revision, route.recordId, open, back)
         "machines" -> MachinesAndModelsPage(api, revision, open, MachinesAndModelsPart.MACHINES)
         "providers" -> MachinesAndModelsPage(api, revision, open, MachinesAndModelsPart.PROVIDERS)
+        "model-routing" -> ModelRoutingPage(api, revision)
         "sessions" -> SessionSettingsPage(api, revision)
         "workspace" -> WorkspaceSettings(api, route.workspaceId, revision, back, workspaceDeleted, changed)
         "sharing" -> SharingSettings(api, revision, open)
@@ -101,7 +102,7 @@ fun settingsTitle(page: String?, record: String? = null): String = when (page) {
         record != null -> poolTitle(record.substringAfter(':'))
         else -> null
     } ?: MachinesAndModels.TITLE
-    "machines" -> MachinesAndModels.MACHINES; "providers" -> SETTINGS_PROVIDERS
+    "machines" -> MachinesAndModels.MACHINES; "providers" -> SETTINGS_PROVIDERS; "model-routing" -> ModelRouting.TITLE
     "sessions" -> GENERAL; "workspace" -> "Workspace settings"; "sharing" -> "Shared links"; "access-tokens" -> AccessTokens.TITLE
     "terminals" -> Terminals.TITLE; "github" -> GithubCopy.TITLE; "admin" -> "Admin"; "notifications" -> "Notifications"; "about" -> "About"; else -> "Settings"
 }
@@ -135,8 +136,8 @@ internal const val SESSION_ORCHESTRATION_HINT = "Sessions in every workspace can
 internal const val SUGGESTED_REPLIES = "Suggested replies"
 internal const val SUGGESTED_REPLIES_HINT = "When a Claude turn ends, the empty message box offers what you'd probably type next. Each suggestion is one more request on that session's Claude account."
 
-/** SettingsCopy's smart model selection switch: its name doesn't say what it does, so the web's hint is its footer on the Sessions
- * page. */
+/** The smart model selection switch, on Providers › Model routing as the web's ModelRoutingPage has it: its name doesn't say what it
+ * does, so the web's hint is under it. */
 internal const val SMART_MODEL_SELECTION = "Route by tier"
 internal const val SMART_MODEL_SELECTION_HINT = "Coordinators suggest a tier for each task, and a SubAgent's size sets its own. Task runs and SubAgents run on a model of that tier from your providers. Off: tasks keep their Agent's model and SubAgents their parent session's."
 
@@ -144,7 +145,7 @@ internal const val SMART_MODEL_SELECTION_HINT = "Coordinators suggest a tier for
 internal fun smartModelSelection(preferences: JsonObject?): Boolean =
     (preferences?.get("modelRouting") as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull != false
 
-/** SettingsCopy's Optimize For row, directly below Smart model selection (board docs/mocks/routing-mode-account/01-account-wide-optimize-for.png):
+/** The Optimize For row, directly below Route by tier on Model routing (board docs/mocks/routing-mode-account/01-account-wide-optimize-for.png):
  * the account-wide preference `preferences.optimizeFor`, one segmented control for every Agent at once. */
 internal const val OPTIMIZE_FOR = "Optimize For"
 internal const val OPTIMIZE_FOR_DETAIL = "What to favour when a model is picked at a tier."
@@ -169,7 +170,7 @@ internal const val SETTINGS_SIGN_OUT_TITLE = "Sign out?"
 /** One preference key written alone, as Settings and its Sessions page write theirs. What the server then has, read back after the
  * write, is what the whole app follows: the theme, smart model selection and session recaps each have a page-wide answer. */
 @Composable
-private fun rememberPreferenceWrite(api: ManagementApi, record: PersonalRecord): (String, JsonPrimitive) -> Unit {
+internal fun rememberPreferenceWrite(api: ManagementApi, record: PersonalRecord): (String, JsonPrimitive) -> Unit {
     val appearance = LocalAppearanceChanged.current
     val smartSelectionChanged = LocalSmartSelectionChanged.current
     val recapsChanged = LocalSessionRecapsChanged.current
@@ -334,9 +335,8 @@ private fun ProfileSettingsPage(api: ManagementApi, revision: Long, open: (Orbit
 }
 
 /** iOS's General page (SessionSettings): the account's session settings, in iOS's order, each in a group of its own with the
- * web's hint as its footer (docs/mocks/ios-settings-order, 2A), and the account-wide Optimize For below Smart model selection
- * (docs/mocks/routing-mode-account/01-account-wide-optimize-for.png). Each is written alone the moment it moves; absent on the
- * server means on. */
+ * web's hint as its footer (docs/mocks/ios-settings-order, 2A). Route by tier and Optimize For are on Providers › Model routing, as
+ * the web has them. Each is written alone the moment it moves; absent on the server means on. */
 @Composable
 private fun SessionSettingsPage(api: ManagementApi, revision: Long) {
     val record = remember(api) { PersonalRecord { api.get("users/me") } }
@@ -358,29 +358,6 @@ private fun SessionSettingsPage(api: ManagementApi, revision: Long) {
         SettingsGroup(null, footer = SESSION_ORCHESTRATION_HINT) {
             SettingsSwitch("Session orchestration", on("enableOrchestration"), record.ready, Modifier.settingRow("enableOrchestration")) { preference("enableOrchestration", JsonPrimitive(it)) }
             SettingChangedLine("enableOrchestration", user, preference)
-        }
-        // On unless the account turned it off; written alone (iOS 9fb3ae6ee).
-        SettingsGroup(null, footer = SMART_MODEL_SELECTION_HINT) {
-            SettingsSwitch(SMART_MODEL_SELECTION, smartModelSelection(preferences), record.ready, Modifier.settingRow("modelRouting")) { preference("modelRouting", JsonPrimitive(it)) }
-            SettingChangedLine("modelRouting", user, preference)
-        }
-        // Account-wide, one answer for every Agent (docs/mocks/routing-mode-account/01-account-wide-optimize-for.png): absent reads
-        // as Balance, and a segment writes the preference alone the moment it moves, as the switch above does. Only smart model
-        // selection reads it, so it shows only while that is on (owner, 2026-11-20); the saved value is kept while it is off.
-        if (smartModelSelection(preferences)) SettingsGroup(null) {
-            ListItem(headlineContent = { Text(OPTIMIZE_FOR) }, colors = settingsRowColors(), modifier = Modifier.settingRow("optimizeFor"),
-                supportingContent = { Text(OPTIMIZE_FOR_DETAIL) })
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) {
-                OPTIMIZE_FOR_VALUES.forEachIndexed { index, value ->
-                    SegmentedButton(selected = optimizeFor(preferences) == value, onClick = { preference("optimizeFor", JsonPrimitive(value)) },
-                        enabled = record.ready, shape = SegmentedButtonDefaults.itemShape(index, OPTIMIZE_FOR_VALUES.size), icon = {},
-                        // M3's 12dp a side clips "Intelligence" on a 393dp phone.
-                        contentPadding = PaddingValues(horizontal = 4.dp)) {
-                        Text(value.replaceFirstChar { it.uppercase() }, maxLines = 1)
-                    }
-                }
-            }
-            SettingChangedLine("optimizeFor", user, preference)
         }
         // The engine's guess at the next message after a Claude turn (docs/prompt-suggestions-design.md).
         SettingsGroup(null, footer = SUGGESTED_REPLIES_HINT) {
@@ -404,12 +381,12 @@ private fun SessionSettingsPage(api: ManagementApi, revision: Long) {
 private fun SettingsIcon(icon: Int) = Icon(painterResource(icon), null, tint = MaterialTheme.colorScheme.onSurface)
 
 @Composable
-private fun settingsRowColors() = ListItemDefaults.colors(containerColor = Color.Transparent)
+internal fun settingsRowColors() = ListItemDefaults.colors(containerColor = Color.Transparent)
 
 /** A group of rows under its header — none where its one row says the name (SettingsHome.header) — and, where it has one, the line
  * under it (SettingsHome.footer). */
 @Composable
-private fun SettingsGroup(title: String?, footer: String? = null, rows: @Composable ColumnScope.() -> Unit) {
+internal fun SettingsGroup(title: String?, footer: String? = null, rows: @Composable ColumnScope.() -> Unit) {
     if (title != null) {
         Text(title, Modifier.padding(start = 16.dp, top = 20.dp, bottom = 6.dp).semantics { heading() },
             style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -439,7 +416,7 @@ private fun SettingsValue(title: String, icon: Int, value: String) {
 /** A menu on the row itself, as iOS's pickers are; a write goes out only for a different value. No glyph on the Sessions page, as
  * iOS draws none there. */
 @Composable
-private fun SettingsPicker(title: String, icon: Int?, current: String, options: List<Pair<String, String>>, enabled: Boolean,
+internal fun SettingsPicker(title: String, icon: Int?, current: String, options: List<Pair<String, String>>, enabled: Boolean,
     modifier: Modifier = Modifier, select: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier) {
@@ -455,10 +432,11 @@ private fun SettingsPicker(title: String, icon: Int?, current: String, options: 
     }
 }
 
-/** The Sessions page's switch: the row is the switch, its hint the group's footer. */
+/** The Sessions page's switch: the row is the switch, its hint the group's footer — or, given [detail], the line under its title. */
 @Composable
-private fun SettingsSwitch(title: String, checked: Boolean, enabled: Boolean, modifier: Modifier = Modifier, change: (Boolean) -> Unit) {
-    ListItem(headlineContent = { Text(title) }, colors = settingsRowColors(),
+internal fun SettingsSwitch(title: String, checked: Boolean, enabled: Boolean, modifier: Modifier = Modifier, detail: String? = null,
+    change: (Boolean) -> Unit) {
+    ListItem(headlineContent = { Text(title) }, colors = settingsRowColors(), supportingContent = detail?.let { { Text(it) } },
         trailingContent = { Switch(checked = checked, onCheckedChange = null, enabled = enabled) },
         modifier = modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = change))
 }

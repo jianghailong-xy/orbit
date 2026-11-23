@@ -29,7 +29,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.time.Instant
 
-/** The account's switch for smart model selection (iOS 9fb3ae6ee, 614a21410; A13-14): Settings → Sessions has it, written alone as
+/** The account's switch for smart model selection (iOS 9fb3ae6ee, 614a21410; A13-14): Settings → Providers → Model routing has it, written alone as
  * preferences.modelRouting (on unless the owner turned it off), and while it is off the task page and the workspace form draw none of
  * smart selection. */
 @RunWith(RobolectricTestRunner::class)
@@ -150,7 +150,7 @@ class SmartSelectionGateTest {
             AccountAppearance(app) {
                 Column {
                     Text("smart selection: " + if (LocalSmartSelection.current) "on" else "off")
-                    SettingsScreen(api, OrbitRoute(Destination.SETTINGS, "sessions"), revision, {}, {}, logout = {}, changed = {}, workspaceDeleted = {},
+                    SettingsScreen(api, OrbitRoute(Destination.SETTINGS, "model-routing"), revision, {}, {}, logout = {}, changed = {}, workspaceDeleted = {},
                         deviceAlerts = { true }, notifications = {}, about = {})
                 }
             }
@@ -164,7 +164,7 @@ class SmartSelectionGateTest {
     @Test fun settingsHasTheSwitchWrittenAloneAsModelRouting() {
         val api = api()
         compose.setContent {
-            SettingsScreen(api, OrbitRoute(Destination.SETTINGS, "sessions"), revision, {}, {}, logout = {}, changed = {}, workspaceDeleted = {},
+            SettingsScreen(api, OrbitRoute(Destination.SETTINGS, "model-routing"), revision, {}, {}, logout = {}, changed = {}, workspaceDeleted = {},
                 deviceAlerts = { true }, notifications = {}, about = {})
         }
         await("Route by tier")

@@ -194,7 +194,15 @@ internal fun MachinesAndModelsPage(api: ManagementApi, revision: Long, open: (Or
             if (providersHalf) {
                 PoolsSection(model.memberPools(now), model.ownPools(now), now, ::page)
                 KeysSection(model, ::page)
-                ModelTiersSection(api, revision)
+                // Each model's tier beside how its SubAgent runs went, and the routing switches: a page of its own, as the web's
+                // Providers → Model routing.
+                FormSection {
+                    Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { open(OrbitRoute(Destination.SETTINGS, "model-routing")) }
+                        .padding(vertical = 8.dp).testTag("model-routing"), verticalAlignment = Alignment.CenterVertically) {
+                        Text(ModelRouting.TITLE, Modifier.weight(1f), maxLines = 1)
+                        Text("›", Modifier.clearAndSetSemantics { }, color = Ink.muted)
+                    }
+                }
             }
             Spacer(Modifier.height(48.dp))
         }

@@ -64,14 +64,21 @@ class SettingsChangeCopyParityTest {
         val tiers = read("src/shared/src/settingsTiers.ts")
         val pages = read("src/web/src/pages/settings/settingsIndex.ts")
         for (key in listOf("theme", "translationEnabled", "translationLanguage", "translationAgentLanguage", "translationBilingual",
-            "notifySessionFinished", "notifyAgentMessage", "recaps", "promptSuggestions", "promptOptimizer",
-            // modelRouting and optimizeFor left out: the web moved them to Providers → Model routing, and this client
-            // still draws them in General › New sessions until its Settings follows.
+            "notifySessionFinished", "notifyAgentMessage", "recaps", "promptSuggestions", "promptOptimizer", "modelRouting", "optimizeFor",
             "defaultPermissionMode", "enableOrchestration", "cardFreeTaskCreates")) {
             val place = SettingsFromConversation.place(key)!!
             assertSays(index, "settingsIndex.ts", "'${place.title}'")
             assertSays(pages, "pages/settingsIndex.ts", "label: '${place.webPage}'")
             place.section?.let { assertSays(web, copyFile, "${if (key == "translationAgentLanguage") "agentLanguage" else key}: '$it'") }
+        }
+        // The routing switches are on the web's own Model routing page, which names no section: `Settings › Model routing`.
+        for (key in listOf("modelRouting", "optimizeFor")) {
+            val place = SettingsFromConversation.place(key)!!
+            assertEquals("Model routing", place.webPage)
+            assertSays(pages, "pages/settingsIndex.ts", "MODEL_ROUTING_PAGE = { path: '/settings/providers/routing', label: '${place.webPage}' }")
+            assertSays(index, "settingsIndex.ts", "'$key', '/settings/providers/routing', '${place.title}'")
+            assertEquals(null, place.section)
+            assertEquals("Settings › Model routing", SettingsFromConversation.pathLabel(place))
         }
         for (key in listOf("defaultModel", "defaultModels", "defaultEffort", "subagentBlockedProviders"))
             assertSays(tiers, "settingsTiers.ts", "'${SettingsFromConversation.title(key)}'")

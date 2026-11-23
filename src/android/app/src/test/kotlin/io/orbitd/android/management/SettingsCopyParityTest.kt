@@ -9,9 +9,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/** Settings → Access tokens, a DeepSeek key's balance, the smart model selection switch, sign out and a wiki's Share say what iOS says, byte for byte: every
+/** Settings → Access tokens, a DeepSeek key's balance, sign out and a wiki's Share say what iOS says, byte for byte: every
  * String constant (and every tab's words) appears as a literal in the Swift source it was ported from. The one difference is the
- * coordinator's, on A13-16: iOS opens the top-up page "in Safari", Android "in your browser". */
+ * coordinator's, on A13-16: iOS opens the top-up page "in Safari", Android "in your browser". The routing switches follow the web's
+ * Model routing page. */
 class SettingsCopyParityTest {
     private val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
         .first { File(it, "src/macos/OrbitKit/Sources/OrbitKit").isDirectory }
@@ -32,11 +33,24 @@ class SettingsCopyParityTest {
         assertEquals("AccessTokens strings not in AccessTokensList.swift", emptyMap<String, String>(), missing(words, source))
     }
 
-    @Test fun theSmartModelSelectionSwitchAndSignOutSayWhatIosSays() {
+    @Test fun signOutSaysWhatIosSays() {
         val source = swift("SettingsHome.swift")
-        listOf(SMART_MODEL_SELECTION, SMART_MODEL_SELECTION_HINT, SETTINGS_SIGN_OUT_TITLE).forEach {
-            assertTrue("\"$it\" is not in SettingsHome.swift", source.contains("\"$it\""))
+        assertTrue("\"$SETTINGS_SIGN_OUT_TITLE\" is not in SettingsHome.swift", source.contains("\"$SETTINGS_SIGN_OUT_TITLE\""))
+    }
+
+    /** Route by tier and Optimize For are on the web's Model routing page (ModelRoutingPage.tsx), their titles and one-line words
+     * in the shared settings index it draws them from: each Android word is a literal there. */
+    @Test fun theRoutingSwitchesSayWhatTheWebsModelRoutingPageSays() {
+        val page = File(root, "src/web/src/pages/settings/ModelRoutingPage.tsx").readText()
+        val index = File(root, "src/shared/src/settingsIndex.ts").readText()
+        listOf(SMART_MODEL_SELECTION, OPTIMIZE_FOR).forEach {
+            assertTrue("aria-label=\"$it\" is not in ModelRoutingPage.tsx", page.contains("aria-label=\"$it\""))
+            assertTrue("'$it' is not in settingsIndex.ts", index.contains("'$it'"))
         }
+        assertTrue("the Route by tier hint is not in ModelRoutingPage.tsx", page.contains("full: \"$SMART_MODEL_SELECTION_HINT\""))
+        assertTrue("the Optimize For line is not in settingsIndex.ts", index.contains("'$OPTIMIZE_FOR_DETAIL'"))
+        listOf("Cost", "Balance", "Intelligence").forEach { assertTrue(page.contains("label: '$it'")) }
+        assertEquals(listOf("Cost", "Balance", "Intelligence"), OPTIMIZE_FOR_VALUES.map { v -> v.replaceFirstChar { it.uppercase() } })
     }
 
     /** The list's groups and rows, and the General page — each setting's name and the hint that is its footer — say what iOS's do

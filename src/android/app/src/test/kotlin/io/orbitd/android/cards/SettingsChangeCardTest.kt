@@ -16,6 +16,8 @@ import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.core.cards.SettingsChangeCopy
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.OrbitLinks
+import io.orbitd.android.navigation.OrbitRoute
+import io.orbitd.android.navigation.Origin
 import io.orbitd.android.text.MarkdownText
 import io.orbitd.android.ui.OrbitTheme
 import java.time.Instant
@@ -186,6 +188,10 @@ class SettingsChangeCardTest {
         assertEquals("sessions", route.id)
         assertEquals("translationEnabled", route.recordId)
         assertEquals(null, OrbitLinks.parse("orbit-settings:theme")!!.id)
+        // The routing switches open Providers → Model routing at their row.
+        listOf("modelRouting", "optimizeFor").forEach {
+            assertEquals(OrbitRoute(Destination.SETTINGS, "model-routing", recordId = it, origin = Origin.LINK), OrbitLinks.parse("orbit-settings:$it"))
+        }
         assertNull(OrbitLinks.parse("orbit-settings:nothing"))
     }
 

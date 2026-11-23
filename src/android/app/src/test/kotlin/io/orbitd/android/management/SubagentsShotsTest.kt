@@ -32,7 +32,7 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
 /** NATIVE frames of the SubAgents group (with its Workflows row, docs/mocks/subagent-workflow part 5), its Providers list and Model
- * tiers with the mock's data (docs/mocks/subagent/05.png), written
+ * routing's models with the mock's data (docs/mocks/subagent/05.png) and a report of their runs, written
  * under `src/android/build/evidence/subagent-android/`; a dialog's or a menu's window is drawn over the page it opened on. */
 abstract class SubagentsShots {
     @get:Rule(order = 0) val host = object : ExternalResource() {
@@ -108,11 +108,14 @@ abstract class SubagentsShots {
     }
 
     @Test fun modelTiers() {
+        fixture.routingReport = SubagentFixtures.REPORT
         val api = api()
-        page { Column(Modifier.padding(horizontal = 16.dp)) { ModelTiersSection(api, 0) } }
+        page { ModelRoutingPage(api, 0) }
         await("qwen-coder")
+        shot("c-model-routing")
+        compose.onNodeWithTag("routing-flag:deepseek:deepseek-chat", useUnmergedTree = true).performScrollTo()
         shot("c-model-tiers")
-        compose.onNodeWithTag("tier:my-endpoint:qwen-coder", useUnmergedTree = true).performClick()
+        compose.onNodeWithTag("tier:my-endpoint:qwen-coder", useUnmergedTree = true).performScrollTo().performClick()
         compose.waitUntil(60_000) { compose.onAllNodesWithText("XL").fetchSemanticsNodes().isNotEmpty() }
         shot("d-model-tier-menu")
     }
@@ -120,10 +123,13 @@ abstract class SubagentsShots {
     @Test fun olderModelTiers() {
         fixture.subagentTiers = SubagentFixtures.OLDER
         val api = api()
-        page { Column(Modifier.padding(horizontal = 16.dp)) { ModelTiersSection(api, 0) } }
+        page { ModelRoutingPage(api, 0) }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("model-routing-idle").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("model-routing-idle").performScrollTo().performClick()
         await("Older · uses claude-opus-5-5")
+        compose.onAllNodesWithText("Older · uses claude-opus-5-5", substring = true, useUnmergedTree = true).onFirst().performScrollTo()
         shot("g-older-tiers")
-        compose.onNodeWithTag("tier:cursor:claude-opus-4-8", useUnmergedTree = true).performClick()
+        compose.onNodeWithTag("tier:cursor:claude-opus-4-8", useUnmergedTree = true).performScrollTo().performClick()
         compose.waitUntil(60_000) { compose.onAllNodesWithText("XL").fetchSemanticsNodes().isNotEmpty() }
         shot("h-older-tier-menu")
     }
@@ -131,8 +137,9 @@ abstract class SubagentsShots {
     @Test fun builtinModelTiers() {
         fixture.subagentTiers = SubagentFixtures.BUILTIN
         val api = api()
-        page { Column(Modifier.padding(horizontal = 16.dp)) { ModelTiersSection(api, 0) } }
-        await("kimi-k3")
+        page { ModelRoutingPage(api, 0) }
+        await("grok-4.7")
+        compose.onNodeWithTag("tier:cursor:grok-4.7", useUnmergedTree = true).performScrollTo()
         shot("e-builtin-tiers")
         compose.onNodeWithTag("tier:cursor:grok-4.7", useUnmergedTree = true).performClick()
         compose.waitUntil(60_000) { compose.onAllNodesWithText("Clear").fetchSemanticsNodes().isNotEmpty() }

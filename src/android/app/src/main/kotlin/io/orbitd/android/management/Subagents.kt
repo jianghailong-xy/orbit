@@ -15,7 +15,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
@@ -73,7 +72,7 @@ internal data class SubagentSettings(val enabled: Boolean, val maxRunning: Int, 
     }
 }
 
-/** The SubAgents settings and the Providers page's Model tiers (docs/subagent-design.md §7, docs/mocks/subagent/05.png). */
+/** The SubAgents settings and the models' tiers Model routing lists (docs/subagent-design.md §7, docs/mocks/subagent/05.png). */
 internal object Subagents {
     const val GROUP = "SubAgents"
     const val SWITCH = "SubAgents"
@@ -84,8 +83,6 @@ internal object Subagents {
     const val PROVIDERS_DETAIL = "All enabled providers. Block one to keep SubAgents off it."
     const val RUNNING = "Running at once"
     const val RUNNING_DETAIL = "Per session: delegated SubAgents and workflow calls together"
-    const val TIERS = "Model tiers"
-    const val TIERS_FOOTER = "Preset tiers and prices follow the catalogue. A model with no tier still runs SubAgents, after every model whose tier fits."
     const val NOT_SET = "Not set"
     const val SUBSCRIPTION = "Subscription"
     const val CLEAR = "Clear"
@@ -302,78 +299,27 @@ internal fun SubagentProvidersDialog(providers: List<SubagentProvider>, blocked:
     }, confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } })
 }
 
-/**
- * The Providers page's Model tiers (docs/subagent-design.md §7): each provider's models with the tiers routing reads for them and their
- * price per million output tokens. A model the owner may tier (a key's own, or any of a built-in engine's catalogue) opens a menu of the
- * four, and Clear where the owner's tier can be cleared; a tier the owner set carries a Yours tag. On a phone the provider sits above its
- * model in one cell.
- */
+/** One model row of Model routing's list, or its header: provider, model, tier, Quality and price; then, under the model name, its
+ *  [flag] when routing took it outside its tiers, and under the row its [figures] (Ran at, Runs, Done, Cost). */
 @Composable
-internal fun ModelTiersSection(api: ManagementApi, revision: Long) {
-    var providers by remember(api) { mutableStateOf<List<SubagentProvider>?>(null) }
-    var failure by remember(api) { mutableStateOf<String?>(null) }
-    var reads by remember { mutableIntStateOf(0) }
-    val scope = rememberCoroutineScope()
-    LaunchedEffect(api, revision, reads) {
-        try { providers = Subagents.decode(api.get("providers/subagent-tiers")); failure = null }
-        catch (e: CancellationException) { throw e } catch (_: Exception) { if (providers == null) failure = Subagents.PROVIDERS_LOAD_FAILED }
-    }
-    val rows = providers.orEmpty().filter { it.models.isNotEmpty() }
-    if (providers != null && rows.isEmpty() && failure == null) return
-    FormSection(Subagents.TIERS, footer = Subagents.TIERS_FOOTER + "\n\n" + Subagents.QUALITY_FOOTER) {
-        failure?.let { Text(it, Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.labelMedium, color = Ink.red) }
-        if (providers == null && failure == null) Text("Loading…", Modifier.padding(vertical = 8.dp), color = Ink.muted)
-        if (rows.isNotEmpty()) BoxWithConstraints {
-            val wide = maxWidth >= 520.dp
-            Column {
-                TierRow(wide, header = true, provider = { Text(if (wide) "Provider" else "Provider / Model", style = it) },
-                    model = { Text("Model", style = it) },
-                    tier = { Text("Tier", style = it) }, quality = { Text(Subagents.QUALITY, style = it) },
-                    price = { Text("Price / M out", style = it) })
-                rows.forEach { provider ->
-                    provider.models.forEach { model ->
-                        HorizontalDivider()
-                        TierRow(wide, header = false,
-                            provider = { Text(provider.label, style = it, maxLines = 1) },
-                            model = { Text(model.model, style = it.copy(fontFamily = FontFamily.Monospace), maxLines = 1) },
-                            tier = { style ->
-                                TierCell(provider, model, style) { path, tier ->
-                                    scope.launch {
-                                        try {
-                                            api.patch(path, buildJsonObject {
-                                                put("model", model.model); put("tier", tier?.let(::JsonPrimitive) ?: JsonNull)
-                                            })
-                                            reads++; failure = null
-                                        } catch (e: CancellationException) { throw e } catch (_: Exception) { failure = Subagents.TIER_SAVE_FAILED }
-                                    }
-                                }
-                            },
-                            quality = { QualityCell(provider, model, it) },
-                            price = { Text(Subagents.priceText(model, provider.billing), style = it, maxLines = 1,
-                                color = if (model.outputPricePerMTok == null) Ink.muted else MaterialTheme.colorScheme.onSurface) })
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TierRow(wide: Boolean, header: Boolean, provider: @Composable (androidx.compose.ui.text.TextStyle) -> Unit,
+internal fun TierRow(wide: Boolean, header: Boolean, provider: @Composable (androidx.compose.ui.text.TextStyle) -> Unit,
                     model: @Composable (androidx.compose.ui.text.TextStyle) -> Unit, tier: @Composable (androidx.compose.ui.text.TextStyle) -> Unit,
                     quality: @Composable (androidx.compose.ui.text.TextStyle) -> Unit,
-                    price: @Composable (androidx.compose.ui.text.TextStyle) -> Unit) {
+                    price: @Composable (androidx.compose.ui.text.TextStyle) -> Unit,
+                    flag: (@Composable () -> Unit)? = null, figures: (@Composable () -> Unit)? = null) {
     val style = if (header) MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold, color = Ink.muted)
         else MaterialTheme.typography.bodyMedium
     val small = if (header) style else if (wide) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall.copy(color = Ink.muted)
-    if (wide) Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        // Quality holds a source word and a figure with its count, so it takes the room the others can spare.
-        Box(Modifier.weight(0.75f)) { provider(style) }
-        Box(Modifier.weight(1.4f)) { model(small) }
-        Box(Modifier.weight(1.1f)) { tier(style) }
-        Box(Modifier.weight(2.1f)) { quality(small) }
-        Box(Modifier.weight(0.75f), contentAlignment = Alignment.CenterEnd) { price(style) }
+    if (wide) Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Quality holds a source word and a figure with its count, so it takes the room the others can spare.
+            Box(Modifier.weight(0.75f)) { provider(style) }
+            Column(Modifier.weight(1.4f)) { model(small); flag?.invoke() }
+            Box(Modifier.weight(1.1f)) { tier(style) }
+            Box(Modifier.weight(2.1f)) { quality(small) }
+            Box(Modifier.weight(0.75f), contentAlignment = Alignment.CenterEnd) { price(style) }
+        }
+        figures?.invoke()
     } else Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         // A phone, as iOS: provider, tier and price on one line, the model across the full width under them. Tier and price
         // are as wide as their longest values ("S–XL by effort", "Subscription"), so the columns line up.
@@ -384,8 +330,10 @@ private fun TierRow(wide: Boolean, header: Boolean, provider: @Composable (andro
         }
         if (!header) {
             model(small)
+            flag?.invoke()
             // The Quality lines under the model name, as iOS draws them (board docs/mocks/model-quality/01-board.png, note E).
             Box(Modifier.padding(top = 2.dp)) { quality(small) }
+            figures?.invoke()
         }
     }
 }
@@ -394,7 +342,7 @@ private fun TierRow(wide: Boolean, header: Boolean, provider: @Composable (andro
  *  line shows who rated, as the iOS popover does. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun QualityCell(provider: SubagentProvider, model: SubagentTierModel, style: androidx.compose.ui.text.TextStyle) {
+internal fun QualityCell(provider: SubagentProvider, model: SubagentTierModel, style: androidx.compose.ui.text.TextStyle) {
     val lines = Subagents.qualityLines(model.quality)
     val base = style.copy(color = MaterialTheme.colorScheme.onSurface)
     if (lines.empty) {
@@ -430,7 +378,7 @@ private fun QualityLineRow(source: String, line: QualityLine, style: androidx.co
 }
 
 @Composable
-private fun TierCell(provider: SubagentProvider, model: SubagentTierModel, style: androidx.compose.ui.text.TextStyle,
+internal fun TierCell(provider: SubagentProvider, model: SubagentTierModel, style: androidx.compose.ui.text.TextStyle,
                      set: (String, String?) -> Unit) {
     val text = Subagents.modelTierText(model)
     val color = if (Subagents.isOlder(model)) Ink.muted else if (model.levels.isEmpty()) Ink.amber else MaterialTheme.colorScheme.onSurface

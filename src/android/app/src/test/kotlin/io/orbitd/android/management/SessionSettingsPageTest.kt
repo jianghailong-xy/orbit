@@ -26,8 +26,7 @@ import org.robolectric.annotation.Config
 /** Settings → General (once Sessions), as iOS has it since docs/mocks/ios-settings-order (2A, scope 3A) and ios-settings-web-groups:
  * Personal's first row opens the page, the
  * list itself holds none of the account's session settings, and the page draws them in iOS's order (SessionSettings), each
- * with the web's hint as its footer — with the account-wide Optimize For (docs/mocks/routing-mode-account/01-account-wide-optimize-for.png)
- * below Smart model selection. */
+ * with the web's hint as its footer. Route by tier and Optimize For are on Providers › Model routing (ModelRoutingPageTest). */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = ManagementShellApplication::class, qualifiers = "w411dp-h4000dp")
 class SessionSettingsPageTest {
@@ -55,7 +54,7 @@ class SessionSettingsPageTest {
 
     private fun top(text: String) = compose.onNodeWithText(text).fetchSemanticsNode().positionInRoot.y
 
-    private val settings = listOf("Default permission", "Session orchestration", SMART_MODEL_SELECTION, SUGGESTED_REPLIES, SESSION_RECAPS)
+    private val settings = listOf("Default permission", "Session orchestration", SUGGESTED_REPLIES, SESSION_RECAPS)
 
     @Test fun personalFirstRowOpensTheGeneralPage() {
         val api = api()
@@ -80,73 +79,26 @@ class SessionSettingsPageTest {
                 deviceAlerts = { true }, notifications = {}, about = {})
         }
         await(SESSION_RECAPS)
-        val hints = listOf(DEFAULT_PERMISSION_HINT, SESSION_ORCHESTRATION_HINT, SMART_MODEL_SELECTION_HINT, SUGGESTED_REPLIES_HINT,
-            SESSION_RECAPS_HINT)
+        val hints = listOf(DEFAULT_PERMISSION_HINT, SESSION_ORCHESTRATION_HINT, SUGGESTED_REPLIES_HINT, SESSION_RECAPS_HINT)
         val tops = settings.zip(hints).flatMap { (title, hint) -> listOf(top(title), top(hint)) }
         assertEquals("each setting, then its hint, in iOS's order", tops.sorted(), tops)
-        // The fixture's account says auto and orchestration on, and names none of the other three: absent reads as on, smart model
-        // selection's included.
+        // The fixture's account says auto and orchestration on, and names neither of the other two: absent reads as on.
         compose.onNode(hasText("Default permission") and hasText("Auto") and hasClickAction()).assertExists()
         compose.onNode(hasText("Session orchestration") and isToggleable()).assertIsOn()
-        compose.onNode(hasText(SMART_MODEL_SELECTION) and isToggleable()).assertIsOn()
         compose.onNode(hasText(SUGGESTED_REPLIES) and isToggleable()).assertIsOn()
         compose.onNode(hasText(SESSION_RECAPS) and isToggleable()).assertIsOn()
     }
 
-    /** The account-wide Optimize For (docs/mocks/routing-mode-account/01-account-wide-optimize-for.png): directly below Smart model
-     * selection, absent reads as Balance, and a segment writes `{"optimizeFor":…}` alone the moment it moves. */
-    @Test fun optimizeForSitsUnderSmartModelSelectionAndASegmentWritesThePreference() {
+    /** Route by tier and Optimize For moved to Providers › Model routing, as the web has them: General draws neither, nor their words. */
+    @Test fun theGeneralPageNoLongerHasTheRoutingSwitches() {
         val api = api()
         compose.setContent {
             SettingsScreen(api, OrbitRoute(Destination.SETTINGS, "sessions"), revision, {}, {}, logout = {}, changed = {}, workspaceDeleted = {},
                 deviceAlerts = { true }, notifications = {}, about = {})
         }
         await(SESSION_RECAPS)
-        // The title and its words are one list item, merged into one node: read each text on its own.
-        fun textTop(text: String) = compose.onNodeWithText(text, useUnmergedTree = true).fetchSemanticsNode().positionInRoot.y
-        assertTrue("title, then its words, under Route by tier's hint and above Suggested replies",
-            textTop(SMART_MODEL_SELECTION_HINT) < textTop(OPTIMIZE_FOR) && textTop(OPTIMIZE_FOR) < textTop(OPTIMIZE_FOR_DETAIL) &&
-                textTop(OPTIMIZE_FOR_DETAIL) < textTop(SUGGESTED_REPLIES))
-        // The fixture's account names no optimizeFor: Balance is selected.
-        compose.onNode(hasText("Balance") and isSelectable()).assertIsSelected()
-        compose.onNode(hasText("Intelligence") and isSelectable()).performScrollTo().performClick()
-        compose.waitUntil(60_000) { fixture.optimizeFor == "intelligence" }
-        val patch = fixture.bodies.filter { it.startsWith("PATCH users/me/preferences") }
-            .map { Json.parseToJsonElement(it.removePrefix("PATCH users/me/preferences").trim()).jsonObject }.single()
-        assertEquals(buildJsonObject { put("optimizeFor", "intelligence") }, patch)
-        // The server's answer carries it, so the segment stays selected.
-        compose.onNode(hasText("Intelligence") and isSelectable()).assertIsSelected()
-    }
-
-    /** An account that stored a mode opens on its own segment, and opening writes nothing. */
-    @Test fun aStoredOptimizeForPrefillsItsSegment() {
-        val api = api()
-        fixture.optimizeFor = "cost"
-        compose.setContent {
-            SettingsScreen(api, OrbitRoute(Destination.SETTINGS, "sessions"), revision, {}, {}, logout = {}, changed = {}, workspaceDeleted = {},
-                deviceAlerts = { true }, notifications = {}, about = {})
+        listOf(SMART_MODEL_SELECTION, SMART_MODEL_SELECTION_HINT, OPTIMIZE_FOR, OPTIMIZE_FOR_DETAIL, "Balance").forEach {
+            assertEquals(it, 0, compose.onAllNodesWithText(it, useUnmergedTree = true).fetchSemanticsNodes().size)
         }
-        await(SESSION_RECAPS)
-        compose.waitUntil(60_000) { runCatching { compose.onNode(hasText("Cost") and isSelectable()).assertIsSelected() }.isSuccess }
-        compose.onNode(hasText("Balance") and isSelectable()).assertIsNotSelected()
-        assertTrue(fixture.bodies.none { it.startsWith("PATCH users/me/preferences") })
-    }
-
-    /** Only smart model selection reads Optimize For, so it shows only while the switch is on (owner, 2026-11-20): off, it is
-     * gone, and turning the switch on brings it back on the mode the account kept. */
-    @Test fun optimizeForShowsOnlyWhileSmartModelSelectionIsOn() {
-        val api = api()
-        fixture.modelRouting = false
-        fixture.optimizeFor = "intelligence"
-        compose.setContent {
-            SettingsScreen(api, OrbitRoute(Destination.SETTINGS, "sessions"), revision, {}, {}, logout = {}, changed = {}, workspaceDeleted = {},
-                deviceAlerts = { true }, notifications = {}, about = {})
-        }
-        await(SESSION_RECAPS)
-        assertEquals(0, compose.onAllNodesWithText(OPTIMIZE_FOR, useUnmergedTree = true).fetchSemanticsNodes().size)
-        compose.onNode(hasText(SMART_MODEL_SELECTION) and isToggleable()).performScrollTo().performClick()
-        compose.waitUntil(60_000) { fixture.modelRouting == true }
-        compose.waitUntil(60_000) { runCatching { compose.onNode(hasText("Intelligence") and isSelectable()).assertIsSelected() }.isSuccess }
-        assertTrue(fixture.bodies.none { it.startsWith("PATCH users/me/preferences") && it.contains("optimizeFor") })
     }
 }

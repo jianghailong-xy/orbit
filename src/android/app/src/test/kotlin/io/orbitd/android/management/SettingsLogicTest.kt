@@ -19,6 +19,8 @@ class SettingsLogicTest {
         assertEquals("Sign out?", SETTINGS_SIGN_OUT_TITLE)
         assertEquals(listOf("Default", "Accept Edits", "Plan", "Auto", "Don't Ask", "Bypass"), personalPermissions.map { it.second })
         assertEquals("Share task", settingsTitle("share", "TASK:abc"))
+        // Providers → Model routing, where Route by tier and Optimize For are.
+        assertEquals("Model routing", settingsTitle("model-routing"))
     }
 
     /** UserPreferences.smartModelSelection: off only for an explicit false; absent, or anything but a boolean, is on. */

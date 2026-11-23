@@ -59,8 +59,9 @@ object SettingsFromConversation {
         row("recaps", "Session recaps", GENERAL_PAGE, "General", "New sessions"),
         row("promptSuggestions", "Suggested replies", GENERAL_PAGE, "General", "New sessions"),
         row("promptOptimizer", "Prompt optimizer", GENERAL_PAGE, "General", "New sessions"),
-        row("modelRouting", "Route by tier", GENERAL_PAGE, "General", "New sessions"),
-        row("optimizeFor", "Optimize For", GENERAL_PAGE, "General", "New sessions"),
+        // Providers → Model routing, beside the model tiers they route by: the web's page names no section.
+        row("modelRouting", "Route by tier", MODEL_ROUTING_PAGE, "Model routing", null),
+        row("optimizeFor", "Optimize For", MODEL_ROUTING_PAGE, "Model routing", null),
         row("defaultPermissionMode", "Default permission mode", GENERAL_PAGE, "General", "New sessions"),
         row("enableOrchestration", "Let sessions orchestrate", GENERAL_PAGE, "General", "Orchestration"),
         row("cardFreeTaskCreates", "Tasks a session files without asking", GENERAL_PAGE, "General", "Orchestration"),
@@ -75,6 +76,7 @@ object SettingsFromConversation {
     /** Settings' route ids for the pages that hold rows (`SettingsScreen`). */
     const val GENERAL_PAGE = "sessions"
     const val NOTIFICATIONS_PAGE = "notifications"
+    const val MODEL_ROUTING_PAGE = "model-routing"
 
     private val permissionLabels = mapOf("default" to "Default", "acceptEdits" to "Accept Edits", "plan" to "Plan", "auto" to "Auto",
         "dontAsk" to "Don't Ask", "bypassPermissions" to "Bypass")

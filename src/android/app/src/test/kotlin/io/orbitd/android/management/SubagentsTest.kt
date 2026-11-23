@@ -55,6 +55,19 @@ internal object SubagentFixtures {
         {"slug":"my-endpoint","label":"My endpoint","kind":"key","providerId":"${ManagementFixture.KEY_OPENAI}","billing":"key",
           "models":[{"model":"qwen-coder","levels":["M"],"source":"owner","editable":true,"outputPricePerMTok":null}]}]}"""
 
+    /** Model routing's report over [TIERS]: deepseek-chat routed at its S and once at L, outside its tiers; claude-opus-5-5 at L;
+     *  qwen-coder, which has no tier, routed at M; claude-sonnet-5-5 called by name; gpt-5.6-sol not routed; and a removed key's
+     *  model the tier list no longer has. */
+    val REPORT = """{"subagents":[
+        {"tier":"S","provider":"deepseek","providerLabel":"DeepSeek","model":"deepseek-chat","modelLabel":"deepseek-chat","runs":3,"workflowCalls":0,"ended":3,"done":2,"costUsd":0.12,"movedOn":0,"noSize":1},
+        {"tier":"L","provider":"deepseek","providerLabel":"DeepSeek","model":"deepseek-chat","modelLabel":"deepseek-chat","runs":1,"workflowCalls":0,"ended":1,"done":1,"costUsd":0.3,"movedOn":0,"noSize":0},
+        {"tier":"L","provider":"claude","providerLabel":"Claude","model":"claude-opus-5-5","modelLabel":"claude-opus-5-5","runs":5,"workflowCalls":2,"ended":4,"done":3,"costUsd":0,"movedOn":1,"noSize":0},
+        {"tier":"M","provider":"my-endpoint","providerLabel":"My endpoint","model":"qwen-coder","modelLabel":"qwen-coder","runs":2,"workflowCalls":0,"ended":2,"done":1,"costUsd":0.05,"movedOn":0,"noSize":0},
+        {"tier":"named","provider":"claude","providerLabel":"Claude","model":"claude-sonnet-5-5","modelLabel":"claude-sonnet-5-5","runs":2,"workflowCalls":0,"ended":2,"done":2,"costUsd":0,"movedOn":0,"noSize":0},
+        {"tier":"not-routed","provider":"codex","providerLabel":"Codex","model":"gpt-5.6-sol","modelLabel":"gpt-5.6-sol","runs":1,"workflowCalls":0,"ended":0,"done":0,"costUsd":0,"movedOn":0,"noSize":0},
+        {"tier":"S","provider":"gone","providerLabel":"Old key","model":"old-model","modelLabel":"old-model","runs":1,"workflowCalls":0,"ended":1,"done":1,"costUsd":0.01,"movedOn":0,"noSize":0}],
+      "workflows":[]}"""
+
     /** Cursor's catalogue with older family members: they read "Older · uses <newest>" after the tiered rows, before Not set. */
     val OLDER = """{"providers":[
         {"slug":"cursor","label":"Cursor","kind":"builtin","providerId":null,"billing":"subscription",
@@ -66,7 +79,8 @@ internal object SubagentFixtures {
             {"model":"grok-4.7","levels":[],"source":null,"editable":true,"outputPricePerMTok":null}]}]}"""
 }
 
-/** The SubAgents settings and Model tiers (docs/subagent-design.md §7): what is read, what is drawn, and what is written. */
+/** The SubAgents settings and the models' tiers on Model routing (docs/subagent-design.md §7): what is read, what is drawn, and what
+ * is written. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = ManagementShellApplication::class, qualifiers = "w411dp-h2400dp")
 class SubagentsTest {
@@ -88,6 +102,14 @@ class SubagentsTest {
     }
     private fun await(text: String) = compose.waitUntil(60_000) {
         compose.onAllNodesWithText(text, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+    }
+    /** Model routing, with the models that have no tier and no runs unfolded. */
+    private fun routing(api: ManagementApi, unfold: Boolean = false) {
+        compose.setContent { ModelRoutingPage(api, 0) }
+        if (unfold) {
+            compose.waitUntil(60_000) { compose.onAllNodesWithTag("model-routing-idle").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithTag("model-routing-idle").performScrollTo().performClick()
+        }
     }
     private fun written(prefix: String) = fixture.bodies.filter { it.startsWith(prefix) }
         .map { Json.parseToJsonElement(it.removePrefix(prefix).trim()).jsonObject }
@@ -151,7 +173,7 @@ class SubagentsTest {
             Subagents.PROVIDERS_DETAIL, Subagents.RUNNING, Subagents.RUNNING_DETAIL).forEach {
             assertTrue("$it is drawn", compose.onAllNodesWithText(it, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
         }
-        // Optimize For is the account's, on Settings › General: the Agent's form draws and writes none of it.
+        // Optimize For is the account's, on Settings › Providers › Model routing: the Agent's form draws and writes none of it.
         assertEquals(0, compose.onAllNodesWithText("Optimize For", useUnmergedTree = true).fetchSemanticsNodes().size)
         compose.onNodeWithTag("subagents-running", useUnmergedTree = true).assertTextEquals("4")
         val switch = hasText(Subagents.SWITCH_DETAIL) and isToggleable()
@@ -239,9 +261,9 @@ class SubagentsTest {
 
     @Test fun modelTiersListTheModelsAndAnEditableOneTakesATier() {
         val api = api()
-        compose.setContent { MachinesAndModelsSettings(api, 0, null, {}, {}) }
+        routing(api, unfold = true)
         await("qwen-coder")
-        listOf(Subagents.TIERS, Subagents.TIERS_FOOTER, "Provider", "Model", "Tier", "Price / M out", "deepseek-chat", "claude-opus-5-5",
+        listOf(ModelRouting.SUBAGENTS_FOOT, "Provider", "Model", "Tier", "Price / M out", "deepseek-chat", "claude-opus-5-5",
             "S · M", "L · XL", "S–XL by effort", "$0.60", "Subscription", "—", "Not set").forEach {
             assertTrue("$it is drawn", compose.onAllNodesWithText(it, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
         }
@@ -276,8 +298,8 @@ class SubagentsTest {
 
     @Test fun modelTiersShowQualityUnderTheModelAndATapSaysWhoRated() {
         val api = api()
-        compose.setContent { MachinesAndModelsSettings(api, 0, null, {}, {}) }
-        await("qwen-coder")
+        routing(api)
+        await("gpt-5.6-sol")
         listOf("4.4 · 23 rated of 41", "86% first pass · 52 tasks", Subagents.NOT_ENOUGH_RATINGS, Subagents.NOT_ENOUGH_TASKS,
             Subagents.NO_RUNS_YET, Subagents.QUALITY_FOOTER).forEach {
             assertTrue("$it is drawn", compose.onAllNodesWithText(it, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
@@ -291,7 +313,7 @@ class SubagentsTest {
     @Test fun aBuiltInEnginesModelTakesATierThroughTheBuiltinDoor() {
         fixture.subagentTiers = SubagentFixtures.BUILTIN
         val api = api()
-        compose.setContent { MachinesAndModelsSettings(api, 0, null, {}, {}) }
+        routing(api, unfold = true)
         await("kimi-k3")
         // Every catalogue model opens the menu; the owner's tiers carry Yours, a catalogue tier does not.
         listOf("claude-opus-5-6", "composer-2.5", "grok-4.7", "kimi-k3").forEach {
@@ -313,7 +335,7 @@ class SubagentsTest {
     @Test fun aBuiltInEnginesOwnerTierClears() {
         fixture.subagentTiers = SubagentFixtures.BUILTIN
         val api = api()
-        compose.setContent { MachinesAndModelsSettings(api, 0, null, {}, {}) }
+        routing(api)
         await("grok-4.7")
         compose.onNodeWithTag("tier:cursor:grok-4.7", useUnmergedTree = true).performScrollTo().performClick()
         await("Clear")
@@ -326,7 +348,7 @@ class SubagentsTest {
     @Test fun clearSendsANullTier() {
         fixture.subagentTiers = SubagentFixtures.TIERS.replace(""""levels":[],"source":null""", """"levels":["M"],"source":"owner"""")
         val api = api()
-        compose.setContent { MachinesAndModelsSettings(api, 0, null, {}, {}) }
+        routing(api)
         await("qwen-coder")
         compose.onNodeWithTag("tier:my-endpoint:qwen-coder", useUnmergedTree = true).performScrollTo().performClick()
         await("Clear")

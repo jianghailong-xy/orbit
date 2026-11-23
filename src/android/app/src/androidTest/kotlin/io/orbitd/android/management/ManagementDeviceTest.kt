@@ -473,7 +473,7 @@ class ManagementDeviceTest {
     }
 
     /**
-     * A13d's pages (A01b A13-7/13/14/16): Settings' Smart model selection switch — written alone — and Access tokens row; the
+     * A13d's pages (A01b A13-7/13/14/16): Model routing's Route by tier switch — written alone — and Settings' Access tokens row; the
      * tokens page's two tabs and a revoke asked first; Providers' new footers and a DeepSeek key's balance at the end of its row,
      * its page — Refresh reading it again, too low this time — and a key DeepSeek refused.
      */
@@ -486,14 +486,14 @@ class ManagementDeviceTest {
                 role = "ADMIN"; modelRouting = false; revoked = emptySet(); deepSeekLow = false
                 signIn(server); settings()
                 await("2 active")
-                // Smart model selection is on Sessions' page (docs/mocks/ios-settings-order).
-                click(hasText("Sessions") and hasClickAction()); await("Route by tier")
-                capture("a13d-settings-sessions")
+                // Route by tier is on Providers → Model routing, as the web has it.
+                click(hasText("Providers") and hasClickAction()); click(hasTestTag("model-routing")); await("Route by tier")
+                capture("a13d-settings-model-routing")
                 click(hasText("Route by tier") and isToggleable())
                 compose.waitUntil(10_000) { modelRouting == true }
                 compose.waitUntil(10_000) { runCatching { compose.onNode(hasText("Route by tier") and isToggleable()).assertIsOn() }.isSuccess }
                 capture("a13d-smart-selection-on")
-                back(); await("Appearance")
+                back(); back(); await("Appearance")
                 compose.onAllNodesWithText("Access tokens").onFirst().performScrollTo()
                 capture("a13d-settings-account")
                 click(hasText("Access tokens") and hasClickAction())

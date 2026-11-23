@@ -65,6 +65,11 @@ class SettingsChangeTest {
         assertEquals("Settings › General › Translation", SettingsFromConversation.pathLabel(SettingsFromConversation.loneLink("[Open](orbit-settings:translationEnabled)")!!))
         assertEquals("translationAgentLanguage", SettingsFromConversation.loneLink("[x](orbit-settings:agentLanguage)")?.key)
         assertEquals("Settings › Appearance", SettingsFromConversation.pathLabel(SettingsFromConversation.place("theme")!!))
+        // The routing switches are on Providers → Model routing, a page with no sections (web settingPathLabel).
+        for (key in listOf("modelRouting", "optimizeFor")) {
+            assertEquals("Settings › Model routing", SettingsFromConversation.pathLabel(key))
+            assertEquals(SettingsFromConversation.MODEL_ROUTING_PAGE, SettingsFromConversation.place(key)!!.page)
+        }
         assertNull(SettingsFromConversation.loneLink("see [x](orbit-settings:translationEnabled) now"))
         assertNull(SettingsFromConversation.loneLink("[x](orbit-settings:nothing)"))
     }

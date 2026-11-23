@@ -52,6 +52,9 @@ object ManagementFixture {
     @Volatile var subagentTiers = """{"providers":[]}"""
     @Volatile var subagentBlocked: List<String>? = null
     @Volatile var workspaceExtra = ""
+    /** GET tasks/model-routing/report/subagents' body (Model routing's runs), or, given [routingReportFailure], a 503 in those words. */
+    @Volatile var routingReport = """{"subagents":[],"workflows":[]}"""
+    @Volatile var routingReportFailure: String? = null
     val bodies = CopyOnWriteArrayList<String>()
     /** GET tasks/:id for [TASK]. */
     @Volatile var task = "{}"
@@ -165,6 +168,7 @@ object ManagementFixture {
         keyCheckAnswer = """{"ok":true,"keyCheck":"VALID","message":"Cursor accepted this key.","recorded":true,"keyCheckState":"VALID","keyCheckedAt":null}"""
         onKeyCheck = {}
         subagentTiers = """{"providers":[]}"""; subagentBlocked = null; workspaceExtra = ""; bodies.clear()
+        routingReport = """{"subagents":[],"workflows":[]}"""; routingReportFailure = null
         capabilities = null; runnerVersion = "0.1.200"; managedStatus = "{}"; ensured = "{}"; ensureRefusal = null; onEnsure = {}; ensureBodies.clear()
     }
 
@@ -279,6 +283,7 @@ object ManagementFixture {
             "providers" -> ok(providerCatalog)
             "providers/mine" -> ok(providersMine)
             "providers/subagent-tiers" -> ok(subagentTiers)
+            "tasks/model-routing/report/subagents" -> routingReportFailure?.let { fail(503, it) } ?: ok(routingReport)
             "tasks/$TASK" -> ok(task)
             "tasks/$TASK/evidence" -> ok(evidence)
             "projects/P1" -> ok(project)
