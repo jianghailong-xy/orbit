@@ -321,6 +321,7 @@ import {
   completeSession,
   cancelAutoRetry,
   cancelQueuedTurn,
+  runQueuedSessionNow,
   steerQueuedTurn,
   adoptSessionBranch,
   dismissMergeFailure,
@@ -387,7 +388,7 @@ import {
 } from './RunNeverStartedCard';
 import { claudeRegionHeld, claudeRegionHeldWords, useClaudeRegionCheckAgain } from '../lib/claudeRegion';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
-import { AntigravityRepairCard, antigravityRepair, AttachmentImage, QueuedFootCtx, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SandboxFixHelp, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
+import { AntigravityRepairCard, antigravityRepair, AttachmentImage, TurnStatusFootCtx, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SandboxFixHelp, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
 import { PendingTray, type PendingTrayRow } from './PendingTray';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
@@ -670,7 +671,13 @@ import {
   capacityHeldTitle,
   capacityHeldWaited,
   isCapacityHeld,
+  RUN_NOW,
+  RUN_NOW_FAILED,
+  runNowNote,
+  runningOverLimitHint,
+  runningOverLimitTag,
   type CapacityGate,
+  type RunningOverLimit,
 } from '../lib/queuedCapacity';
 import { type QueuedTurn, type RunEvent, useSessionStream } from '../lib/useSessionStream';
 import { SessionConversation } from './SessionConversation';
@@ -2203,12 +2210,21 @@ export function RunnerUpdatingTag({
 /**
  * The foot-row tag under a message a full runner, run or batch holds (board queued-card-runner-full ②③):
  * `Queued · runner full`, drawn as RunnerUpdatingTag draws its tag (and in its classes), the popover
- * counting how the slots are taken. Nothing to press there: a full machine has no action of its own.
+ * counting how the slots are taken and offering Run now where the server supports it.
  */
-export function CapacityHeldTag({ gate, machine }: { gate: CapacityGate; machine?: string | null }) {
+export function CapacityHeldTag({ gate, machine, runnerActive, runnerLimit, onRunNow, pending }: {
+  gate: CapacityGate;
+  machine?: string | null;
+  runnerActive?: number;
+  runnerLimit?: number;
+  onRunNow?: () => void;
+  pending?: boolean;
+}) {
   const now = useMinuteNow();
   const [open, setOpen] = useState(false);
   const waited = capacityHeldWaited(gate, now);
+  const note = onRunNow ? runNowNote(gate, machine, runnerActive, runnerLimit) : null;
+  if (!isCapacityHeld(gate)) return null;
   return (
     <span className="chat-runner-updating">
       Queued
@@ -2235,8 +2251,30 @@ export function CapacityHeldTag({ gate, machine }: { gate: CapacityGate; machine
               </>
             )}
           </p>
+          {note && (
+            <>
+              <div className="queued-run-now-action">
+                <Button variant="primary" size="small" loading={pending}
+                  disabled={gate.runNowAvailable !== true || !!gate.runNowRefusal} onClick={onRunNow}>
+                  {RUN_NOW}
+                </Button>
+              </div>
+              <p className="queued-run-now-note">{note}</p>
+            </>
+          )}
         </div>
       </Popover>
+    </span>
+  );
+}
+
+function RunningOverLimitFoot({ overflow }: { overflow: RunningOverLimit }) {
+  return (
+    <span className="chat-runner-updating">
+      Running
+      <Tooltip content={runningOverLimitHint(overflow)}>
+        <span className="chat-over-limit" tabIndex={0}>{runningOverLimitTag(overflow)}</span>
+      </Tooltip>
     </span>
   );
 }
@@ -2436,9 +2474,18 @@ export function HeldFoot({ tag, onCancel }: { tag: ReactNode; onCancel: () => vo
   );
 }
 
-/** The seq of the reader's last message in the transcript, or null where there is none. */
-export function lastUserEventSeq(events: ReadonlyArray<{ type: string; seq: number }>): number | null {
-  for (let i = events.length - 1; i >= 0; i--) if (events[i].type === 'user') return events[i].seq;
+/** The seq of the last user message, or the head of the open turn when requested. */
+export function lastUserEventSeq(
+  events: ReadonlyArray<{ type: string; seq: number; payload?: unknown }>,
+  openTurnOnly = false,
+): number | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const { type, seq, payload } = events[i];
+    if (openTurnOnly && type === 'turn_end') return null;
+    if (type !== 'user') continue;
+    if (openTurnOnly && (payload as { steer?: boolean } | null | undefined)?.steer === true) continue;
+    return seq;
+  }
   return null;
 }
 
@@ -3084,6 +3131,14 @@ export function WorkspaceView({
   // What a write made here re-reads the lists with: in the stream's coalescing window, which the
   // server's own event for the write joins (W5).
   const refreshSessionLists = useRefreshSessionLists();
+  const runNowMut = useMutation({
+    mutationFn: runQueuedSessionNow,
+    onError: (error: Error) => message.error(RUN_NOW_FAILED, error.message),
+    onSettled: (_data, _error, id) => {
+      refreshSessionLists();
+      return qc.invalidateQueries({ queryKey: ['session', id], exact: true });
+    },
+  });
   const sessionsQ = useQuery({
     ...sessionsOpts,
     enabled: !listProjectId,
@@ -4927,7 +4982,14 @@ export function WorkspaceView({
     />
   ) : capacityGate ? (
     // A full runner, run or batch, said in the same places by the same rules (board queued-card-runner-full ②④).
-    <CapacityHeldTag gate={capacityGate} machine={runnerShownName} />
+    <CapacityHeldTag
+      gate={capacityGate}
+      machine={runnerShownName}
+      runnerActive={activeSlots}
+      runnerLimit={runner.maxConcurrent}
+      onRunNow={selectedId && !selectedTrashed ? () => runNowMut.mutate(selectedId) : undefined}
+      pending={runNowMut.isPending && runNowMut.variables === selectedId}
+    />
   ) : null;
   // The reader's own waiting messages sit in the tray, which carries the tag itself; only where nothing
   // anywhere is waiting does it fall back to the last message they sent.
@@ -4957,6 +5019,13 @@ export function WorkspaceView({
             : queuedHeldTag,
         }
       : null;
+  const overflow: RunningOverLimit | null | undefined = selectedSession?.runningOverLimit;
+  const overflowSeq = overflow && !selectedTrashed && sessionRunStateOf(selectedSession) === 'RUNNING'
+    ? lastUserEventSeq(transcriptEvents, true)
+    : null;
+  const turnFoot = overflow && overflowSeq !== null
+    ? { seq: overflowSeq, tag: <RunningOverLimitFoot overflow={overflow} />, running: true }
+    : queuedFoot;
   // What stands in for an empty transcript — exactly one of these, so the loading skeleton can't
   // stack on top of the centered "waiting for a slot" pane. See lib/transcriptPaint.
   const placeholder = transcriptPlaceholder({
@@ -11242,7 +11311,7 @@ export function WorkspaceView({
               )}
               {/* The transcript, in the contexts its cards read (SessionConversation). */}
               <MainCheckoutCtx.Provider value={mainCheckout.host}>
-              <QueuedFootCtx.Provider value={queuedFoot}>
+              <TurnStatusFootCtx.Provider value={turnFoot}>
               <SessionConversation
                 sessionId={selectedId}
                 stream={stream}
@@ -11266,7 +11335,7 @@ export function WorkspaceView({
                 jobQueuedWakes={jobQueuedWakes}
                 jobWhere={shownWorkspaceName ?? null}
               />
-              </QueuedFootCtx.Provider>
+              </TurnStatusFootCtx.Provider>
               </MainCheckoutCtx.Provider>
               {/* The conversation's last row while it is at rest: its recap whole, the line its list
                   row reads in one (SessionRecapCard). Above the cards that ask the owner something,
