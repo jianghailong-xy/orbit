@@ -3344,7 +3344,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1440_drive_trash_group_marking',
       // 1448 indexes drive and share-link foreign keys for bounded permanent deletion. It writes no existing rows
       // and changes no preserved relation, trigger, function or DONE fence.
-      '1448_drive_purge_fk_indexes'],
+      '1448_drive_purge_fk_indexes',
+      // 1455 adds managed_runner.sleep_requested_at, a nullable TIMESTAMPTZ with no default (catalog-only, no rewrite),
+      // so an owner's sleep drains only on a report sent after it; `managed_runner` is none of the preserved relations,
+      // no row is written, and no trigger, function or DONE fence changes.
+      '1455_managed_runner_sleep_requested_at'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
