@@ -360,6 +360,9 @@ docker compose up -d --wait prometheus node-exporter postgres-exporter
 | `prometheus` | Prometheus itself | `localhost:9090` |
 
 The names are looked up every 15 seconds, so an apiserver that starts or stops is scraped, or dropped, within that.
+A target that stops before the next lookup can be scraped as down once in between, and its series go stale a minute or
+so after it is dropped: on a stack whose link gateway was removed, `up{job="link-gateway"}` had no series 60 seconds
+later, and none at all in a Prometheus started while the link was off.
 Each apiserver is a target of its own, labelled by its address in the project network, which changes when the
 container is recreated.
 
