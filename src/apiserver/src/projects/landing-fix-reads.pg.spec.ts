@@ -496,14 +496,14 @@ async function landingRow(stack: Stack, w: World, landingSessionId: string) {
   return rows.find((row) => row.id === landingSessionId) ?? null;
 }
 
-/** `session_get` through the runner's session door as `callingSessionId` on `runnerId`, with no orchestration
- *  credential — the account has Session orchestration off: the answer, or the refusal's code. */
+/** `session_get` with Session orchestration off: the runner's own-landing door (`GET /runner/landings/:id`) as
+ *  `callingSessionId` on `runnerId` — the answer, or the refusal's code. */
 async function readWithoutOrchestration(stack: Stack, w: World, runnerId: string, callingSessionId: string, id: string) {
   const orchestration = new RunnerOrchestrationAuthorizer(stack.prisma, new JwtService({ secret: 'landing-fix-reads-pg' }));
   const door = new RunnerSessionsController(stack.sessions, orchestration, {} as never, {} as never);
   try {
-    const body = await door.getSession(
-      { id: runnerId, ownerId: w.ownerId } as never, undefined, callingSessionId, undefined, id,
+    const body = await door.getOwnTaskLanding(
+      { id: runnerId, ownerId: w.ownerId } as never, undefined, callingSessionId, id,
     ) as unknown as { id: string; landing?: { sessionId: string; taskId: string | null } };
     return { body, code: null as string | null };
   } catch (error) {
@@ -683,16 +683,26 @@ test('§12.7 the work session reads its own task\'s landing through session_get 
     assert.equal(own.body?.landing?.sessionId, landingSessionId, 'the read did not serve the landing view');
     assert.equal(own.body?.landing?.taskId, t.taskId);
 
-    // Anything else is the orchestration door's, which refuses a call with no credential as before.
+    // Anything else is refused: another session, the work session itself, another task's landing.
+    const refused = 'LANDING_NOT_THIS_SESSIONS_TASK';
     const coordinator = await readWithoutOrchestration(stack, w, w.runnerId, t.sessionId, w.coordinatorSessionId);
-    assert.equal(coordinator.code, 'ORCHESTRATION_CREDENTIAL_MISSING', 'the work session read another session');
+    assert.equal(coordinator.code, refused, 'the work session read another session');
     const self = await readWithoutOrchestration(stack, w, w.runnerId, t.sessionId, t.sessionId);
-    assert.equal(self.code, 'ORCHESTRATION_CREDENTIAL_MISSING', 'the open door reads more than a landing');
-    // Not from another runner, and not from a session of no task.
+    assert.equal(self.code, refused, 'the door reads more than a landing');
+    const other = await handedOff(stack, 'reads-other');
+    const foreign = await readWithoutOrchestration(stack, w, w.runnerId, t.sessionId, other.landingSessionId);
+    assert.equal(foreign.code, refused, 'the work session read another task\'s landing');
+    // Not from another runner, and not as a session of no task.
     const elsewhere = await readWithoutOrchestration(stack, w, randomUUID(), t.sessionId, landingSessionId);
-    assert.equal(elsewhere.code, 'ORCHESTRATION_CREDENTIAL_MISSING', 'a session was read as another runner\'s');
+    assert.equal(elsewhere.code, refused, 'a session was read as another runner\'s');
     const notWork = await readWithoutOrchestration(stack, w, w.runnerId, w.coordinatorSessionId, landingSessionId);
-    assert.equal(notWork.code, 'ORCHESTRATION_CREDENTIAL_MISSING', 'a session of no task read the task\'s landing');
+    assert.equal(notWork.code, refused, 'a session of no task read the task\'s landing');
+    // And the orchestration door is as it was: without a credential, session_get is refused.
+    const orchestrationDoor = new RunnerSessionsController(stack.sessions,
+      new RunnerOrchestrationAuthorizer(stack.prisma, new JwtService({ secret: 'landing-fix-reads-pg' })), {} as never, {} as never);
+    await assert.rejects(orchestrationDoor.getSession(
+      { id: w.runnerId, ownerId: w.ownerId } as never, undefined, t.sessionId, undefined, landingSessionId,
+    ), /missing orchestration credential/);
     await finalize(stack, w, t, fix, FIXED);
   } finally {
     await stack.db.$disconnect();

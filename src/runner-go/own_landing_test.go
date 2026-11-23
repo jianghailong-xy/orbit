@@ -42,8 +42,8 @@ func TestOwnTaskLandingSessionGetListedForATaskSessionWithOrchestrationOff(t *te
 	}
 }
 
-// With orchestration off, a task's work session's session_get goes as that session and without any orchestration
-// credential, and the server's answer comes back as it is.
+// With orchestration off, a task's work session's session_get goes to the own-landing door as that session and without
+// any orchestration credential, and the server's answer comes back as it is.
 func TestOwnTaskLandingSessionGetSendsTheSessionWithoutACredential(t *testing.T) {
 	var path, sessionHeader, tokenHeader string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -59,7 +59,7 @@ func TestOwnTaskLandingSessionGetSendsTheSessionWithoutACredential(t *testing.T)
 	if res["isError"] == true {
 		t.Fatalf("session_get of its own landing failed: %#v", res)
 	}
-	if path != "/api/runner/sessions/landing-1" || sessionHeader != "work-session" || tokenHeader != "" {
+	if path != "/api/runner/landings/landing-1" || sessionHeader != "work-session" || tokenHeader != "" {
 		t.Fatalf("request = %s session=%q token=%q", path, sessionHeader, tokenHeader)
 	}
 	content, _ := res["content"].([]map[string]interface{})

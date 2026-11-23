@@ -5,9 +5,10 @@ package main
 // and its landing-fix turn names the record: "The full record: landing <landingSessionId>." session_get reads it,
 // and the session must be able to whether or not the account has Session orchestration on.
 //
-// So a session of a task is offered session_get with orchestration off, and its call goes without the orchestration
-// credential: the server answers it only for a landing of this session's own task (SessionsService
-// .ownTaskLandingForWorkSession) and refuses every other id as it refuses any session_get with orchestration off.
+// So a session of a task is offered session_get with orchestration off, and its call goes to the runner's own-landing
+// door, GET /runner/landings/:id, as the calling session and without the orchestration credential. The server answers
+// it only for a landing of this session's own task (SessionsService.ownTaskLandingForWorkSession) and refuses every
+// other id with 404 LANDING_NOT_THIS_SESSIONS_TASK; the orchestration doors are unchanged.
 
 import (
 	"encoding/json"
@@ -43,13 +44,13 @@ func withOwnLandingSessionGet(tools []map[string]interface{}) []map[string]inter
 	return append(tools, descriptor)
 }
 
-// getOwnTaskLanding is GET /runner/sessions/:id as the calling session, without the orchestration credential.
+// getOwnTaskLanding is GET /runner/landings/:id as the calling session, without the orchestration credential.
 func (t *Transport) getOwnTaskLanding(callerSessionID, id string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, "GET", "/runner/sessions/"+url.PathEscape(id), nil, &out, taskOpTimeout,
+	err := t.doHeaders(nil, "GET", "/runner/landings/"+url.PathEscape(id), nil, &out, taskOpTimeout,
 		map[string]string{"X-Orbit-Session-Id": callerSessionID})
 	return out, err
 }

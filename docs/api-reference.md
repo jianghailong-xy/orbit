@@ -45,10 +45,10 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `public` | 39 |
 | `user` | 527 |
 | `admin` | 31 |
-| `runner` | 229 |
+| `runner` | 230 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **830** |
+| **Total** | **831** |
 
 ## Public routes
 
@@ -710,6 +710,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/integration-jobs/:jobId/progress` | body `Object`; path `jobId` | `RunnerApiController.integrationJobProgress` |
 | `POST` | `/api/runner/integration-jobs/:jobId/release` | body `Object`; path `jobId` | `RunnerApiController.integrationJobRelease` |
 | `POST` | `/api/runner/integration-jobs/:jobId/result` | body `Object`; path `jobId` | `RunnerApiController.integrationJobResult` |
+| `GET` | `/api/runner/landings/:id` | path `id` | `RunnerSessionsController.getOwnTaskLanding` |
 | `POST` | `/api/runner/link-token` | body `Object` | `RunnerLinkTokenController.issue` |
 | `POST` | `/api/runner/link/welcome` | body `Object` | `RunnerLinkWelcomeController.welcome` |
 | `POST` | `/api/runner/login-result` | body `Object` | `RunnerApiController.loginResult` |
