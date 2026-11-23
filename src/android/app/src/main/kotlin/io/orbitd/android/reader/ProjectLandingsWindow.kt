@@ -648,32 +648,42 @@ private fun LandingReceiptBlock(receipt: LandingMergeReceipt) {
 private fun LandingsFooter(coordinatorId: String?, sessionFirst: Boolean, onOpenCoordinator: () -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val words = SessionLandingsCopy.orbitRunsTheseLandings
-    // Revision 42 (board ② c ③, owner's ruling 2026-11-22, which this newer ruling puts over landings-ui-polish ③'s one line): while a
-    // landing is with its task's own session, the whole sentence shows, wrapping beside the button, and names who decides.
-    val ruled = LandingFixWindowCopy.footer(words)
+    val coordinator = @Composable {
+        if (coordinatorId != null) OutlinedButton(onClick = onOpenCoordinator, modifier = Modifier.testTag("landings:open-coordinator")
+            .semantics { stateDescription = if (sessionFirst) LandingFixWindowCopy.DECISIONS_SESSION_FIRST else LandingSessionCopy.DECISIONS_THE_COORDINATOR },
+            contentPadding = PaddingValues(start = 12.dp, end = 16.dp)) {
+            Icon(painterResource(R.drawable.ic_person), null, Modifier.size(ButtonDefaults.IconSize))
+            Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+            Text(LandingSessionCopy.OPEN_COORDINATOR, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+        }
+    }
     Surface(tonalElevation = 2.dp) {
         Column {
             HorizontalDivider()
-            Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = 16.dp, end = 8.dp).testTag("landings:footer"),
+            // Revision 42 (board ② c ③, owner's ruling 2026-11-22, which puts this over landings-ui-polish ③'s one line): while a landing
+            // is with its task's own session, the whole sentence shows, across the bar in two lines, with the button under it.
+            if (sessionFirst) Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 6.dp).testTag("landings:footer"),
+                verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.Top) {
+                    Icon(painterResource(R.drawable.ic_lock), null, Modifier.padding(top = 3.dp).size(14.dp), tint = muted)
+                    Spacer(Modifier.width(8.dp))
+                    Text(buildAnnotatedString {
+                        append(words.substringBefore(" — "))
+                        append(" — ")
+                        withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)) { append(words.substringAfter(" — ")) }
+                        append(" ${LandingFixWindowCopy.DECISIONS_SESSION_FIRST}")
+                    }, Modifier.weight(1f).semantics { contentDescription = LandingFixWindowCopy.footer(words) }.testTag("landings:footer-line"),
+                        style = MaterialTheme.typography.bodySmall, color = muted)
+                }
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { coordinator() }
+            }
+            else Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = 16.dp, end = 8.dp).testTag("landings:footer"),
                 verticalAlignment = Alignment.CenterVertically) {
                 Icon(painterResource(R.drawable.ic_lock), null, Modifier.size(14.dp), tint = muted)
                 Spacer(Modifier.width(8.dp))
-                if (sessionFirst) Text(buildAnnotatedString {
-                    append(words.substringBefore(" — "))
-                    append(" — ")
-                    withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)) { append(words.substringAfter(" — ")) }
-                    append(" ${LandingFixWindowCopy.DECISIONS_SESSION_FIRST}")
-                }, Modifier.weight(1f).padding(vertical = 8.dp).semantics { contentDescription = ruled }.testTag("landings:footer-line"),
-                    style = MaterialTheme.typography.bodySmall, color = muted)
-                else Text(words.substringBefore(" — "), Modifier.weight(1f).semantics { contentDescription = words }.testTag("landings:footer-line"),
+                Text(words.substringBefore(" — "), Modifier.weight(1f).semantics { contentDescription = words }.testTag("landings:footer-line"),
                     style = MaterialTheme.typography.bodyMedium, color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (coordinatorId != null) OutlinedButton(onClick = onOpenCoordinator, modifier = Modifier.testTag("landings:open-coordinator")
-                    .semantics { stateDescription = if (sessionFirst) LandingFixWindowCopy.DECISIONS_SESSION_FIRST else LandingSessionCopy.DECISIONS_THE_COORDINATOR },
-                    contentPadding = PaddingValues(start = 12.dp, end = 16.dp)) {
-                    Icon(painterResource(R.drawable.ic_person), null, Modifier.size(ButtonDefaults.IconSize))
-                    Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-                    Text(LandingSessionCopy.OPEN_COORDINATOR, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                }
+                coordinator()
             }
         }
     }
