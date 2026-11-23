@@ -323,7 +323,7 @@ export class FileRetentionSweep implements OnApplicationBootstrap, OnModuleDestr
           where: { sha256 },
           data: {
             bytesDeletedAt: now,
-            // The local store's bytes are in the off-host copy, and the bucket's when it is mirrored (scripts/pg-backup.sh).
+            // The sidecar prunes local blobs from its files copy and S3 blobs from its declared bucket mirror.
             offHostPruneAt: offHostPruneAtFor(blob.storage, this.files.config, now, this.grace),
           },
         });
