@@ -401,8 +401,8 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         // Each is rendered with sentinels, then each part is found as the web template spells it.
         XCTAssertEqual(ProjectDone.tally(counts()),
                        "23 criteria · 19 met · 17 landed on main · 1 in flight · 2 merged outside Orbit"
-                           + " · 3 no code to land")
-        XCTAssertEqual(ProjectDone.cardTally(counts()), "19 met · 17 landed on main · 3 nothing to land")
+                           + " · 3 no code to land · 4 not met")
+        XCTAssertEqual(ProjectDone.cardTally(counts()), "19 met · 17 landed on main · 3 nothing to land · 4 not met")
         XCTAssertEqual(ProjectDone.receiptTally(counts(), acceptedGaps: Self.gapCount),
                        "23 criteria met · 17 landed on main · 3 nothing to land · 7 gaps accepted")
         XCTAssertEqual(ProjectDone.receiptTally(nil, acceptedGaps: Self.gapCount), "7 gaps accepted")
@@ -417,7 +417,11 @@ final class ProjectDoneCopyParityTests: XCTestCase {
                       "the Why-not-done tally's on-main words are no longer said of the project's main branch")
         for part in [
             "`${counts.criteria} criteria`,\n    `${counts.met} met`,\n    `${counts.onMain} ${landedOn(main)}`,\n    ...reasonParts(counts),",
-            "`${counts.met} met`,\n    `${counts.onMain} ${landedOn(main)}`,\n    ...(noBranch > 0 ? [`${noBranch} ${REASON_LABELS.NO_BRANCH}`] : []),\n    ...(nothing > 0 ? [`${nothing} ${PROJECT_DONE_COPY.nothingToLand}`] : []),\n    ...waitPart,",
+            "`${counts.met} met`,\n    `${counts.onMain} ${landedOn(main)}`,\n    ...(noBranch > 0 ? [`${noBranch} ${REASON_LABELS.NO_BRANCH}`] : []),\n    ...(nothing > 0 ? [`${nothing} ${PROJECT_DONE_COPY.nothingToLand}`] : []),\n    ...(notMet > 0 ? [`${notMet} ${PROJECT_DONE_COPY.notMet}`] : []),\n    ...waitPart,",
+            "...reasonParts(counts),\n    ...(notMet > 0 ? [`${notMet} ${PROJECT_DONE_COPY.notMet}`] : []),",
+            "const notMet = Math.max(0, notMetCount(counts) - waiting);",
+            "return Math.max(0, counts.criteria - counts.met);",
+            "return derivedDone?.criteria.filter((criterion) => criterion.landingReason === 'IN_FLIGHT').length ?? 0;",
             "DONE_CARD_TALLY_OF.replace('{met}', String(counts.met)).replace('{n}', String(counts.criteria)),\n      ...waitPart,",
             "const waitPart = waiting > 0 ? [DONE_CARD_WAIT_CONFIRMATION.replace('{n}', String(waiting))] : [];",
             "return [`${counts.criteria} criteria met`, `${acceptedGaps} ${PROJECT_DONE_COPY.gapsAccepted}`].join(' · ');",
