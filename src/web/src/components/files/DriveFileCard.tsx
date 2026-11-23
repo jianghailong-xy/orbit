@@ -18,7 +18,7 @@ export function driveIdFromHref(href: unknown): string | null {
 /** The folder a path sits in, as the board's card writes it: `Files › Orbit UI migration`. */
 function folderTrail(path: string | undefined): string {
   const parts = (path ?? '').split('/').filter(Boolean);
-  return ['Files', ...parts.slice(0, -1)].join(' › ');
+  return ['Documents', ...parts.slice(0, -1)].join(' › ');
 }
 
 /**

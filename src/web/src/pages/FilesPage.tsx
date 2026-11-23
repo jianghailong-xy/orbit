@@ -486,7 +486,7 @@ function FilesBrowser() {
   const found = useQuery({ ...driveSearchQuery(settled), enabled: settled !== '' });
   const selected = entries.find((entry) => entry.id === selectedId) ?? null;
   const linkOf = (entry: DriveEntry) => links.data?.find((link) => link.root.id === entry.id) ?? null;
-  const folderName = folder?.parentId ? folder.name : 'Files';
+  const folderName = folder?.parentId ? folder.name : 'Documents';
 
   const dropInto = (event: DragEvent, target: { id: string; name: string } | null) => {
     if (!event.dataTransfer.types.includes('Files')) return;
@@ -592,7 +592,7 @@ function FilesBrowser() {
   return (
     <div className="files-page">
       <header className="files-head">
-        <h1>Files</h1>
+        <h1>Documents</h1>
         <div className="files-head-actions">
           <Input
             size="small"
@@ -631,7 +631,7 @@ function FilesBrowser() {
         <nav className="files-tree" role="tree" aria-label="Folders">
           {rootId && (
             <TreeFolder
-              folder={{ id: rootId, name: 'Files', root: true }}
+              folder={{ id: rootId, name: 'Documents', root: true }}
               depth={0}
               current={folder?.id ?? ''}
               open={open}
@@ -655,7 +655,7 @@ function FilesBrowser() {
           onDrop={(event) => dropInto(event, null)}
         >
           <div className="files-crumbs">
-            <Link to="/files">Files</Link>
+            <Link to="/files">Documents</Link>
             {crumbs.map((name, i) => (
               <span key={`${name}-${i}`}>
                 <span className="files-crumb-sep"> › </span>
@@ -707,7 +707,7 @@ function FilesBrowser() {
                             <span className="files-name">{entry.name}</span>
                           </span>
                         </td>
-                        <td className="files-col-writer">{entry.folderPath === '/' ? 'Files' : `Files${entry.folderPath}`}</td>
+                        <td className="files-col-writer">{entry.folderPath === '/' ? 'Documents' : `Documents${entry.folderPath}`}</td>
                         <td className="files-col-size">{entry.kind === 'FILE' ? formatSize(entry.sizeBytes) : '—'}</td>
                         <td className="files-col-when">{formatWhen(entry.lastWriter.at)}</td>
                       </tr>

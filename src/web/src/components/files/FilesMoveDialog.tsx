@@ -103,7 +103,7 @@ export function FilesMoveDialog({ entry, rootId, onClose }: { entry: DriveEntry;
     });
 
   const makeFolder = async () => {
-    const under = picked ?? { id: rootId, name: 'Files' };
+    const under = picked ?? { id: rootId, name: 'Documents' };
     const name = (naming ?? '').trim();
     if (!name) return;
     try {
@@ -178,7 +178,7 @@ export function FilesMoveDialog({ entry, rootId, onClose }: { entry: DriveEntry;
     >
       <div className="files-picker" role="tree" aria-label="Folders">
         <PickerFolder
-          folder={{ id: rootId, name: 'Files', root: true }}
+          folder={{ id: rootId, name: 'Documents', root: true }}
           depth={0}
           moving={entry}
           picked={picked?.id ?? null}

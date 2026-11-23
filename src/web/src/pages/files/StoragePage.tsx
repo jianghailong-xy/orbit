@@ -38,7 +38,7 @@ function UsageSection({ title, rows }: { title: string; rows: { key: string; nam
   );
 }
 
-/** Files → Storage: what this account keeps in Orbit Files, the drive and everything else, each byte once. Read when the page opens. */
+/** Files → Storage: what this account keeps in Documents, the drive and everything else, each byte once. Read when the page opens. */
 export function StorageSettingsPage() {
   const { data: usage, isError } = useQuery(storageUsageQuery());
   const { data: drive } = useQuery(driveUsageQuery());
@@ -48,7 +48,7 @@ export function StorageSettingsPage() {
     <div className="settings-page">
       <button type="button" className="settings-back storage-files-back" onClick={() => navigate('/files')}>
         <LeftOutlined />
-        <span>Files</span>
+        <span>Documents</span>
       </button>
       <SettingsHeader title="Storage" />
       <SettingsCard>
@@ -77,12 +77,12 @@ export function StorageSettingsPage() {
           <SettingsRow title="Total" control={<span className="settings-storage-size">{formatFileSize(drive.totalBytes)}</span>} />
           {drive.nearQuota && drive.storeUsedBytes !== undefined && drive.storeQuotaBytes !== undefined && (
             <SettingsRow
-              title="Orbit Files storage"
+              title="Documents storage"
               description={
                 <span className="settings-storage-full" style={{ color: 'var(--warning)' }}>
                   {drive.storeUsedBytes >= drive.storeQuotaBytes
                     ? "The drive's storage is full. Ask the operator to raise the limit."
-                    : `Orbit Files storage is ${Math.floor((drive.storeUsedBytes / drive.storeQuotaBytes) * 100)}% full. Uploads stop at 100%. Ask the operator to raise the limit.`}
+                    : `Documents storage is ${Math.floor((drive.storeUsedBytes / drive.storeQuotaBytes) * 100)}% full. Uploads stop at 100%. Ask the operator to raise the limit.`}
                 </span>
               }
             />

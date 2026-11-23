@@ -191,7 +191,7 @@ export function StorageFilesPage() {
       />
       {first && first.fileCount > 0 && (
         <SettingsSection
-          title="Files"
+          title="Documents"
           action={
             <Segmented
               size="small"

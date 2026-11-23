@@ -7,7 +7,7 @@ import { Input } from '../ui/Input';
 import { driveFolderQuery, driveSearchQuery, formatSize, messageOf, useSettled } from '../../lib/drive';
 
 /** Where the drive is mounted for an agent (design §4.5): a file's path in a message is this plus its place in Files. */
-export const DRIVE_MOUNT = '/home/orbit/Files';
+export const DRIVE_MOUNT = '/home/orbit/Documents';
 
 interface Crumb {
   id: string | null;
@@ -49,7 +49,7 @@ export function DriveFilePicker({
         root.data.entries.find((e) => e.kind === 'FOLDER' && e.name.startsWith(`${wanted}-`) && projectFolder!.id.startsWith(e.name.slice(wanted.length + 1))) ??
         null)
       : null;
-  const trail: Crumb[] = moved ?? [{ id: null, name: 'Files' }, ...(projectCrumb ? [{ id: projectCrumb.id, name: projectCrumb.name }] : [])];
+  const trail: Crumb[] = moved ?? [{ id: null, name: 'Documents' }, ...(projectCrumb ? [{ id: projectCrumb.id, name: projectCrumb.name }] : [])];
   const here = trail[trail.length - 1]!;
   const listing = useQuery({ ...driveFolderQuery(here.id), enabled: root.isSuccess || root.isError });
   const folderPath = [DRIVE_MOUNT, ...trail.slice(1).map((c) => c.name)].join('/');
@@ -90,7 +90,7 @@ export function DriveFilePicker({
           </button>
         ))}
       </nav>
-      <div className="drive-picker-list" role="listbox" aria-label="Files" aria-multiselectable="true">
+      <div className="drive-picker-list" role="listbox" aria-label="Documents" aria-multiselectable="true">
         {source.isError && <div role="alert">{messageOf(source.error)}</div>}
         {(searching ? needle !== search.trim() || found.isPending : listing.isPending) && <div>Loading…</div>}
         {source.data && !(searching && needle !== search.trim()) && entries.length === 0 && (
@@ -123,7 +123,7 @@ export function DriveFilePicker({
               {picked.has(entry.id) ? <CheckOutlined aria-hidden="true" /> : <FileOutlined aria-hidden="true" />}
               <span className="drive-picker-name">
                 {entry.name}
-                {searching && <span className="drive-picker-folder"> · {entry.folderPath === '/' ? 'Files' : `Files${entry.folderPath}`}</span>}
+                {searching && <span className="drive-picker-folder"> · {entry.folderPath === '/' ? 'Documents' : `Documents${entry.folderPath}`}</span>}
               </span>
               <span className="drive-picker-size">{formatSize(entry.sizeBytes)}</span>
             </div>

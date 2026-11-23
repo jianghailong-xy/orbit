@@ -354,7 +354,7 @@ describe('the folder tree and the list', () => {
     expect(writer('deploy-checklist.md')).toBe('You');
     // The tree has the drive's folders, from its root.
     const tree = [...document.querySelectorAll('.files-tree .files-tree-name')].map((n) => n.textContent);
-    expect(tree).toEqual(['Files', 'Datasets', 'Orbit UI migration', 'screens']);
+    expect(tree).toEqual(['Documents', 'Datasets', 'Orbit UI migration', 'screens']);
   });
 
   it('searches the whole drive from the box, each result with its folder, and opens a result in its folder', async () => {
@@ -368,8 +368,8 @@ describe('the folder tree and the list', () => {
     });
     await settle();
     await until(() => expect(row('migration-notes.md')).toBeTruthy());
-    expect(row('field-notes.csv').querySelector('.files-col-writer')!.textContent).toBe('Files/Datasets');
-    expect(row('migration-notes.md').querySelector('.files-col-writer')!.textContent).toBe('Files/Orbit UI migration');
+    expect(row('field-notes.csv').querySelector('.files-col-writer')!.textContent).toBe('Documents/Datasets');
+    expect(row('migration-notes.md').querySelector('.files-col-writer')!.textContent).toBe('Documents/Orbit UI migration');
     expect(row('sign-in-v3.png')).toBeNull();
     await click(row('migration-notes.md'));
     expect(location).toBe('/files?folder=f-ui&file=notes');

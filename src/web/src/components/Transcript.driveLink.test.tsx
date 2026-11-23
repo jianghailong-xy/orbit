@@ -9,7 +9,7 @@ import { DriveFilePicker } from './files/DriveFilePicker';
 import { materializeReferences } from '../lib/composerRefs';
 
 /**
- * A reply that links a drive file (`orbit-drive:<id>`, which the runner writes for a path under /home/orbit/Files) draws
+ * A reply that links a drive file (`orbit-drive:<id>`, which the runner writes for a path under /home/orbit/Documents) draws
  * that file — name, folder, size — and opens it on the Files page; one that is trashed or gone says so. The composer's
  * Add from Files picker hands back the paths of the files picked (board docs/mocks/orbit-files/02-web frame 8).
  */
@@ -64,7 +64,7 @@ describe('a reply linking a drive file', () => {
     await reply('Saved [sign-in-copy.md](orbit-drive:e1) for you.');
     const card = container.querySelector<HTMLAnchorElement>('a.drive-file-card');
     expect(card?.textContent).toContain('sign-in-copy.md');
-    expect(card?.textContent).toContain('Files › Orbit UI migration · 4.1 KB');
+    expect(card?.textContent).toContain('Documents › Orbit UI migration · 4.1 KB');
     expect(card?.getAttribute('href')).toBe('/files?folder=f1&file=e1');
   });
 
@@ -109,7 +109,7 @@ describe('the composer drive picker', () => {
     await click(option('Orbit UI migration'));
     await click(option('sign-in-copy.md'));
     await click([...document.body.querySelectorAll('button')].find((b) => b.textContent === 'Add 1'));
-    expect(onPick).toHaveBeenCalledWith([{ id: 'e1', name: 'sign-in-copy.md', path: '/home/orbit/Files/Orbit UI migration/sign-in-copy.md' }]);
+    expect(onPick).toHaveBeenCalledWith([{ id: 'e1', name: 'sign-in-copy.md', path: '/home/orbit/Documents/Orbit UI migration/sign-in-copy.md' }]);
   });
 
   it("opens on the session's project folder", async () => {
@@ -118,7 +118,7 @@ describe('the composer drive picker', () => {
     await mount(<DriveFilePicker projectFolder={{ id: 'p1', title: 'Orbit UI migration' }} onClose={() => {}} onPick={onPick} />);
     await click(option('sign-in-copy.md'));
     await click([...document.body.querySelectorAll('button')].find((b) => b.textContent === 'Add 1'));
-    expect(onPick.mock.calls[0]![0][0].path).toBe('/home/orbit/Files/Orbit UI migration/sign-in-copy.md');
+    expect(onPick.mock.calls[0]![0][0].path).toBe('/home/orbit/Documents/Orbit UI migration/sign-in-copy.md');
   });
 
   it('falls back to the drive root when the project has no folder yet', async () => {
@@ -151,14 +151,14 @@ describe('the composer drive picker', () => {
       await new Promise((r) => setTimeout(r, 50));
     });
     expect(searches[0]).toContain('q=budg');
-    expect(option('budget.xlsx')?.textContent).toContain('Files/Finance/2026');
+    expect(option('budget.xlsx')?.textContent).toContain('Documents/Finance/2026');
     await click(option('budget.xlsx'));
     await click([...document.body.querySelectorAll('button')].find((b) => b.textContent === 'Add 1'));
-    expect(onPick).toHaveBeenCalledWith([{ id: 'e7', name: 'budget.xlsx', path: '/home/orbit/Files/Finance/2026/budget.xlsx' }]);
+    expect(onPick).toHaveBeenCalledWith([{ id: 'e7', name: 'budget.xlsx', path: '/home/orbit/Documents/Finance/2026/budget.xlsx' }]);
   });
 
   it('sends a picked chip as the file path', () => {
-    const refs = { 'brief.md': { kind: 'drive' as const, id: 'e1', path: '/home/orbit/Files/P/brief.md' } };
-    expect(materializeReferences('Check #brief.md too', refs)).toBe('Check /home/orbit/Files/P/brief.md too');
+    const refs = { 'brief.md': { kind: 'drive' as const, id: 'e1', path: '/home/orbit/Documents/P/brief.md' } };
+    expect(materializeReferences('Check #brief.md too', refs)).toBe('Check /home/orbit/Documents/P/brief.md too');
   });
 });
