@@ -260,6 +260,10 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertTrue(AgentDefaults.supportsAuto("claude-opus-5"))
         XCTAssertTrue(AgentDefaults.supportsAuto("claude-fable-5"))
         XCTAssertTrue(AgentDefaults.supportsAuto("claude-sonnet-5"))
+        // The current models too: without them a session whose runner had not answered lost Auto to Default.
+        for model in ["claude-fable-5-2", "claude-sonnet-5-5", "claude-haiku-5-5"] {
+            XCTAssertTrue(AgentDefaults.supportsAuto(model), model)
+        }
         XCTAssertTrue(AgentDefaults.supportsAuto(
             "kimi-code/kimi-for-coding", engine: "kimi", provider: "kimi"))
         XCTAssertTrue(AgentDefaults.supportsAuto("local-kimi-alias", engine: "kimi", provider: "kimi"))
