@@ -137,14 +137,17 @@ public enum AppIntent: Equatable, Sendable {
     /// card is (owner decision 2026-10-06). A client without that page opens the coordinator
     /// conversation, which draws the merge as its line.
     case openProjectMerge(projectID: String, sessionID: String)
-    /// An owner request's push action — "Provide key", "Answer", "Mark done", "Review": the "Waiting
-    /// on you" inbox with that request's card open and its input focused (`OwnerRequestLink`). It
-    /// never answers the request: a secret has no reply path outside its card (secrets design §7.2).
+    /// An owner request's push action — "Provide key", "Answer", "Mark done", "Review" — and the
+    /// plain tap on its alert or its Later reminder: the conversation that asked, landed on that
+    /// request's card (`OwnerRequestLink`). It never answers the request: a secret has no reply path
+    /// outside its card (secrets design §7.2).
     case openOwnerRequest(requestID: String)
     /// An owner request's "Later": put off for `OwnerRequests.laterSeconds`, on this device only.
     case snoozeOwnerRequest(requestID: String)
-    /// A terminal asking to be approved (push kind `terminal-login`): the "Waiting on you" inbox, where its card is.
-    case openTerminalRequests
+    /// A terminal asking to be approved (push kind `terminal-login`): where its card is — the machine page's
+    /// Needs you section (docs/mocks/waiting-on-you-removal/02 ④). The id is the push's own when it
+    /// carries one, so that card is the one lit; nil opens the section on the oldest waiting.
+    case openTerminalRequests(requestID: String?)
     /// A key or pool login that needs action (push kind `account-needs-action` without a `runnerID`): the
     /// Providers page, where the key's and the pool's rows draw the block and Check again (contract §1).
     case openProviders
@@ -221,6 +224,8 @@ public enum Notifications {
     public static let keyProject = "projectID"
     /// `userInfo` key naming the runner a machine alert is about (apiserver `PushService.notifyRunnerDrainWaiting`).
     public static let keyRunner = "runnerID"
+    /// The terminal sign-in a `terminal-login` alert is about (apiserver `PushService.notifyTerminalLogin`).
+    public static let keyTerminalLogin = "terminalLoginID"
     /// A runner draining for its update with the owner's work waiting on it (D3): a tap opens its page,
     /// where Later and Update Now are.
     public static let runnerUpdatingKind = "runner-updating"
@@ -288,15 +293,19 @@ public enum Notifications {
             if let sid = userInfo[keySession] { return .open(.session(sid)) }
             return userInfo[keyProject].map { .openProject(projectID: $0) }
         }
-        if userInfo[keyKind] == "terminal-login" { return .openTerminalRequests }
+        if userInfo[keyKind] == "terminal-login" {
+            return .openTerminalRequests(requestID: userInfo[keyTerminalLogin])
+        }
         // A scheduled task's alert opens its run's session or the schedule; never the owner-request actions below.
         if userInfo[keyKind] == scheduleKind, let schedule = userInfo[keySchedule] {
             return .openSchedule(scheduleID: schedule, sessionID: userInfo[keySession])
         }
-        // An owner request's actions open its card or put it off; its plain tap opens the session below.
+        // An owner request's actions open its card or put it off; a plain tap — the alert itself or
+        // its Later reminder — opens the conversation that asked, on the same card. Everything it
+        // needs is the request's own id, which the app resolves to `askedBySessionId`.
         if let request = userInfo[keyOwnerRequest] {
-            if actionId == actionOwnerRequestOpen { return .openOwnerRequest(requestID: request) }
             if actionId == actionOwnerRequestLater { return .snoozeOwnerRequest(requestID: request) }
+            return .openOwnerRequest(requestID: request)
         }
         guard let sid = userInfo[keySession] else {
             // The machine's alerts (updating, an engine signed out, Claude blocked in its region, an account needing action) open the runner.

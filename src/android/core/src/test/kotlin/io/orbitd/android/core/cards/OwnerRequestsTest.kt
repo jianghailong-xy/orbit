@@ -3,7 +3,6 @@ package io.orbitd.android.core.cards
 import io.orbitd.android.core.protocol.Wire
 import java.time.Instant
 import java.time.ZoneOffset
-import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -21,7 +20,6 @@ class OwnerRequestsTest {
     @Test fun theCardsWordsPerKind() {
         assertEquals("STEPS", OwnerRequests.kindTag("MANUAL_STEP"))
         assertEquals(listOf("Send answer", "Provide key", "Mark done", "Confirm"), listOf("DECISION", "SECRET", "MANUAL_STEP", "CONFIRM").map(OwnerRequests::primary))
-        assertEquals(listOf("Answer", "Provide", "Open steps", "Review"), listOf("DECISION", "SECRET", "MANUAL_STEP", "CONFIRM").map(OwnerRequests::inboxAction))
         assertEquals(listOf("Answer", "Provide key", "Mark done", "Review"), listOf("DECISION", "SECRET", "MANUAL_STEP", "CONFIRM").map(OwnerRequests::pushAction))
         assertEquals("Can’t do this…", OwnerRequests.declineLabel("MANUAL_STEP"))
         assertEquals("Decline…", OwnerRequests.declineLabel("CONFIRM"))
@@ -31,7 +29,6 @@ class OwnerRequestsTest {
         assertEquals("Goes straight to mini as a file. Orbit keeps it out of this conversation, but any program running as the runner’s user on " +
             "mini can read the file until it is removed. Use a key you can revoke.",
             OwnerRequests.secretNotice(OwnerRequestSecretSpec("k", filePath = "/tmp/k"), "mini"))
-        assertEquals("holds 2 tasks", OwnerRequests.holdsText(secret, now))
         assertFalse(OwnerRequests.ready(secret, " ", false, "", null, null, ""))
         assertTrue(OwnerRequests.ready(secret, "sk", false, "", null, null, ""))
         assertFalse("saving needs a name", OwnerRequests.ready(secret, "sk", true, " ", null, null, ""))
@@ -45,8 +42,8 @@ class OwnerRequestsTest {
         assertEquals("github.com/sample/lfs-builder", asked.repoUrlNorm)
         assertEquals("ws1", asked.workspaceId)
         assertTrue(OwnerRequests.WIKI_CREATE in OwnerRequests.kinds)
-        assertEquals(listOf("WIKI", "Create wiki", "Review", "Review"), listOf(OwnerRequests.kindTag("WIKI_CREATE"), OwnerRequests.primary("WIKI_CREATE"),
-            OwnerRequests.inboxAction("WIKI_CREATE"), OwnerRequests.pushAction("WIKI_CREATE")))
+        assertEquals(listOf("WIKI", "Create wiki", "Review"), listOf(OwnerRequests.kindTag("WIKI_CREATE"), OwnerRequests.primary("WIKI_CREATE"),
+            OwnerRequests.pushAction("WIKI_CREATE")))
         val made = request("""{"id":"w1","kind":"WIKI_CREATE","state":"DONE","title":"Create a wiki for lfs-builder?",
             "answer":{"spaceId":"sp1","name":"lfs-builder"},"resolvedByUserId":"u","createdAt":"2026-11-10T07:58:00Z"}""")
         assertEquals("sp1", made.answer?.spaceId)
@@ -71,8 +68,8 @@ class OwnerRequestsTest {
         assertEquals(listOf("github.com", "r9", "Fix CI"), listOf(asked.browserSite, asked.browserRunnerId, asked.askedBySessionTitle))
         assertNull(request("""{"id":"w","kind":"CONFIRM","state":"PENDING","title":"t","createdAt":"2026-11-10T07:58:00Z"}""").browserSite)
         assertTrue(OwnerRequests.BROWSER_SIGN_IN in OwnerRequests.kinds)
-        assertEquals(listOf("SIGN IN", "Open browser", "Sign in", "Sign in"), listOf(OwnerRequests.kindTag("BROWSER_SIGN_IN"),
-            OwnerRequests.primary("BROWSER_SIGN_IN"), OwnerRequests.inboxAction("BROWSER_SIGN_IN"), OwnerRequests.pushAction("BROWSER_SIGN_IN")))
+        assertEquals(listOf("SIGN IN", "Open browser", "Sign in"), listOf(OwnerRequests.kindTag("BROWSER_SIGN_IN"),
+            OwnerRequests.primary("BROWSER_SIGN_IN"), OwnerRequests.pushAction("BROWSER_SIGN_IN")))
         assertEquals("Sign in needed · Orbit Cloud browser", OwnerRequests.browserSignInEyebrow)
         assertEquals("You sign in yourself; Orbit never sees your password. The login stays on this runner, and every agent on it can use it.",
             OwnerRequests.browserSignInNote)
@@ -101,14 +98,12 @@ class OwnerRequestsTest {
         assertFalse(OwnerRequests.removalToTell(OwnerRequestSecretGrant("REMOVED", endReason = "REVOKED")))
     }
 
-    @Test fun eachRequestGoesAfterTheLastRowStampedBeforeItAndSnoozesLeaveTheCount() {
+    @Test fun eachRequestGoesAfterTheLastRowStampedBeforeIt() {
         val rows = listOf("2026-11-10T07:00:00Z", null, "2026-11-10T07:59:00Z", "2026-11-10T08:01:00Z")
         val early = secret.copy(id = "a", createdAt = "2026-11-10T06:00:00Z")
         val placed = OwnerRequests.place(rows, listOf(early, secret))
         assertEquals(listOf(early), placed[-1])
         assertEquals("filed at 07:58, after the 07:00 row and before the 07:59 one", listOf(secret), placed[0])
-        assertEquals(1, OwnerRequests.waitingCount(listOf(secret, early), mapOf(OwnerRequests.key("a") to now.toEpochMilli() + 1), now))
-        assertEquals(2, OwnerRequests.waitingCount(listOf(secret, early), mapOf(OwnerRequests.key("a") to now.toEpochMilli()), now))
         // A deadline in two hours leaves only the hour.
         assertEquals(listOf("In 1 hour"), OwnerRequests.snoozeChoices(secret.copy(expiresAt = "2026-11-10T10:00:00Z"), now).map { it.label })
         assertEquals(3, OwnerRequests.snoozeChoices(secret, now).size)
@@ -126,36 +121,6 @@ class OwnerRequestsTest {
         val elsewhere = asked.copy(id = "other", askedBySessionId = "x", createdAt = "2026-11-17T04:55:08Z")
         assertEquals("older", OwnerRequests.oldestPending("s", listOf(asked, ended, elsewhere), listOf(older))?.id)
         assertNull(OwnerRequests.oldestPending("s", listOf(ended, elsewhere)))
-    }
-
-    /** The inbox's Open tab and its one count (web `WaitingOnYouPage`, `waitingCount`): the coordinators' questions beside the requests. */
-    @Test fun questionsJoinTheRequestsNewestFirstAndInTheCount() {
-        val project = Wire.json.parseToJsonElement("""{"id":"p1","title":"Payments rollout","attention":{"ownerItems":[
-            {"kind":"COORDINATOR_QUESTION","count":2},{"kind":"FUSE_PAUSED","count":1}]}}""").jsonObject
-        val quiet = Wire.json.parseToJsonElement("""{"id":"p2","title":"Quiet","attention":{"ownerItems":[]}}""").jsonObject
-        val items = Wire.json.parseToJsonElement("""{"needsYou":[
-            {"itemId":"q1","kind":"COORDINATOR_QUESTION","waitingSince":"2026-11-10T07:59:00Z",
-             "question":{"question":"Go **now**?","options":[{"label":"Yes"},{"label":"No"}],"recommendedOption":1}},
-            {"itemId":"q2","kind":"COORDINATOR_QUESTION","waitingSince":"2026-11-10T07:00:00Z","question":{"question":"Which?","options":[]}},
-            {"itemId":"x","kind":"COORDINATOR_QUESTION","waitingSince":"2026-11-10T07:00:00Z","question":null},
-            {"itemId":"f","kind":"FUSE_PAUSED","waitingSince":"2026-11-10T07:30:00Z"}]}""").jsonObject
-        assertEquals(listOf(project), OwnerRequests.projectsWithQuestions(listOf(project, quiet)))
-        val questions = OwnerRequests.coordinatorQuestions(project, items)
-        assertEquals(listOf("q1", "q2"), questions.map { it.itemId })
-        assertEquals("Go now?", questions[0].question)
-        assertEquals("Payments rollout · decision · recommended: No", questions[0].detail)
-        assertEquals("Payments rollout · decision", questions[1].detail)
-        // Requests at 07:58 (secret) and 06:00; questions at 07:59 and 07:00.
-        val early = secret.copy(id = "a", createdAt = "2026-11-10T06:00:00Z")
-        val rows = OwnerRequests.openRows(listOf(secret, early), questions)
-        assertEquals(listOf("q1", secret.id, "q2", "a"), rows.map {
-            when (it) { is OwnerRequests.OpenRow.Question -> it.question.itemId; is OwnerRequests.OpenRow.Request -> it.request.id }
-        })
-        // One count: the requests not put off for later, and every open question the projects' attention counts.
-        val snoozed = mapOf(OwnerRequests.key("a") to now.toEpochMilli() + 60_000)
-        assertEquals(3, OwnerRequests.waitingCount(listOf(secret, early), listOf(project, quiet), snoozed, now))
-        assertEquals(4, OwnerRequests.waitingCount(listOf(secret, early), listOf(project, quiet), emptyMap(), now))
-        assertEquals(0, OwnerRequests.waitingCount(emptyList(), listOf(quiet), emptyMap(), now))
     }
 
     @Test fun theResolutionTurnIsADividerNotTheOwnersBubble() {

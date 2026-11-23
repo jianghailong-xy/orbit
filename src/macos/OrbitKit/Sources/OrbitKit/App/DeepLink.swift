@@ -12,6 +12,9 @@ public enum Route: Equatable, Sendable {
     case runner(String)
     /// A watch's detail on the Following page — where a watch's notification lands.
     case watch(String)
+    /// A terminal asking to be approved: Machines & models' Needs you section, its card lit
+    /// (docs/mocks/waiting-on-you-removal/02 ④, `orbit://terminal-login/<id>`).
+    case terminalLogin(String)
 }
 
 /// `orbit://` URL scheme. `orbit://session/<id>`, `orbit://task/<id>`, `orbit://runner/<id>`,
@@ -30,6 +33,7 @@ public enum DeepLink {
         case "list":    return id.map(Route.list)
         case "runner":  return id.map(Route.runner)
         case "watch":   return id.map(Route.watch)
+        case "terminal-login": return id.map(Route.terminalLogin)
         case "active", "": return .active
         default:        return nil
         }
@@ -43,6 +47,7 @@ public enum DeepLink {
         case .list(let id):      return URL(string: "\(scheme)://list/\(encode(id))")!
         case .runner(let id):    return URL(string: "\(scheme)://runner/\(encode(id))")!
         case .watch(let id):     return URL(string: "\(scheme)://watch/\(encode(id))")!
+        case .terminalLogin(let id): return URL(string: "\(scheme)://terminal-login/\(encode(id))")!
         }
     }
 

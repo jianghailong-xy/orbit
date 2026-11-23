@@ -21,7 +21,7 @@ import type { AccountNeedsAction } from '../providers/account-health.service';
 import { AgentProvider, ENGINE_CLI_NAMES, RUN_NOTICE_MESSAGE_MAX, TRANSLATION_TIMEOUT_MS, uuidToBase62, type LoginEngine } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
-import { readOwnerItemSessionIds } from '../projects/owner-decision-signal';
+import { readOwnerItemSessionIds, readOwnerRequestSessionIds } from '../projects/owner-decision-signal';
 import {
   SESSION_ENDING_SELECT,
   conversationIsOver,
@@ -1738,9 +1738,13 @@ export class PushService {
    *  The owner-item half does not carry the RUNNING gate: a coordinator conversation sits at
    *  AWAITING_INPUT precisely while it is waiting for the answer, which is the state this exists to
    *  make visible. It does carry the same gate a card does — a project with no coordinator bound,
-   *  or one whose conversation was filed away, is counted by neither (`readOwnerItemSessionIds`). */
+   *  or one whose conversation was filed away, is counted by neither (`readOwnerItemSessionIds`).
+   *
+   *  The open owner requests (`request_owner_action`) and the waiting task moves are counted the
+   *  same way and for the same reason: a card only the owner can answer, on the conversation that
+   *  asked (and, for a move, the target project's coordinator) — `readOwnerRequestSessionIds`. */
   async needsYouSessions(ownerId: string): Promise<string[]> {
-    const [rows, blockedOnOwner, withSubagents, outsideTurn] = await Promise.all([
+    const [rows, blockedOnOwner, withSubagents, outsideTurn, askedOfOwner] = await Promise.all([
       this.prisma.session.findMany({
         where: {
           ownerId,
@@ -1798,6 +1802,8 @@ export class PushService {
           },
         },
       }),
+      // The conversations an open owner request or a waiting task move is counted on (MOVE_REQUEST).
+      readOwnerRequestSessionIds(this.prisma, ownerId),
     ]);
     const visible = new Set((await visibleQuestions(this.prisma, rows.filter(r => r.taskId).flatMap(r => r.approvals))).map(a => a.id));
     // A running SubAgent's card is a question whatever its parent is doing (docs/subagent-design.md §5.3): a
@@ -1823,6 +1829,7 @@ export class PushService {
       ...subagentCards.map(card => card.sessionId),
       ...outsideTurnIds,
       ...blockedOnOwner,
+      ...askedOfOwner,
     ])];
   }
 

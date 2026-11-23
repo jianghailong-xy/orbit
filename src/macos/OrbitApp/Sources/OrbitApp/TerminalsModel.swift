@@ -2,9 +2,9 @@ import Foundation
 import Observation
 import OrbitKit
 
-/// Settings → Terminals: the terminals approved on this account (docs/terminal-session-design.md, "The terminal
-/// credential"), and the one press on them — Revoke. Owned by `AppModel`, like Access tokens, so Settings' row and the
-/// page it opens read the same answer. Web parity: `TerminalsPage.tsx`.
+/// The terminals approved on this account (docs/terminal-session-design.md, "The terminal credential"), and the one
+/// press on them — Revoke. Owned by `AppModel`, like Access tokens, so every machine page's Terminals section reads
+/// the same answer. Web parity: `terminalsQuery` and its machine's list.
 @MainActor
 @Observable
 final class TerminalsModel {
@@ -20,9 +20,6 @@ final class TerminalsModel {
     init(baseURL: URL, tokenStore: TokenStore) {
         api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
     }
-
-    /// How many are signed in — nil until a fetch has answered.
-    var count: Int? { loadState.hasLoaded ? terminals.count : nil }
 
     func load() async {
         loadState.begin()

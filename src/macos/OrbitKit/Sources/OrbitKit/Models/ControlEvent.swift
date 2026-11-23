@@ -45,7 +45,7 @@ public enum ControlEventType: String, Codable, Sendable {
     case wikiChanged = "wiki.changed"
     /// The owner's terminals changed — a terminal asked to be approved, a request was decided or collected, or a
     /// terminal was revoked. USER-scoped; `data` names the request or terminal and nothing else: a nudge to re-read
-    /// `GET /terminals/requests` (the approve card) and `GET /terminals` (Settings → Terminals).
+    /// `GET /terminals/requests` (the approve card) and `GET /terminals` (each machine page's Terminals).
     case terminalsChanged = "terminals.changed"
     /// The account's Open list may read differently now (docs/realtime-control-plane-stream.md
     /// §4.8). USER-scoped; `data` carries the list's version (`ControlListChanged`). Sent only to a
@@ -143,6 +143,12 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     /// nothing is waiting any more — which is how the Needs-you bar lets go of a card somebody
     /// answered — and `.some(items)` is what is waiting now.
     public let ownerItems: [SessionOwnerItem]??
+    /// The open owner requests this session asked, and the PENDING task moves waiting on it —
+    /// overwritten with the count they are part of, and doubly optional for `ownerItems`' reason:
+    /// `nil` is an older control plane that never sends the key (keep what the row knows),
+    /// `.some([])` is this server saying none is waiting any more, and `.some(list)` is what is.
+    public let ownerRequests: [SessionOwnerRequest]??
+    public let taskMoves: [SessionTaskMoveGroup]??
     /// The confirmation on this run's session that is still with its reviewer (contract §5 N3).
     /// Doubly optional for `retryAt`'s reason: `nil` is an older control plane that never sends the
     /// key (keep the row's), `.some(nil)` is this server saying none is under review any more — how a
@@ -231,6 +237,12 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
         // a statement ("nothing is waiting on you here") and a missing key is not.
         ownerItems = values.contains(.ownerItems)
             ? .some(try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems) ?? [])
+            : nil
+        ownerRequests = values.contains(.ownerRequests)
+            ? .some((try? values.decodeIfPresent([SessionOwnerRequest].self, forKey: .ownerRequests)) ?? [])
+            : nil
+        taskMoves = values.contains(.taskMoves)
+            ? .some((try? values.decodeIfPresent([SessionTaskMoveGroup].self, forKey: .taskMoves)) ?? [])
             : nil
         confirmationUnderReview = values.contains(.confirmationUnderReview)
             ? .some(try? values.decodeIfPresent(ConfirmationUnderReview.self, forKey: .confirmationUnderReview))

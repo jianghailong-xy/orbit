@@ -29,13 +29,6 @@ const glyphs = {
       <path d="M3 9.5h18M8 2.5v4M16 2.5v4" />
     </>
   ),
-  // tray — what is waiting on the owner.
-  waiting: (
-    <>
-      <path d="M3 13.5 5.8 4.2A2 2 0 0 1 7.7 2.8h8.6a2 2 0 0 1 1.9 1.4L21 13.5v5.2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5.2Z" />
-      <path d="M3 13.5h5.2l1.3 2.6h5l1.3-2.6H21" />
-    </>
-  ),
   // book.closed
   wiki: (
     <>

@@ -495,6 +495,8 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `PUT` | `/api/sessions/:id/share` | body `PutShareLinkDto`; path `id` | `ShareLinksController.putSessionLink` |
 | `GET` | `/api/sessions/:id/subagents` | path `id` | `SessionsController.subagentRuns` |
 | `PUT` | `/api/sessions/:id/tags` | body `SetSessionTagsDto`; path `id` | `SessionsController.setTags` |
+| `GET` | `/api/sessions/:id/task-moves` | path `id` | `SessionTaskMovesController.list` |
+| `POST` | `/api/sessions/:id/task-moves/decision` | body `DecideTaskMoveBatchDto`; path `id` | `SessionTaskMovesController.decide` |
 | `GET` | `/api/sessions/:id/turns` | path `id`; query `view` | `SessionsController.queuedTurns` |
 | `POST` | `/api/sessions/:id/turns` | body `Object`; path `id` | `SessionsController.turn` |
 | `DELETE` | `/api/sessions/:id/turns/:turnId` | path `id`, `turnId` | `SessionsController.cancelTurn` |
