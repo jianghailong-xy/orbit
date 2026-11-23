@@ -1,5 +1,5 @@
 import {
-  CLONE_WORKDIR_CAPABILITY,
+  cloneRootFor,
   CREATE_WORKDIR_CAPABILITY,
   managedSetupState,
   type ManagedRunnerStatus,
@@ -71,7 +71,7 @@ export const makesNewFolders = (runner: { capabilities?: string[]; reposRoot?: s
 /** Whether a machine clones a GitHub repository on request (docs/github-workspace-design.md §6): it declares
  *  clone-workdir/v1 and has reported the Repos Folder the clone goes in. POST /sessions refuses either missing. */
 export const clonesRepositories = (runner: { capabilities?: string[]; reposRoot?: string | null }): boolean =>
-  !!runner.capabilities?.includes(CLONE_WORKDIR_CAPABILITY) && !!runner.reposRoot?.trim();
+  cloneRootFor(runner) !== null;
 
 /** A path as the board writes it: the home folder as `~` (`/Users/austin/orbit-repos/x` → `~/orbit-repos/x`). */
 export function homeShortPath(path: string): string {
