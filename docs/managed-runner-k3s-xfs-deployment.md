@@ -191,9 +191,9 @@ The previous backend was Docker on the same host (`orbit-ws03`, channel at `http
 
 ## Orbit Files RGW storage
 
-The production Orbit Files data pool is `orbit-files.rgw.buckets.data`. Its starting `max_bytes`
-quota is **2 TiB (2,199,023,255,552 bytes)**. Use that exact value for
-`ORBIT_FILES_STORE_QUOTA_BYTES` when deploying the S3 backend. The S3 bucket is `orbit-files`.
+The production Orbit Files data pool is `orbit-files.rgw.buckets.data`. Its `max_bytes` quota is
+**10 TiB (10,995,116,277,760 bytes)**. Set `ORBIT_FILES_STORE_QUOTA_BYTES=10995116277760` when
+deploying the S3 backend. The S3 bucket is `orbit-files`.
 Keep `ORBIT_FILES_S3_ACCESS_KEY_ID` and `ORBIT_FILES_S3_SECRET_ACCESS_KEY` in the production
 apiserver's private Compose env file.
 
