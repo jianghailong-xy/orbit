@@ -2,6 +2,8 @@
 
 Status: design, nothing built · 2026-11-22 · task 351lKeumGIjTw8S8IoUzt (list-freshness project 34tKYCMLgan4tpcxkUn44)
 
+Built since: §9 task 0 (migration 1428), task 1 (§5.0), and tasks 4–6 (Option A: migration 1434, `hints=list_scopes`, the web filter), task 3527hS20sC7Fl5tmSIfvp, 2026-11-23.
+
 Builds on:
 - [list-freshness-design.md](./list-freshness-design.md): §3 (hints), P2 and P4.
 - [realtime-control-plane-stream.md](./realtime-control-plane-stream.md): §4.8 (`sessions.list_changed`) and §4.9 (the opt-in precedent).
