@@ -481,7 +481,7 @@ a reverse proxy on the host that forwards to `127.0.0.1:3030`, and set `GRAFANA_
 Put your own authentication or an IP allow-list in front of it as well: Grafana's login is its only lock.
 
 **Signing in.** The user is `admin`. The password is `GRAFANA_ADMIN_PASSWORD` in `.env`, which a fresh install
-(`scripts/install-server.sh`) and the upgrade script generate (32 hex digits) where `.env` has none, and never replace.
+(`scripts/install-server.sh`) generates (32 hex digits), and the upgrade script adds where `.env` turns `monitoring` on and has none; neither replaces one.
 Without one the `grafana` container refuses to start, so it can never come up on Grafana's own default password.
 Sign-up, creating organizations and anonymous access are off. Grafana stores the password in its database the first
 time it starts, and changing the line later does not change it; to set a new one:

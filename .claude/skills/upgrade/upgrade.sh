@@ -258,6 +258,20 @@ managed_runner_services_up() {
 }
 # ── end of the managed runners' section ─────────────────────────────────────────────────────────────
 
+# Grafana's admin password (docs/self-hosting.md, "Monitoring"): where .env turns the monitoring profile on and has no
+# GRAFANA_ADMIN_PASSWORD, one is written to it, once, so that Grafana has a password to start with; a password already
+# there is never replaced. A deployment that has not turned monitoring on keeps its .env exactly as it is. Grafana is
+# published on this host's loopback alone.
+grafana_password() {
+  [ -f .env ] || return 0
+  printf '%s\n' "${COMPOSE_PROFILES:-$(link_env COMPOSE_PROFILES)}" | tr ',' '\n' | tr -d ' ' | grep -x monitoring >/dev/null || return 0
+  [ -z "$(link_env GRAFANA_ADMIN_PASSWORD)" ] || return 0
+  if [ -n "$(tail -c 1 .env)" ]; then printf '\n' >>.env || return 0; fi
+  ( umask 077 && printf '# Grafana'"'"'s admin password, written by the upgrade script at %s. Grafana keeps the one it first started with.\nGRAFANA_ADMIN_PASSWORD="%s"\n' \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(openssl rand -hex 16)" >>.env ) || { echo "!!  warning: could not write Grafana's admin password to .env" >&2; return 0; }
+  echo "==> Wrote GRAFANA_ADMIN_PASSWORD to .env (not shown)"
+}
+
 # ── Runner link: this section is the same in both copies of /upgrade's script ───────────────────────
 # Runners work over the runner link (docs/self-hosting.md, "Runner link"), so an upgrade brings it up on a deployment that
 # has none. What .env says decides what this script may do:
@@ -441,18 +455,6 @@ link_prepare() {
   [ "$LINK_STATE" != operator ] || return 0
   link_build || return 0
   if [ "$LINK_STATE" = new ]; then link_write_env || return 0; fi
-}
-
-# Grafana's admin password (docs/self-hosting.md, "Monitoring"): written to .env once, where it has none, so that the
-# monitoring profile's Grafana has one to start with. A password already there is never replaced, and none is written
-# where there is no .env. Grafana is published on this host's loopback alone.
-grafana_password() {
-  [ -f .env ] || return 0
-  [ -z "$(link_env GRAFANA_ADMIN_PASSWORD)" ] || return 0
-  if [ -n "$(tail -c 1 .env)" ]; then printf '\n' >>.env || return 0; fi
-  ( umask 077 && printf '# Grafana'"'"'s admin password, written by the upgrade script at %s. Grafana keeps the one it first started with.\nGRAFANA_ADMIN_PASSWORD="%s"\n' \
-      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(openssl rand -hex 16)" >>.env ) || { echo "!!  warning: could not write Grafana's admin password to .env" >&2; return 0; }
-  echo "==> Wrote GRAFANA_ADMIN_PASSWORD to .env (not shown)"
 }
 
 # What a link address answers from this project's network, as scripts/runner-link/door-check.js says it.
