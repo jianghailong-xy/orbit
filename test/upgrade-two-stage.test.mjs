@@ -24,13 +24,14 @@ const COPIED = [
   'docker-compose.yml', '.gitignore', 'gateway/nginx.conf', 'gateway/several-apiservers/http/upstreams.conf',
   'gateway/several-apiservers/server/routes.conf', 'scripts/pg-archive-wal.sh', 'scripts/pg-backup.sh',
   'src/link-gateway/nats.conf', 'deploy/runner-link/behind-web-gateway.env', 'deploy/postgres-pinned.yml', 'deploy/db-proxy.yml',
-  'deploy/db-proxy/haproxy.cfg',
+  'deploy/db-proxy/haproxy.cfg', 'deploy/monitoring/prometheus.yml', 'scripts/pg-monitor-role.sh',
 ];
 // What the target is left with besides .env, its ./data and .upgrade/: the release's files, and nothing built from.
 const SHIPPED = [
-  'deploy/db-proxy.yml', 'deploy/db-proxy/haproxy.cfg', 'deploy/postgres-pinned.yml', 'deploy/runner-link/behind-web-gateway.env',
-  'docker-compose.yml', 'gateway/nginx.conf', 'gateway/several-apiservers/http/upstreams.conf',
-  'gateway/several-apiservers/server/routes.conf', 'scripts/pg-archive-wal.sh', 'scripts/pg-backup.sh', 'src/link-gateway/nats.conf',
+  'deploy/db-proxy.yml', 'deploy/db-proxy/haproxy.cfg', 'deploy/monitoring/prometheus.yml', 'deploy/postgres-pinned.yml',
+  'deploy/runner-link/behind-web-gateway.env', 'docker-compose.yml', 'gateway/nginx.conf', 'gateway/several-apiservers/http/upstreams.conf',
+  'gateway/several-apiservers/server/routes.conf', 'scripts/pg-archive-wal.sh', 'scripts/pg-backup.sh', 'scripts/pg-monitor-role.sh',
+  'src/link-gateway/nats.conf',
 ];
 const DEPLOY_ORDER = ['postgres', 'db-proxy', 'nats', 'apiserver', 'wiki-worker', 'web', 'link-gateway', 'gateway', 'pgbackup'];
 // Without a gap, a web gateway the release recreates goes first, so that the gateway handing the apiserver and web over
@@ -335,10 +336,10 @@ test('with ORBIT_REGISTRY unset, Compose renders exactly what the file rendered 
   // The file with the release's lines put back as they read before it.
   const before = now.replace(/\n# Where each image comes from\.[^\n]*\n(?:#[^\n]*\n)*\n/, '\n')
     .replace(/\n {4}# Empty unless ORBIT_IMAGE_TAG is set[^\n]*\n {4}#[^\n]*\n {4}image: \$\{ORBIT_IMAGE_TAG:\+[^\n]*\n/, '\n')
-    .replace(/\$\{ORBIT_REGISTRY:\+\$\{ORBIT_REGISTRY\}\/\}\$\{ORBIT_[A-Z]+_IMAGE:-([^}]+)\}/g, '$1')
+    .replace(/\$\{ORBIT_REGISTRY:\+\$\{ORBIT_REGISTRY\}\/\}\$\{ORBIT_[A-Z_]+_IMAGE:-([^}]+)\}/g, '$1')
     .replace(/\$\{ORBIT_REGISTRY:\+\$\{ORBIT_REGISTRY\}\/\}(orbit-[a-z-]+):\$\{ORBIT_[A-Z_]+_TAG:-local\}/g, '$1:local');
   assert.notEqual(before, now);
-  assert.doesNotMatch(before, /ORBIT_REGISTRY|ORBIT_IMAGE_TAG|ORBIT_LINK_GATEWAY_TAG|ORBIT_[A-Z]+_IMAGE/);
+  assert.doesNotMatch(before, /ORBIT_REGISTRY|ORBIT_IMAGE_TAG|ORBIT_LINK_GATEWAY_TAG|ORBIT_[A-Z_]+_IMAGE/);
   writeFileSync(path.join(dir, 'before.yml'), before);
   writeFileSync(path.join(dir, 'now.yml'), now);
   writeFileSync(path.join(dir, '.env'), 'JWT_SECRET=x\nPROVIDER_SECRET_KEY=y\nRUNNER_LINK_SIGNING_KEY=z\n');
@@ -368,7 +369,7 @@ test('with ORBIT_REGISTRY unset, Compose renders exactly what the file rendered 
     env: {
       ...env, ORBIT_REGISTRY: REGISTRY, ORBIT_IMAGE_TAG: 'a'.repeat(40), ORBIT_LINK_GATEWAY_TAG: 'b'.repeat(40),
       ...Object.fromEntries(readFileSync(path.join(repo, 'deploy/two-stage/base-images.env'), 'utf8').split('\n')
-        .filter((line) => /^ORBIT_[A-Z]+_IMAGE=/.test(line)).map((line) => line.split('='))),
+        .filter((line) => /^ORBIT_[A-Z_]+_IMAGE=/.test(line)).map((line) => line.split('='))),
     },
   });
   assert.equal(set.status, 0, set.stderr);
@@ -426,7 +427,7 @@ for (const upgrade of UPGRADES) {
     assert.ok(env.startsWith(TARGET_ENV), 'what .env held comes first, byte for byte');
     assert.equal(statSync(path.join(fixture.target, '.env')).mode & 0o777, 0o600);
     const base = Object.fromEntries(readFileSync(path.join(repo, 'deploy/two-stage/base-images.env'), 'utf8').split('\n')
-      .filter((line) => /^ORBIT_[A-Z]+_IMAGE=/.test(line)).map((line) => line.split('=')));
+      .filter((line) => /^ORBIT_[A-Z_]+_IMAGE=/.test(line)).map((line) => line.split('=')));
     assert.deepEqual(releaseLines(env), [
       '# >>> The release this host runs: written by /upgrade\'s two-stage deploy, and replaced whole by the next one',
       `ORBIT_REGISTRY=${REGISTRY}`, `ORBIT_IMAGE_TAG=${first}`, `ORBIT_LINK_GATEWAY_TAG=${link}`,

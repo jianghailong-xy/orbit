@@ -164,6 +164,17 @@
 // ce80000db8 then added one apiserver environment line, ORBIT_RUN_STOPPED_WAKE (on unless the host's .env sets
 // ORBIT_RUN_STOPPED_WAKE_MODE to off), and the three comment lines that explain it; the account owner approved it as a
 // deployment setting on 2026-11-20. No service, mount or port is added; the block below pins the line.
+//
+// On 2026-11-20 the account owner settled that every self-hosted deployment runs a monitoring stack in Compose (project
+// 350mFkGGRDovIfipePH2O, whose instructions record the decision and its rules: no new internet-facing surface, never the
+// Docker socket, a memory limit on every container, a pg_monitor role of its own for postgres-exporter). Its first phase
+// (task 350mIIwdkZa5qmLnRglPv) adds four services under a profile of their own, monitoring, which (t) pins line by line:
+// prometheus, node-exporter and postgres-exporter, resident, and pg-monitor-role, which runs once each time the profile
+// comes up and exits, making postgres-exporter's role over the Postgres socket. None publishes a port; node-exporter
+// mounts the host's /proc, /sys and / read-only, as nobody with every capability dropped. Two named volumes are added,
+// Prometheus's data and the role's password. The apiserver gains two fixed environment lines, the internal listener
+// Prometheus scrapes (src/apiserver/src/metrics/metrics-listener.ts), which serves /metrics alone and is published
+// nowhere. A deployment whose .env does not name the profile renders exactly what it did, but for those two lines.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -225,7 +236,22 @@ const LINK_PROFILE = 'runner-link';
 const NATS = 'nats';
 // NATS's whole configuration since task B4, pinned by (q).
 const NATS_CONF = 'src/link-gateway/nats.conf';
-const APPROVED_ADDITIONS = [WIKI_WORKER, DOCKER_CHANNEL, MANAGED_RUNNER_FIREWALL, LINK_GATEWAY, NATS];
+// Added by the monitoring project on 2026-11-20 (see the top of this file): started only under their own profile.
+const MONITORING_PROFILE = 'monitoring';
+const PROMETHEUS = 'prometheus';
+const NODE_EXPORTER = 'node-exporter';
+const PG_MONITOR_ROLE = 'pg-monitor-role';
+const POSTGRES_EXPORTER = 'postgres-exporter';
+const MONITORING = [PROMETHEUS, NODE_EXPORTER, PG_MONITOR_ROLE, POSTGRES_EXPORTER];
+// Each image by version and index digest, the default its ORBIT_*_IMAGE variable falls back to.
+const PROMETHEUS_IMAGE = 'prom/prometheus:v3.16.0@sha256:e04987641b57704f408e31f6373ba4138ecf27cb4a165d24aabb6c38fddd0f06';
+const NODE_EXPORTER_IMAGE = 'prom/node-exporter:v1.13.1@sha256:7296504d4ada44b7d7ab4431e27e9f9900d8488f8d55842f4b12ae2704e16dfe';
+const POSTGRES_EXPORTER_IMAGE = 'prometheuscommunity/postgres-exporter:v0.21.1@sha256:3b8e05a84282cd1199ad2fb6c66f362738bf4c68c1547d8f4226a34a7dd6d8d7';
+// Its two named volumes, the last lines of the file, and the comment above them.
+const MONITORING_VOLUMES = ['  prometheus-data:', '  pg-monitor-secret:'];
+// pg-monitor-role is the one approved addition that is not resident: it runs once each time the profile comes up.
+const ONE_SHOT = [PG_MONITOR_ROLE];
+const APPROVED_ADDITIONS = [WIKI_WORKER, DOCKER_CHANNEL, MANAGED_RUNNER_FIREWALL, LINK_GATEWAY, NATS, ...MONITORING];
 const REMOVED_SERVICES = [
   'watchdog', 'outcome-coordinator', 'outcome-coordinator-secondary', 'executable-dead-man',
 ];
@@ -271,7 +297,7 @@ const postgresConfiguration = git('show', `${POSTGRES_CONFIGURATION_SHA}:${COMPO
  * service that happened to precede it.
  */
 function services(source) {
-  const body = source.match(/^services:\n([\s\S]*?)(?=^\S|\Z)/m)?.[1] ?? '';
+  const body = source.match(/^services:\n([\s\S]*?)(?=^\S|(?![\s\S]))/m)?.[1] ?? '';
   const blocks = new Map();
   let name = null;
   let lines = [];
@@ -319,9 +345,9 @@ test('the approved configuration commits still have exactly the five surviving s
   assert.deepEqual([...survivingConfigurationServices.keys()], EXPECTED_SERVICES);
 });
 
-test('(a) Compose declares exactly the five surviving services, the wiki worker, the Docker channel, the managed runners\' firewall, the runner link gateway and its NATS', () => {
+test('(a) Compose declares exactly the five surviving services, the wiki worker, the Docker channel, the managed runners\' firewall, the runner link gateway, its NATS and the monitoring profile\'s four', () => {
   assert.deepEqual([...currentServices.keys()].sort(), [...EXPECTED_SERVICES, ...APPROVED_ADDITIONS].sort());
-  assert.equal(currentServices.size, 10);
+  assert.equal(currentServices.size, 14);
 });
 
 test('(b) no removed sidecar is named anywhere in Compose', () => {
@@ -344,7 +370,10 @@ test('(c) nothing was added back: no new service, no new always-on process, no i
   // No resident process beyond the ones the five surviving services already ran, the wiki worker and
   // the Docker channel: resident processes too (restart: unless-stopped), which is what the owner approved.
   assert.deepEqual(alwaysOn(currentServices).sort(),
-    [...alwaysOn(baselineServices).filter((name) => currentServices.has(name)), ...APPROVED_ADDITIONS].sort());
+    [...alwaysOn(baselineServices).filter((name) => currentServices.has(name)),
+      ...APPROVED_ADDITIONS.filter((name) => !ONE_SHOT.includes(name))].sort());
+  // The one run-once service the owner's monitoring decision allows, by name: it sets no restart policy at all.
+  for (const name of ONE_SHOT) assert.doesNotMatch(currentServices.get(name), /^\s+restart:/m, `${name} restarts`);
   // No one-shot substitute: nothing may declare a run-once profile or a restart policy that
   // re-runs a job, and no service may be introduced solely to be `docker compose run`. The three
   // profiles are the Docker channel's, the managed runners' firewall's and the runner link's, which the gateway
@@ -357,8 +386,9 @@ test('(c) nothing was added back: no new service, no new always-on process, no i
     [MANAGED_RUNNER_FIREWALL, [`    profiles: [${FIREWALL_PROFILE}]`]],
     [LINK_GATEWAY, [`    profiles: [${LINK_PROFILE}]`]],
     [NATS, [`    profiles: [${LINK_PROFILE}]`]],
+    ...MONITORING.map((name) => [name, [`    profiles: [${MONITORING_PROFILE}]`]]),
   ]);
-  assert.equal(current.match(/^\s+profiles:/gm).length, 4);
+  assert.equal(current.match(/^\s+profiles:/gm).length, 8);
   assert.doesNotMatch(current, /^\s+restart: (on-failure|always)$/m);
   assert.doesNotMatch(current, /\bexecutable-acceptance-dead-man\b/);
 });
@@ -389,7 +419,13 @@ test('(s) the two-stage release names each image through variables, and changes 
   // two-stage release deploys, still built where they run and named as before.
   assert.deepEqual(lines.filter((line) => /^\s+image:/.test(line) && !TWO_STAGE_IMAGES.has(line) && !TWO_STAGE_WEB_IMAGE.endsWith(line)),
     ['    image: postgres:16-alpine', '    image: postgres:16-alpine', '    image: orbit-docker-channel:local',
-      '    image: orbit-cloud-runner-firewall:local']);
+      '    image: orbit-cloud-runner-firewall:local',
+      // The monitoring profile's (2026-11-20, the top of this file): (t) pins them. pg-monitor-role runs pgbackup's image,
+      // which deploy/postgres-pinned.yml pins with theirs.
+      `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_PROMETHEUS_IMAGE:-${PROMETHEUS_IMAGE}}`,
+      `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_NODE_EXPORTER_IMAGE:-${NODE_EXPORTER_IMAGE}}`,
+      '    image: postgres:16-alpine',
+      `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_POSTGRES_EXPORTER_IMAGE:-${POSTGRES_EXPORTER_IMAGE}}`]);
 });
 
 /** What Compose acts on: comments and blank lines document a block, they cannot run a process. */
@@ -494,6 +530,13 @@ const APPROVED_APISERVER_BLOCKS = [
     '      RUNNER_LINK_INTERNAL_HOST: "${RUNNER_LINK_INTERNAL_HOST:-0.0.0.0}"',
     '      RUNNER_LINK_NATS_SEED: "${RUNNER_LINK_NATS_APISERVER_SEED:-}"',
   ],
+  // The internal metrics listener (2026-11-20, the top of this file): fixed, so that deploy/monitoring/prometheus.yml
+  // scrapes the port it opens on, on every interface of the container and published nowhere. It comes right after the
+  // forwarding's lines in the file, before the releases'.
+  [
+    '      METRICS_INTERNAL_PORT: "9091"',
+    '      METRICS_INTERNAL_HOST: 0.0.0.0',
+  ],
   // The runner link's releases (2026-10-25, the top of this file): where the apiserver reads what /dl publishes, the web
   // container beside it unless the host's .env names another. It comes after the forwarding's lines in the file, and
   // before the managed runners'.
@@ -596,6 +639,18 @@ test('nothing beyond the approved configuration was added to pgbackup, apiserver
  * `source` without the service `name` and the comment lines that introduce it, as the file read before
  * that service was added: the blank line before its comment stays, the one after its block goes.
  */
+/** `source` without the monitoring profile's volumes and the comment that introduces them. */
+function withoutMonitoringVolumes(source) {
+  let lines = source.split('\n');
+  const first = lines.indexOf(MONITORING_VOLUMES[0]);
+  assert.ok(first > 0, 'docker-compose.yml has no prometheus-data volume');
+  assert.deepEqual(lines.slice(first, first + MONITORING_VOLUMES.length), MONITORING_VOLUMES);
+  let from = first;
+  while (/^ {2}#/.test(lines[from - 1])) from -= 1;
+  lines = [...lines.slice(0, from), ...lines.slice(first + MONITORING_VOLUMES.length)];
+  return lines.join('\n');
+}
+
 function withoutService(source, name) {
   const lines = source.split('\n');
   const header = lines.indexOf(`  ${name}:`);
@@ -643,9 +698,8 @@ function withoutApprovedAdditions(source) {
 // approved blocks are pinned beside them, as postgres's are by (i); all are set aside here, so that a line added
 // anywhere else still turns this red exactly as it did before those decisions.
 test('(k) removing the sidecars is subtraction: setting the approved wiki worker aside, Compose lost more lines than it gained', () => {
-  const rest = withoutApprovedAdditions(withoutService(withoutService(
-    withoutService(withoutService(withoutService(current, WIKI_WORKER), DOCKER_CHANNEL), MANAGED_RUNNER_FIREWALL),
-    LINK_GATEWAY), NATS));
+  const rest = withoutMonitoringVolumes(withoutApprovedAdditions([WIKI_WORKER, DOCKER_CHANNEL, MANAGED_RUNNER_FIREWALL,
+    LINK_GATEWAY, NATS, ...MONITORING].reduce(withoutService, current)));
   const scratch = mkdtempSync(path.join(tmpdir(), 'compose-topology-'));
   try {
     writeFileSync(path.join(scratch, 'baseline.yml'), baseline);
@@ -1102,4 +1156,129 @@ test('(r) a failed off-host copy is logged and costs neither the other copy nor 
     assert.ok(log.includes(`ERROR: off-host sync to ${failing} failed: connection refused`), log);
     assert.ok(rsyncCalls.some((call) => call.endsWith(` ${other}/`)), rsyncCalls.join('\n'));
   }
+});
+
+// The monitoring profile's four services as task 350mIIwdkZa5qmLnRglPv added them on the owner's decision of 2026-11-20
+// (see the top of this file), every directive of each in order. Prometheus: its image by digest, a read-only root, every
+// capability dropped, a memory limit, its configuration read-only and a volume of its own, retention from .env. node-exporter:
+// the host's /proc, /sys and / read-only, as nobody with no capability. pg-monitor-role: pgbackup's image and socket, run
+// once, no restart policy. postgres-exporter: orbit_monitor's password from the volume pg-monitor-role writes. None
+// publishes a port or has the host's network, and none is given the Docker socket. Changing any of it is a new decision,
+// made here.
+test('(t) the monitoring services are exactly the ones the monitoring project added on 2026-11-20, off unless its profile is on', () => {
+  assert.deepEqual(directives(currentServices.get(PROMETHEUS)), [
+    '  prometheus:',
+    `    profiles: [${MONITORING_PROFILE}]`,
+    `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_PROMETHEUS_IMAGE:-${PROMETHEUS_IMAGE}}`,
+    '    container_name: orbit-prometheus',
+    '    restart: unless-stopped',
+    '    mem_limit: 1g',
+    '    read_only: true',
+    '    cap_drop: [ALL]',
+    '    security_opt: [\"no-new-privileges:true\"]',
+    '    command:',
+    '      - --config.file=/etc/prometheus/prometheus.yml',
+    '      - --storage.tsdb.path=/prometheus',
+    '      - --storage.tsdb.retention.time=${ORBIT_PROMETHEUS_RETENTION:-15d}',
+    '      - --storage.tsdb.retention.size=${ORBIT_PROMETHEUS_RETENTION_SIZE:-4GB}',
+    '    volumes:',
+    '      - ./deploy/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro',
+    '      - prometheus-data:/prometheus',
+    '    expose:',
+    '      - \"9090\"',
+    '    healthcheck:',
+    '      test: [\"CMD\", \"wget\", \"-q\", \"-O\", \"/dev/null\", \"http://127.0.0.1:9090/-/ready\"]',
+    '      interval: 10s',
+    '      timeout: 5s',
+    '      retries: 6',
+    '      start_period: 30s',
+  ]);
+  assert.deepEqual(directives(currentServices.get(NODE_EXPORTER)), [
+    '  node-exporter:',
+    `    profiles: [${MONITORING_PROFILE}]`,
+    `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_NODE_EXPORTER_IMAGE:-${NODE_EXPORTER_IMAGE}}`,
+    '    container_name: orbit-node-exporter',
+    '    restart: unless-stopped',
+    '    user: \"65534:65534\"',
+    '    mem_limit: 128m',
+    '    read_only: true',
+    '    cap_drop: [ALL]',
+    '    security_opt: [\"no-new-privileges:true\"]',
+    '    command:',
+    '      - --path.procfs=/host/proc',
+    '      - --path.sysfs=/host/sys',
+    '      - --path.rootfs=/host/root',
+    '      - --web.listen-address=:9100',
+    '    volumes:',
+    '      - /proc:/host/proc:ro',
+    '      - /sys:/host/sys:ro',
+    '      - /:/host/root:ro,rslave',
+    '    expose:',
+    '      - \"9100\"',
+  ]);
+  assert.deepEqual(directives(currentServices.get(PG_MONITOR_ROLE)), [
+    '  pg-monitor-role:',
+    `    profiles: [${MONITORING_PROFILE}]`,
+    '    image: postgres:16-alpine',
+    '    container_name: orbit-pg-monitor-role',
+    '    mem_limit: 64m',
+    '    entrypoint: [\"/bin/sh\", \"/usr/local/bin/pg-monitor-role.sh\"]',
+    '    environment:',
+    '      PGHOST: /var/run/postgresql',
+    '      PGUSER: orbit',
+    '      PGDATABASE: orbit',
+    '    depends_on:',
+    '      postgres:',
+    '        condition: service_healthy',
+    '    volumes:',
+    '      - ./scripts/pg-monitor-role.sh:/usr/local/bin/pg-monitor-role.sh:ro',
+    '      - pg-socket:/var/run/postgresql',
+    '      - pg-monitor-secret:/secret',
+  ]);
+  assert.deepEqual(directives(currentServices.get(POSTGRES_EXPORTER)), [
+    '  postgres-exporter:',
+    `    profiles: [${MONITORING_PROFILE}]`,
+    `    image: \${ORBIT_REGISTRY:+\${ORBIT_REGISTRY}/}\${ORBIT_POSTGRES_EXPORTER_IMAGE:-${POSTGRES_EXPORTER_IMAGE}}`,
+    '    container_name: orbit-postgres-exporter',
+    '    restart: unless-stopped',
+    '    mem_limit: 128m',
+    '    read_only: true',
+    '    cap_drop: [ALL]',
+    '    security_opt: [\"no-new-privileges:true\"]',
+    '    environment:',
+    '      DATA_SOURCE_URI: \"postgres:5432/orbit?sslmode=disable\"',
+    '      DATA_SOURCE_USER: orbit_monitor',
+    '      DATA_SOURCE_PASS_FILE: /secret/password',
+    '    depends_on:',
+    '      pg-monitor-role:',
+    '        condition: service_completed_successfully',
+    '    volumes:',
+    '      - pg-monitor-secret:/secret:ro',
+    '    expose:',
+    '      - \"9187\"',
+  ]);
+});
+
+test('(t) every monitoring service has a memory limit, logs like the rest, and publishes no port', () => {
+  for (const name of MONITORING) {
+    const block = services(current).get(name);
+    assert.match(block, /^ {4}mem_limit: \d+[mg]$/m, `${name} has no memory limit`);
+    assert.match(block, /^ {4}logging: \*logging$/m, `${name} does not rotate its log`);
+    assert.doesNotMatch(block, /^ {4}(ports|network_mode|pid|privileged|cap_add):/m, `${name} publishes a port or widens its sandbox`);
+  }
+});
+
+test('(t) the monitoring profile adds exactly two named volumes, and the file ends with them', () => {
+  assert.ok(asWritten.endsWith(`${MONITORING_VOLUMES.join('\n')}\n`), 'docker-compose.yml no longer ends with the monitoring volumes');
+  assert.deepEqual([...asWritten.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)].map((m) => m[1]).slice(-3), ['pg-socket', 'prometheus-data', 'pg-monitor-secret']);
+});
+
+test('(t) Prometheus scrapes the apiservers by their shared name on the internal listener, and the link gateway by its own name', () => {
+  const config = readFileSync(path.join(repo, 'deploy/monitoring/prometheus.yml'), 'utf8');
+  const jobs = [...config.matchAll(/^ {2}- job_name: ([a-z-]+)$/gm)].map((m) => m[1]);
+  assert.deepEqual(jobs, ['apiserver', 'link-gateway', 'node', 'postgres', 'prometheus']);
+  assert.match(config, /job_name: apiserver\n {4}dns_sd_configs:\n {6}- names: \[orbit-apiservers\]\n {8}type: A\n {8}port: 9091\n/);
+  assert.match(config, /job_name: link-gateway\n {4}dns_sd_configs:\n {6}- names: \[link-gateway\]\n {8}type: A\n {8}port: 9464\n/);
+  // The apiserver's listener opens on the port Prometheus scrapes.
+  assert.match(currentServices.get('apiserver'), /^ {6}METRICS_INTERNAL_PORT: "9091"$/m);
 });

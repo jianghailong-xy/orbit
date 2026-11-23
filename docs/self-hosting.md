@@ -290,7 +290,8 @@ base backups and archived WAL to `./data/pg-archive`.
   restore the archive before the first `docker compose up -d`, or you have a new, empty cluster to move aside first:
   [Restore on a replacement host](postgres-backup-restore.md#restore-on-a-replacement-host).
 - Periodically perform the verification procedure in the [backup and restore runbook](postgres-backup-restore.md).
-- Monitor container health, free disk, failed backups, runner heartbeat status, and HTTP error rates.
+- Monitor container health, free disk, failed backups, runner heartbeat status, and HTTP error rates: the
+  [monitoring profile](#monitoring) collects the metrics for it.
 - Decide an attachment/artifact retention policy appropriate for your deployment.
 
 ### File retention and quota
@@ -324,6 +325,102 @@ Settings shows an account's storage, its largest projects and tasks, and what ea
 `.env` to limit what one account may keep; past it an upload is refused with `413` and the code `FILE_QUOTA_EXCEEDED`. A
 self-hosted deployment needs no limit, and has none unless you set one. Each content counts once, an expired file no longer
 counts, and uploads racing at the limit can pass it by at most 25 MiB each.
+
+### Monitoring
+
+The `monitoring` Compose profile runs Prometheus beside the stack, with two exporters, and collects the metrics of
+every apiserver, the link gateway, PostgreSQL and the host. It publishes no port on the host, and no monitoring
+container is given the Docker socket.
+
+Turn it on by adding `monitoring` to `COMPOSE_PROFILES` in `.env`, then start it:
+
+```bash
+COMPOSE_PROFILES=runner-link,monitoring      # keep the profiles the line already names
+docker compose up -d --wait prometheus node-exporter postgres-exporter
+```
+
+**What it runs.** Every image is pinned by version and digest; set the variable to use another
+([configuration reference](configuration.md#images-and-the-two-stage-release)).
+
+| Service | What it does | Memory limit |
+| --- | --- | --- |
+| `prometheus` | Scrapes the targets below every 15 seconds and keeps the series in the `prometheus-data` volume. | 1 GB |
+| `node-exporter` | The host's CPU, memory, load and disks, from the host's `/proc`, `/sys` and `/` mounted read-only. | 128 MB |
+| `postgres-exporter` | PostgreSQL's statistics, read as the `orbit_monitor` role. | 128 MB |
+| `pg-monitor-role` | Runs once each time the profile comes up and exits: it makes `orbit_monitor` and sets its password. | 64 MB |
+
+**What Prometheus scrapes** (`deploy/monitoring/prometheus.yml`):
+
+| Job | Target | Found by |
+| --- | --- | --- |
+| `apiserver` | Every apiserver, on its internal metrics listener (port 9091) | DNS on `orbit-apiservers`, the name every apiserver answers to: `apiserver`, `apiserver-2` and on from [an override](#several-apiservers), and a two-stage release's `apiserver-next` while it runs |
+| `link-gateway` | The link gateway's `/metrics` (port 9464) | DNS on `link-gateway`, which resolves only while the `runner-link` profile runs it. Without the link the job has no target, rather than one that is down |
+| `node` | `node-exporter:9100` | Its name |
+| `postgres` | `postgres-exporter:9187` | Its name |
+| `prometheus` | Prometheus itself | `localhost:9090` |
+
+The names are looked up every 15 seconds, so an apiserver that starts or stops is scraped, or dropped, within that.
+Each apiserver is a target of its own, labelled by its address in the project network, which changes when the
+container is recreated.
+
+**Reading it.** Prometheus is reached inside the project network only. Ask it from its own container:
+
+```bash
+docker compose exec prometheus wget -qO- 'http://127.0.0.1:9090/api/v1/targets?state=active' | head -c 2000
+docker compose exec prometheus wget -qO- 'http://127.0.0.1:9090/api/v1/query?query=up'
+```
+
+**The apiserver's metrics listener.** Each apiserver serves its metrics to Prometheus on a listener of its own, port
+9091 (`METRICS_INTERNAL_PORT`), beside its API. It answers `GET /metrics` with the same body as `GET /api/metrics`,
+without a token, and refuses every other path with 404 and every other method with 405; no request on it reaches the
+API. It binds every interface of the container, so Prometheus reaches it over the project network, and it is
+published nowhere. It opens whether or not the profile is on, and it stops with the API when the apiserver stops.
+`GET /api/metrics` through the web gateway is unchanged and still needs a bearer token.
+
+It carries no token because nothing outside the project network can reach it. A [managed runner](#managed-runners)
+runs on a network of its own, `orbit-cloud-runners`, and Docker keeps traffic between two bridge networks apart, with
+or without `managed-runner-firewall`: from a network made the way the install makes that one, with no firewall rules,
+a connection to the listener's port fails on the apiserver's address, on the project network's gateway address and on
+the host's own address, while the same port answers from inside the project network. Two things would undo that:
+attaching a managed runner, or any container you do not trust, to the project network, and running Docker with
+`"iptables": false`, which turns off that separation. Do neither.
+
+**postgres-exporter's role.** `pg-monitor-role` connects over the Postgres socket, as `pgbackup` does, and makes
+`orbit_monitor`: a login role in `pg_monitor`, which reads PostgreSQL's statistics views and settings and none of the
+application's tables, with no other right and a connection limit of 3, which the
+[connection budget](#database-connections) counts. Its password is 64 random hex digits that `pg-monitor-role`
+generates the first time and keeps in the `pg-monitor-secret` volume, which postgres-exporter reads it from. It is not
+in `.env` or in any environment. Every run sets the role's rights and password again. To replace the password:
+
+```bash
+docker compose rm -sf postgres-exporter pg-monitor-role
+docker volume rm "$(docker compose config --format json | jq -r .name)_pg-monitor-secret"
+docker compose up -d --wait postgres-exporter
+```
+
+**The host's disks.** node-exporter reports every filesystem the host mounts, under the host's own mount point. The
+one that holds `./data`, where the database, its archive and the attachments are, is the mount point `df` names:
+
+```bash
+df --output=target ./data | tail -1     # for example /, or /mnt/data
+```
+
+Its free space is `node_filesystem_avail_bytes{mountpoint="<that mount point>"}`. node-exporter runs in the project
+network rather than the host's, so that its port is reached by Prometheus alone; its network counters are therefore its
+own container's, not the host's. The host's `/` shows it the path of the Docker socket too, which it cannot open: it
+runs as `nobody`, with every capability dropped, and the socket belongs to root and the `docker` group.
+
+**Retention.** Prometheus keeps 15 days (`ORBIT_PROMETHEUS_RETENTION`) and never more than 4 GB on disk
+(`ORBIT_PROMETHEUS_RETENTION_SIZE`), whichever comes first; the oldest data goes first. It lives in the
+`prometheus-data` volume, in Docker's data root rather than in `./data`, and is not backed up.
+
+**Turn it off.** Remove `monitoring` from `COMPOSE_PROFILES` in `.env`, then stop and remove its containers. The
+apiserver's listener stays open, reached by nothing. The two volumes stay until you remove them:
+
+```bash
+docker compose --profile monitoring rm -sf prometheus node-exporter postgres-exporter pg-monitor-role
+docker volume rm "$(docker compose config --format json | jq -r .name)_prometheus-data"   # only to drop the history
+```
 
 ## Google sign-in
 
@@ -1249,8 +1346,9 @@ Each apiserver process opens at most 12 connections to PostgreSQL:
 
 The wiki worker opens as many: its pool of ten, and a listener for each of its two queues.
 
-So N apiservers and the wiki worker need up to 12 × (N + 1) connections, and the backup sidecar and anyone working
-in `psql` a few more. The default `max_connections` is 100, which is reached at about seven apiservers. Raise it,
+So N apiservers and the wiki worker need up to 12 × (N + 1) connections. With the [monitoring profile](#monitoring)
+on, postgres-exporter's role `orbit_monitor` adds at most 3, its connection limit: 12 × (N + 1) + 3. The backup sidecar
+and anyone working in `psql` need a few more. The default `max_connections` is 100, which is reached at about seven apiservers. Raise it,
 then restart PostgreSQL:
 
 ```bash

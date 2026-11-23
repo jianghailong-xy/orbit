@@ -63,7 +63,7 @@ DIR="${ORBIT_DEPLOY_DIR:-/root/orbit}"
 # they mount: deploy/postgres-pinned.yml, the only pin of postgres and pgbackup, and deploy/db-proxy.yml, the database
 # entry. test/upgrade-two-stage.test.mjs holds this list to those files.
 RELEASE_FILES=(docker-compose.yml gateway scripts/pg-archive-wal.sh scripts/pg-backup.sh src/link-gateway/nats.conf deploy/runner-link
-  deploy/postgres-pinned.yml deploy/db-proxy.yml deploy/db-proxy)
+  deploy/postgres-pinned.yml deploy/db-proxy.yml deploy/db-proxy deploy/monitoring scripts/pg-monitor-role.sh)
 # What the hosted runners' image is built from, as deploy/managed-runner/image/Dockerfile.dockerignore admits it: the
 # runner's Go sources but its tests, its module files, DeepSeek Harness's lockfile, and the image's own directory.
 MANAGED_RUNNER_INPUTS=(':(glob)src/runner-go/*.go' ':(glob,exclude)src/runner-go/*_test.go' src/runner-go/go.mod src/runner-go/go.sum
