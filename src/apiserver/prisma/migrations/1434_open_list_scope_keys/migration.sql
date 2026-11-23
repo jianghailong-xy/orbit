@@ -75,7 +75,51 @@ LANGUAGE plpgsql AS $$
 DECLARE
   o uuid;
   k text;
+  -- OPEN_LIST_UNDRAWN_SESSION_COLUMNS (sessions/open-list-version.ts), as 1420 lists them.
+  undrawn CONSTANT text[] := ARRAY[
+      'updated_at',
+      'context_tokens', 'context_window', 'agent_tools', 'engine_usage_totals',
+      'coordinator_context_epoch', 'coordinator_context_ack_key',
+      'isolation_status', 'base_sha', 'changed_files', 'worktree_dirty', 'worktree_branch', 'branch_sha',
+      'branch_merged', 'merge_targets', 'branch_commits',
+      'recap_claimed_at', 'recap_event_seq', 'alerted_approval_at', 'agent_notified_at',
+      'inbox_lease_owner', 'inbox_lease_generation', 'inbox_request_id', 'inbox_request_turn_id', 'claim_request_id',
+      'retry_attempts', 'retry_claimed_at'
+    ]::text[];
 BEGIN
+  -- An UPDATE, the ingest path's statement, is static SQL so its plan is kept between statements; INSERT and
+  -- DELETE stay behind EXECUTE, which keeps a transition table the event does not have out of the parse path.
+  IF TG_OP = 'UPDATE' THEN
+    FOR o, k IN
+      WITH moved AS (
+          SELECT n.owner_id AS new_owner, n.kind AS new_kind, n.workspace_id AS new_ws,
+                 (n.completed_at IS NULL AND n.archived_at IS NULL AND n.deleted_at IS NULL
+                  AND n.help_ask IS NULL AND n.run_source <> 'SCHEDULE') AS new_listed,
+                 d.owner_id AS old_owner, d.kind AS old_kind, d.workspace_id AS old_ws,
+                 (d.completed_at IS NULL AND d.archived_at IS NULL AND d.deleted_at IS NULL
+                  AND d.help_ask IS NULL AND d.run_source <> 'SCHEDULE') AS old_listed,
+                 (n.owner_id, n.kind, n.task_id, n.context_task_id, n.root_session_id, n.workspace_id)
+                   IS DISTINCT FROM
+                 (d.owner_id, d.kind, d.task_id, d.context_task_id, d.root_session_id, d.workspace_id) AS rerooted
+            FROM new_rows n JOIN old_rows d ON d.id = n.id
+           WHERE (to_jsonb(n) - undrawn) IS DISTINCT FROM (to_jsonb(d) - undrawn)),
+        sides AS (
+          SELECT new_owner AS owner_id, new_ws AS ws, new_listed AS listed FROM moved WHERE new_kind = 'CONVERSATION'
+          UNION ALL
+          SELECT old_owner, old_ws, old_listed FROM moved WHERE old_kind = 'CONVERSATION')
+        SELECT owner_id, open_list_scope_key('session', ws, bool_or(listed)) FROM sides GROUP BY owner_id, ws
+        UNION
+        SELECT new_owner, 'session' FROM moved
+         WHERE rerooted AND (new_kind = 'CONVERSATION' OR old_kind = 'CONVERSATION')
+        UNION
+        SELECT old_owner, 'session' FROM moved
+         WHERE rerooted AND (new_kind = 'CONVERSATION' OR old_kind = 'CONVERSATION')
+    LOOP
+      PERFORM open_list_bump(o, k);
+    END LOOP;
+    RETURN NULL;
+  END IF;
+
   FOR o, k IN EXECUTE CASE TG_OP
       WHEN 'INSERT' THEN $q$
         SELECT n.owner_id, open_list_scope_key('session', n.workspace_id, bool_or(
@@ -94,41 +138,7 @@ BEGIN
           FROM old_rows d
          WHERE d.kind = 'CONVERSATION'
            AND EXISTS (SELECT 1 FROM session c WHERE c.root_session_id = d.id AND c.id <> d.id) $q$
-      ELSE $q$
-        WITH moved AS (
-          SELECT n.owner_id AS new_owner, n.kind AS new_kind, n.workspace_id AS new_ws,
-                 (n.completed_at IS NULL AND n.archived_at IS NULL AND n.deleted_at IS NULL
-                  AND n.help_ask IS NULL AND n.run_source <> 'SCHEDULE') AS new_listed,
-                 d.owner_id AS old_owner, d.kind AS old_kind, d.workspace_id AS old_ws,
-                 (d.completed_at IS NULL AND d.archived_at IS NULL AND d.deleted_at IS NULL
-                  AND d.help_ask IS NULL AND d.run_source <> 'SCHEDULE') AS old_listed,
-                 (n.owner_id, n.kind, n.task_id, n.context_task_id, n.root_session_id, n.workspace_id)
-                   IS DISTINCT FROM
-                 (d.owner_id, d.kind, d.task_id, d.context_task_id, d.root_session_id, d.workspace_id) AS rerooted
-            FROM new_rows n JOIN old_rows d ON d.id = n.id
-           WHERE (to_jsonb(n) - $1) IS DISTINCT FROM (to_jsonb(d) - $1)),
-        sides AS (
-          SELECT new_owner AS owner_id, new_ws AS ws, new_listed AS listed FROM moved WHERE new_kind = 'CONVERSATION'
-          UNION ALL
-          SELECT old_owner, old_ws, old_listed FROM moved WHERE old_kind = 'CONVERSATION')
-        SELECT owner_id, open_list_scope_key('session', ws, bool_or(listed)) FROM sides GROUP BY owner_id, ws
-        UNION
-        SELECT new_owner, 'session' FROM moved
-         WHERE rerooted AND (new_kind = 'CONVERSATION' OR old_kind = 'CONVERSATION')
-        UNION
-        SELECT old_owner, 'session' FROM moved
-         WHERE rerooted AND (new_kind = 'CONVERSATION' OR old_kind = 'CONVERSATION') $q$
     END
-    USING ARRAY[
-      'updated_at',
-      'context_tokens', 'context_window', 'agent_tools', 'engine_usage_totals',
-      'coordinator_context_epoch', 'coordinator_context_ack_key',
-      'isolation_status', 'base_sha', 'changed_files', 'worktree_dirty', 'worktree_branch', 'branch_sha',
-      'branch_merged', 'merge_targets', 'branch_commits',
-      'recap_claimed_at', 'recap_event_seq', 'alerted_approval_at', 'agent_notified_at',
-      'inbox_lease_owner', 'inbox_lease_generation', 'inbox_request_id', 'inbox_request_turn_id', 'claim_request_id',
-      'retry_attempts', 'retry_claimed_at'
-    ]::text[]
   LOOP
     PERFORM open_list_bump(o, k);
   END LOOP;
