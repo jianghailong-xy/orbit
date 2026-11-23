@@ -4,6 +4,7 @@ import test from 'node:test';
 
 import { ConflictException } from '@nestjs/common';
 import { CreatorType, Prisma, PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
+import { RunFailureKind, RunStatus as SharedRunStatus } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -12,6 +13,7 @@ import { establishProjectContractForPgTest } from '../projects/project-contract-
 import { AccountHealthService } from '../providers/account-health.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { MAX_AUTO_RUN_FAILURES } from './task-retry-policy';
 import { TASK_RUN_TRIGGER } from './task-run-identity';
@@ -22,11 +24,15 @@ import { TasksService } from './tasks.service';
  * 2026-11-22 17:19 every run was routed to the owner's Cursor subscription, Cursor refused each at once with
  * "Add a payment method to continue", and each refusal raised the task's tier and spent its retry budget.
  *
- * Driven through the doors a run really passes: Run Now (`execute`) routes and creates the Session; the run ends as
- * the runner's finalize leaves it (FAILED, its kind, the provider's words, admission); and AccountHealthService
- * .afterRunEnd is the call the finalize and turn-complete ingest make once that release has committed. What is proven:
+ * Driven through the doors a run really passes: Run Now (`execute`) routes and creates the Session; the runner's claim
+ * puts it RUNNING on its runner; and the run ends the way the incident's did, by the runner POSTing its finalize (or its
+ * turn-complete) to RunnerApiController with the failure as its engine adapter classified it — kind
+ * ACCOUNT_ACTION_REQUIRED, Cursor's words, admission true — or, from a runner older than the kinds, with no failure
+ * field at all. Nothing writes account health but the controller's own ingest. What is proven:
  *
  * - run 2 routes to another account, at the tier the task asked for, with the refusal not counted;
+ * - from an old runner (no failure field, the bare sentence, no cost) the breaker demotes the account on strike 1,
+ *   so run 2 still routes elsewhere;
  * - five refusals on that one account spend none of the auto-run failure budget (five counted would retire the task);
  * - an account that is the only candidate holds the task with the provider's words, and the hold lifts at
  *   blocked_until, when the held task's run takes the account's trial.
@@ -44,15 +50,33 @@ const CURSOR_ERROR = `Cursor said: "${PAYMENT}." The Cursor account needs this b
 interface Services {
   db: PrismaClient;
   tasks: TasksService;
-  health: AccountHealthService;
+  /** The runner's door: finalize and turn-complete, with account health wired in as Nest wires it. */
+  api: RunnerApiController;
 }
 
 function connect(): Services {
   const db = prismaClientFor(URL!);
   const prisma = db as unknown as PrismaService;
   const publishes = new Proxy({}, { get: () => () => undefined }) as unknown as RealtimeService;
-  const sessions = new SessionsService(prisma, { notifySessionQueued: () => undefined } as unknown as QueueService, publishes);
-  return { db, tasks: new TasksService(prisma, sessions, publishes), health: new AccountHealthService(prisma) };
+  const queue = new QueueService(prisma, publishes);
+  const sessions = new SessionsService(prisma, queue, publishes);
+  // RunnerApiController's positional constructor (as run-failure-kind.pg.spec.ts builds it): the six it requires, the
+  // sessions service at 12, nothing else optional until account health at 34.
+  const optional: unknown[] = Array.from({ length: 27 }, () => undefined);
+  optional[0] = { appendFor: async (_tx: unknown, _sessionId: string, content?: string) => content };
+  optional[5] = sessions;
+  const Controller = RunnerApiController as unknown as new (...args: unknown[]) => RunnerApiController;
+  const api = new Controller(
+    prisma,
+    queue,
+    publishes,
+    new Proxy({}, { get: () => async () => undefined }) as never,
+    { assert: async (_runner: unknown, callingSessionId?: string) => callingSessionId ?? randomUUID() } as never,
+    { expand: async (_ownerId: string, content?: string) => content } as never,
+    ...optional,
+    new AccountHealthService(prisma),
+  );
+  return { db, tasks: new TasksService(prisma, sessions, publishes), api };
 }
 
 interface Fixture {
@@ -120,17 +144,53 @@ async function runNow(s: Services, f: Fixture, taskId: string): Promise<string> 
   return result.sessionId;
 }
 
-/** The run ends as the runner's finalize leaves a run Cursor refused at admission, and the ingest hands it to health. */
-async function refusedByCursor(s: Services, sessionId: string, { classified = true } = {}) {
-  await s.db.session.update({
-    where: { id: sessionId },
-    data: {
-      status: RunStatus.FAILED, finishedAt: new Date(), error: CURSOR_ERROR,
-      // A runner of this release classifies the sentence; an older one sends no kind and no admission flag.
-      ...(classified ? { failureKind: 'ACCOUNT_ACTION_REQUIRED', failureSaid: PAYMENT, admissionFailure: true } : {}),
-    },
+/** The runner claimed the run: it is RUNNING on the fixture's runner, started a moment ago, with its first turn out. */
+async function claimed(s: Services, f: Fixture, sessionId: string): Promise<string> {
+  // As the claim does it: the acquisition guards admit the move to RUNNING only in a transaction that declared it reads
+  // session engines (session_acquisition_engine_guard) and that the runner supports Cursor, onto a runner that reports
+  // it (session_cursor_runner_acquisition_guard).
+  await s.db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+    await tx.$executeRaw`SELECT set_config('orbit.runner_supports_cursor', '1', true)`;
+    await tx.session.update({
+      where: { id: sessionId },
+      data: { status: RunStatus.RUNNING, assignedRunnerId: f.runnerId, startedAt: new Date(), engineTurnActive: true, runtimeSessionId: randomUUID() },
+    });
   });
-  await s.health.afterRunEnd(sessionId, { failed: true });
+  await s.db.conversationTurn.deleteMany({ where: { sessionId } });
+  const turn = await s.db.conversationTurn.create({
+    data: {
+      sessionId, seq: 1, clientTurnId: `turn-1-${randomUUID()}`, kind: 'message', content: 'the brief', status: 'IN_FLIGHT',
+      deliveredAt: new Date(), leaseDeadlineAt: new Date(Date.now() + 300_000), leaseGeneration: randomUUID(),
+    },
+    select: { id: true },
+  });
+  return turn.id;
+}
+
+/** What a runner of this release sends when Cursor refuses: the adapter's kind, the provider's words, admission. */
+const CLASSIFIED = {
+  error: CURSOR_ERROR,
+  failure: { kind: RunFailureKind.ACCOUNT_ACTION_REQUIRED, said: PAYMENT },
+  admission: true,
+};
+
+/**
+ * Cursor refuses the claimed run at admission, and the runner reports it as the incident's runner did: by POSTing its
+ * finalize, or with `turn` its turn-complete, to the runner API. `old`: a runner older than the kinds, which sends no
+ * failure field and no admission flag — only the sentence, at no cost.
+ */
+async function refusedByCursor(s: Services, f: Fixture, sessionId: string, { old = false, via = 'finalize' as 'finalize' | 'turn' } = {}) {
+  const turnId = await claimed(s, f, sessionId);
+  const body = old ? { error: PAYMENT } : CLASSIFIED;
+  if (via === 'turn') {
+    await s.api.turnComplete({ id: f.runnerId }, sessionId, {
+      turnId, status: SharedRunStatus.FAILED, subtype: 'error', numTurns: 1, costUsd: 0, ...body,
+    } as never);
+  } else {
+    await s.api.finalize({ id: f.runnerId }, sessionId, { status: SharedRunStatus.FAILED, ...body } as never);
+  }
+  assert.equal((await s.db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { status: true } })).status, RunStatus.FAILED);
 }
 
 const runOf = (db: PrismaClient, id: string) => db.session.findUniqueOrThrow({
@@ -156,7 +216,7 @@ test('the incident replayed: Cursor refuses run 1 with "Add a payment method to 
       const first = await runOf(s.db, run1);
       assert.deepEqual([first.provider, first.engine, first.model, first.accountHealthEffect], ['cursor', 'cursor', OPUS, null],
         'run 1 starts on the Agent\'s own Cursor sign-in, as in the incident');
-      await refusedByCursor(s, run1);
+      await refusedByCursor(s, f, run1);
 
       // The account is blocked for an hour on the classified ladder, with the provider's words.
       const [row] = await liveHealth(s.db, f.ownerId);
@@ -186,6 +246,38 @@ test('the incident replayed: Cursor refuses run 1 with "Add a payment method to 
     }
   });
 
+test('from a runner older than the kinds, the bare sentence at no cost goes through the breaker: suspect on strike 1, and run 2 still routes elsewhere',
+  { skip, timeout: 120_000 }, async () => {
+    assertCoordinatorPgUrlIsIsolated(URL!);
+    const s = connect();
+    try {
+      const f = await fixture(s.db, 'old-runner');
+      const taskId = await taskIn(s.db, f);
+      const run1 = await runNow(s, f, taskId);
+      assert.equal((await runOf(s.db, run1)).provider, 'cursor');
+      await refusedByCursor(s, f, run1, { old: true });
+
+      const stored = await s.db.session.findUniqueOrThrow({
+        where: { id: run1 }, select: { error: true, failureKind: true, admissionFailure: true, costUsd: true, accountHealthEffect: true },
+      });
+      assert.deepEqual(stored, { error: PAYMENT, failureKind: null, admissionFailure: null, costUsd: 0, accountHealthEffect: 'SUSPECT' },
+        'no kind and no flag from the old runner; the server derived the admission and the breaker struck');
+      const [row] = await liveHealth(s.db, f.ownerId);
+      assert.equal(row.subjectKey, `runner:${f.runnerId}:cursor:default`);
+      assert.deepEqual([row.state, row.kind, row.strikes, row.trips, row.blockedUntil], ['SUSPECT', 'UNCLASSIFIED_ADMISSION', 1, 0, null]);
+
+      const run2 = await runNow(s, f, taskId);
+      assert.equal((await runOf(s.db, run2)).provider, 'claude', 'the suspect account is not kept for being the Agent\'s own');
+      const decision = await decisionOf(s.db, run2);
+      assert.equal(decision.level, 'L');
+      assert.equal((decision.features as Record<string, unknown>).escalatedFrom, null);
+      assert.ok(decision.reasons.includes('Run 1 failed to start at no cost — not counted'), decision.reasons.join(' | '));
+      assert.equal((await holdOff(s, [taskId])).has(taskId), false);
+    } finally {
+      await s.db.$disconnect();
+    }
+  });
+
 test('five refusals on one account, the incident\'s count, spend none of the retry budget and raise no tier; counted, they would retire the task',
   { skip, timeout: 120_000 }, async () => {
     assertCoordinatorPgUrlIsIsolated(URL!);
@@ -193,9 +285,9 @@ test('five refusals on one account, the incident\'s count, spend none of the ret
     try {
       const f = await fixture(s.db, 'five');
       const taskId = await taskIn(s.db, f);
-      // The incident's five runs on the one Cursor account, each released FAILED as the runner left it: the first two
-      // from a runner older than the kinds (no kind, no admission flag: the breaker reads them), the last three with
-      // Cursor's sentence classified. Each handed to health as the ingest hands it.
+      // The incident's five runs on the one Cursor account, each reported by its runner: the first two by a runner older
+      // than the kinds (a finalize with no failure field: the breaker reads them), the last three with Cursor's sentence
+      // classified, two by turn-complete and one by finalize.
       const refused: string[] = [];
       for (let i = 0; i < 5; i += 1) {
         const run = await s.db.session.create({
@@ -208,7 +300,7 @@ test('five refusals on one account, the incident\'s count, spend none of the ret
             startedAt: new Date(Date.now() - 1_000),
           },
         });
-        await refusedByCursor(s, run.id, { classified: i >= 2 });
+        await refusedByCursor(s, f, run.id, { old: i < 2, via: i === 2 || i === 3 ? 'turn' : 'finalize' });
         refused.push(run.id);
       }
       const effects = await s.db.session.findMany({ where: { id: { in: refused } }, select: { id: true, accountHealthEffect: true } });
@@ -243,7 +335,7 @@ test('a blocked only candidate holds the task with the provider\'s words, and th
       const taskId = await taskIn(s.db, f);
       const run1 = await runNow(s, f, taskId);
       assert.equal((await runOf(s.db, run1)).provider, 'cursor');
-      await refusedByCursor(s, run1);
+      await refusedByCursor(s, f, run1);
       const [row] = await liveHealth(s.db, f.ownerId);
       const until = row.blockedUntil!;
 
