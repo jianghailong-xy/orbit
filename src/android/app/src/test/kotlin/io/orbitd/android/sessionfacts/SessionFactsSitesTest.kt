@@ -84,7 +84,8 @@ class SessionFactsSitesTest {
         assertEquals("Ended", label("""{"status":"SUCCEEDED","released":true,"phase":"IDLE","lastTurnOutcome":"ANSWERED"}"""))
         assertEquals("Failed", label("""{"status":"FAILED","released":true,"phase":"IDLE","lastTurnOutcome":"FAILED"}"""))
         assertEquals("Interrupted", label("""{"status":"INTERRUPTED","released":false,"phase":"IDLE","lastTurnOutcome":"INTERRUPTED","endReason":"ended"}"""))
-        assertEquals("Running", label("""{"status":"AWAITING_INPUT","released":false,"phase":"RUNNING"}"""))
+        // A parked session reads parked: the status decides before the phase (web dispatchedTurnInFlight).
+        assertEquals("Awaiting reply", label("""{"status":"AWAITING_INPUT","released":false,"phase":"RUNNING"}"""))
         assertEquals("On hold", label("""{"status":"PENDING","released":false,"phase":"PENDING","waitingOn":"HOLD"}"""))
         assertEquals("Queued", label("""{"status":"PENDING","released":false,"phase":"PENDING"}"""))
         assertEquals("Awaiting reply", label("""{"status":"AWAITING_INPUT","released":false,"phase":"IDLE"}"""))
@@ -157,7 +158,7 @@ class SessionFactsSitesTest {
         // An unknown status falls back to the activity.
         assertEquals("Running", label("""{"status":"MYSTERY","released":false,"phase":"RUNNING","activity":"TURN"}"""))
         assertEquals("Awaiting reply", label("""{"status":"MYSTERY","released":false,"phase":"RUNNING","activity":"BACKGROUND_JOB"}"""))
-        assertEquals("Awaiting reply", label("""{"status":"RUNNING","released":false,"phase":"RUNNING","activity":"WAITING"}"""))
+        assertEquals("Running", label("""{"status":"RUNNING","released":false,"phase":"RUNNING","activity":"WAITING"}"""))
         // `released` with an unknown phase is not the facts: web, and now Android, fall back to the status.
         assertEquals("Running", label("""{"status":"RUNNING","released":true,"phase":"HIBERNATING"}"""))
         assertEquals("—", label("""{"status":"MYSTERY"}"""))
