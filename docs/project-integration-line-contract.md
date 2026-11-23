@@ -2409,12 +2409,12 @@ O-L2、O-L5、O-L6 的读法（R29-8）：
 
 **K2 的第二种免检（修订 42，§12 P-C2）**：任务行 `landing_check_exempt = true`（写入者限项目当前的协调会话与 owner，带理由，只在 `PROJECT_BRANCH` 线上生效，`MAIN` 线上写入 → 409 `LANDING_CHECK_EXEMPT_NEEDS_PROJECT_BRANCH`）时，J-S5 不跑项目的落地检查，检查条目写 `{ name: 'LANDING_CHECK', skipped: 'TASK_EXEMPT', reason }`，与 `PATHS_EXEMPT` 并列，不算失败。`TASK_ACCEPTANCE` 与进 upstream 的合并检查照跑。上面的仓库名单不变：它是仓库的规则，这一条是协调者对一条任务的判断。对旧 runner：服务端在作业命令里就不带落地检查，并自己写 `TASK_EXEMPT` 的条目，见 §12.19。
 
-**K3（基线归属）**：`LANDING_CHECK` 的退出码不符（不含 runner 在预算处杀掉的 `timedOut`），**且**这一代在 J-S2 合入了 upstream（base = M ≠ T0）时，runner 在 M 上（不含本任务的提交）再跑一次同一条 `LANDING_CHECK`，检查条目记 `scope: 'BASELINE'`：
+**K3（基线归属）**：`LANDING_CHECK` 的退出码不符（不含 runner 在预算处杀掉的 `timedOut`），时，runner 在不含本任务提交的基线树上再跑一次同一条 `LANDING_CHECK`，检查条目记 `scope: 'BASELINE'`：
 
 - M 也红 → 结果 `CHECK_FAILED` 且 `baselineRed: true`，作业写 `baseline_red = true`。这不是本任务的失败。
 - M 绿 → 结果照今天的 `CHECK_FAILED`，是本任务的失败。
 
-base = T0 时不做归属检查：T0 是上一次成功落地的树，同一条检查刚在它上面通过。代价是只在红的时候多跑一次落地检查。本项目 11-10 的 5 次基线红都发生在合入了 upstream 的那一代，都落在本条里。
+归属检查在每一次落地检查红时都做：J-S2 吸收了 upstream 时在 M 上，否则在 T0 上（新线的 T0 就是 main 自己的 tip）。不再有「base = T0 时不做归属检查」：新线的 T0 从没过过这条检查，P-C1 也可以设一条线本来就过不了的检查。K4 不变；新线情形的键为 `ICB:<serial>:U:U`。代价是红的时候多跑一次落地检查。
 
 **K4（一个基线红开一条待办，并扣住队列）**：`baseline_red` 的作业开 `INTEGRATION_CHECK_FAILED`，规则如下：
 
@@ -2476,7 +2476,7 @@ M-F4、M7、M-T11 不变：(a) 或 (b) 成立时，Automatic 的项目分支照�
   - 确认卡比对两列。
 - **runner go test**：
   - K2 从 U 读名单，不从 C 读；J-S2 合入了 upstream 时不跳过；名单文件本身被改动时不跳过；`TASK_ACCEPTANCE` 照跑。
-  - K3 用一条在 M 上也失败的检查得到 `baselineRed: true`，在 M 上通过的得到普通 `CHECK_FAILED`；base = T0 时不做归属检查。
+  - K3 用一条在 M 上也失败的检查得到 `baselineRed: true`，在 M 上通过的得到普通 `CHECK_FAILED`；base = T0 时在 T0 上做归属检查。
 - **apiserver pg spec（K4、K5）**：
   - 两个任务在同一 (U, T0) 上基线红 → 一条待办、两条 `BASELINE_HELD` 排队。
   - 扣留放行 `fixes_open_item_id` 指向它的任务。
@@ -2503,7 +2503,7 @@ M-F4、M7、M-T11 不变：(a) 或 (b) 成立时，Automatic 的项目分支照�
 
 ## 12. 落地：agent 动手，平台守门（修订 42）
 
-**状态**：第一部分（§12.1–§12.10，条款 W）：已裁决，未实现，仍是对实现的要求。第二部分（§12.11–§12.18，条款 P）：**已实现**（2026-11-20，提交见 §12.19），§12.17 列出的正文条款已按事实改写，不再留「现状」的对照句。owner 2026-11-20 裁决：附录 A 的 Q30–Q37 一律按默认做法；分两个项目实现，第二部分先做。第一部分的实现要求另有 owner 裁决 R1–R3（见 §12.4、§12.5 的 W5–W8、§12.6 的 W-T2，依据是 2026-11-20 协调者对代码的核对）；§12.9 列出的正文条款已按本修订改写（正文里带「修订 42，§12」的句子即是），实现落地之前它们写的是对实现的要求。
+**状态**：第一部分（§12.1–§12.10，条款 W）：**已实现**（2026-11-24；提交：S1 `c48e8f9ec5`、`c75e892b45`；S2 `9e1e52614e`（合入项目分支）；S3 `df64fed8a7`、`e65bfe5c57`；S4 `750d4d049a`、`edac064297`；S5 `73339787db`（合入项目分支）；随后的修正 W4 `8c817c277e`、基线归属 `86176471df`；以项目分支上的这些提交为准）。第二部分（§12.11–§12.18，条款 P）：**已实现**（2026-11-20，提交见 §12.19），§12.17 列出的正文条款已按事实改写，不再留「现状」的对照句。owner 2026-11-20 裁决：附录 A 的 Q30–Q37 一律按默认做法；分两个项目实现，第二部分先做。第一部分的实现要求另有 owner 裁决 R1–R3（见 §12.4、§12.5 的 W5–W8、§12.6 的 W-T2，依据是 2026-11-20 协调者对代码的核对）；§12.9 列出的正文条款已按本修订改写（正文里带「修订 42，§12」的句子即是），第一部分已实现，它们现在描述的就是代码。
 
 一条修订，两部分，同一个意思：**门归平台，门以外的归 agent**。第一部分（§12.1–§12.10，条款 W）：落地失败先交给写这份工作的会话去修。第二部分（§12.11–§12.18，条款 P）：落不落地由平台从交付的提交量出来，不给项目或任务贴「不改代码」的标签；进项目分支之前跑什么由协调者定。两部分可以分开裁决、分开实现。效果图：`docs/mocks/landing-fix-own-session/`（`00-overview.png` 是合起来的一张）。
 
@@ -2533,20 +2533,20 @@ owner 2026-11-20 问：Orbit 是 agent-first 的平台，落地、合并检查�
 | `LAND_TASK` | `CONFLICT`，`phase = MAIN_SYNC` | 任务会话（§3.1 M3 的解法本来就放在这个任务的源分支上） |
 | `LAND_TASK` | `CHECK_FAILED`，失败分类为 `CHECK_FAILED`（`project-integration-job.ts#landingFailureClass`） | 任务会话 |
 | `TASK_BRANCH` 候选的 `CHECK_PROMOTION` / `LAND_PROMOTION`（`MAIN` 线） | `CONFLICT`、`CHECK_FAILED` | 任务会话 |
-| 以上任一 | 失败分类 `BASELINE_RED`、`CHECK_TIMED_OUT`、`ERROR`（任何 `error_code`） | 协调会话，照旧：这些不是这份工作的错 |
+| 以上任一 | 失败分类 `BASELINE_RED`（含 §11 K3 在 T0 上归属出的基线红，永不交给任务会话）、`CHECK_TIMED_OUT`、`ERROR`（任何 `error_code`） | 协调会话，照旧：这些不是这份工作的错 |
 | `PROJECT_BRANCH` 候选的晋升作业 | 任何失败 | 协调会话，照旧：没有任务，也就没有「任务自己的会话」 |
 | `OBSERVE_LANDING` | — | 不适用 |
 
 **W4（任务会话是哪一条）**：失败作业的 `session_id`，即入队时 `landingWorkSession` 取的那条：这次交付的分支所属的工作会话。只在下面条件全部成立时交给它，任一不成立就照今天的路径直接归协调会话：
 
-1. 会话 `kind = 'CONVERSATION'`、`starts_task_work = true`、`deleted_at IS NULL`、不在 Trash、没有 `cancel_requested_at`。
+1. 会话 `kind = 'CONVERSATION'`、`starts_task_work = true`、`deleted_at IS NULL`、不在 Trash，且除任务自己的 DONE 之外没有人要求结束它：`end_reason IS NULL` 或 `end_reason = 'task_done'`。不读 `cancel_requested_at`：每个结束请求都在它旁边写下原因（`common/session-release.ts`），任务 DONE 对空闲工作会话的结束（`claimParkedSessionEnd`）也写它，所以随任务 DONE 结束的会话都带着它；那是平台自己的结束，不取消资格。还开着、但已被人要求结束（`end_reason` 为 `ended` 等，`cancel_requested_at` 已写）的会话不交。
 2. 会话还开着，或者是随任务 DONE 结束的（`end_reason = 'task_done'`）。被人结束的（`ended`、`cancelled`、`completed`、`deleted`）不复活。
 3. 任务仍是 DONE，这条会话仍是它最近的工作会话。
 4. 本任务段（§2.9 的 TASK 主体，同一个 episode）里，由任务会话发起的落地代数还没到上限（W8）。
 
 ### 12.4 数据结构
 
-不加表。迁移（落地时取下一个空号）：
+不加表。迁移 `1501_open_item_work_session`（原为 1444，因 main 先占了 1444 而改号；已应用旧名的栈的修复：删掉失败的 1501 行，再把 1444 行改名为 1501）：
 
 | 表 | 列 | 约束与语义 |
 |---|---|---|
@@ -2648,7 +2648,7 @@ The full record: landing <landingSessionId>.
 
 ### 12.8 测试
 
-- `landing-fix-work-session.pg.spec.ts`（新）：W4 的四个条件逐一取反都走 W-T6；`CONFLICT` 三种 phase 与 `CHECK_FAILED` 走 W-T1，`BASELINE_RED` / `CHECK_TIMED_OUT` / `ERROR` 不走；W-T1 同事务清了交付身份；`MAIN-line supersession keeps the handed-off item OPEN`：MAIN 线的取代让交给任务会话的待办保持 OPEN（M-T6 不关它，W-T3 / W-T4 才结案），旧候选名下别的 OPEN 失败待办照旧关闭；W-T2 在 finish 上才入队、恰好一代（普通路线与 `queueLandingRetry` 同键只插一次）、`MAIN` 线走 `CHECK_PROMOTION`；`turnComplete` 本身不入队；`retry_failure_class_chk` 收 `CONFLICT`；W-T3 关待办、协调会话零轮次；W-T5 的每种原因各一例（含 R3 的另一台 runner / checkout 重建失败 → `TURN_FAILED`），复活只限 `task_done`、不占项目任务预算，交回后 `escalate_at` 从交回时刻算；W8 第三次失败直接归协调会话；重放 `landing-fix:v1:<jobId>` 逐字节一致。
+- `landing-fix-work-session.pg.spec.ts`（新）：W4 的四个条件逐一取反都走 W-T6；`CONFLICT` 三种 phase 与 `CHECK_FAILED` 走 W-T1，`BASELINE_RED` / `CHECK_TIMED_OUT` / `ERROR` 不走；交付身份在 W6 投递 landing-fix 轮次的事务里清掉（不在 J-T7 的交出这一步清）；`MAIN-line supersession keeps the handed-off item OPEN`：MAIN 线的取代让交给任务会话的待办保持 OPEN（M-T6 不关它，W-T3 / W-T4 才结案），旧候选名下别的 OPEN 失败待办照旧关闭；W-T2 在 finish 上才入队、恰好一代（普通路线与 `queueLandingRetry` 同键只插一次）、`MAIN` 线走 `CHECK_PROMOTION`；`turnComplete` 本身不入队；`retry_failure_class_chk` 收 `CONFLICT`；W-T3 关待办、协调会话零轮次；W-T5 的每种原因各一例（含 R3 的另一台 runner / checkout 重建失败 → `TURN_FAILED`），复活只限 `task_done`、不占项目任务预算，交回后 `escalate_at` 从交回时刻算；W8 第三次失败直接归协调会话；重放 `landing-fix:v1:<jobId>` 逐字节一致。
 - `open-item-doors.spec.ts`：在任务会话手里的格子只有叫停与 chat；每格消息里的工具名仍属于这一格的门。
 - `coordinator-wake` / 保险丝：W6 的轮次不计 §6.1 的三项。
 - 会话路由普查：`landing-fix:v1:` 是唯一能续上 `task_done` 会话的平台前缀。
