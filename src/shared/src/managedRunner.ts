@@ -241,8 +241,8 @@ export interface ManagedRunnerUpdate {
   running: ManagedRunnerBuild;
   current: ManagedRunnerBuild;
   phase: 'available' | 'updating';
-  /** `updating` on a busy runner whose backend cannot stop it (Kubernetes): the owner's Update Now waits for the
-   *  runner to be idle and interrupts nothing. Absent otherwise. */
+  /** `updating` on a busy runner whose backend cannot stop it (neither Docker nor Kubernetes, which both can): the
+   *  owner's Update Now waits for the runner to be idle and interrupts nothing. Absent otherwise. */
   waitsForIdle?: true;
 }
 
