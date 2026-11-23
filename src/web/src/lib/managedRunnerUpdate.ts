@@ -27,6 +27,7 @@ import {
   runnerUpdateRestartingBodyMany,
   runnerUpdateTurnRunning,
 } from './runnerCopy';
+import { isReleaseVersion } from './runnerAttention';
 import { RUNNER_UPDATE_UPDATED_HOURS, runnerUpdateTook, runnerUpdateUpdatedBody, runnerUpdateWaited } from './runnerUpdateCard';
 
 /** `95884b154feb…` → `95884b1`. */
@@ -38,8 +39,10 @@ export function buildDay(builtAt: string | undefined): string | null {
   return Number.isNaN(at) ? null : new Date(at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-/** `the Nov 18 build`, or `the e03e2cd build` when its build time is unknown. */
+/** The release version (`0.1.261-beta.83`) when the build has one, as a self-managed runner's version reads;
+ *  else `the Nov 18 build`, or `the e03e2cd build` when its build time is unknown. */
 export function buildName(build: ManagedRunnerBuild): string {
+  if (build.version) return build.version;
   return managedBuildNamed(buildDay(build.builtAt) ?? buildSha7(build.sha));
 }
 
@@ -165,13 +168,15 @@ function readPendingTarget(status: ManagedRunnerStatus): ManagedRunnerBuild | nu
 /**
  * About's Version: `Build 95884b1 · Nov 16`. The running build is the update's, else the runner's reported
  * `managed-<sha>`; its day is the update's, or the last Update Now's when that is the build it runs. Null when
- * the runner names no build.
+ * the runner names no build. A runner on a release version has no build line: its version shows as a
+ * self-managed runner's does (runnerVersionLine), so this returns null.
  */
 export function managedVersionLine(
   managed: ManagedRunner | null,
   version: string | null,
   outcome: ManagedUpdateOutcome | null,
 ): string | null {
+  if (managed?.status.update?.running.version || isReleaseVersion(version)) return null;
   const reported = /^managed-([0-9a-f]{7,40})$/i.exec(version ?? '')?.[1];
   const running = managed?.status.update?.running;
   const sha = running?.sha ?? reported;

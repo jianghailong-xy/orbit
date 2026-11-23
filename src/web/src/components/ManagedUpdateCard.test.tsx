@@ -45,6 +45,7 @@ const BUSY = {
 
 let status: ManagedRunnerStatus;
 let activeSessions = 0;
+let managedVersion = 'managed-95884b154feb3d4e2a575fb012c4185b20c282ac';
 /** What POST /managed-runner/update-now answers to each body; a busy runner refuses a plain press. */
 let busy = false;
 let root: Root | null = null;
@@ -60,6 +61,7 @@ beforeEach(() => {
   localStorage.clear();
   busy = false;
   activeSessions = 0;
+  managedVersion = 'managed-95884b154feb3d4e2a575fb012c4185b20c282ac';
   status = { ...READY, update: AVAILABLE };
   apiMock.mockImplementation((async (path: string, options?: { body?: { interruptTurns?: boolean } }) => {
     if (path === '/auth/capabilities') return ON;
@@ -71,7 +73,7 @@ beforeEach(() => {
     if (path === '/runners') {
       return [
         runner(OWN, 'workstation', { version: '0.1.260' }),
-        runner(MANAGED, 'managed', { version: 'managed-95884b154feb3d4e2a575fb012c4185b20c282ac' }),
+        runner(MANAGED, 'managed', { version: managedVersion }),
       ];
     }
     return [];
@@ -140,6 +142,37 @@ describe("Orbit Cloud's Update card", () => {
     expect(p.textContent).not.toContain('Kept up to date by Orbit');
     expect(p.textContent).not.toContain('Orbit updates this machine for you.');
     expect(p.textContent).not.toContain('Later');
+  });
+
+  it('release versions: the card, the confirmation and the version line use the version, as self-managed runners do', async () => {
+    status = {
+      ...READY,
+      update: {
+        running: { sha: '', version: '0.1.261-beta.82' },
+        current: { sha: 'e03e2cd0000000000000000000000000000000aa', version: '0.1.261-beta.83', builtAt: '2026-11-18T10:00:00Z' },
+        phase: 'available',
+      },
+    };
+    managedVersion = '0.1.261-beta.82';
+    const p = await page(MANAGED);
+    expect(card(p)?.textContent).toContain('0.1.261-beta.83 is available');
+    expect(card(p)?.textContent).not.toContain('build is available');
+    expect(p.textContent).toContain('0.1.261-beta.82');
+    expect(p.textContent).not.toContain('Build ');
+    expect(p.textContent).not.toContain('Kept up to date by Orbit');
+    await click(updateNowButton(p));
+    expect(dialog()?.textContent).toContain('It restarts on 0.1.261-beta.83');
+    await click(buttonNamed('Update Now'));
+    status = { ...status, update: { ...status.update!, phase: 'updating' } };
+    const again = await page(MANAGED);
+    expect(card(again)?.textContent).toContain('Restarting on 0.1.261-beta.83');
+  });
+
+  it('an update without a version keeps the build wording', async () => {
+    status = { ...READY, update: { ...AVAILABLE, current: { ...AVAILABLE.current } } };
+    const p = await page(MANAGED);
+    expect(card(p)?.textContent).toContain('The Nov 18 build is available');
+    expect(p.querySelector('.machine-section-about')?.textContent).toContain('Build 95884b1 · Nov 16');
   });
 
   it('nothing running: asks first, then Update Now sends a plain press and the card turns to Restarting', async () => {

@@ -144,6 +144,31 @@ final class ManagedRunnerUpdateTests: XCTestCase {
         XCTAssertEqual(RunnerAttention.runnerVersionLine("0.1.190", managed: true, known: nil), "v0.1.190")
     }
 
+    func testReleaseVersionsNameTheCardTheConfirmationAndTheVersionLine() throws {
+        let json = """
+        {"running": {"sha": "", "version": "0.1.261-beta.82"},
+         "current": {"sha": "1a2b3c4d5e6f", "version": "0.1.261-beta.83", "builtAt": "2026-11-18T08:00:00Z"}, "phase": "available"}
+        """
+        let status = try status(update: json)
+        let card = try XCTUnwrap(ManagedRunnerUpdateLogic.card(status: status, now: now, timeZone: utc))
+        XCTAssertEqual(card.title, "0.1.261-beta.83 is available")
+        let restarting = try self.status(update: json.replacingOccurrences(of: "\"available\"", with: "\"updating\""))
+        XCTAssertEqual(ManagedRunnerUpdateLogic.card(status: restarting, now: now, timeZone: utc)?.title, "Restarting on 0.1.261-beta.83…")
+        let updated = ManagedRunnerUpdated(build: try XCTUnwrap(status.update?.current), at: now)
+        XCTAssertEqual(ManagedRunnerUpdateLogic.card(status: nil, updated: updated, now: now, timeZone: utc)?.title, "Updated to 0.1.261-beta.83")
+        let busy = try JSONDecoder().decode(ManagedRunnerBusy.self, from: Data("{\"code\":\"MANAGED_RUNNER_BUSY\"}".utf8))
+        XCTAssertTrue(ManagedRunnerUpdateLogic.confirmation(busy, build: status.update!.current, now: now, timeZone: utc)
+            .body.contains("restarts on 0.1.261-beta.83"))
+        XCTAssertEqual(RunnerAttention.runnerVersionLine("0.1.261-beta.82", managed: true, known: nil), "v0.1.261-beta.82")
+    }
+
+    func testAnUpdateWithoutAVersionKeepsTheBuildWording() throws {
+        let card = try XCTUnwrap(ManagedRunnerUpdateLogic.card(status: try status(update: update("available")), now: now, timeZone: utc))
+        XCTAssertEqual(card.title, "The Nov 18 build is available")
+        XCTAssertEqual(RunnerAttention.runnerVersionLine("managed-95884b154feb3d4e2a575fb012c4185b20c282ac", managed: true, known: nil),
+                       "Build 95884b1")
+    }
+
     func testTheBodyOfUpdateNowIsTheInterruptFlag() throws {
         let data = try JSONEncoder().encode(ManagedRunnerUpdateNowRequest(interruptTurns: true))
         XCTAssertEqual(String(data: data, encoding: .utf8), "{\"interruptTurns\":true}")
