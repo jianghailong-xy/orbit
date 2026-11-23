@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 39 |
-| `user` | 526 |
+| `user` | 527 |
 | `admin` | 31 |
 | `runner` | 229 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **829** |
+| **Total** | **830** |
 
 ## Public routes
 
@@ -340,6 +340,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runners/:id/accounts/:engine/:account/pause` | body `PauseAccountDto`; path `account`, `engine`, `id` | `RunnersController.pauseAccount` |
 | `POST` | `/api/runners/:id/accounts/:engine/:account/set-default` | path `account`, `engine`, `id` | `RunnersController.setDefaultAccount` |
 | `POST` | `/api/runners/:id/accounts/:engine/default/restore` | path `engine`, `id` | `RunnersController.restoreDefault` |
+| `POST` | `/api/runners/:id/accounts/:engine/default/sign-out` | body `SignOutDefaultDto`; path `engine`, `id` | `RunnersController.signOutDefault` |
 | `POST` | `/api/runners/:id/attention/:kind/fix` | body `Object`; path `id`, `kind` | `RunnerAttentionFixController.fix` |
 | `GET` | `/api/runners/:id/browser` | path `id` | `ManagedRunnerBrowserController.state` |
 | `POST` | `/api/runners/:id/browser/clear` | path `id` | `ManagedRunnerBrowserController.clear` |
