@@ -86,7 +86,7 @@ class SessionFactsSitesTest {
     }
     @Test fun aTaskRunKeepsTodaysWordsWhenTheFactsAreAbsentOrUnknown() {
         fun label(json: String) = TaskDetailLogic.runLabel(row(json))
-        assertEquals("Succeeded", label("""{"status":"SUCCEEDED"}"""))
+        assertEquals("Finished", label("""{"status":"SUCCEEDED"}"""))
         assertEquals("Failed", label("""{"status":"FAILED"}"""))
         assertEquals("Queued", label("""{"status":"PENDING","waitingOn":"HOLD"}"""))
         assertEquals("Ended", label("""{"status":"CANCELLED"}"""))

@@ -132,7 +132,7 @@ internal data class WatchSessionGlyph(val symbol: String?, val tone: Tone, val l
             "QUEUED" -> WatchSessionGlyph("clock", Tone.NEUTRAL, "Queued")
             "RUNNING" -> WatchSessionGlyph(null, Tone.BRAND, "Running")
             "AWAITING_INPUT" -> WatchSessionGlyph("message", Tone.NEUTRAL, "Waiting for your reply")
-            "SUCCEEDED" -> WatchSessionGlyph("checkmark.circle.fill", Tone.SUCCESS, "Succeeded")
+            "SUCCEEDED" -> WatchSessionGlyph("checkmark.circle.fill", Tone.SUCCESS, "Finished")
             "FAILED" -> WatchSessionGlyph("xmark.circle.fill", Tone.ERROR, "Failed")
             "INTERRUPTED" -> WatchSessionGlyph("minus.circle", Tone.NEUTRAL, "Interrupted")
             // ENDED, and a run state this build doesn't know: the safe terminal glyph.
