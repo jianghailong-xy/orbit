@@ -40,6 +40,7 @@ export * from './questionRecord';
 export * from './ownerChatReply';
 export * from './session-message';
 export * from './session-guests';
+export * from './session-phase';
 export * from './session-request';
 export * from './source';
 export * from './source-refusal';

@@ -38,6 +38,8 @@ export const PAT_SCOPES = [
   'events:read',
   // The owner's Orbit Files drive (/drive/*): one scope for reading and writing it, so it is not a `:read` and the read-only preset leaves it out.
   'files',
+  // POST /notify: a push to the account owner's Orbit apps, and nothing else — the narrow grant a monitoring system holds.
+  'notify',
 ] as const;
 export type PatScopeName = (typeof PAT_SCOPES)[number];
 

@@ -3332,8 +3332,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // row is written, and no trigger, function or DONE fence changes.
       // Written as 1430 on the project line, it was renumbered after main took 1430.
       '1431_managed_runner_update_interrupt',
-      // 1432 creates model_identity (rule_key, canonical_key, name, decided_at), a new table no preserved relation
-      // references; no existing row is written, and no trigger, function or DONE fence changes.
+      // 1432 creates model_identity (which model ids name one model, for display); 1433 seeds it with INSERTs. Neither
+      // touches a preserved relation, and no trigger, function or DONE fence changes.
       '1432_model_identity',
       // 1433 seeds model_identity with production's model ids, INSERT ... ON CONFLICT (rule_key) DO NOTHING into that
       // new table only; no preserved relation, trigger, function or DONE fence is touched.
@@ -3351,6 +3351,19 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1439_drive_entry_name_trgm',
       // 1440 adds the drive Trash marking flag and its partial index; it changes no preserved relation or fence.
       '1440_drive_trash_group_marking',
+      // 1441 to 1443, deploy 3 of design §12.6 (removal steps R6 to R8; written as 1428, 1429 and 1431, then 1433 to 1435,
+      // renumbered above what main and the other lines took). 1441 writes session.last_turn_outcome (FAILED on a release
+      // the status alone records as a failure, CANCELLED on the residual A2 shape) and conversation_turn.outcome and error
+      // on the carrying turn; 1442 re-creates 1425's three ended-triggers without the status bridge; 1443 drops
+      // session_release_cause_chk and session.release_cause after checking pg_depend. Session and conversation_turn are
+      // not preserved relations: no preserved relation is read, written or dropped, and the DONE fence is unchanged.
+      '1441_session_turn_outcome_backfill',
+      '1442_ended_triggers_drop_status_bridge',
+      '1443_session_release_cause_drop',
+      // 1444 drops 0130's claim index session_task_execution_claim_idx CONCURRENTLY (plan step 4.5, release B); 1426's
+      // index goes on enforcing one live run per task. Session is not a preserved relation, and no function, trigger,
+      // type, constraint or DONE fence changes. No INSERT, UPDATE or DELETE.
+      '1444_drop_session_task_execution_claim_idx',
       // 1447 adds SCHEDULE_CHANGE to session_run_source, two nullable session columns (change_schedule_id, with its
       // foreign key to schedule ON DELETE SET NULL and a partial index, and schedule_change_opening), and a nullable
       // asked_text to schedule_revision and schedule_change_request; no row is written, and none of the preserved
@@ -3359,6 +3372,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1448 indexes drive and share-link foreign keys for bounded permanent deletion. It writes no existing rows
       // and changes no preserved relation, trigger, function or DONE fence.
       '1448_drive_purge_fk_indexes',
+      // 1449 replaces 0152's session_merge_projection_checkpoint_authority body so an update that clears a session's
+      // merge state is not read as a landing claim (a NULL `claimed` used to raise; revision 42, §12.5 W6). It
+      // creates, alters or drops no table, column, constraint or trigger, names none of the preserved triggers or
+      // functions, and writes no row.
+      '1449_merge_projection_authority_null_safe',
       // 1450 adds session.codex_sandbox_unavailable with a constant false default and no table rewrite.
       // It changes no preserved rows, triggers, functions or DONE fence.
       '1450_session_codex_sandbox_unavailable',
@@ -3383,9 +3401,19 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // and a partial index on session; no row is written, and no preserved relation, trigger, function or DONE fence
       // changes. Written as 1430 on its task branch, it was renumbered after main took 1430 to 1464.
       '1465_session_run_now_over_capacity',
+      // 1490 adds session.listed_at (backfilled from last_turn_at/created_at, then defaulted) and conversation_turn.by_person,
+      // and a BEFORE UPDATE trigger on session (status, completed_at) that writes listed_at alone. session is not a
+      // preserved relation, none of the six preserved triggers/functions is named or replaced, and no DONE fence changes.
+      // Written as 1260 on its task branch, then 1434, then 1464; renumbered three times as main took each number.
+      '1490_session_listed_at',
       // 1491 sets feishu_app.message_detail's default to FULL and moves every TITLES_ONLY row to FULL: an ALTER and an
       // UPDATE of that table only, none of the preserved relations, and no trigger, function or DONE fence changes.
       '1491_feishu_details_by_default',
+      // 1501 adds four nullable work-session columns and three checks on project_open_item, and widens
+      // project_integration_job_retry_failure_class_chk to admit CONFLICT (revision 42, §12.4, R1); no row is
+      // written, and no preserved relation, trigger, function or DONE fence changes. Written as 1444 on the project
+      // line, it was renumbered after main took 1444.
+      '1501_open_item_work_session',
       // 1527 lands on a protected GitHub branch through a pull request (docs/design/protected-branch-landing.md §7). Of
       // the preserved relations it adds two nullable columns to session (merge_pull_request_id, merge_owner_token_for)
       // and widens session_merge_receipt_recorded_by_check by SERVER, a CHECK every stored row passes; it writes no row
@@ -3394,7 +3422,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // table, none of the preserved ones), PULL_REQUEST in project_integration_job_event_kind_chk,
       // github_app_config.webhook_secret_enc, and the new github_pull_request and github_webhook_delivery tables. No
       // DONE fence changes. It takes its locks in short tries inside one DO.
-      '1527_pull_request_landing'],
+      '1527_pull_request_landing',
+      // 1537 adds a nullable managed_runner.current_image_version (no default); `managed_runner` is none of the
+      // preserved relations, no row is written, and no trigger, function or DONE fence changes.
+      '1537_managed_runner_current_image_version'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

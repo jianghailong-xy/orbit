@@ -111,8 +111,8 @@ runner relay 与 consume、Plan usage 快照）。本文件是任务「加固 re
 ### 1.4 用 operationId 还原一次操作
 
 ```bash
-# apiserver（容器日志）
-docker logs orbit-apiserver 2>&1 | grep 'codex-reset' | grep '"operationId":"<id>"'
+# apiserver (container log): each line is JSON, so the quotes inside the message are escaped; match the id alone
+docker logs orbit-apiserver 2>&1 | grep 'codex-reset' | grep '<id>'
 # runner（该机器上的 runner 日志）
 journalctl -u orbit-runner --since '-1h' | grep 'codex-reset' | grep '"operationId":"<id>"'
 ```

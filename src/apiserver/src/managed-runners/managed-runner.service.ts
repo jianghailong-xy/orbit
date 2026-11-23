@@ -351,9 +351,15 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
    *     starts the next generation from the current image on the same volume and runner (Docker and Kubernetes). On a
    *     backend that cannot stop an instance it waits for idle instead, and the status says so (`update.waitsForIdle`).
    *
-   * Accepted, one transaction records when, by whom and whether it may interrupt on the mapping, by a compare-and-set
-   * on the revision read, and a `managed_runner.update_now` activity naming the sessions whose turns it interrupts; then
-   * the manager is woken. The status reads `updating` until the next generation is READY, and demand never calls it off.
+   * Accepted, one transaction records when, by whom and whether it may interrupt on the mapping, and a
+   * `managed_runner.update_now` activity naming the sessions whose turns it interrupts; then the manager is woken. The
+   * status reads `updating` until the next generation is READY, and demand never calls it off.
+   *
+   * The write is conditioned on what the decision read, never on the mapping's revision: the manager bumps that on
+   * nearly every pass (a production runner was at revision 1172), so a press read a moment before a pass was refused
+   * as a conflict. It holds while the mapping is still READY and wanted running on the same generation, and no other
+   * request was recorded since the read (`updateRequestedAt` unchanged). A press that loses to a concurrent one is
+   * answered with the status as it stands, as any press while one is in progress is.
    */
   async updateNow(ownerId: string, interruptTurns = false): Promise<ManagedRunnerStatus> {
     const runtime = this.operable();
@@ -400,7 +406,14 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
       this.prisma,
       async (tx) => {
         const { count } = await tx.managedRunner.updateMany({
-          where: { id: mapping.id, ownerId, revision: mapping.revision, managementState: 'READY', desiredState: 'RUNNING' },
+          where: {
+            id: mapping.id,
+            ownerId,
+            managementState: 'READY',
+            desiredState: 'RUNNING',
+            generation: mapping.generation,
+            updateRequestedAt: mapping.updateRequestedAt,
+          },
           data: { updateRequestedAt: now, updateRequestedBy: ownerId, updateInterruptTurns: busy, revision: { increment: 1 } },
         });
         if (count === 0) return false;
@@ -417,7 +430,11 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
       },
       loggedRetry(this.log, 'managedRunners.updateNow'),
     );
-    if (!accepted) throw this.revisionConflict(await this.owned(ownerId));
+    if (!accepted) {
+      const now = await this.owned(ownerId);
+      if (ownerUpdatePending(now)) return this.status(ownerId);
+      throw this.revisionConflict(now);
+    }
     this.log.log(
       `managed runner ${mapping.id}: its owner asked to update it now; `
         + (!busy ? 'idle, it is rolled onto the current image'

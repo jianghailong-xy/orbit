@@ -12,7 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { readInFlightJobs } from './project-integration-line';
 import { pushBoundaryPassed } from './project-integration-job';
 import { readLandingTimeline } from './landing-timeline';
-import { INTEGRATION_ITEM_KINDS, openItemOwed, openItemVisible } from './project-open-item';
+import { INTEGRATION_ITEM_KINDS, openItemInWorkSessionHands, openItemOwed, openItemVisible } from './project-open-item';
 import { isInFlightJobState } from './in-flight-job-states';
 import { PULL_REQUEST_VIEW_SELECT, pullRequestViewOf } from './pull-request-landing';
 
@@ -194,7 +194,8 @@ export async function readLandingView(
  *  subject's task, about the candidate the landing row names, or about a job of this landing: the
  *  same filters and the same three tiers the session row's AWAITING_DECISION asks
  *  (`SessionsService`'s LANDING subquery), so every todo the page lists is one that subquery would
- *  also count while the landing is unsettled. A settled generation is not held to it: the row
+ *  also count while the landing is unsettled — or, for an item in its task's own work session's
+ *  hands (revision 42, §12.7), one its FIXING counts: such a todo names that session. A settled generation is not held to it: the row
  *  answers SETTLED before it asks anything, and the task tier matches every episode of the task,
  *  so a settled generation can still list its task's owed items from a later episode. The candidate
  *  tier is what finds an item about one of the candidate's jobs queued before 0436, whose
@@ -216,7 +217,8 @@ async function readLandingTodos(
   ];
   if (tiers.length === 0) return [];
   return prisma.$queryRaw<SessionLandingTodo<Date>[]>(Prisma.sql`
-    SELECT item."id", item."kind", item."state", item."title", item."waiting_since" AS "waitingSince"
+    SELECT item."id", item."kind", item."state", item."title", item."waiting_since" AS "waitingSince",
+           CASE WHEN ${openItemInWorkSessionHands('item')} THEN item."work_session_id" END AS "workSessionId"
       FROM "project_open_item" item
      WHERE item."owner_id" = ${ownerId}::uuid
        AND item."project_id" = ${subject.projectId}::uuid
@@ -224,6 +226,8 @@ async function readLandingTodos(
        AND item."kind" IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
        AND (${Prisma.join(tiers, ' OR ')})
        AND ${openItemOwed('item')}
-       AND ${openItemVisible('item')}
+       -- Revision 42 (§12.7): an item its task's own work session is fixing is listed with that session, though no
+       -- coordinator has been handed it.
+       AND (${openItemVisible('item')} OR ${openItemInWorkSessionHands('item')})
      ORDER BY item."waiting_since" ASC, item."id" ASC`);
 }

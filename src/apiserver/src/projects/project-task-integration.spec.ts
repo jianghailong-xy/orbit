@@ -292,3 +292,31 @@ test('a reopened task keeps its last attempt readable without being queued again
   assert.equal(view.landTask?.state, 'CONFLICT');
   assert.equal(view.landTask?.blockingReason?.code, 'CONFLICT');
 });
+
+test('revision 42 (§12.7): a failure in the task\'s own work session\'s hands reads FIXING, names that session and '
+  + 'asks nobody else; its fix landing again reads the job, and a handed-back one is the coordinator\'s again', () => {
+  const offeredAt = new Date('2026-10-04T12:00:30Z');
+  for (const itemKind of ['INTEGRATION_CONFLICT', 'INTEGRATION_CHECK_FAILED']) {
+    const held = taskIntegrationOf(row({
+      itemKind, itemHandlingJobId: null, jobId: 'failed', jobState: itemKind === 'INTEGRATION_CONFLICT' ? 'CONFLICT' : 'CHECK_FAILED',
+      itemWorkSessionId: 'work-session', itemWorkSessionOfferedAt: offeredAt,
+    }), now);
+    assert.equal(held.state, 'FIXING');
+    assert.equal(held.workSessionId, 'work-session');
+    assert.equal(held.handler, null, 'a held failure names somebody else to act');
+    assert.equal(held.openItemId, 'failure');
+    assert.equal(held.jobId, 'failed');
+    assert.equal(held.since, offeredAt);
+  }
+  // The session's fix queued to land again (W-T2, H1): the new attempt is what the row says.
+  const again = taskIntegrationOf(row({
+    jobState: 'QUEUED', itemWorkSessionId: 'work-session', itemWorkSessionOfferedAt: offeredAt,
+  }), now);
+  assert.equal(again.state, 'QUEUED');
+  assert.equal(again.workSessionId, undefined);
+  // Handed back (the read leaves the session out once `work_session_returned_at` is written): the coordinator's.
+  const back = taskIntegrationOf(row({ itemHandlingJobId: null, jobState: 'CHECK_FAILED', itemWorkSessionId: null }), now);
+  assert.equal(back.state, 'CHECK_FAILED');
+  assert.equal(back.handler, 'COORDINATOR');
+  assert.equal(back.workSessionId, undefined);
+});

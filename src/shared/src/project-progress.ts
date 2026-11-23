@@ -424,6 +424,9 @@ export interface SessionLandingTodo<Instant = string> {
   state: string;
   title: string;
   waitingSince: Instant;
+  /** The task's own work session that holds the item while it fixes it (revision 42, §12.7), or
+   *  null when the item is the coordinator's or the owner's. Absent from an older server. */
+  workSessionId?: string | null;
 }
 
 /** One generation (segment/round) of the landing subject. `sessionId` is the landing session's id —
@@ -475,12 +478,19 @@ export type DerivedTimelineKind =
   | 'CONFIRMATION'
   | 'RESULT_FALLBACK'
   | 'AUTOMATIC_ATTEMPT'
-  | 'FIX_TASK';
+  | 'FIX_TASK'
+  /** Revision 42 (§12.7): the failure was handed to the task's own work session, its fix landing
+   *  again, and the failure handed back to the coordinator, read off the item's `work_session_*`
+   *  columns and the next generation's `retry_*`. A RETURNED_TO_COORDINATOR line's `data.lastMessage` is the work
+   *  session's last words at the hand-back, or null when it said none. */
+  | 'HANDED_TO_SESSION'
+  | 'FIXED_BY_SESSION'
+  | 'RETURNED_TO_COORDINATOR';
 
 /** Who caused a timeline line. */
 export interface IntegrationTimelineActor {
-  type: 'OWNER' | 'COORDINATOR' | 'PLATFORM' | 'RUNNER' | 'AUTOMATIC';
-  /** The conversation that acted, when a coordinator did. */
+  type: 'OWNER' | 'COORDINATOR' | 'PLATFORM' | 'RUNNER' | 'AUTOMATIC' | 'TASK_SESSION';
+  /** The conversation that acted, when a coordinator — or the task's own work session (revision 42) — did. */
   sessionId?: string | null;
   /** The person that acted, when the owner did. */
   userId?: string | null;
@@ -544,6 +554,7 @@ export interface IntegrationTimelineSection<Instant = string> {
  * - `DONE`: the task was marked done and its branch handed over — `by` TASK, `sessionId` the work
  *   session.
  * - `RETRY`: a rerun — `by` COORDINATOR (its `sessionId`), OWNER, or ORBIT; `reason` is the one given.
+ *   A fix by the task's own work session landing again (revision 42, W7) is `by` TASK, its `sessionId`.
  *   The owner's skip of a landing still in flight is one too: `by` OWNER, `reason` the skip's.
  * - `BACKFILL` / `BEHIND_WORK`: Orbit queued it — the project started integrating, or the task's
  *   work ended on another branch.
@@ -821,6 +832,10 @@ export interface ProjectManualReady {
  * line yet (§10.9): its agent pushes, so no job of the platform's carries it, and the view names the
  * commit it waits to see (`deliveredSha`). Once a receipt says it is there, the task reads
  * `ON_UPSTREAM` like any other.
+ *
+ * `FIXING` (revision 42, §12.7) is a landing that stopped on a conflict or a failed check and is in
+ * the hands of the task's own work session, which is fixing it on its branch: the row reads
+ * "Landing · fixing" and opens that session (`workSessionId`). Nobody else is asked to act on it.
  */
 export type TaskIntegrationState =
   | 'NOT_APPLICABLE'
@@ -829,6 +844,7 @@ export type TaskIntegrationState =
   | 'CONFLICT'
   | 'CHECK_FAILED'
   | 'ERROR'
+  | 'FIXING'
   | 'AWAITING_OWNER'
   | 'AWAITING_OBSERVATION'
   | 'ON_INTEGRATION_LINE'
@@ -948,6 +964,11 @@ export interface TaskIntegrationView<Instant = string> {
    * older server.
    */
   deliveredSha?: string | null;
+  /**
+   * With `FIXING`: the task's own work session that holds the failure (revision 42, §12.7), which
+   * pressing the row opens. Absent in every other state and from an older server.
+   */
+  workSessionId?: string | null;
 }
 
 /**
@@ -1149,6 +1170,36 @@ export interface OpenItemFacts {
   } | null;
 }
 
+/** Why an item left its task's own work session's hands (§12.4 `work_session_return_reason`). */
+export type OpenItemWorkSessionReturnReason =
+  | 'NO_NEW_COMMIT'
+  | 'TURN_FAILED'
+  | 'SESSION_ENDED'
+  | 'ROUNDS_EXHAUSTED'
+  | 'TASK_MOVED_ON';
+
+/**
+ * The task's own work session a landing failure went to first (revision 42, §12.5 W4–W7, §12.7):
+ * which session, when it was offered, and — once it came back to the coordinator — when and why.
+ *
+ * While `returnedAt` is absent the item is in that session's hands: it is listed under
+ * `withWorkSession` ("Being fixed by its session"), counted in no one's Needs you or attention, and
+ * its only doors are the owner's stop and "Chat about this" (W9). `rounds` is how many landing
+ * generations that session has asked for in this task segment (W8 caps them at 2): 0 while it is
+ * fixing the first failure, 1 once its first fix failed to land again.
+ */
+export interface OpenItemWorkSession<Instant = string> {
+  sessionId: string;
+  offeredAt: Instant;
+  /** When it was handed back to the coordinator (W7); absent while the session still holds it. */
+  returnedAt?: Instant;
+  /** Why it was handed back; absent while the session still holds it. */
+  returnReason?: OpenItemWorkSessionReturnReason;
+  rounds: number;
+  /** The session's last words at the hand-back; null when it said none, absent while it still holds the item. */
+  lastMessage?: string | null;
+}
+
 /**
  * The coordinator's rerun of the failure an item is about, while that rerun is still in flight
  * (§4.7 H1): the item is being handled, not closed. It stays OPEN until the job the rerun queued
@@ -1348,6 +1399,10 @@ export interface ProjectOpenItemRow<Instant = string> {
   /** "Chat about this": where the item's handling stands, and whether a message about it can reach
    *  the project's coordinator conversation. Absent from a server that predates it. */
   chat?: OpenItemChat | null;
+  /** The task's own work session this failure was handed to first (revision 42, §12.7), whether it
+   *  still holds it or handed it back; null for an item never offered to one, and absent from a
+   *  server that predates it. */
+  workSession?: OpenItemWorkSession<Instant> | null;
   /** Whether the project's coordinator can be neither asked again nor messaged right now, as the
    *  server read it with the list. An escalated item's heading says so ("the coordinator can’t take
    *  messages") instead of "no one acted on this", because its doors already say it. Absent from a
@@ -1423,6 +1478,13 @@ export interface ProjectSignInWait {
 export interface ProjectOpenItemsView<Instant = string> {
   needsYou: Array<ProjectOpenItemRow<Instant>>;
   withCoordinator: Array<ProjectOpenItemRow<Instant>>;
+  /**
+   * "Being fixed by its session" (revision 42, §12.7): landing failures in the hands of the task's own
+   * work session, which is fixing them on its branch. Kept out of `needsYou` and `withCoordinator` —
+   * nobody is waiting on the owner or the coordinator for them — and counted in no attention. Each row
+   * carries its `workSession`. Absent from a server that predates it.
+   */
+  withWorkSession?: Array<ProjectOpenItemRow<Instant>>;
   /**
    * The coordinator's questions that have ended — answered or withdrawn — newest first, at most 50
    * (§4.8, §5.2 R10, R12). Kept out of `needsYou`: nobody owes anything about them, and a

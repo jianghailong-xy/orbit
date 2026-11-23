@@ -29,7 +29,8 @@ import { isInFlightJobState } from './in-flight-job-states';
  *     was superseded, cancelled or re-queued after the landing must not un-land it.
  *  2. **An open exception item, unless its retry is in flight.** A conflict, a failed check or an
  *     integration error that somebody still owes an answer for. Read before the job's state because
- *     it names WHO has it, which distinguishes "being worked on" from "waiting for you".
+ *     it names WHO has it, which distinguishes "being worked on" from "waiting for you". One in the
+ *     task's own work session's hands (revision 42, §12.7) reads `FIXING`: that session has it.
  *  3. **The newest job.** Queued, running, or stopped at a terminal state nobody filed an item for.
  *
  * `NOT_APPLICABLE` covers everything else and is the ordinary answer: a codeless task, a task in a
@@ -120,6 +121,9 @@ interface TaskIntegrationRow {
   itemAssignee: string | null;
   itemCreatedAt: Date | null;
   itemHandlingJobId: string | null;
+  /** Revision 42 (§12.7): the task's own work session the newest item is in the hands of, while it is; else null. */
+  itemWorkSessionId?: string | null;
+  itemWorkSessionOfferedAt?: Date | null;
   landedAt: Date | null;
   /** The project's main branch by name, which ON_UPSTREAM is on; null with no repository bound. */
   mainBranch: string | null;
@@ -383,6 +387,18 @@ export function taskIntegrationOf(row: TaskIntegrationRow, now: Date): TaskInteg
   // job must not hide an outstanding exception.
   const retryInFlight = row.itemHandlingJobId !== null && row.itemHandlingJobId === row.jobId
     && row.jobState !== null && isInFlightJobState(row.jobState);
+  // Revision 42 (§12.7): a failure in the task's own work session's hands is being fixed there — "Landing · fixing",
+  // which opens that session — and asks nobody else to act. Once its fix is queued to land again, the job says so.
+  if (itemState && !retryInFlight && row.itemWorkSessionId) {
+    return {
+      ...none,
+      state: 'FIXING',
+      since: row.itemWorkSessionOfferedAt ?? row.itemCreatedAt,
+      openItemId: row.itemId,
+      jobId: row.jobId,
+      workSessionId: row.itemWorkSessionId,
+    };
+  }
   if (itemState && !retryInFlight && row.queueBlockCode !== 'WAITING_BASELINE') {
     return {
       ...none,
@@ -464,7 +480,12 @@ export async function readTaskIntegrationViews(
     -- whose second attempt conflicted is described by that conflict, not by the one before it.
     open_item AS (
       SELECT DISTINCT ON (i."task_id") i."task_id", i."id", i."kind", i."assignee", i."created_at",
-             i."handling_job_id"
+             i."handling_job_id",
+             -- Revision 42: offered to the task's own work session and not handed back (inWorkSessionHands).
+             CASE WHEN i."work_session_offered_at" IS NOT NULL AND i."work_session_returned_at" IS NULL
+                  THEN i."work_session_id" END AS "work_session_id",
+             CASE WHEN i."work_session_offered_at" IS NOT NULL AND i."work_session_returned_at" IS NULL
+                  THEN i."work_session_offered_at" END AS "work_session_offered_at"
         FROM "project_open_item" i
        WHERE i."task_id" IN (${ids})
          AND i."owner_id" = ${ownerId}::uuid
@@ -539,6 +560,8 @@ export async function readTaskIntegrationViews(
            open_item."id" AS "itemId", open_item."kind" AS "itemKind",
            open_item."assignee" AS "itemAssignee", open_item."created_at" AS "itemCreatedAt",
            open_item."handling_job_id" AS "itemHandlingJobId",
+           open_item."work_session_id" AS "itemWorkSessionId",
+           open_item."work_session_offered_at" AS "itemWorkSessionOfferedAt",
            landed_at."at" AS "landedAt",
            -- The project's main branch by name, the same for every row: read once, as an InitPlan.
            (SELECT ${mainBranch} FROM "project_codebase" pc

@@ -121,6 +121,9 @@ public enum LandingSteps {
         var groups: [String: [(index: Int, entry: IntegrationTimelineEntry)]] = [:]
         var current: String?
         for (index, entry) in entries.enumerated() {
+            // Revision 42's rows (the hand-off, the fix landing again, the hand-back) are no step's:
+            // the record draws them apart (`LandingFix.rows`).
+            if LandingFix.rowKinds.contains(entry.kind) { continue }
             let key = step(of: entry, current: current)
             current = key
             groups[key, default: []].append((index, entry))

@@ -1,0 +1,173 @@
+diff --git a/src/web/src/components/TaskDetailPanel.tsx b/src/web/src/components/TaskDetailPanel.tsx
+index 3fd903b5b0..bd615639d4 100644
+--- a/src/web/src/components/TaskDetailPanel.tsx
++++ b/src/web/src/components/TaskDetailPanel.tsx
+@@ -128,7 +128,7 @@ export const SESSION_STATE_META: Record<SessionRunState, { label: string; tone:
+   // queuedLabel), not here.
+   QUEUED: { label: QUEUED_LABEL, tone: 'muted' },
+   RUNNING: { label: 'Running', tone: 'blue' },
+-  SUCCEEDED: { label: 'Succeeded', tone: 'green' },
++  SUCCEEDED: { label: 'Finished', tone: 'green' },
+   FAILED: { label: 'Failed', tone: 'red' },
+   AWAITING_INPUT: { label: 'Awaiting reply', tone: 'amber' },
+   INTERRUPTED: { label: 'Interrupted', tone: 'muted' },
+diff --git a/src/web/src/components/WorkspaceView.tsx b/src/web/src/components/WorkspaceView.tsx
+index a7c5c6f16d..b004f5e7f7 100644
+--- a/src/web/src/components/WorkspaceView.tsx
++++ b/src/web/src/components/WorkspaceView.tsx
+@@ -581,6 +581,7 @@ import {
+   isSessionTerminal,
+   SESSION_ACTIVITY_WORD,
+   sessionActivityOf,
++  sessionWaitingOnOf,
+   sessionEndedBanner,
+   sessionIsStarting,
+   sessionLifecycleLabel,
+@@ -1235,6 +1236,12 @@ const parkedWorkLabel = (s: any): ParkedWork | null => {
+     : { text: bgRunningLabel(s.runningBgCount), kind, active: backgroundWorkIsActive(s) };
+ };
+ 
++// A queued turn the server says is on hold (`waitingOn` HOLD: the dispatch pause, a paused account, an
++// unavailable provider) where the queue would otherwise say only "Queued": no gate of a runner names it.
++const holdWord = (s: any): string | null =>
++  sessionWaitingOnOf(s) === 'HOLD' && s.queuedReason === null ? ON_HOLD_LABEL : null;
++const ON_HOLD_LABEL = 'On hold';
++
+ // The line shown under a session title. For a LIVE (openable) session that's working we
+ // surface its current state — the tool in flight, that it's blocked on you, or a bare
+ // "Running…" — so the row never collapses to just a title with no sign of progress.
+@@ -1423,7 +1430,7 @@ export const sessionLine = (
+       return { text: CAPACITY_HELD_LINE, tone: 'queued', hint: capacityHeldHint(s, machine, Date.now()) };
+     // A runner draining for its update is the one queue word in the warning colour (board 2 ①): it
+     // can last hours, and only the owner can shorten it.
+-    return { text: held ?? queuedLabel(s), tone: !held && isRunnerUpdating(s) ? 'warning' : 'queued' };
++    return { text: held ?? holdWord(s) ?? queuedLabel(s), tone: !held && isRunnerUpdating(s) ? 'warning' : 'queued' };
+   }
+   // Parked (AWAITING_INPUT) but still doing background work — a sub-workspace and/or background
+   // shells that outlive the turn — so it doesn't read as idle. A spawned sub-workspace parks the
+@@ -1811,7 +1818,7 @@ export function statusLabel(session: any, watching?: string | null, machine?: st
+   if ((session.pendingApprovals ?? 0) > 0) return waitingLabel(session);
+   // Where `Waiting for your confirmation` would be, while the report is with its reviewer (§5 N3).
+   if (session.confirmationUnderReview) return UNDER_REVIEW;
+-  if (state === 'SUCCEEDED') return 'Succeeded';
++  if (state === 'SUCCEEDED') return 'Finished';
+   if (waitingNoticeFor(session)) return startingLabel(session);
+   if (isGenerating(session, state)) return 'Running';
+   if (state === 'AWAITING_INPUT') {
+@@ -1829,7 +1836,7 @@ export function statusLabel(session: any, watching?: string | null, machine?: st
+   }
+   if (state === 'INTERRUPTED') return 'Interrupted';
+   if (state === 'ENDED') return 'Ended';
+-  return claudeRegionHeldWords(session, machine) ?? queuedLabel(session); // PENDING
++  return claudeRegionHeldWords(session, machine) ?? holdWord(session) ?? queuedLabel(session); // PENDING
+ }
+ 
+ // What a failed session's glyph says — StatusIcon's FAILED tooltips, word for word: the error
+@@ -1917,7 +1924,7 @@ export function StatusIcon({ session, watching, machine }: { session: any; watch
+     );
+   if (state === 'SUCCEEDED')
+     return (
+-      <Tooltip content="Succeeded">
++      <Tooltip content="Finished">
+         <CheckCircleFilled style={{ color: 'var(--success-solid)', fontSize }} />
+       </Tooltip>
+     );
+@@ -2013,7 +2020,7 @@ export function StatusIcon({ session, watching, machine }: { session: any; watch
+     );
+   // PENDING — waiting for an active turn slot, or held for the Claude region, as the row says.
+   return (
+-    <Tooltip content={claudeRegionHeldWords(session, machine) ?? queuedTitle(session)}>
++    <Tooltip content={claudeRegionHeldWords(session, machine) ?? holdWord(session) ?? queuedTitle(session)}>
+       <ClockCircleOutlined style={{ color: 'var(--scrollbar-hover)', fontSize }} />
+     </Tooltip>
+   );
+diff --git a/src/web/src/lib/sessionState.ts b/src/web/src/lib/sessionState.ts
+index 7b78fb290f..1fa207aec0 100644
+--- a/src/web/src/lib/sessionState.ts
++++ b/src/web/src/lib/sessionState.ts
+@@ -81,6 +81,8 @@ export interface SessionStateSource {
+    *  server. Absent from an older control plane; see sessionPhaseOf, sessionReleasedOf. */
+   phase?: string | null;
+   released?: boolean | null;
++  /** `LANDING` for a landing container, whose release with no end reason finished its work. */
++  sessionKind?: string | null;
+   lastTurnOutcome?: string | null;
+   waitingOn?: string | null;
+ }
+@@ -190,6 +192,8 @@ const legacySessionRunState = (session: SessionStateSource): SessionRunState | n
+  * exists. That ordering prevents a stale legacy COMPLETED value from overriding CANCELLED.
+  */
+ export function sessionRunStateOf(session: SessionStateSource): SessionRunState {
++  const fromFields = runStateFromPhaseFields(session);
++  if (fromFields) return fromFields;
+   const explicit = normalizedValue<SessionRunState>(session.runState, SESSION_RUN_STATE_SET);
+   if (explicit) return explicit;
+ 
+@@ -223,6 +227,33 @@ export function sessionRunStateOf(session: SessionStateSource): SessionRunState
+   }
+ }
+ 
++/** Whether a released session finished its work: its task ended DONE, or it is a landing that settled
++ *  (the server's releaseFinishedTheWork). The only release worded "Finished" (decision D2). */
++export const sessionFinishedTheWork = (session: SessionStateSource): boolean =>
++  session.released === true &&
++  ((session.endReason ?? '') === 'task_done' ||
++    ((session.sessionKind ?? '') === 'LANDING' && !session.endReason));
++
++/**
++ * The run state a payload with the new fields reads as (contracts/session-state.contract.json), or null from an
++ * older control plane, which keeps the legacy reading below. A release is a failure only when the last turn failed
++ * and nobody asked for an end (decision D9); it finished the work only by sessionFinishedTheWork; any other release
++ * ended. A held session is queued, running, or parked: RUNNING with `activity` set is work outside a turn (a job, a
++ * sub-agent, the engine's own turn), which the parked branches of every surface already draw.
++ */
++function runStateFromPhaseFields(session: SessionStateSource): SessionRunState | null {
++  const phase = sessionPhaseOf(session);
++  if (!phase || typeof session.released !== 'boolean') return null;
++  const outcome = sessionLastTurnOutcomeOf(session);
++  if (session.released) {
++    if (!session.endReason && outcome === 'FAILED') return 'FAILED';
++    return sessionFinishedTheWork(session) ? 'SUCCEEDED' : 'ENDED';
++  }
++  if (phase === 'PENDING') return 'QUEUED';
++  if (phase === 'RUNNING') return session.activity ? 'AWAITING_INPUT' : 'RUNNING';
++  return outcome === 'INTERRUPTED' ? 'INTERRUPTED' : 'AWAITING_INPUT';
++}
++
+ export type SessionLifecycleView = 'open' | 'completed' | 'trash';
+ type LegacySessionListView = 'active' | 'archived' | 'deleted';
+ 
+@@ -262,7 +293,9 @@ const SESSION_ACTIVITIES: ReadonlySet<string> = new Set<SessionActivity>(['TURN'
+ export const sessionActivityOf = (session: SessionStateSource): SessionActivity | null => {
+   if (sessionRunStateOf(session) !== 'AWAITING_INPUT') return null;
+   const value = (session.activity ?? '').toUpperCase();
+-  return SESSION_ACTIVITIES.has(value) ? (value as SessionActivity) : null;
++  if (SESSION_ACTIVITIES.has(value)) return value as SessionActivity;
++  // The server's `waitingOn` says the same of a parked session a watch, wake-up or retry will give a turn.
++  return sessionWaitingOnOf(session) === 'WAKE' ? 'WAITING' : null;
+ };
+ 
+ /** The words for a parked session's activity, shared by every surface that says it. */
+@@ -278,7 +311,9 @@ const SESSION_RUN_WORD: Record<SessionRunState, string> = {
+   QUEUED: 'Queued',
+   RUNNING: 'Running',
+   AWAITING_INPUT: 'Awaiting reply',
+-  SUCCEEDED: 'Succeeded',
++  // Decision D2: a session never "succeeds". The one release that finished its work is a task's run that
++  // ended DONE, or a settled landing (sessionFinishedTheWork).
++  SUCCEEDED: 'Finished',
+   FAILED: 'Failed',
+   INTERRUPTED: 'Interrupted',
+   ENDED: 'Ended',
+@@ -415,7 +450,10 @@ export function sessionEndedBanner(
+   let base: string;
+   switch (state) {
+     case 'SUCCEEDED':
+-      base = 'Session succeeded.';
++      base =
++        (session.endReason ?? '').toLowerCase() === 'task_done'
++          ? 'The linked task is done, so the session finished.'
++          : 'Session finished.';
+       break;
+     case 'FAILED':
+       // Not "Session failed" while the server is going to re-send it: the card above this line

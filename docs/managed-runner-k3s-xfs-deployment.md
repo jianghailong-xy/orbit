@@ -95,9 +95,13 @@ archive at `/root/orbit-cloud-runner-main-dcb75cb6e.tar.gz` on the node.
 
 ### From the registry, with each release
 
-From then on the image comes with the release (.claude/skills/upgrade/SKILL.md, "Two-stage release"). The build host
-builds `10.66.0.1:5000/orbit-cloud-runner:<commit>` whenever a release changes what the image is built from, and
-pushes it with the other images. The deploy on `10.66.0.4` sets the profile's `runner.image` to it by digest and `runner.imageRevision` to the image's source commit (40 hex; what the runner reports as `managed-<sha>`, and what lets the status offer Update Now), keeps the
+From then on the image comes with the release tag (docs/release-process.md, "Orbit Cloud runner image"). When /release
+creates a tag, the build host builds `10.66.0.1:5000/orbit-cloud-runner:<version>` from the tag's commit and pushes it
+(`deploy/two-stage/publish-managed-runner.sh`); its runner reports that version. A two-stage deploy builds no runner
+image: it takes the one of the newest release tag at or behind the commit it deploys, and stops before changing anything
+when that image is not in the registry. The deploy on `10.66.0.4` sets the profile's `runner.image` to it by digest,
+`runner.imageRevision` to the tag's commit (40 hex) and `runner.imageVersion` to the release version (what the runner
+reports, and what lets the status offer Update Now), keeps the
 profile it replaces beside it, and replaces the apiserver, which reads the profile as it starts. The apiserver's manager
 then moves each runner whose Pod runs another image onto it once that runner is idle: the drain a sleep takes, then a
 wake at once, as the next generation on the same PVC (`rollPreviousImage`). Nothing in flight is cut short; a busy runner
