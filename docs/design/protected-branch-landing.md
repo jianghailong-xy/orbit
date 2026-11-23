@@ -935,3 +935,26 @@ those, until its owner (the user, or an organization owner) opens GitHub's email
 `github.com/settings/installations/<id>` (organization: `github.com/organizations/<org>/settings/installations/<id>`)
 and chooses **Accept new permissions**. Until then Orbit lands as it does today. Pending installations are not removed
 or suspended.
+
+## Appendix C. Owner steps: the webhook
+
+Task `3521xduVqwmXO68Z6Fzwk` serves the endpoint (§4.7, §8). Until these steps are done, Orbit learns what happened on
+GitHub from the slow re-read alone: an open pull request is read every minute while no delivery has arrived in the last
+hour. The webhook makes it seconds.
+
+**Steps (the App's owner, once, after the apiserver that serves the endpoint is deployed)**
+
+1. Make a secret: `openssl rand -hex 32`. Keep it for steps 2 and 3; it is never shown again by Orbit.
+2. github.com → Settings → Developer settings → GitHub Apps → `orbitd-cloud` → Edit → General → Webhook:
+   - Active: on.
+   - Webhook URL: `https://<this Orbit's address>/api/integrations/github/webhook` (the admin read answers it as
+     `webhookUrl`).
+   - Secret: the secret from step 1.
+3. Save the same secret in Orbit, write-only: `PUT /api/admin/integrations/github` with the App's current fields and
+   `webhookSecret`. The admin read then says `webhookSecretSaved: true`. (The admin page's field for it is a client
+   change, not part of this task.)
+4. Permissions & events → Subscribe to events: Pull request, Pull request review, Check run, Check suite, Status, Push.
+   Installation events are sent without subscribing.
+5. Check: GitHub → the App → Advanced → Recent Deliveries lists a `ping` answered `202`, and the admin read's
+   `lastDeliveryAt` moves when a pull request Orbit opened changes. A delivery signed with any other secret is answered
+   `401` and stored nowhere.
