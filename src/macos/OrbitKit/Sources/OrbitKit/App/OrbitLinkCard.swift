@@ -277,7 +277,8 @@ public struct OrbitLinkCardContent: Equatable, Sendable {
 
     /// How a task's newest run came out, in the words its own glyph would use.
     private static func runWord(_ run: LinkPreviewTaskRun) -> String {
-        SessionStatusGlyph.make(runState: run.effectiveRunState).label
+        // A task run stored SUCCEEDED is one whose task ended done: the approved word is Finished (web `stateWord`).
+        SessionStatusGlyph.make(runState: run.effectiveRunState, successLabel: "Finished").label
     }
 
     /// The status word, the Coordinator badge, and who ran it.

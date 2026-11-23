@@ -942,7 +942,8 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 	var res ExecResult
 	var err error
 	// A child that fails on a usage limit, capacity or a failed login is started again, with the same prompt, on the next
-	// candidate the server names (§4.3), at most subagentMaxMoves times; any other end is the run's result.
+	// candidate the server names (§4.3), as often as the server moves it (it holds the bound, which a refused trial is
+	// not counted against); any other end is the run's result.
 	limit, limitNote := "", ""
 	scratch := dir
 	// Every attempt's spend is the run's: a limit failure can still have cost something.
@@ -961,11 +962,7 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 		if limit, limited = subagentLimitFailure(res, err); !limited {
 			break
 		}
-		if attempt > subagentMaxMoves {
-			limitNote = fmt.Sprintf("It hit a usage limit, capacity or a failed login on %d candidates in a row and was moved %d times, the most one delegate call is.", attempt, subagentMaxMoves)
-			break
-		}
-		next, ferr := s.nextSubagentCandidate(run.id, limit, def)
+		next, ferr := s.nextSubagentCandidate(run.id, limit, res, def)
 		if ferr != nil {
 			limitNote = "It was not moved to another candidate: " + ferr.Error()
 			break
@@ -1006,7 +1003,14 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 		}
 	case limit != "":
 		status = subagentStatusFailed
-		result = strings.TrimSpace("The SubAgent failed: " + limit + "\n" + limitNote)
+		// A failed end whose words are not the engine's own error (a refusal at admission, read off the reply) says
+		// that error first, as any other failed end does.
+		why := limit
+		if engineWhy := firstNonEmpty(strings.TrimSpace(res.ErrorMsg), res.Subtype); res.Status != stSucceeded &&
+			engineWhy != "" && !strings.Contains(limit, engineWhy) {
+			why = engineWhy + "\n" + limit
+		}
+		result = strings.TrimSpace("The SubAgent failed: " + why + "\n" + limitNote)
 	case err != nil:
 		status = subagentStatusFailed
 		result = strings.TrimSpace("The SubAgent failed: " + err.Error() + "\n" + result)
@@ -1349,6 +1353,7 @@ func runClaudeChildProcess(ctx context.Context, parent *ClaimedSession, exec Age
 	}
 	var res ExecResult
 	got := false
+	var output claudeTurnOutput
 	sc := bufio.NewScanner(sp.stdout)
 	sc.Buffer(make([]byte, 0, 1024*1024), 16*1024*1024)
 	for sc.Scan() {
@@ -1361,8 +1366,15 @@ func runClaudeChildProcess(ctx context.Context, parent *ClaimedSession, exec Age
 		}
 		if msg["type"] == "result" {
 			res, got = resultFrom(msg, ctx), true
+			// Claude Code ends a spent window or a refused sign-in with a "success" result whose reply is the
+			// failure: what it was is read off that reply, for the fallback ask (subagentLimitFailure).
+			if failure := claudeTurnFailureOf(res.Result); failure.Kind != "" || res.Status == stFailed {
+				res.Failure = failure.wire()
+				res.Admission = output.admission(res, firstNonEmpty(failure.Said, strings.TrimSpace(res.Result)))
+			}
 			break
 		}
+		output.observe(msg)
 		handleMessage(msg, emit, nil)
 	}
 	_ = sp.stdin.Close()

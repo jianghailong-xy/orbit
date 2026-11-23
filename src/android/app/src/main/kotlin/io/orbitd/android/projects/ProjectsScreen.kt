@@ -556,7 +556,7 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
             doc.text("instructions")?.trim()?.takeIf { it.isNotEmpty() }?.let { Folded(it, 180, link) }
                 ?: Text(ProjectPage.noInstructions, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        tasksSection(state, doc, openTask, openSession = { open(OrbitRoute(Destination.SESSION, it)) }, loadMore = {
+        tasksSection(state, doc, openTask, open, openSession = { open(OrbitRoute(Destination.SESSION, it)) }, loadMore = {
             val cursor = state.cursor ?: return@tasksSection
             if (state.loadingMore || state.refreshing) return@tasksSection
             state.loadingMore = true
@@ -1286,7 +1286,7 @@ private fun CriterionRow(criterion: JsonObject, ref: String?, main: String, open
 private fun tasksTail(state: ProjectPageState): Int =
     1 + ProjectPage.taskGroups(state.tasks).let { groups -> if (groups.isEmpty()) 1 else groups.sumOf { 1 + it.tasks.size } } + if (state.cursor != null) 1 else 0
 
-private fun LazyListScope.tasksSection(state: ProjectPageState, doc: JsonObject, openTask: (String) -> Unit, openSession: (String) -> Unit, loadMore: () -> Unit) {
+private fun LazyListScope.tasksSection(state: ProjectPageState, doc: JsonObject, openTask: (String) -> Unit, open: (OrbitRoute) -> Unit, openSession: (String) -> Unit, loadMore: () -> Unit) {
     val groups = ProjectPage.taskGroups(state.tasks)
     item(key = "tasks-head") { SectionHead("Tasks", "${ProjectDoc.taskCount(doc)}") }
     if (groups.isEmpty()) item(key = "tasks-empty") { Text("No tasks yet.", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -1304,6 +1304,8 @@ private fun LazyListScope.tasksSection(state: ProjectPageState, doc: JsonObject,
                 Text(glyphText(glyph), color = glyphColor(glyph))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(task.text("title").orEmpty(), maxLines = 2, color = if (group.settled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
+                    // No account that could run it can run now (§7.5): one quiet line under the title, never a chip in it.
+                    if (io.orbitd.android.tasks.TaskAccountHold.showsOnRow(task)) io.orbitd.android.tasks.TaskAccountHoldLine(task, open)
                     val unmet = task.number("unmetCount") ?: 0; val blocks = task.number("blocksCount") ?: 0
                     if (tags.isNotEmpty() || unmet > 0 || blocks > 0) Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         tags.forEach { Chip(it.text, it.tone) }

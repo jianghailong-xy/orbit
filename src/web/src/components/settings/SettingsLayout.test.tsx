@@ -61,7 +61,6 @@ vi.mock('../../pages/settings/StoragePage', async () => ({ StorageSettingsPage: 
 vi.mock('../../pages/ProfilePage', () => ({ ProfilePage: () => <p data-page="profile">profile</p> }));
 vi.mock('../../pages/SharedLinksPage', () => ({ SharedLinksPage: () => <p data-page="shared-links">links</p> }));
 vi.mock('../../pages/AccessTokensPage', () => ({ AccessTokensPage: () => <p data-page="access-tokens">tokens</p> }));
-vi.mock('../../pages/TerminalsPage', () => ({ TerminalsPage: () => <p data-page="terminals">terminals</p> }));
 vi.mock('../../pages/settings/ModelRoutingPage', () => ({ ModelRoutingPage: () => <p data-page="routing">routing</p> }));
 vi.mock('../../pages/FeishuIntegrationPage', () => ({ FeishuIntegrationPage: () => <p data-page="feishu">feishu</p> }));
 vi.mock('./SettingsProviderPages', async (original) => {
@@ -294,7 +293,6 @@ describe('the Settings window', () => {
       ['Shared links', '/settings/shared-links'],
       ['Access tokens', '/settings/access-tokens'],
       ['Secrets', '/settings/secrets'],
-      ['Terminals', '/settings/terminals'],
     ]);
     expect(rows('Integrations').map((r) => [r.label, r.href])).toEqual([
       ['Feishu', '/settings/integrations/feishu'],
@@ -326,7 +324,6 @@ describe('the Settings window', () => {
       '/settings/profile': 'profile',
       '/settings/shared-links': 'shared-links',
       '/settings/access-tokens': 'access-tokens',
-      '/settings/terminals': 'terminals',
       '/settings/integrations/feishu': 'feishu',
       '/settings/machines/gpuBox': 'machine:gpuBox:',
       '/settings/machines/studioMac': 'machine:studioMac:',
@@ -342,6 +339,18 @@ describe('the Settings window', () => {
       expect(page()).toBe(answered);
       expect(nav().querySelector('a.active')?.getAttribute('href')).toBe(href);
     }
+  });
+
+  it('opens Machines from the old /settings/terminals address: the first machine’s page', async () => {
+    await visit('/settings/terminals');
+    expect(addressBar()).toBe('/settings/machines/gpuBox');
+    expect(page()).toBe('machine:gpuBox:');
+  });
+
+  it('opens General from the old /settings/terminals address when there is no machine', async () => {
+    runners = [];
+    await visit('/settings/terminals');
+    expect(addressBar()).toBe('/settings/general');
   });
 
   it('draws Providers as the one way to connect a provider while there is no key and no pool', async () => {

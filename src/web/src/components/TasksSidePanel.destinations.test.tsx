@@ -286,7 +286,7 @@ describe('Machines & models, which has no sidebar row (docs/mocks/machines-and-m
     serve();
     await visit('/tasks');
     const labels = [...container!.querySelectorAll('.tp-section .tp-label')].map((label) => label.textContent);
-    expect(labels).toEqual(['Projects', 'Tasks', 'Scheduled', 'Waiting on you', 'Wiki', 'Files']);
+    expect(labels).toEqual(['Projects', 'Tasks', 'Scheduled', 'Wiki', 'Files']);
   });
 
   it.each([

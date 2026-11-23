@@ -3,6 +3,8 @@ import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from
 import { DRAIN_SKIPS_HELD, translationLanguages, turnTranslationOf } from '../sessions/turn-translation';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
+import { AccountHealthService, makeTrialDue } from '../providers/account-health.service';
+import { runFailureColumns } from './run-failure-columns';
 import { BG_OWNER_STOP_V1, BROWSER_CLEAR_V1, BROWSER_OPEN_V1, type BackgroundJobStopCommand, CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import { ConditionsService } from '../conditions/conditions.service';
@@ -61,7 +63,7 @@ import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-
 import { latestAgentToolsReport } from './agent-tools-report';
 import { reportsCodexSandboxUnavailable } from './codex-sandbox-report';
 import { withActiveSessions } from '../providers/active-sessions';
-import { accountAfterSignOut, accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount, waitsForWarmCache } from '../providers/plan-usage-accounts';
+import { accountAfterSignOut, accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, changedPlans, runAccount, waitsForWarmCache } from '../providers/plan-usage-accounts';
 import {
   ACCOUNT_MOVE_CAPABILITY,
   CLAUDE_ACCOUNT_MOVE_V1,
@@ -107,6 +109,8 @@ import {
   IntegrationJobResultResponse,
   isUsageLimitErrorText,
   parseQuotaResetAt,
+  RunFailureKind,
+  runFailureIs,
   usageLimitResetsAt,
   workflowLaunchReceipt,
   delegateLaunchReceipt,
@@ -1802,6 +1806,8 @@ export class RunnerApiController {
     /** The browser switch, said on every reclaim as on a claim (browserClaimFields); absent in hand-built specs: off. */
     @Optional() @Inject(MANAGED_RUNNER_BROWSER_GATE) private readonly browserGate?: ManagedRunnerBrowserGate,
     @Optional() private readonly coordinatorFacts?: CoordinatorFactQueueService,
+    /** Account health (docs/routing-account-health-design.md §6.3): told of every run's end; absent in hand-built specs. */
+    @Optional() private readonly accountHealth?: AccountHealthService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -1909,6 +1915,16 @@ export class RunnerApiController {
       runnerToken: session.runnerToken,
       name: session.name,
     };
+  }
+
+  /**
+   * The replacement of §7.3 (docs/routing-account-health-design.md) for a run that ended FAILED: TasksService decides
+   * whether its account refused it at admission and, within the bound, dispatches the task again. Never awaited by the
+   * runner's request, and never in its way: a failure is logged.
+   */
+  private replaceRefusedRun(sessionId: string): void {
+    void this.tasks?.replaceRefusedRun(sessionId).catch((error) =>
+      this.logger.warn(`refused run ${sessionId} not replaced: ${(error as Error)?.message ?? error}`));
   }
 
   /** Insert a device session, regenerating the short code on the rare collision. */
@@ -2190,7 +2206,7 @@ export class RunnerApiController {
         ? (await this.prisma.runner.findUnique({ where: { id: runnerId }, select: { repoHealth: true } }))?.repoHealth
         : undefined;
       try {
-        await writeLinkBeatReports(this.prisma, {
+        const written = await writeLinkBeatReports(this.prisma, {
           runnerId,
           leaseOwner,
           dto,
@@ -2200,6 +2216,10 @@ export class RunnerApiController {
           storedPlanUsage: row.planUsage,
           now: new Date(),
         });
+        // The plan usage it overwrote was read with the beat (planUsageRead): a plan that changed makes trials due.
+        if (written.planUsageStored && row.planUsageRead && verdict.reports.includes('planUsage')) {
+          await this.makePlanChangeTrialsDue(runnerId, admission.ownerId, row.planUsage, dto?.planUsage);
+        }
         if (reposChanged) {
           for (const workspaceId of workspacesWithChangedRepoHealth(priorRepoHealth, sanitizeRunnerRepoHealth(dto.repos) ?? [])) {
             this.realtime.publishWorkspaceRepoHealthChanged(admission.ownerId, workspaceId);
@@ -2257,6 +2277,39 @@ export class RunnerApiController {
    * presence row, so this does neither again; it leaves the runner row as it is when nothing written there changed
    * (only its own record of the beat, when that is due); and it records what it covered (recordLinkReconcile).
    */
+  /**
+   * The plan usage stored for `runnerId` before a heartbeat overwrites it, while the runner has a blocked account
+   * (account_health); undefined otherwise, when no plan change could make a trial due, and when the read fails: the
+   * heartbeat is never in its way.
+   */
+  private async planUsageUnderBlock(runnerId: string): Promise<unknown> {
+    try {
+      const blocked = await this.prisma.accountHealth.findFirst({
+        where: { runnerId, clearedAt: null, state: 'BLOCKED' }, select: { id: true },
+      });
+      if (!blocked) return undefined;
+      return (await this.prisma.runner.findUnique({ where: { id: runnerId }, select: { planUsage: true } }))?.planUsage ?? null;
+    } catch (error) {
+      this.logger.warn(`runner ${runnerId}: plan usage before this heartbeat not read: ${(error as Error)?.message ?? error}`);
+      return undefined;
+    }
+  }
+
+  /**
+   * §6.3 of docs/routing-account-health-design.md: a usage reading whose plan differs from the last one may be the
+   * owner's fix for a block on that account (changedPlans), so its trial is due now, as after a fresh sign-in. The
+   * ladder is kept. Never in the heartbeat's way: a failure is logged.
+   */
+  private async makePlanChangeTrialsDue(runnerId: string, ownerId: string, before: unknown, after: unknown): Promise<void> {
+    try {
+      for (const { engine, account } of changedPlans(before, after)) {
+        await makeTrialDue(this.prisma, ownerId, { runnerId, engine, account });
+      }
+    } catch (error) {
+      this.logger.warn(`runner ${runnerId}: trials not made due after a plan change: ${(error as Error)?.message ?? error}`);
+    }
+  }
+
   private async reconcileHeartbeat(
     runner: { id: string; version: string | null; lastHeartbeatAt?: Date | null },
     dto: RunnerHeartbeatRequest,
@@ -2318,6 +2371,16 @@ export class RunnerApiController {
             })
           )?.engines,
         )
+      : null;
+    // §6.3 of docs/routing-account-health-design.md: an engine newly signed in may be the fix for a block on it, so its
+    // trial is due now. The engines as they stood before this beat, read only while this runner has a blocked account
+    // and the beat reports an engine signed in: one indexed read otherwise.
+    const ownerOfRunner = (runner as { ownerId?: string }).ownerId;
+    const healthPriorEngines = ownerOfRunner && signIns?.some((e) => e.installed && e.auth === 'yes')
+      && (await this.prisma.accountHealth.findFirst({
+        where: { runnerId: runner.id, clearedAt: null, state: 'BLOCKED' }, select: { id: true },
+      }))
+      ? priorEngines ?? signInsOf((await this.prisma.runner.findUnique({ where: { id: runner.id }, select: { engines: true } }))?.engines)
       : null;
     // The beat is two writes, in this order: the runner row — what this heartbeat reports, and the
     // runner's own record of its beats once that is RUNNER_DURABLE_BEAT_EVERY_MS old — then its
@@ -2491,10 +2554,15 @@ export class RunnerApiController {
     const planUsageUnchanged = !!linkBeat && !!storedFacts && storedFacts.planUsage === linkBeat.digests.facts.planUsage;
     if (dto?.planUsage != null && !planUsageUnchanged) {
       planUsageStored = false;
+      // What it overwrites, for a plan that changed (makePlanChangeTrialsDue): read only while this runner has a
+      // blocked account, one indexed read otherwise.
+      const planUsageBefore = ownerOfRunner ? await this.planUsageUnderBlock(runner.id) : undefined;
       try {
         planUsageStored = await storeHeartbeatPlanUsage(this.prisma, runner.id, dto.planUsage, heartbeatLeaseOwner);
         if (!planUsageStored) {
           this.logger.warn(`runner ${runner.id}: planUsage not stored after ${PLAN_USAGE_CAS_ATTEMPTS} compare-and-set attempts; the next heartbeat reports it again`);
+        } else if (planUsageBefore !== undefined) {
+          await this.makePlanChangeTrialsDue(runner.id, ownerOfRunner!, planUsageBefore, dto.planUsage);
         }
       } catch (error) {
         // Advisory telemetry, like the live diffs below: never fail the heartbeat for it.
@@ -2600,6 +2668,14 @@ export class RunnerApiController {
         // that attempt ends, so its probe reads `no` mid-sign-in — not news to whoever is signing in.
         if (current.engine === 'antigravity' && antigravitySignInUnderWay(updated)) continue;
         void this.push.notifyEngineSignedOut(runner.id, current.engine);
+      }
+    }
+    if (healthPriorEngines && ownerOfRunner) {
+      for (const current of signIns ?? []) {
+        if (!current.installed || current.auth !== 'yes') continue;
+        if (healthPriorEngines.find((was) => was.engine === current.engine)?.auth === 'yes') continue;
+        await makeTrialDue(this.prisma, ownerOfRunner, { runnerId: runner.id, engine: current.engine }).catch((error) =>
+          this.logger.warn(`runner ${runner.id}: trials not made due after ${current.engine} signed in: ${(error as Error)?.message ?? error}`));
       }
     }
     // A finished install stops being news the moment the probe confirms it: clear the slot so the
@@ -7887,7 +7963,7 @@ export class RunnerApiController {
         && completedTurn?.kind === 'message'
         && current.retryAt == null
         && usageLimitEngine
-        && isUsageLimitErrorText(failureText)
+        && runFailureIs({ failureKind: dto.failure?.kind, error: failureText }, [RunFailureKind.USAGE_LIMIT])
           ? await this.usageLimitRetry(tx, runner.id, usageLimitEngine, current, failureText!)
           : null;
       const filed = current.completedAt != null || current.archivedAt != null || current.deletedAt != null;
@@ -8318,6 +8394,9 @@ export class RunnerApiController {
                 // reporting the engine's words, which for this shape are nothing: the runtime
                 // released the turn without a reply. Its own sentence follows when it gave one.
                 error: (acceptanceFailureReason ?? (swallowed ? swallowedMessageError(failureText) : failureText)) || 'run failed',
+                // What the engine adapter classified the failure as, beside the error it wrote (design §5.1). An
+                // acceptance failure is the server's own verdict on the work, not the engine's: no kind.
+                ...runFailureColumns(acceptanceFailureReason ? {} : dto, true),
                 cancelRequestedAt: new Date(),
                 // Released for the turn that failed (design §4.2), in the statement that writes FAILED. FAILED is
                 // where this session stops being live, so whatever it had running goes with it
@@ -8639,6 +8718,18 @@ export class RunnerApiController {
     // runs the coordinator replacement, which the runner — blocked on this reply — must not wait for,
     // so it is settled off the response path. Any other turn of the session is a read that finds
     // no WRITING handoff and stops.
+    // What the turn's end says of the account it spent (§6.3): a failure to the rules, a completed turn as the account
+    // working. After the commit, awaited so the next dispatch reads it; it logs its own failure.
+    if (finalized.applied && !finalized.steer && 'failSession' in finalized) {
+      await this.accountHealth?.afterRunEnd(sessionId, {
+        failed: finalized.failSession === true,
+        turnCompleted: !finalized.failSession,
+        until: dto.failure?.until ?? null,
+      });
+      // A task run its account refused at admission is replaced at once (§7.3), off the response path: the runner is
+      // blocked on this reply, and the replacement is a whole dispatch.
+      if (finalized.failSession === true) this.replaceRefusedRun(sessionId);
+    }
     if (finalized.applied && !finalized.steer && this.coordinatorHandoffs) {
       void this.coordinatorHandoffs.afterTurn(sessionId, dto.turnId, dto.status).catch((error) => this.logger.warn(
         `coordinator handoff after turn ${dto.turnId} of ${sessionId} failed: `
@@ -10361,8 +10452,10 @@ export class RunnerApiController {
       // an overwrite: an ingestion-armed retry already knows more than the terminal message does.
       // A failure its turn report already settled arms nothing and records nothing more here.
       const failedRun = effectiveStatus === RunStatus.FAILED && !failureReported;
+      // The failure's kind: the runner's, else the legacy markers of its error (runFailureIs).
+      const failure = { failureKind: dto.failure?.kind, error: dto.error };
       const quotaSpent =
-        failedRun && current.retryAt == null && isUsageLimitErrorText(dto.error);
+        failedRun && current.retryAt == null && runFailureIs(failure, [RunFailureKind.USAGE_LIMIT]);
       // A run that ended because its account refused the sign-in, on the runner's own login for its
       // engine. Most often the runner's check before it starts the engine (engineAuthPreflight) finds
       // the account signed out and ends the run with the message it took undelivered. Moved below.
@@ -10370,7 +10463,8 @@ export class RunnerApiController {
         failedRun
         && current.retryAt == null
         && !quotaSpent
-        && isAuthErrorText(dto.error)
+        // Without a kind, the runtime's "Failed to authenticate" alone, as this path always read it (isAuthErrorText).
+        && runFailureIs(failure, [RunFailureKind.CREDENTIAL_REFUSED], { credential: 'authenticate' })
         && isAccountEngine(current.provider)
         && isBuiltinProvider(current.provider, current.providerBuiltin)
         && (recordedEngine(current.engine) ?? current.provider) === current.provider
@@ -10456,6 +10550,9 @@ export class RunnerApiController {
           status: effectiveStatus,
           result: dto.result,
           error: dto.error,
+          // The runner's classification of the failure it ends with, in the statement that writes `error` (design §5.1).
+          // A failed turn's report already wrote its own, which this release keeps.
+          ...(failureReported ? {} : runFailureColumns(dto, failedRun)),
           // `claudeSessionId` is a legacy alias older runners still send; both name the same
           // id, so it only serves as a fallback here and is never persisted on its own.
           runtimeSessionId: dto.runtimeSessionId ?? dto.claudeSessionId ?? undefined,
@@ -10658,6 +10755,10 @@ export class RunnerApiController {
       return {
         finalized: true,
         effectiveStatus,
+        // Whether the release was a failure, for account health and the replacement after the commit (§6.3, §7.3): a
+        // failed turn's release too (a reported failed turn always releases FAILED), whose turn report recorded the
+        // failure while the session was still live.
+        releasedFailed: failedRun || failureReported,
         keepCheckout,
         retryAt,
         taskReclaimed,
@@ -10690,6 +10791,14 @@ export class RunnerApiController {
       return { ok: true, keepCheckout: outcome.keepCheckout };
     }
     if (!outcome.finalized) return { ok: true, keepCheckout: outcome.keepCheckout };
+    // What the run's end says of the account it spent (§6.3), now that its release and its failure kind are committed:
+    // awaited, so the next dispatch reads it, and never in the way: it logs its own failure.
+    // Idempotent per session, so a failed turn's report having told it already changes nothing.
+    const releasedFailed = 'releasedFailed' in outcome && outcome.releasedFailed === true;
+    await this.accountHealth?.afterRunEnd(sessionId, { failed: releasedFailed, until: dto.failure?.until ?? null });
+    // A task run its account refused at admission is replaced at once (§7.3), off the response path: here once the
+    // release has freed the task, which a failed turn's report may not have yet.
+    if (releasedFailed) this.replaceRefusedRun(sessionId);
     // The one-shot wakeups this finalize dropped with its FAILED session, no retry armed: their owner is
     // told, once, now that the drop has committed (contract §4).
     signalDrainedWakeups(this.push, this.logger, outcome.droppedWakeups ?? []);

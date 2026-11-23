@@ -1,7 +1,7 @@
 import {
-  isAuthErrorText,
-  isUsageLimitErrorText,
   PermissionMode,
+  RunFailureKind,
+  runFailureKind,
   SUBAGENT_RUN_STATUSES,
   type SubagentAttempt,
   type SubagentAttemptOutcome,
@@ -14,6 +14,7 @@ import {
   type SubagentRunCreateRequest,
   type SubagentRunUpdateRequest,
   type SubagentSize,
+  type RunFailure,
 } from '@orbit/shared';
 import {
   ArrayMaxSize,
@@ -30,7 +31,8 @@ import {
   MinLength,
 } from 'class-validator';
 import { IsPublicId } from '../common/public-id';
-import { MODEL_AT_CAPACITY_ERROR_MARKER, subagentFitLine, type SubagentRoutingDecision } from '../tasks/model-routing';
+import { type AccountHealthSubject, subjectKey } from '../providers/account-health';
+import { subagentFitLine, type SubagentRoutingDecision } from '../tasks/model-routing';
 import { stripNul } from './strip-nul';
 
 /**
@@ -175,6 +177,16 @@ export class SubagentFallbackDto implements SubagentFallbackRequest {
   @MaxLength(20_000)
   error!: string;
 
+  /** The child's failure as its engine adapter classified it (§5.1); read by movableFailure, kinds it does not know
+   *  fall back to the text. */
+  @IsOptional()
+  @IsObject()
+  failure?: RunFailure;
+
+  @IsOptional()
+  @IsBoolean()
+  admission?: boolean;
+
   @IsOptional()
   @IsBoolean()
   readonly?: boolean;
@@ -184,38 +196,106 @@ export class SubagentFallbackDto implements SubagentFallbackRequest {
   permissionMode?: string;
 }
 
-/** How many times one delegate call may move to another candidate after a usage limit, capacity or failed login (§4.3). */
+/** How many times one delegate call may move to another candidate after a failure that moves it (§4.3); a move off
+ *  a refused trial is not counted (docs/routing-account-health-design.md §6.5). */
 export const SUBAGENT_MAX_MOVES = 2;
 
 /** How much of a failed attempt's error `subagent_run.attempts` keeps. */
 export const SUBAGENT_ATTEMPT_ERROR_MAX = 500;
 
-/**
- * A child's failure as §4.3 moves it: a spent quota (USAGE_LIMIT_ERROR_MARKERS, opening the text) or a model at
- * capacity (MODEL_AT_CAPACITY_ERROR_MARKER). Null for every other failure, which goes back to the parent as is.
- */
-export function limitFailure(error: string): Extract<SubagentAttemptOutcome, 'USAGE_LIMIT' | 'AT_CAPACITY'> | null {
-  if (isUsageLimitErrorText(error)) return 'USAGE_LIMIT';
-  return error.toLowerCase().includes(MODEL_AT_CAPACITY_ERROR_MARKER) ? 'AT_CAPACITY' : null;
-}
+/** The attempt outcomes a run moves to another candidate on (§4.3, docs/routing-account-health-design.md §7.3). */
+export type MovableOutcome = Extract<SubagentAttemptOutcome,
+  'USAGE_LIMIT' | 'AT_CAPACITY' | 'AUTH_FAILED' | 'ACCOUNT_ACTION_REQUIRED' | 'ACCESS_DENIED' | 'ADMISSION_FAILED'>;
 
-/** How a sign-in failure may open when the engine does not wrap it in `Failed to authenticate` (Codex, OAuth). */
-const LOGIN_FAILURE_OPENINGS = ['not logged in', 'oauth session expired'];
+/** The movable outcomes that are about the account itself rather than its allowance: not moved off a named model. */
+export const ACCOUNT_REFUSAL_OUTCOMES: ReadonlySet<MovableOutcome> =
+  new Set(['AUTH_FAILED', 'ACCOUNT_ACTION_REQUIRED', 'ACCESS_DENIED', 'ADMISSION_FAILED']);
 
 /**
- * Whether a child failed on its engine's login: the runtime's `Failed to authenticate` (isAuthErrorText, which
- * leaves out a dropped connection), or a text that opens as `Not logged in` / `OAuth session expired`. Kept in sync
- * with isSubagentLoginFailure in runner-go/subagent_fallback.go.
+ * A child's failure as §4.3 moves it, read through runFailureKind: the kind its engine adapter sent, else the legacy
+ * markers of its words (docs/routing-account-health-design.md §7.3). A spent quota, a model at capacity, a refused
+ * credential, an account that needs a person's action or denies the use moves; so does an unclassified failure the
+ * runner measured as refused at admission (`admission: true`), unless its words read as a dropped connection. Null for
+ * every other failure, which goes back to the parent as is.
  */
-export function isLoginFailureText(error: string): boolean {
-  if (isAuthErrorText(error)) return true;
-  const opening = error.trimStart().toLowerCase();
-  return LOGIN_FAILURE_OPENINGS.some((marker) => opening.startsWith(marker));
+export function movableFailure(
+  error: string,
+  failure?: { kind?: string } | null,
+  admission?: boolean | null,
+): MovableOutcome | null {
+  switch (runFailureKind({ failureKind: failure?.kind ?? null, error })) {
+    case RunFailureKind.USAGE_LIMIT: return 'USAGE_LIMIT';
+    case RunFailureKind.CAPACITY: return 'AT_CAPACITY';
+    case RunFailureKind.CREDENTIAL_REFUSED: return 'AUTH_FAILED';
+    case RunFailureKind.ACCOUNT_ACTION_REQUIRED: return 'ACCOUNT_ACTION_REQUIRED';
+    case RunFailureKind.ACCESS_DENIED: return 'ACCESS_DENIED';
+    case null: return admission === true ? 'ADMISSION_FAILED' : null;
+    default: return null;
+  }
 }
 
-/** A child's failure as §4.3 moves it: a limit or capacity (limitFailure), else a failed login; null otherwise. */
-export function movableFailure(error: string): Extract<SubagentAttemptOutcome, 'USAGE_LIMIT' | 'AT_CAPACITY' | 'AUTH_FAILED'> | null {
-  return limitFailure(error) ?? (isLoginFailureText(error) ? 'AUTH_FAILED' : null);
+/** What a move's Why line and NO_SUBAGENT_PROVIDER's message say each movable outcome was. */
+const MOVABLE_OUTCOME_TEXT: Record<MovableOutcome, { moved: string; reason: string }> = {
+  USAGE_LIMIT: { moved: "'s account hit its limit", reason: 'the account hit its limit' },
+  AT_CAPACITY: { moved: ' was at capacity', reason: 'the model was at capacity' },
+  AUTH_FAILED: { moved: "'s login failed", reason: 'its login failed' },
+  ACCOUNT_ACTION_REQUIRED: { moved: "'s account needed action", reason: 'the account needed action' },
+  ACCESS_DENIED: { moved: "'s account needed action", reason: 'the account did not allow this use' },
+  ADMISSION_FAILED: { moved: ' could not start', reason: 'it could not start' },
+};
+
+/** Whether an attempt's outcome is one a run moved on from. */
+export function isMovableOutcome(outcome: SubagentAttemptOutcome): outcome is MovableOutcome {
+  return outcome in MOVABLE_OUTCOME_TEXT;
+}
+
+/** A move's Why line: `Moved to <model> on <provider> after <model>'s account needed action`, and the like. */
+export function moveReason(next: Pick<SubagentCandidateTarget, 'model' | 'provider'>, from: string, outcome: MovableOutcome): string {
+  return `Moved to ${next.model} on ${next.provider} after ${from}${MOVABLE_OUTCOME_TEXT[outcome].moved}`;
+}
+
+/**
+ * How many of a run's moves count toward SUBAGENT_MAX_MOVES, the one about to be made off its last attempt included:
+ * each attempt moved off counts, except one that was its account's trial (docs/routing-account-health-design.md
+ * §6.5): the run did not choose to be the test.
+ */
+export function countedMoves(attempts: readonly SubagentAttempt[]): number {
+  return attempts.filter((a) => !(a as TrialAttempt).trialOf).length;
+}
+
+/** An attempt that claimed its account's due trial (§6.5): the health subject key it claimed it by. */
+export type TrialAttempt = SubagentAttempt & { trialOf?: string };
+
+/** Why a candidate whose due trial another run claimed first is passed over (§6.5), as the router says it. */
+export const TRIAL_HELD_REASON = 'The account is being tried now by another run';
+
+/**
+ * The subject key of the trial an account is due (§6.5), as the router left it on a candidate: the routing decision
+ * for its pick, or a fallback. Null when none is due.
+ */
+export function trialSubject(candidate: object): string | null {
+  const subject = (candidate as { trial?: { subject?: unknown } | null }).trial?.subject;
+  return typeof subject === 'string' && subject ? subject : null;
+}
+
+const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const RUNNER_KEY = new RegExp(`^runner:(${UUID}):([^:]+):(.+)$`, 'i');
+const PROVIDER_KEY = new RegExp(`^provider:(${UUID})$`, 'i');
+const POOL_LOGIN_KEY = new RegExp(`^pool-login:(${UUID}):(.+)$`, 'i');
+
+/**
+ * The health subject a subject key (account-health.ts subjectKey) names, so that a SubAgent's trial claim, made by
+ * key, is released through AccountHealthService.releaseTrial. Null for a key that does not read back as itself.
+ */
+export function subjectOfKey(key: string): AccountHealthSubject | null {
+  let subject: AccountHealthSubject | null = null;
+  const runner = RUNNER_KEY.exec(key);
+  const provider = PROVIDER_KEY.exec(key);
+  const pool = POOL_LOGIN_KEY.exec(key);
+  if (runner) subject = { type: 'runner', runnerId: runner[1], engine: runner[2], account: runner[3] };
+  else if (provider) subject = { type: 'provider', providerId: provider[1] };
+  else if (pool) subject = { type: 'pool-login', poolId: pool[1], accountId: pool[2] };
+  return subject && subjectKey(subject) === key ? subject : null;
 }
 
 /** The first entry of a run's attempts: where it was opened to run. */
@@ -242,9 +322,9 @@ export function fallbackCandidates(
 }
 
 /**
- * NO_SUBAGENT_PROVIDER's message: no candidate left to move to, with each provider's reason — the ones whose
- * account hit its limit or whose login failed on an attempt, the ones the router removed, and the ones that could
- * not be started.
+ * NO_SUBAGENT_PROVIDER's message: no candidate left to move to, with each provider's reason — the ones an attempt
+ * failed on and moved off (a limit, capacity, a failed login, an account that needed action or denied the use, a
+ * refusal before it started), the ones the router removed, and the ones that could not be started.
  */
 export function noProviderMessage(
   decision: Pick<SubagentDecision, 'level' | 'candidates'>,
@@ -253,9 +333,9 @@ export function noProviderMessage(
 ): string {
   const tier = decision.level ? ` in tier ${decision.level}` : '';
   const lines = [
-    ...attempts.filter((a) => a.outcome === 'USAGE_LIMIT' || a.outcome === 'AT_CAPACITY' || a.outcome === 'AUTH_FAILED').map((a) =>
-      `${a.provider} (${a.engine}), ${a.model}: ${a.outcome === 'AT_CAPACITY' ? 'the model was at capacity'
-        : a.outcome === 'AUTH_FAILED' ? 'its login failed' : 'the account hit its limit'}`),
+    ...attempts.flatMap((a) => isMovableOutcome(a.outcome)
+      ? [`${a.provider} (${a.engine}), ${a.model}: ${MOVABLE_OUTCOME_TEXT[a.outcome].reason}`]
+      : []),
     ...(decision.candidates ?? []).map((c) =>
       `${c.provider}${c.engine ? ` (${c.engine})` : ''}${c.model ? `, ${c.model}${c.effort ? ` · ${c.effort}` : ''}` : ''}: ${c.reason}`),
     ...skipped,

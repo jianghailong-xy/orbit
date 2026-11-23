@@ -1334,6 +1334,10 @@ public struct ProjectTaskRow: Codable, Equatable, Sendable, Identifiable {
     /// have said nothing for ten minutes.
     public let runReason: String?
     public let runStalled: Bool?
+    /// No account that could run it can run now (contract §3); nil unless a hold stands.
+    public var accountHold: TaskAccountHold? = nil
+    /// The sign-in hold, which wins over `accountHold` when it stands. Read for its presence only.
+    public var hold: TaskSignInHoldMark? = nil
 
     public init(id: String, title: String, status: String = "OPEN", parentTaskId: String? = nil,
                 childCount: Int = 0, unmetCount: Int = 0, blocksCount: Int = 0, topoLevel: Int = 0,
@@ -1382,6 +1386,8 @@ public struct ProjectTaskRow: Codable, Equatable, Sendable, Identifiable {
         landingWaitCount = try c.decodeIfPresent(Int.self, forKey: .landingWaitCount)
         runReason = try? c.decodeIfPresent(String.self, forKey: .runReason)
         runStalled = try? c.decodeIfPresent(Bool.self, forKey: .runStalled)
+        accountHold = try? c.decodeIfPresent(TaskAccountHold.self, forKey: .accountHold)
+        hold = try? c.decodeIfPresent(TaskSignInHoldMark.self, forKey: .hold)
     }
 }
 

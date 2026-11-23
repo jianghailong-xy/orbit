@@ -25,6 +25,7 @@ import { api } from '../api';
 import { agentFixView, engineNotUpdatingFixTarget, installFixTarget } from '../lib/agentFix';
 import { AgentFixButton, AgentFixLine } from './AgentFix';
 import { accountIsPaused, usePauseClock } from '../lib/accountPause';
+import { AccountHealthLine } from './AccountHealthLine';
 import { AccountPauseActions, AccountPauseStatus, type AccountPauseControls } from './AccountPause';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
@@ -1023,6 +1024,7 @@ function EngineRow({
           <div style={{ minWidth: 0 }}>
             <div className="re-name">{engineNameOf(engine)}</div>
             {meta && <div className="re-meta">{meta}</div>}
+            <AccountHealthLine runnerId={runner.id} engine={engine} account={single?.id ?? 'default'} />
           </div>
         </div>
       )}
@@ -1589,6 +1591,7 @@ function AccountRow({
             {tildePath(accountDir(account))}
             {account.fingerprintPrefix && ` · account ${account.fingerprintPrefix}…`}
           </div>
+          <AccountHealthLine runnerId={runner.id} engine={engine} account={account.id} />
         </div>
       </div>
       {removing || signOut.pending ? (

@@ -135,6 +135,20 @@ export function ModelRoutingPage() {
               }
             />
           )}
+          {/* Absent means off (docs/routing-account-health-design.md §7.5): a pinned task whose account can't run holds. */}
+          <SettingsRow
+            anchor={S.relaxBlockedPins.anchor}
+            title={S.relaxBlockedPins.title}
+            description={S.relaxBlockedPins.description}
+            control={
+              <Switch
+                aria-label="Run pinned tasks elsewhere"
+                checked={prefs.relaxBlockedPins === true}
+                onCheckedChange={(v) => save.mutate({ relaxBlockedPins: v })}
+                loading={save.isPending}
+              />
+            }
+          />
         </SettingsCard>
       </SettingsSection>
 

@@ -1,0 +1,254 @@
+<!doctype html><html lang="zh"><head><meta charset="utf-8">
+<title>Agent drive transfers: progress and speed</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/pages/FilesPage.css">
+<style>
+body{margin:0;background:#eef0f4;font-family:-apple-system,BlinkMacSystemFont,Inter,'PingFang SC','Noto Sans SC','WenQuanYi Zen Hei',sans-serif}
+.board{width:2200px;padding:40px 48px 56px;background:#eef0f4;color:#1d2330}
+h1{font-size:30px;margin:0 0 6px} .sub{font-size:15px;color:#5b6475;margin:0 0 28px;line-height:1.6;max-width:1500px}
+h2{font-size:20px;margin:34px 0 14px;padding-top:18px;border-top:1px solid #d5d9e2}
+.row{display:flex;gap:36px;align-items:flex-start;flex-wrap:wrap}
+.fr{margin:0} figcaption{font-size:14px;color:#3a4252;margin:0 0 8px;line-height:1.5;max-width:660px}
+figcaption b{color:#c0392b} figcaption em{font-style:normal;color:#1a7f37;font-weight:600}
+.conv{background:#fff;border-radius:12px;padding:14px 18px;box-shadow:0 1px 3px rgba(0,0,0,.08);font-size:14px;color:#1d2330}
+.conv.dark{background:#1c1d21;color:#e6e7ea}
+.say{font-size:14.5px;line-height:1.7;margin:6px 0}
+.say code{font-family:'JetBrains Mono',monospace;font-size:12.5px;background:#f2f3f5;border:1px solid #e3e6ec;border-radius:4px;padding:1px 5px}
+.steps{font-size:13px;color:#8a909c;margin:8px 0}
+.mdlist{margin:4px 0 0;padding-left:20px;font-size:14.5px;line-height:2}
+.mdlist li::marker{color:#9aa0aa}
+.mdlist li.dim::marker{color:#d6d9df}
+table{border-collapse:collapse;font-size:13.5px;background:#fff;border-radius:10px;overflow:hidden}
+td,th{border-bottom:1px solid #e3e6ec;padding:8px 12px;text-align:left;vertical-align:top;line-height:1.55}
+th{background:#f6f7f9;font-weight:600} code{font-family:'JetBrains Mono',monospace;font-size:12.5px}
+.ask{background:#fff7e6;border:1px solid #f0c36d;border-radius:10px;padding:14px 18px;font-size:14px;line-height:1.7;max-width:1100px}
+
+/* ---- proposed transfer card (mock-only classes; bar/row look borrowed from .files-tray) ---- */
+.xfer{border:1px solid #e3e6ec;border-radius:10px;background:#fff;font-size:13px;margin:8px 0;overflow:hidden}
+.xfer-head{display:flex;align-items:center;gap:8px;padding:10px 14px 0}
+.xfer-icon{width:22px;height:22px;border-radius:6px;background:#eef2ff;color:#4f5bd5;display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+.xfer-icon.down{background:#eaf6ef;color:#1a7f37}
+.xfer-icon.ok{background:#eaf6ef;color:#1a7f37}
+.xfer-icon.bad{background:#fdecec;color:#c0392b}
+.xfer-title{font-weight:600;color:#1d2330}
+.xfer-dest{font-family:'JetBrains Mono',monospace;font-size:12px;color:#4f5bd5;background:#f4f5ff;border-radius:4px;padding:1px 6px}
+.xfer-act{margin-left:auto;display:flex;gap:12px}
+.xfer-act a{color:#4f5bd5;text-decoration:none;font-size:12.5px;cursor:pointer}
+.xfer-sum{padding:8px 14px 10px}
+.xfer-bar{height:6px;border-radius:3px;background:#eceef2;overflow:hidden}
+.xfer-bar span{display:block;height:100%;background:#4f5bd5;border-radius:3px}
+.xfer-bar.live span{background:linear-gradient(90deg,#4f5bd5 0%,#6f7af0 50%,#4f5bd5 100%)}
+.xfer-bar.warn span{background:#d48806}
+.xfer-bar.bad span{background:#c0392b}
+.xfer-bar.ok span{background:#2da44e}
+.xfer-stats{display:flex;gap:6px;margin-top:6px;color:#6b7280;font-variant-numeric:tabular-nums}
+.xfer-stats b{color:#1d2330;font-weight:600}
+.xfer-stats .r{margin-left:auto}
+.xfer-list{list-style:none;margin:0;padding:2px 14px 8px;border-top:1px solid #f0f1f4;max-height:none}
+.xfer-group{font-size:11.5px;color:#8a909c;padding:8px 0 2px;font-family:'JetBrains Mono',monospace}
+.xfer-row{display:grid;grid-template-columns:16px 1fr auto;gap:8px;align-items:center;padding:4px 0;font-variant-numeric:tabular-nums}
+.xfer-row .st{font-size:12px;text-align:center}
+.xfer-row .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#1d2330}
+.xfer-row .sz{color:#8a909c;font-size:12px;white-space:nowrap}
+.xfer-row.done .st{color:#2da44e}
+.xfer-row.done .nm{color:#3a4252}
+.xfer-row.wait .nm,.xfer-row.wait .st{color:#a2a7b1}
+.xfer-row.fail .st,.xfer-row.fail .sz{color:#c0392b}
+.xfer-row.cur .st{color:#4f5bd5}
+.xfer-row .mini{grid-column:2/4;display:flex;align-items:center;gap:8px;margin-top:-1px}
+.xfer-row .mini .xfer-bar{flex:1;height:3px}
+.xfer-row .mini small{color:#6b7280;font-size:11.5px;white-space:nowrap}
+.xfer-more{color:#8a909c;font-size:12px;padding:4px 0 2px 24px}
+.xfer-err{margin:0 14px 10px;padding:8px 10px;border-radius:6px;background:#fdecec;color:#a5281b;font-size:12.5px;line-height:1.5}
+.xfer-note{margin:0 14px 10px;padding:8px 10px;border-radius:6px;background:#fff7e6;color:#8a5a00;font-size:12.5px;line-height:1.5}
+/* folded: one line, like a steps line but with a tick and a link */
+.xfer-fold{display:flex;align-items:center;gap:8px;font-size:13px;color:#3a4252;padding:4px 0;margin:6px 0}
+.xfer-fold .tick{color:#2da44e;font-weight:700}
+.xfer-fold .muted{color:#8a909c;font-variant-numeric:tabular-nums}
+.xfer-fold a{color:#4f5bd5;text-decoration:none}
+.xfer-fold .caret{color:#8a909c;font-size:10px}
+.chip-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+.spark{display:flex;align-items:flex-end;gap:2px;height:16px}
+.spark i{display:block;width:3px;background:#c7ccf7;border-radius:1px}
+/* dark */
+.dark .xfer{background:#24262b;border-color:#34363d}
+.dark .xfer-title,.dark .xfer-row .nm,.dark .xfer-stats b{color:#e6e7ea}
+.dark .xfer-bar{background:#34363d}
+.dark .xfer-list{border-color:#2e3036}
+.dark .xfer-dest{background:#2c2f45;color:#a9b0ff}
+.dark .xfer-icon{background:#2c2f45;color:#a9b0ff}
+.dark .steps{color:#7d828c}
+.dark .say{color:#e6e7ea}
+.phone{width:390px;border-radius:28px;padding:18px 14px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+</style></head><body><div class="board">
+<h1>Agent 上传 / 下载 Files：显示进度和速度</h1>
+<p class="sub">现状：Agent 调 <code>drive_put</code> 把 15 个文件放进 Files 时，对话里只有一行 “Thought for 1s, used 6 tools” 和 Agent 自己写的路径列表，看不出传了多少、多快、还要多久、哪个失败。
+提议：一轮里连续的 <code>drive_put</code> / <code>drive_get</code> 调用不再折进 steps 行，而是合成<b style="color:#1d2330">一张传输卡</b>——总进度条 + 速度 + 剩余时间 + 每个文件一行；传完自动收成一行，可点开、可直达文件夹。条和文案沿用 Files 页上传托盘（<code>FilesUploadTray</code>）。卡上 UI 文案为英文，注释为中文。</p>
+
+<h2>① 现状</h2>
+<div class="row">
+<figure class="fr"><figcaption>① 传输期间：工具调用折在 “used 6 tools” 里；Agent 写的列表只是<b>它打算放哪</b>，不是进度。传完之前、传完之后长得一样。</figcaption>
+<div class="conv" style="width:720px">
+<p class="steps">Thought for 4s, used 1 tool, ran 1 shell command</p>
+<p class="say">Local files are intact. I'll copy all 15 into the Files drive under <code>/Shuge/2026-11-24/</code>, preserving the selection's structure. Testing one first.</p>
+<p class="steps">Thought for 1s, used 6 tools</p>
+<ul class="mdlist"><li>/Shuge/2026-11-24/十二月月令图/十二月月令轴.09.九月.台北故宫博物院藏.jpg</li><li>/Shuge/2026-11-24/鸟谱选页/鸟谱选页_img1_12.jpg</li><li>/Shuge/2026-11-24/老地图/廣東至暹羅水陸道里圖.jpg</li><li class="dim">/Shuge/2026-11-24/缂丝刺绣/谢安赌墅图.宋.缂丝.jpg</li><li class="dim">/Shuge/2026-11-24/缂丝刺绣/缂丝莲塘乳鸭图.南宋.朱克柔.jpg</li><li class="dim">/Shuge/2026-11-24/单幅/万寿宫香.jpg</li><li class="dim">…</li></ul>
+</div></figure>
+</div>
+
+<h2>② 提议：传输卡</h2>
+<div class="row">
+<figure class="fr"><figcaption>② a　传输中（默认展开）。头部：方向 + 目标文件夹（可点开 Files）。总条：<em>文件数 · 字节数 · 速度 · 剩余时间</em>，与托盘同一套说法。下面每个文件一行，按子文件夹分组，正在传的那行有细条和自己的速度。超过 8 行时只显示附近几行 + “7 more waiting”。</figcaption>
+<div class="conv" style="width:720px">
+<p class="say">Local files are intact. I'll copy all 15 into the Files drive under <code>/Shuge/2026-11-24/</code>, preserving the selection's structure. Testing one first.</p>
+<p class="steps">Thought for 1s, used 1 tool</p>
+<div class="xfer">
+ <div class="xfer-head"><span class="xfer-icon">↑</span><span class="xfer-title">Uploading to Files</span><span class="xfer-dest">/Shuge/2026-11-24/</span><span class="xfer-act"><a>Hide files</a></span></div>
+ <div class="xfer-sum">
+  <div class="xfer-bar live" role="progressbar" aria-valuenow="44"><span style="width:44%"></span></div>
+  <div class="xfer-stats"><span><b>Uploading 7 of 15</b> · 58.4 MB of 131.2 MB</span><span class="r"><b>5.3 MB/s</b> · under a minute left</span></div>
+ </div>
+ <ul class="xfer-list">
+  <li class="xfer-group">十二月月令图/</li>
+  <li class="xfer-row done"><span class="st">✓</span><span class="nm">十二月月令轴.09.九月.台北故宫博物院藏.jpg</span><span class="sz">18.6 MB</span></li>
+  <li class="xfer-group">鸟谱选页/</li>
+  <li class="xfer-row done"><span class="st">✓</span><span class="nm">鸟谱选页_img1_12.jpg</span><span class="sz">4.1 MB</span></li>
+  <li class="xfer-group">老地图/</li>
+  <li class="xfer-row done"><span class="st">✓</span><span class="nm">廣東至暹羅水陸道里圖.jpg</span><span class="sz">12.9 MB</span></li>
+  <li class="xfer-group">缂丝刺绣/</li>
+  <li class="xfer-row done"><span class="st">✓</span><span class="nm">谢安赌墅图.宋.缂丝.jpg</span><span class="sz">7.7 MB</span></li>
+  <li class="xfer-row done"><span class="st">✓</span><span class="nm">缂丝莲塘乳鸭图.南宋.朱克柔.jpg</span><span class="sz">9.3 MB</span></li>
+  <li class="xfer-group">单幅/</li>
+  <li class="xfer-row done"><span class="st">✓</span><span class="nm">万寿宫香.jpg</span><span class="sz">2.6 MB</span></li>
+  <li class="xfer-row cur"><span class="st">↑</span><span class="nm">魁星图.jpg</span><span class="sz">3.2 of 11.4 MB</span>
+    <div class="mini"><div class="xfer-bar"><span style="width:28%"></span></div><small>5.3 MB/s</small></div></li>
+  <li class="xfer-row wait"><span class="st">·</span><span class="nm">乾隆款掐丝珐琅太平有象.jpg</span><span class="sz">Waiting · 6.0 MB</span></li>
+  <li class="xfer-row wait"><span class="st">·</span><span class="nm">Canton Pagoda 2300 years old.jpg</span><span class="sz">Waiting · 3.4 MB</span></li>
+  <li class="xfer-more">6 more waiting · 46.8 MB</li>
+ </ul>
+</div>
+</div></figure>
+
+<figure class="fr"><figcaption>② b　全部完成：卡<em>自动收成一行</em>（与 steps 行同调，但带绿勾和链接），写清结果：几个文件、多大、用时、平均速度。“Open folder” 直接打开 Files 里的目标目录。</figcaption>
+<div class="conv" style="width:640px">
+<p class="steps">Thought for 1s, used 1 tool</p>
+<div class="xfer-fold"><span class="tick">✓</span><span>Uploaded 15 files to <a>/Shuge/2026-11-24/</a></span><span class="muted">· 131.2 MB in 26 s · 5.0 MB/s</span><span class="caret">▸</span></div>
+<p class="say">All 15 files are in Files under <code>/Shuge/2026-11-24/</code>, in the same five folders.</p>
+</div>
+<figcaption style="margin-top:22px">② c　点开那一行：同一张卡的完成态，每行文件名可点（打开 Files 里的预览，即现有 <code>DriveFileCard</code> 的目标）。条变绿，停在 100%。</figcaption>
+<div class="conv" style="width:640px">
+<div class="xfer">
+ <div class="xfer-head"><span class="xfer-icon ok">✓</span><span class="xfer-title">Uploaded 15 files</span><span class="xfer-dest">/Shuge/2026-11-24/</span><span class="xfer-act"><a>Open folder</a><a>Hide</a></span></div>
+ <div class="xfer-sum">
+  <div class="xfer-bar ok"><span style="width:100%"></span></div>
+  <div class="xfer-stats"><span><b>131.2 MB</b> in 26 s</span><span class="r">average 5.0 MB/s</span></div>
+ </div>
+ <ul class="xfer-list">
+  <li class="xfer-group">十二月月令图/</li>
+  <li class="xfer-row done"><span class="st">✓</span><span class="nm" style="color:#4f5bd5">十二月月令轴.09.九月.台北故宫博物院藏.jpg</span><span class="sz">18.6 MB</span></li>
+  <li class="xfer-group">鸟谱选页/</li>
+  <li class="xfer-row done"><span class="st">✓</span><span class="nm" style="color:#4f5bd5">鸟谱选页_img1_12.jpg</span><span class="sz">4.1 MB</span></li>
+  <li class="xfer-group">老地图/</li>
+  <li class="xfer-row done"><span class="st">✓</span><span class="nm" style="color:#4f5bd5">廣東至暹羅水陸道里圖.jpg</span><span class="sz">12.9 MB</span></li>
+  <li class="xfer-more" style="padding-left:0">Show all 15</li>
+ </ul>
+</div>
+</div></figure>
+</div>
+
+<h2>③ 边界情况</h2>
+<div class="row">
+<figure class="fr"><figcaption>③ a　有失败：失败的行红色并写原因（工具返回的错误原文），总条停在已传部分。<b>不放 Retry 按钮</b>——重试是 Agent 的事，它会看到同一个错误。完成后收起的一行写 “14 uploaded, 1 failed”，红色不收起。</figcaption>
+<div class="conv" style="width:640px">
+<div class="xfer">
+ <div class="xfer-head"><span class="xfer-icon bad">!</span><span class="xfer-title">Uploaded 14 of 15 files</span><span class="xfer-dest">/Shuge/2026-11-24/</span><span class="xfer-act"><a>Open folder</a></span></div>
+ <div class="xfer-sum">
+  <div class="xfer-bar"><span style="width:91%;background:#2da44e"></span></div>
+  <div class="xfer-stats"><span><b>14 uploaded, 1 failed</b> · 119.8 MB in 24 s</span></div>
+ </div>
+ <ul class="xfer-list">
+  <li class="xfer-row fail"><span class="st">✕</span><span class="nm">缂丝莲塘乳鸭图.南宋.朱克柔.jpg</span><span class="sz">Failed at 3.0 of 11.4 MB</span></li>
+ </ul>
+ <div class="xfer-err">Drive quota reached: 10 GB of 10 GB used. Nothing was kept for this file.</div>
+</div>
+</div></figure>
+
+<figure class="fr"><figcaption>③ b　卡住：20 秒没有新字节，速度一栏换成 “No progress for 20 s”，条变黄。字节恢复流动后自动回到正常态；若该块超时，调用失败，进入 ③ a。（runner 目前<b>不</b>重试块，本提议不改这一点。）</figcaption>
+<div class="conv" style="width:640px">
+<div class="xfer">
+ <div class="xfer-head"><span class="xfer-icon">↑</span><span class="xfer-title">Uploading to Files</span><span class="xfer-dest">/Shuge/2026-11-24/</span><span class="xfer-act"><a>Show files</a></span></div>
+ <div class="xfer-sum">
+  <div class="xfer-bar warn"><span style="width:62%"></span></div>
+  <div class="xfer-stats"><span><b>Uploading 10 of 15</b> · 81.0 MB of 131.2 MB</span><span class="r" style="color:#b26a00">No progress for 20 s</span></div>
+ </div>
+</div>
+</div>
+<figcaption style="margin-top:22px">③ c　下载（<code>drive_get</code>）同一张卡，箭头向下、绿色图标，头部写 Files 里的来源文件夹。</figcaption>
+<div class="conv" style="width:640px">
+<div class="xfer">
+ <div class="xfer-head"><span class="xfer-icon down">↓</span><span class="xfer-title">Downloading from Files</span><span class="xfer-dest">/Shuge/2026-11-24/单幅/</span><span class="xfer-act"><a>Show files</a></span></div>
+ <div class="xfer-sum">
+  <div class="xfer-bar live"><span style="width:71%;background:#2da44e"></span></div>
+  <div class="xfer-stats"><span><b>Downloading 3 of 4</b> · 16.8 MB of 23.4 MB</span><span class="r"><b>12.1 MB/s</b> · under a minute left</span></div>
+ </div>
+</div>
+</div></figure>
+
+<figure class="fr"><figcaption>③ d　只有一个小文件（&lt; 1 秒传完）：不出卡，直接是一行完成态，和 ② b 同样式。进行中时同样是一行：“Uploading 魁星图.jpg · 3.2 of 11.4 MB · 5.3 MB/s”。</figcaption>
+<div class="conv" style="width:560px">
+<div class="xfer-fold"><span class="tick">✓</span><span>Uploaded <a>鸟谱选页_img1_12.jpg</a></span><span class="muted">· 4.1 MB · 0.8 s</span></div>
+<div class="xfer-fold" style="color:#3a4252"><span style="color:#4f5bd5;font-weight:700">↑</span><span>Uploading 魁星图.jpg</span><span class="muted">· 3.2 of 11.4 MB · 5.3 MB/s</span><span class="xfer-bar" style="width:90px;height:4px"><span style="width:28%;display:block;height:100%;background:#4f5bd5"></span></span></div>
+</div>
+<figcaption style="margin-top:22px">③ e　手机宽度：头部目标文件夹换到第二行；速度和剩余时间换到条下第二行。</figcaption>
+<div class="phone">
+<div class="xfer" style="margin:0">
+ <div class="xfer-head" style="flex-wrap:wrap"><span class="xfer-icon">↑</span><span class="xfer-title">Uploading to Files</span><span class="xfer-act"><a>Show files</a></span><span class="xfer-dest" style="flex-basis:100%;margin-left:30px;margin-top:2px;background:none;padding:0">/Shuge/2026-11-24/</span></div>
+ <div class="xfer-sum">
+  <div class="xfer-bar live"><span style="width:44%"></span></div>
+  <div class="xfer-stats" style="flex-direction:column;gap:2px"><span><b>Uploading 7 of 15</b> · 58.4 of 131.2 MB</span><span><b>5.3 MB/s</b> · under a minute left</span></div>
+ </div>
+</div>
+</div></figure>
+
+<figure class="fr"><figcaption>③ f　深色模式（② a 收起文件列表）。</figcaption>
+<div class="conv dark" style="width:640px">
+<p class="steps">Thought for 1s, used 1 tool</p>
+<div class="xfer">
+ <div class="xfer-head"><span class="xfer-icon">↑</span><span class="xfer-title">Uploading to Files</span><span class="xfer-dest">/Shuge/2026-11-24/</span><span class="xfer-act"><a style="color:#a9b0ff">Show files</a></span></div>
+ <div class="xfer-sum">
+  <div class="xfer-bar live"><span style="width:44%;background:#7b84f5"></span></div>
+  <div class="xfer-stats" style="color:#9ba0aa"><span><b>Uploading 7 of 15</b> · 58.4 MB of 131.2 MB</span><span class="r"><b>5.3 MB/s</b> · under a minute left</span></div>
+ </div>
+</div>
+</div></figure>
+</div>
+
+<h2>规则</h2>
+<table style="max-width:1500px">
+<tr><th>部分</th><th>内容</th><th>从哪里来</th></tr>
+<tr><td>哪些调用合成一张卡</td><td>同一轮里、中间只隔着思考的连续 <code>drive_put</code>（或连续 <code>drive_get</code>）；中间夹了别的工具就另起一张。卡和其他“自成一卡”的调用一样，<b>结束</b>它前面的 steps 行（<code>isGroupableTool</code> 排除它们）。</td><td>现有 transcript 节点</td></tr>
+<tr><td>“of 15”</td><td>卡知道的文件数 = 已发出的调用数。Agent 是一个一个发的，所以分母会长；分母还没稳定时只写 “Uploading 7th file”，不写 “of N”。并行发出的一批调用一次就知道全数。</td><td>tool_use 节点</td></tr>
+<tr><td>字节和速度</td><td>Runner 在每个 8 MB 块发出后（以及块内按读取字节）上报 <code>sentBytes / size</code>；速度取最近 3 秒滑动平均；剩余时间只在知道总大小时显示，说法同托盘（“under a minute left” / “about 3 min left”）。</td><td><b>新</b>：runner 在 <code>putDriveFile</code> / <code>getDriveFile</code> 里每 ≤ 500 ms 发一条进度事件到会话流；不进 transcript 存档，只活在直播里</td></tr>
+<tr><td>完成后</td><td>全部成功 → 收成一行（② b），点开见 ② c；有失败 → 卡不收起（③ a）。刷新页面后从工具结果重建完成态（大小来自结果的 <code>sizeBytes</code>，用时来自调用起止时间），不依赖进度事件。</td><td>现有工具结果</td></tr>
+<tr><td>卡住</td><td>≥ 20 s 无新字节 → 黄色 “No progress for N s”</td><td>进度事件的时间戳</td></tr>
+<tr><td>文件名</td><td>相对目标文件夹显示，按子文件夹分组；完成的行链到 <code>orbit-drive:&lt;id&gt;</code></td><td>工具入参 <code>path</code> + 结果 <code>link</code></td></tr>
+</table>
+
+<h2>会改到的文件</h2>
+<table style="max-width:1500px">
+<tr><th>端</th><th>文件</th></tr>
+<tr><td>runner-go</td><td><code>drive_tools.go</code>（<code>putDriveFile</code> / <code>getDriveFile</code> 计字节、节流上报）· 会话事件发送处</td></tr>
+<tr><td>apiserver / shared</td><td>新的瞬时事件类型 <code>drive.transfer.progress</code>（toolUseId, sentBytes, size, at），转发到会话 SSE，不落库</td></tr>
+<tr><td>Web</td><td><code>components/Transcript.tsx</code>（分组 + <code>isGroupableTool</code>）· 新 <code>components/files/DriveTransferCard.tsx</code> · <code>lib/drive.ts</code> 的 <code>formatSize</code> 复用 · CSS</td></tr>
+<tr><td>iOS / macOS / Android</td><td>各自的工具卡渲染处跟进（可在 Web 落地后再做）</td></tr>
+</table>
+
+<h2>待你定</h2>
+<div class="ask">
+1. 完成后<b>自动收成一行</b>（推荐），还是保持展开？<br>
+2. 传输中文件列表默认<b>展开</b>（推荐，文件 ≤ 8 个时全显示），还是只显示总条？<br>
+3. 要不要给卡加 <b>Stop</b> 按钮？（推荐不加：停传输等于打断 Agent，现有 Stop 已能做到）<br>
+4. 单个小文件用一行（③ d，推荐），还是也出卡？<br>
+5. Web 先做、原生三端跟进，还是四端一起？
+</div>
+</div></body></html>

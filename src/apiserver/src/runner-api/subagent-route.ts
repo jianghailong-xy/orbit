@@ -42,7 +42,9 @@ import {
   type SubagentProvider,
   type SubagentRoutingDecision,
   type SubagentRoutingInput,
+  type RoutingHealthEntry,
 } from '../tasks/model-routing';
+import { subjectKey } from '../providers/account-health';
 import { engineState, fullestWindow, quotaTiming, taskRouteReads } from '../tasks/task-route-decision';
 import { readModelIdentities, type ModelSighting } from './model-identity';
 import { addTally, emptyTally, qualityOf, readModelQuality, type QualityTally } from './model-quality';
@@ -141,6 +143,8 @@ export interface SubagentRouteArgs {
   /** routeSubagent's `runnerLabel` and `strictNamedModel`, which a remote SubAgent sets. */
   runnerLabel?: string;
   strictNamedModel?: boolean;
+  /** The owner's live account health by subject key (routingHealthIndex); absent, it is read here. */
+  health?: ReadonlyMap<string, RoutingHealthEntry[]>;
 }
 
 /** A built-in provider's credential, as the region check reads it: the engine's own sign-in, OpenCode's own
@@ -160,6 +164,8 @@ export async function subagentRouteInput(
   const owner = await reads.owner();
   const agent = args.workspaceId ? await reads.workspace(args.workspaceId) : null;
   const runner = args.runnerId ? await reads.runner(args.runnerId) : null;
+  // What account health learned of every account the owner has, read once (docs/routing-account-health-design.md §7.1).
+  const healthIndex = args.health ?? await reads.health();
 
   // The runner's word on each engine; for every engine that keeps accounts, the account a run there would use, as a
   // task run reads it: its sign-in and its quota.
@@ -167,7 +173,7 @@ export async function subagentRouteInput(
   const states: Record<string, ModelRoutingEngineState> = {};
   if (agent && runner) {
     for (const engine of ACCOUNT_ENGINES) {
-      states[engine] = engineState(engine, agent, runner, reads.now);
+      states[engine] = engineState(engine, agent, runner, reads.now, healthIndex);
     }
   }
   const engines: Record<string, SubagentEngineReport> | null = health
@@ -195,12 +201,15 @@ export async function subagentRouteInput(
         expiresAt: states[slug].expiresAt ?? null, expiryWindowMins: states[slug].expiryWindowMins ?? null,
         nearLimit: states[slug].nearLimit === true,
         opusUtilization: states[slug].opusUtilization ?? null,
+        ...(states[slug].health ? { health: states[slug].health } : {}),
       },
     } : {}),
   }));
 
   const catalog = (runner?.modelCatalog ?? null) as RunnerModelCatalog | null;
-  const configured = await readConfiguredProviders(db, ownerId, { catalog, planUsage: args.planUsage ?? null, now: reads.now });
+  const configured = await readConfiguredProviders(db, ownerId, {
+    catalog, planUsage: args.planUsage ?? null, now: reads.now, health: healthIndex,
+  });
 
   const optimizeFor: ModelRoutingOptimizeFor = optimizeForOf(owner);
   const ownerTiers = builtinModelTiers(owner?.preferences);
@@ -242,8 +251,16 @@ interface ConfiguredProvider {
 async function readConfiguredProviders(
   db: Prisma.TransactionClient,
   ownerId: string,
-  { catalog, planUsage, now }: { catalog: RunnerModelCatalog | null; planUsage: SubagentPlanUsageReader | null; now: Date },
+  { catalog, planUsage, now, health }: {
+    catalog: RunnerModelCatalog | null; planUsage: SubagentPlanUsageReader | null; now: Date;
+    /** Live account health by subject key; absent, every account reads healthy (the Tier column's view). */
+    health?: ReadonlyMap<string, RoutingHealthEntry[]>;
+  },
 ): Promise<ConfiguredProvider[]> {
+  const healthOf = (key: string) => {
+    const entries = health?.get(key);
+    return entries?.length ? { health: entries } : {};
+  };
   const rows = await db.modelProvider.findMany({
     where: { enabled: true, slug: { notIn: COMPATIBILITY_GUARD_SLUGS }, OR: [{ ownerId }, { ownerId: null }] },
     orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }, { id: 'asc' }],
@@ -263,6 +280,8 @@ async function readConfiguredProviders(
     // A subscription token's quota is the credential's own, read through the same cache as a pool member's.
     const usage = subscription ? planUsage?.snapshot(row) ?? null : null;
     const standing = subscription ? planUsage?.usageStanding(row) ?? null : null;
+    // A key's health is one row for the owner (§6.1): `provider:<id>`, on a subscription token and a metered key alike.
+    const keyHealth = healthOf(subjectKey({ type: 'provider', providerId: row.id }));
     const provider: SubagentProvider = {
       slug: row.slug,
       billing: subscription ? 'subscription' : 'key',
@@ -272,8 +291,9 @@ async function readConfiguredProviders(
           ...quotaTiming(usage, now),
           refused: standing === 'KEY_REFUSED',
           unreadable: usage === null || standing === 'USAGE_UNKNOWN',
+          ...keyHealth,
         },
-      } : {}),
+      } : 'health' in keyHealth ? { account: keyHealth } : {}),
       inScope: usable.has(row.id),
       credential,
       engines: runsOn.map((engine, index) => (
@@ -324,6 +344,7 @@ async function readConfiguredProviders(
           ...quotaTiming(usage, now),
           paused: later(login.pausedUntil) || later(login.throttledUntil),
           unreadable: !spent && !usage,
+          ...healthOf(subjectKey({ type: 'pool-login', poolId: pool.id, accountId: login.accountId })),
         };
       })
       : pool.members
@@ -339,6 +360,7 @@ async function readConfiguredProviders(
             paused: later(row.pausedUntil),
             refused: standing === 'KEY_REFUSED',
             unreadable: standing === 'USAGE_UNKNOWN' || usage === null,
+            ...healthOf(subjectKey({ type: 'provider', providerId: row.id })),
           };
         });
     return { label: pool.label, kind: 'pool', providerId: null,

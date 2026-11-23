@@ -102,6 +102,16 @@ export interface TransactionUnit {
  * `providers.service.ts#pausePoolMember`.
  */
 export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
+  // Account health (docs/routing-account-health-design.md §6.3): one run's failure applied to its account's live row.
+  {
+    at: 'providers/account-health.service.ts#recordFailure', shape: 'TX_RETRIED',
+    locks: 'First one UPDATE releasing any trial this session holds on the subject\'s live account_health rows (at most one per scope; no trigger, no key moves). Then a plain read of the subject\'s rows for this session (idempotency), the live row of the failure\'s scope FOR UPDATE, and either one UPDATE of that row by id, or — when there is none, or it ran out — an UPDATE stamping it EXPIRED and one INSERT ... ON CONFLICT (account_health_live_key) DO NOTHING, whose foreign keys take user, runner, model_provider and provider_pool FOR KEY SHARE. Every other writer of account_health takes only its own rows by the same key, and no account_health writer locks a parent first, so the KEY SHARE adds no cycle.',
+    identity: 'The owner, subject key, scope and session: a re-run, or a retried finalize of the same session, finds the session on a row of that scope and writes nothing.',
+    isolation: '', attempts: 4,
+    replay: 'Every attempt re-reads and re-locks the live row and re-applies the pure rules (account-health.ts) to it; a rolled-back attempt leaves neither the release nor the write. An INSERT that lost the race to a concurrent failure inserts nothing and the closure reads the winner\'s row once more.',
+    effects: 'None.',
+    answer: 'Typed 503 after retry exhaustion; the run-end ingest that called it is retried by the runner, and the same session writes the same step.',
+  },
   // Fix with an agent (runners/attention-fix.ts): one warning's claim before its session is created.
   {
     at: 'runners/runner-attention-fix.service.ts#fix', shape: 'TX_RETRIED',
@@ -1214,7 +1224,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'runner-api/runner-subagents.controller.ts#createSubagentRun',
     shape: 'TX_RETRIED',
-    locks: "The parent session FOR UPDATE (rank 30) first, which is what serialises the running count; then, through sessionProviderExec, the UPDATE of that same session row an account pool's member choice writes (QueueService.resolvePoolMember / resolveSharedPool / resolveLoginPool) and the pool token rows they mint — for a routed candidate on an account pool, only a Codex pool's SubAgent token (mintSubagentPoolLoginToken) and never the session row; then one subagent_run INSERT (rank 60), whose foreign key re-checks the session row already held.",
+    locks: "The parent session FOR UPDATE (rank 30) first, which is what serialises the running count; then, through sessionProviderExec, the UPDATE of that same session row an account pool's member choice writes (QueueService.resolvePoolMember / resolveSharedPool / resolveLoginPool) and the pool token rows they mint — for a routed candidate on an account pool, only a Codex pool's SubAgent token (mintSubagentPoolLoginToken) and never the session row; then, for a candidate whose account is due its trial, the trial claim's UPDATE of that live account_health row (claimTrialByKey, docs/routing-account-health-design.md §6.5); then one subagent_run INSERT (rank 60), whose foreign key re-checks the session row already held.",
     identity: "The (session, tool_use_id) of the delegate call, under subagent_run's unique index: a re-run, or a retried POST, finds the row it wrote and answers with it.",
     isolation: '',
     attempts: 4,
@@ -1225,7 +1235,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'runner-api/runner-subagents.controller.ts#nextSubagentCandidate',
     shape: 'TX_RETRIED',
-    locks: "The parent session FOR UPDATE (rank 30); then reads only — the run, the session, and through sessionProviderExec with a target the candidate's key row (an account pool's member is chosen for the SubAgent alone, and for a Codex pool its token minted by mintSubagentPoolLoginToken, so the session row is not written); then one subagent_run UPDATE by id (rank 60) of its attempts and, when it moves, its decision.",
+    locks: "The parent session FOR UPDATE (rank 30); then reads only — the run, the session, and through sessionProviderExec with a target the candidate's key row (an account pool's member is chosen for the SubAgent alone, and for a Codex pool its token minted by mintSubagentPoolLoginToken, so the session row is not written); then, for a candidate whose account is due its trial, the trial claim's UPDATE of that live account_health row (claimTrialByKey, §6.5); then one subagent_run UPDATE by id (rank 60) of its attempts and, when it moves, its decision.",
     identity: "The run's attempts as committed: each attempt re-reads them under the session lock and moves from the last one. A runner that re-sent an ask whose answer it lost would move once more, still within SUBAGENT_MAX_MOVES; the runner sends each ask once.",
     isolation: '',
     attempts: 4,
@@ -2204,15 +2214,48 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary, including for the one-statement branch.',
   },
   {
-    at: 'tasks/tasks.service.ts#applyMoveApproval',
+    at: 'tasks/tasks.service.ts#applyMoves',
     shape: 'TX_RETRIED',
-    locks: 'user FOR UPDATE (10, the owner graph mutex: the move re-judges and rewrites the task\'s place in a hierarchy), both project rows FOR NO KEY UPDATE (40, sorted, one statement), the task FOR UPDATE NOWAIT (50, refused MOVE_TASK_BUSY rather than waited for), then project_handoff_approval FOR UPDATE (60). The task UPDATE then takes what its triggers take, all already held or below: the old and new project rows NOWAIT (0130, held here), FOR KEY SHARE on the new project and the declared criterion through their foreign keys, and project_task_status_count (60). The same order as the owner\'s own move in `update`, plus the request row last.',
+    locks: 'user FOR UPDATE (10, the owner graph mutex: the move re-judges and rewrites the task\'s place in a hierarchy), both project rows FOR NO KEY UPDATE (40, sorted, one statement), the task — or, for a batch (applyMoveApprovals), every task of the batch sorted in one statement — FOR UPDATE NOWAIT (50, refused MOVE_TASK_BUSY rather than waited for), then project_handoff_approval FOR UPDATE (60; a batch locks every request row sorted in one statement, lockMovesForBatch, and checks each crossing key and PENDING before any move is applied). The task UPDATE then takes what its triggers take, all already held or below: the old and new project rows NOWAIT (0130, held here), FOR KEY SHARE on the new project and the declared criterion through their foreign keys, and project_task_status_count (60). The same order as the owner\'s own move in `update`, plus the request row last.',
     identity: 'The request id, and the request row it names — whose ends, subject and payload are frozen (0155, 0386). One request moves one task once: the transaction is a compare-and-set PENDING → APPROVED and then `spend`\'s APPROVED → APPLIED on this task, so a second confirmation, concurrent or later, finds APPLIED under the row lock and is refused with nothing written.',
     isolation: '',
     attempts: 4,
     replay: 'Every fact it acts on is read inside the closure under those locks — the request\'s state and expiry, the task\'s project and hierarchy, both statuses, whether the task serves a criterion of the project it leaves, the landing jobs, the criterion\'s revision — so a re-run decides against the state the winner left. A refusal throws before the first write, so nothing of a refused confirmation survives, including the yes.',
     effects: 'None inside. After commit: realtime rows for the task, and the same settled-project, criterion and exception deliveries the owner\'s own move makes, over both projects.',
     answer: 'Typed 503 from the global boundary; a confirmation the move no longer admits is a 409 with its own code (MOVE_TASK_SUBJECT_MOVED, MOVE_TASK_LANDING_IN_FLIGHT, MOVE_TASK_HIERARCHY_CONFLICT, MOVE_TASK_CRITERION_GONE, PROJECT_REOPEN_REQUIRED, MOVE_TASK_SERVES_SETTLED_CRITERION, APPROVAL_EXPIRED, MOVE_TASK_BUSY) and the request stays as it was.',
+  },
+  {
+    at: 'projects/project-handoff.service.ts#decideBatch',
+    shape: 'TX_RETRIED',
+    locks: 'The DENY branch only (APPROVE is tasks.applyMoves): every project_handoff_approval row of the batch FOR UPDATE (rank 60), sorted, one statement (lockMovesForBatch), then one UPDATE PENDING → DENIED over the same rows. No other row.',
+    identity: 'The handoff ids and the crossing key the person read for each; the batch is refused whole unless every row is still PENDING under the same key.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Every row is re-locked and re-checked on each attempt; a rollback discards the whole answer, and a re-run after a commit finds the rows DENIED and is refused HANDOFF_ALREADY_ANSWERED with nothing written.',
+    effects: 'After commit only: session.updated for the asking session and the target coordinator (announceMove).',
+    answer: 'Typed 503 from the global boundary; a stale answer is a 409 (APPROVAL_TARGET_MISMATCH or HANDOFF_ALREADY_ANSWERED) naming each move.',
+  },
+  {
+    at: 'sessions/return-to-open.ts#returnWaitingSessionsToOpen',
+    shape: 'TX_RETRIED',
+    locks: 'Filed (Completed or Trash) non-landing session rows that still have a PENDING owner request they asked, a PENDING MOVE_TASK they asked, or a PENDING MOVE_TASK into a project they coordinate — FOR UPDATE OF session SKIP LOCKED (rank 30), in id order, at most 500; then one UPDATE clearing completed_at, archived_at and deleted_at on them. The owner_request, project_handoff_approval and project rows are only read. Driven from the pending side: a UNION of the PENDING rows, read through partial indexes (owner_request_pending_asker_idx, migration 0592; project_handoff_approval_pending_move_idx, migration 0386), joined to session by primary key, so the every-tick global sweep never scans session.',
+    identity: 'None needed: the rows are chosen by what is true of them now, and a session already in Open matches nothing. Called after commit by sessions.complete, sessions.remove, sessions.completeProjectSessions and reaper.endParked (scoped to the sessions they filed), and by the reaper tick over every account, whose first run after boot is the backfill for sessions filed away before this existed.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The selection is re-run under the lock on each attempt; a row another transaction holds is skipped and taken by the next sweep.',
+    effects: 'None inside. After commit the caller announces each session it moved (publishSessionCreated).',
+    answer: 'Logged by the caller and never a reason for the filing or the sweep to fail; the next sweep tries again.',
+  },
+  {
+    at: 'sessions/return-to-open.ts#returnSessionsToOpen',
+    shape: 'TX_RETRIED',
+    locks: 'The filed (Completed or Trash) non-landing session rows named, FOR UPDATE (rank 30), sorted in one statement, then one UPDATE clearing completed_at, archived_at and deleted_at on them. Its own transaction, after the filing that called it committed.',
+    identity: 'The session ids; bringing an Open session back to Open matches nothing.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The rows are re-selected under the lock on each attempt, as restore does; a purge that won leaves no row to update.',
+    effects: 'None inside. After commit the caller announces each session it moved (publishSessionCreated).',
+    answer: 'Logged by the caller and never a reason for the filing to fail.',
   },
   {
     at: 'tasks/tasks.service.ts#dispatchStalledListForemen',
@@ -3301,6 +3344,8 @@ export interface TransactionParticipant {
  * silently.
  */
 export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
+  { at: 'providers/account-health.service.ts#claimTrialByKey', under: "AccountHealthService.claimTrial and the task dispatch (TasksService.routeFreshRun), each handing it the root client, and the SubAgent doors (runnerSubagents.createSubagentRun, nextSubagentCandidate), which hand it their own transaction after the parent session's lock, the run's id standing in for a session's: so it is the trial claim of docs/routing-account-health-design.md §6.5 in its own implicit transaction, one UPDATE of the live BLOCKED account_health row by owner, subject key and scope, predicated on its block having run out and on no other run holding a fresh or running claim, then a read of that row. Two dispatches racing for it serialise on the row lock and the second re-checks the predicate and matches nothing" },
+  { at: 'providers/account-health.service.ts#makeTrialDue', under: "AccountHealthService.makeTrialDue, the runner heartbeat (an engine newly signed in) and ProvidersService.update (a key saved again), each handing it the root client: so it is one UPDATE in its own implicit transaction moving blocked_until to now on the owner's live BLOCKED account_health rows of one runner and engine, or of one key, still inside their block (§6.3). The ladder is kept; a concurrent recordFailure on a row waits for this one and then reads its trial as due" },
   { at: 'runner-api/model-identity.ts#learnModelIdentities', under: "its one caller, ProvidersController's Model tiers view (providers.controller.ts, through subagentTierView's sightings hook), hands it the root client and does not await it (62caf021ee): so it is one model_identity INSERT ... ON CONFLICT DO NOTHING (createMany skipDuplicates) in its own implicit transaction, keyed by rule_key, after a read of the keys already decided. Two views asking at once insert each key once; a failure writes nothing and is asked again after the back-off" },
   { at: 'realtime/parked-session-end.ts#claimParkedSessionEnd', under: 'reaper.endParked and parkedSessionEnd.endIdleWorkOfDoneTask, each its own unit: the conditional UPDATE of the session row (rank 30) that is the claim, then one conversation_turn INSERT (rank 60) for the end turn, so a seq conflict rolls both back' },
   { at: 'conditions/condition-still-waiting.ts#fileStillWaitingItem', under: 'conditions.askStillWaiting: under the condition row FOR UPDATE it holds, one owner_request INSERT ON CONFLICT (asked_by_session_id, client_request_id) DO NOTHING' },
@@ -3406,6 +3451,8 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'projects/project-start-request.ts#answerStartRequests', under: "projectAcceptance.start — the start's own transaction, after its rank-40 project lock and its confirmation row: one UPDATE of the project's OPEN START_REQUEST item (rank 60) — at most one row, by the dedupe key every request shares — resolved APPROVED by the owner at the start's instant. A start that is refused never reaches it, so a refused start answers no request" },
   { at: 'projects/project-done-request.ts#answerDoneRequests', under: "projectAcceptance.recordProjectDone — the record's own transaction, after its rank-40 project lock and the rank-60 lock on the request it names: one UPDATE of the project's OPEN DONE_REQUEST item (rank 60) — the one named, or, for a press nobody asked for, whichever is open, at most one by the dedupe key every request shares — resolved APPROVED by the owner at the record's instant, with the gaps accepted as its answer. A refused press never reaches it" },
   { at: 'projects/project-handoff.service.ts#spend', under: "tasks.create, tasks.createMany and tasks.applyMoveApproval — unit L4's APPLY, one compare-and-set per yes inside the transaction that writes the task it authorises" },
+  { at: 'projects/project-handoff.service.ts#lockMovesForBatch', under: "tasks.applyMoves (a batch) and projectHandoff.decideBatch (DENY) — every request row of the batch FOR UPDATE (rank 60), sorted, one statement, read again under that lock" },
+  { at: 'tasks/tasks.service.ts#applyOneMoveUnderLocks', under: "tasks.applyMoves — one move under the locks that unit took: the request row (rank 60, already held for a batch), the yes, the task UPDATE, the spend and the activity row" },
   { at: 'projects/project-handoff.service.ts#lockMoveForConfirmation', under: "tasks.applyMoveApproval — the request row FOR UPDATE (rank 60), after the owner mutex, both projects and the task, and read again under that lock before anything is decided on it" },
   { at: 'projects/project-handoff.service.ts#approveMoveForConfirmation', under: "tasks.applyMoveApproval — the person's yes to a MOVE_TASK, one compare-and-set PENDING → APPROVED on the row already locked, pinned on the whole crossing, written only after every check the move meets has passed" },
   { at: 'tasks/tasks.service.ts#lockPlanExecutionIdentity', under: 'tasks.create, tasks.createMany — rank 10 then rank 15, before either takes a list or a session' },
@@ -3581,6 +3628,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'projects/project-open-item.service.ts#skipInFlightLandingCheck', under: "projects/project-open-item.service.ts#skipIntegrationMergeCheck, on the owner's call when the task's newest landing is QUEUED or RUNNING (§2.4 J-S5): under the task lock it holds, project_codebase FOR UPDATE (rank 55), then the shared J-T8 stop (projects/project-integration-line.ts#stopInFlightJob) and, when that ended the generation on the spot, queueDeferredDoneAfterStop and one new LAND_TASK without the check through projects/project-integration-job.ts#queueLandingRetry" },
   { at: 'tasks/reclaim-stalled-task.ts#reclaimStalledTask', under: 'runnerApi.finalize, reaper.forceFinalize' },
   { at: 'tasks/reclaim-stalled-task.ts#postRunFailureComment', under: 'runnerApi.finalize, reaper.forceFinalize' },
+  { at: 'tasks/refused-run-replacement.ts#postReplacementComment', under: "TasksService.replaceRefusedRun, handing it the root client after execute answered with the replacement's Session (docs/routing-account-health-design.md §7.3): one task_comment child row on a task that does not auto-run, in its own implicit transaction, whose task foreign key is FOR KEY SHARE on the task. Idempotent per refused run by a read of the same body first (both ends that report one refusal get the same replacement answered), not retried: a failure is logged and leaves the run started" },
   { at: 'tasks/reclaim-stalled-task.ts#postWorkNotOnBranchComment', under: "runnerApi.finalize — inside the same rank-30 Session transaction that settles the run, beside postRunFailureComment and taking the same locks: one task_comment child row whose task foreign key is FOR KEY SHARE on the rank-50 task. It says on the task's own timeline that the run's work never reached its branch, which is the only place that fact can be read once the acceptance command has already derived DONE" },
   { at: 'tasks/reclaim-stalled-task.ts#postExecutableAcceptanceUnavailableComment', under: 'runnerApi.turnComplete — after the reserved shell turn is ACKed and the rank-50 task is locked; it is the durable needs-human branch mutually exclusive with a comparable result and status derivation' },
   { at: 'tasks/task-dispatch-refusal.ts#raiseSourceUnresolvedBlocker', under: "two doors, each inside the transaction that records the refusal it is about, and each BEFORE `recordDispatchRefusal` in the same closure so the ranks ascend (the blocker's project foreign key at 40, the task at 50). runnerApi.pinSessionSource — the refusal decided at RESOLUTION, frozen onto the session's `source_state`. runnerApi.finalize — the refusal the runner decided at its CHECKOUT, on the run it is settling (SR50's other half: §10.3 is a claim about the code, so the gate that produced it does not decide whether the project is told). One `project_blocker` row per (project, ref, code): the insert computes the generation from the key's own history and conflicts with the partial unique index on open rows, so a second task refused on the same line — or a retried request — writes nothing and the winner's row stands. A task in no project returns without writing, because there is no project for the row to hang on" },
@@ -3838,6 +3886,8 @@ export interface StatementUnit {
  * whose writes are not atomic with each other.
  */
 export const STATEMENT_UNITS: readonly StatementUnit[] = [
+  { at: 'providers/account-health.service.ts#recordSuccess', class: 'MANY_ROWS', statements: 1, note: 'An admitted turn (docs/routing-account-health-design.md §6.3): one UPDATE clearing at most two live account_health rows of one subject (the whole account and the run\'s model) by owner, subject key and scope, under the partial unique key. No trigger names the table; a concurrent recordFailure on the same rows waits for this one and then reads them as cleared.' },
+  { at: 'providers/account-health.service.ts#releaseTrial', class: 'ONE_ROW_CAS', statements: 1, note: 'A trial that ended before admission (§6.5): one UPDATE clearing the claim on the subject\'s live rows still held by that session; at most one row per scope, and a claim another run took since matches nothing.' },
   { at: 'runner-api/subagent-rating.ts#rateSubagentRun', class: 'ONE_ROW_CAS', statements: 1, note: "subagent_rate (docs/subagent-design.md §7.1): one UPDATE of the run by (id, the rating session) predicated on status <> 'RUNNING', writing the score, note, time and the rater's engine, provider and model. subagent_run's columns written are in no key and fire no trigger; a repeat writes the same rating again, which is what a re-rating is." },
   { at: 'projects/coordinator-handoff.service.ts#start', class: 'INSERT', statements: 2, note: "Hand over (docs/coordinator-handoff.md): one INSERT of the coordinator_handoff row (WRITING, attempt 1), its project and session foreign keys taking those rows FOR KEY SHARE and nothing else; two presses meet coordinator_handoff_one_live_idx and the loser answers the winner's row. Then the note turn is queued by sessions.createTurn in its own transaction; if that is refused, a second statement — a CAS on WRITING by id — marks the row CANCELLED, so a refused turn leaves no handoff under way. Not one transaction with the turn: createTurn is its own retried unit under the Session lock, and the row is written first so the turn's end always finds it." },
   { at: 'projects/coordinator-handoff.service.ts#rememberSuccessor', class: 'ONE_ROW_CAS', statements: 1, note: "A successor named while a handoff is under way, or cleared by naming none: one UPDATE by id, a CAS on the state the row was read in, writing successor_engine, successor_provider and successor_model (all NULL when cleared). Its start was resolved by assertStartResolves before this write. A row that moved on — completed, cancelled or retried — matches nothing and the caller keeps what it read. No key moves and no trigger names the row, so it takes that one row and waits for nothing else." },
@@ -4415,6 +4465,9 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   {"table":"model_provider","trigger":"model_provider_builtin_orbit_guard_delete","event":"BEFORE DELETE","kind":"ROW/STATEMENT","since":"0436_landing_sessions","takes":[]},
   {"table":"model_provider","trigger":"model_provider_builtin_orbit_guard_rename","event":"BEFORE UPDATE","kind":"ROW/STATEMENT","since":"0436_landing_sessions","takes":[]},
   {"table":"model_provider","trigger":"model_provider_dispatch_slug_guard","event":"BEFORE INSERT OR UPDATE OF \"slug\"","kind":"ROW/STATEMENT","since":"0265_provider_pool","takes":[]},
+  {"table":"owner_request","trigger":"owner_request_open_list_epoch_delete","event":"AFTER DELETE","kind":"ROW/STATEMENT","since":"0591_open_list_owner_requests_and_moves","takes":["open_list_epoch LOCK","open_list_epoch WRITE"]},
+  {"table":"owner_request","trigger":"owner_request_open_list_epoch_insert","event":"AFTER INSERT","kind":"ROW/STATEMENT","since":"0591_open_list_owner_requests_and_moves","takes":["open_list_epoch LOCK","open_list_epoch WRITE"]},
+  {"table":"owner_request","trigger":"owner_request_open_list_epoch_update","event":"AFTER UPDATE","kind":"ROW/STATEMENT","since":"0591_open_list_owner_requests_and_moves","takes":["open_list_epoch LOCK","open_list_epoch WRITE"]},
   {"table":"project","trigger":"project_coordinator_companions_bind","event":"AFTER UPDATE OF \"coordinator_workspace_id\"","kind":"CONSTRAINT","since":"0113_project_coordinator_final_row","takes":["project_member WRITE","project_runtime WRITE","workspace LOCK"]},
   {"table":"project","trigger":"project_coordinator_companions_insert","event":"AFTER INSERT","kind":"CONSTRAINT","since":"0113_project_coordinator_final_row","takes":["project_member WRITE","project_runtime WRITE","workspace LOCK"]},
   {"table":"project","trigger":"project_coordinator_identity_window_repair","event":"BEFORE UPDATE OF \"coordinator_workspace_id\"","kind":"ROW/STATEMENT","since":"0115_project_coordinator_identity_window_repair","takes":[]},
@@ -4448,6 +4501,9 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   {"table":"project_fuse_episode","trigger":"project_fuse_episode_resumed_guard","event":"BEFORE UPDATE","kind":"ROW/STATEMENT","since":"0284_project_fuse_pause","takes":[]},
   {"table":"project_handoff_approval","trigger":"project_handoff_approval_guard","event":"BEFORE UPDATE","kind":"ROW/STATEMENT","since":"0155_project_handoff_approval","takes":[]},
   {"table":"project_handoff_approval","trigger":"project_handoff_approval_guard_criterion","event":"BEFORE UPDATE","kind":"ROW/STATEMENT","since":"0386_project_handoff_move_request","takes":[]},
+  {"table":"project_handoff_approval","trigger":"project_handoff_approval_open_list_epoch_delete","event":"AFTER DELETE","kind":"ROW/STATEMENT","since":"0591_open_list_owner_requests_and_moves","takes":["open_list_epoch LOCK","open_list_epoch WRITE"]},
+  {"table":"project_handoff_approval","trigger":"project_handoff_approval_open_list_epoch_insert","event":"AFTER INSERT","kind":"ROW/STATEMENT","since":"0591_open_list_owner_requests_and_moves","takes":["open_list_epoch LOCK","open_list_epoch WRITE"]},
+  {"table":"project_handoff_approval","trigger":"project_handoff_approval_open_list_epoch_update","event":"AFTER UPDATE","kind":"ROW/STATEMENT","since":"0591_open_list_owner_requests_and_moves","takes":["open_list_epoch LOCK","open_list_epoch WRITE"]},
   {"table":"project_integration_job","trigger":"project_integration_job_open_list_epoch_delete","event":"AFTER DELETE","kind":"ROW/STATEMENT","since":"0484_open_list_epoch","takes":["open_list_epoch LOCK","open_list_epoch WRITE"]},
   {"table":"project_integration_job","trigger":"project_integration_job_open_list_epoch_insert","event":"AFTER INSERT","kind":"ROW/STATEMENT","since":"0484_open_list_epoch","takes":["open_list_epoch LOCK","open_list_epoch WRITE"]},
   {"table":"project_integration_job","trigger":"project_integration_job_open_list_epoch_update","event":"AFTER UPDATE","kind":"ROW/STATEMENT","since":"0484_open_list_epoch","takes":["open_list_epoch LOCK","open_list_epoch WRITE"]},
