@@ -46,7 +46,6 @@ import { ProjectDetailPage, ProjectsPage } from './pages/ProjectsPage';
 import { SharedLinksPage } from './pages/SharedLinksPage';
 import { AccessTokensPage } from './pages/AccessTokensPage';
 import { SecretsPage } from './pages/SecretsPage';
-import { TerminalsPage } from './pages/TerminalsPage';
 import { FeishuConnectGroupPage } from './pages/FeishuConnectGroupPage';
 import { FeishuIntegrationPage } from './pages/FeishuIntegrationPage';
 import { GithubIntegrationPage } from './pages/GithubIntegrationPage';
@@ -56,7 +55,7 @@ import { GuestLinkRedirect } from './pages/GuestSessionPage';
 import { SharedWikiDocRoute } from './pages/SharedWikiPage';
 import { TaskRoute } from './pages/TaskRoute';
 import { FollowingPage } from './pages/FollowingPage';
-import { WaitingOnYouPage } from './pages/WaitingOnYouPage';
+import { OwnerRequestRedirect } from './pages/OwnerRequestRedirect';
 import { FilesPage } from './pages/FilesPage';
 import { ScheduleChangePage } from './pages/ScheduleChangePage';
 import { ScheduledPage } from './pages/ScheduledPage';
@@ -334,8 +333,9 @@ export function App() {
             <Route path="access-tokens" element={<AccessTokensPage />} />
             {/* Every copy of a secret on a machine, and the saved secrets (project "Secrets management page"). */}
             <Route path="secrets" element={<SecretsPage />} />
-            {/* The terminals this account has approved: list, revoke (docs/terminal-session-design.md). */}
-            <Route path="terminals" element={<TerminalsPage />} />
+            {/* The account-wide Terminals page is gone: each machine's page lists its own (docs/mocks/terminals-on-machine-page).
+                An old link opens Machines as /infrastructure does: the first machine's page, or General with none. */}
+            <Route path="terminals" element={<InfrastructureRoute />} />
             {/* The Routing report's old address: it is on Providers → Model routing now, its view and filters kept. */}
             <Route path="routing-report" element={<KeepQueryRedirect to="/settings/providers/routing" />} />
             {/* The account's own Feishu or Lark app (docs/feishu-bot-design.md §4.1, §4.2). */}
@@ -414,15 +414,8 @@ export function App() {
                 </FlushView>
               }
             />
-            {/* Everything an agent has asked the owner to do: owner requests and coordinator questions. */}
-            <Route
-              path="waiting"
-              element={
-                <DocView>
-                  <WaitingOnYouPage />
-                </DocView>
-              }
-            />
+            {/* The Waiting on you inbox is gone; its old address opens the session that filed the request. */}
+            <Route path="waiting" element={<OwnerRequestRedirect />} />
             {/* Everything this account follows: watches, filed Active / Needs attention / Triggered
                 history. `?watch=<id>` opens one watch's card. */}
             <Route

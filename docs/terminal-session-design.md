@@ -72,7 +72,7 @@ limits are what is left:
 | Minted only by the owner's tap in the app (an owner-channel act), never by a token or a runner | an agent minting its own |
 | Bound to one machine (its runner) and to the sessions on that runner; refused on every other session | a copied credential used for sessions elsewhere |
 | Stored in the OS keychain (macOS Keychain, Linux Secret Service); where there is none, a `0600` file under `ORBIT_HOME`; never in the environment | an agent reading it from `env` or from a world-readable file |
-| Expires 30 days after the tap; listed in the app (Settings → Terminals) with Revoke | a leaked copy living on unnoticed |
+| Expires 30 days after the tap; listed in the app (its machine's page in Settings, under Terminals) with Revoke | a leaked copy living on unnoticed |
 | Allowed: create/open sessions, send, interrupt, read events, answer approval cards. Every other owner-channel act stays refused (evidence decisions, criteria, project start/done) | widening a terminal into the owner |
 | Every answer recorded with `credential_kind = TERMINAL` and the machine name | unattributed answers |
 

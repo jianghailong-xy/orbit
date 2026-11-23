@@ -1,8 +1,6 @@
 package io.orbitd.android.management
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -14,33 +12,34 @@ import androidx.compose.ui.unit.dp
 import io.orbitd.android.core.cards.Terminal
 import io.orbitd.android.core.cards.TerminalRequest
 import io.orbitd.android.core.cards.TerminalsApi
+import io.orbitd.android.navigation.ObjectId
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.time.Instant
 import java.time.ZoneId
 
 /**
- * The approve-terminal card and Settings → Terminals (docs/terminal-session-design.md, "The terminal credential") — OrbitKit
+ * The approve-terminal card and a machine page's Terminals (docs/terminal-session-design.md, "The terminal credential") — OrbitKit
  * `Terminals` (web lib/terminals.ts), word for word. Its dates and clocks are Access tokens' own.
  */
 internal object Terminals {
     // The approve card (board 2, marker 7).
     const val APPROVE_TITLE = "Approve a terminal?"
-    const val APPROVE_DETAIL = "It can start sessions in your workspaces on this machine and answer their approval cards for 30 days. You can revoke it in Settings → Terminals."
+    const val APPROVE_DETAIL = "It can start sessions in your workspaces on this machine and answer their approval cards for 30 days. You can revoke it on this machine's page in Settings."
     const val DENY = "Deny"
     const val APPROVE = "Approve"
 
     /** "Terminal on dev-laptop · code 7KQ-4MZ": the code is the one the terminal shows, compared by eye. */
     fun requestLine(request: TerminalRequest) = "Terminal on ${request.machineName} · code ${request.userCode}"
 
-    // Settings → Terminals.
+    // A machine page's Terminals (docs/mocks/terminals-on-machine-page/01-board.html ②).
     const val TITLE = "Terminals"
-    const val HINT = "Terminals where you typed orbit and approved it. Each one can start sessions on its machine and answer their approval cards until it expires."
-    const val EMPTY = "No terminals are signed in."
+    const val MACHINE_HINT = "Terminals on this machine where you typed orbit and approved it. Each one can start sessions here and answer their approval cards until it expires."
     const val REVOKE = "Revoke"
     const val REVOKE_DETAIL = "It stops working at once. Typing orbit there asks you to approve it again."
     const val REVOKED = "Terminal revoked"
     const val COULD_NOT_REVOKE = "Couldn't revoke the terminal"
-    const val COULD_NOT_LOAD = "Couldn’t load your terminals:"
     const val NEVER_USED = "Never used"
 
     /** "Revoke the terminal on dev-laptop?" */
@@ -64,26 +63,34 @@ internal object Terminals {
         return AccessTokens.untilLine(terminal.expiresAt, nowMs)?.let { "Expires $day · $it" } ?: "Expires $day"
     }
 
-    /** "2 signed in" — Settings' row value. */
-    fun settingsValue(count: Int) = if (count > 0) "$count signed in" else "None"
+    /** "Last used 3m ago · Expires Dec 12, 2026 · in 30 days": the row's second line (board ③). */
+    fun usedAndExpiresLine(terminal: Terminal, nowMs: Long, zone: ZoneId = ZoneId.systemDefault()) =
+        "${lastUsedLine(terminal, nowMs)} · ${expiresLine(terminal, nowMs, zone)}"
+
+    /** [runnerId]'s terminals, newest approval first (board ②). */
+    fun on(terminals: List<Terminal>, runnerId: String): List<Terminal> = terminals
+        .filter { ObjectId.same(it.runnerId, runnerId) }
+        .sortedWith(compareByDescending<Terminal> { millis(it.approvedAt) ?: 0L }.thenByDescending { it.id })
+
+    private fun millis(iso: String) = try { Instant.parse(iso).toEpochMilli() } catch (_: Exception) { null }
 }
 
-/** TerminalsSettingsPage: every live terminal — its machine, when it was approved, last used and when it expires — each with Revoke,
- * which asks first. Revoked or not, the list is read again, so a revoked terminal leaves it. [changed] counts `terminals.changed`: each
- * one reads the list again too. */
+/** A machine page's Terminals (docs/mocks/terminals-on-machine-page/01-board.html ②③; web `MachineTerminalsSection`): this machine's
+ * approved terminals, newest first, each with Revoke, which asks first. Nothing at all while it has none. The list is read when the page
+ * is drawn or resumed, whenever [reread] changes (an approve card decided on the page, or `terminals.changed` reading the requests
+ * again), every 15 s as the page reads its machine, and after a Revoke, so a revoked terminal leaves it. */
 @Composable
-fun TerminalsSettings(api: ManagementApi, revision: Long, changed: Long = 0L) {
+internal fun MachineTerminals(api: ManagementApi, runnerId: String, notice: Notice, reread: Any?) {
     val terminalsApi = remember(api) { TerminalsApi(api.session, api.handle) }
     val scope = rememberCoroutineScope()
-    val notice = remember { Notice() }
     val now = rememberNow(60_000)
-    var terminals by remember(api) { mutableStateOf<List<Terminal>?>(null) }
-    var failure by remember(api) { mutableStateOf<String?>(null) }
+    var terminals by remember(api, runnerId) { mutableStateOf<List<Terminal>>(emptyList()) }
     var asking by remember { mutableStateOf<Terminal?>(null) }
     var revoking by remember { mutableStateOf<String?>(null) }
+    // A failed read keeps what was drawn; the next one tries again.
     suspend fun load() {
-        try { terminals = terminalsApi.list(); failure = null }
-        catch (e: CancellationException) { throw e } catch (e: Exception) { failure = personalFailure(e) }
+        try { terminals = Terminals.on(terminalsApi.list(), runnerId) }
+        catch (e: CancellationException) { throw e } catch (_: Exception) { }
     }
     fun revoke(terminal: Terminal) {
         revoking = terminal.id
@@ -95,28 +102,18 @@ fun TerminalsSettings(api: ManagementApi, revision: Long, changed: Long = 0L) {
             notice.show(reason?.let(Terminals::notRevoked) ?: Terminals.REVOKED)
         }
     }
-    LaunchedEffect(api, revision, changed, rememberResumed()) { load() }
-    Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(Terminals.HINT, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
-            val shown = terminals
-            when {
-                shown == null && failure != null -> {
-                    Text("${Terminals.COULD_NOT_LOAD} $failure", color = Ink.muted)
-                    TextButton(onClick = { scope.launch { load() } }) { Text("Retry") }
-                }
-                shown == null -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
-                else -> {
-                    failure?.let { Text("${Terminals.COULD_NOT_LOAD} $it", color = Ink.red, style = MaterialTheme.typography.labelMedium) }
-                    if (shown.isEmpty()) Text(Terminals.EMPTY, color = Ink.muted)
-                    shown.forEach { terminal ->
-                        HorizontalDivider()
-                        TerminalRow(terminal, now, busy = revoking == terminal.id) { asking = terminal }
-                    }
-                }
+    val resumed = rememberResumed()
+    LaunchedEffect(api, runnerId, reread, resumed) {
+        if (!resumed) return@LaunchedEffect
+        while (true) { load(); delay(15_000) }
+    }
+    if (terminals.isNotEmpty()) FormSection(Terminals.TITLE, footer = Terminals.MACHINE_HINT) {
+        Column(Modifier.testTag("machine-terminals")) {
+            terminals.forEachIndexed { index, terminal ->
+                if (index > 0) HorizontalDivider()
+                TerminalRow(terminal, now, busy = revoking == terminal.id) { asking = terminal }
             }
         }
-        notice.Host(Modifier.align(Alignment.BottomCenter))
     }
     asking?.let { terminal ->
         AlertDialog(onDismissRequest = { asking = null }, title = { Text(Terminals.revokeTitle(terminal)) }, text = { Text(Terminals.REVOKE_DETAIL) },
@@ -125,15 +122,15 @@ fun TerminalsSettings(api: ManagementApi, revision: Long, changed: Long = 0L) {
     }
 }
 
-/** One terminal as the list shows it: its machine, and when it was approved, last used and expires. Never its credential. */
+/** One approved terminal as its machine's page shows it (board ③): when it was approved, then when it was last used and when it
+ * expires on one line, and Revoke. No machine name: the page is the machine. Never its credential. */
 @Composable
 private fun TerminalRow(terminal: Terminal, now: Long, busy: Boolean, revoke: () -> Unit) {
-    Row(Modifier.fillMaxWidth().alpha(if (busy) .5f else 1f).testTag("terminal:${terminal.id}"), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp).alpha(if (busy) .5f else 1f).testTag("terminal:${terminal.id}"),
+        verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f).semantics(mergeDescendants = true) { }, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(terminal.machineName, maxLines = 2)
-            listOf(Terminals.approvedLine(terminal), Terminals.lastUsedLine(terminal, now), Terminals.expiresLine(terminal, now)).forEach {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
-            }
+            Text(Terminals.approvedLine(terminal), maxLines = 2)
+            Text(Terminals.usedAndExpiresLine(terminal, now), style = MaterialTheme.typography.bodySmall, color = Ink.muted)
         }
         Spacer(Modifier.width(8.dp))
         OutlinedButton(onClick = revoke, enabled = !busy, modifier = Modifier.testTag("terminal:${terminal.id}:revoke")) {

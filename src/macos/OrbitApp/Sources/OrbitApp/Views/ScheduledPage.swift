@@ -338,6 +338,10 @@ struct ScheduledPage: View {
                             .multilineTextAlignment(.leading)
                     }
                     .buttonStyle(.plain)
+                case .waiting(let item):
+                    ScheduleWaitingCardView(item: item).listRowSeparator(.hidden)
+                case .condition(let item):
+                    ConditionWaitingCardView(item: item).listRowSeparator(.hidden)
                 case .group(let group):
                     groupHeader(group).listRowSeparator(.hidden)
                 case .item(let item):
@@ -416,6 +420,8 @@ struct ScheduledPage: View {
         case header
         case lead
         case example(String)
+        case waiting(ScheduleWaitingItem)
+        case condition(ConditionWaitingItem)
         case group(ScheduleDisplay.TimelineGroup)
         case item(ScheduleRowModel)
         case quickAdd
@@ -426,6 +432,8 @@ struct ScheduledPage: View {
             case .header: return "header"
             case .lead: return "lead"
             case .example(let text): return "example-\(text)"
+            case .waiting(let item): return "waiting-\(item.id)"
+            case .condition(let item): return "condition-\(item.id)"
             case .group(let group): return "group-\(group.id)"
             case .item(let row): return row.id
             case .quickAdd: return "quick-add"
@@ -437,6 +445,12 @@ struct ScheduledPage: View {
     private func pageRows(_ scheduled: ScheduledModel, groups: [ScheduleDisplay.TimelineGroup],
                           now: Date) -> [PageRow] {
         var out: [PageRow] = [.header]
+        // A condition's items (the can't-read card and the 30-day question, condition-triggers board ⑥ ①) and a
+        // scheduled task's (failed, held, a run's approval, a run asking for more), whole, under the head: each answers
+        // at its own door. There is no Waiting on you sheet (docs/mocks/waiting-on-you-removal; the owner, 2026-11-16);
+        // the run's session draws its own.
+        out += (model.ownerRequests?.conditionItems ?? []).map(PageRow.condition)
+        out += (model.ownerRequests?.scheduleItems ?? []).map(PageRow.waiting)
         let empty = scheduled.loaded && scheduled.shownSchedules.isEmpty && scheduled.drafts.isEmpty
             && scheduled.shownWaitingTasks.isEmpty && scheduled.workspaceFilter == nil
         if empty {

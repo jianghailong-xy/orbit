@@ -760,7 +760,7 @@ public final class APIClient: @unchecked Sendable {
         try await delete("access-tokens/\(id)")
     }
 
-    // MARK: terminals — the approve card and Settings → Terminals (docs/terminal-session-design.md)
+    // MARK: terminals — the approve card and the machine page's Terminals (docs/terminal-session-design.md)
 
     /// The terminal sign-ins waiting for this owner. Web parity: `terminalRequestsQuery`.
     public func terminalRequests() async throws -> [TerminalRequest] {
@@ -1288,6 +1288,24 @@ public final class APIClient: @unchecked Sendable {
                                       _ decision: ProjectCrossingDecision) async throws {
         try await postRaw("projects/\(projectID)/handoffs/\(ProjectCrossings.doorID(crossing))/decision",
                           body: ProjectCrossings.request(crossing, decision))
+    }
+
+    /// The task moves this conversation draws, as batches (`GET /sessions/:id/task-moves`): those
+    /// it asked for and those into a project it coordinates — every waiting batch, then the latest
+    /// answered ones. A session with none answers `[]`.
+    public func sessionTaskMoves(sessionID: String) async throws -> [TaskMoveBatch] {
+        try await get("sessions/\(sessionID)/task-moves")
+    }
+
+    /// Answer a whole batch of task moves with one press. Every move travels with the crossing key
+    /// the card read, and if any one names another crossing or is no longer waiting the server
+    /// writes nothing and refuses the batch (`APPROVAL_TARGET_MISMATCH` /
+    /// `HANDOFF_ALREADY_ANSWERED`). Answers the batch's rows as they stand now.
+    public func decideTaskMoveBatch(sessionID: String, moves: [ProjectCrossing],
+                                    _ decision: ProjectCrossingDecision) async throws -> [ProjectCrossing] {
+        let data = try await postRaw("sessions/\(sessionID)/task-moves/decision",
+                                     body: TaskMoves.answer(moves, decision))
+        return try decoder.decode([ProjectCrossing].self, from: data)
     }
 
     // MARK: projects — the index and one project's page
