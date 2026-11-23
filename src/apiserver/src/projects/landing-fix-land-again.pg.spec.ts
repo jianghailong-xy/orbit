@@ -779,8 +779,8 @@ async function acceptedRun(stack: Stack, w: World, taskId: string, label: string
   return { taskId, sessionId, branch };
 }
 
-test('W7 and the reopen\'s H1 never mark the same item: a reopened task\'s next DONE leaves the item its work session '
-  + 'holds as W7 marked it', { skip, timeout: 300_000 }, async () => {
+test('W7 and the reopen\'s H1 never mark an item in the work session\'s hands: the reopen hands it back TASK_MOVED_ON, '
+  + 'and only then does the reopened task\'s next DONE mark it for its own generation', { skip, timeout: 300_000 }, async () => {
   const stack = await connect();
   try {
     const w = await world(stack, 'reopened');
@@ -812,17 +812,25 @@ test('W7 and the reopen\'s H1 never mark the same item: a reopened task\'s next 
     assert.equal(reopened.status, TaskStatus.OPEN);
     assert.equal((await stack.db.projectIntegrationJob.findUniqueOrThrow({ where: { id: fixed.id } })).state, 'CANCELLED',
       'CONTROL: the reopen stopped the work session\'s generation');
+    // W7: the reopen takes the item back from the work session (TASK_MOVED_ON), still as W7 marked it.
+    const movedOn = await stack.db.projectOpenItem.findUniqueOrThrow({
+      where: { id: marked.id },
+      select: { workSessionReturnReason: true, handlingJobId: true, handlingSessionId: true },
+    });
+    assert.deepEqual(movedOn, { workSessionReturnReason: 'TASK_MOVED_ON', handlingJobId: fixed.id, handlingSessionId: t.sessionId },
+      'the reopen did not hand the item back from the work session');
     const second = await acceptedRun(stack, w, taskId, 'reopened-second', sha('7'));
     const third = (await jobsOf(stack, { taskId, generation: 3 }))[0];
     assert.ok(third, 'CONTROL: the reopened DONE queued its own generation');
     assert.equal(third.sessionId, second.sessionId);
 
+    // Handed back, the item is the reopened DONE's to mark (§4.2: its landing answers it), for its own generation.
     const item = await itemOf(stack, first.jobId);
     assert.equal(item.state, 'OPEN');
     assert.deepEqual(
-      [item.handling_job_id, item.handling_session_id, item.handling_reason],
-      [fixed.id, t.sessionId, REASON],
-      'the reopened DONE\'s H1 marked an item its work session holds, which W7 had marked already',
+      [item.handling_job_id, item.handling_session_id],
+      [third.id, second.sessionId],
+      'the reopened DONE\'s H1 did not take over the item the reopen handed back',
     );
   } finally {
     await stack.db.$disconnect();

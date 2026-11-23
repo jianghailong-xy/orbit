@@ -656,7 +656,15 @@ test('W-T6: W4 condition 4 — after two generations asked for by the work sessi
     const second = await rerun(first);
     assertHandedToWorkSession(await itemOf(stack, w, second), t.sessionId, 'round 1 of 2 failed again');
     const third = await rerun(second);
-    assertCoordinatorsAsToday(await itemOf(stack, w, third), 'round 2 of 2 failed: the rounds are used');
+    // W8 (W-T4): the rounds are used, so the failure is the coordinator's at once — opened already handed back from
+    // the work session, ROUNDS_EXHAUSTED, with its clock running and delivered (landing-fix-hand-back.pg.spec.ts).
+    const exhausted = await itemOf(stack, w, third);
+    assert.equal(exhausted.state, 'OPEN');
+    assert.equal(exhausted.assignee, 'COORDINATOR');
+    assert.equal(exhausted.work_session_id, t.sessionId);
+    assert.equal(exhausted.work_session_return_reason, 'ROUNDS_EXHAUSTED', 'round 2 of 2 failed: the rounds are used');
+    assert.ok(exhausted.work_session_returned_at && exhausted.escalate_at);
+    assert.equal(exhausted.deliveries, 1, 'the exhausted failure was not delivered to the coordinator');
   } finally {
     await stack.db.$disconnect();
   }

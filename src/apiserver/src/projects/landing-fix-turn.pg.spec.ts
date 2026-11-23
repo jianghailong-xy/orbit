@@ -618,11 +618,14 @@ for (const [ending, write] of Object.entries(OTHER_ENDINGS)) {
         assert.equal(after.status, before.status);
         assert.equal(after.endReason, before.endReason);
         assert.deepEqual(await identityOf(stack, t.taskId), identity, 'a refused delivery touched the identity');
-        // The hand-back is S4's (W7, SESSION_ENDED): until it lands the item waits, and nobody else has it.
+        // W7 (R3): handed back SESSION_ENDED, and from then the coordinator's, delivered to it.
         const item = await stack.db.projectOpenItem.findUniqueOrThrow({ where: { id: itemId } });
         assert.equal(item.state, 'OPEN');
+        assert.equal(item.workSessionReturnReason, 'SESSION_ENDED', `a session ${ending} was not handed back from`);
+        assert.ok(item.workSessionReturnedAt);
         assert.equal(
-          await stack.db.projectOpenItemDelivery.count({ where: { itemId, sessionId: w.coordinatorSessionId } }), 0,
+          await stack.db.projectOpenItemDelivery.count({ where: { itemId, sessionId: w.coordinatorSessionId } }), 1,
+          'the handed-back item was not delivered to the coordinator',
         );
       } finally {
         await stack.db.$disconnect();
