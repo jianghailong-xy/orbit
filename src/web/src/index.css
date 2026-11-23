@@ -29361,6 +29361,10 @@ button.agent-progress-agent:hover {
 .model-tiers-quality-one[tabindex] {
   cursor: help;
 }
+/* A model that does not open keeps the arrow's room, unseen, so its name lines up with those that do. */
+.model-routing-no-open > span[aria-hidden] {
+  visibility: hidden;
+}
 /* A model's accounts, open under it: no rule between them, each named by its provider, indented. */
 .model-routing-table tr.is-open td,
 .model-routing-table tr.model-routing-account:not(:has(+ tr.model-routing-account)) td {
