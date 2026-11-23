@@ -65,6 +65,8 @@ public extension Session {
             owesReplyTo: summary.owesReplyTo,
             taskId: summary.taskId,
             lastTurnAt: summary.lastTurnAt,
+            // Moves the row only when the server moved it; streamed activity refreshes lastTurnAt alone.
+            listedAt: summary.listedAt,
             // Null is a value here, like the previews beside them: the summary is how an already-open
             // list learns the recap a settle just wrote — and how it lets go of one a manual refresh
             // dropped — without waiting for the next snapshot.
@@ -172,6 +174,7 @@ public extension Session {
                          owesReplyTo: [SessionRequestPeer]?? = nil,
                          taskId: String? = nil,
                          lastTurnAt: String? = nil,
+                         listedAt: String? = nil,
                          // Doubly optional like `retryAt`: nil keeps the row's recap, `.some(nil)`
                          // is the server saying the session has none, `.some(text)` the one just
                          // written — which travels with its time so the row's label can date it.
@@ -249,6 +252,7 @@ public extension Session {
                 pinnedAt: pinnedAt,
                 createdAt: createdAt,
                 lastTurnAt: lastTurnAt ?? self.lastTurnAt,
+                listedAt: listedAt ?? self.listedAt,
                 tags: tags,
                 retryAt: retryAt ?? self.retryAt,
                 // Both read off this row like the fields above: the list's summaries and every
