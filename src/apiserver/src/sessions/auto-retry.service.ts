@@ -16,7 +16,6 @@ import {
   RunEventType,
   isAccountEngine,
   isRetryableApiErrorText,
-  isUsageLimitErrorText,
   planUsageBlockedUntil,
   RunFailureKind,
   runFailureKind,
@@ -1514,7 +1513,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       select,
     });
     const answer = own.map(replyText).find((text) => text);
-    return !!answer && !isRetryableApiErrorText(answer) && !isUsageLimitErrorText(answer);
+    return !!answer && !isRetryableApiErrorText(answer) && runFailureKind({ error: answer }) !== RunFailureKind.USAGE_LIMIT;
   }
 
   /** The opening turn, found by the fixed seed id. */
