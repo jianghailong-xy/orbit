@@ -2941,6 +2941,16 @@ export interface MergeCommand {
   recoveryAction?: import('./mergeRecovery').MergeRecoveryAction;
   recovery?: import('./mergeRecovery').MergeRecovery;
   check?: { command: string; timeoutSeconds: number };
+  /** How this merge reaches its target (docs/design/protected-branch-landing.md §3, §4.6). Sent only to a runner
+   *  that declared `session-merge-pull-request/v1`; absent, the runner pushes the target as it always did. */
+  landVia?: import('./pull-request-landing').LandVia;
+  /** With `landVia` PULL_REQUEST or PUSH_AS_ME: `refs/heads/orbit/land/<session id>`, the branch the replayed tip
+   *  goes to when GitHub refuses the target because of the branch's rules. */
+  landingRef?: string;
+  /** The commit Orbit last pushed to `landingRef`, for the push's lease; absent when Orbit has pushed none. */
+  landingRefSha?: string;
+  /** The session already has an open Orbit pull request for this target: push only the landing branch. */
+  pullRequestOpen?: true;
 }
 
 /** Control plane → runner: commit a live session's uncommitted worktree changes onto its
@@ -4427,8 +4437,15 @@ export interface SessionMergeResultRequest {
   /** Absent only for an in-flight command issued by a pre-fence control plane. */
   operationId?: string;
   leaseOwner?: string;
-  status: 'merged' | 'conflict' | 'error' | 'released';
+  /** `pull_request`: GitHub refused the target because of its rules, so the replayed tip was pushed to the
+   *  command's `landingRef` instead (`pushedSha`) and the control plane lands it through a pull request
+   *  (docs/design/protected-branch-landing.md §4.6). Only a runner handed `landVia` reports it. */
+  status: 'merged' | 'conflict' | 'error' | 'released' | 'pull_request';
   mergedSha?: string;
+  /** With `pull_request`: the commit the landing branch holds, read back from the remote. */
+  pushedSha?: string;
+  /** With `pull_request`: why the target was not pushed, in GitHub's words; absent when it was not tried. */
+  pushRefusal?: string;
   /** Exact source-branch tip replayed by this merge. Persisted so later worktree reports can
    *  detect new commits without relying on ancestry or patch-id equivalence. */
   sourceSha?: string;
@@ -4623,7 +4640,10 @@ export type IntegrationJobKind = 'LAND_TASK' | 'CHECK_PROMOTION' | 'LAND_PROMOTI
  *  `OBSERVE_LANDING` job ends when it has looked (§10.6, 0453). */
 export type IntegrationJobState =
   | 'QUEUED' | 'RUNNING' | 'LANDED' | 'ALREADY_LANDED' | 'NOTHING_TO_LAND' | 'READY'
-  | 'CONFLICT' | 'CHECK_FAILED' | 'ERROR' | 'CANCELLED' | 'SUPERSEDED' | 'OBSERVED';
+  | 'CONFLICT' | 'CHECK_FAILED' | 'ERROR' | 'CANCELLED' | 'SUPERSEDED' | 'OBSERVED'
+  // The attempt's tested commit is on its landing branch and the landing waits for GitHub
+  // (docs/design/protected-branch-landing.md §4.2). In flight, not final, and not RUNNING: no runner holds it.
+  | 'PULL_REQUEST';
 
 /** The step the runner is on, or the one it stopped at. `OBSERVE` is an `OBSERVE_LANDING` job's
  *  step after its fetch (§10.6, 0453). */
@@ -4726,6 +4746,18 @@ export interface IntegrationJobCommand {
    *  the commit its work was delivered as and the commit that work forked from. Sent only to a runner
    *  that declared `integration-observe/v1`; absent on every other kind. */
   observeTasks?: IntegrationObserveTask[];
+  /** LAND_TASK / LAND_PROMOTION: how this attempt reaches its target (docs/design/protected-branch-landing.md §3),
+   *  fixed when it was handed out. Sent only to a runner that declared `integration-pull-request/v1`; absent, the
+   *  runner pushes the target as it always did. */
+  landVia?: import('./pull-request-landing').LandVia;
+  /** With `landVia` PULL_REQUEST or PUSH_AS_ME: the branch the tested commit goes to when GitHub refuses the target
+   *  because of the branch's rules, `refs/heads/orbit/land/<landing session id>` (§4.1). */
+  landingRef?: string;
+  /** The commit Orbit last pushed to `landingRef`, for the push's lease; absent when Orbit has pushed none. */
+  landingRefSha?: string;
+  /** The landing subject already has an open Orbit pull request: push only the landing branch, never the target
+   *  (§3, §9 item 2). */
+  pullRequestOpen?: true;
 }
 
 /** One task an OBSERVE_LANDING looks for (§10.6 O-S2): its frozen delivered identity (O-L4). */
@@ -4911,6 +4943,12 @@ export interface IntegrationJobResultRequest {
   /** With OBSERVED, and only there (§10.6 O-S3): one observation per task the command named. The two
    *  tips it observed are `upstreamSha` (U) and `targetShaBefore` (T). */
   observations?: IntegrationObservation[];
+  /** With PULL_REQUEST, and only there (docs/design/protected-branch-landing.md §4.2 J-T14): the commit the
+   *  landing branch holds after the push, read back from the remote. It is `testedSha`. */
+  landingRefSha?: string | null;
+  /** With PULL_REQUEST: why the target was not pushed, in GitHub's words (clipped and redacted), or absent when
+   *  the subject already had an open pull request and the target was not tried. */
+  pushRefusal?: string | null;
 }
 
 /** The commits that moved the upstream under a landing, as the runner measured them on the

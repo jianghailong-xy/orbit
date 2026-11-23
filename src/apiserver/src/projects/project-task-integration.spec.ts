@@ -121,6 +121,8 @@ test('a queued attempt carries its generation, target, instants, live wait and r
       summary: 'Waiting for the project line to sync: the landing of “Earlier task” could not merge upstream into this branch, and its conflict is still open',
       jobId: 'sync', openItemId: 'item',
     },
+    // It pushes directly: no pull request (docs/design/protected-branch-landing.md §8).
+    pullRequest: null,
   });
   const wire = JSON.parse(JSON.stringify(view.landTask));
   assert.equal(wire.queuedAt, queuedAt.toISOString());
@@ -170,6 +172,45 @@ test('a claimed attempt stops its queue wait at the claim and drops the reason',
   assert.equal(view.landTask?.startedAt, claimedAt);
   assert.equal(view.landTask?.heartbeatAt, now);
   assert.equal(view.landTask?.blockingReason, null);
+});
+
+test('an attempt waiting on its pull request reads as running, with the pull request and why it waits', () => {
+  const claimedAt = new Date('2026-10-04T11:58:00Z');
+  const waiting = landing({
+    jobState: 'PULL_REQUEST', jobPhase: 'PUSH', jobStartedAt: claimedAt, jobClaimedAt: claimedAt,
+    prState: 'OPEN', prNumber: 214, prUrl: 'https://github.com/acme/web/pull/214', prCondition: 'CHECKS_PENDING',
+    prChecks: [
+      { name: 'ci / unit', required: true, state: 'PENDING', url: null },
+      { name: 'ci / lint', required: true, state: 'PASSED', url: null },
+      { name: 'labeler', required: false, state: 'FAILED', url: null },
+    ],
+    prMergeMethod: null, prMergedSha: null,
+    prRefusal: { via: 'PULL_REQUEST', message: 'GH006: Protected branch update failed for refs/heads/main.' },
+  });
+  const view = taskIntegrationOf(waiting, now);
+  assert.equal(view.state, 'RUNNING', 'still the platform’s to finish, and nobody’s to act on');
+  assert.equal(view.jobId, 'landing');
+  assert.equal(view.since, claimedAt);
+  assert.equal(view.handler, null);
+  assert.equal(view.checksRunningForMs, null);
+  assert.equal(view.landTask?.state, 'PULL_REQUEST');
+  assert.equal(view.landTask?.waitMs, 180_000, 'its queue wait ended at the claim');
+  assert.deepEqual(view.landTask?.blockingReason, {
+    code: 'WAITING_FOR_CHECKS',
+    summary: 'Waiting for the required checks on pull request #214 · 1 of 2',
+  });
+  assert.deepEqual(view.landTask?.pullRequest, {
+    number: 214, url: 'https://github.com/acme/web/pull/214', state: 'OPEN', condition: 'CHECKS_PENDING',
+    checks: { passed: 1, required: 2, failed: [] }, mergeMethod: null, mergedSha: null,
+    refusal: { via: 'PULL_REQUEST', message: 'GH006: Protected branch update failed for refs/heads/main.' },
+  });
+
+  const review = taskIntegrationOf({ ...waiting, prCondition: 'REVIEW_REQUIRED' }, now);
+  assert.deepEqual(review.landTask?.blockingReason, {
+    code: 'WAITING_FOR_REVIEW', summary: 'Waiting for review on pull request #214',
+  });
+  const opening = taskIntegrationOf({ ...waiting, prState: 'OPENING', prNumber: null, prUrl: null, prCondition: null }, now);
+  assert.equal(opening.landTask?.blockingReason?.summary, 'Opening a pull request: main requires one');
 });
 
 test('an attempt sent back to the queue counts from its enqueue, not its first start', () => {

@@ -462,6 +462,7 @@ import {
   runnerLastBeatSql,
   withRunnerLastBeat,
 } from '../runners/runner-presence';
+import { PULL_REQUEST_VIEW_SELECT, pullRequestViewOf } from '../projects/pull-request-landing';
 
 /**
  * A turn the control plane queued with no words of anybody's, whose content is written in at delivery:
@@ -1085,7 +1086,9 @@ type ReadSeed = AgentProviderSeed & Partial<Pick<AnchorSeed, 'anchor'>>;
  */
 function settledWorktreeStateCleared(session: Pick<Session, 'mergeStatus' | 'commitStatus'>): Prisma.SessionUncheckedUpdateInput {
   return {
-    ...(session.mergeStatus && session.mergeStatus !== 'pending'
+    // A Merge waiting on its pull request (`pull_request`, docs/design/protected-branch-landing.md §4.6) has not
+    // settled either: GitHub's merge of it is what the pull request door records against this row.
+    ...(session.mergeStatus && session.mergeStatus !== 'pending' && session.mergeStatus !== 'pull_request'
       ? {
           mergeStatus: null,
           mergeOperationId: null,
@@ -5767,6 +5770,13 @@ export class SessionsService {
       lastUserFromOrbit: lastUserFromOrbitOf({ lastUserFromOrbit }),
       lastUserFromExternal: lastUserFromExternalOf({ lastUserFromExternalSource, lastUserFromExternalName }),
       sourceLanding,
+      // docs/design/protected-branch-landing.md §4.6, §8: the pull request this session's Merge waits on or landed
+      // through, for the merge row. Null for a merge that pushed directly, and for every session that never merged.
+      mergePullRequest: session.mergePullRequestId
+        ? await this.prisma.githubPullRequest.findFirst({
+          where: { id: session.mergePullRequestId, ownerId }, select: PULL_REQUEST_VIEW_SELECT,
+        }).then((row) => (row ? pullRequestViewOf(row) : null))
+        : null,
       // A coordinator's handoff (projects/coordinator-handoff.ts): `coordinatorHandoff` on the outgoing
       // one, `coordinatorHandoffReceived` on its successor, null on every other session.
       ...(await readSessionCoordinatorHandoffs(this.prisma, session.id)),

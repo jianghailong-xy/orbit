@@ -385,6 +385,7 @@ import {
   taskCriterionChangeRefusalBody,
   taskSelfRewrittenStandardRefusalBody,
 } from './task-completion-criterion-change-guard';
+import { IN_FLIGHT_JOB_STATES, IN_FLIGHT_JOB_STATES_SQL } from '../projects/in-flight-job-states';
 import {
   DAG_CHANGE_CARD_TOOL,
   TASK_BATCH_CARD_TOOL,
@@ -3408,7 +3409,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       SELECT job."id"
         FROM "task" waited_on
         JOIN "project_integration_job" job
-          ON job."state" IN ('QUEUED', 'RUNNING')
+          ON job."state" IN ${IN_FLIGHT_JOB_STATES_SQL}
          AND (job."task_id" = waited_on."id"
               OR (job."kind" = 'OBSERVE_LANDING' AND job."project_id" = waited_on."project_id")
               OR job."promotion_id" IN (
@@ -11111,7 +11112,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                   ownerId,
                   taskId: id,
                   kind: 'LAND_TASK',
-                  state: { in: ['QUEUED', 'RUNNING'] },
+                  state: { in: [...IN_FLIGHT_JOB_STATES] },
                 },
                 select: { id: true, projectId: true },
               });

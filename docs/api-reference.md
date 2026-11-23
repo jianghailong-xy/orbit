@@ -72,13 +72,13 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 
 | Caller | Routes |
 | --- | --- |
-| `public` | 39 |
+| `public` | 40 |
 | `user` | 529 |
 | `admin` | 31 |
 | `runner` | 231 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **834** |
+| **Total** | **835** |
 
 ## Public routes
 
@@ -105,6 +105,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/help/articles/:slug` | path `slug` | `HelpController.article` |
 | `GET` | `/api/help/search` | query `q` | `HelpController.search` |
 | `GET` | `/api/integrations/github/callback` | query `code`, `error`, `setup_action`, `state` | `GithubCallbackController.callback` |
+| `POST` | `/api/integrations/github/webhook` | — | `GithubWebhookController.receive` |
 | `POST` | `/api/runner/device/poll` | body `Object` | `RunnerApiController.devicePoll` |
 | `POST` | `/api/runner/device/start` | body `Object` | `RunnerApiController.deviceStart` |
 | `POST` | `/api/runner/register` | body `Object` | `RunnerApiController.register` |

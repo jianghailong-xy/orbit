@@ -1621,6 +1621,57 @@ type mergeOutcome struct {
 	// plane that knows the flag records §13.7 MR2's `ALREADY_MERGED`, which exists to keep "the
 	// target moved" and "it was already there" different facts.
 	AlreadyMerged bool
+	// With Status "pull_request" (docs/design/protected-branch-landing.md §4.6): the commit the landing
+	// branch holds after the push, and GitHub's words for the refused target push.
+	PushedSha   string
+	PushRefusal string
+}
+
+// mergeLanding is a merge's pull-request fallback (docs/design/protected-branch-landing.md §4.6): how the control
+// plane said this merge reaches its target, the landing branch the replayed tip goes to when GitHub refuses the target
+// because of its rules, what Orbit last pushed there, and whether the session's pull request is already open. The
+// zero value is a merge with no fallback, which pushes the target as it always did.
+type mergeLanding struct {
+	landVia  string
+	ref      string
+	expected string
+	open     bool
+}
+
+func mergeLandingOf(req MergeCommand) mergeLanding {
+	return mergeLanding{landVia: req.LandVia, ref: req.LandingRef, expected: req.LandingRefSha, open: req.PullRequestOpen}
+}
+
+// viaPullRequest reports whether a refused target push falls back to the landing branch.
+func (l mergeLanding) viaPullRequest() bool {
+	return landsThroughPullRequest(l.landVia, l.ref, false)
+}
+
+// toLandingBranch pushes the replayed tip in the staging checkout tmp to the landing branch and answers
+// "pull_request" (§4.6 step 2). The local target and the root checkout are left where they are: the target on origin
+// did not move, and this machine's copy of it catches up at its next fetch.
+func (l mergeLanding) toLandingBranch(tmp, source, sourceSha, base, refusal string) mergeOutcome {
+	tip, err := git(tmp, "rev-parse", "HEAD")
+	if err != nil || tip == "" {
+		return mergeOutcome{Status: "error", SourceSha: sourceSha, Message: clip(fmt.Sprintf("could not read the rebased result of %s: %s", source, gitStderr(err)), 1000)}
+	}
+	tree, err := git(tmp, "rev-parse", "HEAD^{tree}")
+	if err != nil || tree == "" {
+		return mergeOutcome{Status: "error", SourceSha: sourceSha, Message: clip(fmt.Sprintf("could not read the rebased tree of %s: %s", source, gitStderr(err)), 1000)}
+	}
+	pushed, err := landingBranchPush{
+		dir: tmp, remote: "origin", landingRef: l.ref,
+		tested: tip, treeSha: tree, baseSha: base, expected: l.expected, reuse: l.open,
+	}.run()
+	if err != nil {
+		message := "could not push the landing branch " + strings.TrimPrefix(l.ref, "refs/heads/") + ": " + gitStderr(err)
+		if refusal != "" {
+			message = "GitHub refused the push to the target (" + refusal + "), and " + message
+		}
+		return mergeOutcome{Status: "error", SourceSha: sourceSha, Message: clip(message, 1000)}
+	}
+	logln(fmt.Sprintf("pushed %s to %s for session %s's pull request", shortSha(pushed), strings.TrimPrefix(l.ref, "refs/heads/"), source))
+	return mergeOutcome{Status: "pull_request", SourceSha: sourceSha, PushedSha: pushed, PushRefusal: refusal, RebaseBase: base}
 }
 
 // mergeToMain brings a session's branch into a target branch on the runner's local repo by
@@ -1836,7 +1887,7 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 		return alreadyMergedOutcome(req.SessionID, target, sourceSha, targetBefore)
 	}
 
-	out := rebaseFastForward(repoRoot, req.Branch, sourceSha, target, req.SessionID, ffAtRoot, anchor, landed)
+	out := rebaseFastForward(repoRoot, req.Branch, sourceSha, target, req.SessionID, ffAtRoot, anchor, landed, mergeLandingOf(req))
 	out.TargetBranch = target
 	out.TargetShaBefore = targetBefore
 	// The base the source was replayed ONTO. For this merge that is the target tip: the rebase puts
@@ -2019,7 +2070,7 @@ func restageRebaseScratch(repoRoot, sourceSha string) (string, error) {
 // local branch, so the local target only ever moves to what origin already accepted — local merges
 // can't pile up unpushed and silently diverge from origin. A concurrent push that beats ours is
 // rejected (non-fast-forward); we re-sync to the new origin tip and replay, up to mergePushAttempts.
-func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ffAtRoot bool, onto string, landed map[string]bool) mergeOutcome {
+func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ffAtRoot bool, onto string, landed map[string]bool, landing mergeLanding) mergeOutcome {
 	// Staged once per repository and kept: the scratch is NOT removed afterwards, because the next
 	// merge restages it and paying a full checkout of the repository again is what pressing Merge
 	// mostly used to cost.
@@ -2062,6 +2113,12 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 				Conflicts: splitLines(unmerged),
 			}
 		}
+		// docs/design/protected-branch-landing.md §4.6: the session's pull request for this target is open, so the
+		// merge updates it — the landing branch, never the target, and nothing local moves.
+		if pushToOrigin && landing.viaPullRequest() && landing.open {
+			base, _ := git(repoRoot, "rev-parse", "refs/heads/"+target)
+			return landing.toLandingBranch(tmp, source, sourceSha, base, "")
+		}
 		// The local fast-forward at the end writes exactly the paths this replay changed, and git
 		// refuses it if any of them is modified in that checkout. Finding that out AFTER the push
 		// would strand the merge half-done — the work on origin, the local target behind — so check
@@ -2085,6 +2142,17 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 			break
 		}
 		combined := strings.TrimSpace(out + "\n" + gitStderr(err))
+		// §4.6 step 2: GitHub refused the push because of the branch's rules, which is never a race to retry. A merge
+		// the control plane said goes through a pull request pushes its landing branch instead; any other one says
+		// the branch is protected, in GitHub's words. A control plane that named no landVia is told as before.
+		if landing.landVia != "" && isProtectedRefusal(combined) {
+			if landing.viaPullRequest() {
+				base, _ := git(repoRoot, "rev-parse", "refs/heads/"+target)
+				return landing.toLandingBranch(tmp, source, sourceSha, base, githubRefusalWords(combined))
+			}
+			return mergeOutcome{Status: "error", SourceSha: sourceSha, Message: clip(fmt.Sprintf(
+				"GitHub refused the push to %s because of the branch's rules: %s", target, githubRefusalWords(combined)), 1000)}
+		}
 		if !isNonFastForward(combined) {
 			// Auth/network/other — origin untouched, local target not yet advanced. Surface it.
 			return mergeOutcome{Status: "error", Message: clip(fmt.Sprintf("could not push %s to origin: %s", target, combined), 1000)}

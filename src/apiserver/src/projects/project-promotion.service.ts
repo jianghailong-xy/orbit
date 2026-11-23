@@ -13,7 +13,7 @@ import type { IntegrationJobPhase, PromotionTask, UpstreamMovedCommitsEnriched }
 import { PrismaService } from '../prisma/prisma.service';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { type MergeReceiptResult, resultLanded } from '../sessions/merge-receipt';
-import { MergeReceiptService } from '../sessions/merge-receipt.service';
+import { MergeReceiptService, type MergeReceiptPullRequest } from '../sessions/merge-receipt.service';
 import {
   IntegrationCheckResult,
   LandingRetryRequest,
@@ -58,6 +58,7 @@ import {
 import { readDerivedProjectDoneReading } from './project-done-derived';
 import { taskLanding } from './project-criterion-landing';
 import { landingDeferred } from './project-looks-finished';
+import { IN_FLIGHT_JOB_STATES } from './in-flight-job-states';
 
 const logger = new Logger('ProjectPromotion');
 
@@ -191,7 +192,7 @@ export class ProjectPromotionService {
       projectId,
     });
     const queued = await tx.projectIntegrationJob.count({
-      where: { serialKey, kind: 'LAND_TASK', state: { in: ['QUEUED', 'RUNNING'] } },
+      where: { serialKey, kind: 'LAND_TASK', state: { in: [...IN_FLIGHT_JOB_STATES] } },
     });
     // The queue is not empty, so the tip is not what the owner would be confirming.
     if (queued > 0) return null;
@@ -609,7 +610,7 @@ export class ProjectPromotionService {
     const job = await this.prisma.projectIntegrationJob.findFirst({
       where: {
         id: row.landJobId, projectId: row.projectId, promotionId: row.id,
-        kind: 'LAND_PROMOTION', state: { in: ['QUEUED', 'RUNNING'] },
+        kind: 'LAND_PROMOTION', state: { in: [...IN_FLIGHT_JOB_STATES] },
       },
       select: {
         state: true, phase: true, startedAt: true, createdAt: true, cancelRequestedAt: true,
@@ -1479,6 +1480,10 @@ export async function applyPromotionJobResult(
     /** The sessions the relay locked up front for their merge recovery, when it did: a MERGED promotion's clear is
      *  limited to those (`MergeReceiptService.lockLandedRecoveries`). */
     recoveryHeld?: ReadonlySet<string>;
+    /** A landing GitHub merged as a pull request (docs/design/protected-branch-landing.md §4.2 J-T15), and the tree
+     *  its merge holds: the receipts say the server recorded it and name it. */
+    pullRequest?: MergeReceiptPullRequest;
+    landedTreeSha?: string | null;
   },
 ): Promise<PromotionJobOutcome | null> {
   const promotion = await tx.projectPromotion.findUnique({
@@ -1600,6 +1605,7 @@ export async function applyPromotionJobResult(
       testedSha: input.testedSha,
       testedTreeSha: input.testedTreeSha,
       recoveryHeld: input.recoveryHeld,
+      ...(input.pullRequest ? { pullRequest: input.pullRequest, landedTreeSha: input.landedTreeSha ?? null } : {}),
     });
     await tx.projectPromotion.update({
       where: { id: promotion.id },
@@ -2144,6 +2150,10 @@ async function writeUpstreamReceipts(
     /** The sessions the result locked up front for their merge recovery, when it did: the clears are limited to
      *  those (`MergeReceiptService.lockLandedRecoveries`). */
     recoveryHeld?: ReadonlySet<string>;
+    /** A merge GitHub made as a pull request (docs/design/protected-branch-landing.md §4.2 J-T15): the server records
+     *  the receipts, naming it, with the tree GitHub's merge actually holds. */
+    pullRequest?: MergeReceiptPullRequest;
+    landedTreeSha?: string | null;
   },
 ): Promise<string[]> {
   // Both ids a receipt is written against are history references (0423, 0424), and both are foreign
@@ -2185,13 +2195,14 @@ async function writeUpstreamReceipts(
       landedSha: input.mergedSha,
       rebaseBaseSha: input.targetShaBefore,
       testedTreeSha: input.testedTreeSha,
-      landedTreeSha: input.testedTreeSha,
+      landedTreeSha: input.landedTreeSha ?? input.testedTreeSha,
       mainSyncSha: null,
       // The ledger's own copy of who merged it: a receipt read years later has to be able to say
       // "nobody pressed this" without the promotion row beside it.
       confirmedAutomatically: input.promotion.confirmedAutomatically,
       recoveredUnknownPush: input.recoveredUnknownPush,
       recoveryHeld: input.recoveryHeld,
+      ...(input.pullRequest ? { pullRequest: input.pullRequest } : {}),
     });
     receiptIds.push(...written);
   }

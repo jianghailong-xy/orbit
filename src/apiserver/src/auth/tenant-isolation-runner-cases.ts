@@ -2164,6 +2164,12 @@ export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
   'GET /auth/google/callback':
     'Google\'s return: the state is found by its hash and must match the browser cookie the start set — '
     + 'google-login.service.ts:390',
+  'POST /integrations/github/webhook':
+    'GitHub\'s webhook deliveries (docs/design/protected-branch-landing.md §4.7): no session and no token; the credential '
+    + 'is the HMAC-SHA256 of the raw bytes under the deployment\'s saved secret, compared in constant time before '
+    + 'anything is read. It names no Orbit id: a delivery about a repository or installation no workspace was cloned '
+    + 'through is dropped, and the one row it writes is the delivery\'s own, keyed by GitHub\'s delivery id. The pull '
+    + 'requests it is about are read again from GitHub, never changed from the payload — github-webhook.ts:107, :125',
   'GET /integrations/github/callback':
     'GitHub\'s return: the flow is taken by its state\'s hash with one DELETE … RETURNING and must match the browser '
     + 'cookie /integrations/github/start set; it writes only the connection of the account that started that flow. '

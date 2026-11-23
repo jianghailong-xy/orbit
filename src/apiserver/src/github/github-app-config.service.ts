@@ -26,6 +26,12 @@ export interface GithubAppSettings {
   connectedUsers: number;
   /** How many live workspaces were cloned from GitHub. */
   clonedWorkspaces: number;
+  /** What to enter as the App's webhook URL on GitHub (docs/design/protected-branch-landing.md §8). */
+  webhookUrl: string;
+  /** A webhook secret is saved. It is never read back. */
+  webhookSecretSaved: boolean;
+  /** When GitHub's last delivery arrived; null before the first. */
+  lastDeliveryAt: string | null;
 }
 
 export interface GithubAppChange {
@@ -36,6 +42,8 @@ export interface GithubAppChange {
   clientSecret?: string;
   /** Left out, the saved one stays. */
   privateKey?: string;
+  /** The secret GitHub signs webhook deliveries with (§4.7). Left out, the saved one stays. */
+  webhookSecret?: string;
 }
 
 /** The App as the user routes use it, its secrets decrypted. */
@@ -51,6 +59,12 @@ export interface GithubAppCredentials {
 export function githubCallbackUrl(): string {
   const origin = (process.env.PUBLIC_ORIGIN?.trim() || 'http://localhost:2086').replace(/\/+$/, '');
   return `${origin}/api/integrations/github/callback`;
+}
+
+/** The one address GitHub delivers the App's webhooks to: this deployment's PUBLIC_ORIGIN and the webhook route. */
+export function githubWebhookUrl(): string {
+  const origin = (process.env.PUBLIC_ORIGIN?.trim() || 'http://localhost:2086').replace(/\/+$/, '');
+  return `${origin}/api/integrations/github/webhook`;
 }
 
 /** The plaintext of a stored secret, or null for none saved or one the key in force cannot read. */
@@ -86,10 +100,11 @@ export class GithubAppConfigService {
   }
 
   async settings(): Promise<GithubAppSettings> {
-    const [row, connectedUsers, clonedWorkspaces] = await Promise.all([
+    const [row, connectedUsers, clonedWorkspaces, lastDelivery] = await Promise.all([
       this.row(),
       this.prisma.githubConnection.count(),
       this.prisma.workspace.count({ where: { githubRepoId: { not: null }, deletedAt: null } }),
+      this.prisma.githubWebhookDelivery.findFirst({ orderBy: { receivedAt: 'desc' }, select: { receivedAt: true } }),
     ]);
     return {
       enabled: row?.enabled ?? false,
@@ -102,6 +117,9 @@ export class GithubAppConfigService {
       callbackUrl: githubCallbackUrl(),
       connectedUsers,
       clonedWorkspaces,
+      webhookUrl: githubWebhookUrl(),
+      webhookSecretSaved: (row?.webhookSecretEnc ?? '') !== '',
+      lastDeliveryAt: lastDelivery?.receivedAt.toISOString() ?? null,
     };
   }
 
@@ -149,6 +167,7 @@ export class GithubAppConfigService {
       updatedById: adminId,
       ...(change.clientSecret === undefined ? {} : { clientSecretEnc: encryptSecret(change.clientSecret) }),
       ...(change.privateKey === undefined ? {} : { privateKeyEnc: encryptSecret(change.privateKey) }),
+      ...(change.webhookSecret === undefined ? {} : { webhookSecretEnc: encryptSecret(change.webhookSecret) }),
     };
     await this.prisma.githubAppConfig.upsert({
       where: { id: ROW },
@@ -156,6 +175,12 @@ export class GithubAppConfigService {
       update: fields,
     });
     return this.settings();
+  }
+
+  /** The secret webhook deliveries are checked against, or null when none is saved or it cannot be read (§4.7). */
+  async webhookSecret(): Promise<string | null> {
+    const row = await this.row();
+    return row ? readable(row.webhookSecretEnc) : null;
   }
 
   /** The App the user routes use, or null while GitHub is off: no row, switched off, or a secret missing or unreadable. */
