@@ -5,6 +5,7 @@ import { hasDeepSeekBalance } from '../lib/deepseekBalance';
 import type { ProviderRow } from '../lib/providerAdmin';
 import { foldFromAnywhere } from '../lib/foldHead';
 import { ago } from '../lib/watches';
+import { AccountHealthProviderLine } from './AccountHealthLine';
 import { CursorKeyCheckLine } from './CursorKeyCheck';
 import { DeepSeekBalanceLine, useBalance } from './DeepSeekBalance';
 import { EngineTile } from './ProviderGallery';
@@ -131,6 +132,8 @@ export function ProviderKeyRows({
                 {hasDeepSeekBalance(row) && <DeepSeekBalanceLine row={row} />}
                 {/* A Cursor key, what Cursor answered its last check (CursorKeyCheck.tsx). */}
                 {row.runtime === 'cursor' && <CursorKeyCheckLine row={row} />}
+                {/* A key an account refused runs on: the provider's words, the next trial, Check again (§8). */}
+                <AccountHealthProviderLine providerId={row.id} />
               </>
             }
             // A press anywhere on the row opens the key's page, but not one on a control of its own (the

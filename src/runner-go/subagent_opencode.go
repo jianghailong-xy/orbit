@@ -19,6 +19,7 @@ func runOpenCodeChild(ctx context.Context, c subagentChild) (ExecResult, string,
 		conversation = c.engineSession
 	}
 	child := subagentChildJob(c.parent, c.exec, c.def, c.runID, providerOpenCode, conversation)
+	openCodeReadonlyFollowsParent(child)
 	// A new OpenCode session is titled by --title; the SubAgent's is not the parent's.
 	child.Title = "SubAgent " + c.runID
 	if err := os.MkdirAll(c.scratch, 0o700); err != nil {
@@ -36,4 +37,17 @@ func runOpenCodeChild(ctx context.Context, c subagentChild) (ExecResult, string,
 		out.NumTurns = res.NumTurns
 	}
 	return out, conversation, nil
+}
+
+// openCodeReadonlyFollowsParent sets a read-only SubAgent up from its parent's mode, once: OpenCode answers nothing
+// while it runs (its "ask" is refused), so readonlySubagentAnswer cannot be asked per request. Under an Auto or Bypass
+// parent the child runs in that mode with its edit tools and its own subagents denied, as a read-only Claude child goes
+// without its edit tools; under any other it keeps plan mode (subagentChildJob). Any other claim is left as it is.
+func openCodeReadonlyFollowsParent(child *ClaimedSession) {
+	if allowed, decided := readonlySubagentAnswer(child, "Bash"); !decided || !allowed {
+		return
+	}
+	child.Agent.PermissionMode = child.readonlyParentMode()
+	child.Agent.DisallowedTools = appendUnique(child.Agent.DisallowedTools, subagentReadonlyDisallowed...)
+	child.Agent.DisallowedTools = appendUnique(child.Agent.DisallowedTools, "Task")
 }

@@ -3,22 +3,124 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
+
+func TestMemoryWatchdogProtectsOrbitHelpers(t *testing.T) {
+	// The test binary stands in for Orbit. Launch both helpers through an
+	// alternate path to exercise executable identity, regardless of argv.
+	helper := filepath.Join(t.TempDir(), "orbit-alias")
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(self, helper); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	engine := exec.CommandContext(ctx, "/bin/sh", "-c", `
+		"$1" -test.run='^TestMemoryWatchdogHelperProcess$' -- mcp &
+		"$1" -test.run='^TestMemoryWatchdogHelperProcess$' -- guide &
+		/bin/sleep 30 &
+		wait
+	`, "engine", helper)
+	engine.Env = append(os.Environ(), "ORBIT_TEST_MEMORY_HELPER=1")
+	engine.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	stdout, err := engine.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = syscall.Kill(-engine.Process.Pid, syscall.SIGKILL)
+		_ = engine.Wait()
+	}()
+	ready := bufio.NewReader(stdout)
+	for range 2 {
+		if _, err := ready.ReadString('\n'); err != nil {
+			t.Fatalf("helper did not start: %v", err)
+		}
+	}
+	processes := readMemoryProcesses()
+	root := processes[engine.Process.Pid]
+	baseline := readOOMScore("/proc/" + strconv.Itoa(root.pid))
+	var helpers []memoryProcessID
+	var tool memoryProcessID
+	for _, p := range processes {
+		if p.ppid != root.pid {
+			continue
+		}
+		if p.name == "sleep" {
+			tool = p.memoryProcessID
+		} else {
+			helpers = append(helpers, p.memoryProcessID)
+			// A previous tool can exec Orbit without changing its PID.
+			p.rss = 500 << 20
+			processes[p.pid] = p
+		}
+	}
+	if len(helpers) != 2 || tool.pid == 0 || baseline == "" || baseline == "1000" {
+		t.Fatalf("helpers=%v tool=%v inherited score=%q", helpers, tool, baseline)
+	}
+	var victims []memoryProcessID
+	w := &memoryWatchdog{
+		readMemory: func() (uint64, uint64, bool) { return 1 << 30, 0, true },
+		processes:  func() map[int]memoryProcess { return processes },
+		raiseScore: raiseToolOOMScore,
+		kill: func(id memoryProcessID) bool {
+			victims = append(victims, id)
+			return true
+		},
+		notify: func(string, string) {},
+		roots:  map[memoryProcessID]memoryRoot{root.memoryProcessID: {session: "session"}},
+		raised: make(map[memoryProcessID]bool),
+		tools:  map[memoryProcessID]memoryGroup{helpers[0]: {"session", helpers[0]}},
+	}
+	w.sample(time.Now())
+	if !reflect.DeepEqual(w.raised, map[memoryProcessID]bool{tool: true}) || !reflect.DeepEqual(victims, []memoryProcessID{tool}) {
+		t.Fatalf("raised=%v victims=%v, want only tool %v", w.raised, victims, tool)
+	}
+	if got := readOOMScore("/proc/" + strconv.Itoa(tool.pid)); got != "1000" {
+		t.Errorf("tool score=%q, want 1000", got)
+	}
+	for _, id := range helpers {
+		if raiseToolOOMScore(id) || killMemoryProcess(id) {
+			t.Errorf("direct OOM action succeeded on helper %d", id.pid)
+		}
+		if got := readOOMScore("/proc/" + strconv.Itoa(id.pid)); got != baseline {
+			t.Errorf("helper %d score=%q, want inherited %q", id.pid, got, baseline)
+		}
+	}
+}
+
+func TestMemoryWatchdogHelperProcess(t *testing.T) {
+	if os.Getenv("ORBIT_TEST_MEMORY_HELPER") != "1" {
+		return
+	}
+	_, _ = io.WriteString(os.Stdout, "ready\n")
+	time.Sleep(30 * time.Second)
+}
 
 func TestMemoryWatchdogKillsLargestToolGroup(t *testing.T) {
 	const mib = 1 << 20
 	processes := map[int]memoryProcess{}
 	add := func(pid, parent, group int, rss uint64, name string) memoryProcessID {
 		id := memoryProcessID{pid, 1}
-		processes[pid] = memoryProcess{id, parent, group, rss * mib, name}
+		processes[pid] = memoryProcess{memoryProcessID: id, ppid: parent, pgid: group, rss: rss * mib, name: name}
 		return id
 	}
 	add(1, 0, 1, 350, "orbit")

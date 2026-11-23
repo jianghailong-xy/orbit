@@ -100,7 +100,7 @@ public enum SessionWorkspaceMove {
     public static let pollInterval: TimeInterval = 1
 
     /// Move the session: end it first when `endingFirst` (End and Move), wait until its run is over,
-    /// then move it. `status` reads the session's run status as the server has it now.
+    /// then move it. `session` reads the current server snapshot on each look.
     ///
     /// An end the server refuses with a 409 is a session already ending or ended — the end request
     /// only takes a live one — so the wait goes on from there. Anything else stops the move with why.
@@ -108,7 +108,7 @@ public enum SessionWorkspaceMove {
     /// timeout, and a session still not ended by then is not moved.
     public static func run(endingFirst: Bool,
                            end: () async throws -> Void,
-                           status: () async throws -> RunStatus,
+                           session: () async throws -> Session,
                            move: () async throws -> Void,
                            phase: (Phase) async -> Void = { _ in },
                            sleep: (TimeInterval) async -> Void = SessionWorkspaceMove.sleep,
@@ -124,7 +124,7 @@ public enum SessionWorkspaceMove {
                 return .failed(SessionMoveCopy.endFailed(error))
             }
             var waited: TimeInterval = 0
-            while (try? await status())?.isTerminal != true {
+            while (try? await session())?.isReleased != true {
                 guard waited < timeout else { return .failed(SessionMoveCopy.endTimedOut) }
                 await sleep(interval)
                 waited += interval

@@ -12,6 +12,7 @@
  * lets both sides name the same interface instead of keeping two that drift.
  */
 import type { IntegrationCheckResult, IntegrationJobKind, IntegrationJobOutputCheck, IntegrationJobPhase, IntegrationJobState } from './dto';
+import type { LandingPullRequestView } from './pull-request-landing';
 import type { ProjectStartRequest, ProjectStartSettingKey, ProjectStartSettings } from './project-start';
 import type { DoneRequest } from './project-done';
 import type { OwnerCardTranslation } from './translation';
@@ -212,8 +213,11 @@ export interface ProjectIntegrationInFlight<Instant = string> {
   kind?: IntegrationJobKind;
   /** The runner's reported step; null before its first report, absent on older servers. */
   phase?: IntegrationJobPhase | null;
-  /** `RUNNING` while the runner performs the job; `QUEUED` while it waits its turn. */
-  state: 'RUNNING' | 'QUEUED';
+  /** `RUNNING` while the runner performs the job; `QUEUED` while it waits its turn; `PULL_REQUEST` while it waits for
+   *  GitHub (docs/design/protected-branch-landing.md §4.2). */
+  state: 'RUNNING' | 'QUEUED' | 'PULL_REQUEST';
+  /** With `PULL_REQUEST`: the pull request it waits on (§8). Absent from a server that predates it. */
+  pullRequest?: LandingPullRequestView | null;
   /** What "for how long" counts from: the claim for a running job, the enqueue for a queued one. */
   startedAt: Instant;
   /** Last report from the runner; absent on older servers and null before a claim. */
@@ -293,7 +297,10 @@ export const LAND_TASK_ROUNDS_PER_CLAIM = 3;
 export interface ProjectIntegrationJob<Instant = string> {
   jobId: string;
   kind: IntegrationJobKind;
-  state: 'RUNNING' | 'QUEUED';
+  /** `PULL_REQUEST`: the landing waits for GitHub (docs/design/protected-branch-landing.md §4.2); no runner holds it. */
+  state: 'RUNNING' | 'QUEUED' | 'PULL_REQUEST';
+  /** With `PULL_REQUEST`: the pull request it waits on (§8). Absent from a server that predates it. */
+  pullRequest?: LandingPullRequestView | null;
   /** The step it last reported, or the one a claim starts at; null before its first claim. */
   phase: IntegrationJobPhase | null;
   /** The task it lands; null for a promotion or a merge check, which land no single task. */
@@ -456,7 +463,9 @@ export type IntegrationJobEventKind =
   | 'STOP_REQUESTED'
   | 'CANCELLED'
   | 'ABANDONED'
-  | 'TIMED_OUT';
+  | 'TIMED_OUT'
+  // The landing's pull request (docs/design/protected-branch-landing.md §14): `data.step` is PUSHED, OPENED or MERGED.
+  | 'PULL_REQUEST';
 
 /** A line read-time derived from another row rather than stored as its own event (LS4): a rerun's
  *  requester and reason (`retry_*`), an item being handled (`handling_*`), the owner's
@@ -632,6 +641,9 @@ export interface SessionLandingView<Instant = string> {
    *  decisions. Read-only, and bounded — `truncated` says the read returned less than the subject
    *  holds. Absent on servers that predate the timeline (contract §2.9: a new field is optional). */
   timeline?: SessionLandingTimeline<Instant>;
+  /** The subject's newest pull request, open or settled (docs/design/protected-branch-landing.md §8); null when it
+   *  never needed one. Absent from a server that predates it. */
+  pullRequest?: LandingPullRequestView | null;
 }
 
 /**
@@ -869,7 +881,9 @@ export type TaskIntegrationHandler = 'COORDINATOR' | 'OWNER';
 export type LandTaskBlockingReasonCode =
   | 'CANCELLING' | 'WAITING_TASK_WORK' | 'WAITING_MAIN_SYNC' | 'WAITING_BASELINE' | 'WAITING_RUNNER'
   | 'WAITING_AUTOMATIC_RUNNER' | 'WAITING_SERIAL_SLOT' | 'WAITING_DISPATCH'
-  | 'WAITING_LOCAL_LOCK' | 'CONFLICT' | 'CHECK_FAILED' | 'ERROR';
+  | 'WAITING_LOCAL_LOCK' | 'CONFLICT' | 'CHECK_FAILED' | 'ERROR'
+  // A landing waiting on its pull request (docs/design/protected-branch-landing.md §8): the required checks, or a review.
+  | 'WAITING_FOR_CHECKS' | 'WAITING_FOR_REVIEW';
 
 /** Why any integration job — of any of the three kinds — waits or where it stopped. The shape
  *  `landTask.blockingReason` has always used, carried on `inFlightJobs` entries as well (§7.2 V6). */
@@ -884,6 +898,9 @@ export type IntegrationJobBlockingReason = LandTaskBlockingReason;
 export interface LandTaskIntegrationView<Instant = string> {
   jobId: string;
   state: IntegrationJobState;
+  /** The pull request this generation waits on or landed through (docs/design/protected-branch-landing.md §8); null
+   *  when it pushed directly. Absent from a server that predates it. */
+  pullRequest?: LandingPullRequestView | null;
   /**
    * The landing session this generation belongs to (§2.9): `project_landing.session_id`, which is
    * pre-generated when the subject opens, so it is present even before the session row is inserted
@@ -1457,6 +1474,22 @@ export interface ProjectSignInWait {
   detailLine: string;
 }
 
+/**
+ * The project's tasks held because no account that could run them can run now
+ * (docs/routing-account-health-design.md §7.5, §8 item 3), as one Needs you row: "2 tasks wait for an account" over the
+ * provider's words and when the first account is tried again. Derived on every read: empty once an account can run them.
+ */
+export interface ProjectAccountWait<Instant = string> {
+  /** The held tasks, oldest first. */
+  taskIds: string[];
+  /** "2 tasks wait for an account". */
+  title: string;
+  /** The hold's own sentence: "Waiting for an account: Cursor said "Add a payment method to continue". Next try at 21:19." */
+  detailLine: string;
+  /** The earliest end among the accounts: the hold lifts then and the held task takes the trial. */
+  until: Instant;
+}
+
 /** The project's open exceptions, split by who is expected to act (§4.8). */
 export interface ProjectOpenItemsView<Instant = string> {
   needsYou: Array<ProjectOpenItemRow<Instant>>;
@@ -1512,6 +1545,8 @@ export interface ProjectOpenItemsView<Instant = string> {
    * Absent from a server that predates it.
    */
   signIns?: ProjectSignInWait[];
+  /** The held-for-an-account Needs you row (`ProjectAccountWait`), or null when no task is held so. Absent from a server that predates it. */
+  accountWait?: ProjectAccountWait<Instant> | null;
 }
 
 /**
@@ -2141,9 +2176,7 @@ export interface SessionOwnerItem<Instant = string> {
  * close", over the "Is this project done?" card. `RECORD_AS_DONE` is a project that looks finished
  * and that its coordinator did not ask to have recorded done within the project's escalation window:
  * the row says "Record as done…". A row counting anything else (a blocked tool call, a proposal)
- * keeps the generic approval wording, and so does one counting two kinds at once. `OWNER_REQUEST`
- * is an owner request (`request_owner_action`) the conversation filed and the owner has not ended:
- * the row says "Waiting on you", over the request's card.
+ * keeps the generic approval wording, and so does one counting two kinds at once.
  */
 export type SessionWaitingKind =
   | 'OWNER_CONFIRMATION'
@@ -2151,4 +2184,76 @@ export type SessionWaitingKind =
   | 'START_REQUEST'
   | 'DONE_REQUEST'
   | 'RECORD_AS_DONE'
-  | 'OWNER_REQUEST';
+  | 'OWNER_REQUEST'
+  | 'MOVE_REQUEST';
+
+/**
+ * `OWNER_REQUEST`: everything counted is one or more open `request_owner_action` requests from this
+ * session, all of ONE kind (`ownerRequests`), and the row says that kind's word below. Requests of
+ * two kinds on one row are a mix, and the row keeps "Waiting for approval".
+ *
+ * `MOVE_REQUEST`: everything counted is PENDING task moves into or out of a project, on the session
+ * that asked for them and on the target project's coordinator (`taskMoves`). A group is one
+ * session's moves from one project into another; the row counts groups but says the moves.
+ */
+export type SessionOwnerRequestKind = 'DECISION' | 'SECRET' | 'MANUAL_STEP' | 'CONFIRM' | 'WIKI_CREATE';
+
+/** One open owner request on the session that asked it, oldest first. */
+export interface SessionOwnerRequest<Instant = string> {
+  ownerRequestId: string;
+  kind: SessionOwnerRequestKind;
+  title: string;
+  /** When it was filed. */
+  since: Instant;
+}
+
+/** One group of PENDING task moves: one session's moves out of one project into another. */
+export interface SessionTaskMoveGroup<Instant = string> {
+  requestedBySessionId: string;
+  fromProjectId: string;
+  /** null: the moves take their tasks out of every project (migration 0610). */
+  toProjectId: string | null;
+  /** How many moves are waiting in the group. Always ≥ 1. */
+  count: number;
+  /** The oldest move's request time. */
+  since: Instant;
+  /** The oldest move's title. */
+  title: string;
+  /** The waiting crossings, oldest first. */
+  handoffIds: string[];
+}
+
+/** The row's word for an open owner request of one kind. */
+export const OWNER_REQUEST_ROW_WORDS: Readonly<Record<SessionOwnerRequestKind, string>> = {
+  DECISION: 'Decision for you',
+  SECRET: 'Key needed',
+  MANUAL_STEP: 'Steps for you',
+  CONFIRM: 'Confirm for you',
+  // An agent asking for a wiki (4424f65ed): the card's own action, "Create wiki".
+  WIKI_CREATE: 'Create wiki',
+};
+
+/** The row's word for `moves` waiting task moves. */
+export function taskMovesRowWord(moves: number): string {
+  return moves === 1 ? 'Approve task move' : `Approve ${moves} task moves`;
+}
+
+/**
+ * The row's word for the two request kinds, or null when `waitingKind` is neither (or the lists
+ * it needs are missing, from an older control plane): the caller then says what it said before.
+ */
+export function ownerRequestRowWord(row: {
+  waitingKind?: SessionWaitingKind | null;
+  ownerRequests?: ReadonlyArray<{ kind: SessionOwnerRequestKind }>;
+  taskMoves?: ReadonlyArray<{ count: number }>;
+}): string | null {
+  if (row.waitingKind === 'OWNER_REQUEST') {
+    const kind = row.ownerRequests?.[0]?.kind;
+    return kind ? OWNER_REQUEST_ROW_WORDS[kind] : null;
+  }
+  if (row.waitingKind === 'MOVE_REQUEST') {
+    const moves = (row.taskMoves ?? []).reduce((sum, group) => sum + group.count, 0);
+    return moves > 0 ? taskMovesRowWord(moves) : null;
+  }
+  return null;
+}

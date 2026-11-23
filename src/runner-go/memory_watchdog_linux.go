@@ -17,6 +17,12 @@ import (
 )
 
 const memoryWatchdogCooldown = 10 * time.Second
+const memoryWatchdogBaselineEnv = "ORBIT_TOOL_OOM_BASELINE"
+
+var orbitMemoryExecutable = sync.OnceValue(func() os.FileInfo {
+	info, _ := os.Stat("/proc/self/exe")
+	return info
+})
 
 type memoryProcessID struct {
 	pid   int
@@ -28,6 +34,7 @@ type memoryProcess struct {
 	ppid, pgid int
 	rss        uint64
 	name       string
+	protected  bool
 }
 
 type memoryRoot struct {
@@ -46,6 +53,7 @@ type memoryWatchdog struct {
 	raiseScore func(memoryProcessID) bool
 	kill       func(memoryProcessID) bool
 	notify     func(session, message string)
+	baseline   string
 
 	mu    sync.Mutex
 	roots map[memoryProcessID]memoryRoot
@@ -70,8 +78,9 @@ func startMemoryWatchdog(ctx context.Context, managed bool) func() {
 	w := &memoryWatchdog{
 		readMemory: read, processes: readMemoryProcesses,
 		raiseScore: raiseToolOOMScore, kill: killMemoryProcess, notify: notifyMemoryWatchdogKill,
-		roots:  make(map[memoryProcessID]memoryRoot),
-		raised: make(map[memoryProcessID]bool),
+		baseline: readOOMScore("/proc/self"),
+		roots:    make(map[memoryProcessID]memoryRoot),
+		raised:   make(map[memoryProcessID]bool),
 	}
 	activeMemoryWatchdog.Store(w)
 	ctx, cancel := context.WithCancel(ctx)
@@ -94,6 +103,28 @@ func startMemoryWatchdog(ctx context.Context, managed bool) func() {
 		cancel()
 		<-done
 	}
+}
+
+func readOOMScore(dir string) string {
+	score, _ := os.ReadFile(filepath.Join(dir, "oom_score_adj"))
+	return strings.TrimSpace(string(score))
+}
+
+func memoryWatchdogChildEnv(env []string) []string {
+	if w := activeMemoryWatchdog.Load(); w != nil && w.baseline != "" {
+		return envWithValue(env, memoryWatchdogBaselineEnv, w.baseline)
+	}
+	return env
+}
+
+// An Orbit helper may be started through a tool shell that was already scored.
+// Restore the runner's baseline before serving requests or spawning children.
+func restoreOrbitOOMScore() {
+	baseline := os.Getenv(memoryWatchdogBaselineEnv)
+	if baseline == "" || baseline == "1000" || readOOMScore("/proc/self") != "1000" {
+		return
+	}
+	_ = os.WriteFile("/proc/self/oom_score_adj", []byte(baseline), 0)
 }
 
 // trackMemoryRoots registers daemon-started processes before their caller begins waiting on them.
@@ -149,7 +180,11 @@ func (w *memoryWatchdog) sample(now time.Time) {
 		visited[p.pid] = true
 		parent := processes[p.ppid]
 		var group memoryGroup
-		if root, ok := roots[p.pid]; ok {
+		if p.protected {
+			// A helper may have the same PGID as a tool, or have exec'd
+			// under a PID which belonged to a tool in the last sample.
+			return group
+		} else if root, ok := roots[p.pid]; ok {
 			if root.tool {
 				group = memoryGroup{root.session, p.memoryProcessID}
 			}
@@ -159,7 +194,7 @@ func (w *memoryWatchdog) sample(now time.Time) {
 			// Descendants can share the engine's PGID. In that case each direct
 			// child and its subtree form a separate tool, without the engine.
 			leader := p
-			if sibling := processes[p.pgid]; sibling.pid > 0 && sibling.ppid == p.ppid && sibling.pgid != parent.pgid {
+			if sibling := processes[p.pgid]; sibling.pid > 0 && !sibling.protected && sibling.ppid == p.ppid && sibling.pgid != parent.pgid {
 				if _, protected := roots[sibling.pid]; !protected {
 					leader = sibling
 				}
@@ -244,6 +279,7 @@ func readMemoryProcesses() map[int]memoryProcess {
 		pid, err := strconv.Atoi(entry.Name())
 		if err == nil {
 			if p, ok := readMemoryProcess("/proc/"+entry.Name(), pid); ok {
+				p.protected = protectedMemoryExecutable("/proc/" + entry.Name())
 				processes[pid] = p
 			}
 		}
@@ -278,6 +314,13 @@ func readMemoryProcess(dir string, pid int) (memoryProcess, bool) {
 	}, true
 }
 
+func protectedMemoryExecutable(dir string) bool {
+	exe, err := os.Stat(filepath.Join(dir, "exe"))
+	self := orbitMemoryExecutable()
+	// Without an executable identity we cannot safely score or signal it.
+	return err != nil || self == nil || os.SameFile(exe, self)
+}
+
 func raiseToolOOMScore(id memoryProcessID) bool {
 	// Open the proc directory first so a recycled PID cannot receive our write.
 	dir, err := os.Open("/proc/" + strconv.Itoa(id.pid))
@@ -286,7 +329,7 @@ func raiseToolOOMScore(id memoryProcessID) bool {
 	}
 	defer dir.Close()
 	path := "/proc/self/fd/" + strconv.FormatUint(uint64(dir.Fd()), 10)
-	if p, ok := readMemoryProcess(path, id.pid); !ok || p.memoryProcessID != id {
+	if p, ok := readMemoryProcess(path, id.pid); !ok || p.memoryProcessID != id || protectedMemoryExecutable(path) {
 		return false
 	}
 	return os.WriteFile(filepath.Join(path, "oom_score_adj"), []byte("1000"), 0) == nil
@@ -300,7 +343,8 @@ func killMemoryProcess(id memoryProcessID) bool {
 		return false
 	}
 	defer unix.Close(fd)
-	if p, ok := readMemoryProcess("/proc/"+strconv.Itoa(id.pid), id.pid); !ok || p.memoryProcessID != id {
+	path := "/proc/" + strconv.Itoa(id.pid)
+	if p, ok := readMemoryProcess(path, id.pid); !ok || p.memoryProcessID != id || protectedMemoryExecutable(path) {
 		return false
 	}
 	return unix.PidfdSendSignal(fd, unix.SIGKILL, nil, 0) == nil

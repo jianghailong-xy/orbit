@@ -26,6 +26,7 @@ import {
   type PromotionBlockedReason,
   type PromotionSourceKind,
   type PromotionState,
+  type LandingPullRequestView,
 } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
@@ -65,6 +66,8 @@ import {
   type RunnerWait,
   readProjectLandTaskViews,
 } from './project-task-integration';
+import { IN_FLIGHT_JOB_STATES, IN_FLIGHT_JOB_STATES_SQL } from './in-flight-job-states';
+import { pullRequestBlockingCode, pullRequestViewOf, pullRequestWaitSummary } from './pull-request-landing';
 
 // SR36 and §1.1's repository condition live beside their SQL spellings, in the landing module; they
 // are served from here too, where the line's readers have always found them.
@@ -228,7 +231,7 @@ export async function readProjectListBindings(
       projectId: true,
       // An observation is not an integration attempt (§10.6, A-Q23): it is not counted here.
       _count: { select: { integrationJobs: {
-        where: { state: { in: ['QUEUED', 'RUNNING'] }, kind: { not: 'OBSERVE_LANDING' } },
+        where: { state: { in: [...IN_FLIGHT_JOB_STATES] }, kind: { not: 'OBSERVE_LANDING' } },
       } } },
     },
   });
@@ -575,6 +578,16 @@ interface InFlightJobRow extends IntegrationCheckSource {
   ownerId: string;
   id: string;
   state: string;
+  /** The pull request a PULL_REQUEST job waits on (docs/design/protected-branch-landing.md §8). */
+  prNumber?: number | null;
+  prUrl?: string | null;
+  prState?: string | null;
+  prCondition?: string | null;
+  prChecks?: unknown;
+  prMergeMethod?: string | null;
+  prMergedSha?: string | null;
+  prRefusal?: unknown;
+  prWorkspaceId?: string | null;
   kind: IntegrationJobKind;
   phase: IntegrationJobPhase | null;
   generation: number;
@@ -770,6 +783,14 @@ function queueFacts(row: InFlightJobRow, blocker: Partial<QueueBlockingFacts> = 
 /** One row as both the view's `inFlight` and its `inFlightJobs` entry state it. */
 function inFlightJobOf(row: InFlightJobRow, typicalMs: Map<string, number>): ProjectIntegrationJob<Date> {
   const running = row.state === 'RUNNING';
+  // §4.2: a job waiting on its pull request holds no runner and has no lease: never timed out, never silent.
+  const pullRequest = row.state === 'PULL_REQUEST' && row.prState
+    ? pullRequestViewOf({
+      number: row.prNumber ?? null, url: row.prUrl ?? null, state: row.prState, condition: row.prCondition ?? null,
+      checks: row.prChecks, mergeMethod: row.prMergeMethod ?? null, mergedSha: row.prMergedSha ?? null,
+      refusal: row.prRefusal ?? null, workspaceId: row.prWorkspaceId ?? null,
+    })
+    : null;
   const limitSeconds = integrationJobLimitSeconds(row);
   const timedOut = limitSeconds !== null && !row.behindAnotherOnRunner
     && (row.silentSeconds ?? 0) > limitSeconds;
@@ -779,7 +800,8 @@ function inFlightJobOf(row: InFlightJobRow, typicalMs: Map<string, number>): Pro
   return {
     jobId: row.id,
     kind: row.kind,
-    state: running ? 'RUNNING' : 'QUEUED',
+    state: running ? 'RUNNING' : row.state === 'PULL_REQUEST' ? 'PULL_REQUEST' : 'QUEUED',
+    ...(row.state === 'PULL_REQUEST' ? { pullRequest } : {}),
     landingSessionId: row.landingSessionId ?? null,
     phase: row.phase,
     taskId: row.taskId,
@@ -801,7 +823,7 @@ function inFlightJobOf(row: InFlightJobRow, typicalMs: Map<string, number>): Pro
     outputMovedAt: running ? row.outputMovedAt : null,
     typicalMs: (check?.name === 'MERGE_CHECK' || check?.name === 'LANDING_CHECK') ? typicalMs.get(row.projectId) ?? null : null,
     liveness: livenessOf(row, timedOut),
-    blockingReason: blockingReasonOf(row),
+    blockingReason: row.state === 'PULL_REQUEST' ? pullRequestBlockingReason(pullRequest, row.upstreamRef) : blockingReasonOf(row),
     retryable: timedOut && row.kind === 'LAND_TASK',
     skippable: row.taskId !== null && inFlightSkipRefusal({
       kind: row.kind,
@@ -820,6 +842,13 @@ function inFlightJobOf(row: InFlightJobRow, typicalMs: Map<string, number>): Pro
   };
 }
 
+/** Why a job waiting on its pull request waits (§8): the required checks or a review, in one sentence. */
+function pullRequestBlockingReason(pullRequest: LandingPullRequestView | null, upstreamRef: string | null): IntegrationJobBlockingReason {
+  const code = pullRequestBlockingCode(pullRequest?.condition ?? null);
+  const mainBranch = upstreamRef ? upstreamRef.replace(/^refs\/heads\//, '') : null;
+  return { code, summary: pullRequestWaitSummary(code, pullRequest, mainBranch) };
+}
+
 /** The oldest job of a project, as the project's line states it — the same fields the view's
  *  `inFlight` carries, so a list row and the page cannot describe one job differently. */
 function inFlightOf(job: ProjectIntegrationJob<Date>): ProjectIntegrationInFlight<Date> {
@@ -829,6 +858,7 @@ function inFlightOf(job: ProjectIntegrationJob<Date>): ProjectIntegrationInFligh
     kind: job.kind,
     phase: job.phase,
     state: job.state,
+    ...(job.state === 'PULL_REQUEST' ? { pullRequest: job.pullRequest ?? null } : {}),
     startedAt: job.startedAt,
     heartbeatAt: job.heartbeatAt,
     waitMs: claimedWaitMs(job),
@@ -1013,12 +1043,18 @@ async function readInFlightJobsForProjects(
            running_block."jobId" AS "serialBlockJobId", running_block."ownerId" AS "serialBlockOwnerId",
            running_block."kind" AS "serialBlockKind", running_block."taskTitle" AS "serialBlockTaskTitle",
            landing."session_id" AS "landingSessionId",
+           -- docs/design/protected-branch-landing.md §8: the pull request a PULL_REQUEST job waits on.
+           pr."number" AS "prNumber", pr."url" AS "prUrl", pr."state" AS "prState", pr."condition" AS "prCondition",
+           pr."checks" AS "prChecks", pr."merge_method" AS "prMergeMethod", pr."merged_sha" AS "prMergedSha",
+           pr."refusal" AS "prRefusal",
+           pr."workspace_id"::text AS "prWorkspaceId",
            lock_holder."jobId" AS "lockHolderJobId", lock_holder."ownerId" AS "lockHolderOwnerId",
            lock_holder."kind" AS "lockHolderKind", lock_holder."taskTitle" AS "lockHolderTaskTitle",
            lock_holder."projectTitle" AS "lockHolderProjectTitle"
       FROM "project_integration_job" j
       JOIN "project_codebase" cb ON cb."id" = j."codebase_id"
       LEFT JOIN "project_landing" landing ON landing."id" = j."landing_id"
+      LEFT JOIN "github_pull_request" pr ON pr."id" = j."pull_request_id"
       LEFT JOIN "task" t ON t."id" = j."task_id"
       LEFT JOIN "session" s ON s."id" = j."session_id"
       LEFT JOIN "task" st ON st."id" = s."task_id"
@@ -1052,7 +1088,7 @@ async function readInFlightJobsForProjects(
       LEFT JOIN LATERAL (
         SELECT f."id" AS "jobId", i."id" AS "openItemId", i."owner_id" AS "ownerId",
                ft."title" AS "taskTitle",
-               CASE WHEN handling."id" IS NOT NULL AND handling."state" IN ('QUEUED', 'RUNNING')
+               CASE WHEN handling."id" IS NOT NULL AND handling."state" IN ${IN_FLIGHT_JOB_STATES_SQL}
                     THEN handling."generation" END AS "handlingGeneration"
           FROM "project_open_item" i
           JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
@@ -1108,7 +1144,7 @@ async function readInFlightJobsForProjects(
          ORDER BY (o."step" IS NOT DISTINCT FROM 'WAITING_LOCAL_LOCK'), o."claimed_at", o."id" LIMIT 1
       ) lock_holder ON true
      WHERE j."project_id" IN (${ids})
-       AND j."state" IN ('RUNNING', 'QUEUED')
+       AND j."state" IN ${IN_FLIGHT_JOB_STATES_SQL}
        ${observations === 'EXCLUDE' ? Prisma.sql`AND j."kind" <> 'OBSERVE_LANDING'` : Prisma.empty}
        ${jobId ? Prisma.sql`AND j."id" = ${jobId}::uuid` : Prisma.empty}
      ORDER BY j."project_id" ASC,
@@ -1207,7 +1243,7 @@ export async function readProjectPromotionIntegrationViews(
         FROM "project_integration_job" j
        WHERE j."project_id" = ${projectId}::uuid
          AND j."promotion_id" IS NOT NULL
-         AND j."state" IN ('QUEUED', 'RUNNING')
+         AND j."state" IN ${IN_FLIGHT_JOB_STATES_SQL}
     ),
     last_merged AS (
       SELECT p."id"
@@ -1546,6 +1582,31 @@ export async function stopInFlightJob(
       return { outcome: 'CANCELLED', errorCode: null };
     }
     // It was claimed between the read and the write: fall through and ask that claim to stop.
+  } else if (job.state === 'PULL_REQUEST') {
+    // docs/design/protected-branch-landing.md §4.2 J-T18: a landing waiting on its pull request holds no runner, so
+    // the stop ends it on the spot. Nothing reached the target. The pull request stays open for the subject's next
+    // attempt, which pushes the same landing branch; the door merges no pull request nobody waits on.
+    const ended = await tx.projectIntegrationJob.updateMany({
+      where: { id: input.jobId, state: 'PULL_REQUEST' },
+      data: { state: 'CANCELLED', cancelRequestedAt: input.now, finishedAt: input.now },
+    });
+    if (ended.count === 1) {
+      await appendIntegrationJobEvent(tx, {
+        jobId: input.jobId,
+        key: 'cancelled',
+        kind: 'CANCELLED',
+        claim: job.claim ?? 0,
+        round: job.round ?? null,
+        phase: job.phase,
+        actor: input.actor ?? { type: 'PLATFORM' },
+        reason: input.reason ?? null,
+        data: { cause: input.cause ?? 'STOP', state: 'CANCELLED', pullRequestOpen: true },
+        text: 'Stopped · cancelled while its pull request waited; the pull request stays open',
+        at: input.now,
+      });
+      return { outcome: 'CANCELLED', errorCode: null };
+    }
+    return { outcome: 'NONE', errorCode: null };
   } else if (job.timedOut) {
     const errorCode = await endTimedOutLanding(tx, job, input.cause ?? 'STOP');
     if (errorCode !== null) {

@@ -34,7 +34,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.orbitd.android.BuildConfig
 import io.orbitd.android.R
-import io.orbitd.android.core.cards.TerminalsApi
 import io.orbitd.android.core.promptoptimizer.PromptOptimizer
 import io.orbitd.android.core.promptoptimizer.PromptOptimizerCopy
 import io.orbitd.android.core.translation.Translation
@@ -51,16 +50,16 @@ import kotlinx.serialization.json.*
 @Composable
 fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: (OrbitRoute) -> Unit, back: () -> Unit,
     logout: () -> Unit, changed: () -> Unit, workspaceDeleted: () -> Unit, deviceAlerts: () -> Boolean?,
-    notifications: @Composable () -> Unit, about: @Composable () -> Unit, terminalsChanged: Long = 0L) {
+    notifications: @Composable () -> Unit, about: @Composable () -> Unit) {
     // An `orbit-settings:` link names the row it opened Settings for (route.recordId): its page scrolls to it and flashes it.
     CompositionLocalProvider(LocalSettingsAnchor provides route.recordId) { SettingsPages(api, route, revision, open, back, logout, changed,
-        workspaceDeleted, deviceAlerts, notifications, about, terminalsChanged) }
+        workspaceDeleted, deviceAlerts, notifications, about) }
 }
 
 @Composable
 private fun SettingsPages(api: ManagementApi, route: OrbitRoute, revision: Long, open: (OrbitRoute) -> Unit, back: () -> Unit,
     logout: () -> Unit, changed: () -> Unit, workspaceDeleted: () -> Unit, deviceAlerts: () -> Boolean?,
-    notifications: @Composable () -> Unit, about: @Composable () -> Unit, terminalsChanged: Long) {
+    notifications: @Composable () -> Unit, about: @Composable () -> Unit) {
     when (route.id) {
         "profile" -> EditProfile(api, revision, back)
         "account" -> ProfileSettingsPage(api, revision, open)
@@ -73,7 +72,9 @@ private fun SettingsPages(api: ManagementApi, route: OrbitRoute, revision: Long,
         "sharing" -> SharingSettings(api, revision, open)
         "github" -> GithubSettingsPage(remember(api) { ManagementGithub(api) }, revision)
         "access-tokens" -> AccessTokensSettings(api, revision)
-        "terminals" -> TerminalsSettings(api, revision, terminalsChanged)
+        // The account-wide Terminals page is gone (docs/mocks/terminals-on-machine-page): each machine's page lists its own, so an old
+        // route to it opens Machines & models.
+        "terminals" -> MachinesAndModelsSettings(api, revision, null, open, back)
         "share" -> route.recordId?.split(':', limit = 2)?.takeIf { it.size == 2 }?.let { (kind, id) -> ShareResourceSettings(api, revision, kind, id) }
         "admin" -> AdminSettings(api, revision, route.recordId, open, back)
         "notifications" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -87,7 +88,7 @@ private fun SettingsPages(api: ManagementApi, route: OrbitRoute, revision: Long,
             about()
             TextButton(onClick = { open(OrbitRoute(Destination.BUILD)) }) { Text("Build information") }
         }
-        else -> SettingsHome(api, revision, open, logout, deviceAlerts, terminalsChanged)
+        else -> SettingsHome(api, revision, open, logout, deviceAlerts)
     }
 }
 
@@ -103,7 +104,7 @@ fun settingsTitle(page: String?, record: String? = null): String = when (page) {
     } ?: MachinesAndModels.TITLE
     "machines" -> MachinesAndModels.MACHINES; "providers" -> SETTINGS_PROVIDERS
     "sessions" -> GENERAL; "workspace" -> "Workspace settings"; "sharing" -> "Shared links"; "access-tokens" -> AccessTokens.TITLE
-    "terminals" -> Terminals.TITLE; "github" -> GithubCopy.TITLE; "admin" -> "Admin"; "notifications" -> "Notifications"; "about" -> "About"; else -> "Settings"
+    "terminals" -> MachinesAndModels.TITLE; "github" -> GithubCopy.TITLE; "admin" -> "Admin"; "notifications" -> "Notifications"; "about" -> "About"; else -> "Settings"
 }
 
 /** SettingsHome.runnersValue: "3 of 4 online" — how many of the account's machines can take work right now. */
@@ -195,7 +196,7 @@ private fun rememberPreferenceWrite(api: ManagementApi, record: PersonalRecord):
  * only: its updates) and Sign out: iOS's Settings list (docs/mocks/ios-settings-web-groups, 1A 2A 3A). */
 @Composable
 private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) -> Unit, logout: () -> Unit,
-    deviceAlerts: () -> Boolean?, terminalsChanged: Long) {
+    deviceAlerts: () -> Boolean?) {
     val record = remember(api) { PersonalRecord { api.get("users/me") } }
     PersonalRecordLifecycle(record, revision)
     val preference = rememberPreferenceWrite(api, record)
@@ -208,9 +209,9 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
     // Read with the machines: a machine with no coding CLI signed in needs you unless a workspace there runs on a key.
     var workspaces by remember(api) { mutableStateOf<List<JsonObject>>(emptyList()) }
     val machinesAndModels = remember(api) { MachinesAndModelsModel(api) }
+    val terminalRequests = rememberLiveTerminalRequests(remember(api) { TerminalRequestStore.of(api) })
     var sharedLinks by remember(api) { mutableStateOf<String?>(null) }
     var accessTokens by remember(api) { mutableStateOf<String?>(null) }
-    var terminals by remember(api) { mutableStateOf<String?>(null) }
     var alerts by remember { mutableStateOf(deviceAlerts()) }
     var signingOut by remember { mutableStateOf(false) }
     var resumed by remember { mutableIntStateOf(0) }
@@ -241,11 +242,6 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             try { accessTokens = settingsAccessTokensValue(AccessTokens.tokens(accessTokenList(api.get("access-tokens")), AccessTokens.Tab.ACTIVE).size) }
             catch (e: CancellationException) { throw e } catch (_: Exception) { }
         }
-    }
-    // A terminal approved or revoked anywhere moves this row's count, and nothing else on the page.
-    LaunchedEffect(api, revision, resumed, terminalsChanged) {
-        try { terminals = Terminals.settingsValue(TerminalsApi(api.session, api.handle).list().size) }
-        catch (e: CancellationException) { throw e } catch (_: Exception) { }
     }
     fun page(id: String) = open(OrbitRoute(Destination.SETTINGS, id))
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -285,7 +281,6 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             SettingsLink(SETTINGS_PROFILE, R.drawable.ic_person) { page("account") }
             SettingsLink("Shared links", R.drawable.ic_link, sharedLinks) { page("sharing") }
             SettingsLink(AccessTokens.TITLE, R.drawable.ic_key, accessTokens) { page("access-tokens") }
-            SettingsLink(Terminals.TITLE, R.drawable.ic_terminal, terminals) { page("terminals") }
         }
         // Integrations → GitHub, between Personal and Machines as the web's settings nav groups it (docs/github-workspace-design.md §8).
         SettingsGroup(GithubCopy.INTEGRATIONS, footer = GithubCopy.GITHUB_ROW_HINT) {
@@ -294,7 +289,9 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
         // No header over either: each group's one row says its name (SettingsHome.header). What needs a person is said in amber.
         val now = System.currentTimeMillis()
         SettingsGroup(null) {
-            val needsYou = runners?.let { machinesAndModels.attention(it, workspaces, now).count { item -> item.isMachine } } ?: 0
+            // Terminals asking to be approved count with the machines (docs/mocks/waiting-on-you-removal/02 ①); there is no Settings ›
+            // Terminals row: each machine's page lists its own (docs/mocks/terminals-on-machine-page).
+            val needsYou = runners?.let { machinesAndModels.attention(it, workspaces, now).count { item -> item.isMachine } + terminalRequests.size } ?: 0
             SettingsLink(MachinesAndModels.MACHINES, R.drawable.ic_runner, runners?.let { MachinesAndModels.settingsValue(needsYou, it) },
                 valueColor = if (needsYou > 0) Ink.amber else null) { page("machines") }
         }

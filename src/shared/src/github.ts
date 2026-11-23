@@ -17,6 +17,13 @@ export interface GithubAppSettings {
   callbackUrl: string;
   connectedUsers: number;
   clonedWorkspaces: number;
+  /** What to enter as the App's webhook URL on GitHub (docs/design/protected-branch-landing.md §8). Absent from a server
+   *  that predates it. */
+  webhookUrl?: string;
+  /** A webhook secret is saved; it is never read back. */
+  webhookSecretSaved?: boolean;
+  /** When GitHub's last delivery arrived. */
+  lastDeliveryAt?: string | null;
 }
 
 /** `PUT /admin/integrations/github`. A secret or key left out keeps the saved one. */
@@ -26,6 +33,8 @@ export interface GithubAppChange {
   clientId: string;
   clientSecret?: string;
   privateKey?: string;
+  /** The webhook secret; left out, the saved one stays. */
+  webhookSecret?: string;
 }
 
 export interface GithubInstallation {

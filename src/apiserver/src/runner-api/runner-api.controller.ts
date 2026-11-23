@@ -3,7 +3,10 @@ import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from
 import { DRAIN_SKIPS_HELD, translationLanguages, turnTranslationOf } from '../sessions/turn-translation';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
-import { BG_OWNER_STOP_V1, BROWSER_CLEAR_V1, BROWSER_OPEN_V1, type BackgroundJobStopCommand, CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
+import { AccountHealthService, makeTrialDue } from '../providers/account-health.service';
+import { runFailureColumns } from './run-failure-columns';
+import { BG_OWNER_STOP_V1, BROWSER_CLEAR_V1, BROWSER_OPEN_V1, type BackgroundJobStopCommand, CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery, SESSION_MERGE_PULL_REQUEST_CAPABILITY, PUSH_AS_ME_CAPABILITY } from '@orbit/shared';
+import { recordSessionMergePullRequest, storedBypassedRules } from '../projects/pull-request-landing';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
 import { ConditionsService } from '../conditions/conditions.service';
 import { GithubWorkspaceService } from '../github/github-workspace.service';
@@ -61,7 +64,7 @@ import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-
 import { latestAgentToolsReport } from './agent-tools-report';
 import { reportsCodexSandboxUnavailable } from './codex-sandbox-report';
 import { withActiveSessions } from '../providers/active-sessions';
-import { accountAfterSignOut, accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount, waitsForWarmCache } from '../providers/plan-usage-accounts';
+import { accountAfterSignOut, accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, changedPlans, runAccount, waitsForWarmCache } from '../providers/plan-usage-accounts';
 import {
   ACCOUNT_MOVE_CAPABILITY,
   CLAUDE_ACCOUNT_MOVE_V1,
@@ -107,6 +110,8 @@ import {
   IntegrationJobResultResponse,
   isUsageLimitErrorText,
   parseQuotaResetAt,
+  RunFailureKind,
+  runFailureIs,
   usageLimitResetsAt,
   workflowLaunchReceipt,
   delegateLaunchReceipt,
@@ -292,7 +297,8 @@ import { backgroundJobStopsFor } from './background-job-stops';
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
-import { followWikiDocsAfterReceipts, followWikiDocsAfterSessionMerge } from '../wiki/wiki-docs-follow';
+import { followWikiDocsAfterSessionMerge } from '../wiki/wiki-docs-follow';
+import { deliverIntegrationAftermath } from './integration-aftermath';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
 import { appendWikiChatNotes } from '../wiki/wiki-chat-notes';
 import { appendScheduleChangeNote } from '../schedules/schedule-change-conversation';
@@ -305,6 +311,8 @@ import { enqueueForDoneTask, settleDeliveredIdentityAfterFinish } from '../proje
 import { queueLandingObservationAfterCommit } from '../projects/landing-observation';
 import { settleTaskSegmentAfterReceipt } from '../projects/landing-session';
 import { ProjectFuseService } from '../projects/project-fuse.service';
+import { PullRequestDoorService } from '../github/pull-request-door.service';
+import { PushAsMeService } from '../github/push-as-me.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { CoordinatorFactQueueService } from '../projects/coordinator-fact-queue.service';
@@ -1804,6 +1812,12 @@ export class RunnerApiController {
     /** The browser switch, said on every reclaim as on a claim (browserClaimFields); absent in hand-built specs: off. */
     @Optional() @Inject(MANAGED_RUNNER_BROWSER_GATE) private readonly browserGate?: ManagedRunnerBrowserGate,
     @Optional() private readonly coordinatorFacts?: CoordinatorFactQueueService,
+    /** Account health (docs/routing-account-health-design.md §6.3): told of every run's end; absent in hand-built specs. */
+    @Optional() private readonly accountHealth?: AccountHealthService,
+    /** docs/design/protected-branch-landing.md §4: the pull request door a landing waiting on GitHub is handed to. */
+    @Optional() private readonly pullRequestDoor?: PullRequestDoorService,
+    /** Push as me's outcomes on the workspace (docs/design/protected-branch-landing.md §5.5). */
+    @Optional() private readonly pushAsMe?: PushAsMeService,
     /**
      * The managed runner runtime, for the profile a managed runner's concurrency ceiling is read from
      * (managed-runners/managed-runner-concurrency.ts). `@Optional()` like the rest: without it no ceiling is applied.
@@ -1916,6 +1930,16 @@ export class RunnerApiController {
       runnerToken: session.runnerToken,
       name: session.name,
     };
+  }
+
+  /**
+   * The replacement of §7.3 (docs/routing-account-health-design.md) for a run that ended FAILED: TasksService decides
+   * whether its account refused it at admission and, within the bound, dispatches the task again. Never awaited by the
+   * runner's request, and never in its way: a failure is logged.
+   */
+  private replaceRefusedRun(sessionId: string): void {
+    void this.tasks?.replaceRefusedRun(sessionId).catch((error) =>
+      this.logger.warn(`refused run ${sessionId} not replaced: ${(error as Error)?.message ?? error}`));
   }
 
   /** Insert a device session, regenerating the short code on the rare collision. */
@@ -2197,7 +2221,7 @@ export class RunnerApiController {
         ? (await this.prisma.runner.findUnique({ where: { id: runnerId }, select: { repoHealth: true } }))?.repoHealth
         : undefined;
       try {
-        await writeLinkBeatReports(this.prisma, {
+        const written = await writeLinkBeatReports(this.prisma, {
           runnerId,
           leaseOwner,
           dto,
@@ -2207,6 +2231,10 @@ export class RunnerApiController {
           storedPlanUsage: row.planUsage,
           now: new Date(),
         });
+        // The plan usage it overwrote was read with the beat (planUsageRead): a plan that changed makes trials due.
+        if (written.planUsageStored && row.planUsageRead && verdict.reports.includes('planUsage')) {
+          await this.makePlanChangeTrialsDue(runnerId, admission.ownerId, row.planUsage, dto?.planUsage);
+        }
         if (reposChanged) {
           for (const workspaceId of workspacesWithChangedRepoHealth(priorRepoHealth, sanitizeRunnerRepoHealth(dto.repos) ?? [])) {
             this.realtime.publishWorkspaceRepoHealthChanged(admission.ownerId, workspaceId);
@@ -2264,6 +2292,39 @@ export class RunnerApiController {
    * presence row, so this does neither again; it leaves the runner row as it is when nothing written there changed
    * (only its own record of the beat, when that is due); and it records what it covered (recordLinkReconcile).
    */
+  /**
+   * The plan usage stored for `runnerId` before a heartbeat overwrites it, while the runner has a blocked account
+   * (account_health); undefined otherwise, when no plan change could make a trial due, and when the read fails: the
+   * heartbeat is never in its way.
+   */
+  private async planUsageUnderBlock(runnerId: string): Promise<unknown> {
+    try {
+      const blocked = await this.prisma.accountHealth.findFirst({
+        where: { runnerId, clearedAt: null, state: 'BLOCKED' }, select: { id: true },
+      });
+      if (!blocked) return undefined;
+      return (await this.prisma.runner.findUnique({ where: { id: runnerId }, select: { planUsage: true } }))?.planUsage ?? null;
+    } catch (error) {
+      this.logger.warn(`runner ${runnerId}: plan usage before this heartbeat not read: ${(error as Error)?.message ?? error}`);
+      return undefined;
+    }
+  }
+
+  /**
+   * §6.3 of docs/routing-account-health-design.md: a usage reading whose plan differs from the last one may be the
+   * owner's fix for a block on that account (changedPlans), so its trial is due now, as after a fresh sign-in. The
+   * ladder is kept. Never in the heartbeat's way: a failure is logged.
+   */
+  private async makePlanChangeTrialsDue(runnerId: string, ownerId: string, before: unknown, after: unknown): Promise<void> {
+    try {
+      for (const { engine, account } of changedPlans(before, after)) {
+        await makeTrialDue(this.prisma, ownerId, { runnerId, engine, account });
+      }
+    } catch (error) {
+      this.logger.warn(`runner ${runnerId}: trials not made due after a plan change: ${(error as Error)?.message ?? error}`);
+    }
+  }
+
   private async reconcileHeartbeat(
     runner: { id: string; version: string | null; lastHeartbeatAt?: Date | null },
     dto: RunnerHeartbeatRequest,
@@ -2325,6 +2386,16 @@ export class RunnerApiController {
             })
           )?.engines,
         )
+      : null;
+    // §6.3 of docs/routing-account-health-design.md: an engine newly signed in may be the fix for a block on it, so its
+    // trial is due now. The engines as they stood before this beat, read only while this runner has a blocked account
+    // and the beat reports an engine signed in: one indexed read otherwise.
+    const ownerOfRunner = (runner as { ownerId?: string }).ownerId;
+    const healthPriorEngines = ownerOfRunner && signIns?.some((e) => e.installed && e.auth === 'yes')
+      && (await this.prisma.accountHealth.findFirst({
+        where: { runnerId: runner.id, clearedAt: null, state: 'BLOCKED' }, select: { id: true },
+      }))
+      ? priorEngines ?? signInsOf((await this.prisma.runner.findUnique({ where: { id: runner.id }, select: { engines: true } }))?.engines)
       : null;
     // The beat is two writes, in this order: the runner row — what this heartbeat reports, and the
     // runner's own record of its beats once that is RUNNER_DURABLE_BEAT_EVERY_MS old — then its
@@ -2500,10 +2571,15 @@ export class RunnerApiController {
     const planUsageUnchanged = !!linkBeat && !!storedFacts && storedFacts.planUsage === linkBeat.digests.facts.planUsage;
     if (dto?.planUsage != null && !planUsageUnchanged) {
       planUsageStored = false;
+      // What it overwrites, for a plan that changed (makePlanChangeTrialsDue): read only while this runner has a
+      // blocked account, one indexed read otherwise.
+      const planUsageBefore = ownerOfRunner ? await this.planUsageUnderBlock(runner.id) : undefined;
       try {
         planUsageStored = await storeHeartbeatPlanUsage(this.prisma, runner.id, dto.planUsage, heartbeatLeaseOwner);
         if (!planUsageStored) {
           this.logger.warn(`runner ${runner.id}: planUsage not stored after ${PLAN_USAGE_CAS_ATTEMPTS} compare-and-set attempts; the next heartbeat reports it again`);
+        } else if (planUsageBefore !== undefined) {
+          await this.makePlanChangeTrialsDue(runner.id, ownerOfRunner!, planUsageBefore, dto.planUsage);
         }
       } catch (error) {
         // Advisory telemetry, like the live diffs below: never fail the heartbeat for it.
@@ -2609,6 +2685,14 @@ export class RunnerApiController {
         // that attempt ends, so its probe reads `no` mid-sign-in — not news to whoever is signing in.
         if (current.engine === 'antigravity' && antigravitySignInUnderWay(updated)) continue;
         void this.push.notifyEngineSignedOut(runner.id, current.engine);
+      }
+    }
+    if (healthPriorEngines && ownerOfRunner) {
+      for (const current of signIns ?? []) {
+        if (!current.installed || current.auth !== 'yes') continue;
+        if (healthPriorEngines.find((was) => was.engine === current.engine)?.auth === 'yes') continue;
+        await makeTrialDue(this.prisma, ownerOfRunner, { runnerId: runner.id, engine: current.engine }).catch((error) =>
+          this.logger.warn(`runner ${runner.id}: trials not made due after ${current.engine} signed in: ${(error as Error)?.message ?? error}`));
       }
     }
     // A finished install stops being news the moment the probe confirms it: clear the slot so the
@@ -2851,6 +2935,21 @@ export class RunnerApiController {
         // clean up minutes later — the successor process claims these instead.
         if (!draining) {
           mergeRequests = await this.realtime.drainMergeRequests(runner.id, heartbeatLeaseOwner);
+          // docs/design/protected-branch-landing.md §4.6: how each Merge reaches a protected target, for a runner that
+          // can land one through a pull request. A failure costs only the fallback: the merge goes out as before.
+          if (this.pullRequestDoor && mergeRequests.length > 0) {
+            const drained = mergeRequests;
+            mergeRequests = await this.pullRequestDoor
+              .withMergeLanding(
+                drained,
+                runnerSupportsCapability(capabilities, SESSION_MERGE_PULL_REQUEST_CAPABILITY),
+                runnerSupportsCapability(capabilities, PUSH_AS_ME_CAPABILITY),
+              )
+              .catch((error) => {
+                this.logger.warn(`runner ${runner.id}: merge landing modes not read (${(error as Error)?.message})`);
+                return drained;
+              });
+          }
           commitRequests = await this.realtime.drainCommitRequests(
             runner.id,
             heartbeatLeaseOwner,
@@ -2863,8 +2962,9 @@ export class RunnerApiController {
       const removeRequest = await this.drainAccountRemoveRequest(runner.id);
       // Codex rides the field a control plane older than accounts-per-engine reads; every other
       // engine names itself. An old runner handed the generic field would remove a path under its
-      // own codex-accounts that never existed and report done.
-      if (removeRequest?.engine === 'codex' || removeRequest === undefined) {
+      // own codex-accounts that never existed and report done. A sign-out of Default always names its
+      // engine: only a runner that reads the engine-named field declares it.
+      if ((removeRequest?.engine === 'codex' && removeRequest.action !== 'sign-out') || removeRequest === undefined) {
         // The codex-named field keeps the shape it always had: an older runner reads only account and
         // attempt, and the engine it is about is the field's own name. `moves` rides along for a runner
         // that carries sessions with no engine running (runner-go account_cold_move.go); an older one
@@ -3189,6 +3289,8 @@ export class RunnerApiController {
       throw integrationJobHttpError(error);
     }
     await this.afterIntegrationResult(applied.after, applied.answer.openItemId);
+    // docs/design/protected-branch-landing.md §5.5: a Push as me landing's outcome stays on its workspace.
+    if (applied.answer.accepted) await this.pushAsMe?.afterJobResult(jobId);
     return applied.answer;
   }
 
@@ -3197,45 +3299,17 @@ export class RunnerApiController {
     after: Awaited<ReturnType<IntegrationJobRelay['applyResult']>>['after'],
     openItemId: string | null,
   ): Promise<void> {
-    if (after) {
-      if (after.considerPromotionProjectId) {
-        // M-F1 / M-F4, after the commit and from the committed rows: "the queue is empty" is only
-        // true of rows that landed, and this job's own is one of them. The service logs and swallows
-        // its own failures — a candidate not made now is made by the next landing.
-        //
-        // BEFORE the facts below, and that order is the closing guardrail's (D5): the merge into
-        // the upstream this queues is work still in flight, and a settled project whose last
-        // landing has just finished must be read with it queued. Read a moment earlier, the project
-        // looks finished while its work is about to go to the upstream — the gap a judgment once
-        // filed a needless "merge into main" task in (`project-looks-finished.ts`).
-        await this.promotions?.considerCandidate(after.considerPromotionProjectId);
-      }
-      // J10: the receipt is the fact the tasks downstream were waiting for, and the item is what
-      // somebody has to look at. Both are announcements of rows that are already committed, so a
-      // failure here is logged and never raised — the runner's result was taken either way.
-      await this.mergeReceipts
-        ?.deliverProjectFactsAfterCommit(after.projectId, after.landedTaskIds ?? after.landedTaskId, {
-          observed: after.observed === true,
-          // §7.6 V12: a LANDED_WITHOUT_CONFIRMATION this result opened — O-R3 of an observation, the
-          // deploy-time pass's one item per project, or a check that saw the work on main (O-L6).
-          ownerItemIds: after.ownerItemIds,
-        })
-        .catch((error) => this.logger.warn(`integration landing facts not delivered: ${(error as Error)?.message}`));
-      // A landing into main — a task's on a MAIN line, or a project's promotion — is a fact the wiki follows (contract
-      // `docs.follow.triggers.landing`): the receipts the result wrote, after the commit, logged and never raised.
-      if ((after.receiptIds?.length ?? 0) > 0) await followWikiDocsAfterReceipts(this.prisma, after.receiptIds ?? []);
-      if (after.openItemIds.length > 0) {
-        await this.openItems?.deliverForItems(after.openItemIds)
-          .catch((error) => this.logger.warn(`integration exception item not delivered: ${(error as Error)?.message}`));
-      }
-      // §7.6 V12 / criterion 13: the merge approval this result may have opened is one of the four
-      // things only the account owner can answer, so their devices are told. Handed the item id
-      // rather than a decision: which items reach a phone is `notifyOwnerItem`'s to decide, and the
-      // exception items opened above — still the coordinator's — answer null there and send nothing.
-      if (openItemId) {
-        void this.push.notifyOwnerItem(openItemId);
-      }
-    }
+    await deliverIntegrationAftermath({
+      prisma: this.prisma,
+      logger: this.logger,
+      promotions: this.promotions,
+      mergeReceipts: this.mergeReceipts,
+      openItems: this.openItems,
+      push: this.push,
+    }, after, openItemId);
+    // docs/design/protected-branch-landing.md §4.1 step 5: a landing that now waits on its pull request is opened
+    // on GitHub after the commit. The door logs its own failures; the re-read opens a row left OPENING (§4.7).
+    if (after?.pullRequestIds?.length) await this.pullRequestDoor?.advance(after.pullRequestIds);
   }
 
   /** The repository-operation queue, or the reason a request about one cannot be answered without it. */
@@ -3983,6 +4057,8 @@ export class RunnerApiController {
         codexAccountRemoveStatus: true,
         codexAccountRemoveAt: true,
         codexAccountRemoveSessions: true,
+        accountRemoveAction: true,
+        accountRemoveForce: true,
       },
     });
     if (r?.codexAccountRemoveStatus !== 'pending') return undefined;
@@ -4006,8 +4082,14 @@ export class RunnerApiController {
     if (!account) return undefined;
     // A row written before accounts-per-engine meant Codex.
     const engine = (r.accountRemoveEngine as LoginCommand['engine']) ?? 'codex';
+    const attempt = r.codexAccountRemoveAt?.toISOString() ?? '';
+    // A sign-out of Default (RunnersService.signOutDefault) moves no session: the runner refuses while
+    // any runs on Default, or signs out under them when the person forced it.
+    if (r.accountRemoveAction === 'sign-out') {
+      return { engine, account, action: 'sign-out', attempt, ...(r.accountRemoveForce ? { force: true } : {}) };
+    }
     const moves = moving ? await this.accountRemoveMoves(runnerId, engine, account, r.codexAccountRemoveSessions ?? []) : [];
-    return { engine, account, attempt: r.codexAccountRemoveAt?.toISOString() ?? '', ...(moves.length > 0 ? { moves } : {}) };
+    return { engine, account, attempt, ...(moves.length > 0 ? { moves } : {}) };
   }
 
   /**
@@ -4106,11 +4188,17 @@ export class RunnerApiController {
       ...(body.account ? { codexAccountRemoveAccount: body.account } : {}),
       ...(attempt ? { codexAccountRemoveAt: attempt } : {}),
     };
+    // A sign-out of Default (RunnersService.signOutDefault) leaves the account where it is: its sessions
+    // are not moved off it — the refusal lists them, and the person decides — and its Orbit name stays.
+    const row = await this.prisma.runner.findFirst({
+      where: asked,
+      select: { codexAccountRemoveAccount: true, accountRemoveAction: true },
+    });
+    const signOut = row?.accountRemoveAction === 'sign-out';
     // Sessions in the account do not keep it: each moves to another of the runner's accounts, and the
     // removal stays pending — redelivered every heartbeat — until the last has left (an idle one at its
     // reload, a running one after its turn). Only those that cannot leave refuse it.
-    if (sessionIds.length > 0 && this.sessions && isAccountEngine(engine)) {
-      const row = await this.prisma.runner.findFirst({ where: asked, select: { codexAccountRemoveAccount: true } });
+    if (sessionIds.length > 0 && this.sessions && isAccountEngine(engine) && !signOut) {
       if (row?.codexAccountRemoveAccount) {
         const stuck = await this.sessions.moveOffRemovedAccount(runnerId, engine, row.codexAccountRemoveAccount, sessionIds);
         if (stuck.length === 0) {
@@ -4137,7 +4225,7 @@ export class RunnerApiController {
     // The name the account was given in Orbit goes with it (RunnersService.renameAccount), and so does
     // its mark as a former Default: nothing would show them again, and a slot added later under the
     // same id must not inherit them.
-    if (count > 0 && status === 'done' && body.account) {
+    if (count > 0 && status === 'done' && body.account && !signOut) {
       await this.prisma.$executeRaw`
         UPDATE "runner"
            SET "account_names" = "account_names" #- ARRAY[${engine}::text, ${body.account}::text]
@@ -7891,7 +7979,7 @@ export class RunnerApiController {
         && completedTurn?.kind === 'message'
         && current.retryAt == null
         && usageLimitEngine
-        && isUsageLimitErrorText(failureText)
+        && runFailureIs({ failureKind: dto.failure?.kind, error: failureText }, [RunFailureKind.USAGE_LIMIT])
           ? await this.usageLimitRetry(tx, runner.id, usageLimitEngine, current, failureText!)
           : null;
       const filed = current.completedAt != null || current.archivedAt != null || current.deletedAt != null;
@@ -8322,6 +8410,9 @@ export class RunnerApiController {
                 // reporting the engine's words, which for this shape are nothing: the runtime
                 // released the turn without a reply. Its own sentence follows when it gave one.
                 error: (acceptanceFailureReason ?? (swallowed ? swallowedMessageError(failureText) : failureText)) || 'run failed',
+                // What the engine adapter classified the failure as, beside the error it wrote (design §5.1). An
+                // acceptance failure is the server's own verdict on the work, not the engine's: no kind.
+                ...runFailureColumns(acceptanceFailureReason ? {} : dto, true),
                 cancelRequestedAt: new Date(),
                 // Released for the turn that failed (design §4.2), in the statement that writes FAILED. FAILED is
                 // where this session stops being live, so whatever it had running goes with it
@@ -8643,6 +8734,18 @@ export class RunnerApiController {
     // runs the coordinator replacement, which the runner — blocked on this reply — must not wait for,
     // so it is settled off the response path. Any other turn of the session is a read that finds
     // no WRITING handoff and stops.
+    // What the turn's end says of the account it spent (§6.3): a failure to the rules, a completed turn as the account
+    // working. After the commit, awaited so the next dispatch reads it; it logs its own failure.
+    if (finalized.applied && !finalized.steer && 'failSession' in finalized) {
+      await this.accountHealth?.afterRunEnd(sessionId, {
+        failed: finalized.failSession === true,
+        turnCompleted: !finalized.failSession,
+        until: dto.failure?.until ?? null,
+      });
+      // A task run its account refused at admission is replaced at once (§7.3), off the response path: the runner is
+      // blocked on this reply, and the replacement is a whole dispatch.
+      if (finalized.failSession === true) this.replaceRefusedRun(sessionId);
+    }
     if (finalized.applied && !finalized.steer && this.coordinatorHandoffs) {
       void this.coordinatorHandoffs.afterTurn(sessionId, dto.turnId, dto.status).catch((error) => this.logger.warn(
         `coordinator handoff after turn ${dto.turnId} of ${sessionId} failed: `
@@ -10365,8 +10468,10 @@ export class RunnerApiController {
       // an overwrite: an ingestion-armed retry already knows more than the terminal message does.
       // A failure its turn report already settled arms nothing and records nothing more here.
       const failedRun = effectiveStatus === RunStatus.FAILED && !failureReported;
+      // The failure's kind: the runner's, else the legacy markers of its error (runFailureIs).
+      const failure = { failureKind: dto.failure?.kind, error: dto.error };
       const quotaSpent =
-        failedRun && current.retryAt == null && isUsageLimitErrorText(dto.error);
+        failedRun && current.retryAt == null && runFailureIs(failure, [RunFailureKind.USAGE_LIMIT]);
       // A run that ended because its account refused the sign-in, on the runner's own login for its
       // engine. Most often the runner's check before it starts the engine (engineAuthPreflight) finds
       // the account signed out and ends the run with the message it took undelivered. Moved below.
@@ -10374,7 +10479,8 @@ export class RunnerApiController {
         failedRun
         && current.retryAt == null
         && !quotaSpent
-        && isAuthErrorText(dto.error)
+        // Without a kind, the runtime's "Failed to authenticate" alone, as this path always read it (isAuthErrorText).
+        && runFailureIs(failure, [RunFailureKind.CREDENTIAL_REFUSED], { credential: 'authenticate' })
         && isAccountEngine(current.provider)
         && isBuiltinProvider(current.provider, current.providerBuiltin)
         && (recordedEngine(current.engine) ?? current.provider) === current.provider
@@ -10460,6 +10566,9 @@ export class RunnerApiController {
           status: effectiveStatus,
           result: dto.result,
           error: dto.error,
+          // The runner's classification of the failure it ends with, in the statement that writes `error` (design §5.1).
+          // A failed turn's report already wrote its own, which this release keeps.
+          ...(failureReported ? {} : runFailureColumns(dto, failedRun)),
           // `claudeSessionId` is a legacy alias older runners still send; both name the same
           // id, so it only serves as a fallback here and is never persisted on its own.
           runtimeSessionId: dto.runtimeSessionId ?? dto.claudeSessionId ?? undefined,
@@ -10662,6 +10771,10 @@ export class RunnerApiController {
       return {
         finalized: true,
         effectiveStatus,
+        // Whether the release was a failure, for account health and the replacement after the commit (§6.3, §7.3): a
+        // failed turn's release too (a reported failed turn always releases FAILED), whose turn report recorded the
+        // failure while the session was still live.
+        releasedFailed: failedRun || failureReported,
         keepCheckout,
         retryAt,
         taskReclaimed,
@@ -10694,6 +10807,14 @@ export class RunnerApiController {
       return { ok: true, keepCheckout: outcome.keepCheckout };
     }
     if (!outcome.finalized) return { ok: true, keepCheckout: outcome.keepCheckout };
+    // What the run's end says of the account it spent (§6.3), now that its release and its failure kind are committed:
+    // awaited, so the next dispatch reads it, and never in the way: it logs its own failure.
+    // Idempotent per session, so a failed turn's report having told it already changes nothing.
+    const releasedFailed = 'releasedFailed' in outcome && outcome.releasedFailed === true;
+    await this.accountHealth?.afterRunEnd(sessionId, { failed: releasedFailed, until: dto.failure?.until ?? null });
+    // A task run its account refused at admission is replaced at once (§7.3), off the response path: here once the
+    // release has freed the task, which a failed turn's report may not have yet.
+    if (releasedFailed) this.replaceRefusedRun(sessionId);
     // The one-shot wakeups this finalize dropped with its FAILED session, no retry armed: their owner is
     // told, once, now that the drop has committed (contract §4).
     signalDrainedWakeups(this.push, this.logger, outcome.droppedWakeups ?? []);
@@ -11097,7 +11218,8 @@ export class RunnerApiController {
       dto?.status !== 'merged' &&
       dto?.status !== 'conflict' &&
       dto?.status !== 'error' &&
-      dto?.status !== 'released'
+      dto?.status !== 'released' &&
+      dto?.status !== 'pull_request'
     ) {
       throw new BadRequestException('invalid merge result status');
     }
@@ -11135,6 +11257,9 @@ export class RunnerApiController {
     // The landed merge this request recorded, which the wiki follows after the commit (contract
     // `docs.follow.triggers.merge`). Keyed by session, so a retried closure overwrites rather than accumulates.
     const landedMerges = new Map<string, { sessionId: string; sourceSha: string; targetBranch: string }>();
+    // docs/design/protected-branch-landing.md §4.6: the pull request a `pull_request` result left this Merge waiting
+    // on, for the door to open after the commit. Reset by every attempt of the closure.
+    let waitingPullRequestId: string | null = null;
     // Retried whole. The worktree-op claim is re-read under its row lock inside the closure, so a
     // re-run either still owns the operation it is reporting on or finds it reclaimed — the same
     // two outcomes a first attempt has.
@@ -11155,6 +11280,7 @@ export class RunnerApiController {
           mergeRecoveryAction: string | null;
           mergeRecovery: unknown;
           mergeRequestedBy: string | null;
+          mergeOwnerTokenFor: string | null;
         }>
       >`
         SELECT status, "finished_at" AS "finishedAt", "inbox_lease_owner" AS "inboxLeaseOwner",
@@ -11166,7 +11292,8 @@ export class RunnerApiController {
                "merge_checkpoint_id" AS "mergeCheckpointId",
                "merge_recovery_action" AS "mergeRecoveryAction",
                "merge_recovery" AS "mergeRecovery",
-               "merge_requested_by" AS "mergeRequestedBy"
+               "merge_requested_by" AS "mergeRequestedBy",
+               "merge_owner_token_for" AS "mergeOwnerTokenFor"
         FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runner.id}::uuid
         FOR UPDATE
@@ -11200,6 +11327,11 @@ export class RunnerApiController {
           where: { id: sessionId },
           data: { mergeOperationOwner: null },
         });
+        return;
+      }
+      waitingPullRequestId = null;
+      if (dto.status === 'pull_request') {
+        waitingPullRequestId = await recordSessionMergePullRequest(tx, { sessionId, current, dto, modern: modernAttempt });
         return;
       }
       const approved = readMergeRecovery(current.mergeRecovery);
@@ -11350,6 +11482,11 @@ export class RunnerApiController {
               taskId: current.taskId,
               commitSha: sourceSha,
             })),
+          // docs/design/protected-branch-landing.md §5.2: pushed with the owner's own token, as the credential door
+          // answered it for this very operation — never on the runner's word alone.
+          ...(merged && dto.pushedAs === 'OWNER' && operationId && current.mergeOwnerTokenFor === operationId
+            ? { pushedAs: { pushedAs: 'OWNER' as const, bypassedRules: storedBypassedRules(dto.bypassedRules) } }
+            : {}),
         });
         if (task?.projectId) openedOwnerItems.set(task.projectId, written.ownerItemIds);
         if (receiptResult === 'MERGED' || receiptResult === 'ALREADY_MERGED') {
@@ -11387,6 +11524,10 @@ export class RunnerApiController {
         .catch((error) => this.logger.warn(
           `landing settlement after merge-result failed: ${(error as Error)?.message ?? error}`));
     }
+    // §4.6 step 3: the Merge waits on its pull request, which the door opens on GitHub now that the row committed.
+    if (waitingPullRequestId) await this.pullRequestDoor?.advance([waitingPullRequestId]);
+    // §5.5: a Push as me Merge's outcome stays on its workspace.
+    if (!released) await this.pushAsMe?.afterMergeResult(sessionId, dto);
     // The checkout is free again. A message the user sent while this merge executed is
     // parked PENDING behind the claim fence (see trySessionClaim); re-drive the queue so it
     // gets a slot now instead of on the next ≤5s poll. Not on `released`: the operation is

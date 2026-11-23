@@ -235,6 +235,21 @@ export const sessionFinishedTheWork = (session: SessionStateSource): boolean =>
     ((session.sessionKind ?? '') === 'LANDING' && !session.endReason));
 
 /**
+ * Whether phase RUNNING is a dispatched turn rather than work outside one. The server's `activity` cannot tell
+ * them apart: it answers TURN for every stored PENDING or RUNNING row and also for a parked session whose engine
+ * runs its own turn or a sub-agent. The legacy run status can: a dispatched turn is stored RUNNING, work outside a
+ * turn is stored AWAITING_INPUT (or INTERRUPTED) with an activity. This is the ONE legacy read left in this
+ * function, kept until the server sends a turn-in-flight fact. With no run status at all, an activity means
+ * work outside a turn.
+ */
+function dispatchedTurnInFlight(session: SessionStateSource): boolean {
+  const runStatus = sessionRunStatusOf(session);
+  if (runStatus === 'RUNNING' || runStatus === 'PENDING' || runStatus === 'QUEUED') return true;
+  if (runStatus === 'AWAITING_INPUT') return false;
+  return !session.activity;
+}
+
+/**
  * The run state a payload with the new fields reads as (contracts/session-state.contract.json), or null from an
  * older control plane, which keeps the legacy reading below. A release is a failure only when the last turn failed
  * and nobody asked for an end (decision D9); it finished the work only by sessionFinishedTheWork; any other release
@@ -250,7 +265,7 @@ function runStateFromPhaseFields(session: SessionStateSource): SessionRunState |
     return sessionFinishedTheWork(session) ? 'SUCCEEDED' : 'ENDED';
   }
   if (phase === 'PENDING') return 'QUEUED';
-  if (phase === 'RUNNING') return session.activity ? 'AWAITING_INPUT' : 'RUNNING';
+  if (phase === 'RUNNING') return dispatchedTurnInFlight(session) ? 'RUNNING' : 'AWAITING_INPUT';
   return outcome === 'INTERRUPTED' ? 'INTERRUPTED' : 'AWAITING_INPUT';
 }
 

@@ -1602,6 +1602,19 @@ const planUsageReadings = Object.fromEntries(
 
 /** Ids a runner-gate request carries that name nothing of an account's to reach, with why and where. */
 export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
+  // ── Push as me's credential door (docs/design/protected-branch-landing.md §5.2) ───────────────────────────
+  'POST /runner/git-credential body jobId':
+    "read only by (id, the runner's owner) and only when its source session's workspace is the named one, which is first "
+    + "read by (id, the calling runner, its owner, not deleted) (github/push-as-me.service.ts:67, :113); another account's "
+    + "job answers 403 PUSH_AS_ME_REFUSED, as an id that names nothing does, and nothing is written. pull-request-landing.pg.spec.ts "
+    + 'case 11 sends it for another runner, lease and generation',
+  'POST /runner/git-credential body sessionId':
+    "read only by (id, the runner's owner) and only when it is a session of the named workspace on the calling runner "
+    + "(github/push-as-me.service.ts:67, :136); another account's session answers 403 PUSH_AS_ME_REFUSED, as an id that names "
+    + 'nothing does, and nothing is written. pull-request-landing.pg.spec.ts case 13 sends it with another operation',
+  'POST /runner/git-credential body mergeOperationId':
+    "compared with the merge operation of a session already found as the runner owner's own (github/push-as-me.service.ts:136); "
+    + "it names nothing of its own, and one that is not that session's current operation answers 403 PUSH_AS_ME_REFUSED",
   'GET /runner/landings/:id header x-orbit-session-id':
     "the calling session is taken only as a work session of the runner's owner on this runner (sessions/sessions.service.ts:3454), "
     + 'so another account\'s session there finds nothing and the read answers 404 LANDING_NOT_THIS_SESSIONS_TASK, writing nothing; '
@@ -2164,6 +2177,12 @@ export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
   'GET /auth/google/callback':
     'Google\'s return: the state is found by its hash and must match the browser cookie the start set — '
     + 'google-login.service.ts:390',
+  'POST /integrations/github/webhook':
+    'GitHub\'s webhook deliveries (docs/design/protected-branch-landing.md §4.7): no session and no token; the credential '
+    + 'is the HMAC-SHA256 of the raw bytes under the deployment\'s saved secret, compared in constant time before '
+    + 'anything is read. It names no Orbit id: a delivery about a repository or installation no workspace was cloned '
+    + 'through is dropped, and the one row it writes is the delivery\'s own, keyed by GitHub\'s delivery id. The pull '
+    + 'requests it is about are read again from GitHub, never changed from the payload — github-webhook.ts:107, :125',
   'GET /integrations/github/callback':
     'GitHub\'s return: the flow is taken by its state\'s hash with one DELETE … RETURNING and must match the browser '
     + 'cookie /integrations/github/start set; it writes only the connection of the account that started that flow. '

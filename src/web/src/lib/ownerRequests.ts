@@ -1,16 +1,12 @@
 import { SCHEDULE_COPY, type OwnerCardTranslation } from '@orbit/shared';
 import { CONDITION_COPY } from './conditions';
-import { useEffect, useMemo, useSyncExternalStore } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { openProjectsQuery, ownerRequestsQuery } from './queries';
-import { terminalRequestsQuery } from './terminals';
-import type { SidebarProject } from './projectAttention';
+import { useEffect, useSyncExternalStore } from 'react';
 import { formatSpan, sameResourceId } from './watches';
 
 /**
  * Owner requests: what a session has asked the account owner to do (apiserver `owner-requests`).
- * The rules with no component in them: what a request says about itself, how many things are
- * waiting, and the one thing the server does not hold — a reminder for later.
+ * The rules with no component in them: what a request says about itself, and the one thing the
+ * server does not hold — a reminder for later.
  */
 
 export type OwnerRequestKind =
@@ -186,29 +182,6 @@ export function isTaskHeld(requests: readonly Pick<OwnerRequest, 'blocksTaskIds'
   return requests.some((request) => request.blocksTaskIds.some((id) => sameResourceId(id, taskId)));
 }
 
-const openQuestionCount = (project: SidebarProject): number =>
-  (project.attention?.ownerItems ?? [])
-    .filter((item) => item.kind === 'COORDINATOR_QUESTION')
-    .reduce((sum, item) => sum + item.count, 0);
-
-/** The open projects a coordinator has asked the owner something in. */
-export const projectsWithQuestions = (projects: readonly SidebarProject[]): SidebarProject[] =>
-  projects.filter((project) => openQuestionCount(project) > 0);
-
-/**
- * The navigation's count: the one inbox holds two tables' rows (coordinator questions were not moved
- * onto owner_request), and a request put off with Remind me later is not counted until it comes back.
- */
-export function waitingCount(
-  requests: readonly Pick<OwnerRequest, 'id'>[],
-  projects: readonly SidebarProject[],
-  snoozes: Readonly<Record<string, number>>,
-  now: number,
-): number {
-  const awake = requests.filter((request) => !((snoozes[request.id] ?? 0) > now)).length;
-  return awake + projects.reduce((sum, project) => sum + openQuestionCount(project), 0);
-}
-
 /* ── Chat about this ───────────────────────────────────────────────────────────────────────────────
    A request talked about rather than answered: the next send is an ordinary turn to the session that
    asked, with the request named in front of the typed words. Nothing is resolved — the card stays, and
@@ -245,8 +218,8 @@ export function resolutionTurnLabel(text: string): string | null {
 }
 
 /* ── Remind me later ──────────────────────────────────────────────────────────────────────────────
-   The server has no snooze, so a reminder belongs to this browser: it folds the card and takes the
-   request out of the count here, and changes nothing about the request itself. */
+   The server has no snooze, so a reminder belongs to this browser: it folds the card here, and
+   changes nothing about the request itself. */
 
 const SNOOZE_KEY = 'orbit:owner-request-snoozes';
 const HOUR = 3_600_000;
@@ -318,19 +291,4 @@ export function useSnoozes(): Readonly<Record<string, number>> {
     return () => clearTimeout(timer);
   }, [current]);
   return current;
-}
-
-/* ── Reads ─────────────────────────────────────────────────────────────────────────────────────── */
-
-/** The number on the navigation entry. Coordinator questions come from the read the rail already makes. */
-export function useWaitingOnYouCount(): number {
-  const requests = useQuery(ownerRequestsQuery('open'));
-  const projects = useQuery(openProjectsQuery());
-  const terminals = useQuery(terminalRequestsQuery());
-  const held = useSnoozes();
-  return useMemo(
-    () => waitingCount(requests.data?.requests ?? [], projects.data ?? [], held, Date.now())
-      + (terminals.data?.requests?.length ?? 0),
-    [requests.data, projects.data, terminals.data, held],
-  );
 }

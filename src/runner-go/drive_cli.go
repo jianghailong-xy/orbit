@@ -20,7 +20,8 @@ Use orbit drive <command> --help for details.
 `
 
 var driveCLIHelp = map[string]string{
-	"put": "Copy a file from this session's checkout or uploads directory to the drive. Overwriting keeps the previous version.",
+	"put": "Copy a file from this session's checkout or uploads directory to the drive. Overwriting keeps the previous version. " +
+		"The file is sent in 8 MiB chunks and has no size limit: file_upload's 25 MiB cap does not apply here.",
 	"get": "Download a drive file into this session's uploads directory and return its local path.",
 	"ls":  "List one page of a drive folder. With no path, list the root.",
 	"mv":  "Move or rename a drive entry. This overwrites an existing file at the destination.",
