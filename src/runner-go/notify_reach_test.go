@@ -32,7 +32,7 @@ func TestNotifyIsLoadedUpFrontAndNamedInTheInstructions(t *testing.T) {
 	for _, form := range []struct{ inside, watches, delegates bool }{
 		{false, true, true}, {true, true, true}, {false, false, true}, {true, false, false},
 	} {
-		if text := orbitCLIInstructions("/usr/local/bin/orbit", form.inside, form.watches, form.delegates); !strings.Contains(text, orbitNotifyInstructions) {
+		if text := orbitCLIInstructions("/usr/local/bin/orbit", form.inside, form.watches, form.delegates, true); !strings.Contains(text, orbitNotifyInstructions) {
 			t.Errorf("instructions %+v do not say when to notify", form)
 		}
 	}

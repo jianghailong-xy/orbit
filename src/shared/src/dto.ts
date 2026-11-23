@@ -198,6 +198,9 @@ export interface PermissionSemantics {
    * newer Claude model.
    */
   shortNote?: string;
+  /** `off` when the runtime's command sandbox is not running for this session: commands run
+   *  unconfined. Absent everywhere else, which says nothing either way. */
+  sandbox?: 'off';
 }
 
 /**

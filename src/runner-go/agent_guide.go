@@ -64,7 +64,7 @@ var guideRoutes = []guideRoute{
 	{"R1.8", "What is the state of this project, task or session?", "none", "inspect", []string{"project_get", "task_get", "task_list", "session_get"}},
 	{"R1.9", "Wait for it to finish", "watch", "wait", []string{"task_await", "session_await", "watch_create"}},
 	{"R1.10", "Remember this lesson or pitfall about a file or a pattern", "wiki", "wiki", []string{"wiki_search", "wiki_propose", "wiki_note"}},
-	{"R1.11", "Keep this file, or read one back", "file", "files", []string{"file_upload", "file_fetch", "file_list"}},
+	{"R1.11", "Keep this file, or read one back", "file", "files", []string{"file_upload", "file_fetch", "file_list", "drive_put", "drive_get", "drive_list", "drive_move", "drive_delete"}},
 	{"R1.12", "This class of work needs its own dispatch policy", "task_list", "task-list", []string{"tasklist_create", "tasklist_update"}},
 	{"R1.13", "Which agent should run this, or change an agent's defaults", "agent", "agent", []string{"agent_list", "agent_create", "agent_update"}},
 	{"R1.14", "Answer, explain, or edit code", "none", "", nil},
@@ -270,13 +270,18 @@ var guideTopics = []guideTopic{
 		Asks:   []string{"Keep this screenshot with the task."},
 		Intent: "Keep a screenshot, report or log in Orbit instead of the repository, or read one back.",
 		Steps: []guideStep{
-			{Op: "file_upload", Why: "Keep the file; it reads only this session's checkout and uploads directory."},
+			{Op: "file_upload", Why: "Keep a file from this session's checkout, uploads directory or a mounted Orbit Files drive."},
 			{Op: "file_list", Optional: true, Why: "What this task's sessions have uploaded."},
 			{Op: "file_fetch", Optional: true, Why: "Read a file back by id."},
+			{Op: "drive_put", Optional: true, Why: "Keep a local file on the owner's drive.", Example: map[string]interface{}{"localPath": "report.md", "path": "/reports/report.md"}},
+			{Op: "drive_get", Optional: true, Why: "Download a drive file into session uploads.", Example: map[string]interface{}{"path": "/reports/report.md"}},
+			{Op: "drive_list", Optional: true, Why: "List a folder on the owner's drive."},
+			{Op: "drive_move", Optional: true, Why: "Move a drive entry.", Example: map[string]interface{}{"from": "/reports/report.md", "to": "/archive/report.md"}},
+			{Op: "drive_delete", Optional: true, Why: "Move a drive entry to the owner's Trash.", Example: map[string]interface{}{"path": "/archive/report.md"}},
 		},
 		Rules: []string{
 			"A file linked in a reply reaches the user only from the working directory or this session's uploads directory: copy it there first, and keep files that do not belong in the repository out of the checkout.",
-			"Cite an uploaded file in evidence as a FILE check, by the id file_upload returned.",
+			"Cite an uploaded file in evidence as a FILE check, by the id file_upload returned. A drive path is refused as a FILE check: file_upload the drive file and cite that id.",
 		},
 		Done:    "file_upload answers the file's id, sha256, sizeBytes and an orbit-attachment: link to put in a reply.",
 		Related: []string{"finish-task"},
@@ -603,6 +608,9 @@ func (f guideFacts) topic(built *builtOperationCatalog, topic *guideTopic) guide
 		if route.Topic == topic.ID {
 			doc.Routes = append(doc.Routes, route.Route)
 		}
+	}
+	if topic.ID == "files" {
+		doc.Rules = append(append([]string{}, doc.Rules...), orbitDriveGuide())
 	}
 	for i, step := range topic.Steps {
 		op := built.ByTool[step.Op]

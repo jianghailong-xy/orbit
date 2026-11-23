@@ -398,6 +398,12 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // The wiki space a public link is rooted at (`share_link.wiki_space_id`, 0403): the space's own id,
   // the one `/wiki/spaces/:id/share` takes. An address, never a fence.
   'wikiSpaceId',
+  // The drive file a public link is rooted at (`share_link.drive_entry_id`, 1340): the entry's own id,
+  // the one `POST /share-links` takes with kind DRIVE_FILE. An address, never a fence.
+  'driveEntryId',
+  // The version of that file the link is pinned to (`share_link.drive_version_id`): an address read back out of the
+  // link's own row, never a fence.
+  'driveVersionId',
   // Owner Ratification's durable decision, reusable authority and two-phase action ledgers. These
   // all name rows a caller can inspect or hand back; whether the named authority is still valid is
   // decided by the database from its immutable scope, not by preserving UUID spelling.
@@ -718,6 +724,23 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // reference with no foreign key). Addresses a reader follows — never a fence: a press is decided on the card's row.
   'draftId',
   'replacesId',
+  // An Orbit Files drive write not committed yet (migration 1283, docs/orbit-files-drive-technical-design.md §1.1): the
+  // upload or handle a chunk row belongs to, which the upload and door routes address. Never a fence.
+  'stagingId',
+  // The drive's name layer (migration 1327, docs/orbit-files-drive-technical-design.md §1.1): an entry's current version,
+  // the Trash group holding an entry or a version, and who last wrote an entry, made a version or deleted into a group
+  // (the session and the runner, §3.6). Addresses the owner's routes answer and accept. Never a fence.
+  'currentVersionId',
+  'trashGroupId',
+  'lastWriterSessionId',
+  'lastWriterRunnerId',
+  'writerSessionId',
+  'writerRunnerId',
+  'actorRunnerId',
+  // A file a rename onto an existing file removed (migration 1438, §3.2): the entry its handle's first later commit made
+  // in Trash (`drive_removed_entry.successor_id`), read by id and checked. An entry's address like `entryId`, with no
+  // foreign key on purpose, so it may name a file since purged. Never a fence.
+  'successorId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner

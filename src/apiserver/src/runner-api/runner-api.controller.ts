@@ -58,6 +58,7 @@ import { CreatorType, Prisma, RunStatus, TaskStatus, type Runner } from '@prisma
 import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
 import { latestAgentToolsReport } from './agent-tools-report';
+import { reportsCodexSandboxUnavailable } from './codex-sandbox-report';
 import { withActiveSessions } from '../providers/active-sessions';
 import { accountAfterSignOut, accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount, waitsForWarmCache } from '../providers/plan-usage-accounts';
 import {
@@ -711,6 +712,7 @@ const INGEST_SESSION_SELECT = {
   // Same one-shot-per-run reason as runtimeSessionId: the stamp ingestEvents takes is only taken
   // while this is still null, and the row is held FOR UPDATE across that decision.
   engineStartedAt: true,
+  codexSandboxUnavailable: true,
   enginePhase: true,
   // Which task this run executes and which door created it — read only when a user turn in
   // this batch is the one that delivers the task's brief (`readTurnCards`).
@@ -738,8 +740,8 @@ interface IngestOutcome {
   /** The batch's events not stored because their seq holds another event, and the door they came by. */
   seqConflicts: RunEventSeqConflict[];
   door: RunEventDoor;
-  /** This batch stamped Session.engineStartedAt: the run left its starting state. */
-  engineStarted: boolean;
+  /** This batch changed the session's starting state or permission semantics. */
+  sessionUpdated: boolean;
 }
 /**
  * A merged link call's own transaction, as each of its batches' ingest runs inside it (ingestLinkEventCall): the
@@ -941,6 +943,7 @@ const INGESTED_SESSION_COLUMNS: Record<string, { column: string; type: 'text' | 
   lastTurnAt: { column: 'last_turn_at', type: 'timestamp' },
   runtimeSessionId: { column: 'runtime_session_id', type: 'text' },
   engineStartedAt: { column: 'engine_started_at', type: 'timestamp' },
+  codexSandboxUnavailable: { column: 'codex_sandbox_unavailable', type: 'boolean' },
   lastAssistantText: { column: 'last_assistant_text', type: 'text' },
   lastToolUse: { column: 'last_tool_use', type: 'text' },
   contextTokens: { column: 'context_tokens', type: 'integer' },
@@ -9144,7 +9147,7 @@ export class RunnerApiController {
         // finds its seqs stored, and is announced again (restated).
         const told = this.realtime.sendNotices(committed.ingested.flatMap(({ batch, outcome }) => (
           isHeld(outcome.session)
-            ? this.realtime.batchNotices(batch.sessionId, outcome.events.filter((e) => !isNoiseSystemEvent(e)), outcome.engineStarted, outcome.restated)
+            ? this.realtime.batchNotices(batch.sessionId, outcome.events.filter((e) => !isNoiseSystemEvent(e)), outcome.sessionUpdated, outcome.restated)
             : []
         ))).then(() => null, (error: unknown) => error);
         for (const { batch, outcome, coordinator } of committed.ingested) {
@@ -9690,6 +9693,9 @@ export class RunnerApiController {
           : {}),
         ...retry,
       });
+      // A new Codex process can repeat the notice. Only the first report changes the session.
+      const sandboxReportChanged = !session.codexSandboxUnavailable && reportsCodexSandboxUnavailable(durable);
+      if (sandboxReportChanged) sessionData.codexSandboxUnavailable = true;
 
       const toolUses = events.filter((e) => e.type === RunEventType.TOOL_USE);
 
@@ -10017,7 +10023,7 @@ export class RunnerApiController {
       return {
         session, currentWorkAcknowledged, abandonedApprovals: [...abandonedApprovals, ...jobCardsCollected],
         accountReload, events, durable, alreadyStored: stored.size,
-        restated, seqConflicts, door: link ? 'link' : 'https', engineStarted,
+        restated, seqConflicts, door: link ? 'link' : 'https', sessionUpdated: engineStarted || sandboxReportChanged,
       };
     };
     return ingest.call(this);
@@ -10079,16 +10085,13 @@ export class RunnerApiController {
       // call tells them itself (ingestLinkEventCall), so only this replica is left. Alone, the batch is
       // answered once they have heard: a notice that could not be sent fails the answer once the rest is
       // announced, and the batch sent again finds its seqs stored and announces them again (restated).
-      // A batch that ended the starting state is followed by a session_updated: the clients read that
-      // state off the session row, and no event the engine sends re-reads it (controlTypeFor), so the
-      // "Getting the session ready" notice stayed up over the engine's tool calls until a list's
-      // one-minute safety read.
+      // Refresh clients that read the starting state and permission semantics from the session row.
       const published = events.filter((e) => !isNoiseSystemEvent(e));
-      if (merged) this.realtime.publishBatchHere(sessionId, published, eventOutcome.engineStarted, eventOutcome.restated);
+      if (merged) this.realtime.publishBatchHere(sessionId, published, eventOutcome.sessionUpdated, eventOutcome.restated);
       else {
         told = (async () => {
           try {
-            await this.realtime.publishBatch(sessionId, published, eventOutcome.engineStarted, eventOutcome.restated);
+            await this.realtime.publishBatch(sessionId, published, eventOutcome.sessionUpdated, eventOutcome.restated);
             return null;
           } catch (error) {
             return error;

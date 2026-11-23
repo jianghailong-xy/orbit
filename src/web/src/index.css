@@ -7659,7 +7659,8 @@ button.toast--pill:focus-visible {
   white-space: nowrap;
 }
 .composer-chip--list,
-.composer-chip--task {
+.composer-chip--task,
+.composer-chip--drive {
   background: color-mix(in srgb, var(--brand) 10%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 38%, transparent);
   color: var(--brand);
