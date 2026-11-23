@@ -6,7 +6,7 @@ import { toolInputPreview } from './tool-input-preview';
  * The cards the Feishu bot sends its owner (docs/feishu-bot-design.md §6.1, §6.2, §6.4), as Feishu card JSON 2.0.
  * Pure: an alert and the app's settings in, the card out. Sending, collapsing and updating are the transport's.
  *
- * WHAT A CARD CARRIES IS THE POINT (§6.4). A card is stored on Feishu's servers, so in the default TITLES_ONLY mode
+ * WHAT A CARD CARRIES IS THE POINT (§6.4). A card is stored on Feishu's servers, so in TITLES_ONLY mode (FULL is the default)
  * it carries the session's or project's title, the kind of event, a tool's name, and who started a session the owner did
  * not (`startedByLine`), and nothing else: no tool
  * input, recap, failure reason, `notify` text, owner item body or question. FULL adds the third column of §6.1.

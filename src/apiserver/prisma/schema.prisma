@@ -10133,8 +10133,8 @@ model FeishuApp {
   appSecretEnc       String     @map("app_secret_enc")
   /// The app's own switch: off, Orbit neither connects it nor sends through it.
   enabled            Boolean    @default(true)
-  /// `TITLES_ONLY` | `FULL`: what an alert card carries (§6.4).
-  messageDetail      String     @default("TITLES_ONLY") @map("message_detail")
+  /// `TITLES_ONLY` | `FULL`: what an alert card carries (§6.4). FULL by default since 1491.
+  messageDetail      String     @default("FULL") @map("message_detail")
   /// Whether tool approvals can be answered on the owner's cards (§7.2).
   approvalsInFeishu  Boolean    @default(true) @map("approvals_in_feishu")
   /// Where a session started in the owner's direct messages opens (§7.3).
