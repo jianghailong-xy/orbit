@@ -800,7 +800,7 @@ class VolumeFilesystems:
         return result.stdout.strip()
 
     def prepare(self):
-        for tool in ("mkfs.ext4", "mount", "umount", "findmnt", "losetup"):
+        for tool in ("mkfs.ext4", "mount", "umount", "losetup"):
             if not shutil.which(tool):
                 raise ValueError(f"volumeFilesystemRoot needs {tool} on the channel host")
         self.root.mkdir(mode=0o700, exist_ok=True)
@@ -837,9 +837,11 @@ class VolumeFilesystems:
         mount.mkdir(mode=0o700, exist_ok=True)
         if not mount.is_mount():
             self.run("mount", "-t", "ext4", "-o", "loop,nosuid,nodev", str(image), str(mount))
-        source = self.run("findmnt", "-n", "-o", "SOURCE", "--mountpoint", str(mount))
-        loops = self.run("losetup", "-j", str(image), "-n", "-O", "NAME").splitlines()
-        if source not in loops:
+        # Inspect the visible mount's device. A recreated channel may have more than one
+        # mountinfo entry at this path when a parent and child are both bind-mounted.
+        device = mount.stat().st_dev
+        loops = self.run("losetup", "-j", str(image), "-n", "-O", "MAJ:MIN").split()
+        if f"{os.major(device)}:{os.minor(device)}" not in loops:
             raise ValueError(f"the mount for volume UID {uid} does not use its own image")
         data = mount / "data"
         if initialize:

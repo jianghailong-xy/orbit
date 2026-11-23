@@ -411,8 +411,8 @@ services:
 ```
 
 The channel needs access to loop devices and mount operations. The runner containers continue to use the
-restricted template. A channel run directly on the host instead needs `mkfs.ext4`, `mount`, `umount`,
-`findmnt` and `losetup`, and must see the same host mounts as Docker. In either case, keep the images and their
+restricted template. A channel run directly on the host instead needs `mkfs.ext4`, `mount`, `umount` and
+`losetup`, and must see the same host mounts as Docker. In either case, keep the images and their
 parent directories accessible only to host administrators. An allocation or mount error is reported as
 `VOLUME_FILESYSTEM_UNAVAILABLE`. A mount failure never creates an ordinary replacement volume.
 
