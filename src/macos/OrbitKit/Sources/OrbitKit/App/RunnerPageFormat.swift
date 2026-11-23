@@ -803,6 +803,9 @@ public enum RunnerPageFormat {
         let refused: String?
         switch blocking.count {
         case 0: refused = failed ? state.message : nil
+        // A relayed state naming Default is always a sign-out (docs/default-sign-out-design.md).
+        case let count where account == CodexAccounts.defaultID:
+            refused = signOutInUse(count: count)
         case 1: refused = RunnerAccountCopy.runnerAccountInUseOne(engine: engineName(engine))
         default: refused = RunnerAccountCopy.runnerAccountInUseMany(engine: engineName(engine), count: blocking.count)
         }
@@ -830,6 +833,42 @@ public enum RunnerPageFormat {
     /// machine, so it works with the runner offline; an added account's sign-in is deleted by the
     /// runner, which has to be online for it.
     public static func canRemove(_ line: AccountLine, offline: Bool) -> Bool { line.isDefault || !offline }
+
+    /// What a runner declares when it signs `engine`'s Default out on request (runner-go default_sign_out.go).
+    public static func defaultSignOutCapability(_ engine: String) -> String { "\(engine)-default-sign-out/v1" }
+
+    /// Whether `line`'s menu offers Sign out…: the Default row of an engine, while it is signed in and its
+    /// runner declares it can sign it out — an older runner would read the request as a removal.
+    public static func offersSignOut(_ line: AccountLine, engine: String, runner: Runner) -> Bool {
+        line.isDefault && line.auth == "yes" && !line.envKey
+            && runner.capabilities?.contains(defaultSignOutCapability(engine)) == true
+    }
+
+    /// Whether Sign out… can be pressed: the runner deletes the credential, so it has to be online, and
+    /// one request at a time is in flight.
+    public static func canSignOut(offline: Bool, pending: Bool) -> Bool { !offline && !pending }
+
+    /// Claude Code and Codex Default is the machine user's own login, so a terminal there is signed out too.
+    public static func signOutQuestion(_ line: AccountLine, engine: String, runner: Runner) -> RemovalQuestion {
+        let machine = displayName(runner)
+        let cli = engineName(engine)
+        let terminal = engine == "claude" || engine == "codex"
+        return RemovalQuestion(title: RunnerAccountCopy.runnerDefaultSignOutTitle(name: line.name),
+                               message: terminal
+                                   ? RunnerAccountCopy.runnerDefaultSignOutDetailTerminal(runner: machine, cli: cli)
+                                   : RunnerAccountCopy.runnerDefaultSignOutDetail(runner: machine, cli: cli))
+    }
+
+    /// The second question, once the runner named `count` sessions running on Default.
+    public static func signOutAgainQuestion(_ line: AccountLine, count: Int) -> RemovalQuestion {
+        RemovalQuestion(title: RunnerAccountCopy.RUNNER_DEFAULT_SIGN_OUT_ANYWAY_TITLE,
+                        message: signOutInUse(name: line.name, count: count))
+    }
+
+    private static func signOutInUse(name: String = "Default", count: Int) -> String {
+        count == 1 ? RunnerAccountCopy.runnerDefaultSignOutInUseOne(name: name)
+                   : RunnerAccountCopy.runnerDefaultSignOutInUseMany(name: name, count: count)
+    }
 
     /// What a runner declares when it can make an added Claude Code account the Default: the swap
     /// itself, and moving a session into its account's new folder (RunnersService.setDefaultAccount

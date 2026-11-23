@@ -133,3 +133,40 @@ export const RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED = 'Both logins are as they wer
 /** What a former Default is called — the account a Set as default moved out of ~/.claude into an added
  *  folder — while the owner has not named it and no email is known for it. */
 export const RUNNER_ACCOUNT_FORMER_DEFAULT = 'Former default';
+
+/** Default's own way out: the item in its ⋯ menu, and the confirmation's button. */
+export const RUNNER_DEFAULT_SIGN_OUT = 'Sign out…';
+export const RUNNER_DEFAULT_SIGN_OUT_CONFIRM = 'Sign out';
+
+/** The question in front of Sign out…; `name` is Default's name. */
+export function runnerDefaultSignOutTitle(name: string): string {
+  return `Sign out of ${name}?`;
+}
+
+/** What it comes to for an engine whose Default lives under Orbit's own directory: only the sign-in goes. */
+export function runnerDefaultSignOutDetail(runner: string, cli: string): string {
+  return `Its sign-in is deleted from ${runner}. Orbit can’t use ${cli} there until you sign in again. Sessions and history stay.`;
+}
+
+/** The same for Claude Code and Codex, whose Default is the machine user’s own login: a terminal there is
+ *  signed out too. */
+export function runnerDefaultSignOutDetailTerminal(runner: string, cli: string): string {
+  return `Its sign-in is deleted from ${runner}, so ${cli} in a terminal there is signed out too. Sessions and history stay. Sign in again to use it.`;
+}
+
+/** The second question, after the runner refused because sessions are running on Default. */
+export const RUNNER_DEFAULT_SIGN_OUT_ANYWAY_TITLE = 'Sign out anyway?';
+export const RUNNER_DEFAULT_SIGN_OUT_ANYWAY = 'Sign out anyway';
+
+export function runnerDefaultSignOutInUseOne(name: string): string {
+  return `1 session is running on ${name}. Sign out anyway? It will fail on its next turn.`;
+}
+
+export function runnerDefaultSignOutInUseMany(name: string, count: number): string {
+  return `${count} sessions are running on ${name}. Sign out anyway? They will fail on their next turn.`;
+}
+
+/** Over the reason when a sign-out was refused or the sign-in stayed. */
+export function runnerDefaultSignOutFailed(name: string): string {
+  return `Couldn’t sign out of ${name}`;
+}
