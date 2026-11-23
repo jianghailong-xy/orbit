@@ -7,16 +7,16 @@
   ],
   "cases": [
     {
-      "name": "a managed runner that has not reported yet takes its image's repos folder",
+      "name": "a managed runner that has not reported yet takes its image's home",
       "runner": { "managed": true, "reposRoot": null, "capabilities": [] },
-      "root": "/home/orbit/orbit-repos",
-      "path": "/home/orbit/orbit-repos/app"
+      "root": "/home/orbit",
+      "path": "/home/orbit/app"
     },
     {
       "name": "a managed runner that has not reported ignores a Repos Folder stored from before",
       "runner": { "managed": true, "reposRoot": "/var/lib/orbit/home/orbit-repos", "capabilities": [] },
-      "root": "/home/orbit/orbit-repos",
-      "path": "/home/orbit/orbit-repos/app"
+      "root": "/home/orbit",
+      "path": "/home/orbit/app"
     },
     {
       "name": "a managed runner that reported is read as any machine: no Repos Folder, no new folder",

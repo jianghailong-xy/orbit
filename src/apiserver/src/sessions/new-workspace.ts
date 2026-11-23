@@ -140,7 +140,7 @@ export function isNewFolderName(value: unknown): value is string {
 /**
  * Where a new folder goes on this runner: @orbit/shared newFolderRootFor, the rule every client's setup card shows, with
  * `capabilities` read as [] until the runner has reported (a runner that declares nothing reads as unreported, as clients see it). A managed runner that has not reported yet makes it in its
- * image's fixed repos folder (MANAGED_RUNNER_REPOS_ROOT), so its first workspace can be made before it is up
+ * image's home (MANAGED_RUNNER_HOME), so its first workspace can be made before it is up
  * (docs/managed-runner-no-default-workspace.md). Any other runner that cannot make one is the 409: too old to declare
  * `create-workdir/v1`, or without a reported reposRoot. Shared by POST /sessions and POST /workspaces.
  */

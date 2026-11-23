@@ -1261,9 +1261,9 @@ export const CREATE_WORKDIR_CAPABILITY = 'create-workdir/v1';
  *  `<reposRoot>/<name>`. */
 export const CREATE_WORKDIR_HOME_CAPABILITY = 'create-workdir/v2';
 
-/** A managed runner's repos folder, fixed by its image (deploy/managed-runner/image/entrypoint.py). A new folder on a
- *  managed runner that has not reported yet goes here: every runner version can make one inside its reposRoot. */
-export const MANAGED_RUNNER_REPOS_ROOT = '/home/orbit/orbit-repos';
+/** A managed runner's home, fixed by its image (deploy/managed-runner/image). A new folder on a managed runner that has
+ *  not reported yet goes here, as it does once it has: every managed image declares create-workdir/v2. */
+export const MANAGED_RUNNER_HOME = '/home/orbit';
 
 /** The directory a runner's new folders go in: its home, the parent of its reposRoot, when it declares
  *  CREATE_WORKDIR_HOME_CAPABILITY, else reposRoot itself. The separator is the one the root is written with. */
@@ -1285,11 +1285,11 @@ export interface NewFolderRunner {
 }
 
 /** Where a new folder named on this runner goes, for every client and the server alike (new-folder-root.fixture.json):
- *  on a managed runner that has not reported yet, its image's MANAGED_RUNNER_REPOS_ROOT, whatever Repos Folder is stored
+ *  on a managed runner that has not reported yet, its image's home MANAGED_RUNNER_HOME, whatever Repos Folder is stored
  *  from before, so its first workspace can be made before it is up; newFolderRoot on a runner that makes new folders and
  *  has reported its Repos Folder; null on any other, which cannot make one. */
 export function newFolderRootFor(runner: NewFolderRunner): string | null {
-  if (runner.managed && !runner.capabilities?.length) return MANAGED_RUNNER_REPOS_ROOT;
+  if (runner.managed && !runner.capabilities?.length) return MANAGED_RUNNER_HOME;
   const reposRoot = runner.reposRoot?.trim() ?? '';
   if (reposRoot && runner.capabilities?.includes(CREATE_WORKDIR_CAPABILITY)) return newFolderRoot(reposRoot, runner.capabilities);
   return null;
