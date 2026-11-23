@@ -137,7 +137,7 @@ import {
 import { MergeReceiptService, type MergeReceiptPullRequest } from '../sessions/merge-receipt.service';
 import { clipCheckTail, redactCheckOutput, redactFailureDetail } from './check-output-redaction';
 import { orderedIds } from '../common/lock-order';
-import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import { loggedRetry, withTransactionRetry, type RetryLogger } from '../common/transaction-retry';
 import { DISPATCH_PAUSED } from '../queue/dispatch-pause';
 import { MAX_LANDING_CHECK_EXEMPT_REASON_CHARS } from '../tasks/task-landing-check-exempt';
 
@@ -262,8 +262,16 @@ export class IntegrationJobRelay {
    * the same one whether a runner reported the end or the platform decided it.
    */
   private applyResultRetry(): Parameters<typeof withTransactionRetry>[2] {
-    return loggedRetry(this.logger, 'integrationJob.applyResult');
+    return resultTransactionRetry(this.logger);
   }
+}
+
+/**
+ * The one operation name the result transaction retries under, whichever door wrote the end: a runner's report, the
+ * platform's abandon, or the pull request door's landing (docs/design/protected-branch-landing.md §4.2 J-T15).
+ */
+export function resultTransactionRetry(logger: RetryLogger): Parameters<typeof withTransactionRetry>[2] {
+  return loggedRetry(logger, 'integrationJob.applyResult');
 }
 
 const logger = new Logger('IntegrationJobRelay');

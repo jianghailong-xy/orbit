@@ -18,7 +18,7 @@ import { PushService } from '../push/push.service';
 import { ControlPlaneLeader } from '../realtime/control-plane-leader';
 import { RealtimeService } from '../realtime/realtime.service';
 import { deliverIntegrationAftermath } from '../runner-api/integration-aftermath';
-import { applyIntegrationJobResult } from '../runner-api/integration-job-relay';
+import { applyIntegrationJobResult, resultTransactionRetry } from '../runner-api/integration-job-relay';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { followWikiDocsAfterSessionMerge } from '../wiki/wiki-docs-follow';
 import { GithubCallError, GithubClient, type GithubPullRequestReading } from './github-api.client';
@@ -356,7 +356,8 @@ export class PullRequestDoorService implements OnApplicationBootstrap, OnModuleD
     const applied = await applyIntegrationJobResult(
       this.prisma,
       { jobId: job.id, ownerId: row.ownerId, body },
-      loggedRetry(this.logger, 'pullRequestDoor.landJob'),
+      // The result transaction's own retry: J-T15 is one more door of it, under the same operation name.
+      resultTransactionRetry(this.logger),
       undefined,
       { pullRequestId: row.id, number: row.number as number, url: row.url as string, mergeMethod, mergedBy },
     );
