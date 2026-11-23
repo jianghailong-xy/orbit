@@ -1,9 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { Prisma, RunnerStatus } from '@prisma/client';
 import { isEngine, planUsageReported, RunEventType, runFailureKind, type PlanUsage } from '@orbit/shared';
 import { engineKeepsAccounts } from '../common/runner-engines';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
+import { PushService } from '../push/push.service';
 import type { RoutingHealthEntry } from '../tasks/model-routing';
 import { ACCOUNT_CHOICE } from './account';
 import { runAccount } from './plan-usage-accounts';
@@ -15,6 +17,7 @@ import {
   type AccountHealthState,
   type AccountHealthSubject,
   type AccountHealthView,
+  alertDue,
   failureEffect,
   failureScopeModel,
   healthView,
@@ -56,6 +59,7 @@ interface RawRow {
   blocked_until: Date | null;
   trial_session_id: string | null;
   trial_claimed_at: Date | null;
+  notified_kind?: string | null;
 }
 
 function rowOf(raw: RawRow): AccountHealthRow & { id: string } {
@@ -87,7 +91,8 @@ function rowOf(raw: RawRow): AccountHealthRow & { id: string } {
 export class AccountHealthService {
   private readonly log = new Logger('AccountHealth');
 
-  constructor(private readonly prisma: PrismaService) {}
+  /** `moduleRef`: PushService is found lazily (the push module imports half the app); absent in specs, which see no push. */
+  constructor(private readonly prisma: PrismaService, @Optional() private readonly moduleRef?: ModuleRef) {}
 
   /**
    * A run or turn of `failure.sessionId` on `subject` ended FAILED. One unit per call: a trial the session held on the
@@ -104,7 +109,9 @@ export class AccountHealthService {
     const key = subjectKey(subject);
     const scopeModel = failureScopeModel(failure);
     const parts = subjectColumns(subject);
-    return withTransactionRetry(this.prisma, async (tx) => {
+    let alert: AccountNeedsAction | null = null;
+    const effect = await withTransactionRetry(this.prisma, async (tx) => {
+      alert = null;
       // A trial this session held ends with it, whatever the failure says (§6.5): released here, and the rules below
       // read a refused trial as the next trip from the row's expired block, not from the claim.
       const heldTrial = await tx.$executeRaw`
@@ -123,7 +130,7 @@ export class AccountHealthService {
       for (let pass = 0; pass < 2; pass += 1) {
         const [raw] = await tx.$queryRaw<RawRow[]>`
           SELECT "id", "state", "kind", "said", "strikes", "trips", "first_at", "last_at", "last_session_id",
-                 "blocked_until", "trial_session_id", "trial_claimed_at"
+                 "blocked_until", "trial_session_id", "trial_claimed_at", "notified_kind"
             FROM "account_health"
            WHERE "owner_id" = ${ownerId}::uuid AND "subject_key" = ${key} AND "scope_model" = ${scopeModel}
              AND "cleared_at" IS NULL
@@ -150,6 +157,7 @@ export class AccountHealthService {
               trialSessionId: next.trialSessionId, trialClaimedAt: next.trialClaimedAt, updatedAt: now,
             },
           });
+          alert = await claimAlert(tx, ownerId, key, scopeModel, current.id, next, raw?.notified_kind ?? null, now);
           return effect;
         }
         if (current) {
@@ -167,10 +175,42 @@ export class AccountHealthService {
             ${next.blockedUntil}, ${now}, ${now})
           ON CONFLICT ("owner_id", "subject_key", "scope_model") WHERE "cleared_at" IS NULL DO NOTHING
           RETURNING "id"`;
-        if (inserted.length) return effect;
+        if (inserted.length) {
+          // A new live row is a new streak: nothing was alerted for it yet.
+          alert = await claimAlert(tx, ownerId, key, scopeModel, inserted[0].id, next, null, now);
+          return effect;
+        }
       }
       throw new Error('account_health: the live row moved twice under one failure');
     }, loggedRetry(this.log, 'accountHealth.recordFailure'));
+    // After the commit and never in its way: the row says the owner was told, the push is best effort (§8).
+    const owed = alert as AccountNeedsAction | null;
+    if (owed) void this.alertOwner(ownerId, owed);
+    return effect;
+  }
+
+  private async alertOwner(ownerId: string, alert: AccountNeedsAction): Promise<void> {
+    try {
+      const push = this.moduleRef?.get(PushService, { strict: false });
+      await push?.notifyAccountNeedsAction(ownerId, alert);
+    } catch (e) {
+      this.log.warn(`account-needs-action push not sent for ${alert.subjectKey}: ${(e as Error)?.message ?? e}`);
+    }
+  }
+
+  /**
+   * The owner's Check again (§8): the live rows of this account (the account-level row and its model rows) are cleared,
+   * `cleared_by = OWNER`, the ladder reset and any claimed trial dropped. Returns how many rows it cleared; zero when
+   * the row was already cleared or is not the owner's. The next failure is trip 1 of a new streak.
+   */
+  async checkAgain(ownerId: string, id: string, now = new Date()): Promise<number> {
+    return this.prisma.$executeRaw`
+      UPDATE "account_health" AS h
+         SET "cleared_at" = ${now}, "cleared_by" = 'OWNER', "trial_session_id" = NULL, "trial_claimed_at" = NULL,
+             "updated_at" = ${now}
+        FROM "account_health" AS src
+       WHERE src."id" = ${id}::uuid AND src."owner_id" = ${ownerId}::uuid AND src."cleared_at" IS NULL
+         AND h."owner_id" = src."owner_id" AND h."subject_key" = src."subject_key" AND h."cleared_at" IS NULL`;
   }
 
   /**
@@ -343,6 +383,47 @@ export class AccountHealthService {
 }
 
 type HealthDb = Prisma.TransactionClient | PrismaService;
+
+/** What the `account-needs-action` push says (§8): the row it is about, and the words it is made of. */
+export interface AccountNeedsAction {
+  rowId: string;
+  subjectKey: string;
+  /** A classified `RunFailureKind`, or `UNCLASSIFIED_ADMISSION` for the breaker. */
+  kind: string;
+  said: string | null;
+  trips: number;
+  blockedUntil: Date | null;
+  since: Date;
+  /** The model the row is about; '' for the whole account. */
+  scopeModel: string;
+}
+
+/**
+ * §8: inside the failure's transaction (the row is locked), decide whether this write owes the owner a push and
+ * record it on the row, so two replicas cannot both send. A row about one model whose account was already alerted
+ * (another live row of the subject has `notified_at`) is marked but not sent: not the same account on another model.
+ */
+async function claimAlert(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  key: string,
+  scopeModel: string,
+  rowId: string,
+  next: AccountHealthRow,
+  notifiedKind: string | null,
+  now: Date,
+): Promise<AccountNeedsAction | null> {
+  if (!alertDue(next, notifiedKind)) return null;
+  await tx.$executeRaw`UPDATE "account_health" SET "notified_at" = ${now}, "notified_kind" = ${next.kind} WHERE "id" = ${rowId}::uuid`;
+  if (scopeModel !== '') {
+    const [sibling] = await tx.$queryRaw<Array<{ one: number }>>`
+      SELECT 1 AS "one" FROM "account_health"
+       WHERE "owner_id" = ${ownerId}::uuid AND "subject_key" = ${key} AND "cleared_at" IS NULL
+         AND "id" <> ${rowId}::uuid AND "notified_at" IS NOT NULL LIMIT 1`;
+    if (sibling) return null;
+  }
+  return { rowId, subjectKey: key, kind: next.kind, said: next.said, trips: next.trips, blockedUntil: next.blockedUntil, since: next.firstAt, scopeModel };
+}
 
 /**
  * A dispatch is about to start `sessionId`'s run on the account `key` names (§6.5): if its block ran out, its run is

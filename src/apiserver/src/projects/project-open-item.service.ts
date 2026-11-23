@@ -35,6 +35,7 @@ import {
   type ProjectRulingView,
   type RequestProjectDoneBody,
   type OwnerCardTranslation,
+  type ProjectAccountWait,
   type ProjectSignInWait,
   type TaskSignInHold,
   RunEventType,
@@ -568,6 +569,31 @@ export interface ProjectOpenItems {
   mainBranch: string | null;
   /** The sign-ins the project's held tasks wait for, one per runner and engine (`projectSignInWaits`). */
   signIns: ProjectSignInWait[];
+  /** The tasks held because no account can run them, as one row (`projectAccountWait`). */
+  accountWait: ProjectAccountWait<Date> | null;
+}
+
+/** The hold of one task, as the project row needs it (TasksService.accountHolds). */
+import type { ModelRoutingHold } from '../tasks/model-routing';
+export interface AccountHoldRead {
+  reason: string;
+  until: string;
+}
+
+/**
+ * The project's account holds as its one Needs you row: "N tasks wait for an account" over the sentence of the hold that
+ * lifts first. Null when no task is held.
+ */
+export function projectAccountWait(holds: ReadonlyMap<string, AccountHoldRead>): ProjectAccountWait<Date> | null {
+  if (holds.size === 0) return null;
+  const first = [...holds.values()].sort((a, b) => a.until.localeCompare(b.until))[0];
+  const n = holds.size;
+  return {
+    taskIds: [...holds.keys()],
+    title: n === 1 ? '1 task waits for an account' : `${n} tasks wait for an account`,
+    detailLine: first.reason,
+    until: new Date(first.until),
+  };
 }
 
 /** The one read of TasksService this service makes: the sweep's signed-out holds (TasksService.signInHolds). */
@@ -688,6 +714,28 @@ export class ProjectOpenItemService {
       }
     }
     return reader ? reader.signInHolds(ownerId, scope) : new Map();
+  }
+
+  /** `accountHold` of each of these tasks (TasksService.accountHoldsFor), for a project's task rows; none without a reader. */
+  async accountHoldsFor(ownerId: string, taskIds: readonly string[]): Promise<Map<string, ModelRoutingHold>> {
+    try {
+      const { TasksService } = await import('../tasks/tasks.service.js');
+      const tasks = this.moduleRef?.get(TasksService, { strict: false });
+      return tasks ? await tasks.accountHoldsFor(ownerId, taskIds) : new Map();
+    } catch {
+      return new Map();
+    }
+  }
+
+  /** The project's tasks held for an account (TasksService.accountHolds), one row; none when no reader is reachable. */
+  private async accountWait(ownerId: string, projectId: string): Promise<ProjectAccountWait<Date> | null> {
+    try {
+      const { TasksService } = await import('../tasks/tasks.service.js');
+      const tasks = this.moduleRef?.get(TasksService, { strict: false });
+      return tasks ? projectAccountWait(await tasks.accountHolds(ownerId, projectId)) : null;
+    } catch {
+      return null;
+    }
   }
 
   /** The project's sign-in waits, one per runner and engine. */
@@ -3907,6 +3955,7 @@ export class ProjectOpenItemService {
       closedQuestions: await this.closedQuestions(projectId),
       mainBranch,
       signIns: await this.signInWaits(ownerId, projectId),
+      accountWait: await this.accountWait(ownerId, projectId),
     };
   }
 

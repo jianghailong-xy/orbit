@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   type AccountHealthFailure,
   type AccountHealthRow,
+  alertDue,
   blockMs,
   BREAKER_LADDER_MS,
   CAPACITY_COOLDOWN_MS,
@@ -278,4 +279,115 @@ test('the subject keys of §6.1', () => {
   // ACCESS_DENIED writes the model's row only when the adapter says it is about one model.
   assert.equal(failureScopeModel(failure('ACCESS_DENIED', { model: 'opus', scope: 'model' })), 'opus');
   assert.equal(failureScopeModel(failure('ACCESS_DENIED', { model: 'opus' })), '');
+});
+
+/**
+ * §8 and §10 phase 3: when a write owes the owner an `account-needs-action` push. Driven as the service drives it: the
+ * row's `notifiedKind` is whatever the last alert stamped, and a cleared row starts the next streak with none.
+ */
+class AlertingAccount extends Account {
+  notified: string | null = null;
+  alerts: string[] = [];
+
+  failAndCount(f: AccountHealthFailure): void {
+    const step = stepOnFailure(this.row, f, this.now);
+    if (!step.next) return;
+    // A row that ran out is replaced by a new live row: a new streak, nothing alerted for it yet.
+    if (!this.row || step.expirePrevious) this.notified = null;
+    this.row = step.next;
+    if (alertDue(step.next, this.notified)) {
+      this.notified = step.next.kind;
+      this.alerts.push(step.next.kind);
+    }
+  }
+
+  clear(): void {
+    this.row = null;
+    this.notified = null;
+  }
+}
+
+test('alert: a classified refusal pushes at trip 1 and not at later trips or daily trials', () => {
+  const a = new AlertingAccount();
+  a.failAndCount(failure('ACCOUNT_ACTION_REQUIRED', { said: 'Add a payment method to continue' }));
+  assert.deepEqual(a.alerts, ['ACCOUNT_ACTION_REQUIRED']);
+  // A fresh failure inside the block is evidence, not a trip.
+  a.now = new Date(a.now.getTime() + 10 * MINUTE);
+  a.failAndCount(failure('ACCOUNT_ACTION_REQUIRED'));
+  // Trials: every one to the 24 h cap and then the daily ones.
+  for (let trip = 2; trip <= 10; trip += 1) {
+    a.now = new Date(a.row!.blockedUntil!.getTime());
+    a.failAndCount(failure('ACCOUNT_ACTION_REQUIRED', { said: 'different wording inside the same kind' }));
+    assert.equal(a.row!.trips, trip);
+  }
+  assert.equal(a.alerts.length, 1, 'one alert for the whole streak');
+});
+
+test('alert: the breaker pushes at its third trip only', () => {
+  const a = new AlertingAccount();
+  a.failAndCount(failure(null));
+  assert.deepEqual(a.alerts, [], 'a first strike makes the account suspect and says nothing');
+  a.failAndCount(failure(null));
+  assert.equal(a.row!.trips, 1);
+  for (const trips of [2, 3, 4, 5, 6, 7]) {
+    a.now = new Date(a.row!.blockedUntil!.getTime());
+    a.failAndCount(failure(null));
+    assert.equal(a.row!.trips, trips);
+    assert.equal(a.alerts.length, trips >= 3 ? 1 : 0, `after trip ${trips}`);
+  }
+});
+
+test('alert: a new streak after a success alerts again at its own alert point', () => {
+  const a = new AlertingAccount();
+  a.failAndCount(failure('CREDENTIAL_REFUSED'));
+  a.clear();
+  a.failAndCount(failure('CREDENTIAL_REFUSED'));
+  assert.deepEqual(a.alerts, ['CREDENTIAL_REFUSED', 'CREDENTIAL_REFUSED']);
+  a.clear();
+  // The breaker's new streak waits for its own third trip.
+  a.failAndCount(failure(null));
+  a.failAndCount(failure(null));
+  assert.equal(a.alerts.length, 2);
+  for (let i = 0; i < 2; i += 1) {
+    a.now = new Date(a.row!.blockedUntil!.getTime());
+    a.failAndCount(failure(null));
+  }
+  assert.equal(a.alerts.length, 3);
+  assert.equal(a.alerts[2], UNCLASSIFIED_ADMISSION);
+});
+
+test('alert: a changed classified kind alerts once; unclassified after classified does not', () => {
+  const a = new AlertingAccount();
+  a.failAndCount(failure('ACCOUNT_ACTION_REQUIRED'));
+  a.now = new Date(a.row!.blockedUntil!.getTime());
+  a.failAndCount(failure('CREDENTIAL_REFUSED'));
+  assert.deepEqual(a.alerts, ['ACCOUNT_ACTION_REQUIRED', 'CREDENTIAL_REFUSED']);
+  a.now = new Date(a.row!.blockedUntil!.getTime());
+  a.failAndCount(failure('CREDENTIAL_REFUSED'));
+  assert.equal(a.alerts.length, 2, 'the same kind again is silent');
+  // A classified streak turning unclassified: three breaker-kind trips in a row on the same row say nothing.
+  for (let i = 0; i < 3; i += 1) {
+    a.now = new Date(a.row!.blockedUntil!.getTime());
+    a.failAndCount(failure(null));
+  }
+  assert.equal(a.alerts.length, 2);
+});
+
+test('alert: the breaker then a classified refusal alerts for the new kind; cool-downs never alert', () => {
+  const a = new AlertingAccount();
+  a.failAndCount(failure(null));
+  a.failAndCount(failure(null));
+  for (let i = 0; i < 2; i += 1) {
+    a.now = new Date(a.row!.blockedUntil!.getTime());
+    a.failAndCount(failure(null));
+  }
+  assert.deepEqual(a.alerts, [UNCLASSIFIED_ADMISSION]);
+  a.now = new Date(a.row!.blockedUntil!.getTime());
+  a.failAndCount(failure('ACCOUNT_ACTION_REQUIRED'));
+  assert.deepEqual(a.alerts, [UNCLASSIFIED_ADMISSION, 'ACCOUNT_ACTION_REQUIRED']);
+
+  const b = new AlertingAccount();
+  b.failAndCount(failure('CAPACITY', { model: 'm' }));
+  b.failAndCount(failure('USAGE_LIMIT'));
+  assert.deepEqual(b.alerts, []);
 });

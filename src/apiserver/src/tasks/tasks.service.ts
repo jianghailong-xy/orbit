@@ -8292,7 +8292,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const hasMore = rows.length > limit;
     const pageTasks = hasMore ? rows.slice(0, limit) : rows;
     const openIds = pageTasks.filter(mayBeSweepCandidate).map((task) => task.id);
-    const [withRun, states, runnableIds, awaitingIds, holds] = await Promise.all([
+    const [withRun, states, runnableIds, awaitingIds, holds, accountHolds] = await Promise.all([
       this.withRunning(ownerId, pageTasks),
       this.dependencyStatesFor(ownerId, pageTasks.map((task) => task.id)),
       this.runnableTaskIds(ownerId, pageTasks.map((task) => task.id)),
@@ -8300,6 +8300,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       openIds.length > 0
         ? this.signInHolds(ownerId, Prisma.sql`t.id = ANY(${openIds}::uuid[])`)
         : new Map<string, SignInHold>(),
+      this.accountHoldsFor(ownerId, openIds),
     ]);
     const items = withRun.map((task) => {
       const dependencyState = states.get(task.id) ?? 'NONE';
@@ -8312,6 +8313,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         confirmationUnderReview: awaitingIds.underReview.has(task.id),
         // The row's Held pill: the task read's `hold`, by the same read (signInHolds).
         hold: holds.get(task.id) ?? null,
+        // Why its next automatic start stands down: no account that could run it can run now (§7.5).
+        accountHold: accountHolds.get(task.id) ?? null,
       };
     });
     const nextCursor =
@@ -16417,6 +16420,44 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(`task ${task.id}: account hold not read: ${(e as Error)?.message ?? e}`);
       return null;
     }
+  }
+
+  /**
+   * The account holds among a project's open auto-run tasks (§8 item 3), for the project's Needs you row.
+   */
+  async accountHolds(ownerId: string, projectId: string): Promise<Map<string, ModelRoutingHold>> {
+    const tasks = await this.prisma.task.findMany({
+      where: { ownerId, projectId, status: TaskStatus.OPEN, autoRunWhenReady: true, assigneeId: { not: null } },
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+      take: 50,
+    });
+    return this.accountHoldsFor(ownerId, tasks.map((t) => t.id));
+  }
+
+  /**
+   * What `accountHold` says of each of these tasks (§7.5), for a list page or a project's tasks: the row's own account
+   * hold, by the same read as the task view. Nothing at all while the owner has no blocked account, which is one
+   * indexed read; at most 50 tasks are asked.
+   */
+  async accountHoldsFor(ownerId: string, taskIds: readonly string[]): Promise<Map<string, ModelRoutingHold>> {
+    const held = new Map<string, ModelRoutingHold>();
+    if (taskIds.length === 0) return held;
+    const [blocked] = await this.prisma.$queryRaw<Array<{ one: number }>>`
+      SELECT 1 AS "one" FROM "account_health" WHERE "owner_id" = ${ownerId}::uuid AND "cleared_at" IS NULL AND "state" = 'BLOCKED' LIMIT 1`;
+    if (!blocked) return held;
+    const tasks = await this.prisma.task.findMany({
+      where: { ownerId, id: { in: [...taskIds].slice(0, 50) }, status: TaskStatus.OPEN, autoRunWhenReady: true, assigneeId: { not: null } },
+      select: {
+        id: true, title: true, description: true, assigneeId: true, engine: true, provider: true, model: true, modelHint: true,
+        modelHintReason: true, completionCriterion: true, acceptanceCommand: true, verifiesTaskId: true, isForeman: true,
+      },
+    });
+    for (const task of tasks) {
+      const hold = await this.accountHold(ownerId, task);
+      if (hold) held.set(task.id, hold);
+    }
+    return held;
   }
 
   /**

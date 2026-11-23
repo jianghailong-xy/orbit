@@ -20,6 +20,7 @@ import {
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { runtimeCatalogModels } from '../common/runtime-model';
 import { anthropicGatewayEnabled, engineTableOptions, withKeyGatewayToken } from '../providers/key-gateway';
 import {
   claudeCodexLoginEnabled,
@@ -129,6 +130,7 @@ import {
   scheduleRunAllowedTools,
   scheduleRunDisallowedTools,
 } from '../schedules/schedule-access';
+import { claimModelLogLine } from './claim-model-log';
 
 /** What a claim attempt answers when another transaction holds the row it picked (FOR UPDATE NOWAIT, 55P03). */
 const LOST_LOCK = Symbol('the claim lost the row lock');
@@ -1128,6 +1130,9 @@ export class QueueService {
         runner: session.assignedRunner,
       });
     let exec = resolveExec(session.model);
+    // The value the resolution ran on, for the claim-model line below: moved to the PATCH winner's
+    // when that compare-and-set loses, so the line shows the choice dispatch actually used.
+    let resolvedFrom = session.model;
     // Snapshot an inherited default on the session at its first claim, and refresh one the runtime
     // has since retired. Later Runtime heartbeat changes must not silently switch an
     // already-established conversation on reclaim/resume — only a model that is no longer offered
@@ -1152,6 +1157,7 @@ export class QueueService {
           select: { model: true },
         });
         exec = resolveExec(winner.model);
+        resolvedFrom = winner.model;
       }
     }
     const provider = exec.provider;
@@ -1165,6 +1171,20 @@ export class QueueService {
     // What the runner is handed as the model: the session's own id, except an OpenCode session on a
     // key, which names it the way OpenCode selects it (resolveProviderExec `runnerModel`).
     const runnerModel = exec.runnerModel ?? exec.model;
+    // What this claim decided about the model, `claim-model {json}` (claim-model-log.ts): the
+    // catalogue the assigned runner reported, what the resolver was offered, and what the runner is
+    // told to run. Diagnostic for the Antigravity Google-account rollout, whose failure mode was a
+    // catalogue id reaching the runner as no `--model` at all with nothing on this side to read.
+    this.logger.log(
+      claimModelLogLine({
+        sessionId: session.id,
+        provider,
+        requestedModel: resolvedFrom,
+        catalog: (session.assignedRunner?.modelCatalog as RunnerModelCatalog | null)?.[provider],
+        offered: runtimeCatalogModels(session.assignedRunner?.modelCatalog, provider),
+        resolvedModel: runnerModel,
+      }),
+    );
     const permissionMode = resolvePermissionMode(session.permissionMode, session.owner);
     // Claude spawns with a pre-generated --session-id, so a Claude row without one has no
     // conversation the runtime could resume — it was created before the column existed, or

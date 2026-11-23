@@ -2041,6 +2041,8 @@ export interface TaskRunRoute {
   escalated: boolean;
   /** The router's own sentences, shown as they are. */
   reasons: string[];
+  /** The §7.5 sentence when the run went elsewhere because its pin could not run; else null. */
+  relaxedRun?: string | null;
   policyVersion: number;
   decidedAt: string;
 }
