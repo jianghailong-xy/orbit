@@ -420,6 +420,9 @@ test('Cross-workspace SubAgents: choice of workspace, refusals, hand-over, relay
     assert.equal(claim.exec.provider, 'claude', "the target workspace's own default engine");
     assert.equal(claim.exec.model, 'claude-sonnet-5-5', "and its runner's default model");
     assert.ok(Array.isArray(claim.exec.allowedTools) && typeof claim.exec.permissionMode === 'string', "in a session claim's shape");
+    const parentRow = await prisma.session.findUniqueOrThrow({ where: { id: e.sessionId }, select: { permissionMode: true } });
+    assert.equal(claim.parentPermissionMode, parentRow.permissionMode ?? 'auto',
+      "the claim names the parent's mode, which the target runner answers a read-only child's requests by");
     assert.deepEqual(await remoteSubagentHeartbeat(prisma, e.mac.id), { remoteSubagentRuns: [], stopSubagentRunIds: [] },
       'claimed, it is no longer listed to claim');
 
