@@ -109,10 +109,10 @@ final class ManagedRunnerWiringTests: XCTestCase {
         let lift = try slice(console, from: "private var sendCapabilities: SessionCapabilities? {", to: "\n    }")
         XCTAssertTrue(lift.contains("ManagedRunnerLogic.sendCapabilities(serverCapabilities, acceptsWork: managed?.display.acceptsWork == true)"))
         // Sending decides its refusal and its endpoint from the same capabilities the composer showed.
-        let send = try slice(console, from: "let terminalAttempt = ComposerLogic.shouldResume(status: sessionStatus)",
+        let send = try slice(console, from: "let terminalAttempt = ComposerLogic.shouldResume(status: sessionStatus, released: serverReleased)",
                              to: "let accepted = try await postTurn(")
-        XCTAssertTrue(flat(send).contains("ComposerLogic.blockedMessage(status: sessionStatus, capabilities: sendCapabilities)"))
-        XCTAssertTrue(send.contains("ComposerLogic.shouldResume(status: sessionStatus, capabilities: sendCapabilities)"))
+        XCTAssertTrue(flat(send).contains("ComposerLogic.blockedMessage(status: sessionStatus, released: serverReleased, capabilities: sendCapabilities)"))
+        XCTAssertTrue(flat(send).contains("ComposerLogic.shouldResume(status: sessionStatus, released: serverReleased, capabilities: sendCapabilities)"))
         XCTAssertFalse(send.contains("capabilities: serverCapabilities"))
     }
 

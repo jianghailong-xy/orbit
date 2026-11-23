@@ -532,6 +532,11 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Explicit low-level runner state from newer servers. `status` remains on the wire for
     /// compatibility; consumers should read `effectiveRunStatus`.
     public let runStatus: RunStatus?
+    @LenientSessionField public internal(set) var phase: SessionPhase?
+    @LenientSessionField public internal(set) var released: Bool?
+    @LenientSessionField public internal(set) var workFinished: Bool?
+    @LenientSessionField public internal(set) var lastTurnOutcome: SessionTurnOutcome?
+    @LenientSessionField public internal(set) var waitingOn: SessionWaitingOn?
     /// Server-normalized, user-facing lifecycle. Optional for compatibility with older servers;
     /// presentation falls back to `status` / `endReason` when absent.
     public let sessionState: SessionState?
@@ -749,7 +754,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// runner-offline disconnect apart from a real crash; `endReason` tells a benign recycle
     /// (idle / task-done / user-ended — shown as dormant) apart from a hard cancel/orphan.
     public let error: String?
-    public let endReason: String?
+    public internal(set) var endReason: String?
     /// The SOURCE chain's state for this session — `UNBOUND`, `SELECTED`, `PINNED` or `REFUSED`
     /// (§6.1). Only `REFUSED` is terminal, and it is the one value this client acts on: such a
     /// session never re-resolves, and its recovery is a new run (SR34). Absent from older servers,
@@ -800,6 +805,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         if let runStatus, runStatus != .unknown { return runStatus }
         return status
     }
+    public var isReleased: Bool { released ?? effectiveRunStatus.isTerminal }
     public var effectiveRunState: SessionRunState {
         SessionRunState.resolve(runState, legacy: sessionState,
                                 status: effectiveRunStatus, endReason: endReason)
@@ -867,6 +873,11 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         title = try values.decodeIfPresent(String.self, forKey: .title)
         status = try values.decode(RunStatus.self, forKey: .status)
         runStatus = try values.decodeIfPresent(RunStatus.self, forKey: .runStatus)
+        phase = try? values.decodeIfPresent(SessionPhase.self, forKey: .phase)
+        released = try? values.decodeIfPresent(Bool.self, forKey: .released)
+        workFinished = try? values.decodeIfPresent(Bool.self, forKey: .workFinished)
+        lastTurnOutcome = try? values.decodeIfPresent(SessionTurnOutcome.self, forKey: .lastTurnOutcome)
+        waitingOn = try? values.decodeIfPresent(SessionWaitingOn.self, forKey: .waitingOn)
         sessionState = try values.decodeIfPresent(SessionState.self, forKey: .sessionState)
         runState = try values.decodeIfPresent(SessionRunState.self, forKey: .runState)
         lifecycleState = try values.decodeIfPresent(SessionLifecycleState.self, forKey: .lifecycleState)
@@ -950,7 +961,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         engineTurnActive = try values.decodeIfPresent(Bool.self, forKey: .engineTurnActive)
         activity = try values.decodeIfPresent(String.self, forKey: .activity)
         error = try values.decodeIfPresent(String.self, forKey: .error)
-        endReason = try values.decodeIfPresent(String.self, forKey: .endReason)
+        endReason = try? values.decodeIfPresent(String.self, forKey: .endReason)
         sourceState = try values.decodeIfPresent(String.self, forKey: .sourceState)
         sourceRefusalCode = try values.decodeIfPresent(String.self, forKey: .sourceRefusalCode)
         sourceRefusalDetail = try? values.decodeIfPresent(SourceRefusalDetail.self,
@@ -1926,11 +1937,17 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     /// optional so older/slim payloads still decode; consumers should read `effectiveRunStatus`.
     public let status: RunStatus?
     public let runStatus: RunStatus?
+    @LenientSessionField public private(set) var phase: SessionPhase?
+    @LenientSessionField public private(set) var released: Bool?
+    @LenientSessionField public private(set) var workFinished: Bool?
+    @LenientSessionField public private(set) var lastTurnOutcome: SessionTurnOutcome?
+    @LenientSessionField public private(set) var waitingOn: SessionWaitingOn?
     /// Server-normalized, user-facing lifecycle; absent when talking to an older control plane.
     public let sessionState: SessionState?
     /// Product-facing execution state and lifecycle location, both optional for older servers.
     public let runState: SessionRunState?
     public let lifecycleState: SessionLifecycleState?
+    public let endReason: String?
     /// Authoritative action availability from newer servers. nil retains legacy local inference.
     public let capabilities: SessionCapabilities?
     /// The engine this session runs on. What the auto-retry card names as the provider whose quota
@@ -2039,10 +2056,16 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         id = try values.decode(String.self, forKey: .id)
         status = try values.decodeIfPresent(RunStatus.self, forKey: .status)
         runStatus = try values.decodeIfPresent(RunStatus.self, forKey: .runStatus)
+        phase = try? values.decodeIfPresent(SessionPhase.self, forKey: .phase)
+        released = try? values.decodeIfPresent(Bool.self, forKey: .released)
+        workFinished = try? values.decodeIfPresent(Bool.self, forKey: .workFinished)
+        lastTurnOutcome = try? values.decodeIfPresent(SessionTurnOutcome.self, forKey: .lastTurnOutcome)
+        waitingOn = try? values.decodeIfPresent(SessionWaitingOn.self, forKey: .waitingOn)
         sessionState = try values.decodeIfPresent(SessionState.self, forKey: .sessionState)
         runState = try values.decodeIfPresent(SessionRunState.self, forKey: .runState)
         lifecycleState = try values.decodeIfPresent(SessionLifecycleState.self, forKey: .lifecycleState)
             ?? legacy.decodeIfPresent(SessionLifecycleState.self, forKey: .filingState)
+        endReason = try? values.decodeIfPresent(String.self, forKey: .endReason)
         capabilities = try values.decodeIfPresent(SessionCapabilities.self, forKey: .capabilities)
         provider = try values.decodeIfPresent(String.self, forKey: .provider)
         projectId = try values.decodeIfPresent(String.self, forKey: .projectId)
@@ -2085,7 +2108,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     public init(id: String, status: RunStatus? = nil, runStatus: RunStatus? = nil,
                 sessionState: SessionState? = nil,
                 runState: SessionRunState? = nil, lifecycleState: SessionLifecycleState? = nil,
-                capabilities: SessionCapabilities? = nil,
+                endReason: String? = nil, capabilities: SessionCapabilities? = nil,
                 provider: String? = nil,
                 projectId: String? = nil, projectTitle: String? = nil,
                 projectMembership: SessionProjectMembership? = nil,
@@ -2111,6 +2134,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.sessionState = sessionState
         self.runState = runState
         self.lifecycleState = lifecycleState
+        self.endReason = endReason
         self.capabilities = capabilities
         self.provider = provider
         self.projectId = projectId

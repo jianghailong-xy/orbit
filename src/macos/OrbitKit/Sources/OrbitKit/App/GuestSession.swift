@@ -70,7 +70,7 @@ extension GuestSessionState {
 
     /// The agent is still in a run — and the conversation is not filed away — so a message joins it
     /// rather than restarting it.
-    public var live: Bool { resolvedRunState.isLive && !completed }
+    public var live: Bool { (released.map { !$0 } ?? resolvedRunState.isLive) && !completed }
 
     /// Waiting on its owner — a permission card or a question pending — which only the owner answers.
     public var waiting: Bool { live && waitingOnOwner }
@@ -78,12 +78,31 @@ extension GuestSessionState {
     /// Queued or running: the conversation is moving now.
     public var busy: Bool { resolvedRunState == .queued || resolvedRunState == .running }
 
+    /// Guest payloads historically omitted the end reason. Until they carry the release outcome
+    /// facts, keep their terminal wording on the legacy path.
+    private var releasedRunState: SessionRunState? {
+        guard released == true, workFinished != nil || endReason != nil else { return nil }
+        return .afterRelease(endReason: endReason, lastTurnOutcome: lastTurnOutcome,
+                             workFinished: workFinished)
+    }
+
+    private var displayRunState: SessionRunState {
+        if let releasedRunState { return releasedRunState }
+        if released == false && endReason != nil && lastTurnOutcome == .interrupted { return .interrupted }
+        return resolvedRunState
+    }
+
     /// The status word (web `sessionStateWord`): `Completed` once filed, else the run's own word.
-    public var word: String { completed ? "Completed" : ShareMarkdown.runLabel(resolvedRunState) }
+    public var word: String {
+        if completed { return "Completed" }
+        if releasedRunState == .succeeded { return "Finished" }
+        if displayRunState == .queued && waitingOn == .hold { return "On hold" }
+        return ShareMarkdown.runLabel(displayRunState)
+    }
 
     public var tone: GuestTone {
         if completed { return .done }
-        switch resolvedRunState {
+        switch displayRunState {
         case .queued: return .queued
         case .running: return .running
         case .awaitingInput: return .awaiting
@@ -114,8 +133,9 @@ public enum GuestFollow {
     /// new; nil once the conversation has stopped and gone quiet. `expecting`: a message was just
     /// sent and the run it starts has not been seen yet, so a quiet session is still asked.
     public static func delay(_ state: GuestSessionState, moved: Bool, expecting: Bool = false) -> TimeInterval? {
-        if moved || state.busy { return workingInterval }
-        if state.resolvedRunState.isLive && !state.completed { return waitingInterval }
+        let busy = state.phase.map { $0 == .pending || $0 == .running } ?? state.busy
+        if moved || (state.released != true && busy) { return workingInterval }
+        if state.live { return waitingInterval }
         return expecting ? workingInterval : nil
     }
 }

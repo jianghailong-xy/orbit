@@ -35,7 +35,7 @@ public extension Session {
             }
             return SessionAgentRef(id: ref.id, name: ref.name, provider: nil, model: ref.model, effort: ref.effort)
         }
-        return merging(
+        var row = merging(
             // A summary with no title means "still untitled" (the naming pass hasn't run), not
             // "cleared" — so it never overwrites a title this row already has.
             title: summary.title,
@@ -94,6 +94,13 @@ public extension Session {
             // Owned by the summary like the handoff: the summary that ends a compaction is a null.
             enginePhase: summary.enginePhase
         )
+        row.phase = summary.phase
+        row.released = summary.released
+        row.workFinished = summary.workFinished
+        row.lastTurnOutcome = summary.lastTurnOutcome
+        row.waitingOn = summary.waitingOn
+        if let endReason = summary.endReason { row.endReason = endReason }
+        return row
     }
 
     /// Apply a title the user just typed, so the header and every loaded row show the new name before
@@ -275,12 +282,18 @@ public extension Session {
                 owesReplyTo: owesReplyTo ?? self.owesReplyTo,
                 folderId: folderId ?? self.folderId,
                 confirmationUnderReview: confirmationUnderReview ?? self.confirmationUnderReview,
-                projectMembership: projectMembership ?? self.projectMembership)
+                projectMembership: projectMembership ?? self.projectMembership,
+                sessionKind: sessionKind, landing: landing)
         // The queue's gate is the list query's alone, and no event carries it: kept while the row is
         // still queued, and dropped once it is not, so a later queue does not read an old gate.
         merged.coordinatorHandoff = coordinatorHandoff ?? self.coordinatorHandoff
         merged.coordinatorHandoffReceived = coordinatorHandoffReceived ?? self.coordinatorHandoffReceived
         merged.enginePhase = enginePhase ?? self.enginePhase
+        merged.phase = phase
+        merged.released = released
+        merged.workFinished = workFinished
+        merged.lastTurnOutcome = lastTurnOutcome
+        merged.waitingOn = waitingOn
         if merged.effectiveRunState == .queued {
             merged.queuedReason = queuedReason
             merged.queuedActive = queuedActive
