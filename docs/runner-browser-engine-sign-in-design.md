@@ -71,7 +71,13 @@ agents use:
 - The vendor's web login (claude.ai, ChatGPT, Google) **stays** in the profile after the sign-in, so the next
   sign-in, or adding a second account, is usually one click. Every agent on the runner can use that login, as with any
   site signed in there; **Clear saved logins** removes it.
-- The tab is brought to the front, so the owner's browser tab shows it. It is left open when the sign-in ends.
+- The tab is brought to the front, so the owner's browser tab shows it. Once the machine is signed in, the runner
+  closes that tab, and only that one (by the target id Chrome gave it), giving Chrome a blank tab first when it was the
+  last, since Chrome quits with its last tab (owner, 2026-11-23). A sign-in that failed or was cancelled keeps its tab,
+  for what the page said. The vendor's login stays in the profile either way.
+- The owner's viewer tab of the runner's browser, when the sign-in card opened it (**In the runner's browser**, **Show
+  the browser**), closes too once the card says **Signed in**. A page can close only windows it opened, so a viewer
+  opened elsewhere, or before the Orbit page was reloaded, stays.
 - **While the sign-in runs, the browser is reserved for the owner**, as `browser_request_sign_in` reserves it
   (`YieldForSignIn`): another session's browser call gets the existing "in use" error, so an agent's clicks do not
   land in the sign-in. A session holding the lease when the owner presses the button keeps its turn; it just waits

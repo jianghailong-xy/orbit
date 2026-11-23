@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient, type Query, type QueryFilters } from '@tanstack/react-query';
-import type { WatchView } from '@orbit/shared';
+import { CONTROL_HINT_LIST_SCOPES, type WatchView } from '@orbit/shared';
 import { getToken } from '../api';
 import { streamReport } from './listBudget';
 import { cloneEventOf, hearClone, sameWorkspace } from './workspaceClone';
@@ -323,9 +323,18 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     // without building anything when nothing it shows moved. Before this connection's first hint
     // the session events read the Open lists, so this reads nothing then: a write's read, or a
     // reconnect's, would otherwise read each of them twice.
-    const refetchOpenList = (): void => {
+    //
+    // `scopes`: the workspaces the window's hints named (`hints=list_scopes`), or null when one of them named none, or
+    // when this tab's own write asked: a list filtered to one workspace is read only when its workspace is among them,
+    // and a list with no workspace filter on every hint (docs/realtime-control-plane-stream.md §4.8).
+    const refetchOpenList = (scopes: ReadonlySet<string> | null): void => {
       if (!hinted) return;
-      refresh({ predicate: ({ queryKey }) => isOpenList(queryKey) });
+      refresh({
+        predicate: ({ queryKey }) => isOpenList(queryKey) && (
+          scopes === null || typeof queryKey[2] !== 'string' || !queryKey[2]
+          || [...scopes].some((scope) => sameWorkspace(scope, queryKey[2] as string))
+        ),
+      });
     };
     // The sidebar's tallies (queries.ts workspaceSessionCountsQuery), read at the end of a window in which some
     // session's share of them moved (`tallyShare`), a session's process may have started or ended, or this tab wrote.
@@ -732,6 +741,8 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     const pendingSubjects = new Map<string, SessionSubject>();
     let pendingAnySession = false;
     const pendingFlags = new Set<'openList' | 'watches' | 'counts'>();
+    // The workspaces this window's `sessions.list_changed` named, unioned; null once something asked for every Open list.
+    let pendingOpenScopes: Set<string> | null = new Set();
     // The window's task changes, and whether a task event said nothing of its rows (refetchEntities' `tasks`); the
     // sessions whose schedule cards the window's events named, and whether one named every session's.
     const pendingTasks: TaskScope = { changes: [], any: false };
@@ -748,7 +759,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         if (pending.has('task')) refetchTaskLists();
         if (pending.has('project')) refetchProjects();
         if (pending.has('watch') || pendingFlags.has('watches')) refetchWatches();
-        if (pendingFlags.has('openList')) refetchOpenList();
+        if (pendingFlags.has('openList')) refetchOpenList(pendingOpenScopes);
         // Decided once the window's events are all in: an approval asked and answered inside it moved nothing.
         if (talliesMoved() || pendingFlags.has('counts')) refetchCounts();
         for (const id of pendingSessions) {
@@ -760,6 +771,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         pendingSubjects.clear();
         pendingAnySession = false;
         pendingFlags.clear();
+        pendingOpenScopes = new Set();
         pendingTasks.changes = [];
         pendingTasks.any = false;
         pendingCards.sessions.clear();
@@ -807,7 +819,14 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       // The Open list's hint is the one event whose path is not an entity: it says the list may read
       // differently, and is read through its own delta read rather than through the session events
       // that would read every session list for it (sessions.list_changed names no session).
-      if (type === 'sessions.list_changed') pendingFlags.add('openList');
+      if (type === 'sessions.list_changed') {
+        pendingFlags.add('openList');
+        // A hint naming no workspace (an older server's, or one where any list may have moved) reads every list.
+        const scopes = (data as { scopes?: unknown } | null | undefined)?.scopes;
+        if (Array.isArray(scopes) && scopes.every((scope) => typeof scope === 'string')) {
+          for (const scope of scopes) pendingOpenScopes?.add(scope);
+        } else pendingOpenScopes = null;
+      }
       if (type === 'task.changed') pendingTasks.changes.push(taskChangeOf(data));
       else if (type.startsWith('task.')) pendingTasks.any = true;
       if (type === 'schedule_cards.changed') {
@@ -857,6 +876,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       pendingAnySession = true;
       // The server's hint for the write joins this read in the window.
       pendingFlags.add('openList');
+      pendingOpenScopes = null;
       pendingFlags.add('counts');
       openWindow();
     };
@@ -919,9 +939,10 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       returnedAt = onReturn;
       hinted = false;
       lastMsgAt = Date.now();
-      // `hints=list_changed` asks for the Open list's hint (docs/realtime-control-plane-stream.md §4.8).
+      // `hints=list_changed` asks for the Open list's hint (docs/realtime-control-plane-stream.md §4.8), and `list_scopes`
+      // for the workspaces it names, so a workspace's list is read only for its own moves.
       // `schedule_cards` asks for `schedule_cards.changed` (§4.10), which a session's schedule cards are read on.
-      es = new EventSource(`/api/events?access_token=${encodeURIComponent(getToken() ?? '')}&hints=list_changed,owner_requests,schedule_cards`);
+      es = new EventSource(`/api/events?access_token=${encodeURIComponent(getToken() ?? '')}&hints=list_changed,owner_requests,schedule_cards,${CONTROL_HINT_LIST_SCOPES}`);
       es.onopen = () => {
         lastMsgAt = Date.now();
         setLive(true);

@@ -608,6 +608,13 @@ describe('the managed runner before it is up', () => {
     });
   }
 
+  it('asleep since an image that declared create-workdir/v1 only: offers its home, where it makes it on waking', async () => {
+    const managed = managedIn('sleeping');
+    const runner = machine({ online: false, status: 'OFFLINE', reposRoot: '/home/orbit/orbit-repos', capabilities: ['dir-probe/v1', 'create-workdir/v1'] });
+    const page = await open(runner, { managed });
+    expect(said(page.querySelector('.msc-prefix'))).toBe('/home/orbit/');
+  });
+
   it('preparing: starting, with a Repos Folder stored from an earlier image, still offers where the server makes it', async () => {
     const managed = managedIn('preparing: starting');
     const runner = machine({ online: false, status: 'OFFLINE', reposRoot: '/var/lib/orbit/home/orbit-repos', capabilities: [], engines: null });

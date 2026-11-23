@@ -26,6 +26,7 @@ import { MODEL_ROUTING_ENGINES } from '../tasks/model-routing';
 import { CreateWorkspaceDto, UpdateWorkspaceDto } from './dto';
 import { worktreeNeedsGit } from './worktree-needs-git';
 import { isNewFolderName, newFolderWorkDirOn, readGithub, type NewWorkspaceTarget } from '../sessions/new-workspace';
+import { RUNNER_BEATS } from '../runners/runner-presence';
 
 /** The engines a list names, each once and in the order the router weighs them. Absent stays absent:
  *  a patch that says nothing about the list leaves it as it is. */
@@ -96,7 +97,7 @@ export class WorkspacesService {
     }
     const runner = await this.prisma.runner.findFirstOrThrow({
       where: { id: dto.runnerId, ownerId },
-      select: { reposRoot: true, capabilities: true, capabilitiesReportedAt: true, managedRunner: { select: { id: true } } },
+      select: { reposRoot: true, capabilities: true, capabilitiesReportedAt: true, managedRunner: { select: { id: true } }, status: true, ...RUNNER_BEATS },
     });
     return newFolderWorkDirOn(runner, dto.newFolder);
   }
