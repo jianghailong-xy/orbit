@@ -254,7 +254,7 @@ class SessionListPageShellTest {
     /** iOS: a list that opens on today would be saying what its rows say. Later sections, and a Pinned that leads, keep their titles. */
     @Test fun theLeadingTodayHasNoTitleAndTheOthersDo() {
         val now = Instant.now().truncatedTo(ChronoUnit.SECONDS)
-        NavShell.extra = mapOf("open" to listOf(NavShell.row("34A05cSessionToday001", "Today's row", at = now.minusSeconds(60).toString()),
+        NavShell.extra = mapOf("open" to listOf(NavShell.row("34A05cSessionToday001", "Today's row", at = now.toString()),
             NavShell.row("34A05cSessionOlder001", "Older row", at = now.minus(3, ChronoUnit.DAYS).toString())))
         signIn()
         await { exists(hasRowMenu("Options for Today's row")) && exists(hasRowMenu("Options for Older row")) }

@@ -247,6 +247,35 @@ func beginCodexAppTurnFinalize(activeMu *sync.Mutex, active **codexAppActiveTurn
 	}, true
 }
 
+// mergeCodexFailure gives result what the turn gathered of its failure when its end said none of its own: the
+// words and code of the error that came before it, and whether it did any work.
+func mergeCodexFailure(result codexTurnResult, snapshot codexAppTurnSnapshot) codexTurnResult {
+	if result.failureSaid == "" {
+		result.failureSaid = snapshot.result.failureSaid
+	}
+	if result.failureCode == "" {
+		result.failureCode = snapshot.result.failureCode
+	}
+	result.sawWork = result.sawWork || snapshot.result.sawWork
+	return result
+}
+
+// codexTurnAdmission is §5.2's measurement of a Codex turn: no reply text, no item of work, no billed token.
+func codexTurnAdmission(result codexTurnResult, snapshot codexAppTurnSnapshot) *bool {
+	said := strings.TrimSpace(snapshot.fullText) != "" || strings.TrimSpace(snapshot.deltaText) != ""
+	return turnAdmission(said || result.sawWork, result.Usage, 0)
+}
+
+// codexItemIsWork reports an item that is neither the conversation's text nor the model's reasoning: a command,
+// an edit, a tool call — anything that means the turn got past admission.
+func codexItemIsWork(item map[string]interface{}) bool {
+	switch firstString(item, "type", "kind") {
+	case "", "userMessage", "agentMessage", "reasoning":
+		return false
+	}
+	return true
+}
+
 func finishCodexAppTurnFinalize(activeMu *sync.Mutex, active **codexAppActiveTurn, finishing *codexAppActiveTurn) {
 	activeMu.Lock()
 	if *active == finishing {
@@ -451,6 +480,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		if result.Usage == nil {
 			result.Usage = snapshot.result.Usage
 		}
+		result = mergeCodexFailure(result, snapshot)
 
 		if result.Status == "" {
 			result.Status = stSucceeded
@@ -482,7 +512,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 			BranchMerged:   branchMergedInto(job.WT),
 			WorktreeBranch: currentBranch(job.WT),
-		}, workerCtx); err != nil {
+		}.withFailure(codexTurnFailureOf(result), codexTurnAdmission(result, snapshot)), workerCtx); err != nil {
 			logln("turn-complete failed for", job.SessionID+":", err)
 		}
 		finishCodexAppTurnFinalize(&activeMu, &active, a)
@@ -2226,6 +2256,9 @@ func handleCodexAppNotificationWithImageFallback(threadID string, msg codexRPCMe
 		item := mapValue(firstPresent(params, "item"))
 		activeMu.Lock()
 		if *active != nil {
+			if codexItemIsWork(item) {
+				(*active).result.sawWork = true
+			}
 			handleCodexItemWithImageFallback(map[string]interface{}{"item": item}, emit, &(*active).result, &(*active).fullText, false, processAssistant, imageFallback)
 		}
 		activeMu.Unlock()
@@ -2255,7 +2288,8 @@ func handleCodexAppNotificationWithImageFallback(threadID string, msg codexRPCMe
 		}
 		activeMu.Unlock()
 	case "error":
-		errMsg := nestedString(params, "error", "message")
+		said := nestedString(params, "error", "message")
+		errMsg := said
 		if errMsg == "" {
 			errMsg = "codex app-server error"
 		}
@@ -2266,6 +2300,8 @@ func handleCodexAppNotificationWithImageFallback(threadID string, msg codexRPCMe
 			(*active).result.Status = stFailed
 			(*active).result.Subtype = "error"
 			(*active).result.Error = errMsg
+			(*active).result.failureSaid = said
+			(*active).result.failureCode = codexErrorInfoName(mapValue(params["error"])["codexErrorInfo"])
 		}
 		activeMu.Unlock()
 	case "item/autoApprovalReview/completed":
@@ -2318,6 +2354,8 @@ func handleCodexAppNotificationWithImageFallback(threadID string, msg codexRPCMe
 			result.Status = stFailed
 			result.Subtype = "failed"
 			result.Error = errMsg
+			result.failureSaid = errMsg
+			result.failureCode = codexErrorInfoName(mapValue(turn["error"])["codexErrorInfo"])
 		case "interrupted":
 			result.Status = stInterrupted
 			result.Subtype = "interrupted"

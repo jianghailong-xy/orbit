@@ -760,7 +760,7 @@ public final class APIClient: @unchecked Sendable {
         try await delete("access-tokens/\(id)")
     }
 
-    // MARK: terminals — the approve card and Settings → Terminals (docs/terminal-session-design.md)
+    // MARK: terminals — the approve card and the machine page's Terminals (docs/terminal-session-design.md)
 
     /// The terminal sign-ins waiting for this owner. Web parity: `terminalRequestsQuery`.
     public func terminalRequests() async throws -> [TerminalRequest] {
@@ -1288,6 +1288,24 @@ public final class APIClient: @unchecked Sendable {
                                       _ decision: ProjectCrossingDecision) async throws {
         try await postRaw("projects/\(projectID)/handoffs/\(ProjectCrossings.doorID(crossing))/decision",
                           body: ProjectCrossings.request(crossing, decision))
+    }
+
+    /// The task moves this conversation draws, as batches (`GET /sessions/:id/task-moves`): those
+    /// it asked for and those into a project it coordinates — every waiting batch, then the latest
+    /// answered ones. A session with none answers `[]`.
+    public func sessionTaskMoves(sessionID: String) async throws -> [TaskMoveBatch] {
+        try await get("sessions/\(sessionID)/task-moves")
+    }
+
+    /// Answer a whole batch of task moves with one press. Every move travels with the crossing key
+    /// the card read, and if any one names another crossing or is no longer waiting the server
+    /// writes nothing and refuses the batch (`APPROVAL_TARGET_MISMATCH` /
+    /// `HANDOFF_ALREADY_ANSWERED`). Answers the batch's rows as they stand now.
+    public func decideTaskMoveBatch(sessionID: String, moves: [ProjectCrossing],
+                                    _ decision: ProjectCrossingDecision) async throws -> [ProjectCrossing] {
+        let data = try await postRaw("sessions/\(sessionID)/task-moves/decision",
+                                     body: TaskMoves.answer(moves, decision))
+        return try decoder.decode([ProjectCrossing].self, from: data)
     }
 
     // MARK: projects — the index and one project's page
@@ -2226,6 +2244,16 @@ public final class APIClient: @unchecked Sendable {
         try await delete("runners/\(id)/accounts/\(engine.rawValue)/\(account)")
     }
 
+    /// Sign the machine's own Default login out (docs/default-sign-out-design.md): the runner deletes the
+    /// credential and nothing else. Answered `pending`, and the runner's word comes back in the list's
+    /// `accountRemove`; a runner refuses while sessions run on Default unless `force` — the person
+    /// confirmed after that refusal named them.
+    public func signOutRunnerDefault(_ id: String, engine: LoginEngine,
+                                     force: Bool = false) async throws -> RunnerAccountRemoveState {
+        try await post("runners/\(id)/accounts/\(engine.rawValue)/default/sign-out",
+                       body: SignOutDefaultRequest(force: force))
+    }
+
     /// Make an added Claude Code account the Default: the runner swaps its login with ~/.claude after
     /// any turn in progress on either account ends (docs/claude-default-swap-contract.md).
     public func setDefaultRunnerAccount(_ id: String, engine: LoginEngine,
@@ -2252,6 +2280,22 @@ public final class APIClient: @unchecked Sendable {
     public func fixRunnerAttention(_ id: String, kind: RunnerAttentionFixKind,
                                    body: RunnerAttentionFixRequest) async throws -> RunnerAttentionFixResult {
         try await post("runners/\(id)/attention/\(kind.rawValue)/fix", body: body)
+    }
+
+    /// Blocked accounts (`GET /account-health`): cool-downs and suspect accounts are not in it.
+    public func accountHealth() async throws -> [AccountHealthBlock] {
+        let answer: AccountHealthAnswer = try await get("account-health")
+        return answer.blocks ?? []
+    }
+
+    /// Check again: the owner says the account is fixed. A 404 means it was already cleared, which is
+    /// the state wanted, so it is not a failure.
+    public func checkAccountAgain(_ id: String) async throws {
+        do {
+            try await postRaw("account-health/\(id)/check", body: Optional<Empty>.none)
+        } catch APIError.http(let status, _) where status == 404 {
+            return
+        }
     }
 
     public func pauseRunnerAccount(_ id: String, engine: LoginEngine, account: String,

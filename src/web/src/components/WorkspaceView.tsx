@@ -1,5 +1,6 @@
 import {
   COORDINATOR_HANDOFF_COPY,
+  ownerRequestRowWord,
   managedSetupState,
   firstSessionProvider,
   type CoordinatorHandoffSuccessor,
@@ -67,7 +68,6 @@ import {
   referenceToken,
   type ReferenceMap,
 } from '../lib/composerRefs';
-import { WAITING_ON_YOU } from '../lib/ownerRequests';
 import {
   ContextActions,
   CoordinatorHandedOverBanner,
@@ -277,7 +277,6 @@ import {
   type ContextSeedState,
 } from '../lib/contextSeed';
 import { InitializeGitSteps, SessionOutputs } from './SessionOutputs';
-import { SessionBrowserChip } from './SessionBrowserChip';
 import { mergeRepairLoopLive } from './MergeRecoveryPanel';
 import { BrandMark, NewSessionProviderHero } from './NewSessionProviderHero';
 import { CreatedWorkspaceLine } from './CreatedWorkspaceLine';
@@ -423,7 +422,7 @@ import {
   ownerRequestChatContext,
   type OwnerRequest,
 } from '../lib/ownerRequests';
-import { useCrossingDecisionCards } from './CrossingDecisionCard';
+import { taskMoveSignal, useCrossingDecisionCards } from './CrossingDecisionCard';
 import { AnsweredQuestionsCtx } from './OwnerAnswerLine';
 import { answeredItemKey, answersHandedOver } from '../lib/ownerAnswer';
 import {
@@ -453,6 +452,7 @@ import { LandingLink } from './LandingLink';
 import { LandingFixAgainLine, SessionProjectLandingFixes } from './LandingFixCard';
 import { LANDING_FIX_COPY, heldByItsSession } from '../lib/landingFix';
 import { SessionProjectLandings } from './SessionProjectLandings';
+import { TerminalsNeedsYouRow } from './TerminalRequests';
 import { ProjectLandingsWindow } from './ProjectLandingsWindow';
 import { ProjectLandingCard } from './ProjectLandingCard';
 import { ProjectStartDialog } from './StartProjectCard';
@@ -1380,9 +1380,9 @@ const waitingLabel = (s: any): string => {
   if (s.waitingKind === 'START_REQUEST') return READY_TO_START;
   if (s.waitingKind === 'DONE_REQUEST') return PROJECT_DONE_COPY.readyToClose;
   if (s.waitingKind === 'RECORD_AS_DONE') return PROJECT_DONE_COPY.recordAsDoneRow;
-  // An owner request this session filed (a step, a decision, a key, a confirmation): its card's words.
-  if (s.waitingKind === 'OWNER_REQUEST') return WAITING_ON_YOU;
-  return 'Waiting for approval';
+  // What a session asked of you (`request_owner_action`), all of one kind, in that kind's word, and
+  // task moves waiting on you: "Approve task move" / "Approve N task moves".
+  return ownerRequestRowWord(s) ?? 'Waiting for approval';
 };
 
 // `watching` is this session as an observer — what its row says about the live watches that will
@@ -5850,7 +5850,12 @@ export function WorkspaceView({
   // Cross-project requests into the project this conversation coordinates, one decision card per
   // batch, drawn where the batch was first asked (board docs/mocks/handoff-in-chat). The batches
   // still waiting are counted by the pinned strip beside the criteria proposals.
-  const crossingCards = useCrossingDecisionCards(selectedTrashed ? null : coordinatedProjectId, transcriptEvents);
+  const crossingCards = useCrossingDecisionCards(
+    selectedTrashed ? null : selectedId,
+    selectedTrashed ? null : coordinatedProjectId,
+    transcriptEvents,
+    taskMoveSignal(selectedSession as { taskMoves?: Array<{ handoffIds?: string[] }> } | null),
+  );
 
   // One array for the transcript, memoized: a fresh array on every render would rebuild the whole
   // conversation with it (`Transcript` memoizes on this prop).
@@ -10650,6 +10655,8 @@ export function WorkspaceView({
           onScroll={onSessionListScroll}
           {...listDragProps}
         >
+          {/* A terminal asking to be approved: one Needs you row over the list, to its machine's page (board 02 ③). */}
+          {!listProjectId && <TerminalsNeedsYouRow />}
           {listProjectId && projectPageTop(listProjectId)}
           {listProjectId
             ? projectPageEmpty
@@ -11837,10 +11844,6 @@ export function WorkspaceView({
             kinds of output next to each other. Hidden until it has created one. */}
         {selectedId && !selectedTrashed && (
           <SessionCreatedTasksStrip sessionId={selectedId} tasks={createdTasks.data} openRequest={createdTasksOpenRequest} />
-        )}
-        {/* The Orbit Cloud runner's browser, while it runs: opens the live view (docs/runner-browser-design.md §5). */}
-        {selectedId && !selectedTrashed && (
-          <SessionBrowserChip managedRunnerId={managedHeadRow ? runner.id : null} sessionId={selectedId} />
         )}
         {/* Every Agent this session started, beside the branch below as iOS draws it: one line that opens
             their list. Hidden until it has started one. */}

@@ -25,6 +25,7 @@ import { SessionsService } from '../sessions/sessions.service';
 import { fileLostJobWake, RUNNER_LIVENESS, settleLostRunnerWork, type RunnerLiveness } from './lost-runner-work';
 import { retireSessionInboxGeneration } from '../common/session-inbox-fence';
 import { PrismaService } from '../prisma/prisma.service';
+import { returnWaitingSessionsToOpen } from '../sessions/return-to-open';
 import { postRunFailureComment, reclaimStalledTask } from '../tasks/reclaim-stalled-task';
 import { RealtimeService } from './realtime.service';
 import { announceParkedSessionEnd, claimParkedSessionEnd, fixingLandingWithWakeSource } from './parked-session-end';
@@ -362,7 +363,24 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
   /** What the timer runs every REAP_INTERVAL_MS: a sweep, on the one process that sweeps (`leading`). */
   async tick(): Promise<void> {
     if (!this.leading()) return;
+    // Its own failure, never the sweep's: a session waiting on the owner comes back to Open whatever
+    // happened to the runs this sweep reaps.
+    await this.returnWaitingSessions().catch((e: unknown) =>
+      this.log.error('waiting-session sweep failed: ' + (e as Error).message));
     await this.sweep();
+  }
+
+  /**
+   * Every session filed in Completed or Trash that still has a question waiting on the owner comes
+   * back to Open (`returnWaitingSessionsToOpen`), whatever filed it there. The writers that file a
+   * session already do this after their own commit; this catches every other path, and its first
+   * run after boot is the backfill for sessions filed away before it existed.
+   */
+  async returnWaitingSessions(): Promise<number> {
+    const back = await returnWaitingSessionsToOpen(this.prisma, this.log);
+    for (const { id } of back) this.realtime.publishSessionCreated(id);
+    if (back.length) this.log.log(`brought ${back.length} session(s) with a question waiting back to Open`);
+    return back.length;
   }
 
   /**
@@ -1249,6 +1267,15 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     if (!done) return;
     if (runnerId) this.realtime.requestCancel(runnerId, sessionId);
     announceParkedSessionEnd(this.realtime, { sessionId, reason });
+    if (reason === SessionEndReason.TASK_DONE) {
+      // A run filed in Completed with a question still waiting on the owner comes straight back.
+      const back = await returnWaitingSessionsToOpen(this.prisma, this.log, { sessionIds: [sessionId] })
+        .catch((e: unknown) => {
+          this.log.warn(`could not bring session ${sessionId} back to Open: ${(e as Error).message}`);
+          return [];
+        });
+      for (const { id } of back) this.realtime.publishSessionCreated(id);
+    }
     this.log.log(`recycling parked session ${sessionId}`);
   }
 }
