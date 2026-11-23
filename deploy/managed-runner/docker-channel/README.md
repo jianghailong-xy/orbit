@@ -31,7 +31,7 @@ Docker backend" and "Implementation record: new deployments"; operating it is in
 
 | Request | Answer |
 | --- | --- |
-| `GET /v1/info` | Its instance, image (and its `org.opencontainers.image.revision` label as `imageRevision`, null when the image has none), network and limits (with `maxContainers` as it applies), whether volume removal is on, and the host (CPUs, memory, the disk Docker's volumes live on, what this instance's volumes hold) for the capacity budget. |
+| `GET /v1/info` | Its instance, image (and its `org.opencontainers.image.revision` label as `imageRevision` and its `org.opencontainers.image.version` label as `imageVersion`, the release it was published for, each null when the image has none or it is empty), network and limits (with `maxContainers` as it applies), whether volume removal is on, and the host (CPUs, memory, the disk Docker's volumes live on, what this instance's volumes hold) for the capacity budget. |
 | `GET /v1/resources` | Every volume, container and kept credential of this instance (credentials without their token). |
 | `PUT /v1/volumes/mr-data-<runner>` | Create the runner's data volume once (`ownerId`, `runnerId`, `limitBytes`); an existing one of this instance is returned as it is. |
 | `GET /v1/volumes/mr-data-<runner>` | The volume, if it is this instance's. |

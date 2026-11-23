@@ -486,7 +486,7 @@ test('Android CI runs every share of verify.sh, and its one check passes only wh
   const check = block(block(ci, 'jobs', 0), 'android', 2);
   assert.match(check, /^    name: Android \(test \+ lint \+ debug APK\)$/m);
   assert.match(check, /^    needs: \[verify\]$/m);
-  assert.match(check, /^    if: always\(\)$/m);
+  assert.match(check, /^    if: \$\{\{ !cancelled\(\) \}\}$/m);
   assert.match(check, /test "\$RESULT" = success/);
   // Only main writes the dependency cache that every other run reads.
   assert.match(ci, /if: success\(\) && github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/);

@@ -76,6 +76,8 @@ const IDLE = { activeTurns: 0, backgroundJobs: 0, operations: 0, unflushedEvents
 const NEXT = `sha256:${'e'.repeat(64)}`;
 const OLD_SHA = '95884b154f';
 const NEW_SHA = 'a800ca3973';
+/** The release NEW_SHA's image was published for (its org.opencontainers.image.version label). */
+const NEW_VERSION = '0.1.261-beta.84';
 
 /** The refusal `call` threw: its HTTP status and body. */
 async function refusal(call: Promise<unknown>): Promise<{ status: number; body: Record<string, unknown> }> {
@@ -594,8 +596,11 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
   async function kubernetesOutdated(label: string) {
     const k = managedRunnerWorld(db);
     const { ownerId, mapping } = await k.readyRunner(label);
-    // The upgrade: the profile names a new image built from NEW_SHA; the Pod keeps the one it was made from.
-    const profile: ManagedRunnerProfile = { ...k.profile, runner: { ...k.profile.runner, image: `registry.invalid/orbit-cloud-runner@${NEXT}`, imageRevision: NEW_SHA } };
+    // The upgrade: the profile names a new image built from NEW_SHA for a release, as a two-stage deploy writes it
+    // (runner.imageVersion); the Pod keeps the one it was made from.
+    const profile: ManagedRunnerProfile = {
+      ...k.profile, runner: { ...k.profile.runner, image: `registry.invalid/orbit-cloud-runner@${NEXT}`, imageRevision: NEW_SHA, imageVersion: NEW_VERSION },
+    };
     installManagedRunnerAdmission(k.cluster, prisma, profile);
     const manager = new ManagedRunnerManager(prisma, k.cluster.client(), profile, {
       holder: `${label}-${randomUUID().slice(0, 8)}`, now: k.now, random: () => 0.5, log: quiet, ownLocationOnly: true,
@@ -608,7 +613,11 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
     k.advance(30_000);
     await k.heartbeat(mapping.runnerId, { activeTurns: 1 });
     assert.equal(await manager.reconcile(mapping.id), 'READY', 'busy on a previous image, it is not rolled');
-    assert.equal((await service.status(ownerId)).update?.phase, 'available');
+    // An old image's runner (managed-<sha>) against the release image: by commit, the current side with its version.
+    const { running, current, phase } = (await service.status(ownerId)).update!;
+    assert.deepEqual({ running, current, phase }, { running: { sha: OLD_SHA }, current: { sha: NEW_SHA, version: NEW_VERSION }, phase: 'available' });
+    const recorded = await k.mappingOf(ownerId);
+    assert.deepEqual({ sha: recorded.currentImageSha, version: recorded.currentImageVersion }, { sha: NEW_SHA, version: NEW_VERSION });
     // From here the kubelet does not report a deleted Pod stopped by itself: the runner drains in its grace, and the
     // test says when it has exited.
     k.cluster.kubeletReportsDeletions = false;
@@ -645,7 +654,7 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
     const answered = await service.updateNow(ownerId, true);
     assert.deepEqual(
       answered.update,
-      { running: { sha: OLD_SHA }, current: { sha: NEW_SHA }, phase: 'updating' },
+      { running: { sha: OLD_SHA }, current: { sha: NEW_SHA, version: NEW_VERSION }, phase: 'updating' },
       'updating, and not waiting for idle: Kubernetes can stop it',
     );
     const [activity] = await db.activity.findMany({ where: { actorId: ownerId, type: MANAGED_RUNNER_UPDATE_NOW_ACTIVITY } });

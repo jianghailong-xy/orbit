@@ -23,11 +23,18 @@ is no administrator command".
 
 1. **The status says when the image is old.** `ManagedRunnerStatus` gains
    `update?: { running: ManagedRunnerBuild; current: ManagedRunnerBuild; phase: 'available' | 'updating' }`, where
-   `ManagedRunnerBuild` is `{ sha, builtAt? }`. The manager already computes `previousImage` per instance; it now keeps
-   the result on the mapping (`imageOutdatedSince`, `currentImageSha`) so the status read needs no backend call.
-   - **The running build** comes from the runner's reported `version` (`managed-<sha>`).
-   - **The current build** is the profile image's `org.opencontainers.image.revision` label. The Docker channel adds it
-     to the image it reports, and Kubernetes takes it from the profile.
+   `ManagedRunnerBuild` is `{ sha, version?, builtAt? }`. The manager already computes `previousImage` per instance; it
+   now keeps the result on the mapping (`imageOutdatedSince`, `currentImageSha`, `currentImageVersion`) so the status
+   read needs no backend call.
+   - **The running build** comes from the runner's reported `version`: the release version for an image published from
+     a release tag (`0.1.261-beta.83`, with an empty `sha`, which the server is not told), or `managed-<sha>` for an
+     older image and for a single host's own build.
+   - **The current build** is the profile image's `org.opencontainers.image.revision` label, with its
+     `org.opencontainers.image.version` label as `version` when it was published from a release tag. The Docker channel
+     reports both for the image it serves, and Kubernetes takes them from the profile (`runner.imageRevision`,
+     `runner.imageVersion`, which the two-stage deploy writes).
+   - **Compared** by version when both sides have one, and otherwise by commit. A runner on the current release has no
+     `update`.
    - **When it is absent:** an instance on the current image, or a server that can't tell, has no `update`.
 2. **Every client shows the Update card for Orbit Cloud.** Web, iOS/macOS and Android show the card a self-managed
    runner shows (docs/runner-update-drain-design.md), driven by `managed.update` instead of `runner.selfUpdate`.

@@ -316,7 +316,7 @@ test('a duplicate on a unique key this unit does not own still reaches the calle
 // driver this deployment does not use, and every lost claim leaks a 500 in production.
 test('the execution claim as Prisma 7\'s pg adapter reports it is still classified', async () => {
   const f = fixture({
-    conflict: adapterConflict('session_task_execution_claim_idx', ['task_id']),
+    conflict: adapterConflict('session_task_execution_claim_idx_finished_at', ['task_id']),
     atDesiredId: { id: WINNER_ID, status: RunStatus.SUCCEEDED, taskId: TASK_ID, ownerId: OWNER_ID },
   });
 
@@ -345,7 +345,7 @@ test('the primary key as Prisma 7\'s pg adapter reports it is still classified',
 // the holder is what forces the insert, the P2002, and the decision about whether it is ours.
 test('the execution claim as prisma 7.10 reports it — index name, no column list — is classified', async () => {
   const f = fixture({
-    conflict: adapterConflict710('session_task_execution_claim_idx', 'session'),
+    conflict: adapterConflict710('session_task_execution_claim_idx_finished_at', 'session'),
     atDesiredId: null,
     holder: holderRow({ status: RunStatus.RUNNING }),
   });
