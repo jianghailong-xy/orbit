@@ -437,7 +437,7 @@ which pins both from `ORBIT_REGISTRY`.
 | `ORBIT_NTFY_TOPIC` | `string` (secret) | Optional; none, and then no alert is delivered | The ntfy topic. On a public server it is the only secret. | Yes | Recreate `grafana` |
 | `ORBIT_ALERT_EMAIL` | `string` | Optional; a placeholder | Addresses for `orbit-email`, separated by `;`. Needs `GF_SMTP_*`. | No | Recreate `grafana` |
 | `ORBIT_ALERT_WEBHOOK_URL` | `string` (URL) | Optional; Prometheus on this host | Where `orbit-webhook` POSTs. | No | Recreate `grafana` |
-| `ORBIT_WATCHDOG_URL` | `string` (URL) | Optional; Prometheus on this host | The external heartbeat URL the always-firing Watchdog is POSTed to every two minutes or so. | No | Recreate `grafana` |
+| `ORBIT_WATCHDOG_URL` | `string` (URL) | Optional; Prometheus on this host | The external heartbeat URL the always-firing Watchdog is POSTed to every minute. | No | Recreate `grafana` |
 
 ## Runner machine only
 

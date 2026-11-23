@@ -1,4 +1,4 @@
-# Which contact point takes which alert. The Watchdog goes to the heartbeat URL, every minute or two for as long as it fires;
+# Which contact point takes which alert. The Watchdog goes to the heartbeat URL, every minute for as long as it fires;
 # everything else goes to the contact point ORBIT_ALERT_CONTACT names (orbit-ntfy unless .env says otherwise).
 apiVersion: 1
 policies:
@@ -14,5 +14,8 @@ policies:
           - [watchdog, "=", "true"]
         group_by: [alertname]
         group_wait: 0s
-        group_interval: 1m
-        repeat_interval: 1m
+        # Not 1m and 1m: the alert is re-sent every minute and the dispatcher flushes just before a 1m repeat interval has
+        # elapsed, so it skipped every other flush and pinged every two minutes. A flush every 30 s with a 45 s repeat
+        # interval pings every 60 s.
+        group_interval: 30s
+        repeat_interval: 45s
