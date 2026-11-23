@@ -3344,7 +3344,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1440_drive_trash_group_marking',
       // 1448 indexes drive and share-link foreign keys for bounded permanent deletion. It writes no existing rows
       // and changes no preserved relation, trigger, function or DONE fence.
-      '1448_drive_purge_fk_indexes'],
+      '1448_drive_purge_fk_indexes',
+      // 1450 adds session.codex_sandbox_unavailable with a constant false default and no table rewrite.
+      // It changes no preserved rows, triggers, functions or DONE fence.
+      '1450_session_codex_sandbox_unavailable'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

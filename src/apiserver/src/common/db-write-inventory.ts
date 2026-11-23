@@ -1338,7 +1338,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'runner-api/runner-api.controller.ts#ingestEvents',
     shape: 'TX_RETRIED',
-    locks: 'session FOR UPDATE via lockSessionLeaseOwner (rank 30), then run_event / tool_call / approval child rows (rank 60), then ONE session UPDATE (I3).',
+    locks: 'session FOR UPDATE via lockSessionLeaseOwner (rank 30), then run_event / tool_call / approval child rows (rank 60), then ONE session UPDATE (I3). A first Codex sandbox-unavailable notice sets session.codex_sandbox_unavailable in that same UPDATE under the held lock. The column changes neither foreign keys nor the trigger lock ranks, and the merged link call carries it in writeCallSessions.',
     identity: 'The batch itself: `run_event` is unique on `(sessionId, seq)` with skipDuplicates — a runner link batch\'s tombstones too, one per refused event\'s seq — tool_call outcomes — and the PENDING approvals a returned call collects — are keyed by tool_use id, and the running sets are set-valued.',
     isolation: '',
     attempts: 4,
