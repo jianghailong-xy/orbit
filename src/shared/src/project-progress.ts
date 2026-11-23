@@ -472,7 +472,8 @@ export type DerivedTimelineKind =
   | 'FIX_TASK'
   /** Revision 42 (§12.7): the failure was handed to the task's own work session, its fix landing
    *  again, and the failure handed back to the coordinator, read off the item's `work_session_*`
-   *  columns and the next generation's `retry_*`. */
+   *  columns and the next generation's `retry_*`. A RETURNED_TO_COORDINATOR line's `data.lastMessage` is the work
+   *  session's last words at the hand-back, or null when it said none. */
   | 'HANDED_TO_SESSION'
   | 'FIXED_BY_SESSION'
   | 'RETURNED_TO_COORDINATOR';
@@ -1178,6 +1179,8 @@ export interface OpenItemWorkSession<Instant = string> {
   /** Why it was handed back; absent while the session still holds it. */
   returnReason?: OpenItemWorkSessionReturnReason;
   rounds: number;
+  /** The session's last words at the hand-back; null when it said none, absent while it still holds the item. */
+  lastMessage?: string | null;
 }
 
 /**

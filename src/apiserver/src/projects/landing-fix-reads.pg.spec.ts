@@ -641,7 +641,7 @@ test('§12.7 handed back: the row\'s workSession carries returnedAt, the reason 
     assert.ok(row, 'the handed-back item is not the coordinator\'s');
     assert.deepEqual(row.workSession, {
       sessionId: t.sessionId, offeredAt: item.workSessionOfferedAt, returnedAt: back.workSessionReturnedAt,
-      returnReason: 'NO_NEW_COMMIT', rounds: 0,
+      returnReason: 'NO_NEW_COMMIT', rounds: 0, lastMessage: LAST_WORDS,
     }, 'the handed-back row does not say where it was and why it came back');
 
     const task = await taskRow(stack, w, t.taskId);
@@ -656,9 +656,31 @@ test('§12.7 handed back: the row\'s workSession carries returnedAt, the reason 
     const returned = section.entries.at(-1)!;
     assert.equal(returned.text, 'Returned to the coordinator: no new commit');
     assert.equal(returned.reason, 'NO_NEW_COMMIT');
+    assert.equal((returned.data as { lastMessage?: string | null }).lastMessage, LAST_WORDS,
+      'the hand-back line does not carry the session\'s last words');
     assert.equal(returned.at.getTime(), back.workSessionReturnedAt!.getTime());
     assert.notEqual((await landingRow(stack, w, landingSessionId))?.landing?.state, 'FIXING',
       'the session list still says a handed-back failure is being fixed');
+  } finally {
+    await stack.db.$disconnect();
+  }
+});
+
+test('§12.7 handed back with no last words: the hand-back line and the row carry lastMessage null',
+{ skip, timeout: 240_000 }, async () => {
+  const stack = await connect();
+  try {
+    const { w, t, first, item, landingSessionId } = await handedOff(stack, 'reads-silent');
+    const fix = await runFixTurn(stack, w, t, first.jobId, { branchSha: DELIVERED, words: '' });
+    await finalize(stack, w, t, fix, DELIVERED);
+    assert.equal((await itemOf(stack, first.jobId)).workSessionReturnReason, 'NO_NEW_COMMIT', 'CONTROL: handed back');
+    await stack.db.project.update({ where: { id: w.projectId }, data: { coordinatorEnabled: false } });
+    const row = (await openItems(stack, w)).withCoordinator.find((candidate) => candidate.itemId === item.id);
+    assert.equal(row?.workSession?.lastMessage, null);
+    const section = sectionOf(await landingOf(stack, w, landingSessionId), first.jobId);
+    const returned = section.entries.at(-1)!;
+    assert.equal(returned.kind, 'RETURNED_TO_COORDINATOR');
+    assert.equal((returned.data as { lastMessage?: string | null }).lastMessage, null);
   } finally {
     await stack.db.$disconnect();
   }
