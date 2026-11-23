@@ -123,7 +123,7 @@ class ProjectSessionsShellTest {
         signIn(); openAlpha()
         await { exists(hasRowMenu("Options for Plain notes")) }
         compose.onNode(hasText("Plain notes") and hasClickAction()).performClick()
-        await { ProjectShell.calls.any { it == "GET sessions/${ProjectShell.PLAIN}" } && exists(hasContentDescription("Back")) }
+        await { exists(hasContentDescription("Back")) && ProjectShell.calls.any { it == "GET sessions/${ProjectShell.PLAIN}" } }
         compose.waitForIdle()
         compose.onAllNodesWithContentDescription("Project sessions").assertCountEquals(0)
     }

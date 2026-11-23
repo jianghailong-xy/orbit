@@ -31,6 +31,7 @@ import { capacityBudget, computeShare, storageShare, type CapacityBudget, type C
 import { observedStop, readFencingReceipt, type ManagedRunnerPredecessor, type ObservedStopProof } from './managed-runner-fencing';
 import type { ManagedRunnerProfile } from './managed-runner-profile';
 import {
+  MANAGED_POD_TERMINATION_GRACE_SECONDS,
   MANAGED_STOP_REPORT_FINALIZER,
   OWNER_ANNOTATION,
   RUNNER_ANNOTATION,
@@ -65,6 +66,8 @@ import {
  *   instance      bare Pod `mr-<runner uuid>` (runner-pod.yaml.example), behind the admission guard
  *   stop report   the kubelet's terminal container states (podStopConfirmed), kept on the Pod by the
  *                 manager's finalizer until the manager has recorded them, whoever deleted it
+ *   stop          the Pod deleted by UID with its termination grace (`stopInstance`), for the owner's
+ *                 Update Now alone (`ownerStopsOnly`)
  *   released      no VolumeAttachment names the volume's PV
  *   fencing       an operator's receipt in ConfigMap `mr-fence-<runner uuid>`
  *   capacity      the profile's budget, pooled by cluster key and namespace
@@ -191,6 +194,7 @@ export class KubernetesBackend implements ManagedRunnerBackend {
   readonly location: { readonly clusterKey: string; readonly namespace: string };
   readonly rollImage: string;
   readonly driveMount?: ManagedDriveMountDelivery;
+  readonly ownerStopsOnly = true as const;
 
   constructor(
     private readonly kube: ManagedKubeClient,
@@ -368,6 +372,18 @@ export class KubernetesBackend implements ManagedRunnerBackend {
     const name = managedPodName(mapping.runnerId);
     await this.kube.pods.delete(name, { uid: mapping.podUid! });
     await this.releaseStopReport(name, mapping.podUid!);
+  }
+
+  /**
+   * Asks the recorded Pod to stop, for the owner's Update Now: deleted by UID — a successor under the same name is
+   * never touched — with the grace every managed Pod is made with, never a shorter one. The kubelet sends the runner
+   * SIGTERM, and its ordinary shutdown stops its turns, which stay resumable; past the grace it is killed. The
+   * stop-report finalizer keeps the deleted Pod, so the kubelet's terminal report of it stays to be read
+   * (`readInstance`), and only that report is the stop proof: asking is none. Asked again on every pass until then,
+   * which changes nothing on a Pod already being deleted.
+   */
+  async stopInstance(mapping: ManagedRunner): Promise<void> {
+    await this.kube.pods.delete(managedPodName(mapping.runnerId), { uid: mapping.podUid!, gracePeriodSeconds: MANAGED_POD_TERMINATION_GRACE_SECONDS });
   }
 
   // ── stop proof ─────────────────────────────────────────────────────────────────────────────
