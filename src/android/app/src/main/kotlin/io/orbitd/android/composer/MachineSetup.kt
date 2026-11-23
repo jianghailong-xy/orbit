@@ -214,9 +214,23 @@ object MachineSetup {
         return if (cut == 0 || root[cut - 1] == ':') root.take(cut + 1) else root.take(cut)
     }
 
-    /** The directory the folder step's name goes in: the machine's home, or its Repos Folder on an older runner. */
-    fun newFolderRootOf(runner: JsonObject): String =
-        newFolderRoot(runner.text("reposRoot").orEmpty(), runner.strings("capabilities"))
+    /**
+     * Where a new folder named on this runner goes, as the server makes it: port of @orbit/shared `newFolderRootFor`, held to
+     * src/shared/src/new-folder-root.fixture.json. A managed runner that has not reported yet takes its image's home, whatever
+     * Repos Folder is stored from before; a runner that makes new folders and has reported its Repos Folder takes [newFolderRoot]; any
+     * other makes none (null).
+     */
+    fun newFolderRootFor(managed: Boolean, reposRoot: String?, capabilities: List<String>?): String? {
+        if (managed && capabilities.isNullOrEmpty()) return ManagedRunner.HOME
+        val root = reposRoot?.trim().orEmpty()
+        if (root.isEmpty() || capabilities?.contains(CREATE_WORKDIR_CAPABILITY) != true) return null
+        return newFolderRoot(root, capabilities)
+    }
+
+    /** The setup card's root: [newFolderRootFor], the account's managed runner read as managed while it is set up or asleep. Only a
+     *  usable card shows or sends it, and a managed runner always has one, so "" is never drawn. */
+    fun setupFolderRoot(runner: JsonObject, managedSetup: Boolean): String =
+        newFolderRootFor(managedSetup || RunnerPage.isManaged(runner), runner.text("reposRoot"), runner.strings("capabilities")).orEmpty()
 
     /**
      * Whether a machine too old to answer gets there by itself: not one that reports its updater off, or unable to write where it is
