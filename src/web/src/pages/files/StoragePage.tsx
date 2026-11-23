@@ -75,6 +75,18 @@ export function StorageSettingsPage() {
       {drive && (
         <SettingsCard>
           <SettingsRow title="Total" control={<span className="settings-storage-size">{formatFileSize(drive.totalBytes)}</span>} />
+          {drive.nearQuota && drive.storeUsedBytes !== undefined && drive.storeQuotaBytes !== undefined && (
+            <SettingsRow
+              title="Orbit Files storage"
+              description={
+                <span className="settings-storage-full" style={{ color: 'var(--warning)' }}>
+                  {drive.storeUsedBytes >= drive.storeQuotaBytes
+                    ? "The drive's storage is full. Ask the operator to raise the limit."
+                    : `Orbit Files storage is ${Math.floor((drive.storeUsedBytes / drive.storeQuotaBytes) * 100)}% full. Uploads stop at 100%. Ask the operator to raise the limit.`}
+                </span>
+              }
+            />
+          )}
           <SettingsRow
             title="Drive"
             description={`Including ${formatFileSize(drive.trashBytes)} in Trash`}

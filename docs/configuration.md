@@ -138,6 +138,7 @@ with either backend. An invalid backend, an incomplete S3 configuration, or an e
 | `ORBIT_FILES_S3_ACCESS_KEY_ID` | `secret` | Required with `s3`; otherwise empty | Access key ID for the bucket. | Yes | Recreate API |
 | `ORBIT_FILES_S3_SECRET_ACCESS_KEY` | `secret` | Required with `s3`; otherwise empty | Secret access key for the bucket. | Yes | Recreate API |
 | `ORBIT_FILES_QUOTA_BYTES` | `integer` (bytes) | Optional; empty means no limit | The most one account may keep, each content counted once. Past it an upload is refused with `413` and the code `FILE_QUOTA_EXCEEDED`. For a hosted instance; a self-hosted deployment needs none. | No | Recreate API |
+| `ORBIT_FILES_STORE_QUOTA_BYTES` | `integer` (bytes) | Optional with `s3` | The S3 store's configured capacity across all accounts. Files → Storage warns at 80% based on S3 blob bytes recorded by Orbit, cached for three minutes. The storage backend enforces its own limit. | No | Recreate API |
 
 With `local`, `./data/files` is the only copy of those bytes: it is not in PostgreSQL or in any local backup. The
 off-host mirror copies it to `<target>-files` beside the archive; with `s3`, the bucket's versioning or replication

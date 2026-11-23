@@ -1908,6 +1908,9 @@ export interface DriveUsage {
   driveBytes: number;
   trashBytes: number;
   otherBytes: number;
+  storeUsedBytes?: number;
+  storeQuotaBytes?: number;
+  nearQuota?: boolean;
 }
 
 export const driveUsageQuery = () =>
