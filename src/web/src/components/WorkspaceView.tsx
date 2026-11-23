@@ -57,6 +57,7 @@ import {
   ThunderboltOutlined,
   UndoOutlined,
   UnorderedListOutlined,
+  UploadOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AgentToolsDrawer, agentToolsMenuStatus } from './AgentToolsDrawer';
@@ -13040,32 +13041,17 @@ export function SessionComposer({
           // array's last entry is the one beside the `+` — while the native menu
           // (ComposerView.swift `addMenu`) hands its items to the system with the first one
           // nearest the button and gets them back reversed. Hence the native source reads
-          // Command…File and this reads Files…Command: both clients put Command under the
-          // thumb and the attachments at the far end, and a divider between the two. Pinned by
+          // Command…File and this reads File…Command: both clients put Command under the
+          // thumb and File at the far end, and a divider between the two groups. Pinned by
           // WorkspaceView.composerMenu.test.tsx, drawn in
           // docs/mocks/composer-attach-menu-phone.html.
           items={[
-              // Orbit's own Files on top under a From Orbit heading, a rule, then this device's
-              // File and Image (owner's call on docs/mocks/composer-attach-labels): "File" and
-              // "From Files" read alike.
-              {
-                key: 'from-orbit',
-                type: 'group',
-                label: 'From Orbit',
-                children: [
-                  {
-                    key: 'drive',
-                    icon: <FolderOpenOutlined />,
-                    label: 'Files',
-                    onSelect: () => setTimeout(() => setDrivePickerOpen(true), 0),
-                  },
-                ],
-              },
-              { key: 'orbit-divider', type: 'separator' },
+              // Each row says what it does and where the file comes from, with no heading to
+              // miss: "File" and "From Files" read alike (docs/mocks/composer-attach-labels).
               {
                 key: 'file',
-                icon: <PaperClipOutlined />,
-                label: 'File',
+                icon: <UploadOutlined />,
+                label: 'Upload File',
                 onSelect: () => fileInputRef.current?.click(),
               },
               {
@@ -13073,8 +13059,14 @@ export function SessionComposer({
                 icon: <PictureOutlined />,
                 // Offered unconditionally: a state the upload can't work in says so on pick,
                 // rather than greying the item out.
-                label: 'Image',
+                label: 'Upload Image',
                 onSelect: () => imageInputRef.current?.click(),
+              },
+              {
+                key: 'drive',
+                icon: <FolderOpenOutlined />,
+                label: 'Add from Orbit Files',
+                onSelect: () => setTimeout(() => setDrivePickerOpen(true), 0),
               },
               { key: 'divider', type: 'separator' },
               {
