@@ -4295,7 +4295,7 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   {"table":"session","trigger":"session_engine_from_task_pin","event":"BEFORE INSERT","kind":"ROW/STATEMENT","since":"0414_session_engine","takes":[]},
   {"table":"session","trigger":"session_engine_immutable","event":"BEFORE UPDATE OF \"engine\"","kind":"ROW/STATEMENT","since":"0414_session_engine","takes":[]},
   {"table":"session","trigger":"session_help_ask_guard","event":"BEFORE UPDATE OF \"help_ask\"","kind":"ROW/STATEMENT","since":"0850_help_ask_session","takes":[]},
-  {"table":"session","trigger":"session_listed_at_settle","event":"BEFORE UPDATE OF \"status\", \"completed_at\"","kind":"ROW/STATEMENT","since":"1464_session_listed_at","takes":[]},
+  {"table":"session","trigger":"session_listed_at_settle","event":"BEFORE UPDATE OF \"status\", \"completed_at\"","kind":"ROW/STATEMENT","since":"1490_session_listed_at","takes":[]},
   {"table":"session","trigger":"session_merge_projection_checkpoint_authority_trg","event":"BEFORE UPDATE OF \"merge_status\", \"merged_source_sha\", \"branch_merged\"","kind":"ROW/STATEMENT","since":"0152_task_checkpoint","takes":[]},
   {"table":"session","trigger":"session_open_list_epoch_delete","event":"AFTER DELETE","kind":"ROW/STATEMENT","since":"0484_open_list_epoch","takes":["open_list_epoch LOCK","open_list_epoch WRITE"]},
   {"table":"session","trigger":"session_open_list_epoch_insert","event":"AFTER INSERT","kind":"ROW/STATEMENT","since":"0484_open_list_epoch","takes":["open_list_epoch LOCK","open_list_epoch WRITE"]},

@@ -152,6 +152,11 @@ export interface ControlEvent {
  *  Comma-separated with any other hint a later server may learn; unknown values are ignored. */
 export const CONTROL_HINT_LIST_CHANGED = 'list_changed';
 
+/** The `hints=` value a `GET /api/events` connection declares, beside `list_changed`, to be told which
+ *  workspaces' Open lists moved: `scopes` on `sessions.list_changed`. A stream that does not declare it
+ *  never sees the field. */
+export const CONTROL_HINT_LIST_SCOPES = 'list_scopes';
+
 /** The `hints=` value a `GET /api/events` connection declares to receive `owner_requests.changed`. */
 export const CONTROL_HINT_OWNER_REQUESTS = 'owner_requests';
 
@@ -177,6 +182,11 @@ export interface ControlListChanged {
    *  nothing but a previous hint's. The first hint a stream gets, shortly after it connects, carries
    *  the current token even when nothing moved. */
   version: string;
+  /** With `hints=list_scopes` only: the public ids of the workspaces whose Open lists may read differently
+   *  since the previous hint to this stream. A list filtered to one workspace reads only when its workspace is
+   *  among them; a list with no workspace filter reads on every hint. Absent: any list may (the first hint
+   *  after a connect, an account-wide source, a clock threshold, a runner change). Never empty. */
+  scopes?: string[];
 }
 
 /** Project membership derived from coordinator, landing, task, context, judgment or root-session
