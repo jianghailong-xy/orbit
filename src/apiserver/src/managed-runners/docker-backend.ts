@@ -330,9 +330,8 @@ export class DockerBackend implements ManagedRunnerBackend {
   }
 
   /**
-   * The channel's latest measurement of the volume: its limit, and what Docker last measured it holding, which the
-   * channel takes every `diskCheckSeconds` to enforce the limit and keeps. Reading the view walks nothing. None
-   * until the channel has measured the volume, or for one with no limit.
+   * The volume's limit and latest usage from the channel, measured every `diskCheckSeconds`.
+   * Reading the view walks nothing. None until the channel has measured the volume, or for one with no limit.
    */
   volumeMeasurement(volume: DockerVolume): VolumeFigures | null {
     const { limitBytes, usageBytes } = volume.view;
