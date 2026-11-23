@@ -37,7 +37,7 @@ export type SessionWaitingOn = (typeof SESSION_WAITING_ON)[number];
 export const SESSION_TURN_OUTCOMES = ['ANSWERED', 'FAILED', 'INTERRUPTED', 'CANCELLED'] as const;
 export type SessionTurnOutcome = (typeof SESSION_TURN_OUTCOMES)[number];
 
-/** The four fields, as each session payload kind carries them. Optional on the wire types: an older
+/** The fields, as each session payload kind carries them. Optional on the wire types: an older
  *  control plane omits them. */
 export interface SessionPhaseFields {
   phase: SessionPhase;
@@ -45,7 +45,16 @@ export interface SessionPhaseFields {
   released: boolean;
   lastTurnOutcome: SessionTurnOutcome | null;
   waitingOn: SessionWaitingOn | null;
+  /** Why an end was asked for (`session.end_reason`, a SessionEndReason value or a legacy one), or null when
+   *  none was. Read from the row; a value a client does not know reads as an end it cannot name. */
+  endReason: string | null;
+  /** Released having finished its work: its task ended DONE (`endReason` task_done) or, as a landing
+   *  container, it settled. The server decides it (common/session-release.ts releaseFinishedTheWork), so a
+   *  client words "Finished" from this and never from the session kind. */
+  workFinished: boolean;
 }
 
 /** The field names, in the order the contract lists them. */
-export const SESSION_PHASE_FIELD_NAMES = ['phase', 'released', 'lastTurnOutcome', 'waitingOn'] as const;
+export const SESSION_PHASE_FIELD_NAMES = [
+  'phase', 'released', 'lastTurnOutcome', 'waitingOn', 'endReason', 'workFinished',
+] as const;
