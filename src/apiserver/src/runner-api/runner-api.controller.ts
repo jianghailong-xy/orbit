@@ -58,6 +58,7 @@ import { CreatorType, Prisma, RunStatus, TaskStatus, type Runner } from '@prisma
 import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
 import { latestAgentToolsReport } from './agent-tools-report';
+import { reportsCodexSandboxUnavailable } from './codex-sandbox-report';
 import { withActiveSessions } from '../providers/active-sessions';
 import { accountAfterSignOut, accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount, waitsForWarmCache } from '../providers/plan-usage-accounts';
 import {
@@ -9648,6 +9649,9 @@ export class RunnerApiController {
           : {}),
         ...retry,
       });
+      // The runner's report that Codex's sandbox cannot start on it (codex-sandbox-report.ts): the
+      // session's permission semantics then say the sandbox is off. Sent once per Codex process.
+      if (reportsCodexSandboxUnavailable(durable)) sessionData.codexSandboxUnavailable = true;
 
       const toolUses = events.filter((e) => e.type === RunEventType.TOOL_USE);
 
