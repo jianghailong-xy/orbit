@@ -218,7 +218,7 @@ describe('the composer + menu', { timeout: 60_000 }, () => {
   it('draws the native menu: command group under the thumb, media group above the rule', async () => {
     const menu = await openMenu();
 
-    expect(drawn(menu)).toEqual(['# From Orbit', 'Files', '# From this device', 'File', 'Image', '─', 'Shell', 'Skill', 'Command']);
+    expect(drawn(menu)).toEqual(['# From Orbit', 'Files', '─', 'File', 'Image', '─', 'Shell', 'Skill', 'Command']);
     // …in the variant that sizes it like the native one on a phone (below).
     expect(menu.dataset.variant).toBe('attachment');
   });
