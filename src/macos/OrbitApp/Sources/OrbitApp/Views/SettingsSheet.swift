@@ -1160,8 +1160,10 @@ struct AccountPoolSettingsPage: View {
                         let failure = await agents.pausePoolMember(pool, member: member, durationMinutes: minutes)
                         if failure == nil { await model.sharedPools?.loadAccess(pool.id) }
                         return failure
-                    })
+                    },
+                    health: health)
                     .task { await model.sharedPools?.loadAccess(pool.id) }
+                    .task { await model.runners?.loadHealth() }
                     .task(id: page.pool.members.map(\.pausedUntil)) {
                         await refreshAfterPauses(page.pool) {
                             await agents.reloadPools()
@@ -1171,7 +1173,8 @@ struct AccountPoolSettingsPage: View {
             } else {
                 AccountPoolPageView(pool: pool, pause: { member, minutes in
                     await agents.pausePoolMember(pool, member: member, durationMinutes: minutes)
-                })
+                }, health: health)
+                .task { await model.runners?.loadHealth() }
                 .task(id: pool.members.map(\.pausedUntil)) {
                     await refreshAfterPauses(pool) { await agents.reloadPools() }
                 }
@@ -1180,6 +1183,9 @@ struct AccountPoolSettingsPage: View {
             ContentUnavailableView(ProvidersOverview.poolGone, systemImage: "person.3")
         }
     }
+
+    /// The blocked accounts, as the runners model last read them.
+    private var health: AccountHealthRows { model.runners.map(AccountHealthRows.init) ?? AccountHealthRows() }
 
     /// What its people's and keys' presses do, once they are read.
     private func accessActions(_ page: CodexPoolPage) -> PoolAccessActions? {
@@ -1237,7 +1243,9 @@ struct SharedPoolSettingsPage: View {
                               exit: { await close(pools, pool, delete: page.mine) },
                               pause: { member, minutes in
                                   await pools.pauseMember(pool, member: member, durationMinutes: minutes)
-                              })
+                              },
+                              health: model.runners.map(AccountHealthRows.init) ?? AccountHealthRows())
+                .task { await model.runners?.loadHealth() }
                 .task(id: page.pool.members.map(\.pausedUntil)) {
                     await refreshAfterPauses(page.pool) { await pools.load() }
                 }

@@ -87,7 +87,7 @@ const envKey = (accounts: RunnerEngineAccount[]): RunnerEngineHealth =>
     },
   });
 
-const LOGIN_CAPABILITIES = ['antigravity-google-login/v1', 'antigravity-account-login/v1', 'antigravity-account-remove/v1'];
+const LOGIN_CAPABILITIES = ['antigravity-google-login/v1', 'antigravity-account-login/v1', 'antigravity-account-remove/v1', 'antigravity-default-sign-out/v1'];
 
 const runner = (engine: RunnerEngineHealth = antigravity(), over: Partial<Runner> = {}): Runner => ({
   id: RUNNER_ID,
@@ -276,7 +276,8 @@ describe('two Google accounts on one runner', () => {
     expect(buttons(defaultRow)).toEqual(['More actions']);
     const items = async (row: HTMLElement) =>
       all(await openRunnerMenu(row), '[role="menuitem"]').map((item) => item.textContent?.trim());
-    expect(await items(defaultRow)).toEqual(['Rename', 'Re-sign in', 'Pause account…', 'Remove account']);
+    // Sign out… is Default's alone: an added account's login goes with the account.
+    expect(await items(defaultRow)).toEqual(['Rename', 'Re-sign in', 'Pause account…', 'Sign out…', 'Remove account']);
     expect(await items(workRow)).toEqual(['Rename', 'Re-sign in', 'Pause account…', 'Remove account']);
 
     await clickRunnerMenuItem(workRow, 'Remove account');

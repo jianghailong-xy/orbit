@@ -45,6 +45,13 @@ export const PERSONAL_SETTINGS = {
     'Optimize For',
     'What to favour when a model is picked at a tier.',
   ),
+  // docs/routing-account-health-design.md §7.5: off by default; the providers the owner blocked stay out either way.
+  relaxBlockedPins: setting(
+    'relaxBlockedPins',
+    '/settings/providers/routing',
+    'Run pinned tasks elsewhere',
+    "When the account a task is pinned to can't run, let it run on another account. Providers you've blocked stay out either way.",
+  ),
   promptSuggestions: setting(
     'promptSuggestions',
     '/settings/general',

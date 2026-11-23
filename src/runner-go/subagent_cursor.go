@@ -180,5 +180,7 @@ func runCursorChild(ctx context.Context, c subagentChild) (ExecResult, string, e
 		req.Status = stFailed
 	}
 	// Cursor reports no usage and no cost (§3.2): none is claimed.
-	return subagentChildResult(req.Status, strings.TrimSpace(req.Result), req.Error, 0, nil), conversation, nil
+	res := subagentChildResult(req.Status, strings.TrimSpace(req.Result), req.Error, 0, nil)
+	res.Failure, res.Admission = req.Failure, req.Admission
+	return res, conversation, nil
 }

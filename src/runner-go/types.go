@@ -1128,8 +1128,17 @@ type AccountRemoveCommand struct {
 	// The engine whose account store holds the slot (codex, claude). Empty on the field older
 	// control planes use, which only ever meant Codex.
 	Engine string `json:"engine,omitempty"`
-	// "default", or the id of a slot this runner added. Default is never removable.
+	// "default", or the id of a slot this runner added. Default is never removable; it is only ever
+	// signed out (Action "sign-out").
 	Account string `json:"account"`
+	// What to do with the account: "remove" (also empty, from a control plane older than sign-out)
+	// takes an added slot off this machine; "sign-out" deletes Default's login credential and nothing
+	// else (signOutDefault, docs/default-sign-out-design.md). Only a runner that declares
+	// `<engine>-default-sign-out/v1` is handed a sign-out.
+	Action string `json:"action,omitempty"`
+	// With a sign-out: go ahead although sessions are running on Default, which the person confirmed
+	// after a refusal named them. They fail on their next turn.
+	Force bool `json:"force,omitempty"`
 	// Identifies this request (the server's codexAccountRemoveAt), so a report can be matched to the
 	// request it answers.
 	Attempt string `json:"attempt,omitempty"`
@@ -1148,7 +1157,8 @@ type AccountRemoveMove struct {
 
 // AccountRemoveResultRequest is the runner's word on a removal: "done" once the slot's
 // directory and record are gone, or "failed" with the machine's own reason — Default, a slot a live
-// session is in, or a directory that would not go away.
+// session is in, or a directory that would not go away. A sign-out is answered the same way: "done"
+// once Default's credential is gone, "failed" with sessions on Default or a credential that stayed.
 type AccountRemoveResultRequest struct {
 	// The engine the removal was for; empty when it was answered on the codex-named route an older
 	// control plane reads.
@@ -1157,8 +1167,8 @@ type AccountRemoveResultRequest struct {
 	Status  string `json:"status"` // "done" | "failed"
 	Message string `json:"message,omitempty"`
 	Attempt string `json:"attempt,omitempty"`
-	// With a removal refused because the account is in use: the sessions using it, so the control
-	// plane can name them in Message.
+	// With a removal or a sign-out refused because the account is in use: the sessions using it, so
+	// the control plane can name them in Message.
 	SessionIDs []string `json:"sessionIds,omitempty"`
 }
 
@@ -1958,6 +1968,12 @@ type TurnCompleteRequest struct {
 	// rather than as a reply (Codex). Result is then whatever the turn said before it died, so
 	// without this the control plane recorded the agent's last sentence as the failure's reason.
 	Error string `json:"error,omitempty"`
+	// Failure is what a FAILED turn failed with, as its engine adapter classified it (engine_failure.go,
+	// docs/routing-account-health-design.md §5.1); nil when it is not classified. Error keeps its words.
+	Failure *RunFailure `json:"failure,omitempty"`
+	// Admission is sent on a FAILED turn only, false included: whether the turn ended before the engine
+	// produced any reply, tool call or billed token (§5.2). Nil on every other turn.
+	Admission *bool `json:"admission,omitempty"`
 	// ShellExitCode/ShellOutput are populated for synchronous shell turns. Pointers preserve
 	// the difference between a real zero/empty result and an older runner that sent neither.
 	ShellExitCode *int                   `json:"shellExitCode,omitempty"`
@@ -2068,6 +2084,8 @@ type RunFinalizeRequest struct {
 	Result           string                 `json:"result,omitempty"`
 	Subtype          string                 `json:"subtype,omitempty"`
 	Error            string                 `json:"error,omitempty"`
+	Failure          *RunFailure            `json:"failure,omitempty"`   // the run's last FAILED turn's, on a FAILED end (§5.1)
+	Admission        *bool                  `json:"admission,omitempty"` // the same turn's (§5.2)
 	ClaudeSessionID  string                 `json:"claudeSessionId,omitempty"`
 	RuntimeSessionID string                 `json:"runtimeSessionId,omitempty"`
 	NumTurns         int                    `json:"numTurns"`
