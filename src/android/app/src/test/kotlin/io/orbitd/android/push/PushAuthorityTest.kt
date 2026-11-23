@@ -412,7 +412,10 @@ class PushAuthorityTest {
         assertEquals(PushType.ALERT, push.type)
         assertEquals("h1", push.payload.accountHealthId)
         assertEquals(Destination.RUNNER, OrbitLinks.parse(push.link!!)!!.destination)
-        assertNull("a key has no machine", message("account-needs-action", "accountHealthID" to "h2").link)
+        // A key or pool login has no machine: the Providers screen, where its row is.
+        val providers = message("account-needs-action", "accountHealthID" to "h2", "subjectKey" to "provider:k1").link
+        assertEquals("orbit://settings/machines-and-models", providers)
+        assertEquals(OrbitRoute(Destination.SETTINGS, "machines-and-models"), OrbitLinks.parse(providers!!)!!.copy(origin = OrbitRoute(Destination.SETTINGS).origin))
         assertNull("it names its health row", runCatching { message("account-needs-action", "runnerID" to runnerId) }.getOrNull())
         authorityFixture { authority, server, _ ->
             var blocks = """[{"id":"h1"}]"""

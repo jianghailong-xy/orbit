@@ -62,9 +62,11 @@ data class PushPayload(
         kind == SCHEDULE -> sessionId?.let { "orbit-session:$it" } ?: scheduleId?.let { "orbit://schedule/$it" }
         // A condition that cannot be read: the conversation it came from, which draws its card, else the card in Waiting on you.
         kind == CONDITION -> sessionId?.let { "orbit-session:$it" } ?: ownerRequestId?.let { "orbit://owner-request/$it" }
-        // About a machine: an account on it the provider refused (a key or pool login has no machine: no link), its sign-in lapsed, its Claude connection to Anthropic is in a region Anthropic does not offer Claude in,
+        // About a machine: its sign-in lapsed, its Claude connection to Anthropic is in a region Anthropic does not offer Claude in,
         // or it drains for an update with the owner's work waiting on it.
-        kind == "engine-signed-out" || kind == "claude-region-blocked" || kind == "runner-updating" || kind == ACCOUNT_NEEDS_ACTION -> runnerId?.let { "orbit://runner/$it" }
+        kind == "engine-signed-out" || kind == "claude-region-blocked" || kind == "runner-updating" -> runnerId?.let { "orbit://runner/$it" }
+        // An account the provider refused: its machine's page, or for a key or pool login the Providers screen, where its row is.
+        kind == ACCOUNT_NEEDS_ACTION -> runnerId?.let { "orbit://runner/$it" } ?: PROVIDERS_LINK
         // A merge into main waiting on the owner opens its project's sessions page, where its card is, as that project's root
         // (iOS 6b4bef713 `Notifications.intent`). Every other owner item opens the conversation, and so does a merge naming no project.
         kind == "approve-merge-to-main" && projectId != null -> "orbit://project/$projectId"
@@ -92,6 +94,8 @@ data class PushPayload(
         const val CONDITION = "condition"
         /** An account the provider refused, or that failed to start runs three times (docs/account-health-owner-surface-contract.md §1). */
         const val ACCOUNT_NEEDS_ACTION = "account-needs-action"
+        /** Settings' Providers screen (keys and pools): where a key's or pool login's blocked row is. */
+        const val PROVIDERS_LINK = "orbit://settings/machines-and-models"
     }
 }
 

@@ -16,6 +16,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.orbitd.android.ui.OrbitTheme
 import java.io.File
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -50,5 +51,31 @@ class AccountHealthDeviceTest {
         compose.onNodeWithTag("account-health:check").performClick()
         compose.waitUntil(5_000) { checked == 1 }
         assertTrue(checked == 1)
+    }
+
+    /** A held task row beside an unheld one, then the task view's block and a relaxed run: files/account-health/held-rows.png. */
+    @Test fun aHeldTaskRowIsOneQuietLineBesideAnUnheldOne() {
+        val held = Json.parseToJsonElement("""{"id":"t1","title":"Index the repository for the search page","status":"OPEN","accountHold":{
+            "kind":"ACCOUNT_NEEDS_ACTION","reason":"Cursor said \"Add a payment method to continue\". Next try at 21:19","until":"2026-11-22T21:19:00Z",
+            "setting":"orbit-settings:relaxBlockedPins",
+            "accounts":[{"provider":"cursor","engine":"cursor","line":"Cursor said \"Add a payment method to continue\"","until":"2026-11-22T21:19:00Z"}]}}""").jsonObject
+        val unheld = Json.parseToJsonElement("""{"id":"t2","title":"Write the release notes","status":"OPEN"}""").jsonObject
+        compose.runOnUiThread {
+            compose.activity.setContentView(ComposeView(compose.activity).apply {
+                setContent {
+                    OrbitTheme {
+                        Column(Modifier.padding(16.dp)) {
+                            io.orbitd.android.tasks.TaskRowView(held)
+                            io.orbitd.android.tasks.TaskRowView(unheld)
+                            io.orbitd.android.tasks.TaskAccountHoldNote(held["accountHold"]!!.jsonObject, {})
+                            io.orbitd.android.tasks.RelaxedRunNote("Pinned to cursor, which can't run now (Cursor said \"Add a payment method to continue\"); runs on codex instead, on the same engine, at tier M")
+                        }
+                    }
+                }
+            })
+        }
+        compose.onNodeWithTag("task-account-hold-line").assertIsDisplayed()
+        val dir = File(InstrumentationRegistry.getInstrumentation().targetContext.filesDir, "account-health").also { it.mkdirs() }
+        File(dir, "held-rows.png").outputStream().use { InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot().compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 }

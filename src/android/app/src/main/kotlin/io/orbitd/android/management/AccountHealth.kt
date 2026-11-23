@@ -17,7 +17,7 @@ import kotlinx.serialization.json.*
 
 /** One blocked account (GET /account-health; docs/account-health-owner-surface-contract.md §2). */
 internal data class AccountHealthBlock(
-    val id: String, val runnerId: String?, val engine: String?, val account: String?, val scopeModel: String,
+    val id: String, val runnerId: String?, val engine: String?, val account: String?, val providerId: String?, val poolId: String?, val scopeModel: String,
     val kind: String, val said: String?, val trips: Int, val since: String?, val nextTrialAt: String?,
     val trialRunning: Boolean, val line: String?,
 ) {
@@ -30,7 +30,7 @@ internal data class AccountHealthBlock(
         fun parse(body: JsonElement): List<AccountHealthBlock> = ((body as? JsonObject)?.get("blocks") as? JsonArray).orEmpty().mapNotNull { element ->
             val o = element as? JsonObject ?: return@mapNotNull null
             fun str(key: String) = (o[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
-            AccountHealthBlock(str("id") ?: return@mapNotNull null, str("runnerId"), str("engine"), str("account"), str("scopeModel").orEmpty(),
+            AccountHealthBlock(str("id") ?: return@mapNotNull null, str("runnerId"), str("engine"), str("account"), str("providerId"), str("poolId"), str("scopeModel").orEmpty(),
                 str("kind").orEmpty(), str("said"), (o["trips"] as? JsonPrimitive)?.intOrNull ?: 0, str("since"), str("nextTrialAt"),
                 (o["trialRunning"] as? JsonPrimitive)?.booleanOrNull == true, str("line"))
         }
@@ -38,6 +38,13 @@ internal data class AccountHealthBlock(
         /** The whole-account block of a runner's sign-in (`default` for the machine's one login), if there is one. */
         fun forRunnerAccount(blocks: List<AccountHealthBlock>, runnerId: String, engine: String, account: String) =
             blocks.firstOrNull { it.runnerId == runnerId && it.engine == engine && it.account == account && it.scopeModel.isEmpty() }
+
+        /** A key, or a Claude pool member (which is a key): `providerId`, whole account only. */
+        fun forProvider(blocks: List<AccountHealthBlock>, providerId: String) = blocks.firstOrNull { it.providerId == providerId && it.scopeModel.isEmpty() }
+
+        /** A Codex pool login: the pool and the login's account id (a member's `login:` prefix is not part of it). */
+        fun forLogin(blocks: List<AccountHealthBlock>, poolId: String, account: String) =
+            blocks.firstOrNull { it.poolId == poolId && it.account == account && it.scopeModel.isEmpty() }
 
         private fun clock(ms: Long, zone: ZoneId, pattern: String) = DateTimeFormatter.ofPattern(pattern, Locale.US).withZone(zone).format(Instant.ofEpochMilli(ms))
 
@@ -60,15 +67,29 @@ internal data class AccountHealthBlock(
 /**
  * A blocked account's line on its row, with Check again (§8 item 2 of docs/routing-account-health-design.md): drawn only while the
  * account is blocked. Check again calls POST /account-health/:id/check, then reads the blocks again; a 404 is "nothing to clear".
+ * [find] picks the row's block: a runner sign-in, a key, or a pool login.
  */
 @Composable
-internal fun AccountHealthLine(api: ManagementApi, runnerId: String, engine: String, account: String) {
-    var blocks by remember(runnerId) { mutableStateOf<List<AccountHealthBlock>>(emptyList()) }
+internal fun AccountHealthLine(api: ManagementApi, find: (List<AccountHealthBlock>) -> AccountHealthBlock?) {
+    var blocks by remember { mutableStateOf<List<AccountHealthBlock>>(emptyList()) }
     var reload by remember { mutableIntStateOf(0) }
-    LaunchedEffect(runnerId, reload) { runCatching { blocks = AccountHealthBlock.parse(api.get("account-health")) } }
-    val block = AccountHealthBlock.forRunnerAccount(blocks, runnerId, engine, account) ?: return
+    LaunchedEffect(reload) { runCatching { blocks = AccountHealthBlock.parse(api.get("account-health")) } }
+    val block = find(blocks) ?: return
     AccountHealthBlockLine(block, check = { api.post("account-health/${block.id}/check") }, onChecked = { reload++ })
 }
+
+@Composable
+internal fun AccountHealthLine(api: ManagementApi, runnerId: String, engine: String, account: String) =
+    AccountHealthLine(api) { AccountHealthBlock.forRunnerAccount(it, runnerId, engine, account) }
+
+/** The line for a key, or a Claude pool member. */
+@Composable
+internal fun AccountHealthProviderLine(api: ManagementApi, providerId: String) = AccountHealthLine(api) { AccountHealthBlock.forProvider(it, providerId) }
+
+/** The line for a Codex pool login: [memberId] is the pool member's id, `login:<account>`. */
+@Composable
+internal fun AccountHealthLoginLine(api: ManagementApi, poolId: String, memberId: String) =
+    AccountHealthLine(api) { AccountHealthBlock.forLogin(it, poolId, memberId.removePrefix("login:")) }
 
 @Composable
 internal fun AccountHealthBlockLine(block: AccountHealthBlock, check: suspend () -> Unit, onChecked: () -> Unit) {
