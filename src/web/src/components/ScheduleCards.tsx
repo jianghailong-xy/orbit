@@ -5,6 +5,7 @@ import {
   SCHEDULE_COPY,
   SCHEDULE_RUN_STATUS_COPY,
   scheduleChangeLineText,
+  scheduleChangeOpeningRows,
   scheduleCostsParts,
   scheduleCreateNotice,
   scheduleCreateWhen,
@@ -24,6 +25,7 @@ import {
   scheduleRunsInText,
   scheduleStartedOnText,
   type ScheduleCard,
+  type ScheduleChangeOpening,
   type ScheduleChangeRecord,
   type ScheduleCreateCard,
   type ScheduleDecisionAnswer,
@@ -442,6 +444,33 @@ function ScheduleRunFiringStrip({ of }: { of: ScheduleRunOfSession }): JSX.Eleme
 }
 
 /** The strip at the top of a run's session. */
+/**
+ * A change conversation's head (§8.2, board 03-change ③): the strip naming the schedule, which opens it, and Orbit's
+ * opening — the schedule as it was when the conversation was opened, and what can change at once or needs Allow.
+ */
+export function ScheduleChangeOpeningView({ opening }: { opening: ScheduleChangeOpening }): JSX.Element {
+  const navigate = useNavigate();
+  const T = C.changeConversation;
+  return (
+    <div className="sched-change-opening" data-schedule-change-opening="">
+      <div className="sched-strip">
+        <CalendarIcon />
+        <span><b>{opening.title}</b>{C.separator}{opening.runsIn}</span>
+        <button type="button" className="sched-link sched-strip-door" onClick={() => navigate(schedulePath(opening.scheduleId))}>
+          {T.openInScheduled}
+        </button>
+      </div>
+      <p>{withTitleBold(scheduleFill(T.lead, { title: opening.title }), opening.title)}</p>
+      <dl className="sched-change-rows">
+        {scheduleChangeOpeningRows(opening).map((row) => (
+          <div key={row.label}><dt>{row.label}</dt><dd>{row.text}</dd></div>
+        ))}
+      </dl>
+      <p>{T.tail}</p>
+    </div>
+  );
+}
+
 export function ScheduleRunStrip({ of }: { of: ScheduleRunOfSession }): JSX.Element {
   if (of.run.trigger === 'CONDITION') return <ScheduleRunFiringStrip of={of} />;
   return (
@@ -649,6 +678,11 @@ export function useSessionScheduleInserts(
       if (!run.card && anchor !== null && ENDED_STATES.includes(run.run.state)) {
         inserts.push({ anchor, moment: run.run.endedAt ?? '', key: `schedule-run-report:${run.run.id}`, element: <ScheduleRunReport of={run} /> });
       }
+    }
+    // A change conversation opens with Orbit's message, before the person's first words (§8.2).
+    const opening = cards?.change;
+    if (opening) {
+      inserts.push({ anchor: 'head', moment: '', key: 'schedule-change-opening', element: <ScheduleChangeOpeningView opening={opening} /> });
     }
     // Cards and change lines in the order they happened, so two after the same event read as they were made.
     const said = [

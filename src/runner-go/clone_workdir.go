@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -22,10 +21,11 @@ import (
 // A workspace Orbit makes from a GitHub repository (POST /sessions newWorkspace.github,
 // docs/github-workspace-design.md §6) is cloned here on request. Every full heartbeat answer lists each such
 // workspace of this runner that is PENDING or CLONING (cloneRequests); the runner clones each one once, into a
-// temporary directory inside the repos root that is renamed into place when the clone is whole, and says where it
-// stands on the heartbeat (cloneReports) until the answer stops listing it.
+// temporary directory beside its target that is renamed into place when the clone is whole, and says where it stands on
+// the heartbeat (cloneReports) until the answer stops listing it.
 //
-//   - The target is held to the repos root (cloneWorkDirTarget), never home: its temporary directory is there.
+//   - The target is held to home or the repos root, as a new folder is (cloneWorkDirTarget): <home>/<name> from a
+//     control plane that reads clone-workdir/v2, <reposRoot>/<name> from an older one. Never home itself.
 //   - A target that is already there is READY when it is a clone of the same repository, and FAILED
 //     "<path> already exists on <machine>" otherwise: nothing is cloned over it.
 //   - The clone is full (no --depth): landing and merge-base need the history.
@@ -34,12 +34,16 @@ import (
 //   - A clone whose progress output stops for cloneStallTimeout fails.
 //   - A restart leaves a temporary directory behind: the first reconcile removes every one, and a clone the
 //     control plane still lists as CLONING starts again.
-const cloneWorkDirCapabilityV1 = "clone-workdir/v1"
+const (
+	cloneWorkDirCapabilityV1 = "clone-workdir/v1"
+	// cloneWorkDirCapabilityV2: a clone may be named anywhere in home, not only in the repos root.
+	cloneWorkDirCapabilityV2 = "clone-workdir/v2"
+)
 
 // cloneStallTimeout is how long a clone may go without progress output before it is stopped and fails.
 var cloneStallTimeout = 30 * time.Minute
 
-// cloneTempPrefix begins the name of a clone's temporary directory in the repos root.
+// cloneTempPrefix begins the name of a clone's temporary directory, made in the directory its target goes in.
 const cloneTempPrefix = ".orbit-clone-"
 
 // Clone states, as @orbit/shared spells them.
@@ -200,29 +204,10 @@ func (c *cloner) startLocked(request CloneRequest) {
 // wait is for tests: every clone this cloner started has ended.
 func (c *cloner) wait() { c.wg.Wait() }
 
-// cloneWorkDirTarget is the directory a clone lands in, symlinks resolved, held to the repos root alone. A new folder
-// may be made anywhere in home (orbitWorkDirTarget, create-workdir/v2), but a clone is made in a temporary directory
-// inside the repos root and renamed into place, and the control plane names its folder there: nothing else is taken.
+// cloneWorkDirTarget is the directory a clone lands in, symlinks resolved, held where a new folder is made
+// (orbitWorkDirTarget): inside home, or inside the repos root where an older control plane names it.
 func cloneWorkDirTarget(dir string) (string, error) {
-	root := reposRoot()
-	if root == "" {
-		return "", errors.New("this machine has no repos root")
-	}
-	if !filepath.IsAbs(dir) {
-		return "", errors.New("it is not an absolute path")
-	}
-	if slices.Contains(strings.Split(filepath.ToSlash(dir), "/"), "..") {
-		return "", errors.New("it steps up with ..")
-	}
-	existing, missing, err := resolveExistingPart(dir)
-	if err != nil {
-		return "", err
-	}
-	target := filepath.Join(existing, missing)
-	if err := insideRoot(root, existing, target, true); err != nil {
-		return "", err
-	}
-	return target, nil
+	return orbitWorkDirTarget(dir)
 }
 
 // cloneWorkDir clones request's repository into its work directory and answers where that leaves it.
@@ -413,17 +398,24 @@ func (o *cloneOutput) lines() []string {
 	return append([]string(nil), o.said...)
 }
 
-// sweepCloneTemps removes every clone's temporary directory from the repos root: a process that stopped mid-clone
-// left it, and its clone starts again from nothing.
+// sweepCloneTemps removes every clone's temporary directory from home and the repos root, where clones are named: a
+// process that stopped mid-clone left it, and its clone starts again from nothing.
 func sweepCloneTemps() {
-	root := reposRoot()
-	if root == "" {
-		return
+	swept := map[string]bool{}
+	for _, root := range []string{userHome(), reposRoot()} {
+		if root == "" {
+			continue
+		}
+		resolved, err := filepath.EvalSymlinks(root)
+		if err != nil || swept[resolved] {
+			continue
+		}
+		swept[resolved] = true
+		sweepCloneTempsIn(resolved)
 	}
-	resolved, err := filepath.EvalSymlinks(root)
-	if err != nil {
-		return
-	}
+}
+
+func sweepCloneTempsIn(resolved string) {
 	entries, err := os.ReadDir(resolved)
 	if err != nil {
 		return

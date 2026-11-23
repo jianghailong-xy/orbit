@@ -3317,7 +3317,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // rewrite), for an owner's Update Now of a busy runner; `managed_runner` is none of the preserved relations, no
       // row is written, and no trigger, function or DONE fence changes.
       // Written as 1430 on the project line, it was renumbered after main took 1430.
-      '1431_managed_runner_update_interrupt'],
+      '1431_managed_runner_update_interrupt',
+      // 1432 creates model_identity (rule_key, canonical_key, name, decided_at), a new table no preserved relation
+      // references; no existing row is written, and no trigger, function or DONE fence changes.
+      '1432_model_identity',
+      // 1433 seeds model_identity with production's model ids, INSERT ... ON CONFLICT (rule_key) DO NOTHING into that
+      // new table only; no preserved relation, trigger, function or DONE fence is touched.
+      '1433_model_identity_seed'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
