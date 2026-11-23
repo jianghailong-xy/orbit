@@ -271,6 +271,13 @@ export {
 } from './task-retry-policy';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
 import {
+  postReplacementComment,
+  REPLACEMENT_WINDOW_MS,
+  replacementComment,
+  replacementOf,
+  replacementRoom,
+} from './refused-run-replacement';
+import {
   clearDispatchRefusal,
   FORK_REFUSAL_STANDS_SQL,
   recordForkDispatchRefusal,
@@ -306,6 +313,7 @@ import {
   readModelHintOptions,
   readTaskRouteSummaries,
   recordTaskRouteDecision,
+  routeOfPlan,
   taskRouteReads,
   withTrialHeld,
   type PlannedTaskRunRoute,
@@ -315,6 +323,7 @@ import {
 import { claimTrialByKey } from '../providers/account-health.service';
 import type { ModelRoutingHold } from './model-routing';
 import {
+  REPLACEMENT_TOKEN,
   TASK_RUN_TRIGGER,
   taskRunBatchId,
   taskRunDesiredSessionId,
@@ -343,6 +352,7 @@ import { readTaskProgress } from './task-progress.service';
 import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './task-dag';
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
 import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
+import { withAccountHealth } from '../providers/account-health-blocked';
 import { ACCOUNT_CHOICE, accountEnvVar } from '../providers/account';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { readOwnerConfirmationRows } from './owner-confirmation-read';
@@ -1751,6 +1761,12 @@ const INDEPENDENT_DISPATCH_MAX_PER_SWEEP = 200;
 export interface AutoDispatch {
   /** `task_dispatch_epoch.epoch` as the candidate scan read it, and the epoch its token names. */
   observedEpoch: bigint;
+  /**
+   * This start continues one a person made: the replacement of a run they started that its account refused
+   * (docs/routing-account-health-design.md §7.3). A project not started yet does not hold it back, as it did not
+   * hold back the person's start; a paused one still does.
+   */
+  continuesManualStart?: boolean;
 }
 
 /**
@@ -11879,6 +11895,89 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * §7.3 of docs/routing-account-health-design.md: a run its account refused at admission is replaced by a new run of
+   * its task at once, with no backoff, for every task whether or not it auto-runs (owner decision Q3). Called by the
+   * runner API once the run's release and its account health are committed, so the new dispatch routes on what the
+   * refusal taught it.
+   *
+   * Which runs are replaced, and how they count, is replacementOf's. The bound: at most REPLACEMENTS_PER_HOUR a task
+   * per hour, refused trials excepted (§6.5). Past it an auto-run task is the retry policy's again, which holds it for
+   * the same window (autoRunRetryDecisions), and any other task stops with the last refusal shown.
+   *
+   * The dispatch is an automatic one at the task's current moment, under a request named after the refused run
+   * (TASK_RUN_TRIGGER.replacement): both ends that report one refusal are one request, and every stand-down the
+   * automatic doors take applies to it, the hold of §7.5 included (nothing can run it: no run is started, and the
+   * task waits for the first trial). A task that does not auto-run records the replacement on its timeline.
+   */
+  async replaceRefusedRun(sessionId: string): Promise<TaskRunAnswer | null> {
+    const run = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      select: {
+        id: true, ownerId: true, taskId: true, status: true, startsTaskWork: true, runSource: true, failureKind: true,
+        error: true, accountHealthEffect: true, admissionFailure: true, retryAt: true, createdAt: true, finishedAt: true,
+      },
+    });
+    // Not until it is released: a failed turn's report can precede its release, and the run still holds the task until
+    // then. The release asks again.
+    if (!run?.finishedAt) return null;
+    const kind = replacementOf(run);
+    if (!kind || !run.taskId) return null;
+    const taskId = run.taskId;
+    const task = await this.prisma.task.findFirst({
+      where: { id: taskId, ownerId: run.ownerId },
+      select: { status: true, autoRunWhenReady: true, dispatchEpoch: { select: { epoch: true } } },
+    });
+    if (!task || (task.status !== TaskStatus.OPEN && task.status !== TaskStatus.IN_PROGRESS)) return null;
+    const now = this.now();
+    if (kind === 'REPLACE') {
+      const counted = (await this.replacementStarts(run.ownerId, [taskId], now)).get(taskId) ?? [];
+      const room = replacementRoom(counted, now);
+      if (!room.room) {
+        this.logger.log(`task ${taskId}: run ${run.id} was refused by its account; not replaced, the bound of `
+          + `replacements an hour is spent until ${room.until.toISOString()}`);
+        return null;
+      }
+    }
+    const answer = await this.execute(
+      run.ownerId,
+      taskId,
+      { observedEpoch: task.dispatchEpoch?.epoch ?? 0n, continuesManualStart: run.runSource === 'MANUAL' },
+      TASK_RUN_TRIGGER.replacement(taskId, run.id, kind === 'TRIAL'),
+    );
+    if (answer.ok) {
+      this.logger.log(`task ${taskId}: run ${run.id} was refused by its account; replaced by ${answer.sessionId}`);
+      if (!task.autoRunWhenReady) {
+        const ordinal = await this.prisma.session.count({
+          where: { taskId, startsTaskWork: true, createdAt: { lte: run.createdAt } },
+        });
+        await postReplacementComment(this.prisma, taskId, replacementComment(ordinal)).catch((e) =>
+          this.logger.warn(`task ${taskId}: replacement not recorded on the task: ${e?.message ?? e}`));
+      }
+    }
+    return answer;
+  }
+
+  /**
+   * The starts of each task's replacements in the last hour that count against the bound (§7.3): the replacement
+   * requests that started a run, a refused trial's excepted (its token is its own kind).
+   */
+  private async replacementStarts(ownerId: string, taskIds: string[], now: Date): Promise<Map<string, Date[]>> {
+    const starts = new Map<string, Date[]>();
+    if (taskIds.length === 0) return starts;
+    const rows = await this.prisma.$queryRaw<Array<{ taskId: string; createdAt: Date }>>`
+      SELECT split_part(r."request_token", ':', 2) AS "taskId", r."created_at" AS "createdAt"
+        FROM "task_run_request" r
+       WHERE r."owner_id" = ${ownerId}::uuid
+         AND r."action_kind" = ${TASK_RUN_ACTION.execute}
+         AND r."created_at" > ${new Date(now.getTime() - REPLACEMENT_WINDOW_MS)}
+         AND r."request_token" LIKE ${`${REPLACEMENT_TOKEN}%`}
+         AND split_part(r."request_token", ':', 2) IN (${Prisma.join(taskIds)})
+         AND r."result"->>'sessionId' IS NOT NULL`;
+    for (const row of rows) starts.set(row.taskId, [...(starts.get(row.taskId) ?? []), row.createdAt]);
+    return starts;
+  }
+
+  /**
    * Move one task's dispatch epoch past the moment the retry policy read, and only past that one.
    *
    * A compare-and-set on the epoch the scan saw. Two passes that both decided to re-arm the same
@@ -12668,9 +12767,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // A bound plan was routed (or not) when it was bound, and is carried out with what it names.
       if (task && c.runnerId && !bound) {
         if (!reads.has(c.ownerId)) reads.set(c.ownerId, taskRouteReads(this.prisma, c.ownerId, this.now()));
-        const route = await this.routeFreshRun(
+        const route = routeOfPlan(await this.routeFreshRun(
           reads.get(c.ownerId)!, task, { id: c.workspaceId, runnerId: c.runnerId }, '',
-        );
+        ));
         // The routed engine and the credential it runs on: the baseline's, or that engine's own sign-in.
         if (route?.applied && route.provider) {
           credential = {
@@ -12789,7 +12888,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           continue;
         }
       }
-      const runner = runnerById.get(assignee.runnerId);
+      // Automatic's pick skips an account health set aside, as sessions.create's does (§7.6 of
+      // docs/routing-account-health-design.md), so that is the quota the run would spend.
+      const reported = runnerById.get(assignee.runnerId);
+      const runner = reported ? await withAccountHealth(this.prisma, t.ownerId, assignee.runnerId, reported, now) : reported;
       // Antigravity's quota travels with its engine health, and is weighed with the rest here.
       const usage = withEnginePlanUsage(
         runner?.planUsage as unknown as PlanUsage | null | undefined,
@@ -13007,7 +13109,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const runners = await this.prisma.runner.findMany({
       where: { id: { in: [...new Set(judged.map((t) => t.assignee!.runnerId!))] } },
       select: {
-        id: true, name: true, displayName: true, status: true, ...RUNNER_BEATS, engines: true, accountNames: true,
+        id: true, ownerId: true, name: true, displayName: true, status: true, ...RUNNER_BEATS, engines: true, accountNames: true,
         accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true,
       },
     });
@@ -13026,9 +13128,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const now = this.now();
     for (const t of judged) {
       const { provider, runnerId, workspaceId } = t.assignee!;
-      const runner = runnerById.get(runnerId!);
+      const reported = runnerById.get(runnerId!);
       const workspace = workspaceById.get(workspaceId);
-      if (!runner || !workspace || !isAccountEngine(provider)) continue;
+      if (!reported || !workspace || !isAccountEngine(provider)) continue;
+      // The account sessions.create would pick: Automatic skips one account health set aside (§7.6).
+      const runner = await withAccountHealth(this.prisma, reported.ownerId, runnerId, reported, now);
       const automatic = automaticAccount(provider, workspace, runner, now);
       const refusal = signedOutEngineRefusal({
         runtime: provider,
@@ -13309,10 +13413,24 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       blind,
       { countUnrequestedEnds: true },
     );
+    // A task whose runs its accounts keep refusing has spent its replacements for the hour (§7.3): those failures
+    // are not counted against it, so without this the policy would start it again every pass. It waits until the
+    // window has room, then is retried like any other.
+    const now = this.now();
+    const replacedUntil = new Map<string, Date>();
+    for (const ownerId of new Set(assigned.map((t) => t.ownerId))) {
+      const ids = assigned.filter((t) => t.ownerId === ownerId).map((t) => t.id);
+      for (const [taskId, starts] of await this.replacementStarts(ownerId, ids, now)) {
+        const room = replacementRoom(starts, now);
+        if (!room.room) replacedUntil.set(taskId, room.until);
+      }
+    }
     for (const t of assigned) {
       const quotaResetsAt = blocked.get(t.id);
       if (quotaResetsAt) {
         decisions.set(t.id, { code: 'QUOTA_EXHAUSTED', retryAt: quotaResetsAt });
+      } else if (replacedUntil.has(t.id) && !heldOff.has(t.id)) {
+        decisions.set(t.id, { code: 'RETRY_BACKOFF', retryAt: replacedUntil.get(t.id)! });
       } else if (heldOff.has(t.id)) {
         const until = heldOff.get(t.id) ?? null;
         decisions.set(
@@ -15983,7 +16101,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // the same moment starts the task once the project moves again. A person's Run is not held.
     if (auto && task.projectId) {
       const still = await projectStandsStill(this.prisma, ownerId, task.projectId);
-      if (still) return this.standDownReleasing(lease, { ok: false as const, skipped: still });
+      if (still && !(still === 'project-not-started' && auto.continuesManualStart)) {
+        return this.standDownReleasing(lease, { ok: false as const, skipped: still });
+      }
     }
     // An agent does not start a project its owner has not started (`projectAwaitingStart`), nor one
     // its owner has paused (`pausedProjectOf`). Ahead of the prerequisites, because each holds every
@@ -16105,9 +16225,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         hold,
       });
     }
-    const route: TaskRunRoute | null = plannedRoute
-      ? (({ hold: _hold, trial: _trial, ...kept }) => kept)(plannedRoute)
-      : null;
+    const route = routeOfPlan(plannedRoute);
     // Only a fresh run decides a mode, and it is the account's default: a paused run keeps its own.
     if (actingSessionId && planned.kind === 'CREATE') {
       await this.sessions.assertMayStartAtAccountDefault(
@@ -16557,19 +16675,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     routeReads: TaskRouteReads,
     t: BatchRunTask,
     pressToken: string,
-  ): Promise<TaskRunBatchItemPlan> {
+  ): Promise<TaskRunBatchItemPlan | { held: string }> {
     const prompt = this.buildExecutePrompt(t);
     const workspace = { id: t.assignee!.id, runnerId: t.assignee!.runnerId! };
     const itemPlan = await this.planWorkspaceRun(
       ownerId, t, workspace, TASK_RUN_TRIGGER.batch(pressToken, t.id),
     );
     // Routed per item, exactly as the single Run does it: a fresh run only, and dispatched with
-    // the route whenever it decided a tier.
-    // A bulk press is a person's start of each task: a hold is not applied to it here, and no trial is claimed.
+    // the route whenever it decided a tier. As at the single Run, an account whose trial is due is claimed for the
+    // item's Session, and an item nothing can run is not started (docs/routing-account-health-design.md §6.5, §7.5):
+    // it is skipped with the hold's sentence, where a single press is refused with it.
     const planned = itemPlan.kind === 'CREATE'
-      ? await this.routeFreshRun(routeReads, t, workspace, prompt)
+      ? await this.routeFreshRun(routeReads, t, workspace, prompt, { ownerId, sessionId: itemPlan.sessionId })
       : null;
-    const route: TaskRunRoute | null = planned ? (({ hold: _hold, trial: _trial, ...kept }) => kept)(planned) : null;
+    if (planned?.hold) return { held: planned.hold.reason };
+    const route = routeOfPlan(planned);
     return {
       taskId: t.id,
       title: `Task: ${t.title}`,
@@ -16745,7 +16865,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     };
     // One set of reads for the whole press: its tasks share a few Agents, runners and one account.
     const routeReads = taskRouteReads(this.prisma, ownerId, this.now());
-    for (const t of runnable) planned.items.push(await this.planBatchItem(ownerId, routeReads, t, pressToken));
+    for (const t of runnable) {
+      const item = await this.planBatchItem(ownerId, routeReads, t, pressToken);
+      if ('held' in item) planned.skipped.push({ id: t.id, title: t.title, reason: item.held });
+      else planned.items.push(item);
+    }
     const bound = await this.bindRunRequest(lease.claim, planned);
     if (!bound) throw taskRunInProgress(TASK_RUN_ACTION.batchExecute, pressToken);
     const plan = readBatchPlan(bound);
@@ -16819,7 +16943,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }
       if (!t.assignee) skipped.push({ id: t.id, title: t.title, reason: 'No assignee' });
       else if (!t.assignee.runnerId) skipped.push({ id: t.id, title: t.title, reason: 'Assignee not bound to a runner' });
-      else items.push(await this.planBatchItem(ownerId, routeReads, t, pressToken));
+      else {
+        const replannedItem = await this.planBatchItem(ownerId, routeReads, t, pressToken);
+        if ('held' in replannedItem) skipped.push({ id: t.id, title: t.title, reason: replannedItem.held });
+        else items.push(replannedItem);
+      }
     }
     const { fromVersion: _fromVersion, ...bound } = plan;
     const replanned: TaskRunBatchPlan = {

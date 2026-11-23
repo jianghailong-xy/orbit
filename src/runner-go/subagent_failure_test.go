@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"net/http"
 	"testing"
 )
@@ -45,9 +46,9 @@ func TestSubagentFallbackAskCarriesFailureAndAdmission(t *testing.T) {
 	}
 }
 
-// The classified kind decides first, over today's moves (§7.3; moving on the account's other kinds is phase 2): a
-// spent quota, capacity or a refused sign-in moves; an account that needs action, a connection failure or a refused
-// request is the run's result, whatever its words.
+// The classified kind decides first, over the words (docs/routing-account-health-design.md §7.3): a spent quota,
+// capacity and an account that refused the run (its credential, an action it needs, a use it does not allow) move;
+// a connection failure or a refused request is the run's result, whatever its words.
 func TestSubagentLimitFailureAsksTheClassificationFirst(t *testing.T) {
 	for _, c := range []struct {
 		kind string
@@ -56,8 +57,8 @@ func TestSubagentLimitFailureAsksTheClassificationFirst(t *testing.T) {
 		{failureUsageLimit, true},
 		{failureCapacity, true},
 		{failureCredentialRefused, true},
-		{failureAccountAction, false},
-		{failureAccessDenied, false},
+		{failureAccountAction, true},
+		{failureAccessDenied, true},
 		{failureTransport, false},
 		{failureRequestRefused, false},
 	} {
@@ -72,5 +73,37 @@ func TestSubagentLimitFailureAsksTheClassificationFirst(t *testing.T) {
 		Failure: &RunFailure{Kind: failureTransport}}
 	if _, got := subagentLimitFailure(cloudflare, nil); got {
 		t.Fatal("a connection failure was moved")
+	}
+	// A refused request stays the result even when the child ended before producing anything.
+	admitted := true
+	refused := ExecResult{Status: stFailed, ErrorMsg: "prompt is too long", Failure: &RunFailure{Kind: failureRequestRefused}, Admission: &admitted}
+	if _, got := subagentLimitFailure(refused, nil); got {
+		t.Fatal("a refused request was moved")
+	}
+}
+
+// An unclassified failure moves when the child ended before its engine produced anything (§5.2): the account would
+// not start it. Not when it did some work, not when the runner measured nothing, and not on a dropped connection.
+func TestSubagentLimitFailureMovesAnUnclassifiedAdmissionFailure(t *testing.T) {
+	yes, no := true, false
+	const cursorPayment = "Upgrade your plan to keep going"
+	for _, c := range []struct {
+		name string
+		res  ExecResult
+		err  error
+		want string
+	}{
+		{"refused at admission", ExecResult{Status: stFailed, ErrorMsg: cursorPayment, Admission: &yes}, nil, cursorPayment},
+		{"the engine's error alone", ExecResult{Status: stFailed, Admission: &yes}, errors.New("the engine exited 1"), "the engine exited 1"},
+		{"it did some work", ExecResult{Status: stFailed, ErrorMsg: cursorPayment, Admission: &no}, nil, ""},
+		{"no measurement", ExecResult{Status: stFailed, ErrorMsg: cursorPayment}, nil, ""},
+		{"a dropped connection", ExecResult{Status: stFailed, ErrorMsg: "API Error: Connection error. ECONNRESET", Admission: &yes}, nil, ""},
+		{"a success is the result", ExecResult{Status: stSucceeded, Result: "Done", Admission: &yes}, nil, ""},
+		{"nothing to say", ExecResult{Status: stFailed, Admission: &yes}, nil, ""},
+	} {
+		text, got := subagentLimitFailure(c.res, c.err)
+		if got != (c.want != "") || text != c.want {
+			t.Errorf("%s: subagentLimitFailure = %q, %v; want %q", c.name, text, got, c.want)
+		}
 	}
 }

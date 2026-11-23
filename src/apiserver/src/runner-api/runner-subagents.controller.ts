@@ -59,10 +59,13 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { sessionProviderExec, type SubagentPoolMemberChoice } from './session-provider-exec';
 import { stripNul } from './strip-nul';
 import {
+  ACCOUNT_REFUSAL_OUTCOMES,
   attemptsOf,
+  countedMoves,
   fallbackCandidates,
   firstAttempt,
   movableFailure,
+  moveReason,
   noProviderMessage,
   appliedDecision,
   SUBAGENT_ATTEMPT_ERROR_MAX,
@@ -70,9 +73,14 @@ import {
   SubagentFallbackDto,
   SubagentRunCreateDto,
   SubagentRunUpdateDto,
+  subjectOfKey,
+  TRIAL_HELD_REASON,
+  type TrialAttempt,
+  trialSubject,
   truncateResultSummary,
 } from './subagent-run';
-import { AccountHealthService } from '../providers/account-health.service';
+import { AccountHealthService, claimTrialByKey } from '../providers/account-health.service';
+import { uuidv7 } from '../drive/drive.service';
 import type { SubagentAttempt } from '@orbit/shared';
 import { planSubagentRoute } from './subagent-route';
 import {
@@ -225,6 +233,21 @@ export class RunnerSubagentsController {
       failure: end.failure ?? null,
       admission: end.admission ?? null,
     });
+  }
+
+  /**
+   * The trial an attempt claimed on its account (§6.5) ends with it: released, so it is due again, unless account
+   * health already cleared the row (an admitted run) or released it with the refusal it took (recordFailure).
+   * Never in the run's way.
+   */
+  private async releaseAttemptTrial(ownerId: string, runId: string, attempt: TrialAttempt | undefined): Promise<void> {
+    const subject = attempt?.trialOf ? subjectOfKey(attempt.trialOf) : null;
+    if (!this.accountHealth || !subject) return;
+    try {
+      await this.accountHealth.releaseTrial(ownerId, subject, runId);
+    } catch (e) {
+      this.logger.warn(`the trial SubAgent run ${runId} held was not released: ${(e as Error)?.message ?? e}`);
+    }
   }
 
   /** Mark a run's end as owing its parent a wake, whatever its status, and read the status back. */
@@ -406,6 +429,8 @@ export class RunnerSubagentsController {
   ): Promise<SubagentRunCreateResponse> {
     await this.assertParentOfRunner(sessionId, runner);
     return withTransactionRetry(this.prisma, async (tx) => {
+      // Chosen first, so that a trial the run claims (§6.5) names the run before its row is written.
+      const runId = uuidv7();
       await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR UPDATE`;
       const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId }, select: SUBAGENT_PARENT_SELECT });
       if (isReleased(session)) throw new ConflictException('the session has ended');
@@ -457,17 +482,29 @@ export class RunnerSubagentsController {
             planUsage: this.planUsage,
             parent,
           });
-          // The pick, else the first of the tier's next candidates this runner can start.
+          // The pick, else the first of the tier's next candidates this runner can start. One whose account is due
+          // its trial (§6.5) claims it, the SubAgent run's id standing in for a session's; one another run claimed
+          // first is passed over, as a task dispatch routes past it.
           const passedOver: Array<{ target: SubagentCandidateTarget; reason: string }> = [];
-          let chosen: { target: SubagentCandidateTarget; built: ChildExec } | null = null;
-          for (const target of fallbackCandidates(route)) {
+          let chosen: { target: SubagentCandidateTarget; built: ChildExec; trialOf?: string } | null = null;
+          const hasPick = Boolean(route.engine && route.provider && route.model);
+          for (const [index, target] of fallbackCandidates(route).entries()) {
+            let built: ChildExec;
             try {
-              chosen = { target, built: await build(target) };
-              break;
+              built = await build(target);
             } catch (error) {
               if (!(error instanceof HttpException)) throw error;
               passedOver.push({ target, reason: refusalText(error) });
+              continue;
             }
+            const trial = trialSubject(index === 0 && hasPick ? route : target);
+            const claim = trial ? await claimTrialByKey(tx, session.ownerId, trial, '', runId) : 'NOT_DUE';
+            if (claim === 'HELD') {
+              passedOver.push({ target, reason: TRIAL_HELD_REASON });
+              continue;
+            }
+            chosen = { target, built, ...(claim === 'CLAIMED' && trial ? { trialOf: trial } : {}) };
+            break;
           }
           if (!chosen) {
             throw new ConflictException({
@@ -483,6 +520,7 @@ export class RunnerSubagentsController {
       const { note: _note, level: _level, ...target } = chosen.target;
       const row = await tx.subagentRun.create({
         data: {
+          id: runId,
           ownerId: session.ownerId,
           sessionId,
           toolUseId: dto.toolUseId,
@@ -498,10 +536,12 @@ export class RunnerSubagentsController {
           ...(dto.description ? { description: stripNul(dto.description) } : {}),
           status: 'RUNNING',
           decision: decision as unknown as Prisma.InputJsonValue,
-          // The first attempt: the candidate it opened on, with the pool account chosen for it, if any.
+          // The first attempt: the candidate it opened on, with the pool account chosen for it, if any, and the
+          // trial it claimed.
           attempts: [{
             ...firstAttempt({ ...target, effort: chosen.built.effort ?? target.effort }),
             ...(chosen.built.poolMember ? { poolMember: chosen.built.poolMember } : {}),
+            ...('trialOf' in chosen && chosen.trialOf ? { trialOf: chosen.trialOf } : {}),
           }] as unknown as Prisma.InputJsonValue,
         },
       });
@@ -973,14 +1013,16 @@ export class RunnerSubagentsController {
   }
 
   /**
-   * The runner's ask for where a SubAgent goes after its child failed on a usage limit, capacity or a failed login
-   * (docs/subagent-design.md §4.3): the next candidate of the tier, from the decision the run opened with — so a
-   * shadow decision serves too — skipping every provider an attempt already failed on. The failed attempt is
-   * closed with its error, the new one appended to `attempts`, and the Why gains a line naming both models.
-   * At most SUBAGENT_MAX_MOVES moves per run (409 SUBAGENT_FALLBACK_SPENT); any other failure is not moved
-   * (409 SUBAGENT_NOT_A_LIMIT_FAILURE), nor is a failed login on a model the caller named (409
-   * SUBAGENT_NAMED_MODEL_NOT_MOVED); no candidate left is 409 NO_SUBAGENT_PROVIDER, listing why each provider
-   * is out. Each refusal still closes the failed attempt.
+   * The runner's ask for where a SubAgent goes after its child failed on a usage limit, capacity, a failed login, an
+   * account that needed action or denied the use, or an unclassified refusal before it started (docs/subagent-design.md
+   * §4.3, docs/routing-account-health-design.md §7.3): the next candidate of the tier, from the decision the run
+   * opened with — so a shadow decision serves too — skipping every provider an attempt already failed on. A
+   * candidate whose account is due its trial claims it, and one another run claimed first is skipped (§6.5). The
+   * failed attempt is closed with its error, the new one appended to `attempts`, and the Why gains a line naming both
+   * models. At most SUBAGENT_MAX_MOVES moves per run, a move off a refused trial not counted (409
+   * SUBAGENT_FALLBACK_SPENT); any other failure is not moved (409 SUBAGENT_NOT_A_LIMIT_FAILURE), nor is an account's
+   * refusal on a model the caller named (409 SUBAGENT_NAMED_MODEL_NOT_MOVED); no candidate left is 409
+   * NO_SUBAGENT_PROVIDER, listing why each provider is out. Each refusal still closes the failed attempt.
    */
   @Post('sessions/:id/subagents/:runId/fallback')
   @HttpCode(200)
@@ -991,10 +1033,12 @@ export class RunnerSubagentsController {
     @Body() dto: SubagentFallbackDto,
   ): Promise<SubagentFallbackResponse> {
     await this.assertParentOfRunner(sessionId, runner);
-    const failure = movableFailure(dto.error, dto.failure);
+    const failure = movableFailure(dto.error, dto.failure, dto.admission);
     // The attempt that failed, as it stood before this closes it: what account health is told of (§6.3).
-    const before = await this.prisma.subagentRun.findFirst({ where: { id: runId, sessionId, status: 'RUNNING' }, select: { attempts: true } });
-    const failing = before ? attemptsOf(before.attempts).at(-1) : undefined;
+    const before = await this.prisma.subagentRun.findFirst({
+      where: { id: runId, sessionId, status: 'RUNNING' }, select: { attempts: true, ownerId: true },
+    });
+    const failing: TrialAttempt | undefined = before ? attemptsOf(before.attempts).at(-1) : undefined;
     // Refusals still close the failed attempt, so they are thrown after the transaction commits.
     const outcome = await withTransactionRetry(this.prisma, async (tx) => {
       await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR UPDATE`;
@@ -1004,8 +1048,8 @@ export class RunnerSubagentsController {
       if (!failure) {
         return { refusal: new ConflictException({
           code: 'SUBAGENT_NOT_A_LIMIT_FAILURE',
-          message: 'The SubAgent failed on something other than a usage limit, capacity or a failed login, so it is not ' +
-            'moved: its failure is its result.',
+          message: 'The SubAgent failed on something other than a usage limit, capacity, a failed login, its account or a ' +
+            'refusal before it started, so it is not moved: its failure is its result.',
         }) };
       }
       const now = new Date().toISOString();
@@ -1015,22 +1059,26 @@ export class RunnerSubagentsController {
       const decision = row.decision as unknown as SubagentDecision;
       const save = (data: Prisma.SubagentRunUpdateInput = {}) =>
         tx.subagentRun.update({ where: { id: row.id }, data: { attempts: attempts as unknown as Prisma.InputJsonValue, ...data } });
-      // A model the caller named runs as named (§4.1 row 1): its failed login is the parent's to see, not to route around.
-      if (failure === 'AUTH_FAILED' && decision.tierSource === 'named-model') {
+      // A model the caller named runs as named (§4.1 row 1): its account's refusal — a failed login, an action it
+      // needs, a use it denies, a start it refused — is the parent's to see, not to route around.
+      if (ACCOUNT_REFUSAL_OUTCOMES.has(failure) && decision.tierSource === 'named-model') {
         await save();
+        const model = failed?.model ?? decision.model ?? 'the model';
+        const what = failure === 'AUTH_FAILED' ? `The SubAgent's login failed on ${model}`
+          : failure === 'ADMISSION_FAILED' ? `The SubAgent could not start on ${model}`
+            : `The SubAgent's account needed action on ${model}`;
         return { refusal: new ConflictException({
           code: 'SUBAGENT_NAMED_MODEL_NOT_MOVED',
-          message: `The SubAgent's login failed on ${failed?.model ?? decision.model ?? 'the model'}, which the delegate call ` +
-            'named, so it is not moved to another model: its failure is its result.',
+          message: `${what}, which the delegate call named, so it is not moved to another model: its failure is its result.`,
         }) };
       }
-      const moves = Math.max(attempts.length - 1, 0);
-      if (moves >= SUBAGENT_MAX_MOVES) {
+      // Each attempt moved off counts, the one that just failed included, except a refused trial (§6.5).
+      if (countedMoves(attempts) > SUBAGENT_MAX_MOVES) {
         await save();
         return { refusal: new ConflictException({
           code: 'SUBAGENT_FALLBACK_SPENT',
-          message: `The SubAgent hit a usage limit, capacity or a failed login on ${attempts.length} candidates in a row; ` +
-            `it was moved ${SUBAGENT_MAX_MOVES} times, the most one delegate call is.`,
+          message: `The SubAgent hit a usage limit, capacity, a failed login or its account's refusal on ${attempts.length} ` +
+            `candidates in a row; it was moved ${SUBAGENT_MAX_MOVES} times, the most one delegate call is.`,
         }) };
       }
       const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId }, select: SUBAGENT_PARENT_SELECT });
@@ -1047,18 +1095,23 @@ export class RunnerSubagentsController {
           spent.add(next.provider);
           continue;
         }
-        const from = failed?.model ?? 'the first model';
-        const reason = failure === 'AT_CAPACITY'
-          ? `Moved to ${next.model} on ${next.provider} after ${from} was at capacity`
-          : failure === 'AUTH_FAILED'
-            ? `Moved to ${next.model} on ${next.provider} after ${from}'s login failed`
-            : `Moved to ${next.model} on ${next.provider} after ${from}'s account hit its limit`;
+        // Its account's due trial (§6.5), claimed for this run; one another run claimed first is skipped.
+        const trial = trialSubject(next);
+        const claim = trial ? await claimTrialByKey(tx, row.ownerId, trial, '', row.id) : 'NOT_DUE';
+        if (claim === 'HELD') {
+          skipped.push(`${next.provider} (${next.engine}): ${TRIAL_HELD_REASON}`);
+          spent.add(next.provider);
+          continue;
+        }
+        const reason = moveReason(next, failed?.model ?? 'the first model', failure);
         const attempt = attempts.length + 1;
-        const { note: _note, level: _level, ...target } = next;
+        const { note: _note, level: _level, trial: _trial, suspect: _suspect, ...target } =
+          next as SubagentCandidateTarget & { trial?: unknown; suspect?: unknown };
         attempts.push({
           ...target, attempt, outcome: 'RUNNING', startedAt: now,
           ...(built.poolMember ? { poolMember: built.poolMember } : {}),
-        });
+          ...(claim === 'CLAIMED' && trial ? { trialOf: trial } : {}),
+        } as TrialAttempt);
         const moved: SubagentDecision = {
           ...decision,
           reasons: [...decision.reasons, reason],
@@ -1068,7 +1121,7 @@ export class RunnerSubagentsController {
           runEffort: built.effort ?? null,
         };
         await save({ decision: moved as unknown as Prisma.InputJsonValue });
-        return { answer: { runId: row.id, attempt, reason, decision: moved, exec: built.exec } };
+        return { answer: { runId: row.id, attempt, reason, decision: moved, exec: built.exec }, trialOf: trial };
       }
       await save();
       return { refusal: new ConflictException({
@@ -1077,6 +1130,11 @@ export class RunnerSubagentsController {
       }) };
     }, loggedRetry(this.logger, 'runnerSubagents.nextSubagentCandidate'));
     await this.attemptEnded(sessionId, runId, failing, { failed: true, error: dto.error, failure: dto.failure, admission: dto.admission });
+    // A trial the failed attempt held ends with it; the refusal it took already released it, unless the next attempt
+    // claimed the same account's.
+    if (before && (!('trialOf' in outcome) || outcome.trialOf !== failing?.trialOf)) {
+      await this.releaseAttemptTrial(before.ownerId, runId, failing);
+    }
     if (outcome.refusal) throw outcome.refusal;
     return outcome.answer!;
   }
@@ -1138,9 +1196,11 @@ export class RunnerSubagentsController {
     const answer = await withTransactionRetry(this.prisma, async (tx) => {
       // The parent first, as every writer of a session and its children takes them (rank 30, then 60).
       await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR UPDATE`;
-      const open = await tx.subagentRun.findFirst({ where: { id: runId, sessionId, status: 'RUNNING' }, select: { attempts: true } });
+      const open = await tx.subagentRun.findFirst({
+        where: { id: runId, sessionId, status: 'RUNNING' }, select: { attempts: true, ownerId: true },
+      });
       const attempts = open ? attemptsOf(open.attempts) : [];
-      const last = attempts.at(-1);
+      const last: TrialAttempt | undefined = attempts.at(-1);
       if (last?.outcome === 'RUNNING') Object.assign(last, { outcome: dto.status, endedAt: new Date().toISOString() });
       const ended = await tx.subagentRun.updateMany({
         where: { id: runId, sessionId, status: 'RUNNING' },
@@ -1165,14 +1225,16 @@ export class RunnerSubagentsController {
       }
       // Its child engine was the only reader of the cards it asked (§5.3), and it has gone.
       await reapApprovalsOfEndedSubagents(tx, sessionId, runId);
-      return { runId, status: dto.status, applied: true, last };
+      return { runId, status: dto.status, applied: true, last, ownerId: open?.ownerId };
     }, loggedRetry(this.logger, 'runnerSubagents.updateSubagentRun'));
     // A run that succeeded was admitted on the account of its last attempt (§6.3).
     if (answer.applied && dto.status === 'DONE' && 'last' in answer) {
       await this.attemptEnded(sessionId, runId, answer.last, { failed: false });
     }
+    // A trial its last attempt held ends with the run (§6.5): cleared above when it was admitted, due again otherwise.
+    if (answer.applied && 'last' in answer && answer.ownerId) await this.releaseAttemptTrial(answer.ownerId, runId, answer.last);
     if (answer.applied) await this.fileWake(runId);
-    const { last: _last, ...reply } = answer as SubagentRunUpdateResponse & { last?: unknown };
+    const { last: _last, ownerId: _ownerId, ...reply } = answer as SubagentRunUpdateResponse & { last?: unknown; ownerId?: unknown };
     return reply;
   }
 }

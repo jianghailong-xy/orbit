@@ -942,7 +942,8 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 	var res ExecResult
 	var err error
 	// A child that fails on a usage limit, capacity or a failed login is started again, with the same prompt, on the next
-	// candidate the server names (§4.3), at most subagentMaxMoves times; any other end is the run's result.
+	// candidate the server names (§4.3), as often as the server moves it (it holds the bound, which a refused trial is
+	// not counted against); any other end is the run's result.
 	limit, limitNote := "", ""
 	scratch := dir
 	// Every attempt's spend is the run's: a limit failure can still have cost something.
@@ -959,10 +960,6 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 		}
 		var limited bool
 		if limit, limited = subagentLimitFailure(res, err); !limited {
-			break
-		}
-		if attempt > subagentMaxMoves {
-			limitNote = fmt.Sprintf("It hit a usage limit, capacity or a failed login on %d candidates in a row and was moved %d times, the most one delegate call is.", attempt, subagentMaxMoves)
 			break
 		}
 		next, ferr := s.nextSubagentCandidate(run.id, limit, res, def)
@@ -1006,7 +1003,14 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 		}
 	case limit != "":
 		status = subagentStatusFailed
-		result = strings.TrimSpace("The SubAgent failed: " + limit + "\n" + limitNote)
+		// A failed end whose words are not the engine's own error (a refusal at admission, read off the reply) says
+		// that error first, as any other failed end does.
+		why := limit
+		if engineWhy := firstNonEmpty(strings.TrimSpace(res.ErrorMsg), res.Subtype); res.Status != stSucceeded &&
+			engineWhy != "" && !strings.Contains(limit, engineWhy) {
+			why = engineWhy + "\n" + limit
+		}
+		result = strings.TrimSpace("The SubAgent failed: " + why + "\n" + limitNote)
 	case err != nil:
 		status = subagentStatusFailed
 		result = strings.TrimSpace("The SubAgent failed: " + err.Error() + "\n" + result)

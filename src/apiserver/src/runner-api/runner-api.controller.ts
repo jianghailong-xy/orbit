@@ -62,7 +62,7 @@ import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-
 import { latestAgentToolsReport } from './agent-tools-report';
 import { reportsCodexSandboxUnavailable } from './codex-sandbox-report';
 import { withActiveSessions } from '../providers/active-sessions';
-import { accountAfterSignOut, accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount, waitsForWarmCache } from '../providers/plan-usage-accounts';
+import { accountAfterSignOut, accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, changedPlans, runAccount, waitsForWarmCache } from '../providers/plan-usage-accounts';
 import {
   ACCOUNT_MOVE_CAPABILITY,
   CLAUDE_ACCOUNT_MOVE_V1,
@@ -152,6 +152,8 @@ import {
   SessionCommitResultRequest,
   RunFinalizeRequest,
   RunFinalizeResponse,
+  type RunReleaseRequest,
+  SESSION_RELEASE_V1,
   SessionDiffResultRequest,
   SessionEndReason,
   SessionMergeResultRequest,
@@ -587,6 +589,7 @@ import { sanitizeWorkspaceWrite } from './runner-agents.controller';
 import { workspaceWriteCardInput } from './runner-workspace-approval';
 import { turnOutcomeOf } from './turn-outcome';
 import { carryingTurnOf, recordCarryingTurnOutcome } from '../common/carrying-turn';
+import { declaresSessionRelease, readRelease, sessionReleaseOffered } from './run-release';
 import { authorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import { browserClaimFields, MANAGED_RUNNER_BROWSER_GATE, type ManagedRunnerBrowserGate } from '../managed-runners/managed-runner-browser-gate';
@@ -1513,6 +1516,34 @@ function parseSupervisedSessionId(value: string): string {
 }
 
 /**
+ * The task of a run released after a failed turn under the new protocol (SESSION_RELEASE_V1), told as the old
+ * protocol's failed turn tells it in the write that releases its session: reclaimed FAILED with the project's exception
+ * item, and the run-failure comment. Not while a retry is armed (the run goes on), and not after a reserved acceptance
+ * turn, whose comparison judged the task at its turn report. Read under the release's Session lock, after its write.
+ */
+async function releaseTaskAfterFailedTurn(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  current: { taskId: string | null; retryAt: Date | null; error: string | null },
+): Promise<boolean> {
+  if (!current.taskId || current.retryAt != null) return false;
+  const failed = await tx.conversationTurn.findFirst({
+    where: { sessionId, outcome: 'FAILED' },
+    orderBy: { seq: 'desc' },
+    select: { kind: true, clientTurnId: true, error: true },
+  });
+  if (failed?.kind === 'shell' && taskAcceptanceExpectedExitCode(failed.clientTurnId) != null) return false;
+  const error = failed?.error || current.error || 'run failed';
+  const reclaimed = await reclaimStalledTask(tx, current.taskId, TaskStatus.FAILED, {
+    sessionId,
+    how: 'RUN_FAILED',
+    error,
+  });
+  await postRunFailureComment(tx, current.taskId, error);
+  return reclaimed;
+}
+
+/**
  * Did this run fail without ever producing anything? Every reason a session dies between getting
  * its checkout and its first turn — the engine isn't installed, isn't signed in, or the account's
  * quota is spent — lands here with no turns and an empty diff, and its branch holds nothing but
@@ -1885,6 +1916,16 @@ export class RunnerApiController {
     };
   }
 
+  /**
+   * The replacement of §7.3 (docs/routing-account-health-design.md) for a run that ended FAILED: TasksService decides
+   * whether its account refused it at admission and, within the bound, dispatches the task again. Never awaited by the
+   * runner's request, and never in its way: a failure is logged.
+   */
+  private replaceRefusedRun(sessionId: string): void {
+    void this.tasks?.replaceRefusedRun(sessionId).catch((error) =>
+      this.logger.warn(`refused run ${sessionId} not replaced: ${(error as Error)?.message ?? error}`));
+  }
+
   /** Insert a device session, regenerating the short code on the rare collision. */
   private async createDeviceSession(dto: DeviceStartRequest, deviceCode: string, requesterIp: string | null): Promise<string> {
     const expiresAt = new Date(Date.now() + DEVICE_TTL_MS);
@@ -2164,7 +2205,7 @@ export class RunnerApiController {
         ? (await this.prisma.runner.findUnique({ where: { id: runnerId }, select: { repoHealth: true } }))?.repoHealth
         : undefined;
       try {
-        await writeLinkBeatReports(this.prisma, {
+        const written = await writeLinkBeatReports(this.prisma, {
           runnerId,
           leaseOwner,
           dto,
@@ -2174,6 +2215,10 @@ export class RunnerApiController {
           storedPlanUsage: row.planUsage,
           now: new Date(),
         });
+        // The plan usage it overwrote was read with the beat (planUsageRead): a plan that changed makes trials due.
+        if (written.planUsageStored && row.planUsageRead && verdict.reports.includes('planUsage')) {
+          await this.makePlanChangeTrialsDue(runnerId, admission.ownerId, row.planUsage, dto?.planUsage);
+        }
         if (reposChanged) {
           for (const workspaceId of workspacesWithChangedRepoHealth(priorRepoHealth, sanitizeRunnerRepoHealth(dto.repos) ?? [])) {
             this.realtime.publishWorkspaceRepoHealthChanged(admission.ownerId, workspaceId);
@@ -2190,6 +2235,7 @@ export class RunnerApiController {
       const cursorKeyChecks = await cursorKeyCheckRelay.takeAnywhere(runnerId);
       return quietHeartbeatAnswer(row, {
         cursorKeyChecks, linkHints: this.linkHintsOf(runnerId, row, supervised), draining: dto?.draining === true,
+        sessionRelease: sessionReleaseOffered(),
       });
     }
     // The full reconcile reads the runner row the guard would have read; the beat statement admitted it.
@@ -2230,6 +2276,39 @@ export class RunnerApiController {
    * presence row, so this does neither again; it leaves the runner row as it is when nothing written there changed
    * (only its own record of the beat, when that is due); and it records what it covered (recordLinkReconcile).
    */
+  /**
+   * The plan usage stored for `runnerId` before a heartbeat overwrites it, while the runner has a blocked account
+   * (account_health); undefined otherwise, when no plan change could make a trial due, and when the read fails: the
+   * heartbeat is never in its way.
+   */
+  private async planUsageUnderBlock(runnerId: string): Promise<unknown> {
+    try {
+      const blocked = await this.prisma.accountHealth.findFirst({
+        where: { runnerId, clearedAt: null, state: 'BLOCKED' }, select: { id: true },
+      });
+      if (!blocked) return undefined;
+      return (await this.prisma.runner.findUnique({ where: { id: runnerId }, select: { planUsage: true } }))?.planUsage ?? null;
+    } catch (error) {
+      this.logger.warn(`runner ${runnerId}: plan usage before this heartbeat not read: ${(error as Error)?.message ?? error}`);
+      return undefined;
+    }
+  }
+
+  /**
+   * §6.3 of docs/routing-account-health-design.md: a usage reading whose plan differs from the last one may be the
+   * owner's fix for a block on that account (changedPlans), so its trial is due now, as after a fresh sign-in. The
+   * ladder is kept. Never in the heartbeat's way: a failure is logged.
+   */
+  private async makePlanChangeTrialsDue(runnerId: string, ownerId: string, before: unknown, after: unknown): Promise<void> {
+    try {
+      for (const { engine, account } of changedPlans(before, after)) {
+        await makeTrialDue(this.prisma, ownerId, { runnerId, engine, account });
+      }
+    } catch (error) {
+      this.logger.warn(`runner ${runnerId}: trials not made due after a plan change: ${(error as Error)?.message ?? error}`);
+    }
+  }
+
   private async reconcileHeartbeat(
     runner: { id: string; version: string | null; lastHeartbeatAt?: Date | null },
     dto: RunnerHeartbeatRequest,
@@ -2474,10 +2553,15 @@ export class RunnerApiController {
     const planUsageUnchanged = !!linkBeat && !!storedFacts && storedFacts.planUsage === linkBeat.digests.facts.planUsage;
     if (dto?.planUsage != null && !planUsageUnchanged) {
       planUsageStored = false;
+      // What it overwrites, for a plan that changed (makePlanChangeTrialsDue): read only while this runner has a
+      // blocked account, one indexed read otherwise.
+      const planUsageBefore = ownerOfRunner ? await this.planUsageUnderBlock(runner.id) : undefined;
       try {
         planUsageStored = await storeHeartbeatPlanUsage(this.prisma, runner.id, dto.planUsage, heartbeatLeaseOwner);
         if (!planUsageStored) {
           this.logger.warn(`runner ${runner.id}: planUsage not stored after ${PLAN_USAGE_CAS_ATTEMPTS} compare-and-set attempts; the next heartbeat reports it again`);
+        } else if (planUsageBefore !== undefined) {
+          await this.makePlanChangeTrialsDue(runner.id, ownerOfRunner!, planUsageBefore, dto.planUsage);
         }
       } catch (error) {
         // Advisory telemetry, like the live diffs below: never fail the heartbeat for it.
@@ -2976,6 +3060,9 @@ export class RunnerApiController {
       // To a draining beat: this server takes a claim scoped to named sessions (GET sessions/claim?drainScope=),
       // which is what a runner draining for an update claims with. A runner that sees no such word sends none.
       ...(dto?.draining === true ? { drainScopedClaims: true } : {}),
+      // While the operator's switch says every replica serves it (run-release.ts sessionReleaseOffered): a runner may
+      // report a failed turn and its release as two reports. Absent, a runner declares nothing.
+      ...(sessionReleaseOffered() ? { sessionReleaseV1: true } : {}),
       postponeSelfUpdateUntil,
       selfUpdateNow,
       ...(clearBrowserProfile ? { clearBrowserProfile } : {}),
@@ -7223,8 +7310,13 @@ export class RunnerApiController {
     // in raw SQL. TurnCompleteRequest is an interface, so the global ValidationPipe never sees
     // this body — without the pipe the id reaches `where: { id: dto.turnId }` exactly as sent.
     @Body(PublicIdPipe.forFields('turnId')) body: TurnCompleteRequest,
+    @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
   ) {
     await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
+    // Which protocol this report speaks, by what the runner declares on it (SESSION_RELEASE_V1, plan step 6.1): under
+    // the new one a failed turn is the turn's outcome and the release is a report of its own (`release` below).
+    const releasesSeparately = declaresSessionRelease(
+      runnerSupportsCapability(capabilities, SESSION_RELEASE_V1), body, SESSION_RELEASE_V1);
     // Stripped once, at the edge, rather than at each write: `result` alone reaches the session's
     // `error`, a turn's `deliveryFailureReason` and two different task comments below, and the
     // worktree snapshot reaches two rows more — a per-write strip is a list to keep in sync, which
@@ -8178,6 +8270,10 @@ export class RunnerApiController {
               status: 'PENDING',
             },
           });
+      // A failed turn under the new protocol (SESSION_RELEASE_V1) releases nothing: the session stays held, RUNNING on
+      // the runner's slot while it tears its engine down, until its release report. Everything else the failure writes
+      // below is written as for the old protocol; what only a release writes waits for that report.
+      const releaseOwed = failSession && releasesSeparately;
       // Run now's pass covered this one turn (decision B): answered, it is spent and the slot over the limit is
       // returned. A turn put back in the queue has not been answered and keeps it.
       const overCapacityEnded = current.overCapacityTurnId != null
@@ -8186,7 +8282,7 @@ export class RunnerApiController {
       // A stopped engine passes no slot on: a message queued behind the stop waits for a claim, where the hold decides.
       // Nor does a turn that ran over the limit: its follow-up queues for a slot like any other message.
       const nextStatus = failSession
-        ? RunStatus.FAILED
+        ? (releaseOwed ? RunStatus.RUNNING : RunStatus.FAILED)
         : regionStopped || overCapacityEnded
           ? (pendingExecutable > 0 ? RunStatus.PENDING : RunStatus.AWAITING_INPUT)
           : statusAfterTurnCompleted(pendingExecutable > 0);
@@ -8271,14 +8367,14 @@ export class RunnerApiController {
                 // What the engine adapter classified the failure as, beside the error it wrote (design §5.1). An
                 // acceptance failure is the server's own verdict on the work, not the engine's: no kind.
                 ...runFailureColumns(acceptanceFailureReason ? {} : dto, true),
-                finishedAt: new Date(),
-                // Released for the turn that failed (design §4.2), in the statement that writes FAILED.
                 cancelRequestedAt: new Date(),
-                // FAILED is where this session stops being live, so whatever it had running
-                // goes with it (CLEARED_RUNNING_WORK). This write is the reason the runner
-                // cannot do it: the drain that kills those jobs reports them seconds from now,
-                // and by then this status has closed event admission on them.
-                ...CLEARED_RUNNING_WORK,
+                // Released for the turn that failed (design §4.2), in the statement that writes FAILED. FAILED is
+                // where this session stops being live, so whatever it had running goes with it
+                // (CLEARED_RUNNING_WORK). This write is the reason the runner cannot do it: the drain that kills
+                // those jobs reports them seconds from now, and by then this status has closed event admission on
+                // them. A release owed is the release report's to write (the session is still live until then, and
+                // admits that drain's reports).
+                ...(releaseOwed ? {} : { finishedAt: new Date(), ...CLEARED_RUNNING_WORK }),
               }
             : {}),
           // The stopped sentence a region stop ends the turn with (§10), which the claim clears once the hold releases.
@@ -8367,7 +8463,7 @@ export class RunnerApiController {
           requestsClosed: stoppedRequestsClosed,
         };
       }
-      if (failSession) {
+      if (failSession && !releaseOwed) {
         await retireSessionInboxGeneration(tx, sessionId);
         // The park above wrote this session's finish, which may be the one a DONE task's identity was
         // waiting for (§10.5 O-L4 3). An item it opens is delivered after the commit with this
@@ -8508,7 +8604,9 @@ export class RunnerApiController {
             `its run stopped without calling ${CRITERION_CHECK_REPORT_TOOL}`,
             { runningBgJobs: current.runningBgJobs, retryAt: retryArmAt ?? current.retryAt })
           : [];
-      if (failTask && !retryPending) {
+      // A release owed tells the task at the release (releaseTaskAfterFailedTurn): a task with a session still held is
+      // not reclaimed (reclaimStalledTask), and the hold is one.
+      if (failTask && !retryPending && !releaseOwed) {
         // Surface the abandoned task for a human, and open its project's exception item in this same
         // transaction (contract §4.3 B).
         taskReclaimed = await reclaimStalledTask(tx, current.taskId!, TaskStatus.FAILED, {
@@ -8548,6 +8646,7 @@ export class RunnerApiController {
         droppedWakeups,
         checksSettled,
         settledWork,
+        releaseOwed,
       };
     }, loggedRetry(this.logger, 'runnerApi.turnComplete', {
       transaction: {
@@ -8591,6 +8690,9 @@ export class RunnerApiController {
         turnCompleted: !finalized.failSession,
         until: dto.failure?.until ?? null,
       });
+      // A task run its account refused at admission is replaced at once (§7.3), off the response path: the runner is
+      // blocked on this reply, and the replacement is a whole dispatch.
+      if (finalized.failSession === true) this.replaceRefusedRun(sessionId);
     }
     if (finalized.applied && !finalized.steer && this.coordinatorHandoffs) {
       void this.coordinatorHandoffs.afterTurn(sessionId, dto.turnId, dto.status).catch((error) => this.logger.warn(
@@ -8778,11 +8880,14 @@ export class RunnerApiController {
       // once, now that the drop has committed (contract §4).
       signalDrainedWakeups(this.push, this.logger, finalized.droppedWakeups ?? []);
       // Only announce the terminal status if this call actually finalized the session
-      // (a late/duplicate turn-complete for an already-ended session is a no-op).
+      // (a late/duplicate turn-complete for an already-ended session is a no-op). A release owed announces it at the
+      // release report: the session is still held, and its turn's end was announced as any turn's is.
       if (finalized.applied) {
         // The failure also asked the runner to tear the process down (cancelRequestedAt), which its heartbeat
         // hands over: over the runner link, the next one is told so.
         this.realtime.markRunnerChanged(runner.id);
+      }
+      if (finalized.applied && !('releaseOwed' in finalized && finalized.releaseOwed)) {
         this.realtime.publish(sessionId, {
           seq: Number.MAX_SAFE_INTEGER,
           type: RunEventType.STATUS,
@@ -10191,12 +10296,46 @@ export class RunnerApiController {
     return new Set(rows.map((row) => row.seq));
   }
 
+  /**
+   * The release report of the new runner protocol (SESSION_RELEASE_V1, plan step 6.1, design §3): the runner's run is
+   * over and the session is released. The finalize with no status word: what the release is comes from the facts the
+   * server holds (readRelease, runner-api/run-release.ts), and everything a finalize writes beside the status is
+   * written as it writes it. Refused from a request that does not declare the protocol.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('sessions/:id/release')
+  async release(
+    @CurrentRunner() runner: { id: string },
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Body() body: RunReleaseRequest,
+    @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
+  ): Promise<RunFinalizeResponse> {
+    // Whose session this is, before anything about the request is judged (finalize asks it again).
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
+    if (!declaresSessionRelease(runnerSupportsCapability(capabilities, SESSION_RELEASE_V1), body, SESSION_RELEASE_V1)) {
+      throw new BadRequestException(`a release report is part of ${SESSION_RELEASE_V1}, which this request does not declare`);
+    }
+    const cutOff = (body as { cutOffTurnOutcome?: unknown } | undefined)?.cutOffTurnOutcome;
+    if (cutOff !== undefined && cutOff !== 'FAILED') {
+      throw new BadRequestException("cutOffTurnOutcome may only be 'FAILED'");
+    }
+    // No status word is read from a release, whatever the body carries: finalize reads `status` only when `release` is
+    // null.
+    const { status: _ignored, ...report } = (body ?? {}) as RunReleaseRequest & { status?: unknown };
+    return this.finalize(runner, sessionId, report as RunFinalizeRequest, { cutOffTurnOutcome: cutOff });
+  }
+
+  /**
+   * A run's end: the old protocol's finalize (`release` null, which is what the route passes: the runner's terminal
+   * status word decides), and the body of the new protocol's release report above (the facts decide, readRelease).
+   */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/finalize')
   async finalize(
     @CurrentRunner() runner: { id: string },
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() body: RunFinalizeRequest,
+    release: { cutOffTurnOutcome?: 'FAILED' } | null = null,
   ): Promise<RunFinalizeResponse> {
     await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     // See turnComplete: the engine's last words (`result`, `error`) and the branch's per-file
@@ -10213,12 +10352,22 @@ export class RunnerApiController {
     // the answer this already gives.
     const outcome = await withTransactionRetry(this.prisma, async (tx) => {
       await this.lockSessionLeaseOwner(tx, sessionId, runner.id, leaseOwner);
-      if (!TERMINAL.includes(dto.status as RunStatus)) {
+      if (!release && !TERMINAL.includes(dto.status as RunStatus)) {
         throw new BadRequestException('finalization status must be terminal');
       }
       const current = await tx.session.findUniqueOrThrow({
         where: { id: sessionId },
       });
+      // The new protocol's release, read from the locked row (runner-api/run-release.ts). FAILED_TURN is the hold a
+      // failed turn left: its turn report already recorded the failure, drained the queue, armed any retry and told
+      // the task, so this release writes only what a release writes.
+      // The old protocol's finalize reads that hold the same way: a runner that declared the protocol on its failed turn
+      // and not on its end (a mixed or downgraded process) still releases it as the failure it is. No row the old
+      // protocol writes has that shape, whose failed turn released its session at once.
+      const reading = release
+        ? readRelease(current, release.cutOffTurnOutcome)
+        : (readRelease(current, undefined) === 'FAILED_TURN' ? 'FAILED_TURN' as const : null);
+      const failureReported = reading === 'FAILED_TURN';
       // A branch the session was not created with is accepted only from a codeless task's run, which makes
       // its branch at finalize (design §3, B2); any other such report is not written (codeless-checkout.ts).
       dto.branch = await acceptedFinalizeBranch(tx, current, dto.branch);
@@ -10226,9 +10375,15 @@ export class RunnerApiController {
       // If cancel/end won the row lock, its reason is authoritative regardless of what
       // the runner reports. TASK_DONE settles SUCCEEDED; task-cancel/user-end/idle and
       // hard complete/delete/cancel settle CANCELLED through the fallback.
-      const effectiveStatus: RunStatus = current.cancelRequestedAt
-        ? ((gracefulEndStatus(current.endReason) as RunStatus | null) ?? RunStatus.CANCELLED)
-        : (dto.status as RunStatus);
+      // A release: a failure reads FAILED; an end asked settles as the old protocol's cancel does; a stop nobody asked
+      // for is CANCELLED, the word the runner's own stop reports today.
+      const effectiveStatus: RunStatus = reading
+        ? (reading === 'FAILED_TURN' || reading === 'FAILED_CUT_OFF'
+          ? RunStatus.FAILED
+          : (reading === 'END_ASKED' ? (gracefulEndStatus(current.endReason) as RunStatus | null) : null) ?? RunStatus.CANCELLED)
+        : current.cancelRequestedAt
+          ? ((gracefulEndStatus(current.endReason) as RunStatus | null) ?? RunStatus.CANCELLED)
+          : (dto.status as RunStatus);
       // Filing timestamps are canonical for new rows; endReason checks keep legacy rows
       // safe. Only Open sessions retain their checkout for a future resume.
       const keepCheckout =
@@ -10236,13 +10391,15 @@ export class RunnerApiController {
         current.deletedAt == null &&
         current.endReason !== SessionEndReason.COMPLETED &&
         current.endReason !== SessionEndReason.DELETED &&
-        !producedNothingBeforeFailing(current.numTurns, effectiveStatus, dto);
+        // A release after a failed turn keeps the checkout as the old protocol's finalize after one does: that
+        // finalize read the turn's teardown cancel and answered for CANCELLED.
+        !(!failureReported && producedNothingBeforeFailing(current.numTurns, effectiveStatus, dto));
       // A run the runner refused or stopped because its Claude connection to Anthropic is in a region Anthropic does
       // not offer Claude in (docs/claude-region-check-contract.md §10) ends here, and the session does not: it is
       // neither FAILED nor drained, its task is told nothing, and its checkout is kept. Not for a session somebody is
       // ending, whose own reason stands.
       if (
-        dto.status === RunStatus.FAILED
+        (release ? reading !== 'END_ASKED' : dto.status === RunStatus.FAILED)
         && !current.cancelRequestedAt
         && (dto.subtype === CLAUDE_REGION_REFUSED_SUBTYPE || dto.subtype === CLAUDE_REGION_STOPPED_SUBTYPE)
       ) {
@@ -10254,7 +10411,8 @@ export class RunnerApiController {
       // prose inside `error`. Arm the same retry from it, so `retryAt` answers "when does this come
       // back" for every quota failure rather than only the ones that got far enough to talk. Never
       // an overwrite: an ingestion-armed retry already knows more than the terminal message does.
-      const failedRun = effectiveStatus === RunStatus.FAILED;
+      // A failure its turn report already settled arms nothing and records nothing more here.
+      const failedRun = effectiveStatus === RunStatus.FAILED && !failureReported;
       // The failure's kind: the runner's, else the legacy markers of its error (runFailureIs).
       const failure = { failureKind: dto.failure?.kind, error: dto.error };
       const quotaSpent =
@@ -10263,7 +10421,7 @@ export class RunnerApiController {
       // engine. Most often the runner's check before it starts the engine (engineAuthPreflight) finds
       // the account signed out and ends the run with the message it took undelivered. Moved below.
       const signInEngine =
-        effectiveStatus === RunStatus.FAILED
+        failedRun
         && current.retryAt == null
         && !quotaSpent
         // Without a kind, the runtime's "Failed to authenticate" alone, as this path always read it (isAuthErrorText).
@@ -10290,7 +10448,7 @@ export class RunnerApiController {
       // and a pool's own owner's session from its ChatGPT accounts (QueueService.loginPoolRetryAt), now
       // while another can take it, else until the first of them comes back.
       const keyRetryAt =
-        effectiveStatus === RunStatus.FAILED
+        failedRun
         && current.retryAt == null
         && !quotaSpent
         && !isBuiltinProvider(current.provider, current.providerBuiltin)
@@ -10354,7 +10512,8 @@ export class RunnerApiController {
           result: dto.result,
           error: dto.error,
           // The runner's classification of the failure it ends with, in the statement that writes `error` (design §5.1).
-          ...runFailureColumns(dto, failedRun),
+          // A failed turn's report already wrote its own, which this release keeps.
+          ...(failureReported ? {} : runFailureColumns(dto, failedRun)),
           // `claudeSessionId` is a legacy alias older runners still send; both name the same
           // id, so it only serves as a fallback here and is never persisted on its own.
           runtimeSessionId: dto.runtimeSessionId ?? dto.claudeSessionId ?? undefined,
@@ -10425,7 +10584,7 @@ export class RunnerApiController {
       // A runner that reports success on a finalize nobody asked for: released engine_exited, which no reader takes for
       // finished work (common/session-release.ts releaseFinishedTheWork: no end reason). No current runner sends it;
       // said here if one does.
-      if (reportsSuccessWithNoEnd(current, dto.status)) {
+      if (!release && reportsSuccessWithNoEnd(current, dto.status as string)) {
         this.logger.warn(`session ${sessionId}: the runner reported success with no end requested; released engine_exited`);
       }
       // This finish may be the one a DONE task's identity was waiting for: its work has stopped moving
@@ -10484,7 +10643,7 @@ export class RunnerApiController {
       // true rather than before it.
       await reapApprovalsOfEndedTurns(tx, sessionId);
       // An Agent check this run was, ended without its verdict (projects/criterion-check-ended.ts).
-      const checksSettled = retryAt != null ? [] : await settleChecksOfEndedRun(
+      const checksSettled = failureReported || retryAt != null ? [] : await settleChecksOfEndedRun(
         tx,
         { sessionId, taskId: current.taskId },
         `the runner finalized its run as ${effectiveStatus}${dto.error ? ` (${dto.error})` : ''}`,
@@ -10496,7 +10655,12 @@ export class RunnerApiController {
       // the workspace owns DONE.
       let taskReclaimed = false;
       let dispatchRefused = false;
-      if (current.taskId && effectiveStatus !== RunStatus.SUCCEEDED) {
+      // A failure its turn report settled: the task is told now, as the old protocol's failed turn tells it in the write
+      // that releases its session.
+      if (failureReported && current.taskId) {
+        taskReclaimed = await releaseTaskAfterFailedTurn(tx, sessionId, current);
+      }
+      if (current.taskId && effectiveStatus !== RunStatus.SUCCEEDED && !failureReported) {
         taskReclaimed = await reclaimStalledTask(
           tx,
           current.taskId,
@@ -10552,8 +10716,10 @@ export class RunnerApiController {
       return {
         finalized: true,
         effectiveStatus,
-        // Whether the release was a failure, for account health after the commit (§6.3).
-        failedRun,
+        // Whether the release was a failure, for account health and the replacement after the commit (§6.3, §7.3): a
+        // failed turn's release too (a reported failed turn always releases FAILED), whose turn report recorded the
+        // failure while the session was still live.
+        releasedFailed: failedRun || failureReported,
         keepCheckout,
         retryAt,
         taskReclaimed,
@@ -10567,7 +10733,9 @@ export class RunnerApiController {
         currentWorkTerminalized,
         // A session the runner finalizes while it runs a turn ends that turn here — completed, failed or
         // stopped — rather than at a turn-complete; one already parked has had its turn's end settled.
-        repairCheck: repairCheckAfter(current, current.status === RunStatus.RUNNING,
+        failureReported,
+        // A release after a failed turn: that turn's report owed the check, and made it.
+        repairCheck: failureReported ? null : repairCheckAfter(current, current.status === RunStatus.RUNNING,
           effectiveStatus === RunStatus.SUCCEEDED),
         droppedWakeups,
         checksSettled,
@@ -10586,10 +10754,12 @@ export class RunnerApiController {
     if (!outcome.finalized) return { ok: true, keepCheckout: outcome.keepCheckout };
     // What the run's end says of the account it spent (§6.3), now that its release and its failure kind are committed:
     // awaited, so the next dispatch reads it, and never in the way: it logs its own failure.
-    await this.accountHealth?.afterRunEnd(sessionId, {
-      failed: 'failedRun' in outcome && outcome.failedRun === true,
-      until: dto.failure?.until ?? null,
-    });
+    // Idempotent per session, so a failed turn's report having told it already changes nothing.
+    const releasedFailed = 'releasedFailed' in outcome && outcome.releasedFailed === true;
+    await this.accountHealth?.afterRunEnd(sessionId, { failed: releasedFailed, until: dto.failure?.until ?? null });
+    // A task run its account refused at admission is replaced at once (§7.3), off the response path: here once the
+    // release has freed the task, which a failed turn's report may not have yet.
+    if (releasedFailed) this.replaceRefusedRun(sessionId);
     // The one-shot wakeups this finalize dropped with its FAILED session, no retry armed: their owner is
     // told, once, now that the drop has committed (contract §4).
     signalDrainedWakeups(this.push, this.logger, outcome.droppedWakeups ?? []);
@@ -10603,6 +10773,14 @@ export class RunnerApiController {
       && outcome.taskId
     ) {
       this.realtime.publishTaskChanged(sessionId, outcome.taskId);
+      // A failed turn's task, told at its release: what the old protocol's failed turn delivers after its commit.
+      if ('failureReported' in outcome && outcome.failureReported) {
+        await this.tasks?.deliverTaskExceptionsAfterCommit(outcome.taskId)
+          .catch((error) => this.logger.warn(
+            `task exception delivery after the release of ${sessionId} failed: `
+            + `${error instanceof Error ? error.message : error}`,
+          ));
+      }
       // The exception item this finalize opened, handed over (contract §4.4 X-D4 1). Before today
       // this door reclaimed the task and told nobody at all.
       await this.openItems?.deliverForTasks([outcome.taskId]);

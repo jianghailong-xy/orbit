@@ -5,6 +5,7 @@ import {
   autoAvailable,
   credentialIsAnthropicBound,
   runnerCatalogRow,
+  settingLink,
   type AnthropicBoundCredential,
   type PlanUsage,
   type RunnerModelCatalog,
@@ -12,8 +13,9 @@ import {
   type RuntimeDefaultModels,
 } from '@orbit/shared';
 
-/** Version 3: account health removes, ranks and holds (docs/routing-account-health-design.md §7). */
-export const MODEL_ROUTING_POLICY_VERSION = 3;
+/** Version 3: account health removes, ranks and holds (docs/routing-account-health-design.md §7). Version 4: a pin
+ *  on an account health set aside holds with the pin named, or is relaxed when the owner allows it (§7.5). */
+export const MODEL_ROUTING_POLICY_VERSION = 4;
 export const MODEL_ROUTING_LEVELS = ['S', 'M', 'L', 'XL'] as const;
 export type ModelRoutingLevel = (typeof MODEL_ROUTING_LEVELS)[number];
 
@@ -389,6 +391,9 @@ export interface ModelRoutingInput {
   /** What the SubAgent router reads for the Agent's runner (runner-api/subagent-route.ts subagentRouteInput): the
    *  pool a tiered run is picked from. Absent: nothing was read, and the run keeps the agent's model. */
   pool?: SubagentRoutingInput | null;
+  /** The owner's UserPreferences.relaxBlockedPins (docs/routing-account-health-design.md §7.5): a pin on an account
+   *  health set aside may run elsewhere. Off (absent): the task holds with the pin named. */
+  relaxBlockedPins?: boolean;
 }
 
 export interface ModelRoutingDecision extends ModelRoutingSelection {
@@ -401,6 +406,8 @@ export interface ModelRoutingDecision extends ModelRoutingSelection {
   hold?: ModelRoutingHold;
   /** The pick's account is due a trial (§6.5): the dispatch claims it before the run starts. */
   trial?: { subject: string; scopeModel: string; provider: string };
+  /** A pin was relaxed off an account health set aside (§7.5): the run goes where it says, tier or not. */
+  relaxed?: true;
 }
 
 /** Why a task waits for an account (§7.5): each account that could have run it, and when the first is tried again. */
@@ -411,6 +418,8 @@ export interface ModelRoutingHold {
   /** The earliest end among them (ISO): the hold lifts then, and the held task takes the trial. */
   until: string;
   accounts: Array<{ provider: string; engine: string | null; line: string; until: string }>;
+  /** A pinned task held with relaxation off: the setting that would let it run elsewhere (§7.5), as a link. */
+  setting?: string;
 }
 
 const FAILURE_WORDING = {
@@ -448,7 +457,21 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
     level: null,
     reasons: reasons.map((reason) => reason.startsWith('[') ? reason : `[not-routed] ${reason}`),
   });
-  if (task.model != null) return unchanged([`Task pin: ${task.model}`]);
+  const credential = task.provider ?? baseline.provider;
+  if (task.model != null) {
+    // A named model is never swapped (§7.5): it runs as pinned, or on another provider × engine that lists that same
+    // model when the owner allows it, or the task waits for its account.
+    const lines = [`Task pin: ${task.model}`];
+    const standing = input.pool ? ownStanding(input, input.pool, own, credential) : {};
+    if (!standing.removed) {
+      return standing.trial
+        ? { ...unchanged(lines), trial: { subject: standing.trial.subject, scopeModel: '', provider: credential } }
+        : unchanged(lines);
+    }
+    const held = holdOf(input, [standing.removed], credential);
+    const moved = input.relaxBlockedPins ? samePinnedModel(input, input.pool!, task.model, credential, own, held) : null;
+    return moved ?? { ...unchanged([...lines, held.reason]), hold: held };
+  }
 
   const skipped: string[] = [];
   let last: ModelRoutingRun | undefined;
@@ -497,12 +520,15 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
     reasons.push("[not-routed] No suggestion — keeps the agent's model, as today");
   }
   reasons.push(...skipped);
-  const credential = task.provider ?? baseline.provider;
   if (!level) {
     reasons.push(`Engine ${own}: ${task.engine || task.provider ? 'pinned on the task' : "this agent's own engine"}`);
-    // Kept on the Agent's own model, which only runs while its account can (§7.5, G7).
-    const held = input.pool ? ownHealthHold(input, input.pool, own, credential) : null;
-    return held ? { ...unchanged(reasons), hold: held } : unchanged(reasons);
+    // Kept on the Agent's own model, which only runs while its account can (§7.5, G7); with no tier there is nothing
+    // to relax a pin at, so it waits. An account whose trial is due takes it.
+    const standing = input.pool ? ownStanding(input, input.pool, own, credential) : {};
+    if (standing.removed) return { ...unchanged(reasons), hold: holdOf(input, [standing.removed], credential) };
+    return standing.trial
+      ? { ...unchanged(reasons), trial: { subject: standing.trial.subject, scopeModel: '', provider: credential } }
+      : unchanged(reasons);
   }
   if (!input.pool) return unchanged([...reasons, "No providers were read — keeps the agent's model"]);
   // The pick is the SubAgent router's (§4.2), at this tier: every provider × engine × model the owner has.
@@ -527,7 +553,12 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
     !r.startsWith(`Tier ${level}, set by the caller`) && !r.startsWith('No provider can run a SubAgent'));
   if (!pick) {
     // No longer the Agent's own model when its account cannot run (§7.5, G7): the task waits for the first that can.
+    // A pin on what health set aside is relaxed, one step at a time, when the owner allows it (§7.5).
     const held = healthHold(input, route, own, credential);
+    const relaxed = held && input.relaxBlockedPins && (task.provider || task.engine)
+      ? relaxedPin(input, input.pool, level, mode, own, credential, held, [...reasons, ...lines])
+      : null;
+    if (relaxed) return relaxed;
     if (held) return { ...unchanged([...reasons, ...lines, held.reason]), hold: held };
     return unchanged([...reasons, ...lines, "No provider can run it at this tier — keeps the agent's model"]);
   }
@@ -586,25 +617,61 @@ function healthHold(
   if (removed.length === 0) return null;
   const ownRemoved = removed.some((c) => c.provider === credential && (c.engine === null || c.engine === own));
   if (!ownRemoved && !input.task.provider && !input.task.engine) return null;
-  return holdOf(input, removed);
+  return holdOf(input, removed, credential);
 }
 
-/** The hold when the run keeps the Agent's own model and that model's account cannot run (§7.5). */
-function ownHealthHold(
+/**
+ * What account health says of the run's own provider × engine, the one a run keeps when it is not routed (§7.5, G7):
+ * the removal when health sets the account aside (or, for a model pin, that model on it), else the trial its account
+ * is due. Nothing for an account health has no word on, or one ruled out for another reason (that keeps today's
+ * behaviour: health relaxes and holds for health only).
+ */
+function ownStanding(
   input: ModelRoutingInput,
   pool: SubagentRoutingInput,
   own: string,
   credential: string,
-): ModelRoutingHold | null {
+): { removed?: SubagentRemovedCandidate; trial?: RoutingHealthEntry } {
   const provider = pool.providers.find((p) => p.slug === credential);
-  if (!provider || !provider.engines.some((spec) => spec.engine === own)) return null;
-  if (providerRefusal(pool, provider)) return null;
+  if (!provider || !provider.engines.some((spec) => spec.engine === own)) return {};
+  if (providerRefusal(pool, provider)) return {};
   const verdict = engineVerdict(pool, provider, own);
-  if (!('reason' in verdict) || !verdict.health) return null;
-  return holdOf(input, [{ provider: credential, engine: own, model: null, effort: null, reason: verdict.reason, health: verdict.health }]);
+  if ('reason' in verdict) {
+    return verdict.health
+      ? { removed: { provider: credential, engine: own, model: null, effort: null, reason: verdict.reason, health: verdict.health } }
+      : {};
+  }
+  const model = input.task.model ?? null;
+  const modelOut = model ? verdict.modelHealth.get(model) : undefined;
+  if (model && modelOut) {
+    return { removed: { provider: credential, engine: own, model, effort: null, reason: healthLine(modelOut, own), health: modelOut } };
+  }
+  return verdict.trial ? { trial: verdict.trial } : {};
 }
 
-function holdOf(input: ModelRoutingInput, removed: readonly SubagentRemovedCandidate[]): ModelRoutingHold {
+/**
+ * What account health means for a run that is not routed at all, the owner's smart model selection being off: the
+ * run keeps its baseline (or its pins), and still does not start on an account health set aside, nor rush one whose
+ * trial is due. No tier and no relaxation: both are routing (docs/routing-account-health-design.md §7.5).
+ */
+export function baselineHealth(input: ModelRoutingInput): {
+  hold?: ModelRoutingHold;
+  trial?: { subject: string; scopeModel: string; provider: string };
+} {
+  if (!input.pool) return {};
+  const own = input.baseline.engine ?? input.environment.runtime;
+  const credential = input.task.provider ?? input.baseline.provider;
+  const standing = ownStanding(input, input.pool, own, credential);
+  if (standing.removed) return { hold: holdOf(input, [standing.removed], credential) };
+  return standing.trial ? { trial: { subject: standing.trial.subject, scopeModel: '', provider: credential } } : {};
+}
+
+/** The earliest-ending account of a hold: the one its line quotes. */
+function firstHeld(hold: ModelRoutingHold): ModelRoutingHold['accounts'][number] {
+  return hold.accounts.reduce((a, b) => (b.until < a.until ? b : a));
+}
+
+function holdOf(input: ModelRoutingInput, removed: readonly SubagentRemovedCandidate[], credential: string): ModelRoutingHold {
   // One line per account: a model's removal and its account's say the same account twice.
   const seen = new Set<string>();
   const accounts = removed
@@ -617,11 +684,102 @@ function holdOf(input: ModelRoutingInput, removed: readonly SubagentRemovedCandi
     .map((c) => ({ provider: c.provider, engine: c.engine, line: c.reason, until: new Date(c.health!.until).toISOString() }));
   const first = accounts.reduce((a, b) => (b.until < a.until ? b : a));
   const at = minuteOf(Date.parse(first.until));
-  const pin = input.task.provider ?? input.task.engine;
+  const { task } = input;
+  const pin = task.model ? `${task.model} on ${credential}` : task.provider ?? task.engine;
   const reason = pin
     ? `Pinned to ${pin}, which can't run now (${first.line}). Next try at ${at}.`
     : `Waiting for an account: ${first.line}. Next try at ${at}.`;
-  return { kind: 'ACCOUNT_NEEDS_ACTION', reason, until: first.until, accounts };
+  // With relaxation off a pin holds, and the hold links the setting that lets it run elsewhere (§7.5).
+  const setting = pin && !input.relaxBlockedPins ? { setting: settingLink('relaxBlockedPins') } : {};
+  return { kind: 'ACCOUNT_NEEDS_ACTION', reason, until: first.until, accounts, ...setting };
+}
+
+/**
+ * §7.5 with the switch on, for a provider or engine pin whose account health set aside: the pool is widened one step
+ * at a time and the first step with a runnable candidate wins. Step 1 keeps the engine and drops the provider (only
+ * when a provider is pinned); step 2 drops both. The tier is kept: the ordinary fit order applies inside the widened
+ * pool. The owner's blocked providers and a shared provider out of scope stay out, as routeSubagent's own filters keep
+ * them. Null when no step can run it: the task holds.
+ */
+function relaxedPin(
+  input: ModelRoutingInput,
+  pool: SubagentRoutingInput,
+  level: ModelRoutingLevel,
+  mode: ModelRoutingOptimizeFor,
+  own: string,
+  credential: string,
+  held: ModelRoutingHold,
+  reasons: readonly string[],
+): ModelRoutingDecision | null {
+  const line = firstHeld(held).line;
+  const engine = input.task.engine ?? own;
+  const steps: Array<{ engine: string | null; why: (pick: SubagentFallback) => string }> = [];
+  if (input.task.provider) {
+    steps.push({
+      engine,
+      why: (pick) => `Pinned to ${credential}, which can't run now (${line}); runs on ${pick.provider} instead, on the same engine, at tier ${level}`,
+    });
+  }
+  steps.push({
+    engine: null,
+    why: (pick) => `Pinned to ${credential} on ${engine}, where no account can run now (${line}); runs on ${pick.model} on ${pick.provider} instead, at tier ${level}`,
+  });
+  for (const step of steps) {
+    const widened = { ...input, task: { ...input.task, provider: null, engine: step.engine } };
+    const route = routeSubagent(taskRunPool(widened, pool, level, mode));
+    const pick = fallbackOrder(route).find((c) => autoEligible(c, input.environment));
+    if (!pick) continue;
+    return {
+      policyVersion: MODEL_ROUTING_POLICY_VERSION,
+      level,
+      engine: pick.engine,
+      provider: pick.provider,
+      model: pick.model,
+      effort: pick.effort,
+      relaxed: true,
+      reasons: [...reasons, step.why(pick)],
+      ...(pick.trial ? { trial: { subject: pick.trial.subject, scopeModel: '', provider: pick.provider } } : {}),
+    };
+  }
+  return null;
+}
+
+/**
+ * §7.5 with the switch on, for a model pin whose account health set aside: the same model id on another provider ×
+ * engine that lists it and passes the §4.2 filters, in the owner's provider order, at its engine's default effort.
+ * Never another model: null when nobody else lists it, and the task holds.
+ */
+function samePinnedModel(
+  input: ModelRoutingInput,
+  pool: SubagentRoutingInput,
+  model: string,
+  credential: string,
+  own: string,
+  held: ModelRoutingHold,
+): ModelRoutingDecision | null {
+  const unpinned = { ...input, task: { ...input.task, provider: null, engine: null } };
+  const named = routeSubagent({
+    ...taskRunPool(unpinned, pool, 'M', input.optimizeFor ?? 'cost'),
+    caller: { model },
+    strictNamedModel: true,
+  });
+  const pick = fallbackOrder(named).find((c) =>
+    c.model === model && !(c.provider === credential && c.engine === own) && autoEligible(c, input.environment));
+  if (!pick) return null;
+  return {
+    policyVersion: MODEL_ROUTING_POLICY_VERSION,
+    level: null,
+    engine: pick.engine,
+    provider: pick.provider,
+    model,
+    effort: pick.effort,
+    relaxed: true,
+    reasons: [
+      `[not-routed] Task pin: ${model}`,
+      `Pinned to ${model} on ${credential}, which can't run now (${firstHeld(held).line}); runs the same model on ${pick.provider}`,
+    ],
+    ...(pick.trial ? { trial: { subject: pick.trial.subject, scopeModel: '', provider: pick.provider } } : {}),
+  };
 }
 
 /** The SubAgent router's input for one task run at `level`: the owner's providers as read for the Agent's runner,
