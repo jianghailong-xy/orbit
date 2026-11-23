@@ -871,17 +871,20 @@ export class ManagedRunnerManager {
   /**
    * What the owner's status says of the image (`update`): a READY instance made from a previous image, with the
    * source commit the image it would be made from now was built from, is recorded as outdated since this pass first
-   * found it so (`imageOutdatedSince`, `currentImageSha`); anything else — current, or a backend that cannot name
-   * the current build — clears both. Written only when that changes, under this replica's lease, as a predicate
+   * found it so (`imageOutdatedSince`, `currentImageSha`, with the release that image was published for as
+   * `currentImageVersion` where the backend names one); anything else — current, or a backend that cannot name the
+   * current build — clears them. Written only when that changes, under this replica's lease, as a predicate
    * write of its own columns that leaves `revision` alone: the status reads it, nothing decides on it.
    */
   private async recordImageOutdated(mapping: ManagedRunner, instance: ManagedInstance): Promise<void> {
     const sha = instance.previousImage ? (instance.currentImageRevision ?? null) : null;
-    if (sha === mapping.currentImageSha && (sha === null) === (mapping.imageOutdatedSince === null)) return;
+    const version = sha === null ? null : (instance.currentImageVersion ?? null);
+    if (sha === mapping.currentImageSha && version === mapping.currentImageVersion && (sha === null) === (mapping.imageOutdatedSince === null)) return;
     await this.prisma.managedRunner.updateMany({
       where: { id: mapping.id, leaseHolder: this.holder },
       data: {
         currentImageSha: sha,
+        currentImageVersion: version,
         imageOutdatedSince: sha === null ? null : (mapping.imageOutdatedSince ?? this.now()),
       },
     });

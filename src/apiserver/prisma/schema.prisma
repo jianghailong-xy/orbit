@@ -1736,9 +1736,11 @@ model ManagedRunner {
   /// READY on a previous image: when the manager first found the instance made from an image other than the one it
   /// makes instances from now, with that image's source commit (`org.opencontainers.image.revision`) as
   /// `currentImageSha`. Both null while the instance is current or the backend cannot name the current build; the
-  /// owner's status reads them (`update`) without asking the backend.
+  /// owner's status reads them (`update`) without asking the backend. With them, the release that image was published
+  /// for (`org.opencontainers.image.version`), as `currentImageVersion`: null for an image built from a checkout.
   imageOutdatedSince  DateTime?                   @map("image_outdated_since") @db.Timestamptz(3)
   currentImageSha     String?                     @map("current_image_sha")
+  currentImageVersion String?                     @map("current_image_version")
   /// The owner's Update Now (managed-runner.service.ts updateNow): when it was asked for, and by whom (the owner's
   /// user id). Kept as the record of the last request. It is in progress while `updateCompletedAt` is null or older:
   /// the manager rolls the READY instance onto the current image once it is idle, or stops it at once for a request
