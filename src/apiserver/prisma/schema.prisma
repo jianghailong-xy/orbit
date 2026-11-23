@@ -2095,6 +2095,9 @@ model Session {
   // must be preserved until first claim snapshots it.
   usesRuntimeDefaultModel Boolean @default(false) @map("uses_runtime_default_model")
   permissionMode       String?   @map("permission_mode")
+  // Its runner reported that Codex's sandbox cannot start there (an Orbit Cloud runner whose probe
+  // failed), so Codex Auto runs with the sandbox off. Read by the session's permission semantics.
+  codexSandboxUnavailable Boolean @default(false) @map("codex_sandbox_unavailable")
   // Claude effort level (low|medium|high|xhigh|max); null omits --effort so claude
   // uses the model's default.
   effort               String?

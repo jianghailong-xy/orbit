@@ -113,9 +113,13 @@ func codexCloudSandboxPermissionSemantics() map[string]interface{} {
 	}
 }
 
-// codexCloudSandboxNoticePayload is the system event that tells the transcript the sandbox is off.
+// codexCloudSandboxNoticePayload is the system event that tells the transcript the sandbox is off. It is
+// also the runner's report of the probe's outcome to the server: `sandboxUnavailable` marks the session
+// so its server-derived permission semantics say the sandbox is off (apiserver codex-sandbox-report.ts).
+// A runner whose probe passed sends no such event, which leaves the session as it is.
 func codexCloudSandboxNoticePayload() map[string]interface{} {
 	return map[string]interface{}{
+		"sandboxUnavailable":  true,
 		"noticeKind":          codexCloudSandboxNoticeKind,
 		"provider":            providerCodex,
 		"notice":              codexCloudSandboxNotice,
