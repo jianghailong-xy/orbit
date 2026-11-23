@@ -733,6 +733,10 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'writerSessionId',
   'writerRunnerId',
   'actorRunnerId',
+  // A file a rename onto an existing file removed (migration 1438, §3.2): the entry its handle's first later commit made
+  // in Trash (`drive_removed_entry.successor_id`), read by id and checked. An entry's address like `entryId`, with no
+  // foreign key on purpose, so it may name a file since purged. Never a fence.
+  'successorId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner
