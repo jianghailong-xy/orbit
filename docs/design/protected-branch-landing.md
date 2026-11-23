@@ -907,7 +907,7 @@ permissions, and its runner declares the capability. Until then landings behave 
 - **SSH keys for Orbit.** A separate, later plan (`docs/design/orbit-ssh-keys.md`). It does not change what GitHub
   allows a push to a protected branch.
 
-## 13. Owner steps: changing the `orbitd-cloud` App's permissions
+## Appendix B. Owner steps: changing the `orbitd-cloud` App's permissions
 
 Task `3521xdtdRcxvbQtuchAcl`. The token mint in `github-api.client.ts` (`installationToken`) stays at
 `contents: write, metadata: read`: §12 says the pull request calls use a second token, minted by the server task. The
@@ -923,8 +923,12 @@ admin page's "Register the app on GitHub" list now carries the permission list a
 3. Save changes. GitHub shows "permissions changed" and emails every installation's owner.
 4. Do not turn the webhook on yet. The webhook URL, secret and event subscriptions (§10) are added with the server task
    that serves the endpoint.
-5. Tell Orbit it is done (reply on the task). Orbit reads the App's permissions back with `GET /app`, if the server
-   carries that read; otherwise check the App's page lists the seven rows above.
+5. **Accept the new permissions on your own installation.** Open `github.com/settings/installations/<id>` for your
+   account (or the organization's page) and choose Accept new permissions. The orbit repository's landings depend on this
+   installation: without it you confirm the App, and Orbit still lands the old way.
+6. Reply on the task. Orbit cannot read the App's permissions back today: the apiserver calls `GET /app`
+   (`github-api.client.ts:104`) but reads only `id`, `slug` and `client_id`. Check the App's page on GitHub: it must list
+   the seven repository permissions above.
 
 **What existing installations see.** Each installation keeps its old permissions, and tokens minted for it carry only
 those, until its owner (the user, or an organization owner) opens GitHub's email or
