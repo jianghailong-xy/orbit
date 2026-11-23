@@ -146,7 +146,13 @@ fun resolvedRunState(session: JsonObject): String? {
         if (released) return SessionFacts.afterRelease(session)
         return when (phase) {
             "PENDING" -> "QUEUED"
-            "RUNNING" -> session.text("activity").let { if (it.isNullOrEmpty() || it == "TURN") "RUNNING" else "AWAITING_INPUT" }
+            // The legacy run status decides first, as web's dispatchedTurnInFlight does: a dispatched turn is running, a parked session
+            // stays parked even while its engine runs its own turn (activity TURN); any other word reads the activity.
+            "RUNNING" -> when (session.text("runStatus") ?: session.text("status")) {
+                "RUNNING", "PENDING", "QUEUED" -> "RUNNING"
+                "AWAITING_INPUT" -> "AWAITING_INPUT"
+                else -> session.text("activity").let { if (it.isNullOrEmpty() || it == "TURN") "RUNNING" else "AWAITING_INPUT" }
+            }
             else -> if (SessionFacts.lastTurnOutcome(session) == "INTERRUPTED") "INTERRUPTED" else "AWAITING_INPUT"
         }
     }

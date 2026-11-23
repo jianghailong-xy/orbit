@@ -151,6 +151,12 @@ class SessionFactsSitesTest {
         assertEquals("Queued", label("""{"status":"PENDING","released":false,"phase":"PENDING","activity":"TURN"}"""))
         // A job with no turn (RUNNING phase, another activity) keeps the parked wording, as web's task panel shows.
         assertEquals("Awaiting reply", label("""{"status":"AWAITING_INPUT","released":false,"phase":"RUNNING","activity":"BACKGROUND_JOB"}"""))
+        // A parked session whose engine runs its own turn is still parked: the status decides before the activity.
+        assertEquals("Awaiting reply", label("""{"status":"AWAITING_INPUT","released":false,"phase":"RUNNING","activity":"TURN"}"""))
+        assertEquals("Running", label("""{"status":"RUNNING","released":false,"phase":"RUNNING","activity":"TURN"}"""))
+        // An unknown status falls back to the activity.
+        assertEquals("Running", label("""{"status":"MYSTERY","released":false,"phase":"RUNNING","activity":"TURN"}"""))
+        assertEquals("Awaiting reply", label("""{"status":"MYSTERY","released":false,"phase":"RUNNING","activity":"BACKGROUND_JOB"}"""))
         assertEquals("Awaiting reply", label("""{"status":"RUNNING","released":false,"phase":"RUNNING","activity":"WAITING"}"""))
         // `released` with an unknown phase is not the facts: web, and now Android, fall back to the status.
         assertEquals("Running", label("""{"status":"RUNNING","released":true,"phase":"HIBERNATING"}"""))
