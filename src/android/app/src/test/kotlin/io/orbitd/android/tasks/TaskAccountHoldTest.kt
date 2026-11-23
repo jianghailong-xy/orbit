@@ -65,7 +65,7 @@ class TaskAccountHoldTest {
         compose.onAllNodesWithTag("task-account-hold-line").assertCountEquals(1)
         compose.onNodeWithTag("task-account-hold-line").assert(hasContentDescription("Held · ", substring = true) and hasContentDescription("· Open account", substring = true))
         compose.onNodeWithTag("task-account-hold-open").performClick()
-        assertEquals(listOf(OrbitRoute(Destination.SETTINGS, "machines-and-models")), opened)
+        assertEquals(listOf(OrbitRoute(Destination.SETTINGS, "machines")), opened)
     }
 
     @Test fun theTaskViewBlockHasTheReasonAndRunElsewhereOnlyForAPinnedTask() {

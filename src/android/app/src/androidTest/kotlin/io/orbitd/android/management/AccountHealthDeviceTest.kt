@@ -63,19 +63,20 @@ class AccountHealthDeviceTest {
         compose.runOnUiThread {
             compose.activity.setContentView(ComposeView(compose.activity).apply {
                 setContent {
-                    OrbitTheme {
+                    OrbitTheme { androidx.compose.material3.Surface {
                         Column(Modifier.padding(16.dp)) {
                             io.orbitd.android.tasks.TaskRowView(held)
                             io.orbitd.android.tasks.TaskRowView(unheld)
                             io.orbitd.android.tasks.TaskAccountHoldNote(held["accountHold"]!!.jsonObject, {})
                             io.orbitd.android.tasks.RelaxedRunNote("Pinned to cursor, which can't run now (Cursor said \"Add a payment method to continue\"); runs on codex instead, on the same engine, at tier M")
                         }
-                    }
+                    } }
                 }
             })
         }
         compose.onNodeWithTag("task-account-hold-line").assertIsDisplayed()
         val dir = File(InstrumentationRegistry.getInstrumentation().targetContext.filesDir, "account-health").also { it.mkdirs() }
-        File(dir, "held-rows.png").outputStream().use { InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot().compress(Bitmap.CompressFormat.PNG, 100, it) }
+        compose.waitForIdle()
+        File(dir, "held-rows.png").outputStream().use { compose.onNodeWithTag("task-account-hold-line").let { _ -> compose.onRoot().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it) } }
     }
 }

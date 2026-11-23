@@ -304,12 +304,14 @@ class ManagementDeviceTest {
             try {
                 role = "ADMIN"; runnerOnline = true; accountsPass = true; accountHealthPass = true
                 signIn(server); settings()
-                click(hasText("Machines & models") and hasClickAction()); await("Controlled remote")
-                // The key row, under its engines.
+                // The key row, under its engines, on Providers.
+                click(hasText("Providers") and hasClickAction())
                 await("OpenAI (work)")
                 compose.onAllNodesWithText("Incorrect API key provided", substring = true).onFirst().performScrollTo()
                 await("Incorrect API key provided")
                 capture("blocked-key-row")
+                back()
+                click(hasText("Machines") and hasClickAction()); await("Controlled remote")
                 click(hasText("Controlled remote") and hasClickAction()); await("Max Concurrent")
                 click(hasText("Claude Code") and hasClickAction())
                 await("Needs action · Claude Code said \"Your credit balance is too low\"")

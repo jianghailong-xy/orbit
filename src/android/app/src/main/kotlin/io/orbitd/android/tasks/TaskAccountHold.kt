@@ -32,7 +32,7 @@ import kotlinx.serialization.json.*
 internal object TaskAccountHold {
     const val OPEN_ACCOUNT = "Open account"
     const val RUN_ELSEWHERE = "Run elsewhere"
-    const val ACCOUNTS_PAGE = "machines-and-models"
+    const val ACCOUNTS_PAGE = "machines"
     const val SETTINGS_PAGE = io.orbitd.android.core.cards.SettingsFromConversation.GENERAL_PAGE
 
     fun of(task: JsonObject): JsonObject? = (task["accountHold"] as? JsonObject)

@@ -95,7 +95,7 @@ data class PushPayload(
         /** An account the provider refused, or that failed to start runs three times (docs/account-health-owner-surface-contract.md §1). */
         const val ACCOUNT_NEEDS_ACTION = "account-needs-action"
         /** Settings' Providers screen (keys and pools): where a key's or pool login's blocked row is. */
-        const val PROVIDERS_LINK = "orbit://settings/machines-and-models"
+        const val PROVIDERS_LINK = "orbit://settings/providers"
     }
 }
 
