@@ -253,4 +253,24 @@ final class CriteriaDecisionCopyParityTests: XCTestCase {
         assertDeclares(web, "CRITERIA_DECISION_ALREADY_SETTLED",
                        CriteriaDecisions.alreadySettledRefusal, "the already-settled refusal")
     }
+
+    /// The receipt's fold "What this approved · …" (web `SettledProposal` / `SettledDiff`): its two
+    /// leads, the tail of its line, and the sentences under its rows.
+    func testTheReceiptFoldMatchesTheWebCardsWords() throws {
+        let web = try flatWebCard()
+        assertDeclares(web, "SETTLED_APPROVED_LEAD", CriteriaDecisions.settledApprovedLead,
+                       "the lead of an approval's fold")
+        assertDeclares(web, "SETTLED_REFUSED_LEAD", CriteriaDecisions.settledRefusedLead,
+                       "the lead of a refusal's fold")
+        assertDeclares(web, "SETTLED_UNCHANGED_ONE", CriteriaDecisions.settledUnchangedOne,
+                       "the tail of a fold that left one criterion alone")
+        assertDeclares(web, "SETTLED_UNCHANGED_MANY", CriteriaDecisions.settledUnchangedMany,
+                       "the tail of a fold that left several alone")
+        assertDeclares(web, "SETTLED_NO_BEFORE_WORDS", CriteriaDecisions.settledNoBeforeWords,
+                       "the note that the proposal's side is one side")
+        assertDeclares(web, "SETTLED_NOTHING_APPLIED", CriteriaDecisions.settledNothingApplied,
+                       "the note a refusal leads with")
+        assertDeclares(web, "SETTLED_DROPPED_WORDS_GONE", CriteriaDecisions.settledDroppedWordsGone,
+                       "a dropped criterion's row")
+    }
 }

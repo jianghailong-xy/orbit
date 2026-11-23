@@ -95,7 +95,8 @@ internal fun GithubFolderOption(
     LaunchedEffect(resumes) { connecting = false }
 
     val clones = MachineSetup.clonesRepositories(runner)
-    val reposRoot = runner.text("reposRoot").orEmpty()
+    // Where the server clones it (MachineSetup.cloneRootFor): home on a clone-workdir/v2 runner.
+    val cloneRoot = MachineSetup.cloneRootOf(runner).orEmpty()
     var search by remember(runnerId) { mutableStateOf("") }
     var q by remember(runnerId) { mutableStateOf("") }
     LaunchedEffect(search) { delay(300); q = search.trim() }
@@ -130,7 +131,7 @@ internal fun GithubFolderOption(
     var settledName by remember(runnerId) { mutableStateOf("") }
     LaunchedEffect(name) { delay(400); settledName = name }
     var attempt by remember(runnerId) { mutableIntStateOf(0) }
-    val query = if (repo != null && !disabled && MachineSetup.isValidNewFolder(settledName)) MachineSetup.newFolderPath(reposRoot, settledName) else null
+    val query = if (repo != null && !disabled && MachineSetup.isValidNewFolder(settledName)) MachineSetup.newFolderPath(cloneRoot, settledName) else null
     // The answer, with the path it is about: one about the name before is no answer about this one.
     var answer by remember(runnerId) { mutableStateOf<Pair<String, DirProbeRelay.Outcome>?>(null) }
     LaunchedEffect(query, attempt) {
@@ -148,7 +149,7 @@ internal fun GithubFolderOption(
     val settled = settledName == name && query != null && answer?.first == query
     val found = (answer?.second as? DirProbeRelay.Outcome.Answered)?.probe?.takeIf { settled }
     val ref = if (branchOpen) MachineSetup.cloneRef(branch, repo?.defaultBranch.orEmpty()) else null
-    val candidate = repo?.takeIf { clones }?.let { MachineSetup.githubPick(it, name, ref, reposRoot, found) }
+    val candidate = repo?.takeIf { clones }?.let { MachineSetup.githubPick(it, name, ref, cloneRoot, found) }
     LaunchedEffect(candidate) { onCandidate(candidate) }
 
     fun pick(picked: GithubRepository) {
@@ -342,7 +343,7 @@ internal fun GithubFolderOption(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Text(
-                        MachineSetup.newFolderPath(reposRoot, ""),
+                        MachineSetup.newFolderPath(cloneRoot, ""),
                         style = MaterialTheme.typography.bodySmall,
                         fontFamily = FontFamily.Monospace,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
