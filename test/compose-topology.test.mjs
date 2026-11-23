@@ -521,6 +521,7 @@ const APPROVED_APISERVER_BLOCKS = [
   // and pgbackup's two retention values with its own defaults. They come right after the store's lines in the file.
   [
     '      ORBIT_FILES_QUOTA_BYTES: "${ORBIT_FILES_QUOTA_BYTES:-}"',
+    '      ORBIT_FILES_STORE_QUOTA_BYTES: "${ORBIT_FILES_STORE_QUOTA_BYTES:-}"',
     '      ORBIT_BASE_BACKUP_INTERVAL: "${ORBIT_BASE_BACKUP_INTERVAL:-86400}"',
     '      ORBIT_BASE_BACKUP_KEEP: "${ORBIT_BASE_BACKUP_KEEP:-2}"',
   ],
