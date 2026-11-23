@@ -161,7 +161,7 @@ internal fun SessionLiveMark(session: DirectorySession, watching: WatchSessionSu
         parked && (watching != null || session.resumesOnItsOwn) -> Icon(painterResource(R.drawable.ic_eye), null, Modifier.size(14.dp).testTag("session-mark-watching"), tint = muted)
         session.isRunningJob(watching) -> BreathingTerminal(Modifier.testTag("session-mark-jobs"))
         session.hasBackgroundProcess(watching) -> Icon(painterResource(R.drawable.ic_terminal), null, Modifier.size(14.dp).testTag("session-mark-services"), tint = muted)
-        session.effectiveRunState == RunState.FAILED && !session.retryPending(Instant.now()) && !session.error.orEmpty().lowercase().contains("offline") ->
+        session.displayRunState == RunState.FAILED && !session.retryPending(Instant.now()) && !session.error.orEmpty().lowercase().contains("offline") ->
             Box(Modifier.size(7.dp).background(MaterialTheme.colorScheme.error, CircleShape).testTag("session-mark-failed"))
     }
 }

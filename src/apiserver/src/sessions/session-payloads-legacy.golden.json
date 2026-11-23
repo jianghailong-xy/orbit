@@ -308,6 +308,34 @@
     {
       "key": "paused account / sharedHead",
       "legacy": "{\"status\":\"PENDING\",\"runStatus\":\"PENDING\",\"runState\":\"QUEUED\",\"sessionState\":\"QUEUED\",\"filingState\":\"OPEN\"}"
+    },
+    {
+      "key": "settled landing / listRow",
+      "legacy": "{\"status\":\"SUCCEEDED\",\"runStatus\":\"SUCCEEDED\",\"runState\":\"SUCCEEDED\",\"sessionState\":\"COMPLETED\",\"filingState\":\"OPEN\"}"
+    },
+    {
+      "key": "settled landing / detail",
+      "legacy": "{\"status\":\"SUCCEEDED\",\"runStatus\":\"SUCCEEDED\",\"runState\":\"SUCCEEDED\",\"sessionState\":\"COMPLETED\",\"filingState\":\"OPEN\"}"
+    },
+    {
+      "key": "settled landing / sessionSummary",
+      "legacy": "{\"status\":\"SUCCEEDED\",\"runStatus\":\"SUCCEEDED\",\"runState\":\"SUCCEEDED\",\"sessionState\":\"COMPLETED\",\"filingState\":\"OPEN\"}"
+    },
+    {
+      "key": "settled landing / sessionEnded",
+      "legacy": "{\"status\":\"SUCCEEDED\",\"runStatus\":\"SUCCEEDED\",\"runState\":\"SUCCEEDED\",\"sessionState\":\"COMPLETED\",\"filingState\":\"OPEN\"}"
+    },
+    {
+      "key": "settled landing / linkPreview",
+      "legacy": "{\"status\":\"SUCCEEDED\",\"runStatus\":\"SUCCEEDED\",\"runState\":\"SUCCEEDED\",\"sessionState\":\"COMPLETED\"}"
+    },
+    {
+      "key": "settled landing / guestRow",
+      "legacy": "{\"status\":\"SUCCEEDED\",\"sessionState\":\"COMPLETED\"}"
+    },
+    {
+      "key": "settled landing / sharedHead",
+      "legacy": "{\"status\":\"SUCCEEDED\",\"runStatus\":\"SUCCEEDED\",\"runState\":\"SUCCEEDED\",\"sessionState\":\"COMPLETED\",\"filingState\":\"OPEN\"}"
     }
   ]
 }

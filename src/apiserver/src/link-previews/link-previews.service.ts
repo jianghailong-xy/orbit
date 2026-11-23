@@ -167,6 +167,7 @@ export class LinkPreviewsService {
           released: row.released,
           lastTurnOutcome: row.lastTurnOutcome,
           waitingOn: row.waitingOn,
+          workFinished: row.workFinished,
           pendingApprovals: row.pendingApprovals,
           waitingKind: row.waitingKind,
           runningBgCount: row.runningBgCount,

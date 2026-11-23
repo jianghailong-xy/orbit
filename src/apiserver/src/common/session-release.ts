@@ -113,8 +113,7 @@ export function sessionHeldIndexedSql(sessionAlias: string): Prisma.Sql {
  * (§12.1, common/carrying-turn.ts), and the session keeps only `finished_at` (released) and `end_reason` (an end was
  * asked for). The readings:
  *
- *   released by a failure  finished_at IS NOT NULL AND end_reason IS NULL
- *                          AND (last_turn_outcome = 'FAILED' OR <the status bridge below>)
+ *   released by a failure  finished_at IS NOT NULL AND end_reason IS NULL AND last_turn_outcome = 'FAILED'
  *   the work finished      finished_at IS NOT NULL
  *                          AND (end_reason = 'task_done' OR (kind = 'LANDING' AND end_reason IS NULL))
  *
@@ -130,18 +129,6 @@ export function sessionHeldIndexedSql(sessionAlias: string): Prisma.Sql {
  * answer it is this module's to know.
  */
 
-/**
- * BRIDGE, removed by removal step R7 (task 351QPAh8wuz6nl3n1ghm2, deploy 3); the one place it is spelled. The
- * status FAILED, read beside `last_turn_outcome` as "the last turn failed", for the rows a deploy-1 server releases
- * during deploy 2's hand-over: its reaper, finalize, refused source and import record a failure in the status alone,
- * not on the turn (design §12.6, fact 1). Every writer of deploy 1 and deploy 2 writes FAILED exactly for a failure,
- * so the arm answers for those rows what their turn would have. R6 backfills their turn outcome in deploy 3; R7 then
- * deletes this arm from the three spellings below, re-creates the three triggers of migration 1425 without it (in a
- * migration of its own: 1425 is deployed by then), and lowers the guard allow-list's FAILURE_STATUS_BRIDGE section,
- * which counts it. Read nowhere else.
- */
-const FAILED_STATUS_BRIDGE = RunStatus.FAILED;
-
 /** The turn outcome a failure records on its carrying turn and copies to `last_turn_outcome` (migration 1201). */
 const FAILED_TURN_OUTCOME = 'FAILED';
 
@@ -151,7 +138,13 @@ const WORK_FINISHED_END_REASON = 'task_done';
 /** The session kind whose release finishes a landing (projects/landing-session.ts). */
 const LANDING_KIND = 'LANDING';
 
-/** What "released by a failure" reads of a session row. `status` is read by the bridge alone. */
+/**
+ * What "released by a failure" reads of a session row, and the status word beside it. The question reads no status:
+ * the status bridge that read FAILED beside the turn outcome, for the rows a deploy-1 server released during deploy 2's
+ * hand-over, went with removal step R7 (design §12.6, deploy 3), after migration 1441 wrote the turn outcome of every
+ * such row. `status` stays in the row (and in RELEASE_FAILURE_SELECT) for the readers that select these columns and
+ * read the status word themselves: the held statuses they compare against, the word they publish.
+ */
 export interface ReleaseFailureFacts extends SessionReleaseColumn {
   endReason: string | null;
   lastTurnOutcome: string | null;
@@ -185,19 +178,19 @@ export const RELEASE_FACTS_SELECT = { ...RELEASE_FAILURE_SELECT, ...RELEASE_WORK
 export function releaseWasFailure(session: ReleaseFailureFacts): boolean {
   return isReleased(session)
     && session.endReason == null
-    && (session.lastTurnOutcome === FAILED_TURN_OUTCOME || session.status === FAILED_STATUS_BRIDGE);
+    && session.lastTurnOutcome === FAILED_TURN_OUTCOME;
 }
 
 /**
- * Prisma filter on a session: it was released by a failure. Its keys are `finishedAt`, `endReason` and `OR`, so put it
- * in an `AND` or `OR` list, or spread it only into a filter that names none of the three. Never null in SQL, so a
+ * Prisma filter on a session: it was released by a failure. Its keys are `finishedAt`, `endReason` and
+ * `lastTurnOutcome`, so put it in an `AND` or `OR` list, or spread it only into a filter that names none of the three. Never null in SQL, so a
  * `NOT` of it is the rows it does not match: the nullable column is compared only beside its own `IS NOT NULL`.
  */
 export function releaseWasFailureFilter(): Prisma.SessionWhereInput {
   return {
     finishedAt: { not: null },
     endReason: null,
-    OR: [{ lastTurnOutcome: { not: null, equals: FAILED_TURN_OUTCOME } }, { status: FAILED_STATUS_BRIDGE }],
+    lastTurnOutcome: { not: null, equals: FAILED_TURN_OUTCOME },
   };
 }
 
@@ -207,7 +200,7 @@ export function releaseWasFailureFilter(): Prisma.SessionWhereInput {
  */
 export function releaseWasFailureSql(sessionAlias: string): Prisma.Sql {
   const s = Prisma.raw(sessionAlias);
-  return Prisma.sql`(${s}."finished_at" IS NOT NULL AND ${s}."end_reason" IS NULL AND (${s}."last_turn_outcome" IS NOT DISTINCT FROM ${Prisma.raw(`'${FAILED_TURN_OUTCOME}'`)} OR ${s}."status" = ${Prisma.raw(`'${FAILED_STATUS_BRIDGE}'`)}))`;
+  return Prisma.sql`(${s}."finished_at" IS NOT NULL AND ${s}."end_reason" IS NULL AND ${s}."last_turn_outcome" IS NOT DISTINCT FROM ${Prisma.raw(`'${FAILED_TURN_OUTCOME}'`)})`;
 }
 
 /** Whether the session was released having finished its work: its task ended DONE, or its landing settled. */

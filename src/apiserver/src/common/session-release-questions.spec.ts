@@ -4,14 +4,15 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { releaseFinishedTheWork, releaseWasFailure, type SessionReleaseFacts } from './session-release';
-import { RELEASE_SHAPES, releaseFactsOfShape, type ReleaseShape } from './session-release-shapes.fixture';
+import { backfilled, RELEASE_SHAPES, releaseFactsOfShape, type ReleaseShape } from './session-release-shapes.fixture';
 
 /**
- * Removal steps R3 and R4 (docs/session-three-state-design.md §12.2, decision D9): the two release questions of
+ * Removal steps R3, R4 and R7 (docs/session-three-state-design.md §12.2, decision D9): the two release questions of
  * common/session-release.ts, asked of every release row shape (common/session-release-shapes.fixture.ts), against the
- * production's reading today (deploy 1 reads the status).
+ * readings production had before them (deploy 1 read the status; deploy 2 read the turn outcome or, the status bridge,
+ * the status FAILED).
  *
- *   released by a failure  finished_at set, no end reason, and last_turn_outcome FAILED or (the bridge) status FAILED
+ *   released by a failure  finished_at set, no end reason, and last_turn_outcome FAILED
  *   the work finished      finished_at set, and end_reason task_done or a LANDING container with no end reason
  *
  * Released by a failure answers as follows for the shapes named in the fixture, each by why:
@@ -20,41 +21,46 @@ import { RELEASE_SHAPES, releaseFactsOfShape, type ReleaseShape } from './sessio
  *                  most 1 cancelled): read as failed, as their status and 1202's turn outcome say and as deploy 1 reads
  *                  them today; only the project branch's cause reading, never deployed, said not.
  *   RESIDUAL       A2, the coordinator's residual shape: a failed turn's copy kept through a release that is no
- *                  failure, with no turn for option A to cut off (production: 0 rows).
- * Separately, the question is asked without the status bridge (removal step R7's reading) of every shape that carries a
- * turn outcome, and answers the same, but for W7 with no reason recorded, which R7 turns into a stop as W7's rule says.
- * The shapes that carry none (W5, the deploy-1 hand-over rows) are read through the bridge until R6 backfills them; W5
- * changes once the bridge goes, and no reader sees it: an import is in Trash, with no task and no retry.
+ *                  failure, with no turn for option A to cut off (production: 0 rows). Read as a failure as stored;
+ *                  migration 1441 gives it CANCELLED, a stop, by the coordinator's ruling.
+ * Removal step R7 dropped the status bridge, after migration 1441 (R6) wrote the turn outcome of every stored row the
+ * bridge was answering for. So every shape, as 1441 leaves it, answers as deploy 2 read it with the bridge, but for A2
+ * (now a stop, as ruled) and W5 (in Trash, which 1441 does not write: a stop, and no reader of the failure question
+ * reaches a trashed import). A row a writer leaves after deploy 3 needs no backfill: it answers as deploy 2 read it,
+ * but for W7 with no reason recorded, which no writer leaves.
  *
  * B4 of §12.2 (1405's rewrite of B1) is not a shape: 1405 was removed before it was deployed (removal step R1).
  *
  * Set ORBIT_RELEASE_SHAPES_TABLE to a file path to write the table as markdown.
  */
 
-/**
- * The row as removal step R7's reading sees it. The bridge is the failure question's one read of `status` (the guard
- * allow-list's FAILURE_STATUS_BRIDGE section counts it), so a status word other than FAILED leaves only the turn
- * outcome to answer; the spec below holds that the question reads the status nowhere else.
- */
-function withoutBridge(facts: SessionReleaseFacts): SessionReleaseFacts {
-  return { ...facts, status: facts.status === 'FAILED' ? 'CANCELLED' : facts.status };
+/** Deploy 2's reading of "released by a failure": the turn outcome, or the status bridge `status = 'FAILED'`. */
+function deploy2Failed(facts: SessionReleaseFacts): boolean {
+  return releaseWasFailure(facts) || (facts.finishedAt != null && facts.endReason == null && facts.status === 'FAILED');
 }
 
 interface Answers {
   shape: ReleaseShape;
   statusFailed: boolean;
+  /** Deploy 2's answer for the row as stored. */
+  deploy2: boolean;
+  /** This build's answer for the row as stored, before 1441. */
   failed: boolean;
-  failedWithoutBridge: boolean;
+  /** This build's answer for the row as 1441 leaves it. */
+  failedBackfilled: boolean;
   finished: boolean;
 }
 
+const AT = new Date('2026-11-21T12:00:00.000Z');
+
 function answersOf(shape: ReleaseShape): Answers {
-  const facts = releaseFactsOfShape(shape, new Date('2026-11-21T12:00:00.000Z'));
+  const facts = releaseFactsOfShape(shape, AT);
   return {
     shape,
     statusFailed: shape.released && shape.status === 'FAILED',
+    deploy2: deploy2Failed(facts),
     failed: releaseWasFailure(facts),
-    failedWithoutBridge: releaseWasFailure(withoutBridge(facts)),
+    failedBackfilled: releaseWasFailure(releaseFactsOfShape(backfilled(shape), AT)),
     finished: releaseFinishedTheWork(facts),
   };
 }
@@ -85,7 +91,8 @@ test('released by a failure: the shapes named by why answer as named, and a held
         assert.equal(a.failed, a.statusFailed, `${name}: production's reading today`);
         break;
       case 'RESIDUAL':
-        assert.equal(a.failed, true, `${name}: the kept copy reads as a failure (a gap, named in the evidence)`);
+        assert.equal(a.failed, true, `${name}: as stored, the kept copy reads as a failure`);
+        assert.equal(a.failedBackfilled, false, `${name}: 1441 gives it CANCELLED, a stop, as ruled`);
         break;
     }
     if (!a.shape.released) assert.equal(a.failed, false, `${name}: held`);
@@ -99,33 +106,40 @@ test('the work finished: task_done, or a LANDING container released with no end 
   }
 });
 
-test('without the bridge, every shape that carries a turn outcome answers the same; the others are the bridge\'s', () => {
+test('as 1441 leaves every stored row, each shape answers as deploy 2 read it with the bridge, but for A2 and W5', () => {
+  const differ = ANSWERS.filter((a) => a.failedBackfilled !== a.deploy2).map((a) => a.shape.name);
+  assert.deepEqual(differ, ['W5', 'A2'], 'the two named differences, and no other');
+  const w5 = ANSWERS.find((a) => a.shape.name === 'W5')!;
+  assert.equal(w5.shape.trashed, true, 'W5 is in Trash, which 1441 does not write');
+  assert.equal(w5.failedBackfilled, false, 'W5: no turn, so a stop once the bridge is gone');
   for (const a of ANSWERS) {
-    const { name, carriesTurnOutcome, withoutBridge: change } = a.shape;
-    if (change === 'END_ASKED') {
-      // W7 with no reason recorded: a failure while the status bridge reads FAILED, a stop once R7 drops it.
-      assert.equal(a.failed, true, `${name}: with the bridge`);
-      assert.equal(a.failedWithoutBridge, false, `${name}: without it, the turn says CANCELLED`);
-    } else if (carriesTurnOutcome) {
-      assert.equal(a.failedWithoutBridge, a.failed, `${name}: the turn outcome answers alone`);
-    } else {
-      // W5 and the deploy-1 hand-over rows: FAILED with no turn outcome, read through the bridge.
-      assert.equal(a.failed, true, `${name}: the bridge reads the status`);
-      assert.equal(a.failedWithoutBridge, false, `${name}: no turn outcome to read without the bridge`);
+    if (!a.shape.carriesTurnOutcome && !a.shape.trashed) {
+      // The deploy-1 hand-over rows: the bridge answered for them in deploy 2, the backfilled turn outcome now.
+      assert.equal(a.failed, false, `${a.shape.name}: as stored, nothing but the status said failed`);
+      assert.equal(a.failedBackfilled, true, `${a.shape.name}: 1441 wrote the FAILED the bridge read`);
     }
   }
 });
 
-test('the bridge is the failure question\'s only read of the status, and the work question reads none', () => {
+test('a row a writer leaves after deploy 3 answers as deploy 2 read it, but for W7 with no reason, which no writer leaves', () => {
+  for (const a of ANSWERS.filter((candidate) => candidate.shape.carriesTurnOutcome)) {
+    if (a.shape.afterDeploy3 === 'END_ASKED') {
+      assert.equal(a.deploy2, true, `${a.shape.name}: the bridge read FAILED`);
+      assert.equal(a.failed, false, `${a.shape.name}: the turn says CANCELLED, so a stop (W7's rule)`);
+    } else {
+      assert.equal(a.failed, a.deploy2, `${a.shape.name}: the turn outcome answers alone`);
+    }
+  }
+});
+
+test('the failure question reads no status word, and neither does the work question', () => {
   for (const shape of RELEASE_SHAPES) {
     const facts = releaseFactsOfShape(shape);
     const answers = (['SUCCEEDED', 'CANCELLED', 'FAILED'] as const).map((status) => {
       const row: SessionReleaseFacts = { ...facts, status };
-      return { status, failed: releaseWasFailure(row), finished: releaseFinishedTheWork(row) };
+      return { failed: releaseWasFailure(row), finished: releaseFinishedTheWork(row) };
     });
-    assert.equal(answers[0].failed, answers[1].failed, `${shape.name}: SUCCEEDED and CANCELLED read alike`);
-    assert.equal(answers[2].failed, answers[0].failed || (shape.released && shape.endReason === null),
-      `${shape.name}: FAILED adds exactly "released with no end reason"`);
+    assert.equal(new Set(answers.map((a) => a.failed)).size, 1, `${shape.name}: the failure question reads no status`);
     assert.equal(new Set(answers.map((a) => a.finished)).size, 1, `${shape.name}: the work question reads no status`);
   }
 });
@@ -147,7 +161,7 @@ test('the new runner protocol: each shape answers both questions as the old prot
     }
     const old = answersOfName(oldProtocol);
     assert.equal(a.failed, old.failed, `${name}: released by a failure, as ${oldProtocol}`);
-    assert.equal(a.failedWithoutBridge, old.failedWithoutBridge, `${name}: and without the bridge, as ${oldProtocol}`);
+    assert.equal(a.failedBackfilled, old.failedBackfilled, `${name}: and as 1441 leaves it, as ${oldProtocol}`);
     assert.equal(a.finished, old.finished, `${name}: the work finished, as ${oldProtocol}`);
   }
   // The four failures read as failures, the stops as stops.
@@ -162,17 +176,17 @@ test('the new runner protocol: each shape answers both questions as the old prot
 test('the table, printed', () => {
   const yes = (value: boolean) => (value ? 'yes' : '-');
   const lines = [
-    '| shape | what | status | end_reason | last_turn_outcome | kind | failed: status (production) | failed: now | failed: without bridge (R7) | finished: now | why it differs | production |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    '| shape | what | status | end_reason | last_turn_outcome | kind | failed: status (deploy 1) | failed: deploy 2 (bridge) | failed: now, as stored | failed: now, after 1441 | finished: now | why it differs | production |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
   ];
   for (const a of ANSWERS) {
     const s = a.shape;
-    const why = [s.failureChange, s.withoutBridge ? `${s.withoutBridge} without bridge` : null,
-      !s.carriesTurnOutcome ? 'bridge carries it' : null].filter(Boolean).join('; ');
+    const why = [s.failureChange, s.afterDeploy3 ? `${s.afterDeploy3} if written after deploy 3` : null,
+      !s.carriesTurnOutcome ? (s.trashed ? 'in Trash, not backfilled' : 'backfilled by 1441') : null]
+      .filter(Boolean).join('; ');
     lines.push(`| ${s.name} | ${s.what} | ${s.status} | ${s.endReason ?? '-'} | `
-      + `${s.lastTurnOutcome ?? '-'} | ${s.sessionKind} | ${yes(a.statusFailed)} | ${yes(a.failed)} | `
-      + `${s.carriesTurnOutcome || s.withoutBridge ? yes(a.failedWithoutBridge) : `(${yes(a.failedWithoutBridge)})`} | `
-      + `${yes(a.finished)} | ${why || '-'} | ${s.production ?? '-'} |`);
+      + `${s.lastTurnOutcome ?? '-'} | ${s.sessionKind} | ${yes(a.statusFailed)} | ${yes(a.deploy2)} | ${yes(a.failed)} | `
+      + `${yes(a.failedBackfilled)} | ${yes(a.finished)} | ${why || '-'} | ${s.production ?? '-'} |`);
   }
   for (const line of lines) console.log(`# ${line}`);
   const out = process.env.ORBIT_RELEASE_SHAPES_TABLE;

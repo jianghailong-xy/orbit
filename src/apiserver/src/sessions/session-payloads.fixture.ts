@@ -39,7 +39,7 @@ export interface FixtureCase {
 
 const MINUTE = 60_000;
 
-/** One case per stored status, then the four shapes. */
+/** One case per stored status, then the four shapes, then a settled landing container (plan phase 5). */
 export const FIXTURE_CASES: readonly FixtureCase[] = [
   { label: 'PENDING', status: RunStatus.PENDING },
   { label: 'RUNNING', status: RunStatus.RUNNING },
@@ -87,6 +87,8 @@ export const FIXTURE_CASES: readonly FixtureCase[] = [
     status: RunStatus.PENDING,
     row: { error: 'Account paused until 2099-01-01T00:00:00.000Z', lastTurnOutcome: 'ANSWERED' },
   },
+  // Plan phase 5: a landing container that settled, released with no end reason — finished work with no task_done.
+  { label: 'settled landing', status: RunStatus.SUCCEEDED, row: { sessionKind: 'LANDING', lastTurnOutcome: 'ANSWERED' } },
 ];
 
 const RELEASED = new Set<RunStatus>([RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED]);

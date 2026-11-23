@@ -42,6 +42,7 @@ import { HELD_TURN_STATUS, translationLanguages } from '../sessions/turn-transla
 import { waitForCardTranslation } from '../sessions/card-translation-wait';
 import { cardHasText } from '../sessions/reply-translation';
 import { isScheduleItemKind } from '../schedules/schedule-attention';
+import type { NotifyPriority } from './dto';
 
 const APNS_HOST_PROD = 'api.push.apple.com';
 const APNS_HOST_SANDBOX = 'api.sandbox.push.apple.com';
@@ -105,6 +106,15 @@ export interface AgentNotifyResult {
   /** Why nothing was sent. Present only when not delivered, and written to be read by an agent. */
   reason?: string;
 }
+
+/**
+ * What became of a POST /notify call, as its caller is answered. `reason` is present only when nothing was delivered:
+ * PUSH_NOT_CONFIGURED — this server has no APNs or FCM credentials, so it pushes to nobody (not an error); NO_DEVICES —
+ * the token's owner has no Orbit app signed in that this server can reach; NOT_ACCEPTED — APNs and FCM took it for none.
+ */
+export type OwnerNotificationResult =
+  | { delivered: true; devices: number }
+  | { delivered: false; reason: 'PUSH_NOT_CONFIGURED' | 'NO_DEVICES' | 'NOT_ACCEPTED' };
 
 /**
  * What the Feishu card of an alert that is neither an approval, a settlement, an agent's message nor an owner item says
@@ -894,6 +904,30 @@ export class PushService {
       this.log.warn(`agent notify failed: ${message}`);
       return { delivered: false, reason: `push failed: ${message}` };
     }
+  }
+
+  /**
+   * POST /notify (push/notify.controller.ts): a notification someone holding the owner's `notify` token sent, pushed to
+   * that owner's own iOS and Android apps and no one else's. Only APNs and FCM: the account's Feishu app is not a device.
+   * No badge, no session: the tap opens Orbit. The caller's rate limit is the controller's. A transport failure is a
+   * device that did not accept it, so this answers rather than throws.
+   */
+  async notifyOwner(ownerId: string, input: { title: string; message: string; priority: NotifyPriority; url?: string }): Promise<OwnerNotificationResult> {
+    if (!this.apnsEnabled && !this.fcm.enabled) return { delivered: false, reason: 'PUSH_NOT_CONFIGURED' };
+    const tokens = await this.targets(ownerId);
+    if (tokens.length === 0) return { delivered: false, reason: 'NO_DEVICES' };
+    const body = JSON.stringify({
+      aps: {
+        alert: { title: input.title, body: input.message },
+        ...(input.priority === 'low' ? {} : { sound: 'default' }),
+        ...(input.priority === 'high' ? { 'interruption-level': 'time-sensitive' } : {}),
+        'thread-id': 'orbit-notify',
+      },
+      kind: 'notify',
+      ...(input.url ? { url: input.url } : {}),
+    });
+    const devices = await this.deliver(tokens, body, 'alert', input.priority === 'low' ? '5' : '10');
+    return devices > 0 ? { delivered: true, devices } : { delivered: false, reason: 'NOT_ACCEPTED' };
   }
 
   /**

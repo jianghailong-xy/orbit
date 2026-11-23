@@ -104,7 +104,8 @@ final class SessionStateContractTests: XCTestCase {
         XCTAssertEqual(Set(kinds.keys), Set(Self.payloads.keys))
         for (kind, entry) in kinds {
             let fields = try XCTUnwrap((entry as? [String: Any])?["fields"] as? [String], "\(kind) lists no fields")
-            XCTAssertEqual(fields, ["phase", "released", "lastTurnOutcome", "waitingOn"], kind)
+            XCTAssertEqual(
+                fields, ["phase", "released", "lastTurnOutcome", "waitingOn", "endReason", "workFinished"], kind)
         }
     }
 
@@ -151,7 +152,7 @@ final class SessionStateContractTests: XCTestCase {
             let payload = try object(try XCTUnwrap(Self.payloads[kind]))
             let envelope: [String: Any] = [
                 "type": type, "sessionId": "s1", "agentId": "a1", "ts": "2026-11-22T00:00:00.000Z",
-                "data": payload.merging(fields) { _, new in new },
+                "data": payload.merging(fields.filter { $0.key != "endReason" }) { _, new in new },
             ]
             let event = try JSONDecoder().decode(ControlEvent.self, from: data(envelope))
             if kind == "sessionSummary" {

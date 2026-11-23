@@ -438,6 +438,7 @@ test('publishSessionLifecycleChanged preserves run outcome and exposes Completed
     released: true,
     lastTurnOutcome: null,
     waitingOn: null,
+    workFinished: false,
   });
 });
 
@@ -469,6 +470,7 @@ test('completing an already-ended session preserves its actual runState', async 
     released: true,
     lastTurnOutcome: null,
     waitingOn: null,
+    workFinished: false,
   });
 });
 

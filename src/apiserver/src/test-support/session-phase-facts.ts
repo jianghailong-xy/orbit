@@ -34,6 +34,8 @@ export function sessionPhaseFactsAnswer(query: unknown, rows: Record<string, Rec
       finishedAt: row.finishedAt ?? null,
       lastTurnOutcome: row.lastTurnOutcome ?? null,
       error: row.error ?? null,
+      endReason: row.endReason ?? null,
+      sessionKind: row.sessionKind ?? 'CONVERSATION',
       engineTurnActive: row.engineTurnActive ?? false,
       runningSubagents: row.runningSubagents ?? [],
       runningBgJobs: row.runningBgJobs ?? [],

@@ -2186,9 +2186,9 @@ model Session {
   // runner's async /finalize. null = a natural agent finish (read `status`) or a
   // pre-migration row. Values: see SessionEndReason in @orbit/shared.
   endReason            String?   @map("end_reason")
-  // No failure fact on the session (design §12, decision D9; removal step R5, 2026-11-21): the nullable column `release_cause` and its CHECK
-  // session_release_cause_chk still exist in the database, and this model does not declare it. Nothing writes it
-  // and nothing reads it; migration R8 drops both one deploy after this field left the model.
+  // No failure fact on the session (design §12, decision D9): the field `release_cause` left this model in deploy 2
+  // (removal step R5, 2026-11-21), and migration 1443 dropped the column and its CHECK session_release_cause_chk in
+  // deploy 3 (R8, 2026-11-22). A failure is the carrying turn's outcome, copied to lastTurnOutcome below.
   // How the session's latest completed turn ended: ANSWERED | FAILED | INTERRUPTED | CANCELLED, the same
   // value as that turn's `outcome`, written by runner turn-complete in the write that parks the session
   // (migration 1201, CHECK session_last_turn_outcome_chk). Backfilled from status and endReason (1202); null

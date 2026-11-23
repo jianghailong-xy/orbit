@@ -349,8 +349,8 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                         Box {
                             ToolbarPlus(enabled = state.loaded) { menu = true }
                             DropdownMenu(menu, onDismissRequest = { menu = false }) {
-                                DropdownMenuItem(text = { Text("Image") }, onClick = { menu = false; photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) })
-                                DropdownMenuItem(text = { Text("File") }, onClick = { menu = false; files.launch(arrayOf("*/*")) })
+                                DropdownMenuItem(text = { Text("Upload Image") }, onClick = { menu = false; photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) })
+                                DropdownMenuItem(text = { Text("Upload File") }, onClick = { menu = false; files.launch(arrayOf("*/*")) })
                                 val clip = clipboard.primaryClip
                                 if (clip != null && clip.itemCount > 0 && clip.description.hasMimeType("image/*")) {
                                     DropdownMenuItem(text = { Text("Paste image") }, onClick = {
@@ -591,7 +591,7 @@ internal fun ModelChip(name: String, effort: String, smart: Boolean, enabled: Bo
 
 /** The permission mode the toolbar names: the one [detail] holds, else the one a session that names none runs in. */
 internal fun shownPermissionMode(detail: JsonObject, engine: String): String =
-    detail.text("permissionMode")?.takeIf { it.isNotEmpty() } ?: CursorRuntime.fallbackMode(engine)
+    detail.text("permissionMode")?.takeIf { it.isNotEmpty() } ?: CursorRuntime.unsetMode(engine)
 
 /**
  * The toolbar's permission mode menu (iOS `modeMenu`): the modes the engine offers for this model, ✓ on the one in use, each written

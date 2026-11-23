@@ -31,13 +31,20 @@ export interface ReleaseShape {
   endReason: string | null;
   lastTurnOutcome: 'ANSWERED' | 'FAILED' | 'INTERRUPTED' | 'CANCELLED' | null;
   sessionKind: 'CONVERSATION' | 'LANDING';
-  /** Its writer records the turn outcome (§12.1), so the answer does not need the status bridge. */
-  carriesTurnOutcome: boolean;
   /**
-   * The answer changes once removal step R7 drops the bridge, and why: an end asked for with no reason recorded, whose
-   * cut-off turn says CANCELLED (W7's rule, reached through the turn instead of the end reason).
+   * Its writer records the turn outcome (§12.1). False where the status alone recorded the failure: a deploy-1
+   * server's releases (H2, H4, H6), which deploy 2 read through the status bridge and migration 1441 backfilled before
+   * removal step R7 dropped it, and the failed import (W5), which nothing backfills: it is in Trash.
    */
-  withoutBridge?: 'END_ASKED';
+  carriesTurnOutcome: boolean;
+  /** Released into Trash (`deleted_at` set) by its writer: W5. Migration 1441 writes no trashed row. */
+  trashed?: boolean;
+  /**
+   * A row its writer would leave after deploy 3 answers otherwise than deploy 2 read the stored one, and why: an end
+   * asked for with no reason recorded, whose cut-off turn says CANCELLED (W7's rule, reached through the turn instead of
+   * the end reason). No writer leaves one; 1441 gave every stored one the FAILED its status said.
+   */
+  afterDeploy3?: 'END_ASKED';
   /** How many production rows have the shape, where measured (design §12.2, the coordinator's counts). */
   production?: string;
   /** Why "released by a failure" answers otherwise than the cause reading; absent when it answers the same. */
@@ -83,7 +90,7 @@ export const RELEASE_SHAPES: readonly ReleaseShape[] = [
     sessionKind: 'CONVERSATION', carriesTurnOutcome: true, failureChange: 'END_ASKED' },
   { name: 'W5', what: 'a failed transcript import (no engine, no turn; in Trash)', writer: `${W}/runner-api/runner-api.controller.ts importResult`,
     status: 'FAILED', released: true, endReason: null, lastTurnOutcome: null,
-    sessionKind: 'CONVERSATION', carriesTurnOutcome: false },
+    sessionKind: 'CONVERSATION', carriesTurnOutcome: false, trashed: true },
   { name: 'W6', what: 'runner finalize, no end asked, FAILED: mid-turn, never started, or events given up', writer: `${W}/runner-api/runner-api.controller.ts finalize`,
     status: 'FAILED', released: true, endReason: null, lastTurnOutcome: 'FAILED',
     sessionKind: 'CONVERSATION', carriesTurnOutcome: true },
@@ -95,7 +102,7 @@ export const RELEASE_SHAPES: readonly ReleaseShape[] = [
     sessionKind: 'CONVERSATION', carriesTurnOutcome: true, failureChange: 'END_ASKED' },
   { name: 'W7 no reason', what: 'the reaper: a cancel recorded with no end reason, not honoured (no current writer leaves one: every end request writes its reason)', writer: `${W}/realtime/reaper.service.ts forceFinalize`,
     status: 'FAILED', released: true, endReason: null, lastTurnOutcome: 'CANCELLED',
-    sessionKind: 'CONVERSATION', carriesTurnOutcome: true, withoutBridge: 'END_ASKED' },
+    sessionKind: 'CONVERSATION', carriesTurnOutcome: true, afterDeploy3: 'END_ASKED' },
   { name: 'W7 after a failed turn', what: 'the reaper: an end not honoured, the turn before it failed during the end (N2)', writer: `${W}/realtime/reaper.service.ts forceFinalize`,
     status: 'FAILED', released: true, endReason: 'deleted', lastTurnOutcome: 'FAILED',
     sessionKind: 'CONVERSATION', carriesTurnOutcome: true, failureChange: 'END_ASKED' },
@@ -199,7 +206,8 @@ export const RELEASE_SHAPES: readonly ReleaseShape[] = [
     status: 'CANCELLED', released: true, endReason: null, lastTurnOutcome: 'CANCELLED',
     sessionKind: 'CONVERSATION', carriesTurnOutcome: true, oldProtocol: 'A1' },
   // A deploy-1 server's releases during deploy 2's hand-over: the status says FAILED, the turn outcome is the last
-  // turn's from before (design §12.6 fact 1). The status bridge carries them until R6 backfills them (deploy 3).
+  // turn's from before (design §12.6 fact 1). Deploy 2 read them through the status bridge; migration 1441 (R6, deploy
+  // 3) wrote their turn outcome before R7 dropped it.
   { name: 'H2', what: 'deploy-1 reaper: runner lost, no turn outcome recorded', writer: 'deploy 1 realtime/reaper.service.ts',
     status: 'FAILED', released: true, endReason: null, lastTurnOutcome: 'ANSWERED',
     sessionKind: 'CONVERSATION', carriesTurnOutcome: false },
@@ -220,6 +228,21 @@ export function releaseFactsOfShape(shape: ReleaseShape, at: Date = new Date()):
     lastTurnOutcome: shape.lastTurnOutcome,
     sessionKind: shape.sessionKind,
   };
+}
+
+/**
+ * The shape as migration 1441 (removal step R6) leaves its stored row: last_turn_outcome FAILED on a release that is
+ * FAILED with no end reason and no FAILED turn outcome, outside Trash; CANCELLED on the residual shape A2 (released, not
+ * FAILED, no end reason, a FAILED copy kept). Every other shape is left as it is. The migration's SQL is held to this in
+ * common/session-release-backfill.pg.spec.ts.
+ */
+export function backfilled(shape: ReleaseShape): ReleaseShape {
+  if (!shape.released || shape.endReason !== null) return shape;
+  if (shape.status === 'FAILED' && shape.lastTurnOutcome !== 'FAILED' && !shape.trashed) {
+    return { ...shape, lastTurnOutcome: 'FAILED' };
+  }
+  if (shape.status !== 'FAILED' && shape.lastTurnOutcome === 'FAILED') return { ...shape, lastTurnOutcome: 'CANCELLED' };
+  return shape;
 }
 
 /** The shape named `name` (RELEASE_SHAPES). */
