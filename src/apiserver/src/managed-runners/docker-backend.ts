@@ -91,7 +91,10 @@ function units(quantity: string, scale: 'unit' | 'milli' = 'unit'): number {
   return value;
 }
 
-/** One runner's compute share: its container's limits (Docker reserves nothing below them), one container, one volume, one user. */
+/**
+ * One runner's compute share: its container's limits (Docker reserves nothing below them), `runner.tmpSizeLimit` of the
+ * ephemeral budget, one container, one volume, one user.
+ */
 export function dockerComputeShare(profile: Pick<DockerRunnerProfile, 'runner'>): ComputeAmounts {
   return {
     cpuMillis: units(profile.runner.resources.cpu, 'milli'),
@@ -108,7 +111,8 @@ export function dockerComputeShare(profile: Pick<DockerRunnerProfile, 'runner'>)
  * channel reports, less a reserve for everything else running there.
  *
  *   CPU, memory     the host's, less `reserve.cpu` / `reserve.memory` (a quarter each by default)
- *   /tmp            a tmpfs, held in the containers' memory: bounded by the memory budget
+ *   ephemeral       `runner.tmpSizeLimit` a runner, against the memory budget unless stated; /tmp itself is a
+ *                   directory of each runner's data volume, held to that volume's disk limit
  *   containers      as many runners as CPU and memory both fit; the same number of volume slots and users.
  *                   Never more than the channel will make (`channelMaxContainers`, the `maxContainers` its
  *                   /v1/info reports): it refuses a container past that, so the pool admits no runner it

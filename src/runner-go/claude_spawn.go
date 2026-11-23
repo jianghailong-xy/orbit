@@ -246,6 +246,9 @@ func spawnClaude(ctx context.Context, job *ClaimedSession, execDir string, args 
 	cmd.Dir = execDir
 	// Start from the runner's own env, then layer the agent's custom env vars on top.
 	cmd.Env = envWithAgent(job.Agent.Env)
+	// The session's Go and npm caches: the runner-owned root every engine's sessions share, as Codex and dsh
+	// sessions get it (cache_root.go), rather than whatever each build picks on its own under /tmp or $HOME.
+	cmd.Env = append(cmd.Env, runnerCacheEnv()...)
 	// Inject session context so the built-in `orbit mcp` server (a child of claude)
 	// knows where it is. The runner token is NOT passed here — `orbit mcp` reads it
 	// from config.json so it never lands in the claude process environment.
