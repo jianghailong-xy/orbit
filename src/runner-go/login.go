@@ -51,8 +51,9 @@ const loginReasonExpired = "expired"
 // target, terminated by BEL, then the URL again as the visible label — whole, or in wrapped
 // fragments, depending on the CLI version — closed by an escape byte (its colour's reset, or the
 // link's end). So a match stops at BEL or ESC. Requiring the oauth path keeps a stray docs link
-// from matching.
-var loginURLRe = regexp.MustCompile(`https://claude\.com/[^\s\x1b\x07"']*oauth/authorize\?[^\s\x1b\x07"']+`)
+// from matching. The host is claude.com up to 2.1.32x and claude.ai from 2.1.330, which prints
+// https://claude.ai/oauth/authorize?<opaque token> in place of the spelled-out query.
+var loginURLRe = regexp.MustCompile(`https://claude\.(?:com|ai)/[^\s\x1b\x07"']*oauth/authorize\?[^\s\x1b\x07"']+`)
 
 // What the CLI prints when a pasted code is rejected: "Invalid code. Please make sure the full
 // code was copied." — written after the existing prompt, on the same line. This is the ONLY

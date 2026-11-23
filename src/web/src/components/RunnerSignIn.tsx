@@ -281,13 +281,25 @@ export function RunnerSignIn({
   // an effect can't count on that press's gesture. The page opens from the card's own link once the
   // URL lands, as a device flow's always does. The ref keeps StrictMode's second mount from starting
   // it twice.
+  //
+  // It waits for the card's first read of the relay: a panel opened again while this card's own sign-in still waits on
+  // its link takes that sign-in up rather than replacing it with a new one, whose link the owner has not seen either.
   const autoStarted = useRef(false);
+  const current = state.data;
   useEffect(() => {
-    if (!autoStart || autoStarted.current) return;
+    // A card adding an account never takes another sign-in up, so it starts as it opens, without the read.
+    if (!autoStart || autoStarted.current || (!adding && state.isPending)) return;
     autoStarted.current = true;
+    const ownInFlight =
+      !adding
+      && !!current
+      && inFlight(current.status)
+      && (current.engine ?? 'claude') === engine
+      && (account === undefined || current.account === account);
+    if (ownInFlight) return;
     setStartedHere(true);
     start.mutate();
-  }, [autoStart, start.mutate]);
+  }, [autoStart, state.isPending, current, adding, engine, account, start.mutate]);
 
   const s = state.data;
   // A runner runs one relay at a time. If the one in flight is for the other engine (another card,
@@ -481,7 +493,10 @@ export function RunnerSignIn({
     );
   }
 
-  if (status === 'pending') {
+  // A card that starts by itself says so from the moment it opens: before its first read and while its start is on the
+  // way, the button below would only start a second sign-in.
+  const autoStarting = !!autoStart && (!autoStarted.current || start.isPending) && !inFlight(status);
+  if (status === 'pending' || autoStarting) {
     return (
       <div className="rsi">
         <div className="rsi-row">
