@@ -108,6 +108,9 @@ object ManagementFixture {
     @Volatile var setDefaultRefusal: String? = null
     @Volatile var setDefaultAnswer = """{"account":null,"status":"pending","message":null,"waitingOn":[],"foreignProcesses":[]}"""
     @Volatile var restoreFails = false
+    /** POST runners/:id/accounts/:engine/default/sign-out runs [onAccountWrite] with its path, then answers pending; given [signOutRefusal]
+     * it refuses 400 in those words. */
+    @Volatile var signOutRefusal: String? = null
     @Volatile var onAccountWrite: (String) -> Unit = {}
     /** POST runners/:id/engines/:engine/update-warning/dismiss runs this with the engine, then answers `{engine, latest}` with [dismissLatest],
      * as the server records the engine's current update.latest — so GET runners can serve the dismissal from then on. */
@@ -156,7 +159,7 @@ object ManagementFixture {
         secondRunner = false; runnerOnline = true; runnerTwoOnline = true; runnerOrder = listOf(RUNNER, RUNNER_TWO); removedRunners = emptySet(); selfUpdate = null
         reorderRequests.clear(); runnerEngines = "[]"; runnerExtra = ""; runnerTwoExtra = ""; loginRelay = """{"status":null}"""; loginStarted = """{"status":"pending"}"""
         codeSent = """{"status":"done"}"""; onCode = {}; loginBodies.clear(); pauseBodies.clear(); installBodies.clear(); onRegionCheck = {}
-        defaultRemoveRefusal = null; setDefaultRefusal = null; restoreFails = false; onAccountWrite = {}; onEngineDismiss = {}; dismissLatest = "0.169.0"
+        defaultRemoveRefusal = null; setDefaultRefusal = null; restoreFails = false; signOutRefusal = null; onAccountWrite = {}; onEngineDismiss = {}; dismissLatest = "0.169.0"
         agentFixBodies.clear(); onAgentFix = {}; agentFixRefusal = null
         deviceStatus = "PENDING"; deviceConflict = false; deviceLastSeen = null; deviceGate = null
         drop = CompletableDeferred(); opened = 0
@@ -340,6 +343,9 @@ object ManagementFixture {
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/pause") -> { pauseBodies += "$path ${api.body!!.decodeToString()}"; ok("{}") }
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/set-default") && api.method == HttpMethod.POST ->
                     setDefaultRefusal?.let { fail(409, it) } ?: run { onAccountWrite(path); ok(setDefaultAnswer) }
+                path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/default/sign-out") && api.method == HttpMethod.POST ->
+                    signOutRefusal?.let { fail(400, it) }
+                        ?: run { onAccountWrite(path); ok("""{"engine":"${path.split('/')[3]}","account":"default","status":"pending","message":null}""") }
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/default/restore") ->
                     if (restoreFails) fail(404, "runner not found") else { onAccountWrite(path); ok("""{"ok":true}""") }
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/default") && api.method == HttpMethod.DELETE ->
