@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   Get,
   Headers,
+  NotFoundException,
   Optional,
   Param,
   Post,
@@ -358,6 +359,32 @@ export class RunnerSessionsController {
     this.assertNoServiceToken(grant);
     await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
     return this.sessions.getForOrchestration(runner.ownerId, id);
+  }
+
+  /**
+   * Revision 42 (§12.5 W6, §12.7): a task's own work session reading its task's landing — `session_get` on the landing
+   * session id its landing-fix turn names — whether or not the account has Session orchestration on. Not one of the
+   * orchestration doors: it reads one thing, a landing of the calling session's own task, and answers 404 for any other
+   * id, as for a calling session that is not a work session of this runner. The calling session is
+   * `X-Orbit-Session-Id`, as `project_integration_get` takes it.
+   */
+  @Get('landings/:id')
+  async getOwnTaskLanding(
+    @CurrentRunner() runner: Runner,
+    @CurrentServiceGrant() grant: ServiceTokenGrant | undefined,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+  ) {
+    this.assertNoServiceToken(grant);
+    const landing = await this.sessions.ownTaskLandingForWorkSession(runner.ownerId, runner.id, callingSessionId, id);
+    if (!landing) {
+      throw new NotFoundException({
+        code: 'LANDING_NOT_THIS_SESSIONS_TASK',
+        message: "no landing of this session's own task has that id: a work session reads its own task's landing "
+          + 'here, and any other session through session_get with Session orchestration on',
+      });
+    }
+    return landing;
   }
 
   @Post('sessions/:id/turns')

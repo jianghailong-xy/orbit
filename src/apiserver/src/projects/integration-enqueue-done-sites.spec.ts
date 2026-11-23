@@ -117,6 +117,14 @@ const EXEMPT: ReadonlyMap<string, string> = new Map([
     + 'finish of work a DONE was waiting for; queueing here would queue a second time for one DONE.',
   ],
   [
+    'projects/project-open-item.service.ts#acceptLandingFix',
+    'It writes no status: the `status: \'DONE\'` it names is the predicate of the compare-and-set that '
+    + 'CLEARS the five delivered_* columns of a task already DONE (§12.5 W6, R2), in the transaction that '
+    + 'writes the landing-fix turn. The DONE was written, and its landing queued, long before; queueing '
+    + 'here would land the very commit whose landing just failed. The identity is frozen again, and the '
+    + 'next generation queued, by the finish of the session the turn revived (§10.5 O-L4 3, W7).',
+  ],
+  [
     'tasks/task-completion-test-helper.ts#completeHumanTaskForPgTest',
     'A pg-spec fixture, not a door: it drives a task to DONE through the VERIFICATION lane so a '
     + 'suite has a genuinely finished task to work with. It is reachable from no request, and a '

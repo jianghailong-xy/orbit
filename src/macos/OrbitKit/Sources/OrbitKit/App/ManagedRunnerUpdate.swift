@@ -53,9 +53,11 @@ public enum ManagedRunnerUpdateLogic {
         return RunnerPageCopy.managedBuildLineBuilt(sha: shortSha(build.sha), built: day)
     }
 
-    /// How a card names a build: `the Nov 18 build`, or `the 1a2b3c4 build` when it has no date.
+    /// How a card names a build: its release version (`0.1.261-beta.83`) as a self-managed runner's reads, else
+    /// `the Nov 18 build`, or `the 1a2b3c4 build` when it has no date.
     public static func buildName(_ build: ManagedRunnerBuild, timeZone: TimeZone = .current) -> String {
-        RunnerPageCopy.managedBuildNamed(name: dayLabel(build.builtAt, timeZone: timeZone) ?? shortSha(build.sha))
+        if let version = build.version, !version.isEmpty { return version }
+        return RunnerPageCopy.managedBuildNamed(name: dayLabel(build.builtAt, timeZone: timeZone) ?? shortSha(build.sha))
     }
 
     /// The build a runner's `managed-<sha>` version names, with the date the status knows for it.

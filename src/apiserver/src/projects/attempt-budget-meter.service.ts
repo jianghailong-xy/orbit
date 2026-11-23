@@ -143,6 +143,12 @@ export class AttemptBudgetMeterService {
    * `status <> 'CLOSED'` on purpose: a closed attempt's budget is history. Re-measuring one would
    * report a wall clock that kept running after the work stopped, and waking a coordinator about a
    * run that already wrote down how it ended is the emptiest kind of wake there is.
+   *
+   * `t.status <> 'DONE'` for the same reason, one level up: a task that is DONE was judged, and its
+   * attempt's budget is history whether or not the attempt row was closed. The turn its work session
+   * runs after that — the landing-fix turn of docs/project-integration-line-contract.md §12.5 W6 — is
+   * the platform's delivery of a failed landing, not the attempt spending; metering it would charge the
+   * fix against a budget already settled and wake the coordinator about a task nobody is to decide.
    */
   private async boundAttempt(
     sessionId: string,
@@ -155,6 +161,7 @@ export class AttemptBudgetMeterService {
         FROM "task_attempt" a
         JOIN "task" t ON t."id" = a."task_id" AND t."owner_id" = a."owner_id"
        WHERE a."session_id" = ${sessionId}::uuid AND a."status" <> 'CLOSED'
+         AND t."status" <> 'DONE'
     `);
     return row ?? null;
   }

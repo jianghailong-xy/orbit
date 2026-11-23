@@ -54,6 +54,7 @@ function mapping(change: Partial<ManagedRunner> = {}): ManagedRunner {
     imageRollTo: null,
     imageOutdatedSince: null,
     currentImageSha: null,
+    currentImageVersion: null,
     updateRequestedAt: null,
     updateRequestedBy: null,
     updateCompletedAt: null,

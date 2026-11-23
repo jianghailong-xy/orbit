@@ -57,6 +57,7 @@ interface FixtureSession {
   lifecycleState: string;
   createdAt: string;
   lastTurnAt: string;
+  listedAt?: string;
   folderId: string | null;
   projectMembership?: ReturnType<typeof membership>;
   [key: string]: unknown;
@@ -73,7 +74,7 @@ const row = (n: number, title: string, extra: Record<string, unknown> = {}): Fix
   lifecycleState: 'OPEN',
   provider: 'claude',
   createdAt: '2026-10-01T09:00:00Z',
-  lastTurnAt: '2026-10-03T08:00:00Z',
+  lastTurnAt: '2026-10-03T08:00:00Z', listedAt: '2026-10-03T08:00:00Z',
   folderId: null,
   ...extra,
 });
@@ -90,7 +91,7 @@ const TASK = row(813, 'Build the package', {
   status: 'RUNNING',
   runState: 'RUNNING',
   lastToolUse: 'Bash',
-  lastTurnAt: '2026-10-04T08:00:00Z',
+  lastTurnAt: '2026-10-04T08:00:00Z', listedAt: '2026-10-04T08:00:00Z',
   tags: [TAG],
 });
 const project = (extra: Record<string, unknown> = {}) => ({
@@ -651,7 +652,8 @@ describe('project entry status and second line', { timeout: 60_000 }, () => {
 // them as any session. A project with no coordinator is a row like a folder's wherever it has members.
 describe('project members outside the coordinator’s workspace, the arrow keys and the landing', { timeout: 60_000 }, () => {
   const elsewhere = { workspaceId: OTHER_WORKSPACE_ID, workspace: { id: OTHER_WORKSPACE_ID, name: 'other workspace' } };
-  const OLDER = row(816, 'Older conversation', { lastTurnAt: '2026-10-02T08:00:00Z', lastAssistantText: 'An older session preview' });
+  const OLDER = row(816, 'Older conversation', { lastTurnAt: '2026-10-02T08:00:00Z', listedAt: '2026-10-02T08:00:00Z', lastAssistantText: 'An older session preview' });
+  const IDLE_TASK = { ...TASK, status: 'AWAITING_INPUT', runState: 'AWAITING_INPUT' };
   const THREE = ['Loose conversation', 'Build the package', 'Older conversation'];
   // A session opened from the list in another workspace reads as itself, not as this workspace's first row.
   beforeEach(() => {
@@ -678,9 +680,9 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
   };
 
   it('lists a member there as its own row, the project’s progress first on its second line', async () => {
-    rows = [{ ...LOOSE, lastTurnAt: '2026-10-05T08:00:00Z' }, TASK, OLDER];
+    rows = [{ ...LOOSE, lastTurnAt: '2026-10-05T08:00:00Z', listedAt: '2026-10-05T08:00:00Z' }, TASK, OLDER];
     remoteRows = [{ ...COORDINATOR, ...elsewhere }];
-    await mount(() => expect(titles()).toEqual(THREE));
+    await mount(() => expect(titles()).toEqual(['Build the package', 'Loose conversation', 'Older conversation']));
     expect(projectRows()).toHaveLength(0);
     const member = sessionRow('Build the package');
     const mark = member.querySelector('.session-project-progress');
@@ -708,7 +710,7 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
   });
 
   it('opens the project’s sessions column from the mark, and the member from the rest of its row', async () => {
-    rows = [{ ...LOOSE, lastTurnAt: '2026-10-05T08:00:00Z' }, TASK, OLDER];
+    rows = [{ ...LOOSE, lastTurnAt: '2026-10-05T08:00:00Z', listedAt: '2026-10-05T08:00:00Z' }, IDLE_TASK, OLDER];
     remoteRows = [{ ...COORDINATOR, ...elsewhere }];
     await mount(() => expect(titles()).toEqual(THREE));
     await click(sessionRow('Build the package').querySelector('.session-project-progress'), 'the member’s mark');
@@ -729,7 +731,7 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
   });
 
   it('steps onto a member there with ↓ and ↑, and the list stays in this workspace', async () => {
-    rows = [{ ...LOOSE, lastTurnAt: '2026-10-05T08:00:00Z' }, TASK, OLDER];
+    rows = [{ ...LOOSE, lastTurnAt: '2026-10-05T08:00:00Z', listedAt: '2026-10-05T08:00:00Z' }, IDLE_TASK, OLDER];
     remoteRows = [{ ...COORDINATOR, ...elsewhere }];
     await mount(() => expect(titles()).toEqual(THREE));
     await press('ArrowDown');
@@ -746,7 +748,7 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
   });
 
   it('offers Move…, Pin and Complete on a member there, each acting on the member', async () => {
-    rows = [{ ...LOOSE, lastTurnAt: '2026-10-05T08:00:00Z' }, TASK, OLDER];
+    rows = [{ ...LOOSE, lastTurnAt: '2026-10-05T08:00:00Z', listedAt: '2026-10-05T08:00:00Z' }, IDLE_TASK, OLDER];
     remoteRows = [{ ...COORDINATOR, ...elsewhere }];
     await mount(() => expect(titles()).toEqual(THREE));
     const openMenu = async (): Promise<void> => {
@@ -772,7 +774,7 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
 
   it('passes over a project with no coordinator, as over a folder row', async () => {
     projects = [project({ coordinatorActivity: null })];
-    rows = [{ ...LOOSE, lastTurnAt: '2026-10-05T08:00:00Z' }, TASK, OLDER];
+    rows = [{ ...LOOSE, lastTurnAt: '2026-10-05T08:00:00Z', listedAt: '2026-10-05T08:00:00Z' }, IDLE_TASK, OLDER];
     await mount(() => expect(titles()).toEqual(['Loose conversation', 'Project Alpha', 'Older conversation']));
     expect(preview()?.textContent).toBe('No coordinator');
     await press('ArrowDown');
@@ -782,7 +784,7 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
   });
 
   it('opens the coordinator from its entry in the coordinator’s own workspace', async () => {
-    rows = [{ ...LOOSE, lastTurnAt: '2026-10-05T08:00:00Z' }, COORDINATOR, TASK];
+    rows = [{ ...LOOSE, lastTurnAt: '2026-10-05T08:00:00Z', listedAt: '2026-10-05T08:00:00Z' }, COORDINATOR, IDLE_TASK];
     await mount();
     expect(titles()).toEqual(['Loose conversation', 'Project Alpha']);
     // Wider than a phone, stepping onto the project's row opens its column beside the coordinator, as a click does.
@@ -837,7 +839,7 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
 
   it('reopens the member a workspace last had open', async () => {
     const here = withWorkspace(pid(821), 'remembering workspace');
-    rows = [{ ...LOOSE, ...here, lastTurnAt: '2026-10-05T08:00:00Z' }, { ...TASK, ...here }];
+    rows = [{ ...LOOSE, ...here, lastTurnAt: '2026-10-05T08:00:00Z', listedAt: '2026-10-05T08:00:00Z' }, { ...IDLE_TASK, ...here }];
     remoteRows = [{ ...COORDINATOR, ...elsewhere }];
     await mount(() => expect(titles()).toEqual(['Loose conversation', 'Build the package']), `/sessions/${TASK.id}`);
     // The sidebar opens a workspace with no session in the address; the newest row is not the one it had open.

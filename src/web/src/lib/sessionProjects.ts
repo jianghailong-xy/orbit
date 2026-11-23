@@ -350,7 +350,8 @@ export const SESSION_LANDINGS_COPY = {
  */
 export interface LandingSessionSummary {
   subject: 'TASK' | 'PROMOTION';
-  state: 'IN_FLIGHT' | 'AWAITING_DECISION' | 'SETTLED';
+  /** FIXING (revision 42, §12.7): a failure of it is in its task's own session's hands. */
+  state: 'IN_FLIGHT' | 'AWAITING_DECISION' | 'FIXING' | 'SETTLED';
   settledAs: string | null;
   settledAt: string | null;
 }
@@ -390,7 +391,7 @@ export interface LandingsWindowRow {
 export interface LandingsWindowCard {
   sessionId: string;
   subject: 'TASK' | 'PROMOTION';
-  state: 'IN_FLIGHT' | 'AWAITING_DECISION';
+  state: 'IN_FLIGHT' | 'AWAITING_DECISION' | 'FIXING';
   /** The task's name (a round's own title), the line the card adds under its head. */
   title: string;
   at: number;
@@ -456,7 +457,7 @@ export function landingsWindow(
   const settled: Array<LandingsWindowRow & GroupableSession> = [];
   const now: LandingsWindowCard[] = [];
   const add = (row: LandingsWindowRow, at: string | null | undefined) =>
-    settled.push({ ...row, id: row.key, lastTurnAt: at ?? null });
+    settled.push({ ...row, id: row.key, lastTurnAt: at ?? null, listedAt: at ?? null });
   for (const row of rows) {
     const landing = row.landing;
     if (!landing) continue;
@@ -519,7 +520,7 @@ export function landingsWindow(
   const days = sessionTimeSections(settled, { pinnedFirst: false, now: opts.now })
     .map((section) => ({
       title: section.title,
-      rows: section.sessions.map(({ id: _id, lastTurnAt: _at, ...row }) => row).reverse(),
+      rows: section.sessions.map(({ id: _id, lastTurnAt: _at, listedAt: _listed, ...row }) => row).reverse(),
     }))
     .reverse();
   now.sort((a, b) => a.at - b.at || a.sessionId.localeCompare(b.sessionId));
@@ -619,7 +620,8 @@ export function landingsRowSummary(
   const now = opts.now ?? Date.now();
   const window = landingsWindow(landings, merges, { now: new Date(now) });
   const waiting = window.now.filter((card) => card.state === 'AWAITING_DECISION');
-  const inFlight = window.now.filter((card) => card.state === 'IN_FLIGHT');
+  // A landing its own task's session is fixing waits on nobody (revision 42, §12.7): it is in hand, as one in flight.
+  const inFlight = window.now.filter((card) => card.state === 'IN_FLIGHT' || card.state === 'FIXING');
   const today = window.days.find((day) => day.title === 'Today')?.rows ?? [];
   const settledAt = Math.max(...window.days.flatMap((day) => day.rows.map((row) => row.at)));
   const time = waiting.length > 0
@@ -813,7 +815,7 @@ export function sessionProjectListing<T extends SessionProjectSession>(
       line = { text: SESSION_PROJECT_COPY.noCoordinator, tone: 'preview' };
       target = { kind: 'project', id: projectId };
     }
-    const latest = members.reduce((newest, session) => instant(session.lastTurnAt ?? session.createdAt) > instant(newest.lastTurnAt ?? newest.createdAt) ? session : newest);
+    const latest = members.reduce((newest, session) => instant(session.listedAt ?? session.createdAt) > instant(newest.listedAt ?? newest.createdAt) ? session : newest);
     const motions = opts.runnerOffline ? [] : members.map(opts.motion);
     const needsYou = members.some((session) => lines.get(session.id)?.tone === 'approval');
     const running = motions.includes('spinner');
@@ -832,6 +834,7 @@ export function sessionProjectListing<T extends SessionProjectSession>(
       folderId,
       pinnedAt: coordinator?.pinnedAt ?? null,
       lastTurnAt: latest.lastTurnAt ?? latest.createdAt,
+      listedAt: latest.listedAt ?? latest.createdAt,
       createdAt: coordinator?.createdAt ?? latest.createdAt,
       needsYou,
       running,
@@ -851,8 +854,8 @@ export function sessionProjectListing<T extends SessionProjectSession>(
   ];
   entries.sort((a, b) => {
     if (opts.view === 'open' && !!a.pinnedAt !== !!b.pinnedAt) return a.pinnedAt ? -1 : 1;
-    const left = instant(a.lastTurnAt ?? a.createdAt);
-    const right = instant(b.lastTurnAt ?? b.createdAt);
+    const left = instant(a.listedAt ?? a.createdAt);
+    const right = instant(b.listedAt ?? b.createdAt);
     return left === right ? 0 : left > right ? -1 : 1;
   });
   return { folders: opts.folderId ? [] : folderListing.folders, projects: rows, sessions: loose, entries };
