@@ -145,6 +145,9 @@ public enum AppIntent: Equatable, Sendable {
     case snoozeOwnerRequest(requestID: String)
     /// A terminal asking to be approved (push kind `terminal-login`): the "Waiting on you" inbox, where its card is.
     case openTerminalRequests
+    /// A key or pool login that needs action (push kind `account-needs-action` without a `runnerID`): the
+    /// Providers page, where the key's and the pool's rows draw the block and Check again (contract §1).
+    case openProviders
     /// A scheduled task's alert (push kind `schedule`, apiserver `PushService.notifySchedule`): the run's session when
     /// it names one, else the schedule's detail on the Scheduled page (docs/scheduled-tasks-design.md §7.3).
     case openSchedule(scheduleID: String, sessionID: String?)
@@ -300,6 +303,8 @@ public enum Notifications {
             if let kind = userInfo[keyKind], runnerKinds.contains(kind), let runner = userInfo[keyRunner] {
                 return .open(.runner(PublicID.toPublic(runner)))
             }
+            // A key or a pool login has no runner: its row is on Providers.
+            if userInfo[keyKind] == AccountHealth.pushKind { return .openProviders }
             // A watch's alert names no session and carries no actions: tapping it opens the watch.
             return userInfo[keyWatch].map { .open(.watch($0)) }
         }

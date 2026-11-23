@@ -210,6 +210,11 @@ final class RunnersModel {
         await press { _ = try await self.api.renameRunnerAccount(id, engine: engine, account: account, name: name) }
     }
 
+    /// Reads the blocked accounts alone, for a page that draws them without the runners (keys, pools).
+    func loadHealth() async {
+        healthBlocks = (try? await api.accountHealth()) ?? healthBlocks
+    }
+
     /// Check again: the account is fixed, so its block is cleared and the next run may use it.
     @discardableResult
     func checkAccountAgain(_ block: AccountHealthBlock) async -> String? {

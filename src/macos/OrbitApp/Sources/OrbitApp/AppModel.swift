@@ -4439,6 +4439,15 @@ final class AppModel {
             ownerRequests?.tab = .open
             ownerRequests?.inboxPresented = true
             Task { await ownerRequests?.loadTerminalRequests() }
+        case .openProviders:
+            // The key's or pool's row is on Providers: Settings' page on iOS, Machines & models on the Mac.
+            #if os(iOS)
+            nav.openSettings(at: .providers)
+            #else
+            settingsPresented = false
+            selectedSection = .runners
+            selectedRunnerID = nil
+            #endif
         case .openShare(let entryID):
             requestShareClaim(entryID: entryID)
         case let .openSchedule(scheduleID, sessionID):

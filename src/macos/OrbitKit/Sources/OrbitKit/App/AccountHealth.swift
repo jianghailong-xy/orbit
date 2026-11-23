@@ -73,6 +73,23 @@ public enum AccountHealth {
         }
     }
 
+    /// The whole-account block of a key, or of a Claude pool member (which is a key): `provider:<id>`.
+    public static func block(_ blocks: [AccountHealthBlock], providerID: String) -> AccountHealthBlock? {
+        blocks.first {
+            $0.providerId.map(PublicID.storageKey) == PublicID.storageKey(providerID) && $0.scopeModel.isEmpty
+        }
+    }
+
+    /// The whole-account block of a Codex pool login: `pool-login:<pool>:<account>`, where the account is the
+    /// login's fingerprint (a member's `login:` prefix is not part of it).
+    public static func block(_ blocks: [AccountHealthBlock], poolID: String, account: String) -> AccountHealthBlock? {
+        let account = account.hasPrefix("login:") ? String(account.dropFirst("login:".count)) : account
+        return blocks.first {
+            $0.poolId.map(PublicID.storageKey) == PublicID.storageKey(poolID) && $0.account == account
+                && $0.scopeModel.isEmpty
+        }
+    }
+
     public static func isClassified(_ block: AccountHealthBlock) -> Bool { block.kind != unclassifiedKind }
 
     private static let product = ["claude": "Claude Code", "codex": "Codex", "kimi": "Kimi Code",

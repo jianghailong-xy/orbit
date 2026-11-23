@@ -55,12 +55,20 @@ final class AccountHealthTests: XCTestCase {
         XCTAssertNil(answer.blocks?.first?.nextTrialAt)
     }
 
-    func testThePushOpensTheRunnerAndNeedsItsID() {
+    func testAKeyPushOpensProvidersAndARunnerPushOpensTheRunner() {
         let runner = "019a0000-0000-7000-8000-000000000003"
         XCTAssertEqual(Notifications.intent(actionId: tap, userInfo: ["kind": "account-needs-action", "runnerID": runner,
                                                                       "accountHealthID": "h1"]),
                        .open(.runner(PublicID.toPublic(runner))))
-        XCTAssertNil(Notifications.intent(actionId: tap, userInfo: ["kind": "account-needs-action"]), "a key has no runner")
+        XCTAssertEqual(Notifications.intent(actionId: tap, userInfo: ["kind": "account-needs-action",
+                                                                      "accountHealthID": "h2",
+                                                                      "subjectKey": "provider:p1"]),
+                       .openProviders, "a key has no runner: its row is on Providers")
+        XCTAssertEqual(Notifications.intent(actionId: tap, userInfo: ["kind": "account-needs-action",
+                                                                      "subjectKey": "pool-login:pool1:fp1"]),
+                       .openProviders)
+        XCTAssertNil(Notifications.intent(actionId: tap, userInfo: ["kind": "engine-signed-out"]),
+                     "a runner kind without its runner still opens nothing")
     }
 
     // MARK: route + wiring

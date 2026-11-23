@@ -37,3 +37,26 @@ struct AccountHealthRow: View {
         }
     }
 }
+
+/// The blocks a page draws on its key, pool member and pool login rows (contract §4), and the press that
+/// clears one. Built from the runners model, which reads `GET /account-health`.
+struct AccountHealthRows {
+    var blocks: [AccountHealthBlock] = []
+    var checkAgain: (AccountHealthBlock) async -> String? = { _ in nil }
+
+    init(blocks: [AccountHealthBlock] = [], checkAgain: @escaping (AccountHealthBlock) async -> String? = { _ in nil }) {
+        self.blocks = blocks
+        self.checkAgain = checkAgain
+    }
+
+    @MainActor init(_ runners: RunnersModel) {
+        self.init(blocks: runners.healthBlocks, checkAgain: { await runners.checkAccountAgain($0) })
+    }
+
+    /// The row's line and Check again, drawn only while `block` stands.
+    @ViewBuilder func row(_ block: AccountHealthBlock?, now: Date = Date()) -> some View {
+        if let block {
+            AccountHealthRow(block: block, now: now) { await checkAgain(block) }
+        }
+    }
+}
