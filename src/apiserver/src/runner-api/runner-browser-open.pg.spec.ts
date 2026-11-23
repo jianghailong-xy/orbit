@@ -114,8 +114,8 @@ test('browser_open: starts the account\'s Orbit Cloud browser for any session of
   /** R's own credential is a managed runner's: its calls name the instance, as `orbit mcp` in R's Pod does. */
   const instance = (declares = true) => ({
     'x-orbit-runner-capabilities': declares ? `${INSTANCE_CAPABILITY},${BROWSER_CLEAR},${BROWSER_OPEN}` : `${INSTANCE_CAPABILITY},${BROWSER_CLEAR}`,
-    'x-orbit-managed-runner-generation': '1',
-    'x-orbit-managed-runner-pod-uid': podUid,
+    'x-orbit-cloud-runner-generation': '1',
+    'x-orbit-cloud-runner-pod-uid': podUid,
   });
   const open = (server: Apiserver, runnerToken: string | undefined, sessionId?: string, body: object = {}) =>
     call(server, 'POST', '/api/runner/browser/open', runnerToken, body, {

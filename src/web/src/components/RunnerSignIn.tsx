@@ -6,6 +6,7 @@ import {
   ENGINE_CLI_NAMES,
   KIMI_LOGIN_REGION_V1,
   KIMI_REGIONS,
+  LOGIN_RUNNER_BROWSER_V1,
   type KimiRegion,
   type LoginEngine,
   type RunnerEngineHealth,
@@ -14,6 +15,7 @@ import {
 import { api } from '../api';
 import { copyText } from '../lib/clipboard';
 import { runnersQuery } from '../lib/queries';
+import { openRunnerBrowserTab, runnerBrowserQuery } from '../lib/runnerBrowser';
 
 const loginKey = (runnerId: string) => ['runner-login', runnerId] as const;
 
@@ -315,6 +317,63 @@ export function RunnerSignIn({
     if (inFlight(reported)) setWatched(true);
   }, [reported]);
 
+  // Use the runner's browser (docs/runner-browser-engine-sign-in-design.md): offered while a link waits, on the
+  // account's own Orbit Cloud runner when its browser is on (the browser's state answers) and the runner can open a
+  // sign-in there. Its tab opens on the press, in control, and the runner opens the link in it.
+  const linkWaiting = (status === 'awaiting_code' || status === 'awaiting_approval') && !!page;
+  const declaresRunnerBrowser = useQuery({
+    ...runnersQuery(),
+    enabled: linkWaiting,
+    select: (list) => !!(list as ProbedRunner[]).find((r) => r.id === runnerId)?.capabilities?.includes(LOGIN_RUNNER_BROWSER_V1),
+  }).data === true;
+  const runnerBrowser = useQuery({ ...runnerBrowserQuery(runnerId), enabled: linkWaiting && declaresRunnerBrowser });
+  const canUseRunnerBrowser = linkWaiting && declaresRunnerBrowser && !!runnerBrowser.data;
+  const runnerBrowserSignIn = useMutation({
+    mutationFn: () => api<RunnerLoginState>(`/runners/${runnerId}/browser/sign-in`, { method: 'POST' }),
+    onSuccess: put,
+  });
+  const pressRunnerBrowser = () => {
+    openRunnerBrowserTab(runnerId, true);
+    runnerBrowserSignIn.mutate();
+  };
+  // Claude Code's code comes back from the runner's browser by itself, so its paste field steps aside once the page is
+  // open there, a press away for when it does not.
+  const [pasteInstead, setPasteInstead] = useState(false);
+  const codeFromBrowser = engine === 'claude' && s?.browser === 'opened' && !s?.message && !pasteInstead;
+  const runnerBrowserBlock = !canUseRunnerBrowser ? null : s?.browser === 'requested' || s?.browser === 'opened' ? (
+    <div className="rsi-runner-browser">
+      <div className="rsi-row">
+        <LoadingOutlined />{' '}
+        {s.browser === 'requested'
+          ? "Opening the sign-in page in the runner's browser…"
+          : codeFromBrowser
+            ? "Finish signing in in the runner's browser. Orbit takes the code from there."
+            : "Finish signing in in the runner's browser."}
+      </div>
+      <div className="rsi-links">
+        <button className="rsi-link" onClick={() => openRunnerBrowserTab(runnerId, true)} type="button">
+          Show the browser
+        </button>
+        {codeFromBrowser && (
+          <button className="rsi-link" onClick={() => setPasteInstead(true)} type="button">
+            Paste a code instead
+          </button>
+        )}
+      </div>
+    </div>
+  ) : (
+    <div className="rsi-runner-browser">
+      {s?.browser === 'failed' && (
+        <div className="rsi-warn">Couldn't open the sign-in page in the runner's browser. Open it here instead.</div>
+      )}
+      {runnerBrowserSignIn.error && <div className="rsi-warn">{(runnerBrowserSignIn.error as Error).message}</div>}
+      <button className="rsi-btn-alt" onClick={pressRunnerBrowser} disabled={runnerBrowserSignIn.isPending} type="button">
+        Use the runner's browser
+      </button>
+      <div className="rsi-hint">You stay signed in to this site on this runner. Agents on this runner can use it.</div>
+    </div>
+  );
+
   // The Kimi site the sign-in under way is on, kept past its URL for the wait below.
   const [signingInOn, setSigningInOn] = useState<KimiRegion | null>(null);
   useEffect(() => {
@@ -369,7 +428,11 @@ export function RunnerSignIn({
   // with no sign their code went anywhere. Hold the wait until the polled state actually moves:
   // to done/failed, or back to awaiting_code carrying the CLI's rejection. Submitting clears the
   // message server-side, so a message here can only be news about this paste.
-  const verifying = submit.isPending || (sent && status === 'awaiting_code' && !s?.message);
+  const verifying =
+    submit.isPending
+    || (sent && status === 'awaiting_code' && !s?.message)
+    // The runner took the code from its browser and handed it to the CLI, as a paste would be.
+    || (status === 'awaiting_code' && s?.browser === 'code-taken' && !s?.message);
 
   useEffect(() => {
     // Anything but awaiting_code — cancelled, restarted, finished — settles the paste above.
@@ -482,6 +545,7 @@ export function RunnerSignIn({
             {copiedUrl === signInUrl ? 'Sign-in link copied' : 'Copy sign-in link'}
           </button>
         </div>
+        {runnerBrowserBlock}
         <div className="rsi-row">
           <LoadingOutlined /> Waiting for you to sign in…
           {left !== null && (
@@ -549,6 +613,7 @@ export function RunnerSignIn({
               ? `Open the ${KIMI_SITE[site].domain} sign-in page`
               : 'Open the sign-in page'}
         </a>
+        {runnerBrowserBlock}
         <div className="rsi-row">
           <LoadingOutlined /> Waiting for you to approve it…
         </div>
@@ -589,30 +654,35 @@ export function RunnerSignIn({
             {copiedUrl === signInUrl ? 'Sign-in link copied' : 'Copy sign-in link'}
           </button>
         </div>
-        <div className="rsi-hint">
-          Approve it there, then paste the code the page gives you:
-        </div>
-        <div className="rsi-form">
-          <input
-            className="rsi-input"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            placeholder="Paste the code"
-            autoComplete="off"
-            spellCheck={false}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && code.trim()) submit.mutate(code);
-            }}
-          />
-          <button
-            className="rsi-btn"
-            disabled={!code.trim()}
-            onClick={() => submit.mutate(code)}
-            type="button"
-          >
-            Submit
-          </button>
-        </div>
+        {runnerBrowserBlock}
+        {!codeFromBrowser && (
+          <>
+            <div className="rsi-hint">
+              Approve it there, then paste the code the page gives you:
+            </div>
+            <div className="rsi-form">
+              <input
+                className="rsi-input"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                placeholder="Paste the code"
+                autoComplete="off"
+                spellCheck={false}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && code.trim()) submit.mutate(code);
+                }}
+              />
+              <button
+                className="rsi-btn"
+                disabled={!code.trim()}
+                onClick={() => submit.mutate(code)}
+                type="button"
+              >
+                Submit
+              </button>
+            </div>
+          </>
+        )}
         {err && <div className="rsi-warn">{err.message}</div>}
         <button className="rsi-link" onClick={() => cancel.mutate()} type="button">
           Cancel
