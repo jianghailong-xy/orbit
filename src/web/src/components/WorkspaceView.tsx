@@ -217,6 +217,7 @@ import {
   permissionModeSupported,
   contextWindowFor,
   DEFAULT_MODEL,
+  DEFAULT_PERMISSION_MODE,
   defaultEngineOf,
   defaultModelFor,
   effectiveSessionEffort,
@@ -1515,9 +1516,16 @@ export function CoordinatorBadge({ projectId }: { projectId?: string | null }) {
 
 /** Where and how the agent runs a guest's message, for the Share dialog's People who can reply: the session's own
  *  runner and permission mode, or the workspace's machine when the session names none. */
-const guestContextOf = (s: any, fallbackRunner: string, managedRunnerId: string | null) => ({
+const guestContextOf = (
+  s: any,
+  fallbackRunner: string,
+  managedRunnerId: string | null,
+  accountPermissionMode: string | undefined,
+) => ({
   runnerName: (s.assignedRunner ? machineName(s.assignedRunner, managedRunnerId) : '') || fallbackRunner,
-  permissionMode: typeof s.permissionMode === 'string' ? s.permissionMode : 'default',
+  // A session that stored no mode runs in the account's, else Auto, as the server resolves it.
+  permissionMode:
+    typeof s.permissionMode === 'string' ? s.permissionMode : (accountPermissionMode ?? DEFAULT_PERMISSION_MODE),
 });
 
 /** What the two-person icon beside a row's time says: people the owner invited can reply here. */
@@ -11104,7 +11112,7 @@ export function WorkspaceView({
             onClose={() => setShareOpen(false)}
             kind="SESSION"
             rootId={selected.id}
-            guests={guestContextOf(selected, runnerShownName, managedRunnerId)}
+            guests={guestContextOf(selected, runnerShownName, managedRunnerId, accountDefaultPermissionMode)}
           />
         )}
         {selected && !selectedTrashed && !composing && (
@@ -11132,7 +11140,7 @@ export function WorkspaceView({
             onClose={() => setShareRow(null)}
             kind="SESSION"
             rootId={shareRow.id}
-            guests={guestContextOf(shareRow, runnerShownName, managedRunnerId)}
+            guests={guestContextOf(shareRow, runnerShownName, managedRunnerId, accountDefaultPermissionMode)}
           />
         )}
         <SessionMoveModal
