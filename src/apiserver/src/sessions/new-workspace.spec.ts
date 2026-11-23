@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
 import { BadRequestException } from '@nestjs/common';
-import { folderNameOf, freeWorkspaceName, newFolderWorkDir, newFolderWorkDirOn, readNewWorkspace } from './new-workspace';
+import { folderNameOf, freeWorkspaceName, newFolderWorkDirOn, readNewWorkspace } from './new-workspace';
 import { SessionsService } from './sessions.service';
 
 /**
@@ -50,10 +52,21 @@ test('the name is the folder\'s', () => {
   assert.equal(folderNameOf('/'), '/', 'a path with no last segment names itself');
 });
 
-test('a new folder goes under the reposRoot, with the separator that root is written with', () => {
-  assert.equal(newFolderWorkDir('/home/orbit/orbit-repos', 'app'), '/home/orbit/orbit-repos/app');
-  assert.equal(newFolderWorkDir('/home/orbit/orbit-repos/', 'app'), '/home/orbit/orbit-repos/app');
-  assert.equal(newFolderWorkDir('C:\\Users\\orbit\\orbit-repos', 'app'), 'C:\\Users\\orbit\\orbit-repos\\app');
+test('a new folder goes where every client\'s setup card shows it: new-folder-root.fixture.json', () => {
+  const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/new-folder-root.fixture.json'), 'utf8')) as {
+    cases: { name: string; runner: { managed: boolean; reposRoot: string | null; capabilities: string[] }; path: string | null }[];
+  };
+  for (const c of fixture.cases) {
+    // The fixture's [] is a runner that has not reported; the server reads that from capabilitiesReportedAt.
+    const runner = {
+      reposRoot: c.runner.reposRoot,
+      capabilities: c.runner.capabilities,
+      capabilitiesReportedAt: c.runner.capabilities.length ? new Date() : null,
+      managedRunner: c.runner.managed ? { id: 'managed' } : null,
+    };
+    if (c.path === null) assert.throws(() => newFolderWorkDirOn(runner, 'app'), /NEW_FOLDER_UNSUPPORTED|cannot make|too old/, c.name);
+    else assert.equal(newFolderWorkDirOn(runner, 'app'), c.path, c.name);
+  }
 });
 
 test('a name the account already has gets " 2", " 3", …: the smallest one free', () => {
@@ -127,6 +140,8 @@ test('an unreported managed runner uses the image repos folder; after reporting 
   const reported = { ...managed, reposRoot: '/home/orbit/orbit-repos', capabilitiesReportedAt: new Date(), capabilities: ['create-workdir/v1', 'create-workdir/v2'] };
   assert.equal(newFolderWorkDirOn(reported, 'app'), '/home/orbit/app');
   assert.equal(newFolderWorkDirOn({ ...reported, capabilities: ['create-workdir/v1'] }, 'app'), '/home/orbit/orbit-repos/app');
-  assert.throws(() => newFolderWorkDirOn({ ...reported, capabilities: [] }, 'app'), /old/);
+  // A runner that declares nothing reads as one that has not reported, as every client reads it.
+  assert.equal(newFolderWorkDirOn({ ...reported, capabilities: [] }, 'app'), '/home/orbit/orbit-repos/app');
+  assert.throws(() => newFolderWorkDirOn({ ...reported, capabilities: ['dir-probe/v1'] }, 'app'), /old/);
   assert.throws(() => newFolderWorkDirOn({ ...managed, managedRunner: null }, 'app'), /old/);
 });

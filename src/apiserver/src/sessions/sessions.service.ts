@@ -1,6 +1,6 @@
 import { readSessionCoordinatorHandoffs } from '../projects/coordinator-handoff';
 import type { BackgroundJobStopResponse, BackgroundJobTailResponse, HelpAskMarker, SubagentRunView, WorkflowRunView } from '@orbit/shared';
-import { BG_JOB_STOPPED_BY_OWNER, BG_JOB_TAIL_MAX_BYTES, BG_OUTPUT_TAIL_V1, BG_OWNER_STOP_V1 } from '@orbit/shared';
+import { BG_JOB_STOPPED_BY_OWNER, BG_JOB_TAIL_MAX_BYTES, BG_OUTPUT_TAIL_V1, BG_OWNER_STOP_V1, newFolderPath } from '@orbit/shared';
 import { RunnerHints } from '../realtime/runner-hints';
 import { boundTailLines } from './background-job-tail';
 import { modelLabels, subagentRunView } from '../runner-api/subagent-run';
@@ -270,7 +270,6 @@ import {
   folderNameOf,
   folderOfRepoName,
   freeWorkspaceName,
-  newFolderWorkDir,
   newFolderWorkDirOn,
   readNewWorkspace,
   type NewWorkspaceGithubAsk,
@@ -2138,7 +2137,7 @@ export class SessionsService {
     }
     return {
       runnerId: runner.id,
-      workDir: newFolderWorkDir(reposRoot, folder),
+      workDir: newFolderPath(reposRoot, folder),
       name: folder,
       autoCreateWorkDir: false,
       clone: {

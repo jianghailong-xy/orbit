@@ -8,7 +8,7 @@ import {
   type LoginEngine,
   type NewWorkspaceRequest,
   type RunnerEngineHealth,
-  newFolderRoot,
+  newFolderPath,
 } from '@orbit/shared';
 import { encodeId, routeId } from './idCodec';
 import { MANAGED_RUNNER_LABEL } from './runnerCopy';
@@ -84,11 +84,6 @@ export function repositoryFolder(fullName: string): string {
   return isValidNewFolder(name) ? name : '';
 }
 
-/** The directory the folder step's name goes in: the machine's home on one that declares create-workdir/v2, its
- *  Repos Folder on an older one (@orbit/shared newFolderRoot, as the server joins it). */
-export const newFolderRootOf = (runner: { capabilities?: string[]; reposRoot?: string | null }): string =>
-  newFolderRoot(runner.reposRoot ?? '', runner.capabilities);
-
 /** Whether a machine too old to answer gets there by itself: not one that reports its updater off, or
  *  unable to write where it is installed. One too old to report anything still updates itself. */
 export const updatesItself = (runner: { selfUpdate?: { state?: string } | null }): boolean =>
@@ -112,10 +107,7 @@ export function isValidNewFolder(name: string): boolean {
 }
 
 /** Where a new folder lands: `<root>/<name>`, as the server joins it. */
-export function newFolderPath(root: string, name: string): string {
-  const separator = root.includes('\\') && !root.includes('/') ? '\\' : '/';
-  return `${root.replace(/[/\\]+$/, '')}${separator}${name}`;
-}
+export { newFolderPath };
 
 /** The workspace name a folder gives, as the server derives it (§3.2): its last segment. */
 export function folderName(path: string): string {

@@ -608,6 +608,13 @@ describe('the managed runner before it is up', () => {
     });
   }
 
+  it('preparing: starting, with a Repos Folder stored from an earlier image, still offers where the server makes it', async () => {
+    const managed = managedIn('preparing: starting');
+    const runner = machine({ online: false, status: 'OFFLINE', reposRoot: '/var/lib/orbit/home/orbit-repos', capabilities: [], engines: null });
+    const page = await open(runner, { managed });
+    expect(said(page.querySelector('.msc-prefix'))).toBe('/home/orbit/orbit-repos/');
+  });
+
   it('reads any other runner as before: offline, with nothing to type', async () => {
     const managed = managedIn('sleeping');
     const other = machine({ id: encodeId('0199f0a8-3c2e-7b51-9a6e-000000000000'), online: false, status: 'OFFLINE' });

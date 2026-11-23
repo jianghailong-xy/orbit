@@ -1261,12 +1261,12 @@ export const CREATE_WORKDIR_CAPABILITY = 'create-workdir/v1';
  *  `<reposRoot>/<name>`. */
 export const CREATE_WORKDIR_HOME_CAPABILITY = 'create-workdir/v2';
 
-/** The directory a runner's new folders go in: its home, the parent of its reposRoot, when it declares
- *  CREATE_WORKDIR_HOME_CAPABILITY, else reposRoot itself. The separator is the one the root is written with. */
 /** A managed runner's repos folder, fixed by its image (deploy/managed-runner/image/entrypoint.py). A new folder on a
  *  managed runner that has not reported yet goes here: every runner version can make one inside its reposRoot. */
 export const MANAGED_RUNNER_REPOS_ROOT = '/home/orbit/orbit-repos';
 
+/** The directory a runner's new folders go in: its home, the parent of its reposRoot, when it declares
+ *  CREATE_WORKDIR_HOME_CAPABILITY, else reposRoot itself. The separator is the one the root is written with. */
 export function newFolderRoot(reposRoot: string, capabilities: readonly string[] | null | undefined): string {
   const root = reposRoot.trim().replace(/(?<=.)[\\/]+$/, '');
   if (!capabilities?.includes(CREATE_WORKDIR_HOME_CAPABILITY)) return root;
@@ -1274,6 +1274,31 @@ export function newFolderRoot(reposRoot: string, capabilities: readonly string[]
   if (cut < 0) return root;
   // `/orbit-repos` sits in `/`, and `C:\orbit-repos` in `C:\`.
   return cut === 0 || root[cut - 1] === ':' ? root.slice(0, cut + 1) : root.slice(0, cut);
+}
+
+/** What newFolderRootFor reads of a runner. `capabilities` is what it has reported: a server passes [] for a runner
+ *  that has not reported yet (no capabilitiesReportedAt). */
+export interface NewFolderRunner {
+  managed: boolean;
+  reposRoot: string | null | undefined;
+  capabilities: readonly string[] | null | undefined;
+}
+
+/** Where a new folder named on this runner goes, for every client and the server alike (new-folder-root.fixture.json):
+ *  on a managed runner that has not reported yet, its image's MANAGED_RUNNER_REPOS_ROOT, whatever Repos Folder is stored
+ *  from before, so its first workspace can be made before it is up; newFolderRoot on a runner that makes new folders and
+ *  has reported its Repos Folder; null on any other, which cannot make one. */
+export function newFolderRootFor(runner: NewFolderRunner): string | null {
+  if (runner.managed && !runner.capabilities?.length) return MANAGED_RUNNER_REPOS_ROOT;
+  const reposRoot = runner.reposRoot?.trim() ?? '';
+  if (reposRoot && runner.capabilities?.includes(CREATE_WORKDIR_CAPABILITY)) return newFolderRoot(reposRoot, runner.capabilities);
+  return null;
+}
+
+/** `<root>/<name>`: the separator the root is written with, never doubled. A new folder's path and a clone's. */
+export function newFolderPath(root: string, name: string): string {
+  const separator = root.includes('\\') && !root.includes('/') ? '\\' : '/';
+  return `${root.replace(/[\\/]+$/, '')}${separator}${name}`;
 }
 
 /** A runner that reports its machine's CPU, memory and disk on every heartbeat (RunnerHeartbeatRequest.resources).
