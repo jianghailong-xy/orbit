@@ -324,7 +324,7 @@ async function refusal(promise: Promise<unknown>): Promise<string> {
   try {
     await promise;
   } catch (error) {
-    if (error instanceof IntegrationJobRefused) return error.code;
+    if (error instanceof IntegrationJobRefused) return error.refusal;
     throw error;
   }
   return 'ACCEPTED';
