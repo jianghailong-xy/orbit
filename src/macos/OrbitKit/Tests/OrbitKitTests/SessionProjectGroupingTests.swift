@@ -17,6 +17,7 @@ final class SessionProjectGroupingTests: XCTestCase {
                          waitingKind: SessionWaitingKind? = nil, since: [String] = [],
                          bg: Int = 0, jobs: Int = 0, subagents: Int = 0,
                          pinnedAt: String? = nil, lastTurnAt: String? = "2026-10-04T09:40:00Z",
+                         listedAt: String? = nil,
                          createdAt: String? = "2026-10-04T09:00:00Z",
                          reply: String? = "Last reply", userText: String? = nil,
                          tool: String? = nil, review: ConfirmationUnderReview? = nil) -> Session {
@@ -33,7 +34,7 @@ final class SessionProjectGroupingTests: XCTestCase {
                 lastAssistantText: reply, lastToolUse: tool, lastUserText: userText,
                 runningBgCount: bg, runningBgJobCount: jobs, runningSubagentCount: subagents,
                 agent: workspaceRef,
-                pinnedAt: pinnedAt, createdAt: createdAt, lastTurnAt: lastTurnAt,
+                pinnedAt: pinnedAt, createdAt: createdAt, lastTurnAt: lastTurnAt, listedAt: listedAt,
                 folderId: folder, confirmationUnderReview: review,
                 projectMembership: role.map {
                     SessionProjectMembership(projectId: projectID, projectTitle: "Project one",
@@ -522,8 +523,10 @@ final class SessionProjectGroupingTests: XCTestCase {
     }
 
     func testAMemberThereIsPinnedByItsOwnPinAndInItsOwnTimeSection() {
-        let pinned = session("pinned", pinnedAt: ago(5), lastTurnAt: ago(10_000))
-        let out = listing([pinned, session("older", lastTurnAt: ago(1_440)), session("ordinary", role: nil, lastTurnAt: ago(1))],
+        let pinned = session("pinned", pinnedAt: ago(5), lastTurnAt: ago(10_000), listedAt: ago(10_000))
+        let out = listing([pinned,
+                           session("older", lastTurnAt: ago(1_440), listedAt: ago(1_440)),
+                           session("ordinary", role: nil, lastTurnAt: ago(1), listedAt: ago(1))],
                           workspace: "w1", coordinators: [remote(lastTurnAt: ago(1))])
         var utc = Calendar(identifier: .gregorian)
         utc.timeZone = TimeZone(identifier: "UTC")!
