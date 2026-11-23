@@ -1605,14 +1605,14 @@ test('② a run that never reached its engine: each try\'s session reads every t
   await fireAndStart(s.id);
   const [run] = await runsOf(s.id);
   const first = (await runOf(run.id)).sessionId!;
-  await db.session.update({ where: { id: first }, data: { status: 'FAILED', finishedAt: clockNow, error: 'spawn failed' } });
+  await db.session.update({ where: { id: first }, data: { status: 'FAILED', lastTurnOutcome: 'FAILED', finishedAt: clockNow, error: 'spawn failed' } });
   assert.equal(await runs.reconcileRun(run.id), 'RETRY');
   advance(MINUTE);
   assert.deepEqual((await runs.startDue(25, s.id)).map((r) => r.outcome), ['STARTED']);
   const second = (await runOf(run.id)).sessionId!;
   // The second try is claimed, and its engine stops before the turn reaches it; the next wait would pass the window.
   at('2026-11-15T01:58:00Z');
-  await db.session.update({ where: { id: second }, data: { status: 'FAILED', finishedAt: clockNow, startedAt: clockNow, error: 'spawn failed' } });
+  await db.session.update({ where: { id: second }, data: { status: 'FAILED', lastTurnOutcome: 'FAILED', finishedAt: clockNow, startedAt: clockNow, error: 'spawn failed' } });
   assert.equal(await runs.reconcileRun(run.id), 'MISSED');
   const missed = await runOf(run.id);
   // A try started when its session was opened (the create door's own clock, not this spec's).
@@ -1685,7 +1685,7 @@ test('④ an earlier try whose run went on in another session reads that it did,
   await fireAndStart(s.id);
   const [run] = await runsOf(s.id);
   const first = (await runOf(run.id)).sessionId!;
-  await db.session.update({ where: { id: first }, data: { status: 'FAILED', finishedAt: clockNow, error: 'spawn failed' } });
+  await db.session.update({ where: { id: first }, data: { status: 'FAILED', lastTurnOutcome: 'FAILED', finishedAt: clockNow, error: 'spawn failed' } });
   assert.equal(await runs.reconcileRun(run.id), 'RETRY');
   const queued = await reads.sessionCards(w.ownerId, first);
   assert.equal(queued.runStatus?.notBeforeAt, '2026-11-14T02:01:00.000Z', 'the next try');
@@ -1705,6 +1705,6 @@ test('④ an earlier try whose run went on in another session reads that it did,
   assert.ok(folder.includes(second), 'the try that ran is');
   // The run's session itself ends with a result, still listed: what it did is there to read.
   await runs.report(w.ownerId, second, { outcome: 'CHANGED', key: 'k', summary: 'New.' });
-  await db.session.update({ where: { id: second }, data: { status: 'FAILED', finishedAt: clockNow } });
+  await db.session.update({ where: { id: second }, data: { status: 'FAILED', lastTurnOutcome: 'FAILED', finishedAt: clockNow } });
   assert.ok((await scheduledFolder(w)).includes(second));
 });
