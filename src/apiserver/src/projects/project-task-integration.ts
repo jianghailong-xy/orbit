@@ -4,6 +4,7 @@ import type {
   IntegrationJobPhase,
   IntegrationJobState,
   LandTaskBlockingReasonCode,
+  LandingPullRequestView,
   LandTaskIntegrationView,
   ProjectLandTask,
   TaskIntegrationView,
@@ -13,6 +14,8 @@ import { runnerOfflineSql } from '../runners/runner-presence';
 import { branchNameSql, hasWorkToLandSql, lineStartedSql, taskLandingSql } from './project-criterion-landing';
 import { INTEGRATION_JOB_CLAIM } from './project-integration-job';
 import { baselineHoldSql } from './baseline-hold';
+import { IN_FLIGHT_JOB_STATES, IN_FLIGHT_JOB_STATES_SQL } from './in-flight-job-states';
+import { pullRequestBlockingCode, pullRequestViewOf, pullRequestWaitSummary } from './pull-request-landing';
 
 /**
  * Where each task on a page sits between "done" and "on main"
@@ -72,6 +75,15 @@ export type QueueBlockingCode =
 interface TaskIntegrationRow {
   taskId: string;
   taskStatus: string;
+  /** The pull request the newest attempt waits on or landed through (docs/design/protected-branch-landing.md §8). */
+  prNumber?: number | null;
+  prUrl?: string | null;
+  prState?: string | null;
+  prCondition?: string | null;
+  prChecks?: unknown;
+  prMergeMethod?: string | null;
+  prMergedSha?: string | null;
+  prRefusal?: unknown;
   landing: string;
   isCode: boolean;
   lineStarted: boolean;
@@ -251,7 +263,20 @@ function reasonSummary(code: LandTaskBlockingReasonCode, row: TaskIntegrationRow
     }
     case 'ERROR':
       return `Landing failed${row.jobPhase ? ` at ${row.jobPhase}` : ''}${row.jobErrorCode ? `: ${row.jobErrorCode}` : ''}`;
+    case 'WAITING_FOR_CHECKS':
+    case 'WAITING_FOR_REVIEW':
+      return pullRequestWaitSummary(code, pullRequestOfRow(row), row.mainBranch);
   }
+}
+
+/** The task row's pull request block (§8), or null for an attempt that pushed directly. */
+function pullRequestOfRow(row: TaskIntegrationRow): LandingPullRequestView | null {
+  if (!row.prState) return null;
+  return pullRequestViewOf({
+    number: row.prNumber ?? null, url: row.prUrl ?? null, state: row.prState, condition: row.prCondition ?? null,
+    checks: row.prChecks, mergeMethod: row.prMergeMethod ?? null, mergedSha: row.prMergedSha ?? null,
+    refusal: row.prRefusal ?? null,
+  });
 }
 
 /** The newest attempt, as its own row says it; null for a task that has no LAND_TASK. */
@@ -260,9 +285,11 @@ function landTaskOf(row: TaskIntegrationRow, now: Date): LandTaskIntegrationView
     return null;
   }
   const stopped = row.jobState === 'CONFLICT' || row.jobState === 'CHECK_FAILED' || row.jobState === 'ERROR';
+  const pullRequest = pullRequestOfRow(row);
   const code: LandTaskBlockingReasonCode | null = row.jobState === 'QUEUED'
     ? row.queueBlockCode ?? 'WAITING_DISPATCH'
-    : stopped ? row.jobState as LandTaskBlockingReasonCode : null;
+    : row.jobState === 'PULL_REQUEST' ? pullRequestBlockingCode(pullRequest?.condition ?? null)
+      : stopped ? row.jobState as LandTaskBlockingReasonCode : null;
   let blockingReason: IntegrationJobBlockingReason | null = null;
   if (code) {
     blockingReason = { code, summary: reasonSummary(code, row) };
@@ -291,6 +318,7 @@ function landTaskOf(row: TaskIntegrationRow, now: Date): LandTaskIntegrationView
     targetRef: row.jobTargetRef,
     waitMs: Math.max(0, waitEnd.getTime() - row.jobCreatedAt.getTime()),
     blockingReason,
+    pullRequest,
   };
 }
 
@@ -417,6 +445,7 @@ export async function readTaskIntegrationViews(
       SELECT DISTINCT ON (j."task_id")
              j."task_id", j."id", j."kind", j."state", j."phase", j."generation", j."target_ref",
              j."serial_key", j."session_id", j."landing_id", j."error_code", j."cancel_requested_at",
+             j."pull_request_id",
              cardinality(j."conflicts") AS "conflict_count", j."checks",
              j."created_at", j."started_at", j."claimed_at", j."heartbeat_at", j."finished_at"
         FROM "project_integration_job" j
@@ -460,6 +489,10 @@ export async function readTaskIntegrationViews(
            -- session_id is the source work session and is a history reference (0424), so nothing
            -- about a deleted source can remove this address.
            landing."session_id" AS "jobLandingSessionId",
+           -- docs/design/protected-branch-landing.md §8: the pull request this attempt waits on or landed through.
+           pr."number" AS "prNumber", pr."url" AS "prUrl", pr."state" AS "prState", pr."condition" AS "prCondition",
+           pr."checks" AS "prChecks", pr."merge_method" AS "prMergeMethod", pr."merged_sha" AS "prMergedSha",
+           pr."refusal" AS "prRefusal",
            failed_check."check" AS "jobFailedCheck",
            -- The claim's own conditions (integration-job-relay.ts claimOne), in the table's order,
            -- for the one state they decide: why a QUEUED attempt has not been claimed yet. Since
@@ -510,6 +543,7 @@ export async function readTaskIntegrationViews(
       FROM scoped
       LEFT JOIN newest_job ON newest_job."task_id" = scoped."taskId"
       LEFT JOIN "project_landing" landing ON landing."id" = newest_job."landing_id"
+      LEFT JOIN "github_pull_request" pr ON pr."id" = newest_job."pull_request_id"
       LEFT JOIN open_item ON open_item."task_id" = scoped."taskId"
       LEFT JOIN landed_at ON landed_at."task_id" = scoped."taskId"
       LEFT JOIN LATERAL (
@@ -551,7 +585,7 @@ export async function readTaskIntegrationViews(
       LEFT JOIN LATERAL (
         SELECT f."id" AS "jobId", i."id" AS "openItemId", i."owner_id" AS "ownerId",
                ft."title" AS "taskTitle",
-               CASE WHEN handling."id" IS NOT NULL AND handling."state" IN ('QUEUED', 'RUNNING')
+               CASE WHEN handling."id" IS NOT NULL AND handling."state" IN ${IN_FLIGHT_JOB_STATES_SQL}
                     THEN handling."generation" END AS "handlingGeneration"
           FROM "project_open_item" i
           JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
@@ -589,7 +623,7 @@ export async function readTaskIntegrationViews(
   return new Map(rows.map((row) => [row.taskId, taskIntegrationOf(row, now)]));
 }
 
-const ACTIVE = new Set(['RUNNING', 'QUEUED']);
+const ACTIVE = new Set<string>(IN_FLIGHT_JOB_STATES);
 const STOPPED = new Set(['CONFLICT', 'CHECK_FAILED', 'ERROR']);
 
 /** Running, then the queue, then the stops, then the last landing (§2.7a). */
@@ -636,7 +670,7 @@ export async function readProjectLandTaskViews(
     SELECT n."task_id" AS "taskId", t."title" AS "taskTitle", n."owner_id" AS "ownerId"
       FROM newest n
       JOIN "task" t ON t."id" = n."task_id" AND t."owner_id" = n."owner_id"
-     WHERE n."state" IN ('QUEUED', 'RUNNING')
+     WHERE n."state" IN ${IN_FLIGHT_JOB_STATES_SQL}
         OR (n."state" IN ('CONFLICT', 'CHECK_FAILED', 'ERROR') AND t."status" = 'DONE')
         OR n."id" IN (SELECT "id" FROM last_landed)`);
   if (candidates.length === 0) return [];

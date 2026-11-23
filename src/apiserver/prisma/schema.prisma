@@ -850,6 +850,8 @@ model GithubPullRequest {
   /// What Orbit last pushed to `headRef`, the base tip it was built and checked on, and the tested tree.
   headSha        String?   @map("head_sha") @db.Char(40)
   baseSha        String?   @map("base_sha") @db.Char(40)
+  /// The source commit the head was built from, which the receipt names when the pull request merges.
+  sourceSha      String?   @map("source_sha") @db.Char(40)
   testedTreeSha  String?   @map("tested_tree_sha") @db.Char(40)
   /// merge | rebase | squash: the method Orbit merges with (§4.4).
   mergeMethod    String?   @map("merge_method")

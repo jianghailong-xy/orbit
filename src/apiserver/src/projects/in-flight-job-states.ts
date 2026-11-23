@@ -19,3 +19,11 @@ export function isInFlightJobState(state: string): state is InFlightJobState {
 
 /** The same list for raw SQL: `j."state" IN ${IN_FLIGHT_JOB_STATES_SQL}`. Constants only, so nothing is bound. */
 export const IN_FLIGHT_JOB_STATES_SQL = Prisma.raw(`(${IN_FLIGHT_JOB_STATES.map((state) => `'${state}'`).join(', ')})`);
+
+/**
+ * The states in which a job is a runner's work: queued for one, or held by one. Not the in-flight list: a job waiting
+ * on its pull request is in flight and no runner's — the pull request door has it — so a reader asking "is there
+ * anything for this runner to do" asks with this one.
+ */
+export const RUNNER_JOB_STATES = ['QUEUED', 'RUNNING'] as const;
+export const RUNNER_JOB_STATES_SQL = Prisma.raw(`(${RUNNER_JOB_STATES.map((state) => `'${state}'`).join(', ')})`);

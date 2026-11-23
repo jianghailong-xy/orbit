@@ -28,6 +28,7 @@
 --   * `session_merge_receipt.recorded_by` admits `SERVER`: the server wrote the receipt from GitHub's answer.
 --   * `github_app_config.webhook_secret_enc`, write-only like the client secret; '' is none saved.
 --   * `github_pull_request`: one pull request Orbit opened to land work; exactly one of `landing_id` and `session_id`.
+--   * `project_integration_job_event.kind` admits PULL_REQUEST: the landing timeline's pull request rows.
 --   * `github_webhook_delivery`: GitHub's deliveries by their id, to de-duplicate them. No payload is stored.
 --
 -- BACKWARD COMPATIBLE
@@ -59,6 +60,7 @@ BEGIN
       LOCK TABLE "project_integration_job" IN ACCESS EXCLUSIVE MODE;
       LOCK TABLE "session_merge_receipt" IN ACCESS EXCLUSIVE MODE;
       LOCK TABLE "github_app_config" IN ACCESS EXCLUSIVE MODE;
+      LOCK TABLE "project_integration_job_event" IN ACCESS EXCLUSIVE MODE;
       EXIT;
     EXCEPTION WHEN lock_not_available OR deadlock_detected THEN
       tries := tries + 1;
@@ -127,6 +129,16 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- ── project_integration_job_event ───────────────────────────────────────────────────────────────────────────────
+-- 0438's list plus PULL_REQUEST: the landing timeline's rows about the pull request (§14: pushed, opened, merged),
+-- each with the server's English text and its step in `data`.
+ALTER TABLE "project_integration_job_event"
+  DROP CONSTRAINT IF EXISTS "project_integration_job_event_kind_chk",
+  ADD CONSTRAINT "project_integration_job_event_kind_chk" CHECK ("kind" IN (
+    'ENQUEUED', 'STEP', 'ROUND', 'CHECK_STARTED', 'CHECK_FINISHED', 'CLAIMED', 'TAKEN_OVER', 'RELEASED',
+    'PUSH_REFUSED', 'RECHECK_ON_MOVED_MAIN', 'NEXT_GENERATION', 'RESULT', 'REQUEUED', 'HANDED_TO',
+    'STOP_REQUESTED', 'CANCELLED', 'ABANDONED', 'TIMED_OUT', 'PULL_REQUEST'));
+
 -- ── session ─────────────────────────────────────────────────────────────────────────────────────────────────────
 ALTER TABLE "session"
   ADD COLUMN IF NOT EXISTS "merge_pull_request_id" UUID,
@@ -160,6 +172,8 @@ CREATE TABLE IF NOT EXISTS "github_pull_request" (
   "state"           TEXT NOT NULL,
   "head_sha"        CHAR(40),
   "base_sha"        CHAR(40),
+  -- The source commit the head was built from: what the receipt names when the pull request merges.
+  "source_sha"      CHAR(40),
   "tested_tree_sha" CHAR(40),
   "merge_method"    TEXT,
   "condition"       TEXT,

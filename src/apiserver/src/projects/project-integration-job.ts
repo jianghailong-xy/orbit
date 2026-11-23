@@ -32,6 +32,7 @@ import { queueLandingObservationIfPending } from './landing-observation';
 // Type-only, so the two modules do not import each other at run time: this one needs the two closed
 // sets a candidate is written with, and `project-promotion.ts` needs the shape a check reports.
 import type { PromotionSourceKind, PromotionState } from './project-promotion';
+import { IN_FLIGHT_JOB_STATES } from './in-flight-job-states';
 
 /**
  * Integration jobs: the platform's own git work (`docs/project-integration-line-contract.md` §2).
@@ -1845,7 +1846,7 @@ async function queueForDoneTask(
     // marker has done its work.
     const stopped = await tx.projectIntegrationJob.findFirst({
       where: {
-        taskId, kind: 'LAND_TASK', state: { in: ['QUEUED', 'RUNNING'] },
+        taskId, kind: 'LAND_TASK', state: { in: [...IN_FLIGHT_JOB_STATES] },
         cancelRequestedAt: { not: null },
       },
       select: { id: true },
@@ -2123,7 +2124,7 @@ async function queueLandTask(
   },
 ): Promise<{ jobId: string; landingSessionId: string } | null> {
   const inflight = await tx.projectIntegrationJob.count({
-    where: { taskId: input.taskId, kind: 'LAND_TASK', state: { in: ['QUEUED', 'RUNNING'] } },
+    where: { taskId: input.taskId, kind: 'LAND_TASK', state: { in: [...IN_FLIGHT_JOB_STATES] } },
   });
   if (inflight > 0) return null;
 
