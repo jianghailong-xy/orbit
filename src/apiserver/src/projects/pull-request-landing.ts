@@ -1,3 +1,4 @@
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   isOrbitOwnedRef,
@@ -9,9 +10,11 @@ import {
   type PullRequestCondition,
   type PullRequestMergeMethod,
   type PullRequestState,
+  type SessionMergeResultRequest,
 } from '@orbit/shared';
 import { redactSecrets } from '../common/secret-redaction';
 import { appendIntegrationJobEvent } from './project-integration-event';
+import { reportedLandingAuthority } from './task-checkpoint.service';
 
 /**
  * Landing on a protected GitHub branch through a pull request (docs/design/protected-branch-landing.md): the rows
@@ -333,4 +336,96 @@ export function pullRequestWaitSummary(
         : `Waiting for the required checks on ${which}`;
     }
   }
+}
+
+// ── §4.6: a session's Merge that waits on a pull request ────────────────────────────────────────────────────────
+
+/**
+ * A session's Merge GitHub refused because of the target's rules, landed on the session's landing branch instead
+ * (docs/design/protected-branch-landing.md §4.6 steps 2 and 3): the Merge now waits on a pull request. Called by the
+ * merge result's own transaction, under its session row lock and after its operation fence: the session records
+ * `pull_request` and the pull request row it waits on — a new one, or the open one with its new head. No receipt:
+ * nothing has landed yet. The same `[K6]` §7 authority as a landing is asked first, since the pull request lands
+ * exactly this source. Answers the row's id, for the door to open it after the commit.
+ */
+export async function recordSessionMergePullRequest(
+  tx: Prisma.TransactionClient,
+  input: {
+    sessionId: string;
+    current: { ownerId: string; taskId: string | null; mergeCheckpointId: string | null; mergeRecoveryAction: string | null };
+    dto: SessionMergeResultRequest;
+    /** The result names the operation it reports on (the owner-bearing protocol). */
+    modern: boolean;
+  },
+): Promise<string> {
+  const { sessionId, current, dto } = input;
+  const sha = (value: string | undefined) => {
+    const v = (value ?? '').trim().toLowerCase();
+    return SHA40.test(v) ? v : null;
+  };
+  const pushedSha = sha(dto.pushedSha);
+  const sourceSha = sha(dto.sourceSha);
+  const baseSha = sha(dto.rebaseBaseSha);
+  const targetBranch = (dto.targetBranch ?? '').trim();
+  if (!input.modern || current.mergeRecoveryAction) {
+    throw new BadRequestException('only a claimed merge reports a pull request');
+  }
+  if (!pushedSha || !sourceSha || !baseSha || targetBranch === '') {
+    throw new BadRequestException('a pull_request result names the pushed commit, the source, the base and the target');
+  }
+  const workspace = await tx.session.findUnique({
+    where: { id: sessionId },
+    select: { workspace: { select: { id: true, githubRepoId: true, githubInstallationId: true } } },
+  }).then((row) => row?.workspace ?? null);
+  if (!workspace?.githubRepoId || !workspace.githubInstallationId) {
+    throw new ConflictException('this workspace was not cloned from GitHub, so a merge here cannot land through a pull request');
+  }
+  const authority = await reportedLandingAuthority(tx, {
+    ownerId: current.ownerId, taskId: current.taskId, mergeCheckpointId: current.mergeCheckpointId, sourceSha,
+  });
+  if (authority.decision !== 'ALLOWED') throw new ConflictException(`${authority.decision}: ${authority.detail}`);
+  const baseRef = `refs/heads/${targetBranch}`;
+  const message = storedRefusal(dto.pushRefusal);
+  const refusal = message ? { via: 'PULL_REQUEST', message, at: new Date().toISOString() } : null;
+  // One open pull request per session (`github_pull_request_open_session_key`), beside the session row this
+  // transaction holds (rank 30 → 60).
+  const [open] = await tx.$queryRaw<Array<{ id: string; baseRef: string }>>(Prisma.sql`
+    SELECT "id", "base_ref" AS "baseRef" FROM "github_pull_request"
+     WHERE "session_id" = ${sessionId}::uuid AND "state" IN ('OPENING', 'OPEN')
+     FOR UPDATE`);
+  if (open && open.baseRef !== baseRef) {
+    throw new ConflictException(`this session's pull request into ${open.baseRef.replace('refs/heads/', '')} is open: merge or close it before merging into ${targetBranch}`);
+  }
+  let pullRequestId: string;
+  if (open) {
+    pullRequestId = open.id;
+    await tx.githubPullRequest.update({
+      where: { id: open.id },
+      data: { headSha: pushedSha, baseSha, sourceSha, condition: null, checks: [], observedAt: null, ...(refusal ? { refusal } : {}) },
+    });
+  } else {
+    pullRequestId = (await tx.githubPullRequest.create({
+      data: {
+        ownerId: current.ownerId,
+        workspaceId: workspace.id,
+        githubRepoId: workspace.githubRepoId,
+        installationId: workspace.githubInstallationId,
+        sessionId,
+        baseRef,
+        headRef: landingRefFor(sessionId),
+        state: 'OPENING',
+        headSha: pushedSha,
+        baseSha,
+        sourceSha,
+        ...(refusal ? { refusal } : {}),
+      },
+      select: { id: true },
+    })).id;
+  }
+  // The one write of the session row in this transaction (I3).
+  await tx.session.update({
+    where: { id: sessionId },
+    data: { mergeStatus: 'pull_request', mergeError: null, mergedAt: null, mergePullRequestId: pullRequestId },
+  });
+  return pullRequestId;
 }

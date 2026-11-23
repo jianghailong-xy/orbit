@@ -50,6 +50,7 @@ import {
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { INTEGRATION_JOB_CLAIM, enqueueForDoneTask } from '../projects/project-integration-job';
 import { readInFlightJobs, stopInFlightJob } from '../projects/project-integration-line';
+import { recordSessionMergePullRequest } from '../projects/pull-request-landing';
 import { GITHUB_API, GithubClient } from './github-api.client';
 import { GithubAppConfigService } from './github-app-config.service';
 import { GithubInstallationGrants } from './github-installation-grants';
@@ -376,6 +377,25 @@ test('§3: how a landing reaches main is decided at the hand-out and recorded on
   const recorded = await h.job(landing.jobId);
   assert.equal(recorded.landVia, 'PULL_REQUEST');
   assert.equal(recorded.landingRef, command.landingRef);
+
+  // A subject whose pull request is open finishes through it (§3): the next attempt is handed the landing branch's
+  // head for its lease and told to push only the landing branch — even once the installation's grant no longer reads.
+  const reopened = await h.newWorkspace(ownerId, 'open-pull-request', { github: true });
+  const again = await h.queuedLanding(ownerId, reopened, 'its pull request is already open');
+  const subject = await h.prisma.projectLanding.findFirstOrThrow({ where: { taskId: again.taskId } });
+  const openHead = SHA('the head Orbit pushed before');
+  await h.prisma.githubPullRequest.create({
+    data: {
+      ownerId, workspaceId: reopened.workspaceId, githubRepoId: BigInt(reopened.repoId), installationId: BigInt(reopened.installationId),
+      landingId: subject.id, baseRef: 'refs/heads/main', headRef: `refs/heads/orbit/land/${subject.sessionId}`, state: 'OPEN',
+      number: 77, url: `https://github.com/${reopened.fullName}/pull/77`, headSha: openHead, baseSha: SHA('old base'),
+    },
+  });
+  const [finishing] = await h.beat(reopened.runnerId, true);
+  assert.equal(finishing?.landVia, 'PULL_REQUEST');
+  assert.equal(finishing.pullRequestOpen, true);
+  assert.equal(finishing.landingRefSha, openHead);
+  assert.equal(finishing.landingRef, `refs/heads/orbit/land/${subject.sessionId}`);
 });
 
 test('J-T14, the door and J-T15: a protected main lands through a pull request', { skip: !URL_, concurrency: 1, timeout: 300_000 }, async (t) => {
@@ -590,23 +610,50 @@ test('§4.6: a session\'s Merge lands through its pull request', { skip: !URL_, 
   assert.equal(withoutMode?.landVia, undefined, 'a runner without the capability is handed today\'s command');
   void SESSION_MERGE_PULL_REQUEST_CAPABILITY;
 
-  // The runner's `pull_request` result left the Merge waiting (the controller's write, as recordMergePullRequest makes it).
+  // The runner's `pull_request` result leaves the Merge waiting: the merge result's own write, under the session lock.
   const head = SHA('session-head');
   const base = SHA('session-base');
   h.github.pushed.set(`orbit/land/${sessionId}`, head);
-  const pr = await h.prisma.githubPullRequest.create({
-    data: {
-      ownerId, workspaceId: cloud.workspaceId, githubRepoId: BigInt(cloud.repoId), installationId: BigInt(cloud.installationId),
-      sessionId, baseRef: 'refs/heads/main', headRef: `refs/heads/orbit/land/${sessionId}`, state: 'OPENING',
-      headSha: head, baseSha: base, sourceSha: SHA('session-source'),
-    },
+  const current = { ownerId, taskId: null, mergeCheckpointId: null, mergeRecoveryAction: null };
+  const dto = {
+    operationId: randomUUID(), leaseOwner: 'x', status: 'pull_request' as const, sourceSha: SHA('session-source'),
+    pushedSha: head, rebaseBaseSha: base, targetBranch: 'main',
+    pushRefusal: 'GH013: Repository rule violations found for refs/heads/main. Changes must be made through a pull request.',
+  };
+  const within = <T>(write: (tx: never) => Promise<T>) => h.prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${sessionId}::uuid FOR UPDATE`;
+    return write(tx as never);
   });
-  await h.prisma.session.update({ where: { id: sessionId }, data: { mergeStatus: 'pull_request', mergePullRequestId: pr.id } });
+  // A result that names no claim, or no pushed commit, is refused and writes nothing.
+  await assert.rejects(within((tx) => recordSessionMergePullRequest(tx, { sessionId, current, dto, modern: false })),
+    (error: { getStatus?: () => number }) => error.getStatus?.() === 400);
+  await assert.rejects(within((tx) => recordSessionMergePullRequest(tx, { sessionId, current, dto: { ...dto, pushedSha: 'nope' }, modern: true })),
+    (error: { getStatus?: () => number }) => error.getStatus?.() === 400);
+  const prId = await within((tx) => recordSessionMergePullRequest(tx, { sessionId, current, dto, modern: true }));
+  const waiting = await h.prisma.session.findUniqueOrThrow({ where: { id: sessionId } });
+  assert.equal(waiting.mergeStatus, 'pull_request');
+  assert.equal(waiting.mergePullRequestId, prId);
+  const pr = await h.prisma.githubPullRequest.findUniqueOrThrow({ where: { id: prId } });
+  assert.equal(pr.state, 'OPENING');
+  assert.equal(pr.headRef, `refs/heads/orbit/land/${sessionId}`);
+  assert.equal(pr.baseRef, 'refs/heads/main');
+  assert.equal(pr.headSha, head);
+  assert.equal(pr.sourceSha, SHA('session-source'));
+  assert.match(String((pr.refusal as { message?: string }).message), /GH013/);
+  assert.equal(await h.prisma.sessionMergeReceipt.count({ where: { sessionId } }), 0, 'nothing has landed yet');
+  // A second report (Merge pressed again) updates the same pull request with the new head.
+  const head2 = SHA('session-head-2');
+  h.github.pushed.set(`orbit/land/${sessionId}`, head2);
+  await h.prisma.session.update({ where: { id: sessionId }, data: { mergeStatus: 'pending' } });
+  assert.equal(await within((tx) => recordSessionMergePullRequest(tx, {
+    sessionId, current, dto: { ...dto, pushedSha: head2 }, modern: true,
+  })), prId);
+  assert.equal((await h.prisma.githubPullRequest.findUniqueOrThrow({ where: { id: prId } })).headSha, head2);
   const scenario = h.github.scenario(cloud.fullName);
   scenario.mergeStateStatus = 'CLEAN';
   scenario.baseSha = base;
   scenario.mergeTree = () => SHA('session-tree');
-  await h.door.advance([pr.id]);
+  await h.door.advance([prId]);
   const opened = h.github.calls.find((call) => call.method === 'POST' && call.path === `/repos/${cloud.fullName}/pulls`);
   assert.equal((opened?.body as { title?: string })?.title, 'Tidy the settings page');
   const session = await h.prisma.session.findUniqueOrThrow({ where: { id: sessionId } });
@@ -618,7 +665,9 @@ test('§4.6: a session\'s Merge lands through its pull request', { skip: !URL_, 
   assert.equal(receipt.result, 'MERGED');
   assert.equal(receipt.targetShaAfter, pull.mergeCommit!.oid);
   assert.equal(receipt.sourceSha, SHA('session-source'));
-  assert.equal((await h.prisma.githubPullRequest.findUniqueOrThrow({ where: { id: pr.id } })).state, 'MERGED');
+  assert.equal((await h.prisma.githubPullRequest.findUniqueOrThrow({ where: { id: prId } })).state, 'MERGED');
+  // A merge PUT carried the head Orbit pushed last.
+  assert.deepEqual(h.github.calls.find((call) => call.method === 'PUT')?.body, { sha: head2, merge_method: 'rebase' });
 });
 
 test('§4.7: the webhook is checked, de-duplicated and read again; the re-read keeps its cadence', { skip: !URL_, concurrency: 1, timeout: 300_000 }, async (t) => {
