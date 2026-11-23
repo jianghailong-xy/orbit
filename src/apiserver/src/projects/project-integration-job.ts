@@ -2,7 +2,7 @@ import { Prisma, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { INTEGRATION_CLAIM_STALE_MS } from '@orbit/shared';
 import { RELEASE_WORK_SELECT, releaseFinishedTheWork } from '../common/session-release';
-import { LANDING_FIX_TURN_KEY_PREFIX } from '../sessions/watch-turn-key';
+import { LANDING_FIX_TURN_KEY_PREFIX } from '../sessions/landing-fix-turn-key';
 import { notifyRunnerWakeOnCommit } from '../realtime/runner-wake';
 import { LANDING_SESSION_CANDIDATES, LANDING_WORK_SESSION_SELECT, landingWorkSession } from './landing-source-branch';
 import {

@@ -1,4 +1,5 @@
 import { RUN_QUESTION_PREFIX } from './run-question';
+import { LANDING_FIX_TURN_KEY_PREFIX } from './landing-fix-turn-key';
 import { BadRequestException } from '@nestjs/common';
 import { TASK_ACCEPTANCE_CLIENT_TURN_PREFIX } from '../tasks/executable-acceptance-round';
 
@@ -90,14 +91,8 @@ export const EVIDENCE_SEND_BACK_TURN_KEY_PREFIX = 'evidence-send-back:v1:';
  */
 export const OPEN_ITEM_TURN_KEY_PREFIX = 'open-item:v1:';
 
-/**
- * The namespace a failed landing is handed to its task's own work session in
- * (projects/landing-fix-turn.ts `landingFixTurnId`, docs/project-integration-line-contract.md §12.5 W6):
- * `landing-fix:v1:<jobId>`. The one platform prefix that may revive an ended session — one that ended
- * because its task was done (sessions/platform-turn-revival.ts). Spelled here for the reason the reply
- * prefix is.
- */
-export const LANDING_FIX_TURN_KEY_PREFIX = 'landing-fix:v1:';
+/** The landing-fix namespace (§12.5 W6), spelled in `landing-fix-turn-key.ts` and reserved here with the rest. */
+export { LANDING_FIX_TURN_KEY_PREFIX };
 
 /** Every prefix a caller's own `clientTurnId` may not start with. */
 const RESERVED_TURN_KEY_PREFIXES = [

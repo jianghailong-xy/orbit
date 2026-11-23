@@ -40,7 +40,7 @@ import {
   type OpenItemDoorMessageNames,
 } from './open-item-doors';
 import type { PrismaService } from '../prisma/prisma.service';
-import { LANDING_FIX_TURN_KEY_PREFIX } from '../sessions/watch-turn-key';
+import { LANDING_FIX_TURN_KEY_PREFIX } from '../sessions/landing-fix-turn-key';
 import { runLastWords } from './run-last-words';
 
 /** Nest token for the post-commit delivery edge, kept structural to avoid a service import cycle. */
