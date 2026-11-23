@@ -33,6 +33,23 @@ makes it one press and takes the code out by itself.
 On the Orbit Cloud runner, when its browser is on (`GET /runners/:id/browser` answers), the sign-in card gains one
 action beside **Open the sign-in page** once the link is there:
 
+**Starting (revised 2026-11-23, owner: option A).** An engine row's **Sign in**, and an account's, starts the sign-in as
+its panel opens, as **+ Account** does, and opens no tab: the card says "Starting sign-in on the runner…" until the link
+is there, then offers **Open the sign-in page** and, here, **Use the runner's browser** side by side, so nothing has
+opened before the owner chooses. Before, the row only opened the panel, its **Sign in to …** started the sign-in, and for
+Claude Code and Antigravity that press parked a tab of the owner's own browser at once, ahead of the choice. Kimi still
+asks which site first (the site's press starts it). A panel opened again while its own sign-in waits on the link takes
+that sign-in up rather than starting another. On every runner, not only Orbit Cloud.
+
+**The card's layout (revised 2026-11-23, owner: option A of the board in the session's uploads).** Where the runner's
+browser is offered, the card asks "Where do you want to sign in?" and puts both ways in one row of one size: **In this
+browser** (the main button, the page's link) and **In the runner's browser**. The line under the row says what the
+runner's way means ("The runner's browser keeps you signed in there; agents on this runner can use it.") and ends in
+**Copy sign-in link**; a divider keeps that choice apart from "After you approve, paste the code the page shows:". Once
+the runner's browser is chosen, what it is doing leads, with **Show the browser**, **Paste a code instead** (Claude Code)
+and **Open it in this browser instead** as links. A device flow keeps its one-time code and its own button, with **In the
+runner's browser** beside it. A runner without the browser shows the card as before.
+
 - **Use the runner's browser** — a secondary button, with the line "You stay signed in to this site on this runner.
   Agents on this runner can use it." (the Browser section's saved-logins wording).
 - Pressing it opens the browser tab in control (`openRunnerBrowserTab(runnerId, true)`, on the click so no popup
