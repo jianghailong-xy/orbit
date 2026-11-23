@@ -66,6 +66,24 @@ export function qualityLines(quality: ModelQuality): QualityLines {
   };
 }
 
+/**
+ * The Quality cell of Settings → Model routing on one line: the figures there are ("Rated 4.1 (18) · 47% first pass ·
+ * 91 tasks"), "Not enough data" with neither, "No runs yet" with no run at all. `detail` is its tooltip: both lines in
+ * full, and who rated.
+ */
+export function qualitySummary(quality: ModelQuality): { text: string; muted: boolean; detail: string | null } {
+  const lines = qualityLines(quality);
+  if (lines.empty) return { text: 'No runs yet', muted: true, detail: null };
+  const { subagent, tasks } = quality;
+  const parts = [
+    ...(subagent.averageRating !== null ? [`Rated ${subagent.averageRating.toFixed(1)} (${subagent.ratedCount})`] : []),
+    ...(tasks.firstPassRate !== null ? [`${Math.round(tasks.firstPassRate * 100)}% first pass · ${tasks.completedTaskCount} tasks`] : []),
+  ];
+  const detail = [`SubAgents: ${lines.subagents.text}`, `Tasks: ${lines.tasks.text}`, ...(lines.subagents.raters ? [lines.subagents.raters] : [])]
+    .join('\n');
+  return parts.length > 0 ? { text: parts.join(' · '), muted: false, detail } : { text: 'Not enough data', muted: true, detail };
+}
+
 /** What the Quality column means, under the table. */
 export const QUALITY_FOOT = 'Quality is shown, not used for routing. SubAgents: the parent session\'s 1–5 rating of each ' +
   'result, last 90 days, recent ratings weighed more. Tasks: share of done tasks that passed on their first run; runs ' +
