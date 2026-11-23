@@ -29,7 +29,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 import {
   type AccountHealthFailure,
   type AccountHealthSubject,
-  type RunFailureKind,
+  type HealthFailureKind,
   CAPACITY_COOLDOWN_MS,
   subjectKey,
   TRIAL_CLAIM_STALE_MS,
@@ -73,7 +73,7 @@ test('account health: the trial claim race, the ladders, resets and cool-downs o
     });
     return { ownerId, subject: { type: 'runner', runnerId, engine: 'cursor', account: 'default' } };
   }
-  const failure = (kind: RunFailureKind | null, extra: Partial<AccountHealthFailure> = {}): AccountHealthFailure => ({
+  const failure = (kind: HealthFailureKind | null, extra: Partial<AccountHealthFailure> = {}): AccountHealthFailure => ({
     sessionId: randomUUID(), kind, admission: true, runnerOnline: true, ...extra,
   });
   const rows = (ownerId: string) => db.accountHealth.findMany({ where: { ownerId }, orderBy: { createdAt: 'asc' } });
@@ -81,7 +81,7 @@ test('account health: the trial claim race, the ladders, resets and cool-downs o
     db.accountHealth.findFirst({ where: { ownerId, scopeModel, clearedAt: null } });
 
   /** A refused trial: claimed by its dispatch at the end of the block, then refused with `kind`. */
-  async function refusedTrial(ownerId: string, subject: AccountHealthSubject, kind: RunFailureKind | null): Promise<Date> {
+  async function refusedTrial(ownerId: string, subject: AccountHealthSubject, kind: HealthFailureKind | null): Promise<Date> {
     const row = (await liveRow(ownerId))!;
     const at = row.blockedUntil!;
     const trial = failure(kind);

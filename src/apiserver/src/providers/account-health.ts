@@ -1,4 +1,4 @@
-import { RunFailureKind as SharedRunFailureKind, type RunFailureScope as SharedRunFailureScope } from '@orbit/shared';
+import type { RunFailureKind, RunFailureScope } from '@orbit/shared';
 import { QUOTA_BLIND_RETRY_BACKOFF_MS } from '../tasks/task-retry-policy';
 
 /**
@@ -8,13 +8,10 @@ import { QUOTA_BLIND_RETRY_BACKOFF_MS } from '../tasks/task-retry-policy';
 
 /**
  * The failure kind of a released run (§4), as `runFailureKind` of @orbit/shared answers it: the runner's structured
- * kind, else what the legacy markers say of the error text; null when it is not classified. The shared enum's
- * values, so a stored kind and an enum member are both one.
+ * kind (the shared RunFailureKind), else what the legacy markers say of the error text; null when it is not
+ * classified. The enum's values, so a stored kind and an enum member are both one.
  */
-export type RunFailureKind = `${SharedRunFailureKind}`;
-
-/** What a failure is about (§4): the whole account (the default), one model on it, this runner, or the request. */
-export type RunFailureScope = SharedRunFailureScope;
+export type HealthFailureKind = `${RunFailureKind}`;
 
 export type AccountHealthState = 'SUSPECT' | 'BLOCKED' | 'COOLDOWN';
 
@@ -156,7 +153,7 @@ export function trialHeld(row: Pick<AccountHealthRow, 'trialSessionId' | 'trialC
 export interface AccountHealthFailure {
   sessionId: string;
   /** runFailureKind's output. */
-  kind: RunFailureKind | null;
+  kind: HealthFailureKind | null;
   /** The adapter's scope; absent is the whole account. */
   scope?: RunFailureScope | null;
   /** The model the run asked for: the row a CAPACITY or one-model ACCESS_DENIED writes. */

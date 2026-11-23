@@ -9,7 +9,7 @@ import {
   CLASSIFIED_LADDER_MS,
   failureScopeModel,
   healthView,
-  type RunFailureKind,
+  type HealthFailureKind,
   stepOnFailure,
   subjectKey,
   SUSPECT_WINDOW_MS,
@@ -44,7 +44,7 @@ const LADDER_TABLE: ReadonlyArray<readonly [number, number, number]> = [
 let sessions = 0;
 const session = () => `00000000-0000-4000-8000-${String(++sessions).padStart(12, '0')}`;
 
-function failure(kind: RunFailureKind | null, extra: Partial<AccountHealthFailure> = {}): AccountHealthFailure {
+function failure(kind: HealthFailureKind | null, extra: Partial<AccountHealthFailure> = {}): AccountHealthFailure {
   return { sessionId: session(), kind, admission: true, runnerOnline: true, ...extra };
 }
 

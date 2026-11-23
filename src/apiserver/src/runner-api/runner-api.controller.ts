@@ -8588,7 +8588,7 @@ export class RunnerApiController {
     if (finalized.applied && !finalized.steer && 'failSession' in finalized) {
       await this.accountHealth?.afterRunEnd(sessionId, {
         failed: finalized.failSession === true,
-        turnCompleted: !finalized.failSession && dto.status === RunStatus.SUCCEEDED,
+        turnCompleted: !finalized.failSession,
         until: dto.failure?.until ?? null,
       });
     }
@@ -10552,6 +10552,8 @@ export class RunnerApiController {
       return {
         finalized: true,
         effectiveStatus,
+        // Whether the release was a failure, for account health after the commit (§6.3).
+        failedRun,
         keepCheckout,
         retryAt,
         taskReclaimed,
@@ -10585,7 +10587,7 @@ export class RunnerApiController {
     // What the run's end says of the account it spent (§6.3), now that its release and its failure kind are committed:
     // awaited, so the next dispatch reads it, and never in the way: it logs its own failure.
     await this.accountHealth?.afterRunEnd(sessionId, {
-      failed: outcome.effectiveStatus === RunStatus.FAILED,
+      failed: 'failedRun' in outcome && outcome.failedRun === true,
       until: dto.failure?.until ?? null,
     });
     // The one-shot wakeups this finalize dropped with its FAILED session, no retry armed: their owner is

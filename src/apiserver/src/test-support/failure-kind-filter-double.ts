@@ -2,12 +2,14 @@
  * What a session row answers to the failure-kind filters of common/run-failure-kind-filter.ts, evaluated the way
  * Postgres would, NULLs included: a test double of `session.groupBy` reads the clause its caller asked rather than
  * assuming which query it is. Only the operators those filters use are understood (OR, AND, NOT, `failureKind` null /
- * in / notIn, `error` null / insensitive contains); anything else is refused, so a filter that grows a new shape fails
+ * in / notIn, `error` null / insensitive contains, `accountHealthEffect` null / not null); anything else is refused, so a filter that grows a new shape fails
  * its tests instead of being read as true.
  */
 export interface FailureRow {
   error: string | null;
   failureKind?: string | null;
+  /** What account health did with the run (session.account_health_effect); absent is none. */
+  accountHealthEffect?: string | null;
 }
 
 type Truth = boolean | null;
@@ -36,6 +38,11 @@ function evaluate(where: Record<string, unknown>, row: FailureRow): Truth {
         const marker = (value as { contains: string }).contains.toLowerCase();
         parts.push(row.error === null ? null : row.error.toLowerCase().includes(marker));
       } else throw new Error(`failure-kind double: unknown error filter ${JSON.stringify(value)}`);
+    } else if (key === 'accountHealthEffect') {
+      const effect = row.accountHealthEffect ?? null;
+      if (value === null) parts.push(effect === null);
+      else if (JSON.stringify(value) === JSON.stringify({ not: null })) parts.push(effect !== null);
+      else throw new Error(`failure-kind double: unknown accountHealthEffect filter ${JSON.stringify(value)}`);
     } else throw new Error(`failure-kind double: unknown key ${key}`);
   }
   return and(parts);

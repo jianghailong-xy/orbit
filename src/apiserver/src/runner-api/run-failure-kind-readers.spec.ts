@@ -5,7 +5,7 @@ import { RunFailureKind, USAGE_LIMIT_ERROR_MARKERS } from '@orbit/shared';
 import { failureKindIs, failureKindIsNot, failureKindIsSql } from '../common/run-failure-kind-filter';
 import { CLEARED_RUN_FAILURE, runFailureColumns } from './run-failure-columns';
 import { movableFailure } from './subagent-run';
-import { runLimitFailures } from '../tasks/task-route-decision';
+import { runNotCounted } from '../common/run-not-counted';
 
 /**
  * The server's readers of a failure's kind (docs/routing-account-health-design.md §5.4): the columns a run's end
@@ -85,24 +85,22 @@ test('failureKindIsSql reads the column first and the markers only when it is nu
 /**
  * The route history reads a usage-limit marker anywhere in a failed run's error, as its quotaFailure always did
  * (review of revision 1, point 2): a run whose marker sits past character 40 stays not counted for escalation.
+ * Read through runNotCounted, the one definition escalation and the failure budget share (§7.4).
  */
-test('route history: a usage-limit marker past character 40 still marks the run as a quota failure', () => {
+test('route history: a usage-limit marker past character 40 still marks the run as not counted', () => {
   const late = `Nothing answered this message across 3 deliveries of it to the engine. It was left for a retry.\n\n${CODEX_LIMIT}`;
+  const run = (failureKind: string | null, error: string | null, accountHealthEffect: string | null = null) =>
+    runNotCounted({ failureKind, error, accountHealthEffect });
   assert.ok(late.toLowerCase().indexOf('hit your usage limit') > 40, 'the fixture puts the marker past the opening');
-  assert.deepEqual(runLimitFailures({ failureKind: null, error: late }, true), { quotaFailure: true, capacityFailure: false });
-  assert.deepEqual(
-    runLimitFailures({ failureKind: null, error: 'Turn failed: Selected model is at capacity.' }, true),
-    { quotaFailure: false, capacityFailure: true },
-  );
-  // Both markers in one text answer both, as the two independent substring tests did.
-  assert.deepEqual(
-    runLimitFailures({ failureKind: null, error: `${CODEX_LIMIT} The model is at capacity too.` }, true),
-    { quotaFailure: true, capacityFailure: true },
-  );
-  // The runner's kind decides over the words; a run that did not fail is neither.
-  assert.deepEqual(runLimitFailures({ failureKind: 'ACCOUNT_ACTION_REQUIRED', error: late }, true),
-    { quotaFailure: false, capacityFailure: false });
-  assert.deepEqual(runLimitFailures({ failureKind: 'USAGE_LIMIT', error: 'Kimi Code failed this turn' }, true),
-    { quotaFailure: true, capacityFailure: false });
-  assert.deepEqual(runLimitFailures({ failureKind: null, error: CODEX_LIMIT }, false), { quotaFailure: false, capacityFailure: false });
+  assert.equal(run(null, late), 'usage-limit');
+  assert.equal(run(null, 'Turn failed: Selected model is at capacity.'), 'capacity');
+  // Both markers in one text: the usage limit, which this history always checked first.
+  assert.equal(run(null, `${CODEX_LIMIT} The model is at capacity too.`), 'usage-limit');
+  // The runner's kind decides over the words.
+  assert.equal(run('ACCOUNT_ACTION_REQUIRED', late), 'account');
+  assert.equal(run('USAGE_LIMIT', 'Kimi Code failed this turn'), 'usage-limit');
+  assert.equal(run('REQUEST_REFUSED', CODEX_LIMIT), null);
+  // An ordinary failure counts, unless account health acted on it.
+  assert.equal(run(null, 'Error: something broke'), null);
+  assert.equal(run(null, 'Error: something broke', 'BLOCKED'), 'admission');
 });
