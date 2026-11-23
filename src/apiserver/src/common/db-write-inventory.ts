@@ -1786,6 +1786,18 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: "Typed 503 from the global boundary, after `create` has committed the session — create's own statements are not atomic with this one.",
   },
   {
+    // Run now (sessions/run-now.ts, docs/mocks/queued-run-now): the pass for one queued message over the runner's limit.
+    at: 'sessions/sessions.service.ts#runNow',
+    shape: 'TX_RETRIED',
+    locks: 'session FOR UPDATE by id and owner (rank 30); plain reads of its runner, its conversation turns and the counts the queued gate reads (queued-gate.ts); then, for a session the claim has not seeded, the opening conversation_turn insert and the attachment rows linked to it (ensurePromptSeeded, rank 60); then one UPDATE of that same session row writing over_capacity_turn_id, conditional on its still being PENDING and not cancelled.',
+    identity: "The session and its oldest queued message: a second press finds the pass already standing and writes nothing; the opening turn's fixed `initial-<session id>` clientTurnId is the one every seeder uses.",
+    isolation: '',
+    attempts: 4,
+    replay: 'A victim wrote neither the seed nor the pass, so a re-run re-reads the gate under the Session lock and decides again from the rows as they stand: a claim that took the session meanwhile leaves it not PENDING, and the re-run refuses.',
+    effects: 'None inside. After commit `runNow` publishes session.updated and wakes the claim queue on its runner.',
+    answer: 'Typed 503 from the global boundary; nothing was written.',
+  },
+  {
     at: 'sessions/sessions.service.ts#createTurn',
     shape: 'TX_RETRIED',
     locks: 'session FOR UPDATE (rank 30) — deliberately blocking, because this is where a user turn serializes against the claim and against turnComplete — then the optional orchestration task_attempt charge, the background_job_wake a coalescing wake files, the session_scheduled_wakeup a due wakeup settles — for a loop\'s tick, its session_wakeup_loop row FOR UPDATE first, then the tick settled and the next one inserted (settleLoopTick) — and conversation_turn/startup receipt children (rank 60); for a Watch wake, the delivery row its acknowledgement writes through `participateSendTransaction`, which no transaction holding a delivery row waits on a session for. A message another session sent also reads that session\'s id and title for the row\'s `lastUserFrom` (session-message.ts#readSessionMessageFrom), written in the one session UPDATE: a plain read, no lock — the FOR KEY SHARE a foreign key would take on the sender\'s row is what 0349 and 0485 avoid. A message under a key of the platform\'s own reads the card of the coordinator notification it is (orbit-message.ts#readOrbitMessageFrom: the project_coordinator_wake the hook above bound to it, or the criteria decision it answers) for the row\'s `lastUserFromOrbit` (0491), in the same UPDATE: plain reads, no lock.',
@@ -3298,7 +3310,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'runner-api/scheduled-wakeup.ts#settleLoopTick', under: "sessions.createTurn's coalesce hook and sessions.resume's onTurnWritten, for ScheduledWakeupWorker's ticks — under the rank-30 Session lock either already holds FOR UPDATE — and ScheduledWakeupWorker.missTick and endLoopAtTick, which hold nothing else. The session FOR KEY SHARE first (rank 30: a no-op under createTurn or the revive, and for the worker's own drop the mode and row its tick insert takes anyway, moved ahead of the loop, lock-order.ts I4), then the loop row FOR UPDATE (rank 60), then one compare-and-set of its tick PENDING to DELIVERED or DROPPED, one update of the loop's counters (and its end), and the insert of the next tick: a lost compare-and-set or an ended loop throws, which rolls back everything its caller wrote with it, and a retried caller re-runs the same reads" },
   { at: 'runners/codex-rate-limit-reset.repository.ts#insertIfAbsent', under: 'codexRateLimitReset.create — one INSERT ... ON CONFLICT DO NOTHING of the operation that transaction just decided to create. Losing to a concurrent confirmation writes nothing and aborts nothing, and the caller reads what won in the same transaction.' },
   { at: 'sessions/merge-receipt.service.ts#fromRunnerMergeResult', under: 'runnerApi.mergeResult' },
-  { at: 'sessions/sessions.service.ts#ensurePromptSeeded', under: 'sessions.resume, .seedOpeningTurn, .createInNewWorkspace, queue.buildSession' },
+  { at: 'sessions/sessions.service.ts#ensurePromptSeeded', under: 'sessions.resume, .seedOpeningTurn, .createInNewWorkspace, .runNow, queue.buildSession' },
   { at: 'sessions/sessions.service.ts#insertTurnLocked', under: 'sessions.insertTurn, .createTurn, .resume, .createInNewWorkspace, .writeChat' },
   { at: 'sessions/sessions.service.ts#insertHeldTurnLocked', under: "sessions.createTurn's transaction, under its Session lock: the attachments' links (rank 60), the HELD conversation_turn INSERT (insertTurnLocked) and the session row's preview columns, already held" },
   { at: 'sessions/sessions.service.ts#linkHeldOpeningAttachments', under: "sessions.createInNewWorkspace's transaction, after the session INSERT and its held opening; and sessions.create on its own client after adopting the uploads — one UPDATE of the session's turn-less attachment rows (rank 60), linking them to the held opening as queue.buildSession's seed would" },

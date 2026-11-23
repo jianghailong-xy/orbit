@@ -1623,6 +1623,9 @@ export interface RunnerHeartbeatResponse {
    *  adopts this live on each heartbeat, so a UI/API change to it takes effect within
    *  one heartbeat without restarting the runner. */
   maxConcurrent: number;
+  /** Extra sessions on demand (the editable DB value): how many turns past maxConcurrent an overflow claim
+   *  (`ClaimedSession.overCapacity`) may run at once. Adopted live like maxConcurrent. Absent on older control planes. */
+  burstConcurrent?: number;
   /** Branch merges the user requested from the UI for sessions this runner ran. The
    *  runner merges each session's branch into main on its local repo and reports the
    *  outcome back via POST /runner/sessions/:id/merge-result. Absent on older control
@@ -1839,6 +1842,15 @@ export const SUBAGENT_REMOTE_IN_PLACE_V1 = 'subagent-remote-in-place/v1';
  *  BG_JOB_STOPPED_BY_OWNER. The stop is refused for a session whose runner does not declare it, and that runner's
  *  jobs are listed as not stoppable. runner-go declares the same string (bgOwnerStopCapabilityV1). */
 export const BG_OWNER_STOP_V1 = 'bg-owner-stop/v1';
+
+/** Declared by a runner that admits a turn the server claimed over its limit (`ClaimedSession.overCapacity`, Run now,
+ *  docs/mocks/queued-run-now): past maxConcurrent up to maxConcurrent + burstConcurrent, evicting no running turn for
+ *  it. No overflow claim is made for a runner without it, and Run now on its sessions is refused as too old.
+ *  runner-go declares the same string. */
+export const OVER_CAPACITY_V1 = 'over-capacity/v1';
+
+/** The most Extra sessions on demand (Runner.burstConcurrent) a runner may be given; its default is 2. */
+export const RUNNER_BURST_CONCURRENT_MAX = 32;
 
 /** The reason a bg_run job killed by its session's owner from the app carries, on its terminal background_task, its
  *  wake and its row of GET /sessions/:id/background. runner-go names the kill the same (bgStoppedByOwnerReason). */
@@ -3471,6 +3483,13 @@ export interface ClaimedSession {
   codelessCheckout?: boolean;
   /** The branch a `codelessCheckout` run makes at finalize if it changed anything. */
   codelessBranch?: string;
+  /** Run now (docs/mocks/queued-run-now): this claim takes the session past the runner's maxConcurrent, as the turn
+   *  its owner let start over the limit (`overCapacityTurnId`). Sent only to a runner that declares OVER_CAPACITY_V1,
+   *  which admits it up to maxConcurrent + burstConcurrent and evicts no running turn for it. When that turn ends the
+   *  slot is returned: the session's next message is claimed as any other. Absent on every ordinary claim. */
+  overCapacity?: boolean;
+  /** The conversation turn the overflow covers, beside `overCapacity`. */
+  overCapacityTurnId?: string;
   /** Agent opt-in: if workDir isn't a git repo, the runner `git init`s it (default
    *  .gitignore + baseline commit) so the session can still be worktree-isolated. */
   autoInitGit?: boolean;

@@ -874,6 +874,9 @@ model Runner {
   // One knob per machine, but evaluated against each workspace's own measured filesystem —
   // "keep this much headroom wherever you are writing" is the same policy on every mount.
   minFreeDiskMb     Int?         @default(10240) @map("min_free_disk_mb")
+  // Extra sessions on demand (migration 1465): how many turns past maxConcurrent its owner's Run now may start
+  // at once. 0 turns Run now off on this machine. Only an overflow claim reads it.
+  burstConcurrent   Int          @default(2) @map("burst_concurrent")
   // Unused: the background job limits these held were withdrawn on 2026-11-20. They stay because
   // migration 1260 already added them to production's database; nothing reads or writes them.
   bgJobCpus         Float?       @map("bg_job_cpus")
@@ -1983,6 +1986,13 @@ model Session {
   // top of, the runner's own max_concurrent. null = not part of any batch (ungated).
   batchId              String?   @map("batch_id") @db.Uuid
   batchMaxConcurrent   Int?      @map("batch_max_concurrent")
+  // Run now (migration 1465, docs/mocks/queued-run-now): the one queued turn its owner let start over the runner's
+  // limit. While PENDING, the claim may take the session past the runner, run and batch caps, up to the runner's
+  // max_concurrent + burst_concurrent; an ordinary claim clears it, and so does the end of that turn, after which the
+  // session's next message queues normally. Kept through an overflow claim, so a RUNNING session with it set is
+  // running over the limit. Deliberately not a relation: it names a conversation_turn row of this session, and a
+  // stale id (a turn withdrawn since) names nothing PENDING, which the claim reads as no pass.
+  overCapacityTurnId   String?   @map("over_capacity_turn_id") @db.Uuid
   // Runtime thread/session id, always owned by the runtime named in `provider`. Claude's is
   // pre-generated at creation (--session-id on first spawn, --resume on reclaim/respawn);
   // Codex/Kimi/OpenCode/Antigravity mint their own after process initialization, so it stays

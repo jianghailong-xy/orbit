@@ -3344,7 +3344,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // table, column, constraint or trigger, names or replaces none of the preserved triggers or functions, and runs
       // no INSERT, UPDATE or DELETE at apply time.
       // Written as 1434 on the project line, it was renumbered after main took 1434.
-      '1464_open_list_scope_keys'],
+      '1464_open_list_scope_keys',
+      // 1465 adds runner.burst_concurrent (NOT NULL DEFAULT 2, a check >= 0), the nullable session.over_capacity_turn_id
+      // and a partial index on session; no row is written, and no preserved relation, trigger, function or DONE fence
+      // changes. Written as 1430 on its task branch, it was renumbered after main took 1430 to 1464.
+      '1465_session_run_now_over_capacity'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
