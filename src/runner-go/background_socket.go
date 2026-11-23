@@ -467,7 +467,7 @@ func startSessionBgJobService(ctx context.Context, t *Transport, bg *bgTailer, j
 		token:              token,
 		execDir:            execDir,
 		scratchDir:         scratchDir,
-		extraDirs:          []string{uploadsDir(job.SessionID)},
+		extraDirs:          append([]string{uploadsDir(job.SessionID)}, driveGrantRoots()...),
 		env:                job.Agent.Env,
 		sessionID:          job.SessionID,
 		mode:               liveMode.current,

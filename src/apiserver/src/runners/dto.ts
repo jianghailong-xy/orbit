@@ -6,11 +6,12 @@ import {
   IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
   Min,
   MinLength,
 } from 'class-validator';
-import { KIMI_REGIONS, type InstallEngine, type KimiRegion, type LoginEngine, type RelayMode } from '@orbit/shared';
+import { KIMI_REGIONS, RUNNER_BURST_CONCURRENT_MAX, type InstallEngine, type KimiRegion, type LoginEngine, type RelayMode } from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
 
 export class CreateEnrollmentTokenDto {
@@ -24,6 +25,9 @@ export class UpdateRunnerDto {
   // Max sessions the runner runs at once; the claim queue gates on this. Floor of
   // 1 (0 would stall the runner); no ceiling — a runner defaults to its CPU core count.
   @IsOptional() @IsInt() @Min(1) maxConcurrent?: number;
+  // Extra sessions on demand: how many turns past maxConcurrent the owner's Run now may start on this runner at
+  // once (docs/mocks/queued-run-now decision C). 0 turns Run now off; the ceiling keeps a typo from unbounding it.
+  @IsOptional() @IsInt() @Min(0) @Max(RUNNER_BURST_CONCURRENT_MAX) burstConcurrent?: number;
   // Free-space floor in MB: below it, the auto-run sweep dispatches nothing onto this machine.
   // null clears the floor (no gate), and 0 is spelled that way rather than accepted as a
   // disabling value, so "gate at zero bytes" can never be typed by accident. No ceiling — the
