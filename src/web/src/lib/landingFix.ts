@@ -192,6 +192,8 @@ export interface LandingFixStanding {
   /** The round it is in (FIXING) or was in when it came back (RETURNED). */
   round: number;
   returnReason: OpenItemWorkSessionReturnReason | null;
+  /** The session's last words frozen at the hand-back (`data.lastMessage`); null when it said none or it is FIXING. */
+  lastMessage: string | null;
 }
 
 function sessionOf(entry: IntegrationTimelineEntry): string | null {
@@ -233,6 +235,7 @@ export function landingFixStanding(
     round,
     returnReason: typeof reason === 'string' && reason in LANDING_FIX_RETURNED_BECAUSE
       ? reason as OpenItemWorkSessionReturnReason : null,
+    lastMessage: last.entry.kind === 'RETURNED_TO_COORDINATOR' ? landingFixLastWords(last.entry.data?.lastMessage as string | null | undefined) : null,
   };
 }
 
