@@ -336,7 +336,7 @@ test('S2 the merge repair door hands the next step to the same repair session on
     const cases: Array<[string, Partial<Prisma.SessionUncheckedCreateInput> | null]> = [
       ['none', null],
       // Its run failed; it could still be resumed, but a failed repair is not continued.
-      ['failed', ended({ status: RunStatus.FAILED, error: 'the engine exited' })],
+      ['failed', ended({ status: RunStatus.FAILED, error: 'the engine exited', lastTurnOutcome: 'FAILED' })],
       // In Trash: ended when it was moved there, and resumable once restored.
       ['deleted', ended({ status: RunStatus.CANCELLED, endReason: 'deleted', deletedAt: new Date(Date.now() - 5 * 60_000) })],
     ];

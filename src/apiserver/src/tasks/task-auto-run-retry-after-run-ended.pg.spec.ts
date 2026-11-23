@@ -156,11 +156,14 @@ const workRuns = (db: PrismaClient, taskId: string) =>
     select: { id: true, status: true, dispatchOrigin: true, createdAt: true },
   });
 
-/** The run ends FAILED as the runner's /finalize leaves it: `error` is whatever the runner sent. */
+/**
+ * The run ends FAILED as the runner's /finalize leaves it: `error` is whatever the runner sent, and the failure is on
+ * the turn it cut off, copied to lastTurnOutcome (removal step R2).
+ */
 async function failRun(db: PrismaClient, sessionId: string, error: string | null): Promise<void> {
   await db.session.update({
     where: { id: sessionId },
-    data: { status: RunStatus.FAILED, error, finishedAt: new Date() },
+    data: { status: RunStatus.FAILED, error, finishedAt: new Date(), lastTurnOutcome: 'FAILED' },
   });
 }
 

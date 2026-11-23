@@ -67,6 +67,8 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
       workspaceId: subject.ownerId === owner ? agent.id : otherAgent.id, startsTaskWork: true,
       provider: 'claude', model: OPUS, effort: 'low', status, createdAt: at(seconds), ...data,
       finishedAt: terminal ? data.finishedAt ?? at(seconds + (duration ?? 0)) : null,
+      // A failure release carries FAILED on its turn (removal step R2), which is what reads it as one since R7.
+      ...(status === 'FAILED' && data.lastTurnOutcome === undefined ? { lastTurnOutcome: 'FAILED' } : {}),
     } });
   }
   async function route(subject: Task, sessionId: string | null, seconds: number, data: Partial<Prisma.TaskRouteDecisionUncheckedCreateInput> = {}) {
