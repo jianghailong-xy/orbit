@@ -16,6 +16,7 @@ class WorktreeBarLogicTest {
         assertEquals(WorktreeBarLogic.Mode.HIDDEN, L.mode(null, "orbit/x-abcdef", 3))
         assertEquals(WorktreeBarLogic.Mode.NOT_ISOLATED, L.mode("shared-nogit", null, 0))
         assertEquals(WorktreeBarLogic.Mode.HIDDEN, L.mode("worktree", "orbit/x-abcdef", 0))
+        assertEquals(WorktreeBarLogic.Mode.WORKTREE, L.mode("worktree", "orbit/x-abcdef", 0, hasCommitWork = true))
         assertEquals("a failed merge keeps the bar even without changes", WorktreeBarLogic.Mode.WORKTREE, L.mode("worktree", "orbit/x-abcdef", 0, mergeStatus = "error"))
         assertEquals(WorktreeBarLogic.Mode.WORKTREE, L.mode("worktree", "orbit/x-abcdef", 0, hasMergeRecovery = true))
         assertEquals(WorktreeBarLogic.Mode.HIDDEN, L.mode("worktree", null, 5))

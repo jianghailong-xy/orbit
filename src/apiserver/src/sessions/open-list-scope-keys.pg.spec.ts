@@ -14,7 +14,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 import { readOpenListVersionParts } from './open-list-version';
 
 /**
- * Migration 1434 (docs/list-freshness-scope-hints.md §5.1, §8.2): the Open-list counters of the sources that hang
+ * Migration 1464 (docs/list-freshness-scope-hints.md §5.1, §8.2): the Open-list counters of the sources that hang
  * on one session or one workspace are keyed by that workspace, `<source>@w:<ws>` for a row in an Open list and
  * `<source>@c:<ws>` for one in none, with the root rule and the request rule; every other source keeps its account
  * key, and the version still reads each source as one.
@@ -266,6 +266,10 @@ test('3. the Open and closed edges: completing, a completed row, a scheduled run
   // A write to a completed one, and to a scheduled run's: in no Open list.
   assert.deepEqual(await moved(f, () => db.session.update({ where: { id: f.done }, data: { title: 'done renamed' } })), { [c('session', f.a)]: 1 });
   assert.deepEqual(await moved(f, () => db.session.update({ where: { id: f.scheduled }, data: { title: 'run renamed' } })), { [c('session', f.a)]: 1 });
+  // A schedule's Change… conversation (main's 1447) is in no session list either.
+  const change = await session(db, f, f.a);
+  await db.$executeRaw`UPDATE session SET run_source = 'SCHEDULE_CHANGE' WHERE id = ${change}::uuid`;
+  assert.deepEqual(await moved(f, () => db.session.update({ where: { id: change }, data: { title: 'change renamed' } })), { [c('session', f.a)]: 1 });
   // A turn of a completed session is the closed key too.
   assert.deepEqual(await moved(f, () => db.conversationTurn.create({
     data: { sessionId: f.done, seq: 1, clientTurnId: `olsk-${randomUUID()}`, kind: 'message', content: 'late', status: 'PENDING' },
@@ -347,8 +351,8 @@ test('7. a workspace write of the probe columns alone moves no key; a rename mov
     { [w('workspace', f.a)]: 1, [w('workspace', f.b)]: 1, [w('workspace', f.c)]: 1 });
 });
 
-/** The bump functions as they stood before 1434: 1420's two, 1428's and 0641's, read from their migrations. */
-function functionsBefore1434(): string {
+/** The bump functions as they stood before 1464: 1420's two, 1428's and 0641's, read from their migrations. */
+function functionsBefore1464(): string {
   const dir = path.resolve(__dirname, '../..', 'prisma/migrations');
   const body = (migration: string, name: string) => {
     const sql = readFileSync(path.join(dir, migration, 'migration.sql'), 'utf8');
@@ -364,9 +368,9 @@ function functionsBefore1434(): string {
   ].join('\n');
 }
 
-test('8. rollout: the old aggregation sees every bump, and the per-base-source epochs equal the ones before 1434', { skip }, async (t) => {
-  // The same writes, each in one scope, once on the functions before 1434 (installed in a transaction that is then
-  // rolled back) and once on 1434's: per base source, the counters move alike.
+test('8. rollout: the old aggregation sees every bump, and the per-base-source epochs equal the ones before 1464', { skip }, async (t) => {
+  // The same writes, each in one scope, once on the functions before 1464 (installed in a transaction that is then
+  // rolled back) and once on 1464's: per base source, the counters move alike.
   const script = async (f: Fixture, run: (sql: string, ...args: unknown[]) => Promise<unknown>) => {
     await run(`UPDATE session SET title = 'one' WHERE id = $1::uuid`, f.a1);
     await run(`UPDATE session SET title = 'two' WHERE id = $1::uuid`, f.b1);
@@ -397,7 +401,7 @@ test('8. rollout: the old aggregation sees every bump, and the per-base-source e
   await old.connect();
   t.after(() => old.end());
   await old.query('BEGIN');
-  await old.query(functionsBefore1434());
+  await old.query(functionsBefore1464());
   const oldStart = await epochs(old, before.ownerId);
   await script(before, (sql, ...args) => old.query(sql, args));
   const onOld = delta(oldStart, await epochs(old, before.ownerId));
@@ -417,7 +421,7 @@ test('8. rollout: the old aggregation sees every bump, and the per-base-source e
     if (await sumOf(db, after.ownerId) !== was) bumps += 1;
   });
   const onNew = delta(newStart, await epochs(db, after.ownerId));
-  assert.deepEqual(onNew, onOld, 'the per-base-source epochs moved unlike they did before 1434');
+  assert.deepEqual(onNew, onOld, 'the per-base-source epochs moved unlike they did before 1464');
   assert.deepEqual(onNew, { approval: 1, conversation_turn: 1, session: 4, workspace: 1 });
   // Every write of the script but the two undrawn ones (context_tokens, the probe column) is one bump.
   assert.equal(bumps, 7);

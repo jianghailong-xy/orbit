@@ -473,7 +473,7 @@ async function connection(t: { after: (fn: () => Promise<void>) => void }): Prom
   return client;
 }
 
-/** How many rows the account's `session` counter is spread over (0487), its workspace keys (1434) included. */
+/** How many rows the account's `session` counter is spread over (0487), its workspace keys (1464) included. */
 async function sessionCounterRows(f: Fixture): Promise<number> {
   const [row] = await f.db.$queryRaw<Array<{ n: number }>>`
     SELECT count(*)::int AS n FROM open_list_epoch
@@ -563,7 +563,7 @@ test('two writers taking two counters in opposite orders both commit', { skip },
 });
 
 /**
- * 1434 keys the session and turn counters by workspace. One workspace's key is one counter like the account's was,
+ * 1464 keys the session and turn counters by workspace. One workspace's key is one counter like the account's was,
  * so two writers of it while one holds it must not queue (0487's guarantee, kept by calling the same bump with a
  * new key), and the key's total moves by exactly the statements committed.
  */

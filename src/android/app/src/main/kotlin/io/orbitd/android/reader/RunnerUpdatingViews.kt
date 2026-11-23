@@ -41,6 +41,8 @@ import io.orbitd.android.directory.RunnerUpdatingPart
 import java.time.Instant
 import kotlinx.coroutines.delay
 
+private const val CANCEL = "Cancel"
+
 /** A clock that moves every 30 seconds, for the waits counted in minutes (web `useMinuteNow`). */
 @Composable
 internal fun rememberMinuteNow(): Instant {
@@ -84,11 +86,12 @@ internal fun RunnerUpdatingQueued(gate: QueuedGate, machine: String?, openSessio
  * voice, the reason dotted-underlined because a press opens why — the update's account and, on its own line, how long it has waited.
  * A full runner, run or batch is drawn the same way in [QueuedCapacity]'s words, `Queued · runner full` (web `CapacityHeldTag`,
  * docs/mocks/queued-card-runner-full), with nothing to press in its popover. A new session Keep Free holds reads
- * `Queued · low disk space` ([QueuedDiskLow]), likewise.
+ * `Queued · low disk space` ([QueuedDiskLow]), likewise. With [cancel] — under an accepted message no runner has taken yet
+ * ([cancellableHeldTurn]) — the row ends ` · Cancel`, which takes the message back (web `HeldFoot`).
  */
 @Composable
 internal fun RunnerUpdatingFoot(gate: QueuedGate, machine: String?, modifier: Modifier = Modifier, now: Instant = rememberMinuteNow(),
-    later: (@Composable () -> Unit)? = null) {
+    later: (@Composable () -> Unit)? = null, cancel: (() -> Unit)? = null) {
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val style = MaterialTheme.typography.labelSmall
     var open by remember { mutableStateOf(false) }
@@ -103,6 +106,11 @@ internal fun RunnerUpdatingFoot(gate: QueuedGate, machine: String?, modifier: Mo
                 drawLine(secondary, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx(),
                     pathEffect = PathEffect.dashPathEffect(floatArrayOf(2.dp.toPx(), 2.dp.toPx())))
             }.testTag("runner-updating-foot:reason"), style = style, color = secondary)
+        if (cancel != null) {
+            Text("·", style = style, color = secondary)
+            Text(CANCEL, Modifier.clickable(role = Role.Button, onClick = cancel).testTag("runner-updating-foot:cancel"), style = style,
+                color = MaterialTheme.colorScheme.primary)
+        }
     }
     if (open) Dialog({ open = false }) {
         Surface(shape = RoundedCornerShape(14.dp), tonalElevation = 6.dp, modifier = Modifier.widthIn(max = 320.dp).testTag("runner-updating-pop")) {

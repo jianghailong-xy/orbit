@@ -41,6 +41,9 @@ final class ScheduledModel {
     var inspectedID: String?
     /// The draft panel: the sentence typed and the session it opened.
     var draftPanel: DraftPanel?
+    /// The draft change conversation (§8.2, board 03-change ③): Orbit's opening and a composer, before any
+    /// session exists. The person's first words open the change conversation, and the page gives way to it.
+    var changeDraft: ChangeDraft?
     /// The last refusal a press came back with, said once under what was pressed.
     var errorText: String?
 
@@ -48,6 +51,12 @@ final class ScheduledModel {
         let sessionID: String
         let typed: String
         var id: String { sessionID }
+    }
+
+    /// The schedule the draft change conversation is about.
+    struct ChangeDraft: Equatable, Identifiable {
+        let scheduleID: String
+        var id: String { scheduleID }
     }
 
     /// The viewer's zone: the timeline's days, and the zone a create card naming none is allowed in.
@@ -277,6 +286,30 @@ final class ScheduledModel {
         await load()
         await loadCard(card.id)
         return result
+    }
+
+    /// Change… (§8.2): the schedule's open change conversation, or the opening a new one would start with.
+    /// A failure is said in `errorText`, like every other press.
+    func changeConversation(_ id: String) async -> ScheduleChangeConversationResponse? {
+        errorText = nil
+        do {
+            return try await api.scheduleChangeConversation(id)
+        } catch {
+            errorText = Self.refusal(error)
+            return nil
+        }
+    }
+
+    /// The person's first words: opens the change conversation, or — `created` false, another device opened
+    /// one meanwhile — says them in that one and answers it.
+    func openChangeConversation(_ id: String, text: String) async -> ScheduleChangeAnswer? {
+        errorText = nil
+        do {
+            return try await api.openScheduleChange(id, text: text)
+        } catch {
+            errorText = Self.refusal(error)
+            return nil
+        }
     }
 
     /// The quick-add line: the sentence opens a conversation in the workspace on its right; the draft panel

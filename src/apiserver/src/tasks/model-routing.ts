@@ -188,6 +188,9 @@ export interface ModelRoutingEngineState {
   /** When what that account has left goes to waste (quotaExpiresAt, ms); null when no reset is known. And whether a
    *  window is nearly spent (quotaNearLimit). Only the SubAgent router reads them: soonest expiry first. */
   expiresAt?: number | null;
+  /** How long the window whose reset expiresAt is lasts, in minutes; null when no window says. A weekly or monthly
+   *  quota about to reset is one about to go to waste (SUBAGENT_WASTE_WINDOW_MS); a 5-hour one always resets soon. */
+  expiryWindowMins?: number | null;
   nearLimit?: boolean;
   /** That account's Opus weekly window, in percent; null when none is live. At ENGINE_QUOTA_LIMIT Opus is not routed onto. */
   opusUtilization?: number | null;
@@ -481,6 +484,10 @@ function taskRunPool(
     providers,
     smartSelection: true,
     strictNamedModel: false,
+    // A task run keeps the order it had before SubAgents chose the model first (§4.2): in Balance, the default, the
+    // two steps would change which model a task run gets whenever the Agent's own engine cannot take it, and that
+    // change was not asked for (owner, 2026-11-22).
+    rankTogether: true,
     runnerLabel: "this agent's runner",
   };
 }
@@ -506,7 +513,7 @@ function autoEligible(c: SubagentFallback, environment: ModelRoutingInput['envir
 // ─────────────────────────── SubAgent routing (docs/subagent-design.md §4.1, §4.2) ───────────────────────────
 
 /** What a recorded SubAgent decision was made under: bump when a rule below changes what it picks. */
-export const SUBAGENT_ROUTING_POLICY_VERSION = 'p6-subscriptions-first-1';
+export const SUBAGENT_ROUTING_POLICY_VERSION = 'p7-model-then-account-1';
 
 /** Which row of §4.1 set the tier — or, for the first two, the model; `not-routed`: smart model selection is off. */
 export type SubagentTierSource =
@@ -520,6 +527,9 @@ export interface SubagentModelRow {
   level: ModelRoutingLevel | null;
   /** USD per million output tokens, for a metered key; null when nobody knows it. */
   outputPricePerMTok?: number | null;
+  /** On a provider's own model space: where the row's tier came from, the owner or the catalogue (a preset's tier or
+   *  the model's family). Step 1 of the two-step order prefers the owner's tier (§4.2). */
+  source?: 'catalogue' | 'owner' | null;
 }
 
 /** One engine a provider runs on, as the parent's runner sees it. */
@@ -544,8 +554,10 @@ export interface SubagentPoolMember {
   refused?: boolean;
   /** Its quota could not be read: nothing was reported, or the endpoint will not report on it. */
   unreadable?: boolean;
-  /** When its quota goes to waste (ms), null when unknown; and whether a window is nearly spent. */
+  /** When its quota goes to waste (ms), null when unknown, and how long that window is; and whether a window is
+   *  nearly spent. */
   expiresAt?: number | null;
+  expiryWindowMins?: number | null;
   nearLimit?: boolean;
   /** Its Opus weekly window, in percent; null when none is live. */
   opusUtilization?: number | null;
@@ -564,7 +576,7 @@ export interface SubagentProvider {
   /** A subscription's account on the parent's runner: its fullest window, and whether it is paused. */
   account?: {
     quota?: ModelRoutingEngineState['quota']; paused?: boolean; refused?: boolean; unreadable?: boolean;
-    expiresAt?: number | null; nearLimit?: boolean; opusUtilization?: number | null;
+    expiresAt?: number | null; expiryWindowMins?: number | null; nearLimit?: boolean; opusUtilization?: number | null;
   } | null;
   /** An account pool: a subscription on its members' own credentials, whose headroom is its best member's. */
   pool?: { members: readonly SubagentPoolMember[] };
@@ -606,6 +618,11 @@ export interface SubagentRoutingInput {
   /** The account's smart model selection switch (common/model-routing-switch.ts). False: no tier is routed —
    *  a named model is still used, anything else runs on the parent's. Absent: on. */
   smartSelection?: boolean;
+  /** When the route is made (ms): what tells a quota about to go to waste in Balance (§4.2). Absent: none is. */
+  now?: number;
+  /** Rank every candidate together, by quota, in every mode: the order before the two steps (policy p6), which a
+   *  task run keeps (routeTaskRun, §4.2). Absent: Intelligence and Balance choose the model, then the account. */
+  rankTogether?: boolean;
 }
 
 /** A candidate taken out of the pool, and why. Null model: the whole provider or engine went. */
@@ -722,14 +739,21 @@ interface SubagentCandidate extends SubagentModelRow {
   providerIndex: number;
   engine: string;
   engineIndex: number;
+  /** Its row's place in the engine's tier rows: the table's own order within a tier. */
+  rowIndex: number;
+  /** Where its tier came from, for step 1 (§4.2): the owner's tier, a rule (a family, measured or not, or a preset's
+   *  catalogue), or an engine's built-in table. */
+  origin: SubagentTierOrigin;
   /** The highest tier any row of this model reaches on this provider and engine; the asked tier for an untiered one. */
   ceiling: ModelRoutingLevel;
   /** For a pool: the quota of its account with the most left, which is its headroom. */
   quota?: ModelRoutingEngineState['quota'];
   /** A subscription whose quota was not read: ranked after those whose headroom is known. */
   quotaUnknown: boolean;
-  /** A subscription's: when what it has left goes to waste (null: no reset known), and whether it is nearly spent. */
+  /** A subscription's: when what it has left goes to waste (null: no reset known), how long that window is, and
+   *  whether it is nearly spent. */
   expiresAt: number | null;
+  expiryWindowMins: number | null;
   nearLimit: boolean;
   poolMember?: string;
   /** How it fits the asked tier (§4.2): the tier itself, a higher one, an untiered default model, a lower one. */
@@ -741,6 +765,22 @@ interface SubagentCandidate extends SubagentModelRow {
 /** The order the fits are tried in, best first. */
 const SUBAGENT_FITS = ['exact', 'higher', 'untiered', 'lower'] as const;
 type SubagentFit = (typeof SUBAGENT_FITS)[number];
+
+/** Where a model's tier came from, most preferred first (owner, 2026-11-22): the owner's own tier, a family rule
+ *  (measured or not) or a preset's catalogue, an engine's built-in table. */
+const SUBAGENT_TIER_ORIGINS = ['owner', 'rule', 'table'] as const;
+type SubagentTierOrigin = (typeof SUBAGENT_TIER_ORIGINS)[number];
+
+/** The engines whose catalogue the built-in table tiers (DEFAULT_MODEL_TIER_TABLE); every other one's is tiered by family. */
+const TABLE_ENGINES: readonly string[] = [AgentProvider.CLAUDE, AgentProvider.CODEX, AgentProvider.KIMI];
+
+/**
+ * How soon a weekly or monthly quota's reset has to be for Balance to call what is left of it about to go to waste
+ * (§4.2): a day. Long enough for the runs of that day to spend what is left; short enough that the preferred model
+ * keeps the rest of the week (six days in seven of a weekly window). Only a window longer than this counts: a
+ * 5-hour one always resets within it, and gives its quota back every few hours anyway.
+ */
+export const SUBAGENT_WASTE_WINDOW_MS = 24 * 3_600_000;
 
 /** Quota left on a subscription's account, in percent; a key has no quota to run out of. */
 const headroom = (c: SubagentCandidate): number =>
@@ -762,25 +802,140 @@ function expiryOrder(a: SubagentCandidate, b: SubagentCandidate): number {
   return x === y ? 0 : x < y ? -1 : 1;
 }
 
-function compareCandidates(mode: ModelRoutingOptimizeFor, a: SubagentCandidate, b: SubagentCandidate): number {
-  const fit = SUBAGENT_FITS.indexOf(a.fit) - SUBAGENT_FITS.indexOf(b.fit) || a.distance - b.distance;
-  if (fit) return fit;
+const fitOrder = (a: SubagentCandidate, b: SubagentCandidate): number =>
+  SUBAGENT_FITS.indexOf(a.fit) - SUBAGENT_FITS.indexOf(b.fit) || a.distance - b.distance;
+
+/**
+ * The accounts that can run one model, best first (step 2 of §4.2), and Cost's whole order within a fit: every usable
+ * subscription before any metered key (owner, 2026-11-19: free quota is spent before money); among subscriptions those
+ * whose quota was read, then the quota that goes to waste first, then the most left; among keys the cheapest; then the
+ * owner's provider order.
+ */
+function compareAccounts(a: SubagentCandidate, b: SubagentCandidate): number {
+  const subscription = (c: SubagentCandidate) => (c.provider.billing === 'subscription' ? 0 : 1);
   const unknown = (c: SubagentCandidate) => (c.quotaUnknown ? 1 : 0);
-  let order = 0;
-  if (mode === 'cost' || mode === 'balance') {
-    // Every usable subscription before any metered key, in Balance too (owner, 2026-11-19): free quota is spent
-    // before money. Balance differs from Cost only in the tier it raises a SubAgent without a size to.
-    const subscription = (c: SubagentCandidate) => (c.provider.billing === 'subscription' ? 0 : 1);
-    order = subscription(a) - subscription(b)
-      || (subscription(a) === 0
-        ? unknown(a) - unknown(b) || expiryOrder(a, b) || headroom(b) - headroom(a)
-        : marginalPrice(a) - marginalPrice(b));
-  } else {
-    order = levelIndex(b.ceiling) - levelIndex(a.ceiling) || unknown(a) - unknown(b) || expiryOrder(a, b)
-      || marginalPrice(a) - marginalPrice(b);
-  }
+  const order = subscription(a) - subscription(b)
+    || (subscription(a) === 0
+      ? unknown(a) - unknown(b) || expiryOrder(a, b) || headroom(b) - headroom(a)
+      : marginalPrice(a) - marginalPrice(b));
   // NaN only from Infinity - Infinity: two keys nobody knows the price of, which tie.
   return (Number.isNaN(order) ? 0 : order) || a.providerIndex - b.providerIndex || a.engineIndex - b.engineIndex;
+}
+
+/**
+ * Every candidate ranked together within its fit (the order before the two steps): Cost's order in every mode but
+ * Intelligence, which ranks the model whose tier reaches highest first, then by quota and price. What Cost routes by,
+ * and what a task run keeps in every mode (rankTogether).
+ */
+function compareTogether(mode: ModelRoutingOptimizeFor, a: SubagentCandidate, b: SubagentCandidate): number {
+  const fit = fitOrder(a, b);
+  if (fit) return fit;
+  if (mode !== 'intelligence') return compareAccounts(a, b);
+  const unknown = (c: SubagentCandidate) => (c.quotaUnknown ? 1 : 0);
+  const order = levelIndex(b.ceiling) - levelIndex(a.ceiling) || unknown(a) - unknown(b) || expiryOrder(a, b)
+    || marginalPrice(a) - marginalPrice(b);
+  return (Number.isNaN(order) ? 0 : order) || a.providerIndex - b.providerIndex || a.engineIndex - b.engineIndex;
+}
+
+/** One model in one fit (a tier, or the untiered models), with every account that can run it, best first. */
+interface SubagentModelChoice {
+  model: string;
+  accounts: SubagentCandidate[];
+  /** The highest tier any of its rows reaches. */
+  ceiling: ModelRoutingLevel;
+  /** Step 1's preference (§4.2): its first account's place in the owner's provider order, then where its tier came
+   *  from, then its row's place in the table. */
+  preference: number[];
+}
+
+/** How step 1 settled on the model that runs, for the Why line. */
+type SubagentModelReason =
+  | { kind: 'only' }
+  | { kind: 'preferred' }
+  | { kind: 'strongest' }
+  | { kind: 'near-limit'; preferred: string; keysOnly: boolean }
+  | { kind: 'waste'; preferred: string; account: SubagentCandidate };
+
+const preferenceOf = (c: SubagentCandidate): number[] =>
+  [c.providerIndex, c.engineIndex, SUBAGENT_TIER_ORIGINS.indexOf(c.origin), c.rowIndex];
+const comparePreference = (x: readonly number[], y: readonly number[]): number => {
+  for (let i = 0; i < x.length; i += 1) if (x[i] !== y[i]) return x[i] - y[i];
+  return 0;
+};
+
+/** A model with a subscription that is not nearly spent: Balance keeps the preferred model while it has one. */
+const hasRoom = (m: SubagentModelChoice): boolean =>
+  m.accounts.some((c) => c.provider.billing === 'subscription' && !c.nearLimit);
+
+/** A subscription whose weekly or monthly quota resets within SUBAGENT_WASTE_WINDOW_MS with room left. */
+function wastesSoon(c: SubagentCandidate, now: number | undefined): boolean {
+  return now !== undefined && c.provider.billing === 'subscription' && !c.nearLimit && c.expiresAt !== null
+    && (c.expiryWindowMins ?? 0) * 60_000 > SUBAGENT_WASTE_WINDOW_MS
+    && c.expiresAt > now && c.expiresAt - now <= SUBAGENT_WASTE_WINDOW_MS;
+}
+
+/**
+ * The two steps (§4.2, owner 2026-11-22), within each fit (exact, then higher, untiered, lower, as before): choose the
+ * model, then the account. Each model's accounts are ranked by compareAccounts; the models by step 1's preference,
+ * Intelligence first by how high a model's tier reaches. Intelligence moves to the next model only when no account of
+ * the chosen one can run (it is then not in the pool). Balance lets another model of the same tier take over in two
+ * cases: when another model's weekly or monthly quota is about to go to waste (wastesSoon) and none of the preferred
+ * model's is, the one whose quota resets first; else when no subscription of the preferred model has room (all near
+ * their limit, or only metered keys), the next model that has one. The rest keep their order. The result is the pick
+ * and its fallbacks, in order: every account of the chosen model, then the next model's, then the next fit's.
+ */
+function modelFirstOrder(
+  mode: 'balance' | 'intelligence',
+  pool: readonly SubagentCandidate[],
+  now: number | undefined,
+): { ordered: SubagentCandidate[]; models: SubagentModelChoice[]; reason: SubagentModelReason } {
+  const fits = new Map<string, SubagentCandidate[]>();
+  for (const c of [...pool].sort(fitOrder)) {
+    const key = `${c.fit}:${c.distance}`;
+    fits.set(key, [...(fits.get(key) ?? []), c]);
+  }
+  const ordered: SubagentCandidate[] = [];
+  let first: { models: SubagentModelChoice[]; reason: SubagentModelReason } | null = null;
+  for (const candidates of fits.values()) {
+    const byModel = new Map<string, SubagentCandidate[]>();
+    for (const c of candidates) byModel.set(c.model, [...(byModel.get(c.model) ?? []), c]);
+    const models: SubagentModelChoice[] = [...byModel.entries()].map(([model, accounts]) => ({
+      model,
+      accounts: [...accounts].sort(compareAccounts),
+      ceiling: accounts.map((c) => c.ceiling).reduce((x, y) => (levelIndex(y) > levelIndex(x) ? y : x)),
+      preference: accounts.map(preferenceOf).sort(comparePreference)[0],
+    }));
+    models.sort((a, b) => (mode === 'intelligence' ? levelIndex(b.ceiling) - levelIndex(a.ceiling) : 0)
+      || comparePreference(a.preference, b.preference));
+    let reason: SubagentModelReason = models.length === 1 ? { kind: 'only' }
+      : mode === 'intelligence' && models[0].ceiling !== models[1].ceiling ? { kind: 'strongest' } : { kind: 'preferred' };
+    if (mode === 'balance' && models.length > 1) {
+      const [preferred] = models;
+      // The other model whose quota goes to waste first, if any does and none of the preferred model's does.
+      let wasting: { index: number; account: SubagentCandidate } | null = null;
+      if (!preferred.accounts.some((c) => wastesSoon(c, now))) {
+        models.forEach((m, index) => {
+          const account = m.accounts.find((c) => wastesSoon(c, now));
+          if (index > 0 && account && (!wasting || account.expiresAt! < wasting.account.expiresAt!)) wasting = { index, account };
+        });
+      }
+      const found = wasting as { index: number; account: SubagentCandidate } | null;
+      let takeover = -1;
+      if (found) {
+        takeover = found.index;
+        reason = { kind: 'waste', preferred: preferred.model, account: found.account };
+      } else if (!hasRoom(preferred)) {
+        takeover = models.findIndex(hasRoom);
+        if (takeover > 0) {
+          reason = { kind: 'near-limit', preferred: preferred.model, keysOnly: preferred.accounts.every((c) => c.provider.billing === 'key') };
+        }
+      }
+      if (takeover > 0) models.unshift(...models.splice(takeover, 1));
+    }
+    first ??= { models, reason };
+    for (const m of models) ordered.push(...m.accounts);
+  }
+  return { ordered, ...first! };
 }
 
 /** A candidate's billing and headroom, in the few words the Why line gives it. */
@@ -790,21 +945,65 @@ function candidateNote(c: SubagentCandidate): string {
   return c.outputPricePerMTok != null ? `key at $${c.outputPricePerMTok}/M output tokens` : 'key, price unknown';
 }
 
-function pickLine(mode: ModelRoutingOptimizeFor, c: SubagentCandidate): string {
-  // The provider once, and the engine only when it is another name.
-  const what = `${c.model}${c.effort ? ` · ${c.effort}` : ''} on ${c.provider.slug}${c.engine === c.provider.slug ? '' : ` (${c.engine})`}`;
+const minuteOf = (ms: number): string => `${new Date(ms).toISOString().slice(0, 16)}Z`;
+
+/** The pick as the Why line names it: its model and effort, the provider once, and the engine only when it is another name. */
+const pickWhat = (c: SubagentCandidate): string =>
+  `${c.model}${c.effort ? ` · ${c.effort}` : ''} on ${c.provider.slug}${c.engine === c.provider.slug ? '' : ` (${c.engine})`}`;
+
+/** A candidate's account in a clause: its billing, and a subscription's headroom and reset. */
+function accountWhy(c: SubagentCandidate): string {
   const price = c.outputPricePerMTok != null ? `$${c.outputPricePerMTok} per million output tokens` : 'an unknown price';
-  const resets = c.expiresAt !== null ? ` until ${new Date(c.expiresAt).toISOString().slice(0, 16)}Z` : '';
-  const why = c.poolMember
+  const resets = c.expiresAt !== null ? ` until ${minuteOf(c.expiresAt)}` : '';
+  return c.poolMember
     ? `a subscription pool whose account ${c.poolMember} ${c.quotaUnknown ? 'has no quota reading' : `has ${headroom(c)}% of its quota left${resets}`}`
     : c.provider.billing === 'subscription'
       ? (c.quotaUnknown ? 'a subscription whose quota was not read' : `a subscription with ${headroom(c)}% of its quota left${resets}`)
       : `a metered key at ${price}`;
+}
+
+/** The pick's Why line when every candidate was ranked together (Cost, and a task run in every mode). */
+function pickLine(mode: ModelRoutingOptimizeFor, c: SubagentCandidate): string {
+  const why = accountWhy(c);
   const among = c.level ? `tier ${c.level}` : 'the untiered models';
   const lead = mode === 'intelligence' ? `the strongest model in ${among}${c.level ? ` (reaches ${c.ceiling})` : ''}, ${why}`
     : c.provider.billing === 'subscription' ? `${why}, used before any metered key`
       : `the cheapest in ${among}: ${why}`;
-  return `Picked ${what} (${OPTIMIZE_LABEL[mode]}): ${lead}`;
+  return `Picked ${pickWhat(c)} (${OPTIMIZE_LABEL[mode]}): ${lead}`;
+}
+
+/** Which step-2 key put the pick ahead of the next account that can run the same model. */
+function accountStep(best: SubagentCandidate, next: SubagentCandidate | undefined): string {
+  if (!next) return 'the only account that can run it';
+  if (best.provider.billing !== next.provider.billing) return 'a subscription, used before any metered key';
+  if (best.provider.billing === 'key') {
+    return marginalPrice(best) < marginalPrice(next) ? 'the cheapest key that runs it' : "first in the owner's provider order";
+  }
+  if (best.quotaUnknown !== next.quotaUnknown) return `its quota was read, ${next.provider.slug}'s was not`;
+  if (best.nearLimit !== next.nearLimit) return `${next.provider.slug} is near its limit`;
+  if (expiryOrder(best, next) < 0) return 'its quota resets first';
+  if (headroom(best) > headroom(next)) return 'the most quota left';
+  return "first in the owner's provider order";
+}
+
+/** The pick's Why line in Intelligence and Balance: which model step 1 chose and why, then which account step 2 did. */
+function modelFirstLine(mode: ModelRoutingOptimizeFor, models: readonly SubagentModelChoice[], reason: SubagentModelReason): string {
+  const [chosen] = models;
+  const best = chosen.accounts[0];
+  const among = best.level ? `tier ${best.level}` : 'the untiered models';
+  const model = {
+    only: `the only model in ${among} that can run`,
+    preferred: `preferred in ${among}`,
+    strongest: `the strongest model in ${among} (reaches ${chosen.ceiling})`,
+  } as Record<string, string>;
+  const why = reason.kind === 'near-limit'
+    ? `takes over ${among} from the preferred ${reason.preferred}, which has ${reason.keysOnly ? 'only metered keys' : 'every account near its limit'}`
+    : reason.kind === 'waste'
+      ? `takes over ${among} from the preferred ${reason.preferred}: its quota on ${reason.account.provider.slug} resets at ` +
+        `${minuteOf(reason.account.expiresAt!)}, within a day, and would otherwise go to waste`
+      : model[reason.kind];
+  return `Picked ${pickWhat(best)} (${OPTIMIZE_LABEL[mode]}): model ${chosen.model}, ${why}; ` +
+    `account ${best.provider.slug}: ${accountStep(best, chosen.accounts[1])}, ${accountWhy(best)}`;
 }
 
 /**
@@ -862,8 +1061,8 @@ function engineVerdict(
   provider: SubagentProvider,
   engine: string,
 ): { reason: string } | {
-  quota: ModelRoutingEngineState['quota']; quotaUnknown: boolean; expiresAt: number | null; nearLimit: boolean;
-  opusUtilization: number | null; poolMember?: string;
+  quota: ModelRoutingEngineState['quota']; quotaUnknown: boolean; expiresAt: number | null; expiryWindowMins: number | null;
+  nearLimit: boolean; opusUtilization: number | null; poolMember?: string;
 } {
   const where = input.runnerLabel ?? "the parent's runner";
   const report = input.engines?.[engine];
@@ -879,7 +1078,8 @@ function engineVerdict(
     if ('reason' in best) return best;
     return {
       quota: best.member.quota, quotaUnknown: best.member.unreadable === true,
-      expiresAt: best.member.expiresAt ?? null, nearLimit: best.member.nearLimit === true,
+      expiresAt: best.member.expiresAt ?? null, expiryWindowMins: best.member.expiryWindowMins ?? null,
+      nearLimit: best.member.nearLimit === true,
       opusUtilization: best.member.opusUtilization ?? null, poolMember: best.member.label,
     };
   }
@@ -895,11 +1095,12 @@ function engineVerdict(
     // No reading of its quota (nothing reported for it, or none read at all): it runs, after those whose headroom is known.
     return {
       quota, quotaUnknown: !provider.account || provider.account.unreadable === true,
-      expiresAt: provider.account?.expiresAt ?? null, nearLimit: provider.account?.nearLimit === true,
+      expiresAt: provider.account?.expiresAt ?? null, expiryWindowMins: provider.account?.expiryWindowMins ?? null,
+      nearLimit: provider.account?.nearLimit === true,
       opusUtilization: provider.account?.opusUtilization ?? null,
     };
   }
-  return { quota, quotaUnknown: false, expiresAt: null, nearLimit: false, opusUtilization: null };
+  return { quota, quotaUnknown: false, expiresAt: null, expiryWindowMins: null, nearLimit: false, opusUtilization: null };
 }
 
 /**
@@ -1095,16 +1296,22 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
       const { engine } = spec;
       const verdict = engineVerdict(input, provider, engine);
       if ('reason' in verdict) return drop(slug, engine, null, null, verdict.reason);
-      const { quota, quotaUnknown, expiresAt, nearLimit, opusUtilization, poolMember } = verdict;
+      const { quota, quotaUnknown, expiresAt, expiryWindowMins, nearLimit, opusUtilization, poolMember } = verdict;
       // Opus has a weekly window of its own on a Claude account: at the limit, Opus is not run there; Sonnet still is.
       const opusOut = (row: SubagentModelRow) => engine === AgentProvider.CLAUDE && row.model.startsWith('claude-opus-')
         && opusUtilization !== null && opusUtilization >= ENGINE_QUOTA_LIMIT;
       const opusReason = `Opus's weekly quota is at ${opusUtilization}% on this account`;
-      const join = (row: SubagentModelRow, ceiling: ModelRoutingLevel, fit: SubagentFit, distance: number) => pool.push({
-        ...row, provider, providerIndex, engine, engineIndex, ceiling, quota, quotaUnknown, expiresAt, nearLimit,
-        ...(poolMember ? { poolMember } : {}), fit, distance,
-      });
       const rows = subagentEngineRows(spec, input);
+      // Where a row's tier came from (step 1, §4.2): the owner's, a rule's or a preset's, or the engine's table.
+      const origin = (row: SubagentModelRow): SubagentTierOrigin => {
+        if (spec.models) return row.source === 'owner' ? 'owner' : 'rule';
+        if (row.level && input.builtinModelTiers?.[engine]?.[row.model] === row.level) return 'owner';
+        return TABLE_ENGINES.includes(engine) ? 'table' : 'rule';
+      };
+      const join = (row: SubagentModelRow, ceiling: ModelRoutingLevel, fit: SubagentFit, distance: number) => pool.push({
+        ...row, provider, providerIndex, engine, engineIndex, rowIndex: Math.max(rows.indexOf(row), 0), origin: origin(row),
+        ceiling, quota, quotaUnknown, expiresAt, expiryWindowMins, nearLimit, ...(poolMember ? { poolMember } : {}), fit, distance,
+      });
       if (!rows.some((row) => row.level)) {
         // No tiers at all: its default model runs, untiered; the rest of what it lists is reachable by name.
         // A list of the provider's own is its model space, even empty; only an engine on its catalogue reads the runner's.
@@ -1144,10 +1351,14 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
     return { ...decision, engine: null, provider: null, model: null, effort: null,
       reasons: [...reasons, 'No provider can run a SubAgent: the SubAgent is refused with NO_SUBAGENT_PROVIDER'] };
   }
-  const [best, ...rest] = [...pool].sort((a, b) => compareCandidates(mode, a, b));
+  // Cost, and a task run in every mode, rank every candidate together; Intelligence and Balance choose the model, then
+  // the account (§4.2, owner 2026-11-22).
+  const together = mode === 'cost' || input.rankTogether === true;
+  const twoStep = together ? null : modelFirstOrder(mode as 'balance' | 'intelligence', pool, input.now);
+  const [best, ...rest] = twoStep ? twoStep.ordered : [...pool].sort((a, b) => compareTogether(mode, a, b));
   const away = subagentFitLine(level, { level: best.level, model: best.model, provider: best.provider.slug, engine: best.engine });
   if (away) reasons.push(away);
-  reasons.push(pickLine(mode, best));
+  reasons.push(twoStep ? modelFirstLine(mode, twoStep.models, twoStep.reason) : pickLine(mode, best));
   const priceless = new Set(pool
     .filter((c) => best.provider.billing === 'key' && c.fit === best.fit && c.provider.billing === 'key' && c.outputPricePerMTok == null)
     .map((c) => `No price known for ${c.model} on ${c.provider.slug}; ordered after priced keys`));

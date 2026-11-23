@@ -18,7 +18,7 @@
 --   * `session` (the row itself), `conversation_turn`, `approval`, `session_tag_link`,
 --     `scheduled_wakeup` (through the row's session) and `watch` (through its observer session):
 --     `w:` when the session is in an Open list on either side of the statement — a CONVERSATION,
---     neither completed, archived nor deleted, no Ask and no scheduled run (sessions.service.ts
+--     neither completed, archived nor deleted, no Ask, no scheduled run and no schedule-change conversation (sessions.service.ts
 --     listShape) — and `c:` otherwise;
 --   * `workspace`: `w:` and the workspace row's own id, always;
 --   * `session_request` (the request rule): both of its sessions' scopes, the asker's and the
@@ -94,10 +94,10 @@ BEGIN
       WITH moved AS (
           SELECT n.owner_id AS new_owner, n.kind AS new_kind, n.workspace_id AS new_ws,
                  (n.completed_at IS NULL AND n.archived_at IS NULL AND n.deleted_at IS NULL
-                  AND n.help_ask IS NULL AND n.run_source <> 'SCHEDULE') AS new_listed,
+                  AND n.help_ask IS NULL AND n.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')) AS new_listed,
                  d.owner_id AS old_owner, d.kind AS old_kind, d.workspace_id AS old_ws,
                  (d.completed_at IS NULL AND d.archived_at IS NULL AND d.deleted_at IS NULL
-                  AND d.help_ask IS NULL AND d.run_source <> 'SCHEDULE') AS old_listed,
+                  AND d.help_ask IS NULL AND d.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')) AS old_listed,
                  (n.owner_id, n.kind, n.task_id, n.context_task_id, n.root_session_id, n.workspace_id)
                    IS DISTINCT FROM
                  (d.owner_id, d.kind, d.task_id, d.context_task_id, d.root_session_id, d.workspace_id) AS rerooted
@@ -124,13 +124,13 @@ BEGIN
       WHEN 'INSERT' THEN $q$
         SELECT n.owner_id, open_list_scope_key('session', n.workspace_id, bool_or(
                  n.completed_at IS NULL AND n.archived_at IS NULL AND n.deleted_at IS NULL
-                 AND n.help_ask IS NULL AND n.run_source <> 'SCHEDULE'))
+                 AND n.help_ask IS NULL AND n.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')))
           FROM new_rows n WHERE n.kind = 'CONVERSATION'
          GROUP BY n.owner_id, n.workspace_id $q$
       WHEN 'DELETE' THEN $q$
         SELECT d.owner_id, open_list_scope_key('session', d.workspace_id, bool_or(
                  d.completed_at IS NULL AND d.archived_at IS NULL AND d.deleted_at IS NULL
-                 AND d.help_ask IS NULL AND d.run_source <> 'SCHEDULE'))
+                 AND d.help_ask IS NULL AND d.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')))
           FROM old_rows d WHERE d.kind = 'CONVERSATION'
          GROUP BY d.owner_id, d.workspace_id
         UNION
@@ -164,7 +164,7 @@ BEGIN
       ids AS (SELECT new_session AS id FROM moved UNION SELECT old_session FROM moved)
       SELECT s.owner_id, open_list_scope_key($2, s.workspace_id, bool_or(
                s.kind = 'CONVERSATION' AND s.completed_at IS NULL AND s.archived_at IS NULL AND s.deleted_at IS NULL
-               AND s.help_ask IS NULL AND s.run_source <> 'SCHEDULE'))
+               AND s.help_ask IS NULL AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')))
         FROM ids JOIN session s ON s.id = ids.id
        GROUP BY s.owner_id, s.workspace_id $q$
       USING ARRAY[
@@ -184,21 +184,21 @@ BEGIN
         WITH ids AS (SELECT DISTINCT session_id AS id FROM new_rows)
         SELECT s.owner_id, open_list_scope_key($1, s.workspace_id, bool_or(
                  s.kind = 'CONVERSATION' AND s.completed_at IS NULL AND s.archived_at IS NULL AND s.deleted_at IS NULL
-                 AND s.help_ask IS NULL AND s.run_source <> 'SCHEDULE'))
+                 AND s.help_ask IS NULL AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')))
           FROM ids JOIN session s ON s.id = ids.id
          GROUP BY s.owner_id, s.workspace_id $q$
       WHEN 'DELETE' THEN $q$
         WITH ids AS (SELECT DISTINCT session_id AS id FROM old_rows)
         SELECT s.owner_id, open_list_scope_key($1, s.workspace_id, bool_or(
                  s.kind = 'CONVERSATION' AND s.completed_at IS NULL AND s.archived_at IS NULL AND s.deleted_at IS NULL
-                 AND s.help_ask IS NULL AND s.run_source <> 'SCHEDULE'))
+                 AND s.help_ask IS NULL AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')))
           FROM ids JOIN session s ON s.id = ids.id
          GROUP BY s.owner_id, s.workspace_id $q$
       ELSE $q$
         WITH ids AS (SELECT session_id AS id FROM new_rows UNION SELECT session_id FROM old_rows)
         SELECT s.owner_id, open_list_scope_key($1, s.workspace_id, bool_or(
                  s.kind = 'CONVERSATION' AND s.completed_at IS NULL AND s.archived_at IS NULL AND s.deleted_at IS NULL
-                 AND s.help_ask IS NULL AND s.run_source <> 'SCHEDULE'))
+                 AND s.help_ask IS NULL AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')))
           FROM ids JOIN session s ON s.id = ids.id
          GROUP BY s.owner_id, s.workspace_id $q$
     END
@@ -278,7 +278,7 @@ BEGIN
                          UNION SELECT owner_id, to_session_id FROM new_rows)
           SELECT p.owner_id, open_list_scope_key('session_request', s.workspace_id, bool_or(
                    s.kind = 'CONVERSATION' AND s.completed_at IS NULL AND s.archived_at IS NULL AND s.deleted_at IS NULL
-                   AND s.help_ask IS NULL AND s.run_source <> 'SCHEDULE'))
+                   AND s.help_ask IS NULL AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')))
             FROM peers p LEFT JOIN session s ON s.id = p.id
            GROUP BY p.owner_id, s.workspace_id $q$
         WHEN 'DELETE' THEN $q$
@@ -286,7 +286,7 @@ BEGIN
                          UNION SELECT owner_id, to_session_id FROM old_rows)
           SELECT p.owner_id, open_list_scope_key('session_request', s.workspace_id, bool_or(
                    s.kind = 'CONVERSATION' AND s.completed_at IS NULL AND s.archived_at IS NULL AND s.deleted_at IS NULL
-                   AND s.help_ask IS NULL AND s.run_source <> 'SCHEDULE'))
+                   AND s.help_ask IS NULL AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')))
             FROM peers p LEFT JOIN session s ON s.id = p.id
            GROUP BY p.owner_id, s.workspace_id $q$
         ELSE $q$
@@ -296,7 +296,7 @@ BEGIN
                          UNION SELECT owner_id, to_session_id FROM old_rows)
           SELECT p.owner_id, open_list_scope_key('session_request', s.workspace_id, bool_or(
                    s.kind = 'CONVERSATION' AND s.completed_at IS NULL AND s.archived_at IS NULL AND s.deleted_at IS NULL
-                   AND s.help_ask IS NULL AND s.run_source <> 'SCHEDULE'))
+                   AND s.help_ask IS NULL AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')))
             FROM peers p LEFT JOIN session s ON s.id = p.id
            GROUP BY p.owner_id, s.workspace_id $q$
       END
@@ -331,14 +331,14 @@ BEGIN
       WHEN 'INSERT' THEN $q$
         SELECT w.owner_id, open_list_scope_key($1, s.workspace_id, bool_or(
                  s.kind = 'CONVERSATION' AND s.completed_at IS NULL AND s.archived_at IS NULL AND s.deleted_at IS NULL
-                 AND s.help_ask IS NULL AND s.run_source <> 'SCHEDULE'))
+                 AND s.help_ask IS NULL AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')))
           FROM new_rows w LEFT JOIN session s ON s.id = w.observer_session_id
          WHERE w.action = 'RESUME_SESSION' AND w.observer_session_id IS NOT NULL
          GROUP BY w.owner_id, s.workspace_id $q$
       WHEN 'DELETE' THEN $q$
         SELECT w.owner_id, open_list_scope_key($1, s.workspace_id, bool_or(
                  s.kind = 'CONVERSATION' AND s.completed_at IS NULL AND s.archived_at IS NULL AND s.deleted_at IS NULL
-                 AND s.help_ask IS NULL AND s.run_source <> 'SCHEDULE'))
+                 AND s.help_ask IS NULL AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')))
           FROM old_rows w LEFT JOIN session s ON s.id = w.observer_session_id
          WHERE w.action = 'RESUME_SESSION' AND w.observer_session_id IS NOT NULL
          GROUP BY w.owner_id, s.workspace_id $q$
@@ -356,7 +356,7 @@ BEGIN
                  WHERE n.owner_id IS DISTINCT FROM p.owner_id)
         SELECT m.owner_id, open_list_scope_key($1, s.workspace_id, bool_or(
                  s.kind = 'CONVERSATION' AND s.completed_at IS NULL AND s.archived_at IS NULL AND s.deleted_at IS NULL
-                 AND s.help_ask IS NULL AND s.run_source <> 'SCHEDULE'))
+                 AND s.help_ask IS NULL AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')))
           FROM moved m LEFT JOIN session s ON s.id = m.id
          GROUP BY m.owner_id, s.workspace_id $q$
     END

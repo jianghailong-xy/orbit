@@ -448,7 +448,7 @@ test('3. the row: changing every undrawn session column leaves the Open list\'s 
   assert.deepEqual(await sessions.list(f.ownerId, { view: 'open' }), before);
 });
 
-test('4. keys (1434): an undrawn write moves no counter key at all; a drawn one moves its workspace\'s key alone', { skip, timeout: 60_000 }, async (t) => {
+test('4. keys (1464): an undrawn write moves no counter key at all; a drawn one moves its workspace\'s key alone', { skip, timeout: 60_000 }, async (t) => {
   const f = await fixture(t, { held: true });
   const { workspaceId } = await f.db.session.findUniqueOrThrow({ where: { id: f.sessionId }, select: { workspaceId: true } });
   const keys = async () => new Map((await f.db.$queryRaw<Array<{ key: string; total: string }>>`

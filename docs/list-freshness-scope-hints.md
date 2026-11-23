@@ -2,7 +2,7 @@
 
 Status: design, nothing built · 2026-11-22 · task 351lKeumGIjTw8S8IoUzt (list-freshness project 34tKYCMLgan4tpcxkUn44)
 
-Built since: §9 task 0 (migration 1428), task 1 (§5.0), and tasks 4–6 (Option A: migration 1434, `hints=list_scopes`, the web filter), task 3527hS20sC7Fl5tmSIfvp, 2026-11-23.
+Built since: §9 task 0 (migration 1428), task 1 (§5.0), and tasks 4–6 (Option A: migration 1464, `hints=list_scopes`, the web filter), task 3527hS20sC7Fl5tmSIfvp, 2026-11-23.
 
 Builds on:
 - [list-freshness-design.md](./list-freshness-design.md): §3 (hints), P2 and P4.
@@ -248,7 +248,7 @@ The inputs that are not counters (`steady`, share links, foreign turns) are pick
 - `workspace` (the workspace row).
 
 Each bumps `<source>@<scope>`, where `<scope>` is one of two values:
-- `w:<workspace uuid>` for a row that is in an Open list on either side of the statement: CONVERSATION, not completed, archived or deleted, not a scheduled run, not an Ask (`sessions.service.ts:4255-4262, 4310-4318`);
+- `w:<workspace uuid>` for a row that is in an Open list on either side of the statement: CONVERSATION, not completed, archived or deleted, not a scheduled run or a schedule-change conversation, not an Ask (`sessions.service.ts` listShape);
 - `c:<workspace uuid>` otherwise.
 
 Shards keep their suffix after the key, as in `session@w:…#12`. Every other source keeps its plain account-wide key, as today.

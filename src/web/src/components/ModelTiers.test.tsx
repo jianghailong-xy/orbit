@@ -176,23 +176,22 @@ describe('ModelTierCell and QualityCell', () => {
     expect(writes).toEqual([{ path: '/providers/builtin/cursor/model-tier', body: { model: 'grok-4.7', tier: null } }]);
   });
 
-  it('shows Quality as two figures, why one is missing, and No runs yet', async () => {
+  it('shows Quality on one line: the figures there are, Not enough data without one, and No runs yet', async () => {
     await mount();
-    const quality = (model: string) => [...rowOf(model).querySelectorAll('.model-tiers-quality .model-tiers-quality-line')]
-      .map((line) => line.textContent);
-    expect(quality('claude-opus-5-6')).toEqual(['SubAgents4.4 · 23 rated of 41', 'Tasks86% first pass · 52 tasks']);
-    expect(quality('grok-4.7')).toEqual(['SubAgentsNot enough ratings', 'TasksNot enough tasks']);
-    expect(rowOf('grok-4.7').querySelectorAll('.model-tiers-quality .model-tiers-muted')).toHaveLength(2);
-    expect(rowOf('kimi-k3').querySelector('.model-tiers-quality')?.textContent).toBe('No runs yet');
+    const quality = (model: string) => rowOf(model).querySelector('.model-tiers-quality')?.textContent;
+    expect(quality('claude-opus-5-6')).toBe('Rated 4.4 (23) · 86% first pass · 52 tasks');
+    expect(quality('grok-4.7')).toBe('Not enough data');
+    expect(rowOf('grok-4.7').querySelector('.model-tiers-quality .model-tiers-muted')).not.toBeNull();
+    expect(quality('kimi-k3')).toBe('No runs yet');
   });
 
-  it('says who rated in a tooltip on the SubAgents line, only where there is an average', async () => {
+  it('gives both lines in full and who rated in its tooltip', async () => {
     await mount();
-    expect(rowOf('grok-4.7').querySelector('.model-tiers-rated')).toBeNull();
-    const line = rowOf('claude-opus-5-6').querySelector<HTMLElement>('.model-tiers-rated')!;
-    await act(async () => { line.focus(); line.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    const cell = rowOf('claude-opus-5-6').querySelector<HTMLElement>('.model-tiers-quality-one')!;
+    await act(async () => { cell.focus(); cell.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
     await act(async () => new Promise((resolve) => setTimeout(resolve, 150)));
-    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('Rated by Opus 5.5 (15) · Sonnet 5.5 (8)');
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe(
+      'SubAgents: 4.4 · 23 rated of 41\nTasks: 86% first pass · 52 tasks\nRated by Opus 5.5 (15) · Sonnet 5.5 (8)');
   });
 
   it("keeps a key's model on its own door", async () => {

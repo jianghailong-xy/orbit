@@ -111,8 +111,8 @@ test('browser_status: the account\'s Orbit Cloud browser for any session of it, 
   /** R's own credential is a managed runner's: its calls name the instance, as `orbit mcp` in R's Pod does. */
   const instance = () => ({
     'x-orbit-runner-capabilities': `${INSTANCE_CAPABILITY},${BROWSER_CLEAR}`,
-    'x-orbit-managed-runner-generation': '1',
-    'x-orbit-managed-runner-pod-uid': podUid,
+    'x-orbit-cloud-runner-generation': '1',
+    'x-orbit-cloud-runner-pod-uid': podUid,
   });
   const status = (server: Apiserver, runnerToken: string | undefined, sessionId?: string) =>
     call(server, 'GET', '/api/runner/browser', runnerToken, undefined, {

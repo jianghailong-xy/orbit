@@ -951,6 +951,15 @@ public enum ProjectPage {
         }
     }
 
+    /// A criterion's landing half-sentence on the project page (D2 A): the Done card's words for its
+    /// `landingReason`, and none for a criterion its work has not met — that work has not landed
+    /// anywhere yet, whatever the landing lane says. Web's `criterionLandingHalfSentence`, held to
+    /// `src/shared/src/project-page-labels.fixture.json`.
+    public static func criterionLandingHalfSentence(satisfied: Bool?, landingReason: CriterionLandingReason?,
+                                                    main: String = RunSettings.defaultMainBranch) -> String? {
+        satisfied == true ? ProjectDone.landingReasonLabel(landingReason, main: main) : nil
+    }
+
     public static let metByItsWork = "Met by its work"
     public static let notMetByItsWork = "Not met by its work"
 
@@ -982,7 +991,10 @@ public enum ProjectPage {
         guard let satisfied = c.satisfied else { return nil }
         var landing: String?
         var warning: String?
-        if satisfied, let raw = c.landing {
+        if c.landingReasonRead {
+            // D2 A: the reason decides it, in the Done card's words; an unmet criterion says none.
+            landing = criterionLandingHalfSentence(satisfied: satisfied, landingReason: c.landingReason, main: main)
+        } else if satisfied, let raw = c.landing {
             switch raw {
             case "ON_INTEGRATION_LINE":
                 landing = "on \(integrationRef ?? "the project branch")"
@@ -1000,9 +1012,12 @@ public enum ProjectPage {
                                          action: requiredActionSentence[$0.requiredAction] ?? $0.requiredAction)
                 })
         }
+        let flagged = c.landingReasonRead
+            ? c.landingReason == .noReceipt || c.landingReason == .noBranch
+            : c.landing == "UNKNOWN"
         return CriterionWork(state: satisfied ? metByItsWork : notMetByItsWork,
                              landing: landing, landingWarning: warning,
-                             landingFlagged: satisfied && c.landing == "UNKNOWN",
+                             landingFlagged: satisfied && flagged,
                              reasons: reasons)
     }
 
@@ -1129,6 +1144,41 @@ public enum ProjectPage {
         let done = ProjectDone.live(openItems: items, status: status.rawValue)
         return OpenItemsSummary(needsYou: needsYouRows(items).count + (start?.request == nil ? 0 : 1)
                                     + (done == nil ? 0 : 1))
+    }
+
+    /// The page's Open items section (D3 A): drawn after the title area and before Work overview, as
+    /// web's mobile page draws `ProjectOpenItems` — whenever something is open, or the owner has a
+    /// row of their own to press (Start…, Record as done… · not asked yet), which an open project
+    /// always has once the read is in. Nil while there is nothing to draw, as web's returns null.
+    public struct OpenItemsSection: Equatable, Sendable {
+        /// The header's detail: "0 need you · oldest first".
+        public let hint: String
+        public let start: StartProject.PageRow?
+        public let done: ProjectDone.PageRow?
+        public let needsYou: [ProjectOpenItemRow]
+
+        /// Whether the Needs you group is drawn: anything in it, or the owner's own rows.
+        public var drawsNeedsYou: Bool { !needsYou.isEmpty || start != nil || done != nil }
+    }
+
+    /// The header's detail, in web's words. The pause is drawn as a card and not counted, as web
+    /// keeps it out of the group; the coordinator's items are not drawn here, as web's are not.
+    public static func openItemsHint(needsYou: Int) -> String {
+        "\(needsYou) need you · oldest first"
+    }
+
+    public static func openItemsSection(status: ProjectStatus, started: Bool?, derivedDone: ProjectDerivedDone?,
+                                        items: ProjectOpenItemsView?) -> OpenItemsSection? {
+        guard let items else { return nil }
+        let start = StartProject.pageRow(status: status, started: started, openItems: items)
+        let done = ProjectDone.pageRow(status: status, derivedDone: derivedDone, openItems: items)
+        let needsYou = needsYouRows(items)
+        let counted = needsYou.filter { $0.kind != .fusePaused }.count
+            + (start?.request == nil ? 0 : 1)
+            + (ProjectDone.live(openItems: items, status: status.rawValue) == nil ? 0 : 1)
+        let section = OpenItemsSection(
+            hint: openItemsHint(needsYou: counted), start: start, done: done, needsYou: needsYou)
+        return section.drawsNeedsYou ? section : nil
     }
 
     /// The owner's rows, without the request to record the project done should a server ever list
@@ -1276,15 +1326,46 @@ public enum ProjectPage {
         public let tone: TagTone
     }
 
+    /// A running task whose background jobs have said nothing for ten minutes (`runStalled`).
+    public static let runStalled = "no output 10+ min"
+    /// A task set to start by hand (`autoRunWhenReady: false`), as its row says it: the Project
+    /// started card's words for the same tasks. Web's `PROJECT_TASK_STARTS_BY_HAND`.
+    public static let startsByHand = "set to start by hand"
+
+    private static let runReasonLabel: [String: String] = [
+        "TURN": "Turn in progress",
+        "BACKGROUND_JOB": "Background job",
+        "WAITING": "Waiting to be woken",
+    ]
+
+    /// What a running task says it is doing: "Running · Background job", and "· no output 10+ min"
+    /// when it stalled; nil when the server gave no reason. Web's `runningLabel`.
+    public static func runningLabel(runReason: String?, runStalled: Bool?) -> String? {
+        guard let reason = runReason, !reason.isEmpty else { return nil }
+        let label = "Running · \(runReasonLabel[reason] ?? reason)"
+        return runStalled == true ? "\(label) · \(Self.runStalled)" : label
+    }
+
     /// The row's lane as a tag ("Ready · can start now", "Running", "Failed", …), or nil where the
     /// lane goes without saying (done, cancelled, or waiting on a landing the other tag names).
     public static func workTag(_ t: ProjectTaskRow) -> Tag? {
-        switch workState(t) {
+        let state = workState(t)
+        // Held for a person to start (G5): said on the row in the Project started card's words.
+        // `false`, not absent — an older server sends no flag, and that is no claim.
+        if t.autoRunWhenReady == false, state == "READY" || (state == "BLOCKED" && !waitsForLanding(t)) {
+            return state == "READY"
+                ? Tag(text: "Ready · \(startsByHand)", tone: .warning)
+                : Tag(text: "Blocked · \(startsByHand)", tone: .neutral)
+        }
+        switch state {
         case "READY":
             return Tag(text: t.autoRunWhenReady == true ? "Ready · automatic dispatch" : "Ready · can start now",
                        tone: .warning)
         case "RUNNING":
-            return Tag(text: "Running", tone: .brand)
+            // A stalled run (G4) says so on its row as well as in the run queue.
+            return t.runStalled == true
+                ? Tag(text: "Running · \(runStalled)", tone: .warning)
+                : Tag(text: "Running", tone: .brand)
         case "BLOCKED":
             return waitsForLanding(t) ? nil : Tag(text: "Blocked", tone: .neutral)
         case "AWAITING_VERIFICATION":

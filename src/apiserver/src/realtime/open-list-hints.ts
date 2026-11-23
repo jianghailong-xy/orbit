@@ -42,13 +42,13 @@ interface TickRow {
 }
 
 /**
- * The Open-list predicate of migration 1434's triggers (sessions.service.ts listShape): a CONVERSATION, neither
- * completed, archived nor deleted, no Ask and no scheduled run.
+ * The Open-list predicate of migration 1464's triggers (sessions.service.ts listShape): a CONVERSATION, neither
+ * completed, archived nor deleted, no Ask, no scheduled run and no schedule-change conversation (main 1447).
  */
 const listed = (alias: string): Prisma.Sql => {
   const s = Prisma.raw(alias);
   return Prisma.sql`${s}.kind = 'CONVERSATION' AND ${s}.completed_at IS NULL AND ${s}.archived_at IS NULL
-    AND ${s}.deleted_at IS NULL AND ${s}.help_ask IS NULL AND ${s}.run_source <> 'SCHEDULE'`;
+    AND ${s}.deleted_at IS NULL AND ${s}.help_ask IS NULL AND ${s}.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')`;
 };
 
 /**
@@ -67,7 +67,7 @@ const listed = (alias: string): Prisma.Sql => {
  * the counter sums and that clock part, which leaves out the runners' heartbeats and the runner
  * columns outside `steady`. A second in which only counters moved reads nothing but the counters.
  *
- * Which workspaces moved (§5.1, migration 1434): the sources that hang on one session or one
+ * Which workspaces moved (§5.1, migration 1464): the sources that hang on one session or one
  * workspace bump a key naming the workspace, `w:` for a row in an Open list and `c:` for one in none,
  * and every other source the account's key. A stream that also declared `hints=list_scopes` is told
  * `scopes`, the public ids of the workspaces whose Open lists may read differently since its previous

@@ -7,7 +7,8 @@ internal data class ChangedFile(val path: String, val additions: Int, val deleti
     val binary: Boolean get() = additions < 0 || deletions < 0
 
     companion object {
-        fun of(detail: JsonObject?): List<ChangedFile> = (detail?.get("changedFiles") as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
+        fun of(detail: JsonObject?): List<ChangedFile> = parse(detail?.get("changedFiles"))
+        fun parse(value: JsonElement?): List<ChangedFile> = (value as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
             .mapNotNull { file -> file.string("path")?.let { ChangedFile(it, file.int("additions"), file.int("deletions"), file.string("status").orEmpty()) } }
         private fun JsonObject.int(key: String) = (get(key) as? JsonPrimitive)?.intOrNull ?: 0
     }
@@ -22,12 +23,12 @@ internal object WorktreeBarLogic {
 
     /** No isolation → hidden; `shared-nogit` → the nudge; a worktree with a branch and a change (or an outcome to report) → the bar. */
     fun mode(isolationStatus: String?, branch: String?, changedFileCount: Int, mergeStatus: String? = null,
-        commitStatus: String? = null, hasMergeRecovery: Boolean = false): Mode {
+        commitStatus: String? = null, hasMergeRecovery: Boolean = false, hasCommitWork: Boolean = false): Mode {
         val iso = isolationStatus ?: return Mode.HIDDEN
         if (iso == "shared-nogit") return Mode.NOT_ISOLATED
         if (iso != "worktree" || branch == null) return Mode.HIDDEN
         val actionable = mergeStatus in setOf("pending", "conflict", "error") || commitStatus in setOf("pending", "error")
-        return if (changedFileCount > 0 || actionable || hasMergeRecovery) Mode.WORKTREE else Mode.HIDDEN
+        return if (changedFileCount > 0 || hasCommitWork || actionable || hasMergeRecovery) Mode.WORKTREE else Mode.HIDDEN
     }
 
     /** What a session without a worktree (`shared-nogit`: it edits its workspace's folder directly) says above the composer. */

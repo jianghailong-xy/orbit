@@ -113,7 +113,7 @@ export async function readOpenListVersionParts(
       -- not; it cannot lag a write. A LANDING session is not one of them: the flat list excludes
       -- those rows, and the read that can show them hashes its own body. A counter is the sum of
       -- its rows, keyed '<source>' and '<source>#<n>' (0487): a bump adds one to whichever row no
-      -- other writer holds, so writers never queue on it. A source keyed by workspace (1434,
+      -- other writer holds, so writers never queue on it. A source keyed by workspace (1464,
       -- '<source>@w:<ws>' or '<source>@c:<ws>', shard suffix after the key) is added up here as one
       -- source, so these sums read as they did before the keys: only the hint poller reads them apart.
       COALESCE((SELECT string_agg(src || '=' || total, ',' ORDER BY src)
@@ -211,7 +211,7 @@ export async function readOpenListVersionParts(
  * The `session` columns no Open list reads (migration 1420_open_list_undrawn_writes): neither the
  * row query, its overlay, the probe of a `since=` read nor this version, so no client can draw them
  * from the list. An UPDATE that changes nothing else moves no counter, and so sends no
- * `sessions.list_changed`. The migration's `open_list_bump_session` names these same columns (and 1434's, which keys it by workspace)
+ * `sessions.list_changed`. The migration's `open_list_bump_session` names these same columns (and 1464's, which keys it by workspace)
  * (`open-list-undrawn-writes.pg.spec.ts` writes each one and asserts that, and that the built rows
  * do not change). A column the list starts to read must leave this list and that function.
  */
@@ -240,7 +240,7 @@ export const OPEN_LIST_UNDRAWN_TURN_COLUMNS = [
 
 /**
  * The `workspace` columns a runner heartbeat's directory and disk probe writes, none of which an Open
- * list draws (migration 1428_open_list_workspace_probes, `open_list_bump_owner`, carried into 1434): the row reads a
+ * list draws (migration 1428_open_list_workspace_probes, `open_list_bump_owner`, carried into 1464): the row reads a
  * workspace's id, name, model and effort, and the queued gates its clone_state and, against the
  * floor of a never-started PENDING session's runner, its free bytes. So an UPDATE that changes only
  * these moves no counter, except a free-bytes change that flips that disk gate's verdict
