@@ -289,6 +289,7 @@ import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout'
 import { followWikiDocsAfterReceipts, followWikiDocsAfterSessionMerge } from '../wiki/wiki-docs-follow';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
 import { appendWikiChatNotes } from '../wiki/wiki-chat-notes';
+import { appendScheduleChangeNote } from '../schedules/schedule-change-conversation';
 import {
   type TaskFailure,
   recordTaskFailure,
@@ -6195,6 +6196,8 @@ export class RunnerApiController {
             },
             // A wiki chat's messages carry its notes (appendWikiChatNotes, below).
             wikiChatSpaceId: true,
+            // A schedule's change conversation names its schedule on every message (appendScheduleChangeNote).
+            changeScheduleId: true,
           },
         });
         // A message turn that already produced runtime output is a lease re-delivery.
@@ -6295,6 +6298,15 @@ export class RunnerApiController {
               sessionId,
               turn: { seq: t.seq, kind: t.kind, wikiContext: t.wikiContext },
             }, content);
+          }
+          // A schedule's change conversation (scheduled-tasks-design.md §8.2): each message carries the schedule it
+          // changes, read now, after the person's words. Not on a steer, which joins a turn that already has it.
+          if (t.kind === 'message' && sessionContext?.changeScheduleId) {
+            content = await appendScheduleChangeNote(
+              tx,
+              { ownerId: sessionContext.ownerId, scheduleId: sessionContext.changeScheduleId },
+              content,
+            );
           }
           // Another Orbit session's message says so, in a block after its words (session-message.ts,
           // contract §2.2): without it the recipient reads another agent as the account owner. After

@@ -1654,7 +1654,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       case ControlEventType.SESSION_CREATED:
         // A scheduled task's run enters no list (docs/scheduled-tasks-design.md §7.4, §12.1): an open list is not
         // told about it. It is reached from its schedule's history and its notification.
-        if ((await this.prisma.session.findUnique({ where: { id: sessionId }, select: { runSource: true } }))?.runSource === 'SCHEDULE') {
+        // Nor is a schedule's change conversation (§8.2), which is reached from its schedule.
+        if (['SCHEDULE', 'SCHEDULE_CHANGE'].includes(
+          (await this.prisma.session.findUnique({ where: { id: sessionId }, select: { runSource: true } }))?.runSource ?? '',
+        )) {
           return null;
         }
       // falls through

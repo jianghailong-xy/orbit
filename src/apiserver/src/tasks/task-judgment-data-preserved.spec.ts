@@ -3332,6 +3332,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // row is written, and no trigger, function or DONE fence changes.
       // Written as 1430 on the project line, it was renumbered after main took 1430.
       '1431_managed_runner_update_interrupt',
+      // 1432 creates model_identity, a new table no preserved relation references, without rewriting any existing rows.
+      '1432_model_identity',
+      // 1433 seeds that table alone with INSERT ... ON CONFLICT DO NOTHING. Neither migration changes the DONE fence.
+      '1433_model_identity_seed',
       // 1438 creates drive_removed_entry (Orbit Files drive: the file a replacing rename removed, §3.2) and its index; no
       // existing row is written, and no preserved relation, trigger, function or DONE fence changes. Numbered past every
       // migration on main and the project and task branches (1437 the highest) when it was written.
@@ -3342,6 +3346,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1439_drive_entry_name_trgm',
       // 1440 adds the drive Trash marking flag and its partial index; it changes no preserved relation or fence.
       '1440_drive_trash_group_marking',
+      // 1447 adds nullable schedule-change fields, a foreign key and index on session, and a session_run_source value.
+      // The migration changes the session schema without rewriting rows or changing the DONE fence.
+      '1447_schedule_change_conversation',
       // 1448 indexes drive and share-link foreign keys for bounded permanent deletion. It writes no existing rows
       // and changes no preserved relation, trigger, function or DONE fence.
       '1448_drive_purge_fk_indexes'],

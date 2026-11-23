@@ -3,6 +3,7 @@ import { queryOptions, useQuery } from '@tanstack/react-query';
 import {
   scheduleNeedsCount,
   type ScheduleCard,
+  type ScheduleChangeConversationResponse,
   type ScheduleChangeRecord,
   type ScheduleDetailResponse,
   type ScheduleDraftsResponse,
@@ -144,6 +145,26 @@ export function scheduleRunSessionPath(run: Pick<ScheduleRunView, 'sessionId'>):
 /** The Scheduled page with one schedule open in the inspector. */
 export function schedulePath(scheduleId: string): string {
   return `/scheduled?id=${encodeURIComponent(scheduleId)}`;
+}
+
+/** A schedule's change conversation (§8.2): the draft page, which goes on to the open one when there is one. */
+export function scheduleChangePath(scheduleId: string): string {
+  return `/scheduled/${encodeURIComponent(scheduleId)}/change`;
+}
+
+export const scheduleChangeQuery = (id: string) =>
+  queryOptions({
+    queryKey: ['schedules', 'change', id] as const,
+    meta: { entities: ['session'] },
+    queryFn: () => api<ScheduleChangeConversationResponse>(`/schedules/${encodeURIComponent(id)}/change`),
+  });
+
+/** Opens the change conversation with the person's first words (or says them in the one already open). */
+export function openScheduleChange(id: string, text: string) {
+  return api<{ sessionId: string; created: boolean }>(`/schedules/${encodeURIComponent(id)}/change`, {
+    method: 'POST',
+    body: { text },
+  });
 }
 
 /** Undo a recorded change through the door the record names. */

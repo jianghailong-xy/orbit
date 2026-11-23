@@ -2571,6 +2571,16 @@ public final class APIClient: @unchecked Sendable {
         try await get("sessions/\(sessionID)/schedule-cards")
     }
 
+    /// Change… (§8.2): the schedule's open change conversation, or the opening a new one would start with.
+    public func scheduleChangeConversation(_ id: String) async throws -> ScheduleChangeConversationResponse {
+        try await get("schedules/\(id)/change")
+    }
+
+    /// The person's first words: opens the change conversation, or says them in the one another device opened.
+    public func openScheduleChange(_ id: String, text: String) async throws -> ScheduleChangeAnswer {
+        try await post("schedules/\(id)/change", body: ScheduleChangeBody(text: text))
+    }
+
     // MARK: - request plumbing
 
     /// How far a NAMED run request is resent when no answer comes back, and how long it waits.

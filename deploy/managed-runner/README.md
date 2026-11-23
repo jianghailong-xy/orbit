@@ -72,7 +72,7 @@ stay constant across rebuilds and nodes:
 | `/home/orbit/.orbit/codex-state` | Codex SQLite partitions, including database, WAL and SHM. |
 | `/home/orbit/.codex` | Default Codex auth/configuration, transcripts and sessions. |
 | `/home/orbit/.claude` | Claude Code configuration and session transcripts (`projects/<cwd>/<session>.jsonl`). |
-| `/home/orbit/orbit-repos` | The runner's work directory, empty at first: workspaces' folders are made here or in home when their first session is claimed. An image before 2026-11-17 also made an empty `orbit-repos/default`; the entrypoint removes it while it is still empty and moves the config and identity marker to `orbit-repos`. |
+| `/home/orbit/orbit-repos` | Where the runner clones repositories, made by the runner on its first clone; the image does not make it. The runner's work directory is home itself. An image before 2026-11-23 made `orbit-repos` and named it the work directory, and one before 2026-11-17 also made an empty `orbit-repos/default`; the entrypoint moves the config and identity marker to home, removes `orbit-repos/default` while it is still empty, and leaves `orbit-repos` as it is. |
 
 A volume an image before 2026-11-17 (a944a7f362) ran on was mounted at `/var/lib/orbit`, with home in
 its `home` folder. The entrypoint's start moves that folder's contents to the volume root, under the

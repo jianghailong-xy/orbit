@@ -63,6 +63,11 @@ export class ScheduleDecisionDto {
 }
 
 /** The Scheduled page's quick-add line (§8.1): a sentence, and the workspace the line shows. */
+/** A change conversation's first words (§8.2). */
+export class ScheduleChangeDto {
+  @IsString() @MaxLength(4000) text!: string;
+}
+
 export class ScheduleDraftDto {
   @IsPublicId() workspaceId!: string;
   @IsString() @MaxLength(4000) text!: string;
