@@ -221,6 +221,7 @@ final class ComposerMenuCopyParityTests: XCTestCase {
 
         // Read from the attach items onward: the native menu does gate Command and Skill, and that
         // gate is its own business.
+        // The first attach item, named for what it does since 530a6f9569 (Upload Image, Upload File).
         guard let first = menu.range(of: "Label(\"Upload Image\"") else {
             throw ParityError.unparsed("the native `addMenu` offers no `Upload Image` item")
         }

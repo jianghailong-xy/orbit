@@ -132,9 +132,11 @@ public struct SessionGuestContext: Equatable, Sendable {
     public let runnerName: String
     public let permissionMode: String
 
-    public init(runnerName: String, permissionMode: String?) {
+    /// A session that stores no mode runs in the account's, else Auto, as the server resolves it.
+    public init(runnerName: String, permissionMode: String?, accountDefault: String? = nil) {
         self.runnerName = runnerName
-        self.permissionMode = permissionMode ?? "default"
+        self.permissionMode = AgentDefaults.resolvePermissionMode(session: permissionMode,
+                                                                  accountDefault: accountDefault).rawValue
     }
 }
 

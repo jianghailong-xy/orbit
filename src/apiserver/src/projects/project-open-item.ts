@@ -1278,7 +1278,9 @@ export async function readOpenItemWorkSessions(
   const rounds = new Map(counted.map((row) => [row.id, row.rounds]));
   for (const item of offered) {
     const returned = item.workSessionReturnedAt;
-    const frozen = (item.payload as { workSession?: Partial<LandingFixHandBack> } | null)?.workSession?.rounds;
+    const hand = (item.payload as { workSession?: Partial<LandingFixHandBack> } | null)?.workSession;
+    const frozen = hand?.rounds;
+    const last = hand?.lastMessage;
     out.set(item.id, {
       sessionId: item.workSessionId!,
       offeredAt: item.workSessionOfferedAt!,
@@ -1287,6 +1289,7 @@ export async function readOpenItemWorkSessions(
         ? { returnReason: item.workSessionReturnReason as OpenItemWorkSessionReturnReason }
         : {}),
       rounds: returned ? (typeof frozen === 'number' ? frozen : 0) : rounds.get(item.id) ?? 0,
+      ...(returned ? { lastMessage: typeof last === 'string' && last !== '' ? last : null } : {}),
     });
   }
   return out;

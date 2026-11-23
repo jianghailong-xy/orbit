@@ -650,7 +650,9 @@ object ProjectPage {
     }
     fun waitsForLanding(t: JsonObject) = t.text("dependencyState") != "READY" && (t.number("landingWaitCount") ?: 0) > 0
     /** An AGENT_PUSH task not yet seen on its line (§10.9) has no receipt either, so it waits with the work still landing. */
-    private val integratingStates = setOf("QUEUED", "RUNNING", "CONFLICT", "CHECK_FAILED", "ERROR", "AWAITING_OWNER", "AWAITING_OBSERVATION")
+    private val integratingStates = setOf("QUEUED", "RUNNING", "CONFLICT", "CHECK_FAILED", "ERROR", "FIXING", "AWAITING_OWNER", "AWAITING_OBSERVATION")
+    /** The task's own work session that is fixing its landing (revision 42, §12.7: `integration.state = FIXING`), which its row opens. */
+    fun fixingSession(t: JsonObject): String? = t.obj("integration")?.takeIf { it.text("state") == "FIXING" }?.text("workSessionId")?.takeIf { it.isNotEmpty() }
     private val landedStates = setOf("ON_INTEGRATION_LINE", "ON_UPSTREAM")
     /** "integrating" / "landed" for a done task, by its integration state. */
     fun integrationStage(t: JsonObject): String? {
@@ -701,6 +703,8 @@ object ProjectPage {
             "CONFLICT" -> Tag("Conflict · $who", TagTone.DANGER)
             "CHECK_FAILED" -> Tag("Checks failed · $who", TagTone.DANGER)
             "ERROR" -> Tag("Integration error · $who", TagTone.DANGER)
+            // Revision 42 (board ④ e ②): its own session is fixing it, which asks nothing of anyone else.
+            "FIXING" -> Tag(io.orbitd.android.reader.LandingFixWindowCopy.LANDING_FIXING, TagTone.VERIFICATION)
             "AWAITING_OWNER" -> Tag("Awaiting your approval", TagTone.WARNING)
             "AWAITING_OBSERVATION" -> Tag(waitingToBeSeenOn(upstreamRef ?: "main", integration.text("deliveredSha")), TagTone.NEUTRAL)
             "ON_INTEGRATION_LINE" -> Tag("On ${ref ?: "the project branch"}", TagTone.SUCCESS)
