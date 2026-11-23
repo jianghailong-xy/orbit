@@ -1206,6 +1206,7 @@ test('the landing’s todos list its owed INTEGRATION_* item and not another kin
         await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: {
           status, retryAt,
           finishedAt: status === RunStatus.FAILED ? new Date() : null,
+          lastTurnOutcome: status === RunStatus.FAILED ? 'FAILED' : null,
         } });
         assert.deepEqual(await todosOf(stack, w, landing.sessionId), [],
           `${status}: an unread coordinator item is not an owner-facing landing todo`);
@@ -1213,7 +1214,7 @@ test('the landing’s todos list its owed INTEGRATION_* item and not another kin
           `${status}: the unread item does not mark the landing as awaiting a decision`);
       }
       // Down with no retry coming, the coordinator never reads it: the owner sees it on the landing.
-      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, finishedAt: new Date(), retryAt: null } });
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', finishedAt: new Date(), retryAt: null } });
       assert.deepEqual(await todosOf(stack, w, landing.sessionId), [[failedId, 'INTEGRATION_CHECK_FAILED', 'OPEN']],
         'an item its coordinator cannot take is an owner-facing landing todo');
       await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null} });
