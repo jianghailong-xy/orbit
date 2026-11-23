@@ -7,6 +7,7 @@ import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { drainable, type DrainableServer, DRAIN_MS, endStreams, LINGER_MS, STOP_MS } from './common/graceful-stop';
 import { holdIdleConnections } from './common/idle-connections';
+import { httpRequestMetrics } from './common/http-request-metrics';
 import { PublicIdExceptionFilter } from './common/public-id.filter';
 import { publicIdHeaders } from './common/public-id-headers';
 import { PublicIdInterceptor } from './common/public-id.interceptor';
@@ -40,6 +41,10 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule, { bodyParser: false });
   const config = app.get(ConfigService);
+
+  // First, so its clock covers everything below: the request histogram, recorded when the answer has been written,
+  // which is when its status is known (common/http-request-metrics.ts).
+  app.use(httpRequestMetrics);
 
   // Pasted-image turns carry base64 in the JSON body; Nest's default 100kb express
   // limit rejects them with 413. Match the gateway/web nginx client_max_body_size (10m).
