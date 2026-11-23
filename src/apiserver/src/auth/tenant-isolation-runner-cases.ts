@@ -469,6 +469,15 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
   },
   'POST /runner/sessions/:id/events': { as: RUNNER, request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { events: [] } }) },
   'POST /runner/sessions/:id/finalize': { as: RUNNER, request: (of) => ({ params: { id: of.runner.finalizeSessionId }, body: { status: 'CANCELLED' } }) },
+  // The release report of session-release/v1, declared as a runner declares it.
+  'POST /runner/sessions/:id/release': {
+    as: RUNNER,
+    request: (of) => ({
+      params: { id: of.runner.finalizeSessionId },
+      headers: { 'x-orbit-runner-capabilities': 'session-release/v1' },
+      body: {},
+    }),
+  },
   'POST /runner/sessions/:id/import-result': { as: RUNNER, request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { ok: true } }) },
   'POST /runner/sessions/:id/merge-result': {
     as: RUNNER,
@@ -1777,6 +1786,12 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     + '(runner-api.controller.ts:6151)',
   'POST /runner/sessions/:id/finalize body runtimeSessionId':
     'the engine\'s own id for its conversation, stored on the session the path names (runner-api.controller.ts:6151)',
+  'POST /runner/sessions/:id/release body claudeSessionId':
+    'the release report is the finalize with no status word, and reads this as the finalize reads it: the engine\'s own '
+    + 'id for its conversation, under its older name, stored on the session the path names (runner-api.controller.ts:10308)',
+  'POST /runner/sessions/:id/release body runtimeSessionId':
+    'the release report is the finalize with no status word, and reads this as the finalize reads it: the engine\'s own '
+    + 'id for its conversation, stored on the session the path names (runner-api.controller.ts:10308)',
   'POST /runner/sessions/:id/merge-result body operationId':
     'the merge attempt token the server minted for the session the path names, compared only with that locked row '
     + '(runner-api.controller.ts:6554)',
