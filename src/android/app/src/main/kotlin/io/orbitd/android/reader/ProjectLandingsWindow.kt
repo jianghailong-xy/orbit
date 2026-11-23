@@ -30,6 +30,9 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -439,7 +442,9 @@ internal fun ProjectLandingsWindow(app: OrbitApplication, handle: SessionHandle,
                 }
             }
         }
-        LandingsFooter(state.coordinatorId) { state.coordinatorId?.let { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LINK)) } }
+        // Revision 42 (board ② c ③): while a landing is with its task's own session, the footer says who decides, in that order.
+        val sessionFirst = state.rows.any { it.landing?.state == "FIXING" } || state.cards.values.any { it.workSession?.held == true }
+        LandingsFooter(state.coordinatorId, sessionFirst) { state.coordinatorId?.let { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LINK)) } }
     }
     review?.let { promotionId -> ProjectMergeReviewSheet(merge, promotionId, null) { review = null } }
     receipt?.let { record -> PromotionReceiptSheet(record) { receipt = null } }
@@ -640,9 +645,12 @@ private fun LandingReceiptBlock(receipt: LandingMergeReceipt) {
  * the end (docs/mocks/landings-ui-polish ③). No text field; a screen reader hears the whole sentence.
  */
 @Composable
-private fun LandingsFooter(coordinatorId: String?, onOpenCoordinator: () -> Unit) {
+private fun LandingsFooter(coordinatorId: String?, sessionFirst: Boolean, onOpenCoordinator: () -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val words = SessionLandingsCopy.orbitRunsTheseLandings
+    // Revision 42 (board ② c ③, owner's ruling 2026-11-22, which this newer ruling puts over landings-ui-polish ③'s one line): while a
+    // landing is with its task's own session, the whole sentence shows, wrapping beside the button, and names who decides.
+    val ruled = LandingFixWindowCopy.footer(words)
     Surface(tonalElevation = 2.dp) {
         Column {
             HorizontalDivider()
@@ -650,11 +658,17 @@ private fun LandingsFooter(coordinatorId: String?, onOpenCoordinator: () -> Unit
                 verticalAlignment = Alignment.CenterVertically) {
                 Icon(painterResource(R.drawable.ic_lock), null, Modifier.size(14.dp), tint = muted)
                 Spacer(Modifier.width(8.dp))
-                Text(words.substringBefore(" — "), Modifier.weight(1f).semantics { contentDescription = words }.testTag("landings:footer-line"),
+                if (sessionFirst) Text(buildAnnotatedString {
+                    append(words.substringBefore(" — "))
+                    append(" — ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)) { append(words.substringAfter(" — ")) }
+                    append(" ${LandingFixWindowCopy.DECISIONS_SESSION_FIRST}")
+                }, Modifier.weight(1f).padding(vertical = 8.dp).semantics { contentDescription = ruled }.testTag("landings:footer-line"),
+                    style = MaterialTheme.typography.bodySmall, color = muted)
+                else Text(words.substringBefore(" — "), Modifier.weight(1f).semantics { contentDescription = words }.testTag("landings:footer-line"),
                     style = MaterialTheme.typography.bodyMedium, color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (coordinatorId != null) OutlinedButton(onClick = onOpenCoordinator, modifier = Modifier.testTag("landings:open-coordinator")
-                    // Revision 42 (board ② c ③): a task's own session decides first, then the coordinator.
-                    .semantics { stateDescription = LandingFixWindowCopy.DECISIONS_SESSION_FIRST },
+                    .semantics { stateDescription = if (sessionFirst) LandingFixWindowCopy.DECISIONS_SESSION_FIRST else LandingSessionCopy.DECISIONS_THE_COORDINATOR },
                     contentPadding = PaddingValues(start = 12.dp, end = 16.dp)) {
                     Icon(painterResource(R.drawable.ic_person), null, Modifier.size(ButtonDefaults.IconSize))
                     Spacer(Modifier.width(ButtonDefaults.IconSpacing))

@@ -81,6 +81,11 @@ class LandingFixTest {
         assertNull(LandingFixWindowCopy.returnReason("SOMETHING_NEW"))
     }
 
+    @Test fun theFooterSaysWhoDecidesWhileASessionHasALanding() {
+        assertEquals("Orbit runs these landings — nothing to type here. Decisions: the task's own session first, then the coordinator",
+            LandingFixWindowCopy.footer(io.orbitd.android.directory.SessionLandingsCopy.orbitRunsTheseLandings))
+    }
+
     @Test fun theTaskRowReadsLandingFixingAndOpensTheSession() {
         val task = obj("""{"id":"t1","status":"DONE","workState":"DONE","dependencyState":"READY","integration":{"state":"FIXING","workSessionId":"s1"}}""")
         assertEquals("Landing · fixing", ProjectPage.integrationTag(task, "project/x", "main")?.text)

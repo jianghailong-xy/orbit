@@ -35,6 +35,8 @@ object LandingFixWindowCopy {
     fun hasIt(age: String) = "has it · $age"
     /** The footer's second sentence (board ② c ③): who decides, in the order they get the failure. */
     const val DECISIONS_SESSION_FIRST = "Decisions: the task's own session first, then the coordinator"
+    /** The footer's whole sentence while a landing is with its task's own session (board ② c ③). */
+    fun footer(orbitRunsTheseLandings: String) = "$orbitRunsTheseLandings $DECISIONS_SESSION_FIRST"
 
     /** The timeline's three lines (§12.7) as the board draws them. */
     const val HANDED_TO_THE_TASKS_SESSION = "Handed to the task's session"

@@ -174,6 +174,9 @@ class LandingFixDeviceTest : IncrementDeviceTest() {
         verify("its clause says who is on it", says("landing-head:detail", "conflict · ${LandingFixWindowCopy.ITS_OWN_SESSION_IS_ON_IT}"))
         verify("the hand-off line", exists(hasTestTag("landing:fix-line:handed_to_session"), unmerged = true))
         verify("the session's door first", exists(hasTestTag("landing:fixing:open_work_session"), unmerged = true))
+        // ② c ③: while a landing is with its task's session, the footer says the whole ruled sentence, visibly.
+        await("the ruled footer") { textOf("landings:footer-line") ==
+            "Orbit runs these landings — nothing to type here. ${LandingFixWindowCopy.DECISIONS_SESSION_FIRST}" }
         val window = compose.onNodeWithTag("landings-window-list")
         window.performScrollToNode(hasTestTag("landing-entry:$land1"))
         capture("$theme-c-window-fixing")
@@ -185,6 +188,10 @@ class LandingFixDeviceTest : IncrementDeviceTest() {
         verify("the words are the session's", says("landing:hand-back-words", "“$words2”"))
         verify("the returned line", says("landing:fix-line:returned_to_coordinator", "Returned to the coordinator · no new commit", substring = true))
         verify("Open session among the coordinator's doors", exists(hasTestTag("landing:wait:open_work_session"), unmerged = true))
+        // ② d: what failed is said once — the head's clause, then the generation's own sentence, never the clause twice.
+        val handedBack = hasAnyAncestor(hasTestTag("landing-entry:$land2"))
+        verify("the clause once", count(hasText("Could not merge · conflict") and handedBack, unmerged = true) == 1)
+        verify("the failure in its own words", exists(hasTestTag("landing:failure") and hasText("Conflict in 2 files · nothing was pushed") and handedBack, unmerged = true))
         window.performScrollToNode(hasTestTag("landing:hand-back"))
         capture("$theme-d-window-handed-back")
 
@@ -220,6 +227,8 @@ class LandingFixDeviceTest : IncrementDeviceTest() {
         open("orbit-session:$land1")
         await("the Fixed line") { exists(hasTestTag("landing:fix-line:fixed_by_session"), unmerged = true) }
         await("A11k's card read whole again") { exists(hasTestTag("landing:hand-back-words"), unmerged = true) }
+        // Nothing is with a task's session any more: today's footer, one line.
+        await("today's footer") { textOf("landings:footer-line") == "Orbit runs these landings" }
         compose.onNodeWithTag("landings-window-list").performScrollToNode(hasTestTag("landing:fix-line:fixed_by_session"))
         capture("$theme-c-window-fixed-again")
     }

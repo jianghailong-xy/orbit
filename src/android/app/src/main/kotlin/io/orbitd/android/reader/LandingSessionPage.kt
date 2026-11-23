@@ -425,7 +425,9 @@ internal fun LandingStatusCard(state: LandingSessionRead, view: LandingView?, ca
                     }
                 }
                 // While its own session fixes it, what failed in the generation's own sentence (board ② c ①: `Conflict in 2 files · …`).
-                (if (fixing != null) LandingFix.failureLine(view) ?: card.failure else card.failure)?.let {
+                // Handed back, the same (board ② d): said once — never the head's clause a second time.
+                (if (fixing != null || handedBack != null) LandingFix.failureLine(view) ?: card.failure else card.failure)
+                    ?.takeIf { fixing == null && handedBack == null || it != detail }?.let {
                     Text(it, Modifier.testTag("landing:failure"), style = MaterialTheme.typography.bodySmall, color = muted)
                 }
                 if (card.timedOut) {
