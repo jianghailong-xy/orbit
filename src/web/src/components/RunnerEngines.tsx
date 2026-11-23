@@ -1387,6 +1387,13 @@ function AccountRow({
     onSettled: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
     onError: (e: Error) => message.error(runnerAccountSetDefaultFailed(accountNameOf(account)), e.message),
   });
+  // The failure stays on the runner's record until the owner dismisses it here, or asks again.
+  const dismissSwapFailure = useMutation({
+    mutationFn: () =>
+      api<{ ok: true }>(`/runners/${runner.id}/accounts/${engine}/${account.id}/set-default`, { method: 'DELETE' }),
+    onSettled: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
+    onError: (e: Error) => message.error("Couldn't dismiss it", e.message),
+  });
   const canSetDefault = engine === 'claude' && !isDefault;
   const setDefaultBlocked = !runner.online
     ? RUNNER_ACCOUNT_SET_DEFAULT_OFFLINE
@@ -1599,6 +1606,15 @@ function AccountRow({
       {/* The machine could not swap the logins, and put both back: its reason, as a refused removal's. */}
       {swapMine?.status === 'failed' && (
         <div className="re-panel bad re-swap-failed">
+          <button
+            type="button"
+            className="wt-notice-close re-panel-close"
+            aria-label="Dismiss"
+            disabled={dismissSwapFailure.isPending}
+            onClick={() => dismissSwapFailure.mutate()}
+          >
+            ✕
+          </button>
           <div className="re-panel-row">{runnerAccountSetDefaultFailed(accountNameOf(account))}</div>
           {swapMine.message && <div className="re-panel-row">{swapMine.message}</div>}
           <div className="re-panel-hint">{RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED}</div>

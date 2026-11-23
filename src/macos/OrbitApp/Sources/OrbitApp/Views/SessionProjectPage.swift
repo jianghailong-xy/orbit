@@ -595,7 +595,8 @@ struct SessionProjectPage: View {
         .sheet(item: $sharingSession) { session in
             if let baseURL = app.baseURL {
                 ShareSheet(kind: .session, rootID: session.id, baseURL: baseURL, tokenStore: app.tokenStore,
-                           guests: .of(session, agents: app.agents))
+                           guests: .of(session, agents: app.agents,
+                                       accountDefault: app.user?.preferences?.defaultPermissionMode))
             }
         }
         .sheet(item: $movingSession) { session in

@@ -223,6 +223,22 @@ test('the errors a caller saw: a 502 once, and no retry answered, call its runne
   assert.match(md, /^Errors a caller saw, each once: 2 \(the report's own count: 16\)\.$/m);
 });
 
+test('the apiserver\'s error lines are counted in its JSON lines as in Nest\'s text', () => {
+  const dir = writeRun('apiserver-json', []);
+  mkdirSync(join(dir, 'logs'));
+  const at = STEADY_FROM + 120_000;
+  const json = (level, message) => JSON.stringify({ level, pid: 1, timestamp: at, message, context: 'Queue', requestId: '3f1c9a0b5d7e4f2a8c6b1d0e9f8a7b6c' });
+  writeFileSync(join(dir, 'logs', 'apiserver.log'), [
+    json('error', 'claim failed'),
+    json('log', 'claimed'),
+    // Outside the window: not counted.
+    JSON.stringify({ level: 'error', pid: 1, timestamp: STEADY_TO + 60_000, message: 'late' }),
+    '[Nest] 1  - 10/28/2026, 2:03:00 AM   ERROR [Queue] claim failed',
+  ].join('\n') + '\n');
+  const r = JSON.parse(report(dir).text);
+  assert.equal(r.errorCounts.apiserverErrorLines, 2);
+});
+
 // Task C2b's two judging runs, from their report.json as its comments hold them: evidence 16 (34pY2HDYWSnX3JeUpItJL,
 // sha256 be81a84efff2d53c…) and evidence 25 (34pdFTWYp1hDd2zF8IQ0h, sha256 623f62bf6c6d4758…), cut to what the second
 // verdict reads:
