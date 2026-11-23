@@ -1261,19 +1261,50 @@ export const CREATE_WORKDIR_CAPABILITY = 'create-workdir/v1';
  *  `<reposRoot>/<name>`. */
 export const CREATE_WORKDIR_HOME_CAPABILITY = 'create-workdir/v2';
 
+/** A managed runner's home, fixed by its image (deploy/managed-runner/image). A new folder on a managed runner that has
+ *  not reported yet goes here, as it does once it has: every managed image declares create-workdir/v2. */
+export const MANAGED_RUNNER_HOME = '/home/orbit';
+
 /** The directory a runner's new folders go in: its home, the parent of its reposRoot, when it declares
  *  CREATE_WORKDIR_HOME_CAPABILITY, else reposRoot itself. The separator is the one the root is written with. */
-/** A managed runner's repos folder, fixed by its image (deploy/managed-runner/image/entrypoint.py). A new folder on a
- *  managed runner that has not reported yet goes here: every runner version can make one inside its reposRoot. */
-export const MANAGED_RUNNER_REPOS_ROOT = '/home/orbit/orbit-repos';
-
 export function newFolderRoot(reposRoot: string, capabilities: readonly string[] | null | undefined): string {
-  const root = reposRoot.trim().replace(/(?<=.)[\\/]+$/, '');
-  if (!capabilities?.includes(CREATE_WORKDIR_HOME_CAPABILITY)) return root;
+  return capabilities?.includes(CREATE_WORKDIR_HOME_CAPABILITY) ? homeOfReposRoot(reposRoot) : trimReposRoot(reposRoot);
+}
+
+const trimReposRoot = (reposRoot: string): string => reposRoot.trim().replace(/(?<=.)[\\/]+$/, '');
+
+/** The directory a reported reposRoot sits in: the machine's home (`<home>/orbit-repos`). */
+function homeOfReposRoot(reposRoot: string): string {
+  const root = trimReposRoot(reposRoot);
   const cut = Math.max(root.lastIndexOf('/'), root.lastIndexOf('\\'));
   if (cut < 0) return root;
   // `/orbit-repos` sits in `/`, and `C:\orbit-repos` in `C:\`.
   return cut === 0 || root[cut - 1] === ':' ? root.slice(0, cut + 1) : root.slice(0, cut);
+}
+
+/** What newFolderRootFor reads of a runner. `capabilities` is what it has reported: a server passes [] for a runner
+ *  that has not reported yet (no capabilitiesReportedAt). */
+export interface NewFolderRunner {
+  managed: boolean;
+  reposRoot: string | null | undefined;
+  capabilities: readonly string[] | null | undefined;
+}
+
+/** Where a new folder named on this runner goes, for every client and the server alike (new-folder-root.fixture.json):
+ *  on a managed runner that has not reported yet, its image's home MANAGED_RUNNER_HOME, whatever Repos Folder is stored
+ *  from before, so its first workspace can be made before it is up; newFolderRoot on a runner that makes new folders and
+ *  has reported its Repos Folder; null on any other, which cannot make one. */
+export function newFolderRootFor(runner: NewFolderRunner): string | null {
+  if (runner.managed && !runner.capabilities?.length) return MANAGED_RUNNER_HOME;
+  const reposRoot = runner.reposRoot?.trim() ?? '';
+  if (reposRoot && runner.capabilities?.includes(CREATE_WORKDIR_CAPABILITY)) return newFolderRoot(reposRoot, runner.capabilities);
+  return null;
+}
+
+/** `<root>/<name>`: the separator the root is written with, never doubled. A new folder's path and a clone's. */
+export function newFolderPath(root: string, name: string): string {
+  const separator = root.includes('\\') && !root.includes('/') ? '\\' : '/';
+  return `${root.replace(/[\\/]+$/, '')}${separator}${name}`;
 }
 
 /** A runner that reports its machine's CPU, memory and disk on every heartbeat (RunnerHeartbeatRequest.resources).
@@ -1399,6 +1430,20 @@ export interface NewWorkspaceGithub {
 /** What a runner declares when it clones a GitHub workspace's repository on request (cloneRequests,
  *  docs/github-workspace-design.md §6). POST /sessions makes a GitHub workspace only on a runner that declares it. */
 export const CLONE_WORKDIR_CAPABILITY = 'clone-workdir/v1';
+
+/** What a runner declares when it clones into its home directory, the directory its reported reposRoot sits in:
+ *  a GitHub workspace's folder is then `<home>/<folder>` (cloneRootFor) rather than `<reposRoot>/<folder>`. */
+export const CLONE_WORKDIR_HOME_CAPABILITY = 'clone-workdir/v2';
+
+/** Where a GitHub workspace's clone goes on this runner, for every client and the server alike
+ *  (new-folder-root.fixture.json `clones`): its home on a runner that declares CLONE_WORKDIR_HOME_CAPABILITY, its
+ *  reposRoot on an older one; null on a runner that does not clone or has not reported its reposRoot. `capabilities` is
+ *  what it has reported ([] before it reports). */
+export function cloneRootFor(runner: { reposRoot?: string | null; capabilities?: readonly string[] | null }): string | null {
+  const reposRoot = runner.reposRoot?.trim() ?? '';
+  if (!reposRoot || !runner.capabilities?.includes(CLONE_WORKDIR_CAPABILITY)) return null;
+  return runner.capabilities.includes(CLONE_WORKDIR_HOME_CAPABILITY) ? homeOfReposRoot(reposRoot) : trimReposRoot(reposRoot);
+}
 
 /** A workspace's clone state (Workspace.cloneState); null for a workspace that does not come from GitHub. */
 export type WorkspaceCloneState = 'PENDING' | 'CLONING' | 'READY' | 'FAILED';

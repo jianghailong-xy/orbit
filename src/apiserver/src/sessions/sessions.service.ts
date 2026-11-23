@@ -1,6 +1,6 @@
 import { readSessionCoordinatorHandoffs } from '../projects/coordinator-handoff';
 import type { BackgroundJobStopResponse, BackgroundJobTailResponse, HelpAskMarker, SubagentRunView, WorkflowRunView } from '@orbit/shared';
-import { BG_JOB_STOPPED_BY_OWNER, BG_JOB_TAIL_MAX_BYTES, BG_OUTPUT_TAIL_V1, BG_OWNER_STOP_V1 } from '@orbit/shared';
+import { BG_JOB_STOPPED_BY_OWNER, BG_JOB_TAIL_MAX_BYTES, BG_OUTPUT_TAIL_V1, BG_OWNER_STOP_V1, cloneRootFor, newFolderPath } from '@orbit/shared';
 import { RunnerHints } from '../realtime/runner-hints';
 import { boundTailLines } from './background-job-tail';
 import { modelLabels, subagentRunView } from '../runner-api/subagent-run';
@@ -270,7 +270,6 @@ import {
   folderNameOf,
   folderOfRepoName,
   freeWorkspaceName,
-  newFolderWorkDir,
   newFolderWorkDirOn,
   readNewWorkspace,
   type NewWorkspaceGithubAsk,
@@ -2121,9 +2120,10 @@ export class SessionsService {
         message: 'Your GitHub account cannot reach that repository through Orbit\'s GitHub App. Add it to the App on GitHub, or pick another.',
       });
     }
-    const reposRoot = runner.reposRoot?.trim();
-    const clones = !!runner.capabilitiesReportedAt && runner.capabilities.includes(CLONE_WORKDIR_CAPABILITY);
-    if (!clones || !reposRoot) {
+    const capabilities = runner.capabilitiesReportedAt ? runner.capabilities : [];
+    const clones = capabilities.includes(CLONE_WORKDIR_CAPABILITY);
+    const cloneRoot = cloneRootFor({ reposRoot: runner.reposRoot, capabilities });
+    if (cloneRoot === null) {
       throw new ConflictException({
         code: 'CLONE_UNSUPPORTED',
         message: clones
@@ -2138,7 +2138,7 @@ export class SessionsService {
     }
     return {
       runnerId: runner.id,
-      workDir: newFolderWorkDir(reposRoot, folder),
+      workDir: newFolderPath(cloneRoot, folder),
       name: folder,
       autoCreateWorkDir: false,
       clone: {

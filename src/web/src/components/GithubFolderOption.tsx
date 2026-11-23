@@ -2,7 +2,7 @@ import { BranchesOutlined, ExportOutlined, GithubOutlined, LockOutlined, SearchO
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState, type KeyboardEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import type { GithubIntegration, GithubRepository } from '@orbit/shared';
+import { cloneRootFor, type GithubIntegration, type GithubRepository } from '@orbit/shared';
 import {
   connectGithub,
   githubBranchesQuery,
@@ -163,8 +163,9 @@ export function GithubFolderOption({
 
   const name = folder.trim();
   const settledName = useSettled(name, 400);
-  const reposRoot = runner.reposRoot ?? '';
-  const probe = useDirProbe(runner.id, repo && !disabled && isValidNewFolder(settledName) ? newFolderPath(reposRoot, settledName) : undefined, true);
+  // Where the server clones it (@orbit/shared cloneRootFor): home on a clone-workdir/v2 runner.
+  const cloneRoot = cloneRootFor(runner) ?? '';
+  const probe = useDirProbe(runner.id, repo && !disabled && isValidNewFolder(settledName) ? newFolderPath(cloneRoot, settledName) : undefined, true);
   const found = repo && settledName === name && probe.state === 'answered' ? probe.probe : null;
   const free = !!found && !found.error && !found.exists;
   const ref = branchOpen && branch.trim() && branch.trim() !== repo?.defaultBranch ? branch.trim() : null;
@@ -179,7 +180,7 @@ export function GithubFolderOption({
           defaultBranch: repo.defaultBranch,
           ref,
           name,
-          path: newFolderPath(reposRoot, name),
+          path: newFolderPath(cloneRoot, name),
         }
       : null;
   const candidateKey = candidate ? `${candidate.repoId}:${candidate.name}:${candidate.ref ?? ''}` : '';
@@ -341,7 +342,7 @@ export function GithubFolderOption({
       <Input
         className="msc-input"
         size="small"
-        prefix={<span className="msc-prefix">{newFolderPath(reposRoot, '')}</span>}
+        prefix={<span className="msc-prefix">{newFolderPath(cloneRoot, '')}</span>}
         placeholder={SETUP_NEW_FOLDER_NAME}
         aria-label={SETUP_NEW_FOLDER_NAME}
         value={folder}
