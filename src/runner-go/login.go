@@ -289,6 +289,14 @@ type loginRun struct {
 	binPath  string
 	finished chan struct{}
 	signedIn bool
+	// report is this attempt's own report (it names the attempt and the account), and published the last
+	// report that gave the owner a link: what a sign-in in the runner's browser (login_runner_browser.go) opens,
+	// and reports again with what became of it. Both read and written with the relay's mu held.
+	report    func(LoginResultRequest)
+	published *LoginResultRequest
+	// browser is how far a sign-in in the runner's browser got for this attempt (login_runner_browser.go): "",
+	// browserOpening while the tab is being opened, loginBrowserOpened once it is.
+	browser string
 }
 
 // loginAccountKey names the account a sign-in writes: the engine's one login, or — for an engine
@@ -408,8 +416,18 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 	// Every report names the attempt it is about and the account signing in, so the control plane
 	// can tell which account this is and drop what a sign-in it has moved past still says.
 	send := report
+	// The run this attempt becomes, once it has one: the reports that give the owner a link are kept on it.
+	var self *loginRun
 	report = func(res LoginResultRequest) {
 		res.Attempt, res.Account = attempt, account
+		if (res.Status == loginAwaitingCode || res.Status == loginAwaitingApproval) && res.URL != "" && res.Browser == "" {
+			r.mu.Lock()
+			if self != nil {
+				kept := res
+				self.published = &kept
+			}
+			r.mu.Unlock()
+		}
 		send(res)
 	}
 	// A sign-in that cannot even start still added this attempt's account, and an account nobody
@@ -591,6 +609,7 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 		r.runs = map[string]*loginRun{}
 	}
 	r.runs[key] = run
+	run.report, self = report, run
 	r.wg.Add(1)
 	r.mu.Unlock()
 
