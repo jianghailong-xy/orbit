@@ -1175,7 +1175,9 @@ function WikiChatSession({
     | { model?: string | null; effort?: string | null; runnerId?: string | null }
     | undefined;
   const model = effectiveSessionModel(engine, provider, session?.model, workspaceRow?.model, catalog, machine.configured, runner?.runtimeDefaultModels);
-  const permissionMode = session?.permissionMode ?? 'default';
+  const me = useQuery(meQuery());
+  // A session that stored no mode runs in the account's, else Auto, as the server resolves it.
+  const permissionMode = session?.permissionMode ?? me.data?.preferences?.defaultPermissionMode ?? DEFAULT_PERMISSION_MODE;
   const current: ChatConfig = {
     model,
     permissionMode: resolved ? clampPermissionModeForModel(permissionMode, model, engine, provider, machine.configured, catalog) : permissionMode,

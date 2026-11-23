@@ -650,6 +650,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// never-run (queued) session — mirroring web's client-side sort. See `SessionFilter`.
     public let createdAt: String?
     public let lastTurnAt: String?
+    /// The list's order key: moves only when the session changes for its owner (created, a message
+    /// sent, a turn ended on the owner, ended or completed), never on streamed activity. nil from an
+    /// older control plane, which reads as `createdAt`. `lastTurnAt` is the liveness clock instead.
+    public let listedAt: String?
     /// When the turn now in flight was handed to the runner (ISO-8601), or nil when the session is
     /// not mid-turn. Distinct from `lastTurnAt`, which the server rewrites on every state move and
     /// so reads as a few seconds old on *every* running session — a list of them all says "just
@@ -664,6 +668,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// choice); before the session exists the pills reflect local picks instead.
     public let model: String?
     public let permissionMode: String?
+    public let actualPermissionMode: String?
+    public let actualPermissionModeAt: String?
+    /// The detail carries history; the list omits it.
+    public let permissionModeChanges: [SessionPermissionModeChange]?
     public let effort: String?
     /// Whether the session runs in the runtime's fast lane — Claude Code's `/fast`, Codex's
     /// "priority" service tier. Offered only where `AgentDefaults.fastModeAvailable` says the lane
@@ -914,10 +922,14 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         updatedAt = try values.decodeIfPresent(String.self, forKey: .updatedAt)
         createdAt = try values.decodeIfPresent(String.self, forKey: .createdAt)
         lastTurnAt = try values.decodeIfPresent(String.self, forKey: .lastTurnAt)
+        listedAt = try values.decodeIfPresent(String.self, forKey: .listedAt)
         currentTurnStartedAt = try values.decodeIfPresent(String.self, forKey: .currentTurnStartedAt)
         pinnedAt = try values.decodeIfPresent(String.self, forKey: .pinnedAt)
         model = try values.decodeIfPresent(String.self, forKey: .model)
         permissionMode = try values.decodeIfPresent(String.self, forKey: .permissionMode)
+        actualPermissionMode = try values.decodeIfPresent(String.self, forKey: .actualPermissionMode)
+        actualPermissionModeAt = try values.decodeIfPresent(String.self, forKey: .actualPermissionModeAt)
+        permissionModeChanges = try values.decodeIfPresent([SessionPermissionModeChange].self, forKey: .permissionModeChanges)
         effort = try values.decodeIfPresent(String.self, forKey: .effort)
         fastMode = try values.decodeIfPresent(Bool.self, forKey: .fastMode)
         source = try values.decodeIfPresent(String.self, forKey: .source)
@@ -972,6 +984,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 ownerItems: [SessionOwnerItem]? = nil, taskId: String? = nil,
                 branch: String?,
                 updatedAt: String?, model: String? = nil, permissionMode: String? = nil,
+                actualPermissionMode: String? = nil, actualPermissionModeAt: String? = nil,
+                permissionModeChanges: [SessionPermissionModeChange]? = nil,
                 effort: String? = nil, fastMode: Bool? = nil, source: String? = nil, runSource: String? = nil,
                 projectId: String? = nil, projectTitle: String? = nil,
                 lastAssistantText: String? = nil,
@@ -990,6 +1004,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 sourceState: String? = nil, sourceRefusalCode: String? = nil,
                 sourceRefusalDetail: SourceRefusalDetail? = nil, forkSource: String? = nil,
                 pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil,
+                listedAt: String? = nil,
                 currentTurnStartedAt: String? = nil,
                 tags: [SessionTag]? = nil, retryAt: String? = nil,
                 poolMemberProviderId: String? = nil, poolKeyId: String? = nil,
@@ -1046,6 +1061,9 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.updatedAt = updatedAt
         self.model = model
         self.permissionMode = permissionMode
+        self.actualPermissionMode = actualPermissionMode
+        self.actualPermissionModeAt = actualPermissionModeAt
+        self.permissionModeChanges = permissionModeChanges
         self.effort = effort
         self.fastMode = fastMode
         self.source = source
@@ -1079,6 +1097,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.pinnedAt = pinnedAt
         self.createdAt = createdAt
         self.lastTurnAt = lastTurnAt
+        self.listedAt = listedAt
         self.currentTurnStartedAt = currentTurnStartedAt
         self.tags = tags
         self.folderId = folderId

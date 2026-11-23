@@ -230,7 +230,7 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let view = code(try appSource("Views/Console/ConsoleView.swift"))
         // The transcript's rows are built in `builtRows`; `rows` folds settled cards on top of them.
         let rows = try slice(view, from: "private var builtRows: [TranscriptRow] {", to: "\n    }")
-        XCTAssertTrue(rows.contains("decisionCards: console.decisionCards,"))
+        XCTAssertTrue(rows.contains("decisionCards: console.decisionCards + console.permissionModeCards,"))
         XCTAssertTrue(rows.contains("conversationCreatedAt: app.session(id: console.sessionID)?.createdAt,"))
         let card = try slice(view, from: ".onChange(of: console.cardRequest, initial: true) { _, request in",
                              to: "\n        }")

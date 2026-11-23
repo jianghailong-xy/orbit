@@ -397,6 +397,14 @@ export class ManagedRunnerManager {
       : { backend: this.backend.name };
   }
 
+  /**
+   * Whether the manager may ask the backend to stop an instance on its own account — an accepted sleep past its drain
+   * time, a disabled owner's drain, a silent instance of a previous image — and not only for the owner's Update Now.
+   */
+  private get stopsUnasked(): boolean {
+    return !!this.backend.stopInstance && !this.backend.ownerStopsOnly;
+  }
+
   /** Whether a mapping is one this manager drives (`scope`). */
   owns(mapping: Pick<ManagedRunner, 'backend' | 'clusterKey' | 'namespace'>): boolean {
     const { backend, clusterKey, namespace } = this.scope;
@@ -898,9 +906,9 @@ export class ManagedRunnerManager {
    * on the current image ends the request (`updateCompletedAt`). Otherwise, null when it stays:
    *
    *   - Asked of a busy runner with the owner's word that its turns may be interrupted (`updateInterruptTurns`), on a
-   *     backend whose host reports every stop it makes (`stopInstance`, Docker): the instance is asked to stop
-   *     (`stopForOwnerUpdate`), and its host's report of the exit is read as for any stop (`terminated`).
-   *   - Otherwise — an idle runner's request, or a busy one's on a backend that cannot stop it (Kubernetes) — the same
+   *     backend whose host reports every stop it makes (`stopInstance`, Docker and Kubernetes): the instance is asked
+   *     to stop (`stopForOwnerUpdate`), and its host's report of the exit is read as for any stop (`terminated`).
+   *   - Otherwise — an idle runner's request, or a busy one's on a backend that cannot stop it — the same
    *     roll as `rollPreviousImage`, on any backend: once the instance is idle, by its own fresh report and by the
    *     records, it drains marked as a roll and wakes at once as the next generation, made from the image the backend
    *     makes instances from now, on the same volume and runner. Nothing in flight is cut short: while busy it stays
@@ -930,8 +938,9 @@ export class ManagedRunnerManager {
   /**
    * The owner's Update Now of a busy runner, with their word that its turns may be interrupted, on a backend whose host
    * reports every stop it makes: the READY instance is asked to stop (`stopInstance`), as `stopSilentPrevious` asks.
-   * Docker sends SIGTERM with the profile's stop grace, and the runner's ordinary shutdown stops its turns, which stay
-   * resumable; that works on every runner image. Asking is no proof: the mapping stays READY, nothing is created, and
+   * Docker sends SIGTERM with the profile's stop grace, and Kubernetes deletes the Pod with its termination grace, which
+   * the kubelet turns into the same SIGTERM; the runner's ordinary shutdown stops its turns, which stay resumable; that
+   * works on every runner image. Asking is no proof: the mapping stays READY, nothing is created, and
    * every pass asks again until its host reports the exit. That report is the stop proof (`terminated`): recorded, the
    * container removed by UID, its volume released, and only then the next generation made from the image the backend
    * makes instances from now, on the same volume and runner. Demand changes none of it.
@@ -992,9 +1001,10 @@ export class ManagedRunnerManager {
    * exit is, read as for any stop (`terminated`): recorded as the proof, the container removed by UID, its volume
    * released, and the next generation made from the image the profile names now, on the same volume and runner (or
    * asleep, if its owner asked). A stop reported by anything else, or a container gone, fences. Null when it stays.
+   * Never on Kubernetes (`stopsUnasked`), where only the owner's Update Now stops an instance.
    */
   private async stopSilentPrevious(mapping: ManagedRunner, instance: ManagedInstance): Promise<Step | null> {
-    if (!this.backend.stopInstance || !instance.previousImage || !instance.running) return null;
+    if (!this.stopsUnasked || !instance.previousImage || !instance.running) return null;
     if (!(await this.linkOnly())) return null;
     const now = this.now();
     const beats = await this.prisma.runner.findUnique({ where: { id: mapping.runnerId }, select: RUNNER_BEATS });
@@ -1006,7 +1016,7 @@ export class ManagedRunnerManager {
         + `previous image (${instance.previousImage}) and silent since ${beat?.toISOString() ?? 'it started'}, on a server that takes runners `
         + `over the link alone; asking it to stop, so that the next generation starts from the current image`,
     );
-    await this.backend.stopInstance(mapping);
+    await this.backend.stopInstance!(mapping);
     return { done: 'READY' };
   }
 
@@ -1132,7 +1142,7 @@ export class ManagedRunnerManager {
     }
     // Accepted: it stops by itself. Overdue is said, and forced only where the backend can (`stopOverdue`).
     const overdue = now.getTime() - mapping.stopAcknowledgedAt.getTime() > this.profile.lifecycle.drainSeconds * 1000;
-    const said = this.backend.stopInstance ? 'SLEEP_STOP_FORCED' : 'SLEEP_STOP_OVERDUE';
+    const said = this.stopsUnasked ? 'SLEEP_STOP_FORCED' : 'SLEEP_STOP_OVERDUE';
     if (overdue && (mapping.lastError as { code?: unknown } | null)?.code !== said) {
       await this.commit(mapping, { lastError: { ...managedRunnerReason(said), detail: `accepted at ${mapping.stopAcknowledgedAt.toISOString()}` } });
     }
@@ -1143,14 +1153,14 @@ export class ManagedRunnerManager {
   /**
    * A drain that is past its drain time since `since` — accepted and not yet stopped, or a disabled
    * owner's runner that has not stopped by itself — is stopped, where the backend's host reports
-   * every stop it makes (`stopInstance`: Docker; Kubernetes has none and nothing is forced). Asking
-   * is never the proof: the gate still waits for the host's report of the exit, then removes the
-   * instance by UID, as for a runner that stopped on its own.
+   * every stop it makes and the manager may ask it on its own account (`stopsUnasked`: Docker; on
+   * Kubernetes nothing is forced). Asking is never the proof: the gate still waits for the host's
+   * report of the exit, then removes the instance by UID, as for a runner that stopped on its own.
    */
   private async stopOverdue(mapping: ManagedRunner, since: Date, now: Date): Promise<void> {
-    if (!this.backend.stopInstance || now.getTime() - since.getTime() <= this.profile.lifecycle.drainSeconds * 1000) return;
+    if (!this.stopsUnasked || now.getTime() - since.getTime() <= this.profile.lifecycle.drainSeconds * 1000) return;
     this.log.warn(`managed runner ${mapping.id}: draining past its drain time; asking ${this.backend.terms.instance} ${mapping.podUid} to stop`);
-    await this.backend.stopInstance(mapping);
+    await this.backend.stopInstance!(mapping);
   }
 
   /**
