@@ -3000,7 +3000,7 @@ private struct TaskDetailContent: View {
         case .queued:        return "Queued"
         case .running:       return "Running"
         case .awaitingInput: return "Awaiting reply"
-        case .succeeded:     return "Succeeded"
+        case .succeeded:     return "Finished"
         case .failed:        return "Failed"
         case .interrupted:   return "Interrupted"
         case .ended:         return "Ended"

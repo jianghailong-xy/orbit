@@ -8,6 +8,8 @@ import type { SessionStateSource } from './sessionState';
  */
 export type Payload = SessionStateSource & {
   id: string;
+  engineTurnActive?: boolean;
+  runningSubagentCount?: number;
   queuedReason?: string | null;
   pendingApprovals?: number;
   runningBgCount?: number;
@@ -19,6 +21,22 @@ export type Payload = SessionStateSource & {
     resumeBlockedReason?: string | null;
   };
 };
+
+/**
+ * What the server sends as `activity` (sessionActivitySql, apiserver/src/sessions/task-work-carrier.ts): TURN for every
+ * row stored PENDING or RUNNING; for a row stored AWAITING_INPUT, the first wake source it has (TURN for the engine's
+ * own turn or a sub-agent, BACKGROUND_JOB, WAITING); null for every other status. Mirror of that rule, so a fixture
+ * never invents an activity the server would not send.
+ */
+export const serverActivity = (
+  status: string,
+  wake: 'TURN' | 'BACKGROUND_JOB' | 'WAITING' | null = null,
+): 'TURN' | 'BACKGROUND_JOB' | 'WAITING' | null =>
+  status === 'PENDING' || status === 'RUNNING' ? 'TURN' : status === 'AWAITING_INPUT' ? wake : null;
+
+/** Whether `payload` carries the activity the server would send for its stored status (the guard of the fixtures). */
+export const carriesServerActivity = (payload: Payload): boolean =>
+  (payload.status !== 'RUNNING' && payload.status !== 'PENDING') || payload.activity === 'TURN';
 
 export const held = { canSend: true, canResume: false, resumeBlockedReason: 'NOT_TERMINAL' };
 export const resumable = { canSend: true, canResume: true, resumeBlockedReason: null };
@@ -47,17 +65,40 @@ export const SITUATIONS: Record<string, Payload> = {
     phase: 'RUNNING', released: false, lastTurnOutcome: 'ANSWERED', waitingOn: null, capabilities: held,
   },
   'waiting on an approval': {
-    id: 's', status: 'RUNNING', runStatus: 'RUNNING', runState: 'RUNNING', pendingApprovals: 1,
+    id: 's', status: 'RUNNING', runStatus: 'RUNNING', runState: 'RUNNING', pendingApprovals: 1, activity: 'TURN',
     phase: 'RUNNING', released: false, lastTurnOutcome: null, waitingOn: 'PERSON', capabilities: held,
   },
   'on hold': {
     id: 's', status: 'PENDING', runStatus: 'PENDING', runState: 'QUEUED', error: 'Account paused until 2099-01-01',
-    queuedReason: null,
+    queuedReason: null, activity: 'TURN',
     phase: 'PENDING', released: false, lastTurnOutcome: 'ANSWERED', waitingOn: 'HOLD', capabilities: held,
   },
   'will wake': {
     id: 's', status: 'AWAITING_INPUT', runStatus: 'AWAITING_INPUT', runState: 'AWAITING_INPUT', activity: 'WAITING',
     phase: 'IDLE', released: false, lastTurnOutcome: 'ANSWERED', waitingOn: 'WAKE', capabilities: held,
+  },
+  'a running turn': {
+    id: 's', status: 'RUNNING', runStatus: 'RUNNING', runState: 'RUNNING', activity: 'TURN',
+    phase: 'RUNNING', released: false, lastTurnOutcome: null, waitingOn: null, capabilities: held,
+  },
+  'a queued turn': {
+    id: 's', status: 'PENDING', runStatus: 'PENDING', runState: 'QUEUED', activity: 'TURN',
+    phase: 'PENDING', released: false, lastTurnOutcome: null, waitingOn: null, capabilities: held,
+  },
+  // Parked (stored AWAITING_INPUT) while the engine runs its own turn: the server says activity TURN, phase RUNNING.
+  'parked with the engine\'s own turn': {
+    id: 's', status: 'AWAITING_INPUT', runStatus: 'AWAITING_INPUT', runState: 'AWAITING_INPUT', activity: 'TURN',
+    engineTurnActive: true,
+    phase: 'RUNNING', released: false, lastTurnOutcome: 'ANSWERED', waitingOn: null, capabilities: held,
+  },
+  'parked with a sub-agent running': {
+    id: 's', status: 'AWAITING_INPUT', runStatus: 'AWAITING_INPUT', runState: 'AWAITING_INPUT', activity: 'TURN',
+    runningSubagentCount: 1,
+    phase: 'RUNNING', released: false, lastTurnOutcome: 'ANSWERED', waitingOn: null, capabilities: held,
+  },
+  'interrupted': {
+    id: 's', status: 'INTERRUPTED', runStatus: 'INTERRUPTED', runState: 'INTERRUPTED',
+    phase: 'IDLE', released: false, lastTurnOutcome: 'INTERRUPTED', waitingOn: null, capabilities: held,
   },
   // An End asked of a session parked after an interrupted turn: the legacy run state already says ENDED, but no
   // runner has let go yet (INTERRUPTED is a held status), so the server answers ENDING until the release lands.

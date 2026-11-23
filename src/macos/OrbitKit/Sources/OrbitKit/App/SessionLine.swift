@@ -96,7 +96,7 @@ public struct SessionLine: Equatable, Sendable {
             // Held by its GitHub workspace's clone: git's percentage once the stream has relayed one (board
             // clone-progress-wait-card ④, web `sessionLine`).
             if let cloned = QueuedClone.rowLine(s, heard: cloneHeard) { return SessionLine(text: cloned, tone: .queued) }
-            return SessionLine(text: "Queued", tone: .queued)
+            return SessionLine(text: s.queueWord, tone: .queued)
         }
         // Parked while a sub-agent or workflow it started works on: the workspace itself still
         // working, so it outranks the wait it is parked on and anything it left running (web's
