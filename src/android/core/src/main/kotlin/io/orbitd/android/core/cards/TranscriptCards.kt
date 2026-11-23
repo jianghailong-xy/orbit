@@ -151,7 +151,8 @@ fun transcriptCards(event: RunEvent): List<InteractionCard> = buildList {
         addTurnCard("runNotice", OrbitTurnCards.noticeFromRun, CardFamily.SESSION_REQUEST, OrbitTurnCards::isRunNotice)
         addTurnCard("sessionOpening", "Orbit started this session", CardFamily.SESSION_REQUEST, OrbitTurnCards::isSessionOpening)
         addProjection("taskStart", "Task started", CardFamily.SESSION_REQUEST, listOf("taskId", "title"))
-        addProjection("projectStarted", "Project started", CardFamily.SESSION_REQUEST, listOf("projectId", "projectTitle", "by"))
+        // A payload that is not a card parses as nothing and leaves the turn the bubble it was (OrbitKit `ProjectStarted.parse`).
+        addTurnCard("projectStarted", ProjectStartedCopy.startedLabel, CardFamily.SESSION_REQUEST) { ProjectStarted.parse(it) != null }
         addProjection("openItemDelivery", "Project item delivered", CardFamily.SESSION_REQUEST, listOf("itemId", "kind", "title"))
         // The owner's answer handed to the coordinator: one line that opens to the words the agent read (`OwnerAnswerLine`).
         payload.obj("ownerAnswer")?.takeIf(OwnerAnswerLine::isCard)?.let { answer ->

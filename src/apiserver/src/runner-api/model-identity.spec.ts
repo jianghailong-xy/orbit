@@ -32,7 +32,8 @@ function memoryDb(rows: Array<{ ruleKey: string; canonicalKey: string; name: str
 
 test('the id rules take off what an engine wraps a model id in', () => {
   assert.equal(modelRuleKey('claude-sonnet-5-5'), 'claude-sonnet-5-5');
-  assert.equal(modelRuleKey('claude-sonnet-5-5-medium'), 'claude-sonnet-5-5', 'a level suffix');
+  assert.equal(modelRuleKey('qwen3.7-max'), 'qwen3-7-max', 'a trailing -max is part of the name, not a level');
+  assert.equal(modelRuleKey('claude-sonnet-5-5-medium'), 'claude-sonnet-5-5-medium', "an Antigravity level is its caller's to fold");
   assert.equal(modelRuleKey('claude-opus-5-5[context=1m,fast=true]'), 'claude-opus-5-5', 'a Cursor variant');
   assert.equal(modelRuleKey('["deepseek", "deepseek-v4-pro"]'), 'deepseek-v4-pro', 'a DeepSeek Harness token');
   assert.equal(modelRuleKey('kimi-code/k3'), 'k3', 'a tool prefix');

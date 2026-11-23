@@ -6,7 +6,8 @@ import { deepSeekCall } from '../sessions/naming';
  * one name and share one Quality figure (model-quality.ts). Display only: routing never reads any of it.
  *
  * Two steps. The id rules (modelRuleKey) take off what an engine wraps an id in, so `claude-sonnet-5-5` on Claude
- * Code and on Antigravity, or a Cursor variant of it, are one key with no question asked. What the rules cannot
+ * Code and on Antigravity, or a Cursor variant of it, are one key with no question asked. An Antigravity id's level
+ * (`claude-opus-5-5-high`) is taken off by the caller that knows the engine (antigravityBaseModel), never here. What the rules cannot
  * settle — `kimi-code/k3` beside `kimi-k3`, an alias like `deepseek-flash` beside `deepseek-v4-flash` — is asked
  * of DeepSeek on the server's own key, once per key, in the background (learnModelIdentities), and its answer kept
  * in model_identity, so the page stays the same from one load to the next. A key nobody has decided is its own model.
@@ -27,13 +28,11 @@ export interface ModelSighting {
   provider: string;
 }
 
-const EFFORT_SUFFIX = /-(?:minimal|low|medium|high|xhigh|max)$/;
-
 /**
  * An id with an engine's wrapping taken off: lower case; DeepSeek Harness's `["deepseek", "deepseek-v4-pro"]`
- * token read as its model; a Cursor variant's `[context=1m]` and a level suffix (`-medium`) dropped; a
- * `vendor/` prefix dropped; a dot between digits written as a dash (`5.5` and `5-5`). Two ids with one key are
- * one model; two keys may still be, which is DeepSeek's to say.
+ * token read as its model; a Cursor variant's `[context=1m]` dropped; a `vendor/` prefix dropped; a dot between
+ * digits written as a dash (`5.5` and `5-5`). Two ids with one key are one model; two keys may still be, which is
+ * DeepSeek's to say. A trailing level is NOT dropped: `-max` names Qwen3.7 Max (`qwen3.7-max`), not an effort.
  */
 export function modelRuleKey(model: string): string {
   let id = model.trim();
@@ -47,7 +46,7 @@ export function modelRuleKey(model: string): string {
   }
   id = id.toLowerCase().replace(/\[.*\]$/, '');
   id = id.slice(id.lastIndexOf('/') + 1);
-  return id.replace(EFFORT_SUFFIX, '').replace(/(\d)\.(?=\d)/g, '$1-') || model;
+  return id.replace(/(\d)\.(?=\d)/g, '$1-') || model;
 }
 
 /** The fields of the client this needs; a Prisma client or a double. */

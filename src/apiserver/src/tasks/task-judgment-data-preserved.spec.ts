@@ -3321,7 +3321,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1432 creates model_identity (rule_key, canonical_key, name, decided_at) and 1433 seeds it with INSERTs: a new
       // table, not a preserved relation; no preserved relation, trigger, function or DONE fence is read or changed.
       '1432_model_identity',
+      // 1433 seeds model_identity with production's model ids, INSERT ... ON CONFLICT (rule_key) DO NOTHING into that
+      // new table only; no preserved relation, trigger, function or DONE fence is touched.
       '1433_model_identity_seed',
+      // 1434 rewrites runner.repos_root from /var/lib/orbit/home to /home/orbit for managed runners only (6a7106f95b): an
+      // UPDATE of runner rows, none of the preserved relations, and no trigger, function or DONE fence changes.
+      '1434_managed_runner_repos_root_home_orbit',
       // 1441 to 1443, deploy 3 of design §12.6 (removal steps R6 to R8; written as 1428, 1429 and 1431, then 1433 to 1435,
       // renumbered above what main and the other lines took). 1441 writes session.last_turn_outcome (FAILED on a release
       // the status alone records as a failure, CANCELLED on the residual A2 shape) and conversation_turn.outcome and error
@@ -3336,7 +3341,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // type, constraint or DONE fence changes. No INSERT, UPDATE or DELETE.
       // Written as 1432 on the project line, it was renumbered after main took 1432 and 1433 (model_identity); it runs
       // after deploy 3's 1441 to 1443, and neither reads what the other changes.
-      '1444_drop_session_task_execution_claim_idx'],
+      '1444_drop_session_task_execution_claim_idx',
+      // 1447 adds SCHEDULE_CHANGE to session_run_source, two nullable session columns (change_schedule_id, with its
+      // foreign key to schedule ON DELETE SET NULL and a partial index, and schedule_change_opening), and a nullable
+      // asked_text to schedule_revision and schedule_change_request; no row is written, and none of the preserved
+      // relations, their triggers, functions or the DONE fence changes.
+      '1447_schedule_change_conversation',
+      // 1462 adds one nullable column, login_browser, to runner; no row is written, and no preserved relation,
+      // trigger, function or DONE fence changes.
+      '1462_runner_login_browser',
+      // 1463 re-keys three model_identity rows (qwen3-7, qwen3-8, qwen4 to their -max ids): UPDATEs of that table only,
+      // none of the preserved relations, and no trigger, function or DONE fence changes.
+      '1463_model_identity_max_is_a_name'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
