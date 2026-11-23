@@ -36,6 +36,9 @@ data class WorkspaceRef(val id: String, val name: String = "")
 data class DirectorySession(
     val id: String, val title: String? = null, val status: String = "UNKNOWN",
     val runState: String? = null, val lifecycleState: String? = null,
+    /** The session facts (contracts/session-state.contract.json), as words so a new one decodes; null from an older server. */
+    val phase: String? = null, val released: Boolean? = null, val lastTurnOutcome: String? = null, val waitingOn: String? = null,
+    val workFinished: Boolean? = null,
     val agent: WorkspaceRef? = null, val agentId: String? = null, val workspaceId: String? = null,
     val folderId: String? = null, val pinnedAt: String? = null,
     val createdAt: String? = null, val lastTurnAt: String? = null,
