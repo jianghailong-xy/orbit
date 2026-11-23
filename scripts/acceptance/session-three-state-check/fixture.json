@@ -21,7 +21,8 @@
     "resumeBlockedReason": "NOT_TERMINAL",
     "canComplete": true,
     "canRestore": false
-   }
+   },
+   "activity": "TURN"
   }
  },
  {
@@ -41,7 +42,8 @@
     "resumeBlockedReason": "NOT_TERMINAL",
     "canComplete": true,
     "canRestore": false
-   }
+   },
+   "activity": "TURN"
   }
  },
  {
@@ -65,7 +67,8 @@
     "resumeBlockedReason": "NOT_TERMINAL",
     "canComplete": true,
     "canRestore": false
-   }
+   },
+   "activity": "TURN"
   }
  },
  {
@@ -84,7 +87,8 @@
     "resumeBlockedReason": "NOT_TERMINAL",
     "canComplete": true,
     "canRestore": false
-   }
+   },
+   "activity": "TURN"
   }
  },
  {
@@ -108,7 +112,8 @@
     "resumeBlockedReason": "NOT_TERMINAL",
     "canComplete": true,
     "canRestore": false
-   }
+   },
+   "activity": null
   }
  },
  {
@@ -127,7 +132,8 @@
     "resumeBlockedReason": "NOT_TERMINAL",
     "canComplete": true,
     "canRestore": false
-   }
+   },
+   "activity": null
   }
  },
  {
@@ -151,7 +157,8 @@
     "resumeBlockedReason": "NOT_TERMINAL",
     "canComplete": true,
     "canRestore": false
-   }
+   },
+   "activity": null
   }
  },
  {
@@ -170,7 +177,8 @@
     "resumeBlockedReason": "NOT_TERMINAL",
     "canComplete": true,
     "canRestore": false
-   }
+   },
+   "activity": null
   }
  },
  {
@@ -195,7 +203,8 @@
     "resumeBlockedReason": null,
     "canComplete": true,
     "canRestore": false
-   }
+   },
+   "activity": null
   }
  },
  {
@@ -215,7 +224,8 @@
     "resumeBlockedReason": null,
     "canComplete": true,
     "canRestore": false
-   }
+   },
+   "activity": null
   }
  },
  {
@@ -239,7 +249,8 @@
     "resumeBlockedReason": null,
     "canComplete": true,
     "canRestore": false
-   }
+   },
+   "activity": null
   }
  },
  {
@@ -258,7 +269,8 @@
     "resumeBlockedReason": null,
     "canComplete": true,
     "canRestore": false
-   }
+   },
+   "activity": null
   }
  },
  {
@@ -283,7 +295,8 @@
     "resumeBlockedReason": null,
     "canComplete": true,
     "canRestore": false
-   }
+   },
+   "activity": null
   }
  },
  {
@@ -303,7 +316,8 @@
     "resumeBlockedReason": null,
     "canComplete": true,
     "canRestore": false
-   }
+   },
+   "activity": null
   }
  },
  {
@@ -377,7 +391,8 @@
     "resumeBlockedReason": "NOT_TERMINAL",
     "canComplete": true,
     "canRestore": false
-   }
+   },
+   "activity": "TURN"
   }
  },
  {
@@ -397,7 +412,8 @@
     "resumeBlockedReason": "NOT_TERMINAL",
     "canComplete": true,
     "canRestore": false
-   }
+   },
+   "activity": "TURN"
   }
  },
  {
@@ -423,7 +439,8 @@
     "resumeBlockedReason": "NOT_TERMINAL",
     "canComplete": true,
     "canRestore": false
-   }
+   },
+   "activity": "TURN"
   }
  },
  {
@@ -444,7 +461,8 @@
     "resumeBlockedReason": "NOT_TERMINAL",
     "canComplete": true,
     "canRestore": false
-   }
+   },
+   "activity": "TURN"
   }
  },
  {
@@ -470,7 +488,8 @@
     "resumeBlockedReason": null,
     "canComplete": true,
     "canRestore": false
-   }
+   },
+   "activity": null
   }
  },
  {
@@ -491,7 +510,8 @@
     "resumeBlockedReason": null,
     "canComplete": true,
     "canRestore": false
-   }
+   },
+   "activity": null
   }
  },
  {
@@ -515,7 +535,8 @@
     "resumeBlockedReason": null,
     "canComplete": true,
     "canRestore": false
-   }
+   },
+   "activity": null
   }
  },
  {
@@ -534,7 +555,8 @@
     "resumeBlockedReason": null,
     "canComplete": true,
     "canRestore": false
-   }
+   },
+   "activity": null
   }
  },
  {
@@ -559,7 +581,8 @@
     "resumeBlockedReason": "ENDING",
     "canComplete": true,
     "canRestore": false
-   }
+   },
+   "activity": null
   }
  },
  {
@@ -579,6 +602,144 @@
     "resumeBlockedReason": "ENDING",
     "canComplete": true,
     "canRestore": false
+   },
+   "activity": null
+  }
+ },
+ {
+  "name": "parked, engine started its own turn",
+  "newFields": true,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "AWAITING_INPUT",
+   "runStatus": "AWAITING_INPUT",
+   "runState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "activity": "TURN",
+   "phase": "RUNNING",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "workFinished": false,
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   }
+  }
+ },
+ {
+  "name": "parked, engine started its own turn",
+  "newFields": false,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "AWAITING_INPUT",
+   "runStatus": "AWAITING_INPUT",
+   "runState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "activity": "TURN",
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   }
+  }
+ },
+ {
+  "name": "parked, sub-agent running",
+  "newFields": true,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "AWAITING_INPUT",
+   "runStatus": "AWAITING_INPUT",
+   "runState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "activity": "TURN",
+   "runningSubagentCount": 1,
+   "phase": "RUNNING",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "workFinished": false,
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   }
+  }
+ },
+ {
+  "name": "parked, sub-agent running",
+  "newFields": false,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "AWAITING_INPUT",
+   "runStatus": "AWAITING_INPUT",
+   "runState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "activity": "TURN",
+   "runningSubagentCount": 1,
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   }
+  }
+ },
+ {
+  "name": "parked, will wake (watch or wake-up)",
+  "newFields": true,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "AWAITING_INPUT",
+   "runStatus": "AWAITING_INPUT",
+   "runState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "activity": "WAITING",
+   "phase": "IDLE",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": "WAKE",
+   "workFinished": false,
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
+   }
+  }
+ },
+ {
+  "name": "parked, will wake (watch or wake-up)",
+  "newFields": false,
+  "payload": {
+   "id": "s",
+   "title": "t",
+   "status": "AWAITING_INPUT",
+   "runStatus": "AWAITING_INPUT",
+   "runState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "activity": "WAITING",
+   "capabilities": {
+    "canSend": true,
+    "canResume": false,
+    "resumeBlockedReason": "NOT_TERMINAL",
+    "canComplete": true,
+    "canRestore": false
    }
   }
  },
@@ -594,7 +755,8 @@
    "released": false,
    "lastTurnOutcome": null,
    "waitingOn": null,
-   "workFinished": false
+   "workFinished": false,
+   "activity": null
   }
  },
  {
@@ -604,7 +766,8 @@
    "id": "s",
    "title": "t",
    "status": "HIBERNATING",
-   "lifecycleState": "OPEN"
+   "lifecycleState": "OPEN",
+   "activity": null
   }
  },
  {
@@ -619,7 +782,8 @@
    "released": true,
    "lastTurnOutcome": "ANSWERED",
    "waitingOn": null,
-   "workFinished": false
+   "workFinished": false,
+   "activity": null
   }
  },
  {
@@ -629,7 +793,8 @@
    "id": "s",
    "title": "t",
    "status": "HIBERNATING",
-   "lifecycleState": "OPEN"
+   "lifecycleState": "OPEN",
+   "activity": null
   }
  }
 ]

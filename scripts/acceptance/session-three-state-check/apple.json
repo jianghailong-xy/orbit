@@ -208,6 +208,54 @@
     "word" : "Ended"
   },
   {
+    "name" : "parked, engine started its own turn",
+    "newFields" : true,
+    "run" : "Awaiting reply",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Waiting for your reply"
+  },
+  {
+    "name" : "parked, engine started its own turn",
+    "newFields" : false,
+    "run" : "Awaiting reply",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Waiting for your reply"
+  },
+  {
+    "name" : "parked, sub-agent running",
+    "newFields" : true,
+    "run" : "Awaiting reply",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Running Agent"
+  },
+  {
+    "name" : "parked, sub-agent running",
+    "newFields" : false,
+    "run" : "Awaiting reply",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Running Agent"
+  },
+  {
+    "name" : "parked, will wake (watch or wake-up)",
+    "newFields" : true,
+    "run" : "Awaiting reply",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Waiting to resume"
+  },
+  {
+    "name" : "parked, will wake (watch or wake-up)",
+    "newFields" : false,
+    "run" : "Awaiting reply",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Waiting to resume"
+  },
+  {
     "name" : "unknown status, no capabilities, held",
     "newFields" : true,
     "run" : "Ended",

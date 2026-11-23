@@ -21,10 +21,16 @@ const cases = [
   ['ended, runner never confirmed', { ...L('FAILED', null, 'FAILED'), endReason: 'ended', error: 'cancel not honored', phase: 'IDLE', released: true, lastTurnOutcome: 'FAILED', waitingOn: null, workFinished: false, capabilities: resumable }],
   ['old plain row stored SUCCEEDED', { ...L('SUCCEEDED', null, 'SUCCEEDED'), phase: 'IDLE', released: true, lastTurnOutcome: 'ANSWERED', waitingOn: null, workFinished: false, capabilities: resumable }],
   ['ending after an interrupted turn', { ...L('INTERRUPTED', null, 'ENDED'), endReason: 'ended', phase: 'IDLE', released: false, lastTurnOutcome: 'INTERRUPTED', waitingOn: null, workFinished: false, capabilities: ending }],
+  // activity as sessionActivitySql sends it: TURN for a parked session the engine's own turn or a sub-agent keeps busy, WAITING for a wake source
+  ['parked, engine started its own turn', { ...L('AWAITING_INPUT', null, 'AWAITING_INPUT'), activity: 'TURN', phase: 'RUNNING', released: false, lastTurnOutcome: 'ANSWERED', waitingOn: null, workFinished: false, capabilities: held }],
+  ['parked, sub-agent running', { ...L('AWAITING_INPUT', null, 'AWAITING_INPUT'), activity: 'TURN', runningSubagentCount: 1, phase: 'RUNNING', released: false, lastTurnOutcome: 'ANSWERED', waitingOn: null, workFinished: false, capabilities: held }],
+  ['parked, will wake (watch or wake-up)', { ...L('AWAITING_INPUT', null, 'AWAITING_INPUT'), activity: 'WAITING', phase: 'IDLE', released: false, lastTurnOutcome: 'ANSWERED', waitingOn: 'WAKE', workFinished: false, capabilities: held }],
   // the coordinator's note of 2026-11-19: a status word no client knows, and no capabilities
   ['unknown status, no capabilities, held', { id: 's', title: 't', status: 'HIBERNATING', lifecycleState: 'OPEN', phase: 'IDLE', released: false, lastTurnOutcome: null, waitingOn: null, workFinished: false }],
   ['unknown status, no capabilities, released', { id: 's', title: 't', status: 'HIBERNATING', lifecycleState: 'OPEN', phase: 'IDLE', released: true, lastTurnOutcome: 'ANSWERED', waitingOn: null, workFinished: false }],
 ];
+// Every row carries `activity` as the server sends it (sessionActivitySql): TURN on every stored PENDING or RUNNING row.
+for (const [, p] of cases) if (!('activity' in p)) p.activity = ['PENDING', 'RUNNING'].includes(p.status) ? 'TURN' : null;
 const strip = (p) => { const { phase, released, lastTurnOutcome, waitingOn, workFinished, ...rest } = p; return rest; };
 const out = [];
 for (const [name, payload] of cases) {
