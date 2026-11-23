@@ -3378,7 +3378,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // table, column, constraint or trigger, names or replaces none of the preserved triggers or functions, and runs
       // no INSERT, UPDATE or DELETE at apply time.
       // Written as 1434 on the project line, it was renumbered after main took 1434.
-      '1464_open_list_scope_keys'],
+      '1464_open_list_scope_keys',
+      // 1465 adds two columns to runner for a Default sign-out on the account-removal relay: account_remove_action, a
+      // nullable TEXT, and account_remove_force, a BOOLEAN with a constant false default (both catalog-only); no row is
+      // written, and no preserved relation, trigger, function or DONE fence changes.
+      '1465_runner_account_sign_out'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

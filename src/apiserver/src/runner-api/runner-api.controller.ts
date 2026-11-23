@@ -2821,8 +2821,9 @@ export class RunnerApiController {
       const removeRequest = await this.drainAccountRemoveRequest(runner.id);
       // Codex rides the field a control plane older than accounts-per-engine reads; every other
       // engine names itself. An old runner handed the generic field would remove a path under its
-      // own codex-accounts that never existed and report done.
-      if (removeRequest?.engine === 'codex' || removeRequest === undefined) {
+      // own codex-accounts that never existed and report done. A sign-out of Default always names its
+      // engine: only a runner that reads the engine-named field declares it.
+      if ((removeRequest?.engine === 'codex' && removeRequest.action !== 'sign-out') || removeRequest === undefined) {
         // The codex-named field keeps the shape it always had: an older runner reads only account and
         // attempt, and the engine it is about is the field's own name. `moves` rides along for a runner
         // that carries sessions with no engine running (runner-go account_cold_move.go); an older one
@@ -3926,6 +3927,8 @@ export class RunnerApiController {
         codexAccountRemoveStatus: true,
         codexAccountRemoveAt: true,
         codexAccountRemoveSessions: true,
+        accountRemoveAction: true,
+        accountRemoveForce: true,
       },
     });
     if (r?.codexAccountRemoveStatus !== 'pending') return undefined;
@@ -3949,8 +3952,14 @@ export class RunnerApiController {
     if (!account) return undefined;
     // A row written before accounts-per-engine meant Codex.
     const engine = (r.accountRemoveEngine as LoginCommand['engine']) ?? 'codex';
+    const attempt = r.codexAccountRemoveAt?.toISOString() ?? '';
+    // A sign-out of Default (RunnersService.signOutDefault) moves no session: the runner refuses while
+    // any runs on Default, or signs out under them when the person forced it.
+    if (r.accountRemoveAction === 'sign-out') {
+      return { engine, account, action: 'sign-out', attempt, ...(r.accountRemoveForce ? { force: true } : {}) };
+    }
     const moves = moving ? await this.accountRemoveMoves(runnerId, engine, account, r.codexAccountRemoveSessions ?? []) : [];
-    return { engine, account, attempt: r.codexAccountRemoveAt?.toISOString() ?? '', ...(moves.length > 0 ? { moves } : {}) };
+    return { engine, account, attempt, ...(moves.length > 0 ? { moves } : {}) };
   }
 
   /**
@@ -4049,11 +4058,17 @@ export class RunnerApiController {
       ...(body.account ? { codexAccountRemoveAccount: body.account } : {}),
       ...(attempt ? { codexAccountRemoveAt: attempt } : {}),
     };
+    // A sign-out of Default (RunnersService.signOutDefault) leaves the account where it is: its sessions
+    // are not moved off it — the refusal lists them, and the person decides — and its Orbit name stays.
+    const row = await this.prisma.runner.findFirst({
+      where: asked,
+      select: { codexAccountRemoveAccount: true, accountRemoveAction: true },
+    });
+    const signOut = row?.accountRemoveAction === 'sign-out';
     // Sessions in the account do not keep it: each moves to another of the runner's accounts, and the
     // removal stays pending — redelivered every heartbeat — until the last has left (an idle one at its
     // reload, a running one after its turn). Only those that cannot leave refuse it.
-    if (sessionIds.length > 0 && this.sessions && isAccountEngine(engine)) {
-      const row = await this.prisma.runner.findFirst({ where: asked, select: { codexAccountRemoveAccount: true } });
+    if (sessionIds.length > 0 && this.sessions && isAccountEngine(engine) && !signOut) {
       if (row?.codexAccountRemoveAccount) {
         const stuck = await this.sessions.moveOffRemovedAccount(runnerId, engine, row.codexAccountRemoveAccount, sessionIds);
         if (stuck.length === 0) {
@@ -4080,7 +4095,7 @@ export class RunnerApiController {
     // The name the account was given in Orbit goes with it (RunnersService.renameAccount), and so does
     // its mark as a former Default: nothing would show them again, and a slot added later under the
     // same id must not inherit them.
-    if (count > 0 && status === 'done' && body.account) {
+    if (count > 0 && status === 'done' && body.account && !signOut) {
       await this.prisma.$executeRaw`
         UPDATE "runner"
            SET "account_names" = "account_names" #- ARRAY[${engine}::text, ${body.account}::text]

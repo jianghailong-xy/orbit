@@ -1106,6 +1106,12 @@ model Runner {
   // When the current removal was asked for: the identity every report names, and the deadline an
   // abandoned one is swept by.
   codexAccountRemoveAt      DateTime? @map("codex_account_remove_at")
+  // What the request above asks of the account (migration 1465, docs/default-sign-out-design.md):
+  // NULL is a removal, what every row written before it meant; 'sign-out' takes Default's login off
+  // the machine and leaves the account. With a sign-out, accountRemoveForce says the person confirmed
+  // after a refusal named the sessions running on Default; false on every removal.
+  accountRemoveAction       String?   @map("account_remove_action")
+  accountRemoveForce        Boolean   @default(false) @map("account_remove_force")
 
   // Making an added Claude account the Default (migration 1000, docs/claude-default-swap-contract.md §5):
   // the runner swaps that account's login with the one in ~/.claude. The removal's relay again — one
