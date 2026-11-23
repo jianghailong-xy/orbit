@@ -55,8 +55,9 @@ object LandingFixWindowCopy {
         else -> null
     }
 
-    /** What the hand-back's quote says before the session's last words (board ② d ①). */
-    fun handBackLead(reason: String?): String = when (reason) {
+    /** What the hand-back says before the session's last words (board ② d ①); a sentence of its own when there are none to quote. */
+    fun handBackLead(reason: String?, quoted: Boolean = true): String = handBackLeadWords(reason).let { if (quoted) it else it.removeSuffix(":") + "." }
+    private fun handBackLeadWords(reason: String?): String = when (reason) {
         "NO_NEW_COMMIT" -> "The task's session ended its turn without a new commit:"
         "TURN_FAILED" -> "The task's session's fix turn failed:"
         "SESSION_ENDED" -> "The task's session was ended before it could land this:"
@@ -75,7 +76,9 @@ object LandingFixWindowCopy {
 }
 
 /** An open item's `workSession` (§12.7): the session it went to, when, and — once handed back — when and why. */
-data class LandingWorkSession(val sessionId: String, val offeredAt: String?, val returnedAt: String?, val returnReason: String?, val rounds: Int) {
+data class LandingWorkSession(val sessionId: String, val offeredAt: String?, val returnedAt: String?, val returnReason: String?, val rounds: Int,
+    /** What the session said last, as the hand-back froze it (`workSession.lastMessage`); null when it said nothing or still holds it. */
+    val lastMessage: String? = null) {
     /** Still in the session's hands: offered and not handed back. */
     val held: Boolean get() = returnedAt == null
     /** The round the session is on while it holds the item: the generations it asked for, plus the one it is fixing now. */
@@ -90,8 +93,8 @@ object LandingFix {
         return if (seconds < 60) "just now" else SharePanelCopy.span(seconds)
     }
 
-    /** What a session said last, as the hand-back quotes it: trimmed and cut at 1,200 characters, as the server cuts the words it hands
-     *  the coordinator (apiserver `runLastWords`); null when it said nothing. */
+    /** Last words as the hand-back quotes them: trimmed, and cut at 1,200 characters as the server already cuts them (apiserver
+     *  `runLastWords`); null when there are none. */
     fun lastWords(text: String?): String? {
         val words = text?.trim().orEmpty()
         if (words.isEmpty()) return null
@@ -101,7 +104,8 @@ object LandingFix {
     /** An open item's `workSession`, or null for an item never handed to a task's session (and from an older server). */
     fun workSession(row: JsonObject?): LandingWorkSession? = row?.obj("workSession")?.let { w ->
         val session = w.text("sessionId")?.takeIf { it.isNotEmpty() } ?: return null
-        LandingWorkSession(session, w.text("offeredAt"), w.text("returnedAt"), w.text("returnReason"), w.number("rounds") ?: 0)
+        LandingWorkSession(session, w.text("offeredAt"), w.text("returnedAt"), w.text("returnReason"), w.number("rounds") ?: 0,
+            lastWords(w.text("lastMessage")))
     }
 
     /** The project's items a task's session has been handed, held first (`withWorkSession`), then the ones handed back. */
@@ -131,6 +135,16 @@ object LandingFix {
         val job = view.currentAttempt?.jobId ?: return null
         return view.timeline?.sections?.firstOrNull { it.jobId == job }?.entries
             ?.lastOrNull { it.kind == "RESULT" || it.kind == "RESULT_FALLBACK" }?.text?.takeIf { it.isNotBlank() }
+    }
+
+    /**
+     * The words the hand-back quotes (board ② d ①): what the task's session said last, as the server froze them at the hand-back — the
+     * newest `RETURNED_TO_COORDINATOR` line's `data.lastMessage`, else the item's `workSession.lastMessage`. Null when it said nothing:
+     * then nothing is quoted. Never the session's words since, which can have moved on.
+     */
+    fun handBackWords(view: LandingView?, work: LandingWorkSession?): String? {
+        val returned = view?.timeline?.sections.orEmpty().flatMap { it.entries }.lastOrNull { it.kind == "RETURNED_TO_COORDINATOR" }
+        return lastWords(returned?.data?.text("lastMessage")) ?: work?.lastMessage
     }
 
     /** The three kinds of line §12.7 adds to a landing's record. */

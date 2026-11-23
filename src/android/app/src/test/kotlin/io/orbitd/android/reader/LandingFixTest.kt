@@ -75,6 +75,17 @@ class LandingFixTest {
         assertFalse(LandingFix.handedOff(view(first, entry("RETURNED_TO_COORDINATOR", "2026-11-22T10:31:00Z"))))
     }
 
+    @Test fun theHandBackQuotesTheWordsTheServerFrozeAndNothingWhenThereAreNone() {
+        val returned = entry("RETURNED_TO_COORDINATOR", "2026-11-22T10:31:00Z", """{"returnReason":"NO_NEW_COMMIT","lastMessage":" Not mine to decide. "}""")
+        val work = LandingFix.workSession(obj(back.replace("\"rounds\":1", "\"rounds\":1,\"lastMessage\":\"From the item.\"")))!!
+        assertEquals("From the item.", work.lastMessage)
+        assertEquals("Not mine to decide.", LandingFix.handBackWords(view(entry("HANDED_TO_SESSION", "2026-11-22T10:02:00Z"), returned), work))
+        val silent = entry("RETURNED_TO_COORDINATOR", "2026-11-22T10:31:00Z", """{"returnReason":"TURN_FAILED","lastMessage":null}""")
+        assertEquals("From the item.", LandingFix.handBackWords(view(silent), work))
+        assertNull(LandingFix.handBackWords(view(silent), LandingFix.workSession(obj(back))))
+        assertEquals("The task's session ended its turn without a new commit.", LandingFixWindowCopy.handBackLead("NO_NEW_COMMIT", quoted = false))
+    }
+
     @Test fun theHandBackSaysWhyInTheTimelinesWords() {
         assertEquals("no new commit", LandingFixWindowCopy.returnReason("NO_NEW_COMMIT"))
         assertEquals("The task's session ended its turn without a new commit:", LandingFixWindowCopy.handBackLead("NO_NEW_COMMIT"))

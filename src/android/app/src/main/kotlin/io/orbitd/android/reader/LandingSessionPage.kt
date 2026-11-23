@@ -148,8 +148,6 @@ internal data class LandingSessionRead(
     val offline: LandingJobSnapshot? = null,
     /** The project's open item for this task's landing that its own work session holds or handed back (revision 42, §12.7). */
     val workItem: JsonObject? = null,
-    /** What that session said last, quoted once it handed the item back (board ② d): its own `lastAssistantText`. */
-    val workSessionWords: String? = null,
 ) {
     /** The item's `workSession`: who has the failure, since when, and the round. */
     val workSession: LandingWorkSession? get() = LandingFix.workSession(workItem)
@@ -191,14 +189,9 @@ internal object LandingSessionReads {
             attempt { projects.integration(landing.projectId) }?.let { snapshots.remember(handle, landing.projectId, it); next = next.copy(integration = it) }
             attempt { projects.coordinator(landing.projectId) }?.let { next = next.copy(coordinator = it) }
             if (landing.subject == "PROMOTION") attempt { projects.currentPromotion(landing.projectId) }?.let { next = next.copy(promotion = it) }
-            // Revision 42 (§12.7): whether the task's own session has this failure, or handed it back — and then what it said last.
+            // Revision 42 (§12.7): whether the task's own session has this failure, or handed it back.
             if (landing.subject == "TASK") attempt { projects.openItems(landing.projectId) }?.let { items ->
-                val item = LandingFix.itemForTask(items, landing.taskId)
-                next = next.copy(workItem = item)
-                val work = LandingFix.workSession(item)
-                if (work != null && !work.held) attempt { api.objectRead(listOf("sessions", work.sessionId)) }?.let { session ->
-                    next = next.copy(workSessionWords = LandingFix.lastWords(session.text("lastAssistantText")))
-                }
+                next = next.copy(workItem = LandingFix.itemForTask(items, landing.taskId))
             }
         } else if (landing.subject == "PROMOTION") {
             attempt { projects.mergedPromotions(landing.projectId) }?.let { next = next.copy(mergedPromotions = it) }
@@ -448,7 +441,7 @@ internal fun LandingStatusCard(state: LandingSessionRead, view: LandingView?, ca
             // Revision 42 (board ② c ①): whose hands it is in, since when and which round, and the way into that session and the task.
             if (fixing != null) LandingFixingPanel(fixing, now, waitDoors, onPress)
             // Revision 42 (board ② d ①): handed back — what the task's session said last, before the coordinator's doors.
-            if (handedBack != null) LandingHandBackQuote(handedBack, state.workSessionWords)
+            if (handedBack != null) LandingHandBackQuote(handedBack, LandingFix.handBackWords(view, handedBack))
             // A landing that waits for a decision names who decides, then the doors to them: the coordinator first, then the task or
             // the round's card — on a quiet panel, as the chat's own waiting cards stand.
             if (fixing == null && waitDoors.isNotEmpty()) Column(Modifier.fillMaxWidth().background(muted.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
@@ -508,14 +501,16 @@ private fun LandingFixingPanel(work: LandingWorkSession, now: Instant, doors: Li
     }
 }
 
-/** What the task's session said last, as the hand-back quotes it (board ② d ①): why it came back, then its words, in quotes. */
+/** What the task's session said last, as the hand-back quotes it (board ② d ①): why it came back, then its words as the server froze them,
+ *  in quotes — none when it said nothing. */
 @Composable
 private fun LandingHandBackQuote(work: LandingWorkSession, words: String?) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(10.dp))
         .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 10.dp)
         .testTag("landing:hand-back"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(LandingFixWindowCopy.handBackLead(work.returnReason), Modifier.testTag("landing:hand-back-lead"), style = MaterialTheme.typography.bodySmall, color = muted)
+        Text(LandingFixWindowCopy.handBackLead(work.returnReason, quoted = words != null), Modifier.testTag("landing:hand-back-lead"),
+            style = MaterialTheme.typography.bodySmall, color = muted)
         words?.let { Text("“$it”", Modifier.testTag("landing:hand-back-words"), style = MaterialTheme.typography.bodyMedium, maxLines = 8,
             overflow = TextOverflow.Ellipsis) }
     }

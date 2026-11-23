@@ -29,6 +29,8 @@ class LandingFixDeviceTest : IncrementDeviceTest() {
     private val title2 = "A11k · Write back before enabling the button"
     private val words2 = "The conflict is with A13f's store refactor, which removes the list-ready signal my fix waits on. " +
         "Which of the two designs stays is not mine to decide."
+    /** What A11k's session said after its hand-back: the session row's own last words now, which the quote must not take. */
+    private val later2 = "Waiting for the coordinator's call on the store refactor."
 
     /** A10c's session has committed its fix, and the landing is queued again (board ② b ③, ② c ②). */
     @Volatile private var fixed = false
@@ -60,7 +62,7 @@ class LandingFixDeviceTest : IncrementDeviceTest() {
         "capabilities":{"canSend":true,"canResume":false,"canComplete":true}$extra}"""
     private fun coordRow() = row(coord, "Wiki server execution", "AWAITING_INPUT", ""","lastAssistantText":"Watching 1 of 12 tasks.",${member("COORDINATOR")}""")
     private fun work1Row() = row(work1, "Run task: $title1", if (fixed) "AWAITING_INPUT" else "RUNNING", ""","lastAssistantText":${quote(reply)},${member("TASK")}""")
-    private fun work2Row() = row(work2, "Run task: $title2", "AWAITING_INPUT", ""","lastAssistantText":${quote(words2)},${member("TASK")}""")
+    private fun work2Row() = row(work2, "Run task: $title2", "AWAITING_INPUT", ""","lastAssistantText":${quote(later2)},${member("TASK")}""")
     private fun landingRow(id: String, title: String, state: String) = """{"id":"$id","title":"Land · $title","status":"AWAITING_INPUT",
         "createdAt":"${ago(18)}","lastTurnAt":"${ago(1)}","sessionKind":"LANDING","landing":{"subject":"TASK","state":"$state","settledAs":null,
         "settledAt":null},"projectMembership":{"projectId":"$project","projectTitle":"Wiki server execution","projectStatus":"OPEN","role":"LANDING"}}"""
@@ -80,7 +82,7 @@ class LandingFixDeviceTest : IncrementDeviceTest() {
         entry("RESULT", ago(16), "Conflict in 2 files · nothing was pushed", extra = ""","data":{"state":"CONFLICT"}"""),
         entry("HANDED_TO_SESSION", if (back) ago(10) else handedAt, "Handed to the task's session", extra = ""","data":{"itemId":"item-$task","sessionId":"$work"}"""),
         if (back) entry("RETURNED_TO_COORDINATOR", returnedAt, "Returned to the coordinator: no new commit",
-            extra = ""","reason":"NO_NEW_COMMIT","data":{"itemId":"item-$task","sessionId":"$work","returnReason":"NO_NEW_COMMIT"}""") else null,
+            extra = ""","reason":"NO_NEW_COMMIT","data":{"itemId":"item-$task","sessionId":"$work","returnReason":"NO_NEW_COMMIT","lastMessage":${quote(words2)}}""") else null,
     ).joinToString(",", "[", "]")
     private fun attempt(job: String, state: String, generation: Int, phase: String?) = """{"jobId":"$job","kind":"LAND_TASK","state":"$state",
         "generation":$generation,"phase":${phase?.let { "\"$it\"" } ?: "null"},"round":1,"step":null,"claim":${if (state == "QUEUED") 0 else 1},
@@ -110,7 +112,7 @@ class LandingFixDeviceTest : IncrementDeviceTest() {
         "escalateAt":null,"escalatedAt":null,"taskId":"$task","sessionId":"$work","landingSessionId":"${if (task == task1) land1 else land2}",
         "integrationJobId":"${if (task == task1) land1 else land2}-j1","promotionId":null,"fuseEpisodeId":null,
         "delivery":{"state":"${if (held) "NOT_DELIVERED" else "DELIVERED"}","sessionId":null,"at":null},"actions":[],"question":null,
-        "workSession":{"sessionId":"$work","offeredAt":"${if (held) handedAt else ago(10)}",${if (held) "" else """"returnedAt":"$returnedAt","returnReason":"NO_NEW_COMMIT","""}"rounds":0}}"""
+        "workSession":{"sessionId":"$work","offeredAt":"${if (held) handedAt else ago(10)}",${if (held) "" else """"returnedAt":"$returnedAt","returnReason":"NO_NEW_COMMIT","lastMessage":${quote(words2)},"""}"rounds":0}}"""
     private fun openItems() = """{"needsYou":[],"withCoordinator":[${item(task2, title2, work2, held = false)}],
         "withWorkSession":[${if (fixed) "" else item(task1, title1, work1, held = true)}],"startRequest":null,"doneRequest":null}"""
     private fun taskRow(id: String, title: String, status: String, integration: String?) = """{"id":"$id","title":"$title","status":"$status",
@@ -185,7 +187,9 @@ class LandingFixDeviceTest : IncrementDeviceTest() {
         window.performScrollToNode(hasTestTag("landing:fix-line:returned_to_coordinator"))
         await("the hand-back quote") { exists(hasTestTag("landing:hand-back-words"), unmerged = true) }
         verify("the lead says why", says("landing:hand-back-lead", LandingFixWindowCopy.handBackLead("NO_NEW_COMMIT")))
-        verify("the words are the session's", says("landing:hand-back-words", "“$words2”"))
+        verify("the words are the ones the server froze at the hand-back", says("landing:hand-back-words", "“$words2”"))
+        verify("not what the session said since", !exists(hasText(later2, substring = true), unmerged = true))
+        verify("no read of the work session for its words", calls.none { it == "GET sessions/$work2" })
         verify("the returned line", says("landing:fix-line:returned_to_coordinator", "Returned to the coordinator · no new commit", substring = true))
         verify("Open session among the coordinator's doors", exists(hasTestTag("landing:wait:open_work_session"), unmerged = true))
         // ② d: what failed is said once — the head's clause, then the generation's own sentence, never the clause twice.
