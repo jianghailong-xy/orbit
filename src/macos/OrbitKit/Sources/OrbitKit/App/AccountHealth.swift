@@ -31,6 +31,26 @@ public struct AccountHealthBlock: Codable, Equatable, Sendable, Identifiable {
         self.kind = kind; self.said = said; self.trips = trips; self.since = since
         self.nextTrialAt = nextTrialAt; self.trialRunning = trialRunning; self.line = line
     }
+
+    /// Lenient on what only shapes the sentence: a row missing one of them still draws.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        subjectKey = try c.decodeIfPresent(String.self, forKey: .subjectKey) ?? ""
+        runnerId = try c.decodeIfPresent(String.self, forKey: .runnerId)
+        engine = try c.decodeIfPresent(String.self, forKey: .engine)
+        account = try c.decodeIfPresent(String.self, forKey: .account)
+        providerId = try c.decodeIfPresent(String.self, forKey: .providerId)
+        poolId = try c.decodeIfPresent(String.self, forKey: .poolId)
+        scopeModel = try c.decodeIfPresent(String.self, forKey: .scopeModel) ?? ""
+        kind = try c.decode(String.self, forKey: .kind)
+        said = try c.decodeIfPresent(String.self, forKey: .said)
+        trips = try c.decodeIfPresent(Int.self, forKey: .trips) ?? 1
+        since = try c.decode(String.self, forKey: .since)
+        nextTrialAt = try c.decodeIfPresent(String.self, forKey: .nextTrialAt)
+        trialRunning = try c.decodeIfPresent(Bool.self, forKey: .trialRunning) ?? false
+        line = try c.decodeIfPresent(String.self, forKey: .line) ?? ""
+    }
 }
 
 public struct AccountHealthAnswer: Codable, Equatable, Sendable {
