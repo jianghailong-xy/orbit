@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 39 |
-| `user` | 523 |
+| `user` | 526 |
 | `admin` | 31 |
 | `runner` | 229 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **826** |
+| **Total** | **829** |
 
 ## Public routes
 
@@ -343,6 +343,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runners/:id/attention/:kind/fix` | body `Object`; path `id`, `kind` | `RunnerAttentionFixController.fix` |
 | `GET` | `/api/runners/:id/browser` | path `id` | `ManagedRunnerBrowserController.state` |
 | `POST` | `/api/runners/:id/browser/clear` | path `id` | `ManagedRunnerBrowserController.clear` |
+| `POST` | `/api/runners/:id/browser/sign-in` | path `id` | `ManagedRunnerBrowserController.signIn` |
 | `GET` | `/api/runners/:id/claude-history` | path `id`; query `workDir` | `RunnersController.claudeHistory` |
 | `POST` | `/api/runners/:id/claude-history` | body `Object`; path `id` | `RunnersController.askClaudeHistory` |
 | `DELETE` | `/api/runners/:id/codex-accounts/:account` | path `account`, `id` | `RunnersController.removeCodexAccount` |
@@ -381,6 +382,8 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/schedules` | query `state`, `workspaceId` | `SchedulesController.list` |
 | `DELETE` | `/api/schedules/:id` | path `id` | `SchedulesController.remove` |
 | `GET` | `/api/schedules/:id` | path `id` | `SchedulesController.get` |
+| `GET` | `/api/schedules/:id/change` | path `id` | `SchedulesController.change` |
+| `POST` | `/api/schedules/:id/change` | body `ScheduleChangeDto`; path `id` | `SchedulesController.openChange` |
 | `POST` | `/api/schedules/:id/pause` | path `id` | `SchedulesController.pause` |
 | `POST` | `/api/schedules/:id/resume` | path `id` | `SchedulesController.resume` |
 | `POST` | `/api/schedules/:id/run` | path `id` | `SchedulesController.runNow` |

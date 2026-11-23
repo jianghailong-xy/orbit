@@ -58,6 +58,7 @@ import { TaskRoute } from './pages/TaskRoute';
 import { FollowingPage } from './pages/FollowingPage';
 import { WaitingOnYouPage } from './pages/WaitingOnYouPage';
 import { FilesPage } from './pages/FilesPage';
+import { ScheduleChangePage } from './pages/ScheduleChangePage';
 import { ScheduledPage } from './pages/ScheduledPage';
 import { WikiPage } from './pages/WikiPage';
 import { HelpLayout } from './pages/help/HelpLayout';
@@ -381,6 +382,15 @@ export function App() {
               element={
                 <FlushView>
                   <ScheduledPage />
+                </FlushView>
+              }
+            />
+            {/* A schedule's Change… (§8.2): Orbit's opening until the person's first words open the conversation. */}
+            <Route
+              path="scheduled/:id/change"
+              element={
+                <FlushView>
+                  <ScheduleChangePage />
                 </FlushView>
               }
             />

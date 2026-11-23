@@ -38,6 +38,12 @@ export function ModelTierCell({ provider, model }: { provider: ProviderTierRow; 
 export function QualityCell({ model, pooledWith = [] }: { model: ProviderModelTier; pooledWith?: readonly string[] }) {
   const lines = qualityLines(model.quality);
   if (lines.empty) return <span className="model-tiers-muted">No runs yet</span>;
+  // Said only where there is a figure to explain, and short: the providers are in its tooltip.
+  const pooled = pooledWith.length > 0 && !(lines.subagents.muted && lines.tasks.muted) && (
+    <Tooltip content={`Runs on ${pooledWith.join(', ')} are counted too`} toggleOnClick popupStyle={{ whiteSpace: 'nowrap' }}>
+      <div className="model-tiers-muted model-tiers-pooled" tabIndex={0}>Pooled across {pooledWith.length + 1} providers</div>
+    </Tooltip>
+  );
   const subagents = (
     <div className={`model-tiers-quality-line${lines.subagents.raters ? ' model-tiers-rated' : ''}`}
       tabIndex={lines.subagents.raters ? 0 : undefined}>
@@ -52,7 +58,7 @@ export function QualityCell({ model, pooledWith = [] }: { model: ProviderModelTi
         <span className="model-tiers-quality-source">Tasks</span>
         <span className={lines.tasks.muted ? 'model-tiers-muted' : undefined}>{lines.tasks.text}</span>
       </div>
-      {pooledWith.length > 0 && <div className="model-tiers-muted model-tiers-pooled">Pooled with {pooledWith.join(', ')}</div>}
+      {pooled}
     </>
   );
 }

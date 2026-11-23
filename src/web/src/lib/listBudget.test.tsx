@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { QueryClientProvider, useQueries, type QueryClient, type UseQueryOptions } from '@tanstack/react-query';
+import { QueryClientProvider, useQueries, useQuery, type QueryClient, type UseQueryOptions } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import type { SessionListItem } from '../api';
 import {
@@ -16,6 +16,8 @@ import {
   workspacesQuery,
 } from './queries';
 import { createAppQueryClient } from './queryClient';
+import { listPollMs } from './listBudget';
+import { forgetOpenListCursors } from './openListDelta';
 import { ControlPlaneProvider, useControlPlaneLive } from './useControlPlane';
 import { useSessionProjectData } from './useSessionProjectData';
 
@@ -62,9 +64,16 @@ vi.mock('../api', async (importOriginal) => {
   return {
     ...actual,
     getToken: () => 'token',
-    api: vi.fn((path: string) => answer(path, () => (path.startsWith('/watches')
-      ? h.watches
-      : path.startsWith('/sessions/project-placement') ? { projects: [] } : []))),
+    api: vi.fn((path: string) => answer(path, () => {
+      if (path.startsWith('/watches')) return h.watches;
+      if (path.startsWith('/sessions/project-placement')) return { projects: [] };
+      // The Open list's delta read (lib/openListDelta): a first read is answered whole, and every read after it
+      // finds nothing moved, an empty delta under the same cursor — what the browser hands back for a 304.
+      const since = path.startsWith('/sessions?') ? new URLSearchParams(path.split('?')[1]).get('since') : null;
+      if (since === '') return { full: true, sessions: [], cursor: 'c1' };
+      if (since) return { full: false, upserts: [], removedIds: [], cursor: since };
+      return [];
+    })),
     getSession: vi.fn((id: string) => answer(`/sessions/${id}`, () => ({ id, status: 'RUNNING' }))),
     getSessionDiff: vi.fn((id: string) => answer(`/sessions/${id}/diff`, () => ({ files: [] }))),
   };
@@ -214,6 +223,7 @@ beforeEach(() => {
   h.latency = 0;
   h.failing = () => false;
   h.watches = [];
+  forgetOpenListCursors();
 });
 
 afterEach(async () => {
@@ -554,5 +564,117 @@ describe('W4: a workspace list places its projects with one read', () => {
     await show('visible');
     await advance(2_000);
     expect(reads(placementRead(), from), 'back in view, the placement was not read exactly once').toBe(1);
+  });
+});
+
+/**
+ * A tab hidden long enough for the browser to freeze it: its clock moves on, and no timer of its own
+ * fires (on 2026-11-22 one tab made no request at all for two hours, its stream killed by a deploy in
+ * between). Whatever the browser held for it is delivered when it wakes.
+ */
+async function freeze(ms: number): Promise<void> {
+  vi.setSystemTime(Date.now() + ms);
+}
+
+/** The console's reads of one workspace as WorkspaceView makes them: its whole Open list (the `since=` delta
+ *  read) and the selected session's detail, both on the list budget's interval. */
+function ConsoleReads(): null {
+  const controlLive = useControlPlaneLive();
+  useQuery({ ...sessionsQuery({ runnerId: 'R1', workspaceId: 'W1', view: 'open' }), refetchInterval: (query) => listPollMs(controlLive, query) });
+  useQuery({ ...sessionQuery('S9'), refetchInterval: (query) => listPollMs(controlLive, query, 5_000) });
+  return null;
+}
+const isSinceRead = (path: string): boolean =>
+  path.startsWith('/sessions?runnerId=R1&workspaceId=W1&view=open&since=');
+const isDetail = exactly('/sessions/S9');
+
+/** The server is still down: every stream asked for fails at once, for `ms`. */
+async function streamsFailFor(ms: number): Promise<void> {
+  for (let left = ms; left > 0; left -= 250) {
+    const es = current();
+    if (es) await act(async () => es.onerror?.());
+    await advance(Math.min(250, left));
+  }
+}
+
+describe('a stream lost while the tab was hidden', () => {
+  for (const how of ['its error is delivered as the tab wakes', 'the socket just went silent'] as const) {
+    it(`is asked for again as the tab comes back into view, and keeps being asked for with its backoff (${how})`, async () => {
+      await mount(<ConsoleReads />);
+      await open();
+      const asked = FakeEventSource.all.length;
+      await show('hidden');
+      await freeze(60 * 60_000);
+      if (how === 'its error is delivered as the tab wakes') await drop();
+
+      await show('visible');
+      expect(FakeEventSource.all.length, 'back in view, the stream was not asked for again').toBe(asked + 1);
+      expect(current(), 'the stream asked for on return was closed').toBeDefined();
+
+      // The server is still restarting: each failure waits out the next step of the backoff, which counts on from
+      // the drop the tab woke to (1 s, 2 s, 3 s … plus up to 0.5 s of jitter).
+      for (let failure = 2; failure <= 4; failure += 1) {
+        const before = FakeEventSource.all.length;
+        await drop();
+        await advance(1_000 * failure - 20);
+        expect(FakeEventSource.all.length, `asked again before the backoff of failure ${failure} was up`).toBe(before);
+        await advance(520);
+        expect(FakeEventSource.all.length, `not asked again after failure ${failure}`).toBe(before + 1);
+      }
+    });
+  }
+
+  it('reads the Open list and the session once on return, then at most once in 30 s while it stays down', async () => {
+    random = vi.spyOn(Math, 'random').mockReturnValue(0.5); // every poll 10 % past its step
+    await mount(<ConsoleReads />);
+    await open();
+    await show('hidden');
+    await freeze(60 * 60_000);
+    await drop();
+
+    const from = mark();
+    const returnedAt = Date.now();
+    await show('visible');
+    await streamsFailFor(25_000);
+    expect(reads(isSinceRead, from), 'the Open list was not read exactly once on return').toBe(1);
+    expect(reads(isDetail, from), 'the session was not read exactly once on return').toBe(1);
+
+    await streamsFailFor(5 * 60_000);
+    for (const [what, match] of [['the Open list', isSinceRead], ['the session', isDetail]] as const) {
+      const times = h.calls.slice(from).filter((call) => match(call.path)).map((call) => call.at - returnedAt);
+      expect(times[0], `${what} was not read on return`).toBeLessThan(1_000);
+      const gaps = times.slice(1).map((at, i) => at - times[i]);
+      expect(gaps.length, `${what} was not polled while the stream stayed down`).toBeGreaterThanOrEqual(8);
+      expect(Math.min(...gaps), `${what} was read more often than once in 30 s`).toBeGreaterThanOrEqual(30_000);
+      expect(Math.max(...gaps), `${what} was not read by its jittered 30 s step`).toBeLessThanOrEqual(33_500);
+    }
+  });
+
+  it('reads each list once on return when the stream reopens at once', async () => {
+    await mount(<ConsoleReads />);
+    await open();
+    await show('hidden');
+    await freeze(60 * 60_000);
+    await drop();
+
+    const from = mark();
+    await show('visible');
+    await open();
+    await live(50_000);
+    expect(reads(isSinceRead, from), 'the return and the reopened stream each read the Open list').toBe(1);
+    expect(reads(isDetail, from), 'the return and the reopened stream each read the session').toBe(1);
+  });
+
+  it('does not read the Open list again because its answer was unchanged (a 304)', async () => {
+    await mount(<ConsoleReads />);
+    await open();
+    await publish('sessions.list_changed', { version: 'v1' });
+    await advance(1_500);
+    const from = mark();
+    await publish('sessions.list_changed', { version: 'v2' });
+    await advance(1_500);
+    expect(reads(isSinceRead, from), 'the hint was not read once').toBe(1);
+    await live(55_000);
+    expect(reads(isSinceRead, from), 'an unchanged answer was read again').toBe(1);
   });
 });
