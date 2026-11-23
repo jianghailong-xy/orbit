@@ -19,7 +19,6 @@ import io.orbitd.android.MainActivity
 import io.orbitd.android.TestOrbitApplication
 import io.orbitd.android.cards.BusinessCard
 import io.orbitd.android.cards.OwnerRequestStore
-import io.orbitd.android.cards.WaitingOnYouScreen
 import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.cards.CardCatalog
 import io.orbitd.android.core.net.OkHttpTransport

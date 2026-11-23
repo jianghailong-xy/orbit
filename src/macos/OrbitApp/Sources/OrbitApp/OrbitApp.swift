@@ -24,7 +24,7 @@ struct OrbitApp: App {
                 .onOpenURL { url in
                     // `orbit-session://<id>?share=<entry>`: the Share extension's Add (share-to-orbit §3.3).
                     if let entryID = ShareHandoffLink.entryID(in: url) { model.requestShareClaim(entryID: entryID); return }
-                    // `orbit://owner-request/<id>`: the inbox, with that request's card open on its input.
+                    // `orbit://owner-request/<id>`: the conversation that asked, on that request's card.
                     if let request = OwnerRequestLink.parse(url) { model.openOwnerRequest(request); return }
                     if let route = DeepLink.parse(url) { model.route(to: route) }
                     // `orbit://session/<id>?at=<record>`: the session, at that record.
@@ -140,7 +140,6 @@ struct RootView: View {
             if model.signedIn {
                 MainView()
                     .sessionSearchSheet(model)
-                    .ownerRequestInboxSheet(model)
                     .wikiCreateHost(model)
             } else {
                 LoginView()

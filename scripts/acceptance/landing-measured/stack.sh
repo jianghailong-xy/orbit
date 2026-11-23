@@ -74,12 +74,16 @@ cmd_build_runner() {
 runner_exec() {
   mkdir -p "$RUNNER_HOME" "$RUNNER_USERHOME" "$LM_DIR/runner-tmp" "$RUNNER_PATH_DIR" "$LM_DIR/work"
   chmod 700 "$RUNNER_HOME" "$RUNNER_USERHOME"
-  install -m 755 "$HERE/fake-claude" "$RUNNER_PATH_DIR/claude"
+  # LM_CLAUDE_BIN: a real Claude Code binary (outside /root) in place of the fake, for a run whose model is scripted
+  # behind an Orbit provider (scripts/acceptance/landing-fix-own-session/).
+  rm -f "$RUNNER_PATH_DIR/claude"
+  if [ -n "${LM_CLAUDE_BIN:-}" ]; then ln -s "$LM_CLAUDE_BIN" "$RUNNER_PATH_DIR/claude"; else install -m 755 "$HERE/fake-claude" "$RUNNER_PATH_DIR/claude"; fi
   ln -sfn "$RUNNER_BIN" "$RUNNER_PATH_DIR/orbit"
   unshare --mount --propagation private -- /bin/sh -c \
     'mount -t tmpfs -o size=4m,mode=0700 lm42-hide-root /root && cd "$0" && exec "$@"' "$LM_DIR/work" \
     env -i PATH="$RUNNER_PATH_DIR:/usr/local/go/bin:/usr/bin:/bin" HOME="$RUNNER_USERHOME" LANG=C.UTF-8 USER=root LOGNAME=root \
       ORBIT_HOME="$RUNNER_HOME" ORBIT_NO_SELFUPDATE=1 ORBIT_NO_ENGINE_UPDATE=1 \
+      DISABLE_AUTOUPDATER=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
       SSL_CERT_FILE="$ORBIT_LINK_STAGING_DIR/tls/ca-bundle.pem" \
       XDG_CONFIG_HOME="$RUNNER_USERHOME/.config" XDG_CACHE_HOME="$RUNNER_USERHOME/.cache" \
       XDG_DATA_HOME="$RUNNER_USERHOME/.local/share" XDG_STATE_HOME="$RUNNER_USERHOME/.local/state" \

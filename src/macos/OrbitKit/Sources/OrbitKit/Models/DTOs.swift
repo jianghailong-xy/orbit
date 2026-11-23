@@ -532,6 +532,11 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Explicit low-level runner state from newer servers. `status` remains on the wire for
     /// compatibility; consumers should read `effectiveRunStatus`.
     public let runStatus: RunStatus?
+    @LenientSessionField public internal(set) var phase: SessionPhase?
+    @LenientSessionField public internal(set) var released: Bool?
+    @LenientSessionField public internal(set) var workFinished: Bool?
+    @LenientSessionField public internal(set) var lastTurnOutcome: SessionTurnOutcome?
+    @LenientSessionField public internal(set) var waitingOn: SessionWaitingOn?
     /// Server-normalized, user-facing lifecycle. Optional for compatibility with older servers;
     /// presentation falls back to `status` / `endReason` when absent.
     public let sessionState: SessionState?
@@ -630,6 +635,14 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// are already inside `pendingApprovals`; this says which they are, so the bar can name one and
     /// open its card. Empty (or nil, from an older control plane) when none.
     public let ownerItems: [SessionOwnerItem]?
+    /// The open owner requests this session asked (`request_owner_action`), oldest first — already
+    /// inside `pendingApprovals`, and what the row's `OWNER_REQUEST` word names. Empty (or nil,
+    /// from an older control plane) when none.
+    public let ownerRequests: [SessionOwnerRequest]?
+    /// The PENDING task-move groups waiting on this session — as the asker, or as the target
+    /// project's coordinator — oldest first. Already inside `pendingApprovals`, and what the row's
+    /// `MOVE_REQUEST` word counts. Empty (or nil, from an older control plane) when none.
+    public let taskMoves: [SessionTaskMoveGroup]?
     /// The OWNER_CONFIRMED request on this run's session that is still with its reviewer
     /// (docs/owner-confirmation-review-contract.md §5 N3): the row and the header say "Under review"
     /// where they would say "Waiting for your confirmation", and it is not in `pendingApprovals`. Nil
@@ -753,7 +766,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// runner-offline disconnect apart from a real crash; `endReason` tells a benign recycle
     /// (idle / task-done / user-ended — shown as dormant) apart from a hard cancel/orphan.
     public let error: String?
-    public let endReason: String?
+    public internal(set) var endReason: String?
     /// The SOURCE chain's state for this session — `UNBOUND`, `SELECTED`, `PINNED` or `REFUSED`
     /// (§6.1). Only `REFUSED` is terminal, and it is the one value this client acts on: such a
     /// session never re-resolves, and its recovery is a new run (SR34). Absent from older servers,
@@ -804,6 +817,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         if let runStatus, runStatus != .unknown { return runStatus }
         return status
     }
+    public var isReleased: Bool { released ?? effectiveRunStatus.isTerminal }
     public var effectiveRunState: SessionRunState {
         SessionRunState.resolve(runState, legacy: sessionState,
                                 status: effectiveRunStatus, endReason: endReason)
@@ -871,6 +885,11 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         title = try values.decodeIfPresent(String.self, forKey: .title)
         status = try values.decode(RunStatus.self, forKey: .status)
         runStatus = try values.decodeIfPresent(RunStatus.self, forKey: .runStatus)
+        phase = try? values.decodeIfPresent(SessionPhase.self, forKey: .phase)
+        released = try? values.decodeIfPresent(Bool.self, forKey: .released)
+        workFinished = try? values.decodeIfPresent(Bool.self, forKey: .workFinished)
+        lastTurnOutcome = try? values.decodeIfPresent(SessionTurnOutcome.self, forKey: .lastTurnOutcome)
+        waitingOn = try? values.decodeIfPresent(SessionWaitingOn.self, forKey: .waitingOn)
         sessionState = try values.decodeIfPresent(SessionState.self, forKey: .sessionState)
         runState = try values.decodeIfPresent(SessionRunState.self, forKey: .runState)
         lifecycleState = try values.decodeIfPresent(SessionLifecycleState.self, forKey: .lifecycleState)
@@ -913,6 +932,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
         ownerItems = try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems)
+        ownerRequests = try? values.decodeIfPresent([SessionOwnerRequest].self, forKey: .ownerRequests)
+        taskMoves = try? values.decodeIfPresent([SessionTaskMoveGroup].self, forKey: .taskMoves)
         confirmationUnderReview = try? values.decodeIfPresent(ConfirmationUnderReview.self,
                                                               forKey: .confirmationUnderReview)
         awaitingReplyFrom = try? values.decodeIfPresent([SessionRequestPeer].self, forKey: .awaitingReplyFrom)
@@ -957,7 +978,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         engineTurnActive = try values.decodeIfPresent(Bool.self, forKey: .engineTurnActive)
         activity = try values.decodeIfPresent(String.self, forKey: .activity)
         error = try values.decodeIfPresent(String.self, forKey: .error)
-        endReason = try values.decodeIfPresent(String.self, forKey: .endReason)
+        endReason = try? values.decodeIfPresent(String.self, forKey: .endReason)
         sourceState = try values.decodeIfPresent(String.self, forKey: .sourceState)
         sourceRefusalCode = try values.decodeIfPresent(String.self, forKey: .sourceRefusalCode)
         sourceRefusalDetail = try? values.decodeIfPresent(SourceRefusalDetail.self,
@@ -981,7 +1002,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 agentId: String?,
                 assignedRunnerId: String?, engine: String? = nil, provider: String? = nil,
                 pendingApprovals: Int?, waitingKind: SessionWaitingKind? = nil,
-                ownerItems: [SessionOwnerItem]? = nil, taskId: String? = nil,
+                ownerItems: [SessionOwnerItem]? = nil,
+                ownerRequests: [SessionOwnerRequest]? = nil,
+                taskMoves: [SessionTaskMoveGroup]? = nil,
+                taskId: String? = nil,
                 branch: String?,
                 updatedAt: String?, model: String? = nil, permissionMode: String? = nil,
                 actualPermissionMode: String? = nil, actualPermissionModeAt: String? = nil,
@@ -1053,6 +1077,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.pendingApprovals = pendingApprovals
         self.waitingKind = waitingKind
         self.ownerItems = ownerItems
+        self.ownerRequests = ownerRequests
+        self.taskMoves = taskMoves
         self.confirmationUnderReview = confirmationUnderReview
         self.awaitingReplyFrom = awaitingReplyFrom
         self.owesReplyTo = owesReplyTo
@@ -1152,6 +1178,82 @@ public struct SessionOwnerItem: Codable, Equatable, Sendable, Identifiable {
         // arrived on, still stand. Same reading as the branch below.
         need = try? c.decodeIfPresent(String.self, forKey: .need)
         mainBranch = try? c.decodeIfPresent(String.self, forKey: .mainBranch)
+    }
+}
+
+/// One open `request_owner_action` request on the session that asked it, oldest first — what the
+/// row's `OWNER_REQUEST` word names (`@orbit/shared`'s `SessionOwnerRequest`).
+public struct SessionOwnerRequest: Codable, Equatable, Sendable, Identifiable {
+    /// The request's row. Also the address its card is drawn from.
+    public let ownerRequestId: String
+    public let kind: SessionOwnerRequestKind
+    public let title: String
+    /// When it was filed (ISO-8601).
+    public let since: String
+
+    public var id: String { ownerRequestId }
+
+    public init(ownerRequestId: String, kind: SessionOwnerRequestKind, title: String, since: String) {
+        self.ownerRequestId = ownerRequestId
+        self.kind = kind
+        self.title = title
+        self.since = since
+    }
+
+    private enum CodingKeys: String, CodingKey { case ownerRequestId, kind, title, since }
+
+    /// The kind is the only field the row's WORD depends on, and a control plane that learns a new
+    /// kind must not take the row down with it: it reads as a kind this build cannot name.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        ownerRequestId = try c.decode(String.self, forKey: .ownerRequestId)
+        kind = (try? c.decode(SessionOwnerRequestKind.self, forKey: .kind)) ?? .unknown
+        title = (try? c.decodeIfPresent(String.self, forKey: .title)) ?? ""
+        since = (try? c.decodeIfPresent(String.self, forKey: .since)) ?? ""
+    }
+}
+
+/// One group of PENDING task moves waiting on a session: one asker's moves out of one project into
+/// another (`@orbit/shared`'s `SessionTaskMoveGroup`). The row counts groups but says the moves.
+public struct SessionTaskMoveGroup: Codable, Equatable, Sendable {
+    public let requestedBySessionId: String
+    public let fromProjectId: String
+    public let toProjectId: String
+    /// How many moves are waiting in the group. Always ≥ 1.
+    public let count: Int
+    /// The oldest move's request time (ISO-8601).
+    public let since: String
+    /// The oldest move's title.
+    public let title: String
+    /// The waiting crossings, oldest first.
+    public let handoffIds: [String]
+
+    public init(requestedBySessionId: String, fromProjectId: String, toProjectId: String,
+                count: Int, since: String, title: String, handoffIds: [String]) {
+        self.requestedBySessionId = requestedBySessionId
+        self.fromProjectId = fromProjectId
+        self.toProjectId = toProjectId
+        self.count = count
+        self.since = since
+        self.title = title
+        self.handoffIds = handoffIds
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case requestedBySessionId, fromProjectId, toProjectId, count, since, title, handoffIds
+    }
+
+    /// A group this build cannot read whole is not a move this row can name: every field is read
+    /// leniently, and a missing count reads as none (`taskMovesRowWord` then keeps the old words).
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        requestedBySessionId = (try? c.decodeIfPresent(String.self, forKey: .requestedBySessionId)) ?? ""
+        fromProjectId = (try? c.decodeIfPresent(String.self, forKey: .fromProjectId)) ?? ""
+        toProjectId = (try? c.decodeIfPresent(String.self, forKey: .toProjectId)) ?? ""
+        count = (try? c.decodeIfPresent(Int.self, forKey: .count)) ?? 0
+        since = (try? c.decodeIfPresent(String.self, forKey: .since)) ?? ""
+        title = (try? c.decodeIfPresent(String.self, forKey: .title)) ?? ""
+        handoffIds = (try? c.decodeIfPresent([String].self, forKey: .handoffIds)) ?? []
     }
 }
 
@@ -1938,11 +2040,17 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     /// optional so older/slim payloads still decode; consumers should read `effectiveRunStatus`.
     public let status: RunStatus?
     public let runStatus: RunStatus?
+    @LenientSessionField public private(set) var phase: SessionPhase?
+    @LenientSessionField public private(set) var released: Bool?
+    @LenientSessionField public private(set) var workFinished: Bool?
+    @LenientSessionField public private(set) var lastTurnOutcome: SessionTurnOutcome?
+    @LenientSessionField public private(set) var waitingOn: SessionWaitingOn?
     /// Server-normalized, user-facing lifecycle; absent when talking to an older control plane.
     public let sessionState: SessionState?
     /// Product-facing execution state and lifecycle location, both optional for older servers.
     public let runState: SessionRunState?
     public let lifecycleState: SessionLifecycleState?
+    public let endReason: String?
     /// Authoritative action availability from newer servers. nil retains legacy local inference.
     public let capabilities: SessionCapabilities?
     /// The engine this session runs on. What the auto-retry card names as the provider whose quota
@@ -2051,10 +2159,16 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         id = try values.decode(String.self, forKey: .id)
         status = try values.decodeIfPresent(RunStatus.self, forKey: .status)
         runStatus = try values.decodeIfPresent(RunStatus.self, forKey: .runStatus)
+        phase = try? values.decodeIfPresent(SessionPhase.self, forKey: .phase)
+        released = try? values.decodeIfPresent(Bool.self, forKey: .released)
+        workFinished = try? values.decodeIfPresent(Bool.self, forKey: .workFinished)
+        lastTurnOutcome = try? values.decodeIfPresent(SessionTurnOutcome.self, forKey: .lastTurnOutcome)
+        waitingOn = try? values.decodeIfPresent(SessionWaitingOn.self, forKey: .waitingOn)
         sessionState = try values.decodeIfPresent(SessionState.self, forKey: .sessionState)
         runState = try values.decodeIfPresent(SessionRunState.self, forKey: .runState)
         lifecycleState = try values.decodeIfPresent(SessionLifecycleState.self, forKey: .lifecycleState)
             ?? legacy.decodeIfPresent(SessionLifecycleState.self, forKey: .filingState)
+        endReason = try? values.decodeIfPresent(String.self, forKey: .endReason)
         capabilities = try values.decodeIfPresent(SessionCapabilities.self, forKey: .capabilities)
         provider = try values.decodeIfPresent(String.self, forKey: .provider)
         projectId = try values.decodeIfPresent(String.self, forKey: .projectId)
@@ -2097,7 +2211,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     public init(id: String, status: RunStatus? = nil, runStatus: RunStatus? = nil,
                 sessionState: SessionState? = nil,
                 runState: SessionRunState? = nil, lifecycleState: SessionLifecycleState? = nil,
-                capabilities: SessionCapabilities? = nil,
+                endReason: String? = nil, capabilities: SessionCapabilities? = nil,
                 provider: String? = nil,
                 projectId: String? = nil, projectTitle: String? = nil,
                 projectMembership: SessionProjectMembership? = nil,
@@ -2123,6 +2237,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.sessionState = sessionState
         self.runState = runState
         self.lifecycleState = lifecycleState
+        self.endReason = endReason
         self.capabilities = capabilities
         self.provider = provider
         self.projectId = projectId

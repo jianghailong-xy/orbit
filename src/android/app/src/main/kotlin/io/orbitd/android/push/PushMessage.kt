@@ -45,15 +45,16 @@ data class PushPayload(
     val isTerminalLogin get() = kind == TERMINAL_LOGIN
     /** A decision only the owner can make, raised outside the owner items: a crossing request, a coordinator's confirmation hold. */
     val isOwnerDecision get() = kind == CROSSING_REQUEST || kind == CONFIRMATION_RAISED
-    /** An owner request's primary action (`orbit://owner-request/<id>`): the inbox, its card open on its input. Neither it nor
-     * Later ends the request; the tap on the notification itself opens the session that asked, as [link] says. */
+    /** An owner request's primary action (`orbit://owner-request/<id>`): the conversation that asked, opened on the request's card
+     * with its input focused ([io.orbitd.android.cards.OwnerRequestLinks]). Neither it nor Later ends the request; the tap on the
+     * notification itself opens that conversation too, as [link] says. */
     val ownerRequestLink: String? get() = ownerRequestId?.takeIf { isOwnerRequest }?.let { "orbit://owner-request/$it" }
 
     /** The existing ACTION_VIEW/OrbitLinks entry retains authentication and the caller's stack. */
     val link: String? get() = when {
         // A project done, and a pending item of a project nobody has (the orphan sweep, owner with no coordinator): its project.
         kind == "project-done" || kind == "project-orphan" -> projectId?.let { "orbit://project/$it" }
-        // A terminal asking to be approved: the Waiting on you inbox, whose Open tab heads with its card (iOS `.openTerminalRequests`).
+        // A terminal asking to be approved: Machines & models' Needs you section, its card lit (OrbitLinks).
         kind == TERMINAL_LOGIN -> terminalLoginId?.let { "orbit://terminal-login/$it" }
         kind == "watch-matched" -> watchId?.let { "orbit://watch/$it" }
         // A scheduled task's alert: its run's session when it names one, else the schedule's detail on the Scheduled page.

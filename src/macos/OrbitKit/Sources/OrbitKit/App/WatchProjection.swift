@@ -554,7 +554,8 @@ public enum WatchProjection {
     /// A session target's standing: the glyph its own header draws for its run state.
     public static func stripGlyph(_ target: WatchTarget) -> SessionStatusGlyph? {
         guard target.targetKind == .session, let standing = target.targetStatus else { return nil }
-        return SessionStatusGlyph.make(runState: SessionRunState(rawValue: standing.status) ?? .unknown)
+        let state = SessionRunState(rawValue: standing.status) ?? .unknown
+        return SessionStatusGlyph.make(runState: state, successLabel: "Finished")
     }
 
     /// The targets an opened strip lists for one watch: the live ones, each once and a task's run

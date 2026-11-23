@@ -1,4 +1,5 @@
-import { isWiderThanStarter, resolvePermissionMode, runningPermissionMode } from '../common/permission-mode';
+import { PermissionMode } from '@orbit/shared';
+import { isWiderThanStarter, runningPermissionMode } from '../common/permission-mode';
 import type { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -15,9 +16,8 @@ import type { PrismaService } from '../prisma/prisma.service';
  * Counted from `task.creator_session_id`, so every task the session created counts, however its card
  * was answered: a session that already filed five on the owner's say-so has three left, not eight.
  *
- * The allowance answers for a session that may start what the account's default starts: what it files
- * runs in that default, so a session whose stored mode is narrower (Plan, Ask before edits under an
- * Auto default) is asked, and a person decides — the rule `coordinatorCreateAllowedBy` applies.
+ * The allowance answers for a session that may start work in Auto. When Auto is wider than the
+ * session's running mode, the card goes to a person, as in `coordinatorCreateAllowedBy`.
  *
  * Only task creates — `orbit_task_create` and `orbit_task_batch`. Anything this cannot read answers
  * null and the card is raised.
@@ -55,7 +55,7 @@ export async function sessionCreateAllowedBy(
     if (!row) return null;
     // R3: the mode the session is actually running in.
     const starter = { mode: runningPermissionMode(row, row.owner), engine: row.engine ?? null };
-    if (isWiderThanStarter(starter, resolvePermissionMode(null, row.owner), null)) return null;
+    if (isWiderThanStarter(starter, PermissionMode.AUTO, null)) return null;
     const created = await prisma.task.count({ where: { creatorSessionId: session.id } });
     return created + adding <= cardFreeTaskCreates(row.owner?.preferences) ? SESSION_CREATE_ALLOWANCE_MESSAGE : null;
   } catch {

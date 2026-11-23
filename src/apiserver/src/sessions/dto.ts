@@ -21,14 +21,15 @@ export interface SessionLandingFields {
  * can keep an in-flight landing out of the ordinary rows, list an awaiting one, and fold a settled
  * one into "Earlier · n landed". AWAITING_DECISION is the segment having an OPEN integration item
  * or a BLOCKED candidate; the row does not carry the item itself — its own card is where that is
- * answered. Grouping and the 24-hour window are the client's; the server says only these facts.
+ * answered. FIXING (revision 42, §12.7) is a failure of the segment in the hands of its task's own
+ * work session, which is fixing it on its branch: nothing is awaited of anyone else. Grouping and the 24-hour window are the client's; the server says only these facts.
  *
  * Carried on a list row only (`GET /sessions?projectId=&includeLanding=1`), absent from every
  * other row, and a client that does not know the field ignores it.
  */
 export interface SessionLandingSummary {
   subject: 'TASK' | 'PROMOTION';
-  state: 'IN_FLIGHT' | 'AWAITING_DECISION' | 'SETTLED';
+  state: 'IN_FLIGHT' | 'AWAITING_DECISION' | 'FIXING' | 'SETTLED';
   /** How a SETTLED segment ended; null while it is open. */
   settledAs: string | null;
   settledAt: string | Date | null;

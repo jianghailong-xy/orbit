@@ -1,7 +1,7 @@
 import { ConflictException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { settingValueInForce } from '@orbit/shared';
-import { mergePreferences, withChangedBy } from '../users/preferences-merge';
+import { mergePreferences, recordDefaultPermissionModeChange, withChangedBy } from '../users/preferences-merge';
 import { SETTINGS_STALE } from './owner-request';
 import { sameSettingValue, type SettingsChangeEntry } from './settings-change';
 
@@ -16,6 +16,7 @@ export async function applySettingsChanges(
   tx: Prisma.TransactionClient,
   card: { ownerId: string; requestId: string; askedBySessionId: string; changes: readonly SettingsChangeEntry[] },
   now: Date,
+  client: string | null,
 ): Promise<void> {
   const [row] = await tx.$queryRaw<Array<{ preferences: Prisma.JsonValue }>>`
     SELECT "preferences" FROM "user" WHERE "id" = ${card.ownerId}::uuid FOR NO KEY UPDATE`;
@@ -37,4 +38,5 @@ export async function applySettingsChanges(
     from: from.get(key),
   }));
   await tx.user.update({ where: { id: card.ownerId }, data: { preferences: preferences as Prisma.InputJsonValue } });
+  await recordDefaultPermissionModeChange(tx, card.ownerId, current, preferences, { senderClient: client ?? undefined });
 }

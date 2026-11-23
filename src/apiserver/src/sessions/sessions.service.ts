@@ -146,6 +146,7 @@ import {
   supportsSteerWithdraw,
   supportsTargetBoundCurrentWorkSteer,
   uuidToBase62,
+  toUuid,
   accountToMoveTo,
   isAccountEngine,
   planUsageBlockedUntil,
@@ -224,6 +225,8 @@ import { QueueService } from '../queue/queue.service';
 import { mergeDispatchGate } from '../projects/task-checkpoint.service';
 import {
   ownerItemsForRow,
+  ownerRequestsForRow,
+  taskMovesForRow,
   readOwnerDecisionSignals,
   readOwnerDecisionsBySession,
   sessionWaitingKind,
@@ -242,7 +245,7 @@ import { isCodelessTaskRun } from './codeless-checkout';
 import { readWikiChatContext, sameWikiChatContext, wikiContextOutsideChat } from '../wiki/wiki-chat-context';
 import { branchName } from '../projects/project-criterion-landing';
 import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
-import { INTEGRATION_ITEM_KINDS, openItemOwed, openItemVisible } from '../projects/project-open-item';
+import { INTEGRATION_ITEM_KINDS, openItemInWorkSessionHands, openItemOwed, openItemVisible } from '../projects/project-open-item';
 import { landingContainerStatus, readSourceLanding } from '../projects/landing-session';
 import { readLandingIntegrationLog, type IntegrationLogSelectors } from '../projects/project-integration-log';
 import {
@@ -437,7 +440,7 @@ import {
   terminalizePendingCurrentWorkSteers,
 } from './current-work-delivery';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
-import { returnQueuedTurns } from '../projects/project-open-item';
+import { handBackLandingFixesOfSession, returnQueuedTurns } from '../projects/project-open-item';
 import { type OpenListBase, OpenListDeltaStore } from './open-list-delta';
 import { type OpenListVersionParts, openListEtag, readOpenListVersion, readOpenListVersionParts } from './open-list-version';
 import {
@@ -445,6 +448,7 @@ import {
   SESSION_KIND_LANDING,
   assertEngineSession as assertEngineSessionRow,
 } from './engine-session';
+import { returnWaitingSessionsToOpen } from './return-to-open';
 import { readLandingView } from '../projects/landing-view';
 import {
   deriveSessionCapabilities,
@@ -1468,7 +1472,7 @@ export class SessionsService {
     // request clones from GitHub starts with it on (createInNewWorkspace), and so does its first session.
     let enableWorktree = !!newWorkspace?.clone;
     // The owner's account-level permission default, materialized onto the session below when the
-    // caller picked none (MCP spawns, task runs — the web/native composers always send one).
+    // caller picked none. Task runs, coordinator judgments and the web/native composers name one.
     // The claim resolves session ?? account ?? auto anyway, so this doesn't change what the
     // runner spawns with; it stops a NULL column from *reading* as one particular mode in every
     // client's Mode pill — a stale pill that the next resume writes back, silently changing a
@@ -3109,13 +3113,12 @@ export class SessionsService {
   }
 
   /**
-   * Refuse a session opening a session at the account's default when that default is wider than the
-   * session may start. For a door with no mode to name (`task_start`, `task_update`, a coordinator's
-   * rotation), so `next` is a person's way forward. A caller that is not a session of this owner has
+   * Refuse a session opening another session in a wider mode. Task starts name Auto and a
+   * coordinator rotation can inherit the account's default. A caller that is not a session of this owner has
    * nothing to compare: an owner's own door passes none, and the header it came from attributes, it
    * does not authorize.
    */
-  async assertMayStartAtAccountDefault(
+  async assertMayStartInMode(
     ownerId: string,
     actingSessionId: string | undefined,
     target: {
@@ -3123,6 +3126,7 @@ export class SessionsService {
       provider?: string | null;
       model?: string | null;
       workspaceId?: string | null;
+      permissionMode?: PermissionMode;
       /** The start's anchor, as create() is handed it (start-anchor.ts). */
       anchor?: () => Promise<AnchorSeed | null>;
     },
@@ -3138,7 +3142,7 @@ export class SessionsService {
     const starter = { mode: runningPermissionMode(acting, acting.owner), engine: acting.engine };
     if (!modeLimitsWhatItStarts(starter.mode)) return;
     const engine = await this.engineOfStart(ownerId, target);
-    const mode = modeOfNoneNamed(acting.owner, engine);
+    const mode = target.permissionMode ?? modeOfNoneNamed(acting.owner, engine);
     if (isWiderThanStarter(starter, mode, engine)) throw widerModeRefusal(starter.mode, mode, engine, next);
   }
 
@@ -3440,6 +3444,47 @@ export class SessionsService {
     const engines = await sessionEnginesOf(this.prisma, sessions.map((session) => ({ ...session, ownerId })));
     return sessions.map(({ providerBuiltin: _providerBuiltin, ...session }) =>
       withSessionState({ ...session, engine: engines.get(session.id) ?? null }));
+  }
+
+  /**
+   * Revision 42 (§12.5 W6, §12.7): a task's own work session reading its task's landing — `session_get` on the landing
+   * session id its landing-fix turn names, or on `task_get`'s `integration.landTask.landingSessionId` — whether or not
+   * the account has Session orchestration on. The landing is about the work this session wrote, and fixing it needs
+   * the record.
+   *
+   * Answers only when the calling session is a work session of this runner that is not deleted, the id is a landing of the project this session's task is in, and that landing's task is this session's task; then it
+   * is the same detail `getForOrchestration` serves for it. Null in every other case, which leaves the request to the
+   * orchestration door and its refusals unchanged.
+   */
+  async ownTaskLandingForWorkSession(
+    ownerId: string,
+    runnerId: string,
+    callingSessionId: string | undefined,
+    id: string,
+  ) {
+    const raw = callingSessionId?.trim();
+    if (!raw) return null;
+    let caller: string;
+    try {
+      caller = toUuid(raw);
+    } catch {
+      return null;
+    }
+    const session = await this.prisma.session.findFirst({
+      where: {
+        // Not `cancel_requested_at`: a session revived for its landing-fix round keeps the end its task's DONE asked
+        // for (R3 resumes it without clearing that), and this is exactly the session that must read its landing.
+        id: caller, ownerId, assignedRunnerId: runnerId, startsTaskWork: true, deletedAt: null, taskId: { not: null },
+      },
+      select: { taskId: true, task: { select: { projectId: true } } },
+    });
+    if (!session?.taskId || !session.task?.projectId) return null;
+    const landing = await this.prisma.projectLanding.findFirst({
+      where: { sessionId: id, ownerId, taskId: session.taskId, projectId: session.task.projectId },
+      select: { sessionId: true },
+    });
+    if (!landing) return null;
+    return this.getForOrchestration(ownerId, landing.sessionId);
   }
 
   /**
@@ -5148,6 +5193,7 @@ export class SessionsService {
                    AND oi.kind IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
                    AND ${openItemOwed('oi')}
                    AND ${openItemVisible('oi')}
+                   AND NOT ${openItemInWorkSessionHands('oi')}
                    AND (oi.task_id = l.task_id
                         OR oi.promotion_id = l.promotion_id
                         OR EXISTS (
@@ -5161,6 +5207,20 @@ export class SessionsService {
                           SELECT j.promotion_id FROM project_integration_job j
                            WHERE j.landing_id = l.id AND j.promotion_id IS NOT NULL))
               ) THEN 'AWAITING_DECISION'
+              -- Revision 42 (§12.7): a failure of this segment in its task's own work session's hands is being fixed
+              -- there; no coordinator has it yet, and no decision is awaited.
+              WHEN EXISTS (
+                SELECT 1 FROM project_open_item oi
+                 WHERE oi.state = 'OPEN'
+                   AND oi.project_id = l.project_id
+                   AND oi.kind IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
+                   AND ${openItemOwed('oi')}
+                   AND ${openItemInWorkSessionHands('oi')}
+                   AND (oi.task_id = l.task_id
+                        OR EXISTS (
+                          SELECT 1 FROM project_integration_job j
+                           WHERE j.id = oi.integration_job_id AND j.landing_id = l.id))
+              ) THEN 'FIXING'
               ELSE 'IN_FLIGHT'
             END,
             'settledAs', l.settled_as,
@@ -5446,6 +5506,10 @@ export class SessionsService {
         // Which of the four owner items are waiting here, for the banner that has to name one and
         // open its card rather than only say that a number is not zero (§7.6 V13).
         ownerItems: ownerItemsForRow(waiting),
+        // The open owner requests this session asked and the task moves waiting on it, which the
+        // row's `OWNER_REQUEST` / `MOVE_REQUEST` words name; sent as [] to clear.
+        ownerRequests: ownerRequestsForRow(waiting),
+        taskMoves: taskMovesForRow(waiting),
         awaitingReplyFrom: peers?.awaitingReplyFrom ?? [],
         owesReplyTo: peers?.owesReplyTo ?? [],
       }];
@@ -7677,6 +7741,7 @@ export class SessionsService {
       kind: 'reload',
       content: JSON.stringify({ provider: engine }),
       clientTurnId: randomUUID(),
+      senderClient: 'orbit',
     });
     return {
       [ACCOUNT_CHOICE[engine]]: move.to,
@@ -10405,7 +10470,25 @@ export class SessionsService {
     );
     await reprojectAfterSettledChecks(this.prisma, ended.checksSettled, this.logger);
     if (ended.settledProjectId) await this.routeSettledFacts(ended.settledProjectId);
+    if (ended.settledProjectId || (ended.changed && lifecycle === 'deletedAt')) {
+      await this.deliverLandingFixesAfterFinish(sessionId);
+    }
     return ended;
+  }
+
+  /**
+   * Revision 42 (§12.5 W7): an end that finished a work session here — one that never ran — or moved it to Trash may have
+   * handed back the failed landing it held (SESSION_ENDED); it is the coordinator's from that commit, and delivered now. Found by
+   * `ModuleRef` as `routeSettledFacts` finds its router; without one, the coordinator's next turn end delivers it.
+   */
+  private async deliverLandingFixesAfterFinish(sessionId: string): Promise<void> {
+    if (!this.moduleRef) return;
+    try {
+      const { ProjectOpenItemService } = await import('../projects/project-open-item.service.js');
+      await this.moduleRef.get(ProjectOpenItemService, { strict: false }).offerLandingFixesTo(sessionId);
+    } catch (e) {
+      this.logger.warn(`landing fixes handed back by an end not delivered: ${e instanceof Error ? e.message : e}`);
+    }
   }
 
   /**
@@ -10624,6 +10707,12 @@ export class SessionsService {
         clientTurnId: randomUUID(),
         ...(endTurnContent !== undefined ? { content: endTurnContent } : {}),
       });
+    }
+    // Revision 42 (§12.5 W7): a work session moved to Trash hands back the failed landing it holds, SESSION_ENDED, in
+    // this transaction (the items are rank 60, after this Session's rank 30). Its finish cannot decide it: a trashed
+    // session is no work a delivered identity is read from (`readDeliveredIdentity`), so no settlement reaches W7.
+    if (lifecycle === 'deletedAt' && session.startsTaskWork) {
+      await handBackLandingFixesOfSession(tx, sessionId, 'SESSION_ENDED');
     }
     return {
       changed: true,
@@ -11998,7 +12087,24 @@ export class SessionsService {
       ended.endReason,
       ended.lifecycleState,
     );
+    await this.returnIfStillWaiting(ownerId, [id]);
     return { ok: true };
+  }
+
+  /**
+   * After sessions were filed in Completed or Trash: one with a question still waiting on the owner
+   * (an owner request it asked, or a task move it asked or coordinates the target of) comes straight
+   * back to Open (`returnWaitingSessionsToOpen`), told as a restore is. Never a reason for the
+   * filing to fail: the periodic sweep brings back anything this misses.
+   */
+  private async returnIfStillWaiting(ownerId: string, ids: readonly string[]): Promise<void> {
+    if (ids.length === 0) return;
+    try {
+      const back = await returnWaitingSessionsToOpen(this.prisma, this.logger, { ownerId, sessionIds: ids });
+      for (const { id } of back) this.realtime.publishSessionCreated(id);
+    } catch (error) {
+      this.logger.warn(`could not bring waiting sessions back to Open: ${(error as Error).message}`);
+    }
   }
 
   /**
@@ -12049,6 +12155,7 @@ export class SessionsService {
       this.publishEndIntent(id, end);
       this.realtime.publishSessionLifecycleChanged(id, end.status, end.endReason, end.lifecycleState);
     }
+    await this.returnIfStillWaiting(ownerId, moved.map(({ id }) => id));
     return { completed: moved.length };
   }
 
@@ -12277,7 +12384,7 @@ export class SessionsService {
     id: string,
     dto: SessionConfigDto,
     credential?: AuthCredential,
-    by: { origin: ConfigChangeOrigin; senderClient?: TurnSenderClient } = { origin: 'OWNER' },
+    by: { origin: ConfigChangeOrigin; senderClient?: TurnSenderClient; senderSessionId?: string } = { origin: 'OWNER' },
   ) {
     // Model, permission mode, effort, provider and account are all engine-path settings (§2.9 LS6).
     await this.assertEngineSession(ownerId, id);
@@ -12507,6 +12614,21 @@ export class SessionsService {
           // Against what the engine runs in now: the intent no longer says that.
           normalizedPermissionMode !== (session.actualPermissionMode ?? session.permissionMode) ||
           effortMoved);
+      // A session header is attribution only. Keep it only if it names this owner's session.
+      const senderSession = by.senderSessionId && UUID_SHAPE.test(by.senderSessionId)
+        ? await tx.session.findFirst({
+            where: { id: by.senderSessionId, ownerId, deletedAt: null },
+            select: { id: true },
+          })
+        : null;
+      const sender = {
+        senderClient: by.origin === 'ORBIT' ? 'orbit'
+          : credential?.kind === 'PAT' ? 'pat'
+          : senderSession ? 'session'
+          : 'unknown',
+        ...senderClientColumns(by.senderClient),
+        senderSessionId: senderSession?.id,
+      };
       // Both are enqueued under this same row lock, so their payload is exactly the config
       // committed above. Order matters when both go: the re-spawn re-applies every flag anyway,
       // so putting it last keeps the control frame from being work that is immediately redone.
@@ -12527,7 +12649,7 @@ export class SessionsService {
           }),
           // Who asked, for the actual-mode change its acknowledgement records (configTurnKey).
           clientTurnId: configTurnKey(by.origin),
-          ...senderClientColumns(by.senderClient),
+          ...sender,
         });
       }
       // `effort: undefined` is omitted by JSON.stringify when it did not change.
@@ -12551,7 +12673,7 @@ export class SessionsService {
           }),
           // Who asked, as on setconfig: its delivery records the mode it re-spawns the engine in.
           clientTurnId: configTurnKey(by.origin),
-          ...senderClientColumns(by.senderClient),
+          ...sender,
         });
       }
       return true;
@@ -12576,7 +12698,7 @@ export class SessionsService {
    * at once, if it was waiting out the old account's reset. The next engine start says so in the
    * transcript.
    */
-  async switchAccount(ownerId: string, id: string, account: unknown) {
+  async switchAccount(ownerId: string, id: string, account: unknown, senderClient?: TurnSenderClient) {
     // Switching the runner account a session runs on is an engine door (§2.9 LS6).
     await this.assertEngineSession(ownerId, id);
     if (typeof account !== 'string' || (account !== AUTOMATIC_ACCOUNT && !ACCOUNT_ID_PATTERN.test(account))) {
@@ -12702,6 +12824,8 @@ export class SessionsService {
         kind: 'reload',
         content: JSON.stringify({ provider: engine }),
         clientTurnId: randomUUID(),
+        senderClient: 'unknown',
+        ...senderClientColumns(senderClient),
       });
       return true;
     }, loggedRetry(this.logger, 'sessions.switchAccount'));
@@ -12798,6 +12922,7 @@ export class SessionsService {
           kind: 'reload',
           content: JSON.stringify({ provider: engine }),
           clientTurnId: randomUUID(),
+          senderClient: 'orbit',
         });
         return 'reloaded' as const;
       }, loggedRetry(this.logger, 'sessions.moveOffRemovedAccount'));
@@ -12823,6 +12948,7 @@ export class SessionsService {
         kind: 'reload',
         content: JSON.stringify({ provider: AgentProvider.CLAUDE }),
         clientTurnId: randomUUID(),
+        senderClient: 'orbit',
       });
     }, formerDefaultEmail), loggedRetry(this.logger, 'sessions.applyClaudeAccountSwap'));
     for (const id of applied?.release ?? []) this.realtime.notifyInbox(id);
@@ -12892,7 +13018,7 @@ export class SessionsService {
    * An ended engine is refused 409 ENGINE_NOT_RUNNING: there is nothing to reload, and the claim that
    * starts the next one builds it with the env as it is then.
    */
-  async restart(ownerId: string, id: string): Promise<SessionRestartResponse> {
+  async restart(ownerId: string, id: string, senderClient?: TurnSenderClient): Promise<SessionRestartResponse> {
     const { afterTurn, queued } = await withTransactionRetry(this.prisma, async (tx) => {
       // Serialized with the settings PATCH and other restarts, so two restarts cannot both queue one.
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
@@ -12927,6 +13053,8 @@ export class SessionsService {
         kind: 'reload',
         content: RESTART_RELOAD_CONTENT,
         clientTurnId: randomUUID(),
+        senderClient: 'unknown',
+        ...senderClientColumns(senderClient),
       });
       return { afterTurn: inFlight != null, queued: true };
     }, loggedRetry(this.logger, 'sessions.restart'));
@@ -13008,6 +13136,7 @@ export class SessionsService {
       ended.endReason,
       ended.lifecycleState,
     );
+    await this.returnIfStillWaiting(ownerId, [id]);
     return { ok: true };
   }
 

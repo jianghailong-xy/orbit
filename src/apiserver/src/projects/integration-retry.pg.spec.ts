@@ -349,6 +349,13 @@ async function doneTask(
   });
   const acceptance = await dequeue(stack, sessionId, w.runnerId);
   assert.equal(acceptance?.taskAcceptance, true, 'the acceptance command was queued for this task');
+  // W4 false on purpose (§12.3 condition 1): every case in this file is about the coordinator's and the
+  // owner's doors to a failed landing, so its failure must go to the coordinator as before revision 42.
+  // A person ends the work session while its acceptance command runs; the command passes and writes DONE,
+  // but the session ended with `end_reason = 'ended'`, not with its task's DONE, so it is never handed the
+  // failure. Left to its DONE's own end (`task_done`), the failure would be the session's (W-T1 — the
+  // landing-fix specs' cases).
+  await stack.sessions.end(w.ownerId, sessionId);
   await stack.api.turnComplete({ id: w.runnerId }, sessionId, {
     turnId: acceptance!.turnId,
     status: SharedRunStatus.SUCCEEDED,
@@ -357,6 +364,10 @@ async function doneTask(
     shellOutput: '',
   });
   assert.equal(await taskStatus(stack.db, declared.id), TaskStatus.DONE, 'the acceptance command agreed');
+  assert.equal(
+    (await stack.db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { endReason: true } })).endReason,
+    'ended', 'CONTROL: the work session is one a person ended, which W4 does not hand a failure',
+  );
   // The runner commits the worktree when it FINISHES the session (SR13), and a landing is not handed
   // over before that (J-T1a): what the queue reads is the finish and where HEAD ended.
   await stack.db.$transaction(async (tx) => {

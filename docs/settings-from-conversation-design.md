@@ -154,7 +154,18 @@ apply-settings route (§5.2) for every key the route writes.
 - `GET /users/me` returns `changedBy` together with the session's title. The Settings row needs the title to name
   the conversation.
 
-No migration is needed: `preferences` is JSON.
+The default permission mode also has an append-only audit history. Both a preferences PATCH and a
+settings-card approval write changes to `activity` in the same transaction as the preference update.
+The row records the account owner, time, previous and new values, and the app when the request identifies it.
+An omitted client is recorded as `unknown`.
+
+```sql
+SELECT actor_id, created_at, payload
+FROM activity
+WHERE type = 'preferences.default_permission_mode.changed'
+  AND actor_id = $1::uuid
+ORDER BY created_at DESC, id DESC;
+```
 
 ## 6. Tier 3: refusal and the link
 

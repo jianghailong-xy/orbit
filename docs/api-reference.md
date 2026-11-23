@@ -73,12 +73,12 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | Caller | Routes |
 | --- | --- |
 | `public` | 39 |
-| `user` | 529 |
+| `user` | 531 |
 | `admin` | 31 |
-| `runner` | 230 |
+| `runner` | 231 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **833** |
+| **Total** | **836** |
 
 ## Public routes
 
@@ -493,6 +493,8 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `PUT` | `/api/sessions/:id/share` | body `PutShareLinkDto`; path `id` | `ShareLinksController.putSessionLink` |
 | `GET` | `/api/sessions/:id/subagents` | path `id` | `SessionsController.subagentRuns` |
 | `PUT` | `/api/sessions/:id/tags` | body `SetSessionTagsDto`; path `id` | `SessionsController.setTags` |
+| `GET` | `/api/sessions/:id/task-moves` | path `id` | `SessionTaskMovesController.list` |
+| `POST` | `/api/sessions/:id/task-moves/decision` | body `DecideTaskMoveBatchDto`; path `id` | `SessionTaskMovesController.decide` |
 | `GET` | `/api/sessions/:id/turns` | path `id`; query `view` | `SessionsController.queuedTurns` |
 | `POST` | `/api/sessions/:id/turns` | body `Object`; path `id` | `SessionsController.turn` |
 | `DELETE` | `/api/sessions/:id/turns/:turnId` | path `id`, `turnId` | `SessionsController.cancelTurn` |
@@ -742,6 +744,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/runner/integration-jobs/:jobId/progress` | body `Object`; path `jobId` | `RunnerApiController.integrationJobProgress` |
 | `POST` | `/api/runner/integration-jobs/:jobId/release` | body `Object`; path `jobId` | `RunnerApiController.integrationJobRelease` |
 | `POST` | `/api/runner/integration-jobs/:jobId/result` | body `Object`; path `jobId` | `RunnerApiController.integrationJobResult` |
+| `GET` | `/api/runner/landings/:id` | path `id` | `RunnerSessionsController.getOwnTaskLanding` |
 | `POST` | `/api/runner/link-token` | body `Object` | `RunnerLinkTokenController.issue` |
 | `POST` | `/api/runner/link/welcome` | body `Object` | `RunnerLinkWelcomeController.welcome` |
 | `POST` | `/api/runner/login-result` | body `Object` | `RunnerApiController.loginResult` |

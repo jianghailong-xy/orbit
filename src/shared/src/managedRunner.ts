@@ -228,7 +228,12 @@ export interface ManagedRunnerStatus {
 
 /** One build of the managed runner image: the source commit it was built from, and when, if known. */
 export interface ManagedRunnerBuild {
+  /** The source commit. Empty on `running` when the runner reports a release version, whose commit the server is not
+   *  told. */
   sha: string;
+  /** The release it was published for, as its runner reports it (`0.1.261-beta.83`). Absent for an image built from a
+   *  checkout, whose runner reports `managed-<sha>`, and from an older server. */
+  version?: string;
   builtAt?: string;
 }
 

@@ -350,7 +350,8 @@ export const SESSION_LANDINGS_COPY = {
  */
 export interface LandingSessionSummary {
   subject: 'TASK' | 'PROMOTION';
-  state: 'IN_FLIGHT' | 'AWAITING_DECISION' | 'SETTLED';
+  /** FIXING (revision 42, §12.7): a failure of it is in its task's own session's hands. */
+  state: 'IN_FLIGHT' | 'AWAITING_DECISION' | 'FIXING' | 'SETTLED';
   settledAs: string | null;
   settledAt: string | null;
 }
@@ -390,7 +391,7 @@ export interface LandingsWindowRow {
 export interface LandingsWindowCard {
   sessionId: string;
   subject: 'TASK' | 'PROMOTION';
-  state: 'IN_FLIGHT' | 'AWAITING_DECISION';
+  state: 'IN_FLIGHT' | 'AWAITING_DECISION' | 'FIXING';
   /** The task's name (a round's own title), the line the card adds under its head. */
   title: string;
   at: number;
@@ -619,7 +620,8 @@ export function landingsRowSummary(
   const now = opts.now ?? Date.now();
   const window = landingsWindow(landings, merges, { now: new Date(now) });
   const waiting = window.now.filter((card) => card.state === 'AWAITING_DECISION');
-  const inFlight = window.now.filter((card) => card.state === 'IN_FLIGHT');
+  // A landing its own task's session is fixing waits on nobody (revision 42, §12.7): it is in hand, as one in flight.
+  const inFlight = window.now.filter((card) => card.state === 'IN_FLIGHT' || card.state === 'FIXING');
   const today = window.days.find((day) => day.title === 'Today')?.rows ?? [];
   const settledAt = Math.max(...window.days.flatMap((day) => day.rows.map((row) => row.at)));
   const time = waiting.length > 0

@@ -16,6 +16,7 @@ import {
   ALWAYS_ALLOWED_TOOLS,
   isWiderThanParent,
   runningPermissionMode,
+  subagentChildMode,
 } from '../common/permission-mode';
 import { dispatchAllowedTools } from '../common/permission-rules';
 import { normalizeBuiltinPermissionMode, normalizeEffortForRuntimeModel } from '../common/runtime-provider';
@@ -306,6 +307,8 @@ export interface RemoteSubagentExec {
   provider?: string;
   model?: string;
   effort?: string | null;
+  /** The parent session's mode, which a read-only child's requests are answered by on the target runner. */
+  parentMode?: PermissionMode;
   refusal?: string;
 }
 
@@ -397,10 +400,8 @@ export async function remoteSubagentExec(
     && !isWiderThanParent({ mode: parentMode, engine: parentEngine }, args.facts.permissionMode, provider)
     ? args.facts.permissionMode
     : null;
-  // A read-only Claude child keeps the parent's mode, its edit tools withheld; any other engine reads in Plan.
-  const childMode = (args.facts.readonly
-    ? (provider === AgentProvider.CLAUDE ? parentMode : PermissionMode.PLAN)
-    : asked ?? parentMode) as PermissionMode;
+  // The parent's mode on every engine, read-only or not: the runner keeps a read-only child read-only (§5.3).
+  const childMode = subagentChildMode(parentMode, { readonly: args.facts.readonly, asked }, provider);
   const effort = normalizeEffortForRuntimeModel(
     provider, (target ? target.effort : null) ?? workspace.effort ?? undefined, runnerModel, catalog, resolved.reasoningLevels,
   );
@@ -424,6 +425,7 @@ export async function remoteSubagentExec(
     provider: seed.provider,
     model: resolved.model,
     effort: effort ?? null,
+    parentMode,
   };
 }
 

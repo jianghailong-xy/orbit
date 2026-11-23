@@ -918,7 +918,7 @@ object TaskDetailLogic {
             if (route.flag("escalated")) listOf(TaskDetailCopy.usageLimitNote) else emptyList()).joinToString(" · ")
     }
     fun runLabel(session: JsonObject) = when (resolvedRunState(session)) {
-        "QUEUED" -> if (SessionFacts.present(session) && SessionFacts.waitingOn(session) == "HOLD") "On hold" else "Queued"; "FINISHED" -> "Finished"; "RUNNING" -> "Running"; "AWAITING_INPUT" -> "Awaiting reply"; "SUCCEEDED" -> "Succeeded"
+        "QUEUED" -> if (SessionFacts.present(session) && SessionFacts.waitingOn(session) == "HOLD") "On hold" else "Queued"; "FINISHED" -> "Finished"; "RUNNING" -> "Running"; "AWAITING_INPUT" -> "Awaiting reply"; "SUCCEEDED" -> "Finished"
         "FAILED" -> "Failed"; "INTERRUPTED" -> "Interrupted"; "ENDED" -> "Ended"; else -> "—"
     }
 }

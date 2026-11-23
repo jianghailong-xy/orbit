@@ -98,7 +98,7 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
   },
   {
     file: 'tasks.service.ts',
-    method: 'applyMoveApproval',
+    method: 'applyOneMoveUnderLocks',
     statements: ['task.updateMany'],
     holds: [
       'await this.lockDependencyGraph(tx, ownerId);',
@@ -107,7 +107,9 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
       'const row = await this.handoffs.lockMoveForConfirmation(tx, ownerId, handoffId, now);',
     ],
     note:
-      'Unit L4: the account owner\'s confirmation of a MOVE_TASK, which moves one task. The order ' +
+      'Unit L4: the account owner\'s confirmation of a MOVE_TASK, which moves one task, under the ' +
+      'locks `applyMoves` took (a batch takes every task in one sorted NOWAIT statement and every ' +
+      'request row in one sorted statement before the first move). The order ' +
       'the owner\'s own move in `update` takes, plus the request row: rank 10 (the move re-judges ' +
       'and rewrites the task\'s place in a hierarchy), both projects at rank 40 in one sorted ' +
       'statement, the task NOWAIT at rank 50 for the reason `linkSupersededBy` gives, and the ' +

@@ -48,6 +48,11 @@
   --warning-border: #ffd591;
   /* what smart model selection would have picked, on a run that kept the agent's own model */
   --route-shadow: #5b2fb8;
+  /* a landing in its task's own session's hands (revision 42, board landing-fix-own-session): purple,
+     neither the amber of a wait nor the red of a stop */
+  --fixing: #5b4bd6;
+  --fixing-bg: #f1effd;
+  --fixing-border: #d7d1f7;
   /* high-contrast inverted button (dark CTA on light, light CTA on dark) */
   --invert-surface: #1f2329;
   --invert-surface-hover: #000000;
@@ -92,6 +97,9 @@
   --warning-bg: rgba(250, 140, 22, 0.15);
   --warning-border: rgba(250, 140, 22, 0.38);
   --route-shadow: #b69cf5;
+  --fixing: #a99bf5;
+  --fixing-bg: rgba(124, 108, 240, 0.16);
+  --fixing-border: rgba(124, 108, 240, 0.36);
   --invert-surface: #e6e8eb;
   --invert-surface-hover: #ffffff;
   --invert-text: #16171a;
@@ -30130,35 +30138,6 @@ td > .routing-report-tier + .model-routing-flag {
   color: var(--text-1);
 }
 
-/* Settings → Terminals (TerminalsPage) */
-.terminals-empty {
-  margin: 0;
-  color: var(--text-3);
-}
-.terminals-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.terminals-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 0;
-  border-top: 1px solid var(--border);
-}
-.terminals-row:first-child {
-  border-top: 0;
-}
-.terminals-machine {
-  color: var(--text-1);
-  font-weight: 600;
-}
-.terminals-sub {
-  color: var(--text-3);
-  font-size: 12px;
-}
 /* A coordinator question still waiting on the owner: orange and heavier-edged, the colour of the
    `open question below` capsule that points at it (the owner's pick, 2026-11-13). */
 .approval-card.coordinator-question {
@@ -30470,4 +30449,191 @@ td > .routing-report-tier + .model-routing-flag {
 }
 .project-integration-setting.project-changes-entry {
   display: block;
+}
+
+/* ── A failed landing handed first to the task's own session (revision 42, §12.5–§12.7; owner ruling
+   2026-11-22, docs/mocks/landing-fix-own-session web a–e) ─────────────────────────────────────── */
+/* a ①: Orbit's card in the session that wrote the work — the warning wash, the step that stopped it, the
+   files, the three steps, and the way into the landing. */
+.landing-fix-card {
+  margin: 10px 0;
+  padding: 12px 16px 12px;
+  border: 1px solid var(--warning-border);
+  border-radius: 12px;
+  background: var(--warning-bg);
+  color: var(--text-1);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.landing-fix-card-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--warning);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.landing-fix-card-pill {
+  margin-left: auto;
+  padding: 0 9px;
+  border: 1px solid var(--warning-border);
+  border-radius: 999px;
+  background: var(--bg-raised);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.landing-fix-card-title {
+  margin: 6px 0 4px;
+  font-size: 15.5px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.landing-fix-card-line code,
+.landing-fix-again code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--fill-inset);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.9em;
+}
+.landing-fix-card-files {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.landing-fix-card-steps {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+.landing-fix-card-foot {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--warning-border);
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+.landing-fix-card-open,
+.landing-fix-link {
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+/* a ③: the one line once its fix is landing again, in the place of the session's landing label. */
+.landing-fix-again {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.landing-fix-again .landing-fix-card-open {
+  color: var(--brand);
+}
+/* The left column's card for a landing its own session is fixing (web a ③, b ①): today's card, with the
+   state word Fixing in purple and the ring still; and for one it handed back (web c), the stopped card. */
+.session-project-landing.is-fixing .landing-head-right {
+  color: var(--fixing);
+}
+.session-project-landing.is-fixing .landing-head-mark {
+  background: var(--fixing-bg);
+  color: var(--brand);
+}
+.session-project-landing.is-handed-back {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+.session-project-landing.is-handed-back .landing-head-right {
+  color: var(--text-2);
+}
+.session-project-landing a.spl-primary {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+/* b ①: the window's card while its own task's session holds it — the head in purple, a person for the mark. */
+.landings-window-card.is-fixing .landings-window-status-title,
+.landings-window-card.is-fixing .landings-window-status-icon {
+  color: var(--fixing);
+}
+.landing-fix-who b {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.landing-fix-who .anticon {
+  color: var(--fixing);
+}
+/* c ①: what the session said last, as it said it, on the hand-back card. */
+.landing-fix-quote {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0 2px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--fill-inset);
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.landing-fix-quote i {
+  color: var(--text-3);
+  font-size: 12px;
+}
+/* b ②, c ②: revision 42's three rows, between the attempts — the hand-off and the fix in purple, the hand-back grey. */
+.landing-fix-row {
+  margin: 2px 0;
+  padding: 0 12px;
+}
+.landing-fix-row .landing-fix-glyph {
+  color: var(--fixing);
+}
+.landing-fix-row.is-returned-to-coordinator .landing-fix-glyph {
+  color: var(--text-3);
+}
+.landing-fix-row code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--fill-inset);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.92em;
+}
+/* b ③: who decides, while a landing is in its own task's session's hands — a line of its own under the footer's words,
+   so a narrow window wraps it rather than cutting it. */
+.landing-page-foot-line.has-decisions {
+  flex-wrap: wrap;
+  row-gap: 2px;
+  white-space: normal;
+}
+.landing-page-foot-decisions {
+  flex-basis: 100%;
+  padding-left: 21px;
+}
+.landings-window-card.is-fixing .landings-window-status-icon {
+  background: var(--fixing-bg);
+}
+/* d ①: Open items' group for failures their task's own session is fixing — purple, waiting on nobody. */
+.project-open-items-group.is-fixing {
+  color: var(--fixing);
+}
+.project-open-item-fix-mark {
+  display: flex;
+  justify-content: center;
+  color: var(--fixing);
+  font-size: 12px;
+}
+/* e ②: the task row's "Landing · fixing" opens the task's own session. */
+.project-task-integration-press {
+  text-decoration: none;
 }
