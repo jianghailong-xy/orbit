@@ -10527,6 +10527,15 @@ button.chat-jump-start:hover {
   border-color: var(--brand-border);
   color: var(--brand);
 }
+/* Use the runner's browser (docs/runner-browser-engine-sign-in-design.md): a second way to the same link, under the
+   card's own. */
+.rsi-runner-browser {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 10px 0 4px;
+}
 .rsi-link {
   margin-top: 8px;
   padding: 0;

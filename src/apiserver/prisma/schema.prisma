@@ -1083,6 +1083,9 @@ model Runner {
   // Why a `failed` sign-in failed, when a client answers it differently (migration 0427): `expired`
   // is the link running out before anyone signed in with it. NULL for every other failure.
   loginReason   String?   @map("login_reason")
+  // The owner's Use the runner's browser on the sign-in waiting on its link (migration 1462): 'requested'
+  // until the runner answers, then 'opened', 'failed' or 'code-taken'. NULL when nobody asked.
+  loginBrowser  String?   @map("login_browser")
 
   // Removing a Codex account slot from this machine — the one relay that takes an account away
   // rather than adding one. The same shape as the sign-in relay above and for the same reason: the

@@ -964,6 +964,9 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     + '(runner id, the caller) through its managed_runner row before anything is written, and another account\'s runner, '
     + 'a self-managed one or a guest\'s view is 404 with no row written (managed-runners/browser-state.ts:122); '
     + 'browser-state.pg.spec.ts section 2 sends it as each and checks browser_clear_requested_at stayed NULL',
+  'POST /runners/:id/browser/sign-in':
+    "behind the browser switch, which the census server leaves off. ManagedRunnerBrowserService.signIn reads the owner's "
+    + 'managed runner before reading or updating its sign-in. login-runner-browser.pg.spec.ts exercises the other account with the switch on.',
   // ── Still stuck (help center board 02 ②): the id is an Ask, which the census's fixture account has none of ──
   'GET /help/ask/:id/stuck':
     'the Ask is read by (id, the caller, help_ask set, not deleted) before anything else, so another account\'s Ask answers 404 (help/help-ask.ts:207, :238); help-ask-stuck.pg.spec.ts "another account" sends it with the owner\'s Ask',
@@ -982,6 +985,10 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
   // ── scheduled tasks (docs/scheduled-tasks-design.md §9.1) ─────────────────────────────────────────
   'GET /schedules/:id':
     "read by (id, the caller) and nothing else, 404 for another account's id (schedules/schedule-reads.service.ts:98)",
+  'GET /schedules/:id/change':
+    "the schedule is looked up by (id, ownerId) in ScheduleChangeConversations.schedule before reading any conversation or opening. Another account's schedule returns 404.",
+  'POST /schedules/:id/change':
+    "the same owner-scoped schedule lookup returns 404 before appending a turn or creating a session (ScheduleChangeConversations.open).",
   'GET /schedules/:id/runs':
     "the schedule is counted by (id, the caller) first, 404 for another account's id (schedules/schedule-reads.service.ts:128)",
   'POST /schedules/:id/pause':

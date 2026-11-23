@@ -22,7 +22,7 @@ echo "$SHA" > "$W/source-sha"
 started=$(date +%s)
 docker buildx build --builder "$BUILDER" --file "$W/ctx/deploy/managed-runner/image/Dockerfile" \
   --build-arg ORBIT_SOURCE_SHA="$SHA" --provenance=false \
-  --output "type=oci,dest=$W/product.oci.tar,name=docker.io/library/orbit-managed-runner:browser-${SHA:0:9}" \
+  --output "type=oci,dest=$W/product.oci.tar,name=docker.io/library/orbit-cloud-runner:browser-${SHA:0:9}" \
   "$W/ctx"
 echo "product build: $(( $(date +%s) - started )) s"
 mkdir -p "$W/product-oci" && tar -xf "$W/product.oci.tar" -C "$W/product-oci"
