@@ -20,16 +20,19 @@ public struct SessionTimeSection: Identifiable, Equatable, Sendable {
 /// web's flat list here (a deliberate, ChatGPT-style redesign): pinned sessions are lifted into a
 /// leading "Pinned" section, and the rest are grouped by the calendar day of their last activity.
 public enum SessionTimeGrouping {
-    /// Group a **console-sorted** list (pinned-first, then most-recent activity — see `SessionFilter`)
-    /// into ordered sections. When `pinnedFirst` (Open, where pinning applies), pinned sessions
-    /// become a leading "Pinned" section in their given order;
-    /// every other session buckets by the calendar day of `lastTurnAt ?? createdAt` into Today /
+    /// Group a **console-sorted** list (pinned-first, then `listedAt` — see `SessionFilter`) into
+    /// ordered sections. When `pinnedFirst` (Open, where pinning applies), each session goes to the
+    /// first section that takes it: "Pinned" (pinnedAt set), "Needs you" (pending approvals, or
+    /// FAILED with no retry armed), "Working" (running or queued, or FAILED with a retry armed);
+    /// every other session buckets by the calendar day of `listedAt ?? createdAt` into Today /
     /// Yesterday / 2–7 days ago / 8–30 days ago / Older. Order within each bucket is preserved
     /// (so recency still holds), empty buckets are dropped, and a session with no/unparseable
     /// timestamp falls to "Older". `now` and `calendar` are injectable for deterministic tests.
     public static func sections(_ sessions: [Session], pinnedFirst: Bool = true,
                                 now: Date = Date(), calendar: Calendar = .current) -> [SessionTimeSection] {
         var pinned: [Session] = []
+        var needsYou: [Session] = []
+        var working: [Session] = []
         // Fixed bucket order; titles double as the rendered section headers.
         var buckets: [[Session]] = Array(repeating: [], count: 5)
         let titles = bucketTitles
@@ -39,15 +42,36 @@ public enum SessionTimeGrouping {
             // Only Open honours pins; elsewhere a (possibly stale) pinnedAt just buckets
             // by time like any other session, so no "Pinned" section appears in Completed/Trash.
             if pinnedFirst, s.pinnedAt != nil { pinned.append(s); continue }
+            if pinnedFirst {
+                if needsOwner(s) { needsYou.append(s); continue }
+                if isWorking(s) { working.append(s); continue }
+            }
             buckets[bucketIndex(for: s, today: today, calendar: calendar)].append(s)
         }
 
         var out: [SessionTimeSection] = []
         if !pinned.isEmpty { out.append(SessionTimeSection(title: "Pinned", sessions: pinned)) }
+        if !needsYou.isEmpty { out.append(SessionTimeSection(title: "Needs you", sessions: needsYou)) }
+        if !working.isEmpty { out.append(SessionTimeSection(title: "Working", sessions: working)) }
         for (i, items) in buckets.enumerated() where !items.isEmpty {
             out.append(SessionTimeSection(title: titles[i], sessions: items))
         }
         return out
+    }
+
+    /// Needs the owner: something is waiting on them, or the run failed and no retry is armed.
+    private static func needsOwner(_ s: Session) -> Bool {
+        if (s.pendingApprovals ?? 0) > 0 { return true }
+        return s.effectiveRunState == .failed && s.retryAt == nil
+    }
+
+    /// Running or queued, or failed with a retry armed (the server is retrying it).
+    private static func isWorking(_ s: Session) -> Bool {
+        switch s.effectiveRunState {
+        case .running, .queued: return true
+        case .failed: return s.retryAt != nil
+        default: return false
+        }
     }
 
     /// The bucket titles, in order — `bucketIndex` indexes into these.
@@ -56,7 +80,7 @@ public enum SessionTimeGrouping {
     /// 0 Today · 1 Yesterday · 2 2–7 days ago · 3 8–30 days ago · 4 Older. A future timestamp
     /// (clock skew) reads as Today; a missing/unparseable one falls to Older.
     private static func bucketIndex(for s: Session, today: Date, calendar: Calendar) -> Int {
-        bucketIndex(at: s.lastTurnAt ?? s.createdAt, today: today, calendar: calendar)
+        bucketIndex(at: s.listedAt ?? s.createdAt, today: today, calendar: calendar)
     }
 
     /// The same buckets for any instant, so a row that is not a session (a landing in the project's

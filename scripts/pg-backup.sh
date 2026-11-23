@@ -18,6 +18,11 @@
 # are in the files directory (docs/orbit-files-design.md §2.10), mounted here read-only.
 # Before the mirror's --delete it reads the target, and leaves one it cannot read, or that holds another
 # cluster's archive, alone. The files copy is pruned by name, of bytes the database says have gone.
+#
+# How it is going is written for node-exporter's textfile collector to /archive/metrics/pgbackup.prom, on
+# every poll: the newest base backup's time, the configured interval, WAL-archive failures and off-host
+# mirror failures (docs/self-hosting.md, "Monitoring"). That directory is this host's, not the archive's,
+# and is never mirrored.
 set -eu
 
 ARCHIVE_DIR="${ORBIT_ARCHIVE_DIR:-/archive}"
@@ -49,6 +54,14 @@ LAST_BUCKET_PRUNE=0
 # Whether this round's mirror went through. The files copy is pruned only then, so never on behalf of a
 # cluster that target refused.
 MIRRORED=no
+# The textfile node-exporter reads, and what goes in it that only this loop knows: the rounds in which each
+# off-host copy failed since this container started, and what pg_stat_archiver said on the last poll.
+METRICS_DIR="$ARCHIVE_DIR/metrics"
+METRICS_FILE="$METRICS_DIR/pgbackup.prom"
+MIRROR_FAILED_ARCHIVE=0
+MIRROR_FAILED_FILES=0
+MIRROR_FAILED_BUCKET=0
+ARCHIVER_ROW=""
 # Backups are due on the interval; the loop wakes at least every 15 minutes so a run
 # skipped for disk space retries without waiting a whole day.
 if [ "$INTERVAL" -lt 900 ]; then POLL="$INTERVAL"; else POLL=900; fi
@@ -279,13 +292,13 @@ sync_archive() {
   # WAL goes first while deletes are held back too, so that it keeps landing when the base backup does not fit.
   # Then --delete so the copy mirrors retention instead of growing forever; --timeout so a
   # stalled transfer cannot wedge the loop and stop base backups; .staging-* is a backup
-  # still being written, so it never ships.
+  # still being written, so it never ships, and metrics/ is this host's textfile, not the archive.
   if ! sent="$( { { [ "$hold_deletes" = no ] && [ -n "$shared_segments" ]; } || rsync -a --timeout=600 --itemize-changes -e "ssh $ssh_opts" "$WAL_DIR" "$SYNC_TARGET/" 2>"$rsync_stderr"; } \
-       && { [ "$hold_deletes" = no ] || rsync -a --timeout=600 --itemize-changes --exclude '.staging-*' -e "ssh $ssh_opts" "$ARCHIVE_DIR/" "$SYNC_TARGET/" 2>"$rsync_stderr"; })"; then
+       && { [ "$hold_deletes" = no ] || rsync -a --timeout=600 --itemize-changes --exclude '.staging-*' --exclude '/metrics/' -e "ssh $ssh_opts" "$ARCHIVE_DIR/" "$SYNC_TARGET/" 2>"$rsync_stderr"; })"; then
     log "ERROR: off-host sync to $SYNC_TARGET failed: $(rsync_said)$(no_room_advice "$(cat "$rsync_stderr")")"
     return 1
   fi
-  if ! out="$(rsync -a --delete --timeout=600 --itemize-changes --exclude '.staging-*' \
+  if ! out="$(rsync -a --delete --timeout=600 --itemize-changes --exclude '.staging-*' --exclude '/metrics/' \
        -e "ssh $ssh_opts" "$ARCHIVE_DIR/" "$SYNC_TARGET/" 2>"$rsync_stderr")"; then
     log "ERROR: off-host sync to $SYNC_TARGET failed: $(rsync_said)"
     return 1
@@ -482,10 +495,51 @@ backup_due() {
 # pg_wal until the disk is full and Postgres stops. Say so on every poll while it lasts.
 check_archiver() {
   row="$(psql -Atc "select coalesce(last_failed_time > last_archived_time, last_failed_wal is not null), coalesce(last_failed_wal, '-'), failed_count from pg_stat_archiver" 2>/dev/null || true)"
+  ARCHIVER_ROW="$row"
   [ -n "$row" ] || return 0
   case "$row" in
     t\|*) log "ERROR: WAL archiving is failing (last failed segment $(echo "$row" | cut -d'|' -f2), $(echo "$row" | cut -d'|' -f3) failures). pg_wal will grow until this is fixed." ;;
   esac
+}
+
+# The textfile node-exporter's textfile collector reads (docs/self-hosting.md, "Monitoring"), written whole
+# under a name it ignores and then renamed, so a scrape never reads half of one. The newest base backup's time
+# is its directory's, as backup_due reads it. The WAL-archive lines are left out when the last poll could not
+# read pg_stat_archiver, so that a number that was not read is not served as one that was.
+write_metrics() {
+  newest="$(list_backups | tail -n1)"
+  last_success=0
+  if [ -n "$newest" ]; then last_success="$(stat -c %Y "$BASE_DIR/$newest" 2>/dev/null || echo 0)"; fi
+  archive_failing="$(printf '%s' "$ARCHIVER_ROW" | cut -d'|' -f1)"
+  archive_failures="$(printf '%s' "$ARCHIVER_ROW" | cut -s -d'|' -f3)"
+  tmp="$METRICS_DIR/.pgbackup.prom.tmp"
+  if ! { mkdir -p "$METRICS_DIR" && {
+    echo "# HELP orbit_backup_base_interval_seconds Seconds between base backups: ORBIT_BASE_BACKUP_INTERVAL."
+    echo "# TYPE orbit_backup_base_interval_seconds gauge"
+    echo "orbit_backup_base_interval_seconds $INTERVAL"
+    echo "# HELP orbit_backup_base_last_success_timestamp_seconds When the newest completed base backup was finished, in Unix seconds; 0 with none."
+    echo "# TYPE orbit_backup_base_last_success_timestamp_seconds gauge"
+    echo "orbit_backup_base_last_success_timestamp_seconds $last_success"
+    case "$archive_failures" in
+      ''|*[!0-9]*) ;;
+      *)
+        echo "# HELP orbit_backup_wal_archive_failures_total Failed WAL archive attempts: pg_stat_archiver.failed_count, since its statistics were last reset."
+        echo "# TYPE orbit_backup_wal_archive_failures_total counter"
+        echo "orbit_backup_wal_archive_failures_total $archive_failures"
+        echo "# HELP orbit_backup_wal_archive_failing 1 while WAL archiving is failing: its last failure is newer than its last success."
+        echo "# TYPE orbit_backup_wal_archive_failing gauge"
+        if [ "$archive_failing" = t ]; then echo "orbit_backup_wal_archive_failing 1"; else echo "orbit_backup_wal_archive_failing 0"; fi
+        ;;
+    esac
+    echo "# HELP orbit_backup_mirror_failures_total Polls whose off-host copy failed since this sidecar started, by copy: the archive, the files, the bucket."
+    echo "# TYPE orbit_backup_mirror_failures_total counter"
+    echo "orbit_backup_mirror_failures_total{copy=\"archive\"} $MIRROR_FAILED_ARCHIVE"
+    echo "orbit_backup_mirror_failures_total{copy=\"files\"} $MIRROR_FAILED_FILES"
+    echo "orbit_backup_mirror_failures_total{copy=\"bucket\"} $MIRROR_FAILED_BUCKET"
+  } > "$tmp" && chmod 644 "$tmp" && mv -f "$tmp" "$METRICS_FILE"; } 2>/dev/null; then
+    rm -f "$tmp" 2>/dev/null || true
+    log "WARN: could not write $METRICS_FILE; node-exporter keeps serving the last one it read"
+  fi
 }
 
 mkdir -p "$BASE_DIR" "$WAL_DIR"
@@ -493,6 +547,7 @@ mkdir -p "$BASE_DIR" "$WAL_DIR"
 # changes. Nothing is running yet, and no later run would come back for this one's disk space.
 rm -rf "$BASE_DIR"/.staging-*
 log "watching: base backup every ${INTERVAL}s, keeping $KEEP, ${MIN_FREE_MB}MB headroom on $ARCHIVE_DIR${SYNC_TARGET:+, mirroring to $SYNC_TARGET and $FILES_SYNC_TARGET}"
+write_metrics
 while :; do
   if backup_due; then
     take_backup || true
@@ -502,16 +557,23 @@ while :; do
   # a round that finishes leaves the mirror with the bytes of every row in its WAL. Neither
   # copy failing stops the other.
   if sync_ready; then
-    sync_archive || true
-    sync_files || true
+    sync_archive || MIRROR_FAILED_ARCHIVE=$((MIRROR_FAILED_ARCHIVE + 1))
+    sync_files || MIRROR_FAILED_FILES=$((MIRROR_FAILED_FILES + 1))
     bucket_copied=no
-    if [ "$FILES_S3_MIRROR" = 1 ] && copy_bucket; then
-      bucket_copied=yes
+    if [ "$FILES_S3_MIRROR" = 1 ]; then
+      if copy_bucket; then bucket_copied=yes; else MIRROR_FAILED_BUCKET=$((MIRROR_FAILED_BUCKET + 1)); fi
     fi
     prune_files "$bucket_copied" || true
     rm -f "$rsync_stderr"
-  elif [ "$FILES_S3_MIRROR" = 1 ] && [ -z "$SYNC_TARGET" ]; then
+  elif [ -n "$SYNC_TARGET" ]; then
+    # A target and no way to reach it (sync_ready said why): nothing was copied.
+    MIRROR_FAILED_ARCHIVE=$((MIRROR_FAILED_ARCHIVE + 1))
+    MIRROR_FAILED_FILES=$((MIRROR_FAILED_FILES + 1))
+    [ "$FILES_S3_MIRROR" != 1 ] || MIRROR_FAILED_BUCKET=$((MIRROR_FAILED_BUCKET + 1))
+  elif [ "$FILES_S3_MIRROR" = 1 ]; then
     log "ERROR: ORBIT_FILES_S3_MIRROR=1 requires ORBIT_BACKUP_SYNC_TARGET"
+    MIRROR_FAILED_BUCKET=$((MIRROR_FAILED_BUCKET + 1))
   fi
+  write_metrics
   sleep "$POLL"
 done

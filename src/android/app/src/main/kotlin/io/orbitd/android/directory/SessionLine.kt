@@ -3,6 +3,7 @@ package io.orbitd.android.directory
 import io.orbitd.android.cards.NeedsYouLogic
 import io.orbitd.android.cards.OwnerItem
 import io.orbitd.android.core.cards.ClaudeRegion
+import io.orbitd.android.core.protocol.SessionFacts
 import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.core.cards.OwnerReview
 import io.orbitd.android.projects.ProjectDone
@@ -81,7 +82,7 @@ data class SessionLine(val text: String, val tone: Tone) {
                 // Held by its clone: git's percentage once this app has heard one (board clone-progress-wait-card ④).
                 if (held == null && QueuedClone.isCloning(s.queuedGate)) return SessionLine(cloneProgress?.let(QueuedClone::rowLabel) ?: QueuedClone.TITLE, Tone.QUEUED)
                 if (held == null && QueuedClone.isFailed(s.queuedGate)) return SessionLine(QueuedClone.FAILED_TITLE, Tone.QUEUED)
-                return SessionLine(held ?: SessionLineCopy.queued, Tone.QUEUED)
+                return SessionLine(held ?: s.queueWord, Tone.QUEUED)
             }
             // Parked while a sub-agent or workflow it started works on: the workspace itself is still working.
             if (live) s.runningSubagentCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.subagentRunningLine(it, s.runningSubagentTitle), Tone.RUNNING) }
@@ -180,17 +181,21 @@ internal object SessionLineCopy {
 
 /** OrbitKit `SessionHeader`'s two words the line falls back on. */
 internal object SessionHeader {
+    // Kept out of SessionLineCopy, whose words SessionLineCopyParityTest pins to the Swift line and header as they stand on this branch.
+    const val FINISHED = "Finished"
+    const val ON_HOLD = "On hold"
+
     /** The run's short state word; where the session is filed is not consulted. [watching]: parked with a live watch that
      * will resume it, it reads the watch's word. */
     fun statusWord(s: DirectorySession, watching: WatchSessionSummary? = null, now: Instant = Instant.now()): String {
         if (s.pendingApprovals > 0) return waitingWord(s)
         if (s.confirmationUnderReview != null) return OwnerReview.underReview
-        return when (s.effectiveRunState) {
+        return when (s.displayRunState) {
             RunState.QUEUED -> if (RunnerUpdating.isRunnerUpdating(s.queuedGate)) RunnerUpdating.runnerUpdatingTitle(s.queuedGate)
                 else if (QueuedCapacity.isCapacityHeld(s.queuedGate)) QueuedCapacity.title(s.queuedGate)
                 else if (QueuedDiskLow.isDiskHeld(s.queuedGate)) QueuedDiskLow.TITLE
                 else if (QueuedClone.isCloning(s.queuedGate)) QueuedClone.TITLE
-                else if (QueuedClone.isFailed(s.queuedGate)) QueuedClone.FAILED_TITLE else SessionLineCopy.queued
+                else if (QueuedClone.isFailed(s.queuedGate)) QueuedClone.FAILED_TITLE else s.queueWord
             RunState.RUNNING -> SessionLineCopy.stateRunning
             RunState.AWAITING_INPUT -> when {
                 // A turn the runtime started for itself keeps the run parked for its whole duration.
@@ -202,7 +207,7 @@ internal object SessionHeader {
                 (s.runningBgCount ?: 0) > 0 -> SessionLineCopy.bgRunning(s.runningBgCount ?: 0)
                 else -> SessionLineCopy.waitingForReply
             }
-            RunState.SUCCEEDED -> SessionLineCopy.succeeded
+            RunState.SUCCEEDED -> if (s.releasedRunState == RunState.SUCCEEDED) SessionHeader.FINISHED else SessionLineCopy.succeeded
             // Not "Failed" while the server is still going to send it again.
             RunState.FAILED -> if (s.retryPending(now)) SessionLineCopy.retrying
                 else if (s.error.orEmpty().lowercase().contains("offline")) SessionLineCopy.disconnected else SessionLineCopy.failed
@@ -246,6 +251,28 @@ internal val DirectorySession.effectiveRunState: RunState get() {
         else -> RunState.UNKNOWN
     }
 }
+
+/** What the session's release establishes, for the words and marks drawn from it (OrbitKit `Session.releasedRunState`): null until
+ * released, and null when the payload carries no `released` (an older server). */
+internal val DirectorySession.releasedRunState: RunState? get() {
+    if (released != true) return null
+    return when (SessionFacts.afterRelease(endReason, lastTurnOutcome, workFinished, isLanding)) {
+        "FINISHED" -> RunState.SUCCEEDED
+        "FAILED" -> RunState.FAILED
+        else -> RunState.ENDED
+    }
+}
+
+/** The run state a row draws its word and mark from (OrbitKit `Session.displayRunState`): what the release established, an
+ * interrupted session that is being ended staying Interrupted until the release lands, else [effectiveRunState]. */
+internal val DirectorySession.displayRunState: RunState get() {
+    releasedRunState?.let { return it }
+    if (SessionFacts.endingAfterInterrupt(released, endReason, lastTurnOutcome)) return RunState.INTERRUPTED
+    return effectiveRunState
+}
+
+/** The queued word: "On hold" while the server says the turn is held (OrbitKit `Session.queueWord`). */
+internal val DirectorySession.queueWord: String get() = if (waitingOn == "HOLD") SessionHeader.ON_HOLD else SessionLineCopy.queued
 
 /** Held for its runner's Claude region (docs/claude-region-check-contract.md §10, §11; web `claudeRegionHeld`): queued, with a region
  * refusal as its error. Its message waits, and nothing is working on it. */

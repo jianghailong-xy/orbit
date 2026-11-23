@@ -206,6 +206,7 @@ import { moveProject } from './ProjectRunSettings';
 import { SidebarNavIcon } from './SidebarNavIcon';
 import {
   type SessionTagRef,
+  compareListed,
   sessionTagSections,
   sessionTimeSections,
   sessionsWithTag,
@@ -217,6 +218,7 @@ import {
   permissionModeSupported,
   contextWindowFor,
   DEFAULT_MODEL,
+  DEFAULT_PERMISSION_MODE,
   defaultEngineOf,
   defaultModelFor,
   effectiveSessionEffort,
@@ -413,7 +415,7 @@ import {
   type CriteriaDecisionReply,
 } from './CriteriaDecisionCard';
 import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows, coordinatorQuestions } from './CoordinatorQuestionCard';
-import { useSessionOwnerRequestInserts } from './OwnerRequestCard';
+import { useSessionOwnerRequestInserts, useSessionOwnerRequestPointers } from './OwnerRequestCard';
 import { useScheduleRunOfSession, useSessionScheduleCards, useSessionScheduleInserts } from './ScheduleCards';
 import {
   OWNER_REQUEST_CHAT_PLACEHOLDER,
@@ -587,6 +589,7 @@ import {
   isSessionTerminal,
   SESSION_ACTIVITY_WORD,
   sessionActivityOf,
+  sessionWaitingOnOf,
   sessionEndedBanner,
   sessionIsStarting,
   sessionLifecycleLabel,
@@ -1249,6 +1252,12 @@ const parkedWorkLabel = (s: any): ParkedWork | null => {
     : { text: bgRunningLabel(s.runningBgCount), kind, active: backgroundWorkIsActive(s) };
 };
 
+// A queued turn the server says is on hold (`waitingOn` HOLD: the dispatch pause, a paused account, an
+// unavailable provider) where the queue would otherwise say only "Queued": no gate of a runner names it.
+const holdWord = (s: any): string | null =>
+  sessionWaitingOnOf(s) === 'HOLD' && s.queuedReason === null ? ON_HOLD_LABEL : null;
+const ON_HOLD_LABEL = 'On hold';
+
 // The line shown under a session title. For a LIVE (openable) session that's working we
 // surface its current state — the tool in flight, that it's blocked on you, or a bare
 // "Running…" — so the row never collapses to just a title with no sign of progress.
@@ -1440,7 +1449,7 @@ export const sessionLine = (
     // Held by its clone, the row says git's percentage once this tab has heard one (board clone-progress-wait-card ④).
     const cloned = !held && s.queuedReason === 'WORKSPACE_CLONING' ? cloneHeardOf(s.workspace?.id) : null;
     if (cloned?.state === 'CLONING' && cloned.progress !== null) return { text: cloneRowLabel(cloned.progress), tone: 'queued' };
-    return { text: held ?? queuedLabel(s), tone: !held && isRunnerUpdating(s) ? 'warning' : 'queued' };
+    return { text: held ?? holdWord(s) ?? queuedLabel(s), tone: !held && isRunnerUpdating(s) ? 'warning' : 'queued' };
   }
   // Parked (AWAITING_INPUT) but still doing background work — a sub-workspace and/or background
   // shells that outlive the turn — so it doesn't read as idle. A spawned sub-workspace parks the
@@ -1515,9 +1524,16 @@ export function CoordinatorBadge({ projectId }: { projectId?: string | null }) {
 
 /** Where and how the agent runs a guest's message, for the Share dialog's People who can reply: the session's own
  *  runner and permission mode, or the workspace's machine when the session names none. */
-const guestContextOf = (s: any, fallbackRunner: string, managedRunnerId: string | null) => ({
+const guestContextOf = (
+  s: any,
+  fallbackRunner: string,
+  managedRunnerId: string | null,
+  accountPermissionMode: string | undefined,
+) => ({
   runnerName: (s.assignedRunner ? machineName(s.assignedRunner, managedRunnerId) : '') || fallbackRunner,
-  permissionMode: typeof s.permissionMode === 'string' ? s.permissionMode : 'default',
+  // A session that stored no mode runs in the account's, else Auto, as the server resolves it.
+  permissionMode:
+    typeof s.permissionMode === 'string' ? s.permissionMode : (accountPermissionMode ?? DEFAULT_PERMISSION_MODE),
 });
 
 /** What the two-person icon beside a row's time says: people the owner invited can reply here. */
@@ -1555,7 +1571,7 @@ export function SessionTitleRow({
           <TeamOutlined />
         </span>
       )}
-      <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
+      <span className="session-time">{fmtTime(s.listedAt ?? s.createdAt)}</span>
       <CoordinatorBadge projectId={s.projectId} />
     </div>
   );
@@ -1729,7 +1745,7 @@ export function SessionProjectRowContent({ project }: { project: SessionProjectR
       <div className="session-main">
         <div className="session-title-row">
           <div className="session-title">{project.title}</div>
-          <span className="session-time">{fmtTime(project.lastTurnAt ?? project.createdAt ?? undefined)}</span>
+          <span className="session-time">{fmtTime(project.listedAt ?? project.createdAt ?? undefined)}</span>
         </div>
         <div className="session-sub">
           <span
@@ -1828,7 +1844,7 @@ export function statusLabel(session: any, watching?: string | null, machine?: st
   if ((session.pendingApprovals ?? 0) > 0) return waitingLabel(session);
   // Where `Waiting for your confirmation` would be, while the report is with its reviewer (§5 N3).
   if (session.confirmationUnderReview) return UNDER_REVIEW;
-  if (state === 'SUCCEEDED') return 'Succeeded';
+  if (state === 'SUCCEEDED') return 'Finished';
   if (waitingNoticeFor(session)) return startingLabel(session);
   if (isGenerating(session, state)) return 'Running';
   if (state === 'AWAITING_INPUT') {
@@ -1846,7 +1862,7 @@ export function statusLabel(session: any, watching?: string | null, machine?: st
   }
   if (state === 'INTERRUPTED') return 'Interrupted';
   if (state === 'ENDED') return 'Ended';
-  return claudeRegionHeldWords(session, machine) ?? queuedLabel(session); // PENDING
+  return claudeRegionHeldWords(session, machine) ?? holdWord(session) ?? queuedLabel(session); // PENDING
 }
 
 // What a failed session's glyph says — StatusIcon's FAILED tooltips, word for word: the error
@@ -1934,7 +1950,7 @@ export function StatusIcon({ session, watching, machine }: { session: any; watch
     );
   if (state === 'SUCCEEDED')
     return (
-      <Tooltip content="Succeeded">
+      <Tooltip content="Finished">
         <CheckCircleFilled style={{ color: 'var(--success-solid)', fontSize }} />
       </Tooltip>
     );
@@ -2030,7 +2046,7 @@ export function StatusIcon({ session, watching, machine }: { session: any; watch
     );
   // PENDING — waiting for an active turn slot, or held for the Claude region, as the row says.
   return (
-    <Tooltip content={claudeRegionHeldWords(session, machine) ?? queuedTitle(session)}>
+    <Tooltip content={claudeRegionHeldWords(session, machine) ?? holdWord(session) ?? queuedTitle(session)}>
       <ClockCircleOutlined style={{ color: 'var(--scrollbar-hover)', fontSize }} />
     </Tooltip>
   );
@@ -2957,8 +2973,9 @@ export function WorkspaceView({
   >(null);
   // The bar while it is drawn: its height is how far its own coming and going moves the transcript.
   const stuckBarRef = useRef<HTMLButtonElement>(null);
-  // The exception cards scrolled wholly above the viewport, by item id and space-joined so an
-  // unchanged answer is no re-render: which way the pinned line's press goes to reach one.
+  // The exception cards scrolled wholly above the viewport, by item id, and the owner request cards,
+  // by their element id (`owner-request-<id>`), space-joined so an unchanged answer is no re-render:
+  // which way the pinned line's press goes to reach one.
   const [openItemsAbove, setOpenItemsAbove] = useState('');
   // Smart auto-scroll: only keep pinned to the bottom when the user is already there, so
   // reading history (or jumping to the sticky prompt) isn't yanked back by streaming updates.
@@ -3200,9 +3217,8 @@ export function WorkspaceView({
     return rows.sort((a, b) => {
       // Pinned sessions float to the top; among themselves they keep time order.
       if (!!a.pinnedAt !== !!b.pinnedAt) return a.pinnedAt ? -1 : 1;
-      const ta = a.lastTurnAt ?? a.createdAt;
-      const tb = b.lastTurnAt ?? b.createdAt;
-      return ta < tb ? 1 : -1;
+      // listedAt, never lastTurnAt: streamed activity must not move a row (contracts/session-list-order.fixtures.json).
+      return compareListed(a, b);
     });
   }, [sessionsQ.data, effectiveView, onScheduledRuns]);
   const selectedFromList = useMemo(
@@ -3586,8 +3602,8 @@ export function WorkspaceView({
   const pageMerges = useMemo(() => (Array.isArray(pageMergesQ.data) ? pageMergesQ.data : []), [pageMergesQ.data]);
   const allProjectMembers = useMemo(() => [...new Map(
     [...(projectSessionsQ.data ?? []), ...(completedProjectSessionsQ.data ?? [])].map((s) => [s.id, s]),
-  ).values()].sort((a, b) => (Date.parse(b.lastTurnAt ?? b.createdAt ?? '') || 0) -
-    (Date.parse(a.lastTurnAt ?? a.createdAt ?? '') || 0)), [projectSessionsQ.data, completedProjectSessionsQ.data]);
+  ).values()].sort((a, b) => (Date.parse(b.listedAt ?? b.createdAt ?? '') || 0) -
+    (Date.parse(a.listedAt ?? a.createdAt ?? '') || 0)), [projectSessionsQ.data, completedProjectSessionsQ.data]);
   // A project's LANDING sessions are its subject's, not conversations: they are counted nowhere on
   // this page — not in "Project · N sessions", not in the running count, not among the status dots,
   // not in the timeline — and are summed up once, in the Landings row below the coordinator.
@@ -3851,6 +3867,7 @@ export function WorkspaceView({
         }))
       : sessionTimeSections(folderListing.entries, {
           pinnedFirst: view === 'open' && !tagFilter,
+          attention: view === 'open',
         }).map((s) => ({
           key: s.title,
           tag: null as SessionTagRef | null,
@@ -3867,7 +3884,7 @@ export function WorkspaceView({
       if (!openProjectId) return [];
       const coordinator = pageCoordinator ? [{ key: 'Coordinator', title: SESSION_PROJECT_COPY.coordinatorSection, tag: null,
         sessions: [{ ...pageCoordinator, kind: 'session' as const }] }] : [];
-      const timeline = sessionTimeSections(projectMembers.filter((s) => s.id !== pageCoordinator?.id), { pinnedFirst: false })
+      const timeline = sessionTimeSections(projectMembers.filter((s) => s.id !== pageCoordinator?.id), { pinnedFirst: false, attention: true })
         .map((s) => ({ key: s.title, title: s.title, tag: null,
           sessions: s.sessions.map((session) => ({ ...session, kind: 'session' as const })) }));
       // The Landings row sits below the coordinator and above the timeline, for a project that has
@@ -4540,7 +4557,18 @@ export function WorkspaceView({
   // Model and Mode have independent dirty guards. If an untouched model is refined by a late
   // Runtime heartbeat after the user explicitly chose Auto, correctness still wins: never keep
   // an invalid pair merely because Mode is dirty.
+  //
+  // Not in the commit a new context arrives in: that commit still holds the previous context's
+  // model and mode, the seeds above having only queued this one's. Judged on those, a stopped Claude
+  // session opened after a Codex one read Codex's model, lost Auto, and its Continue stored Default
+  // (seen on orbitd.io, 2026-11-23). The seeds are clamped already, and the next commit runs this
+  // check again on this context's own values.
+  const clampContextKey = useRef<string | null>(null);
   useEffect(() => {
+    if (clampContextKey.current !== modelContextKey) {
+      clampContextKey.current = modelContextKey;
+      return;
+    }
     if (
       !live &&
       shownProviderCapabilitiesResolved &&
@@ -4555,6 +4583,7 @@ export function WorkspaceView({
     live,
     mode,
     model,
+    modelContextKey,
     runner.modelCatalog,
     shownEngine,
     shownProvider,
@@ -4886,9 +4915,9 @@ export function WorkspaceView({
     if (top < LOAD_OLDER_AT) loadOlder();
     const topY = el.getBoundingClientRect().top;
     setOpenItemsAbove(
-      Array.from(el.querySelectorAll<HTMLElement>('[data-open-item]'))
+      Array.from(el.querySelectorAll<HTMLElement>('[data-open-item], .owner-request-card'))
         .filter((card) => card.getBoundingClientRect().bottom <= topY + 1)
-        .map((card) => card.getAttribute('data-open-item'))
+        .map((card) => card.getAttribute('data-open-item') ?? card.id)
         .join(' '),
     );
     // A turn the control plane queued is scanned too — it is where the answer under it starts, so the
@@ -5788,6 +5817,8 @@ export function WorkspaceView({
     transcriptEvents,
     startOwnerRequestChat,
   );
+  // The same requests still waiting on their cards, for the pinned strip to point at.
+  const ownerRequestPointers = useSessionOwnerRequestPointers(selectedTrashed ? null : selectedId);
 
   // A scheduled task's run: its schedule and run (crumb, strip, report), and the cards and change lines a session put
   // up, each where it happened (docs/mocks/scheduled-tasks/web/02-board.png).
@@ -11092,7 +11123,7 @@ export function WorkspaceView({
             onClose={() => setShareOpen(false)}
             kind="SESSION"
             rootId={selected.id}
-            guests={guestContextOf(selected, runnerShownName, managedRunnerId)}
+            guests={guestContextOf(selected, runnerShownName, managedRunnerId, accountDefaultPermissionMode)}
           />
         )}
         {selected && !selectedTrashed && !composing && (
@@ -11120,7 +11151,7 @@ export function WorkspaceView({
             onClose={() => setShareRow(null)}
             kind="SESSION"
             rootId={shareRow.id}
-            guests={guestContextOf(shareRow, runnerShownName, managedRunnerId)}
+            guests={guestContextOf(shareRow, runnerShownName, managedRunnerId, accountDefaultPermissionMode)}
           />
         )}
         <SessionMoveModal
@@ -11189,6 +11220,10 @@ export function WorkspaceView({
                 return Number.isFinite(at) ? Math.max(0, Math.floor((Date.now() - at) / 1000)) : null;
               })(),
             })) : []}
+            ownerRequests={ownerRequestPointers.map((request) => ({
+              ...request,
+              above: openItemsAbove.split(' ').includes(`owner-request-${request.id}`),
+            }))}
           />
         )}
 

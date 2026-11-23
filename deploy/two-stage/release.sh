@@ -65,7 +65,7 @@ DIR="${ORBIT_DEPLOY_DIR:-/root/orbit}"
 # they mount: deploy/postgres-pinned.yml, the only pin of postgres and pgbackup, and deploy/db-proxy.yml, the database
 # entry. test/upgrade-two-stage.test.mjs holds this list to those files.
 RELEASE_FILES=(docker-compose.yml gateway scripts/pg-archive-wal.sh scripts/pg-backup.sh src/link-gateway/nats.conf deploy/runner-link
-  deploy/postgres-pinned.yml deploy/db-proxy.yml deploy/db-proxy)
+  deploy/postgres-pinned.yml deploy/db-proxy.yml deploy/db-proxy deploy/monitoring scripts/pg-monitor-role.sh)
 # in_registry, registry_digest, push_preflight, and the release tag that names the hosted runners' image.
 # shellcheck source=deploy/two-stage/registry.sh
 . "$REPO_ROOT/deploy/two-stage/registry.sh"
@@ -144,7 +144,7 @@ release_of() {
     fi
   fi
   base="$(git show "$1:deploy/two-stage/base-images.env")"
-  for name in ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE; do
+  for name in ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE ORBIT_PROMETHEUS_IMAGE ORBIT_NODE_EXPORTER_IMAGE ORBIT_POSTGRES_EXPORTER_IMAGE ORBIT_GRAFANA_IMAGE ORBIT_LOKI_IMAGE ORBIT_ALLOY_IMAGE; do
     value="$(printf '%s\n' "$base" | sed -n "s/^$name=//p" | tail -n 1)"
     if ! [[ "$value" =~ ^[a-z0-9._/-]+@sha256:[0-9a-f]{64}$ ]]; then
       echo "error: $1's deploy/two-stage/base-images.env does not pin $name as <repository>@sha256:<64 hex>" >&2
@@ -327,7 +327,8 @@ deploy_stage() {
     | on_target "mkdir -p $DIR/.upgrade && cd $DIR && rm -rf $stage && tar -x"
   on_target "cat > $DIR/.upgrade/deploy-stage.sh" <deploy/two-stage/deploy-stage.sh
   on_target "ORBIT_DEPLOY_DIR=$DIR ORBIT_RELEASE_COMMIT=$COMMIT ORBIT_REGISTRY=$REGISTRY ORBIT_LINK_GATEWAY_TAG=$LINK_TAG \
-ORBIT_NGINX_IMAGE=$ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE=$ORBIT_NATS_IMAGE ORBIT_MANAGED_RUNNER_IMAGE=$MR_REF ORBIT_MANAGED_RUNNER_REVISION=$MR_REVISION ORBIT_MANAGED_RUNNER_VERSION=$MR_VERSION \
+ORBIT_NGINX_IMAGE=$ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE=$ORBIT_NATS_IMAGE \
+ORBIT_PROMETHEUS_IMAGE=$ORBIT_PROMETHEUS_IMAGE ORBIT_NODE_EXPORTER_IMAGE=$ORBIT_NODE_EXPORTER_IMAGE ORBIT_POSTGRES_EXPORTER_IMAGE=$ORBIT_POSTGRES_EXPORTER_IMAGE ORBIT_GRAFANA_IMAGE=$ORBIT_GRAFANA_IMAGE ORBIT_LOKI_IMAGE=$ORBIT_LOKI_IMAGE ORBIT_ALLOY_IMAGE=$ORBIT_ALLOY_IMAGE ORBIT_MANAGED_RUNNER_IMAGE=$MR_REF ORBIT_MANAGED_RUNNER_REVISION=$MR_REVISION ORBIT_MANAGED_RUNNER_VERSION=$MR_VERSION \
 ORBIT_DEPLOY_PULL_BASE=$PULL_BASE ORBIT_DEPLOY_PRUNE=$PRUNE ORBIT_DEPLOY_PLAN=$plan ORBIT_DEPLOY_STOP_THEN_START=$STOP_THEN_START \
 bash $DIR/.upgrade/deploy-stage.sh" || status=$?
   if [ "$status" -eq 255 ]; then

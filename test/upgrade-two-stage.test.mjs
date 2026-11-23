@@ -19,19 +19,42 @@ const UPGRADES = ['.claude/skills/upgrade/upgrade.sh', '.agents/skills/upgrade/s
 const REGISTRY = 'registry.invalid:5000';
 const realDocker = spawnSync('sh', ['-c', 'command -v docker'], { encoding: 'utf8' }).stdout.trim();
 const compose = realDocker && spawnSync(realDocker, ['compose', 'version'], { encoding: 'utf8' }).status === 0;
+// Every file of deploy/monitoring: Prometheus, Grafana's provisioning and dashboards, Loki and Alloy.
+const MONITORING = [
+  'deploy/monitoring/alloy/config.alloy',
+  'deploy/monitoring/alloy/log-targets.sh',
+  'deploy/monitoring/alloy/run.sh',
+  'deploy/monitoring/grafana/dashboards/database.json',
+  'deploy/monitoring/grafana/dashboards/host.json',
+  'deploy/monitoring/grafana/dashboards/overview.json',
+  'deploy/monitoring/grafana/dashboards/runners-sessions.json',
+  'deploy/monitoring/grafana/provisioning/alerting/contact-points.yml',
+  'deploy/monitoring/grafana/provisioning/alerting/policies.yml',
+  'deploy/monitoring/grafana/provisioning/alerting/rules.yml',
+  'deploy/monitoring/grafana/provisioning/alerting/templates.yml',
+  'deploy/monitoring/grafana/provisioning/dashboards/orbit.yml',
+  'deploy/monitoring/grafana/provisioning/datasources/loki.yml',
+  'deploy/monitoring/grafana/provisioning/datasources/prometheus.yml',
+  'deploy/monitoring/loki.yml',
+  'deploy/monitoring/prometheus.yml',
+];
+const MONITORING_SERVICES = ['prometheus', 'node-exporter', 'postgres-exporter', 'grafana', 'loki', 'alloy'];
 const COPIED = [
   ...UPGRADES, 'deploy/two-stage/release.sh', 'deploy/two-stage/deploy-stage.sh', 'deploy/two-stage/base-images.env',
   'deploy/two-stage/registry.sh', 'deploy/two-stage/publish-managed-runner.sh',
   'docker-compose.yml', '.gitignore', 'gateway/nginx.conf', 'gateway/several-apiservers/http/upstreams.conf',
   'gateway/several-apiservers/server/routes.conf', 'scripts/pg-archive-wal.sh', 'scripts/pg-backup.sh',
   'src/link-gateway/nats.conf', 'deploy/runner-link/behind-web-gateway.env', 'deploy/postgres-pinned.yml', 'deploy/db-proxy.yml',
-  'deploy/db-proxy/haproxy.cfg',
+  'deploy/db-proxy/haproxy.cfg', 'scripts/pg-monitor-role.sh',
+  // The monitoring profile's config, every file of it.
+  ...MONITORING,
 ];
 // What the target is left with besides .env, its ./data and .upgrade/: the release's files, and nothing built from.
 const SHIPPED = [
-  'deploy/db-proxy.yml', 'deploy/db-proxy/haproxy.cfg', 'deploy/postgres-pinned.yml', 'deploy/runner-link/behind-web-gateway.env',
-  'docker-compose.yml', 'gateway/nginx.conf', 'gateway/several-apiservers/http/upstreams.conf',
-  'gateway/several-apiservers/server/routes.conf', 'scripts/pg-archive-wal.sh', 'scripts/pg-backup.sh', 'src/link-gateway/nats.conf',
+  'deploy/db-proxy.yml', 'deploy/db-proxy/haproxy.cfg', ...MONITORING, 'deploy/postgres-pinned.yml',
+  'deploy/runner-link/behind-web-gateway.env', 'docker-compose.yml', 'gateway/nginx.conf', 'gateway/several-apiservers/http/upstreams.conf',
+  'gateway/several-apiservers/server/routes.conf', 'scripts/pg-archive-wal.sh', 'scripts/pg-backup.sh', 'scripts/pg-monitor-role.sh',
+  'src/link-gateway/nats.conf',
 ];
 const DEPLOY_ORDER = ['postgres', 'db-proxy', 'nats', 'apiserver', 'wiki-worker', 'web', 'link-gateway', 'gateway', 'pgbackup'];
 // Without a gap, a web gateway the release recreates goes first, so that the gateway handing the apiserver and web over
@@ -348,10 +371,10 @@ test('with ORBIT_REGISTRY unset, Compose renders exactly what the file rendered 
   // The file with the release's lines put back as they read before it.
   const before = now.replace(/\n# Where each image comes from\.[^\n]*\n(?:#[^\n]*\n)*\n/, '\n')
     .replace(/\n {4}# Empty unless ORBIT_IMAGE_TAG is set[^\n]*\n {4}#[^\n]*\n {4}image: \$\{ORBIT_IMAGE_TAG:\+[^\n]*\n/, '\n')
-    .replace(/\$\{ORBIT_REGISTRY:\+\$\{ORBIT_REGISTRY\}\/\}\$\{ORBIT_[A-Z]+_IMAGE:-([^}]+)\}/g, '$1')
+    .replace(/\$\{ORBIT_REGISTRY:\+\$\{ORBIT_REGISTRY\}\/\}\$\{ORBIT_[A-Z_]+_IMAGE:-([^}]+)\}/g, '$1')
     .replace(/\$\{ORBIT_REGISTRY:\+\$\{ORBIT_REGISTRY\}\/\}(orbit-[a-z-]+):\$\{ORBIT_[A-Z_]+_TAG:-local\}/g, '$1:local');
   assert.notEqual(before, now);
-  assert.doesNotMatch(before, /ORBIT_REGISTRY|ORBIT_IMAGE_TAG|ORBIT_LINK_GATEWAY_TAG|ORBIT_[A-Z]+_IMAGE/);
+  assert.doesNotMatch(before, /ORBIT_REGISTRY|ORBIT_IMAGE_TAG|ORBIT_LINK_GATEWAY_TAG|ORBIT_[A-Z_]+_IMAGE/);
   writeFileSync(path.join(dir, 'before.yml'), before);
   writeFileSync(path.join(dir, 'now.yml'), now);
   writeFileSync(path.join(dir, '.env'), 'JWT_SECRET=x\nPROVIDER_SECRET_KEY=y\nRUNNER_LINK_SIGNING_KEY=z\n');
@@ -381,7 +404,7 @@ test('with ORBIT_REGISTRY unset, Compose renders exactly what the file rendered 
     env: {
       ...env, ORBIT_REGISTRY: REGISTRY, ORBIT_IMAGE_TAG: 'a'.repeat(40), ORBIT_LINK_GATEWAY_TAG: 'b'.repeat(40),
       ...Object.fromEntries(readFileSync(path.join(repo, 'deploy/two-stage/base-images.env'), 'utf8').split('\n')
-        .filter((line) => /^ORBIT_[A-Z]+_IMAGE=/.test(line)).map((line) => line.split('='))),
+        .filter((line) => /^ORBIT_[A-Z_]+_IMAGE=/.test(line)).map((line) => line.split('='))),
     },
   });
   assert.equal(set.status, 0, set.stderr);
@@ -394,6 +417,14 @@ test('with ORBIT_REGISTRY unset, Compose renders exactly what the file rendered 
     `${REGISTRY}/library/postgres@sha256:d845e7f0ac8517b9d9868b6d20379f9688ba3676595e50ca7c0b664964b2a760`,
     `${REGISTRY}/orbit-apiserver:${'a'.repeat(40)}`, `${REGISTRY}/orbit-apiserver:${'a'.repeat(40)}`,
     `${REGISTRY}/orbit-link-gateway:${'b'.repeat(40)}`, `${REGISTRY}/orbit-web:${'a'.repeat(40)}`,
+    // The monitoring profile's: pg-monitor-role pinned beside postgres, and the six images by digest, each from base-images.env.
+    `${REGISTRY}/library/postgres@sha256:d845e7f0ac8517b9d9868b6d20379f9688ba3676595e50ca7c0b664964b2a760`,
+    `${REGISTRY}/prom/node-exporter@sha256:7296504d4ada44b7d7ab4431e27e9f9900d8488f8d55842f4b12ae2704e16dfe`,
+    `${REGISTRY}/prom/prometheus@sha256:e04987641b57704f408e31f6373ba4138ecf27cb4a165d24aabb6c38fddd0f06`,
+    `${REGISTRY}/prometheuscommunity/postgres-exporter@sha256:3b8e05a84282cd1199ad2fb6c66f362738bf4c68c1547d8f4226a34a7dd6d8d7`,
+    `${REGISTRY}/grafana/grafana@sha256:74144189b38447facf737dfd0f3906e42e0776212bf575dc3334c3609183adf7`,
+    `${REGISTRY}/grafana/loki@sha256:b43c257ccfc925d4a50b8717cac61a3b51df8c48d01847936057e5c4075a24a7`,
+    `${REGISTRY}/grafana/alloy@sha256:9acc2529bc1edb7f5b2bd801dd8334ebc80c158e3a9e5526ecd7c9a273d43189`,
   ].sort());
 });
 
@@ -439,11 +470,12 @@ for (const upgrade of UPGRADES) {
     assert.ok(env.startsWith(TARGET_ENV), 'what .env held comes first, byte for byte');
     assert.equal(statSync(path.join(fixture.target, '.env')).mode & 0o777, 0o600);
     const base = Object.fromEntries(readFileSync(path.join(repo, 'deploy/two-stage/base-images.env'), 'utf8').split('\n')
-      .filter((line) => /^ORBIT_[A-Z]+_IMAGE=/.test(line)).map((line) => line.split('=')));
+      .filter((line) => /^ORBIT_[A-Z_]+_IMAGE=/.test(line)).map((line) => line.split('=')));
     assert.deepEqual(releaseLines(env), [
       '# >>> The release this host runs: written by /upgrade\'s two-stage deploy, and replaced whole by the next one',
       `ORBIT_REGISTRY=${REGISTRY}`, `ORBIT_IMAGE_TAG=${first}`, `ORBIT_LINK_GATEWAY_TAG=${link}`,
       `ORBIT_NGINX_IMAGE=${base.ORBIT_NGINX_IMAGE}`, `ORBIT_NATS_IMAGE=${base.ORBIT_NATS_IMAGE}`,
+      ...['PROMETHEUS', 'NODE_EXPORTER', 'POSTGRES_EXPORTER', 'GRAFANA', 'LOKI', 'ALLOY'].map((name) => `ORBIT_${name}_IMAGE=${base[`ORBIT_${name}_IMAGE`]}`),
       '# <<< The release this host runs',
     ]);
     const rendered = spawnSync(realDocker, ['compose', 'config', '--images'], {
@@ -827,6 +859,21 @@ test('a host\'s own Compose files, named in COMPOSE_FILE, are rendered with the 
   assert.notEqual(run.status, 0, run.output);
   assert.match(run.output, /do not include the release's docker-compose\.yml/);
   assert.deepEqual(ups(run), []);
+});
+
+test('a plan for a target with the monitoring profile on creates every monitoring service from the registry', { skip: !compose && 'needs docker compose' }, (t) => {
+  const fixture = makeFixture(t);
+  const upgrade = UPGRADES[0];
+  const first = fixture.commit('the first release');
+  const envFile = path.join(fixture.target, '.env');
+  writeFileSync(envFile, TARGET_ENV.replace('COMPOSE_PROFILES=runner-link', 'COMPOSE_PROFILES=runner-link,monitoring'), { mode: 0o600 });
+  let run = fixture.run(upgrade, ['--build-only']);
+  assert.equal(run.status, 0, run.output);
+  run = fixture.run(upgrade, ['--plan', first]);
+  assert.equal(run.status, 0, run.output);
+  for (const service of MONITORING_SERVICES) assert.match(run.stdout, new RegExp(` {4}${service} +create \\(a deploy leaves it as it is\\)\\n`), run.stdout);
+  assert.doesNotMatch(run.stdout, /not in registry\.invalid|which is not in/);
+  assert.deepEqual(shippedFiles(fixture.target, { directories: true }), []);
 });
 
 test('a plan prints what the deploy would change, and changes nothing on the target', { skip: !compose && 'needs docker compose' }, (t) => {

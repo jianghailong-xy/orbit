@@ -34,6 +34,7 @@ const row = (id: string, over: Partial<Row> = {}): Row => ({
   title: id,
   createdAt: ago(60),
   lastTurnAt: ago(20),
+  listedAt: ago(20),
   line: { text: 'Last reply', tone: 'preview' },
   ...over,
 });
@@ -113,18 +114,18 @@ describe('sessionProjectListing', () => {
   });
 
   it('uses coordinator pinning and the latest member activity for recency and row ordering', () => {
-    const pinnedMember = member('pinnedMember', { pinnedAt: ago(30), lastTurnAt: ago(1) });
-    const out = listing([coordinator({ lastTurnAt: ago(10_000) }), pinnedMember, row('ordinary', { lastTurnAt: ago(5) })]);
-    expect(out.projects[0]).toMatchObject({ pinnedAt: null, lastTurnAt: ago(1) });
+    const pinnedMember = member('pinnedMember', { pinnedAt: ago(30), listedAt: ago(1) });
+    const out = listing([coordinator({ listedAt: ago(10_000) }), pinnedMember, row('ordinary', { listedAt: ago(5) })]);
+    expect(out.projects[0]).toMatchObject({ pinnedAt: null, listedAt: ago(1) });
     expect(out.entries.map((entry) => entry.id)).toEqual(['p1', 'ordinary']);
     expect(sessionTimeSections(out.entries, { now: new Date(NOW) }).map((section) => section.title)).toEqual(['Today']);
-    const pinned = listing([coordinator({ pinnedAt: ago(40), lastTurnAt: ago(10_000) }), member('worker', { lastTurnAt: ago(10_000) })]);
+    const pinned = listing([coordinator({ pinnedAt: ago(40), listedAt: ago(10_000) }), member('worker', { listedAt: ago(10_000) })]);
     expect(sessionTimeSections(pinned.entries, { now: new Date(NOW) })[0].title).toBe('Pinned');
     expect(sessionTimeSections(pinned.entries, { pinnedFirst: false, now: new Date(NOW) })[0].title).toBe('2–7 days ago');
   });
 
   it('uses createdAt when a member has no turn yet, ignoring global project activity', () => {
-    const out = listing([coordinator(), member('new', { createdAt: ago(2), lastTurnAt: null })]);
+    const out = listing([coordinator(), member('new', { createdAt: ago(2), lastTurnAt: null, listedAt: null })]);
     expect(out.projects[0].lastTurnAt).toBe(ago(2));
   });
 
@@ -180,10 +181,10 @@ describe('a project outside its coordinator’s workspace', () => {
   it('gives the project no row and marks each member there, beside a project that does have one', () => {
     const p2 = (role: SessionProjectMembership['role']) => ({ ...membership(role, 'p2'), projectTitle: 'Project two' });
     const sessions = [
-      member('check', { ...here, lastTurnAt: ago(22) }),
-      row('cert', { ...here, lastTurnAt: ago(15) }),
-      member('deploy', { ...here, lastTurnAt: ago(41) }),
-      row('coordinator-2', { ...here, lastTurnAt: ago(30), projectMembership: p2('COORDINATOR') }),
+      member('check', { ...here, listedAt: ago(22) }),
+      row('cert', { ...here, listedAt: ago(15) }),
+      member('deploy', { ...here, listedAt: ago(41) }),
+      row('coordinator-2', { ...here, listedAt: ago(30), projectMembership: p2('COORDINATOR') }),
     ];
     const out = listing(sessions, { workspaceId: 'w1', coordinators: [remote()] });
     expect(out.projects.map((entry) => entry.projectId)).toEqual(['p2']);
@@ -242,9 +243,9 @@ describe('a project outside its coordinator’s workspace', () => {
   });
 
   it('puts a member there in Pinned by its own pin, and in its own time section', () => {
-    const pinned = member('pinned', { ...here, pinnedAt: ago(5), lastTurnAt: ago(10_000) });
-    const out = listing([pinned, member('older', { ...here, lastTurnAt: ago(1_440) }), row('ordinary', here)],
-      { workspaceId: 'w1', coordinators: [remote({ pinnedAt: null, lastTurnAt: ago(1) })] });
+    const pinned = member('pinned', { ...here, pinnedAt: ago(5), listedAt: ago(10_000) });
+    const out = listing([pinned, member('older', { ...here, listedAt: ago(1_440) }), row('ordinary', here)],
+      { workspaceId: 'w1', coordinators: [remote({ pinnedAt: null, listedAt: ago(1) })] });
     const sections = sessionTimeSections(out.entries, { now: new Date(NOW) });
     expect(sections.map((section) => [section.title, section.sessions.map((entry) => entry.id)])).toEqual([
       ['Pinned', ['pinned']], ['Today', ['ordinary']], ['Yesterday', ['older']],

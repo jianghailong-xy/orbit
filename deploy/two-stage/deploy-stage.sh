@@ -9,7 +9,8 @@
 #   ORBIT_RELEASE_COMMIT     the commit the apiserver and web images were built from, and their tag
 #   ORBIT_REGISTRY           the registry every image is pulled from
 #   ORBIT_LINK_GATEWAY_TAG   the link gateway image's tag: the last commit under src/link-gateway
-#   ORBIT_NGINX_IMAGE, ORBIT_NATS_IMAGE
+#   ORBIT_NGINX_IMAGE, ORBIT_NATS_IMAGE, ORBIT_PROMETHEUS_IMAGE, ORBIT_NODE_EXPORTER_IMAGE, ORBIT_POSTGRES_EXPORTER_IMAGE,
+#   ORBIT_GRAFANA_IMAGE, ORBIT_LOKI_IMAGE, ORBIT_ALLOY_IMAGE
 #                            the base images by digest, from that commit's deploy/two-stage/base-images.env (postgres,
 #                            pgbackup and db-proxy are pinned by deploy/postgres-pinned.yml and deploy/db-proxy.yml)
 #   ORBIT_MANAGED_RUNNER_IMAGE
@@ -38,7 +39,7 @@
 # that names an image anywhere but the registry is refused.
 set -euo pipefail
 
-for name in ORBIT_DEPLOY_DIR ORBIT_RELEASE_COMMIT ORBIT_REGISTRY ORBIT_LINK_GATEWAY_TAG ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE; do
+for name in ORBIT_DEPLOY_DIR ORBIT_RELEASE_COMMIT ORBIT_REGISTRY ORBIT_LINK_GATEWAY_TAG ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE ORBIT_PROMETHEUS_IMAGE ORBIT_NODE_EXPORTER_IMAGE ORBIT_POSTGRES_EXPORTER_IMAGE ORBIT_GRAFANA_IMAGE ORBIT_LOKI_IMAGE ORBIT_ALLOY_IMAGE; do
   if [ -z "${!name:-}" ]; then
     echo "error: $name is not set. deploy/two-stage/release.sh starts this script; run upgrade.sh on the build host." >&2
     exit 2
@@ -54,6 +55,12 @@ RELEASE_ENV=(
   "ORBIT_LINK_GATEWAY_TAG=$LINK_TAG"
   "ORBIT_NGINX_IMAGE=$ORBIT_NGINX_IMAGE"
   "ORBIT_NATS_IMAGE=$ORBIT_NATS_IMAGE"
+  "ORBIT_PROMETHEUS_IMAGE=$ORBIT_PROMETHEUS_IMAGE"
+  "ORBIT_NODE_EXPORTER_IMAGE=$ORBIT_NODE_EXPORTER_IMAGE"
+  "ORBIT_POSTGRES_EXPORTER_IMAGE=$ORBIT_POSTGRES_EXPORTER_IMAGE"
+  "ORBIT_GRAFANA_IMAGE=$ORBIT_GRAFANA_IMAGE"
+  "ORBIT_LOKI_IMAGE=$ORBIT_LOKI_IMAGE"
+  "ORBIT_ALLOY_IMAGE=$ORBIT_ALLOY_IMAGE"
 )
 MR_IMAGE="${ORBIT_MANAGED_RUNNER_IMAGE:-}"
 MR_REV="${ORBIT_MANAGED_RUNNER_REVISION:-}"
@@ -71,7 +78,7 @@ PRUNE="${ORBIT_DEPLOY_PRUNE:-0}"
 PLAN="${ORBIT_DEPLOY_PLAN:-0}"
 STOP_THEN_START="${ORBIT_DEPLOY_STOP_THEN_START:-0}"
 # From here on Compose reads the release from release_dc's environment below, and then from .env, as anyone's would.
-unset ORBIT_REGISTRY ORBIT_IMAGE_TAG ORBIT_LINK_GATEWAY_TAG ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE
+unset ORBIT_REGISTRY ORBIT_IMAGE_TAG ORBIT_LINK_GATEWAY_TAG ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE ORBIT_PROMETHEUS_IMAGE ORBIT_NODE_EXPORTER_IMAGE ORBIT_POSTGRES_EXPORTER_IMAGE ORBIT_GRAFANA_IMAGE ORBIT_LOKI_IMAGE ORBIT_ALLOY_IMAGE
 STAGE=".upgrade/release-$COMMIT"
 cd "$DIR"
 mkdir -p .upgrade

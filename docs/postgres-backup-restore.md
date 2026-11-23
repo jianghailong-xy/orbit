@@ -6,6 +6,7 @@ The deployment keeps two things on disk so any moment of the database can be rec
 | --- | --- | --- |
 | Continuous WAL archive | `./data/pg-archive/wal/<segment>.gz` | every finished segment; a written-to database closes one at least every 5 min (`archive_timeout=300`) |
 | Base backups | `./data/pg-archive/base/<UTC stamp>/` | daily, newest 2 kept |
+| Backup metrics | `./data/pg-archive/metrics/pgbackup.prom` | every poll; this host's state, never mirrored |
 
 A base backup is the image the archived WAL is replayed onto; on their own neither restores
 anything. Recovery point is therefore "the last archived segment" — within ~5 minutes of a
@@ -43,6 +44,15 @@ forever, so a broken `archive_command` ends as a full disk and a stopped databas
 logs `ERROR: WAL archiving is failing` while that is the case. Note that `archive_command` is
 set on the server's command line in `docker-compose.yml`, so `ALTER SYSTEM` cannot change it —
 edit compose and recreate the container.
+
+The same facts are metrics: on every poll the sidecar writes them to `data/pg-archive/metrics/pgbackup.prom`, which
+the [monitoring profile](self-hosting.md#monitoring)'s node-exporter serves to Prometheus. They are the newest base
+backup's time, the configured interval, `pg_stat_archiver`'s failure count and whether archiving is failing now, and
+the off-host copies that failed. [The backup metrics](self-hosting.md#the-backup-metrics) lists them.
+
+```bash
+cat data/pg-archive/metrics/pgbackup.prom
+```
 
 ## The off-host mirror
 
