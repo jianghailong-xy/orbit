@@ -3339,6 +3339,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1462 adds one nullable column, login_browser, to runner; no row is written, and no preserved relation,
       // trigger, function or DONE fence changes.
       '1462_runner_login_browser',
+      // 1463 re-keys three model_identity rows (qwen3-7, qwen3-8, qwen4 to their -max ids): UPDATEs of that table only,
+      // none of the preserved relations, and no trigger, function or DONE fence changes.
+      '1463_model_identity_max_is_a_name',
       // 1470 adds a partial index on activity. No preserved relation or row is changed.
       // Written as 1461 on its task branch, it was renumbered after main took 1462.
       '1470_default_permission_mode_audit'],
