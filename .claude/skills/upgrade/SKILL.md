@@ -288,15 +288,20 @@ the two Compose files a target lists beside `docker-compose.yml`, `deploy/postgr
    the reason ([Without a gap](#without-a-gap), below). Where the target runs managed runners on Kubernetes (its
    `.env` sets `ORBIT_MANAGED_RUNNERS_ENABLED=true`, and `profile.json` in `ORBIT_MANAGED_RUNNERS_DIR` says
    `"backend": "kubernetes"`), it also prints the hosted runners' image: `unchanged`, or the profile's
-   `runner.image` and the release's image by digest, `<registry>/orbit-cloud-runner@sha256:<64 hex>`;
+   `runner.image` and the release's image by digest, `<registry>/orbit-cloud-runner@sha256:<64 hex>`, then an
+   `imageRevision` line: `unchanged`, or the profile's `runner.imageRevision` (`(none)` if missing) and the image's
+   source commit, the 40-character sha it was tagged and built with (`ORBIT_SOURCE_SHA`);
 5. stops, having changed nothing, if an image the release runs does not come from the registry: `postgres` and
    `pgbackup` have theirs only from `deploy/postgres-pinned.yml`, so a target whose `COMPOSE_FILE` does not
    list it is refused. `--plan` stops here in any case, with every file put back;
 6. pulls every image the release runs, and stops if one is missing;
 7. writes the release's names into `.env` (below), and, where the plan printed a new hosted runners' image, sets
-   the profile's `runner.image` to it, by a rename, keeping the profile it replaces beside it as
-   `profile.json.bak-<time>-before-<commit>`. The apiserver reads the profile only as it starts, so one the release
-   does not otherwise replace is replaced for it. Once it runs, its manager moves each hosted runner onto the new
+   the profile's `runner.image` to it and `runner.imageRevision` to the image's source commit, in the same rename,
+   keeping the profile it replaces beside it as `profile.json.bak-<time>-before-<commit>`. Kubernetes learns a
+   runner's target revision only from `runner.imageRevision`, and offers Update Now only with it. An unchanged image
+   whose revision is missing or different gets the revision written the same way (a backfill); with both right
+   nothing is written. The apiserver reads the profile only as it starts, so one the release does not otherwise
+   replace is replaced for any write. Once it runs, its manager moves each hosted runner onto the new
    image as soon as that runner is idle: drained like a sleep, and woken at once as the next generation, on the same
    volume (`rollPreviousImage` in `src/apiserver/src/managed-runners/managed-runner-manager.ts`). A busy runner moves
    later, and nothing in flight is cut short;

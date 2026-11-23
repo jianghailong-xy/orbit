@@ -515,11 +515,13 @@ const APPROVED_APISERVER_BLOCKS = [
     '      ORBIT_FILES_S3_ACCESS_KEY_ID: "${ORBIT_FILES_S3_ACCESS_KEY_ID:-}"',
     '      ORBIT_FILES_S3_SECRET_ACCESS_KEY: "${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}"',
     '      ORBIT_FILES_S3_REGION: "${ORBIT_FILES_S3_REGION:-}"',
+    '      ORBIT_FILES_S3_MIRROR: "${ORBIT_FILES_S3_MIRROR:-0}"',
   ],
   // Orbit Files' quota and grace period (2026-11-03, the top of this file): the quota, empty unless the host's .env sets it,
   // and pgbackup's two retention values with its own defaults. They come right after the store's lines in the file.
   [
     '      ORBIT_FILES_QUOTA_BYTES: "${ORBIT_FILES_QUOTA_BYTES:-}"',
+    '      ORBIT_FILES_STORE_QUOTA_BYTES: "${ORBIT_FILES_STORE_QUOTA_BYTES:-}"',
     '      ORBIT_BASE_BACKUP_INTERVAL: "${ORBIT_BASE_BACKUP_INTERVAL:-86400}"',
     '      ORBIT_BASE_BACKUP_KEEP: "${ORBIT_BASE_BACKUP_KEEP:-2}"',
   ],
@@ -559,6 +561,14 @@ const APPROVED_WEB_BLOCK = [
 ];
 // Orbit Files' off-host copy (2026-11-02, the top of this file): the sidecar reads the files directory and cannot write it.
 const PGBACKUP_FILES_MOUNT = '      - ./data/files:/var/lib/orbit/files:ro';
+const PGBACKUP_S3_MIRROR = [
+  '      ORBIT_FILES_S3_MIRROR: "${ORBIT_FILES_S3_MIRROR:-0}"',
+  '      ORBIT_FILES_S3_ENDPOINT: "${ORBIT_FILES_S3_ENDPOINT:-}"',
+  '      ORBIT_FILES_S3_BUCKET: "${ORBIT_FILES_S3_BUCKET:-}"',
+  '      ORBIT_FILES_S3_ACCESS_KEY_ID: "${ORBIT_FILES_S3_ACCESS_KEY_ID:-}"',
+  '      ORBIT_FILES_S3_SECRET_ACCESS_KEY: "${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}"',
+  '      ORBIT_FILES_S3_REGION: "${ORBIT_FILES_S3_REGION:-}"',
+];
 // The approved additions to postgres's command that (k) sets aside, which (i) pins byte for byte with the rest of the
 // service. Each is found by its LAST line: `      - -c` opens every setting, so a block's first line would find the
 // command's first setting instead. Only its lines and the comment directly above them go, up to the directive before
@@ -573,7 +583,7 @@ const APPROVED_POSTGRES_BLOCKS = [
   ],
 ];
 test('nothing beyond the approved configuration was added to pgbackup, apiserver or web', () => {
-  const approved = { pgbackup: [PGBACKUP_FILES_MOUNT], apiserver: APPROVED_APISERVER_ADDITIONS, web: APPROVED_WEB_BLOCK };
+  const approved = { pgbackup: [...PGBACKUP_S3_MIRROR, PGBACKUP_FILES_MOUNT], apiserver: APPROVED_APISERVER_ADDITIONS, web: APPROVED_WEB_BLOCK };
   for (const [name, additions] of Object.entries(approved)) {
     assert.deepEqual(
       directivesNotInBaseline(currentServices.get(name), survivingConfigurationServices.get(name)),
@@ -606,7 +616,7 @@ function withoutService(source, name) {
  */
 function withoutApprovedAdditions(source) {
   let lines = source.split('\n');
-  for (const block of [...APPROVED_APISERVER_BLOCKS, [PGBACKUP_FILES_MOUNT], APPROVED_WEB_BLOCK]) {
+  for (const block of [PGBACKUP_S3_MIRROR, ...APPROVED_APISERVER_BLOCKS, [PGBACKUP_FILES_MOUNT], APPROVED_WEB_BLOCK]) {
     const first = lines.indexOf(block[0]);
     assert.ok(first > 0, `docker-compose.yml no longer has the approved ${block[0].trim()}`);
     const last = lines.indexOf(block[block.length - 1], first);

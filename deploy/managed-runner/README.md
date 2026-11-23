@@ -330,7 +330,9 @@ kubectl --context "$AUTHORIZED_TEST_CONTEXT" --namespace "$AUTHORIZED_TEST_NAMES
 In the managed namespace: Pods get, create (including `dryRun`), delete, patch (only to take its own
 finalizer off a Pod whose stop it recorded); PVCs get, create; Secrets get, create, delete;
 ConfigMaps get. Cluster-scoped and read-only: PersistentVolumes get, VolumeAttachments list. Nothing
-on nodes, Ceph or the webhook configuration.
+on nodes, Ceph or the webhook configuration. With the Orbit Files drive (the profile's `files`
+section), also Secrets get, create, update and delete in `orbit-files-system`, for the mount
+credentials (files-csi/rbac.yaml).
 
 ## Reproducible checks and pending acceptance
 

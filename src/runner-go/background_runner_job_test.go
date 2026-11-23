@@ -253,15 +253,24 @@ func TestRunnerOwnedJobSurvivesWarmTTLExpiry(t *testing.T) {
 // Same property under the other eviction path: an incoming active session cutting
 // idle warm capacity, which is where 17 of the 97 recorded kills came from.
 func TestRunnerOwnedJobSurvivesLRUEviction(t *testing.T) {
-	h := newEvictionHarness(t, "lru", 1)
+	h := newEvictionHarness(t, "lru", 2)
 	h.startEngine()
 	job := h.startJob("sleep 30", bgKindJob)
 	h.park()
 
-	// One cold active claim: allowed warm capacity drops to zero, and this parked
-	// engine is the only victim available. evictWarmExcessLocked runs inside it.
+	// Fill the second engine slot with a newer warm engine. A cold claim can
+	// take the turn slot beside the background job, and LRU picks the older engine.
+	h.clock.Advance(time.Second)
+	newer := registerPoolSession(t, h.pool, "newer", true)
+	var newerCancelled int
+	startPoolEngine(t, h.pool, newer, &newerCancelled)
+	parkPoolSession(h.pool, newer)
+
 	registerPoolSession(t, h.pool, "claimant", true)
 	h.afterEngineStopped()
+	if newerCancelled != 0 {
+		t.Fatal("LRU evicted the newer warm engine")
+	}
 
 	if !processAlive(job.PID) {
 		t.Fatalf("job %s (pid %d) died with the engine LRU-evicted under capacity pressure",

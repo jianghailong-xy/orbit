@@ -387,7 +387,7 @@ func TestManagedSkillIsASCIIAndOffTheCriticalPath(t *testing.T) {
 			}
 		}
 	}
-	for _, text := range []string{agentPrimer, orbitCLIInstructions("/opt/orbit/orbit", true, true, true), orbitCLIInstructions("/opt/orbit/orbit", false, false, true)} {
+	for _, text := range []string{agentPrimer, orbitCLIInstructions("/opt/orbit/orbit", true, true, true, true), orbitCLIInstructions("/opt/orbit/orbit", false, false, true, true)} {
 		for _, name := range []string{"playbook", claudeManagedSkillID, codexManagedSkillName} {
 			if strings.Contains(text, name) {
 				t.Errorf("the always-on instructions name %q: the skill must stay off the critical path", name)

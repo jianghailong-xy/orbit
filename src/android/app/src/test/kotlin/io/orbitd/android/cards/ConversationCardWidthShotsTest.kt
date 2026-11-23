@@ -34,12 +34,13 @@ import org.robolectric.annotation.GraphicsMode
 class ConversationCardWidthShotsTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
-    private fun card(suffix: String, family: CardFamily) = InteractionCard("e1:$suffix", family, "Card $suffix",
-        buildJsonObject { put("title", "A card"); put("reason", "Why it is here") }, "s1", objectId = "o$suffix", binding = suffix)
+    private fun card(suffix: String, family: CardFamily, source: JsonObject = buildJsonObject { put("title", "A card"); put("reason", "Why it is here") }) =
+        InteractionCard("e1:$suffix", family, "Card $suffix", source, "s1", objectId = "o$suffix", binding = suffix)
 
     private val kinds = listOf(
         "taskStart" to card("taskStart", CardFamily.BACKGROUND),
-        "projectStarted" to card("projectStarted", CardFamily.START),
+        "projectStarted" to card("projectStarted", CardFamily.START,
+            buildJsonObject { put("by", "CONFIRMATION"); put("projectId", "p1"); put("projectTitle", "A project") }),
         "confirmationReviewRequest" to card("confirmationReviewRequest", CardFamily.REVIEW),
         "confirmationReturn" to card("confirmationReturn", CardFamily.REVIEW),
         "generic notice" to card("evidenceReceipt", CardFamily.EVIDENCE),

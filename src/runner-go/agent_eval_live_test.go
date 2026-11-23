@@ -464,7 +464,7 @@ func (e *codexEvalEngine) start(s *evalSession) error {
 		return err
 	}
 	s.probeMCP(false)
-	s.context.EngineInstructions = len(codexAgentContext(s.job.Agent, s.exe, s.job.insideRecordedWork(), s.job.watchesOn()))
+	s.context.EngineInstructions = len(codexAgentContext(s.job.Agent, s.exe, s.job.insideRecordedWork(), s.job.watchesOn(), true))
 	return e.spawn(s)
 }
 
@@ -489,7 +489,7 @@ func (e *codexEvalEngine) spawn(s *evalSession) error {
 		return fmt.Errorf("thread: %w", err)
 	}
 	if !resumed && app.currentInstructionMode() == codexInstructionsInjectItems {
-		if err := app.injectAgentContext(s.ctx, threadID, s.job.Agent, s.job.insideRecordedWork(), s.job.watchesOn()); err != nil {
+		if err := app.injectAgentContext(s.ctx, threadID, s.job.Agent, s.job.insideRecordedWork(), s.job.watchesOn(), true); err != nil {
 			app.setInstructionMode(codexInstructionsUserInput)
 		}
 	}

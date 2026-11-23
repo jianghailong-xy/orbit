@@ -246,10 +246,11 @@ Each session works in a checkout of its own, under `<ORBIT_HOME>/worktrees` (`~/
 Three things keep them from filling the runner's disk:
 
 - **Keep Free.** Set on the runner's page (Capacity), it is the free space below which the runner reclaims
-  checkouts: finished sessions' first, then those of resting sessions left unwritten for two weeks, when nothing
-  in them would be lost. With none set, a registered runner reclaims only finished sessions' checkouts beyond the
-  32 most recent. Set it at least as high as whatever else guards that disk. A managed runner has a default floor,
-  and takes resting sessions' checkouts sooner ([Their storage](#their-storage)).
+  checkouts: finished sessions' first, then resting sessions' least recently worked in, when nothing in them would
+  be lost (their work stays on their branch and the checkout comes back from it). Whatever the floor, a runner
+  keeps no more than the 32 most recent finished sessions' checkouts and the 64 most recent resting sessions'. Set
+  it at least as high as whatever else guards that disk. A managed runner has a default floor
+  ([Their storage](#their-storage)).
 - **Cloned checkouts.** Where the filesystem can clone files, on APFS, XFS made with `reflink=1`, btrfs, or
   OpenZFS 2.2 or later with block cloning enabled, a session's checkout is cloned from the workspace's own
   checkout and costs next to nothing on disk until its files change. The workspace's checkout has to be on the
