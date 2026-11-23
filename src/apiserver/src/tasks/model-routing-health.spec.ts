@@ -215,3 +215,14 @@ test('routeTaskRun: when nothing can run, the task is held until the first trial
   assert.equal(due.provider, 'codex');
   assert.deepEqual(due.trial, { subject: blocked.subject, scopeModel: '', provider: 'codex' });
 });
+
+test('routeTaskRun: the Agent\'s own engine is not kept when its account is suspect and another can run', () => {
+  const suspect = entry({ state: 'suspect', kind: 'UNCLASSIFIED_ADMISSION' });
+  const d = routeTaskRun(taskInput([signIn('codex', 5, { health: [suspect] }), signIn('claude', 50)]));
+  assert.equal(d.provider, 'claude', 'one unclassified refusal demotes the own account, so run 2 goes elsewhere');
+  assert.ok(!d.reasons.some((r) => r.startsWith('Engine codex: this agent\'s own engine')));
+  // Alone, the suspect account still takes the run.
+  assert.equal(routeTaskRun(taskInput([signIn('codex', 5, { health: [suspect] })])).provider, 'codex');
+  // Healthy, the own engine keeps it, as before.
+  assert.equal(routeTaskRun(taskInput([signIn('codex', 5), signIn('claude', 50)])).provider, 'codex');
+});

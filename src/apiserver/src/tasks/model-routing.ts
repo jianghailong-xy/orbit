@@ -517,7 +517,10 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
   const fresh = verified ? runnable.find((c) => c.engine !== verified) : undefined;
   // The Agent's own engine and credential keep the run while they can take it at this tier (owner, 2026-11-20): the
   // router's ranking only decides where it goes when they cannot. A verification's fresh pair of eyes comes first.
-  const ownPick = runnable.find((c) => c.engine === own && c.provider === credential && c.level === level);
+  // A suspect account is not kept for being the Agent's own (§6.4): the failure the router just saw outranks it, and
+  // the run goes to a healthy account when there is one.
+  const ownMatch = runnable.find((c) => c.engine === own && c.provider === credential && c.level === level);
+  const ownPick = ownMatch?.suspect && runnable.some((c) => !c.suspect) ? undefined : ownMatch;
   const pick = fresh ?? ownPick ?? runnable[0];
   // The router's own words, less what only a SubAgent says: the caller that set the tier, and its refusal.
   const lines = route.reasons.filter((r) =>
@@ -666,7 +669,7 @@ function fallbackOrder(route: SubagentRoutingDecision): SubagentFallback[] {
     ? [{
       engine: route.engine, provider: route.provider, model: route.model, effort: route.effort, level: route.pickLevel ?? null,
       ...(route.note ? { note: route.note } : {}),
-      ...(route.trial ? { trial: route.trial } : {}),
+      ...(route.trial ? { trial: route.trial } : {}), ...(route.suspect ? { suspect: true } : {}),
     }]
     : [];
   return [...first, ...route.fallbacks];
@@ -834,6 +837,8 @@ export interface SubagentRoutingDecision {
   pickLevel?: ModelRoutingLevel | null;
   /** The pick's account is due its trial (§6.5). */
   trial?: RoutingHealthEntry;
+  /** The pick's account failed its last run at no cost: every other candidate was suspect too (§7.2). */
+  suspect?: boolean;
 }
 
 /** One candidate a SubAgent may move to after a usage-limit or capacity failure (§4.3). */
@@ -848,6 +853,8 @@ export interface SubagentFallback {
   level?: ModelRoutingLevel | null;
   /** Its account's trial is due (§6.5): a run that goes there claims it first. */
   trial?: RoutingHealthEntry;
+  /** Its account failed its last run at no cost (§7.2). */
+  suspect?: boolean;
 }
 
 const levelIndex = (level: ModelRoutingLevel): number => MODEL_ROUTING_LEVELS.indexOf(level);
@@ -1597,11 +1604,11 @@ export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecis
   if (removed.length > 0) reasons.push(`${removed.length} candidate${removed.length === 1 ? '' : 's'} removed, each with its reason`);
   const fallbacks = rest.map((c) => ({
     engine: c.engine, provider: c.provider.slug, model: c.model, effort: c.effort, note: candidateNote(c), level: c.level,
-    ...(c.trial ? { trial: c.trial } : {}),
+    ...(c.trial ? { trial: c.trial } : {}), ...(c.suspect ? { suspect: true } : {}),
   }));
   return {
     ...decision, engine: best.engine, provider: best.provider.slug, model: best.model, effort: best.effort,
     note: candidateNote(best), pickLevel: best.level, reasons, fallbacks,
-    ...(best.trial ? { trial: best.trial } : {}),
+    ...(best.trial ? { trial: best.trial } : {}), ...(best.suspect ? { suspect: true } : {}),
   };
 }
