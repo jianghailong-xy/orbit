@@ -470,6 +470,7 @@ var agentToolsFamilyDefs = []struct {
 	// The account's tools are the owner's own Settings (settings_tools.go): settings_propose is a card for them too.
 	{"owner", "Questions for you", []string{"owner", "account"}},
 	{"wiki", "Wiki", []string{"wiki"}},
+	{"browser", "Orbit Cloud browser", []string{"browser"}},
 	{"providers", "Providers", []string{"provider"}},
 	{"merge-receipts", "Merge receipts", []string{"merge_receipt"}},
 	{"guide", "Guide", []string{"catalog"}},

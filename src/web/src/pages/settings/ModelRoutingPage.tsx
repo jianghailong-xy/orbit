@@ -322,9 +322,22 @@ function ModelRow({
   const outsideTiers = row.tiers.filter((tier) => tier.outside).map((tier) => tier.tier);
   return (
     <>
-      <tr className={open ? 'is-open' : undefined}>
-        <td>
-          {opens ? (
+      <tr className={[open && 'is-open', row.continued && !open && 'model-routing-continued'].filter(Boolean).join(' ') || undefined}>
+        <td className={row.continues ? 'model-routing-same' : undefined}>
+          {row.continues ? (
+            opens ? (
+              <button type="button" className="model-routing-open" aria-expanded={open} onClick={onToggle} aria-label={`${row.modelLabel} on ${row.providerLabel}`}>
+                <span aria-hidden="true">{open ? '▾' : '▸'}</span>
+                <span className="routing-report-provider">{row.providerLabel}</span>
+              </button>
+            ) : (
+              // The arrow's room kept, so a block's providers line up whether or not they open.
+              <span className="model-routing-open model-routing-no-open">
+                <span aria-hidden="true">▸</span>
+                <span className="routing-report-provider" aria-label={`${row.modelLabel} on ${row.providerLabel}`}>{row.providerLabel}</span>
+              </span>
+            )
+          ) : opens ? (
             <button type="button" className="model-routing-open" aria-expanded={open} onClick={onToggle}>
               <span aria-hidden="true">{open ? '▾' : '▸'}</span>
               <span className="routing-report-model">{row.modelLabel}</span>
@@ -332,7 +345,7 @@ function ModelRow({
           ) : (
             <span className="routing-report-model">{row.modelLabel}</span>
           )}
-          {row.providerLabel && <span className="routing-report-provider">{row.providerLabel}</span>}
+          {!row.continues && row.providerLabel && <span className="routing-report-provider">{row.providerLabel}</span>}
           {ranAt === 'tiers' && row.outsideRuns > 0 && (
             <div className="model-routing-flag">
               {row.model && row.model.levels.length === 0
@@ -342,7 +355,7 @@ function ModelRow({
           )}
         </td>
         <td>{row.provider && row.model ? <ModelTierCell provider={row.provider} model={row.model} /> : '—'}</td>
-        <td className="model-tiers-quality">{row.model ? <QualityCell model={row.model} /> : '—'}</td>
+        <td className="model-tiers-quality">{row.continues ? null : row.model ? <QualityCell model={row.model} pooledWith={row.pooledWith} /> : '—'}</td>
         <td className="model-tiers-price">{row.provider && row.model ? priceText(row.model, row.provider.billing) : '—'}</td>
         <td>
           {ranAt !== 'tiers' ? (

@@ -1300,6 +1300,8 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 	// process and dies with it — deliberately, since terminateSessionProcessTree
 	// walks the ppid table precisely to catch escapees. Stage 4 verdict.
 	cmd.Env = append(cmd.Env, bgJobEnvPairs(job.SessionID)...)
+	// On the Orbit Cloud runner with the browser on, a tool the agent runs opens its pages there (browser_opener.go).
+	cmd.Env = browserOpenerEnv(cmd.Env, job.BrowserEnabled)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		cancel()

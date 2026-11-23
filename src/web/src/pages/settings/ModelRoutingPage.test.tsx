@@ -58,10 +58,11 @@ function render(
   address: string,
   report: SubagentRoutingReport | null = BOARD_REPORT,
   key: { period: ReportPeriod; agentId: string | null } = { period: '30d', agentId: null },
+  tiers: SubagentTiersResponse = TIERS,
 ) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(workspacesQuery().queryKey, [{ id: 'ws1', name: 'orbit' }, { id: 'ws2', name: 'website' }]);
-  qc.setQueryData(subagentTiersQuery().queryKey, TIERS);
+  qc.setQueryData(subagentTiersQuery().queryKey, tiers);
   if (report) qc.setQueryData(subagentRoutingReportQuery(key.period, key.agentId).queryKey, report);
   return renderToStaticMarkup(
     <QueryClientProvider client={qc}>
@@ -117,6 +118,36 @@ describe('Settings → Providers → Model routing', () => {
       'DeepSeek Flash|DeepSeek|Not set|No runs yet|$0.42|Not routed|395|89%|$172.34',
       '▸ No tier, no runs · 1 model',
     ]);
+  });
+
+  it("draws one model's rows on different providers as one block, its Quality once, and says it is pooled", () => {
+    const k3 = { key: 'kimi-k3', name: 'Kimi K3' };
+    const withK3 = (quality: ModelQuality): SubagentTiersResponse => ({
+      providers: TIERS.providers.map((provider) =>
+        provider.slug === 'kimi' ? { ...provider, models: [model('kimi-code/k3', ['S', 'M'], { identity: k3, quality })] }
+          : provider.slug === 'moonshot'
+            ? { ...provider, models: [...provider.models, model('kimi-k3', ['S'], { editable: false, outputPricePerMTok: 15, identity: k3, quality })] }
+            : provider),
+    });
+    const rated: ModelQuality = {
+      subagent: { averageRating: null, ratedCount: 0, runCount: 3, raters: [] },
+      tasks: { firstPassRate: 0.8, firstPassTaskCount: 8, completedTaskCount: 10 },
+    };
+    const html = render(PAGE, BOARD_REPORT, undefined, withK3(rated));
+    const listed = rows(html);
+    const at = listed.findIndex((row) => row.includes('|Kimi Code|'));
+    expect(listed[at]).toContain('|80% first pass · 10 tasks|Pooled across 2 providers|');
+    // The row below: its provider alone, its own tier and price, no Quality of its own.
+    expect(listed[at + 1]).toBe('▸|Kimi (Moonshot)|S|$15.00|No runs|0|—|—');
+    expect(html).toContain('aria-label="Kimi K3 on Kimi (Moonshot)"');
+    expect(html).toContain('class="model-routing-continued"');
+
+    // With no figure to explain, nothing is said of pooling.
+    const unrated: ModelQuality = {
+      subagent: { averageRating: null, ratedCount: 0, runCount: 3, raters: [] },
+      tasks: { firstPassRate: null, firstPassTaskCount: 1, completedTaskCount: 2 },
+    };
+    expect(text(render(PAGE, BOARD_REPORT, undefined, withK3(unrated)))).not.toContain('Pooled across');
   });
 
   it("keeps Model tiers' Quality column beside the tier, its footnote under the table", () => {

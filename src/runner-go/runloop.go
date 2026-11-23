@@ -413,7 +413,8 @@ func (g *selfUpdateGate) notePostponedLocked() {
 // the control plane does not take a scoped claim (serverScopes false: an older one would ignore the
 // scope and hand over any session), so the pool claims nothing, as before.
 func drainClaimScope(pool *sessionPool, serverScopes bool) []string {
-	if !serverScopes || !pool.isDrainingForUpdate() {
+	// Below the data volume's free-space reserve nothing new is claimed, a drain's message included.
+	if !serverScopes || !pool.isDrainingForUpdate() || pool.admissionHoldReason() != "" {
 		return nil
 	}
 	return pool.liveEngineTurnSessionIDs()
@@ -744,6 +745,7 @@ func claimedSessionFromReclaim(r ReclaimSession) *ClaimedSession {
 		AllowOrchestration: r.AllowOrchestration,
 		WatchesDisabled:    r.WatchesDisabled,
 		WikiDisabled:       r.WikiDisabled,
+		BrowserEnabled:     r.BrowserEnabled,
 		WorkflowsDisabled:  r.WorkflowsDisabled,
 		ScheduleRun:        r.ScheduleRun,
 		OrchestrationToken: r.OrchestrationToken,
@@ -1554,7 +1556,13 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// the control plane returns on each heartbeat — so editing a runner's max-concurrent
 	// in the UI takes effect within one heartbeat, no restart. The local config value is
 	// only the initial seed; the DB value is authoritative once the first heartbeat lands.
-	pool := newSessionPool(cfg.MaxConcurrent)
+	startupConcurrency := cfg.MaxConcurrent
+	if currentManagedInstance() != nil {
+		// Startup reclaim can start a turn before the first heartbeat supplies the
+		// mapping's cap. Until then, admit at most one turn.
+		startupConcurrency = 1
+	}
+	pool := newSessionPool(startupConcurrency)
 	// A managed instance claims nothing, and starts no reclaimed RUNNING session, while its container has less than one
 	// more turn's memory left (memory_reserve.go). Nil anywhere else: it admits.
 	turnMemory := newTurnMemoryGate(currentManagedInstance() != nil)
@@ -1562,6 +1570,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// job the image before handed on as it re-executed is still this process's child, and until the
 	// pool holds it again the sweep takes its checkout for one nobody is using.
 	pool.adoptRecordedJobs()
+	// A managed runner's /tmp is a directory of its data volume and outlives the container: what the container
+	// before left in it goes now, before anything here writes there (managed_tmp.go).
+	sweepManagedTmpAtStart(pool)
 	// Remote SubAgents a previous process was hosting when it ended unreported: worktrees removed, runs INTERRUPTED.
 	go recoverRemoteSubagents(t)
 	// A copy of the Google sign-in lives in a session's directory only while an agy runs on it; the
@@ -1602,6 +1613,11 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	loopCtx, stopLoop := context.WithCancelCause(context.Background())
 	loopCancel := func() { stopLoop(nil) }
 	defer startMemoryWatchdog(loopCtx, currentManagedInstance() != nil)()
+	// A managed runner takes no new work while its data volume is below its free-space reserve
+	// (managed_disk_reserve.go). Checked once now, before the reclaim and the first claim.
+	if currentManagedInstance() != nil {
+		watchDataVolumeReserve(loopCtx, pool, func() string { return measureDataVolumeHold(&storage) }, dataVolumeCheckInterval)
+	}
 	// The other half of what a finished session's checkout can hold: one that still has
 	// uncommitted work is never reclaimed, so the control plane is told which ones those are
 	// (abandoned_checkout.go). Its own goroutine and its own clock — it reads every checkout,
@@ -2540,6 +2556,14 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					beatNow()
 				}()
 			}
+			// A session's browser_open: start the browser and open the page asked for, on its own goroutine like the
+			// clear, since a Chrome just started takes a moment to answer; the beat it asks for reports it running.
+			if resp.OpenBrowser != nil {
+				go func(cmd BrowserOpenCommand) {
+					handleBrowserOpen(context.Background(), runnerBrowser(), cmd)
+					beatNow()
+				}(*resp.OpenBrowser)
+			}
 			// The owner's Update Now: install the waiting release now, interrupting the turns in flight
 			// (selfUpdateGate.updateNow). The check it asks for takes it.
 			if resp.SelfUpdateNow {
@@ -2796,6 +2820,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				}
 				forgetMergeTarget(j.SessionID)
 				pool.finish(live)
+				// A session's end: what the work left in a managed runner's /tmp goes once nothing else runs.
+				sweepManagedTmpWhenIdle(pool)
 			}()
 
 			// An OPEN reclaim can contain many idle sessions. Keep those supervisors

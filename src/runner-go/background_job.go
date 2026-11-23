@@ -173,6 +173,9 @@ type bgJobSpec struct {
 	// WakeOnStall, when set, asks for a wake once the job, still running, has written nothing for this
 	// long (bg_run's wakeOnStall.afterSeconds; watchForStall).
 	WakeOnStall time.Duration
+	// BrowserOpener: the session's browser is on, so on the Orbit Cloud runner the job's pages open in its shared
+	// Chrome, as they do from the engine's own shell (browser_opener.go).
+	BrowserOpener bool
 }
 
 // bgStallConfig is a job's wakeOnStall as bg_run takes it and bg_list shows it.
@@ -479,6 +482,7 @@ func (b *bgTailer) prepareJob(spec bgJobSpec) (*bgPreparedJob, error) {
 	// No `publicID` here: that encoding is for UUIDs, and this is already the opaque token the
 	// runner hands out (`newBgJobID`), the spelling `bg_list`/`bg_output` take.
 	cmd.Env = append(cmd.Env, envBgJobID+"="+jobID)
+	cmd.Env = browserOpenerEnv(cmd.Env, spec.BrowserOpener)
 	cmd.Stdout = f
 	cmd.Stderr = f
 	return &bgPreparedJob{job: job, cmd: cmd, output: f, ctx: jobCtx, cancel: cancel, spec: spec}, nil
