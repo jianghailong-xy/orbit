@@ -58,6 +58,8 @@ test('a dormant retry arm is not managed-runner work', { skip: !URL, concurrency
       id, owner_id: m.ownerId, creator_id: m.ownerId, workspace_id: workspace.id, assigned_runner_id: m.runnerId,
       title: 'failed work', prompt: 'p', provider: 'claude', provider_builtin: true, status: 'FAILED', num_turns: 1,
       finished_at: new Date(), cancel_requested_at: new Date(), error: 'overloaded', retry_attempts: 1,
+      // A failure release carries FAILED on its turn (removal step R2), which is what reads it as one since R7.
+      last_turn_outcome: 'FAILED',
       ...extra,
     };
     const names = Object.keys(columns);

@@ -9,6 +9,7 @@ import {
 } from '../common/system-noise';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
+import { isSessionPhaseFactsQuery, noAnswersOwed, sessionPhaseFactsAnswer } from '../test-support/session-phase-facts';
 
 const SESSION = '00000000-0000-4000-8000-000000000001';
 
@@ -118,8 +119,9 @@ test('what a shared session added after a seq sits behind the same fence, read a
   const reads: string[] = [];
   let captured: TaggedQuery | undefined;
   const prisma = {
-    approval: { findMany: async () => [] },
+    ...noAnswersOwed(),
     session: {
+      findMany: async () => [],
       findFirst: async () => {
         reads.push('header');
         return {
@@ -138,6 +140,11 @@ test('what a shared session added after a seq sits behind the same fence, read a
     $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
       // The header's own second read, what the session is still doing (readSessionActivities, 29fc026c1), comes as one
       // Prisma.sql object rather than a template: it is part of the header, not an events read.
+      if (!Array.isArray(strings) && isSessionPhaseFactsQuery(strings)) {
+        // And the header's third, its phase and waitingOn (sessions/session-phase.ts), part of the header too.
+        reads.push('phase');
+        return sessionPhaseFactsAnswer(strings, { [SESSION]: { status: 'RUNNING' } });
+      }
       if (!Array.isArray(strings)) {
         const query = strings as unknown as { sql: string; values: unknown[] };
         assert.match(query.sql, /AS "activity"/);
@@ -159,7 +166,7 @@ test('what a shared session added after a seq sits behind the same fence, read a
   assert.equal(now.after, null);
   assert.equal(now.runState, 'RUNNING');
   // The header first: an answer that says the run is over holds every event written before it.
-  assert.deepEqual(reads, ['header', 'activity', 'events']);
+  assert.deepEqual(reads, ['header', 'activity', 'phase', 'events']);
   assert.ok(captured);
   assert.match(renderedQuery(captured), /seq > \?/);
   assert.ok(captured.values.includes(7));

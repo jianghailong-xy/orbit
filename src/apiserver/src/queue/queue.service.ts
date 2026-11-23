@@ -36,7 +36,6 @@ import {
   adminOnlyProviderRefusal,
   builtinSessionEngine,
   engineBaseEnv,
-  ENGINE_INCOMPATIBLE_ERROR_LIKE,
   engineIncompatibleMessage,
   isBuiltinProvider,
   keyCredential,
@@ -97,16 +96,7 @@ import {
 } from '../common/session-tree-sql';
 import {
   ADMIN_ONLY_PROVIDER_ERROR,
-  ANTIGRAVITY_RUNNER_UPGRADE_ERROR,
-  CURSOR_NOT_INSTALLED_ERROR,
-  CURSOR_RUNNER_UPGRADE_ERROR,
-  DSH_NOT_INSTALLED_ERROR,
-  DSH_PLATFORM_UNSUPPORTED_ERROR,
-  DSH_RUNNER_UPGRADE_ERROR,
-  DSH_VERSION_INCOMPATIBLE_ERROR,
-  OPENCODE_RUNNER_UPGRADE_ERROR,
   PROVIDER_UNAVAILABLE_ERROR,
-  SOURCE_PROTOCOL_UNSUPPORTED_ERROR,
 } from '../runner-api/runner-provider-support';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
 import { orchestrationEnabled } from '../common/orchestration-switch';
@@ -130,6 +120,7 @@ import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/
 import { browserClaimFields, MANAGED_RUNNER_BROWSER_GATE, type ManagedRunnerBrowserGate } from '../managed-runners/managed-runner-browser-gate';
 import { DISPATCH_PAUSED } from './dispatch-pause';
 import { CLAUDE_REGION_ERROR_PREFIX, claudeRegionHold } from '../runners/runner-region';
+import { holdNoticeSql } from './hold-notice';
 import { openingTurnId } from '../sessions/orbit-authored-turn';
 import {
   runAccessLevel,
@@ -505,23 +496,9 @@ export class QueueService {
           -- runner unable to drive the row and had nothing else to say why it sat there; the row
           -- being claimed IS the answer, so leaving the text behind would make a running session
           -- read as blocked on the machine that is running it.
+          -- The hold notices (queue/hold-notice.ts), the one list a payload's waitingOn HOLD reads too.
           error = CASE
-            WHEN error IN (
-              ${OPENCODE_RUNNER_UPGRADE_ERROR},
-              ${ANTIGRAVITY_RUNNER_UPGRADE_ERROR},
-              ${DSH_RUNNER_UPGRADE_ERROR},
-              ${CURSOR_RUNNER_UPGRADE_ERROR},
-              ${CURSOR_NOT_INSTALLED_ERROR},
-              ${DSH_NOT_INSTALLED_ERROR},
-              ${DSH_PLATFORM_UNSUPPORTED_ERROR},
-              ${DSH_VERSION_INCOMPATIBLE_ERROR},
-              ${PROVIDER_UNAVAILABLE_ERROR},
-              ${ADMIN_ONLY_PROVIDER_ERROR},
-              ${SOURCE_PROTOCOL_UNSUPPORTED_ERROR}
-            ) OR error LIKE 'Account paused until %' OR error LIKE ${ENGINE_INCOMPATIBLE_ERROR_LIKE}
-              -- The region check's hold, released (docs/claude-region-check-contract.md §11), and the sentence a turn it
-              -- stopped ended with: both begin with the code.
-              OR starts_with(error, ${CLAUDE_REGION_ERROR_PREFIX}) THEN NULL
+            WHEN ${holdNoticeSql(Prisma.sql`error`)} THEN NULL
             ELSE error
           END,
           "started_at" = COALESCE("started_at", now()),

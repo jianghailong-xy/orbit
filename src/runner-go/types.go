@@ -546,6 +546,10 @@ type HeartbeatResponse struct {
 	// (drainClaimScope). False/absent on older control planes, which would ignore the scope, so the
 	// runner claims nothing while it drains, as before.
 	DrainScopedClaims bool `json:"drainScopedClaims,omitempty"`
+	// SessionReleaseV1: this server's operator says every replica serves the session-release protocol (the apiserver's
+	// switch ORBIT_SESSION_RELEASE_V1), so this runner may report a failed turn and the release separately
+	// (session_release.go). Absent from an older control plane and while the switch is off: declared on nothing.
+	SessionReleaseV1 bool `json:"sessionReleaseV1,omitempty"`
 	// The owner's Later (RFC3339): stop draining for the waiting release now and put it off until
 	// this time, then wait for idle again under a fresh deferral limit (selfUpdateGate.postpone).
 	// Handed over once and cleared, like CheckSelfUpdate; sent only to a runner that declares
@@ -1957,6 +1961,10 @@ type TurnCompleteRequest struct {
 	BranchMerged bool `json:"branchMerged"`
 	// WorktreeBranch: the worktree's actual current HEAD branch (see SessionLiveState.WorktreeBranch).
 	WorktreeBranch string `json:"worktreeBranch,omitempty"`
+	// ReleaseProtocol declares the session-release protocol on this report (session_release.go): set only on a failed
+	// turn's report, by turnCompleteReporting, while the server offers it. The body says it because the runner link
+	// carries no request header of its own.
+	ReleaseProtocol string `json:"releaseProtocol,omitempty"`
 }
 
 // TurnCompleteResponse carries the control-plane status after the ack. Newer
