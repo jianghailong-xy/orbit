@@ -220,10 +220,11 @@ interface Finished {
 }
 
 /**
- * A code task whose work session finished on its branch and ended because the task was done
- * (`end_reason = 'task_done'`), written DONE by the owner's Confirm. `beforeDone` runs while the work
- * session is still running and the task is IN_PROGRESS — where a run opens its attempt and a reviewer
- * sends a revision back.
+ * A code task written DONE by the owner's Confirm, whose work session then ends the way production ends
+ * it: parked on its branch when the DONE is written, the DONE asks for its end (`claimParkedSessionEnd`,
+ * which leaves `cancel_requested_at` beside `end_reason = 'task_done'`), and the runner's finalize writes
+ * the finish, which queues the landing. `beforeDone` runs while the work session is still running and the
+ * task is IN_PROGRESS — where a run opens its attempt and a reviewer sends a revision back.
  */
 async function finishedTask(
   stack: Stack,
@@ -253,14 +254,26 @@ async function finishedTask(
   });
   const t = { taskId, sessionId, title };
   if (beforeDone) await beforeDone(t);
-  await stack.db.session.update({
-    where: { id: sessionId },
-    data: { status: RunStatus.SUCCEEDED, finishedAt: minutesAgo(2), endReason: 'task_done' },
-  });
+  // Its turn ends and it parks, idle on its branch.
+  await stack.db.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT } });
   const receipt = await stack.confirmations.decide(
     w.ownerId, taskId, { door: 'USER', userId: w.ownerId }, { decision: 'CONFIRM' } as never,
   );
   assert.equal(receipt.completed, true, 'CONTROL: the confirmation wrote DONE');
+  const asked = await stack.db.session.findUniqueOrThrow({
+    where: { id: sessionId }, select: { cancelRequestedAt: true, endReason: true },
+  });
+  assert.ok(asked.cancelRequestedAt, 'CONTROL: the DONE asked for the end of its idle work session');
+  assert.equal(asked.endReason, 'task_done');
+  await stack.api.finalize({ id: w.runnerId } as never, sessionId, {
+    status: SharedRunStatus.SUCCEEDED, isolationStatus: 'worktree', branch: `orbit/${label}`, branchSha: sha('a'),
+    baseSha: sha('b'),
+  } as never);
+  const ended = await stack.db.session.findUniqueOrThrow({
+    where: { id: sessionId }, select: { finishedAt: true, endReason: true, cancelRequestedAt: true },
+  });
+  assert.ok(ended.finishedAt && ended.cancelRequestedAt, 'CONTROL: the finish kept the end the DONE asked for');
+  assert.equal(ended.endReason, 'task_done');
   return t;
 }
 
@@ -478,6 +491,7 @@ test('W6: a session that ended because its task was done is revived, and R2 clea
       const session = await stack.db.session.findUniqueOrThrow({ where: { id: t.sessionId } });
       assert.equal(session.finishedAt, null, 'the session was not revived');
       assert.equal(session.endReason, null);
+      assert.equal(session.cancelRequestedAt, null, 'the revive kept the end its task\'s DONE asked for');
       assert.equal(session.archivedAt, null);
       assert.equal(session.status, RunStatus.PENDING);
       assert.equal(session.assignedRunnerId, w.runnerId, 'the revival moved the session to another runner');
@@ -501,11 +515,14 @@ test('W6: a work session still open is handed the turn as its next turn', { skip
     const t = await finishedTask(stack, w, 'live');
     const command = await claimJob(stack, w, 'LAND_TASK');
     const itemId = await fail(stack, w, command, conflict('MERGE'));
-    // Revived by somebody and open when the item reaches it.
-    await stack.db.session.update({
-      where: { id: t.sessionId },
-      data: { status: RunStatus.AWAITING_INPUT, finishedAt: null, endReason: null, cancelRequestedAt: null },
+    // Revived by its owner's message and open when the item reaches it. The revive (`SessionsService.resume`)
+    // clears the end its task's DONE asked for, `cancel_requested_at` with it.
+    await stack.sessions.resume(w.ownerId, t.sessionId, { clientTurnId: randomUUID(), content: 'one more thing' });
+    const revived = await stack.db.session.findUniqueOrThrow({
+      where: { id: t.sessionId }, select: { finishedAt: true, endReason: true, cancelRequestedAt: true },
     });
+    assert.deepEqual(revived, { finishedAt: null, endReason: null, cancelRequestedAt: null },
+      'CONTROL: the revive left an end on the session');
     await deliver(stack, w, itemId);
     const [turn] = await turnOf(stack, t.sessionId, command.jobId);
     assert.ok(turn, 'the open session was not handed the landing-fix turn');
