@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { DeleteOutlined, DownloadOutlined, EditOutlined, EllipsisOutlined, LoadingOutlined, LoginOutlined, PauseOutlined, PlayCircleOutlined, PlusOutlined, StarOutlined } from '@ant-design/icons';
+import { DeleteOutlined, DownloadOutlined, EditOutlined, EllipsisOutlined, LoadingOutlined, LoginOutlined, LogoutOutlined, PauseOutlined, PlayCircleOutlined, PlusOutlined, StarOutlined } from '@ant-design/icons';
 import {
   accountToStartOn,
   AgentProvider,
@@ -112,6 +112,15 @@ import {
   runnerAccountSettingDefault,
   runnerAccountSettingDefaultMany,
   runnerAccountSettingDefaultOne,
+  RUNNER_DEFAULT_SIGN_OUT,
+  RUNNER_DEFAULT_SIGN_OUT_CONFIRM,
+  RUNNER_DEFAULT_SIGN_OUT_RUNNING_DETAIL,
+  RUNNER_DEFAULT_SIGNING_OUT,
+  runnerDefaultSignOutDetail,
+  runnerDefaultSignOutFailed,
+  runnerDefaultSignOutRunning,
+  runnerDefaultSignOutTerminal,
+  runnerDefaultSignOutTitle,
 } from '../lib/runnerAccountCopy';
 import { loginExpiresLine, signedOutNote } from '../lib/accountLogin';
 import { foldFromAnywhere } from '../lib/foldHead';
@@ -355,7 +364,8 @@ const CLAUDE_ACCOUNT_SWAP_CAPABILITIES = ['claude-account-swap/v1', 'claude-acco
  *  that follows the machine's "done" drops it, a beat later. */
 function beingRemoved(runner: Runner, engine: RowEngine, account: string): boolean {
   const removal = runner.accountRemove;
-  return removal?.engine === engine && removal.account === account &&
+  // Default is never removed from the machine: a relayed state naming it is its sign-out.
+  return account !== 'default' && removal?.engine === engine && removal.account === account &&
     (removal.status === 'pending' || removal.status === 'done');
 }
 
@@ -504,9 +514,76 @@ function QuotaCell({ kind, quota, next, signIn = true }: { kind: RowKind; quota:
   );
 }
 
+/** Whether Default's sign-out, relayed to the runner, is under way for this engine. */
+function signingOutDefault(runner: Runner, engine: RowEngine): boolean {
+  const removal = runner.accountRemove;
+  return removal?.engine === engine && removal.account === 'default' && removal.status === 'pending';
+}
+
+/**
+ * Default's Sign out… (docs/default-sign-out-design.md): asked first, then relayed to the runner, which
+ * deletes the login and refuses while sessions run on Default. That refusal arrives as the runner's
+ * state, so a press that is waiting on it asks again and resends with `force`. `available` is false
+ * unless Default is signed in and the runner declares `<engine>-default-sign-out/v1`.
+ */
+function useDefaultSignOut(runner: Runner, engine: RowEngine, name: string, signedIn: boolean, anchor: RefObject<Element | null>, returnFocus: RefObject<HTMLButtonElement | null>) {
+  const machineNameOf = useMachineName();
+  const message = useToast();
+  const qc = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
+  const [awaiting, setAwaiting] = useState(false);
+  const [running, setRunning] = useState(0);
+  const send = useMutation({
+    mutationFn: (force: boolean) =>
+      api<RunnerAccountRemoveState>(`/runners/${runner.id}/accounts/${engine}/default/sign-out`, { method: 'POST', body: { force } }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: runnersQuery().queryKey });
+      setAwaiting(true);
+    },
+    onError: (e: Error) => message.error(runnerDefaultSignOutFailed(name), e.message),
+  });
+  const removal = runner.accountRemove;
+  const outcome = removal?.engine === engine && removal.account === 'default' ? removal : null;
+  useEffect(() => {
+    if (!awaiting || !outcome || outcome.status === 'pending') return;
+    setAwaiting(false);
+    if (outcome.status !== 'failed') return;
+    if (outcome.sessions?.length) setRunning(outcome.sessions.length);
+    else message.error(runnerDefaultSignOutFailed(name), outcome.message ?? undefined);
+  }, [awaiting, outcome, message, name]);
+  const available = signedIn && !!runner.capabilities?.includes(`${engine}-default-sign-out/v1`);
+  const pending = send.isPending || signingOutDefault(runner, engine);
+  const machine = machineNameOf(runner);
+  const command = engine === 'claude' || engine === 'codex' ? engine : null;
+  const common = { anchor, returnFocus, popupClassName: 're-confirm', danger: true, confirmText: RUNNER_DEFAULT_SIGN_OUT_CONFIRM } as const;
+  const questions = available ? (
+    <>
+      <Popconfirm
+        {...common}
+        title={runnerDefaultSignOutTitle(name)}
+        description={`${runnerDefaultSignOutDetail(machine)}${command ? ` ${runnerDefaultSignOutTerminal(machine, command)}` : ''}`}
+        open={confirming}
+        onOpenChange={(open) => { if (!open) setConfirming(false); }}
+        onCancel={() => setConfirming(false)}
+        onConfirm={() => { send.mutate(false); setConfirming(false); }}
+      />
+      <Popconfirm
+        {...common}
+        title={runnerDefaultSignOutRunning(running, name)}
+        description={RUNNER_DEFAULT_SIGN_OUT_RUNNING_DETAIL}
+        open={running > 0}
+        onOpenChange={(open) => { if (!open) setRunning(0); }}
+        onCancel={() => setRunning(0)}
+        onConfirm={() => { send.mutate(true); setRunning(0); }}
+      />
+    </>
+  ) : null;
+  return { available, pending, ask: () => setConfirming(true), questions };
+}
+
 /** Routine account maintenance stays in one menu. The pause dialog lives outside the dropdown
  *  so closing the menu does not unmount the operation it just opened. `moreRef` is its button. */
-function RunnerAccountMenu({ onRename, onSignIn, signInLabel, onSetDefault, setDefaultBlocked, onRemove, offline, removing, removesInOrbit, pause, moreRef }: {
+function RunnerAccountMenu({ onRename, onSignIn, signInLabel, onSetDefault, setDefaultBlocked, onRemove, onSignOut, signingOut, offline, removing, removesInOrbit, pause, moreRef }: {
   onRename?: () => void;
   /** Set as default, on an added Claude Code account only. */
   onSetDefault?: () => void;
@@ -517,6 +594,9 @@ function RunnerAccountMenu({ onRename, onSignIn, signInLabel, onSetDefault, setD
    *  couldn't answer. */
   signInLabel?: string;
   onRemove?: () => void;
+  /** Default's Sign out…, which deletes its login from the machine. */
+  onSignOut?: () => void;
+  signingOut?: boolean;
   offline: boolean;
   removing?: boolean;
   /** Remove changes only Orbit's own record (Default's): nothing goes to the machine, so it stays
@@ -558,6 +638,7 @@ function RunnerAccountMenu({ onRename, onSignIn, signInLabel, onSetDefault, setD
         disabled: !!setDefaultBlocked,
         onSelect: onSetDefault,
       }] : []),
+      ...(onSignOut ? [{ key: 'sign-out', icon: <LogoutOutlined aria-hidden />, label: RUNNER_DEFAULT_SIGN_OUT, disabled: offline || signingOut, onSelect: onSignOut }] : []),
       ...(onRemove ? [
         { type: 'separator' as const, key: 'divider' },
         { key: 'remove', icon: <DeleteOutlined aria-hidden />, label: 'Remove account', danger: true, disabled: (offline && !removesInOrbit) || removing, onSelect: onRemove },
@@ -675,6 +756,8 @@ function EngineRow({
   const message = useToast();
   const qc = useQueryClient();
   const kind = rowKindOf(health, runner.install, engine);
+  const menuAnchor = useRef<HTMLSpanElement>(null);
+  const more = useRef<HTMLButtonElement>(null);
   // This row's engine, where it is one this page signs in. OpenCode is the one row here without a
   // relayable sign-in — it authenticates per provider, and the runner refuses a login it would
   // have to drive — so every sign-in affordance hangs off this, and what the row offers instead is
@@ -738,6 +821,7 @@ function EngineRow({
   // The engine's one account, which this row is when it stands alone — not when it heads a group of
   // one, as it does while Default is removed from Orbit (accountRowsOf).
   const single = !grouped && engineKeepsAccounts(engine) && health?.accounts?.length === 1 ? health.accounts[0] : undefined;
+  const signOut = useDefaultSignOut(runner, engine, single ? accountNameOf(single) : '', single?.id === 'default' && kind === 'in' && !envKey && !regionBlocked, menuAnchor, more);
   // What the head says for its group: how many of its accounts could take a session now, out of
   // those staying — one being removed is counted as gone already.
   const kept = accounts.filter((account) => !beingRemoved(runner, engine, account.id));
@@ -967,7 +1051,11 @@ function EngineRow({
       )}
       {!grouped && !cursorBlocked && !regionBlocked && (
         <>
-          <AccountPauseStatus until={single?.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={antigravity?.supported === false ? { color: 'orange', label: 'Update runner' } : statusOf(kind, quota, now, loginEngine !== null)} />
+          {signOut.pending ? (
+            <div className="re-status"><Badge tone="info" icon={<LoadingOutlined />}>{RUNNER_DEFAULT_SIGNING_OUT}</Badge></div>
+          ) : (
+            <AccountPauseStatus until={single?.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={antigravity?.supported === false ? { color: 'orange', label: 'Update runner' } : statusOf(kind, quota, now, loginEngine !== null)} />
+          )}
           {envKey ? <div className="re-quota re-meta">env key · runs on your Gemini key</div> : <QuotaCell kind={kind} quota={quota} signIn={loginEngine !== null} />}
         </>
       )}
@@ -1005,8 +1093,12 @@ function EngineRow({
         {/* A group's sign-ins are its accounts', each on its own row. */}
         {!grouped && action()}
         {!grouped && (
+          <span ref={menuAnchor} className="re-menu-anchor">
           <RunnerAccountMenu
             offline={offline}
+            moreRef={more}
+            onSignOut={signOut.available ? signOut.ask : undefined}
+            signingOut={signOut.pending}
             onSignIn={!regionBlocked && loginEngine !== null && (kind === 'in' || kind === 'unknown') && (loginEngine !== 'antigravity' || (googleLogin === 'available' && !envKey))
               ? () => onSignIn(signIn === engine ? null : engine)
               : undefined}
@@ -1018,7 +1110,9 @@ function EngineRow({
               endpoint: `/runners/${runner.id}/accounts/${engine}/${single.id}/pause`,
             } : undefined}
           />
+          </span>
         )}
+        {!grouped && signOut.questions}
       </div>
 
       {/* The check got no answer: said once under the head, with what it does and does not mean.
@@ -1448,10 +1542,13 @@ function AccountRow({
   const swapForeign = swapMine?.status === 'pending' ? swapMine.foreignProcesses.length : 0;
   const menuAnchor = useRef<HTMLSpanElement>(null);
   const more = useRef<HTMLButtonElement>(null);
+  const signOut = useDefaultSignOut(runner, engine, accountNameOf(account), isDefault && kind === 'in' && !envKey && !regionBlocked, menuAnchor, more);
   const menu = (
     <RunnerAccountMenu
       offline={!runner.online}
       removing={removing}
+      onSignOut={signOut.available ? signOut.ask : undefined}
+      signingOut={signOut.pending}
       removesInOrbit={isDefault}
       moreRef={more}
       onRename={() => setEditing(true)}
@@ -1485,9 +1582,9 @@ function AccountRow({
           </div>
         </div>
       </div>
-      {removing ? (
+      {removing || signOut.pending ? (
         <div className="re-status">
-          <Badge tone="info" icon={<LoadingOutlined />}>Removing…</Badge>
+          <Badge tone="info" icon={<LoadingOutlined />}>{removing ? 'Removing…' : RUNNER_DEFAULT_SIGNING_OUT}</Badge>
         </div>
       ) : (
         // On a machine blocked for its region the account can take no session there: its sign-in is all
@@ -1513,17 +1610,18 @@ function AccountRow({
           </Button>
         )}
         {/* The confirmation stays anchored to More after its menu closes. */}
-        {removable ? (
+        {removable || signOut.available ? (
           <>
             <span ref={menuAnchor} className="re-menu-anchor">{menu}</span>
-            <Popconfirm
+            {signOut.questions}
+            {removable && <Popconfirm
               {...removeQuestion}
               anchor={menuAnchor}
               open={confirmingRemove}
               onOpenChange={(open) => { if (!open) setConfirmingRemove(false); }}
               onCancel={() => setConfirmingRemove(false)}
               returnFocus={more}
-            />
+            />}
             {canSetDefault && (
               <Popconfirm
                 {...setDefaultQuestion}
