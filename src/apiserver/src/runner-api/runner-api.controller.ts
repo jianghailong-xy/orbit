@@ -8101,10 +8101,11 @@ export class RunnerApiController {
       let currentWorkTerminalized = 0;
       let currentWorkRequeued = 0;
       let stoppedRequestsClosed: string[] = [];
+      const reportedInterrupted = dto.status === RunStatus.INTERRUPTED;
       if (
         completedTurn
         && !failSession
-        && (dto.status === RunStatus.INTERRUPTED || await stopOvertookTarget(tx, sessionId, completedTurn.seq))
+        && (reportedInterrupted || await stopOvertookTarget(tx, sessionId, completedTurn.seq))
       ) {
         const settled = await settleStoppedCurrentWorkSteers(
           tx,
@@ -8146,7 +8147,7 @@ export class RunnerApiController {
       // generation, is followed by the update's continuation (managed-runner-update-cut.ts), which the count below then
       // finds queued: the session stays RUNNING for the next generation to take it.
       if (completedTurn && !failSession && !unanswered) {
-        await queueUpdateNowContinuation(tx, runner.id, sessionId, completedTurn, dto.status);
+        await queueUpdateNowContinuation(tx, runner.id, sessionId, completedTurn, reportedInterrupted);
       }
       // If a follow-up arrived before this completion acquired the Session lock, the
       // current active slot passes directly to it and the inbox may deliver it next. With

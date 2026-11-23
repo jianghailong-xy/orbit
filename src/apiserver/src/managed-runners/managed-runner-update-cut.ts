@@ -1,4 +1,4 @@
-import { RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, RunEventType, RunStatus, type NormalizedRunEvent } from '@orbit/shared';
+import { RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, RunEventType, type NormalizedRunEvent } from '@orbit/shared';
 import type { ManagedRunner, Prisma } from '@prisma/client';
 
 import { buildUpdateResumeContinuation } from '../runner-api/resume-continuation';
@@ -79,9 +79,10 @@ export async function queueUpdateNowContinuation(
   runnerId: string,
   sessionId: string,
   turn: { id: string; seq: number; kind: string; content: string | null },
-  status: string | undefined,
+  /** The runner reported the turn INTERRUPTED. */
+  interrupted: boolean,
 ): Promise<boolean> {
-  if (turn.kind !== 'message' || status !== RunStatus.INTERRUPTED) return false;
+  if (turn.kind !== 'message' || !interrupted) return false;
   const mapping = await tx.managedRunner.findUnique({
     where: { runnerId },
     select: { updateRequestedAt: true, updateCompletedAt: true, updateInterruptTurns: true, stopRequestedAt: true, currentImageSha: true },
