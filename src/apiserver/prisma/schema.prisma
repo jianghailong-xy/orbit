@@ -408,6 +408,8 @@ model User {
   sessionGuestPlaces SessionGuest[] // the sessions this user was invited into as a guest (0560)
   /// Its sessions' replies on their way back to Feishu (migration 0501).
   feishuOutbox     FeishuOutbox[]
+  /// What Orbit has learned about its accounts from the runs it sent there (migration 1494).
+  accountHealth         AccountHealth[]
 
   @@map("user")
   mentionDeliveries TaskCommentMentionDelivery[]
@@ -1201,6 +1203,8 @@ model Runner {
   presence      RunnerPresence?
   /// The drive mount credentials issued for its generations (migration 1339): a managed runner's only.
   driveMountCredentials DriveMountCredential[]
+  // Account health of the sign-ins on this runner (migration 1494).
+  accountHealth     AccountHealth[]
 
   @@index([ownerId])
   /// The tenancy fence `project_codebase` hangs off: naming BOTH the runner and the owner in one
@@ -7982,6 +7986,8 @@ model ModelProvider {
   @@unique([id, ownerId], map: "model_provider_id_owner_id_key")
   @@index([ownerId])
   @@map("model_provider")
+  // Account health of this key or pool member (migration 1494).
+  accountHealth AccountHealth[]
 }
 
 /// A retired provider name (migration 0415, docs/provider-engine-contract.md §1.5): the slug of a
@@ -8082,6 +8088,8 @@ model ProviderPool {
   loginUsage    PoolLoginUsage[]
   createdAt DateTime             @default(now()) @map("created_at")
   updatedAt DateTime             @updatedAt @map("updated_at")
+  // Account health of this pool's Codex logins (migration 1494).
+  accountHealth AccountHealth[]
 
   @@unique([id, ownerId], map: "provider_pool_id_owner_id_key")
   @@index([ownerId])
@@ -10955,4 +10963,61 @@ model ModelIdentity {
   decidedAt    DateTime @default(now()) @map("decided_at") @db.Timestamptz(3)
 
   @@map("model_identity")
+}
+
+/// Account health (migration 1494, docs/routing-account-health-design.md §6): what Orbit has learned about an
+/// account from the runs it sent there, beside quota (what the provider reports) and the owner's pause. One live
+/// row (clearedAt null) per owner, subjectKey and scopeModel — held by the partial unique index
+/// `account_health_live_key`, which lives in the migration's SQL only. AccountHealthService
+/// (providers/account-health.service.ts) is its one writer; the rules are providers/account-health.ts.
+model AccountHealth {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  ownerId        String    @map("owner_id") @db.Uuid
+  owner          User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "account_health_owner_id_fkey")
+  // `runner:<runnerId>:<engine>:<account>`, `provider:<providerId>` or `pool-login:<poolId>:<accountId>` (§6.1).
+  subjectKey     String    @map("subject_key")
+  // '' for the whole account, else the one model the row is about (CAPACITY; ACCESS_DENIED of one model).
+  scopeModel     String    @default("") @map("scope_model")
+  // The parts of the key, for joins and cascade delete.
+  runnerId       String?   @map("runner_id") @db.Uuid
+  runner         Runner?   @relation(fields: [runnerId], references: [id], onDelete: Cascade, map: "account_health_runner_id_fkey")
+  engine         String?
+  account        String?
+  providerId     String?   @map("provider_id") @db.Uuid
+  provider       ModelProvider? @relation(fields: [providerId], references: [id], onDelete: Cascade, map: "account_health_provider_id_fkey")
+  poolId         String?   @map("pool_id") @db.Uuid
+  pool           ProviderPool? @relation(fields: [poolId], references: [id], onDelete: Cascade, map: "account_health_pool_id_fkey")
+  // SUSPECT | BLOCKED | COOLDOWN (account_health_state_check).
+  state          String
+  // The RunFailureKind that wrote the row, or UNCLASSIFIED_ADMISSION for the breaker.
+  kind           String
+  // The provider's own words.
+  said           String?
+  // Consecutive unclassified admission failures while SUSPECT.
+  strikes        Int       @default(0)
+  // Consecutive trips, shared by both ladders; picks the step (§6.4). Zero for a cool-down.
+  trips          Int       @default(0)
+  firstAt        DateTime  @default(now()) @map("first_at") @db.Timestamptz(3)
+  lastAt         DateTime  @default(now()) @map("last_at") @db.Timestamptz(3)
+  // The session whose failure last wrote the row: a retry of the same finalize changes nothing.
+  lastSessionId  String?   @map("last_session_id") @db.Uuid
+  // Always set for BLOCKED and COOLDOWN (account_health_blocked_until_check).
+  blockedUntil   DateTime? @map("blocked_until") @db.Timestamptz(3)
+  // The one run testing an expired block (§6.5), and when it claimed it.
+  trialSessionId String?   @map("trial_session_id") @db.Uuid
+  trialClaimedAt DateTime? @map("trial_claimed_at") @db.Timestamptz(3)
+  // The owner alert (§8), written by phase 3.
+  notifiedAt     DateTime? @map("notified_at") @db.Timestamptz(3)
+  notifiedKind   String?   @map("notified_kind")
+  clearedAt      DateTime? @map("cleared_at") @db.Timestamptz(3)
+  // SUCCESS | OWNER | EXPIRED (account_health_cleared_by_check).
+  clearedBy      String?   @map("cleared_by")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([ownerId, subjectKey, scopeModel], map: "account_health_owner_subject_idx")
+  @@index([runnerId], map: "account_health_runner_id_idx")
+  @@index([providerId], map: "account_health_provider_id_idx")
+  @@index([poolId], map: "account_health_pool_id_idx")
+  @@map("account_health")
 }
