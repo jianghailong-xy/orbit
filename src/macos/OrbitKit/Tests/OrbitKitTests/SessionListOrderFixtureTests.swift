@@ -91,4 +91,33 @@ final class SessionListOrderFixtureTests: XCTestCase {
             ##"{"id":"a","title":"a","status":"AWAITING_INPUT","listedAt":"2026-11-20T11:00:00.000Z","lastTurnAt":"2026-11-20T11:59:30.000Z","createdAt":"2026-09-01T00:00:00.000Z"}"##.utf8))
         XCTAssertEqual(SessionListTime.format(for: row, now: date("2026-11-20T12:00:00.000Z")), "1h ago")
     }
+
+    /// The list the phone draws goes through `SessionProjectGrouping`, whose entries are what the
+    /// sections are cut from: a busier session (fresher lastTurnAt) must not sit above one listed later,
+    /// and a feed of activity-only changes (lastTurnAt and preview text) must leave the order as it was.
+    func testListingEntriesAreOrderedByListedAtNotActivity() throws {
+        func row(_ id: String, listed: String, turn: String, text: String) throws -> Session {
+            try JSONDecoder().decode(Session.self, from: Data(
+                ##"{"id":"\##(id)","title":"\##(id)","status":"RUNNING","runState":"RUNNING","listedAt":"\##(listed)","lastTurnAt":"\##(turn)","createdAt":"2026-09-01T00:00:00.000Z","lastAssistantText":"\##(text)"}"##.utf8))
+        }
+        func order(_ rows: [Session]) -> [String] {
+            SessionProjectGrouping.listing(rows, folders: [], projects: [], view: .open, byTag: false)
+                .entries.map(\.id)
+        }
+        let before = [
+            try row("a", listed: "2026-11-20T09:20:00.000Z", turn: "2026-11-20T09:20:00.000Z", text: "start"),
+            try row("b", listed: "2026-11-20T09:10:00.000Z", turn: "2026-11-20T09:10:00.000Z", text: "start"),
+            try row("c", listed: "2026-11-20T09:00:00.000Z", turn: "2026-11-20T09:00:00.000Z", text: "start"),
+        ]
+        XCTAssertEqual(order(before), ["a", "b", "c"])
+        // Activity only: c streams most recently, then b; listedAt unchanged, previews change.
+        let after = [
+            try row("a", listed: "2026-11-20T09:20:00.000Z", turn: "2026-11-20T09:20:05.000Z", text: "reading logs"),
+            try row("b", listed: "2026-11-20T09:10:00.000Z", turn: "2026-11-20T11:59:00.000Z", text: "running tests"),
+            try row("c", listed: "2026-11-20T09:00:00.000Z", turn: "2026-11-20T12:00:00.000Z", text: "waiting on CI"),
+        ]
+        XCTAssertEqual(order(after), order(before))
+        XCTAssertEqual(after.map { $0.lastAssistantText }, ["reading logs", "running tests", "waiting on CI"])
+        XCTAssertNotEqual(before.map { $0.lastAssistantText }, after.map { $0.lastAssistantText })
+    }
 }
