@@ -204,6 +204,7 @@ import { moveProject } from './ProjectRunSettings';
 import { SidebarNavIcon } from './SidebarNavIcon';
 import {
   type SessionTagRef,
+  compareListed,
   sessionTagSections,
   sessionTimeSections,
   sessionsWithTag,
@@ -1545,7 +1546,7 @@ export function SessionTitleRow({
           <TeamOutlined />
         </span>
       )}
-      <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
+      <span className="session-time">{fmtTime(s.listedAt ?? s.createdAt)}</span>
       <CoordinatorBadge projectId={s.projectId} />
     </div>
   );
@@ -1719,7 +1720,7 @@ export function SessionProjectRowContent({ project }: { project: SessionProjectR
       <div className="session-main">
         <div className="session-title-row">
           <div className="session-title">{project.title}</div>
-          <span className="session-time">{fmtTime(project.lastTurnAt ?? project.createdAt ?? undefined)}</span>
+          <span className="session-time">{fmtTime(project.listedAt ?? project.createdAt ?? undefined)}</span>
         </div>
         <div className="session-sub">
           <span
@@ -3131,7 +3132,9 @@ export function WorkspaceView({
   const sessions = useMemo(() => {
     // A scheduled task's run is listed only in its workspace's Scheduled runs folder (owner 2026-11-18): the server
     // reads the folder apart, and a row on the wrong side is not drawn here either.
-    const rows = (sessionsQ.data ?? []).filter((row) => (row.runSource === 'SCHEDULE') === onScheduledRuns);
+    // A schedule's change conversation (§8.2) is in no list: it is reached from its schedule.
+    const rows = (sessionsQ.data ?? []).filter((row) =>
+      row.runSource !== 'SCHEDULE_CHANGE' && (row.runSource === 'SCHEDULE') === onScheduledRuns);
     // The Completed view is ordered by the server on completed_at (newest first) and
     // intentionally ignores pinning. The optimistic cache edits
     // (drop/rename/pin) only remove or patch rows in place — never reorder — and a real
@@ -3140,9 +3143,8 @@ export function WorkspaceView({
     return rows.sort((a, b) => {
       // Pinned sessions float to the top; among themselves they keep time order.
       if (!!a.pinnedAt !== !!b.pinnedAt) return a.pinnedAt ? -1 : 1;
-      const ta = a.lastTurnAt ?? a.createdAt;
-      const tb = b.lastTurnAt ?? b.createdAt;
-      return ta < tb ? 1 : -1;
+      // listedAt, never lastTurnAt: streamed activity must not move a row (contracts/session-list-order.fixtures.json).
+      return compareListed(a, b);
     });
   }, [sessionsQ.data, effectiveView, onScheduledRuns]);
   const selectedFromList = useMemo(
@@ -3526,8 +3528,8 @@ export function WorkspaceView({
   const pageMerges = useMemo(() => (Array.isArray(pageMergesQ.data) ? pageMergesQ.data : []), [pageMergesQ.data]);
   const allProjectMembers = useMemo(() => [...new Map(
     [...(projectSessionsQ.data ?? []), ...(completedProjectSessionsQ.data ?? [])].map((s) => [s.id, s]),
-  ).values()].sort((a, b) => (Date.parse(b.lastTurnAt ?? b.createdAt ?? '') || 0) -
-    (Date.parse(a.lastTurnAt ?? a.createdAt ?? '') || 0)), [projectSessionsQ.data, completedProjectSessionsQ.data]);
+  ).values()].sort((a, b) => (Date.parse(b.listedAt ?? b.createdAt ?? '') || 0) -
+    (Date.parse(a.listedAt ?? a.createdAt ?? '') || 0)), [projectSessionsQ.data, completedProjectSessionsQ.data]);
   // A project's LANDING sessions are its subject's, not conversations: they are counted nowhere on
   // this page — not in "Project · N sessions", not in the running count, not among the status dots,
   // not in the timeline — and are summed up once, in the Landings row below the coordinator.
@@ -3791,6 +3793,7 @@ export function WorkspaceView({
         }))
       : sessionTimeSections(folderListing.entries, {
           pinnedFirst: view === 'open' && !tagFilter,
+          attention: view === 'open',
         }).map((s) => ({
           key: s.title,
           tag: null as SessionTagRef | null,
@@ -3807,7 +3810,7 @@ export function WorkspaceView({
       if (!openProjectId) return [];
       const coordinator = pageCoordinator ? [{ key: 'Coordinator', title: SESSION_PROJECT_COPY.coordinatorSection, tag: null,
         sessions: [{ ...pageCoordinator, kind: 'session' as const }] }] : [];
-      const timeline = sessionTimeSections(projectMembers.filter((s) => s.id !== pageCoordinator?.id), { pinnedFirst: false })
+      const timeline = sessionTimeSections(projectMembers.filter((s) => s.id !== pageCoordinator?.id), { pinnedFirst: false, attention: true })
         .map((s) => ({ key: s.title, title: s.title, tag: null,
           sessions: s.sessions.map((session) => ({ ...session, kind: 'session' as const })) }));
       // The Landings row sits below the coordinator and above the timeline, for a project that has
@@ -3924,16 +3927,6 @@ export function WorkspaceView({
   // this turn is meant to create a project. Keeping it in the URL makes refresh/back truthful and
   // lets dismissing it return to the byte-for-byte ordinary compose without a second screen/state.
   const projectIntent = composing && searchParams.get('intent') === 'project';
-  // A scheduled task's Change… lands here with the schedule named in the composer (ScheduledPage): it is changed
-  // by talking to a session, never through a form. Read from the browser's own entry (useLocation trails it), once.
-  useEffect(() => {
-    if (!composing) return;
-    const entry = window.history.state as { usr?: { composerText?: string } } | null;
-    const seed = entry?.usr?.composerText;
-    if (!seed) return;
-    setText(seed);
-    window.history.replaceState({ ...entry, usr: { ...entry.usr, composerText: undefined } }, '');
-  }, [composing]);
   const dismissProjectIntent = useCallback(() => {
     setSearchParams(
       (current) => {

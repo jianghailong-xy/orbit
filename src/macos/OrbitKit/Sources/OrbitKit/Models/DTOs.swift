@@ -650,6 +650,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// never-run (queued) session — mirroring web's client-side sort. See `SessionFilter`.
     public let createdAt: String?
     public let lastTurnAt: String?
+    /// The list's order key: moves only when the session changes for its owner (created, a message
+    /// sent, a turn ended on the owner, ended or completed), never on streamed activity. nil from an
+    /// older control plane, which reads as `createdAt`. `lastTurnAt` is the liveness clock instead.
+    public let listedAt: String?
     /// When the turn now in flight was handed to the runner (ISO-8601), or nil when the session is
     /// not mid-turn. Distinct from `lastTurnAt`, which the server rewrites on every state move and
     /// so reads as a few seconds old on *every* running session — a list of them all says "just
@@ -914,6 +918,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         updatedAt = try values.decodeIfPresent(String.self, forKey: .updatedAt)
         createdAt = try values.decodeIfPresent(String.self, forKey: .createdAt)
         lastTurnAt = try values.decodeIfPresent(String.self, forKey: .lastTurnAt)
+        listedAt = try values.decodeIfPresent(String.self, forKey: .listedAt)
         currentTurnStartedAt = try values.decodeIfPresent(String.self, forKey: .currentTurnStartedAt)
         pinnedAt = try values.decodeIfPresent(String.self, forKey: .pinnedAt)
         model = try values.decodeIfPresent(String.self, forKey: .model)
@@ -990,6 +995,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 sourceState: String? = nil, sourceRefusalCode: String? = nil,
                 sourceRefusalDetail: SourceRefusalDetail? = nil, forkSource: String? = nil,
                 pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil,
+                listedAt: String? = nil,
                 currentTurnStartedAt: String? = nil,
                 tags: [SessionTag]? = nil, retryAt: String? = nil,
                 poolMemberProviderId: String? = nil, poolKeyId: String? = nil,
@@ -1079,6 +1085,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.pinnedAt = pinnedAt
         self.createdAt = createdAt
         self.lastTurnAt = lastTurnAt
+        self.listedAt = listedAt
         self.currentTurnStartedAt = currentTurnStartedAt
         self.tags = tags
         self.folderId = folderId
@@ -1783,6 +1790,49 @@ public struct SessionChangedFile: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
+/// One file a branch commit changed. Additions/deletions are -1 for a binary file, as in `SessionChangedFile`.
+public struct BranchCommitFile: Codable, Equatable, Sendable {
+    public let path: String
+    public let additions: Int
+    public let deletions: Int
+    public init(path: String, additions: Int, deletions: Int) {
+        self.path = path
+        self.additions = additions
+        self.deletions = deletions
+    }
+}
+
+/// One commit of a session's branch, between its base and its tip, as the runner reads it (runner
+/// branch_commits.go; @orbit/shared `BranchCommit`). The worktree bar counts these and its sheet lists
+/// them, newest first (board docs/mocks/session-commits-first/02-native).
+public struct BranchCommit: Codable, Equatable, Sendable, Identifiable {
+    public let sha: String
+    public let subject: String
+    public let body: String?
+    /// ISO 8601 committer date.
+    public let committedAt: String
+    /// Set when the runner made the commit itself: "session-end", "commit-button" or "checkpoint".
+    /// Nil for a commit the agent made.
+    public let savedBy: String?
+    public let files: [BranchCommitFile]
+    public let filesTruncated: Bool?
+    public var id: String { sha }
+    public init(sha: String, subject: String, body: String? = nil, committedAt: String, savedBy: String? = nil,
+                files: [BranchCommitFile], filesTruncated: Bool? = nil) {
+        self.sha = sha
+        self.subject = subject
+        self.body = body
+        self.committedAt = committedAt
+        self.savedBy = savedBy
+        self.files = files
+        self.filesTruncated = filesTruncated
+    }
+    /// The commit's files as the diff list takes them (no status letter: a commit reports none).
+    public var changedFiles: [SessionChangedFile] {
+        files.map { SessionChangedFile(path: $0.path, additions: $0.additions, deletions: $0.deletions, status: "") }
+    }
+}
+
 /// The agent nested on a session detail, as the worktree bar reads it: the id plus the agent's
 /// remembered default merge target (set when the user last switched targets in the merge dropdown;
 /// nil = the runner's auto-detected default). Distinct from `SessionAgentRef` (list rows), which
@@ -1899,6 +1949,11 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     public let isolationStatus: String?
     /// Per-file diff summary of the worktree vs its base; empty when nothing changed.
     public let changedFiles: [SessionChangedFile]?
+    /// The branch's commits from its base to its tip, newest first. Nil from a runner too old to
+    /// report them: the bar then counts files, as it did before.
+    public let branchCommits: [BranchCommit]?
+    /// The commit the branch forked from, which the sheet's commit list says it is based on.
+    public let baseSha: String?
     /// True while the worktree has uncommitted changes (drives Commit vs Merge). Nil = not reported.
     public let worktreeDirty: Bool?
     /// "Merge to main" outcome: pending | merged | conflict | error. Nil until the user merges.
@@ -1997,6 +2052,8 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         branch = try values.decodeIfPresent(String.self, forKey: .branch)
         isolationStatus = try values.decodeIfPresent(String.self, forKey: .isolationStatus)
         changedFiles = try values.decodeIfPresent([SessionChangedFile].self, forKey: .changedFiles)
+        branchCommits = try values.decodeIfPresent([BranchCommit].self, forKey: .branchCommits)
+        baseSha = try values.decodeIfPresent(String.self, forKey: .baseSha)
         worktreeDirty = try values.decodeIfPresent(Bool.self, forKey: .worktreeDirty)
         mergeStatus = try values.decodeIfPresent(String.self, forKey: .mergeStatus)
         mergeError = try values.decodeIfPresent(String.self, forKey: .mergeError)
@@ -2034,7 +2091,8 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
                 projectMembership: SessionProjectMembership? = nil,
                 projectIntegrationRef: String? = nil,
                 branch: String? = nil, isolationStatus: String? = nil,
-                changedFiles: [SessionChangedFile]? = nil, worktreeDirty: Bool? = nil,
+                changedFiles: [SessionChangedFile]? = nil, branchCommits: [BranchCommit]? = nil,
+                baseSha: String? = nil, worktreeDirty: Bool? = nil,
                 mergeStatus: String? = nil, mergeError: String? = nil, mergeTarget: String? = nil,
                 mergeRecovery: MergeRecovery? = nil, mergeRecoverySupported: Bool? = nil,
                 mergeRepairSession: MergeRepairSession? = nil,
@@ -2062,6 +2120,8 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.branch = branch
         self.isolationStatus = isolationStatus
         self.changedFiles = changedFiles
+        self.branchCommits = branchCommits
+        self.baseSha = baseSha
         self.worktreeDirty = worktreeDirty
         self.mergeStatus = mergeStatus
         self.mergeError = mergeError

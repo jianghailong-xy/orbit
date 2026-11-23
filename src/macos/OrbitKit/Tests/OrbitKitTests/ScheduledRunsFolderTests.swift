@@ -4,16 +4,17 @@ import XCTest
 final class ScheduledRunsFolderTests: XCTestCase {
     private func session(_ id: String, workspace: String = "w1", source: String? = "SCHEDULE",
                          status: RunStatus = .awaitingInput, approvals: Int = 0,
-                         waitingKind: SessionWaitingKind? = nil, folderID: String? = nil) -> Session {
+                         waitingKind: SessionWaitingKind? = nil, folderID: String? = nil,
+                         listedAt: String? = nil) -> Session {
         Session(id: id, title: id, status: status, agentId: workspace, assignedRunnerId: nil,
                 pendingApprovals: approvals, waitingKind: waitingKind, branch: nil, updatedAt: nil,
-                runSource: source, folderId: folderID)
+                runSource: source, listedAt: listedAt, folderId: folderID)
     }
 
     func testWorkspaceAndScheduledListsKeepDisjointRows() {
         let rows = [
-            session("old-server", source: nil),
-            session("manual", source: "MANUAL"),
+            session("old-server", source: nil, listedAt: "2026-10-02T00:00:00Z"),
+            session("manual", source: "MANUAL", listedAt: "2026-10-01T00:00:00Z"),
             session("run", folderID: "f1"),
             session("other-run", workspace: "w2"),
         ]
@@ -23,6 +24,22 @@ final class ScheduledRunsFolderTests: XCTestCase {
                            ["old-server", "manual"])
             XCTAssertEqual(SessionFilter.forAgent(rows, agentID: "w1", view: view, scheduled: true).map(\.id),
                            ["run"])
+        }
+    }
+
+    /// A schedule's change conversation (runSource SCHEDULE_CHANGE, §8.2) is in no list — the server already
+    /// excludes it, but a realtime upsert can bring a row in: both the workspace's and the scheduled runs'
+    /// lists keep it out, as the web's `row.runSource !== 'SCHEDULE_CHANGE'` read does.
+    func testChangeConversationsAreInNoList() {
+        let rows = [
+            session("manual", source: "MANUAL"),
+            session("run", source: "SCHEDULE"),
+            session("change", source: "SCHEDULE_CHANGE"),
+        ]
+
+        for view in SessionView.allCases {
+            XCTAssertEqual(SessionFilter.forAgent(rows, agentID: "w1", view: view).map(\.id), ["manual"])
+            XCTAssertEqual(SessionFilter.forAgent(rows, agentID: "w1", view: view, scheduled: true).map(\.id), ["run"])
         }
     }
 

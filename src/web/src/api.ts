@@ -1958,6 +1958,8 @@ export interface SessionChangedFile {
  * existing row fields remain open. */
 export type SessionListItem = Record<string, any> & {
   id: string;
+  /** The list's order key: moves only when the session changes for its owner. Absent from older servers (createdAt then). */
+  listedAt?: string | null;
   /** The engine the session runs on, recorded at its creation and never changed (null only when an
    *  older replica wrote it and nobody can tell). `provider` is the credential it spends. */
   engine?: string | null;

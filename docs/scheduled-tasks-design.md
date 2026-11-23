@@ -721,8 +721,25 @@ in progress keeps the revision it started with.
   change. It applies at once inside the envelope, including by itself, and is recorded in the revision’s before /
   after and undoable. Pass it when the prompt or access changes as well as the time; a rule or time-zone change
   without it clears the old read-back so the read derives it.
-- In the inspector, **Change…** opens a new session in the schedule's workspace with the schedule attached, and the
-  person types what to change.
+- **Change…** (inspector, row swipe, long-press and context menus) opens the schedule's **change conversation**
+  (owner 2026-11-19, board `docs/mocks/scheduled-tasks/03-change.png`):
+  - It is a session in the schedule's workspace, bound to the schedule (`Session.changeScheduleId`, `runSource =
+    SCHEDULE_CHANGE`). Its first message is the agent's, drawn by Orbit from the schedule, and starts no engine: until
+    the person says something the client draws it and nothing is written; the session keeps it as it was then
+    (`Session.scheduleChangeOpening`). It says what the schedule does,
+    *When*, *May*, *Costs*, then what can change at once and undo (time, days, what it checks, how it reports) and
+    what needs the owner's **Allow** (more runs, longer runs, more access, another workspace).
+  - The engine starts with the person's first reply. Each message reaches it with a note after the person's words
+    (`<orbit_schedule_change>`, the control plane's) naming the schedule as it is at delivery (id, revision, rule,
+    envelope, read-back) and asking it to change that schedule with `schedule_update`, asking back only for what only
+    the person can decide.
+  - A change made from it is recorded as the person's (`changedBy = USER`), with the person's latest words as
+    `askedText`; the history shows them and links the conversation. A change made from any other session is still
+    `SESSION`.
+  - Change… again returns to the schedule's latest change conversation while it is open; a new one opens once that
+    one is completed, archived or deleted. One opened and left without a word leaves nothing behind.
+  - It is not listed in the workspace's session list: it is reached from the schedule (history, Change…) and from
+    **Waiting on you** when it holds a card. A strip at its top names the schedule and opens it.
 
 ### 8.3 A run changing its own schedule
 
@@ -833,6 +850,12 @@ cards. A schedule with no planned end shows nothing.
   session (claim field `scheduleRun`, `ORBIT_SCHEDULE_RUN=1`).
 - The quick-add line: `POST /api/schedules/drafts {workspaceId, text}` opens an ordinary session with the sentence;
   `GET /api/schedules/drafts` lists the account's PENDING create cards, each naming the session that put it up.
+- Change… (§8.2): `GET /api/schedules/:id/change` answers `{sessionId, opening}`: the schedule's open change
+  conversation if it has one, and the opening Orbit draws for a new one; nothing is written. `POST
+  /api/schedules/:id/change {text}` opens one with the person's first words and answers `{sessionId, created}`; when
+  one is already open (another device), the words are said there and `created` is false. The person's door: a request
+  with an acting session is refused `SCHEDULE_CHANGE_FROM_SESSION`. `GET /api/sessions/:id/schedule-cards` adds
+  `change`, the opening a change conversation was drawn with.
 - Tokens: the reads take `sessions:read`, the controls `sessions:write`; no token reaches a card press.
 
 ### 9.2 Clients
@@ -861,7 +884,7 @@ As decided in revision 3, modelled on Reminders' *Scheduled* list:
   **Undo**, each naming who made it: you, a session, or a run), the controls of §8.4 and **Change…**.
 - **Quick-add line** at the end of the list: "Describe a scheduled task…" with the workspace it will use.
 - **Sessions:** the create card, the change line with Undo, the widen card; on a run's session a header naming the
-  schedule and the report card.
+  schedule and the report card; on a change conversation a strip naming the schedule, which opens it.
 - **Waiting on you:** failed runs, held schedules, run approvals and widen cards asked by a run.
 
 Mocks first, with iOS as the reference. Client work starts after the owner approves them.

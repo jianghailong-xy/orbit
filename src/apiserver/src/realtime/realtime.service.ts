@@ -1480,7 +1480,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
 
   streamForUser(
     userId: string,
-    options: { listChanged?: boolean; ownerRequests?: boolean; scheduleCards?: boolean } = {},
+    options: { listChanged?: boolean; listScopes?: boolean; ownerRequests?: boolean; scheduleCards?: boolean } = {},
   ): Observable<ControlEvent> {
     const events$ = this.hub.asObservable().pipe(
       filter((m) => controlTypeFor(m.event.type) !== null),
@@ -1491,9 +1491,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     );
     // `sessions.list_changed` only for a stream that declared it (`?hints=list_changed`): a shipped
     // client re-reads everything on an event type it does not know (open-list-hints.ts).
-    // `owner_requests.changed` likewise, for a stream that declared `?hints=owner_requests`.
+    // `owner_requests.changed` likewise, for a stream that declared `?hints=owner_requests`. Only a stream that
+    // also declared `?hints=list_scopes` is told which workspaces moved (`scopes`); any other gets `{ version }`.
     const hinted = [
-      ...(options.listChanged ? [this.listHints.watch(userId)] : []),
+      ...(options.listChanged ? [this.listHints.watch(userId, { scoped: options.listScopes === true })] : []),
       ...(options.ownerRequests ? [this.ownerRequestHints.watch(userId)] : []),
     ];
     return hinted.length > 0 ? merge(events$, ...hinted) : events$;
@@ -1635,7 +1636,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       case ControlEventType.SESSION_CREATED:
         // A scheduled task's run enters no list (docs/scheduled-tasks-design.md §7.4, §12.1): an open list is not
         // told about it. It is reached from its schedule's history and its notification.
-        if ((await this.prisma.session.findUnique({ where: { id: sessionId }, select: { runSource: true } }))?.runSource === 'SCHEDULE') {
+        // Nor is a schedule's change conversation (§8.2), which is reached from its schedule.
+        if (['SCHEDULE', 'SCHEDULE_CHANGE'].includes(
+          (await this.prisma.session.findUnique({ where: { id: sessionId }, select: { runSource: true } }))?.runSource ?? '',
+        )) {
           return null;
         }
       // falls through

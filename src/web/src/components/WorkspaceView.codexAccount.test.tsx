@@ -316,6 +316,10 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     // Picked, so no note: it starts where the pick says.
     expect(await gaugeAccount()).toEqual({ name: 'Default', note: null });
 
+    // Finish dismissing the usage popover before opening the model menu again.
+    await click(usage());
+    await vi.waitFor(() => expect(document.querySelector('.cu-pop')).toBeNull(), { timeout: 20_000, interval: 20 });
+
     await click(await draftRow('Automatic'));
     expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 0%');
 
