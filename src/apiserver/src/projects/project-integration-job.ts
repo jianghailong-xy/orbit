@@ -77,8 +77,12 @@ export const INTEGRATION_JOB_STATES = [
   'CANCELLED',
   'SUPERSEDED',
   // How an OBSERVE_LANDING job ends when it has looked (§10.6 O-J3, 0453). Final like every state
-  // but the first two.
+  // but the first two and the last.
   'OBSERVED',
+  // The attempt's tested commit is on its landing branch and the landing waits for GitHub
+  // (docs/design/protected-branch-landing.md §4.2, 1527). In flight and not final, but not RUNNING: no runner,
+  // no lease and no J1 slot. J-T14 writes it from a runner's result; the pull request door ends it (J-T15).
+  'PULL_REQUEST',
 ] as const;
 export type IntegrationJobState = (typeof INTEGRATION_JOB_STATES)[number];
 
@@ -122,6 +126,14 @@ export const INTEGRATION_ERROR_CODES = [
   // A TASK_BRANCH candidate's check or landing named by its commit (§10.5 O-L5) found that commit
   // missing from the claiming runner's object store. Nothing is fetched to look for it elsewhere.
   'WORK_COMMIT_MISSING',
+  // GitHub refused the direct push because of the branch's rules (GH006, GH013) and the attempt had no pull
+  // request to fall back to (docs/design/protected-branch-landing.md §3 rules 1 to 3). Replaces PUSH_REJECTED
+  // for that case; the detail quotes GitHub and says what would let the landing through.
+  'PUSH_PROTECTED',
+  // The landing's pull request was closed on GitHub without being merged (§4.2 J-T19).
+  'PULL_REQUEST_CLOSED',
+  // The landing's pull request holds a head Orbit did not push: Orbit merges only what it checked (§4.2 J-T20).
+  'PULL_REQUEST_HEAD_CHANGED',
 ] as const;
 export type IntegrationErrorCode = (typeof INTEGRATION_ERROR_CODES)[number];
 
