@@ -222,6 +222,8 @@ test('SubAgent moves on an account refusal: outcomes, the Why line, named models
       [2, classified(RunFailureKind.ACCESS_DENIED, NOT_IN_PLAN), 'ACCESS_DENIED'],
       [3, fallback(UNMAPPED, { admission: true }), 'ADMISSION_FAILED'],
     ] as const) {
+      // Each refusal blocks the one account that lists the named model: start every case from a healthy one.
+      await forgetHealth();
       const sessionId = await parentSession();
       const opened = await subagents.createSubagentRun(runner, sessionId, create({ toolUseId: `toolu_named_${i}`, model: 'claude-opus-5-5' }));
       assert.equal(opened.decision.tierSource, 'named-model');

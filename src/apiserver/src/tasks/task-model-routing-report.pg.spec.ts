@@ -265,7 +265,7 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
     });
   });
   await t.test('unfinished runs with no usage, completion or finish time return defined counts and NULL ratios', async () => {
-    assert.deepEqual(group(await get(), 'shadow', 3, 'M', 'codex', null), {
+    assert.deepEqual(group(await get(), 'shadow', 4, 'M', 'codex', null), {
       policyVersion: 4, level: 'M', provider: 'codex', model: null, sampleCount: 1,
       taskCount: 1, completedTaskCount: 0, firstPassTaskCount: 0, firstPassRate: 0,
       averageFailureCount: 0, tokensPerCompletedTask: null, costUsdPerCompletedTask: null, usageUnknownCompletedTaskCount: 0, durationP50Ms: null,

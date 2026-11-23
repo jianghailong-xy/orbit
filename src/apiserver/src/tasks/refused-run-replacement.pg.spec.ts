@@ -200,14 +200,15 @@ test('a task that does not auto-run gets one replacement after a refusal, on ano
       const decision = await s.db.taskRouteDecision.findFirstOrThrow({ where: { sessionId: replacement } });
       assert.ok(decision.reasons.includes('Run 1 was refused by its account before it started — not counted'), decision.reasons.join(' | '));
       assert.equal(decision.level, 'L');
-      const [comment] = await s.db.taskComment.findMany({ where: { taskId } });
-      assert.match(comment?.body ?? '', /^\*\*Replaced run 1, which its account refused \(recorded by Orbit\)\*\*/);
+      // Beside the finalize's own record of the failed run, the replacement's.
+      const replacedNote = { taskId, body: { startsWith: '**Replaced run 1, which its account refused (recorded by Orbit)**' } };
+      assert.equal(await s.db.taskComment.count({ where: replacedNote }), 1);
 
       // The same refusal reported again (a failed turn, then the finalize) is the same request: one replacement.
       const again = await s.tasks.replaceRefusedRun(run1);
       assert.equal(again?.sessionId, replacement);
       assert.equal((await runsOf(s.db, taskId)).length, 2);
-      assert.equal(await s.db.taskComment.count({ where: { taskId } }), 1);
+      assert.equal(await s.db.taskComment.count({ where: replacedNote }), 1, 'recorded once');
       // An ordinary failure is not replaced.
       await s.db.session.update({ where: { id: replacement }, data: { status: RunStatus.FAILED, finishedAt: new Date(), error: 'tests failed' } });
       assert.equal(await s.tasks.replaceRefusedRun(replacement), null);
