@@ -588,6 +588,12 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
       headers: calling(mine.runner.coordinatorSessionId),
     }),
   },
+  // A task's own work session reading its task's landing (revision 42, §12.7): B's own calling session on A's
+  // landing is the 404 an id that names nothing gets — no landing of that session's task has the id.
+  'GET /runner/landings/:id': {
+    as: RUNNER,
+    request: (of, mine) => ({ params: { id: of.runner.landingSessionId }, headers: calling(mine.runner.callingSessionId) }),
+  },
   'POST /runner/projects/:id/acceptance/merge-evidence': {
     as: RUNNER,
     request: (of) => ({ params: { id: of.projectId }, body: { requirementId: 'census', targetBranch: 'refs/heads/main', contentHash: 'd'.repeat(64) } }),
@@ -1228,6 +1234,10 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
   ...taskCreateFieldCases('POST /runner/tasks', (task) => task, ''),
   ...taskCreateFieldCases('POST /runner/tasks/batch-create', (task) => ({ tasks: [task] }), 'tasks[].'),
   ...taskCreateFieldCases('POST /runner/tasks/batch-preview', (task) => ({ tasks: [task] }), 'tasks[].'),
+  // And A's session in the calling session's place on B's own landing: the same 404.
+  'GET /runner/landings/:id header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({
+    params: { id: mine.runner.landingSessionId },
+  })),
   'POST /runner/tasks header x-orbit-session-id': fromTheirSession(RUNNER, () => ({ params: {}, body: taskBody() })),
   'POST /runner/tasks header x-orbit-workspace-id': fromTheirWorkspace('x-orbit-workspace-id', () => ({ params: {}, body: taskBody() })),
   'POST /runner/tasks header x-orbit-agent-id': fromTheirWorkspace('x-orbit-agent-id', () => ({ params: {}, body: taskBody() })),
