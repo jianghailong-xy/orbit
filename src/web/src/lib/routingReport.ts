@@ -186,8 +186,8 @@ const rowKey = (provider: string | null, model: string | null) => `${provider ??
 
 /**
  * A model id with an engine's wrapping taken off, as the server's modelRuleKey (apiserver model-identity.ts) spells it:
- * lower case, a `["vendor", "model"]` token read as its model, a `[variant]` and a level suffix dropped, a `vendor/`
- * prefix dropped, a dot between digits written as a dash. For a row the tier list does not have, so has no identity:
+ * lower case, a `["vendor", "model"]` token read as its model, a `[variant]` dropped, a `vendor/` prefix dropped, a dot
+ * between digits written as a dash. A trailing `-max` stays: it names a model (`qwen3.7-max`). For a row the tier list does not have, so has no identity:
  * `gpt-6.2-sol` there is still GPT-6.2 Sol's `gpt-6-2-sol`.
  */
 export function modelRuleKey(model: string): string {
@@ -202,7 +202,7 @@ export function modelRuleKey(model: string): string {
   }
   id = id.toLowerCase().replace(/\[.*\]$/, '');
   id = id.slice(id.lastIndexOf('/') + 1);
-  return id.replace(/-(?:minimal|low|medium|high|xhigh|max)$/, '').replace(/(\d)\.(?=\d)/g, '$1-') || model;
+  return id.replace(/(\d)\.(?=\d)/g, '$1-') || model;
 }
 
 /** Model names in reading order, the numbers in them as numbers: GPT-5.6 Sol, GPT-6.1 Sol, GPT-6.2 Sol. */
