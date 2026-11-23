@@ -43,11 +43,10 @@ The rules it keeps, whoever asks:
     starts. The credential is never in an environment, a label or a log line, and the runner is
     given neither value in its environment; the channel's own labels name the generation only for
     its identity checks.
-  - Disk: a Docker local volume has no size limit of its own. Each data volume is measured with
-    Docker's own report every `diskCheckSeconds`; the container of a volume over its limit is
-    stopped (with the stop grace), and no container is created for a volume over its limit. The
-    pool's disk is the filesystem of `diskProbePath` (in Compose an empty volume of its own, which
-    Docker keeps beside the data volumes), or Docker's data root where this process can see it.
+  - Disk: with `volumeFilesystemRoot`, each data volume is a fixed-size ext4 filesystem.
+    Without it, Docker measures ordinary local volumes and the channel stops runners over the
+    limit. The pool measures the image backing disk in filesystem mode and Docker's volume disk
+    in measured mode.
 
 Run: `channel.py serve --config <file> [--disk-probe-path <dir>]` (channel.example.json). Python 3
 standard library only.
@@ -63,10 +62,12 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import signal
 import socket
 import socketserver
 import stat
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -89,6 +90,8 @@ UID_LABEL = LABEL + "uid"
 GENERATION_LABEL = LABEL + "generation"
 VOLUME_UID_LABEL = LABEL + "volume-uid"
 DISK_LIMIT_LABEL = LABEL + "disk-limit-bytes"
+FILESYSTEM_LABEL = LABEL + "volume-filesystem"
+MIN_FILESYSTEM_BYTES = 32 * 2 ** 20
 IMAGE_REVISION_LABEL = "org.opencontainers.image.revision"
 
 # \Z, not $: `$` also matches before a final newline, and "<uuid>\n" is not a runner's name.
@@ -189,7 +192,7 @@ def parse_config(value):
 
     known = {"schemaVersion", "instanceId", "listen", "tokenFile", "dockerSocket", "stateDir", "image", "network",
              "limits", "stopGraceSeconds", "diskCheckSeconds", "diskProbePath", "volumeLimitOverrides", "extraLabels",
-             "socketMode", "logMaxSize", "logMaxFiles", "allowVolumeRemoval"}
+             "socketMode", "logMaxSize", "logMaxFiles", "allowVolumeRemoval", "volumeFilesystemRoot"}
     for key in value:
         if key not in known:
             problems.append(f"{key} is not a configuration field")
@@ -212,6 +215,8 @@ def parse_config(value):
         problems.append(f"limits must give every one of {', '.join(limit_keys)}, and may give maxContainers, as a positive integer")
     if "diskProbePath" in value and not absolute(value["diskProbePath"]):
         problems.append("diskProbePath must be an absolute path")
+    if "volumeFilesystemRoot" in value and not absolute(value["volumeFilesystemRoot"]):
+        problems.append("volumeFilesystemRoot must be an absolute path")
     overrides = value.get("volumeLimitOverrides", {})
     if not isinstance(overrides, dict) or not all(
             runner_of_data_volume(k) and positive(v, 2 ** 53) for k, v in overrides.items()):
@@ -429,8 +434,8 @@ class Docker:
     def volumes(self, labels):
         return (self.call("GET", "/volumes", query=self.filters(label=labels)) or {}).get("Volumes") or []
 
-    def create_volume(self, name, labels):
-        return self.call("POST", "/volumes/create", body={"Name": name, "Driver": "local", "Labels": labels})
+    def create_volume(self, name, labels, options=None):
+        return self.call("POST", "/volumes/create", body={"Name": name, "Driver": "local", "Labels": labels, "DriverOpts": options or {}})
 
     def remove_volume(self, name):
         self.call("DELETE", f"/volumes/{urllib.parse.quote(name)}")
@@ -461,6 +466,14 @@ class Docker:
 
 # ── credentials: the runner credential of a generation, until its container starts ─────────────
 
+def sync_directory(path):
+    directory = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+
+
 def durable_write(path, value):
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=".channel-", dir=path.parent)
@@ -471,11 +484,7 @@ def durable_write(path, value):
             os.fsync(output.fileno())
         os.chmod(temporary, 0o600)
         os.replace(temporary, path)
-        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+        sync_directory(path.parent)
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
@@ -767,6 +776,94 @@ def server_url_field(value):
 
 # ── the channel ─────────────────────────────────────────────────────────────────────────────────
 
+class VolumeFilesystems:
+    """Host-side provisioning. Docker's local driver binds a directory inside the mounted ext4 image."""
+
+    def __init__(self, root, instance):
+        self.root = Path(root) / instance
+
+    def paths(self, uid):
+        if not UUID.fullmatch(uid or ""):
+            raise ValueError("a volume filesystem needs a valid volume UID")
+        return self.root / f"{uid}.ext4", self.root / uid
+
+    def options(self, uid):
+        _, mount = self.paths(uid)
+        # This source is absent when the image is unmounted. Docker cannot fall back to an empty directory.
+        return {"type": "none", "o": "bind", "device": str(mount / "data")}
+
+    @staticmethod
+    def run(*args):
+        result = subprocess.run(args, capture_output=True, text=True, timeout=120)
+        if result.returncode:
+            raise ValueError(f"{args[0]} failed: {result.stderr.strip() or result.stdout.strip()}")
+        return result.stdout.strip()
+
+    def prepare(self):
+        for tool in ("mkfs.ext4", "mount", "umount", "findmnt", "losetup"):
+            if not shutil.which(tool):
+                raise ValueError(f"volumeFilesystemRoot needs {tool} on the channel host")
+        self.root.mkdir(mode=0o700, exist_ok=True)
+
+    def create(self, uid, limit):
+        image, _ = self.paths(uid)
+        # Reserve the host blocks now so reaching the ext4 limit cannot trigger a backing-file write failure.
+        if not image.exists():
+            staged = image.with_suffix(".partial")
+            staged.unlink(missing_ok=True)
+            try:
+                with os.fdopen(os.open(staged, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as file:
+                    os.posix_fallocate(file.fileno(), 0, limit)
+                    self.run("mkfs.ext4", "-q", "-F", "-m", "0", "-E", "nodiscard", str(staged))
+                    os.fsync(file.fileno())
+                os.replace(staged, image)
+                sync_directory(self.root)
+            finally:
+                staged.unlink(missing_ok=True)
+        try:
+            self.mount(uid, limit, initialize=True)
+        except (ValueError, OSError, subprocess.TimeoutExpired):
+            # Docker has not seen the volume yet. Release a failed provision's host allocation.
+            try:
+                self.remove(uid)
+            except (ValueError, OSError, subprocess.TimeoutExpired) as error:
+                log(f"could not clean up unprovisioned volume UID {uid}: {error}")
+            raise
+
+    def mount(self, uid, limit, initialize=False):
+        image, mount = self.paths(uid)
+        if image.stat().st_size != limit:
+            raise ValueError(f"the image for volume UID {uid} does not match its recorded limit")
+        mount.mkdir(mode=0o700, exist_ok=True)
+        if not mount.is_mount():
+            self.run("mount", "-t", "ext4", "-o", "loop,nosuid,nodev", str(image), str(mount))
+        source = self.run("findmnt", "-n", "-o", "SOURCE", "--mountpoint", str(mount))
+        loops = self.run("losetup", "-j", str(image), "-n", "-O", "NAME").splitlines()
+        if source not in loops:
+            raise ValueError(f"the mount for volume UID {uid} does not use its own image")
+        data = mount / "data"
+        if initialize:
+            data.mkdir(mode=0o755, exist_ok=True)
+            sync_directory(mount)
+        elif not data.is_dir():
+            raise ValueError(f"the filesystem for volume UID {uid} has no data directory")
+
+    def remove(self, uid):
+        image, mount = self.paths(uid)
+        if mount.is_mount():
+            self.run("umount", str(mount))
+        if mount.exists():
+            mount.rmdir()
+        image.unlink(missing_ok=True)
+
+    def measure(self, uid, limit):
+        _, mount = self.paths(uid)
+        if mount.is_mount():
+            fs = os.statvfs(mount)
+            return limit - fs.f_bavail * fs.f_frsize
+        return None
+
+
 class Channel:
     def __init__(self, config, docker, token, clock=time.time, firewall_dir=None):
         self.config = config
@@ -795,6 +892,9 @@ class Channel:
         self.image_env = ()
         self.image_revision = None
         self.firewall_dir = Path(firewall_dir) if firewall_dir else None
+        self.pending_volumes = state / "pending-volumes"
+        root = config.get("volumeFilesystemRoot")
+        self.filesystems = VolumeFilesystems(root, config["instanceId"]) if root else None
 
     # ── start-up ────────────────────────────────────────────────────────────────────────────────
 
@@ -810,11 +910,11 @@ class Channel:
         if engine and int(engine.group(1)) < SUBPATH_ENGINE:
             raise ValueError(f"Docker {info.get('ServerVersion')} cannot mount a volume's subdirectory, which runners' /tmp is: "
                              f"this channel needs Docker {SUBPATH_ENGINE} or later")
-        probe = self.config.get("diskProbePath")
+        probe = None if self.filesystems else self.config.get("diskProbePath")
         if probe and not os.path.isdir(probe):
             raise ValueError(f"the disk probe path {probe} is not a directory: the storage budget would measure nothing")
         root = info.get("DockerRootDir")
-        if not probe and not (root and os.path.isdir(root)):
+        if not self.filesystems and not probe and not (root and os.path.isdir(root)):
             log(f"warning: Docker's data root {root} is not visible here and no disk probe path is set: the storage budget "
                 f"measures the disk under {self.config['stateDir']}, which is right only if Docker's volumes are on it too")
         image = self.docker.image(self.config["image"])
@@ -838,7 +938,45 @@ class Channel:
         }
         if self.network_facts["interContainer"]:
             log(f"warning: network {self.config['network']} lets containers reach each other; create it with com.docker.network.bridge.enable_icc=false")
+        self.prepare_data_volumes()
         self.finish_interrupted_creates()
+
+    def data_volumes(self):
+        return self.docker.volumes([f"{INSTANCE_LABEL}={self.config['instanceId']}", f"{KIND_LABEL}=data"])
+
+    def prepare_data_volumes(self):
+        if self.filesystems:
+            self.filesystems.prepare()
+        for volume in self.data_volumes():
+            self.check_volume_filesystem(volume)
+        if self.filesystems:
+            log(f"volume limit mode: filesystem (ext4 images under {self.filesystems.root})")
+        else:
+            log("volume limit mode: measured (no volumeFilesystemRoot configured; a volume over its limit stops its runner)")
+
+    def check_volume_filesystem(self, volume):
+        labels = volume.get("Labels") or {}
+        name = volume["Name"]
+        if not self.filesystems and FILESYSTEM_LABEL not in labels:
+            return
+        if not self.filesystems or labels.get(FILESYSTEM_LABEL) != "ext4":
+            raise ValueError(f"volume {name} does not match the host's volume limit mode; see the Docker volume migration runbook")
+        uid = labels.get(UID_LABEL)
+        if volume.get("Driver") != "local" or volume.get("Options") != self.filesystems.options(uid):
+            raise ValueError(f"volume {name} has unexpected filesystem driver options")
+        limit = self.volume_limit(name, labels)
+        if limit is None or limit < MIN_FILESYSTEM_BYTES:
+            raise ValueError(f"volume {name} has no valid filesystem limit")
+        try:
+            self.filesystems.mount(uid, limit)
+        except subprocess.TimeoutExpired as error:
+            raise ValueError(f"mounting the filesystem of {name} timed out") from error
+
+    def require_volume_filesystem(self, volume):
+        try:
+            self.check_volume_filesystem(volume)
+        except (ValueError, OSError) as error:
+            raise Refused(503, "VOLUME_FILESYSTEM_UNAVAILABLE", str(error)) from error
 
     def finish_interrupted_creates(self):
         """A container this channel created and never started (it stopped in between) is started now, or left
@@ -912,16 +1050,25 @@ class Channel:
         return {**self.config["extraLabels"], INSTANCE_LABEL: self.config["instanceId"], KIND_LABEL: kind}
 
     def volume_limit(self, name, labels):
-        override = self.config["volumeLimitOverrides"].get(name)
+        override = self.config["volumeLimitOverrides"].get(name) if FILESYSTEM_LABEL not in labels else None
         if override:
             return override
-        said = (labels or {}).get(DISK_LIMIT_LABEL, "")
+        said = labels.get(DISK_LIMIT_LABEL, "")
         return int(said) if said.isdigit() else None
 
     # ── disk usage ──────────────────────────────────────────────────────────────────────────────
 
     def measure(self):
-        sizes = self.docker.volume_usage()
+        if self.filesystems:
+            sizes = {}
+            for volume in self.data_volumes():
+                labels = volume.get("Labels") or {}
+                if labels.get(FILESYSTEM_LABEL) == "ext4":
+                    used = self.filesystems.measure(labels[UID_LABEL], self.volume_limit(volume["Name"], labels))
+                    if used is not None:
+                        sizes[volume["Name"]] = used
+        else:
+            sizes = self.docker.volume_usage()
         with self._usage_lock:
             self._usage, self._usage_at = sizes, self.clock()
         return sizes
@@ -944,11 +1091,15 @@ class Channel:
             return None
 
     def enforce_disk_limits(self):
-        """One check: the container of every data volume over its limit is stopped, and why is kept."""
+        """Keep usage current. Stop an over-limit runner only in measured mode."""
         sizes = self.measure()
+        if self.filesystems:
+            return []
         evicted = []
-        for volume in self.docker.volumes([f"{INSTANCE_LABEL}={self.config['instanceId']}", f"{KIND_LABEL}=data"]):
+        for volume in self.data_volumes():
             name, labels = volume["Name"], volume.get("Labels") or {}
+            if FILESYSTEM_LABEL in labels:
+                continue
             limit, used = self.volume_limit(name, labels), sizes.get(name)
             runner_id = runner_of_data_volume(name)
             if limit is None or used is None or used <= limit or not runner_id:
@@ -1042,17 +1193,41 @@ class Channel:
             raise Refused(400, "NAME_REFUSED", "a data volume is named after the runner it belongs to")
         limit = count_field(body, "limitBytes", self.config["limits"]["maxVolumeBytes"])
         with self.lock(runner_id):
+            pending = self.pending_volumes / f"{runner_id}.json"
             found = self.docker.volume(name)
             if found:
                 if not self.ours(found.get("Labels")) or (found.get("Labels") or {}).get(KIND_LABEL) != "data":
                     raise Refused(409, "NOT_MANAGED", f"a volume named {name} exists without this instance's data label; it is never adopted")
+                self.require_volume_filesystem(found)
+                pending.unlink(missing_ok=True)
                 return self.volume_view(found)  # created once: the caller checks whose it is
+            uid = str(uuid.uuid4())
             labels = {**self.base_labels("data"), OWNER_LABEL: owner_id, RUNNER_LABEL: runner_id,
-                      UID_LABEL: str(uuid.uuid4()), DISK_LIMIT_LABEL: str(limit)}
-            self.docker.create_volume(name, labels)
+                      UID_LABEL: uid, DISK_LIMIT_LABEL: str(limit)}
+            if self.filesystems:
+                limit = self.volume_limit(name, labels)
+                if limit < MIN_FILESYSTEM_BYTES:
+                    raise Refused(400, "LIMIT_REFUSED", f"an ext4 data volume needs at least {MIN_FILESYSTEM_BYTES} bytes")
+                try:
+                    # A retry after a lost Docker reply or channel crash must reuse the same image.
+                    record = read_private_json(pending)
+                    if record is None:
+                        durable_write(pending, {"uid": uid, "limit": limit, "ownerId": owner_id})
+                    else:
+                        if record["ownerId"] != owner_id:
+                            raise ValueError(f"volume {name} has a pending filesystem for another owner")
+                        uid, limit = record["uid"], record["limit"]
+                    self.filesystems.create(uid, limit)
+                except (ValueError, OSError, subprocess.TimeoutExpired) as error:
+                    raise Refused(503, "VOLUME_FILESYSTEM_UNAVAILABLE", f"could not provision the filesystem for {name}: {error}") from error
+                labels.update({FILESYSTEM_LABEL: "ext4", UID_LABEL: uid, DISK_LIMIT_LABEL: str(limit)})
+                self.docker.create_volume(name, labels, self.filesystems.options(uid))
+            else:
+                self.docker.create_volume(name, labels)
             created = self.docker.volume(name)
-            if not created or not self.ours(created.get("Labels")):
+            if not created or (created.get("Labels") or {}).get(UID_LABEL) != uid or not self.ours(created.get("Labels")):
                 raise Refused(409, "NOT_MANAGED", f"a volume named {name} appeared without this instance's label")
+            pending.unlink(missing_ok=True)
             log(f"volume {name} created")
             return self.volume_view(created)
 
@@ -1085,7 +1260,17 @@ class Channel:
                 raise Refused(409, "UID_MISMATCH", f"volume {name} is not the one with UID {uid}")
             if self.holders(name):
                 raise Refused(409, "VOLUME_IN_USE", f"volume {name} is still referred to by a container")
+            if self.filesystems:
+                stored = self.docker.volume(name)
+                if not stored or (stored.get("Labels") or {}).get(UID_LABEL) != uid:
+                    raise Refused(409, "UID_MISMATCH", f"{name} changed before removal")
+                self.require_volume_filesystem(stored)
             self.docker.remove_volume(name)
+            if self.filesystems:
+                try:
+                    self.filesystems.remove(uid)
+                except (ValueError, OSError, subprocess.TimeoutExpired) as error:
+                    log(f"volume {name} removed from Docker; its filesystem for UID {uid} needs manual cleanup: {error}")
             log(f"volume {name} removed")
 
     # ── credentials ─────────────────────────────────────────────────────────────────────────────
@@ -1242,9 +1427,11 @@ class Channel:
         if holders:
             raise Refused(409, "VOLUME_IN_USE", f"{volume_name} is still referred to by {len(holders)} container(s); a second container never mounts it")
         credential = self.matching_credential(body)
-        limit, used = self.volume_limit(volume_name, labels), self.usage(volume_name)
-        if limit is not None and used is not None and used > limit:
-            raise Refused(409, "VOLUME_OVER_LIMIT", f"{volume_name} holds {used} bytes, over its {limit}-byte limit; no container is started on it")
+        self.require_volume_filesystem(volume)
+        if not self.filesystems:
+            limit, used = self.volume_limit(volume_name, labels), self.usage(volume_name)
+            if limit is not None and used is not None and used > limit:
+                raise Refused(409, "VOLUME_OVER_LIMIT", f"{volume_name} holds {used} bytes, over its {limit}-byte limit; no container is started on it")
         boot = boot_volume_name(runner_id, body["generation"])
         existing_boot = self.docker.volume(boot)
         if existing_boot and not self.ours(existing_boot.get("Labels")):
@@ -1375,22 +1562,25 @@ class Channel:
 
     def host(self):
         info = self.docker.info()
-        probe = self.config.get("diskProbePath")
+        probe = self.filesystems.root if self.filesystems else self.config.get("diskProbePath")
         if not probe:
             root = info.get("DockerRootDir")
             probe = root if root and os.path.isdir(root) else self.config["stateDir"]
         disk = None
         try:
             fs = os.statvfs(probe)
-            disk = {"path": probe, "totalBytes": fs.f_blocks * fs.f_frsize, "freeBytes": fs.f_bavail * fs.f_frsize}
+            disk = {"path": str(probe), "totalBytes": fs.f_blocks * fs.f_frsize, "freeBytes": fs.f_bavail * fs.f_frsize}
         except OSError:
             pass
         sizes = self.measure()
-        managed = [v["Name"] for v in self.docker.volumes([f"{INSTANCE_LABEL}={self.config['instanceId']}", f"{KIND_LABEL}=data"])]
+        volumes = self.data_volumes()
+        # Host allocation and volume usage differ when the image already reserves all its bytes.
+        allocated = (sum(self.volume_limit(v["Name"], v["Labels"]) for v in volumes) if self.filesystems
+                     else sum(sizes.get(v["Name"], 0) for v in volumes))
         return {
             "name": info.get("Name"), "cpus": info.get("NCPU"), "memoryBytes": info.get("MemTotal"),
             "serverVersion": info.get("ServerVersion"), "disk": disk,
-            "managedVolumeBytes": sum(sizes.get(name, 0) for name in managed),
+            "managedVolumeBytes": allocated,
         }
 
     def info(self):
@@ -1399,6 +1589,7 @@ class Channel:
             "imageRevision": self.image_revision,
             "network": self.network_facts, "limits": {**self.config["limits"], "maxContainers": self.max_containers},
             "allowVolumeRemoval": self.config["allowVolumeRemoval"], "stopGraceSeconds": self.config["stopGraceSeconds"],
+            "volumeLimitMode": "filesystem" if self.filesystems else "measured",
             "diskCheckSeconds": self.config["diskCheckSeconds"], "host": self.host(),
         }
 

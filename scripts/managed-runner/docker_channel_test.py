@@ -31,6 +31,7 @@ import tarfile
 import tempfile
 import threading
 import unittest
+from unittest.mock import Mock
 import urllib.parse
 import uuid
 
@@ -95,10 +96,11 @@ class FakeDocker:
     def volumes(self, labels):
         return [copy.deepcopy(v) for v in self.volumes_by_name.values() if self.matches(v.get("Labels"), labels)]
 
-    def create_volume(self, name, labels):
+    def create_volume(self, name, labels, options=None):
         self.calls.append(("create_volume", name))
         # Docker answers an existing name with the volume as it is.
-        self.volumes_by_name.setdefault(name, {"Name": name, "Driver": "local", "Labels": dict(labels), "CreatedAt": "2026-10-17T00:00:00Z"})
+        self.volumes_by_name.setdefault(name, {"Name": name, "Driver": "local", "Labels": dict(labels),
+                                               "Options": options, "CreatedAt": "2026-10-17T00:00:00Z"})
         return copy.deepcopy(self.volumes_by_name[name])
 
     def remove_volume(self, name):
@@ -1075,7 +1077,84 @@ class ContainerLimitTest(ChannelFixture):
 
 
 class DiskLimitTest(ChannelFixture):
+    def filesystem_channel(self):
+        config = self.ch.parse_config({**self.config, "volumeFilesystemRoot": self.scratch.name, "allowVolumeRemoval": True})
+        channel = self.ch.Channel(config, self.docker, TOKEN)
+        # Keep the real driver options and report shape. The real Docker repro covers mkfs and mount.
+        channel.filesystems.root.mkdir(exist_ok=True)
+        channel.filesystems.create = Mock()
+        channel.filesystems.mount = Mock()
+        channel.filesystems.measure = Mock(return_value=20 * 2 ** 30)
+        channel.filesystems.remove = Mock()
+        channel.filesystems.prepare = Mock()
+        return channel
+
+    def test_a_filesystem_limited_volume_is_provisioned_once_and_never_evicted(self):
+        self.server.channel = self.channel = self.filesystem_channel()
+        said = []
+        self.ch.log = said.append
+        self.channel.prepare()
+        limit = 20 * 2 ** 30
+        volume = self.volume(limit=limit)
+        name, data, uid = f"mr-{RUNNER}", f"mr-data-{RUNNER}", volume["uid"]
+        self.assertEqual(self.volume(limit=limit)["uid"], uid)
+        self.channel.filesystems.create.assert_called_once_with(uid, limit)
+        stored = self.docker.volume(data)
+        self.assertEqual(stored["Options"], self.channel.filesystems.options(uid))
+        self.assertEqual(stored["Labels"][self.ch.FILESYSTEM_LABEL], "ext4")
+        self.docker.sizes[data] = limit + 1  # A Docker apparent-size measurement is irrelevant to this filesystem.
+        self.credential()
+        self.assertEqual(self.call("POST", "/v1/containers", self.request(uid))[0], 201)
+        self.assertEqual(self.channel.enforce_disk_limits(), [])
+        view = self.call("GET", f"/v1/containers/{name}")[1]
+        self.assertEqual((view["status"], view["evicted"]), ("running", None))
+        info = self.call("GET", "/v1/info")[1]
+        self.assertEqual(info["volumeLimitMode"], "filesystem")
+        self.assertEqual(info["host"]["managedVolumeBytes"], limit)
+        self.assertEqual(info["host"]["disk"]["path"], str(self.channel.filesystems.root))
+        self.assertTrue(any("volume limit mode: filesystem" in line for line in said))
+        self.assertNotIn(("df",), self.docker.calls)
+        self.assertEqual(self.call("GET", f"/v1/volumes/{data}")[1]["usageBytes"], limit)
+        self.assertEqual(self.call("DELETE", f"/v1/volumes/{data}?uid={uid}")[0], 409)
+        self.channel.filesystems.remove.assert_not_called()
+        self.docker.exit(name)
+        self.assertEqual(self.call("DELETE", f"/v1/containers/{name}?uid={view['uid']}")[0], 204)
+        self.assertEqual(self.call("DELETE", f"/v1/volumes/{data}?uid={uid}")[0], 204)
+        self.channel.filesystems.remove.assert_called_once_with(uid)
+
+    def test_a_filesystem_volume_with_a_missing_image_cannot_start(self):
+        self.server.channel = self.channel = self.filesystem_channel()
+        self.channel.prepare()
+        volume = self.volume()
+        self.channel.filesystems.mount.side_effect = FileNotFoundError("volume image is missing")
+        self.credential()
+        status, body = self.call("POST", "/v1/containers", self.request(volume["uid"]))
+        self.assertEqual((status, body["code"]), (503, "VOLUME_FILESYSTEM_UNAVAILABLE"))
+        self.assertFalse(self.docker.containers_by_name)
+
+    def test_a_failed_docker_volume_create_can_retry_the_same_image(self):
+        self.server.channel = self.channel = self.filesystem_channel()
+        self.channel.prepare()
+        create = self.docker.create_volume
+        self.docker.create_volume = Mock(side_effect=self.ch.DockerError(503, "try again"))
+        name = f"mr-data-{RUNNER}"
+        status, body = self.call("PUT", f"/v1/volumes/{name}", {"ownerId": OWNER, "runnerId": RUNNER, "limitBytes": 20 * 2 ** 30})
+        self.assertEqual((status, body["code"]), (502, "DOCKER_ERROR"))
+        uid = self.channel.filesystems.create.call_args.args[0]
+        self.docker.create_volume = create
+        restarted = self.filesystem_channel()
+        restarted.prepare()
+        self.server.channel = self.channel = restarted
+        self.assertEqual(self.volume(limit=20 * 2 ** 30)["uid"], uid)
+        restarted.filesystems.create.assert_called_once_with(uid, 20 * 2 ** 30)
+
+    def test_filesystem_mode_refuses_an_unmigrated_volume(self):
+        self.volume()
+        with self.assertRaisesRegex(ValueError, "does not match the host's volume limit mode"):
+            self.filesystem_channel().prepare()
+
     def test_a_container_over_its_volume_limit_is_stopped_and_not_started_again(self):
+        self.assertEqual(self.call("GET", "/v1/info")[1]["volumeLimitMode"], "measured")
         volume, created = self.running_container()
         name, data = f"mr-{RUNNER}", f"mr-data-{RUNNER}"
         self.docker.sizes[data] = 10 * 2 ** 30
