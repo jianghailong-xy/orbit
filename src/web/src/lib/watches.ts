@@ -414,7 +414,7 @@ export const SESSION_TARGET_WORDS: Record<string, string> = {
   RUNNING: 'Running',
   AWAITING_INPUT: 'Waiting for your reply',
   INTERRUPTED: 'Interrupted',
-  SUCCEEDED: 'Succeeded',
+  SUCCEEDED: 'Finished',
   FAILED: 'Failed',
   ENDED: 'Ended',
 };

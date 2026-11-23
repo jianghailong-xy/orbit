@@ -9,8 +9,7 @@ public enum NotificationEvent: Equatable, Sendable {
     /// A session's pending-approval count went 0 → >0 — the agent is blocked on you. A project ready
     /// to start is not counted (see `SessionDelta.diff`).
     case needsApproval(sessionID: String, title: String, count: Int)
-    /// A previously-live session reached a terminal state (status nil = it simply left the
-    /// Open list, so the exact terminal status is unknown).
+    /// A run finished or failed (status nil is an unclassified departure on an older server).
     case finished(sessionID: String, title: String, status: RunStatus?)
     /// A NOTIFY_USER watch matched: a condition you asked to be told about held. The generation is
     /// what, with the watch's id, names that one Match.
@@ -26,7 +25,8 @@ public enum SessionDelta {
     /// launch).
     public static func diff(previous: [Session], current: [Session],
                             focusedSessionID: String? = nil,
-                            filed: Set<String> = []) -> [NotificationEvent] {
+                            filed: Set<String> = [],
+                            finishedDepartures: Set<String> = []) -> [NotificationEvent] {
         let prevByID = Dictionary(previous.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let curByID = Dictionary(current.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let silent = filed.union([focusedSessionID].compactMap { $0 })
@@ -45,15 +45,18 @@ public enum SessionDelta {
             // retry for is an interruption it is about to undo by itself. `prev.retryAt` is what
             // carries the give-up, which moves no status at all — the row stays FAILED and only the
             // armed retry clearing turns it into the outcome worth announcing.
-            if let prev = prevByID[s.id], prev.effectiveRunStatus.isLive || prev.retryAt != nil,
-               isSettled(s) {
+            if let prev = prevByID[s.id], wasHeld(prev) || prev.retryAt != nil,
+               let outcome = settledOutcome(s) {
                 events.append(.finished(sessionID: s.id, title: s.title ?? "Session",
-                                        status: s.effectiveRunStatus))
+                                        status: outcome))
             }
         }
-        // Sessions that were live and dropped out of Open → finished (status unknown).
-        for p in previous where p.effectiveRunStatus.isLive && curByID[p.id] == nil && !silent.contains(p.id) {
-            events.append(.finished(sessionID: p.id, title: p.title ?? "Session", status: nil))
+        for p in previous where curByID[p.id] == nil && !silent.contains(p.id) {
+            if finishedDepartures.contains(p.id) && (wasHeld(p) || p.retryAt != nil) {
+                events.append(.finished(sessionID: p.id, title: p.title ?? "Session", status: .succeeded))
+            } else if p.released == nil && p.effectiveRunStatus.isLive {
+                events.append(.finished(sessionID: p.id, title: p.title ?? "Session", status: nil))
+            }
         }
         return events
     }
@@ -75,13 +78,23 @@ public enum SessionDelta {
     /// "not task_done" is the only read of it that holds.
     public static func announcesFinish(endReason: String?) -> Bool { endReason == "task_done" }
 
+    private static func wasHeld(_ s: Session) -> Bool {
+        s.released.map { !$0 } ?? s.effectiveRunStatus.isLive
+    }
+
     /// The run is over AND nothing is going to restart it — the only reading of a row that is an
     /// outcome. A quota-killed or 529'd turn settles as FAILED with `retryAt` armed, and the server
     /// re-sends the same message when the provider is back (`AutoRetryService`), so announcing that
     /// reports a failure the user never had. An older server sends no `retryAt` at all, which reads
     /// as "nothing armed" and keeps the pre-retry behaviour.
-    private static func isSettled(_ s: Session) -> Bool {
-        s.effectiveRunStatus.isTerminal && s.retryAt == nil
+    private static func settledOutcome(_ s: Session) -> RunStatus? {
+        guard s.retryAt == nil else { return nil }
+        if s.released == nil { return s.effectiveRunStatus.isTerminal ? s.effectiveRunStatus : nil }
+        switch s.releasedRunState {
+        case .succeeded: return .succeeded
+        case .failed: return .failed
+        default: return nil
+        }
     }
 }
 
