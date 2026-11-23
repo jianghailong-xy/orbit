@@ -658,7 +658,8 @@ test('§4.6: a session\'s Merge lands through its pull request', { skip: !URL_, 
     data: {
       id: sessionId, ownerId, creatorId: ownerId, workspaceId: cloud.workspaceId, assignedRunnerId: cloud.runnerId,
       title: 'Tidy the settings page', prompt: 'tidy it', branch: `orbit/tidy-${sessionId.slice(0, 6)}`, isolationStatus: 'worktree',
-      status: RunStatus.SUCCEEDED, mergeStatus: 'pending', mergeOperationId: randomUUID(), mergeTarget: 'main',
+      status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 60_000),
+      mergeStatus: 'pending', mergeOperationId: randomUUID(), mergeTarget: 'main',
     },
   });
 
