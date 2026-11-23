@@ -1317,6 +1317,8 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
         val inUse = RunnerPage.inUseSessions(runner.obj("accountRemove"), engine, line.id)
         if (inUse.isNotEmpty()) AccountInUse(engine, inUse, openSession)
         else removal?.second?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.red) }
+        // A refusal the provider stated, or runs that would not start: why Orbit passes over this account, with Check again.
+        runner.text("id").takeIf { it.isNotEmpty() }?.let { AccountHealthLine(api, it, engine, line.id) }
         if (signingIn) RunnerSignInCard(api, runner, engine, account = line.signInAccount, autoStart = true, onClose = close, onSignedIn = landed)
         else {
             // Paused is the row's state; Resume and a new duration are its menu's.

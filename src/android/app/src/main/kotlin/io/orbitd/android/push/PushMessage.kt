@@ -38,6 +38,8 @@ data class PushPayload(
     /** `condition`: the condition that cannot be read (docs/condition-triggers-design.md §5.3); its Waiting on you item is
      * [ownerRequestId] when it filed one. */
     val conditionId: String? = null,
+    /** `account-needs-action`: the account_health row Check again takes. A key or pool login names no runner. */
+    val accountHealthId: String? = null,
 ) {
     val isOwnerItem get() = kind in ownerItemKinds
     val isReminder get() = kind == "approval" || isOwnerItem
@@ -60,9 +62,9 @@ data class PushPayload(
         kind == SCHEDULE -> sessionId?.let { "orbit-session:$it" } ?: scheduleId?.let { "orbit://schedule/$it" }
         // A condition that cannot be read: the conversation it came from, which draws its card, else the card in Waiting on you.
         kind == CONDITION -> sessionId?.let { "orbit-session:$it" } ?: ownerRequestId?.let { "orbit://owner-request/$it" }
-        // About a machine: its sign-in lapsed, its Claude connection to Anthropic is in a region Anthropic does not offer Claude in,
+        // About a machine: an account on it the provider refused (a key or pool login has no machine: no link), its sign-in lapsed, its Claude connection to Anthropic is in a region Anthropic does not offer Claude in,
         // or it drains for an update with the owner's work waiting on it.
-        kind == "engine-signed-out" || kind == "claude-region-blocked" || kind == "runner-updating" -> runnerId?.let { "orbit://runner/$it" }
+        kind == "engine-signed-out" || kind == "claude-region-blocked" || kind == "runner-updating" || kind == ACCOUNT_NEEDS_ACTION -> runnerId?.let { "orbit://runner/$it" }
         // A merge into main waiting on the owner opens its project's sessions page, where its card is, as that project's root
         // (iOS 6b4bef713 `Notifications.intent`). Every other owner item opens the conversation, and so does a merge naming no project.
         kind == "approve-merge-to-main" && projectId != null -> "orbit://project/$projectId"
@@ -88,6 +90,8 @@ data class PushPayload(
         const val SCHEDULE = "schedule"
         /** A condition that cannot be read (apiserver `notifyCondition`). A condition that fires rings as its run's `schedule` push. */
         const val CONDITION = "condition"
+        /** An account the provider refused, or that failed to start runs three times (docs/account-health-owner-surface-contract.md §1). */
+        const val ACCOUNT_NEEDS_ACTION = "account-needs-action"
     }
 }
 
@@ -107,7 +111,7 @@ data class PushMessage(
             "engine-signed-out", "confirmation-problems", "watch-matched", "wiki-review-mode-manual",
             "wiki-review-mode-tiered", "wiki-maintenance-failing", "loop-missed", "wakeup-dropped", "claude-region-blocked",
             "runner-updating", PushPayload.OWNER_REQUEST, PushPayload.TERMINAL_LOGIN, PushPayload.CROSSING_REQUEST,
-            PushPayload.CONFIRMATION_RAISED, PushPayload.SCHEDULE, PushPayload.CONDITION)
+            PushPayload.CONFIRMATION_RAISED, PushPayload.SCHEDULE, PushPayload.CONDITION, PushPayload.ACCOUNT_NEEDS_ACTION)
 
         /** No unknown version, malformed identifier, or partial route can become a notification. */
         fun parse(data: Map<String, String>): PushMessage? = try {
@@ -142,7 +146,7 @@ data class PushMessage(
                 id("taskID"), id("recordID"), id("runnerID"), string("engine"), id("watchID"),
                 number("generation"), id("wikiSpaceID"), ownerRequestId = id("ownerRequestID"), ownerRequestKind = string("ownerRequestKind"),
                 terminalLoginId = id("terminalLoginID"), handoffId = id("handoffID"), scheduleId = id("scheduleID"),
-                scheduleKind = string("scheduleKind"), conditionId = id("conditionID"))
+                scheduleKind = string("scheduleKind"), conditionId = id("conditionID"), accountHealthId = string("accountHealthID"))
             if (type == PushType.ALERT) {
                 require(!payload.title.isNullOrBlank() && payload.body != null && payload.kind in kinds)
                 when (payload.kind) {
@@ -162,6 +166,8 @@ data class PushMessage(
                     PushPayload.SCHEDULE -> require(payload.scheduleId != null)
                     // A condition that cannot be read names the condition; its session and item only when it has them.
                     PushPayload.CONDITION -> require(payload.conditionId != null)
+                    // An account row: the health row Check again takes; the machine only when the account is a machine's sign-in.
+                    PushPayload.ACCOUNT_NEEDS_ACTION -> require(!payload.accountHealthId.isNullOrBlank())
                     "confirmation-problems" -> require(payload.sessionId != null && payload.taskId != null && payload.recordId != null)
                     // A confirmed region flip is about its runner's Claude Code, as a sign-out is about its runner's engine.
                     "engine-signed-out", "claude-region-blocked" -> require(payload.runnerId != null && !payload.engine.isNullOrBlank())
