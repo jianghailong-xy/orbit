@@ -173,6 +173,10 @@ struct UserTurnRow: View {
             RunNoticeCardView(card: card, told: told(b), ts: b.ts,
                               undelivered: undelivered, onCancelQueued: cancel)
                 .orbitCardWidth()
+        } else if let card = LandingFix.parse(clientTurnId: b.clientTurnId, text: b.text) {
+            // A failed landing handed to the task's own session (revision 42, §12.5 W6; board
+            // landing-fix-own-session 02 b): Orbit's turn, read back from its own words into the card.
+            LandingFixCardView(card: card, ts: b.ts, undelivered: undelivered, onCancelQueued: cancel)
         } else if let card = b.sessionOpening {
             // The opening of a session Orbit opened with a brief of its own: one row saying why.
             SessionOpeningRowView(card: card, text: b.text,

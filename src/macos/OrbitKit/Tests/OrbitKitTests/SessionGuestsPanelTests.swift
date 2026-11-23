@@ -26,8 +26,10 @@ final class SessionGuestsPanelTests: XCTestCase {
         for mode in ["default", "plan", "acceptEdits"] {
             XCTAssertFalse(SessionGuestsCopy.consequence(runnerName: "x", permissionMode: mode).warns, mode)
         }
-        // A session that names no mode runs in Default.
-        XCTAssertEqual(SessionGuestContext(runnerName: "x", permissionMode: nil).permissionMode, "default")
+        // A session that names no mode runs in the account's, else Auto — and so it warns.
+        XCTAssertEqual(SessionGuestContext(runnerName: "x", permissionMode: nil).permissionMode, "auto")
+        XCTAssertEqual(SessionGuestContext(runnerName: "x", permissionMode: nil, accountDefault: "plan").permissionMode, "plan")
+        XCTAssertEqual(SessionGuestContext(runnerName: "x", permissionMode: "default", accountDefault: "auto").permissionMode, "default")
     }
 
     func testEachGuestSaysTodaysMessagesOrNotOpenedYet() {

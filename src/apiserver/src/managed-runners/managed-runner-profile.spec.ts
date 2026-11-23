@@ -65,6 +65,22 @@ test('the drive is optional, and its Secrets never share the runner namespace', 
   refused((p) => (p.files = {}), /files\.namespace must be a non-empty string/);
 });
 
+test('the current image\'s revision and release version are optional, and checked when given', () => {
+  const build = (result: ReturnType<typeof withChange>) => {
+    assert.equal(result.ok, true);
+    const runner = (result.ok ? result.profile.runner : {}) as { imageRevision?: string; imageVersion?: string };
+    return [runner.imageRevision, runner.imageVersion];
+  };
+  assert.deepEqual(build(withChange((p) => Object.assign(p.runner, { imageRevision: 'a800ca3973', imageVersion: '0.1.261-beta.84' }))),
+    ['a800ca3973', '0.1.261-beta.84']);
+  assert.deepEqual(build(withChange(() => undefined)), [undefined, undefined]);
+  for (const version of ['v0.1.261-beta.84', 'managed-a800ca3973', '0.1', '']) {
+    const result = withChange((p) => (p.runner.imageVersion = version));
+    assert.equal(result.ok, false, version);
+    assert.match(JSON.stringify(result), /runner\.imageVersion/, version);
+  }
+});
+
 test('http to a loopback Orbit server is allowed for a local fake control plane, as the image allows it', () => {
   assert.equal(withChange((p) => (p.runner.serverUrl = 'http://127.0.0.1:3000')).ok, true);
 });

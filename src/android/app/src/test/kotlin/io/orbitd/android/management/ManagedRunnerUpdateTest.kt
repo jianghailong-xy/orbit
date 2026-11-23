@@ -83,6 +83,15 @@ class ManagedRunnerUpdateTest {
         assertFalse(ManagedRunnerUpdateLogic.showsDot(s))
     }
 
+    @Test fun restarting_comes_from_the_server_alone_never_from_a_press_remembered() {
+        // An Update Now noted with one interrupted turn, which the server did not take (or which ended unwatched): the
+        // status says available, so the card is Available with its button, not Restarting (production, 2026-11-23).
+        val card = req(ManagedRunnerUpdateLogic.card(status(ManagedUpdate(running, current, "available")), pendingTurns = 1, zone = utc))
+        assertEquals("available", card.phase)
+        assertTrue(card.canUpdateNow)
+        assertFalse(card.body.contains("interrupted"))
+    }
+
     @Test fun updated_card_follows_a_finished_restart_for_a_day() {
         val before = status(ManagedUpdate(running, current, "updating"))
         val after = status(null)
@@ -107,5 +116,26 @@ class ManagedRunnerUpdateTest {
         ManagedRunnerRunningBuild.build = null
         assertEquals("Kept up to date by Orbit", RunnerPage.versionLine("managed-95884b1", managed = true))
         assertEquals("Kept up to date by Orbit", RunnerPage.versionLine(null, managed = true))
+    }
+
+    @Test fun release_versions_name_the_card_the_confirmation_and_the_version_line() {
+        val from = ManagedBuild("", null, "0.1.261-beta.82")
+        val to = ManagedBuild("1a2b3c4dddd", "2026-11-22T10:00:00Z", "0.1.261-beta.83")
+        val available = ManagedRunnerUpdateLogic.card(status(ManagedUpdate(from, to, "available")), zone = utc)!!
+        assertEquals("0.1.261-beta.83 is available", available.title)
+        val restarting = ManagedRunnerUpdateLogic.card(status(ManagedUpdate(from, to, "updating")), zone = utc)!!
+        assertEquals("Restarting on 0.1.261-beta.83…", restarting.title)
+        val updated = ManagedRunnerUpdateLogic.card(status(null), updated = io.orbitd.android.composer.ManagedUpdated(to, now), nowMs = now, zone = utc)!!
+        assertEquals("Updated to 0.1.261-beta.83", updated.title)
+        val c = ManagedRunnerUpdateLogic.confirmation(ManagedBusy(emptyList(), 0), to, now, utc)
+        assertTrue(c.body.contains("restarts on 0.1.261-beta.83"))
+        assertEquals("v0.1.261-beta.82", RunnerPage.versionLine("0.1.261-beta.82", managed = true))
+    }
+
+    @Test fun an_update_without_a_version_keeps_the_build_wording() {
+        val card = ManagedRunnerUpdateLogic.card(status(ManagedUpdate(running, current, "available")), zone = utc)!!
+        assertEquals("The Nov 22 build is available", card.title)
+        ManagedRunnerRunningBuild.build = running
+        assertTrue(RunnerPage.versionLine("managed-95884b1aaaa", managed = true)!!.startsWith("Build 95884b1"))
     }
 }

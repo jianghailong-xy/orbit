@@ -591,7 +591,7 @@ internal fun ModelChip(name: String, effort: String, smart: Boolean, enabled: Bo
 
 /** The permission mode the toolbar names: the one [detail] holds, else the one a session that names none runs in. */
 internal fun shownPermissionMode(detail: JsonObject, engine: String): String =
-    detail.text("permissionMode")?.takeIf { it.isNotEmpty() } ?: CursorRuntime.fallbackMode(engine)
+    detail.text("permissionMode")?.takeIf { it.isNotEmpty() } ?: CursorRuntime.unsetMode(engine)
 
 /**
  * The toolbar's permission mode menu (iOS `modeMenu`): the modes the engine offers for this model, ✓ on the one in use, each written

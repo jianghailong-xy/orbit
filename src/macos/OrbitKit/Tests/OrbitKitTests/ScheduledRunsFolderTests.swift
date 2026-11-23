@@ -4,16 +4,17 @@ import XCTest
 final class ScheduledRunsFolderTests: XCTestCase {
     private func session(_ id: String, workspace: String = "w1", source: String? = "SCHEDULE",
                          status: RunStatus = .awaitingInput, approvals: Int = 0,
-                         waitingKind: SessionWaitingKind? = nil, folderID: String? = nil) -> Session {
+                         waitingKind: SessionWaitingKind? = nil, folderID: String? = nil,
+                         listedAt: String? = nil) -> Session {
         Session(id: id, title: id, status: status, agentId: workspace, assignedRunnerId: nil,
                 pendingApprovals: approvals, waitingKind: waitingKind, branch: nil, updatedAt: nil,
-                runSource: source, folderId: folderID)
+                runSource: source, listedAt: listedAt, folderId: folderID)
     }
 
     func testWorkspaceAndScheduledListsKeepDisjointRows() {
         let rows = [
-            session("old-server", source: nil),
-            session("manual", source: "MANUAL"),
+            session("old-server", source: nil, listedAt: "2026-10-02T00:00:00Z"),
+            session("manual", source: "MANUAL", listedAt: "2026-10-01T00:00:00Z"),
             session("run", folderID: "f1"),
             session("other-run", workspace: "w2"),
         ]

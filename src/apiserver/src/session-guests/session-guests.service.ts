@@ -22,6 +22,7 @@ import type { ExternalTurnSender } from '../sessions/session-message';
 import { assertEngineSession } from '../sessions/engine-session';
 import { withSessionState } from '../sessions/session-state';
 import { readSessionActivities } from '../sessions/task-work-carrier';
+import { readSessionPhaseFields } from '../sessions/session-phase';
 import { parseMaxPayload } from '../sessions/truncate-payload';
 
 /** The one answer a guest door gives when there is no live invitation: never invited, removed, left, or Trash. */
@@ -325,6 +326,8 @@ export class SessionGuestsService {
       },
     });
     const activities = await readSessionActivities(this.prisma, rows.map(({ session }) => session.id));
+    // phase, released, lastTurnOutcome, waitingOn (sessions/session-phase.ts), as every payload kind carries them.
+    const phases = await readSessionPhaseFields(this.prisma, rows.map(({ session }) => session.id));
     return {
       sessions: rows.map(({ addedAt, session }) => {
         const state = withSessionState(session);
@@ -336,6 +339,7 @@ export class SessionGuestsService {
           sessionState: state.sessionState,
           lifecycleState: state.lifecycleState,
           activity: activities.get(session.id) ?? null,
+          ...phases.get(session.id),
           addedAt: addedAt.toISOString(),
           lastTurnAt: session.lastTurnAt?.toISOString() ?? null,
         };
@@ -490,14 +494,14 @@ export class SessionGuestsService {
     const ended = await this.hasEnded(sessionId);
     if (!ended) {
       try {
-        const sent = await this.sessions.createTurn(invitation.ownerId, sessionId, dto, { externalSender, onTurnWritten });
+        const sent = await this.sessions.createTurn(invitation.ownerId, sessionId, dto, { externalSender, onTurnWritten, listed: true });
         return { ...answerOf(sent), revived: false };
       } catch (error) {
         // It ended between the read above and the turn's own lock: resume it, as below.
         if (!(error instanceof SessionNotSendable)) throw error;
       }
     }
-    const resumed = await this.sessions.resume(invitation.ownerId, sessionId, dto, { externalSender, onTurnWritten });
+    const resumed = await this.sessions.resume(invitation.ownerId, sessionId, dto, { externalSender, onTurnWritten, listed: true });
     return { ...answerOf(resumed), revived: resumed.revived };
   }
 

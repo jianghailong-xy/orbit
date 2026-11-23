@@ -1,0 +1,65 @@
+-- ══════════════════════════════════════════════════════════════════════════════════════════════
+-- 1444: drop 0130's one-live-run-per-task index, the one stated on the status set. Release B of two
+-- (docs/session-three-state-plan.md §7 step 4.5; project 3508bDBDE5xPH43TYuiqP).
+--
+-- WHAT IT DROPS, AND WHAT STAYS
+-- -----------------------------
+-- session_task_execution_claim_idx (0130): UNIQUE on session(task_id)
+--   WHERE task_id IS NOT NULL AND deleted_at IS NULL AND status IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
+-- What enforces one live run per task from here on is 1426's session_task_execution_claim_idx_finished_at, the same
+-- column WHERE task_id IS NOT NULL AND deleted_at IS NULL AND finished_at IS NULL, built in release A (deploy 2,
+-- a7f28ff0ac) and valid in production since 2026-11-22. Under session_release_fact_chk the two refuse and admit the
+-- same rows (1426's header), so this changes no write's outcome.
+--
+-- WHICH DEPLOY IT MAY RIDE IN, AND WHAT A SERVER ONE RELEASE OLDER DOES
+-- --------------------------------------------------------------------
+-- Only one whose every running apiserver (and wiki-worker, the same image) already runs release A, a7f28ff0ac or a
+-- later commit: such a server states the new index's predicate (`finished_at IS NULL`) wherever the claim index is
+-- its access path, and its classifiers match a lost claim by `includes('session_task_execution_claim_idx')`, which the
+-- new name begins with. A deploy-2 server serving beside the deploy-3 one through the hand-over, against this
+-- database after the drop: its inserts and revives are refused by the new index alone, as before by both; its P2002
+-- classifiers recognise the new name; its claim reads are planned through the new index. No statement names either
+-- index's predicate in ON CONFLICT ... WHERE (none since 2133b988ed, before deploy 1), so no server can raise 42P10
+-- from the drop. A deploy-1 server (45c327a903) would read through the old index and must not be running: how to
+-- confirm that before the deploy is in docs/session-three-state-plan.md §7, step 4.5, release B.
+-- Rehearsed with the four dispatch paths before and after the drop on a populated database in
+-- sessions/session-claim-index-release-b.pg.spec.ts.
+--
+-- HOW PRISMA RUNS IT: ONE STATEMENT AND NOTHING ELSE
+-- --------------------------------------------------
+-- DROP INDEX CONCURRENTLY cannot run inside a transaction block, an implicit one included. Prisma 7.10 cannot read
+-- a DROP INDEX CONCURRENTLY, so it sends the file whole, as one query string; with any second statement in it (a
+-- SET, a RESET) PostgreSQL runs that string as one implicit transaction and refuses the drop with 25001. Alone, the
+-- one statement runs outside any transaction, as it must. Both were tried with the real `prisma migrate deploy`
+-- (the spec above shows the 25001 of the two-statement form and applies this file). So this file holds the one
+-- statement, and the server's own settings apply to it: production's lock_timeout (30 s) and statement_timeout
+-- (300 s), docker-compose.yml.
+--
+-- WHAT IT LOCKS
+-- -------------
+-- SHARE UPDATE EXCLUSIVE on session and on the index, never ACCESS EXCLUSIVE: reads and writes of session go on
+-- throughout; it conflicts with schema changes and VACUUM only. It marks the index invalid (committed at once, so
+-- the planner stops choosing it), waits until every transaction that holds a lock on session has ended, marks it not
+-- ready, waits again, and removes it. Those waits are lock waits, under lock_timeout.
+--
+-- IF IT IS INTERRUPTED
+-- --------------------
+-- A wait that outlasts lock_timeout (a transaction holding session open for more than 30 s), statement_timeout, a
+-- cancel or a lost connection ends the drop with the index still in the catalog, INVALID (pg_index.indisvalid =
+-- false). The planner no longer reads it, and 1426's index enforces the claim either way. Prisma records 1444 as
+-- failed, the deploy-3 server does not start (migrations apply at boot, before it serves), the deploy-2 server goes
+-- on serving, and every later deploy stops on P3009 until an operator runs
+--   prisma migrate resolve --rolled-back 1444_drop_session_task_execution_claim_idx
+-- and deploys again; IF EXISTS makes the re-run drop what is left, or find nothing. Drilled in the spec above. By
+-- hand, the same statement does it. To find one:
+--   SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid AND indrelid = 'session'::regclass;
+--
+-- NUMBERING, RE-RUNNABILITY
+-- -------------------------
+-- 1444: written as 1432, renumbered on 2026-11-23 after main took 1432 (model_identity) and 1433; 1444 is above
+-- everything on main (rescanned 2026-11-23). Not a multiple of 10. It runs after deploy 3's 1441 to 1443 (the
+-- column drop included); neither reads what the other changes, so the order between them does not matter.
+-- Can run twice: IF EXISTS.
+-- ══════════════════════════════════════════════════════════════════════════════════════════════
+
+DROP INDEX CONCURRENTLY IF EXISTS "session_task_execution_claim_idx";
