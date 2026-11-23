@@ -1211,6 +1211,12 @@ test('(15) §16 Q1: the owner\'s token is retired once the push reports back, an
     return { ownerId, command, door, logged, ask, land, connection };
   }
   const calls = () => h.github.tokenCalls.splice(0);
+  /** A retirement, failed or not, reopens no handout: the token is refused, and the claim keeps its one answer. */
+  async function assertNoSecondHandout(landing: Awaited<ReturnType<typeof answeredLanding>>) {
+    assert.match(await refusedWith(landing.ask()), /^PUSH_AS_ME_(REFUSED|ALREADY_ANSWERED)/);
+    const row = await h.job(landing.command.jobId);
+    assert.equal(row.ownerTokenGeneration, BigInt(landing.command.claimGeneration));
+  }
 
   // Accepted: refreshed, then the handed token revoked by name, in that order; the connection lives on, rotated.
   const ok = await answeredLanding('retire-accepted');
@@ -1232,8 +1238,8 @@ test('(15) §16 Q1: the owner\'s token is retired once the push reports back, an
   // Once: the same result reported again retires nothing more.
   assert.equal(await ok.door.service.afterJobResult(ok.command.jobId), null);
   assert.deepEqual(calls(), []);
-  // And no second handout for that claim, whatever happened since.
-  assert.match(await refusedWith(ok.ask()), /^PUSH_AS_ME_ALREADY_ANSWERED/);
+  // And no second handout for that claim, whatever happened since: the claim is over, and it still records its one answer.
+  await assertNoSecondHandout(ok);
 
   // A refused push that fell back to a pull request is retired the same way: the token was handed either way.
   const fell = await answeredLanding('retire-refused');
@@ -1260,7 +1266,7 @@ test('(15) §16 Q1: the owner\'s token is retired once the push reports back, an
   assert.equal(row.refreshExpiresAt.getTime(), before.refreshExpiresAt.getTime(), 'the connection is not marked dead');
   assert.equal((await h.job(noRefresh.command.jobId)).state, 'LANDED');
   assert.ok(noRefresh.logged.some((line) => line.startsWith('WARN') && line.includes(noRefresh.command.jobId) && line.includes('not fully retired')));
-  assert.match(await refusedWith(noRefresh.ask()), /^PUSH_AS_ME_ALREADY_ANSWERED/, 'a failed retirement reopens no handout');
+  await assertNoSecondHandout(noRefresh);
 
   // GitHub refuses the revoke: the new pair is stored and the connection live; the failure is recorded.
   const noRevoke = await answeredLanding('retire-revoke-fails');
@@ -1278,7 +1284,7 @@ test('(15) §16 Q1: the owner\'s token is retired once the push reports back, an
   assert.ok(row.refreshExpiresAt.getTime() > Date.now());
   assert.equal((await h.job(noRevoke.command.jobId)).state, 'LANDED');
   assert.ok(noRevoke.logged.some((line) => line.startsWith('WARN') && line.includes('not fully retired')));
-  assert.match(await refusedWith(noRevoke.ask()), /^PUSH_AS_ME_ALREADY_ANSWERED/);
+  await assertNoSecondHandout(noRevoke);
 
   // A session's Merge: retired once its result reports back, refresh then revoke.
   const ownerId = await h.newOwner('retire-merge');
