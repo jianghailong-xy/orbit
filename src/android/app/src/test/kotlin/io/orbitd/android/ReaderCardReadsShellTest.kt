@@ -49,7 +49,7 @@ class ReaderCardReadsShellTest {
     @Test fun anEventAboutAnotherSessionReadsNeitherTheSnapshotNorTheCardsAndItsOwnReadsEachOnce() {
         signIn(); open("orbit-session:$coord")
         await { exists(hasTestTag("transcript-list")) }
-        await { cardReads(0) > 0 }
+        await { exists(hasTestTag("transcript-list")) && cardReads(0) > 0 }
         advance(3_000)
         val before = ProjectShell.calls.size
         ProjectShell.event("session.updated", ProjectShell.WORKER)
@@ -61,7 +61,7 @@ class ReaderCardReadsShellTest {
         val own = ProjectShell.calls.size
         ProjectShell.event("session.updated", coord)
         advance(1_500)
-        await { cardReads(own) > 0 }
+        await { exists(hasTestTag("transcript-list")) && cardReads(own) > 0 }
         advance(3_000)
         assertEquals("its own event: ${ProjectShell.calls.drop(own)}", 1, snapshotReads(own))
         assertEquals("its own event: ${ProjectShell.calls.drop(own)}", 1, cardReads(own))
@@ -98,5 +98,7 @@ class ReaderCardReadsShellTest {
         runBlocking { ProjectShell.signIn(app().session) }
         compose.waitUntil(60_000) { app().session.state.value is AuthState.SignedIn && app().realtime.state.value.directoryFresh }
     }
+    /** A condition on [ProjectShell.calls] alone never runs the main looper the reads are queued on (waitUntil only sleeps
+     *  between checks): put a screen query, which idles it, first. */
     private fun await(condition: () -> Boolean) = compose.waitUntil(60_000, condition)
 }
