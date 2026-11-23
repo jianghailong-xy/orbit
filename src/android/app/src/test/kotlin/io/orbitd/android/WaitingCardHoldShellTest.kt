@@ -125,12 +125,14 @@ class WaitingCardHoldShellTest {
         // The read lands off the main thread, in real time: the card is measured once the open has brought it in, held it and laid it out.
         await { CardFocus.pending(ProjectShell.WAITING) == null && CardFocus.held(ProjectShell.WAITING)?.key == "approval:a-quota" }
         settle()
-        await { title()?.isEmpty == false }
-        val placed = title()!!
-        assertTrue("opened on the card: $placed", inList(placed))
-        return placed.top
+        await { waitingCard()?.boundsInRoot?.isEmpty == false }
+        val top = topNow()
+        val list = bounds(compose.onNodeWithTag("transcript-list"))
+        assertTrue("opened on the card: $top in $list", top >= list.top && top < list.bottom - 100)
+        return top
     }
-    private fun topNow() = title()!!.top
+    // A released card can move past the viewport. Clipped bounds then report zero instead of its new position.
+    private fun topNow() = waitingCard()!!.positionInRoot.y
 
     /** A question record lands ahead of the opened card in the cards item: it stays where it was brought to. */
     @Test fun theOpenedCardStaysInViewWhileAQuestionRecordIsAddedAheadOfIt() {
@@ -171,8 +173,7 @@ class WaitingCardHoldShellTest {
     }
 
     /** The waiting card's own box, by its tag: the one the open brought in, not the card that landed ahead of it. */
-    private fun title(): Rect? = compose.onAllNodesWithTag("approval:a-quota", useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
-    private fun inList(r: Rect?): Boolean { val list = bounds(compose.onNodeWithTag("transcript-list")); return r != null && r.top >= list.top && r.top < list.bottom - 100 }
+    private fun waitingCard() = compose.onAllNodesWithTag("approval:a-quota", useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()
     private fun stepRow() = compose.onAllNodes(SemanticsMatcher("a step row") { node ->
         node.config.getOrNull(SemanticsProperties.Text)?.any { it.text.startsWith("Retry step") || it.text.startsWith("Step ") } == true
     }, useUnmergedTree = true).fetchSemanticsNodes().first()
