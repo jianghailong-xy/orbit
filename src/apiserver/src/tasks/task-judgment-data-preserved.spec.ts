@@ -3338,7 +3338,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1433 seeds model_identity with production's model ids, INSERT ... ON CONFLICT (rule_key) DO NOTHING into that
       // new table only; no preserved relation, trigger, function or DONE fence is touched.
       '1433_model_identity_seed',
-      // 1434 rewrites runner.repos_root for managed runners only, to /home/orbit. It updates no preserved relation.
+      // 1434 rewrites runner.repos_root from /var/lib/orbit/home to /home/orbit for managed runners only (6a7106f95b): an
+      // UPDATE of runner rows, none of the preserved relations, and no trigger, function or DONE fence changes.
       '1434_managed_runner_repos_root_home_orbit',
       // 1438 creates drive_removed_entry (Orbit Files drive: the file a replacing rename removed, §3.2) and its index; no
       // existing row is written, and no preserved relation, trigger, function or DONE fence changes. Numbered past every
@@ -3350,8 +3351,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1439_drive_entry_name_trgm',
       // 1440 adds the drive Trash marking flag and its partial index; it changes no preserved relation or fence.
       '1440_drive_trash_group_marking',
-      // 1447 adds SCHEDULE_CHANGE, nullable columns for schedule change conversations, a session foreign key and
-      // a partial index. It writes no rows and changes no preserved trigger, function or DONE fence.
+      // 1447 adds SCHEDULE_CHANGE to session_run_source, two nullable session columns (change_schedule_id, with its
+      // foreign key to schedule ON DELETE SET NULL and a partial index, and schedule_change_opening), and a nullable
+      // asked_text to schedule_revision and schedule_change_request; no row is written, and none of the preserved
+      // relations, their triggers, functions or the DONE fence changes.
       '1447_schedule_change_conversation',
       // 1448 indexes drive and share-link foreign keys for bounded permanent deletion. It writes no existing rows
       // and changes no preserved relation, trigger, function or DONE fence.
@@ -3363,8 +3366,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // so an owner's sleep drains only on a report sent after it; `managed_runner` is none of the preserved relations,
       // no row is written, and no trigger, function or DONE fence changes.
       '1455_managed_runner_sleep_requested_at',
-      // 1462 adds nullable runner.login_browser. It rewrites no rows and changes no preserved trigger, function
-      // or DONE fence.
+      // 1462 adds one nullable column, login_browser, to runner; no row is written, and no preserved relation,
+      // trigger, function or DONE fence changes.
       '1462_runner_login_browser',
       // 1463 re-keys three model_identity rows (qwen3-7, qwen3-8, qwen4 to their -max ids): UPDATEs of that table only,
       // none of the preserved relations, and no trigger, function or DONE fence changes.
