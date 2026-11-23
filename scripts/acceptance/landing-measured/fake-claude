@@ -32,6 +32,16 @@ or in messages they send):
                         goes to $LM_SCRATCH/<key>.out, and the turn fails if HEAD did not move or the worktree is not
                         clean afterwards. The runner then reports changed_files as the diff from the base to <ref>.
   E2E-UPSTREAM: <remote>/<branch>    where push-* go when the brief does not say (a PLATFORM brief says "Do not push")
+  E2E-SHARED: <file>    (with E2E-DO; revision 42 part one) also write <file> holding this task's own line, in the same
+                        commit, so two tasks that both write it from the same tip conflict when the second one lands
+  E2E-ONFIX: resolve|decline    (with E2E-DO) what this task's session does with a landing-fix turn later: `resolve`
+                        merges the branches the turn names into its own branch, keeps both sides of every conflict,
+                        commits and ends the turn; `decline` commits nothing and ends the turn saying DECLINE_WORDS
+  E2E-BARRIER <name> <n>    (with E2E-DO) after the commit, wait (at most 300 s) until <n> task runs have reached
+                        barrier <name>, so the tasks of a pair have all started from the same tip
+
+A landing-fix turn (§12.5 W6: its prompt says "Orbit could not land your work") is answered by the E2E-ONFIX its task
+run recorded under $LM_SCRATCH/onfix/, found by ORBIT_TASK_ID or by the checkout's branch.
   E2E-MCP <id> <tool> <json-arguments>   (any session) call one orbit MCP tool through `orbit mcp` -- the server
                         the runner put in --mcp-config, run with this session's own environment -- after a
                         `git fetch` in the cwd; the answer is logged under <id> and is the turn's reply
@@ -238,6 +248,88 @@ def detach_work(prompt):
         return f'lm42 fake engine: {"; ".join(said)}; FAILED: {e}', True
 
 
+# ── revision 42 part one: the landing-fix turn ───────────────────────────────────────────────────────────────
+DECLINE_WORDS = ('LFX42 decline: this conflict is with another task\'s line in the same file, and which line stays is '
+                 'not mine to decide, so I committed nothing. The coordinator should choose.')
+IDENT = ['-c', 'user.name=LM42 Fake Agent', '-c', 'user.email=agent@lm42.test']
+MARKER = re.compile(r'^(<<<<<<< |=======$|>>>>>>> )')
+
+
+def onfix_paths(branch):
+    base = os.path.join(os.environ.get('LM_SCRATCH') or tempfile.gettempdir(), 'onfix')
+    keys = [k for k in (os.environ.get('ORBIT_TASK_ID', ''), 'branch-' + branch.replace('/', '_')) if k]
+    return base, [os.path.join(base, k) for k in keys]
+
+
+def record_onfix(policy, branch):
+    base, paths = onfix_paths(branch)
+    os.makedirs(base, exist_ok=True)
+    for path in paths:
+        with open(path, 'w') as f:
+            f.write(policy + '\n')
+
+
+def barrier(name, count):
+    path = os.path.join(os.environ.get('LM_SCRATCH') or tempfile.gettempdir(), f'barrier-{name}')
+    os.makedirs(path, exist_ok=True)
+    with open(os.path.join(path, os.environ.get('ORBIT_TASK_ID', '') or str(os.getpid())), 'w') as f:
+        f.write(datetime.datetime.now(datetime.timezone.utc).isoformat() + '\n')
+    end = datetime.datetime.now().timestamp() + 300
+    while len(os.listdir(path)) < count:
+        if datetime.datetime.now().timestamp() > end:
+            raise RuntimeError(f'barrier {name}: only {len(os.listdir(path))} of {count} runs arrived in 300 s')
+        subprocess.run(['sleep', '1'])
+    return sorted(os.listdir(path))
+
+
+def landing_fix(prompt):
+    """Answer a landing-fix turn as the task's E2E-ONFIX says: resolve and commit, or decline and commit nothing."""
+    branch = must('rev-parse', '--abbrev-ref', 'HEAD')
+    head_before = must('rev-parse', 'HEAD')
+    _, paths = onfix_paths(branch)
+    policy = next((open(p).read().strip() for p in paths if os.path.exists(p)), '')
+    m = re.search(r'^1\. Merge (\S+?)(?: and (\S+?))? into your branch', prompt, re.M)
+    targets = [g for g in (m.groups() if m else ()) if g]
+    rec = {'policy': policy, 'branch': branch, 'headBefore': head_before, 'targets': targets,
+           'taskEnv': os.environ.get('ORBIT_TASK_ID', '')}
+    if policy != 'resolve':
+        rec.update(headAfter=must('rev-parse', 'HEAD'), worktreeStatus=must('status', '--porcelain'))
+        log('landing-fix', ok=True, declined=True, **rec)
+        return DECLINE_WORDS, False
+    try:
+        if not targets:
+            raise RuntimeError('the turn names no branch to merge')
+        must('fetch', '--quiet', 'origin')
+        resolved = []
+        for target in targets:
+            code, so, se = git(*IDENT, 'merge', '--no-edit', f'origin/{target}')
+            if code == 0:
+                continue
+            conflicted = [f for f in must('diff', '--name-only', '--diff-filter=U').split('\n') if f]
+            if not conflicted:
+                raise RuntimeError(f'git merge origin/{target} exited {code}: {se[-300:]}')
+            for name in conflicted:
+                with open(name) as f:
+                    kept = [line for line in f.read().splitlines(True) if not MARKER.match(line.rstrip('\n'))]
+                with open(name, 'w') as f:
+                    f.writelines(kept)
+                must('add', name)
+            must(*IDENT, 'commit', '--no-edit', '-q')
+            resolved += conflicted
+        head_after = must('rev-parse', 'HEAD')
+        status = must('status', '--porcelain')
+        rec.update(headAfter=head_after, worktreeStatus=status, resolved=resolved)
+        if status:
+            raise RuntimeError(f'the worktree is not clean after the fix: {status!r}')
+        log('landing-fix', ok=True, **rec)
+        merged = ', '.join(f'origin/{t}' for t in targets)
+        return (f'lm42 fake engine: landing fix: merged {merged} into {branch}, kept both sides of '
+                f'{", ".join(resolved) or "nothing (no conflict)"}, committed {head_after[:10]}. No model was called.'), False
+    except Exception as e:  # noqa: BLE001 - report, and fail the turn
+        log('landing-fix', ok=False, error=str(e), **rec)
+        return f'lm42 fake engine: landing fix FAILED: {e}', True
+
+
 def task_work(prompt):
     if re.search(r'^E2E-DETACH\s', prompt, re.M) and not re.search(r'^E2E-DO:', prompt, re.M):
         return detach_work(prompt)
@@ -259,11 +351,25 @@ def task_work(prompt):
             f.write(f'- {datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")} '
                     f'{os.environ.get("ORBIT_TASK_ID", "")}: {first}\n')
         must('add', work_file)
+        shared = re.search(r'^E2E-SHARED:\s*(\S+)\s*$', prompt, re.M)
+        if shared:
+            with open(shared.group(1), 'w') as f:
+                f.write(f'{os.environ.get("ORBIT_TASK_ID", "")}: this line is the work of this task\n')
+            must('add', shared.group(1))
+            rec['shared'] = shared.group(1)
         must('-c', 'user.name=LM42 Fake Agent', '-c', 'user.email=agent@lm42.test', 'commit', '-qm',
              f'e2e work for task {os.environ.get("ORBIT_TASK_ID", "")}')
         work = must('rev-parse', 'HEAD')
         rec.update(taskBranch=branch_now, parent=base, commit=work)
         said.append(f'committed {work[:10]} on {branch_now}')
+        onfix = re.search(r'^E2E-ONFIX:\s*(resolve|decline)\s*$', prompt, re.M)
+        if onfix:
+            record_onfix(onfix.group(1), branch_now)
+            rec['onfix'] = onfix.group(1)
+        bar = re.search(r'^E2E-BARRIER\s+(\S+)\s+(\d+)\s*$', prompt, re.M)
+        if bar:
+            rec['barrier'] = barrier(bar.group(1), int(bar.group(2)))
+            said.append(f'met {bar.group(2)} runs at barrier {bar.group(1)}')
         remote, branch, source = push_target(prompt)
         rec.update(remote=remote, branch=branch, pushTargetFrom=source)
         if 'push-upstream' in actions:
@@ -323,6 +429,8 @@ def turn(sid, prompt):
     parts = mcp_directives(prompt)
     if parts:
         return 'lm42 fake engine:\n' + '\n'.join(parts), False
+    if 'Orbit could not land your work' in prompt:
+        return landing_fix(prompt)
     if os.environ.get('ORBIT_TASK_ID') and '/worktrees/' in os.getcwd():
         return task_work(prompt)
     return 'lm42 fake engine: acknowledged. No model was called.', False
