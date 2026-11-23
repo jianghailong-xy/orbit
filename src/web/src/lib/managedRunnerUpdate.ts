@@ -27,6 +27,7 @@ import {
   runnerUpdateRestartingBodyMany,
   runnerUpdateTurnRunning,
 } from './runnerCopy';
+import { isReleaseVersion } from './runnerAttention';
 import { RUNNER_UPDATE_UPDATED_HOURS, runnerUpdateTook, runnerUpdateUpdatedBody, runnerUpdateWaited } from './runnerUpdateCard';
 
 /** `95884b154feb…` → `95884b1`. */
@@ -38,8 +39,10 @@ export function buildDay(builtAt: string | undefined): string | null {
   return Number.isNaN(at) ? null : new Date(at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-/** `the Nov 18 build`, or `the e03e2cd build` when its build time is unknown. */
+/** The release version (`0.1.261-beta.83`) when the build has one, as a self-managed runner's version reads;
+ *  else `the Nov 18 build`, or `the e03e2cd build` when its build time is unknown. */
 export function buildName(build: ManagedRunnerBuild): string {
+  if (build.version) return build.version;
   return managedBuildNamed(buildDay(build.builtAt) ?? buildSha7(build.sha));
 }
 
@@ -83,6 +86,8 @@ export function notePendingUpdate(runnerId: string, interruptedTurns: number, to
 }
 /** The Update Now pressed and not yet seen through: how many turns it interrupted. Null when none is. */
 export const pendingUpdateTurns = (runnerId: string): number | null => read<PendingUpdate>('pending', runnerId)?.interruptedTurns ?? null;
+/** When the pending Update Now was noted; null when none is. */
+export const pendingUpdateAt = (runnerId: string): number | null => read<PendingUpdate>('pending', runnerId)?.at ?? null;
 
 /**
  * Once the runner is READY again with no `update`, a pending Update Now has finished: how long it took
@@ -101,6 +106,14 @@ export function settlePendingUpdate(runnerId: string, now = Date.now()): Managed
   write('pending', runnerId, null);
   return outcome;
 }
+/**
+ * A pending Update Now the server no longer reports as in progress while a build is still available to move to: either
+ * it ended unwatched before a newer build came out, or it never took. Its note is dropped with no outcome, so that it
+ * neither shows Restarting nor records an Updated card it cannot time.
+ */
+export function dropPendingUpdate(runnerId: string): void {
+  write('pending', runnerId, null);
+}
 export const readUpdateOutcome = (runnerId: string): ManagedUpdateOutcome | null => read<ManagedUpdateOutcome>('updated', runnerId);
 
 export interface ManagedUpdateCard {
@@ -115,17 +128,18 @@ export interface ManagedUpdateCard {
 
 /**
  * The card the managed status calls for, or null (the runner runs the current build, or is not running).
- * Restarting: the status's `updating`, or an Update Now of ours still waiting for the runner to be back.
+ * Restarting comes from the server alone: its status says `updating`, which it does from the accepted Update Now until
+ * the next generation is READY. A press this browser remembers never shows it: a refused or lost request, or one that
+ * ended while nobody watched, would otherwise read Restarting for good.
  */
 export function managedUpdateCard(
   status: ManagedRunnerStatus,
-  pending: boolean,
   outcome: ManagedUpdateOutcome | null,
   nowMs: number,
   interruptedTurns: number,
 ): ManagedUpdateCard | null {
   const update = status.update;
-  if (update?.phase === 'available' && !pending) {
+  if (update?.phase === 'available') {
     return {
       phase: 'available',
       tone: 'quiet',
@@ -135,12 +149,11 @@ export function managedUpdateCard(
       to: update.current,
     };
   }
-  if (update?.phase === 'updating' || pending) {
-    const to = update?.current ?? readPendingTarget(status);
+  if (update?.phase === 'updating') {
     return {
       phase: 'restarting',
       tone: 'warn',
-      title: managedUpdateRestartingTitle(to ? buildName(to) : ''),
+      title: managedUpdateRestartingTitle(buildName(update.current)),
       tag: RUNNER_UPDATE_TAG_RESTARTING,
       body: !interruptedTurns
         ? RUNNER_UPDATE_RESTARTING_BODY
@@ -158,20 +171,19 @@ export function managedUpdateCard(
   }
   return null;
 }
-function readPendingTarget(status: ManagedRunnerStatus): ManagedRunnerBuild | null {
-  return status.runnerId ? read<PendingUpdate>('pending', status.runnerId)?.to ?? null : null;
-}
 
 /**
  * About's Version: `Build 95884b1 · Nov 16`. The running build is the update's, else the runner's reported
  * `managed-<sha>`; its day is the update's, or the last Update Now's when that is the build it runs. Null when
- * the runner names no build.
+ * the runner names no build. A runner on a release version has no build line: its version shows as a
+ * self-managed runner's does (runnerVersionLine), so this returns null.
  */
 export function managedVersionLine(
   managed: ManagedRunner | null,
   version: string | null,
   outcome: ManagedUpdateOutcome | null,
 ): string | null {
+  if (managed?.status.update?.running.version || isReleaseVersion(version)) return null;
   const reported = /^managed-([0-9a-f]{7,40})$/i.exec(version ?? '')?.[1];
   const running = managed?.status.update?.running;
   const sha = running?.sha ?? reported;

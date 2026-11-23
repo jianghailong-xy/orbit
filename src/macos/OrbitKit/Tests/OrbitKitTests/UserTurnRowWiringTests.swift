@@ -40,6 +40,7 @@ final class UserTurnRowWiringTests: XCTestCase {
         "EvidenceToReviewCardView(", "EvidenceSentBackCardView(", "RunQuestionCardView(",
         "RunNoticeCardView(", "SessionOpeningRowView(",
         "SessionReplyCardsView(", "WatchWakeCardView(", "BackgroundWakeCardView(",
+        "LandingFixCardView(",
     ]
 
     private func path(_ relative: String) throws -> URL {

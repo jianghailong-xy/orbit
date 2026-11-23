@@ -138,6 +138,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'handlingJobId',
   'handlingSessionId',
   'handlingUserId',
+  // The task's own work session a landing failure was handed to first (migration 1501, §12.4 W5): an
+  // address a reader follows to that session. History with no foreign key, never a fence.
+  'workSessionId',
   'resolvedByJobId',
   // Who caused a landing-timeline fact (migration 0438): the coordinator conversation or the owner
   // a line is signed with — the same two addresses a rerun and a handling row carry. A reader

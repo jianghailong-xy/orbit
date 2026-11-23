@@ -6,16 +6,13 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RunnerBrowserState } from '@orbit/shared';
 import type { OwnerRequest } from '../lib/ownerRequests';
-import { SessionBrowserChip } from './SessionBrowserChip';
 import { RunnerBrowserSection } from './settings/RunnerBrowserSection';
 import { RunnerBrowserPage } from '../pages/RunnerBrowserPage';
 
 /**
- * The web viewer of the Orbit Cloud runner's browser (docs/runner-browser-design.md §5; boards 01 frames 4–9 and 02
- * frames ② ③): the session's Browser chip and when it shows; the drawer as a view-only quick look whose Open in new
- * tab and Take control open the browser's own tab and close the drawer's stream; Settings' Open browser opening that
- * tab in control; the tab at /runners/:id/browser in control (Fit / 100%, Done, paste) and view only (Take control);
- * Clear saved logins behind a confirmation; and nothing at all while the server reports the browser off.
+ * The web viewer of the Orbit Cloud runner's browser (docs/runner-browser-design.md §5; board 02 frames ② ③):
+ * Settings' Open browser opening the browser's own tab in control; the tab at /runners/:id/browser in control
+ * (Fit / 100%, Done, paste) and view only (Take control); Clear saved logins behind a confirmation; and nothing at all while the server reports the browser off.
  *
  * noVNC is replaced by a stand-in that records what the viewer asked of it: `viewOnly` is the one switch between
  * watching and sending pointer and keys (noVNC drops every input event while it is true), and the keys that reach
@@ -245,8 +242,6 @@ async function mount(node: React.ReactNode) {
   await settle();
 }
 
-const chip = () => host!.querySelector<HTMLButtonElement>('.rb-chip');
-const drawer = () => document.querySelector<HTMLElement>('.rb-drawer');
 const buttonNamed = (name: string) =>
   [...document.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === name) ?? null;
 async function press(button: HTMLElement | null) {
@@ -256,36 +251,6 @@ async function press(button: HTMLElement | null) {
 }
 /** The requests other than reads: what the viewer sent anywhere. */
 const writes = () => calls.filter((call) => !call.startsWith('GET '));
-
-describe('the session Browser chip', () => {
-  it('shows when the switch is on, the session runs on the managed runner, and the browser is running', async () => {
-    browser = running();
-    await mount(<SessionBrowserChip managedRunnerId={RUNNER} sessionId={SESSION} />);
-    expect(chip()?.textContent).toBe('Browser');
-    expect(chip()?.querySelector('.rb-chip-dot')).not.toBeNull();
-  });
-
-  it('is not drawn while the browser is not running', async () => {
-    browser = running({ state: 'IDLE', holderSessionId: null, holderTitle: null });
-    await mount(<SessionBrowserChip managedRunnerId={RUNNER} sessionId={SESSION} />);
-    expect(chip()).toBeNull();
-    expect(host!.innerHTML).toBe('');
-  });
-
-  it('reads nothing and draws nothing for a session on any other runner', async () => {
-    browser = running();
-    await mount(<SessionBrowserChip managedRunnerId={null} sessionId={SESSION} />);
-    expect(host!.innerHTML).toBe('');
-    expect(calls).toEqual([]);
-  });
-
-  it('draws nothing when the server reports the browser off (404)', async () => {
-    browser = 'off';
-    await mount(<SessionBrowserChip managedRunnerId={RUNNER} sessionId={SESSION} />);
-    expect(calls).toEqual([`GET /runners/${RUNNER}/browser`]);
-    expect(host!.innerHTML).toBe('');
-  });
-});
 
 
 const SECRET = '密码 Pässwörd 🔑';
@@ -309,84 +274,6 @@ async function pressPaste(text: string, mod: 'ctrlKey' | 'metaKey' = 'ctrlKey') 
   await pasteText(document.activeElement ?? canvas, text);
   await act(async () => void canvas.dispatchEvent(new KeyboardEvent('keyup', { key: 'v', code: 'KeyV', [mod]: true, bubbles: true })));
 }
-
-describe('the drawer from a session: a view-only quick look', () => {
-  it('opens view only on the runner viewer stream, saying who holds the browser, with Open in new tab and Take control', async () => {
-    browser = running();
-    await mount(<SessionBrowserChip managedRunnerId={RUNNER} sessionId={SESSION} />);
-    await press(chip());
-    expect(drawer()).not.toBeNull();
-    expect(vnc.made).toHaveLength(1);
-    expect(socket().url).toBe(`ws://${window.location.host}/api/runners/${RUNNER}/browser/vnc?access_token=web-login`);
-    expect(vnc.made[0].channel).toBe(socket());
-    expect(vnc.made[0].viewOnly).toBe(true);
-    expect(vnc.made[0].scaleViewport).toBe(true);
-    // The server is told this viewer is not in control.
-    expect(controlSaid()).toEqual([false]);
-    expect(drawer()!.querySelector('.orbit-overlay-title')?.textContent).toBe('Browser');
-    expect(buttonNamed('↗ Open in new tab')).not.toBeNull();
-    expect(buttonNamed('Take control')).not.toBeNull();
-    expect(drawer()!.querySelector('.rb-view-only')?.textContent).toBe('View only');
-    expect(drawer()!.querySelector('.rb-holder')?.textContent).toBe('Used by this session');
-    expect(drawer()!.querySelector('.rb-scaled')?.textContent).toBe('Fit');
-    expect(drawer()!.querySelector('.rb-link')?.textContent).toBe('Live');
-  });
-
-  it('names another session that holds the browser, and none when nobody does', async () => {
-    browser = running({ holderSessionId: '34z8OKBXxDRYsIZwzJ35T', holderTitle: 'Book the venue' });
-    await mount(<SessionBrowserChip managedRunnerId={RUNNER} sessionId={SESSION} />);
-    await press(chip());
-    expect(drawer()!.querySelector('.rb-holder')?.textContent).toBe('Used by “Book the venue” · it keeps running');
-    act(() => root!.unmount());
-    host!.remove();
-    browser = running({ holderSessionId: null, holderTitle: null });
-    await mount(<SessionBrowserChip managedRunnerId={RUNNER} sessionId={SESSION} />);
-    await press(chip());
-    expect(drawer()!.querySelector('.rb-holder')?.textContent).toBe('Not in use by any session');
-  });
-
-  it('Open in new tab opens the tab view only and hands it the stream: the drawer closes its own first', async () => {
-    browser = running();
-    await mount(<SessionBrowserChip managedRunnerId={RUNNER} sessionId={SESSION} />);
-    await press(chip());
-    await press(buttonNamed('↗ Open in new tab'));
-    expect(opened).toEqual([[`/runners/${RUNNER}/browser`, `orbit-browser-${RUNNER}`]]);
-    expect(vnc.made[0].disconnected).toBe(true);
-    expect(drawer()).toBeNull();
-    expect(writes()).toEqual([]);
-  });
-
-  it('Take control opens the tab already in control, closes the drawer’s stream, and interrupts nothing', async () => {
-    browser = running();
-    await mount(<SessionBrowserChip managedRunnerId={RUNNER} sessionId={SESSION} />);
-    await press(chip());
-    await press(buttonNamed('Take control'));
-    expect(opened).toEqual([[`/runners/${RUNNER}/browser?control=1`, `orbit-browser-${RUNNER}`]]);
-    expect(vnc.made).toHaveLength(1);
-    expect(vnc.made[0].viewOnly).toBe(true);
-    expect(vnc.made[0].disconnected).toBe(true);
-    // No interrupt, stop or message to the session: the only request ever made is reading the browser's state.
-    expect(writes()).toEqual([]);
-  });
-
-  it('sends no paste and no keys while it only looks', async () => {
-    browser = running();
-    await mount(<SessionBrowserChip managedRunnerId={RUNNER} sessionId={SESSION} />);
-    await press(chip());
-    await pressPaste(SECRET);
-    expect(pastesSent()).toEqual([]);
-    expect(socket().sent.join('')).not.toContain('Pässwörd');
-  });
-
-  it('closing the drawer closes the stream', async () => {
-    browser = running();
-    await mount(<SessionBrowserChip managedRunnerId={RUNNER} sessionId={SESSION} />);
-    await press(chip());
-    await press(document.querySelector<HTMLButtonElement>('.orbit-overlay-close'));
-    expect(vnc.made[0].disconnected).toBe(true);
-    expect(writes()).toEqual([]);
-  });
-});
 
 describe('Settings → Orbit Cloud runner → Browser', () => {
   it('draws nothing when the server reports the browser off (404)', async () => {
@@ -415,7 +302,6 @@ describe('Settings → Orbit Cloud runner → Browser', () => {
     await press(buttonNamed('Open browser'));
     expect(opened).toEqual([[`/runners/${RUNNER}/browser?control=1`, `orbit-browser-${RUNNER}`]]);
     expect(vnc.made).toHaveLength(0);
-    expect(drawer()).toBeNull();
     expect(document.querySelector('.orbit-confirm')).toBeNull();
     expect(writes()).toEqual([]);
   });

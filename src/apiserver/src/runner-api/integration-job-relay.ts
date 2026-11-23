@@ -45,6 +45,7 @@ import {
   isTerminalJobState,
   jobLanded,
   landingFailureClass,
+  landingFixWorkSession,
   skippedMergeCheck,
   type SkippedMergeCheckRecord,
   landingJudgedTooEarly,
@@ -2898,6 +2899,20 @@ export async function applyIntegrationJobResult(
       const stoppedCheckTimeoutSeconds = state === 'CHECK_FAILED' && checks.some((check) => check.timedOut)
         ? await checkBudgetsOf(tx, job)
         : null;
+      // Revision 42 (§12.3, W4, W-T1 / W-T6): a conflict or a red check of the work's own making goes
+      // first to the task's own work session, when W4 holds; any other result, or W4 false, opens the
+      // item for the coordinator exactly as before. W8: with the session's rounds used up, it opens handed back,
+      // ROUNDS_EXHAUSTED, and is the coordinator's at once.
+      const handOff = await landingFixWorkSession(tx, {
+        jobKind: job.kind,
+        sessionId: job.sessionId,
+        taskId: job.kind === 'LAND_TASK' ? liveTaskId : candidateRow?.taskId ?? null,
+        landingId: job.landingId,
+        failureClass: landingFailureClass({ state, checks, baselineRed: body.baselineRed === true }),
+        candidateSourceKind: candidateRow?.sourceKind ?? null,
+        retryOfJobId: job.retryOfJobId,
+      });
+      const workSessionId = handOff && !handOff.roundsExhausted ? handOff.sessionId : null;
       const opened = await recordIntegrationFailure(tx, {
         projectId: job.projectId,
         ownerId: job.ownerId,
@@ -2915,7 +2930,12 @@ export async function applyIntegrationJobResult(
         // §4.7 H4: when this job is a rerun whose item the clock handed to the owner while it ran, the
         // failure it opens stays theirs — the coordinator's rerun does not carry the decision back.
         heldByOwner: await ownerHoldOnHandledItems(tx, job.id),
+        workSessionId,
+        roundsExhausted: handOff?.roundsExhausted ?? null,
         payload: {
+          // Revision 42 (§12.5 W6): the title the landing-fix turn names the work by, as it was when the
+          // work failed to land — a task can be renamed, and the turn's words are a replay's to compare.
+          ...(workSessionId ? { taskTitle: task?.title ?? candidateTask?.title ?? null } : {}),
           ...(body.baselineRed === true ? {
             baseline: {
               upstreamSha: body.upstreamSha!, targetSha: body.targetShaBefore!,

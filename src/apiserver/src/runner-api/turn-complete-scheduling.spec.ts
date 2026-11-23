@@ -55,6 +55,8 @@ function makeController(
     // (`sessions/abandoned-approvals.ts`). These fixtures raise no approvals, so it collects none.
     approval: { updateMany: async () => ({ count: 0 }), findMany: async () => [] },
     sessionRequest: noSessionRequests(),
+    // Not an Orbit Cloud runner: an INTERRUPTED turn is not the owner's Update Now's (managed-runner-update-cut.ts).
+    managedRunner: { findUnique: async () => null },
     // No confirmation request was put to this session for review (owner-confirmation-review.ts T5).
     taskOwnerConfirmationReview: { findMany: async () => [] },
     conversationTurn: {

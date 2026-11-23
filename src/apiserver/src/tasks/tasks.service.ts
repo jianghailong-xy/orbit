@@ -82,6 +82,7 @@ import {
   INTEGRATION_ITEM_KINDS,
   LANDING_UNOBSERVED_KIND,
   SESSION_ENDING_SELECT,
+  handBackLandingFixesOfTask,
   openItemOwed,
   recordTaskFailure,
   sessionHasEnded,
@@ -11165,6 +11166,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                   reason: 'the task was reopened, cancelled or failed',
                 });
               }
+            }
+            // Revision 42 (§12.5 W7, W-T5): a DONE task reopened, cancelled, failed, replaced or moved out of its
+            // project takes the failed landing its own work session holds back from it — TASK_MOVED_ON, in this
+            // transaction (the items are rank 60, under this task's rank-50 lock), delivered to nobody: §4.2's facts
+            // answer the item from here.
+            if (before.status === TaskStatus.DONE && before.projectId
+              && (task.status !== TaskStatus.DONE || task.supersededByTaskId !== null
+                || task.projectId !== before.projectId)) {
+              await handBackLandingFixesOfTask(tx, {
+                taskId: id, projectId: before.projectId, reason: 'TASK_MOVED_ON',
+              });
             }
             if (dto.fixesOpenItemId) {
               await this.assertFixesOpenItem(

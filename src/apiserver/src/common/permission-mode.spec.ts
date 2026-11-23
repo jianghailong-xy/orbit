@@ -8,6 +8,7 @@ import {
   modesItMayStart,
   PERMISSION_MODE_WIDER_THAN_SESSION,
   SESSION_WIDER_THAN_CALLER,
+  subagentChildMode,
   widerModeRefusal,
   widerSessionRefusal,
 } from './permission-mode';
@@ -104,4 +105,36 @@ test('the refusal for a session that already exists names both modes, the act, a
   );
   const onKimi = widerSessionRefusal(DONT_ASK, 'target-id', AUTO, AgentProvider.KIMI, 'end it', 'Ask.');
   assert.match((onKimi.getResponse() as { message: string }).message, /On Kimi[^.]* that mode runs as bypassPermissions/);
+});
+
+test("a SubAgent runs in its parent's mode on every engine, read-only or not, and never in Plan for being read-only", () => {
+  const engines = [
+    AgentProvider.CLAUDE, AgentProvider.CODEX, AgentProvider.KIMI, AgentProvider.OPENCODE, AgentProvider.ANTIGRAVITY,
+  ];
+  for (const engine of engines) {
+    for (const parent of ALL) {
+      assert.equal(subagentChildMode(parent, { readonly: true }, engine), parent, `read-only on ${engine} under ${parent}`);
+      assert.equal(subagentChildMode(parent, {}, engine), parent, `writable on ${engine} under ${parent}`);
+    }
+    // A read-only definition's own mode is not taken: the runner keeps it read-only, the parent's mode answers it.
+    assert.equal(subagentChildMode(AUTO, { readonly: true, asked: PLAN }, engine), AUTO);
+    // A writable one runs in the mode it named (the caller has already refused or dropped a wider one).
+    assert.equal(subagentChildMode(AUTO, { asked: DEFAULT }, engine), DEFAULT);
+  }
+});
+
+test('an engine that cannot hold the mode gets the nearest one it holds that is not wider, never a refusal', () => {
+  const dsh = AgentProvider.DSH;
+  const want: Record<PermissionMode, PermissionMode> = {
+    [PLAN]: DONT_ASK, [DEFAULT]: DEFAULT, [ACCEPT_EDITS]: DEFAULT, [AUTO]: AUTO, [DONT_ASK]: DONT_ASK, [BYPASS]: AUTO,
+  };
+  for (const parent of ALL) {
+    assert.equal(subagentChildMode(parent, { readonly: true }, dsh), want[parent], `DeepSeek Harness under ${parent}`);
+  }
+  const cursor = AgentProvider.CURSOR;
+  assert.equal(subagentChildMode(DEFAULT, { readonly: true }, cursor), PLAN);
+  assert.equal(subagentChildMode(DEFAULT, {}, cursor), PLAN);
+  for (const parent of [PLAN, ACCEPT_EDITS, AUTO, DONT_ASK, BYPASS]) {
+    assert.equal(subagentChildMode(parent, {}, cursor), parent, `Cursor CLI under ${parent}`);
+  }
 });

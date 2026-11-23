@@ -114,7 +114,7 @@ class LandingObservationCopyTest {
         assertTemplate(page, ProjectPage.waitingToBeSeenOn(b, null), b to "\${branch}")
         assertTrue(page.contains("return deliveredSha ? `\${words} · \${deliveredSha.slice(0, 7)}` : words;"))
         assertEquals("${ProjectPage.waitingToBeSeenOn(b, null)} · 9f1c2ab", ProjectPage.waitingToBeSeenOn(b, "9f1c2ab7e4d0b5a6c3f8e1d2a7b4c9e0f1a2b3c4"))
-        assertTrue(page.contains("'QUEUED', 'RUNNING', 'CONFLICT', 'CHECK_FAILED', 'ERROR', 'AWAITING_OWNER', 'AWAITING_OBSERVATION',"))
+        assertTrue(page.contains("'QUEUED', 'RUNNING', 'CONFLICT', 'CHECK_FAILED', 'ERROR', 'FIXING', 'AWAITING_OWNER', 'AWAITING_OBSERVATION',"))
     }
 
     /** The fifth owner item (owner 2026-10-28): its kind word on the session row and the bar, its chip on the project list and where a

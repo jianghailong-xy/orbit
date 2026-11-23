@@ -68,7 +68,7 @@ internal object NavShell {
     /** A row of Alpha's. [fields] are more of its JSON, starting with a comma. */
     fun row(id: String, title: String, at: String = "2026-10-09T01:00:00Z", pending: Int = 0, fields: String = "") =
         """{"id":"$id","title":"$title","status":"AWAITING_INPUT","runState":"AWAITING_INPUT","lifecycleState":"OPEN",
-        "agent":{"id":"$ALPHA","name":"Alpha"},"agentId":"$ALPHA","createdAt":"2026-10-08T08:00:00Z","lastTurnAt":"$at",
+        "agent":{"id":"$ALPHA","name":"Alpha"},"agentId":"$ALPHA","createdAt":"2026-10-08T08:00:00Z","lastTurnAt":"$at","listedAt":"$at",
         "capabilities":{"canComplete":true,"canRestore":false},"pendingApprovals":$pending$fields}"""
 
     val workspaces = """[

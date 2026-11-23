@@ -601,7 +601,7 @@ import {
   type ManagedHeartbeatAnswer,
 } from '../managed-runners/managed-runner-sleep';
 import { readManagedRunnerStorage, type ManagedRunnerStorage } from '../managed-runners/managed-runner-storage';
-import { markUpdateNowCuts } from '../managed-runners/managed-runner-update-cut';
+import { markUpdateNowCuts, queueUpdateNowContinuation } from '../managed-runners/managed-runner-update-cut';
 import {
   RUNNER_OFFLINE_AFTER_MS,
   RunnerPresenceService,
@@ -8225,10 +8225,11 @@ export class RunnerApiController {
       let currentWorkTerminalized = 0;
       let currentWorkRequeued = 0;
       let stoppedRequestsClosed: string[] = [];
+      const reportedInterrupted = dto.status === RunStatus.INTERRUPTED;
       if (
         completedTurn
         && !failSession
-        && (dto.status === RunStatus.INTERRUPTED || await stopOvertookTarget(tx, sessionId, completedTurn.seq))
+        && (reportedInterrupted || await stopOvertookTarget(tx, sessionId, completedTurn.seq))
       ) {
         const settled = await settleStoppedCurrentWorkSteers(
           tx,
@@ -8266,6 +8267,12 @@ export class RunnerApiController {
         where: { sessionId, kind: 'steer', status: 'PENDING', sendIntent: null },
         data: { kind: 'message' },
       });
+      // A turn an older runner ended INTERRUPTED at the owner's Update Now's stop, rather than keeping it for the next
+      // generation, is followed by the update's continuation (managed-runner-update-cut.ts), which the count below then
+      // finds queued: the session stays RUNNING for the next generation to take it.
+      if (completedTurn && !failSession && !unanswered) {
+        await queueUpdateNowContinuation(tx, runner.id, sessionId, completedTurn, reportedInterrupted);
+      }
       // If a follow-up arrived before this completion acquired the Session lock, the
       // current active slot passes directly to it and the inbox may deliver it next. With
       // no executable follow-up, release the slot while the runtime remains warm.
@@ -8482,7 +8489,7 @@ export class RunnerApiController {
         // The park above wrote this session's finish, which may be the one a DONE task's identity was
         // waiting for (§10.5 O-L4 3). An item it opens is delivered after the commit with this
         // turn's own exception items.
-        const settled = await settleDeliveredIdentityAfterFinish(tx, current);
+        const settled = await settleDeliveredIdentityAfterFinish(tx, { ...current, id: sessionId });
         settledWork = settled === 'FROZEN' || settled === 'IDENTITY_UNKNOWN';
       }
       // NO_REPLY (contract §4.1): the turn has settled, the session is idle and its run goes on. Each
@@ -8801,6 +8808,9 @@ export class RunnerApiController {
       // The exception item that same transaction opened, handed to whoever is responsible for it
       // (contract §4.4 X-D4 1).
       await this.openItems?.deliverForTasks([finalized.taskId]);
+      // §12.5 W7: a failed landing this session held, handed back by the finish its failed turn wrote (TURN_FAILED);
+      // a MAIN line's item names no task, so the task's delivery above does not find it.
+      await this.openItems?.offerLandingFixesTo(sessionId);
     }
     // TURN_END events are flushed before /turn-complete, so their control summary can still see
     // RUNNING. Publish the committed row for every applied non-steer completion; task-bound
@@ -10818,6 +10828,9 @@ export class RunnerApiController {
       if (!outcome.taskReclaimed) this.realtime.publishTaskChanged(sessionId, outcome.taskId);
       await this.tasks?.deliverDispatchRefusalAfterCommit(outcome.taskId);
     }
+    // §12.5 W6: a failed landing handed to this work session while it was on its way to its DONE's end
+    // is delivered now that the end is over — the landing-fix turn revives it. Nothing for any other.
+    if ('taskId' in outcome && outcome.taskId) await this.openItems?.offerLandingFixesTo(sessionId);
     if ('currentWorkTerminalized' in outcome && (outcome.currentWorkTerminalized ?? 0) > 0) {
       this.realtime.publishQueuedTurnsChanged(sessionId);
     }

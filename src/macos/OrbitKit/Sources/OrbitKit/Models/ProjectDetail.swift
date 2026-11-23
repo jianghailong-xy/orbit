@@ -1288,14 +1288,19 @@ public struct ProjectTaskIntegration: Codable, Equatable, Sendable {
     /// observation waits to see on the line. Nil while the identity is not frozen, in every other
     /// state, and from an older server.
     public let deliveredSha: String?
+    /// With `FIXING` (revision 42, §12.7): the task's own work session fixing the failed landing on
+    /// its branch, which pressing the row opens. Nil in every other state and from an older server.
+    public let workSessionId: String?
 
     public init(state: String, handler: String? = nil, checksRunningForMs: Double? = nil,
-                landTask: LandTaskIntegrationView? = nil, deliveredSha: String? = nil) {
+                landTask: LandTaskIntegrationView? = nil, deliveredSha: String? = nil,
+                workSessionId: String? = nil) {
         self.state = state
         self.handler = handler
         self.checksRunningForMs = checksRunningForMs
         self.landTask = landTask
         self.deliveredSha = deliveredSha
+        self.workSessionId = workSessionId
     }
 }
 

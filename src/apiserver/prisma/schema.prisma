@@ -1727,11 +1727,14 @@ model ManagedRunner {
   /// column, which any fresh report answers.
   sleepRequestedAt    DateTime?                   @map("sleep_requested_at") @db.Timestamptz(3)
   /// DRAINING: when the instance was asked to stop for sleep. Null until then: up to that moment
-  /// the drain can still be called off without anything having stopped.
+  /// the drain can still be called off without anything having stopped. READY: when the owner's
+  /// interrupting Update Now first asked the backend to stop the instance (stopForOwnerUpdate),
+  /// kept on the next generation until another stop is asked.
   stopRequestedAt     DateTime?                   @map("stop_requested_at") @db.Timestamptz(3)
   /// DRAINING: when the instance, with nothing to do, accepted the stop. Set by its heartbeat only
   /// while the drain stands and no demand has come since it began; from then on the drain cannot be
-  /// called off, and the instance exits on its own.
+  /// called off, and the instance exits on its own. For the owner's Update Now: when the host
+  /// reported the exit that followed its stop request (`terminated`), kept like `stopRequestedAt`.
   stopAcknowledgedAt  DateTime?                   @map("stop_acknowledged_at") @db.Timestamptz(3)
   /// DRAINING for an image roll: the image the profile names, which the instance's Pod was not made from. The drain
   /// keeps the runner wanted (desiredState RUNNING), and once it has stopped the runner wakes at once as the next
@@ -1740,9 +1743,11 @@ model ManagedRunner {
   /// READY on a previous image: when the manager first found the instance made from an image other than the one it
   /// makes instances from now, with that image's source commit (`org.opencontainers.image.revision`) as
   /// `currentImageSha`. Both null while the instance is current or the backend cannot name the current build; the
-  /// owner's status reads them (`update`) without asking the backend.
+  /// owner's status reads them (`update`) without asking the backend. With them, the release that image was published
+  /// for (`org.opencontainers.image.version`), as `currentImageVersion`: null for an image built from a checkout.
   imageOutdatedSince  DateTime?                   @map("image_outdated_since") @db.Timestamptz(3)
   currentImageSha     String?                     @map("current_image_sha")
+  currentImageVersion String?                     @map("current_image_version")
   /// The owner's Update Now (managed-runner.service.ts updateNow): when it was asked for, and by whom (the owner's
   /// user id). Kept as the record of the last request. It is in progress while `updateCompletedAt` is null or older:
   /// the manager rolls the READY instance onto the current image once it is idle, or stops it at once for a request
@@ -4874,6 +4879,16 @@ model ProjectOpenItem {
   handoverNote          String?   @map("handover_note")
   handedOverAt          DateTime? @map("handed_over_at") @db.Timestamptz(3)
   handedOverBySessionId String?   @map("handed_over_by_session_id") @db.Uuid
+
+  /// Revision 42 (§12.4, migration 1501): the task's own work session a landing failure was handed to
+  /// first (W4, W5), when, and when and why it was handed back to the coordinator (W7). History, not a
+  /// relation. Offered and not returned = in the work session's hands: delivered to no coordinator and
+  /// no escalation time (`escalateAt` NULL). The pairs are both-or-neither, and the reason is one of
+  /// NO_NEW_COMMIT, TURN_FAILED, SESSION_ENDED, ROUNDS_EXHAUSTED, TASK_MOVED_ON.
+  workSessionId           String?   @map("work_session_id") @db.Uuid
+  workSessionOfferedAt    DateTime? @map("work_session_offered_at") @db.Timestamptz(3)
+  workSessionReturnedAt   DateTime? @map("work_session_returned_at") @db.Timestamptz(3)
+  workSessionReturnReason String?   @map("work_session_return_reason")
 
   resolution          String?
   resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(3)

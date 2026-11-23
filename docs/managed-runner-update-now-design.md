@@ -23,11 +23,18 @@ is no administrator command".
 
 1. **The status says when the image is old.** `ManagedRunnerStatus` gains
    `update?: { running: ManagedRunnerBuild; current: ManagedRunnerBuild; phase: 'available' | 'updating' }`, where
-   `ManagedRunnerBuild` is `{ sha, builtAt? }`. The manager already computes `previousImage` per instance; it now keeps
-   the result on the mapping (`imageOutdatedSince`, `currentImageSha`) so the status read needs no backend call.
-   - **The running build** comes from the runner's reported `version` (`managed-<sha>`).
-   - **The current build** is the profile image's `org.opencontainers.image.revision` label. The Docker channel adds it
-     to the image it reports, and Kubernetes takes it from the profile.
+   `ManagedRunnerBuild` is `{ sha, version?, builtAt? }`. The manager already computes `previousImage` per instance; it
+   now keeps the result on the mapping (`imageOutdatedSince`, `currentImageSha`, `currentImageVersion`) so the status
+   read needs no backend call.
+   - **The running build** comes from the runner's reported `version`: the release version for an image published from
+     a release tag (`0.1.261-beta.83`, with an empty `sha`, which the server is not told), or `managed-<sha>` for an
+     older image and for a single host's own build.
+   - **The current build** is the profile image's `org.opencontainers.image.revision` label, with its
+     `org.opencontainers.image.version` label as `version` when it was published from a release tag. The Docker channel
+     reports both for the image it serves, and Kubernetes takes them from the profile (`runner.imageRevision`,
+     `runner.imageVersion`, which the two-stage deploy writes).
+   - **Compared** by version when both sides have one, and otherwise by commit. A runner on the current release has no
+     `update`.
    - **When it is absent:** an instance on the current image, or a server that can't tell, has no `update`.
 2. **Every client shows the Update card for Orbit Cloud.** Web, iOS/macOS and Android show the card a self-managed
    runner shows (docs/runner-update-drain-design.md), driven by `managed.update` instead of `runner.selfUpdate`.
@@ -60,6 +67,19 @@ is no administrator command".
        the next one was created, and the next generation was READY within 40 s of the exit and resumed the turn by
        itself, which then ended answered. No re-queue from the server is needed. Without the cut marking the
        continuation said "its runner restarted"; with it, it opens with the update's note.
+     - **Not so on production's DeepSeek Harness turn** (2026-11-23, Kubernetes). The dsh engine alone cancelled its turn
+       at the SIGTERM and reported it INTERRUPTED, with no cut. Its completion was lost as the container exited, so the
+       next generation was handed the turn back with the restart's continuation. dsh's own turn ledger then re-sent the
+       old settlement instead of prompting, Orbit never acknowledged it, and the session stayed RUNNING with nothing
+       running. A second session of the same spawn tree waited behind it, because a two-slot runner gives a tree one
+       running session. Three fixes:
+       - dsh now drains and cuts like every other engine, and prompts a turn it finds cut, or settled INTERRUPTED by an
+         earlier binary, when Orbit hands it back (runner-go dsh_acp.go).
+       - The server re-queues as the fallback: a message turn an older runner reports INTERRUPTED while the owner's
+         interrupting Update Now has asked its instance to stop is followed by the update's continuation
+         (`queueUpdateNowContinuation`), so the session stays RUNNING for the next generation to take it.
+       - The stop is recorded on the mapping: `stopRequestedAt` when the manager first asks the backend, and
+         `stopAcknowledgedAt` when the host reports the exit. Both stay on the next generation.
    - **Demand never cancels an owner's Update Now,** on either path: on the idle path neither demand nor work recorded
      meanwhile calls its drain off, and the instance's acceptance does not wait for them (`ownerUpdateDrain`). What
      came meanwhile waits for the next generation, which wakes at once. An automatic idle roll is still called off by

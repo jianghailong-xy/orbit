@@ -2257,8 +2257,13 @@ func TestIntegrationLandingPathsExempt(t *testing.T) {
 			}
 			result := runIntegrationJob(cmd, silent)
 			expectedChecks := 2
-			if scenario == "upstream-absorbed" {
-				expectedChecks = 3 // K3 attributes the red landing check on M.
+			if scenario != "exempt" && scenario != "bare-directory" && scenario != "promotion" {
+				// K3 attributes every red landing check: on M after an absorb, on T0 otherwise. "exit 7"
+				// is red there too.
+				expectedChecks = 3
+				if !result.BaselineRed || len(result.Checks) != 3 || result.Checks[2].Scope != "BASELINE" {
+					t.Fatalf("red landing check not attributed: %+v", result)
+				}
 			}
 			if len(result.Checks) != expectedChecks || !strings.Contains(result.Checks[0].OutputTail, "acceptance-ran") {
 				t.Fatalf("acceptance did not run: %+v", result)
@@ -2345,8 +2350,12 @@ func TestIntegrationLandingTaskExempt(t *testing.T) {
 	}
 }
 
+// K3: a red landing check is run again on the tree without the task, whether or not this generation
+// absorbed upstream. "no-absorb*" land on a line already at upstream's tip; "fresh-line*" on a line
+// that does not exist on origin yet, whose T0 is main's own tip (task 352ZEtmx7cOXY91yIodUk: a red
+// main read as each task's own CHECK_FAILED and was handed to its session).
 func TestIntegrationBaselineAttribution(t *testing.T) {
-	for _, scenario := range []string{"baseline-red", "task-red", "no-absorb", "timed-out", "baseline-timed-out", "source-absorb", "baseline-unprepared", "baseline-worktree-failed"} {
+	for _, scenario := range []string{"baseline-red", "task-red", "no-absorb", "no-absorb-red", "fresh-line", "fresh-line-red", "timed-out", "baseline-timed-out", "source-absorb", "baseline-unprepared", "baseline-worktree-failed"} {
 		t.Run(scenario, func(t *testing.T) {
 			r := newIntegrationRepo(t)
 			recipe := "#!/bin/sh\nmkdir -p node_modules\ntouch node_modules/ready\n"
@@ -2356,14 +2365,17 @@ func TestIntegrationBaselineAttribution(t *testing.T) {
 			r.writeIn("scripts/worktree-overlay.sh", recipe)
 			r.commit("environment recipe")
 			r.push("main")
+			fresh := strings.HasPrefix(scenario, "fresh-line")
 			r.checkoutNew("project/line", "main")
-			r.push("project/line")
+			if !fresh {
+				r.push("project/line")
+			}
 			r.checkoutNew("task/red", "project/line")
 			r.write("task.txt", "task\n")
 			r.commit("task")
 			r.push("task/red")
 			r.checkout("main")
-			if scenario != "no-absorb" {
+			if !strings.HasPrefix(scenario, "no-absorb") {
 				r.write("upstream.txt", "upstream\n")
 				r.commit("upstream")
 				r.push("main")
@@ -2378,7 +2390,7 @@ func TestIntegrationBaselineAttribution(t *testing.T) {
 				r.push("main")
 			}
 			command := "test -f node_modules/ready || exit 9; test ! -f task.txt"
-			if scenario == "baseline-red" {
+			if scenario == "baseline-red" || scenario == "no-absorb-red" || scenario == "fresh-line-red" {
 				command = "test -f node_modules/ready || exit 9; exit 7"
 			}
 			if scenario == "timed-out" {
@@ -2392,8 +2404,15 @@ func TestIntegrationBaselineAttribution(t *testing.T) {
 			}
 			spec := IntegrationCheckSpec{Name: "LANDING_CHECK", Command: command, ExpectedExitCode: 0, TimeoutSeconds: 1}
 			result := runIntegrationJob(r.command("task/red", "project/line", spec), silent)
-			if result.State != "CHECK_FAILED" || result.BaselineRed != (scenario == "baseline-red") {
+			baselineRed := scenario == "baseline-red" || scenario == "no-absorb-red" || scenario == "fresh-line-red"
+			if result.State != "CHECK_FAILED" || result.BaselineRed != baselineRed {
 				t.Fatalf("result: %+v", result)
+			}
+			if fresh {
+				// The line still does not exist, and the job measured against main's own tip.
+				if r.originRev("refs/heads/project/line") != "" || result.TargetShaBefore != result.UpstreamSha || result.MainSyncSha != "" {
+					t.Fatalf("fresh line: %+v", result)
+				}
 			}
 			if scenario == "baseline-unprepared" || scenario == "baseline-worktree-failed" {
 				original := result.Checks[0]
@@ -2402,7 +2421,7 @@ func TestIntegrationBaselineAttribution(t *testing.T) {
 				}
 			}
 			expected := 2
-			if scenario == "no-absorb" || scenario == "timed-out" || scenario == "baseline-unprepared" || scenario == "baseline-worktree-failed" {
+			if scenario == "timed-out" || scenario == "baseline-unprepared" || scenario == "baseline-worktree-failed" {
 				expected = 1
 			}
 			if len(result.Checks) != expected {
@@ -2421,10 +2440,10 @@ func TestIntegrationBaselineAttribution(t *testing.T) {
 				if baseline.Scope != "BASELINE" {
 					t.Fatalf("scope: %+v", baseline)
 				}
-				if scenario == "baseline-red" && (baseline.ExitCode == nil || *baseline.ExitCode != 7) {
+				if baselineRed && (baseline.ExitCode == nil || *baseline.ExitCode != 7) {
 					t.Fatalf("baseline was not prepared: %+v", baseline)
 				}
-				if (scenario == "task-red" || scenario == "source-absorb") && (baseline.ExitCode == nil || *baseline.ExitCode != 0) {
+				if (scenario == "task-red" || scenario == "source-absorb" || scenario == "no-absorb" || scenario == "fresh-line") && (baseline.ExitCode == nil || *baseline.ExitCode != 0) {
 					t.Fatalf("task leaked into baseline or recipe did not run: %+v", baseline)
 				}
 			}
