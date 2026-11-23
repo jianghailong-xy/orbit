@@ -965,7 +965,7 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 			limitNote = fmt.Sprintf("It hit a usage limit, capacity or a failed login on %d candidates in a row and was moved %d times, the most one delegate call is.", attempt, subagentMaxMoves)
 			break
 		}
-		next, ferr := s.nextSubagentCandidate(run.id, limit, def)
+		next, ferr := s.nextSubagentCandidate(run.id, limit, res, def)
 		if ferr != nil {
 			limitNote = "It was not moved to another candidate: " + ferr.Error()
 			break
@@ -1349,6 +1349,7 @@ func runClaudeChildProcess(ctx context.Context, parent *ClaimedSession, exec Age
 	}
 	var res ExecResult
 	got := false
+	var output claudeTurnOutput
 	sc := bufio.NewScanner(sp.stdout)
 	sc.Buffer(make([]byte, 0, 1024*1024), 16*1024*1024)
 	for sc.Scan() {
@@ -1361,8 +1362,15 @@ func runClaudeChildProcess(ctx context.Context, parent *ClaimedSession, exec Age
 		}
 		if msg["type"] == "result" {
 			res, got = resultFrom(msg, ctx), true
+			// Claude Code ends a spent window or a refused sign-in with a "success" result whose reply is the
+			// failure: what it was is read off that reply, for the fallback ask (subagentLimitFailure).
+			if failure := claudeTurnFailureOf(res.Result); failure.Kind != "" || res.Status == stFailed {
+				res.Failure = failure.wire()
+				res.Admission = output.admission(res, firstNonEmpty(failure.Said, strings.TrimSpace(res.Result)))
+			}
 			break
 		}
+		output.observe(msg)
 		handleMessage(msg, emit, nil)
 	}
 	_ = sp.stdin.Close()

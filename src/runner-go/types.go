@@ -1910,6 +1910,12 @@ type TurnCompleteRequest struct {
 	// rather than as a reply (Codex). Result is then whatever the turn said before it died, so
 	// without this the control plane recorded the agent's last sentence as the failure's reason.
 	Error string `json:"error,omitempty"`
+	// Failure is what a FAILED turn failed with, as its engine adapter classified it (engine_failure.go,
+	// docs/routing-account-health-design.md §5.1); nil when it is not classified. Error keeps its words.
+	Failure *RunFailure `json:"failure,omitempty"`
+	// Admission is sent on a FAILED turn only, false included: whether the turn ended before the engine
+	// produced any reply, tool call or billed token (§5.2). Nil on every other turn.
+	Admission *bool `json:"admission,omitempty"`
 	// ShellExitCode/ShellOutput are populated for synchronous shell turns. Pointers preserve
 	// the difference between a real zero/empty result and an older runner that sent neither.
 	ShellExitCode *int                   `json:"shellExitCode,omitempty"`
@@ -2016,6 +2022,8 @@ type RunFinalizeRequest struct {
 	Result           string                 `json:"result,omitempty"`
 	Subtype          string                 `json:"subtype,omitempty"`
 	Error            string                 `json:"error,omitempty"`
+	Failure          *RunFailure            `json:"failure,omitempty"`   // the run's last FAILED turn's, on a FAILED end (§5.1)
+	Admission        *bool                  `json:"admission,omitempty"` // the same turn's (§5.2)
 	ClaudeSessionID  string                 `json:"claudeSessionId,omitempty"`
 	RuntimeSessionID string                 `json:"runtimeSessionId,omitempty"`
 	NumTurns         int                    `json:"numTurns"`
