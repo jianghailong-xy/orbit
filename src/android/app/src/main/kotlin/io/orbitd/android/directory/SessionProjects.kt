@@ -62,6 +62,8 @@ data class SessionProjectRow(
     val needsYou: Boolean, val running: Boolean, val jobs: Boolean, val indicator: Indicator?, val line: SessionLine, val target: Target,
     val taskCounts: ProjectTaskCounts?, val runningCount: Int, val pause: ProjectPause = ProjectPause.NONE,
     val started: Boolean = true, val pauseLine: PauseLine? = null,
+    /** The newest listing among the members: the order key, as [DirectorySession.listedAt] is a session's. */
+    val listedAt: String? = null,
 ) {
     /** Which pause the second line says (design §4.2 2a, 2b), or null when it says something else. */
     enum class PauseLine { DAILY_LIMIT, OWNER }
@@ -91,24 +93,29 @@ sealed interface SessionProjectEntry {
     val id: String
     val pinnedAt: String?
     val lastTurnAt: String?
+    val listedAt: String?
     val createdAt: String?
     data class Session(val session: DirectorySession) : SessionProjectEntry {
         override val id get() = session.id
         override val pinnedAt get() = session.pinnedAt
         override val lastTurnAt get() = session.lastTurnAt
+        override val listedAt get() = session.listedAt
         override val createdAt get() = session.createdAt
     }
     data class Project(val row: SessionProjectRow) : SessionProjectEntry {
         override val id get() = row.projectId
         override val pinnedAt get() = row.pinnedAt
         override val lastTurnAt get() = row.lastTurnAt
+        override val listedAt get() = row.listedAt
         override val createdAt get() = row.createdAt
     }
     /** The entry as the time sections file it (`timeGroupingSession`): a project under its own id, at its coordinator's pin and its
      * members' latest activity. */
     val groupingSession: DirectorySession get() = when (this) {
         is Session -> session
-        is Project -> DirectorySession(id, row.title, pinnedAt = pinnedAt, lastTurnAt = lastTurnAt, createdAt = createdAt)
+        is Project -> DirectorySession(id, row.title, pinnedAt = pinnedAt, lastTurnAt = lastTurnAt, listedAt = listedAt, createdAt = createdAt,
+            // What the sections read: a waiting member is Needs you, a running one Working.
+            status = if (row.running) "RUNNING" else "AWAITING_INPUT", pendingApprovals = if (row.needsYou) 1 else 0)
     }
 }
 
@@ -231,10 +238,11 @@ object SessionProjectGrouping {
                 needsYou, runningCount > 0, jobs, when { needsYou -> SessionProjectRow.Indicator.NEEDS_YOU; runningCount > 0 -> SessionProjectRow.Indicator.RUNNING
                     jobs -> SessionProjectRow.Indicator.JOBS; else -> null }, selected, target, counts,
                 if (summary != null) summary.obj("buckets")?.number("running") ?: 0 else runningCount, pause, ProjectPause.started(summary),
-                if (selected === pauseSaid) pauseLineKind else null)
+                if (selected === pauseSaid) pauseLineKind else null,
+                members.maxByOrNull { instant(it.listedAt ?: it.createdAt) }?.let { it.listedAt ?: it.createdAt })
         }
         val entries = (loose.map { SessionProjectEntry.Session(it) } + rows.map { SessionProjectEntry.Project(it) })
-            .map { it to instant(it.lastTurnAt ?: it.createdAt) }
+            .map { it to instant(if (view == SessionView.OPEN) it.listedAt ?: it.createdAt else it.lastTurnAt ?: it.createdAt) }
             .sortedWith { a, b ->
                 if (view == SessionView.OPEN && (a.first.pinnedAt != null) != (b.first.pinnedAt != null)) (if (a.first.pinnedAt != null) -1 else 1)
                 else b.second.compareTo(a.second)

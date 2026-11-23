@@ -55,6 +55,7 @@ interface FixtureSession {
   lifecycleState: string;
   createdAt: string;
   lastTurnAt: string;
+  listedAt?: string;
   folderId: string | null;
   projectMembership?: ReturnType<typeof membership>;
   [key: string]: unknown;
@@ -71,7 +72,7 @@ const row = (n: number, title: string, extra: Record<string, unknown> = {}): Fix
   lifecycleState: 'OPEN',
   provider: 'claude',
   createdAt: '2026-10-01T09:00:00Z',
-  lastTurnAt: '2026-10-03T08:00:00Z',
+  lastTurnAt: '2026-10-03T08:00:00Z', listedAt: '2026-10-03T08:00:00Z',
   folderId: null,
   ...extra,
 });
@@ -88,7 +89,7 @@ const TASK = row(813, 'Build the package', {
   status: 'RUNNING',
   runState: 'RUNNING',
   lastToolUse: 'Bash',
-  lastTurnAt: '2026-10-04T08:00:00Z',
+  lastTurnAt: '2026-10-04T08:00:00Z', listedAt: '2026-10-04T08:00:00Z',
   tags: [TAG],
 });
 const project = (extra: Record<string, unknown> = {}) => ({
@@ -333,7 +334,7 @@ beforeEach(() => {
       const inScope = params.has('workspaceId') ? rows : [...rows, ...remoteRows];
       return reply(inScope.filter((r) => r.lifecycleState === lifecycle &&
         (!params.has('projectId') || r.projectMembership?.projectId === params.get('projectId')))
-        .sort((a, b) => Date.parse(b.lastTurnAt) - Date.parse(a.lastTurnAt)));
+        .sort((a, b) => Date.parse(b.listedAt ?? b.lastTurnAt) - Date.parse(a.listedAt ?? a.lastTurnAt)));
     }
     if (path.startsWith('/sessions/project-placement?')) {
       // What the server answers (SessionsService.projectPlacement), from every workspace's rows.
@@ -730,8 +731,8 @@ describe('the project sessions column beside the conversation', { timeout: 60_00
     const OTHER_PROJECT_ID = pid(830);
     const otherMembership = (role: string) => ({ projectId: OTHER_PROJECT_ID, projectTitle: 'Project Beta', projectStatus: 'OPEN', role });
     const otherCoordinator = row(831, 'Coordinate the migration', { projectMembership: otherMembership('COORDINATOR'),
-      projectId: OTHER_PROJECT_ID, projectTitle: 'Project Beta', lastTurnAt: '2026-10-02T08:00:00Z' });
-    const otherTask = row(832, 'Copy the index', { projectMembership: otherMembership('TASK'), lastTurnAt: '2026-10-02T07:00:00Z' });
+      projectId: OTHER_PROJECT_ID, projectTitle: 'Project Beta', lastTurnAt: '2026-10-02T08:00:00Z', listedAt: '2026-10-02T08:00:00Z' });
+    const otherTask = row(832, 'Copy the index', { projectMembership: otherMembership('TASK'), lastTurnAt: '2026-10-02T07:00:00Z', listedAt: '2026-10-02T07:00:00Z' });
     rows = [LOOSE, COORDINATOR, TASK, otherCoordinator, otherTask];
     projects = [project(), project({ id: OTHER_PROJECT_ID, title: 'Project Beta', lastActivityAt: '2026-10-02T08:00:00Z',
       coordinatorActivity: { working: false, lastTurnAt: otherCoordinator.lastTurnAt } })];
@@ -802,8 +803,8 @@ describe('the project sessions column beside the conversation', { timeout: 60_00
   const BETA_ID = pid(840);
   const betaMembership = (role: string) => ({ projectId: BETA_ID, projectTitle: 'Project Beta', projectStatus: 'OPEN', role });
   const betaCoordinator = remote(841, 'Coordinate Beta', { projectMembership: betaMembership('COORDINATOR'),
-    projectId: BETA_ID, projectTitle: 'Project Beta', lastTurnAt: '2026-10-02T08:00:00Z' });
-  const betaMember = row(842, 'Index the archive', { projectMembership: betaMembership('TASK'), lastTurnAt: '2026-10-03T09:00:00Z' });
+    projectId: BETA_ID, projectTitle: 'Project Beta', lastTurnAt: '2026-10-02T08:00:00Z', listedAt: '2026-10-02T08:00:00Z' });
+  const betaMember = row(842, 'Index the archive', { projectMembership: betaMembership('TASK'), lastTurnAt: '2026-10-03T09:00:00Z', listedAt: '2026-10-03T09:00:00Z' });
   const withBeta = (): void => {
     rows = [LOOSE, COORDINATOR, TASK, betaMember];
     remoteRows = [betaCoordinator];
@@ -1475,9 +1476,9 @@ describe('project sessions page', { timeout: 60_000 }, () => {
 
   it('lists Open and Completed members across workspaces, excludes Trash and counts running members', async () => {
     remoteRows = [
-      remote(825, 'Resolve remote issue', { lastTurnAt: '2026-10-04T10:00:00Z' }),
-      remote(826, 'Completed remote work', { lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED', lastTurnAt: '2026-10-04T09:00:00Z' }),
-      remote(827, 'Trashed remote work', { lifecycleState: 'TRASH', lastTurnAt: '2026-10-04T11:00:00Z' }),
+      remote(825, 'Resolve remote issue', { lastTurnAt: '2026-10-04T10:00:00Z', listedAt: '2026-10-04T10:00:00Z' }),
+      remote(826, 'Completed remote work', { lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED', lastTurnAt: '2026-10-04T09:00:00Z', listedAt: '2026-10-04T09:00:00Z' }),
+      remote(827, 'Trashed remote work', { lifecycleState: 'TRASH', lastTurnAt: '2026-10-04T11:00:00Z', listedAt: '2026-10-04T11:00:00Z' }),
     ];
     projects = [project({ buckets: { running: 99 } })];
     await mount();
@@ -1488,7 +1489,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     expect(page()?.textContent).toContain('2/5 done · 1 running');
     expect(page()?.querySelector('.session-new')).toBeNull();
     expect(page()?.querySelector('[aria-label="New session"]')).toBeNull();
-    expect(sessionRows().map((entry) => entry.querySelector('.session-title')?.textContent)).toEqual(['Plan the release', 'Resolve remote issue', 'Completed remote work', 'Build the package']);
+    expect(sessionRows().map((entry) => entry.querySelector('.session-title')?.textContent)).toEqual(['Plan the release', 'Build the package', 'Resolve remote issue', 'Completed remote work']);
     const coordinatorSection = page()?.querySelector('.session-project-coordinator');
     expect(coordinatorSection?.textContent).toContain('Coordinator');
     expect(coordinatorSection?.querySelector('.session-title')?.textContent).toBe('Plan the release');
@@ -1498,7 +1499,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     expect(projectQueryCalls().some((params) => params.get('view') === 'trash')).toBe(false);
     await click(memberRow('Resolve remote issue'), 'the remote member');
     await until(() => expect(location).toBe(`/sessions/${pid(825)}?project=${PROJECT_ID}`));
-    expect(pageTitles()).toEqual(['Plan the release', 'Resolve remote issue', 'Completed remote work', 'Build the package']);
+    expect(pageTitles()).toEqual(['Plan the release', 'Build the package', 'Resolve remote issue', 'Completed remote work']);
   });
 
   it.each(['open', 'completed'] as const)('gives mixed member rows their own lifecycle actions from the %s page', async (view) => {
