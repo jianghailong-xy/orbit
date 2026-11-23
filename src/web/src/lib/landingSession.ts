@@ -549,10 +549,13 @@ function terminalCard(
       || (result.exitCode != null && result.exitCode !== result.expectedExitCode);
   }) as {
     name?: string; exitCode?: number | null; expectedExitCode?: number;
-    timedOut?: boolean; durationMs?: number;
+    timedOut?: boolean; durationMs?: number; command?: string;
   } | undefined;
-  const label = failed?.name ? checkLabel(failed.name) : LANDING_PAGE_COPY.TASK_ACCEPTANCE;
-  const clause = failed?.timedOut
+  // A GITHUB_CHECK is a required check that failed on the pull request; its `command` is GitHub's name for it.
+  const githubCheck = failed?.name === 'GITHUB_CHECK' ? (failed.command ?? 'Required check') : null;
+  const label = githubCheck ? `Check failed: ${githubCheck}`
+    : failed?.name ? checkLabel(failed.name) : LANDING_PAGE_COPY.TASK_ACCEPTANCE;
+  const clause = githubCheck ? label : failed?.timedOut
     ? `${LANDING_PAGE_COPY.CHECKS_FAILED} · ${LANDING_PAGE_COPY.CHECKS_TIMED_OUT.toLowerCase()}`
     : failed
       ? `${LANDING_PAGE_COPY.CHECKS_FAILED} · ${LANDING_PAGE_COPY.EXIT} ${failed.exitCode ?? '—'} `
@@ -562,7 +565,9 @@ function terminalCard(
         : attempt.state === 'ERROR'
           ? LANDING_PAGE_COPY.STOPPED_WITH_AN_ERROR
           : LANDING_PAGE_COPY.STOPPED_NOT_LANDED;
-  const failure = failed
+  const failure = githubCheck
+    ? `${label} · ${LANDING_PAGE_COPY.NOTHING_PUSHED_CLAUSE}`
+    : failed
     ? `${failed.timedOut ? `${label} timed out ${LANDING_PAGE_COPY.ON_THE_COMBINED_TREE}` : LANDING_PAGE_COPY.TASK_ACCEPTANCE_EXITED(String(failed.exitCode ?? '—'), String(failed.expectedExitCode ?? 0))} · ${LANDING_PAGE_COPY.NOTHING_PUSHED_CLAUSE}`
     : attempt.state === 'CONFLICT' ? `${LANDING_PAGE_COPY.COULD_NOT_MERGE} · ${LANDING_PAGE_COPY.CONFLICT}`
       : attempt.state === 'ERROR' ? `${LANDING_PAGE_COPY.STOPPED_WITH_AN_ERROR} · ${LANDING_PAGE_COPY.NOTHING_PUSHED_CLAUSE}`

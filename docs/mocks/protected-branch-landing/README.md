@@ -22,4 +22,8 @@ The coordinator's two preview attachments could not be fetched from this session
 
 ## Owner's choices
 
-_Not yet recorded. To be filled in when the owner confirms the board._
+The owner confirmed the board on 2026-11-23 with the recommended option on all three:
+
+1. **Setting: A.** A "Landing" section in workspace settings with both choices visible: Pull request (Default badge) and Push as me (Faster badge).
+2. **Label: keep "Pull request"** with the Default badge. Its description says Orbit pushes when GitHub allows it and opens a pull request when main requires one.
+3. **Tip: 1.** "Faster next time: Push as me" sits inside the waiting-for-review landing card, is dismissible, and is not shown once Push as me is on.

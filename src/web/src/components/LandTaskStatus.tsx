@@ -8,6 +8,7 @@ import {
 } from '@orbit/shared';
 import { DEFAULT_MAIN_BRANCH } from '../lib/projectStart';
 import { formatSpan } from '../lib/watches';
+import { LandingPullRequest } from './LandingPullRequest';
 import {
   LANDING_LIVENESS_WORDS,
   LANDING_NO_REPORT_YET,
@@ -193,6 +194,7 @@ export function LandTaskStatus({
           Its work is on {integration.state === 'ON_UPSTREAM' ? main : 'the project branch'} by an existing receipt.
         </div>
       ) : null}
+      {job?.pullRequest ? <LandingPullRequest pullRequest={job.pullRequest} main={branchOf(job.targetRef)} /> : null}
       {job ? (
         <dl className="land-task-facts">
           <div><dt>Target</dt><dd><code title={job.targetRef}>{branchOf(job.targetRef)}</code></dd></div>

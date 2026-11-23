@@ -9,6 +9,7 @@ import {
   type ProjectIntegrationJob,
   type ProjectIntegrationView,
   type ProjectManualReady,
+  type LandingPullRequestView,
 } from '@orbit/shared';
 import { api } from '../api';
 import { streamPoll } from '../lib/listBudget';
@@ -872,6 +873,8 @@ export interface LandingCard {
    *  "Nothing to do" (board v4 04 draws no body under that head). Read off `inFlight`, so a server
    *  that does not list its jobs says it too. */
   mergeJob: boolean;
+  /** The pull request the landing waits on or ended in (design §8); absent from a server that predates it. */
+  pullRequest?: LandingPullRequestView | null;
 }
 
 /** The card's own three: the branch the work lands on, the sentence that takes the reader off the
@@ -945,6 +948,7 @@ export function landingCard(
       : lead?.skipCheck === 'STOPPING' ? LANDING_WORDS.SKIP_CHECK_STOPPING
         : lead?.skipCheck === 'SKIPPED' ? LANDING_WORDS.SKIP_CHECK_SKIPPED : null,
     mergeJob: !several && MERGE_JOB_KINDS.has(view.inFlight?.kind ?? ''),
+    ...(!several && view.inFlight?.pullRequest ? { pullRequest: view.inFlight.pullRequest } : {}),
   };
 }
 
