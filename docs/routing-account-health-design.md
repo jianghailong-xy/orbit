@@ -1,7 +1,7 @@
 # Routing and account health: design
 
 **Status**: design proposal (2026-11-23). No code yet. The owner ruled on the open decisions on 2026-11-23; they are
-recorded in §11 and the whole document follows them.
+recorded in §11, with three amendments accepted the same day, and the whole document follows them.
 
 > **Words.** An **account** is whatever a run spends: a sign-in on one runner (runner × engine × account), a member of
 > an account pool, or an API key. An **admission failure** is a run the provider turned away before it did any work.
@@ -26,14 +26,15 @@ recorded in §11 and the whole document follows them.
      No block is open-ended. A provider's explicit refusal blocks the account for 1 hour; each consecutive refusal
      doubles that (2 h, 4 h, 8 h, 16 h) up to 24 hours. Every block ends with one trial: an ordinary routed run. At the
      cap that is one trial a day until one succeeds or the owner clears the account. Unclassified zero-cost admission
-     failures run a shorter ladder of the same shape (the circuit breaker). A model at capacity is set aside on that
-     account for 5 minutes.
+     failures run a ladder of the same shape that starts at 30 minutes and reaches the same 24-hour cap (the circuit
+     breaker). A model at capacity is set aside on that account for 5 minutes.
   3. **Router changes** (§7): a blocked account is removed with a Why line that quotes the provider; a suspect one is
      ranked last; admission refusals are not counted for tier escalation or the failure budget; the refused run is
-     replaced at once on the next candidate, for every task, auto-run or not; a task pinned to a blocked provider runs
-     elsewhere and says so.
-  4. **One owner alert** from the third consecutive trip on an account, not repeated until its state changes, and a
-     "Check again" control on the account's row (§8).
+     replaced at once on the next candidate, for every task, auto-run or not; a task pinned to a blocked provider holds
+     with a reason, or runs elsewhere and says so when the owner has turned that on (one account-level setting, off
+     by default).
+  4. **One owner alert** per problem: at the first classified refusal, or at the breaker's third consecutive trip.
+     It is not repeated until the state changes. A "Check again" control sits on the account's row (§8).
 - **A new engine** gets the breaker for free, and gets precise behaviour by declaring one mapping table in its adapter
   (§5.3, §9).
 - **Rollout** (§10): health and structured kinds ship together as the first release; replacement and pin handling
@@ -177,7 +178,7 @@ implies:
 | `ACCESS_DENIED` | **No** | **A trip** on the classified ladder, at its scope (the account, or one model on it) | Same as `ACCOUNT_ACTION_REQUIRED` | Yes |
 | `TRANSPORT` | No | None. Never a strike. | — | No: `AutoRetryService` re-sends in place, as today |
 | `REQUEST_REFUSED` | Yes (unchanged) | None | — | No |
-| *(absent)* | Yes, **unless** the run was a zero-cost admission failure (§6.4) | A breaker strike if it was a zero-cost admission failure: demoted, then **a trip** on the breaker ladder (30 min, doubling to a 6 h cap) | A trial run that succeeds; the owner's Check again | Only when the strike blocks or demotes the account |
+| *(absent)* | Yes, **unless** the run was a zero-cost admission failure (§6.4) | A breaker strike if it was a zero-cost admission failure: demoted, then **a trip** on the breaker ladder (30 min, doubling to a 24 h cap) | A trial run that succeeds; the owner's Check again | Only when the strike blocks or demotes the account |
 
 Two rules keep the table honest:
 
@@ -372,17 +373,19 @@ success or after 60 minutes without another strike. A second one in a row is a t
 | 2 | 2 h | 1 h |
 | 3 | 4 h | 2 h |
 | 4 | 8 h | 4 h |
-| 5 | 16 h | 6 h (cap) |
-| 6 and later | 24 h (cap) | 6 h |
+| 5 | 16 h | 8 h |
+| 6 | 24 h (cap) | 16 h |
+| 7 and later | 24 h | 24 h (cap) |
 
 How the two relate:
 
 - They share one counter, `trips`, on the account-level row. The length of a block is read from the column of the
   kind that caused **this** trip, at the current count. An account that tripped the breaker three times and is then
   refused with a classified kind is at trip 4 of the classified column: 8 hours.
-- At every count the breaker's block is at most half the classified one, so an unclassified failure never keeps an
-  account out longer than an explicit refusal would. The reverse order is deliberate: a guess earns a shorter penalty
-  than a statement.
+- At every count the breaker's block is at or below the classified one: half of it up to trip 5, two thirds at
+  trip 6, equal from trip 7. So an unclassified failure never keeps an account out longer than an explicit refusal
+  would, and a guess earns a shorter penalty than a statement until both reach the cap.
+- Both ladders end at the same place: one trial every 24 hours. The breaker gets there one trip later.
 - Every block of either ladder ends with a trial (§6.5). A refused trial is the next trip, at once: a trial does not
   need two strikes.
 - Any success resets `strikes` and `trips` to zero and clears the row. So does the owner's Check again.
@@ -435,8 +438,8 @@ never started.
 | ends some other way before admission (cancelled, runner lost, `TRANSPORT`) | Unchanged: the trial is due again. | As today. |
 
 **At the cap.** Once the classified ladder reaches 24 hours, the account gets exactly one trial every 24 hours, for
-as long as it keeps refusing. It stops when a trial succeeds or the owner presses Check again. At the breaker's cap
-the same holds every 6 hours.
+as long as it keeps refusing. It stops when a trial succeeds or the owner presses Check again. The breaker's ladder
+has the same cap, so an unmapped failure ends at the same one trial a day.
 
 **What a refused trial costs the task that got it.**
 
@@ -448,8 +451,9 @@ the same holds every 6 hours.
   SubAgent's two moves: the task did not choose to be the test.
 - If the tried account was its only candidate, the task waits for the next period instead of being replaced (§7.5).
 
-What the owner sees over time, for an account that stays broken: refused trials at about 1, 3, 7, 15 and 31 hours
-after the first refusal, then one a day.
+What the owner sees over time, for an account that stays broken: after a classified refusal, refused trials at about
+1, 3, 7, 15 and 31 hours, then one a day; after the breaker's first trip, at about 0.5, 1.5, 3.5, 7.5, 15.5 and 31.5
+hours, then one a day.
 
 ## 7. Router changes
 
@@ -561,9 +565,32 @@ failures count again, because then the evidence points at the task.
 
 A task can pin an engine (`Task.engine`), a provider (`Task.provider`) and a model (`Task.model`). `taskRunPool`
 applies the first two as filters (`model-routing.ts:459`); a model pin skips routing altogether (`:352`).
-**A pin whose every account health has blocked is relaxed for that run** (owner decision Q7). The pin on the task is
-not changed: each run decides again, and the task returns to its pin as soon as the account passes a trial. A pinned
-task is also the natural taker of that trial, since the pinned account ranks first for it once the trial is due.
+
+**The switch** (owner decision Q7, as amended). Whether a pin may be relaxed is the owner's choice, made once for the
+account:
+
+| | |
+|---|---|
+| Where | `UserPreferences.relaxBlockedPins`, a boolean beside `subagentBlockedProviders`. Read and changed like any other preference, `settings_get` / `settings_propose` included. The dispatch passes it to the router as one input field. |
+| Label | `Run pinned tasks elsewhere when their account can't run`, in the model routing settings. |
+| Default | **Off.** |
+| Per task | **No override.** A task has no field for it. A pin means what the account says pins mean. |
+
+One account-level setting is enough because the question it answers is about the owner, not the task: "may my work
+go to a provider I did not name?" A per-task override would make each pin carry a second meaning that every reader
+of a task has to check. An owner who wants one task free to move while the switch is off removes that task's pin; an
+owner who wants one task never to move while the switch is on has no way to say so, and that is the accepted limit
+of the smallest switch.
+
+**Off (the default): the task holds.** A task whose pinned account health has blocked is not moved. It gets the
+`ACCOUNT_NEEDS_ACTION` hold described at the end of this section, with the pin named: `Pinned to <provider>, which
+can't run now (<its health line>). Next try at 21:19.` The hold lifts when the pinned account's trial is due, and the
+held task takes that trial. The settings row is linked from the hold so the owner can turn relaxation on.
+
+**On: the pin is relaxed for that run.** The pin on the task is not changed: each run decides again, and the task
+returns to its pin as soon as the account passes a trial. A pinned task is also the natural taker of that trial,
+since the pinned account ranks first for it once the trial is due. The rest of this section, up to "When nothing else
+can run", describes the switch on.
 
 Relaxation applies only to health (`blocked`, `cooldown`, `trial-running`). A pinned account that is paused, signed
 out or at its quota behaves as it does today.
@@ -596,7 +623,8 @@ Why lines, on the Route Decision of the run:
 
 The task's row shows the same sentence while its newest run is a relaxed one.
 
-**When nothing else can run** (this also closes G7 for an unpinned task). `routeTaskRun` no longer falls back to the
+**When nothing else can run**: no candidate for an unpinned task (this closes G7), none after relaxation, or a pinned
+task with the switch off. `routeTaskRun` no longer falls back to the
 Agent's own model when that model's account is blocked. The dispatch holds the task, the way it holds one whose engine
 is signed out (`TaskSignInHold`, `src/shared/src/project-progress.ts:1376`). The hold type gains a second kind,
 `ACCOUNT_NEEDS_ACTION`, which names each account that could have run it, the provider's words for it, and the
@@ -618,26 +646,32 @@ at 21:19.`
 
 Kept to three things.
 
-1. **One push**, kind `account-needs-action`, sent on the **third consecutive trip** of an account, whichever ladder
-   the trips are on (owner decision Q4). With runs flowing, that is about 3 hours after the first classified refusal
-   (trips at 0, +1 h, +3 h) and about 1.5 hours after the breaker's first trip. Title: the runner's name (or the
-   provider's label for a key). Body: `Cursor can't run on this account: "Add a payment method to continue". Orbit is
-   using your other accounts and tries this one again from time to time.` For the breaker: `Cursor failed to start 6
-   runs on this account. Orbit is using your other accounts.` Same shape as `notifyEngineSignedOut`
-   (`push.service.ts:470`): no badge, no session id, thread `runner-<id>`. The Android client must list the new kind
-   or it drops the push.
+1. **One push**, kind `account-needs-action` (owner decision Q4, as amended). When it is sent depends on how sure
+   Orbit is:
 
-   **Not again until the state changes.** The row stores `notified_at` and `notified_kind`. After the alert, a
-   further alert is sent only when one of two things has happened:
+   | What happened | Push |
+   |---|---|
+   | A classified refusal (`ACCOUNT_ACTION_REQUIRED`, `CREDENTIAL_REFUSED`, `ACCESS_DENIED`) | At its **first** occurrence. The provider said so in its own words; there is nothing to wait for. |
+   | The unclassified breaker | At its **third consecutive trip**: about 1.5 hours after the first one, with runs flowing. Earlier trips are a guess and often heal by themselves. |
+
+   Title: the runner's name (or the provider's label for a key). Body: `Cursor can't run on this account: "Add a
+   payment method to continue". Orbit is using your other accounts and tries this one again from time to time.` For
+   the breaker: `Cursor failed to start 4 runs on this account. Orbit is using your other accounts.` Same shape as
+   `notifyEngineSignedOut` (`push.service.ts:470`): no badge, no session id, thread `runner-<id>`. The Android client
+   must list the new kind or it drops the push.
+
+   **Not again until the state changes.** The row stores `notified_at` and `notified_kind`. After an alert, a further
+   one is sent only when one of two things has happened:
 
    | Change | Then |
    |---|---|
-   | The row was cleared (a success, or Check again) and a **new** streak reaches its third trip | one alert for the new streak |
-   | The account is still at trip 3 or beyond and trips with a **different kind** than `notified_kind` (the breaker's guess became a classified refusal; a payment problem became a credential one) | one alert for the new kind |
+   | The row was cleared (a success, or Check again) and a **new** streak reaches its own alert point: its first classified refusal, or its third breaker trip | one alert for the new streak |
+   | The account, still blocked, is refused with a **different classified kind** than `notified_kind` (the breaker's guess became a classified refusal; a payment problem became a credential one) | one alert for the new kind |
 
-   Nothing else alerts: not the fourth or any later trip, not the daily trial at the cap, not a refused Check again
-   below the third trip, not different wording inside the same kind, not a cool-down, and not the same account on
-   another model.
+   Nothing else alerts: not a later trip of the same kind, not a refused trial, not the daily trial at the cap, not
+   different wording inside the same kind, not a classified streak turning unclassified, not a cool-down, and not the
+   same account on another model. An owner who presses Check again on an account that is still broken gets one alert
+   for it: that is the answer to the press.
 
 2. **The account's row** (runner page and Providers page, where `pausedUntil` is already shown through
    `namedRunnerEngines`, `src/apiserver/src/common/runner-engines.ts:414`), from the **first** trip: `Needs action ·
@@ -676,14 +710,14 @@ Q8): health is not shipped on text markers alone.
 
 | Phase | Content | Tests |
 |---|---|---|
-| **1. Health and structured kinds** (server and runner, one release) | **Runner:** `engineFailure`, the rule tables for Cursor, Codex, Claude, Kimi and Antigravity, `failure` and `admission` on turn-complete, finalize and the SubAgent fallback request, the census test. **Server:** the four session columns; `runFailureKind` in place of the six text call sites; `account_health` and `AccountHealthService` with both ladders, both cool-downs and the trial claim; `health` in routing input; the account and model exclusions and suspect ranking; `notCounted` in run history and in `autoRunHoldOff`; the hold when nothing can run. | **Go:** table tests per engine with recorded fixtures; census; `admission` set and unset. **Shared:** `runFailureKind` prefers the structured kind, falls back to markers. **Unit:** `engineVerdict` reasons per kind; a model entry removes only that model's rows; `compareAccounts` with a suspect; `routeTaskRun` skips and does not escalate; the ladder table of §6.4 row by row, including a breaker-then-classified streak; reset on success; idempotent per session; `TRANSPORT` never strikes; a capacity cool-down never trips or alerts. **pg spec:** five refused runs on one account → run 2 routes elsewhere, tier unchanged, budget unspent; two dispatches racing for one due trial → one claims, one routes elsewhere; a refused trial takes the next step; a blocked only-candidate holds the task and the hold lifts at `blocked_until`. **Cross-version:** an old runner against the new server and the reverse. |
-| **2. Replace, relax, move** | Immediate replacement run for every task with its bound; SubAgent moves on the new kinds; pin relaxation (§7.5) and its Why lines; Automatic account choice skips blocked accounts; pool member choice at claim. | **Unit:** each relaxation step; tier kept; model pin kept or held; owner's blocked providers never reached. **pg spec:** a refused run of a task that does not auto-run is followed by one replacement, at most 3 per hour, refused trials excepted; SubAgent attempts record `ACCOUNT_ACTION_REQUIRED`; a named model does not move; a pinned task returns to its pin after a successful trial. |
-| **3. Owner surface** | Push kind (server, iOS/macOS, Android), the account row line, the Check again route, the hold kind in project open items. | **Unit:** no push on trips 1 and 2, one on trip 3, none on trip 4 or on daily trials; a new streak alerts again at its third trip; a changed kind alerts once. **pg spec:** Check again clears and resets the ladder; a refusal after it is trip 1. Client tests for the row and the push kind on each platform. |
+| **1. Health and structured kinds** (server and runner, one release) | **Runner:** `engineFailure`, the rule tables for Cursor, Codex, Claude, Kimi and Antigravity, `failure` and `admission` on turn-complete, finalize and the SubAgent fallback request, the census test. **Server:** the four session columns; `runFailureKind` in place of the six text call sites; `account_health` and `AccountHealthService` with both ladders, both cool-downs and the trial claim; `health` in routing input; the account and model exclusions and suspect ranking; `notCounted` in run history and in `autoRunHoldOff`; the hold when nothing can run. | **Go:** table tests per engine with recorded fixtures; census; `admission` set and unset. **Shared:** `runFailureKind` prefers the structured kind, falls back to markers. **Unit:** `engineVerdict` reasons per kind; a model entry removes only that model's rows; `compareAccounts` with a suspect; `routeTaskRun` skips and does not escalate; the ladder table of §6.4 row by row to both 24 h caps, including a breaker-then-classified streak; reset on success; idempotent per session; `TRANSPORT` never strikes; a capacity cool-down never trips or alerts. **pg spec:** five refused runs on one account → run 2 routes elsewhere, tier unchanged, budget unspent; two dispatches racing for one due trial → one claims, one routes elsewhere; a refused trial takes the next step; a blocked only-candidate holds the task and the hold lifts at `blocked_until`. **Cross-version:** an old runner against the new server and the reverse. |
+| **2. Replace, relax, move** | Immediate replacement run for every task with its bound; SubAgent moves on the new kinds; the `relaxBlockedPins` preference, pin relaxation when it is on (§7.5) and its Why lines; Automatic account choice skips blocked accounts; pool member choice at claim. | **Unit:** switch off holds a pinned task with the pin named; switch on: each relaxation step; tier kept; model pin kept or held; owner's blocked providers never reached. **pg spec:** a refused run of a task that does not auto-run is followed by one replacement, at most 3 per hour, refused trials excepted; SubAgent attempts record `ACCOUNT_ACTION_REQUIRED`; a named model does not move; a pinned task returns to its pin after a successful trial. |
+| **3. Owner surface** | Push kind (server, iOS/macOS, Android), the account row line, the Check again route, the hold kind in project open items. | **Unit:** a classified refusal pushes at trip 1 and not at later trips or daily trials; the breaker pushes at trip 3 only; a new streak alerts again at its own alert point; a changed classified kind alerts once; a classified streak turning unclassified does not. **pg spec:** Check again clears and resets the ladder; a refusal after it is trip 1. Client tests for the row and the push kind on each platform. |
 
 Between phases 1 and 2 two things are weaker than the final design, by construction: a refused run is replaced by
-the next ordinary dispatch of an auto-run task rather than at once, and a task pinned to a blocked provider holds
-until the trial is due rather than running elsewhere. Between phases 1 and 3 the owner sees blocks in Why lines and
-hold reasons only.
+the next ordinary dispatch of an auto-run task rather than at once, and a task pinned to a blocked provider always
+holds until the trial is due, because the setting that lets it run elsewhere arrives in phase 2. Between phases 1 and
+3 the owner sees blocks in Why lines and hold reasons only; there is no push yet.
 
 **Migration.** One new table (`account_health`, with its partial unique index on `owner_id, subject_key,
 scope_model`) and four nullable columns on `session`. No backfill: history before the change is read through the
@@ -704,10 +738,11 @@ server ignores the new fields and the sentences still match. Neither direction n
 | A rule is too broad and blocks healthy accounts. | Rules are exact matches with a recorded fixture; the first block is one hour and ends in a trial; a hand-started session clears it. |
 | The breaker blames an account for a repository's fault. | Demote first, block for 30 minutes, clear on any success (§6.4). |
 | Exempting refusals from the budget creates a respawn loop. | The health row removes the account; the replacement bound (3 per hour) caps the rest; no candidate → hold, not run. |
-| Trials are noise: an account that stays broken refuses about five runs in the first 31 hours and one a day after that. | Each is free, replaced at once and marked as a trial in the task's history. Fixing the account, pausing it or blocking the provider stops them. |
+| Trials are noise: an account that stays broken refuses about five runs in the first 31 hours and one a day after that, on either ladder. | Each is free, replaced at once and marked as a trial in the task's history. Fixing the account, pausing it or blocking the provider stops them. |
 | The owner pays and Orbit still avoids the account. | At most one block's wait, then a trial succeeds; Check again ends it at once; any hand-started session ends it. |
-| The owner is told late: nothing before the third trip, and trips advance only when a run is routed to the account. | The account row and the Why lines show it from the first trip. |
-| A relaxed pin sends work to a provider the task was pinned away from on purpose. | The owner's blocked providers and scope are always kept (§7.5); the Why line and the task row say where it ran. |
+| An unmapped failure is reported late: the breaker does not push before its third trip, and trips advance only when a run is routed to the account. | A classified refusal pushes at once, so the delay applies only to failures no adapter has mapped; the account row and the Why lines show those from the first trip. Mapping the sentence removes the delay. |
+| A relaxed pin sends work to a provider the task was pinned away from on purpose. | It cannot happen unless the owner turned `relaxBlockedPins` on; it is off by default. When on, the owner's blocked providers and scope are still kept (§7.5), and the Why line and the task row say where it ran. |
+| With the switch off, pinned tasks stand still while their account is blocked. | The hold names the pin, the provider's words and the next try, and links the setting; the classified refusal has already pushed. |
 | Every account ends up blocked and nothing runs. | That is the correct outcome when nothing can run; the hold names each account's reason and lifts at the first trial. |
 | Many tasks rush a just-expired block. | The trial claim admits one run; the rest see the account as being tried. |
 
@@ -717,14 +752,22 @@ The owner ruled on all eight questions. Each ruling is stated with what it chang
 
 | # | Question | Ruling | Effect |
 |---|---|---|---|
-| Q1 | How long does a classified refusal block an account? | Not open-ended. A progressive delay: 1 h for the first block, doubling per consecutive one (2 h, 4 h, 8 h, 16 h), capped at 24 h. Any success resets it. The unclassified breaker stays as designed. | §6.4 has two ladders on one `trips` counter. The breaker's ladder (30 min to 6 h) is at most half the classified one at every step, so it never outlasts it. `blocked_until` is always set (§6.2). |
+| Q1 | How long does a classified refusal block an account? | Not open-ended. A progressive delay: 1 h for the first block, doubling per consecutive one (2 h, 4 h, 8 h, 16 h), capped at 24 h. Any success resets it. The unclassified breaker keeps its design. **Amended (A2):** the breaker's ladder is raised to the same 24 h cap. | §6.4 has two ladders on one `trips` counter: classified 1, 2, 4, 8, 16, 24 h; breaker 30 min, 1, 2, 4, 8, 16, 24 h. The breaker is at or below the classified ladder at every step and reaches the cap one trip later. `blocked_until` is always set (§6.2). |
 | Q2 | Is a blocked account ever tried again by itself? | Yes. Once the ladder is at its cap, one trial every 24 hours until one succeeds or the owner clears the account. | §6.5: every block ends with one trial, which is an ordinary routed run claimed by one dispatch, not a probe. A refused trial costs its task seconds and no money, is replaced at once and is not counted. There are no adapter probes in the design. |
 | Q3 | Does a task that does not auto-run get a replacement run by itself? | Yes. The per-hour cap stays. | §7.3: every task is replaced at once after an uncounted admission refusal, at most 3 times an hour, and the replacement is recorded on the task. |
-| Q4 | When is the owner alerted? | From the third consecutive trip on an account, classified or breaker; then not again until the state changes. | §8: one push at trip 3. "Changes" means the row was cleared and a new streak reaches its third trip, or the account trips with a different kind. Later trips and daily trials do not alert. The account row shows the block from the first trip. |
+| Q4 | When is the owner alerted? | From the third consecutive trip on an account, then not again until the state changes. **Amended (A1):** a classified refusal alerts at its first occurrence; the third-trip rule applies to the unclassified breaker only. | §8: one push at the first classified refusal, or at the breaker's third trip. "Changes" means the row was cleared and a new streak reaches its own alert point, or the account is refused with a different classified kind. Later trips and daily trials do not alert. The account row shows every block from the first trip. |
 | Q5 | Is health per runner or shared across runners? | Per runner (runner × engine × account). | §6.1: unchanged from the proposal. A second runner on the same provider account learns by one refused, replaced run. |
 | Q6 | Does `CAPACITY` write health? | Yes: a 5-minute cool-down per model, scoped to that model on that account. | §6.1 and §6.2: `scope_model` is part of the row's key. §6.4: the capacity cool-down, which is not a trip. §7.1: `health` is a list with a `model` field; a model entry removes only that model's rows. |
-| Q7 | What does a task pinned to a blocked provider do? | It runs elsewhere. | §7.5: the pin is relaxed for that run only, provider first and engine second; the tier is kept; a model pin is kept exactly; the owner's blocked providers stay out; the Why line says where it ran and why. When nothing else can run the task holds until the next trial is due. |
+| Q7 | What does a task pinned to a blocked provider do? | It runs elsewhere. **Amended (A3):** only when the owner allows it. | §7.5: one account-level preference, `relaxBlockedPins`, off by default, with no per-task override. Off: the task holds with the pin named and takes the pinned account's next trial. On: the pin is relaxed for that run only, provider first and engine second; the tier is kept; a model pin is kept exactly; the owner's blocked providers stay out; the Why line says where it ran and why. |
 | Q8 | Does the server-only part ship first? | No. Health and structured kinds ship together. | §10: three phases; phase 1 is one release of server and runner. The temporary text rule for Cursor's sentence is gone; a runner that has not updated is covered by the breaker. |
+
+**Amendments accepted by the owner the same day (2026-11-23).**
+
+| # | Amends | Amendment | Why |
+|---|---|---|---|
+| A1 | Q4 | A classified refusal pushes at its first occurrence. The third-consecutive-trip rule stays for the unclassified breaker. The no-repeat rule is unchanged. | Waiting for a third trip delayed a certain, provider-stated problem by about three hours, and for ever on an account few runs reach. |
+| A2 | Q1, Q2 | The breaker's ladder is 30 min, 1 h, 2 h, 4 h, 8 h, 16 h, 24 h. | With a 6 h cap an unmapped failure was tried four times a day, more often than a mapped one. Both now end at one trial every 24 hours. |
+| A3 | Q7 | A pin is relaxed only when `relaxBlockedPins` is on. It is off by default, account-level, with no per-task override. | A pin can exist to keep work away from other providers. Moving it must be the owner's choice. |
 
 Three definitions in this document go beyond the wording of the rulings and are stated here so that they can be
 corrected:
@@ -732,7 +775,7 @@ corrected:
 1. **Check again resets the ladder** (§8). The owner's press is treated as "it is fixed": the account is used as
    healthy and a new refusal starts at one hour. A sign-in, a saved key or a changed plan reading only makes the trial
    due now and keeps the ladder (§6.3).
-2. **A model pin is never swapped** (§7.5). Q7 is applied to provider and engine pins. A task that names a model keeps
+2. **A model pin is never swapped** (§7.5). With the switch on, Q7 is applied to provider and engine pins. A task that names a model keeps
    that model on another provider, or waits.
-3. **Pins are relaxed for health only** (§7.5). A pinned account that is paused, signed out or at its quota behaves as
+3. **Pins are relaxed for health only** (§7.5), and only with the switch on. A pinned account that is paused, signed out or at its quota behaves as
    it does today.
