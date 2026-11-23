@@ -71,7 +71,9 @@ final class LandingViewsWiringTests: XCTestCase {
                      ".contextMenu { menu(landing: landing, row: row, sessionID: row.sessionId, model: model) }",
                      ".contextMenu { menu(landing: landing, row: nil, sessionID: id, model: model) }",
                      "SessionLandingsCopy.orbitRunsTheseLandings",
-                     "LandingPageCopy.decisionsTheCoordinator",
+                     // Revision 42 (board landing-fix-own-session 02 c ③): who decides, the task's own
+                     // session first, then the coordinator.
+                     "LandingFixCopy.decisionsTheTasksSessionFirst",
                      "dayChip(SessionLandingsCopy.now, now: true)",
                      "Button(LandingPageCopy.openCoordinator) { open(\"orbit-session\", coordinator) }",
                      "Button(SessionProjectCopy.openProject) { open(\"orbit-project\", projectID) }"] {
