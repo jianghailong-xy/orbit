@@ -187,6 +187,18 @@ function refuseShape(why: string): never {
   });
 }
 
+/**
+ * Whether a FILE reference names a drive file (docs/orbit-files-drive-technical-design.md §4.5): an `orbit-drive:` link,
+ * or a path by any of the drive's spellings on Orbit Cloud. The drive's content changes under its name (D17), so it is
+ * never what evidence binds; `file_upload` of the path makes the evidence copy that is.
+ */
+export function namesDriveFile(ref: string): boolean {
+  const text = ref.trim();
+  return /^orbit-drive:/i.test(text)
+    || /^(?:~|\/home\/orbit)\/Files(?:\/|$)/.test(text)
+    || /^\/run\/orbit-files\/drive(?:\/|$)/.test(text);
+}
+
 function refuseCitation(code: string, message: string, requiredAction: string): never {
   throw new BadRequestException({ code, message, requiredAction });
 }
@@ -614,6 +626,15 @@ export async function resolveEvidenceCitations(
 ): Promise<EvidenceCitation[]> {
   const citations: EvidenceCitation[] = [];
   for (const [index, submitted] of envelope.checks.entries()) {
+    if (submitted.kind === 'FILE' && namesDriveFile(submitted.ref)) {
+      refuseCitation(
+        'EVIDENCE_FILE_IS_A_DRIVE_PATH',
+        `evidence.checks[${index}] names a file in the Orbit Files drive; nothing was written. A drive file can be `
+        + 'overwritten after it is cited, so evidence never cites one. Keep it with file_upload, which makes an evidence '
+        + 'copy of it under the evidence rules, and cite the id that answers',
+        'UPLOAD_THE_FILE_AND_CITE_ITS_ID',
+      );
+    }
     const row = await RESOLVERS[submitted.kind](tx, scope, submitted.ref);
     const check = row.found && row.file ? { ...submitted, ...images.get(row.file.id) } : submitted;
     if (!row.found) {

@@ -136,6 +136,16 @@ export interface Tenant {
   adminSubjectId: string;
   adminSubjectTokenId: string;
   adminProviderId: string;
+  /**
+   * The account's drive (docs/orbit-files-drive-technical-design.md §4.1): a folder, a file in it with a replaced
+   * version in Trash, and a Trash group of a deleted file.
+   */
+  driveFolderId: string;
+  driveFileId: string;
+  driveVersionId: string;
+  driveTrashGroupId: string;
+  /** An upload in progress (OWNER_UPLOAD staging) with no chunks yet. */
+  driveUploadId: string;
   /** Objects a destructive route takes away, one each, so that no other case loses its own. */
   spare: {
     accessTokenId: string;
@@ -162,6 +172,17 @@ export interface Tenant {
     guestUserId: string;
     listId: string;
     taskId: string;
+    /** A drive file the owner moves to Trash, a replaced version deleted for good, and Trash groups deleted and restored. */
+    driveEntryId: string;
+    driveVersionId: string;
+    driveTrashGroupId: string;
+    driveRestoreGroupId: string;
+    /** A Trash group whose one item the owner restores on its own, and that item. */
+    driveRestoreItemGroupId: string;
+    driveRestoreItemEntryId: string;
+    /** An empty upload that completes, and one that is abandoned. */
+    driveCompleteUploadId: string;
+    driveAbandonUploadId: string;
   };
 }
 
@@ -286,6 +307,33 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /attachments/usage/projects/:id/files': { request: (of) => ({ params: { id: of.projectId } }) },
   'GET /attachments/usage/tasks/:id/files': { request: (of) => ({ params: { id: of.taskId } }) },
   'DELETE /attachments/:id/everywhere': { request: (of) => ({ params: { id: of.spare.storedFileId } }) },
+
+  // ── the drive (docs/orbit-files-drive-technical-design.md §4.1, §4.4): every read and write by (id, owner) ────────
+  'GET /drive/entries/:id': { request: (of) => ({ params: { id: of.driveFileId } }) },
+  'PATCH /drive/entries/:id': { request: (of) => ({ params: { id: of.driveFileId }, body: { name: 'renamed by the census.txt' } }) },
+  'DELETE /drive/entries/:id': { request: (of) => ({ params: { id: of.spare.driveEntryId } }) },
+  'POST /drive/entries/:id/share-check': { request: (of) => ({ params: { id: of.driveFileId } }) },
+  'GET /drive/entries/:id/versions': { request: (of) => ({ params: { id: of.driveFileId } }) },
+  'GET /drive/entries/:id/content': { request: (of) => ({ params: { id: of.driveFileId } }) },
+  'GET /drive/versions/:id/content': { request: (of) => ({ params: { id: of.driveVersionId } }) },
+  'GET /drive/uploads/:id': { request: (of) => ({ params: { id: of.driveUploadId } }) },
+  // An empty body is answered 400 for A (a chunk holds at least one byte): not a 404, and B is refused before anything else is read.
+  'PUT /drive/uploads/:id/chunks/:idx': {
+    request: (of) => ({ params: { id: of.driveUploadId, idx: 0 }, headers: { 'x-orbit-chunk-sha256': 'a'.repeat(64) } }),
+  },
+  'POST /drive/uploads/:id/complete': { request: (of) => ({ params: { id: of.spare.driveCompleteUploadId } }) },
+  'DELETE /drive/uploads/:id': { request: (of) => ({ params: { id: of.spare.driveAbandonUploadId } }) },
+  // As a copy: the owner's own restore leaves the version in Trash for the cases after it.
+  'POST /drive/versions/:id/restore': { request: (of) => ({ params: { id: of.driveVersionId }, body: { as: 'COPY' } }) },
+  'DELETE /drive/versions/:id': { request: (of) => ({ params: { id: of.spare.driveVersionId } }) },
+  'GET /drive/trash/groups/:id': { request: (of) => ({ params: { id: of.driveTrashGroupId } }) },
+  'POST /drive/trash/groups/:id/restore': { request: (of) => ({ params: { id: of.spare.driveRestoreGroupId } }) },
+  'DELETE /drive/trash/groups/:id': { request: (of) => ({ params: { id: of.spare.driveTrashGroupId } }) },
+  'POST /drive/trash/groups/:id/items/:entryId/restore': {
+    request: (of) => ({ params: { id: of.spare.driveRestoreItemGroupId, entryId: of.spare.driveRestoreItemEntryId } }),
+    nested: ['entryId'],
+  },
+  'POST /drive/entries/:id/download-link': { request: (of) => ({ params: { id: of.driveFileId } }) },
 
   // ── projects ─────────────────────────────────────────────────────────────────────────────────
   'GET /projects/:id': { request: (of) => ({ params: { id: of.projectId } }) },
@@ -676,6 +724,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'POST /sessions/:id/complete': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/archive': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/restore': { request: (of) => ({ params: { id: of.sessionId } }) },
+  // Run now (sessions/run-now.ts): another account's queued message is not B's to put over A's runner's limit.
+  'POST /sessions/:id/run-now': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/pin': { request: (of) => ({ params: { id: of.sessionId } }) },
   'DELETE /sessions/:id/pin': { request: (of) => ({ params: { id: of.sessionId } }) },
   'GET /sessions/:id/move-targets': { request: (of) => ({ params: { id: of.sessionId } }) },
@@ -916,6 +966,9 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     + '(runner id, the caller) through its managed_runner row before anything is written, and another account\'s runner, '
     + 'a self-managed one or a guest\'s view is 404 with no row written (managed-runners/browser-state.ts:122); '
     + 'browser-state.pg.spec.ts section 2 sends it as each and checks browser_clear_requested_at stayed NULL',
+  'POST /runners/:id/browser/sign-in':
+    "behind the browser switch, which the census server leaves off. The owner's managed runner is read by (runnerId, ownerId) "
+    + 'before its sign-in is read or updated (managed-runners/browser-state.ts:177); login-runner-browser.pg.spec.ts sends it as another account.',
   // ── Still stuck (help center board 02 ②): the id is an Ask, which the census's fixture account has none of ──
   'GET /help/ask/:id/stuck':
     'the Ask is read by (id, the caller, help_ask set, not deleted) before anything else, so another account\'s Ask answers 404 (help/help-ask.ts:207, :238); help-ask-stuck.pg.spec.ts "another account" sends it with the owner\'s Ask',
@@ -934,6 +987,12 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
   // ── scheduled tasks (docs/scheduled-tasks-design.md §9.1) ─────────────────────────────────────────
   'GET /schedules/:id':
     "read by (id, the caller) and nothing else, 404 for another account's id (schedules/schedule-reads.service.ts:98)",
+  'GET /schedules/:id/change':
+    "the schedule is looked up by (id, ownerId) before reading any conversation or opening. Another account's schedule returns 404 "
+    + '(schedules/schedule-change-conversation.ts:76).',
+  'POST /schedules/:id/change':
+    'the same owner-scoped schedule lookup returns 404 before appending a turn or creating a session '
+    + '(schedules/schedule-change-conversation.ts:76).',
   'GET /schedules/:id/runs':
     "the schedule is counted by (id, the caller) first, 404 for another account's id (schedules/schedule-reads.service.ts:128)",
   'POST /schedules/:id/pause':
@@ -1237,6 +1296,26 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
   },
   'GET /projects/:id/tasks/page query parentId': {
     request: (of, mine) => ({ params: { id: mine.projectId }, query: { parentId: of.projectTaskId } }),
+  },
+
+  // ── the drive: a folder named in B's own request ─────────────────────────────────────────────
+  'GET /drive/entries query parentId': { request: (of) => ({ params: {}, query: { parentId: of.driveFolderId } }) },
+  'GET /drive/trash/groups/:id query parentId': {
+    request: (of, mine) => ({ params: { id: mine.driveTrashGroupId }, query: { parentId: of.driveFolderId } }),
+  },
+  'POST /share-links body driveEntryId': {
+    request: (of) => ({ params: {}, body: { kind: 'DRIVE_FILE', driveEntryId: of.driveFileId } }),
+  },
+  'POST /drive/folders body parentId': { request: (of) => ({ params: {}, body: { parentId: of.driveFolderId, name: 'census folder' } }) },
+  'POST /drive/uploads body parentId': { request: (of) => ({ params: {}, body: { parentId: of.driveFolderId, name: 'census.bin', size: 1 } }) },
+  'POST /drive/uploads body dropRootId': {
+    request: (of, mine) => ({ params: {}, body: { parentId: mine.driveFolderId, name: 'census.bin', size: 1, relativePath: 'Dir/census.bin', dropRootId: of.driveFolderId } }),
+  },
+  'POST /drive/entries/:id/download-link body versionId': {
+    request: (of, mine) => ({ params: { id: mine.driveFileId }, body: { versionId: of.driveVersionId } }),
+  },
+  'PATCH /drive/entries/:id body parentId': {
+    request: (of, mine) => ({ params: { id: mine.driveFileId }, body: { parentId: of.driveFolderId } }),
   },
 
   // ── providers, phones, runners ───────────────────────────────────────────────────────────────

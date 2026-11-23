@@ -55,7 +55,9 @@ const agentPrimerMaxBytes = 3456
 // the longest shape is 7,178 bytes, so the budget is 7,424 (7.25 KiB); reconciling the two paragraphs, which both
 // speak of handing work to another agent, is P2-01's follow-up, not the merge's. Raised to 7,680 on 2026-11-20, with
 // the owner's agreement, for the primer's settings paragraph: the longest shape went from 7,236 bytes to 7,425.
-const orbitInstructionsMaxBytes = 7680
+// Raised to 8,192 on 2026-11-23 for the workflow paragraph (orbitWorkflowInstructions, 416 bytes): the longest shape
+// went from 7,582 bytes to 7,998. A session whose Agent has Workflows off, or a SubAgent, does not carry it.
+const orbitInstructionsMaxBytes = 8192
 
 // The primer, one rule set per paragraph. The first states the choices an agent gets wrong most
 // often (contract §8.3: S1-S4), and every later one is one or two of §0's ten rules.

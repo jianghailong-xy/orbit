@@ -1,0 +1,8 @@
+# This image accepts only the mount daemon's sources, never host state.
+**
+!src/
+!src/drive-mount/
+!src/drive-mount/**/*.go
+!src/drive-mount/go.mod
+!src/drive-mount/go.sum
+src/drive-mount/**/*_test.go

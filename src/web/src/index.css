@@ -7659,7 +7659,8 @@ button.toast--pill:focus-visible {
   white-space: nowrap;
 }
 .composer-chip--list,
-.composer-chip--task {
+.composer-chip--task,
+.composer-chip--drive {
   background: color-mix(in srgb, var(--brand) 10%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 38%, transparent);
   color: var(--brand);
@@ -8653,6 +8654,24 @@ button.chat-jump-start:hover {
 }
 .runner-updating-pop p {
   margin: 0;
+}
+.queued-run-now-action {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+.runner-updating-pop .queued-run-now-note {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.chat-over-limit {
+  padding: 2px 6px;
+  border: 1px solid var(--warning-border);
+  border-radius: 5px;
+  background: var(--warning-bg);
+  color: var(--warning);
+  white-space: nowrap;
 }
 /* A message the engine never received, at the end of the meta row. Always visible (unlike the
    copy button and time before it): the whole point is that nobody has to hover to find out their
@@ -10526,14 +10545,54 @@ button.chat-jump-start:hover {
   border-color: var(--brand-border);
   color: var(--brand);
 }
-/* Use the runner's browser (docs/runner-browser-engine-sign-in-design.md): a second way to the same link, under the
-   card's own. */
+/* The runner's browser (docs/runner-browser-engine-sign-in-design.md, §2 option A): the second way to the same link, in
+   the row beside .rsi-open and of its size, with its line and its progress under the row. */
+.rsi-open-alt {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.rsi-open-alt:hover:not(:disabled) {
+  border-color: var(--brand-border);
+  color: var(--brand);
+}
+.rsi-open-alt:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.rsi .rsi-q + .rsi-actions {
+  margin-top: 8px;
+}
 .rsi-runner-browser {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
-  margin: 10px 0 4px;
+  margin: 2px 0 8px;
+}
+.rsi-runner-browser .rsi-hint .rsi-link {
+  margin-top: 0;
+  font-size: 12px;
+}
+/* The runner's browser at work: apart from the row above it, and its links in one line. */
+.rsi-actions + .rsi-runner-browser-going {
+  margin-top: 10px;
+}
+.rsi-runner-browser .rsi-links .rsi-link {
+  margin-top: 0;
+}
+/* Choosing where to sign in, apart from pasting the code back. */
+.rsi-sep {
+  margin: 12px 0 4px;
+  border-top: 1px solid var(--border);
 }
 .rsi-link {
   margin-top: 8px;
@@ -29360,6 +29419,10 @@ button.agent-progress-agent:hover {
 /* The Quality cell on one line; both lines in full are its tooltip. */
 .model-tiers-quality-one[tabindex] {
   cursor: help;
+}
+/* A model that does not open keeps the arrow's room, unseen, so its name lines up with those that do. */
+.model-routing-no-open > span[aria-hidden] {
+  visibility: hidden;
 }
 /* A model's accounts, open under it: no rule between them, each named by its provider, indented. */
 .model-routing-table tr.is-open td,

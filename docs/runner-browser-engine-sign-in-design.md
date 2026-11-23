@@ -41,6 +41,15 @@ Claude Code and Antigravity that press parked a tab of the owner's own browser a
 asks which site first (the site's press starts it). A panel opened again while its own sign-in waits on the link takes
 that sign-in up rather than starting another. On every runner, not only Orbit Cloud.
 
+**The card's layout (revised 2026-11-23, owner: option A of the board in the session's uploads).** Where the runner's
+browser is offered, the card asks "Where do you want to sign in?" and puts both ways in one row of one size: **In this
+browser** (the main button, the page's link) and **In the runner's browser**. The line under the row says what the
+runner's way means ("The runner's browser keeps you signed in there; agents on this runner can use it.") and ends in
+**Copy sign-in link**; a divider keeps that choice apart from "After you approve, paste the code the page shows:". Once
+the runner's browser is chosen, what it is doing leads, with **Show the browser**, **Paste a code instead** (Claude Code)
+and **Open it in this browser instead** as links. A device flow keeps its one-time code and its own button, with **In the
+runner's browser** beside it. A runner without the browser shows the card as before.
+
 - **Use the runner's browser** — a secondary button, with the line "You stay signed in to this site on this runner.
   Agents on this runner can use it." (the Browser section's saved-logins wording).
 - Pressing it opens the browser tab in control (`openRunnerBrowserTab(runnerId, true)`, on the click so no popup
@@ -62,7 +71,13 @@ agents use:
 - The vendor's web login (claude.ai, ChatGPT, Google) **stays** in the profile after the sign-in, so the next
   sign-in, or adding a second account, is usually one click. Every agent on the runner can use that login, as with any
   site signed in there; **Clear saved logins** removes it.
-- The tab is brought to the front, so the owner's browser tab shows it. It is left open when the sign-in ends.
+- The tab is brought to the front, so the owner's browser tab shows it. Once the machine is signed in, the runner
+  closes that tab, and only that one (by the target id Chrome gave it), giving Chrome a blank tab first when it was the
+  last, since Chrome quits with its last tab (owner, 2026-11-23). A sign-in that failed or was cancelled keeps its tab,
+  for what the page said. The vendor's login stays in the profile either way.
+- The owner's viewer tab of the runner's browser, when the sign-in card opened it (**In the runner's browser**, **Show
+  the browser**), closes too once the card says **Signed in**. A page can close only windows it opened, so a viewer
+  opened elsewhere, or before the Orbit page was reloaded, stays.
 - **While the sign-in runs, the browser is reserved for the owner**, as `browser_request_sign_in` reserves it
   (`YieldForSignIn`): another session's browser call gets the existing "in use" error, so an agent's clicks do not
   land in the sign-in. A session holding the lease when the owner presses the button keeps its turn; it just waits

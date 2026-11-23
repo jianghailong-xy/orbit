@@ -58,6 +58,7 @@ import { CreatorType, Prisma, RunStatus, TaskStatus, type Runner } from '@prisma
 import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
 import { latestAgentToolsReport } from './agent-tools-report';
+import { reportsCodexSandboxUnavailable } from './codex-sandbox-report';
 import { withActiveSessions } from '../providers/active-sessions';
 import { accountAfterSignOut, accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount, waitsForWarmCache } from '../providers/plan-usage-accounts';
 import {
@@ -714,6 +715,7 @@ const INGEST_SESSION_SELECT = {
   // Same one-shot-per-run reason as runtimeSessionId: the stamp ingestEvents takes is only taken
   // while this is still null, and the row is held FOR UPDATE across that decision.
   engineStartedAt: true,
+  codexSandboxUnavailable: true,
   enginePhase: true,
   // Which task this run executes and which door created it — read only when a user turn in
   // this batch is the one that delivers the task's brief (`readTurnCards`).
@@ -741,8 +743,8 @@ interface IngestOutcome {
   /** The batch's events not stored because their seq holds another event, and the door they came by. */
   seqConflicts: RunEventSeqConflict[];
   door: RunEventDoor;
-  /** This batch stamped Session.engineStartedAt: the run left its starting state. */
-  engineStarted: boolean;
+  /** This batch changed the session's starting state or permission semantics. */
+  sessionUpdated: boolean;
 }
 /**
  * A merged link call's own transaction, as each of its batches' ingest runs inside it (ingestLinkEventCall): the
@@ -944,6 +946,7 @@ const INGESTED_SESSION_COLUMNS: Record<string, { column: string; type: 'text' | 
   lastTurnAt: { column: 'last_turn_at', type: 'timestamp' },
   runtimeSessionId: { column: 'runtime_session_id', type: 'text' },
   engineStartedAt: { column: 'engine_started_at', type: 'timestamp' },
+  codexSandboxUnavailable: { column: 'codex_sandbox_unavailable', type: 'boolean' },
   lastAssistantText: { column: 'last_assistant_text', type: 'text' },
   lastToolUse: { column: 'last_tool_use', type: 'text' },
   contextTokens: { column: 'context_tokens', type: 'integer' },
@@ -2962,6 +2965,8 @@ export class RunnerApiController {
       ...(keepWorkSessionIds.length > 0 ? { keepWorkSessionIds } : {}),
       leaseLostSessionIds: ownershipLostSessionIds,
       maxConcurrent: updated.maxConcurrent,
+      // Run now's headroom past it (ClaimedSession.overCapacity), adopted the same way.
+      burstConcurrent: updated.burstConcurrent,
       minFreeDiskMb: managedStorage ? managedStorage.minFreeDiskMb : updated.minFreeDiskMb,
       mergeRequests,
       commitRequests,
@@ -7330,6 +7335,8 @@ export class RunnerApiController {
           mergeRepairTurnEndedAt: true,
           // And whether this session asked to merge itself during the turn that just ended.
           mergeAfterTurnAt: true,
+          // The turn Run now started over the runner's limit, if this session runs one (sessions/run-now.ts).
+          overCapacityTurnId: true,
         },
       });
       // Read the row being completed before changing it. A reserved shell turn is the one path
@@ -8191,10 +8198,16 @@ export class RunnerApiController {
       // the runner's slot while it tears its engine down, until its release report. Everything else the failure writes
       // below is written as for the old protocol; what only a release writes waits for that report.
       const releaseOwed = failSession && releasesSeparately;
+      // Run now's pass covered this one turn (decision B): answered, it is spent and the slot over the limit is
+      // returned. A turn put back in the queue has not been answered and keeps it.
+      const overCapacityEnded = current.overCapacityTurnId != null
+        && completedTurn?.id === current.overCapacityTurnId
+        && !(unanswered && !swallowed);
       // A stopped engine passes no slot on: a message queued behind the stop waits for a claim, where the hold decides.
+      // Nor does a turn that ran over the limit: its follow-up queues for a slot like any other message.
       const nextStatus = failSession
         ? (releaseOwed ? RunStatus.RUNNING : RunStatus.FAILED)
-        : regionStopped
+        : regionStopped || overCapacityEnded
           ? (pendingExecutable > 0 ? RunStatus.PENDING : RunStatus.AWAITING_INPUT)
           : statusAfterTurnCompleted(pendingExecutable > 0);
       // OWNER_CONFIRMED: a run that declared its work finished and has stopped working asks its
@@ -8337,6 +8350,7 @@ export class RunnerApiController {
           // Folded into the park so the row is written once (I3). The park is conditional, so
           // the branch below covers the case where it matched nothing.
           ...(clearsMergedState ? CLEARED_MERGE_STATE : {}),
+          ...(overCapacityEnded ? { overCapacityTurnId: null } : {}),
         },
       });
       if (parked.count === 0) {
@@ -8536,6 +8550,8 @@ export class RunnerApiController {
         currentWorkTerminalized,
         currentWorkRequeued,
         status: nextStatus,
+        // A follow-up the overflow turn left queued waits for a claim: the runner is woken below.
+        overCapacityRequeued: overCapacityEnded && nextStatus === RunStatus.PENDING,
         failSession,
         // What the STATUS below announces beside FAILED: a usage limit this turn armed is a retry
         // on its way, and the clients draw Retrying rather than Failed.
@@ -8685,6 +8701,7 @@ export class RunnerApiController {
     // RUNNING. Publish the committed row for every applied non-steer completion; task-bound
     // summaries carry taskId and clear the running overlay without waiting for reconciliation.
     if (finalized.applied && !finalized.steer) {
+      if ('overCapacityRequeued' in finalized && finalized.overCapacityRequeued) this.queue.notifySessionQueued(runner.id);
       // The turn's reply, registered to go back to the session's Feishu chain (docs/feishu-bot-design.md §7.5): after
       // the commit, one statement of its own, a failure only logged — the turn never waits on Feishu nor fails for it
       // (§1.3 item 6). A worker on any replica sends it (feishu/feishu-outbox.ts).
@@ -9180,7 +9197,7 @@ export class RunnerApiController {
         // finds its seqs stored, and is announced again (restated).
         const told = this.realtime.sendNotices(committed.ingested.flatMap(({ batch, outcome }) => (
           isHeld(outcome.session)
-            ? this.realtime.batchNotices(batch.sessionId, outcome.events.filter((e) => !isNoiseSystemEvent(e)), outcome.engineStarted, outcome.restated)
+            ? this.realtime.batchNotices(batch.sessionId, outcome.events.filter((e) => !isNoiseSystemEvent(e)), outcome.sessionUpdated, outcome.restated)
             : []
         ))).then(() => null, (error: unknown) => error);
         for (const { batch, outcome, coordinator } of committed.ingested) {
@@ -9726,6 +9743,9 @@ export class RunnerApiController {
           : {}),
         ...retry,
       });
+      // A new Codex process can repeat the notice. Only the first report changes the session.
+      const sandboxReportChanged = !session.codexSandboxUnavailable && reportsCodexSandboxUnavailable(durable);
+      if (sandboxReportChanged) sessionData.codexSandboxUnavailable = true;
 
       const toolUses = events.filter((e) => e.type === RunEventType.TOOL_USE);
 
@@ -10053,7 +10073,7 @@ export class RunnerApiController {
       return {
         session, currentWorkAcknowledged, abandonedApprovals: [...abandonedApprovals, ...jobCardsCollected],
         accountReload, events, durable, alreadyStored: stored.size,
-        restated, seqConflicts, door: link ? 'link' : 'https', engineStarted,
+        restated, seqConflicts, door: link ? 'link' : 'https', sessionUpdated: engineStarted || sandboxReportChanged,
       };
     };
     return ingest.call(this);
@@ -10115,16 +10135,13 @@ export class RunnerApiController {
       // call tells them itself (ingestLinkEventCall), so only this replica is left. Alone, the batch is
       // answered once they have heard: a notice that could not be sent fails the answer once the rest is
       // announced, and the batch sent again finds its seqs stored and announces them again (restated).
-      // A batch that ended the starting state is followed by a session_updated: the clients read that
-      // state off the session row, and no event the engine sends re-reads it (controlTypeFor), so the
-      // "Getting the session ready" notice stayed up over the engine's tool calls until a list's
-      // one-minute safety read.
+      // Refresh clients that read the starting state and permission semantics from the session row.
       const published = events.filter((e) => !isNoiseSystemEvent(e));
-      if (merged) this.realtime.publishBatchHere(sessionId, published, eventOutcome.engineStarted, eventOutcome.restated);
+      if (merged) this.realtime.publishBatchHere(sessionId, published, eventOutcome.sessionUpdated, eventOutcome.restated);
       else {
         told = (async () => {
           try {
-            await this.realtime.publishBatch(sessionId, published, eventOutcome.engineStarted, eventOutcome.restated);
+            await this.realtime.publishBatch(sessionId, published, eventOutcome.sessionUpdated, eventOutcome.restated);
             return null;
           } catch (error) {
             return error;

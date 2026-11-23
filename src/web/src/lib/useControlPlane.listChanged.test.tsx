@@ -146,6 +146,23 @@ describe('the Open list and sessions.list_changed', () => {
     expect(openReads()[0]).toContain('since=c1');
   });
 
+  it("reads every workspace's Open list on an older server's hint, which names no workspace", async () => {
+    const client = await mount();
+    await openListOnScreen(client);
+    const second = sessionsQuery({ runnerId: 'R', workspaceId: 'W2', view: 'open' });
+    observers.push(new QueryObserver(client, { ...second, refetchInterval: streamPoll() }).subscribe(() => {}));
+    await advance(0);
+    await openHinted();
+    h.asked = [];
+
+    // `{ version }` alone: what a server that predates `hints=list_scopes` sends this stream.
+    await publish('sessions.list_changed', { version: 'v2' }, '');
+    await advance(1_000);
+
+    const workspaces = openReads().map((path) => new URLSearchParams(path.split('?')[1]).get('workspaceId')).sort();
+    expect(workspaces).toEqual(['W', 'W2']);
+  });
+
   it('never has two Open list reads out at once', async () => {
     const client = await mount();
     await openListOnScreen(client);

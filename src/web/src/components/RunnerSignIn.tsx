@@ -1,6 +1,6 @@
-import { CheckCircleFilled, ExportOutlined, LoadingOutlined } from '@ant-design/icons';
+import { CheckCircleFilled, DesktopOutlined, ExportOutlined, LoadingOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   AgentProvider,
   ENGINE_CLI_NAMES,
@@ -344,26 +344,56 @@ export function RunnerSignIn({
     mutationFn: () => api<RunnerLoginState>(`/runners/${runnerId}/browser/sign-in`, { method: 'POST' }),
     onSuccess: put,
   });
+  // The viewer tab this card opened for the sign-in, closed again once the card says Signed in: its page has nothing
+  // left to show (the runner closes the sign-in's own tab too). Only one this card opened can be closed from here.
+  const viewer = useRef<Window | null>(null);
+  const showRunnerBrowser = () => {
+    viewer.current = openRunnerBrowserTab(runnerId, true) ?? viewer.current;
+  };
   const pressRunnerBrowser = () => {
-    openRunnerBrowserTab(runnerId, true);
+    showRunnerBrowser();
     runnerBrowserSignIn.mutate();
   };
   // Claude Code's code comes back from the runner's browser by itself, so its paste field steps aside once the page is
   // open there, a press away for when it does not.
   const [pasteInstead, setPasteInstead] = useState(false);
   const codeFromBrowser = engine === 'claude' && s?.browser === 'opened' && !s?.message && !pasteInstead;
-  const runnerBrowserBlock = !canUseRunnerBrowser ? null : s?.browser === 'requested' || s?.browser === 'opened' ? (
+  // Option A of the sign-in card (owner, 2026-11-23): where the runner's browser is offered, the card asks where to sign
+  // in and puts both ways in one row, this browser the main one; the line under the row says what the runner's way
+  // means, and a divider keeps that choice apart from the paste.
+  const runnerBrowserGoing = s?.browser === 'requested' || s?.browser === 'opened';
+  const offersRunnerBrowser = canUseRunnerBrowser && !runnerBrowserGoing;
+  const runnerBrowserButton = (
+    <button className="rsi-open-alt" onClick={pressRunnerBrowser} disabled={runnerBrowserSignIn.isPending} type="button">
+      <DesktopOutlined /> In the runner's browser
+    </button>
+  );
+  const runnerBrowserNote = (copyLink?: ReactNode) => (
     <div className="rsi-runner-browser">
+      {s?.browser === 'failed' && (
+        <div className="rsi-warn">Couldn't open the sign-in page in the runner's browser. Open it in this browser instead.</div>
+      )}
+      {runnerBrowserSignIn.error && <div className="rsi-warn">{(runnerBrowserSignIn.error as Error).message}</div>}
+      <div className="rsi-hint">
+        The runner's browser keeps you signed in there; agents on this runner can use it.
+        {copyLink && <> {copyLink}</>}
+      </div>
+    </div>
+  );
+  const runnerBrowserGoingHere = canUseRunnerBrowser && runnerBrowserGoing;
+  /** What the runner's browser is doing, once chosen. `hereInstead`: this browser's way back, as a link. */
+  const runnerBrowserProgress = (hereInstead?: ReactNode) => !runnerBrowserGoingHere ? null : (
+    <div className="rsi-runner-browser rsi-runner-browser-going">
       <div className="rsi-row">
         <LoadingOutlined />{' '}
-        {s.browser === 'requested'
+        {s?.browser === 'requested'
           ? "Opening the sign-in page in the runner's browser…"
           : codeFromBrowser
             ? "Finish signing in in the runner's browser. Orbit takes the code from there."
             : "Finish signing in in the runner's browser."}
       </div>
       <div className="rsi-links">
-        <button className="rsi-link" onClick={() => openRunnerBrowserTab(runnerId, true)} type="button">
+        <button className="rsi-link" onClick={showRunnerBrowser} type="button">
           Show the browser
         </button>
         {codeFromBrowser && (
@@ -371,19 +401,21 @@ export function RunnerSignIn({
             Paste a code instead
           </button>
         )}
+        {hereInstead}
       </div>
     </div>
-  ) : (
-    <div className="rsi-runner-browser">
-      {s?.browser === 'failed' && (
-        <div className="rsi-warn">Couldn't open the sign-in page in the runner's browser. Open it here instead.</div>
-      )}
-      {runnerBrowserSignIn.error && <div className="rsi-warn">{(runnerBrowserSignIn.error as Error).message}</div>}
-      <button className="rsi-btn-alt" onClick={pressRunnerBrowser} disabled={runnerBrowserSignIn.isPending} type="button">
-        Use the runner's browser
-      </button>
-      <div className="rsi-hint">You stay signed in to this site on this runner. Agents on this runner can use it.</div>
-    </div>
+  );
+  /** Copy sign-in link, beside the page's button or, where the runner's browser is offered, at the end of its line. */
+  const copyLinkButton = (url: string) => (
+    <button
+      className="rsi-link"
+      type="button"
+      onClick={() => {
+        void copyText(url).then((ok) => { if (ok) setCopiedUrl(url); });
+      }}
+    >
+      {copiedUrl === url ? 'Sign-in link copied' : 'Copy sign-in link'}
+    </button>
   );
 
   // The Kimi site the sign-in under way is on, kept past its URL for the wait below.
@@ -469,6 +501,14 @@ export function RunnerSignIn({
   // A card that goes away mid-flow can never point its tab anywhere.
   useEffect(() => dropTab, []);
 
+  // Signed in: the viewer tab this card opened goes, as the runner closes the sign-in's tab in its browser.
+  useEffect(() => {
+    if (status !== 'done') return;
+    const w = viewer.current;
+    viewer.current = null;
+    if (w && !w.closed) w.close();
+  }, [status]);
+
   // Cursor CLI's link stops working about 23 minutes after the runner relays it (expiresAt): the card
   // counts down to it, a minute at a time.
   const cursorLink = engine === 'cursor' && status === 'awaiting_approval' && !!page;
@@ -548,19 +588,12 @@ export function RunnerSignIn({
         </div>
         <div className="rsi-actions">
           <a className="rsi-open" href={signInUrl} target="_blank" rel="noopener noreferrer">
-            <ExportOutlined /> Open cursor.com
+            <ExportOutlined /> {offersRunnerBrowser ? 'In this browser' : 'Open cursor.com'}
           </a>
-          <button
-            className="rsi-link"
-            type="button"
-            onClick={() => {
-              void copyText(signInUrl).then((ok) => { if (ok) setCopiedUrl(signInUrl); });
-            }}
-          >
-            {copiedUrl === signInUrl ? 'Sign-in link copied' : 'Copy sign-in link'}
-          </button>
+          {offersRunnerBrowser ? runnerBrowserButton : copyLinkButton(signInUrl)}
         </div>
-        {runnerBrowserBlock}
+        {offersRunnerBrowser && runnerBrowserNote(copyLinkButton(signInUrl))}
+        {runnerBrowserProgress()}
         <div className="rsi-row">
           <LoadingOutlined /> Waiting for you to sign in…
           {left !== null && (
@@ -610,25 +643,29 @@ export function RunnerSignIn({
           )}
         </div>
         <div className="rsi-usercode">{userCode}</div>
-        <a
-          className="rsi-open"
-          href={page}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={() => {
-            if (userCode) void navigator.clipboard?.writeText(userCode).catch(() => undefined);
-          }}
-        >
-          <ExportOutlined />{' '}
-          {userCode
-            ? site
-              ? `Copy Code & Open ${KIMI_SITE[site].domain}`
-              : 'Copy Code & Open Sign-In Page'
-            : site
-              ? `Open the ${KIMI_SITE[site].domain} sign-in page`
-              : 'Open the sign-in page'}
-        </a>
-        {runnerBrowserBlock}
+        <div className="rsi-actions">
+          <a
+            className="rsi-open"
+            href={page}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => {
+              if (userCode) void navigator.clipboard?.writeText(userCode).catch(() => undefined);
+            }}
+          >
+            <ExportOutlined />{' '}
+            {userCode
+              ? site
+                ? `Copy Code & Open ${KIMI_SITE[site].domain}`
+                : 'Copy Code & Open Sign-In Page'
+              : site
+                ? `Open the ${KIMI_SITE[site].domain} sign-in page`
+                : 'Open the sign-in page'}
+          </a>
+          {offersRunnerBrowser && runnerBrowserButton}
+        </div>
+        {offersRunnerBrowser && runnerBrowserNote()}
+        {runnerBrowserProgress()}
         <div className="rsi-row">
           <LoadingOutlined /> Waiting for you to approve it…
         </div>
@@ -655,25 +692,29 @@ export function RunnerSignIn({
         {/* A rejected code lands back here with the SAME url still valid — the CLI keeps waiting
             on that challenge — so the message is what tells the user anything changed. */}
         {s?.message && <div className="rsi-warn">{s.message}</div>}
-        <div className="rsi-actions">
-          <a className="rsi-open" href={signInUrl} target="_blank" rel="noopener noreferrer">
-            <ExportOutlined /> Open the sign-in page
-          </a>
-          <button
-            className="rsi-link"
-            type="button"
-            onClick={() => {
-              void copyText(signInUrl).then((ok) => { if (ok) setCopiedUrl(signInUrl); });
-            }}
-          >
-            {copiedUrl === signInUrl ? 'Sign-in link copied' : 'Copy sign-in link'}
-          </button>
-        </div>
-        {runnerBrowserBlock}
+        {offersRunnerBrowser && <div className="rsi-q">Where do you want to sign in?</div>}
+        {/* Once the runner's browser is chosen, what it is doing leads; this browser stays a link away. */}
+        {!runnerBrowserGoingHere && (
+          <div className="rsi-actions">
+            <a className="rsi-open" href={signInUrl} target="_blank" rel="noopener noreferrer">
+              <ExportOutlined /> {offersRunnerBrowser ? 'In this browser' : 'Open the sign-in page'}
+            </a>
+            {offersRunnerBrowser ? runnerBrowserButton : copyLinkButton(signInUrl)}
+          </div>
+        )}
+        {offersRunnerBrowser && runnerBrowserNote(copyLinkButton(signInUrl))}
+        {runnerBrowserProgress(
+          <a className="rsi-link" href={signInUrl} target="_blank" rel="noopener noreferrer">
+            Open it in this browser instead
+          </a>,
+        )}
         {!codeFromBrowser && (
           <>
+            {canUseRunnerBrowser && <div className="rsi-sep" />}
             <div className="rsi-hint">
-              Approve it there, then paste the code the page gives you:
+              {canUseRunnerBrowser
+                ? 'After you approve, paste the code the page shows:'
+                : 'Approve it there, then paste the code the page gives you:'}
             </div>
             <div className="rsi-form">
               <input

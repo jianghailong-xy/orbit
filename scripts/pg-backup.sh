@@ -37,10 +37,15 @@ SYNC_KNOWN_HOSTS="${ORBIT_BACKUP_SYNC_KNOWN_HOSTS:-/ssh/known_hosts}"
 # archive mirror's --delete would remove them.
 FILES_DIR="${ORBIT_FILES_DIR:-/var/lib/orbit/files}"
 FILES_SYNC_TARGET="${SYNC_TARGET%/}-files"
+# A deployment that mirrors its bucket (ORBIT_FILES_S3_MIRROR=1, docs/orbit-files-drive-technical-design.md §10.2) keeps the
+# mirror of the bucket's files/ prefix here, beside the other two, and the apiserver sets off_host_prune_at for its s3 blobs.
+FILES_S3_MIRROR="${ORBIT_FILES_S3_MIRROR:-0}"
+BUCKET_SYNC_TARGET="${SYNC_TARGET%/}-bucket"
 # The database that names those files (POSTGRES_DB in docker-compose.yml); PGDATABASE here is postgres.
 FILES_DB=orbit
 # When the off-host files copy was last pruned: at most once per interval, since it lists the whole copy.
 LAST_PRUNE=0
+LAST_BUCKET_PRUNE=0
 # Whether this round's mirror went through. The files copy is pruned only then, so never on behalf of a
 # cluster that target refused.
 MIRRORED=no
@@ -312,6 +317,42 @@ sync_files() {
   [ "$changed" -eq 0 ] || log "mirrored $changed change(s) to $FILES_SYNC_TARGET"
 }
 
+copy_bucket() {
+  if [ -z "${ORBIT_FILES_S3_BUCKET:-}" ] || [ -z "${ORBIT_FILES_S3_ENDPOINT:-}" ] ||
+     [ -z "${ORBIT_FILES_S3_ACCESS_KEY_ID:-}" ] || [ -z "${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}" ]; then
+    log "ERROR: cannot mirror the bucket: set ORBIT_FILES_S3_BUCKET, ORBIT_FILES_S3_ENDPOINT and the S3 key pair"
+    return 1
+  fi
+  if ! command -v rclone >/dev/null 2>&1 && ! apk add --no-cache rclone >/dev/null 2>&1; then
+    log "ERROR: cannot install rclone for the bucket mirror"
+    return 1
+  fi
+  # Use the same SSH connection settings and sibling path as rsync. A plain path is
+  # also accepted, for a locally mounted backup target.
+  bucket_dest="$BUCKET_SYNC_TARGET"
+  bucket_ssh=""
+  case "$BUCKET_SYNC_TARGET" in
+    /*) ;;
+    *:*)
+      bucket_host="${BUCKET_SYNC_TARGET%:*}"
+      bucket_ssh="ssh $ssh_opts -o ServerAliveInterval=30 $bucket_host"
+      bucket_dest=":sftp:${BUCKET_SYNC_TARGET##*:}"
+      ;;
+  esac
+  # Stream from the source to the mirror. Objects absent from the source can still
+  # be needed by a retained database backup and are removed only by prune_files.
+  if ! RCLONE_S3_ACCESS_KEY_ID="$ORBIT_FILES_S3_ACCESS_KEY_ID" \
+       RCLONE_S3_SECRET_ACCESS_KEY="$ORBIT_FILES_S3_SECRET_ACCESS_KEY" \
+       RCLONE_SFTP_SSH="$bucket_ssh" \
+       rclone copy --config /dev/null --s3-provider Other --s3-force-path-style \
+         --s3-endpoint "$ORBIT_FILES_S3_ENDPOINT" --s3-region "${ORBIT_FILES_S3_REGION:-us-east-1}" \
+         --sftp-disable-hashcheck --contimeout 15s --timeout 600s \
+         ":s3:$ORBIT_FILES_S3_BUCKET/files" "$bucket_dest"; then
+    log "ERROR: copying the bucket to $BUCKET_SYNC_TARGET failed"
+    return 1
+  fi
+}
+
 # Remove from the files copy the bytes the database says went from here a grace period ago, by name
 # (file_blob.off_host_prune_at, which the apiserver's retention sweep writes one grace period after it
 # deleted them, so that no database a retained backup can restore still expects them there). Nothing
@@ -322,31 +363,54 @@ sync_files() {
 prune_files() {
   [ "$MIRRORED" = yes ] || return 0
   now="$(date -u +%s)"
-  [ "$((now - LAST_PRUNE))" -ge "$INTERVAL" ] || return 0
-  if ! due="$(psql -d "$FILES_DB" -Atc "select sha256 from file_blob where off_host_prune_at <= now() at time zone 'utc'" 2>&1)"; then
-    log "WARN: not pruning $FILES_SYNC_TARGET: could not read which files have gone: $(printf '%s' "$due" | tr '\n' ' ' | tail -c 200)"
+  status=0
+  if [ "$((now - LAST_PRUNE))" -ge "$INTERVAL" ]; then
+    LAST_PRUNE="$now"
+    prune_due "$FILES_SYNC_TARGET" local || status=1
+  fi
+  if [ "$1" = yes ] && [ "$((now - LAST_BUCKET_PRUNE))" -ge "$INTERVAL" ]; then
+    if prune_due "$BUCKET_SYNC_TARGET" s3; then
+      LAST_BUCKET_PRUNE="$now"
+    else
+      status=1
+    fi
+  fi
+  return "$status"
+}
+
+prune_due() {
+  if ! due="$(psql -d "$FILES_DB" -Atc "select sha256 from file_blob where off_host_prune_at <= now() at time zone 'utc' and storage = '$2'" 2>&1)"; then
+    log "WARN: not pruning $1: could not read which files have gone: $(printf '%s' "$due" | tr '\n' ' ' | tail -c 200)"
     return 1
   fi
-  LAST_PRUNE="$now"
   due="$(printf '%s\n' "$due" | grep -E '^[0-9a-f]{64}$' || true)"
   [ -n "$due" ] || return 0
-  if [ ! -d "$FILES_DIR" ] || [ -z "$(ls -A "$FILES_DIR" | grep -vx tmp)" ]; then
-    log "ERROR: refusing to prune $FILES_SYNC_TARGET: $FILES_DIR is empty or not mounted"
+  prune_copy "$1" "$2" "$due"
+}
+
+# One copy of the files, "local" (a copy of $FILES_DIR) or "s3" (a copy of the bucket's files/ prefix), pruned of the
+# names in $3 that are on it. A local copy keeps whatever is back in $FILES_DIR.
+prune_copy() {
+  target="$1"
+  kind="$2"
+  names="$3"
+  if [ "$kind" = local ] && { [ ! -d "$FILES_DIR" ] || [ -z "$(ls -A "$FILES_DIR" | grep -vx tmp)" ]; }; then
+    log "ERROR: refusing to prune $target: $FILES_DIR is empty or not mounted"
     return 1
   fi
   # No copy there yet lists as empty, and so leaves nothing to prune.
-  if ! listed="$(list_target -r "$FILES_SYNC_TARGET/")"; then
-    log "ERROR: pruning $FILES_SYNC_TARGET failed: could not list it: $listed"
+  if ! listed="$(list_target -r "$target/")"; then
+    log "ERROR: pruning $target failed: could not list it: $listed"
     return 1
   fi
   scratch="$(mktemp -d)"
   mkdir "$scratch/none"
   printf '%s\n' "$listed" | awk '{print $NF}' | LC_ALL=C sort > "$scratch/there"
-  printf '%s\n' "$due" | awk '{print substr($0, 1, 2) "/" $0}' | LC_ALL=C sort > "$scratch/due"
+  printf '%s\n' "$names" | awk '{print substr($0, 1, 2) "/" $0}' | LC_ALL=C sort > "$scratch/due"
   count=0
   # The database keeps naming what has gone, so most of these are long gone from the copy too.
   for file in $(LC_ALL=C comm -12 "$scratch/due" "$scratch/there"); do
-    [ ! -e "$FILES_DIR/$file" ] || continue
+    [ "$kind" != local ] || [ ! -e "$FILES_DIR/$file" ] || continue
     mkdir -p "$scratch/none/${file%/*}"
     printf '+ /%s/\n+ /%s\n' "${file%/*}" "$file" >> "$scratch/rules"
     count=$((count + 1))
@@ -360,13 +424,13 @@ prune_files() {
   # this can be whatever the rules turn out to match.
   echo '- *' >> "$scratch/rules"
   if ! rsync -r --delete --max-delete="$count" --filter="merge $scratch/rules" --timeout=600 \
-       -e "ssh $ssh_opts" "$scratch/none/" "$FILES_SYNC_TARGET/" >/dev/null 2>"$rsync_stderr"; then
+       -e "ssh $ssh_opts" "$scratch/none/" "$target/" >/dev/null 2>"$rsync_stderr"; then
     rm -rf "$scratch"
-    log "ERROR: pruning $FILES_SYNC_TARGET failed: $(rsync_said)"
+    log "ERROR: pruning $target failed: $(rsync_said)"
     return 1
   fi
   rm -rf "$scratch"
-  log "pruned $count file(s) from $FILES_SYNC_TARGET"
+  log "pruned $count file(s) from $target"
 }
 
 take_backup() {
@@ -440,8 +504,14 @@ while :; do
   if sync_ready; then
     sync_archive || true
     sync_files || true
-    prune_files || true
+    bucket_copied=no
+    if [ "$FILES_S3_MIRROR" = 1 ] && copy_bucket; then
+      bucket_copied=yes
+    fi
+    prune_files "$bucket_copied" || true
     rm -f "$rsync_stderr"
+  elif [ "$FILES_S3_MIRROR" = 1 ] && [ -z "$SYNC_TARGET" ]; then
+    log "ERROR: ORBIT_FILES_S3_MIRROR=1 requires ORBIT_BACKUP_SYNC_TARGET"
   fi
   sleep "$POLL"
 done

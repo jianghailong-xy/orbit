@@ -12,9 +12,10 @@ import {
 // What the access tokens page says about a token (docs/personal-access-token-design.md §4, §9, §11).
 
 describe('the scopes a token can be granted', () => {
-  it('are the server’s twelve (PAT_SCOPES), read-only being every :read one', () => {
+  it('are the server’s thirteen (PAT_SCOPES), read-only being every :read one', () => {
     expect([...ALL_SCOPES].sort()).toEqual([
       'events:read',
+      'files',
       'projects:read',
       'projects:write',
       'runners:read',
@@ -29,13 +30,14 @@ describe('the scopes a token can be granted', () => {
     ]);
     expect(READ_SCOPES.every((scope) => scope.endsWith(':read'))).toBe(true);
     expect(ALL_SCOPES.filter((scope) => scope.endsWith(':read'))).toEqual(READ_SCOPES);
+    expect(READ_SCOPES).not.toContain('files');
   });
 
   it('read as a preset’s name, or resource by resource', () => {
     expect(scopeSummary([...ALL_SCOPES].reverse())).toBe('Read & write · everything');
     expect(scopeSummary(READ_SCOPES)).toBe('Read-only · everything');
-    expect(scopeSummary(['tasks:read', 'wiki:write', 'tasks:write', 'events:read'])).toBe(
-      'Tasks: read & write · Wiki: write · Events: read',
+    expect(scopeSummary(['tasks:read', 'wiki:write', 'tasks:write', 'events:read', 'files'])).toBe(
+      'Tasks: read & write · Wiki: write · Events: read · Files: read & write',
     );
   });
 });
