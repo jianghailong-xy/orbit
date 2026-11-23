@@ -305,12 +305,14 @@ func (fs *FS) Write(cancel <-chan struct{}, input *fuse.WriteIn, data []byte) (u
 		return 0, fuse.EIO
 	}
 	drivePath := ""
-	if fs.door.Health().Offline() {
-		// write() itself fails, so a caller that ignores close() (a shell redirection) still sees it (§5.7).
-		return 0, fs.offline("write", fs.pathForLog(h.node.ino, ""))
-	}
 	ctx, stop := fs.ctxOf(cancel)
 	defer stop()
+	if !fs.awaitOnline(ctx) {
+		// write() itself fails, so a caller that ignores close() (a shell redirection) still sees it (§5.7).
+		return 0, fs.refuse(fuse.EIO, "write", fs.pathForLog(h.node.ino, ""), "",
+			fmt.Sprintf("the drive's server cannot be reached (for %s now); the bytes written before this one are in the "+
+				"spool, where close() commits them or keeps them in unsent/; /run/orbit-files/status.json says since when", fs.opts.CloseWait))
+	}
 	off := int64(input.Offset)
 	if h.append {
 		off = -1
@@ -328,6 +330,29 @@ func (fs *FS) Write(cancel <-chan struct{}, input *fuse.WriteIn, data []byte) (u
 		return 0, fs.failed("write", drivePath, err)
 	}
 	return uint32(len(data)), fuse.OK
+}
+
+// awaitOnline answers whether the server can be reached, waiting while an outage is younger than CloseWait. A write
+// needs only the spool, so a stall of the server (a loaded host, a long Postgres transaction that answers nothing for
+// 20 s) makes a write slow rather than failing it and ending the writer; a write past that is an outage's and fails
+// at once (§5.7). The probe, every 5 s while offline, is what ends the wait.
+func (fs *FS) awaitOnline(ctx context.Context) bool {
+	health := fs.door.Health()
+	for health.Offline() {
+		since := health.Since()
+		if since.IsZero() {
+			continue
+		}
+		if time.Since(since) >= fs.opts.CloseWait || fs.door.Fenced() != nil {
+			return false
+		}
+		select {
+		case <-ctx.Done():
+			return !health.Offline()
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+	return true
 }
 
 // ── flush, fsync, release ────────────────────────────────────────────────────────────────────────

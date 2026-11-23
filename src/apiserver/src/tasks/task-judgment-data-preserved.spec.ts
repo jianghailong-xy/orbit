@@ -3357,6 +3357,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1450 adds session.codex_sandbox_unavailable with a constant false default and no table rewrite.
       // It changes no preserved rows, triggers, functions or DONE fence.
       '1450_session_codex_sandbox_unavailable',
+      // 1455 adds managed_runner.sleep_requested_at, a nullable TIMESTAMPTZ with no default (catalog-only, no rewrite),
+      // so an owner's sleep drains only on a report sent after it; `managed_runner` is none of the preserved relations,
+      // no row is written, and no trigger, function or DONE fence changes.
+      '1455_managed_runner_sleep_requested_at',
       // 1462 adds nullable runner.login_browser. It rewrites no rows and changes no preserved trigger, function
       // or DONE fence.
       '1462_runner_login_browser'],

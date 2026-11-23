@@ -644,7 +644,10 @@ The product asks for a clear error, not a hang.
 - **Offline is read-only from cache.** Reads of cached chunks, and lookups and listings in the metadata cache (up to
   10 minutes old), work. Everything else fails `EIO` at once: reads of uncached chunks, uncached lookups and listings,
   `open(O_CREAT)` (it must create the entry), `mkdir`, `rename`, `unlink`, and **`write()` itself** on any handle, so
-  that a caller that ignores `close()` (a shell redirection) still sees the failure.
+  that a caller that ignores `close()` (a shell redirection) still sees the failure. A `write()` needs only the spool,
+  so in the first 30 s of an outage (the close's wait) it waits for the server instead: a stall of a loaded server that
+  answers nothing for 20 s makes a long writer's writes slow, not failed (the sleep/wake walk lost a writer that way).
+  A write later in the outage fails at once, and `errors.log` says how long the server has been unreachable.
 - A handle that had uncommitted bytes when the daemon went offline fails its `close()` with `EIO` after waiting up to 30 s
   for the server. Its bytes are kept as **`/run/orbit-files/unsent/<time>-<name>`** (readable by the agent, removed only
   by the mounter after 24 h, and **at most 1 GiB per runner**: past that the oldest go first, each removal logged), and
