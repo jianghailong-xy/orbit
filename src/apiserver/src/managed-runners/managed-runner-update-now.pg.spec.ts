@@ -656,12 +656,13 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
     );
 
     // The next pass deletes the Pod by its UID with the grace it was made with, and stays READY: asking proves nothing.
-    k.cluster.calls.length = 0;
+    const mark = k.cluster.calls.length;
+    const since = () => k.cluster.calls.slice(mark);
     k.advance(1_000);
     await k.heartbeat(mapping.runnerId, { activeTurns: 1 });
     assert.equal(await manager.reconcile(mapping.id), 'READY');
     assert.deepEqual(
-      k.cluster.calls.filter((call) => call.op === 'delete'),
+      since().filter((call) => call.op === 'delete'),
       [{ op: 'delete', kind: 'pods', name, gracePeriodSeconds: MANAGED_POD_TERMINATION_GRACE_SECONDS }],
       'stopInstance: the recorded Pod deleted with its grace, never a force delete',
     );
@@ -687,7 +688,7 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
     assert.ok(stopping.demandRevision > mapping.demandRevision, 'the demand was recorded');
     assert.equal(k.cluster.count('create', 'pods'), podsMade, 'no Pod is made before the kubelet reports the old one stopped');
     assert.equal(pod()!.metadata.uid, podUid, 'the one Pod is still the old one');
-    assert.ok(k.cluster.calls.filter((call) => call.op === 'delete').every((call) => call.gracePeriodSeconds === MANAGED_POD_TERMINATION_GRACE_SECONDS), 'asked again on each pass, always with the grace');
+    assert.ok(since().filter((call) => call.op === 'delete').every((call) => call.gracePeriodSeconds === MANAGED_POD_TERMINATION_GRACE_SECONDS), 'asked again on each pass, always with the grace');
 
     // The runner's shutdown ends (SIGTERM's 143): the kubelet's report is the stop proof, and only once the old Pod is
     // gone is the next one made — from the profile's image, on the same claim and runner, with no attempt spent.
