@@ -82,7 +82,7 @@ func orbitCLIInstructionExecutable(exe string) string {
 // Kept ASCII and in paragraphs no longer than one Codex application-context value: codex carries
 // each value capped at 1,000 tokens, and codexAgentAdditionalContext sends these paragraphs packed
 // into values of at most codexContextValueMaxBytes.
-func orbitCLIInstructions(executable string, insideRecordedWork, watches, delegates bool) string {
+func orbitCLIInstructions(executable string, insideRecordedWork, watches, delegates, workflows bool) string {
 	executable = orbitCLIInstructionExecutable(executable)
 	if executable == "" {
 		return ""
@@ -97,6 +97,7 @@ func orbitCLIInstructions(executable string, insideRecordedWork, watches, delega
 		orbitWaitInstructionsFor(watches) +
 		orbitNotifyInstructions +
 		orbitDelegateInstructionsFor(delegates) +
+		orbitWorkflowInstructionsFor(delegates, workflows) +
 		orbitWikiPathInstructions +
 		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: they are schema-checked and need " +
 		"no shell. Inside a session the Orbit CLI at `" + command + "` takes the same approvals and attributes the work " +
@@ -207,6 +208,34 @@ func orbitDelegateInstructionsFor(delegates bool) string {
 		return ""
 	}
 	return orbitDelegateInstructions
+}
+
+// orbitWorkflowInstructions says when to reach for the workflow tool (subagent_workflow.go), next to delegate's.
+// Measured 2026-11-22: it shipped, a smoke run worked, and no agent ever chose it. Nothing named it, and in Claude Code
+// it is a deferred MCP tool, seen by name only until ToolSearch loads it, while the engine's own built-in Workflow
+// tool, which that engine is told to use only on a user's explicit opt-in, has nearly the same name: an agent carries
+// the caution over. So the paragraph says when, what it does, and that Orbit's tool needs no opt-in. ASCII like the rest.
+const orbitWorkflowInstructions = "To fan out several SubAgents, in parallel or in phases, whose results you only need " +
+	"combined, use workflow: one script runs them all and wakes this session once with its return value; delegate " +
+	"stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's " +
+	"built-in Workflow tool." + orbitWorkflowClaudeCodeLoad + "\n\n"
+
+// orbitWorkflowClaudeCodeLoad is the paragraph's Claude Code sentence, left out for Cursor like delegate's.
+const orbitWorkflowClaudeCodeLoad = " In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__workflow."
+
+// orbitWorkflowInstructionsFor is that paragraph for a session that is offered the workflow tool: one that is offered
+// delegate (a SubAgent is not) and whose Agent has Workflows on (ClaimedSession.WorkflowsDisabled), the same two
+// conditions under which `orbit mcp` lists the tool (recovery_render.go). It never names a tool the session lacks.
+func orbitWorkflowInstructionsFor(delegates, workflows bool) string {
+	if !delegates || !workflows {
+		return ""
+	}
+	return orbitWorkflowInstructions
+}
+
+// workflowsOn reports whether this claimed session is spawned with the workflow tool offered.
+func (s *ClaimedSession) workflowsOn() bool {
+	return s == nil || !s.WorkflowsDisabled
 }
 
 // agentDelegates reports whether a session run with this agent is offered delegate: every one but a SubAgent's
@@ -322,8 +351,8 @@ func (s *ClaimedSession) instructionAgent() AgentExecConfig {
 	return agent
 }
 
-func withOrbitCLIInstructions(configured, executable string, insideRecordedWork, watches, delegates bool) string {
-	orbit := orbitCLIInstructions(executable, insideRecordedWork, watches, delegates)
+func withOrbitCLIInstructions(configured, executable string, insideRecordedWork, watches, delegates, workflows bool) string {
+	orbit := orbitCLIInstructions(executable, insideRecordedWork, watches, delegates, workflows)
 	if orbit == "" {
 		return configured
 	}
@@ -502,6 +531,7 @@ func appendClaudeAgentInstructionArgs(
 	insideRecordedWork bool,
 	watches bool,
 	browser bool,
+	workflows bool,
 ) []string {
 	// The raw absolute path remains safe for direct exec/MCP configuration. Only
 	// inject and auto-allow the CLI when it is also unambiguous in Claude's
@@ -510,7 +540,7 @@ func appendClaudeAgentInstructionArgs(
 	if agent.SystemPrompt != "" {
 		args = append(args, "--system-prompt", agent.SystemPrompt)
 	}
-	if appendPrompt := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable, insideRecordedWork, watches, agentDelegates(agent)); appendPrompt != "" {
+	if appendPrompt := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable, insideRecordedWork, watches, agentDelegates(agent), workflows); appendPrompt != "" {
 		args = append(args, "--append-system-prompt", appendPrompt)
 	}
 	allowed := agent.AllowedTools

@@ -32,6 +32,8 @@ When the person asked to hear once something is done, tell them with notify when
 
 Use delegate whenever you would start a subagent or run an independent piece in the background, in place of your engine's built-in subagent or Agent tool: Orbit picks the model, records the cost and brings the result back even if this engine is recycled. Use it too to hand work to a cheaper or stronger model than yours, or to run it on another machine (needs: ["os:darwin"], or workspace: another agent's name from agent_list). Prefer it to session_create when you only need that piece's result back. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
 
+To fan out several SubAgents, in parallel or in phases, whose results you only need combined, use workflow: one script runs them all and wakes this session once with its return value; delegate stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's built-in Workflow tool. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__workflow.
+
 Before changing a file, use wiki_search with its path to look up known pitfalls, if your tool list has it.
 
 Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: they are schema-checked and need no shell. Inside a session the Orbit CLI at `'/usr/local/bin/orbit'` takes the same approvals and attributes the work to you: find a command with `'/usr/local/bin/orbit' guide [topic] --json` or `'/usr/local/bin/orbit' capabilities --id <id> --json`, then run the argv it returns with that exact absolute path. Pass `--receipt` to read the receipt its MCP tool answers with; `--json` prints the entity alone. Do not run `'/usr/local/bin/orbit' mcp` directly.
