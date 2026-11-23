@@ -12,10 +12,11 @@ import {
 // What the access tokens page says about a token (docs/personal-access-token-design.md §4, §9, §11).
 
 describe('the scopes a token can be granted', () => {
-  it('are the server’s thirteen (PAT_SCOPES), read-only being every :read one', () => {
+  it('are the server’s fourteen (PAT_SCOPES), read-only being every :read one', () => {
     expect([...ALL_SCOPES].sort()).toEqual([
       'events:read',
       'files',
+      'notify',
       'projects:read',
       'projects:write',
       'runners:read',
@@ -31,6 +32,7 @@ describe('the scopes a token can be granted', () => {
     expect(READ_SCOPES.every((scope) => scope.endsWith(':read'))).toBe(true);
     expect(ALL_SCOPES.filter((scope) => scope.endsWith(':read'))).toEqual(READ_SCOPES);
     expect(READ_SCOPES).not.toContain('files');
+    expect(READ_SCOPES).not.toContain('notify');
   });
 
   it('read as a preset’s name, or resource by resource', () => {
@@ -39,6 +41,8 @@ describe('the scopes a token can be granted', () => {
     expect(scopeSummary(['tasks:read', 'wiki:write', 'tasks:write', 'events:read', 'files'])).toBe(
       'Tasks: read & write · Wiki: write · Events: read · Files: read & write',
     );
+    // The token a monitoring system holds: it sends notifications and reaches nothing else.
+    expect(scopeSummary(['notify'])).toBe('Notifications: send');
   });
 });
 
