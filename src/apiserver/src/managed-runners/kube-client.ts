@@ -132,6 +132,8 @@ export interface KubeWatch {
 export interface KubeDeleteOptions {
   /** Delete only the object with this UID: a successor under the same name is never deleted. */
   uid?: string;
+  /** How long the kubelet gives the Pod's containers between SIGTERM and SIGKILL. Absent: the object's own. */
+  gracePeriodSeconds?: number;
 }
 
 export interface KubeCreateOptions {
