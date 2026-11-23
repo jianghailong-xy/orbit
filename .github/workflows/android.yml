@@ -82,11 +82,13 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # The one Android check: it passes only when every share above passed.
+  # The one Android check: it passes only when every share above passed. A run cancelled as a
+  # whole (a newer push to the same ref) skips it rather than report a failure; a share that
+  # fails or hits its timeout still fails it.
   android:
     name: Android (test + lint + debug APK)
     needs: [verify]
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
