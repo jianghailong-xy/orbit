@@ -33,25 +33,48 @@ for (const view of [null, 'completed']) {
   views[view ?? 'open'] = { status: r.status, rows };
 }
 const result = { at: new Date().toISOString(), cases: {} };
-for (const [key, c] of Object.entries(seed.cases)) {
+const has = (o, k) => (o && k in o ? o[k] : '<absent>');
+/** One session's six fields on the list (each view it is in) and the detail, with the legacy fields beside them. */
+async function readSession(c) {
   const listed = {};
   for (const [view, v] of Object.entries(views)) {
     // The API answers public (encoded) ids, so a row is found by its unique title.
     const row = v.rows.find((s) => s.title === c.title);
-    if (row) listed[view] = { status: v.status, id: row.id, fields: pick(row), legacy: { status: row.status, runState: row.runState ?? null, activity: row.activity ?? null, pendingApprovals: row.pendingApprovals ?? null } };
+    if (row) listed[view] = { status: v.status, id: row.id, fields: pick(row), legacy: { status: row.status, runState: row.runState ?? null, activity: row.activity ?? null, pendingApprovals: row.pendingApprovals ?? null, queuedReason: has(row, 'queuedReason') } };
   }
   const detail = await get(`/sessions/${c.id}`);
-  result.cases[key] = {
+  return {
     id: c.id,
     publicId: detail.body?.id ?? null,
     title: c.title,
     list: listed,
-    detail: { status: detail.status, fields: pick(detail.body), legacy: { status: detail.body?.status, runState: detail.body?.runState ?? null, activity: detail.body && 'activity' in detail.body ? detail.body.activity : '<absent>' } },
+    detail: { status: detail.status, fields: pick(detail.body), legacy: { status: detail.body?.status, runState: detail.body?.runState ?? null, activity: has(detail.body, 'activity') } },
   };
+}
+for (const [key, c] of Object.entries(seed.cases)) result.cases[key] = await readSession(c);
+// A task's runs, as the task panel reads them: the task detail's `sessions`, beside each run's own list row and detail.
+const TASK_RUN_FIELDS = ['status', 'runState', 'endReason', ...FIELDS, 'activity', 'queuedReason'];
+result.tasks = {};
+for (const [key, t] of Object.entries(seed.tasks ?? {})) {
+  const task = await get(`/tasks/${t.id}`);
+  const runs = {};
+  for (const [runKey, run] of Object.entries(t.runs)) {
+    const inTask = (task.body?.sessions ?? []).find((s) => s.title === run.title) ?? null;
+    runs[runKey] = {
+      ...(await readSession(run)),
+      taskDetail: inTask ? Object.fromEntries(TASK_RUN_FIELDS.map((k) => [k, has(inTask, k)])) : null,
+    };
+  }
+  result.tasks[key] = { id: t.id, publicId: task.body?.id ?? null, title: t.title, httpStatus: task.status, taskStatus: task.body?.status ?? null, runs };
 }
 fs.writeFileSync(out, JSON.stringify(result, null, 2));
 for (const [key, c] of Object.entries(result.cases)) {
   const listView = Object.keys(c.list).join('+') || 'NOT LISTED';
   console.log(`${key.padEnd(14)} list(${listView}) ${JSON.stringify(Object.values(c.list)[0]?.fields ?? null)}`);
   console.log(`${''.padEnd(14)} detail(${c.detail.status}) ${JSON.stringify(c.detail.fields)}`);
+}
+for (const [key, t] of Object.entries(result.tasks)) {
+  for (const [runKey, r] of Object.entries(t.runs)) {
+    console.log(`${key}/${runKey}: detail ${JSON.stringify(r.detail.fields)}; task detail ${JSON.stringify(r.taskDetail)}`);
+  }
 }

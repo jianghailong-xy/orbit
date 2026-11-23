@@ -33,7 +33,12 @@ await page.fill('input[name="email"]', seed.ownerEmail);
 await page.fill('input[name="password"]', password);
 await page.click('button.login-submit');
 await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 30_000 });
-await page.waitForSelector('.session-row', { timeout: 30_000 });
+await page.waitForSelector('.session-row', { timeout: 30_000 }).catch(async (err) => {
+  // Keep what the page showed instead of the list, then fail as before.
+  await page.screenshot({ path: path.join(out, '00-no-session-list.png') });
+  fs.writeFileSync(path.join(out, 'walk.log'), `no session list 30 s after sign-in, at ${new URL(page.url()).pathname}\n`);
+  throw err;
+});
 await page.screenshot({ path: path.join(out, '00-signed-in.png') });
 log(`signed in; landed on ${new URL(page.url()).pathname}`);
 
@@ -61,6 +66,13 @@ async function readCase(title) {
         // The approval card, where there is one: whether it can be answered, and the line a dead card carries.
         approveButtonDisabled: [...document.querySelectorAll('button')].find((b) => (b.textContent?.trim() ?? '').startsWith('Approve'))?.disabled ?? null,
         approvalStaleNote: document.querySelector('.approval-stale')?.textContent?.trim() ?? null,
+        // The composer's Stop (WorkspaceView `showStop`), and the row glyph: its icon class, and whether it spins.
+        stopVisible: (() => {
+          const stop = document.querySelector('button[aria-label="Stop"]');
+          return !!stop && stop.getClientRects().length > 0;
+        })(),
+        rowGlyph: row?.querySelector('.session-icon .anticon')?.getAttribute('class') ?? row?.querySelector('.session-icon > *')?.getAttribute('class') ?? null,
+        rowSpinner: !!row?.querySelector('.session-icon .anticon-spin, .session-icon .anticon-loading'),
       };
     }, title);
     const key = JSON.stringify(now);

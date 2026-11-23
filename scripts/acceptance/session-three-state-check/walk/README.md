@@ -16,13 +16,18 @@ It reads each seeded session's six fields (`phase`, `released`, `lastTurnOutcome
   - failed turn
   - released by End
   - task run finished, with a DONE task
-- `seed-control.cjs <tip> <walk>`: adds the control session, a plain RUNNING turn.
+- `seed-control.cjs <tip> <walk>`: adds the plain RUNNING turns. One has no `engineStartedAt` (the F7 control, "Starting") and one has its engine started ("Running").
+- `seed-task-runs.cjs <tip> <walk>`: adds one IN_PROGRESS task with two runs, a finished one (task_done) and one queued on hold (paused account), for the task panel's run badges.
+- `seed-approval.cjs <tip> <walk> <case>`: adds a fresh pending Bash approval to one case's session, so there is a card to press again.
 - `beat.sh <container> <runner id>`: keeps the runner's `last_heartbeat_at` fresh. Without it, the runner goes offline after 90 s, and a queued row shows its runner gate instead of "On hold".
 - `vite.preview.config.mjs`: `vite preview` of `<tip>/src/web/dist` with `/api` proxied to the walk's apiserver. Build the console first with `cd src/web && npx vite build`.
 - `api-read.mjs <walk> <out.json>`: the six fields from the list (matched by title, since the API answers public ids) and from the detail.
 - `walk.mjs <walk> <origin> <out>`: signs in, opens each session, reads the DOM until it holds still, and takes screenshots.
 - `walk-ab.mjs <walk> <origin> <out>`: the same console with `activity` nulled on rows stored RUNNING. It rewrites the list and detail JSON in the browser and never the `/events` stream.
-- `make-table.mjs <api.json> <dom.json> <ab.json> <out.md>`: builds the table.
+- `walk-task.mjs <walk> <origin> <out>`: opens each seeded task's panel (`/tasks/<id>`) and reads every run's badge (`a.tdp-session .tdp-badge`), matched to a run by its link.
+- `walk-approve.mjs <walk> <origin> <out>` (`WALK_CASE=<case>`, default `approval`): presses Approve on the card and waits up to 30 s for the word to change. It records the decision request, the DOM before and after, and the approval and session from the API before and after. It changes state, so run it last.
+- `make-table.mjs <api.json> <dom.json> <ab.json> <out.md>`: the F7 table.
+- `make-table-fix.mjs <walk dir> <out.md>`: the fix walk's table. It reads `api-before-press.json`, `run2/dom.json`, `task/task.json`, `ab/ab.json` and `approve2/approve-*.json` under `<walk dir>`.
 - `down.sh <walk>`: stops the processes by their pid files and removes only the walk's own container.
 
 ## Rerun
@@ -53,3 +58,12 @@ The control found a defect outside the seven:
 - **Approval case.** The word is right, but the card is drawn dead: "This turn has ended…" with Approve disabled.
 
 The table, screenshots and reads were uploaded with `file_upload`. They are not kept here.
+
+## Fix walk (2026-11-24): console from e95ff30f32, apiserver from the tip
+
+The fix console was built in its own checkout (`cd /tmp/p3/fix/src/web && npx vite build`) and served with `WALK_WEB_ROOT=/tmp/p3/fix/src/web`. Everything else ran the tip, as above, plus `seed-task-runs.cjs`, `walk-task.mjs`, `seed-approval.cjs` (on `approval` and `running-started`) and `walk-approve.mjs` once per case.
+
+All the session words, Stop, the spinner or terminal glyph, and the approval card now read as expected, and pressing Approve leaves a running turn with Stop.
+
+Still wrong: the task panel's badge for a run on hold says "Queued". The tip server's task detail sends each run with `status`, `runState` and `endReason` but no `waitingOn` (`TasksService.loadDetail`), and the panel's new "On hold" reading needs `waitingOn`.
+
