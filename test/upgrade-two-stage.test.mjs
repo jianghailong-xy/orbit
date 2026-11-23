@@ -899,7 +899,7 @@ test('the hosted runners\' image is built when the runner changed, and their pro
   appendFileSync(path.join(fixture.target, '.env'), 'ORBIT_MANAGED_RUNNERS_ENABLED=true\nORBIT_MANAGED_RUNNERS_DIR=./data/managed-runners\n');
   const profilePath = path.join(fixture.target, 'data/managed-runners/profile.json');
   mkdirSync(path.dirname(profilePath), { recursive: true });
-  const profileText = (image) => `{\n  "backend": "kubernetes",\n  "runner": {\n    "image": "${image}",\n    "maxConcurrent": 2\n  }\n}\n`;
+  const profileText = (image, revision) => `{\n  "backend": "kubernetes",\n  "runner": {\n${revision ? `    "imageRevision": "${revision}",\n` : ''}    "image": "${image}",\n    "maxConcurrent": 2\n  }\n}\n`;
   writeFileSync(profilePath, profileText(OLD), { mode: 0o600 });
   const profile = () => readFileSync(profilePath, 'utf8');
   const backups = () => readdirSync(path.dirname(profilePath)).filter((name) => name.startsWith('profile.json.bak-')).sort();
@@ -915,7 +915,8 @@ test('the hosted runners\' image is built when the runner changed, and their pro
     [`build --provenance=false -f deploy/managed-runner/image/Dockerfile --build-arg ORBIT_SOURCE_SHA=${first} -t ${firstImage} .`]);
   assert.ok(readFileSync(fixture.registry, 'utf8').split('\n').includes(firstImage), 'and pushed');
   assert.match(run.stdout, new RegExp(` {4}managed-runner +${OLD.replace(/[.]/g, '\\.')}\n {18}-> ${digestOf(firstImage).replace(/[.]/g, '\\.')}\n`));
-  assert.equal(profile(), profileText(digestOf(firstImage)), 'the profile names the image by digest, and is otherwise as it was');
+  assert.equal(profile(), profileText(digestOf(firstImage), first), 'the profile names the image by digest and its source commit, and is otherwise as it was');
+  assert.match(run.stdout, new RegExp(` {4}imageRevision +\\(none\\)\\n {18}-> ${first}\\n`), 'the plan names the imageRevision change');
   assert.equal(statSync(profilePath).mode & 0o777, 0o600);
   assert.equal(backups().length, 1);
   assert.equal(readFileSync(path.join(path.dirname(profilePath), backups()[0]), 'utf8'), profileText(OLD));
@@ -930,7 +931,7 @@ test('the hosted runners\' image is built when the runner changed, and their pro
   assert.deepEqual(imageBuilds(run), [], 'a runner test and a document are not what the image is built from');
   assert.match(run.stdout, new RegExp(`orbit-cloud-runner:${first} is in the registry already`));
   assert.match(run.stdout, / {4}managed-runner +unchanged\n/);
-  assert.equal(profile(), profileText(digestOf(firstImage)));
+  assert.equal(profile(), profileText(digestOf(firstImage), first));
   assert.equal(backups().length, 1);
 
   // A release that changes the runner: a plan says so and changes nothing; the deploy moves the profile on.
@@ -943,22 +944,23 @@ test('the hosted runners\' image is built when the runner changed, and their pro
   const plan = fixture.run(upgrade, ['--plan', third]);
   assert.equal(plan.status, 0, plan.output);
   assert.match(plan.stdout, new RegExp(`-> ${digestOf(thirdImage).replace(/[.]/g, '\\.')}\n`));
-  assert.equal(profile(), profileText(digestOf(firstImage)), 'a plan changes nothing');
+  assert.equal(profile(), profileText(digestOf(firstImage), first), 'a plan changes nothing');
+  assert.match(plan.stdout, new RegExp(` {4}imageRevision +${first}\\n {18}-> ${third}\\n`));
   run = fixture.run(upgrade, ['--deploy', third]);
   assert.equal(run.status, 0, run.output);
-  assert.equal(profile(), profileText(digestOf(thirdImage)));
+  assert.equal(profile(), profileText(digestOf(thirdImage), third));
   assert.equal(backups().length, 2);
 
   // The rollback: the second release names the first's image again, and builds nothing.
   run = fixture.run(upgrade, ['--deploy', second]);
   assert.equal(run.status, 0, run.output);
   assert.deepEqual(run.build.filter((call) => /^(compose build|build|push) /.test(call.args)), [], run.output);
-  assert.equal(profile(), profileText(digestOf(firstImage)));
+  assert.equal(profile(), profileText(digestOf(firstImage), first));
 
   // The same release again: the apiserver, otherwise unchanged, is not replaced for the profile, which is unchanged too.
   run = fixture.run(upgrade, ['--deploy', second]);
   assert.equal(run.status, 0, run.output);
-  assert.match(run.stdout, / {4}managed-runner +unchanged\n/);
+  assert.match(run.stdout, / {4}managed-runner +unchanged\n {4}imageRevision +unchanged\n/);
   assert.ok(!ups(run).some((call) => call.includes('--force-recreate')), ups(run).join('\n'));
 
   // The profile changed by hand while the release stays: the deploy sets it back, and replaces the unchanged apiserver,
@@ -966,7 +968,37 @@ test('the hosted runners\' image is built when the runner changed, and their pro
   writeFileSync(profilePath, profileText(OLD));
   run = fixture.run(upgrade, ['--deploy', second]);
   assert.equal(run.status, 0, run.output);
-  assert.equal(profile(), profileText(digestOf(firstImage)));
+  assert.equal(profile(), profileText(digestOf(firstImage), first));
   assert.deepEqual(handover(run).slice(0, 5), WITHOUT_A_GAP.slice(0, 5), 'the apiserver is handed over, as for a new image');
   assert.match(run.stdout, /==> apiserver: recreate, without a gap/);
+
+  // The image is right but the revision is missing (a profile an earlier deploy wrote): the deploy backfills it, keeps a
+  // backup, and replaces the apiserver for it.
+  const before = backups().length;
+  writeFileSync(profilePath, profileText(digestOf(firstImage)));
+  run = fixture.run(upgrade, ['--plan', second]);
+  assert.match(run.stdout, / {4}managed-runner +unchanged\n {4}imageRevision +\(none\)\n {18}-> /);
+  assert.equal(profile(), profileText(digestOf(firstImage)), 'a plan changes nothing');
+  run = fixture.run(upgrade, ['--deploy', second]);
+  assert.equal(run.status, 0, run.output);
+  assert.equal(profile(), profileText(digestOf(firstImage), first));
+  assert.equal(backups().length, before + 1);
+  assert.equal(readFileSync(path.join(path.dirname(profilePath), backups().at(-1)), 'utf8'), profileText(digestOf(firstImage)));
+  assert.match(run.stdout, /==> apiserver: recreate, without a gap/);
+
+  // A wrong revision, on an unchanged image, is set right the same way, in place.
+  writeFileSync(profilePath, profileText(digestOf(firstImage), 'b'.repeat(40)));
+  run = fixture.run(upgrade, ['--deploy', second]);
+  assert.equal(run.status, 0, run.output);
+  assert.equal(profile(), profileText(digestOf(firstImage), first));
+  assert.match(run.stdout, /==> apiserver: recreate, without a gap/);
+
+  // Both right: nothing is written, no backup is made, and the apiserver is not replaced.
+  const kept = backups().length;
+  run = fixture.run(upgrade, ['--deploy', second]);
+  assert.equal(run.status, 0, run.output);
+  assert.equal(profile(), profileText(digestOf(firstImage), first));
+  assert.equal(backups().length, kept);
+  assert.ok(!ups(run).some((call) => call.includes('--force-recreate')), ups(run).join('\n'));
+  assert.doesNotMatch(run.stdout, /apiserver: recreate/);
 });
