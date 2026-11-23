@@ -1489,9 +1489,22 @@ export interface RunnerGitCredentialRequest {
   host: string;
   /** The repository path git is asking about, `<owner>/<name>` with or without `.git`. */
   path: string;
+  /**
+   * `PUSH_AS_ME` (docs/design/protected-branch-landing.md §5.2): the owner's own GitHub token, for one landing's target
+   * push. It names the attempt it is for: an integration job (`jobId`, `claimGeneration`, `leaseOwner`) past its push
+   * boundary, or a session's Merge (`sessionId`, `mergeOperationId`, `leaseOwner`) this runner holds. Answered once
+   * per claim generation or merge operation. Absent: the App's installation token, as always.
+   */
+  purpose?: 'PUSH_AS_ME';
+  jobId?: string;
+  claimGeneration?: string;
+  leaseOwner?: string;
+  sessionId?: string;
+  mergeOperationId?: string;
 }
 
-/** The answer: an installation token for that repository alone, contents:write and metadata:read. Never stored. */
+/** The answer: an installation token for that repository alone, contents:write and metadata:read, or with
+ *  `purpose: 'PUSH_AS_ME'` the owner's own user token. Never stored. */
 export interface RunnerGitCredentialAnswer {
   username: 'x-access-token';
   password: string;
@@ -4446,6 +4459,12 @@ export interface SessionMergeResultRequest {
   pushedSha?: string;
   /** With `pull_request`: why the target was not pushed, in GitHub's words; absent when it was not tried. */
   pushRefusal?: string;
+  /** The command's `landVia`, echoed: `PUSH_AS_ME` says the refused target push was the owner's (§5.4). */
+  landVia?: import('./pull-request-landing').LandVia;
+  /** With `merged`: the target push carried the owner's own GitHub token and GitHub took it (§5.2). */
+  pushedAs?: 'OWNER';
+  /** With `pushedAs`: the rules GitHub said the push bypassed, its "Bypassed rule violations" lines. */
+  bypassedRules?: string[];
   /** Exact source-branch tip replayed by this merge. Persisted so later worktree reports can
    *  detect new commits without relying on ancestry or patch-id equivalence. */
   sourceSha?: string;
@@ -4947,8 +4966,13 @@ export interface IntegrationJobResultRequest {
    *  landing branch holds after the push, read back from the remote. It is `testedSha`. */
   landingRefSha?: string | null;
   /** With PULL_REQUEST: why the target was not pushed, in GitHub's words (clipped and redacted), or absent when
-   *  the subject already had an open pull request and the target was not tried. */
+   *  the subject already had an open pull request and the target was not tried. With `landVia` PUSH_AS_ME and the
+   *  owner's token not to be had, Orbit's reason instead. */
   pushRefusal?: string | null;
+  /** With LANDED: the target push carried the owner's own GitHub token and GitHub took it (§5.2). */
+  pushedAs?: 'OWNER' | null;
+  /** With `pushedAs`: the rules GitHub said the push bypassed, its "Bypassed rule violations" lines. */
+  bypassedRules?: string[] | null;
 }
 
 /** The commits that moved the upstream under a landing, as the runner measured them on the

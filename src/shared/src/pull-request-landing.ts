@@ -17,6 +17,37 @@ export const INTEGRATION_PULL_REQUEST_CAPABILITY = 'integration-pull-request/v1'
 /** The runner capability that says a session's Merge does the same (§4.6, §9 item 7). */
 export const SESSION_MERGE_PULL_REQUEST_CAPABILITY = 'session-merge-pull-request/v1';
 
+/**
+ * The runner capability that says Push as me works on this runner (§5.2, §9 item 3): right after the push boundary
+ * it asks `POST /runner/git-credential` with `purpose: 'PUSH_AS_ME'` for the owner's own GitHub token, pushes the
+ * target with that token alone, and falls back to the landing branch when GitHub refuses. A runner without it is never
+ * handed `PUSH_AS_ME`: one with only `integration-pull-request/v1` would push the target with today's credential.
+ */
+export const PUSH_AS_ME_CAPABILITY = 'push-as-me/v1';
+
+/** The workspace's landing setting as the owner chooses it (§7 `workspace.landing_mode`; NULL reads PULL_REQUEST). */
+export type WorkspaceLandingMode = 'PULL_REQUEST' | 'PUSH_AS_ME';
+
+/** The last time GitHub (or Orbit's credential route) refused a Push as me landing on a workspace (§5.5, §11.1). */
+export interface PushAsMeRefusalView {
+  /** ISO-8601. */
+  at: string;
+  /** The target branch, without `refs/heads/`. */
+  branch: string;
+  /** GitHub's words, or Orbit's reason when the owner's token could not be had. */
+  message: string;
+}
+
+/**
+ * A workspace's `landing` block (§8), on `GET /workspaces/:id`. `mode` is null for a workspace not cloned from GitHub,
+ * which has no choice: its landings push with the machine's Git credential.
+ */
+export interface WorkspaceLandingView {
+  mode: WorkspaceLandingMode | null;
+  pushAsMe: { available: boolean; reason?: 'WORKSPACE_NOT_FROM_GITHUB' | 'GITHUB_NOT_CONNECTED' };
+  lastRefusal: PushAsMeRefusalView | null;
+}
+
 /** Where Orbit pushes a landing GitHub refused on its target: `refs/heads/orbit/land/<id>` (§4.1). */
 export const LANDING_REF_PREFIX = 'refs/heads/orbit/land/';
 
