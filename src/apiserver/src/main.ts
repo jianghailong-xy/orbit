@@ -15,6 +15,7 @@ import { SlowRequestInterceptor } from './common/slow-request.interceptor';
 import { TransientDbConflictFilter } from './common/transient-db-conflict.filter';
 import { WorkspaceAliasInterceptor } from './common/workspace-alias.interceptor';
 import { outsideThePoolGateway } from './providers/pool-gateway.controller';
+import { listenForMetricsScrapes } from './metrics/metrics-listener';
 import { listenForRunnerLinkCalls } from './runner-api/runner-link-call';
 
 declare global {
@@ -109,6 +110,12 @@ async function bootstrap() {
     host: config.get<string>('RUNNER_LINK_INTERNAL_HOST'),
   });
   if (linkServer) listeners.push(drainable(linkServer));
+  // Prometheus's door to GET /api/metrics, serving /metrics alone, inside the project's network (metrics/metrics-listener.ts).
+  const metricsServer = await listenForMetricsScrapes(app, {
+    port: config.get<string>('METRICS_INTERNAL_PORT'),
+    host: config.get<string>('METRICS_INTERNAL_HOST'),
+  });
+  if (metricsServer) listeners.push(drainable(metricsServer));
   started({ app, listeners });
 }
 

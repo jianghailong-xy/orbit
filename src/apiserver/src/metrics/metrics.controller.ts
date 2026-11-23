@@ -39,10 +39,17 @@ export class MetricsController {
   @Header('Content-Type', 'text/plain; version=0.0.4')
   @Header('Cache-Control', 'no-store')
   async read(): Promise<string> {
-    // The Watch gauges and the wiki's System model are the parts read from the database, on every scrape
-    // (watches/watch-metrics.ts, wiki/wiki-model-metrics.ts).
-    return renderDbConflictMetrics() + renderCodexResetMetrics() + renderRunEventSeqConflictMetrics()
-      + (await renderWatchMetrics(this.prisma))
-      + (await renderWikiModelMetrics(this.prisma));
+    return renderMetrics(this.prisma);
   }
+}
+
+/**
+ * The whole body, as this route and the internal listener Prometheus scrapes (metrics-listener.ts) both serve it.
+ * The Watch gauges and the wiki's System model are the parts read from the database, on every scrape
+ * (watches/watch-metrics.ts, wiki/wiki-model-metrics.ts).
+ */
+export async function renderMetrics(prisma?: PrismaService): Promise<string> {
+  return renderDbConflictMetrics() + renderCodexResetMetrics() + renderRunEventSeqConflictMetrics()
+    + (await renderWatchMetrics(prisma))
+    + (await renderWikiModelMetrics(prisma));
 }
