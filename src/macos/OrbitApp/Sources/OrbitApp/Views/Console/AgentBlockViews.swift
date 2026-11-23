@@ -317,7 +317,8 @@ struct AgentsBandRow: View {
             .padding(.bottom, .composerBandGap)
             .accessibilityLabel(summary.spoken)
             .sheet(isPresented: $showing) {
-                AgentsSheet(summary: summary, parentEngine: session?.engine) { id in
+                AgentsSheet(summary: summary, parentEngine: session?.engine,
+                            items: { console.state.subagentItems[$0] ?? [] }) { id in
                     showing = false
                     console.revealAgent(id)
                 }
@@ -433,9 +434,14 @@ struct AgentBandChip: View {
 
 /// Every Agent the session started, the running ones first. No cost is shown,
 /// not even a run's own. A row closes the sheet and scrolls the conversation to its block.
+/// Each row has one shape (board docs/mocks/agents-sheet-rows): the title with its time on the right,
+/// then the engine's mark, the model and the machine on one line that never wraps; a running row adds
+/// what it is on right now.
 struct AgentsSheet: View {
     let summary: SubagentSessionSummary
     let parentEngine: String?
+    /// A run's own transcript, by its call: where the running row's current step comes from.
+    var items: (String) -> [TranscriptItem] = { _ in [] }
     let reveal: (String) -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -465,15 +471,28 @@ struct AgentsSheet: View {
         return Button { reveal(run.toolUseId) } label: {
             HStack(alignment: .top, spacing: 10) {
                 Group {
-                    if block.running { SpinnerGlyph(color: .accentColor) } else { SubagentEndGlyph(status: run.status) }
+                    if block.running {
+                        SpinnerGlyph(color: .accentColor)
+                    } else if SubagentCardEnd.tone(run.status) == .ok {
+                        // Grey: a finished run is the usual case, so only a running or failed one stands out.
+                        Image(systemName: "checkmark").font(.orbitLabel.weight(.semibold)).foregroundStyle(.tertiary)
+                    } else {
+                        SubagentEndGlyph(status: run.status)
+                    }
                 }
                 .frame(width: 18)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(run.description ?? run.type).font(.body).lineLimit(1)
-                    AgentIdentityLine(block: block, showsMeta: false, trailing: rowNumbers(block, run))
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(run.description ?? run.type).font(.body).lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        time(block, run)
+                    }
+                    identity(block, run)
+                    if block.running, let live = ToolCardView.liveActivity(in: items(run.toolUseId)) {
+                        Text(live).font(.orbitMonoFine.italic()).foregroundStyle(.secondary)
+                            .lineLimit(1).truncationMode(.tail)
+                    }
                 }
-                Spacer(minLength: 0)
                 Image(systemName: "chevron.right").font(.orbitMeta.weight(.semibold)).foregroundStyle(.tertiary)
             }
             .contentShape(Rectangle())
@@ -481,11 +500,46 @@ struct AgentsSheet: View {
         .buttonStyle(.plain)
     }
 
-    /// A writer's file count ahead of its time (`3 files · 2m 4s`); the run's cost is left out.
-    private func rowNumbers(_ block: SubagentBlock, _ run: SubagentRunView) -> String? {
+    /// How long it took, or — while it runs — how long it has run, in the accent colour.
+    @ViewBuilder
+    private func time(_ block: SubagentBlock, _ run: SubagentRunView) -> some View {
+        if block.running {
+            if let start = block.startedAt {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    Text(WikiRunsLogic.duration(max(0, context.date.timeIntervalSince(start))))
+                        .font(.orbitMonoFine).monospacedDigit().foregroundStyle(Color.accentColor).fixedSize()
+                }
+            }
+        } else if let duration = SubagentBlock.duration(run) {
+            Text(duration).font(.orbitMonoFine).monospacedDigit().foregroundStyle(.secondary).fixedSize()
+        }
+    }
+
+    /// `[C] DeepSeek V4.1 Flash · orbit-ws04 · 3 files`: plain words, one line. This machine is not named;
+    /// an ending other than done says so (`Failed` in red).
+    private func identity(_ block: SubagentBlock, _ run: SubagentRunView) -> some View {
         var parts: [String] = []
-        if block.outcomeIsFiles { parts.append(block.changedFiles.count == 1 ? "1 file" : "\(block.changedFiles.count) files") }
-        if let duration = SubagentBlock.duration(run) { parts.append(duration) }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        if let model = SubagentSessionSummary.sheetModelLabel(run) { parts.append(model) }
+        if let place = run.workspaceName, !place.isEmpty { parts.append(place) }
+        if block.outcomeIsFiles {
+            parts.append(block.changedFiles.count == 1 ? "1 file" : "\(block.changedFiles.count) files")
+        }
+        let ending = SubagentCardEnd.tone(run.status) == .ok || block.running ? nil : block.outcome
+        return HStack(spacing: 5) {
+            if let engine = block.engine {
+                Text(String(SubagentBlock.shortName(engine).prefix(1)))
+                    .font(.orbitSectionLabel.weight(.heavy))
+                    .foregroundStyle(Color(white: 1))
+                    .frame(width: 14, height: 14)
+                    .background(engineTint(engine), in: RoundedRectangle(cornerRadius: 4))
+            }
+            Text(parts.joined(separator: " · ")).foregroundStyle(.secondary)
+                .lineLimit(1).truncationMode(.middle)
+            if let ending {
+                Text("· \(ending)").foregroundStyle(block.outcomeIsFailure ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondary))
+                    .lineLimit(1).fixedSize()
+            }
+        }
+        .font(.orbitLabel)
     }
 }
