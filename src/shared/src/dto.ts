@@ -2382,8 +2382,16 @@ export interface AccountRemoveCommand {
   /** The engine whose account store holds the slot: `codex`, `claude`. Absent on the codex-named
    *  field older control planes hand over, which only ever meant Codex. */
   engine?: LoginEngine;
-  /** `default`, or the id of a slot the runner added. */
+  /** `default`, or the id of a slot the runner added. A sign-out names `default`. */
   account: string;
+  /** `remove` (also absent) takes an added slot off the machine; `sign-out` deletes Default's login
+   *  credential and nothing else (docs/default-sign-out-design.md). Only a runner that declares
+   *  `<engine>-default-sign-out/v1` is handed a sign-out: an older one would read it as a removal of
+   *  Default, which it refuses. */
+  action?: AccountRemoveAction;
+  /** With `sign-out`: sign out although sessions are running on Default — the person confirmed after
+   *  a refusal named them. They fail on their next turn. */
+  force?: boolean;
   /** Identifies this removal (Runner.codexAccountRemoveAt), so a report can be matched to the
    *  request it answers. */
   attempt?: string;
@@ -2392,6 +2400,9 @@ export interface AccountRemoveCommand {
    *  rather than at its next claim. Absent otherwise. */
   moves?: AccountRemoveMove[];
 }
+
+/** What an AccountRemoveCommand asks of the account. */
+export type AccountRemoveAction = 'remove' | 'sign-out';
 
 /** One session of a removal under way and the account it was moved to. */
 export interface AccountRemoveMove {
@@ -2409,13 +2420,15 @@ export interface AccountRemoveResult {
   engine?: LoginEngine;
   account: string;
   /** `done` once the slot's directory and record are gone; `failed` with the machine's own reason
-   *  — Default, a slot a live session is in, or a directory that would not go away. */
+   *  — Default, a slot a live session is in, or a directory that would not go away. A sign-out is
+   *  `done` once Default's credential is gone, `failed` while sessions run on Default (unforced) or
+   *  when the credential stayed. */
   status: 'done' | 'failed';
   message?: string;
   /** The `attempt` of the request this reports on. */
   attempt?: string;
-  /** With `failed` because the account is in use: the sessions running in it, which the control
-   *  plane names by title in the message the page shows. */
+  /** With `failed` because the account is in use (a removal, or an unforced sign-out): the sessions
+   *  running in it, which the control plane names by title in the message the page shows. */
   sessionIds?: string[];
 }
 
@@ -2867,8 +2880,10 @@ export interface RunnerAccountRemoveState {
   /** The engine whose account store the removal is about (`codex` on a row written before
    *  accounts-per-engine). */
   engine: LoginEngine;
-  /** The slot being removed, or null when nothing is in flight. `default` only in the answer to
-   *  removing Default, which is removed from Orbit alone: `done` at once, never relayed to the runner. */
+  /** The slot being removed, or null when nothing is in flight. `default` in the answer to removing
+   *  Default, which is removed from Orbit alone: `done` at once, never relayed to the runner; and on a
+   *  sign-out of Default (`POST /runners/:id/accounts/:engine/default/sign-out`), which is relayed —
+   *  so a relayed state naming `default` is always a sign-out. */
   account: string | null;
   status: 'pending' | 'done' | 'failed' | null;
   /** The machine's own words when it failed: the account is in use by a session, the runner is too

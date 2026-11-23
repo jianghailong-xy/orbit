@@ -73,12 +73,12 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | Caller | Routes |
 | --- | --- |
 | `public` | 39 |
-| `user` | 531 |
+| `user` | 532 |
 | `admin` | 31 |
 | `runner` | 231 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **836** |
+| **Total** | **837** |
 
 ## Public routes
 
@@ -374,6 +374,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `DELETE` | `/api/runners/:id/accounts/:engine/:account/set-default` | path `account`, `engine`, `id` | `RunnersController.dismissSetDefaultFailure` |
 | `POST` | `/api/runners/:id/accounts/:engine/:account/set-default` | path `account`, `engine`, `id` | `RunnersController.setDefaultAccount` |
 | `POST` | `/api/runners/:id/accounts/:engine/default/restore` | path `engine`, `id` | `RunnersController.restoreDefault` |
+| `POST` | `/api/runners/:id/accounts/:engine/default/sign-out` | body `SignOutDefaultDto`; path `engine`, `id` | `RunnersController.signOutDefault` |
 | `POST` | `/api/runners/:id/attention/:kind/fix` | body `Object`; path `id`, `kind` | `RunnerAttentionFixController.fix` |
 | `GET` | `/api/runners/:id/browser` | path `id` | `ManagedRunnerBrowserController.state` |
 | `POST` | `/api/runners/:id/browser/clear` | path `id` | `ManagedRunnerBrowserController.clear` |

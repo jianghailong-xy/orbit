@@ -192,7 +192,11 @@ export const HEARTBEAT_DELIVERIES = {
     writers: ['runners/runners.service.ts#startLogin', 'runners/runners.service.ts#submitLoginCode', 'runners/runners.service.ts#cancelLogin'],
     pending: 'a sign-in in flight',
   },
-  accountRemoveRequest: { how: 'MARKED', writers: ['runners/runners.service.ts#removeAccount'], pending: 'a removal pending' },
+  accountRemoveRequest: {
+    how: 'MARKED',
+    writers: ['runners/runners.service.ts#removeAccount', 'runners/runners.service.ts#signOutDefault'],
+    pending: 'a removal or a Default sign-out pending',
+  },
   codexAccountRemoveRequest: { how: 'MARKED', writers: ['runners/runners.service.ts#removeAccount'], pending: 'a removal pending' },
   claudeAccountSwapRequest: { how: 'MARKED', writers: ['runners/runners.service.ts#setDefaultAccount'], pending: 'a Set as default swap pending' },
   installRequest: {

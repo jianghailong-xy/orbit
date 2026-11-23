@@ -50,7 +50,7 @@ const machine = (over: Partial<Runner> = {}): Runner =>
     online: true,
     maxConcurrent: 4,
     activeSessions: 0,
-    capabilities: ['provider:dsh'],
+    capabilities: ['provider:dsh', 'codex-default-sign-out/v1'],
     engines: [
       health({ engine: 'claude', version: '2.1.291 (Claude Code)', auth: 'no' }),
       health({
@@ -232,9 +232,12 @@ describe('an engine on its machine’s page', () => {
     await click($('.re-grp-toggle', codex));
     expect($$('.machine-section-engines .re-acct .re-name-text').map(text)).toEqual(['Default', 'Work']);
 
-    const work = $$('.machine-section-engines .re-acct')[1];
+    const [first, work] = $$('.machine-section-engines .re-acct');
     const menu = await openRunnerMenu(work);
     expect($$('[role="menuitem"]', menu).map(text)).toEqual(['Rename', 'Re-sign in', 'Pause account…', 'Remove account']);
+    // Default's alone offers Sign out…, the runner having declared it.
+    const defaultMenu = await openRunnerMenu(first);
+    expect($$('[role="menuitem"]', defaultMenu).map(text)).toEqual(['Rename', 'Re-sign in', 'Pause account…', 'Sign out…', 'Remove account']);
 
     await click(button('Add account', codex));
     expect(text($('.re-add-label', codex))).toBe('Account name');

@@ -3416,6 +3416,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1491 sets feishu_app.message_detail's default to FULL and moves every TITLES_ONLY row to FULL: an ALTER and an
       // UPDATE of that table only, none of the preserved relations, and no trigger, function or DONE fence changes.
       '1491_feishu_details_by_default',
+      // 1492 adds two columns to runner for a Default sign-out on the account-removal relay: account_remove_action, a
+      // nullable TEXT, and account_remove_force, a BOOLEAN with a constant false default (both catalog-only); no row is
+      // written, and no preserved relation, trigger, function or DONE fence changes. Written as 1465 on its task branch, it
+      // was renumbered after main took 1465 and 1491.
+      '1492_runner_account_sign_out',
       // 1493 adds four nullable session columns (failure_kind, failure_scope, failure_said, admission_failure) with no
       // default, CHECK, index or backfill; no row is written, and no preserved relation, trigger, function or DONE
       // fence changes.
