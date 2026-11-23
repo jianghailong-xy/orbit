@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Revision 42 part one end to end (docs/project-integration-line-contract.md §12.1–§12.8), on an isolated stack of its
-# own: start or converge the stack from this checkout, build and (re)start the runner from it, then the three cases of
-# cases.mjs in one project on a project branch. The stack, the runner and the fake engine are part two's kit
+# own: start or converge the stack from this checkout, build and (re)start the runner from it, then the four cases of
+# cases.mjs: three in one project on a project branch, and a fresh line in a second project. The stack, the runner and the fake engine are part two's kit
 # (scripts/acceptance/landing-measured/), under another Compose project, directory and port range so the two never meet.
 # Every query the run records is printed at the end, so this job's output carries the rows. Exit 0 only if every check
 # passed.
@@ -63,7 +63,7 @@ bash "$KIT/stack.sh" start-runner || echo "(not registered yet: bootstrap regist
 cd "$KIT"
 node bootstrap.mjs lfx-line | grep -E '^(runner|workspace) |"version"' || true
 set +e
-step "the three cases (run $LM_RUN)"
+step "the four cases (run $LM_RUN)"
 node "$HERE/cases.mjs"; rc=$?
 step "recorded queries ($LM_DIR/records/$LM_RUN/lfx-cases/queries.txt)"
 cat "$LM_DIR/records/$LM_RUN/lfx-cases/queries.txt"

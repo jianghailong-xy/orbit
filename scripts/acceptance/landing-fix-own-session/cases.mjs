@@ -8,6 +8,9 @@
 //      commit and says why. The item is handed back NO_NEW_COMMIT with those words, and the coordinator's turn quotes them.
 //   3. Main gains LINE_RED.md, which the landing check refuses, and R lands after it: the combined tree is red and so is
 //      the baseline without R (BASELINE_RED). The item is the coordinator's from the start; R's session gets no turn.
+//   4. With main still red, a second project starts a fresh line (no branch on origin yet), and its task Z lands first:
+//      the job's target is main's own tip and nothing is absorbed. K3 checks that tip too, so the landing is still
+//      BASELINE_RED, the coordinator's from the start, and Z's session gets no turn (task 352ZEtmx7cOXY91yIodUk).
 //
 //   node cases.mjs        (run.sh runs it on the isolated stack; records under $LM_DIR/records/<run>/lfx-cases/)
 import { execFileSync } from 'node:child_process';
@@ -135,22 +138,23 @@ for (const [k, s] of Object.entries(spec)) {
 ev.say(`tasks: ${Object.entries(ids).map(([k, v]) => `${k}=${v}`).join(' ')}`);
 state.lfx = { projectId: p.id, title: TITLE, run: RUN, coordinatorSessionId: coord, tasks: ids };
 saveState(state);
-const taskRow = (k) => `(select id from task where project_id = ${P} and title like ${lit(`${k} %`)})`;
+const taskRow = (k, project = P) => `(select id from task where project_id = ${project} and title like ${lit(`${k} %`)})`;
 
 await until('the coordinator session to be live', async () => {
   const s = await call('GET', `/sessions/${coord}`, T);
   return ['AWAITING_INPUT', 'RUNNING', 'IDLE'].includes(s.status) ? s : null;
 }, { timeoutMs: 180_000 });
-const coordinatorCall = async (id, tool, args) => {
+const coordinatorCall = (id, tool, args) => coordinatorCallOn(coord, id, tool, args);
+async function coordinatorCallOn(coordinator, id, tool, args) {
   const callId = `LFX-${id}-${RUN}`;
-  await sendTurn(T, coord, `E2E-MCP ${callId} ${tool} ${JSON.stringify(args)}`);
+  await sendTurn(T, coordinator, `E2E-MCP ${callId} ${tool} ${JSON.stringify(args)}`);
   const ans = await mcpAnswer(callId);
   ev.say(`coordinator ${tool}: ${ans.isError ? 'ERROR ' : ''}${ans.text.slice(0, 600).replace(/\n/g, ' ')}`);
   ev.file(`mcp-${id}.json`, ans);
   let body = null;
   try { body = JSON.parse(ans.text); } catch { /* text */ }
   return { ...ans, body, entity: body?.entity ?? body };
-};
+}
 
 // ── the line: a project branch with a merge check, Automatic, and the coordinator's landing check ───────────────
 const rs = await coordinatorCall('request-start', 'project_request_start', {
@@ -173,10 +177,10 @@ const lc = await coordinatorCall('landing-check', 'project_update', {
 check('the coordinator set the landing check', !lc.isError, lc.text.slice(0, 200));
 
 /** The LAND_TASK jobs of a pair, with the session each was handed. */
-const landJobs = (k) => rows(`select j.id, j.generation, j.state, coalesce(j.phase, ''), j.session_id, j.source_sha,
+const landJobs = (k, project = P) => rows(`select j.id, j.generation, j.state, coalesce(j.phase, ''), j.session_id, j.source_sha,
     coalesce(j.retry_requested_by_session_id::text, ''), coalesce(j.retry_reason, ''), coalesce(j.retry_failure_class, ''),
     to_char(j.finished_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'), array_to_string(j.conflicts, ','), j.baseline_red
-  from project_integration_job j where j.task_id = ${taskRow(k)} and j.kind = 'LAND_TASK' order by j.generation`)
+  from project_integration_job j where j.task_id = ${taskRow(k, project)} and j.kind = 'LAND_TASK' order by j.generation`)
   .map(([id, generation, st, phase, session, source, retryBy, retryReason, retryClass, finished, conflicts, baselineRed]) => ({
     id, generation: Number(generation), state: st, phase, session, source, retryBy, retryReason, retryClass, finished,
     conflicts, baselineRed: baselineRed === 't',
@@ -366,6 +370,98 @@ check('case 3: R\'s session got no landing-fix turn and no turn at all after its
   `landing-fix turns ${fixTurns(rSession).length}, turns after the landing ${rTurnsAfter}`);
 const rSessionNow = rows(`select status, coalesce(end_reason, ''), finished_at is not null from session where id = ${lit(rSession)}::uuid`)[0];
 check('case 3: R\'s session stayed ended by its task\'s DONE (not revived)', rSessionNow?.[1] === 'task_done' && rSessionNow?.[2] === 't', JSON.stringify(rSessionNow));
+
+// ── case 4: a fresh line's first landing on a red main (T0 = U, no absorb) never reaches the task's session ─────
+// Main still carries LINE_RED.md from case 3. A second project starts a line nobody has pushed, so its first LAND_TASK
+// measures against main's own tip and J-S2 absorbs nothing: before task 352ZEtmx7cOXY91yIodUk this red was read as Z's
+// own CHECK_FAILED and handed to Z's session with a turn naming a branch that did not exist.
+const TITLE2 = `LFX42 fresh line on a red main (${RUN})`;
+const LINE2 = `lfx42/fresh-${RUN}`;
+const BRANCH2 = `refs/heads/${LINE2}`;
+const P2 = projectBy(TITLE2);
+const originHas = (ref) => { try { return gitIn(origin(REPO), 'rev-parse', '--verify', '--quiet', ref); } catch { return ''; } };
+const p2 = await call('POST', '/projects', T, {
+  title: TITLE2,
+  goal: 'Show that a fresh line\'s first landing on a red main is attributed to main, not to the task.',
+  instructions: 'Revision 42 part one e2e, case 4. Leave landing failures to the platform.',
+  acceptanceCriteriaItems: [{ text: 'Z\'s work is on the line, or its failure is with the coordinator', verificationMethod: 'the job and item rows' }],
+  maxConcurrentTasks: 1, workspaceId: ws.id,
+});
+const coord2 = p2.coordinatorSessionId;
+check('case 4: the second project opened its coordinator', !!coord2, `project ${p2.id}, coordinator ${coord2}`);
+const z = await call('POST', '/tasks', T, {
+  projectId: p2.id, assigneeId: ws.id, title: `Z lands first on a fresh line while main is red (${RUN})`,
+  criterionKey: p2.acceptanceCriteriaItems[0].key, description: ['Task Z: commit the work.', 'E2E-DO: commit', 'E2E-ONFIX: resolve'].join('\n'),
+  ...accept, ...pin, autoRunWhenReady: false,
+});
+ids.Z = z.id;
+state.lfx.fresh = { projectId: p2.id, title: TITLE2, coordinatorSessionId: coord2, task: z.id, line: BRANCH2 };
+saveState(state);
+await until('the second coordinator session to be live', async () => {
+  const s = await call('GET', `/sessions/${coord2}`, T);
+  return ['AWAITING_INPUT', 'RUNNING', 'IDLE'].includes(s.status) ? s : null;
+}, { timeoutMs: 180_000 });
+const rs2 = await coordinatorCallOn(coord2, 'request-start-2', 'project_request_start', {
+  projectId: p2.id, line: 'PROJECT_BRANCH', projectBranchName: BRANCH2, upstreamRef: 'refs/heads/main',
+  mergeCheckCommand: MERGE_CHECK, automatic: true, maxConcurrentTasks: 1,
+  why: 'One committing task lands first on a fresh project branch.',
+});
+check('case 4: project_request_start for the fresh line is accepted', !rs2.isError, rs2.text.slice(0, 200));
+const conf2 = await call('GET', `/projects/${p2.id}/acceptance/confirmation`, T);
+const started2 = await call('POST', `/projects/${p2.id}/start`, T, {
+  criteriaDigest: conf2.currentVersion.digest, line: 'PROJECT_BRANCH', projectBranchName: BRANCH2, upstreamRef: 'refs/heads/main',
+  automatic: true, maxConcurrentTasks: 1, mergeCheckCommand: MERGE_CHECK,
+  requestId: rs2.entity?.itemId ?? rs2.entity?.itemPublicId ?? rs2.entity?.id,
+});
+ev.file('start-answer-2.json', started2);
+check('case 4: the owner started it on the fresh project branch', started2.settings?.line === 'PROJECT_BRANCH', JSON.stringify(started2.settings));
+const lc2 = await coordinatorCallOn(coord2, 'landing-check-2', 'project_update', {
+  projectId: p2.id, integration: { landingCheckCommand: LANDING_CHECK, landingCheckTimeoutSeconds: 1800, landingCheckReason: 'The line must never carry LINE_RED.md.' },
+});
+check('case 4: the second coordinator set the same landing check', !lc2.isError, lc2.text.slice(0, 200));
+const mainNow = originHas('refs/heads/main');
+check('case 4: origin main still carries LINE_RED.md, and the fresh line is not on origin', !!originHas('refs/heads/main:LINE_RED.md')
+  && !originHas(BRANCH2), `main ${mainNow}, ${BRANCH2} ${originHas(BRANCH2) || 'absent'}`);
+await execute(T, ids.Z);
+await until('Z to be DONE', async () => {
+  const t = await getTask(T, ids.Z);
+  if (t.status === 'FAILED') throw new Error('Z FAILED');
+  return t.status === 'DONE';
+}, { timeoutMs: 600_000, everyMs: 3_000 });
+const z1 = await until('Z\'s first landing to finish', () => landJobs('Z', P2).find((g) => g.finished) ?? null, { timeoutMs: 600_000, everyMs: 3_000 });
+const zJob = rows(`select coalesce(target_sha_before, ''), coalesce(upstream_sha, ''), coalesce(main_sync_sha, '')
+  from project_integration_job where id = ${lit(z1.id)}::uuid`)[0] ?? [];
+const [zTarget, zUpstream, zSync] = zJob;
+const zChecks = JSON.parse(row(`select checks::text from project_integration_job where id = ${lit(z1.id)}::uuid`) || '[]');
+check('case 4: Z\'s first landing measured against main\'s own tip with nothing absorbed (T0 = U, no MAIN_SYNC)',
+  z1.generation === 1 && !!zTarget && zTarget === zUpstream && zUpstream === mainNow && zSync === '',
+  `generation ${z1.generation}, target_sha_before ${zTarget}, upstream_sha ${zUpstream}, main_sync_sha ${zSync || 'empty'}, main ${mainNow}`);
+check('case 4: Z\'s landing is CHECK_FAILED with baseline_red (BASELINE_RED)', z1.state === 'CHECK_FAILED' && z1.baselineRed,
+  `${z1.state} baseline_red=${z1.baselineRed} job ${z1.id}`);
+const zCombined = zChecks.find((c) => c.name === 'LANDING_CHECK' && c.scope !== 'BASELINE');
+const zBaseline = zChecks.find((c) => c.name === 'LANDING_CHECK' && c.scope === 'BASELINE');
+const mainTree = gitIn(origin(REPO), 'rev-parse', `${mainNow}^{tree}`);
+check('case 4: the landing check failed on the combined tree and on main\'s own tree (the K3 baseline on T0)',
+  zCombined?.exitCode === 3 && zBaseline?.exitCode === 3 && zBaseline?.treeSha === mainTree,
+  `combined exit ${zCombined?.exitCode}, baseline exit ${zBaseline?.exitCode} on tree ${zBaseline?.treeSha} (main's ${mainTree})`);
+const zItem = itemOf(z1.id);
+check('case 4: the item is BASELINE_RED and the coordinator\'s from the start, never offered to Z\'s session',
+  zItem?.kind === 'INTEGRATION_CHECK_FAILED' && zItem.failureClass === 'BASELINE_RED' && zItem.assignee === 'COORDINATOR'
+  && !zItem.workSession && !zItem.offeredAt, JSON.stringify(zItem));
+await sleep(30_000); // room for a wrong delivery to show up before its absence is read
+const zTurnsAfter = row(`select count(*) from conversation_turn where session_id = ${lit(z1.session)}::uuid
+  and created_at > ${lit(z1.finished)}::timestamptz`);
+check('case 4: Z\'s session got no landing-fix turn and no turn at all after its landing', fixTurns(z1.session).length === 0 && zTurnsAfter === '0',
+  `landing-fix turns ${fixTurns(z1.session).length}, turns after the landing ${zTurnsAfter}`);
+check('case 4: nothing was pushed: the fresh line is still not on origin', !originHas(BRANCH2), originHas(BRANCH2) || 'absent');
+ev.query('case 4: project_integration_job and project_open_item of the fresh line', `select j.kind, j.generation, j.state, j.phase,
+  j.baseline_red, j.target_sha_before, j.upstream_sha, j.main_sync_sha, j.session_id, i.kind as item_kind, i.assignee,
+  i.payload->>'failureClass' as failure_class, i.work_session_id, i.work_session_offered_at, i.dedupe_key
+from project_integration_job j left join project_open_item i on i.integration_job_id = j.id
+where j.project_id = ${P2} order by j.created_at`, true);
+ev.query('case 4: conversation_turn of Z\'s work session', `select t.seq, t.client_turn_id, t.kind, t.status, t.created_at,
+  left(t.content, 160) as content_head
+from conversation_turn t where t.session_id = ${lit(z1.session)}::uuid order by t.seq`, true);
 
 // ── records: read-only queries of the three tables, after the run ──────────────────────────────────────────────
 const sess = (k) => `(select s.id from session s where s.task_id = ${taskRow(k)} and s.starts_task_work order by s.created_at limit 1)`;

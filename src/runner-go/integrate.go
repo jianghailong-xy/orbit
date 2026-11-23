@@ -604,7 +604,13 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 			// Nothing is pushed. The branch a person is looking at is untouched, which is what the
 			// item says (§4.2's `branchUnchanged`).
 			result.State, result.Phase = "CHECK_FAILED", "CHECK"
-			if spec.Name == "LANDING_CHECK" && outcome.ExitCode != nil && !outcome.TimedOut && base != targetSha {
+			// K3 attributes every red landing check, absorb or not: T0 is no proof of a green line. A
+			// fresh line's T0 is upstream's own tip, which no landing check has passed, and a line can
+			// be red without an absorb (a landing check set that the line already fails, §12 P-C1).
+			// Left unattributed, either would read as the task's own CHECK_FAILED and be handed to its
+			// session (§12.3 W4). The baseline is base without the task's commits: M after an absorb,
+			// T0 otherwise. The cost is one more run of the check, on failures only.
+			if spec.Name == "LANDING_CHECK" && outcome.ExitCode != nil && !outcome.TimedOut {
 				// Attribution failures leave the combined CHECK_FAILED verdict intact.
 				// Nest it under this job so scratch sweeping protects both trees together.
 				baseline := filepath.Join(scratch, ".baseline")

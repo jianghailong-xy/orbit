@@ -4536,6 +4536,9 @@ export interface SessionSearchHit {
   taskId: string | null;
   taskTitle: string | null;
   lastTurnAt: string | Date | null;
+  /** The session list's order key (session.listed_at): moves only when the session changes for its owner. Absent from
+   *  an older control plane. */
+  listedAt?: string | Date | null;
   createdAt: string | Date;
   /** Set when the session has been moved to Completed. */
   completedAt: string | Date | null;
