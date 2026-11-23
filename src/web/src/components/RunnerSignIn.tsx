@@ -344,8 +344,14 @@ export function RunnerSignIn({
     mutationFn: () => api<RunnerLoginState>(`/runners/${runnerId}/browser/sign-in`, { method: 'POST' }),
     onSuccess: put,
   });
+  // The viewer tab this card opened for the sign-in, closed again once the card says Signed in: its page has nothing
+  // left to show (the runner closes the sign-in's own tab too). Only one this card opened can be closed from here.
+  const viewer = useRef<Window | null>(null);
+  const showRunnerBrowser = () => {
+    viewer.current = openRunnerBrowserTab(runnerId, true) ?? viewer.current;
+  };
   const pressRunnerBrowser = () => {
-    openRunnerBrowserTab(runnerId, true);
+    showRunnerBrowser();
     runnerBrowserSignIn.mutate();
   };
   // Claude Code's code comes back from the runner's browser by itself, so its paste field steps aside once the page is
@@ -387,7 +393,7 @@ export function RunnerSignIn({
             : "Finish signing in in the runner's browser."}
       </div>
       <div className="rsi-links">
-        <button className="rsi-link" onClick={() => openRunnerBrowserTab(runnerId, true)} type="button">
+        <button className="rsi-link" onClick={showRunnerBrowser} type="button">
           Show the browser
         </button>
         {codeFromBrowser && (
@@ -494,6 +500,14 @@ export function RunnerSignIn({
 
   // A card that goes away mid-flow can never point its tab anywhere.
   useEffect(() => dropTab, []);
+
+  // Signed in: the viewer tab this card opened goes, as the runner closes the sign-in's tab in its browser.
+  useEffect(() => {
+    if (status !== 'done') return;
+    const w = viewer.current;
+    viewer.current = null;
+    if (w && !w.closed) w.close();
+  }, [status]);
 
   // Cursor CLI's link stops working about 23 minutes after the runner relays it (expiresAt): the card
   // counts down to it, a minute at a time.

@@ -47,6 +47,7 @@ var errBrowserPasteUI = errors.New("Could not paste into the browser's address b
 
 // browserTarget is one entry of Chrome's /json/list.
 type browserTarget struct {
+	ID                   string `json:"id"`
 	Type                 string `json:"type"`
 	URL                  string `json:"url"`
 	WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`

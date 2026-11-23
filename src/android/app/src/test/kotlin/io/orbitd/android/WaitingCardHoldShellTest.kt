@@ -10,6 +10,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import io.orbitd.android.core.auth.AuthState
+import io.orbitd.android.navigation.ObjectId
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -61,12 +62,12 @@ class WaitingCardHoldShellTest {
     }
     private fun serve(vararg approvals: JsonObject) { ProjectShell.waitingApprovals = JsonArray(approvals.toList()).toString() }
 
-    /** The wall clock the 10 s lapse reads: the test's, moved by hand, since the shell's virtual time runs far ahead of real loads. */
-    private var wall = 1_000_000L
+    // Advance the focus clock only at the scenario's time boundaries. Compose can pump frames while fixture reads complete.
+    private var focusTimeMs = 1_000_000L
     @After fun realClock() { CardFocus.now = { System.currentTimeMillis() } }
 
     @Before fun start() {
-        CardFocus.now = { wall }
+        CardFocus.now = { focusTimeMs }
         ProjectShell.reset()
         ProjectShell.waitingEvents = buildJsonArray {
             (1..24).forEach { n ->
@@ -81,10 +82,10 @@ class WaitingCardHoldShellTest {
         serve()
         openMember()
         restAtTheEnd()
-        wall += 11_000
+        focusTimeMs += 11_000
         val before = bounds(stepRow())
         serve(approval("a-late", 1, "LATE-DECISION", tall))
-        arrive()
+        arrive(::lateApprovalLanded)
         assertEquals("the late card did not carry the list away from the reader", before, bounds(stepRow()))
     }
 
@@ -93,11 +94,11 @@ class WaitingCardHoldShellTest {
         serve()
         openMember()
         restAtTheEnd()
-        wall += 1_000
+        focusTimeMs += 1_000
         readAlittle()
         val before = bounds(stepRow())
         serve(approval("a-late", 1, "LATE-DECISION", tall))
-        arrive()
+        arrive(::lateApprovalLanded)
         assertEquals("the late card did not carry the list away from the reader", before, bounds(stepRow()))
     }
 
@@ -106,8 +107,7 @@ class WaitingCardHoldShellTest {
         serve()
         openMember()
         serve(approval("a-late", 1, "LATE-DECISION"))
-        arrive()
-        await { shows("LATE-DECISION") }
+        arrive { shows("LATE-DECISION") }
     }
 
     private val quota get() = approval("a-quota", 9, "Retry the quota read", tall)
@@ -122,61 +122,58 @@ class WaitingCardHoldShellTest {
         serve(quota)
         openMember()
         await { shows(headLine) }
+        // The read lands off the main thread, in real time: the card is measured once the open has brought it in, held it and laid it out.
+        await { CardFocus.pending(ProjectShell.WAITING) == null && CardFocus.held(ProjectShell.WAITING)?.key == "approval:a-quota" }
         settle()
-        val placed = title()!!
-        assertTrue("opened on the card: $placed", inList(placed))
-        return placed.top
+        await { waitingCard()?.boundsInRoot?.isEmpty == false }
+        val top = topNow()
+        val list = bounds(compose.onNodeWithTag("transcript-list"))
+        assertTrue("opened on the card: $top in $list", top >= list.top && top < list.bottom - 100)
+        return top
     }
-    private fun topNow() = title()!!.top
+    // A released card can move past the viewport. Clipped bounds then report zero instead of its new position.
+    private fun topNow() = waitingCard()!!.positionInRoot.y
 
     /** A question record lands ahead of the opened card in the cards item: it stays where it was brought to. */
     @Test fun theOpenedCardStaysInViewWhileAQuestionRecordIsAddedAheadOfIt() {
         ProjectShell.waitingReadsProject = true
         val placed = openedOnTheCard()
         ProjectShell.closedQuestions = record
-        arrive()
-        assertTrue("the record landed: ${order()}", compose.onAllNodesWithTag("item:q1", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+        arrive { compose.onAllNodesWithTag("item:q1", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         assertEquals("the card is held where it was brought to while the record landed ahead of it", placed, topNow(), 1f)
     }
 
     @Test fun theOpenedCardStaysInViewWhileACardIsAddedAheadOfIt() {
         val placed = openedOnTheCard()
         serve(ahead(1), quota)
-        arrive()
-        assertTrue("the earlier card landed", shows("AHEAD-DECISION-1"))
+        arrive { shows("AHEAD-DECISION-1") }
         assertEquals("the card is held where it was brought to while one landed ahead of it", placed, topNow(), 1f)
     }
 
     /** Held first (content that lands ahead is put back), then the reader touches the list: the next one is not put back. */
     @Test fun theHoldReleasesWhenTheReaderTakesTheScroller() {
         val placed = openedOnTheCard()
-        serve(ahead(1), quota); arrive()
+        serve(ahead(1), quota); arrive { shows("AHEAD-DECISION-1") }
         assertEquals("held before the touch", placed, topNow(), 1f)
         readAlittle()
         val touched = topNow()
-        serve(ahead(1), ahead(2), quota); arrive()
-        assertTrue("the second card landed", shows("AHEAD-DECISION-2"))
+        serve(ahead(1), ahead(2), quota); arrive { shows("AHEAD-DECISION-2") }
         assertTrue("after the touch nothing put the card back: $touched, now ${topNow()}", topNow() > touched + 20f)
     }
 
     /** Held first, then five quiet seconds after it last moved: the next landing ahead of it is not put back. */
     @Test fun theHoldReleasesAfterFiveSecondsWithNothingMovingIt() {
         val placed = openedOnTheCard()
-        wall += 1_000
-        serve(ahead(1), quota); arrive()
+        focusTimeMs += 4_999
+        serve(ahead(1), quota); arrive { shows("AHEAD-DECISION-1") }
         assertEquals("held inside the window", placed, topNow(), 1f)
-        wall += 6_000
-        serve(ahead(1), ahead(2), quota); arrive()
-        assertTrue("the second card landed", shows("AHEAD-DECISION-2"))
+        focusTimeMs += 5_000
+        serve(ahead(1), ahead(2), quota); arrive { shows("AHEAD-DECISION-2") }
         assertTrue("after the quiet nothing put the card back: $placed, now ${topNow()}", topNow() > placed + 20f)
     }
 
-    private fun order() = compose.onAllNodes(SemanticsMatcher("an approval card") { n ->
-        n.config.getOrNull(SemanticsProperties.TestTag)?.let { it.startsWith("approval:") && it.count { c -> c == ':' } == 1 } == true
-    }, useUnmergedTree = true).fetchSemanticsNodes().map { it.config[SemanticsProperties.TestTag] + "@" + it.positionInRoot.y }
     /** The waiting card's own box, by its tag: the one the open brought in, not the card that landed ahead of it. */
-    private fun title(): Rect? = compose.onAllNodesWithTag("approval:a-quota", useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
-    private fun inList(r: Rect?): Boolean { val list = bounds(compose.onNodeWithTag("transcript-list")); return r != null && r.top >= list.top && r.top < list.bottom - 100 }
+    private fun waitingCard() = compose.onAllNodesWithTag("approval:a-quota", useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()
     private fun stepRow() = compose.onAllNodes(SemanticsMatcher("a step row") { node ->
         node.config.getOrNull(SemanticsProperties.Text)?.any { it.text.startsWith("Retry step") || it.text.startsWith("Step ") } == true
     }, useUnmergedTree = true).fetchSemanticsNodes().first()
@@ -187,21 +184,26 @@ class WaitingCardHoldShellTest {
     /** A short drag back: the reader steps up into the last rows, and the cards item is still on screen below them. */
     private fun readAlittle() { compose.onNodeWithTag("transcript-list").performTouchInput { swipe(Offset(centerX, 150f), Offset(centerX, 190f), 200) }; settle() }
     private fun readHistory() { compose.onNodeWithTag("transcript-list").performTouchInput { swipeDown() }; settle() }
-    /** Asks for the session again and waits, in real time, for the read to land, so the shell's virtual clock does not run past the hold meanwhile. */
-    private fun arrive() {
-        val reads = { ProjectShell.calls.count { it == "GET sessions/${ProjectShell.WAITING}/approvals?status=PENDING" } }
-        val before = reads()
+    /** Wait for the refreshed content before pumping the layout and the reader's two-frame put-back. */
+    private fun arrive(landed: () -> Boolean) {
+        val before = snapshotReads()
         app().realtime.refreshSession()
-        val until = System.currentTimeMillis() + 30_000
-        while (reads() == before && System.currentTimeMillis() < until) Thread.sleep(20)
-        Thread.sleep(300)
+        await { snapshotReads() > before && read() && landed() }
         repeat(5) { compose.mainClock.advanceTimeBy(100); compose.waitForIdle() }
     }
-    private fun advance(ms: Long) { compose.mainClock.advanceTimeBy(ms); compose.waitForIdle() }
+    // An approval below the viewport may never be composed after the reader scrolls away.
+    private fun lateApprovalLanded() = app().realtime.state.value.session?.snapshot?.approvals
+        ?.any { it["id"]?.jsonPrimitive?.content == "a-late" } == true
+    private fun snapshotReads() = app().realtime.state.value.session?.snapshotReads ?: 0L
+    /** The member's own read has landed: its transcript and its cards, fresh. */
+    private fun read() = app().realtime.state.value.session?.let {
+        ObjectId.same(it.id, ProjectShell.WAITING) && it.snapshot != null && it.fresh && it.transcript.seeded
+    } == true
     private fun openMember() {
         signIn(); await { exists(hasTestTag(row)) }
         compose.onNodeWithTag(row).performClick()
         await { exists(hasContentDescription("Project sessions")) }
+        await { read() }
         settle()
     }
     private fun settle() { repeat(5) { compose.mainClock.advanceTimeBy(500); compose.waitForIdle() } }

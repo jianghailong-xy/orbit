@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { CREATE_WORKDIR_CAPABILITY, newFolderPath, newFolderRootFor } from '@orbit/shared';
+import { runnerIsOnline, type RunnerBeats } from '../runners/runner-presence';
 
 /**
  * The workspace POST /sessions makes with a session, read from the request (docs/first-workspace-contract.md §3): the
@@ -145,11 +146,17 @@ export function isNewFolderName(value: unknown): value is string {
  * `create-workdir/v1`, or without a reported reposRoot. Shared by POST /sessions and POST /workspaces.
  */
 export function newFolderWorkDirOn(
-  runner: { reposRoot: string | null; capabilities: readonly string[]; capabilitiesReportedAt: Date | null; managedRunner?: { id: string } | null },
+  runner: {
+    reposRoot: string | null;
+    capabilities: readonly string[];
+    capabilitiesReportedAt: Date | null;
+    managedRunner?: { id: string } | null;
+    status: string;
+  } & RunnerBeats,
   folder: string,
 ): string {
   const capabilities = runner.capabilitiesReportedAt ? runner.capabilities : [];
-  const root = newFolderRootFor({ managed: !!runner.managedRunner, reposRoot: runner.reposRoot, capabilities });
+  const root = newFolderRootFor({ managed: !!runner.managedRunner, up: runnerIsOnline(runner), reposRoot: runner.reposRoot, capabilities });
   if (root === null) {
     throw new ConflictException({
       code: 'NEW_FOLDER_UNSUPPORTED',

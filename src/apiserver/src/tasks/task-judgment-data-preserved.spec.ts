@@ -3371,7 +3371,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1462_runner_login_browser',
       // 1463 re-keys three model_identity rows (qwen3-7, qwen3-8, qwen4 to their -max ids): UPDATEs of that table only,
       // none of the preserved relations, and no trigger, function or DONE fence changes.
-      '1463_model_identity_max_is_a_name'],
+      '1463_model_identity_max_is_a_name',
+      // 1464 replaces the Open-list counter functions `open_list_bump_session` and `open_list_bump_via_session` (1420),
+      // `open_list_bump_owner` (1428) and `open_list_bump_watch` (0641) so the per-session and per-workspace sources
+      // bump keys naming their workspace, and adds the pure helper `open_list_scope_key`. It creates, alters or drops no
+      // table, column, constraint or trigger, names or replaces none of the preserved triggers or functions, and runs
+      // no INSERT, UPDATE or DELETE at apply time.
+      // Written as 1434 on the project line, it was renumbered after main took 1434.
+      '1464_open_list_scope_keys'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
