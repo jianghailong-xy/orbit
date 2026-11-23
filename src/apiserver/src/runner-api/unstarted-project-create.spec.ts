@@ -25,28 +25,28 @@ const started = (permissionMode: string | null, accountDefault: string | null, c
   owner: { preferences: accountDefault ? { defaultPermissionMode: accountDefault } : {} },
 });
 
-test('Automatic answers for a coordinator no narrower than the account default', async () => {
+test('Automatic answers for a coordinator that can start work in Auto', async () => {
   for (const [mode, accountDefault] of [
     ['auto', null],
     ['bypassPermissions', null],
     ['dontAsk', null],
     [null, null],
-    ['default', 'default'],
-    ['plan', 'plan'],
-    ['default', 'plan'],
+    ['auto', 'default'],
+    ['dontAsk', 'bypassPermissions'],
   ]) {
     assert.equal(await ask(started(mode, accountDefault)), AUTOMATIC_COORDINATOR_DECIDES_MESSAGE, `${mode}, ${accountDefault}`);
   }
 });
 
-test('Automatic does not answer for a coordinator narrower than the account default: a person is asked', async () => {
+test('Automatic asks a person when the coordinator cannot start work in Auto', async () => {
   for (const [mode, accountDefault] of [
     ['default', null],
     ['acceptEdits', null],
     ['plan', null],
     ['default', 'auto'],
     ['plan', 'default'],
-    ['dontAsk', 'bypassPermissions'],
+    ['default', 'default'],
+    ['plan', 'plan'],
   ]) {
     assert.equal(await ask(started(mode, accountDefault)), null, `${mode}, ${accountDefault}`);
   }

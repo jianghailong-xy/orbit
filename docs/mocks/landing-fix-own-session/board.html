@@ -1,7 +1,9 @@
 <!doctype html><html lang="zh"><meta charset="utf-8">
 <title>落地：agent 动手，平台守门（修订 42 草稿）</title>
 <link rel="stylesheet" href="../landing-session/v4/kit.css">
+<link rel="stylesheet" href="../landing-session/v4/web.css">
 <script src="../landing-session/v4/kit.js"></script>
+<script src="../landing-session/v4/web.js"></script>
 <style>
 /* 2026-11-20 · 契约修订 42（草稿）的效果图。部件与取值照 ../landing-session/v4 与 ../landings-one-window（main 上的落地窗口）；
    本图自己的类都带 rv- 前缀。 */
@@ -86,6 +88,39 @@ table.rv-q th, table.rv-q td { border-bottom: 1px solid #e4e4ea; padding: 9px 12
 table.rv-q th { background: #f1f1f5; font-weight: 600; }
 table.rv-q td.rec { background: rgba(62,105,246,.06); }
 table.rv-q td:first-child { white-space: nowrap; font-weight: 700; }
+
+/* ④ web：本图自己的类，rw- 前缀 */
+.rw-part { margin-bottom: 46px; width: max-content; padding: 6px 4px 0; }
+.rw-fig { width: 1240px; margin-bottom: 30px; }
+.rw-fix { background: #f6f3ff !important; border-color: rgba(122,90,245,.35) !important; }
+.rw-new { background: rgba(122,90,245,.09); border-radius: 8px; padding: 4px 8px !important; margin: 2px -8px; }
+.rw-later { opacity: .62; }
+.rw-card { margin: 10px 22px; border-radius: 12px; background: #fff8e8; box-shadow: inset 0 0 0 1px #f0dba8; padding: 12px 14px; display: flex; flex-direction: column; gap: 7px; font-size: 13.5px; line-height: 1.5; }
+.rw-card .eh { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #8a5a00; letter-spacing: .02em; }
+.rw-card .eh .k { margin-left: auto; background: #fff; border-radius: 999px; padding: 0 8px; box-shadow: inset 0 0 0 1px #f0dba8; font-weight: 600; }
+.rw-card .tt { font-size: 15px; font-weight: 650; }
+.rw-card .files { background: #fff; border-radius: 8px; padding: 6px 10px; font: 11.5px/1.6 "JetBrains Mono", monospace; }
+.rw-card ol { margin: 0; padding-left: 18px; }
+.rw-card .ft { font-size: 12px; color: var(--text-3); border-top: 1px solid #f0dba8; padding-top: 7px; }
+.rw-card .ft a, .rw-sys a { color: var(--brand); font-weight: 600; }
+.rw-msg { margin: 8px 22px; font-size: 14px; line-height: 1.6; }
+.rw-msg code, .rw-sys code, .wev code { font: 12px "JetBrains Mono", monospace; background: var(--bg-hover); border-radius: 4px; padding: 0 4px; }
+.rw-sys { margin: 4px auto 0; width: max-content; font-size: 12.5px; color: var(--text-2); background: var(--bg-hover); border-radius: 999px; padding: 3px 12px; }
+.rw-quote { background: #fff; border-radius: 8px; padding: 8px 12px; font-size: 13px; line-height: 1.5; box-shadow: inset 0 0 0 1px var(--border); margin-top: 8px; }
+.rw-quote i { display: block; font-style: normal; font-size: 11.5px; color: var(--text-3); margin-bottom: 2px; }
+.rw-pm { padding: 18px 24px; }
+.rw-pm h2 { font-size: 20px; margin: 0 0 12px; }
+.rw-box { border: 1px solid var(--border); border-radius: 12px; margin-bottom: 14px; background: #fff; }
+.rw-box > h3 { margin: 0; font-size: 14px; padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); display: flex; gap: 8px; align-items: center; }
+.rw-box > h3 .k { margin-left: auto; font-weight: 400; font-size: 12.5px; color: var(--text-3); }
+.rw-sub { font-size: 11.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); padding: 8px 14px 2px; }
+.rw-it { display: flex; align-items: flex-start; gap: 10px; padding: 8px 14px; border-top: 1px solid var(--border-subtle); font-size: 13.5px; }
+.rw-it .b { flex: 1; min-width: 0; } .rw-it .b span { display: block; font-size: 12.5px; color: var(--text-3); }
+.rw-it .st { flex: none; font-size: 12.5px; color: #5b4bd6; font-weight: 600; }
+.rw-tk { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-top: 1px solid var(--border-subtle); font-size: 13.5px; }
+.rw-tk .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rw-tk .s { font-size: 12.5px; color: var(--text-3); width: 70px; }
+.rw-tk .lg { font-size: 12.5px; font-weight: 600; color: #5b4bd6; background: rgba(110,92,230,.12); border-radius: 999px; padding: 0 9px; line-height: 20px; }
 </style>
 <body>
 <h1>落地：agent 动手，平台守门（契约修订 42 草稿 · 2026-11-20）</h1>
@@ -229,6 +264,76 @@ const part3 = `<div class="rv-panel">
 <p style="color:#6a6a72;font-size:13.5px;margin-top:12px">条文在 <code>docs/project-integration-line-contract.md</code> §12（草稿，裁决前不改任何现行条款）。本图不含 web 与 Android；项目页的 Landing 卡与 Landings 行沿用今天的部件，只多一种状态词 <b>Fixing</b>，在任务会话手里的落地不计入 Needs you。</p>
 </div>`;
 
+
+// ── ④ web ───────────────────────────────────────────────────────────────────────
+const WTK = 'A10c · Notification cold start drops the session';
+const WBRN = 'project/34ZZn…CsCFp';
+const WRN = 'workstation-gpu';
+const wgl = (i) => `<span class="gl">${i}</span>`;
+const wev2 = (tm, gl, html, cls = '') => `<div class="wev ${cls}"><span class="tm">${tm}</span>${wgl(gl)}<span class="wx">${html}</span></div>`;
+const GOK = ic('check', 13, '#1a7f37', 2.4), GTASK = ic('task', 13, '#8f959e', 2), GAG = ic('person', 13, '#7a5af5', 2.2), GUP = ic('up', 14, '#7a5af5', 2), GARR = ic('arrow', 13, '#8f959e', 2);
+const wfig4 = (tag, label, frame, capHtml) => `<figure class="rw-fig"><span class="tag ${tag}">${label}</span>${frame}<figcaption style="max-width:1220px">${capHtml}</figcaption></figure>`;
+const wcap4 = (title, items) => `<b>${title}</b><ol>${items.map((i) => `<li>${i}</li>`).join('')}</ol>`;
+const wro = (who) => `<div class="ro">Orbit runs this landing — <b>nothing to type here.</b> Decisions: ${who}</div>`;
+const wcolFix = (card) => `${wcolHead4()}<div class="body">${wpc4(44, 46, 1)}${card}${wsec5('Coordinator')}${W_COORD}${wsec5('Today')}${wrow4({ t: `执行任务：${WTK}`, tm: '7m ago', sub: 'Landing · the task’s session is fixing it', sel: false })}${W_ROWS.slice(0, 2).join('')}</div>`;
+const TLG1 = `<div class="wrnd">Generation 1</div>` + wev2('10:01', GTASK, `Task marked done · queued to land on ${WBRN}`)
+  + wev2('10:02', wGlyph('spin', 13), `Claimed by runner ${WRN} · claim 1`) + wev2('10:02', ic('x', 13, '#cf3b35', 2.6), `<b>Conflict</b> in 2 files · nothing was pushed<span class="s">The project branch did not move.</span>`);
+const wHeadFix = wh4({ tone: 'run', title: 'Landing', right: 'Fixing', detail: 'conflict · its own session is on it' });
+const wHeadFail = wh4({ tone: 'fail', title: 'Landing', right: 'Not landed', detail: 'conflict · rebasing onto the project branch' });
+const wLcFix = wlc4(wHeadFix + wWhat(WTK) + wRef(WBRN) + wDet('The task’s session is fixing it · 4m · round 1 of 2') + wFoot('<span class="wpri">Open Session</span><span class="wlk">Open landing ›</span>'));
+const wTitleBar = (title, chip, sub) => `<div class="mhd"><div class="bc">‹ ${P4}</div><div class="t"><b>${title}</b>${chip}<span class="more">${ic('dots', 18, '#646a73', 1.6)}</span></div><div class="sub">${sub}</div></div>`;
+const LDCHIP = `<span class="kchip4">${ic('ring', 10, '#5b4bd6', 2.6)}Landing</span>`;
+
+// a · 任务自己的会话里收到的卡
+const wMainA = wTitleBar(`执行任务：${WTK}`, '', 'Task done · landing')
+  + `<div class="rw-msg" style="color:var(--text-3);text-align:center;font-size:12px">10:02</div>`
+  + mkx(`<div class="rw-card"><div class="eh">${wGlyph('warn', 13)}FROM ORBIT · LANDING<span class="k">Conflict</span></div>
+<div class="tt">Orbit could not land your work on ${WBRN}</div>
+<div>Conflict while rebasing onto the project branch at <code>41ac9e0</code>. <b>Nothing was pushed.</b></div>
+<div class="files">app/…/notify/ColdStartRouter.kt<br>app/…/session/SessionListStore.kt</div>
+<ol><li>Merge the project branch into your branch and resolve what conflicts.</li><li>Run what failed until it passes.</li><li>Commit, then end your turn.</li></ol>
+<div class="ft">Orbit lands the new commit and runs the checks again. Do not push the project branch. Not yours to fix? End your turn without committing and say why. · <a>Open landing ›</a></div></div>`, 1, 'in', 'border-radius:12px;margin:0 14px')
+  + mkx(`<div class="rw-msg">Merged <code>${WBRN}</code> into my branch. Both conflicts were with A13f’s store refactor: I kept its <code>SessionListStore</code> API and moved my wait-for-list onto it. <code>ColdStartRouteTest</code> passes. Committed <code>4be19c2</code>.</div>`, 2, 'in', 'border-radius:10px;margin:0 14px')
+  + mkx(`<div class="rw-sys">${wGlyph('spin', 12)} Landing <code>4be19c2</code> again · <a>Open landing ›</a></div>`, 3, 'in', 'border-radius:999px;display:block;width:max-content;margin:0 auto')
+  + `<div class="composer">Message…</div>`;
+const frameA = webFrame4({ col: wcolFix(wLcFix), main: wMainA, h: 740 });
+
+// b · 落地窗口 · Fixing
+const wSc2 = (cls, inner) => `<div class="wsc ${cls}" style="margin:14px 22px 8px">${inner}</div>`;
+const wMainB = wTitleBar('Landings', LDCHIP, `Run by Orbit · ${WRN}`)
+  + mkx(wSc2('rw-fix', wHeadFix + `<div class="m" style="margin-top:8px">${WTK}</div><div class="m">Conflict in 2 files while rebasing onto ${WBRN} · <b>nothing was pushed</b></div>`
+    + `<div class="m">${GAG} <b>The task’s session</b> is fixing it · 4m · round 1 of 2</div><div class="acts"><span class="wpri">Open Session</span><span class="wsec4">Open Task</span></div>`), 1, 'in', 'border-radius:12px')
+  + `<div class="wtl">${TLG1}${mkx(wev2('10:02', GAG, `<b>Handed to the task’s session</b><span class="s">It wrote this work · round 1 of 2</span>`, 'rw-new') + wev2('10:09', GUP, `Fixed in <code>4be19c2</code> · landing again`, 'rw-new'), 2, 'in', 'border-radius:8px')}
+<div class="rw-later"><div class="wrnd">Generation 2 · after 10:09</div>${wev2('10:09', GTASK, `Queued again to land on ${WBRN}`)}${wev2('10:14', GOK, 'Landing check passed · 3m 48s <a>Log ›</a>')}${wev2('10:14', GOK, `Landed on ${WBRN} · <code>7d03b6e</code>`)}</div></div>`
+  + mkx(wro('the task’s own session first, then the coordinator'), 3, 'in', 'border-radius:0;position:absolute;left:0;right:0;bottom:0');
+const frameB = webFrame4({ col: wcolFix(wLcFix), main: wMainB, h: 760 });
+
+// c · 交回
+const wMainC = wTitleBar('Landings', LDCHIP, `Run by Orbit · ${WRN}`)
+  + wSc2('', wHeadFail + `<div class="m" style="margin-top:8px">${WTK}</div>`
+    + mkx(`<div class="rw-quote"><i>The task’s session ended its turn without a new commit:</i>“The conflict is with A13f’s store refactor, which removes the list-ready signal my fix waits on. Which of the two designs stays is not mine to decide.”</div>`, 1, 'in', 'border-radius:8px')
+    + `<div class="m" style="margin-top:8px">${ic('person', 13, '#7a5af5', 2)} <b>Coordinator</b> has it · just now</div><div class="acts"><span class="wpri">Open Coordinator</span><span class="wsec4">Open Session</span><span class="wsec4">Open Task</span></div>`)
+  + `<div class="wtl">${TLG1}${wev2('10:02', GAG, `Handed to the task’s session<span class="s">round 1 of 2</span>`)}${mkx(wev2('10:31', GARR, `<b>Returned to the coordinator: no new commit</b><span class="s">Its last words are on the card above.</span>`), 2, 'in', 'border-radius:8px')}</div>`
+  + wro('the coordinator · <a>Open coordinator ›</a>');
+const wColC = `${wcolHead4()}<div class="body">${wpc4(44, 46, 0)}${wlc4(wHeadFail + wWhat(WTK) + wRef(WBRN) + wDet('Coordinator has it · just now') + wFoot('<span class="wpri">Open Coordinator</span><span class="wlk">Open landing ›</span>'), true)}${wsec5('Coordinator')}${W_COORD}${wsec5('Today')}${W_ROWS.slice(0, 2).join('')}</div>`;
+const frameC = webFrame4({ col: wColC, main: wMainC, h: 700 });
+
+// d + e · 项目页：Open items 与任务行
+const itRow = (mark, t, sub, st) => `<div class="rw-it">${mark}<div class="b">${t}<span>${sub}</span></div>${st ? `<span class="st">${st}</span>` : ''}</div>`;
+const tkRow = (t, st, lg) => `<div class="rw-tk">${GTASK}<span class="t">${t}</span><span class="s">${st}</span>${lg ? `<span class="lg">${lg}</span>` : '<span style="width:96px"></span>'}</div>`;
+const wMainD = `<div class="rw-pm"><h2>${P4}</h2>
+<div class="rw-box"><h3>Open items<span class="k">2 · none waiting on you</span></h3>
+<div class="rw-sub">Needs you · 0</div>
+${mkx(`<div class="rw-sub" style="color:#5b4bd6">Being fixed by its session · 1</div>${itRow(GAG, `Landing conflict · ${WTK}`, 'The task’s session is on it · 4m · round 1 of 2 · nothing was pushed', 'Open session ›')}`, 1, 'in', 'border-radius:8px')}
+<div class="rw-sub">With the coordinator · 1</div>${itRow(ic('person', 13, '#7a5af5', 2), 'Checks failed on the combined tree: Task acceptance…', 'A11k · Write back before enabling the button · 18m', '')}</div>
+<div class="rw-box"><h3>Tasks<span class="k">46 · 44 done</span></h3>
+${mkx(tkRow(WTK, 'Done', 'Landing · fixing'), 2, 'in', 'border-radius:8px')}
+${tkRow('A11k · Write back before enabling the button', 'Done', 'Landing · checking')}
+${tkRow('A13f · Order model accounts in Runner settings', 'Done', 'Landed')}
+${tkRow('A08l · Collapse the input on Android 15 window recreation', 'Running', '')}</div></div>`;
+const wColD = `${wcolHead4()}<div class="body">${wpc4(44, 46, 1)}${wlc4(wHeadFix + wWhat(WTK) + wRef(WBRN) + wDet('The task’s session is fixing it · 4m · round 1 of 2') + wFoot('<span class="wpri">Open Session</span><span class="wlk">Open landing ›</span>'))}${wsec5('Coordinator')}${W_COORD}${wsec5('Today')}${W_ROWS.slice(0, 2).join('')}</div>`;
+const frameD = webFrame4({ col: wColD, main: wMainD, h: 640 });
+
 document.getElementById('board').innerHTML = `
 <section class="rv-part" id="part-0" data-png="00-overview">
 ${band('⓪ 合起来看', 'after', '一条任务从完成到落地：三处改动（紫色），两道不变的门（蓝色）')}
@@ -258,6 +363,33 @@ ${rfig('after', 'd · 改后 · 它修不了', pD, rcap('交回协调会话，�
 
 <section class="rv-part" id="part-3" data-png="03-decisions">
 ${band('③ 待你定', 'tbd', '附录 A 的 Q30–Q33，未裁决前按默认')}
-${part3}</section>`;
+${part3}</section>
+
+<section class="rw-part" id="part-4" data-png="04-web-session">
+${band('④ web · a', 'after', '任务自己的会话里收到的卡（对应 iPhone b）')}
+${wfig4('after', 'a · 改后 · 任务自己的会话', frameA, wcap4('失败直接到写这份工作的会话里', [
+  `${n(1)}同一张 Orbit 发来的卡：哪一步、哪些文件、什么都没推，以及它该做的三步；卡底是 <i>Open landing ›</i>。会话已随任务 DONE 结束时，这张卡把它续上。`,
+  `${n(2)}它在自己的分支上修，不推项目分支；这一轮结束、分支上有新提交，会话里只多一行 <i>Landing 4be19c2 again</i>。`,
+  `${n(3)}左栏的落地卡与这个会话的行都写着谁在修；会话行是 <i>Landing · the task’s session is fixing it</i>。`]))}
+</section>
+
+<section class="rw-part" id="part-5" data-png="05-web-landing">
+${band('④ web · b、c', 'after', '落地窗口的 Fixing 状态与交回（对应 iPhone c、d）')}
+${wfig4('after', 'b · 改后 · 落地窗口 · Fixing', frameB, wcap4('同一个窗口里看得到谁在修、第几轮、修成了什么', [
+  `${n(1)}状态词 <b>Fixing</b>（紫色，不是琥珀也不是红）；卡上写 <i>The task’s session is fixing it · 4m · round 1 of 2</i>；门是 Open Session。左栏的卡是同一个头。`,
+  `${n(2)}记录多两行：<i>Handed to the task’s session</i>（带第几轮）与 <i>Fixed in 4be19c2 · landing again</i>。淡色的是 10:09 之后接着写下的第二代。`,
+  `${n(3)}底部那句改成先任务自己的会话、再协调会话。`]))}
+${wfig4('after', 'c · 改后 · 交回协调会话', frameC, wcap4('它修不了：带着它最后说的话交回', [
+  `${n(1)}任务会话没有新提交就结束了这一轮：它最后一轮说的话原样放在卡上，状态回到 <i>Not landed</i>，<i>Coordinator has it · just now</i>。`,
+  `${n(2)}记录末行 <i>Returned to the coordinator: no new commit</i>。原因词还有 <i>the turn failed</i>、<i>the session was ended</i>、<i>the task moved on</i>、<i>2 rounds used</i>（§12.5 W7、W8）。从这一行起和今天一样，升级的计时也从这一刻算。`]))}
+</section>
+
+<section class="rw-part" id="part-6" data-png="06-web-project">
+${band('④ web · d、e', 'after', '项目页：Open items 与任务行')}
+${wfig4('after', 'd、e · 改后 · 项目页', frameD, wcap4('不算等你，也不算等协调会话', [
+  `${n(1)}Open items 把它列在 <b>Being fixed by its session</b> 下，不进 Needs you、不计 attention（§12.7）；行里写第几轮，门是 Open session ›。`,
+  `${n(2)}任务行在这期间的集成一段是 <b>Landing · fixing</b>，按压进任务自己的会话；修好再落时变回 <i>Landing · checking</i>。`]))}
+</section>
+`;
 </script>
 </body></html>

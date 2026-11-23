@@ -735,8 +735,8 @@ final class AppModel {
     }
 
     /// Persist a Mode the user picked when starting a session as the account default (synced across
-    /// devices), so the runs nobody starts from a composer — task-launched, MCP-created — inherit it
-    /// server-side. Same fire-and-forget shape as `rememberDefaultEffort`.
+    /// devices). Sessions created without an explicit mode can inherit it server-side. Task runs
+    /// and coordinator judgments ask for Auto. Same fire-and-forget shape as `rememberDefaultEffort`.
     func rememberDefaultPermissionMode(_ raw: String) {
         guard let api, user?.preferences?.defaultPermissionMode != raw else { return }
         Task {

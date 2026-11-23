@@ -75,10 +75,10 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `public` | 39 |
 | `user` | 529 |
 | `admin` | 31 |
-| `runner` | 230 |
+| `runner` | 231 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **833** |
+| **Total** | **834** |
 
 ## Public routes
 
@@ -742,6 +742,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/runner/integration-jobs/:jobId/progress` | body `Object`; path `jobId` | `RunnerApiController.integrationJobProgress` |
 | `POST` | `/api/runner/integration-jobs/:jobId/release` | body `Object`; path `jobId` | `RunnerApiController.integrationJobRelease` |
 | `POST` | `/api/runner/integration-jobs/:jobId/result` | body `Object`; path `jobId` | `RunnerApiController.integrationJobResult` |
+| `GET` | `/api/runner/landings/:id` | path `id` | `RunnerSessionsController.getOwnTaskLanding` |
 | `POST` | `/api/runner/link-token` | body `Object` | `RunnerLinkTokenController.issue` |
 | `POST` | `/api/runner/link/welcome` | body `Object` | `RunnerLinkWelcomeController.welcome` |
 | `POST` | `/api/runner/login-result` | body `Object` | `RunnerApiController.loginResult` |

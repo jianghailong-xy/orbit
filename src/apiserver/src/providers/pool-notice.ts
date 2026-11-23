@@ -49,6 +49,7 @@ export class PoolNotices {
           kind: 'reload',
           content: provider ? JSON.stringify({ provider }) : '{}',
           clientTurnId,
+          senderClient: 'orbit',
           status: 'PENDING',
         },
       });

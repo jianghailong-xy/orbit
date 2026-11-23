@@ -12,7 +12,10 @@
  *       mapping alone; once the container is made again from the current image, it is gone and the record cleared;
  *   (2) on the current image: no `update`, nothing recorded;
  *   (3) a SLEEPING mapping (and one draining to sleep) of a runner found on a previous image: no `update`;
- *   (4) the current image without the revision label: the server cannot tell, so no `update` and nothing recorded.
+ *   (4) the current image without the revision label: the server cannot tell, so no `update` and nothing recorded;
+ *   (5) images published from a release tag (their `org.opencontainers.image.version` label): an old `managed-<sha>`
+ *       runner is compared by commit and a release runner by version, `update` naming the versions; on the current
+ *       release, none.
  *
  * Not destructive: every row belongs to a user this run creates, and each world has a pool of its own.
  */
@@ -72,7 +75,8 @@ test('the managed runner status says when its container runs an older image', {
     const now = () => new Date(clock.ms);
     let manager: ManagedRunnerManager;
     let service: ManagedRunnerService;
-    /** The build the runner in the container reports: the one its image was built from. */
+    /** The build the runner in the container reports: the one its image was built from, a commit (`managed-<sha>`) or a
+     *  release version. */
     let runnerBuild = OLD_SHA;
     const start = () => {
       // Not link-only: a previous image's runner that still beats is left running, as on this deployment today.
@@ -84,10 +88,11 @@ test('the managed runner status says when its container runs an older image', {
     };
     start();
     /** An upgrade: the apiserver and the channel recreated on a new image, the running container left as it is. */
-    const upgrade = (revision: string | null) => {
-      profile = { ...profile, runner: { ...profile.runner, image: NEXT } };
-      channel.image = NEXT;
+    const upgrade = (revision: string | null, version: string | null = null, image = NEXT) => {
+      profile = { ...profile, runner: { ...profile.runner, image } };
+      channel.image = image;
       channel.imageRevision = revision;
+      channel.imageVersion = version;
       start();
     };
     const advance = (ms: number) => void (clock.ms += ms);
@@ -99,7 +104,7 @@ test('the managed runner status says when its container runs an older image', {
         where: { id: runnerId },
         data: {
           status: 'ONLINE',
-          version: `managed-${runnerBuild}`,
+          version: /^[0-9a-f]+$/.test(runnerBuild) ? `managed-${runnerBuild}` : runnerBuild,
           lastHeartbeatAt: now(),
           engines: [{ engine: 'codex', installed: true, auth: 'yes' }],
           capabilities: [MANAGED_RUNNER_INSTANCE_CAPABILITY, MANAGED_RUNNER_SLEEP_CAPABILITY],
@@ -227,6 +232,44 @@ test('the managed runner status says when its container runs an older image', {
     }
     const after = await w.mappingOf(ownerId);
     assert.deepEqual({ sha: after.currentImageSha, since: after.imageOutdatedSince }, { sha: null, since: null });
+    assert.equal((await w.service.status(ownerId)).update, undefined);
+  });
+
+  await t.test('(5) release images: managed-<sha> by commit, a release runner by version, none on the current release', async () => {
+    const w = world();
+    const { ownerId, mapping } = await w.readyRunner('release');
+    // The first release image, over an old image's runner that reports managed-<sha>.
+    w.upgrade(NEW_SHA, '0.1.261-beta.83');
+    w.advance(30_000);
+    await w.heartbeat(mapping.runnerId, BUSY);
+    assert.equal(await w.manager.reconcile(mapping.id), 'READY');
+    let recorded = await w.mappingOf(ownerId);
+    assert.deepEqual({ sha: recorded.currentImageSha, version: recorded.currentImageVersion }, { sha: NEW_SHA, version: '0.1.261-beta.83' });
+    assert.deepEqual((await w.service.status(ownerId)).update,
+      { running: { sha: OLD_SHA }, current: { sha: NEW_SHA, version: '0.1.261-beta.83' }, phase: 'available' });
+
+    // Made again from it: its runner reports the release, and there is no update.
+    w.channel.exit(mapping.runnerId, 1);
+    w.runnerBuild = '0.1.261-beta.83';
+    assert.equal((await w.drive(ownerId)).at(-1), 'READY');
+    w.advance(30_000);
+    await w.heartbeat(mapping.runnerId, BUSY);
+    assert.equal(await w.manager.reconcile(mapping.id), 'READY');
+    recorded = await w.mappingOf(ownerId);
+    assert.deepEqual({ sha: recorded.currentImageSha, version: recorded.currentImageVersion }, { sha: null, version: null });
+    assert.equal((await w.service.status(ownerId)).update, undefined);
+
+    // The next release: compared by version.
+    const LATER_SHA = 'c0ffee1234';
+    w.upgrade(LATER_SHA, '0.1.261-beta.84', `sha256:${'f'.repeat(64)}`);
+    w.advance(30_000);
+    await w.heartbeat(mapping.runnerId, BUSY);
+    assert.equal(await w.manager.reconcile(mapping.id), 'READY');
+    assert.deepEqual((await w.service.status(ownerId)).update,
+      { running: { sha: '', version: '0.1.261-beta.83' }, current: { sha: LATER_SHA, version: '0.1.261-beta.84' }, phase: 'available' });
+    // The runner on that release already (an image the record still calls previous): no update.
+    w.runnerBuild = '0.1.261-beta.84';
+    await w.heartbeat(mapping.runnerId, BUSY);
     assert.equal((await w.service.status(ownerId)).update, undefined);
   });
 });

@@ -3376,6 +3376,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1448 indexes drive and share-link foreign keys for bounded permanent deletion. It writes no existing rows
       // and changes no preserved relation, trigger, function or DONE fence.
       '1448_drive_purge_fk_indexes',
+      // 1449 replaces 0152's session_merge_projection_checkpoint_authority body so an update that clears a session's
+      // merge state is not read as a landing claim (a NULL `claimed` used to raise; revision 42, §12.5 W6). It
+      // creates, alters or drops no table, column, constraint or trigger, names none of the preserved triggers or
+      // functions, and writes no row.
+      '1449_merge_projection_authority_null_safe',
       // 1450 adds session.codex_sandbox_unavailable with a constant false default and no table rewrite.
       // It changes no preserved rows, triggers, functions or DONE fence.
       '1450_session_codex_sandbox_unavailable',
@@ -3407,7 +3412,19 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1490_session_listed_at',
       // 1491 sets feishu_app.message_detail's default to FULL and moves every TITLES_ONLY row to FULL: an ALTER and an
       // UPDATE of that table only, none of the preserved relations, and no trigger, function or DONE fence changes.
-      '1491_feishu_details_by_default'],
+      '1491_feishu_details_by_default',
+      // 1501 adds four nullable work-session columns and three checks on project_open_item, and widens
+      // project_integration_job_retry_failure_class_chk to admit CONFLICT (revision 42, §12.4, R1); no row is
+      // written, and no preserved relation, trigger, function or DONE fence changes. Written as 1444 on the project
+      // line, it was renumbered after main took 1444.
+      '1501_open_item_work_session',
+      // 1537 adds a nullable managed_runner.current_image_version (no default); `managed_runner` is none of the
+      // preserved relations, no row is written, and no trigger, function or DONE fence changes.
+      '1537_managed_runner_current_image_version',
+      // 1540 adds a partial index on activity. No preserved relation or row is changed.
+      // Written as 1461 on its task branch, it was renumbered to 1470 after main took 1462, to 1495 after main took
+      // 1491, and to 1540 after other branches took 1495 (1537 the highest on any branch then).
+      '1540_default_permission_mode_audit'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

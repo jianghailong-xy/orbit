@@ -60,7 +60,8 @@ data class LandingsWindowRow(val key: String, val sessionId: String?, val subjec
     val id: String get() = sessionId ?: key
 }
 
-/** One landing that has not settled: a card at the bottom of the window. [state] is `IN_FLIGHT` or `AWAITING_DECISION`; [title] the
+/** One landing that has not settled: a card at the bottom of the window. [state] is `IN_FLIGHT`, `AWAITING_DECISION` or `FIXING` (its
+ *  task's own session is fixing it, revision 42); [title] the
  *  task's name (a round's own title), the line the card adds under its head; [at] when it started, in epoch milliseconds. */
 data class LandingsWindowCard(val sessionId: String, val subject: String, val state: String, val title: String, val at: Long) {
     val id: String get() = sessionId
@@ -200,7 +201,8 @@ object SessionProjectLandings {
         if (landings.isEmpty() && merges.none { it.obj("merged") != null }) return null
         val window = window(landings, merges, now, zone)
         val waiting = window.now.filter { it.state == "AWAITING_DECISION" }
-        val inFlight = window.now.filter { it.state == "IN_FLIGHT" }
+        // Revision 42 (§12.7): one its task's own session is fixing waits on nobody here, like one in flight.
+        val inFlight = window.now.filter { it.state == "IN_FLIGHT" || it.state == "FIXING" }
         val today = window.days.firstOrNull { it.title == dayTitles[0] }?.rows.orEmpty()
         val lastSettled = window.days.flatMap { it.rows }.maxOfOrNull { it.at } ?: Long.MIN_VALUE
         val time = if (waiting.isNotEmpty()) elapsed(waiting.minOf { it.at }, now)

@@ -4,6 +4,8 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
+  Logger,
   NotFoundException,
   Patch,
   Put,
@@ -23,7 +25,9 @@ import { AVATAR_MAX_BYTES, readAvatar } from './avatar';
 import { UpdatePreferencesDto, UpdateProfileDto } from './dto';
 import { SIGN_IN_METHODS_SELECT, signInMethodsOf } from './sign-in-methods';
 import { normalizeDefaultModels } from '../providers/engine-provider';
-import { changedByOf, mergePreferences, withChangedBy, type SettingChangedBy } from './preferences-merge';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import { senderClientColumns, senderClientOfRequest } from '../sessions/turn-sender-client';
+import { changedByOf, mergePreferences, recordDefaultPermissionModeChange, withChangedBy, type SettingChangedBy } from './preferences-merge';
 import { translationAvailable, translationUnavailableUntil } from '../sessions/translation';
 import { promptOptimizerAvailable } from '../sessions/prompt-optimizer';
 
@@ -67,6 +71,8 @@ function asMe<T extends { avatar?: { updatedAt: Date } | null; passwordHash: str
 @PatForbidden('ACCOUNT')
 @Controller('users')
 export class UsersController {
+  private readonly logger = new Logger(UsersController.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   @UseGuards(JwtAuthGuard)
@@ -164,24 +170,34 @@ export class UsersController {
    */
   @UseGuards(JwtAuthGuard)
   @Patch('me/preferences')
-  async updatePreferences(@CurrentUser() user: AuthUser, @Body() dto: UpdatePreferencesDto) {
-    const current = await this.prisma.user.findUnique({
-      where: { id: user.userId },
-      select: { preferences: true },
-    });
+  async updatePreferences(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: UpdatePreferencesDto,
+    @Headers('x-orbit-client') client?: string,
+    @Headers('x-orbit-device') device?: string,
+  ) {
     const values: Record<string, unknown> = { ...dto };
     if (dto.defaultModels !== undefined) {
       // Keyed by (engine, provider) — `<engine>:<provider>` — and an older client's own keys kept as it
       // wrote them, beside the new key each means (docs/provider-engine-contract.md §6.5).
       values.defaultModels = await normalizeDefaultModels(this.prisma, user.userId, dto.defaultModels);
     }
-    const { merged, written } = mergePreferences((current?.preferences ?? {}) as Record<string, unknown>, values);
-    // The owner set these themselves: a "Set from <conversation>" mark on them ends (docs/settings-from-conversation-design.md §5.3).
-    const preferences = withChangedBy(merged, written);
-    return this.answer(await this.prisma.user.update({
-      where: { id: user.userId },
-      data: { preferences: preferences as Prisma.InputJsonValue },
-      select: ME_SELECT,
-    }));
+    const sender = senderClientColumns(senderClientOfRequest(user.credential, client, device));
+    const account = await withTransactionRetry(this.prisma, async (tx) => {
+      const [row] = await tx.$queryRaw<Array<{ preferences: Prisma.JsonValue }>>`
+        SELECT "preferences" FROM "user" WHERE "id" = ${user.userId}::uuid FOR NO KEY UPDATE`;
+      const current = (row?.preferences ?? {}) as Record<string, unknown>;
+      const { merged, written } = mergePreferences(current, values);
+      // Settings changed directly by the owner lose their conversation-card mark.
+      const preferences = withChangedBy(merged, written);
+      const updated = await tx.user.update({
+        where: { id: user.userId },
+        data: { preferences: preferences as Prisma.InputJsonValue },
+        select: ME_SELECT,
+      });
+      await recordDefaultPermissionModeChange(tx, user.userId, current, preferences, sender);
+      return updated;
+    }, loggedRetry(this.logger, 'users.updatePreferences'));
+    return this.answer(account);
   }
 }

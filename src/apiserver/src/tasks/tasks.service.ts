@@ -30,6 +30,7 @@ import {
   isAccountEngine,
   isEngine,
   keyDialect,
+  PermissionMode,
   planUsageBlockedUntil,
   planUsageReported,
   RunEventType,
@@ -82,6 +83,7 @@ import {
   INTEGRATION_ITEM_KINDS,
   LANDING_UNOBSERVED_KIND,
   SESSION_ENDING_SELECT,
+  handBackLandingFixesOfTask,
   openItemOwed,
   recordTaskFailure,
   sessionHasEnded,
@@ -9932,10 +9934,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         message: 'this task starts when its condition holds; a task has at most one of runAt and startWhen',
       });
     }
-    // A schedule, or auto-run switched on, starts the task in the account's default mode with no
+    // A schedule, or auto-run switched on, starts the task in Auto with no
     // session in the way, so a session that may not start that with `task_start` may not arrange it.
     if (actingSessionId && (dto.runAt != null || (dto.autoRunWhenReady === true && !before.autoRunWhenReady))) {
-      await this.sessions.assertMayStartAtAccountDefault(
+      await this.sessions.assertMayStartInMode(
         ownerId,
         actingSessionId,
         {
@@ -9943,9 +9945,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           provider: dto.provider ?? before.provider,
           model: dto.model ?? before.model,
           workspaceId: dto.assigneeId ?? before.assigneeId,
+          permissionMode: PermissionMode.AUTO,
           anchor: () => taskRunAnchor(this.prisma, id),
         },
-        'A schedule or auto-run would start this task in the account default, so nothing was written. ' +
+        'A schedule or auto-run would start this task in Auto. ' +
           'A person can press Start on the task page, or switch this session to Auto.',
       );
     }
@@ -11125,6 +11128,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                   reason: 'the task was reopened, cancelled or failed',
                 });
               }
+            }
+            // Revision 42 (§12.5 W7, W-T5): a DONE task reopened, cancelled, failed, replaced or moved out of its
+            // project takes the failed landing its own work session holds back from it — TASK_MOVED_ON, in this
+            // transaction (the items are rank 60, under this task's rank-50 lock), delivered to nobody: §4.2's facts
+            // answer the item from here.
+            if (before.status === TaskStatus.DONE && before.projectId
+              && (task.status !== TaskStatus.DONE || task.supersededByTaskId !== null
+                || task.projectId !== before.projectId)) {
+              await handBackLandingFixesOfTask(tx, {
+                taskId: id, projectId: before.projectId, reason: 'TASK_MOVED_ON',
+              });
             }
             if (dto.fixesOpenItemId) {
               await this.assertFixesOpenItem(
@@ -15537,6 +15551,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         workspaceId: workspace.id,
         taskId: task.id,
         title: newSessionTitle.slice(0, 80),
+        permissionMode: PermissionMode.AUTO,
         // Unpinned (null) fields are left off entirely so the session keeps inheriting the
         // workspace's engine/provider/model/effort, exactly as before these columns existed — and an
         // engine pinned alone runs on that engine's own credential (engine-provider.ts). A routed run
@@ -16076,13 +16091,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         prompt,
       )
       : null;
-    // Only a fresh run decides a mode, and it is the account's default: a paused run keeps its own.
+    // A fresh run starts in Auto. A paused run keeps its own mode.
     if (actingSessionId && planned.kind === 'CREATE') {
-      await this.sessions.assertMayStartAtAccountDefault(
+      await this.sessions.assertMayStartInMode(
         ownerId,
         actingSessionId,
-        { ...taskRunDispatch(task, route), workspaceId: task.assignee!.id, anchor: () => taskRunAnchor(this.prisma, task.id) },
-        'This task would start in the account default. A person can press Start on the task page, or ' +
+        {
+          ...taskRunDispatch(task, route),
+          workspaceId: task.assignee!.id,
+          permissionMode: PermissionMode.AUTO,
+          anchor: () => taskRunAnchor(this.prisma, task.id),
+        },
+        'This task would start in Auto. A person can press Start on the task page, or ' +
           'switch this session to Auto.',
       );
     }

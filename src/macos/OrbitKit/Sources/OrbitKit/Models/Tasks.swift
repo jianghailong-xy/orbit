@@ -215,11 +215,14 @@ public struct TaskIntegrationView: Codable, Equatable, Sendable {
     public let landTask: LandTaskIntegrationView?
     /// The project's main branch by name, which `ON_UPSTREAM` is on. Absent from an older server.
     public let mainBranch: String?
+    /// With `FIXING` (revision 42, §12.7): the task's own work session that holds the failed landing,
+    /// which pressing the row opens. Absent in every other state and from an older server.
+    public let workSessionId: String?
 
     public init(state: String, since: String? = nil, handler: String? = nil,
                 openItemId: String? = nil, jobId: String? = nil,
                 checksRunningForMs: Double? = nil, landTask: LandTaskIntegrationView? = nil,
-                mainBranch: String? = nil) {
+                mainBranch: String? = nil, workSessionId: String? = nil) {
         self.state = state
         self.since = since
         self.handler = handler
@@ -228,6 +231,7 @@ public struct TaskIntegrationView: Codable, Equatable, Sendable {
         self.checksRunningForMs = checksRunningForMs
         self.landTask = landTask
         self.mainBranch = mainBranch
+        self.workSessionId = workSessionId
     }
 
     public init(from decoder: Decoder) throws {
@@ -240,6 +244,7 @@ public struct TaskIntegrationView: Codable, Equatable, Sendable {
         checksRunningForMs = try? c.decodeIfPresent(Double.self, forKey: .checksRunningForMs)
         landTask = try? c.decodeIfPresent(LandTaskIntegrationView.self, forKey: .landTask)
         mainBranch = try? c.decodeIfPresent(String.self, forKey: .mainBranch)
+        workSessionId = try? c.decodeIfPresent(String.self, forKey: .workSessionId)
     }
 }
 
