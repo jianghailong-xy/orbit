@@ -90,7 +90,7 @@ public struct LandingsWindowCard: Equatable, Sendable, Identifiable {
     public let sessionId: String
     /// `TASK` or `PROMOTION`.
     public let subject: String
-    /// `IN_FLIGHT` or `AWAITING_DECISION`.
+    /// `IN_FLIGHT`, `AWAITING_DECISION` or `FIXING`.
     public let state: String
     /// The task's name (a round's own title), the line the card adds under its head.
     public let title: String
@@ -308,7 +308,8 @@ public enum SessionProjectLandings {
         if landings.isEmpty && !merges.contains(where: { $0.merged != nil }) { return nil }
         let window = window(landings, merges: merges, now: now, calendar: calendar)
         let waiting = window.now.filter { $0.state == "AWAITING_DECISION" }
-        let inFlight = window.now.filter { $0.state == "IN_FLIGHT" }
+        // A landing its task's own session is fixing (revision 42) waits on nobody: it is in flight.
+        let inFlight = window.now.filter { $0.state == "IN_FLIGHT" || $0.state == "FIXING" }
         let today = window.days.first { $0.title == SessionTimeGrouping.bucketTitles[0] }?.rows ?? []
         let lastSettled = window.days.flatMap(\.rows).map(\.at).max() ?? -.infinity
         let time: String?
