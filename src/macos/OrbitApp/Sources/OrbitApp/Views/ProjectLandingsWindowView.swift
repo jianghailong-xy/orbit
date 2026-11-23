@@ -418,7 +418,7 @@ struct ProjectLandingsWindowView: View {
                 .buttonStyle(.bordered)
                 .buttonBorderShape(.capsule)
                 .controlSize(.small)
-                .accessibilityHint(LandingPageCopy.decisionsTheCoordinator)
+                .accessibilityHint(LandingFixCopy.decisionsTheTasksSessionFirst)
                 .accessibilityIdentifier("landings-open-coordinator")
             }
         }
@@ -612,7 +612,9 @@ struct ProjectLandingsWindowView: View {
         let settled = landing?.settledAt != nil
         let running = !settled && attempt?.state == "RUNNING" && attempt?.timedOut == false
         let timedOut = !settled && attempt?.timedOut == true
-        let waiting = !settled && card.state == "AWAITING_DECISION"
+        // A landing its task's own session is fixing (revision 42) stays open as a waiting one does.
+        let waiting = !settled && (card.state == "AWAITING_DECISION" || card.state == "FIXING"
+                                   || LandingFix.isFixing(landing))
         // What needs a look stays open: a landing that runs, waits for a decision or timed out
         // (docs/mocks/landings-chat-tools-native d).
         let open = expanded.contains(id) || running || waiting || timedOut
@@ -666,6 +668,8 @@ struct ProjectLandingsWindowView: View {
         }
         var doors: [LandingMenuAction] = []
         if model.coordinatorID != nil { doors.append(.openCoordinator) }
+        // Handed back by the task's own session (board landing-fix-own-session 02 d): that session too.
+        if LandingFix.handBack(landing) != nil { doors.append(.openSourceSession) }
         if landing.subject == "TASK", let taskID = landing.taskId, !taskID.isEmpty { doors.append(.openTask) }
         if landing.subject == "PROMOTION", promotion != nil { doors.append(.reviewCard) }
         return doors
@@ -730,7 +734,9 @@ struct ProjectLandingsWindowView: View {
         case .openTask:
             if let taskID = landing?.taskId { open("orbit-task", taskID) }
         case .openSourceSession:
-            if let source = landing?.currentAttempt?.sourceSessionId { open("orbit-session", source) }
+            // The session fixing the failure, or the one that handed it back (revision 42), first.
+            if let source = LandingFix.workSessionId(landing) ?? LandingFix.handBack(landing)?.sessionId
+                ?? landing?.currentAttempt?.sourceSessionId { open("orbit-session", source) }
         case .openCoordinator:
             if let coordinator = model.coordinatorID { open("orbit-session", coordinator) }
         case .reviewCard:

@@ -58,6 +58,10 @@ struct LandingStatusCardView: View {
         let card = LandingPageCopy.attemptCard(landing, now: now, updatedAt: readAt,
                                                failed: readFailed, facts: facts)
         let outcome = LandingPageCopy.outcomeCard(landing, promotion: promotion)
+        // Revision 42 (board landing-fix-own-session 02 c, d): the failure in the task's own session's
+        // hands, or handed back from it to the coordinator.
+        let fixing = outcome == nil && LandingFix.isFixing(landing)
+        let handBack = outcome == nil ? LandingFix.handBack(landing) : nil
         // A round's word (Merge check, Merge to main) says which of its jobs this is.
         let word = landing.subject == "PROMOTION" && card?.rightIsClock == false ? card?.word : nil
         // No card of its own: the line, and what it carries hung under the line's mark, as the chat
@@ -65,6 +69,8 @@ struct LandingStatusCardView: View {
         VStack(alignment: .leading, spacing: 6) {
             if let outcome {
                 line(kind: outcome.ok ? .ok : .quiet, title: outcome.title, status: outcome.right)
+            } else if fixing {
+                line(kind: .running, title: LandingFixCopy.fixing)
             } else if let card {
                 line(kind: card.stoppedOnFailure || card.timedOut ? .failed : .running,
                      title: card.rightIsClock ? card.word : card.right, word: word,
@@ -93,7 +99,9 @@ struct LandingStatusCardView: View {
                         Text(treeLine).font(.orbitMeta).foregroundStyle(.secondary)
                     }
                 } else if let card {
-                    if !card.detail.isEmpty {
+                    if fixing {
+                        Text(LandingFix.fixingDetail(landing)).font(.orbitMeta).foregroundStyle(.tertiary)
+                    } else if !card.detail.isEmpty {
                         Text(card.detail).font(.orbitMeta).foregroundStyle(.tertiary)
                     }
                     if let budget = card.budget {
@@ -132,8 +140,15 @@ struct LandingStatusCardView: View {
                         timedOutDoors(landing)
                     }
                 }
-                if !waitDoors.isEmpty {
-                    waitingDoors
+                if fixing {
+                    LandingFixingDoors(landing: landing, now: now, act: act)
+                } else {
+                    if let handBack {
+                        LandingFixHandBackView(handBack: handBack)
+                    }
+                    if !waitDoors.isEmpty {
+                        waitingDoors(handBack: handBack)
+                    }
                 }
             }
             .padding(.leading, LandingLineView.indent)
@@ -221,9 +236,17 @@ struct LandingStatusCardView: View {
 
     /// The doors a landing that waits for a decision carries (board 02 d): the first is the solid
     /// one, as the board draws Open Coordinator beside a plain Open Task.
-    private var waitingDoors: some View {
+    private func waitingDoors(handBack: LandingFixHandBack?) -> some View {
         VStack(alignment: .leading, spacing: 9) {
-            if waitDoors.contains(.openCoordinator) {
+            if let handBack, waitDoors.contains(.openCoordinator) {
+                // Handed back (board 02 d): who has it now, and since when.
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "person").foregroundStyle(Color.accentColor)
+                    (Text(LandingFixCopy.coordinator).fontWeight(.semibold)
+                     + Text(" ") + Text(LandingFix.coordinatorHasIt(handBack, now: now)).foregroundColor(.secondary))
+                }
+                .font(.orbitMeta)
+            } else if waitDoors.contains(.openCoordinator) {
                 Label(LandingPageCopy.decisionsTheCoordinator, systemImage: "person")
                     .font(.orbitMeta).foregroundStyle(.secondary)
             }
@@ -249,6 +272,7 @@ struct LandingStatusCardView: View {
         switch action {
         case .openCoordinator: return LandingPageCopy.openCoordinator
         case .openTask: return LandingPageCopy.openTask
+        case .openSourceSession: return LandingFixCopy.openSession
         default: return LandingPageCopy.reviewCard
         }
     }
@@ -315,6 +339,14 @@ struct LandingTimelineView: View {
                 let status = LandingStepStatus.of(step, kind: section.kind, isLast: last, live: live,
                                                   queued: current && landing.currentAttempt?.state == "QUEUED")
                 stepRow(step, status: status, section: section)
+            }
+            // Revision 42's rows under the attempt whose failure they are about (board
+            // landing-fix-own-session 02 c ②, d ②): the hand-off, the fix landing again, the hand-back.
+            if let sections = landing.timeline?.sections,
+               let at = sections.firstIndex(where: { $0.jobId == section.jobId }) {
+                ForEach(LandingFix.rows(after: at, in: sections)) { row in
+                    LandingFixRowView(row: row)
+                }
             }
             // A task exempt from the landing check (board 04 b, D5): the merge check still runs on the
             // way into main, said under the list.
