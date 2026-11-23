@@ -365,7 +365,7 @@ export class AnthropicGatewayService {
       : { spentUntil: until ?? null };
     try {
       await this.prisma.modelProvider.updateMany({ where: { id: caller.key.id, apiKeyEnc: caller.key.apiKeyEnc }, data });
-      this.log.log(`session ${caller.sessionId} key ${caller.key.slug}: ${effect === 'key_invalid' ? 'refused by OpenAI — marked invalid' : `insufficient_quota — spent until ${until?.toISOString()}`}`);
+      this.log.log(`session ${caller.sessionId} key ${caller.key.slug}: ${effect === 'key_invalid' ? `refused by ${caller.key.dialect === 'openai' ? 'OpenAI' : 'its endpoint'} — marked invalid` : `insufficient_quota — spent until ${until?.toISOString()}`}`);
     } catch (e) {
       this.log.warn(`session ${caller.sessionId} key ${caller.key.slug}: could not record ${effect}: ${(e as Error).message}`);
     }
