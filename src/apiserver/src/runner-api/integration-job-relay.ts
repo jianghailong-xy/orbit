@@ -3178,10 +3178,34 @@ export async function applyIntegrationJobResult(
         sessionId: job.sessionId!, sourceRef: job.sourceRef, runnerId: job.runnerId,
       });
     }
+    // §2.2 J-T5: the task's landing answers what was open about landing it, in this same
+    // transaction — beside the receipt that says the work is there, which is the fact the item was
+    // waiting for. Read by TASK rather than by this job: what is still open is an older
+    // generation's item, and this landing is what closes it. An answer about a branch the work did
+    // NOT end on is not that landing: it says nothing about the work, and the item it would close can
+    // be the only record that the work has not reached the line — the landing owed for it failed, and
+    // a generation of the work is owed only one (§2.3 J-T1e, `landingBehindTheWorkKey`). A fully
+    // applied answer that speaks for the work (its receipt state is set) is that landing too: the work
+    // is on the target, and nothing was pushed because nothing was missing.
+    if ((jobLanded(effectiveState) || (fullyApplied && receiptState !== null)) && job.taskId && !leftWorkBehind) {
+      // §4.7 H2 first: the items the coordinator's rerun was handling are HANDLED in its name, and
+      // only then does the landing answer whatever else is open about the task (LANDED, by the
+      // platform) — including an item the clock gave the owner while the rerun ran.
+      await resolveHandledItems(tx, job.id);
+      await resolveIntegrationItemsOnLanding(tx, job.taskId);
+    }
+    // §4.4 X-D4 (5): this task was filed to fix an exception, and its landing is in — receipted, and
+    // not the answer about a branch the work did not end on. Whether the work that exception is
+    // about went in with it is the coordinator's to check, so the item goes back in front of it.
+    const rearmedItemId = job.kind === 'LAND_TASK' && job.taskId && receiptState !== null && !leftWorkBehind
+      ? await rearmItemFixedBy(tx, job.taskId, job.serialKey)
+      : null;
+
     // docs/design/protected-branch-landing.md §4.4: GitHub merged the pull request onto a target that moved in the
     // second after Orbit read it, so the tree on the target is not the tree the checks passed on. The work is on the
     // target and the job is LANDED with the real tree — J2's one exception, recorded rather than hidden — and this
-    // item, opened in the same transaction, asks for the project's check to run on the target.
+    // item, opened in the same transaction, asks for the project's check to run on the target. Opened after the
+    // landing answered the task's open items above, so the landing does not close the item it is the reason for.
     if (pullRequestEnd && body.landedTreeSha !== body.testedTreeSha) {
       const landingSessionId = job.landingId
         ? (await tx.projectLanding.findUnique({ where: { id: job.landingId }, select: { sessionId: true } }))?.sessionId ?? null
@@ -3231,29 +3255,6 @@ export async function applyIntegrationJobResult(
         handedTo = { itemId: opened.itemId, assignee: opened.assignee, itemKind: 'INTEGRATION_ERROR' };
       }
     }
-    // §2.2 J-T5: the task's landing answers what was open about landing it, in this same
-    // transaction — beside the receipt that says the work is there, which is the fact the item was
-    // waiting for. Read by TASK rather than by this job: what is still open is an older
-    // generation's item, and this landing is what closes it. An answer about a branch the work did
-    // NOT end on is not that landing: it says nothing about the work, and the item it would close can
-    // be the only record that the work has not reached the line — the landing owed for it failed, and
-    // a generation of the work is owed only one (§2.3 J-T1e, `landingBehindTheWorkKey`). A fully
-    // applied answer that speaks for the work (its receipt state is set) is that landing too: the work
-    // is on the target, and nothing was pushed because nothing was missing.
-    if ((jobLanded(effectiveState) || (fullyApplied && receiptState !== null)) && job.taskId && !leftWorkBehind) {
-      // §4.7 H2 first: the items the coordinator's rerun was handling are HANDLED in its name, and
-      // only then does the landing answer whatever else is open about the task (LANDED, by the
-      // platform) — including an item the clock gave the owner while the rerun ran.
-      await resolveHandledItems(tx, job.id);
-      await resolveIntegrationItemsOnLanding(tx, job.taskId);
-    }
-    // §4.4 X-D4 (5): this task was filed to fix an exception, and its landing is in — receipted, and
-    // not the answer about a branch the work did not end on. Whether the work that exception is
-    // about went in with it is the coordinator's to check, so the item goes back in front of it.
-    const rearmedItemId = job.kind === 'LAND_TASK' && job.taskId && receiptState !== null && !leftWorkBehind
-      ? await rearmItemFixedBy(tx, job.taskId, job.serialKey)
-      : null;
-
     // §2.9 LS2: the facts this result IS — each check's result, a refused push, the answer itself,
     // who it was handed to, an abandonment — recorded in the transaction that wrote the terminal
     // state, after every write above so the row they read is the one that stands. A replay writes
