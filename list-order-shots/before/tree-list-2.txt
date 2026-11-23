@@ -1,0 +1,216 @@
+Attributes: Application, 0x117e8fe80, pid: 36590, label: 'ListProbe'
+Element subtree:
+ →Application, 0x117e8fe80, pid: 36590, label: 'ListProbe'
+    Window (Main), 0x117e9c000, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x117e9c140, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x117e9c280, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x117e9c3c0, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x117e9c500, {{0.0, 0.0}, {402.0, 874.0}}
+              CollectionView, 0x117e9c640, {{0.0, 0.0}, {305.5, 874.0}}
+                Other, 0x117e9c780, {{0.0, -1620.0}, {305.7, 3810.7}}
+                Cell, 0x117e9c8c0, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x117e9ca00, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x117e9cb40, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x117e9cc80, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x117e9cdc0, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x117e9cf00, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x117e9d040, {{0.0, 128.0}, {305.3, 44.3}}
+                        Button, 0x117e9d180, {{0.0, 128.0}, {305.3, 44.3}}, label: 'Projects'
+                          Image, 0x117e9d2c0, {{26.3, 142.3}, {15.3, 15.3}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                          StaticText, 0x117e9d400, {{58.0, 140.0}, {62.3, 20.3}}, label: 'Projects'
+                Cell, 0x117e9d540, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x117e9d680, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x117e9d7c0, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x117e9d900, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x117e9da40, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x117e9db80, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x117e9dcc0, {{0.0, 172.3}, {305.3, 44.3}}
+                        Button, 0x117e9de00, {{0.0, 172.3}, {305.3, 44.3}}, label: 'Tasks'
+                          Image, 0x117e9df40, {{24.7, 186.0}, {18.7, 17.0}}, identifier: 'checklist', label: 'checklist'
+                          StaticText, 0x117e9e080, {{58.0, 184.3}, {43.0, 20.3}}, label: 'Tasks'
+                Cell, 0x117e9e1c0, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x117e9e300, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x117e9e440, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x117e9e580, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x117e9e6c0, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x117e9e800, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x117e9e940, {{0.0, 216.7}, {305.3, 44.3}}
+                        Button, 0x117e9ea80, {{0.0, 216.7}, {305.3, 44.3}}, identifier: 'drawer-scheduled', label: 'Scheduled'
+                          Image, 0x117e9ebc0, {{25.7, 231.0}, {16.7, 15.3}}, identifier: 'calendar', label: 'Calendar'
+                          StaticText, 0x117e9ed00, {{58.0, 228.7}, {81.0, 20.3}}, label: 'Scheduled'
+                Cell, 0x117e9ee40, {{0.0, 261.0}, {305.3, 44.3}}
+                  Other, 0x117e9ef80, {{0.0, 261.0}, {305.3, 44.3}}
+                    Other, 0x117e9f0c0, {{0.0, 261.0}, {305.3, 44.3}}
+                      Other, 0x117e9f200, {{0.0, 261.0}, {305.3, 44.3}}
+                  Other, 0x117e9f340, {{0.0, 261.0}, {305.3, 44.3}}
+                    Other, 0x117e9f480, {{0.0, 261.0}, {305.3, 44.3}}
+                      Other, 0x117e9f5c0, {{0.0, 261.0}, {305.3, 44.3}}
+                        Button, 0x117e9f700, {{0.0, 261.0}, {305.3, 44.3}}, label: 'Wiki'
+                          Image, 0x117e9f840, {{27.0, 274.3}, {14.0, 18.0}}, identifier: 'book.closed', label: 'book.closed'
+                          StaticText, 0x117e9f980, {{58.0, 273.0}, {32.7, 20.3}}, label: 'Wiki'
+                Cell, 0x117e9fac0, {{0.0, 305.3}, {305.3, 44.3}}
+                  Other, 0x117e9fc00, {{0.0, 305.3}, {305.3, 44.3}}
+                    Other, 0x117e9fd40, {{0.0, 305.3}, {305.3, 44.3}}
+                      Other, 0x117e9fe80, {{0.0, 305.3}, {305.3, 44.3}}
+                  Other, 0x117ea4000, {{0.0, 305.3}, {305.3, 44.3}}
+                    Other, 0x117ea4140, {{0.0, 305.3}, {305.3, 44.3}}
+                      Other, 0x117ea4280, {{0.0, 305.3}, {305.3, 44.3}}
+                        Button, 0x117ea43c0, {{0.0, 305.3}, {305.3, 44.3}}, identifier: 'owner-request-inbox-entry', label: 'Waiting on you'
+                          Image, 0x117ea4500, {{28.0, 318.3}, {13.7, 18.3}}, identifier: 'hand.raised', label: 'Block'
+                          StaticText, 0x117ea4640, {{58.0, 317.3}, {112.3, 20.3}}, label: 'Waiting on you'
+                Cell, 0x117ea4780, {{0.0, 349.7}, {305.3, 48.7}}
+                  Other, 0x117ea48c0, {{0.0, 349.7}, {305.3, 48.7}}
+                    Other, 0x117ea4a00, {{0.0, 349.7}, {305.3, 48.7}}
+                      Other, 0x117ea4b40, {{0.0, 349.7}, {305.3, 48.7}}
+                  Other, 0x117ea4c80, {{0.0, 349.7}, {305.3, 48.7}}
+                    Other, 0x117ea4dc0, {{0.0, 349.7}, {305.3, 48.7}}
+                      Other, 0x117ea4f00, {{0.0, 349.7}, {305.3, 48.7}}
+                        StaticText, 0x117ea5040, {{22.0, 374.2}, {87.7, 18.0}}, label: 'Workspaces'
+                        Button, 0x117ea5180, {{263.3, 372.3}, {24.0, 22.0}}, identifier: 'new-workspace', label: 'New workspace'
+                Cell, 0x117ea52c0, {{0.0, 398.3}, {305.3, 44.3}}
+                  Other, 0x117ea5400, {{0.0, 398.3}, {305.3, 44.3}}
+                    Other, 0x117ea5540, {{0.0, 398.3}, {305.3, 44.3}}
+                      Other, 0x117ea5680, {{0.0, 398.3}, {305.3, 44.3}}
+                  Other, 0x117ea57c0, {{0.0, 398.3}, {305.3, 44.3}}
+                    Other, 0x117ea5900, {{0.0, 398.3}, {305.3, 44.3}}
+                      Other, 0x117ea5a40, {{0.0, 398.3}, {305.3, 44.3}}
+                        Button, 0x117ea5b80, {{0.0, 398.3}, {305.3, 44.3}}, label: 'orbit-macos,  · longdeMac-mini.local, 1 waiting for you'
+                          Other, 0x117ea5cc0, {{24.7, 412.7}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x117ea5e00, {{24.7, 412.7}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x117ea5f40, {{58.0, 410.3}, {93.0, 20.3}}, label: 'orbit-macos'
+                          StaticText, 0x117ea6080, {{151.0, 410.3}, {79.0, 20.3}}, label: ' · longdeMac-mini.local'
+                          StaticText, 0x117ea61c0, {{262.0, 412.0}, {21.3, 17.3}}, label: '1 waiting for you'
+                Other, 0x117ea6300, {{272.2, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x117ea6440, {{299.2, 561.0}, {3.0, 310.0}}
+                Other, 0x117ea6580, {{272.2, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x117ea66c0, {{299.2, 561.0}, {3.0, 310.0}}
+              StaticText, 0x117ea6800, {{22.0, 84.8}, {52.3, 26.3}}, label: 'Orbit'
+              Button, 0x117ea6940, {{251.7, 76.0}, {44.0, 44.0}}, identifier: 'magnifyingglass', label: 'Search sessions'
+              Button, 0x117ea6a80, {{10.0, 788.7}, {165.0, 43.0}}, label: 'New session'
+                Image, 0x117ea6bc0, {{31.0, 801.0}, {18.3, 18.3}}, identifier: 'square.and.pencil', label: 'Compose'
+                StaticText, 0x117ea6d00, {{57.0, 799.8}, {100.0, 20.3}}, label: 'New session'
+              Button, 0x117ea6e40, {{251.7, 788.0}, {44.0, 44.0}}, identifier: 'gearshape', label: 'Settings'
+              Other, 0x117ea6f80, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x117ea70c0, {{0.0, 62.0}, {402.0, 54.0}}, identifier: '_TtGC7SwiftUI32NavigationStackHosting'
+                  Other, 0x117ea7200, {{20.0, 66.0}, {36.0, 36.0}}, identifier: 'line.3.horizontal', label: 'Open navigation', value: 1
+                    Other, 0x117ea7340, {{20.0, 66.0}, {36.0, 36.0}}
+                      Button, 0x117ea7480, {{22.3, 66.0}, {31.3, 36.0}}, identifier: 'line.3.horizontal', label: 'Open navigation', value: 1
+                  StaticText, 0x117ea75c0, {{48.5, 61.2}, {10.3, 14.3}}, label: '1'
+                  Other, 0x117ea7700, {{76.0, 73.7}, {95.7, 20.7}}, label: 'Workspace: orbit-macos'
+                    Other, 0x117ea7840, {{76.0, 73.7}, {95.7, 20.7}}
+                      StaticText, 0x117ea7980, {{76.0, 74.0}, {95.7, 20.3}}, label: 'Workspace: orbit-macos'
+                  Other, 0x117ea7ac0, {{283.7, 66.0}, {41.7, 36.0}}, label: 'Session scope, Open'
+                    Other, 0x117ea7c00, {{283.7, 66.0}, {41.7, 36.0}}
+                      Button, 0x117ea7d40, {{283.7, 66.0}, {41.7, 36.0}}, label: 'Session scope, Open'
+                        Button, 0x117ea7e80, {{283.7, 66.0}, {41.7, 36.0}}
+                          Image, 0x117ea8000, {{293.3, 77.7}, {22.0, 13.0}}, identifier: 'line.3.horizontal.decrease', label: 'Filter'
+                  Button, 0x117ea8140, {{341.3, 66.0}, {40.7, 36.0}}, label: 'Start a new session with orbit-macos'
+                Other, 0x117ea8280, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x117ea83c0, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x117ea8500, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x117ea8640, {{0.0, 0.0}, {402.0, 874.0}}
+                        Other, 0x117ea8780, {{0.0, 116.0}, {402.0, 672.0}}
+                        CollectionView, 0x117ea88c0, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x117ea8a00, {{0.0, -1632.0}, {402.0, 3948.0}}
+                          Other, 0x117ea8b40, {{0.0, 0.0}, {402.0, 874.0}}
+                            Other, 0x117ea8c80, {{0.0, 0.0}, {402.0, 170.8}}
+                            Other, 0x117ea8dc0, {{0.0, 733.2}, {402.0, 140.8}}
+                          Other, 0x117ea8f00, {{0.0, 0.0}, {402.0, 874.0}}
+                          Cell, 0x117ea9040, {{0.0, 116.0}, {402.0, 75.3}}
+                            Other, 0x117ea9180, {{0.0, 116.0}, {402.0, 75.3}}
+                              Other, 0x117ea92c0, {{0.0, 116.0}, {402.0, 75.3}}
+                            Other, 0x117ea9400, {{0.0, 116.0}, {402.0, 75.3}}
+                              Other, 0x117ea9540, {{0.0, 116.0}, {402.0, 75.3}}
+                                Other, 0x117ea9680, {{0.0, 116.0}, {402.0, 75.3}}
+                                  Other, 0x117ea97c0, {{0.0, 120.3}, {150.0, 66.7}}
+                                  Other, 0x117ea9900, {{182.0, 120.3}, {220.0, 66.7}}
+                                  Button, 0x117ea9a40, {{0.0, 116.0}, {402.0, 75.3}}, label: 'Runner full view, 1h, tests...', value: Running
+                                    StaticText, 0x117ea9b80, {{16.0, 133.0}, {121.0, 20.3}}, label: 'Runner full view'
+                                    StaticText, 0x117ea9cc0, {{374.0, 136.5}, {12.0, 13.3}}, label: '1h'
+                                    StaticText, 0x117ea9e00, {{16.0, 156.3}, {46.3, 18.0}}, label: 'tests...'
+                          Cell, 0x117ea9f40, {{0.0, 191.3}, {402.0, 75.3}}
+                            Other, 0x117eaa080, {{0.0, 191.3}, {402.0, 75.3}}
+                              Other, 0x117eaa1c0, {{0.0, 191.3}, {402.0, 75.3}}
+                            Other, 0x117eaa300, {{0.0, 191.3}, {402.0, 75.3}}
+                              Other, 0x117eaa440, {{0.0, 191.3}, {402.0, 75.3}}
+                                Other, 0x117eaa580, {{0.0, 191.3}, {402.0, 75.3}}
+                                  Other, 0x117eaa6c0, {{0.0, 195.7}, {150.0, 66.7}}
+                                  Other, 0x117eaa800, {{182.0, 195.7}, {220.0, 66.7}}
+                                  Button, 0x117eaa940, {{0.0, 191.3}, {402.0, 75.3}}, label: 'Runner preinstall agent, 1h, Mac back online', value: Running
+                                    StaticText, 0x117eaaa80, {{16.0, 208.3}, {175.7, 20.3}}, label: 'Runner preinstall agent'
+                                    StaticText, 0x117eaabc0, {{374.0, 211.8}, {12.0, 13.3}}, label: '1h'
+                                    StaticText, 0x117eaad00, {{16.0, 231.7}, {111.3, 18.0}}, label: 'Mac back online'
+                          Cell, 0x117eaae40, {{0.0, 266.7}, {402.0, 75.3}}
+                            Other, 0x117eaaf80, {{0.0, 266.7}, {402.0, 75.3}}
+                              Other, 0x117eab0c0, {{0.0, 266.7}, {402.0, 75.3}}
+                            Other, 0x117eab200, {{0.0, 266.7}, {402.0, 75.3}}
+                              Other, 0x117eab340, {{0.0, 266.7}, {402.0, 75.3}}
+                                Other, 0x117eab480, {{0.0, 266.7}, {402.0, 75.3}}
+                                  Other, 0x117eab5c0, {{0.0, 271.0}, {150.0, 66.7}}
+                                  Other, 0x117eab700, {{182.0, 271.0}, {220.0, 66.7}}
+                                  Button, 0x117eab840, {{0.0, 266.7}, {402.0, 75.3}}, label: 'Runner default workspace, 1h, CI 3/7', value: Running
+                                    StaticText, 0x117eab980, {{16.0, 283.7}, {198.3, 20.3}}, label: 'Runner default workspace'
+                                    StaticText, 0x117eabac0, {{374.0, 287.2}, {12.0, 13.3}}, label: '1h'
+                                    StaticText, 0x117eabc00, {{16.0, 307.0}, {40.3, 18.0}}, label: 'CI 3/7'
+                          Cell, 0x117eabd40, {{0.0, 342.0}, {402.0, 75.3}}
+                            Other, 0x117eabe80, {{0.0, 342.0}, {402.0, 75.3}}
+                              Other, 0x117ebc000, {{0.0, 342.0}, {402.0, 75.3}}
+                            Other, 0x117ebc140, {{0.0, 342.0}, {402.0, 75.3}}
+                              Other, 0x117ebc280, {{0.0, 342.0}, {402.0, 75.3}}
+                                Other, 0x117ebc3c0, {{0.0, 342.0}, {402.0, 75.3}}
+                                  Other, 0x117ebc500, {{0.0, 346.3}, {150.0, 66.7}}
+                                  Other, 0x117ebc640, {{182.0, 346.3}, {220.0, 66.7}}
+                                  Button, 0x117ebc780, {{0.0, 342.0}, {402.0, 75.3}}, label: 'Agent title position, 55m, CI 5/7', value: Running
+                                    StaticText, 0x117ebc8c0, {{16.0, 359.0}, {142.7, 20.3}}, label: 'Agent title position'
+                                    StaticText, 0x117ebca00, {{362.3, 362.5}, {23.7, 13.3}}, label: '55m'
+                                    StaticText, 0x117ebcb40, {{16.0, 382.3}, {40.0, 18.0}}, label: 'CI 5/7'
+                          Cell, 0x117ebcc80, {{0.0, 417.3}, {402.0, 75.3}}
+                            Other, 0x117ebcdc0, {{0.0, 417.3}, {402.0, 75.3}}
+                              Other, 0x117ebcf00, {{0.0, 417.3}, {402.0, 75.3}}
+                            Other, 0x117ebd040, {{0.0, 417.3}, {402.0, 75.3}}
+                              Other, 0x117ebd180, {{0.0, 417.3}, {402.0, 75.3}}
+                                Other, 0x117ebd2c0, {{0.0, 417.3}, {402.0, 75.3}}
+                                  Other, 0x117ebd400, {{0.0, 421.7}, {150.0, 66.7}}
+                                  Other, 0x117ebd540, {{182.0, 421.7}, {220.0, 66.7}}
+                                  Button, 0x117ebd680, {{0.0, 417.3}, {402.0, 75.3}}, label: 'UI copy check, 22m, editing view...', value: Running
+                                    StaticText, 0x117ebd7c0, {{16.0, 434.3}, {108.0, 20.3}}, label: 'UI copy check'
+                                    StaticText, 0x117ebd900, {{362.7, 437.8}, {23.3, 13.3}}, label: '22m'
+                                    StaticText, 0x117ebda40, {{16.0, 457.7}, {93.7, 18.0}}, label: 'editing view...'
+                          Cell, 0x117ebdb80, {{0.0, 492.7}, {402.0, 75.3}}
+                            Other, 0x117ebdcc0, {{0.0, 492.7}, {402.0, 75.3}}
+                              Other, 0x117ebde00, {{0.0, 492.7}, {402.0, 75.3}}
+                            Other, 0x117ebdf40, {{0.0, 492.7}, {402.0, 75.3}}
+                              Other, 0x117ebe080, {{0.0, 492.7}, {402.0, 75.3}}
+                                Other, 0x117ebe1c0, {{0.0, 492.7}, {402.0, 75.3}}
+                                  Other, 0x117ebe300, {{0.0, 497.0}, {150.0, 66.7}}
+                                  Other, 0x117ebe440, {{182.0, 497.0}, {220.0, 66.7}}
+                                  Button, 0x117ebe580, {{0.0, 492.7}, {402.0, 75.3}}, label: 'Alert cause, 2h ago, Waiting for approval', value: Waiting for approval
+                                    StaticText, 0x117ebe6c0, {{16.0, 509.7}, {86.0, 20.3}}, label: 'Alert cause'
+                                    StaticText, 0x117ebe800, {{350.0, 513.2}, {36.0, 13.3}}, label: '2h ago'
+                                    StaticText, 0x117ebe940, {{16.0, 533.0}, {137.0, 18.0}}, label: 'Waiting for approval'
+                          Other, 0x117ebea80, {{369.0, 116.0}, {30.0, 672.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x117ebebc0, {{396.0, 778.0}, {3.0, 7.0}}
+                          Other, 0x117ebed00, {{369.0, 116.0}, {30.0, 672.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x117ebee40, {{396.0, 778.0}, {3.0, 7.0}}
+                Other, 0x117ebef80, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x117ebf0c0, {{0.0, 0.0}, {402.0, 874.0}}
+                    Toolbar, 0x117ebf200, {{0.0, 788.0}, {402.0, 86.0}}, identifier: 'Toolbar', label: 'Toolbar'
+                      Other, 0x117ebf340, {{28.0, 798.0}, {346.0, 48.0}}
+                        Other, 0x117ebf480, {{28.0, 798.0}, {346.0, 48.0}}
+                          Other, 0x117ebf5c0, {{28.0, 798.0}, {0.0, 0.0}}
+                            Other, 0x117ebf700, {{28.0, 798.0}, {346.0, 48.0}}
+                              Other, 0x117ebf840, {{28.0, 798.0}, {346.0, 48.0}}
+                                Other, 0x117ebf980, {{33.0, 803.0}, {336.0, 38.0}}
+                                  SearchField, 0x117ebfac0, {{33.0, 803.0}, {336.0, 38.0}}, label: 'Search sessions', placeholderValue: 'Search sessions'
+                                    Image, 0x117ebfc00, {{46.0, 812.3}, {20.3, 18.7}}, identifier: 'magnifyingglass', label: 'Search'
+              Button, 0x117ebfd40, {{16.0, 114.0}, {370.0, 62.0}}, identifier: 'needs-you-toast', label: 'Alert cause, Needs your reply'
+                Image, 0x117ebfe80, {{30.0, 126.0}, {38.0, 38.0}}, identifier: 'hand.raised.fill', label: 'Block'
+                StaticText, 0x117ec0000, {{80.0, 126.5}, {81.3, 18.0}}, label: 'Alert cause'
+                StaticText, 0x117ec0140, {{80.0, 145.5}, {116.7, 18.0}}, label: 'Needs your reply'
+Path to element:
+ →Application, 0x117e8fe80, pid: 36590, label: 'ListProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.crossingsprobe'
+  Output: {
+    Application, 0x117ec0280, pid: 36590, label: 'ListProbe'
+  }

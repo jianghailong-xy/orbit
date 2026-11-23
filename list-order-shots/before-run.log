@@ -1,0 +1,21 @@
+==> iPhone 6478AFFB-AE17-412A-A1E5-51BCFFD300B6
+Test Case '-[ListProbeUITests.ListShotTests testIPhoneListKeepsItsOrderThroughActivity]' started.
+Test Case '-[ListProbeUITests.ListShotTests testIPhoneListKeepsItsOrderThroughActivity]' passed (83.488 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 83.488 (83.492) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 83.488 (83.493) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 83.488 (83.500) seconds
+** TEST SUCCEEDED **
+total 2872
+drwxr-xr-x  12 runner  staff     384 Nov 23 02:44 .
+drwxr-xr-x   3 runner  staff      96 Nov 23 02:24 ..
+-rw-r--r--   1 runner  staff       7 Nov 23 02:44 .done-probe
+drwxr-xr-x  10 runner  staff     320 Nov 23 02:44 attachments
+-rw-r--r--   1 runner  staff  216260 Nov 23 02:42 list-1.png
+-rw-r--r--   1 runner  staff  212144 Nov 23 02:43 list-2.png
+-rw-r--r--@  1 runner  staff       0 Nov 23 02:43 ListShotTeststestIPhoneListKeepsItsOrderThroughActivity-notes.txt
+-rw-r--r--@  1 runner  staff    1906 Nov 23 02:43 requests.log
+-rw-r--r--   1 runner  staff  225216 Nov 23 02:43 stub.out
+-rw-r--r--@  1 runner  staff   18738 Nov 23 02:42 tree-list-1.txt
+-rw-r--r--@  1 runner  staff   18724 Nov 23 02:43 tree-list-2.txt
+-rw-r--r--   1 runner  staff  720949 Nov 23 02:44 xcodebuild-ios.log
+.lo-probe/run.sh: line 54:  4612 Terminated: 15          python3 -u stub.py 8765 "$OUT/requests.log" > "$OUT/stub.out" 2>&1
