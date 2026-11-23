@@ -859,6 +859,39 @@ export function useSessionOwnerRequestInserts(
   }, [sessionId, events, open.data, all.data, onChat]);
 }
 
+/** One of this session's requests still waiting on its card, for the pinned strip to point at. */
+export interface OwnerRequestPointer {
+  id: string;
+  /** The card's own title. */
+  title: string;
+  ageSeconds: number | null;
+}
+
+/**
+ * The pending requests whose full card this conversation draws (`useSessionOwnerRequestInserts`),
+ * oldest first: a snoozed one is drawn as a line and an ended one as its summary, so neither is a
+ * card to go to (docs/mocks/owner-request-strip-jump). Same reads, so the strip and the cards agree.
+ */
+export function useSessionOwnerRequestPointers(sessionId: string | null | undefined): OwnerRequestPointer[] {
+  const open = useQuery({ ...ownerRequestsQuery('open'), enabled: Boolean(sessionId) });
+  const snoozes = useSnoozes();
+  return useMemo(() => {
+    if (!sessionId) return [];
+    const now = Date.now();
+    return (open.data?.requests ?? [])
+      .filter((request) => sameResourceId(request.askedBySessionId, sessionId)
+        && request.state === 'PENDING'
+        && !((snoozes[request.id] ?? 0) > now)
+        && Number.isFinite(Date.parse(request.createdAt)))
+      .sort((x, y) => Date.parse(x.createdAt) - Date.parse(y.createdAt))
+      .map((request) => ({
+        id: request.id,
+        title: request.title,
+        ageSeconds: Math.max(0, Math.floor((now - Date.parse(request.createdAt)) / 1000)),
+      }));
+  }, [sessionId, open.data, snoozes]);
+}
+
 /** On a task a pending request holds up, wherever a task is listed or opened. */
 export function WaitingOnYouTaskBadge({ taskId }: { taskId: string }): JSX.Element | null {
   const held = useQuery({

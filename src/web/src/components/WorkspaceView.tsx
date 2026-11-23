@@ -414,7 +414,7 @@ import {
   type CriteriaDecisionReply,
 } from './CriteriaDecisionCard';
 import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows, coordinatorQuestions } from './CoordinatorQuestionCard';
-import { useSessionOwnerRequestInserts } from './OwnerRequestCard';
+import { useSessionOwnerRequestInserts, useSessionOwnerRequestPointers } from './OwnerRequestCard';
 import { useScheduleRunOfSession, useSessionScheduleCards, useSessionScheduleInserts } from './ScheduleCards';
 import {
   OWNER_REQUEST_CHAT_PLACEHOLDER,
@@ -2969,8 +2969,9 @@ export function WorkspaceView({
   >(null);
   // The bar while it is drawn: its height is how far its own coming and going moves the transcript.
   const stuckBarRef = useRef<HTMLButtonElement>(null);
-  // The exception cards scrolled wholly above the viewport, by item id and space-joined so an
-  // unchanged answer is no re-render: which way the pinned line's press goes to reach one.
+  // The exception cards scrolled wholly above the viewport, by item id, and the owner request cards,
+  // by their element id (`owner-request-<id>`), space-joined so an unchanged answer is no re-render:
+  // which way the pinned line's press goes to reach one.
   const [openItemsAbove, setOpenItemsAbove] = useState('');
   // Smart auto-scroll: only keep pinned to the bottom when the user is already there, so
   // reading history (or jumping to the sticky prompt) isn't yanked back by streaming updates.
@@ -4916,9 +4917,9 @@ export function WorkspaceView({
     if (top < LOAD_OLDER_AT) loadOlder();
     const topY = el.getBoundingClientRect().top;
     setOpenItemsAbove(
-      Array.from(el.querySelectorAll<HTMLElement>('[data-open-item]'))
+      Array.from(el.querySelectorAll<HTMLElement>('[data-open-item], .owner-request-card'))
         .filter((card) => card.getBoundingClientRect().bottom <= topY + 1)
-        .map((card) => card.getAttribute('data-open-item'))
+        .map((card) => card.getAttribute('data-open-item') ?? card.id)
         .join(' '),
     );
     // A turn the control plane queued is scanned too — it is where the answer under it starts, so the
@@ -5818,6 +5819,8 @@ export function WorkspaceView({
     transcriptEvents,
     startOwnerRequestChat,
   );
+  // The same requests still waiting on their cards, for the pinned strip to point at.
+  const ownerRequestPointers = useSessionOwnerRequestPointers(selectedTrashed ? null : selectedId);
 
   // A scheduled task's run: its schedule and run (crumb, strip, report), and the cards and change lines a session put
   // up, each where it happened (docs/mocks/scheduled-tasks/web/02-board.png).
@@ -11223,6 +11226,10 @@ export function WorkspaceView({
                 return Number.isFinite(at) ? Math.max(0, Math.floor((Date.now() - at) / 1000)) : null;
               })(),
             })) : []}
+            ownerRequests={ownerRequestPointers.map((request) => ({
+              ...request,
+              above: openItemsAbove.split(' ').includes(`owner-request-${request.id}`),
+            }))}
           />
         )}
 
