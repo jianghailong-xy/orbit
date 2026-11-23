@@ -17,6 +17,10 @@ enum class Destination { WORKSPACES, WORKSPACE, FOLDER, SEARCH, SESSION, DRAFT, 
     /** Scheduled tasks (docs/scheduled-tasks-design.md §9.2): account-wide, in the drawer only. `id` the schedule whose detail sheet
      * opens over the timeline, from a push or a card's Open. There is no Waiting on you page (docs/mocks/waiting-on-you-removal). */
     SCHEDULED,
+    /** A schedule's draft change conversation (§8.2, board 03-change ③): `id` the schedule. The page reads
+     * `GET /schedules/:id/change`; a conversation already open — or opened by the first words sent here — takes its
+     * place. */
+    SCHEDULE_CHANGE,
     /** A session someone shared with this account (docs/session-guests-design.md §4): `id` the session, drawn as the guest view. A
      *  Shared with me row opens it; a session link the owner's read answers 404 for draws the same view through `SESSION`. */
     GUEST_SESSION }

@@ -297,7 +297,12 @@ struct ScheduledMacDetail: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        if let scheduled = model.scheduled, let id = scheduled.inspectedID {
+        if let scheduled = model.scheduled, let draft = scheduled.changeDraft {
+            // The draft change conversation (board 03-change ③): the Mac draws it in this panel, as the web does.
+            ScheduleChangePage(scheduleID: draft.scheduleID)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .id(draft.scheduleID)
+        } else if let scheduled = model.scheduled, let id = scheduled.inspectedID {
             ScheduleDetailPanel(scheduleID: id)
                 .id(id)
         } else if let scheduled = model.scheduled, let panel = scheduled.draftPanel {

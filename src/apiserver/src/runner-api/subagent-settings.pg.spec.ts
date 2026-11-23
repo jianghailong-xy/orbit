@@ -260,7 +260,8 @@ test('SubAgents settings: defaults, the human doors, the runner refusals, Workfl
     assert.ok(untiered.reasons.includes(untieredWhy), untiered.reasons.join('\n'));
     assert.deepEqual(untiered.candidates.filter((c) => c.provider === slug && c.model !== null), [], 'not removed');
     assert.deepEqual((await row())?.models, [
-      { model: 'qwen-coder', levels: [], source: null, editable: true, outputPricePerMTok: null },
+      // Each row names the model it is across engines (62caf021ee); this id is in no seed, so it is its own, unnamed.
+      { model: 'qwen-coder', levels: [], source: null, editable: true, outputPricePerMTok: null, identity: { key: 'qwen-coder', name: null } },
     ], 'the Tier column says Not set, and offers to set it');
     assert.equal((await row())?.providerId, created.id);
 
@@ -285,7 +286,7 @@ test('SubAgents settings: defaults, the human doors, the runner refusals, Workfl
     assert.equal(tiered.level, 'M');
     assert.equal(tiered.reasons.some((r) => r.startsWith('Nothing in tier')), false, 'in the asked tier');
     assert.deepEqual((await row())?.models, [
-      { model: 'qwen-coder', levels: ['M'], source: 'owner', editable: true, outputPricePerMTok: null },
+      { model: 'qwen-coder', levels: ['M'], source: 'owner', editable: true, outputPricePerMTok: null, identity: { key: 'qwen-coder', name: null } },
     ]);
 
     // Editing the model list keeps the owner's tier; clearing it takes the model out again.
@@ -304,12 +305,12 @@ test('SubAgents settings: defaults, the human doors, the runner refusals, Workfl
     const view = tierRows(await providersDoor.subagentTiers(user));
     const claude = view.providers.find((entry) => entry.slug === 'claude');
     assert.deepEqual(claude?.models, [
-      { model: 'claude-sonnet-5-5', levels: ['S', 'M'], source: 'catalogue', editable: true, outputPricePerMTok: null },
-      { model: 'claude-opus-5-5', levels: ['L', 'XL'], source: 'catalogue', editable: true, outputPricePerMTok: null },
+      { model: 'claude-sonnet-5-5', levels: ['S', 'M'], source: 'catalogue', editable: true, outputPricePerMTok: null, identity: { key: 'claude-sonnet-5-5', name: 'Claude Sonnet 5.5' } },
+      { model: 'claude-opus-5-5', levels: ['L', 'XL'], source: 'catalogue', editable: true, outputPricePerMTok: null, identity: { key: 'claude-opus-5-5', name: 'Claude Opus 5.5' } },
     ], "a built-in engine's tiers are the owner's to override");
     assert.equal(claude?.billing, 'subscription');
     assert.deepEqual(view.providers.find((entry) => entry.slug === 'codex')?.models, [
-      { model: 'gpt-5.6-sol', levels: ['S', 'M', 'L', 'XL'], source: 'catalogue', editable: true, outputPricePerMTok: null },
+      { model: 'gpt-5.6-sol', levels: ['S', 'M', 'L', 'XL'], source: 'catalogue', editable: true, outputPricePerMTok: null, identity: { key: 'gpt-5-6-sol', name: 'GPT-5.6 Sol' } },
     ]);
     assert.deepEqual(view.providers.find((entry) => entry.slug === 'cursor')?.models, [],
       'an engine its runner reports no catalogue for lists no models');
@@ -369,9 +370,9 @@ test('SubAgents settings: defaults, the human doors, the runner refusals, Workfl
 
     // Before: the family tiers Opus; muse-spark-1.3 and Auto are of no family, listed Not set, and the owner's to tier.
     assert.deepEqual(await cursor(), [
-      { model: 'claude-opus-5-6', levels: ['L', 'XL'], source: 'catalogue', editable: true, outputPricePerMTok: null },
-      { model: 'default', levels: [], source: null, editable: true, outputPricePerMTok: null },
-      { model: 'muse-spark-1.3', levels: [], source: null, editable: true, outputPricePerMTok: null },
+      { model: 'claude-opus-5-6', levels: ['L', 'XL'], source: 'catalogue', editable: true, outputPricePerMTok: null, identity: { key: 'claude-opus-5-6', name: null } },
+      { model: 'default', levels: [], source: null, editable: true, outputPricePerMTok: null, identity: { key: 'default', name: null } },
+      { model: 'muse-spark-1.3', levels: [], source: null, editable: true, outputPricePerMTok: null, identity: { key: 'muse-spark-1-3', name: 'Muse Spark 1.3' } },
     ]);
     const before = await plan('S');
     t.diagnostic(`before: ${JSON.stringify(before)}`);
@@ -384,14 +385,14 @@ test('SubAgents settings: defaults, the human doors, the runner refusals, Workfl
     assert.deepEqual(stored.builtinModelTiers, { cursor: { 'muse-spark-1.3': 'S' } });
     assert.equal(stored.theme, 'dark', 'the rest of the preferences is left alone');
     assert.deepEqual((await cursor())?.find((row) => row.model === 'muse-spark-1.3'),
-      { model: 'muse-spark-1.3', levels: ['S'], source: 'owner', editable: true, outputPricePerMTok: null });
+      { model: 'muse-spark-1.3', levels: ['S'], source: 'owner', editable: true, outputPricePerMTok: null, identity: { key: 'muse-spark-1-3', name: 'Muse Spark 1.3' } });
     const set = await plan('S');
     assert.deepEqual([set.provider, set.model, set.effort, set.pickLevel], ['cursor', 'muse-spark-1.3', 'low', 'S']);
 
     // The owner's tier overrides the family's: Opus at S leaves L and XL with nothing but the tier below.
     await tier('claude-opus-5-6', 'S');
     assert.deepEqual((await cursor())?.find((row) => row.model === 'claude-opus-5-6'),
-      { model: 'claude-opus-5-6', levels: ['S'], source: 'owner', editable: true, outputPricePerMTok: null });
+      { model: 'claude-opus-5-6', levels: ['S'], source: 'owner', editable: true, outputPricePerMTok: null, identity: { key: 'claude-opus-5-6', name: null } });
     const opus = await plan('XL');
     assert.equal(opus.pickLevel, 'S', 'the family rows are gone; S is the nearest');
     assert.deepEqual([opus, ...opus.fallbacks].filter((pick) => pick.model === 'claude-opus-5-6')

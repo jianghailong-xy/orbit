@@ -321,10 +321,10 @@ describe('the inspector (board 1/2 ②)', () => {
     expect(inspector().querySelector('[role="alert"]')!.textContent).toBe('This week already had 7 runs, all it is allowed.');
   });
 
-  it('Change… opens a new conversation in the schedule’s workspace, not a form', async () => {
+  it('Change… opens the schedule’s change conversation, not a form (§8.2)', async () => {
     await openCodex();
     await click(button(block('doors'), 'Change…'));
-    expect(host.querySelector('[data-where]')!.textContent).toBe('/workspaces/ws-apiserver/new');
+    expect(host.querySelector('[data-where]')!.textContent).toMatch(/^\/scheduled\/[^/]+\/change$/);
     expect(document.querySelector('form')).toBeNull();
   });
 

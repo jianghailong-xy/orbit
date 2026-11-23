@@ -19,13 +19,16 @@ public struct ProviderModelTier: Codable, Equatable, Sendable, Identifiable {
     /// Set on a built-in engine's older family model: the newest model of its family, which routing uses instead.
     public let supersededBy: String?
     /// How well this model completed work, for display only (docs/subagent-design.md §7.1). Absent on an older
-    /// server: read as no runs.
+    /// server: read as no runs. Pooled over every row of the same `identity`, on any provider or engine.
     public let quality: ModelQuality
+    /// Which model this is on any provider or engine: rows with one key are one model. Absent on an older server.
+    public let identity: ModelIdentity?
 
     public var id: String { model }
 
     public init(model: String, levels: [String], source: String? = nil, editable: Bool = false,
-                outputPricePerMTok: Double? = nil, supersededBy: String? = nil, quality: ModelQuality = .none) {
+                outputPricePerMTok: Double? = nil, supersededBy: String? = nil, quality: ModelQuality = .none,
+                identity: ModelIdentity? = nil) {
         self.model = model
         self.levels = levels
         self.source = source
@@ -33,10 +36,11 @@ public struct ProviderModelTier: Codable, Equatable, Sendable, Identifiable {
         self.outputPricePerMTok = outputPricePerMTok
         self.supersededBy = supersededBy
         self.quality = quality
+        self.identity = identity
     }
 
     private enum CodingKeys: String, CodingKey {
-        case model, levels, source, editable, outputPricePerMTok, supersededBy, quality
+        case model, levels, source, editable, outputPricePerMTok, supersededBy, quality, identity
     }
 
     public init(from decoder: Decoder) throws {
@@ -48,7 +52,37 @@ public struct ProviderModelTier: Codable, Equatable, Sendable, Identifiable {
         outputPricePerMTok = try c.decodeIfPresent(Double.self, forKey: .outputPricePerMTok)
         supersededBy = try c.decodeIfPresent(String.self, forKey: .supersededBy)
         quality = (try? c.decodeIfPresent(ModelQuality.self, forKey: .quality)) ?? .none
+        identity = try? c.decodeIfPresent(ModelIdentity.self, forKey: .identity)
     }
+}
+
+/// Which model a row is on any provider or engine (shared ProviderModelTier.identity): `key` names the model, `name`
+/// is its vendor name, nil when none is known.
+public struct ModelIdentity: Codable, Equatable, Sendable {
+    public let key: String
+    public let name: String?
+
+    public init(key: String, name: String? = nil) {
+        self.key = key
+        self.name = name
+    }
+}
+
+/// One row of the Model tiers table: a provider's model, placed in its model's block. A block is one model's rows on
+/// every provider listing it; the first row names the model and carries its Quality, the rest only their provider.
+public struct ModelTierTableRow: Identifiable, Equatable, Sendable {
+    public let provider: ProviderTierRow
+    public let model: ProviderModelTier
+    /// The model's vendor name when known, else its id.
+    public let name: String
+    /// The row above is the same model.
+    public let continues: Bool
+    /// The row below is the same model.
+    public let continued: Bool
+    /// The other providers listing the same model, whose runs its Quality counts too.
+    public let pooledWith: [String]
+
+    public var id: String { provider.slug + "\n" + model.model }
 }
 
 /// Who rated a model's SubAgent runs: a parent session's own model, and how many ratings it gave (shared ModelQualityRater).
@@ -274,6 +308,41 @@ public enum SubagentSettings {
     /// The providers the Model tiers table lists: those with at least one model.
     public static func tableProviders(_ providers: [ProviderTierRow]) -> [ProviderTierRow] {
         providers.filter { !$0.models.isEmpty }
+    }
+
+    /// The table's rows, one block per model, as web's Model routing draws them: each model's rows right after its first,
+    /// in the order the first came. A row with no identity (an older server) is a block of its own.
+    public static func tableRows(_ providers: [ProviderTierRow]) -> [ModelTierTableRow] {
+        let listed = providers.flatMap { provider in provider.models.map { (provider, $0) } }
+        let key = { (provider: ProviderTierRow, model: ProviderModelTier) in model.identity?.key ?? provider.slug + "\n" + model.model }
+        var order: [String] = []
+        var blocks: [String: [(ProviderTierRow, ProviderModelTier)]] = [:]
+        for (provider, model) in listed {
+            let k = key(provider, model)
+            if blocks[k] == nil { order.append(k) }
+            blocks[k, default: []].append((provider, model))
+        }
+        return order.flatMap { k -> [ModelTierTableRow] in
+            let block = blocks[k]!
+            var labels: [String] = []
+            for (provider, _) in block where !labels.contains(provider.label) { labels.append(provider.label) }
+            return block.enumerated().map { index, entry in
+                ModelTierTableRow(provider: entry.0, model: entry.1, name: entry.1.identity?.name ?? entry.1.model,
+                                  continues: index > 0, continued: index < block.count - 1,
+                                  pooledWith: labels.filter { $0 != entry.0.label })
+            }
+        }
+    }
+
+    /// Under a model's Quality: how many providers its figures count, said only where there is a figure to explain.
+    public static func pooledText(_ lines: QualityLines, pooledWith: [String]) -> String? {
+        if pooledWith.isEmpty || lines.empty || (lines.subagents.muted && lines.tasks.muted) { return nil }
+        return "Pooled across \(pooledWith.count + 1) providers"
+    }
+
+    /// The pooled line's tooltip: the other providers by name.
+    public static func pooledTip(_ pooledWith: [String]) -> String {
+        "Runs on " + pooledWith.joined(separator: ", ") + " are counted too"
     }
 
     /// A model's Tier cell: "Not set", "S–XL by effort", or the levels joined ("L · XL").

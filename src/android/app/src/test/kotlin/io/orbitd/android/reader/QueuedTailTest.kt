@@ -257,4 +257,21 @@ class QueuedTailTest {
         assertEquals("waiting for CI run 4242", turn.wake?.let { io.orbitd.android.core.cards.BackgroundWakeCard.lineName(it) })
         assertTrue(turn.cancelable)
     }
+
+    /** Cancel beside `Queued · runner full` (web `cancellableHeldTurn`): only on the accepted head — the last, with a turn id and no
+     * echo yet — and never on the session's opening prompt. Its words are the reader's own: a translation's original. */
+    @Test fun onlyTheAcceptedHeadWithAnIdNotTheOpeningIsCancellableUnderTheHeldTag() {
+        fun accepted(turnId: String?, extra: String = "") = """{${turnId?.let { "\"turnId\":\"$it\"," } ?: ""}"kind":"message",
+            "placement":"accepted","content":"Why is task 6 still queued?","attachments":[]$extra}"""
+        val listed = rows("[${accepted("t2")}]")
+        assertEquals(HeldCancel("t2", "Why is task 6 still queued?"), cancellableHeldTurn(listed, emptyList()))
+        assertNull("the opening prompt, which the server keeps", cancellableHeldTurn(rows("""[${accepted("t2", ""","opening":true""")}]"""), emptyList()))
+        assertNull("a placeholder with no id yet", cancellableHeldTurn(rows("[${accepted(null)}]"), emptyList()))
+        val echo = RunEvent("user", 4, buildJsonObject { put("text", "Why is task 6 still queued?") }, "t2")
+        assertNull("a message a runner has echoed", cancellableHeldTurn(listed, listOf(echo)))
+        assertNull("a message only queued is the tail's, with its own Cancel",
+            cancellableHeldTurn(rows("""[{"turnId":"t3","kind":"message","placement":"queued","content":"x","attachments":[]}]"""), emptyList()))
+        val translated = rows("[${accepted("t2", ""","translation":{"state":"DONE","from":"zh-Hans","original":"任务 6 为什么还在排队？"}""")}]")
+        assertEquals("任务 6 为什么还在排队？", cancellableHeldTurn(translated, emptyList())?.words)
+    }
 }

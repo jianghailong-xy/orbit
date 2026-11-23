@@ -449,6 +449,24 @@ class ComposerDeviceTest {
         capture("after-back")
     }
 
+    /** A full runner holds the reader's next message, accepted but taken by no runner (web e90dc6fb93): its foot row reads
+     * `Queued · runner full · Cancel`, and Cancel takes it back to the composer. */
+    @Test fun aMessageAFullRunnerHoldsCanBeCancelled() = journey("runner-full-cancel") {
+        val held = "01a0cca7-8609-70ed-a0e2-d4b55b832b91"
+        login("""{"status":"PENDING","extraDetail":{"runState":"QUEUED","queuedReason":"runner_at_capacity","queuedActive":4,"queuedLimit":4},
+            "rows":[{"seq":1,"type":"user","turnId":"t-1","payload":{"text":"Start task 6"}},
+            {"seq":2,"type":"assistant","turnId":"t-1","payload":{"text":"Task 6 is filed and waiting for a runner."}},
+            {"seq":3,"type":"turn_end","turnId":"t-1","payload":{"subtype":"success"}}],
+            "queuedTurns":[{"id":"$held","turnId":"$held","kind":"message","placement":"accepted","content":"Why is task 6 still queued?","attachments":[]}]}""")
+        compose.waitUntil(20000) { compose.onAllNodes(hasTestTag("runner-updating-foot:cancel"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        capture("runner-full-cancel")
+        compose.onNodeWithTag("runner-updating-foot:cancel", useUnmergedTree = true).performClick()
+        compose.waitUntil(10000) { model.state.value.draft.text == "Why is task 6 still queued?" }
+        compose.waitUntil(10000) { compose.onAllNodes(hasTestTag("accepted:$held")).fetchSemanticsNodes().isEmpty() }
+        assertTrue(stats()["controls"]!!.jsonArray.any { it.jsonObject["turnId"]?.jsonPrimitive?.content == held })
+        capture("runner-full-cancelled")
+    }
+
     @Test fun explicitRejectionRestoresMessageAndAttachmentThenResumes() = journey("rejected-send") {
         login()
         compose.runOnIdle { model.importAttachment(StagedAttachment("reject-file","retry.txt","text/plain"),
