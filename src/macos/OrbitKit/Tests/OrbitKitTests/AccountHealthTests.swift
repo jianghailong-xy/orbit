@@ -44,6 +44,23 @@ final class AccountHealthTests: XCTestCase {
         XCTAssertNil(AccountHealth.block([block(scope: "gpt-5")], runnerID: "r1", engine: "cursor", account: "default"))
     }
 
+    func testAKeyAndAPoolLoginMatchTheirWholeAccountOnly() {
+        let key = AccountHealthBlock(id: "k", subjectKey: "provider:p1", providerId: "p1", kind: "ACCOUNT_ACTION_REQUIRED",
+                                     since: "2026-11-22T17:19:00Z")
+        let keyModel = AccountHealthBlock(id: "km", providerId: "p1", scopeModel: "claude-opus", kind: "ACCESS_DENIED",
+                                          since: "2026-11-22T17:19:00Z")
+        let login = AccountHealthBlock(id: "l", subjectKey: "pool-login:pool1:fp1", account: "fp1", poolId: "pool1",
+                                       kind: "CREDENTIAL_REFUSED", since: "2026-11-22T17:19:00Z")
+        let blocks = [keyModel, key, login]
+        XCTAssertEqual(AccountHealth.block(blocks, providerID: "p1")?.id, "k")
+        XCTAssertNil(AccountHealth.block([keyModel], providerID: "p1"))
+        XCTAssertNil(AccountHealth.block(blocks, providerID: "p2"))
+        XCTAssertEqual(AccountHealth.block(blocks, poolID: "pool1", account: "fp1")?.id, "l")
+        XCTAssertEqual(AccountHealth.block(blocks, poolID: "pool1", account: "login:fp1")?.id, "l", "a member's id spelling")
+        XCTAssertNil(AccountHealth.block(blocks, poolID: "pool1", account: "fp2"))
+        XCTAssertNil(AccountHealth.block(blocks, runnerID: "r1", engine: "cursor", account: "fp1"))
+    }
+
     func testDecodesTheRouteAnswer() throws {
         let json = """
         {"blocks":[{"id":"h1","subjectKey":"k","runnerId":"r1","engine":"cursor","account":"default","providerId":null,

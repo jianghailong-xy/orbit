@@ -2300,6 +2300,13 @@ final class AppModel {
         if let me = try? await api?.me() { assignIfChanged(\.user, me) }
     }
 
+    /// Where a held task's account row is, and its Check again: Machines & models (contract §3 Open account).
+    func openAccounts() {
+        settingsPresented = false
+        selectedSection = .runners
+        selectedRunnerID = nil
+    }
+
     /// Settings → GitHub: the sheet's page on iOS, the Settings section on the Mac, where GitHub is a group of its form.
     func showGithubSettings() {
         #if os(iOS)

@@ -2483,6 +2483,11 @@ struct ProjectDetailView: View {
                         .font(.orbitSubtext)
                         .lineLimit(2)
                         .foregroundStyle(group.settled ? .secondary : .primary)
+                    if TaskAccountHoldCopy.showsOnRow(task.accountHold, signInHold: task.hold,
+                                                      running: task.workState == "RUNNING", queued: false),
+                       let hold = task.accountHold {
+                        TaskAccountHoldLine(hold: hold)
+                    }
                     if !tags.isEmpty || task.unmetCount > 0 || task.blocksCount > 0 {
                         HStack(spacing: 6) {
                             ForEach(Array(tags.enumerated()), id: \.offset) { _, tag in
