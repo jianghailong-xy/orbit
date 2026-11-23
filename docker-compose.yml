@@ -665,6 +665,8 @@ services:
   # /proc, /sys and / mounted read-only. It runs in this project's network rather than the host's, so its port is
   # reached by Prometheus alone; its network counters are therefore its own container's, not the host's. The host's /
   # shows it the Docker socket's path too, which nobody, with every capability dropped, cannot open.
+  # It also serves the textfile pgbackup writes on every poll (scripts/pg-backup.sh), from that one directory of the
+  # archive, read-only: the backup metrics.
   node-exporter:
     profiles: [monitoring]
     image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}${ORBIT_NODE_EXPORTER_IMAGE:-prom/node-exporter:v1.13.1@sha256:7296504d4ada44b7d7ab4431e27e9f9900d8488f8d55842f4b12ae2704e16dfe}
@@ -681,10 +683,12 @@ services:
       - --path.sysfs=/host/sys
       - --path.rootfs=/host/root
       - --web.listen-address=:9100
+      - --collector.textfile.directory=/textfile
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/host/root:ro,rslave
+      - ./data/pg-archive/metrics:/textfile:ro
     expose:
       - "9100"
 

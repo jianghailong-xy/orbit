@@ -1164,7 +1164,8 @@ test('(r) a failed off-host copy is logged and costs neither the other copy nor 
 // the host's /proc, /sys and / read-only, as nobody with no capability. pg-monitor-role: pgbackup's image and socket, run
 // once, no restart policy. postgres-exporter: orbit_monitor's password from the volume pg-monitor-role writes. None
 // publishes a port or has the host's network, and none is given the Docker socket. Changing any of it is a new decision,
-// made here.
+// made here. Task 350mIIyOWkjqn2a9K7iMR (same project) gave node-exporter its textfile collector: pgbackup's backup
+// metrics, from ./data/pg-archive/metrics alone, read-only, never the rest of the archive.
 test('(t) the monitoring services are exactly the ones the monitoring project added on 2026-11-20, off unless its profile is on', () => {
   assert.deepEqual(directives(currentServices.get(PROMETHEUS)), [
     '  prometheus:',
@@ -1209,10 +1210,12 @@ test('(t) the monitoring services are exactly the ones the monitoring project ad
     '      - --path.sysfs=/host/sys',
     '      - --path.rootfs=/host/root',
     '      - --web.listen-address=:9100',
+    '      - --collector.textfile.directory=/textfile',
     '    volumes:',
     '      - /proc:/host/proc:ro',
     '      - /sys:/host/sys:ro',
     '      - /:/host/root:ro,rslave',
+    '      - ./data/pg-archive/metrics:/textfile:ro',
     '    expose:',
     '      - \"9100\"',
   ]);
