@@ -88,8 +88,11 @@ account (billing, settings, other products) within their reach. The owner chose 
 
 ## 4. Taking the code (Claude Code, Antigravity)
 
-- The runner knows the authorize URL it scraped: its `redirect_uri` and `state`. It reads Chrome's pages
-  (`/json/list` on its DevTools, every half second) until the attempt ends (`login_runner_browser.go`).
+- The runner knows the authorize URL it scraped: its `redirect_uri` and `state`. It follows the sign-in tab's
+  navigations over DevTools (`Page.frameNavigated`, each with the address it was loaded at) and, as a fallback, reads
+  every page's current address (`/json/list`, every half second) until the attempt ends (`login_runner_browser.go`).
+  The navigations are what matter for Antigravity: its callback page strips the code and state from its address as it
+  loads, so its address bar, and `/json/list`, show only `antigravity.google/oauth-callback` (seen live, 2026-11-23).
 - When a page is at the `redirect_uri` (scheme, host and path equal) with a `code` and a `state`
   equal to the one in the authorize URL (which only this attempt's page can carry), the runner builds what the page would show (Claude Code: `code#state`) and
   hands it to the CLI exactly as `submitCode` hands a pasted one. Any other address is ignored.
