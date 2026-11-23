@@ -4,6 +4,7 @@ import { RUN_QUESTION_PREFIX } from './run-question';
 import { derivedUuid, isDerivedUuid } from '../projects/project-dispatch-identity';
 import { OPEN_ITEM_TURN_PREFIX, OWNER_ANSWER_TURN_PREFIX } from '../projects/project-open-item';
 import { PROJECT_STARTED_TURN_PREFIX } from '../projects/project-started';
+import { UPDATE_NOW_CONTINUATION_TURN_PREFIX } from '../managed-runners/managed-runner-update-cut';
 import { BACKGROUND_WAKE_TURN_PREFIX } from '../runner-api/background-job-wake';
 import { TASK_ACCEPTANCE_CLIENT_TURN_PREFIX } from '../tasks/executable-acceptance-round';
 import { TASK_RUN_TURN_PREFIX } from '../tasks/task-run-identity';
@@ -59,6 +60,7 @@ export function isOrbitAuthoredTurn(clientTurnId: string | null | undefined): bo
     EVIDENCE_SEND_BACK_TURN_KEY_PREFIX,
     AUTO_RETRY_ORBIT_TURN_KEY_PREFIX,
     COORDINATOR_HANDOFF_TURN_PREFIX,
+    UPDATE_NOW_CONTINUATION_TURN_PREFIX,
   ];
   return prefixes.some((prefix) => clientTurnId.startsWith(prefix)) || isDerivedUuid(clientTurnId);
 }

@@ -24,7 +24,9 @@
  *       creates nothing while the container is in its stop grace, however many passes, and demand meanwhile changes
  *       nothing; Docker's report of the exit is the stop proof, and only then is the next generation made from the
  *       current image, on the same volume and runner, with no attempt spent; a crash of that next generation before it
- *       is READY is counted as any crash (4b);
+ *       is READY is counted as any crash (4b); a manager pass that bumps the revision while the press is decided does
+ *       not refuse it, a concurrent press is answered with the status and records nothing twice, and a mapping that left
+ *       READY meanwhile is still refused (4c);
  *   (5) idle, then demand before the drain is accepted: the owner's Update Now is not called off — the instance
  *       accepts on its own idle report and wakes on the current image — while an automatic roll still is;
  *   (6) on Kubernetes, as on Docker: a busy runner's Update Now with `interruptTurns` records no `waitsForIdle`; the
@@ -434,6 +436,9 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
     // The next pass asks the backend to stop the container, by its UID, and stays READY: asking proves nothing.
     assert.equal(await w.manager.reconcile(mapping.id), 'READY');
     assert.deepEqual(w.channel.stopRequests, [{ name, uid: mapping.podUid }], 'stopInstance, for the recorded container');
+    const requested = await w.mappingOf(ownerId);
+    assert.ok(requested.stopRequestedAt && requested.stopRequestedAt >= asked.updateRequestedAt!, 'the stop request is recorded');
+    assert.equal(requested.stopAcknowledgedAt, null, 'and not acknowledged while the container runs');
 
     // Demand while it stops — a message queued for the runner, and the demand hook's write — changes nothing, and no
     // pass creates anything while the container is in its grace, still running.
@@ -451,6 +456,7 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
       { state: 'READY', generation: mapping.generation, podUid: mapping.podUid, attempt: 0, interrupts: true, completed: null },
       'demand did not call it off, and nothing advanced',
     );
+    assert.deepEqual([stopping.stopRequestedAt, stopping.stopAcknowledgedAt], [requested.stopRequestedAt, null], 'asked again, the first request stands');
     assert.ok(stopping.demandRevision > mapping.demandRevision, 'the demand was recorded');
     assert.equal(w.channel.count('createContainer'), 1, 'no container is created before Docker reports the old one stopped');
     assert.equal(w.channel.containers.get(name)?.uid, mapping.podUid, 'the one container is still the old one');
@@ -490,6 +496,8 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
       { state: 'READY', desired: 'RUNNING', rollTo: null, attempt: 0 },
     );
     assert.ok(awake.updateCompletedAt && awake.updateCompletedAt >= awake.updateRequestedAt!, 'the next generation READY ends the update');
+    assert.equal(awake.stopRequestedAt?.getTime(), requested.stopRequestedAt!.getTime(), 'the next generation keeps the stop request');
+    assert.ok(awake.stopAcknowledgedAt && awake.stopAcknowledgedAt >= awake.stopRequestedAt!, 'and Docker\'s report of the exit as its acknowledgement');
     // The sessions are the runner's to stop and resume: the server changed none of them.
     const sessions = await db.session.findMany({ where: { id: { in: [first.id, second.id, queued.id] } }, select: { id: true, status: true } });
     assert.deepEqual(
@@ -533,6 +541,59 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
     const awake = await w.mappingOf(ownerId);
     assert.deepEqual({ generation: awake.generation, pvcUid: awake.pvcUid }, { generation: mapping.generation + 2, pvcUid: mapping.pvcUid });
     assert.ok(awake.updateCompletedAt && awake.updateCompletedAt >= awake.updateRequestedAt!);
+  });
+
+  await t.test('(4c) busy, with interruptTurns: a manager pass that bumps the revision while the press is decided does not refuse it (production, 2026-11-23)', async () => {
+    const w = world();
+    const { ownerId, mapping } = await w.outdatedRunner('revision-race', { activeTurns: 1 });
+    const turn = await session(mapping, 'RUNNING', 'A hung turn');
+    w.advance(1_000);
+    await w.heartbeat(mapping.runnerId, { activeTurns: 1 });
+    // What a manager pass writes between the press's read and its write: the revision alone, as every commit bumps it
+    // (the production runner was at revision 1172).
+    const service = w.service as unknown as { busyWith: (...args: unknown[]) => Promise<unknown> };
+    const busyWith = service.busyWith.bind(w.service);
+    let passes = 0;
+    service.busyWith = async (...args: unknown[]) => {
+      passes += 1;
+      await db.managedRunner.update({ where: { id: mapping.id }, data: { revision: { increment: 1 } } });
+      return busyWith(...args);
+    };
+    const read = await w.mappingOf(ownerId);
+    const answered = await w.service.updateNow(ownerId, true);
+    assert.equal(passes, 1, 'the manager wrote between the read and the write');
+    assert.equal(answered.update?.phase, 'updating', 'accepted, not refused as a revision conflict');
+    const asked = await w.mappingOf(ownerId);
+    assert.deepEqual(
+      { by: asked.updateRequestedBy, interrupts: asked.updateInterruptTurns, revision: asked.revision },
+      { by: ownerId, interrupts: true, revision: read.revision + 2 },
+      'recorded over the manager\'s write, and the revision bumped so a pass that read before it is Superseded',
+    );
+    const activities = await db.activity.findMany({ where: { actorId: ownerId, type: MANAGED_RUNNER_UPDATE_NOW_ACTIVITY } });
+    assert.equal(activities.length, 1);
+    assert.deepEqual((activities[0].payload as { sessionIds: string[] }).sessionIds, [turn.id]);
+
+    // A second press that read before the first was recorded loses to it: answered with the status, nothing written twice.
+    await db.managedRunner.update({ where: { id: mapping.id }, data: { updateRequestedAt: null, updateRequestedBy: null, updateInterruptTurns: false } });
+    await db.activity.deleteMany({ where: { actorId: ownerId, type: MANAGED_RUNNER_UPDATE_NOW_ACTIVITY } });
+    service.busyWith = async (...args: unknown[]) => {
+      // The other press lands first.
+      await db.managedRunner.update({ where: { id: mapping.id }, data: { updateRequestedAt: w.now(), updateRequestedBy: ownerId, updateInterruptTurns: true, revision: { increment: 1 } } });
+      return busyWith(...args);
+    };
+    const second = await w.service.updateNow(ownerId, true);
+    assert.equal(second.update?.phase, 'updating', 'answered as it stands');
+    assert.equal(await db.activity.count({ where: { actorId: ownerId, type: MANAGED_RUNNER_UPDATE_NOW_ACTIVITY } }), 0, 'the losing press records nothing');
+
+    // A mapping that left READY meanwhile still refuses: the condition is the decision's, not the revision's.
+    await db.managedRunner.update({ where: { id: mapping.id }, data: { updateRequestedAt: null, updateRequestedBy: null, updateInterruptTurns: false } });
+    service.busyWith = async (...args: unknown[]) => {
+      await db.managedRunner.update({ where: { id: mapping.id }, data: { managementState: 'DRAINING', revision: { increment: 1 } } });
+      return busyWith(...args);
+    };
+    const moved = await refusal(w.service.updateNow(ownerId, true));
+    assert.equal(moved.status, 409);
+    assert.equal((await w.mappingOf(ownerId)).updateRequestedAt, null, 'nothing written');
   });
 
   await t.test('(5) idle, then demand before the drain is accepted: the owner\'s Update Now goes on, an automatic roll is called off', async () => {
@@ -675,6 +736,9 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
       'stopInstance: the recorded Pod deleted with its grace, never a force delete',
     );
     assert.deepEqual({ uid: pod()!.metadata.uid, deleting: !!pod()!.metadata.deletionTimestamp }, { uid: podUid, deleting: true });
+    const requested = await k.mappingOf(ownerId);
+    assert.ok(requested.stopRequestedAt && requested.stopRequestedAt >= requested.updateRequestedAt!, 'the stop request is recorded');
+    assert.equal(requested.stopAcknowledgedAt, null, 'and not acknowledged while the Pod runs');
 
     // Demand while the runner drains in its grace — a message queued for it, and the demand hook's write — changes
     // nothing, and no pass makes a Pod while the old one runs.
@@ -693,6 +757,7 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
       { state: 'READY', generation: mapping.generation, podUid, attempt: 0, interrupts: true, completed: null },
       'demand did not call it off, and nothing advanced',
     );
+    assert.deepEqual([stopping.stopRequestedAt, stopping.stopAcknowledgedAt], [requested.stopRequestedAt, null], 'asked again, the first request stands');
     assert.ok(stopping.demandRevision > mapping.demandRevision, 'the demand was recorded');
     assert.equal(k.cluster.count('create', 'pods'), podsMade, 'no Pod is made before the kubelet reports the old one stopped');
     assert.equal(pod()!.metadata.uid, podUid, 'the one Pod is still the old one');
@@ -730,6 +795,8 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
     );
     assert.equal(k.cluster.count('create', 'persistentvolumeclaims'), 1, 'the claim was never made again');
     assert.ok(awake.updateCompletedAt && awake.updateCompletedAt >= awake.updateRequestedAt!, 'the next generation READY ends the update');
+    assert.equal(awake.stopRequestedAt?.getTime(), requested.stopRequestedAt!.getTime(), 'the next generation keeps the stop request');
+    assert.ok(awake.stopAcknowledgedAt && awake.stopAcknowledgedAt >= awake.stopRequestedAt!, 'and the kubelet\'s report of the exit as its acknowledgement');
     // The sessions are the runner's to stop and resume: the server changed none of them.
     const sessions = await db.session.findMany({ where: { id: { in: [turn.id, queued.id] } }, select: { id: true, status: true } });
     assert.deepEqual(Object.fromEntries(sessions.map((s) => [s.id, s.status])), { [turn.id]: 'RUNNING', [queued.id]: 'PENDING' });

@@ -89,6 +89,16 @@ final class ManagedRunnerUpdateTests: XCTestCase {
         XCTAssertEqual(interrupted?.body, "2 interrupted turns continue once it is back. Usually under a minute.")
     }
 
+    func testRestartingComesFromTheServerAloneNeverFromAPressRemembered() throws {
+        // An Update Now noted with one interrupted turn, which the server did not take (or which ended unwatched): the
+        // status says available, so the card is Available with its button, not Restarting (production, 2026-11-23).
+        let available = try status(update: update("available"))
+        let card = try XCTUnwrap(ManagedRunnerUpdateLogic.card(status: available, pendingTurns: 1, now: now, timeZone: utc))
+        XCTAssertEqual(card.phase, "available")
+        XCTAssertTrue(card.canUpdateNow)
+        XCTAssertFalse(card.body.contains("interrupted"))
+    }
+
     func testUpdatedFollowsARestartForADay() throws {
         let updating = try status(update: update("updating"))
         let current = try status()
