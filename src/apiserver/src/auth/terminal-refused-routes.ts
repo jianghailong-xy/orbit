@@ -41,6 +41,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'DELETE /providers/shared-pools/:id/people/:userId',
   'DELETE /runners/:id',
   'DELETE /runners/:id/accounts/:engine/:account',
+  'DELETE /runners/:id/accounts/:engine/:account/set-default',
   'DELETE /runners/:id/codex-accounts/:account',
   'DELETE /runners/:id/install',
   'DELETE /runners/:id/login',
