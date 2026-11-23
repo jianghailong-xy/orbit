@@ -118,7 +118,8 @@ import {
   RUNNER_DEFAULT_SIGNING_OUT,
   runnerDefaultSignOutDetail,
   runnerDefaultSignOutFailed,
-  runnerDefaultSignOutRunning,
+  runnerDefaultSignOutRunningMany,
+  runnerDefaultSignOutRunningOne,
   runnerDefaultSignOutTerminal,
   runnerDefaultSignOutTitle,
 } from '../lib/runnerAccountCopy';
@@ -569,7 +570,7 @@ function useDefaultSignOut(runner: Runner, engine: RowEngine, name: string, sign
       />
       <Popconfirm
         {...common}
-        title={runnerDefaultSignOutRunning(running, name)}
+        title={running === 1 ? runnerDefaultSignOutRunningOne(name) : runnerDefaultSignOutRunningMany(running, name)}
         description={RUNNER_DEFAULT_SIGN_OUT_RUNNING_DETAIL}
         open={running > 0}
         onOpenChange={(open) => { if (!open) setRunning(0); }}

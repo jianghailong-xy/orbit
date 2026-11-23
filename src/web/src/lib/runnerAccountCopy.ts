@@ -156,8 +156,12 @@ export const RUNNER_DEFAULT_SIGN_OUT = 'Sign out…';
 export const RUNNER_DEFAULT_SIGNING_OUT = 'Signing out…';
 
 /** The second question, after the runner refused because sessions are running on Default. */
-export function runnerDefaultSignOutRunning(count: number, name: string): string {
-  return `${count} ${count === 1 ? 'session is' : 'sessions are'} running on ${name}. Sign out anyway?`;
+export function runnerDefaultSignOutRunningOne(name: string): string {
+  return `1 session is running on ${name}. Sign out anyway?`;
+}
+
+export function runnerDefaultSignOutRunningMany(count: number, name: string): string {
+  return `${count} sessions are running on ${name}. Sign out anyway?`;
 }
 
 export const RUNNER_DEFAULT_SIGN_OUT_RUNNING_DETAIL = 'They will stop working until you sign in again.';
