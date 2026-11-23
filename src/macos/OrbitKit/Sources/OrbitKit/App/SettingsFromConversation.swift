@@ -112,6 +112,7 @@ public enum SettingsFromConversation {
         "defaultModels": "Default model per provider",
         "defaultEffort": "Default effort",
         "subagentBlockedProviders": "SubAgent providers",
+        "relaxBlockedPins": "Run pinned tasks elsewhere when their account can't run",
     ]
 
     /// The row an `orbit-settings:` link or a key names, in either spelling the web takes (`agentLanguage` is the

@@ -2363,6 +2363,13 @@ final class AppModel {
         if let me = try? await api?.me() { assignIfChanged(\.user, me) }
     }
 
+    /// Where a held task's account row is, and its Check again: Machines & models (contract §3 Open account).
+    func openAccounts() {
+        settingsPresented = false
+        selectedSection = .runners
+        selectedRunnerID = nil
+    }
+
     /// Settings → GitHub: the sheet's page on iOS, the Settings section on the Mac, where GitHub is a group of its form.
     func showGithubSettings() {
         #if os(iOS)
@@ -4525,6 +4532,15 @@ final class AppModel {
             // Machines & models' Needs you section is where the card lives now (board
             // docs/mocks/waiting-on-you-removal/02 ④); the push's own id lights that card.
             openTerminalRequests(requestID)
+        case .openProviders:
+            // The key's or pool's row is on Providers: Settings' page on iOS, Machines & models on the Mac.
+            #if os(iOS)
+            nav.openSettings(at: .providers)
+            #else
+            settingsPresented = false
+            selectedSection = .runners
+            selectedRunnerID = nil
+            #endif
         case .openShare(let entryID):
             requestShareClaim(entryID: entryID)
         case let .openSchedule(scheduleID, sessionID):

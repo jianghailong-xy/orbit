@@ -33,6 +33,7 @@ export * from './openCodeKeys';
 export * from './providerEngines';
 export * from './providerTransport';
 export * from './retry';
+export * from './runFailureKind';
 export * from './recovery';
 export * from './searchTerms';
 export * from './sessionCreatedTasks';

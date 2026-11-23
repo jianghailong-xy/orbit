@@ -232,6 +232,9 @@ export interface UserPreferences {
   translationBilingual?: boolean;
   /** The provider slugs no SubAgent of this account is routed onto (docs/subagent-design.md §7). Absent: none. */
   subagentBlockedProviders?: string[];
+  /** Whether a task pinned to an account that can't run now may run elsewhere (docs/routing-account-health-design.md
+   *  §7.5). Absent means OFF: the pinned task holds. */
+  relaxBlockedPins?: boolean;
 }
 
 /** How an account signs in (docs/google-sign-in-design.md §6): a password, and the Google account linked. */

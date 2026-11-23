@@ -2244,6 +2244,16 @@ public final class APIClient: @unchecked Sendable {
         try await delete("runners/\(id)/accounts/\(engine.rawValue)/\(account)")
     }
 
+    /// Sign the machine's own Default login out (docs/default-sign-out-design.md): the runner deletes the
+    /// credential and nothing else. Answered `pending`, and the runner's word comes back in the list's
+    /// `accountRemove`; a runner refuses while sessions run on Default unless `force` — the person
+    /// confirmed after that refusal named them.
+    public func signOutRunnerDefault(_ id: String, engine: LoginEngine,
+                                     force: Bool = false) async throws -> RunnerAccountRemoveState {
+        try await post("runners/\(id)/accounts/\(engine.rawValue)/default/sign-out",
+                       body: SignOutDefaultRequest(force: force))
+    }
+
     /// Make an added Claude Code account the Default: the runner swaps its login with ~/.claude after
     /// any turn in progress on either account ends (docs/claude-default-swap-contract.md).
     public func setDefaultRunnerAccount(_ id: String, engine: LoginEngine,
@@ -2270,6 +2280,22 @@ public final class APIClient: @unchecked Sendable {
     public func fixRunnerAttention(_ id: String, kind: RunnerAttentionFixKind,
                                    body: RunnerAttentionFixRequest) async throws -> RunnerAttentionFixResult {
         try await post("runners/\(id)/attention/\(kind.rawValue)/fix", body: body)
+    }
+
+    /// Blocked accounts (`GET /account-health`): cool-downs and suspect accounts are not in it.
+    public func accountHealth() async throws -> [AccountHealthBlock] {
+        let answer: AccountHealthAnswer = try await get("account-health")
+        return answer.blocks ?? []
+    }
+
+    /// Check again: the owner says the account is fixed. A 404 means it was already cleared, which is
+    /// the state wanted, so it is not a failure.
+    public func checkAccountAgain(_ id: String) async throws {
+        do {
+            try await postRaw("account-health/\(id)/check", body: Optional<Empty>.none)
+        } catch APIError.http(let status, _) where status == 404 {
+            return
+        }
     }
 
     public func pauseRunnerAccount(_ id: String, engine: LoginEngine, account: String,
