@@ -12,9 +12,12 @@
 #   stack.sh build-runner        go build src/runner-go into $LM_DIR/bin/orbit
 #   stack.sh repo <name>         a bare origin $LM_DIR/origin/<name>.git and the runner's clone $LM_DIR/work/<name>
 #   stack.sh register <token>    orbit register against the stack (fresh ORBIT_HOME)
-#   stack.sh start-runner | stop-runner
+#   stack.sh start-runner | stop-runner | kill-runner (SIGKILL, no drain)
 #   stack.sh psql <sql> [x]      one READ ONLY query (default_transaction_read_only=on); x = expanded display
 #   stack.sh status | down       down stops the runner and removes the stack (staging-down.sh --purge)
+#
+# LM_RUNNER names a second (third, ...) runner of the same stack: its own home, PATH, pid, log, name lm42-runner-<name>
+# and, with LM_RUNNER_BIN, its own binary (default $LM_DIR/bin/orbit). Unset, the one runner as before.
 set -euo pipefail
 
 HERE=$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -29,9 +32,13 @@ export ORBIT_LINK_STAGING_NATS_PORT=${LM_NATS_PORT:-46422}
 export ORBIT_LINK_STAGING_NATS_MONITOR_PORT=${LM_NATS_MONITOR_PORT:-46822}
 export ORBIT_LINK_STAGING_PEBBLE_PORT=${LM_PEBBLE_PORT:-46500}
 PG=$ORBIT_LINK_STAGING_PROJECT-postgres
-RUNNER_HOME=$LM_DIR/runner-home
-RUNNER_USERHOME=$LM_DIR/runner-userhome
-RUNNER_PATH_DIR=$LM_DIR/runner-path
+SUFFIX=${LM_RUNNER:+-$LM_RUNNER}
+RUNNER_HOME=$LM_DIR/runner-home$SUFFIX
+RUNNER_USERHOME=$LM_DIR/runner-userhome$SUFFIX
+RUNNER_PATH_DIR=$LM_DIR/runner-path$SUFFIX
+RUNNER_BIN=${LM_RUNNER_BIN:-$LM_DIR/bin/orbit}
+RUNNER_NAME=lm42-runner$SUFFIX
+PIDFILE=$LM_DIR/runner$SUFFIX.pid
 LOG=$LM_DIR/logs
 die() { echo "stack.sh: $*" >&2; exit 1; }
 case "$LM_DIR/" in /root/*) die "LM_DIR=$LM_DIR: the runner hides /root behind a tmpfs" ;; esac
@@ -71,7 +78,7 @@ runner_exec() {
   # behind an Orbit provider (scripts/acceptance/landing-fix-own-session/).
   rm -f "$RUNNER_PATH_DIR/claude"
   if [ -n "${LM_CLAUDE_BIN:-}" ]; then ln -s "$LM_CLAUDE_BIN" "$RUNNER_PATH_DIR/claude"; else install -m 755 "$HERE/fake-claude" "$RUNNER_PATH_DIR/claude"; fi
-  ln -sfn "$LM_DIR/bin/orbit" "$RUNNER_PATH_DIR/orbit"
+  ln -sfn "$RUNNER_BIN" "$RUNNER_PATH_DIR/orbit"
   unshare --mount --propagation private -- /bin/sh -c \
     'mount -t tmpfs -o size=4m,mode=0700 lm42-hide-root /root && cd "$0" && exec "$@"' "$LM_DIR/work" \
     env -i PATH="$RUNNER_PATH_DIR:/usr/local/go/bin:/usr/bin:/bin" HOME="$RUNNER_USERHOME" LANG=C.UTF-8 USER=root LOGNAME=root \
@@ -108,35 +115,47 @@ cmd_register() {
   local token=${1:?token}
   cmd_stop_runner
   rm -rf "$RUNNER_HOME"
-  runner_exec "$LM_DIR/bin/orbit" register --server "http://127.0.0.1:$ORBIT_LINK_STAGING_HTTP_PORT" --token "$token" \
-    --name lm42-runner --workdir "$LM_DIR/work/_root" --no-service --no-auto-install-engines --force \
-    > "$LOG/register.log" 2>&1 || { cat "$LOG/register.log"; die "register failed"; }
-  grep -m1 -i registered "$LOG/register.log" || true
+  mkdir -p "$LM_DIR/work/_root$SUFFIX"
+  runner_exec "$RUNNER_BIN" register --server "http://127.0.0.1:$ORBIT_LINK_STAGING_HTTP_PORT" --token "$token" \
+    --name "$RUNNER_NAME" --workdir "$LM_DIR/work/_root$SUFFIX" --no-service --no-auto-install-engines --force \
+    > "$LOG/register$SUFFIX.log" 2>&1 || { cat "$LOG/register$SUFFIX.log"; die "register failed"; }
+  grep -m1 -i registered "$LOG/register$SUFFIX.log" || true
 }
 
 cmd_start_runner() {
   [ -f "$RUNNER_HOME/config.json" ] || die "runner not registered"
-  if pid_alive "$LM_DIR/runner.pid"; then echo "runner already running (pid $(cat "$LM_DIR/runner.pid"))"; return; fi
-  echo "== $(date -u +%FT%TZ) start runner ($("$LM_DIR/bin/orbit" --version))" >> "$LOG/runner.log"
-  runner_exec setsid -f "$LM_DIR/bin/orbit" run >> "$LOG/runner.log" 2>&1 < /dev/null
+  if pid_alive "$PIDFILE"; then echo "runner already running (pid $(cat "$PIDFILE"))"; return; fi
+  echo "== $(date -u +%FT%TZ) start runner $RUNNER_NAME ($("$RUNNER_BIN" --version))" >> "$LOG/runner$SUFFIX.log"
+  runner_exec setsid -f "$RUNNER_BIN" run >> "$LOG/runner$SUFFIX.log" 2>&1 < /dev/null
   local pid=""
   for _ in $(seq 1 40); do
-    pid=$(pgrep -f "^$LM_DIR/bin/orbit run" | head -1 || true)
+    pid=$(pgrep -f "^$RUNNER_BIN run" | head -1 || true)
     [ -n "$pid" ] && break; sleep 0.5
   done
   [ -n "$pid" ] || die "runner did not start"
-  echo "$pid" > "$LM_DIR/runner.pid"
-  echo "runner pid $pid"
+  echo "$pid" > "$PIDFILE"
+  echo "runner $RUNNER_NAME pid $pid"
 }
 
 cmd_stop_runner() {
-  if pid_alive "$LM_DIR/runner.pid"; then
-    local p; p=$(cat "$LM_DIR/runner.pid"); kill "$p" 2>/dev/null || true
+  if pid_alive "$PIDFILE"; then
+    local p; p=$(cat "$PIDFILE"); kill "$p" 2>/dev/null || true
     for _ in $(seq 1 40); do kill -0 "$p" 2>/dev/null || break; sleep 0.5; done
     kill -0 "$p" 2>/dev/null && kill -9 "$p" 2>/dev/null || true
-    echo "stopped runner ($p)"
+    echo "stopped runner $RUNNER_NAME ($p)"
   fi
-  rm -f "$LM_DIR/runner.pid"
+  rm -f "$PIDFILE"
+}
+
+# kill-runner: SIGKILL, no drain: a runner that dies without a word, with what it was doing cut off.
+cmd_kill_runner() {
+  if pid_alive "$PIDFILE"; then
+    local p; p=$(cat "$PIDFILE")
+    pkill -9 -P "$p" 2>/dev/null || true
+    kill -9 "$p" 2>/dev/null || true
+    echo "killed runner $RUNNER_NAME ($p)"
+  fi
+  rm -f "$PIDFILE"
 }
 
 cmd_psql() {
@@ -146,7 +165,7 @@ cmd_psql() {
 
 cmd_status() {
   docker ps -a --filter "name=^$ORBIT_LINK_STAGING_PROJECT-" --format '{{.Names}} {{.Status}}'
-  if pid_alive "$LM_DIR/runner.pid"; then echo "runner: pid $(cat "$LM_DIR/runner.pid")"; else echo "runner: down"; fi
+  if pid_alive "$PIDFILE"; then echo "runner $RUNNER_NAME: pid $(cat "$PIDFILE")"; else echo "runner $RUNNER_NAME: down"; fi
 }
 
 cmd_down() {
@@ -162,8 +181,9 @@ case "$cmd" in
   register) cmd_register "$@" ;;
   start-runner) cmd_start_runner ;;
   stop-runner) cmd_stop_runner ;;
+  kill-runner) cmd_kill_runner ;;
   psql) cmd_psql "$@" ;;
   status) cmd_status ;;
   down) cmd_down ;;
-  *) sed -n '2,17p' "$0" >&2; exit 2 ;;
+  *) sed -n '2,20p' "$0" >&2; exit 2 ;;
 esac

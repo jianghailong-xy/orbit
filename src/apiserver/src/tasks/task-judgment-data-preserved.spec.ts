@@ -3351,10 +3351,19 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1439_drive_entry_name_trgm',
       // 1440 adds the drive Trash marking flag and its partial index; it changes no preserved relation or fence.
       '1440_drive_trash_group_marking',
-      // 1444 adds four nullable work-session columns and three checks on project_open_item, and widens
-      // project_integration_job_retry_failure_class_chk to admit CONFLICT (revision 42, §12.4, R1); no row is
-      // written, and no preserved relation, trigger, function or DONE fence changes.
-      '1444_open_item_work_session',
+      // 1441 to 1443, deploy 3 of design §12.6 (removal steps R6 to R8; written as 1428, 1429 and 1431, then 1433 to 1435,
+      // renumbered above what main and the other lines took). 1441 writes session.last_turn_outcome (FAILED on a release
+      // the status alone records as a failure, CANCELLED on the residual A2 shape) and conversation_turn.outcome and error
+      // on the carrying turn; 1442 re-creates 1425's three ended-triggers without the status bridge; 1443 drops
+      // session_release_cause_chk and session.release_cause after checking pg_depend. Session and conversation_turn are
+      // not preserved relations: no preserved relation is read, written or dropped, and the DONE fence is unchanged.
+      '1441_session_turn_outcome_backfill',
+      '1442_ended_triggers_drop_status_bridge',
+      '1443_session_release_cause_drop',
+      // 1444 drops 0130's claim index session_task_execution_claim_idx CONCURRENTLY (plan step 4.5, release B); 1426's
+      // index goes on enforcing one live run per task. Session is not a preserved relation, and no function, trigger,
+      // type, constraint or DONE fence changes. No INSERT, UPDATE or DELETE.
+      '1444_drop_session_task_execution_claim_idx',
       // 1447 adds SCHEDULE_CHANGE to session_run_source, two nullable session columns (change_schedule_id, with its
       // foreign key to schedule ON DELETE SET NULL and a partial index, and schedule_change_opening), and a nullable
       // asked_text to schedule_revision and schedule_change_request; no row is written, and none of the preserved
@@ -3394,7 +3403,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1465_session_run_now_over_capacity',
       // 1491 sets feishu_app.message_detail's default to FULL and moves every TITLES_ONLY row to FULL: an ALTER and an
       // UPDATE of that table only, none of the preserved relations, and no trigger, function or DONE fence changes.
-      '1491_feishu_details_by_default'],
+      '1491_feishu_details_by_default',
+      // 1501 adds four nullable work-session columns and three checks on project_open_item, and widens
+      // project_integration_job_retry_failure_class_chk to admit CONFLICT (revision 42, §12.4, R1); no row is
+      // written, and no preserved relation, trigger, function or DONE fence changes. Written as 1444 on the project
+      // line, it was renumbered after main took 1444.
+      '1501_open_item_work_session'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

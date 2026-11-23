@@ -222,7 +222,7 @@ var guideTopics = []guideTopic{
 			{Op: "project_get", Optional: true, Why: "A project's goal, acceptance criteria, instructions, blockers and task counts."},
 			{Op: "task_get", Why: "One task in full, with its comments and sessions; with no id, the task this session runs.", Example: map[string]interface{}{"taskId": "<taskId>"}},
 			{Op: "task_list", Optional: true, Why: "Tasks filtered by project, status, list or label, as compact rows.", Example: map[string]interface{}{"projectId": "<projectId>"}},
-			{Op: "session_get", Optional: true, Why: "One session's record."},
+			{Op: "session_get", Optional: true, Why: "One session's record: over when `released`; failed when released with `lastTurnOutcome` FAILED and no endReason; working when `phase` is RUNNING; `waitingOn` names what holds it."},
 		},
 		Rules: []string{
 			"After a compaction or a resume, read the object again: never rebuild an id, a status or an approval from memory or a summary.",

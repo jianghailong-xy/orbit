@@ -32,7 +32,11 @@ import (
 // of the canonical catalogue and is emitted with `orbit capabilities --json`, so a client can tell
 // which catalogue answered it.
 
-const operationCatalogVersion = "1.9.0"
+const operationCatalogVersion = "1.10.0"
+
+// sessionStateFieldsNote is how an agent reads the session-state fields session_list and session_get
+// return beside `status` (Agent Contract 1.12.0). They are additive: `status` and its values are unchanged.
+const sessionStateFieldsNote = " Beside `status` it carries `phase` (PENDING, RUNNING, IDLE), `released` (true: the session is over), `lastTurnOutcome` (ANSWERED, FAILED, INTERRUPTED, CANCELLED or null) and `waitingOn` (PERSON, HOLD, WAKE or null: what stands between it and its next turn). It failed when released with lastTurnOutcome FAILED and no endReason; it is working when phase is RUNNING. A server that does not send them leaves them out: then read `status`."
 
 // operationObject is the Orbit object an operation acts on (docs/orbit-agent-contract.md §1.1),
 // plus the auxiliary resources (watch, wiki, file) and the two doors that are not writes at all
@@ -2918,7 +2922,7 @@ func buildOperationCatalog() []*operation {
 			},
 			map[string]interface{}{
 				"name":        "session_list",
-				"description": "List this owner's sessions (optionally filter by status or parentSessionId). Use to see what other sessions are doing and to collect the children you spawned (pass your own session id as parentSessionId).",
+				"description": "List this owner's sessions (optionally filter by status or parentSessionId). Use to see what other sessions are doing and to collect the children you spawned (pass your own session id as parentSessionId)." + sessionStateFieldsNote,
 				"inputSchema": obj(map[string]interface{}{"status": sessionStatus, "parentSessionId": str}),
 			},
 			map[string]interface{}{
@@ -2931,7 +2935,7 @@ func buildOperationCatalog() []*operation {
 			},
 			map[string]interface{}{
 				"name":        "session_get",
-				"description": fmt.Sprintf("Get one session's current status and latest output (to collect a spawned sub-task's result). To wait for a session, call session_await instead of calling this in a loop. A record over %d characters is shortened to fit: the prompt first, then changedFiles, lastToolUse, lastUserText and error; lastAssistantText and result stay whole unless nothing else is left to shorten. What was shortened is named in truncatedFields; summary=false returns the full record. A landing session id (task_get's integration.landTask.landingSessionId, or the landing a landing-fix turn names) returns that landing's view: its attempts, timeline and open items. A task's own work session may read its own task's landing this way.", toolResultBudget),
+				"description": fmt.Sprintf("Get one session's current status and latest output (to collect a spawned sub-task's result). To wait for a session, call session_await instead of calling this in a loop. A record over %d characters is shortened to fit: the prompt first, then changedFiles, lastToolUse, lastUserText and error; lastAssistantText and result stay whole unless nothing else is left to shorten. What was shortened is named in truncatedFields; summary=false returns the full record. A landing session id (task_get's integration.landTask.landingSessionId, or the landing a landing-fix turn names) returns that landing's view: its attempts, timeline and open items. A task's own work session may read its own task's landing this way."+sessionStateFieldsNote, toolResultBudget),
 				"inputSchema": obj(map[string]interface{}{
 					"sessionId": sessionIDProp,
 					"summary":   map[string]interface{}{"type": "boolean", "description": "Default true: the record held under the budget. false returns it in full."},

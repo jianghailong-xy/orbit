@@ -775,7 +775,7 @@ test('escalated, coordinator reaped while its runner is away: Ask again can queu
       // FAILED with the cancel it writes beside it — while the runner stayed away.
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId },
-        data: { status: RunStatus.FAILED, cancelRequestedAt: new Date(), finishedAt: new Date(), error: 'runner offline' },
+        data: { status: RunStatus.FAILED, cancelRequestedAt: new Date(), finishedAt: new Date(), error: 'runner offline', lastTurnOutcome: 'FAILED' },
       });
       await stack.db.runner.update({
         where: { id: w.runnerId },
@@ -807,7 +807,7 @@ test('escalated, coordinator reaped and its runner back (2026-11-15): Ask again 
       // beside it, nobody closing the conversation — and then the runner came back.
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId },
-        data: { status: RunStatus.FAILED, cancelRequestedAt: new Date(), finishedAt: new Date(), error: 'runner offline' },
+        data: { status: RunStatus.FAILED, cancelRequestedAt: new Date(), finishedAt: new Date(), error: 'runner offline', lastTurnOutcome: 'FAILED' },
       });
       await stack.db.runner.update({
         where: { id: w.runnerId },

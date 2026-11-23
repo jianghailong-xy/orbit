@@ -49,6 +49,7 @@ import {
   SESSION_RUNNING_BG_JOB_WHERE,
 } from '../common/session-working';
 import { readSessionActivities, sessionActivitySql } from './task-work-carrier';
+import { readOneSessionPhaseFields, readSessionPhaseFields } from './session-phase';
 import { CLEARED_RUNNING_WORK, KEEP_BACKGROUND_WORK_END_CONTENT } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest, worktreeFileAnswerKey } from './worktree-artifact';
@@ -5368,8 +5369,15 @@ export class SessionsService {
     const given = overlay ?? new Map<string, ListOverlay>();
     const missing = rows.filter((r) => !given.has(r.id));
     const read = missing.length === 0 ? new Map<string, ListOverlay>() : await this.listOverlay(ownerId, missing);
+    const overlays = new Map(rows.map((r) => [r.id, given.get(r.id) ?? read.get(r.id)!]));
+    // phase, released, lastTurnOutcome, waitingOn (sessions/session-phase.ts), over the approvals the overlay counted.
+    const phases = await readSessionPhaseFields(
+      this.prisma,
+      rows.map((r) => r.id),
+      new Map(rows.map((r) => [r.id, overlays.get(r.id)!.pendingApprovals])),
+    );
     // The release column was read for the capabilities; the row does not carry it.
-    return sessions.map(({ finishedAt: _released, ...s }) => ({ ...s, ...(given.get(s.id) ?? read.get(s.id)!) }));
+    return sessions.map(({ finishedAt: _released, ...s }) => ({ ...s, ...overlays.get(s.id)!, ...phases.get(s.id) }));
   }
 
   /**
@@ -5757,6 +5765,8 @@ export class SessionsService {
       settings: sessionSettingsOf(session, session.workspace?.env, SessionsService.engineLive(session)),
       usage,
       engineVersion,
+      // phase, released, lastTurnOutcome, waitingOn (sessions/session-phase.ts), as every payload kind carries them.
+      ...(await readOneSessionPhaseFields(this.prisma, session.id)),
     });
   }
 
@@ -6082,6 +6092,7 @@ export class SessionsService {
     // A parked session can still be working (a self-driven turn, a sub-agent, a job, a wait that
     // wakes it): without this the page read its AWAITING_INPUT as idle and said "Awaiting reply".
     const activity = (await readSessionActivities(this.prisma, [session.id])).get(session.id) ?? null;
+    const phase = await readOneSessionPhaseFields(this.prisma, session.id);
     return {
       waitingOnOwner,
       title: session.title,
@@ -6093,6 +6104,7 @@ export class SessionsService {
       runState: stateful.runState,
       lifecycleState: stateful.lifecycleState,
       filingState: stateful.filingState,
+      ...phase,
       createdAt: session.createdAt,
     };
   }
