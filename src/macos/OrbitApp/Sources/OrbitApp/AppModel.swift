@@ -1180,6 +1180,7 @@ final class AppModel {
         selectedSection = .scheduled
         nav.path = []
         scheduled?.draftPanel = nil
+        scheduled?.changeDraft = nil
         scheduled?.inspectedID = id
     }
 
@@ -1188,6 +1189,7 @@ final class AppModel {
         ownerRequests?.inboxPresented = false
         scheduled?.inspectedID = nil
         scheduled?.draftPanel = nil
+        scheduled?.changeDraft = nil
         route(to: .session(sessionID), inScheduledRuns: true)
     }
 
@@ -2183,10 +2185,23 @@ final class AppModel {
         show(.compose(agentID: id, folderID: nil), agent: id)
     }
 
-    /// A schedule's Change… (board 01 ③ 1): no form — a new conversation in the schedule's workspace, where the
-    /// change is said and its card or record comes back.
+    /// A schedule's Change… (§8.2, board 03-change): the schedule's open change conversation if it has one,
+    /// else a draft change conversation — Orbit's opening and a composer, nothing written yet — whose first
+    /// words open the session. No form, and no blank composer: the conversation knows its schedule.
     func openChangeConversation(for schedule: ScheduleView) {
-        show(.compose(agentID: schedule.workspaceId, folderID: nil), agent: schedule.workspaceId)
+        Task { @MainActor in
+            guard let answer = await scheduled?.changeConversation(schedule.id) else { return }
+            if let sessionID = answer.sessionId {
+                scheduled?.changeDraft = nil
+                route(to: .session(sessionID))
+            } else {
+                selectedSection = .scheduled
+                nav.path = []
+                scheduled?.draftPanel = nil
+                scheduled?.inspectedID = nil
+                scheduled?.changeDraft = ScheduledModel.ChangeDraft(scheduleID: schedule.id)
+            }
+        }
     }
 
     private func newSessionWithNoWorkspace() {

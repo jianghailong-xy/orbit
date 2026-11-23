@@ -109,6 +109,8 @@ enum SessionRunSource {
   PROJECT_COORDINATOR
   /// A scheduled task's run (migration 0790): `Session.scheduleRunId` names the run.
   SCHEDULE
+  /// A scheduled task's change conversation (migration 1447): `Session.changeScheduleId` names the schedule.
+  SCHEDULE_CHANGE
 
   @@map("session_run_source")
 }
@@ -1067,6 +1069,9 @@ model Runner {
   // Why a `failed` sign-in failed, when a client answers it differently (migration 0427): `expired`
   // is the link running out before anyone signed in with it. NULL for every other failure.
   loginReason   String?   @map("login_reason")
+  // The owner's Use the runner's browser on the sign-in waiting on its link (migration 1462): 'requested'
+  // until the runner answers, then 'opened', 'failed' or 'code-taken'. NULL when nobody asked.
+  loginBrowser  String?   @map("login_browser")
 
   // Removing a Codex account slot from this machine — the one relay that takes an account away
   // rather than adding one. The same shape as the sign-in relay above and for the same reason: the
@@ -2606,6 +2611,12 @@ model Session {
   /// index (`session_schedule_run_idx`, WHERE NOT NULL) lives in the migration.
   scheduleRunId         String?   @map("schedule_run_id") @db.Uuid
   scheduleRun           ScheduleRun? @relation(fields: [scheduleRunId], references: [id], onDelete: SetNull, map: "session_schedule_run_id_fkey")
+  /// The schedule this session changes (migration 1447), set with `runSource = SCHEDULE_CHANGE`: its Change…
+  /// conversation (docs/scheduled-tasks-design.md §8.2). Partial index `session_change_schedule_idx` in the migration.
+  changeScheduleId      String?   @map("change_schedule_id") @db.Uuid
+  changeSchedule        Schedule? @relation("ScheduleChangeConversations", fields: [changeScheduleId], references: [id], onDelete: SetNull, map: "session_change_schedule_id_fkey")
+  /// The opening Orbit drew for it, as the schedule was when the conversation was opened (`ScheduleChangeOpening`).
+  scheduleChangeOpening Json?     @map("schedule_change_opening")
 
   @@index([assignedRunnerId, status])
   // "what did this workspace last run on", the derived seed a new session inherits when the
@@ -10360,6 +10371,7 @@ model Schedule {
   runs                     ScheduleRun[]
   findings                 ScheduleFinding[]
   changeRequests           ScheduleChangeRequest[]
+  changeConversations      Session[]           @relation("ScheduleChangeConversations")
   /// Its WHEN rule's condition (migration 1030), when it has one.
   conditions               Condition[]
 
@@ -10378,6 +10390,8 @@ model ScheduleRevision {
   fields          Json
   /// Set on the revision an Undo wrote: the revision it undid.
   undoOfRevision  Int?              @map("undo_of_revision")
+  /// The person's words that asked for it, from the schedule's change conversation (migration 1447).
+  askedText       String?           @map("asked_text")
   createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@unique([scheduleId, revision], map: "schedule_revision_schedule_revision_key")
@@ -10453,6 +10467,8 @@ model ScheduleChangeRequest {
   state            ScheduleChangeRequestState @default(PENDING)
   askedBy          ScheduleChangedBy          @map("asked_by")
   askedBySessionId String?                    @map("asked_by_session_id") @db.Uuid
+  /// The person's words, when a change conversation asked (migration 1447); the revision an Allow writes keeps them.
+  askedText        String?                    @map("asked_text")
   baseRevision     Int?                       @map("base_revision")
   proposed         Json
   envelopeBefore   Json?                      @map("envelope_before")

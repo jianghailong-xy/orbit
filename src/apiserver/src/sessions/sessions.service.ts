@@ -1,6 +1,6 @@
 import { readSessionCoordinatorHandoffs } from '../projects/coordinator-handoff';
 import type { BackgroundJobStopResponse, BackgroundJobTailResponse, HelpAskMarker, SubagentRunView, WorkflowRunView } from '@orbit/shared';
-import { BG_JOB_STOPPED_BY_OWNER, BG_JOB_TAIL_MAX_BYTES, BG_OUTPUT_TAIL_V1, BG_OWNER_STOP_V1 } from '@orbit/shared';
+import { BG_JOB_STOPPED_BY_OWNER, BG_JOB_TAIL_MAX_BYTES, BG_OUTPUT_TAIL_V1, BG_OWNER_STOP_V1, cloneRootFor, newFolderPath } from '@orbit/shared';
 import { RunnerHints } from '../realtime/runner-hints';
 import { boundTailLines } from './background-job-tail';
 import { modelLabels, subagentRunView } from '../runner-api/subagent-run';
@@ -277,7 +277,6 @@ import {
   folderNameOf,
   folderOfRepoName,
   freeWorkspaceName,
-  newFolderWorkDir,
   newFolderWorkDirOn,
   readNewWorkspace,
   type NewWorkspaceGithubAsk,
@@ -1393,6 +1392,12 @@ export class SessionsService {
        * session's own INSERT so no claim can see the session before it names its run.
        */
       scheduleRunId?: string;
+      /**
+       * The schedule this session changes, and the opening Orbit drew for it (docs/scheduled-tasks-design.md §8.2).
+       * Internal: set only by its Change… door (schedules/schedule-change-conversation.ts), with
+       * `runSource: SCHEDULE_CHANGE`.
+       */
+      changeSchedule?: { scheduleId: string; opening: unknown };
     },
   ) {
     refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
@@ -1920,6 +1925,12 @@ export class SessionsService {
         dispatchOrigin: opts?.dispatchOrigin ?? SessionDispatchOrigin.USER,
         runSource: opts?.runSource ?? SessionRunSource.MANUAL,
         ...(opts?.scheduleRunId ? { scheduleRunId: opts.scheduleRunId } : {}),
+        ...(opts?.changeSchedule
+          ? {
+            changeScheduleId: opts.changeSchedule.scheduleId,
+            scheduleChangeOpening: opts.changeSchedule.opening as Prisma.InputJsonValue,
+          }
+          : {}),
         startsTaskWork: opts?.startsTaskWork ?? false,
         // A task session must remain discoverable in Open even if an internal caller
         // accidentally asks for the legacy "system" provenance.
@@ -2116,9 +2127,10 @@ export class SessionsService {
         message: 'Your GitHub account cannot reach that repository through Orbit\'s GitHub App. Add it to the App on GitHub, or pick another.',
       });
     }
-    const reposRoot = runner.reposRoot?.trim();
-    const clones = !!runner.capabilitiesReportedAt && runner.capabilities.includes(CLONE_WORKDIR_CAPABILITY);
-    if (!clones || !reposRoot) {
+    const capabilities = runner.capabilitiesReportedAt ? runner.capabilities : [];
+    const clones = capabilities.includes(CLONE_WORKDIR_CAPABILITY);
+    const cloneRoot = cloneRootFor({ reposRoot: runner.reposRoot, capabilities });
+    if (cloneRoot === null) {
       throw new ConflictException({
         code: 'CLONE_UNSUPPORTED',
         message: clones
@@ -2133,7 +2145,7 @@ export class SessionsService {
     }
     return {
       runnerId: runner.id,
-      workDir: newFolderWorkDir(reposRoot, folder),
+      workDir: newFolderPath(cloneRoot, folder),
       name: folder,
       autoCreateWorkDir: false,
       clone: {
@@ -3396,7 +3408,7 @@ export class SessionsService {
         // grouping's `includeLanding` (a later task), never here.
         sessionKind: SESSION_KIND_CONVERSATION,
         // A scheduled task's run is reached by id (session_get), not listed (scheduled-tasks-design.md §7.4).
-        runSource: { not: SessionRunSource.SCHEDULE },
+        runSource: { notIn: [SessionRunSource.SCHEDULE, SessionRunSource.SCHEDULE_CHANGE] as SessionRunSource[] },
         ...(filters.status ? { status: filters.status } : {}),
         ...(filters.parentSessionId ? { parentSessionId: filters.parentSessionId } : {}),
         ...runnerScopeWhere(filters.scope),
@@ -3660,7 +3672,7 @@ export class SessionsService {
               LEFT JOIN conversation_turn ct
                 ON ct.id = e.turn_id AND ct.session_id = e.session_id
               WHERE s.owner_id = ${ownerId}::uuid
-                AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
+                AND s.kind = 'CONVERSATION' AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')
                 AND e.type IN ('user', 'assistant')
                 -- Keep the exact indexed expression as the cheap candidate filter. On an ordinary
                 -- delivery it contains the authored user text. A reclaimed continuation can
@@ -3773,7 +3785,7 @@ export class SessionsService {
             SELECT s.id
             FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
-              AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
+              AND s.kind = 'CONVERSATION' AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')
               AND s.id = ${norm.sessionId}::uuid
             UNION
             -- Workspaces and logs commonly shorten a UUID to its first 8–12 hex characters. At this
@@ -3782,7 +3794,7 @@ export class SessionsService {
             SELECT s.id
             FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
-              AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
+              AND s.kind = 'CONVERSATION' AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')
               AND replace(s.id::text, '-', '') LIKE ${
                 norm.sessionIdPrefix ? `${norm.sessionIdPrefix}%` : null
               }
@@ -3795,7 +3807,7 @@ export class SessionsService {
             SELECT s.id
             FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
-              AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
+              AND s.kind = 'CONVERSATION' AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')
               AND ${sessionPredicate}
             UNION
             -- Joined names resolve against their own tiny tables first (~10 workspaces, ~500 tasks),
@@ -3803,14 +3815,14 @@ export class SessionsService {
             -- index instead would mean reindexing every session whenever a workspace is renamed.
             SELECT s.id FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
-              AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
+              AND s.kind = 'CONVERSATION' AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')
               AND s.workspace_id IN (
                 SELECT id FROM workspace WHERE ${matches(stripMarks(Prisma.sql`name`))}
               )
             UNION
             SELECT s.id FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
-              AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
+              AND s.kind = 'CONVERSATION' AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')
               AND s.task_id IN (
                 SELECT id FROM task WHERE ${matches(stripMarks(Prisma.sql`title`))}
               )
@@ -3976,7 +3988,7 @@ export class SessionsService {
           LEFT JOIN workspace a ON a.id = s.workspace_id
           LEFT JOIN task  t ON t.id = s.task_id
           WHERE s.owner_id = ${ownerId}::uuid
-            AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
+            AND s.kind = 'CONVERSATION' AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')
             AND s.deleted_at IS NULL
           ORDER BY s.last_turn_at DESC NULLS LAST, s.created_at DESC
           LIMIT ${take}::int
@@ -4040,7 +4052,7 @@ export class SessionsService {
       // means only that its subject is open. It counts in no workspace tally.
       sessionKind: SESSION_KIND_CONVERSATION,
       // Nor does a scheduled task's run, which is in no list (docs/scheduled-tasks-design.md §7.4).
-      runSource: { not: SessionRunSource.SCHEDULE },
+      runSource: { notIn: [SessionRunSource.SCHEDULE, SessionRunSource.SCHEDULE_CHANGE] as SessionRunSource[] },
     } as const;
     const [active, running, jobs, blocked, jobCards] = await Promise.all([
       this.prisma.session.groupBy({
@@ -4332,6 +4344,7 @@ export class SessionsService {
       // A scheduled task's run is listed only in its workspace's Scheduled runs folder (`scheduled`), never among
       // a workspace's own sessions (docs/scheduled-tasks-design.md §7.4): every other view, folder and project read,
       // and the delta that reads this, leave it out. `listRowsByIds` names its sessions: a link card to a run is by id.
+      // A schedule's change conversation (§8.2) is in no list at all: it is reached from its schedule.
       visibility: view === 'system'
         ? visibility
         : filters.scheduled
@@ -4350,7 +4363,7 @@ export class SessionsService {
                      AND ct.delivered_at IS NOT NULL
                 )
               )`
-          : Prisma.sql`(${visibility}) AND s.run_source <> 'SCHEDULE'`,
+          : Prisma.sql`(${visibility}) AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')`,
       orderBy,
       pageLimit,
     } };
@@ -13397,7 +13410,7 @@ export class SessionsService {
     const filed = folders.length
       ? await this.prisma.session.groupBy({
           by: ['folderId'],
-          where: { ownerId, deletedAt: null, runSource: { not: SessionRunSource.SCHEDULE }, folderId: { in: folders.map((f) => f.id) } },
+          where: { ownerId, deletedAt: null, runSource: { notIn: [SessionRunSource.SCHEDULE, SessionRunSource.SCHEDULE_CHANGE] as SessionRunSource[] }, folderId: { in: folders.map((f) => f.id) } },
           _count: { _all: true },
         })
       : [];

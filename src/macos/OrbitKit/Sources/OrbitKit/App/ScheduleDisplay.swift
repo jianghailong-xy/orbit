@@ -833,6 +833,29 @@ public enum ScheduleDisplay {
             note: envelopeNote(widens: envelope.widens))
     }
 
+    // MARK: - A change conversation (§8.2, board 03-change)
+
+    /// The opening's rows, in order, as label and text (the shared `scheduleChangeOpeningRows`).
+    public static func changeOpeningRows(_ opening: ScheduleChangeOpening) -> [(label: String, text: String)] {
+        [
+            (C.ChangeConversation.does, opening.does),
+            (C.ChangeConversation.when, opening.when),
+            (C.ChangeConversation.runsIn, opening.runsIn),
+            (C.ChangeConversation.may, opening.may),
+            (C.ChangeConversation.costs, opening.costs),
+        ]
+    }
+
+    /// "Change Codex stable check": the draft page's and the conversation's title.
+    public static func changeConversationTitle(_ title: String) -> String {
+        fill(C.ChangeConversation.title, ["title": title])
+    }
+
+    /// "What should change about Codex stable check? This is what it does now:".
+    public static func changeConversationLead(_ title: String) -> String {
+        fill(C.ChangeConversation.lead, ["title": title])
+    }
+
     // MARK: - History and the change line
 
     /// Who a history entry names: You, Session or Run — and You allowed for a change a session or a run asked for

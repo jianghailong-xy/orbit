@@ -14,6 +14,8 @@ import io.orbitd.android.core.schedule.ConditionView
 import io.orbitd.android.core.schedule.ConditionWaitingItem
 import io.orbitd.android.core.schedule.ScheduleApi
 import io.orbitd.android.core.schedule.ScheduleCard
+import io.orbitd.android.core.schedule.ScheduleChangeAnswer
+import io.orbitd.android.core.schedule.ScheduleChangeConversationResponse
 import io.orbitd.android.core.schedule.ScheduleDecisionOutcome
 import io.orbitd.android.core.schedule.ScheduleDetailResponse
 import io.orbitd.android.core.schedule.ScheduleDisplay
@@ -71,6 +73,8 @@ class ScheduledStore internal constructor(private val auth: AuthSession, val han
         val approvals: Map<String, JsonObject> = emptyMap(),
         /** What each conversation asked and changed (`GET /sessions/:id/schedule-cards`), by canonical session id. */
         val sessions: Map<String, SessionScheduleCardsResponse> = emptyMap(),
+        /** Each schedule's change-conversation read (`GET /schedules/:id/change`), by canonical schedule id. */
+        val changes: Map<String, ScheduleChangeConversationResponse> = emptyMap(),
         /** The run a session is, with its schedule, by canonical session id. */
         val runs: Map<String, RunContext> = emptyMap(),
         val loaded: Boolean = false,
@@ -112,6 +116,7 @@ class ScheduledStore internal constructor(private val auth: AuthSession, val han
         fun schedule(id: String): ScheduleView? = detail(id)?.schedule ?: schedules.firstOrNull { ObjectId.same(it.id, id) }
         fun card(id: String): ScheduleCard? = cards[key(id)]
         fun session(id: String): SessionScheduleCardsResponse? = sessions[key(id)]
+        fun change(id: String): ScheduleChangeConversationResponse? = changes[key(id)]
         fun run(sessionId: String): RunContext? = runs[key(sessionId)]
 
         /** The draft the panel's conversation produced, once its agent has drafted it. */
@@ -231,6 +236,26 @@ class ScheduledStore internal constructor(private val auth: AuthSession, val han
             runs.firstOrNull { ObjectId.same(it.id, runId) }?.let { return it }
         }
         return null
+    }
+
+    /** Change… (§8.2): the schedule's open change conversation, if any, and the opening a new one would start with. */
+    fun loadChange(id: String) { scope.launch {
+        // Read afresh each time: an answer kept from an earlier visit may name a conversation since completed.
+        mutable.update { it.copy(changes = it.changes - key(id)) }
+        val change = try { api.change(id) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { return@launch }
+        if (live()) mutable.update { it.copy(changes = it.changes + (key(id) to change)) }
+    } }
+
+    /** The draft change screen's send: opens the conversation with the person's first words — or says them in the one
+     * another device opened meanwhile. Null on a refusal, said in [State.errorText]. */
+    suspend fun openChange(id: String, text: String): ScheduleChangeAnswer? {
+        mutable.update { it.copy(errorText = null) }
+        return try {
+            api.openChange(id, text)
+        } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) {
+            mutable.update { it.copy(errorText = ScheduleApi.refusal(error)) }
+            null
+        }
     }
 
     // MARK: presses

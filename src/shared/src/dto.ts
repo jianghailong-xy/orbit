@@ -1311,19 +1311,50 @@ export const CREATE_WORKDIR_CAPABILITY = 'create-workdir/v1';
  *  `<reposRoot>/<name>`. */
 export const CREATE_WORKDIR_HOME_CAPABILITY = 'create-workdir/v2';
 
+/** A managed runner's home, fixed by its image (deploy/managed-runner/image). A new folder on a managed runner that has
+ *  not reported yet goes here, as it does once it has: every managed image declares create-workdir/v2. */
+export const MANAGED_RUNNER_HOME = '/home/orbit';
+
 /** The directory a runner's new folders go in: its home, the parent of its reposRoot, when it declares
  *  CREATE_WORKDIR_HOME_CAPABILITY, else reposRoot itself. The separator is the one the root is written with. */
-/** A managed runner's repos folder, fixed by its image (deploy/managed-runner/image/entrypoint.py). A new folder on a
- *  managed runner that has not reported yet goes here: every runner version can make one inside its reposRoot. */
-export const MANAGED_RUNNER_REPOS_ROOT = '/home/orbit/orbit-repos';
-
 export function newFolderRoot(reposRoot: string, capabilities: readonly string[] | null | undefined): string {
-  const root = reposRoot.trim().replace(/(?<=.)[\\/]+$/, '');
-  if (!capabilities?.includes(CREATE_WORKDIR_HOME_CAPABILITY)) return root;
+  return capabilities?.includes(CREATE_WORKDIR_HOME_CAPABILITY) ? homeOfReposRoot(reposRoot) : trimReposRoot(reposRoot);
+}
+
+const trimReposRoot = (reposRoot: string): string => reposRoot.trim().replace(/(?<=.)[\\/]+$/, '');
+
+/** The directory a reported reposRoot sits in: the machine's home (`<home>/orbit-repos`). */
+function homeOfReposRoot(reposRoot: string): string {
+  const root = trimReposRoot(reposRoot);
   const cut = Math.max(root.lastIndexOf('/'), root.lastIndexOf('\\'));
   if (cut < 0) return root;
   // `/orbit-repos` sits in `/`, and `C:\orbit-repos` in `C:\`.
   return cut === 0 || root[cut - 1] === ':' ? root.slice(0, cut + 1) : root.slice(0, cut);
+}
+
+/** What newFolderRootFor reads of a runner. `capabilities` is what it has reported: a server passes [] for a runner
+ *  that has not reported yet (no capabilitiesReportedAt). */
+export interface NewFolderRunner {
+  managed: boolean;
+  reposRoot: string | null | undefined;
+  capabilities: readonly string[] | null | undefined;
+}
+
+/** Where a new folder named on this runner goes, for every client and the server alike (new-folder-root.fixture.json):
+ *  on a managed runner that has not reported yet, its image's home MANAGED_RUNNER_HOME, whatever Repos Folder is stored
+ *  from before, so its first workspace can be made before it is up; newFolderRoot on a runner that makes new folders and
+ *  has reported its Repos Folder; null on any other, which cannot make one. */
+export function newFolderRootFor(runner: NewFolderRunner): string | null {
+  if (runner.managed && !runner.capabilities?.length) return MANAGED_RUNNER_HOME;
+  const reposRoot = runner.reposRoot?.trim() ?? '';
+  if (reposRoot && runner.capabilities?.includes(CREATE_WORKDIR_CAPABILITY)) return newFolderRoot(reposRoot, runner.capabilities);
+  return null;
+}
+
+/** `<root>/<name>`: the separator the root is written with, never doubled. A new folder's path and a clone's. */
+export function newFolderPath(root: string, name: string): string {
+  const separator = root.includes('\\') && !root.includes('/') ? '\\' : '/';
+  return `${root.replace(/[\\/]+$/, '')}${separator}${name}`;
 }
 
 /** A runner that reports its machine's CPU, memory and disk on every heartbeat (RunnerHeartbeatRequest.resources).
@@ -1449,6 +1480,20 @@ export interface NewWorkspaceGithub {
 /** What a runner declares when it clones a GitHub workspace's repository on request (cloneRequests,
  *  docs/github-workspace-design.md §6). POST /sessions makes a GitHub workspace only on a runner that declares it. */
 export const CLONE_WORKDIR_CAPABILITY = 'clone-workdir/v1';
+
+/** What a runner declares when it clones into its home directory, the directory its reported reposRoot sits in:
+ *  a GitHub workspace's folder is then `<home>/<folder>` (cloneRootFor) rather than `<reposRoot>/<folder>`. */
+export const CLONE_WORKDIR_HOME_CAPABILITY = 'clone-workdir/v2';
+
+/** Where a GitHub workspace's clone goes on this runner, for every client and the server alike
+ *  (new-folder-root.fixture.json `clones`): its home on a runner that declares CLONE_WORKDIR_HOME_CAPABILITY, its
+ *  reposRoot on an older one; null on a runner that does not clone or has not reported its reposRoot. `capabilities` is
+ *  what it has reported ([] before it reports). */
+export function cloneRootFor(runner: { reposRoot?: string | null; capabilities?: readonly string[] | null }): string | null {
+  const reposRoot = runner.reposRoot?.trim() ?? '';
+  if (!reposRoot || !runner.capabilities?.includes(CLONE_WORKDIR_CAPABILITY)) return null;
+  return runner.capabilities.includes(CLONE_WORKDIR_HOME_CAPABILITY) ? homeOfReposRoot(reposRoot) : trimReposRoot(reposRoot);
+}
 
 /** A workspace's clone state (Workspace.cloneState); null for a workspace that does not come from GitHub. */
 export type WorkspaceCloneState = 'PENDING' | 'CLONING' | 'READY' | 'FAILED';
@@ -1820,6 +1865,11 @@ export const BROWSER_CLEAR_V1 = 'browser-clear/v1';
  *  the page asked for through Chrome's DevTools. A runner without it is refused an open as too old. runner-go asserts
  *  the same string. */
 export const BROWSER_OPEN_V1 = 'browser-open/v1';
+
+/** Declared by a managed runner that honours a LoginCommand `browser`: it opens the sign-in link of the attempt waiting
+ *  on it in the runner's browser (docs/runner-browser-engine-sign-in-design.md). A runner without it is refused Use the
+ *  runner's browser. runner-go asserts the same string. */
+export const LOGIN_RUNNER_BROWSER_V1 = 'login-runner-browser/v1';
 
 /** Declared by a runner that keeps a remote SubAgent's conversation when the run ends and continues it on a claim's
  *  `resumeOf` (docs/subagent-design.md §10.2). A resume is refused for a target runner without it, which would start
@@ -2321,7 +2371,9 @@ export type AntigravityKeyAvailableByRunner = Record<string, boolean>;
  * machine, which puts back the Google login a replacement had set aside.
  */
 export interface LoginCommand {
-  action: 'start' | 'code' | 'cancel';
+  /** `browser` (to a runner that declares LOGIN_RUNNER_BROWSER_V1): open the attempt's sign-in link in the runner's
+   *  browser, the owner's Use the runner's browser. Redelivered until the runner reports `browser` on that attempt. */
+  action: 'start' | 'code' | 'cancel' | 'browser';
   /** Which CLI to sign in. Absent from an older control plane, which only ever drove claude. A
    *  `cursor` start, Default's included, goes only to a runner that declares `cursor-account-login/v1`:
    *  an older one signs in Claude Code for an engine it does not know. */
@@ -2453,6 +2505,9 @@ export interface LoginResult {
    *  timed out"), which a client answers with a new link rather than a retry. `message` still says it
    *  in words. Absent for every other failure. */
   reason?: LoginFailureReason;
+  /** What became of a LoginCommand `browser`, on a repeat of the attempt's waiting report: the link opened in the
+   *  runner's browser, could not be, or the runner took Claude Code's code from that browser and handed it to the CLI. */
+  browser?: LoginBrowserOutcome;
   /** The `attempt` of the start this reports on. A report about an attempt the control plane has
    *  moved past (cancelled, or replaced by a new sign-in) changes nothing. Absent from an older
    *  runner, whose reports are taken as they come. */
@@ -2787,14 +2842,29 @@ export interface RunnerLoginState {
   /** Why a `failed` sign-in failed, when a client answers it differently (LoginResult.reason).
    *  Present only on such a failure. */
   reason?: LoginFailureReason;
+  /** The owner's Use the runner's browser for this attempt: `requested` until the runner answers, then its answer
+   *  (LoginResult.browser). Present only while a sign-in is waiting on its link and the owner asked for it. */
+  browser?: LoginBrowserState;
 }
 
 /** Why a sign-in failed, when a client answers it differently from any other failure: `expired` is
  *  the sign-in link running out before anyone signed in with it. */
 export type LoginFailureReason = 'expired';
 
+/** LoginResult.browser: what a runner did with a LoginCommand `browser`. */
+export type LoginBrowserOutcome = 'opened' | 'failed' | 'code-taken';
+
+/** RunnerLoginState.browser: the owner asked, and what the runner answered. */
+export type LoginBrowserState = 'requested' | LoginBrowserOutcome;
+
 /** Every LoginFailureReason, for a reader that checks one it is handed. */
 export const LOGIN_FAILURE_REASONS: readonly LoginFailureReason[] = ['expired'];
+
+/** Every LoginBrowserOutcome a runner may report, for a control plane to keep only these. */
+export const LOGIN_BROWSER_OUTCOMES: readonly LoginBrowserOutcome[] = ['opened', 'failed', 'code-taken'];
+
+/** Every LoginBrowserState a sign-in may be in. */
+export const LOGIN_BROWSER_STATES: readonly LoginBrowserState[] = ['requested', ...LOGIN_BROWSER_OUTCOMES];
 
 /** `code` of the 409 a new session gets when its engine is signed out on an online runner. */
 export const ENGINE_SIGNED_OUT = 'ENGINE_SIGNED_OUT';

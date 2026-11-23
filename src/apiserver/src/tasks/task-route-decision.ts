@@ -8,7 +8,7 @@ import {
   isEngine,
   USAGE_LIMIT_ERROR_MARKERS,
   runnerCatalogRow,
-  quotaExpiresAt,
+  quotaExpiry,
   quotaNearLimit,
   spentPlanUsage,
   withEnginePlanUsage,
@@ -256,15 +256,16 @@ function windowName(window: PlanUsageWindow | undefined, slot: string): string {
 export function quotaTiming(
   snapshot: PlanUsageSnapshot | null | undefined,
   now: Date,
-): { expiresAt: number | null; nearLimit: boolean; opusUtilization: number | null } {
+): { expiresAt: number | null; expiryWindowMins: number | null; nearLimit: boolean; opusUtilization: number | null } {
   // A model family's own window (Opus or Sonnet weekly) caps that family, not the account: it moves the family's
   // rows (opusUtilization), never the account's place.
   const account = snapshot ? { ...snapshot, sevenDayOpus: undefined, sevenDaySonnet: undefined } : snapshot;
-  const at = quotaExpiresAt(account, now);
+  const { at, mins } = quotaExpiry(account, now);
   const opus = snapshot?.sevenDayOpus;
   const live = opus && !(Date.parse(opus.resetsAt ?? '') <= now.getTime());
   return {
     expiresAt: Number.isFinite(at) ? at : null,
+    expiryWindowMins: Number.isFinite(at) ? mins : null,
     nearLimit: quotaNearLimit(account, now),
     opusUtilization: live ? opus.utilization : null,
   };

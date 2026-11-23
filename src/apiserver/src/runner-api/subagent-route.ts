@@ -191,7 +191,8 @@ export async function subagentRouteInput(
     ...(states[slug] ? {
       account: {
         quota: states[slug].quota ?? null, paused: states[slug].paused === true, unreadable: states[slug].quotaUnread === true,
-        expiresAt: states[slug].expiresAt ?? null, nearLimit: states[slug].nearLimit === true,
+        expiresAt: states[slug].expiresAt ?? null, expiryWindowMins: states[slug].expiryWindowMins ?? null,
+        nearLimit: states[slug].nearLimit === true,
         opusUtilization: states[slug].opusUtilization ?? null,
       },
     } : {}),
@@ -216,6 +217,7 @@ export async function subagentRouteInput(
     engines,
     modelCatalog: catalog,
     runtimeDefaultModels: sanitizeRuntimeDefaultModels(runner?.runtimeDefaultModels),
+    now: reads.now.getTime(),
     ...(Object.keys(ownerTiers).length > 0 ? { builtinModelTiers: ownerTiers } : {}),
     ...(args.runnerLabel ? { runnerLabel: args.runnerLabel } : {}),
     ...(args.strictNamedModel ? { strictNamedModel: true } : {}),

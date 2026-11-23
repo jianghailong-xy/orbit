@@ -3318,12 +3318,29 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // row is written, and no trigger, function or DONE fence changes.
       // Written as 1430 on the project line, it was renumbered after main took 1430.
       '1431_managed_runner_update_interrupt',
+      // 1432 creates model_identity (rule_key, canonical_key, name, decided_at), a new table no preserved relation
+      // references; no existing row is written, and no trigger, function or DONE fence changes.
+      '1432_model_identity',
+      // 1433 seeds model_identity with production's model ids, INSERT ... ON CONFLICT (rule_key) DO NOTHING into that
+      // new table only; no preserved relation, trigger, function or DONE fence is touched.
+      '1433_model_identity_seed',
+      // 1434 is one UPDATE of runner.repos_root for managed runners still under /var/lib/orbit/home; runner is not a
+      // preserved relation, it creates, alters or drops nothing, and no trigger, function or DONE fence changes.
+      '1434_managed_runner_repos_root_home_orbit',
       // 1437 (renumbered from 1317 to sit after main's migrations) adds two nullable columns on session,
       // actual_permission_mode and actual_permission_mode_at, and a new append-only table session_permission_mode_change
       // (cascades with its session); no row is written, and no preserved relation, trigger, function or DONE fence changes.
       '1437_session_actual_permission_mode',
-      // 1461 adds a partial index on activity. No preserved relation or row is changed.
-      '1461_default_permission_mode_audit'],
+      // 1447 adds a session_run_source value, two nullable session columns (change_schedule_id with a foreign key to
+      // schedule, schedule_change_opening) and asked_text on schedule_revision and schedule_change_request; no row is
+      // written, and no preserved relation, trigger, function or DONE fence changes.
+      '1447_schedule_change_conversation',
+      // 1462 adds one nullable column, login_browser, to runner; no row is written, and no preserved relation,
+      // trigger, function or DONE fence changes.
+      '1462_runner_login_browser',
+      // 1470 adds a partial index on activity. No preserved relation or row is changed.
+      // Written as 1461 on its task branch, it was renumbered after main took 1462.
+      '1470_default_permission_mode_audit'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

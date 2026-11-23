@@ -50,7 +50,7 @@
     "`setupState` (per state): how a machine's setup card treats the managed runner (`managedSetupState`,",
     "docs/managed-runner-no-default-workspace.md): `preparing` or `asleep` while it is not up, so the card takes a",
     "new folder and makes the workspace; null when the card reads the runner as any machine. `setup` is",
-    "MANAGED_RUNNER_COPY.setup, the card's words for those two states, and `reposRoot` MANAGED_RUNNER_REPOS_ROOT, where",
+    "MANAGED_RUNNER_COPY.setup, the card's words for those two states, and `home` MANAGED_RUNNER_HOME, where",
     "a new folder goes on a managed runner that has never reported. `status.workspaceId` is always null: a managed",
     "runner has no default workspace."
   ],
@@ -122,7 +122,7 @@
       "preparing": "Not checked until your managed runner is up: used if it’s there, created if not.",
       "asleep": "Not checked while it’s asleep: used if it’s there, created if not."
     },
-    "reposRoot": "/home/orbit/orbit-repos"
+    "home": "/home/orbit"
   },
   "capabilities": [
     {

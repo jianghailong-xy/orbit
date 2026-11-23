@@ -26,6 +26,22 @@ final class ScheduledRunsFolderTests: XCTestCase {
         }
     }
 
+    /// A schedule's change conversation (runSource SCHEDULE_CHANGE, §8.2) is in no list — the server already
+    /// excludes it, but a realtime upsert can bring a row in: both the workspace's and the scheduled runs'
+    /// lists keep it out, as the web's `row.runSource !== 'SCHEDULE_CHANGE'` read does.
+    func testChangeConversationsAreInNoList() {
+        let rows = [
+            session("manual", source: "MANUAL"),
+            session("run", source: "SCHEDULE"),
+            session("change", source: "SCHEDULE_CHANGE"),
+        ]
+
+        for view in SessionView.allCases {
+            XCTAssertEqual(SessionFilter.forAgent(rows, agentID: "w1", view: view).map(\.id), ["manual"])
+            XCTAssertEqual(SessionFilter.forAgent(rows, agentID: "w1", view: view, scheduled: true).map(\.id), ["run"])
+        }
+    }
+
     func testSummaryUsesFolderVisibilityAndKeepsBothAttentionMarks() {
         let runs = [
             session("running", status: .running),

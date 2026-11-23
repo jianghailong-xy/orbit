@@ -862,7 +862,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                             if (head == null && held == null) TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1), target = targetSeq)
                             else Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1), target = targetSeq)
-                                held?.let { RunnerUpdatingFoot(it, runnerUpdatingMachine, later = runnerUpdatingLater) }
+                                // Under the reader's own message, so it stands at the bubble's right edge, as on iOS and web.
+                                held?.let { RunnerUpdatingFoot(it, runnerUpdatingMachine, Modifier.align(Alignment.End), later = runnerUpdatingLater) }
                                 head?.let { TurnHeadLine(it, ticking = sessionLive && row.event.seq == newestHead) }
                             }
                         }
@@ -908,7 +909,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                                 val withdraw = heldCancel?.takeIf { it.turnId == head.turnId }?.let { held ->
                                     { composer.withdraw(held.turnId, held.words, steer = false, engine = console.engine) }
                                 }
-                                RunnerUpdatingFoot(gate, runnerUpdatingMachine, later = runnerUpdatingLater, cancel = withdraw)
+                                RunnerUpdatingFoot(gate, runnerUpdatingMachine, Modifier.align(Alignment.End), later = runnerUpdatingLater, cancel = withdraw)
                             }
                         }
                     }

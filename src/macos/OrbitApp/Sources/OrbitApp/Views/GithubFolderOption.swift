@@ -32,13 +32,14 @@ struct GithubFolderOption: View {
     @State private var branchOpen = false
     @State private var branch = ""
     @State private var branches: [String] = []
-    /// What the machine said about `<reposRoot>/<folder>`, and Check again.
+    /// What the machine said about `<cloneRoot>/<folder>`, and Check again.
     @State private var answer: DirProbeRelay.Outcome?
     @State private var attempt = 0
 
     private var machine: String { RunnerPageFormat.displayName(runner) }
     private var clones: Bool { MachineSetup.clonesRepositories(runner) }
-    private var reposRoot: String { runner.reposRoot ?? "" }
+    /// Where the server clones it (MachineSetup.cloneRootFor): home on a clone-workdir/v2 runner.
+    private var cloneRoot: String { MachineSetup.cloneRoot(runner) ?? "" }
     private var name: String { folder.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     private var probed: DirProbe? {
@@ -50,7 +51,7 @@ struct GithubFolderOption: View {
         guard let repo, clones else { return nil }
         return MachineSetup.githubPick(repo, name: name,
                                        ref: branchOpen ? MachineSetup.cloneRef(typed: branch, defaultBranch: repo.defaultBranch) : nil,
-                                       reposRoot: reposRoot, probe: probed)
+                                       reposRoot: cloneRoot, probe: probed)
     }
 
     private struct Question: Equatable {
@@ -60,7 +61,7 @@ struct GithubFolderOption: View {
 
     private var folderQuestion: String? {
         guard repo != nil, !disabled, MachineSetup.isValidNewFolder(name) else { return nil }
-        return MachineSetup.newFolderPath(root: reposRoot, name: name)
+        return MachineSetup.newFolderPath(root: cloneRoot, name: name)
     }
 
     var body: some View {
@@ -285,7 +286,7 @@ struct GithubFolderOption: View {
             .padding(.top, 4)
         }
         HStack(spacing: 4) {
-            Text(MachineSetup.newFolderPath(root: reposRoot, name: ""))
+            Text(MachineSetup.newFolderPath(root: cloneRoot, name: ""))
                 .font(.orbitMono)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
