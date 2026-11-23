@@ -3338,6 +3338,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1433 seeds model_identity with production's model ids, INSERT ... ON CONFLICT (rule_key) DO NOTHING into that
       // new table only; no preserved relation, trigger, function or DONE fence is touched.
       '1433_model_identity_seed',
+      // 1434 rewrites runner.repos_root for managed runners only, to /home/orbit. It updates no preserved relation.
+      '1434_managed_runner_repos_root_home_orbit',
       // 1438 creates drive_removed_entry (Orbit Files drive: the file a replacing rename removed, §3.2) and its index; no
       // existing row is written, and no preserved relation, trigger, function or DONE fence changes. Numbered past every
       // migration on main and the project and task branches (1437 the highest) when it was written.
@@ -3363,7 +3365,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1455_managed_runner_sleep_requested_at',
       // 1462 adds nullable runner.login_browser. It rewrites no rows and changes no preserved trigger, function
       // or DONE fence.
-      '1462_runner_login_browser'],
+      '1462_runner_login_browser',
+      // 1463 re-keys three model_identity rows (qwen3-7, qwen3-8, qwen4 to their -max ids): UPDATEs of that table only,
+      // none of the preserved relations, and no trigger, function or DONE fence changes.
+      '1463_model_identity_max_is_a_name'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

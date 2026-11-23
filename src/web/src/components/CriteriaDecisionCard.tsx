@@ -976,9 +976,24 @@ export const REPLY_NOT_SENT: Record<CriteriaDecisionReplyUnsent, string> = {
   DELIVERY_FAILED: 'not sent — the reply could not be delivered',
 };
 
-/** A receipt's clock: hours and minutes, as the evidence receipt says it. */
-export function receiptClock(at: string): string {
-  return new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+/** A receipt's moment (decision D4 A): the reader's short clock when it is today, else `M/D` before
+ *  it — iOS's `OwnerConfirmations.receiptTime`, the same rule (src/shared/src/project-page-labels.fixture.json).
+ *  `zone` pins the time zone and locale, which only a test does. */
+export function receiptClock(
+  at: string,
+  now: Date = new Date(),
+  zone: { timeZone?: string; locale?: string } = {},
+): string {
+  const moment = new Date(at);
+  const { timeZone, locale } = zone;
+  // The short time style, as iOS's `.short`: "09:30" in en-GB, "9:30 AM" in en-US.
+  const clock = moment.toLocaleTimeString(locale ?? [], { timeStyle: 'short', timeZone });
+  // en-CA writes the calendar day as YYYY-MM-DD in any zone: a stable key for "the same day".
+  const day = (d: Date) => d.toLocaleDateString('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone });
+  const atDay = day(moment);
+  if (atDay === day(now)) return clock;
+  const [, month, dayOfMonth] = atDay.split('-').map(Number);
+  return `${month}/${dayOfMonth} ${clock}`;
 }
 
 /** What was recorded, and when: the first half of the receipt line. */

@@ -97,22 +97,31 @@ async function mount(initial: RunnerLoginState, { engine = 'claude', declares = 
 }
 const text = (el: Element | null | undefined) => el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
 const useButton = (card: Element) =>
-  [...card.querySelectorAll<HTMLButtonElement>('button')].find((b) => text(b) === "Use the runner's browser");
+  [...card.querySelectorAll<HTMLButtonElement>('button')].find((b) => text(b) === "In the runner's browser");
 
 describe("Use the runner's browser on the sign-in card", () => {
   it('is offered beside the link, saying the login stays on the runner', async () => {
     const card = await mount(claudeLink());
     expect(useButton(card)).toBeDefined();
+    // Option A: one question, both ways in one row (this browser the main one), the runner's line under it ending in
+    // Copy sign-in link, and a divider before the paste.
+    expect(text(card.querySelector('.rsi-q'))).toBe('Where do you want to sign in?');
+    expect([...card.querySelectorAll('.rsi-actions > *')].map(text)).toEqual(['In this browser', "In the runner's browser"]);
     expect(text(card.querySelector('.rsi-runner-browser .rsi-hint'))).toBe(
-      'You stay signed in to this site on this runner. Agents on this runner can use it.',
+      "The runner's browser keeps you signed in there; agents on this runner can use it. Copy sign-in link",
     );
-    // The card's own link stays first, and the paste with it.
-    expect(text(card.querySelector('a.rsi-open'))).toBe('Open the sign-in page');
+    expect(card.querySelector('.rsi-sep')).not.toBeNull();
+    expect(text(card.querySelector('.rsi-sep + .rsi-hint'))).toBe('After you approve, paste the code the page shows:');
     expect(card.querySelector('.rsi-input')).not.toBeNull();
   });
 
   it('is not offered when the runner cannot do it or has no browser', async () => {
-    expect(useButton(await mount(claudeLink(), { declares: false }))).toBeUndefined();
+    const old = await mount(claudeLink(), { declares: false });
+    expect(useButton(old)).toBeUndefined();
+    // As before: the page's button with Copy sign-in link beside it, no question, no divider.
+    expect([...old.querySelectorAll('.rsi-actions > *')].map(text)).toEqual(['Open the sign-in page', 'Copy sign-in link']);
+    expect(old.querySelector('.rsi-q, .rsi-sep')).toBeNull();
+    expect(text(old.querySelector('.rsi-hint'))).toBe('Approve it there, then paste the code the page gives you:');
     act(() => root?.unmount());
     expect(useButton(await mount(claudeLink(), { browser: false }))).toBeUndefined();
   });
@@ -132,6 +141,10 @@ describe("Use the runner's browser on the sign-in card", () => {
       "Finish signing in in the runner's browser. Orbit takes the code from there.",
     );
     expect(card.querySelector('.rsi-input')).toBeNull();
+    // What the runner's browser does leads; this browser is a link away, not the main button any more.
+    expect(card.querySelector('.rsi-actions, a.rsi-open')).toBeNull();
+    const here = [...card.querySelectorAll<HTMLAnchorElement>('.rsi-runner-browser a.rsi-link')].find((a) => text(a) === 'Open it in this browser instead');
+    expect(here?.getAttribute('href')).toBe(CLAUDE_URL);
     const show = [...card.querySelectorAll<HTMLButtonElement>('button')].find((b) => text(b) === 'Show the browser')!;
     act(() => show.click());
     expect(opened.at(-1)).toEqual([`/runners/${RUNNER}/browser?control=1`, `orbit-browser-${RUNNER}`]);
@@ -152,7 +165,7 @@ describe("Use the runner's browser on the sign-in card", () => {
   it('says so when the runner could not open it, and can be pressed again', async () => {
     const card = await mount(claudeLink({ browser: 'failed' }));
     expect(text(card.querySelector('.rsi-runner-browser .rsi-warn'))).toBe(
-      "Couldn't open the sign-in page in the runner's browser. Open it here instead.",
+      "Couldn't open the sign-in page in the runner's browser. Open it in this browser instead.",
     );
     expect(useButton(card)).toBeDefined();
   });
@@ -175,7 +188,7 @@ describe("Use the runner's browser on the sign-in card", () => {
     await settle();
     await settle();
     await settle();
-    expect(text(card.querySelector('a.rsi-open'))).toBe('Open the sign-in page');
+    expect(text(card.querySelector('a.rsi-open'))).toBe('In this browser');
     expect(useButton(card)).toBeDefined();
     expect(opened).toEqual([]);
   });

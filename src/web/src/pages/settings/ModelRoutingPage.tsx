@@ -339,7 +339,11 @@ function ModelBlock({
       <tr className={open ? 'is-open' : undefined}>
         <td>
           {single ? (
-            <span className="routing-report-model">{block.modelLabel}</span>
+            // The arrow's room kept, so every model's name starts in the same place whether or not it opens.
+            <span className="model-routing-open model-routing-no-open">
+              <span aria-hidden="true">▸</span>
+              <span className="routing-report-model">{block.modelLabel}</span>
+            </span>
           ) : (
             <button type="button" className="model-routing-open" aria-expanded={open} onClick={onToggle}>
               <span aria-hidden="true">{open ? '▾' : '▸'}</span>
