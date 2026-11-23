@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package io.orbitd.android.reader
 
 import io.orbitd.android.projects.LandingMeasuredCopy
@@ -422,7 +424,10 @@ internal fun LandingStatusCard(state: LandingSessionRead, view: LandingView?, ca
                         }
                     }
                 }
-                card.failure?.let { Text(it, Modifier.testTag("landing:failure"), style = MaterialTheme.typography.bodySmall, color = muted) }
+                // While its own session fixes it, what failed in the generation's own sentence (board ② c ①: `Conflict in 2 files · …`).
+                (if (fixing != null) LandingFix.failureLine(view) ?: card.failure else card.failure)?.let {
+                    Text(it, Modifier.testTag("landing:failure"), style = MaterialTheme.typography.bodySmall, color = muted)
+                }
                 if (card.timedOut) {
                     val gates = LandingSessionModel.gates(view, now, state.updatedAt, state.failed)
                     val push = attempt?.let { LandingSessionModel.pushSentence(view, it) }
@@ -452,12 +457,12 @@ internal fun LandingStatusCard(state: LandingSessionRead, view: LandingView?, ca
                     // Handed back (board ② d): the coordinator has it, from the moment it came back.
                     if (handedBack != null) Text(buildAnnotatedString {
                         withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)) { append(LandingFixWindowCopy.COORDINATOR) }
-                        append("  ${LandingFixWindowCopy.hasIt(LandingFix.age(handedBack.returnedAt, now))}")
+                        append(" ${LandingFixWindowCopy.hasIt(LandingFix.age(handedBack.returnedAt, now))}")
                     }, Modifier.testTag("landing:wait-line"), style = MaterialTheme.typography.bodySmall, color = muted)
                     else Text(LandingSessionCopy.DECISIONS_THE_COORDINATOR, Modifier.testTag("landing:wait-line"),
                         style = MaterialTheme.typography.bodySmall, color = muted)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     waitDoors.forEachIndexed { index, action ->
                         val label = when (action) {
                             LandingMenuAction.OPEN_COORDINATOR -> LandingSessionCopy.OPEN_COORDINATOR
@@ -487,7 +492,7 @@ private fun LandingFixingPanel(work: LandingWorkSession, now: Instant, doors: Li
             Icon(painterResource(R.drawable.ic_person), null, Modifier.size(14.dp), tint = blue)
             Text(buildAnnotatedString {
                 withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)) { append(LandingFixWindowCopy.THE_TASKS_SESSION) }
-                append("  ${LandingFixWindowCopy.isFixingIt(LandingFix.age(work.offeredAt, now), work.round)}")
+                append(" ${LandingFixWindowCopy.isFixingIt(LandingFix.age(work.offeredAt, now), work.round)}")
             }, Modifier.testTag("landing:fixing-line"), style = MaterialTheme.typography.bodySmall, color = muted)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -783,7 +783,10 @@ private fun OpenItemsSheet(state: ProjectPageState, doc: JsonObject, now: Instan
             val summary = ProjectPage.openItemsSummary(doc, items)
             when {
                 items != null && summary != null -> {
-                    Text(summary.subtitle, Modifier.padding(end = 8.dp).testTag("project-open-items-subtitle"), style = MaterialTheme.typography.labelMedium,
+                    // Revision 42 (board ④ d): what its own session is fixing is open, though none of it waits on the owner.
+                    val fixingCount = LandingFix.beingFixed(items).size
+                    Text(if (summary.needsYou == 0 && fixingCount > 0) LandingFixWindowCopy.noneWaitingOnYou(fixingCount) else summary.subtitle,
+                        Modifier.padding(end = 8.dp).testTag("project-open-items-subtitle"), style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     val start = StartProjectCopy.pageRow(ProjectDoc.status(doc), ProjectDoc.started(doc), items)
                     val done = ProjectDone.pageRow(doc, items)
