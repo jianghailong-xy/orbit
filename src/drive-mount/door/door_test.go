@@ -66,8 +66,8 @@ func TestThreeFailuresWithinTenSecondsAreOffline(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := New(Config{BaseURL: srv.URL, Token: "t", ProbeInterval: 50 * time.Millisecond})
-	var changes []bool
-	c.Health().OnChange(func(online bool, _ time.Time) { changes = append(changes, online) })
+	changes := make(chan bool, 2)
+	c.Health().OnChange(func(online bool, _ time.Time) { changes <- online })
 	for i := 0; i < 3; i++ {
 		if _, err := c.StatID(context.Background(), "x"); !Transient(err) {
 			t.Fatalf("a 502 is transient: %v", err)
@@ -84,15 +84,20 @@ func TestThreeFailuresWithinTenSecondsAreOffline(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go c.RunProbe(ctx)
-	deadline := time.Now().Add(5 * time.Second)
-	for c.Health().Offline() {
-		if time.Now().After(deadline) {
-			t.Fatal("the probe did not bring it back")
+	deadline := time.NewTimer(5 * time.Second)
+	defer deadline.Stop()
+	for _, want := range []bool{false, true} {
+		select {
+		case online := <-changes:
+			if online != want {
+				t.Fatalf("health changed to online=%v, want %v", online, want)
+			}
+		case <-deadline.C:
+			t.Fatalf("no health notification for online=%v", want)
 		}
-		time.Sleep(20 * time.Millisecond)
 	}
-	if len(changes) != 2 || changes[0] || !changes[1] {
-		t.Fatalf("health changes %v", changes)
+	if c.Health().Offline() {
+		t.Fatal("the probe did not bring it back")
 	}
 }
 
