@@ -2254,6 +2254,22 @@ public final class APIClient: @unchecked Sendable {
         try await post("runners/\(id)/attention/\(kind.rawValue)/fix", body: body)
     }
 
+    /// Blocked accounts (`GET /account-health`): cool-downs and suspect accounts are not in it.
+    public func accountHealth() async throws -> [AccountHealthBlock] {
+        let answer: AccountHealthAnswer = try await get("account-health")
+        return answer.blocks ?? []
+    }
+
+    /// Check again: the owner says the account is fixed. A 404 means it was already cleared, which is
+    /// the state wanted, so it is not a failure.
+    public func checkAccountAgain(_ id: String) async throws {
+        do {
+            try await postRaw("account-health/\(id)/check", body: Optional<Empty>.none)
+        } catch APIError.http(let status, _) where status == 404 {
+            return
+        }
+    }
+
     public func pauseRunnerAccount(_ id: String, engine: LoginEngine, account: String,
                                    durationMinutes: Int?) async throws {
         try await postRaw("runners/\(id)/accounts/\(engine.rawValue)/\(account)/pause",

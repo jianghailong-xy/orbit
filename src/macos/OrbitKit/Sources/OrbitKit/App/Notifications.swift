@@ -222,7 +222,8 @@ public enum Notifications {
     /// where Later and Update Now are.
     public static let runnerUpdatingKind = "runner-updating"
     /// The server's runner pushes that name a `runnerID` and no session; a tap opens that runner.
-    static let runnerKinds: Set<String> = [runnerUpdatingKind, "engine-signed-out", "claude-region-blocked"]
+    static let runnerKinds: Set<String> = [runnerUpdatingKind, "engine-signed-out", "claude-region-blocked",
+                                       AccountHealth.pushKind]
     /// The owner-item alert kind of a merge into main waiting on the owner (`OWNER_ITEM_PUSH_KINDS`).
     static let approveMergeKind = "approve-merge-to-main"
     /// An agent asking to take a task out of its project. A tap opens the conversation that draws
@@ -295,7 +296,7 @@ public enum Notifications {
             if actionId == actionOwnerRequestLater { return .snoozeOwnerRequest(requestID: request) }
         }
         guard let sid = userInfo[keySession] else {
-            // The machine's alerts (updating, an engine signed out, Claude blocked in its region) open the runner.
+            // The machine's alerts (updating, an engine signed out, Claude blocked in its region, an account needing action) open the runner.
             if let kind = userInfo[keyKind], runnerKinds.contains(kind), let runner = userInfo[keyRunner] {
                 return .open(.runner(PublicID.toPublic(runner)))
             }
