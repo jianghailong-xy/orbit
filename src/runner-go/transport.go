@@ -24,6 +24,7 @@ import (
 
 const (
 	runnerCapabilitiesHeader = "X-Orbit-Runner-Capabilities"
+	overCapacityCapabilityV1 = "over-capacity/v1"
 	// The operating system this binary was built for (runtime.GOOS). The control plane offers a
 	// sign-in only where it works — Antigravity's Google login is Linux-only for now.
 	runnerOSHeader                   = "X-Orbit-Runner-Os"
@@ -136,6 +137,7 @@ func init() {
 		subagentRemoteInPlaceCapabilityV1,
 		bgOwnerStopCapabilityV1,
 		bgOutputTailCapabilityV1,
+		overCapacityCapabilityV1,
 	}, cursorAccountCapabilities()...), declaredSteerCapabilities()...), ",")
 	// Where 0600 means something (secret_file_unix.go); a Windows runner is never handed a secret.
 	if secretFilesSupported {
