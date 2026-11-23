@@ -28,6 +28,7 @@ export const ACCOUNT_HEALTH_QUERY_KEY = ['account-health'] as const;
 
 export const accountHealthQuery = queryOptions({
   queryKey: ACCOUNT_HEALTH_QUERY_KEY,
+  meta: { entities: ['provider', 'workspace'] },
   queryFn: () => api<{ blocks?: AccountHealthBlock[] }>('/account-health'),
   staleTime: 30_000,
 });
