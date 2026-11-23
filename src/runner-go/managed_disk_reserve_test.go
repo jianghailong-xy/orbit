@@ -154,19 +154,19 @@ func TestReclaimPermitWaitsForBothReserves(t *testing.T) {
 	started(done, "once both reserves admit")
 }
 
-// A claim is refused while either reserve refuses: the claim loop reads the memory gate, then the pool's capacity,
-// which is none under the free-space hold.
+// A claim is refused while either reserve refuses: the claim loop reads the memory gate, then asks the pool
+// whether it can claim, including during a free-space hold.
 func TestClaimsWaitForBothReserves(t *testing.T) {
 	body := runLoopSource(t)
 	memory := strings.Index(body, "if !turnMemory.admits() {")
-	capacity := strings.Index(body, "if pool.admissionIdleCapacity() <= 0 {")
+	capacity := strings.Index(body, "if !pool.canClaim() {")
 	claim := strings.Index(body, "t.claimSession(loopCtx, &claims, scope...)")
 	if memory < 0 || capacity < memory || claim < capacity {
 		t.Fatal("the claim loop does not read the memory reserve and then the pool's capacity before it claims")
 	}
 	pool := newSessionPool(2)
 	pool.setAdmissionHold("free space on the data volume is low")
-	if pool.admissionIdleCapacity() != 0 {
+	if pool.canClaim() || pool.admissionIdleCapacity() != 0 {
 		t.Fatal("under the free-space hold the pool still offers capacity, so a claim would go ahead")
 	}
 }
@@ -185,7 +185,7 @@ func TestRunLoopHoldsWorkBelowTheReserve(t *testing.T) {
 		!strings.Contains(body, "pool.waitReclaimPermit(loopCtx, turnMemory)\n\t\t}\n\t}") {
 		t.Fatal("a reclaim starts RUNNING sessions without the permit line the free-space hold stops")
 	}
-	if !strings.Contains(body, "if pool.admissionIdleCapacity() <= 0 {") {
-		t.Fatal("the claim loop no longer reads the pool's capacity before claiming")
+	if !strings.Contains(body, "if !pool.canClaim() {") {
+		t.Fatal("the claim loop no longer checks whether the pool can claim")
 	}
 }

@@ -90,7 +90,7 @@ func TestRunLoopClaimsNothingBelowTheMemoryReserve(t *testing.T) {
 		t.Error("a later reclaim's RUNNING session does not wait for a permit and the memory reserve")
 	}
 	gate := strings.Index(loop, "\t\tif !turnMemory.admits() {\n\t\t\tselect {\n\t\t\tcase <-loopCtx.Done():\n\t\t\tcase <-time.After(500 * time.Millisecond):\n\t\t\t}\n\t\t\tcontinue\n\t\t}\n")
-	saturation := strings.Index(loop, "if pool.admissionIdleCapacity() <= 0 {")
+	saturation := strings.Index(loop, "if !pool.canClaim() {")
 	claim := strings.Index(loop, "job, err := t.claimSession(loopCtx, &claims, scope...)")
 	if gate < 0 || saturation < gate || claim < saturation {
 		t.Error("the claim loop does not refuse to claim below the memory reserve before every claim")
