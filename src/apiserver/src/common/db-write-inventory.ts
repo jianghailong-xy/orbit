@@ -1151,7 +1151,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'realtime/reaper.service.ts#endParked',
     shape: 'TX_RETRIED',
-    locks: 'Same as forceFinalize.',
+    locks: 'Same as forceFinalize. Before the claim, for a DONE task\'s session on a runner that is heard from (revision 42, §12.5 W6 R2, parked-session-end.ts#fixingLandingWithWakeSource): plain reads of the session row, the project\'s OPEN item in its hands and hasPendingWakeSource; a session holding its task\'s failed landing that something will still wake is not claimed, and nothing is written.',
     identity: 'Same as forceFinalize.',
     isolation: '',
     attempts: 4,
