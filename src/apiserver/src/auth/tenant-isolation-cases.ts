@@ -595,6 +595,9 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'POST /runners/:id/accounts/:engine/:account/set-default': {
     request: (of) => ({ params: { id: of.runnerId, ...of.runnerAccount } }),
   },
+  'DELETE /runners/:id/accounts/:engine/:account/set-default': {
+    request: (of) => ({ params: { id: of.runnerId, ...of.runnerAccount } }),
+  },
   'POST /runners/:id/accounts/:engine/default/restore': {
     request: (of) => ({ params: { id: of.runnerId, engine: of.runnerAccount.engine } }),
   },
