@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Commits first: iOS and Android</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; background: #e9e9ee; }
+.board { width: 1800px; padding: 44px 48px 56px; background: #f4f4f7; color: #16161a;
+  font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+h1 { font-size: 28px; line-height: 1.3; margin: 0 0 10px; }
+.lede { color: #4a4a54; font-size: 15.5px; max-width: 1560px; margin: 0 0 24px; }
+code { font: 12.5px "JetBrains Mono", monospace; background: #e3e3ea; border-radius: 4px; padding: 1px 5px; }
+.section { display: flex; align-items: baseline; gap: 14px; margin: 34px 0 16px; padding-top: 18px; border-top: 1px solid #dcdce3; }
+.section.first { border-top: 0; padding-top: 0; margin-top: 0; }
+.sec { flex: none; font-size: 15px; font-weight: 700; border-radius: 999px; padding: 3px 14px; }
+.sec.now { background: #ffe0dc; color: #8f1d13; }
+.sec.ios { background: #d9e6ff; color: #14428f; }
+.sec.and { background: #dcf3e3; color: #13612e; }
+.sec.ask { background: #fff0c2; color: #6b4a00; }
+.sec-sub { color: #5a5a64; font-size: 14.5px; }
+.row { display: flex; gap: 26px; align-items: flex-start; }
+.cap { width: 340px; }
+.cap-t { font-size: 15px; font-weight: 650; margin: 0 0 8px; display: flex; gap: 8px; align-items: center; }
+.num { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; background: #e5372b; color: #fff;
+  font-size: 12.5px; font-weight: 700; align-items: center; justify-content: center; flex: none; }
+.fr { display: inline-flex; width: 22px; height: 22px; border-radius: 6px; background: #16161a; color: #fff;
+  font-size: 12.5px; font-weight: 700; align-items: center; justify-content: center; flex: none; }
+.notes { list-style: none; margin: 10px 0 0; padding: 0; font-size: 13.5px; line-height: 1.55; color: #34343c; }
+.notes li { display: flex; gap: 8px; margin: 5px 0; }
+.notes .num { width: 19px; height: 19px; font-size: 11px; margin-top: 1px; }
+.cmp { width: 100%; border-collapse: collapse; font-size: 14px; background: #fff; border-radius: 14px; overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.05); }
+.cmp th, .cmp td { text-align: left; vertical-align: top; padding: 10px 12px; border-top: 1px solid #ececf1; line-height: 1.55; }
+.cmp th { border-top: 0; color: #6a6a74; font-size: 13px; font-weight: 600; }
+.cmp td:first-child { width: 230px; font-weight: 600; }
+
+/* ---------- phone shell ---------- */
+.phone { width: 340px; height: 700px; border-radius: 44px; background: #111; padding: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+.scr { position: relative; width: 100%; height: 100%; border-radius: 34px; overflow: hidden; background: #fff; display: flex; flex-direction: column; }
+.status { height: 40px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 26px; font: 600 14px Inter; }
+.mono { font-family: "JetBrains Mono", monospace; }
+.dim { color: #8e8e93; }
+.add { color: #2a9d4b; } .del { color: #d1453b; }
+
+/* iOS */
+.ios { font-family: Inter, sans-serif; color: #1c1c1e; }
+.ios .nav { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 6px 16px 10px; font-size: 16px; }
+.ios .nav b { font-size: 16.5px; font-weight: 600; }
+.ios .link { color: #007aff; }
+.ios .transcript { flex: 1; padding: 6px 16px; font-size: 14px; color: #3a3a3c; line-height: 1.5; }
+.ios .bubble { background: #f2f2f7; border-radius: 16px; padding: 9px 12px; margin: 6px 0; }
+.ios .bar { margin: 0 12px 6px; border: 1px solid #e5e5ea; border-radius: 12px; background: #fafafa; display: flex; align-items: center;
+  gap: 6px; padding: 7px 8px; font-size: 12.5px; white-space: nowrap; overflow: hidden; }
+.ios .pill { display: inline-block; padding: 1px 6px; border-radius: 6px; background: rgba(0,0,0,.05); border: 1px solid rgba(0,0,0,.08); font: 11.5px "JetBrains Mono", monospace; min-width: 34px; max-width: 46%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; }
+.ios .btn { flex: none; background: #007aff; color: #fff; border-radius: 8px; padding: 3px 10px; font-weight: 600; font-size: 12.5px; }
+.ios .composer { flex: none; margin: 0 12px 18px; border: 1px solid #e5e5ea; border-radius: 20px; padding: 10px 14px; color: #aeaeb2; font-size: 14.5px; }
+.ios .sheet { position: absolute; inset: 52px 0 0 0; background: #f2f2f7; border-radius: 14px 14px 0 0; box-shadow: 0 -2px 18px rgba(0,0,0,.15);
+  display: flex; flex-direction: column; }
+.ios .grab { width: 36px; height: 5px; border-radius: 3px; background: #c7c7cc; margin: 6px auto 2px; }
+.ios .seg { margin: 4px 16px 10px; background: #e3e3e8; border-radius: 9px; padding: 2px; display: flex; font-size: 13px; }
+.ios .seg span { flex: 1; text-align: center; padding: 5px 0; border-radius: 7px; color: #3a3a3c; }
+.ios .seg span.on { background: #fff; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.ios .group { margin: 0 16px 12px; background: #fff; border-radius: 12px; overflow: hidden; }
+.ios .gh { margin: 0 16px 6px 30px; font-size: 12px; color: #8e8e93; text-transform: uppercase; letter-spacing: .02em; }
+.ios .cell { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-top: 0.5px solid #e5e5ea; font-size: 14px; }
+.ios .cell:first-child { border-top: 0; }
+.ios .cell .t { flex: 1; min-width: 0; }
+.ios .cell .s { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ios .cell .m { font-size: 12px; color: #8e8e93; display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.ios .chev { color: #c7c7cc; font-size: 16px; }
+.ios .file { font: 12px "JetBrains Mono", monospace; }
+.ios .body { padding: 2px 16px 12px; }
+.ios .h2 { font-size: 19px; font-weight: 700; line-height: 1.3; margin: 0 0 4px; }
+.ios .why { font-size: 14px; color: #3a3a3c; margin: 8px 0 0; }
+.ios .note { font-size: 12px; color: #8e8e93; margin: 8px 0 0; }
+.ios .diff { margin: 0 16px; background: #fff; border-radius: 12px; overflow: hidden; font: 11px/1.65 "JetBrains Mono", monospace; }
+.ios .diff div { padding: 0 10px; white-space: pre; overflow: hidden; }
+
+/* shared rows */
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #8e8e93; flex: none; }
+.dot.auto { background: transparent; border: 1.5px solid #aeaeb2; }
+.dot.pend { background: transparent; border: 1.5px dashed #c2710c; }
+.tag { font-size: 11px; border-radius: 4px; padding: 0 5px; background: #ececf0; color: #555; }
+.tag.pend { background: #fff4e6; color: #c2710c; }
+.hd { background: #f3f6fb; color: #8e8e93; }
+.ad { background: #e9f7ee; } .rm { background: #fdecea; }
+
+/* Android (Material 3) */
+.and { font-family: Roboto, Inter, sans-serif; color: #1b1b1f; }
+.and .scr { background: #fdfbff; }
+.and .top { flex: none; display: flex; align-items: center; gap: 10px; padding: 6px 12px 8px; font-size: 18px; }
+.and .top b { font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.and .tbtn { color: #3a5ba9; font-size: 14px; font-weight: 500; padding: 4px 6px; }
+.and .transcript { flex: 1; padding: 6px 16px; font-size: 14px; color: #46464f; line-height: 1.5; }
+.and .bubble { background: #eef0f8; border-radius: 16px; padding: 9px 12px; margin: 6px 0; }
+.and .bar { margin: 0 10px 6px; border: 1px solid #e1e2ec; border-radius: 12px; background: #f6f7fb; display: flex; align-items: center;
+  gap: 6px; padding: 7px 8px; font-size: 12.5px; white-space: nowrap; overflow: hidden; }
+.and .pill { display: inline-block; padding: 1px 6px; border-radius: 6px; background: rgba(0,0,0,.05); border: 1px solid rgba(0,0,0,.08); font: 11.5px "JetBrains Mono", monospace; min-width: 34px; max-width: 46%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; }
+.and .btn { flex: none; background: #3a5ba9; color: #fff; border-radius: 16px; padding: 3px 12px; font-weight: 500; font-size: 12.5px; }
+.and .composer { flex: none; margin: 0 10px 18px; border-radius: 24px; background: #eef0f8; padding: 12px 16px; color: #8a8a94; font-size: 14.5px; }
+.and .tabs { flex: none; display: flex; border-bottom: 1px solid #e1e2ec; font-size: 14px; font-weight: 500; }
+.and .tabs span { flex: 1; text-align: center; padding: 10px 0 9px; color: #46464f; position: relative; }
+.and .tabs span.on { color: #3a5ba9; }
+.and .tabs span.on::after { content: ""; position: absolute; left: 30%; right: 30%; bottom: -1px; height: 3px; border-radius: 3px 3px 0 0; background: #3a5ba9; }
+.and .li { display: flex; align-items: center; gap: 12px; padding: 10px 16px; font-size: 14px; border-bottom: 1px solid #f0f0f5; }
+.and .li .t { flex: 1; min-width: 0; }
+.and .li .s { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.and .li .m { font-size: 12px; color: #77777f; display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.and .sub { padding: 10px 16px 4px; font-size: 12.5px; color: #3a5ba9; font-weight: 500; }
+.and .body { padding: 6px 16px 10px; }
+.and .h2 { font-size: 19px; font-weight: 500; line-height: 1.3; margin: 0 0 4px; }
+.and .why { font-size: 14px; color: #46464f; margin: 8px 0 0; }
+.and .note { font-size: 12px; color: #77777f; margin: 8px 0 0; }
+.and .diff { font: 11px/1.65 "JetBrains Mono", monospace; border-top: 1px solid #e1e2ec; }
+.and .diff div { padding: 0 12px; white-space: pre; overflow: hidden; }
+.and .file { font: 12px "JetBrains Mono", monospace; }
+</style>
+</head>
+<body>
+<div class="board">
+<h1>Commits first on iOS and Android</h1>
+<p class="lede">The web bar now counts a session's work in commits (board 01, live since 11-19). This brings the same model to the
+native apps, keeping each platform's existing shape: the bar above the composer, and the full-screen "Worktree changes" view it
+opens (iOS sheet, Android full-screen dialog). The change is a Commits / All changes switch at the top of that view, a commit
+screen between the list and a file's diff, and the bar's count. iOS is the reference; Android follows it with Material parts.
+Hand-drawn draft; nothing is built. macOS shares the iOS code (OrbitKit + WorktreeBar.swift) and gets the same, in its own sizes.</p>
+
+<div class="section first"><span class="sec now">Today</span><span class="sec-sub">Both apps: a file count on the bar, a flat file list behind it.</span></div>
+<div class="row">
+  <div class="cap"><div class="cap-t">iOS · bar</div>
+    <div class="phone ios"><div class="scr">
+      <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="nav"><span class="link">‹ Sessions</span><b>Paginate rows</b><span class="link">⋯</span></div>
+      <div class="transcript"><div class="bubble">The list now loads 50 rows per page. Tests pass (14 of 14).</div></div>
+      <div class="bar"><span class="pill"><span class="dim">⎇ orbit/</span>paginate-rows<span class="dim">-39bcbf</span></span>
+        <span class="mono"><span class="add">+479</span> <span class="del">−54</span> <span class="dim">· 8 files</span></span><span style="flex:1"></span><span class="btn">Merge</span></div>
+      <div class="composer">Reply…</div>
+    </div></div></div>
+  <div class="cap"><div class="cap-t">iOS · tap → "Worktree changes"</div>
+    <div class="phone ios"><div class="scr" style="background:#8e8e93">
+      <div class="status" style="color:#fff"><span>9:41</span><span></span></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="nav"><span class="link">Copy branch</span><b>Worktree changes</b><span class="link"><b style="font-weight:600">Done</b></span></div>
+        <div class="group">
+          <div class="cell"><span class="t"><span class="file">src/pages/RowList.tsx</span></span><span class="mono" style="font-size:11.5px"><span class="add">+212</span> <span class="del">−31</span></span><span class="chev">›</span></div>
+          <div class="cell"><span class="t"><span class="file">src/pages/useRows.ts</span></span><span class="mono" style="font-size:11.5px"><span class="add">+96</span> <span class="del">−4</span></span><span class="chev">›</span></div>
+          <div class="cell"><span class="t"><span class="file">src/api/client.ts</span></span><span class="mono" style="font-size:11.5px"><span class="add">+58</span> <span class="del">−12</span></span><span class="chev">›</span></div>
+          <div class="cell"><span class="t"><span class="file">src/pages/RowList.test.tsx</span></span><span class="mono" style="font-size:11.5px"><span class="add">+71</span> <span class="del">−0</span></span><span class="chev">›</span></div>
+          <div class="cell dim"><span class="t">… 4 more</span></div>
+        </div>
+      </div>
+    </div></div></div>
+  <div class="cap"><div class="cap-t">Android · bar</div>
+    <div class="phone and"><div class="scr">
+      <div class="status"><span>9:41</span><span>▾ ▮</span></div>
+      <div class="top"><span>←</span><b>Paginate rows</b><span>⋮</span></div>
+      <div class="transcript"><div class="bubble">The list now loads 50 rows per page. Tests pass (14 of 14).</div></div>
+      <div class="bar"><span class="pill"><span class="dim">⎇ orbit/</span>paginate-rows<span class="dim">-39bcbf</span></span>
+        <span class="mono"><span class="add">+479</span> <span class="del">−54</span> <span class="dim">· 8 files</span></span><span style="flex:1"></span><span class="btn">Merge</span></div>
+      <div class="composer">Reply…</div>
+    </div></div></div>
+  <div class="cap"><div class="cap-t">Android · tap → full-screen dialog</div>
+    <div class="phone and"><div class="scr">
+      <div class="status"><span>9:41</span><span>▾ ▮</span></div>
+      <div class="top"><span class="tbtn">Copy branch</span><b style="text-align:center;font-size:16px">Worktree changes</b><span class="tbtn">Done</span></div>
+      <div class="li"><span class="t"><span class="file">src/pages/RowList.tsx</span></span><span class="mono" style="font-size:11.5px"><span class="add">+212</span> <span class="del">−31</span></span></div>
+      <div class="li"><span class="t"><span class="file">src/pages/useRows.ts</span></span><span class="mono" style="font-size:11.5px"><span class="add">+96</span> <span class="del">−4</span></span></div>
+      <div class="li"><span class="t"><span class="file">src/api/client.ts</span></span><span class="mono" style="font-size:11.5px"><span class="add">+58</span> <span class="del">−12</span></span></div>
+      <div class="li"><span class="t"><span class="file">src/pages/RowList.test.tsx</span></span><span class="mono" style="font-size:11.5px"><span class="add">+71</span> <span class="del">−0</span></span></div>
+      <div class="li dim"><span class="t">… 4 more</span></div>
+    </div></div></div>
+</div>
+
+<div class="section"><span class="sec ios">iOS proposal</span><span class="sec-sub">The reference. Same sheet, a segmented control, one more pushed screen.</span></div>
+<div class="row">
+  <div class="cap"><div class="cap-t"><span class="fr">A</span>Bar</div>
+    <div class="phone ios"><div class="scr">
+      <div class="status"><span>9:41</span><span></span></div>
+      <div class="nav"><span class="link">‹ Sessions</span><b>Paginate rows</b><span class="link">⋯</span></div>
+      <div class="transcript"><div class="bubble">The list now loads 50 rows per page. Tests pass (14 of 14).</div></div>
+      <div class="bar"><span class="pill"><span class="dim">⎇ </span>paginate-rows<span class="dim">-39b…</span></span>
+        <b style="font-weight:600">3 commits</b>
+        <span class="mono"><span class="add">+479</span> <span class="del">−54</span></span><span style="flex:1"></span><span class="btn">Merge</span></div>
+      <div class="bar" style="margin-top:-2px"><span class="pill"><span class="dim">⎇ </span>paginate-rows<span class="dim">-39b…</span></span>
+        <b style="font-weight:600">2 commits</b><span class="tag pend">+ uncommitted</span><span style="flex:1"></span><span class="btn">Commit</span></div>
+      <div class="composer">Reply…</div>
+    </div></div>
+    <ul class="notes">
+      <li><span class="num">1</span><span>"8 files" becomes "3 commits". The newest subject does not fit a phone row; the sheet leads with it instead. Upper bar: ended; lower: live with uncommitted work.</span></li>
+      <li><span class="num">2</span><span>The row gives way in today's order: branch name first, then the line counts, never the button.</span></li>
+    </ul></div>
+  <div class="cap"><div class="cap-t"><span class="fr">B</span>Tap → Commits</div>
+    <div class="phone ios"><div class="scr" style="background:#8e8e93">
+      <div class="status" style="color:#fff"><span>9:41</span><span></span></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="nav"><span class="link">Copy branch</span><b>Worktree changes</b><span class="link"><b style="font-weight:600">Done</b></span></div>
+        <div class="seg"><span class="on">Commits 3</span><span>All changes 8</span></div>
+        <div class="group">
+          <div class="cell"><span class="dot pend"></span><span class="t"><div class="s">Uncommitted changes</div><div class="m">Not committed yet</div></span><span class="chev">›</span></div>
+          <div class="cell"><span class="dot"></span><span class="t"><div class="s">fix(rows): keep the selected row after a refresh</div><div class="m"><span class="mono">c98e1d4</span>· 3m · 1 file</div></span><span class="chev">›</span></div>
+          <div class="cell"><span class="dot"></span><span class="t"><div class="s">feat(rows): paginate the row list</div><div class="m"><span class="mono">a41c9e2</span>· 12m · 4 files</div></span><span class="chev">›</span></div>
+          <div class="cell"><span class="dot auto"></span><span class="t"><div class="s">chore: update 3 files in src/api</div><div class="m"><span class="mono">7d03b5f</span>· 31m <span class="tag">Auto-saved by Orbit</span></div></span><span class="chev">›</span></div>
+        </div>
+        <div class="gh" style="margin-top:2px">Based on main @ e9f1c07</div>
+      </div>
+    </div></div>
+    <ul class="notes">
+      <li><span class="num">3</span><span>Same rows as the web list: pending first, newest first, the runner's own commits labelled. Merges of main never appear (runner beta.61).</span></li>
+      <li><span class="num">4</span><span>"Uncommitted changes" opens All changes, as on the web.</span></li>
+    </ul></div>
+  <div class="cap"><div class="cap-t"><span class="fr">C</span>A commit (pushed)</div>
+    <div class="phone ios"><div class="scr" style="background:#8e8e93">
+      <div class="status" style="color:#fff"><span>9:41</span><span></span></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="nav"><span class="link">‹ Commits</span><b class="mono" style="font-size:14px">a41c9e2</b><span class="link"><b style="font-weight:600">Done</b></span></div>
+        <div class="body">
+          <div class="h2">feat(rows): paginate the row list</div>
+          <div class="dim" style="font-size:12.5px">12 minutes ago · <span class="add">+30</span> <span class="del">−5</span> · 2 files</div>
+          <div class="why">The list loaded every row at once and timed out past 2,000. It now asks for 50 per page with a cursor.</div>
+        </div>
+        <div class="gh">Files</div>
+        <div class="group">
+          <div class="cell"><span class="t"><span class="file">src/pages/RowList.tsx</span></span><span class="mono" style="font-size:11.5px"><span class="add">+20</span> <span class="del">−3</span></span><span class="chev">›</span></div>
+          <div class="cell"><span class="t"><span class="file">src/pages/useRows.ts</span></span><span class="mono" style="font-size:11.5px"><span class="add">+10</span> <span class="del">−2</span></span><span class="chev">›</span></div>
+        </div>
+        <div class="gh" style="text-transform:none;letter-spacing:0;margin-right:16px">RowList.tsx changes in another commit too: its diff is the file's whole change on the branch.</div>
+      </div>
+    </div></div>
+    <ul class="notes">
+      <li><span class="num">5</span><span>The message first: subject, then the why. Only this commit's files under it.</span></li>
+      <li><span class="num">6</span><span>The same "whole change" note the web drawer shows, here under the list.</span></li>
+    </ul></div>
+  <div class="cap"><div class="cap-t"><span class="fr">D</span>A file (pushed) · and All changes</div>
+    <div class="phone ios"><div class="scr" style="background:#8e8e93">
+      <div class="status" style="color:#fff"><span>9:41</span><span></span></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="nav"><span class="link">‹ a41c9e2</span><b class="mono" style="font-size:13px">useRows.ts</b><span class="link"><b style="font-weight:600">Done</b></span></div>
+        <div class="diff">
+          <div class="hd">@@ -18,7 +18,12 @@</div>
+          <div> const client = useClient();</div>
+          <div class="rm">-const rows = useQuery(['rows'], …);</div>
+          <div class="ad">+const rows = useInfiniteQuery({</div>
+          <div class="ad">+  queryKey: ['rows', id],</div>
+          <div class="ad">+  queryFn: ({ pageParam }) =&gt; …,</div>
+          <div class="ad">+});</div>
+          <div> return rows;</div>
+        </div>
+        <div class="gh" style="margin-top:16px;text-transform:none;letter-spacing:0">All changes segment = today's list:</div>
+        <div class="seg"><span>Commits 3</span><span class="on">All changes 8</span></div>
+        <div class="group">
+          <div class="cell"><span class="t"><span class="file">src/pages/RowList.tsx</span></span><span class="mono" style="font-size:11.5px"><span class="add">+212</span> <span class="del">−31</span></span><span class="chev">›</span></div>
+          <div class="cell dim"><span class="t">… 7 more</span></div>
+        </div>
+      </div>
+    </div></div>
+    <ul class="notes">
+      <li><span class="num">7</span><span>Today's file diff view, unchanged; its back button names where it came from.</span></li>
+      <li><span class="num">8</span><span>"All changes" is today's file list, unchanged.</span></li>
+    </ul></div>
+</div>
+
+<div class="section"><span class="sec and">Android proposal</span><span class="sec-sub">The same four screens with Material parts: tabs for the switch, the top bar's back arrow.</span></div>
+<div class="row">
+  <div class="cap"><div class="cap-t"><span class="fr">E</span>Bar</div>
+    <div class="phone and"><div class="scr">
+      <div class="status"><span>9:41</span><span>▾ ▮</span></div>
+      <div class="top"><span>←</span><b>Paginate rows</b><span>⋮</span></div>
+      <div class="transcript"><div class="bubble">The list now loads 50 rows per page. Tests pass (14 of 14).</div></div>
+      <div class="bar"><span class="pill"><span class="dim">⎇ </span>paginate-rows<span class="dim">-39b…</span></span>
+        <b style="font-weight:500">3 commits</b>
+        <span class="mono"><span class="add">+479</span> <span class="del">−54</span></span><span style="flex:1"></span><span class="btn">Merge</span></div>
+      <div class="composer">Reply…</div>
+    </div></div>
+    <ul class="notes"><li><span class="num">9</span><span>As A. Long-press keeps "Copy branch name".</span></li></ul></div>
+  <div class="cap"><div class="cap-t"><span class="fr">F</span>Tap → Commits tab</div>
+    <div class="phone and"><div class="scr">
+      <div class="status"><span>9:41</span><span>▾ ▮</span></div>
+      <div class="top"><span class="tbtn">Copy branch</span><b style="text-align:center;font-size:16px">Worktree changes</b><span class="tbtn">Done</span></div>
+      <div class="tabs"><span class="on">Commits 3</span><span>All changes 8</span></div>
+      <div class="li"><span class="dot pend"></span><span class="t"><div class="s">Uncommitted changes</div><div class="m">Not committed yet</div></span></div>
+      <div class="li"><span class="dot"></span><span class="t"><div class="s">fix(rows): keep the selected row after a refresh</div><div class="m"><span class="mono">c98e1d4</span>· 3m · 1 file</div></span></div>
+      <div class="li"><span class="dot"></span><span class="t"><div class="s">feat(rows): paginate the row list</div><div class="m"><span class="mono">a41c9e2</span>· 12m · 4 files</div></span></div>
+      <div class="li"><span class="dot auto"></span><span class="t"><div class="s">chore: update 3 files in src/api</div><div class="m"><span class="mono">7d03b5f</span>· 31m <span class="tag">Auto-saved by Orbit</span></div></span></div>
+      <div class="sub" style="color:#77777f;font-weight:400">Based on main @ e9f1c07</div>
+    </div></div>
+    <ul class="notes"><li><span class="num">10</span><span>Material tabs where iOS has a segmented control; rows and order as B.</span></li></ul></div>
+  <div class="cap"><div class="cap-t"><span class="fr">G</span>A commit</div>
+    <div class="phone and"><div class="scr">
+      <div class="status"><span>9:41</span><span>▾ ▮</span></div>
+      <div class="top"><span>←</span><b class="mono" style="font-size:15px">a41c9e2</b><span class="tbtn">Done</span></div>
+      <div class="body">
+        <div class="h2">feat(rows): paginate the row list</div>
+        <div style="font-size:12.5px;color:#77777f">12 minutes ago · <span class="add">+30</span> <span class="del">−5</span> · 2 files</div>
+        <div class="why">The list loaded every row at once and timed out past 2,000. It now asks for 50 per page with a cursor.</div>
+      </div>
+      <div class="sub">Files</div>
+      <div class="li"><span class="t"><span class="file">src/pages/RowList.tsx</span></span><span class="mono" style="font-size:11.5px"><span class="add">+20</span> <span class="del">−3</span></span></div>
+      <div class="li"><span class="t"><span class="file">src/pages/useRows.ts</span></span><span class="mono" style="font-size:11.5px"><span class="add">+10</span> <span class="del">−2</span></span></div>
+      <div class="note" style="padding:0 16px">RowList.tsx changes in another commit too: its diff is the file's whole change on the branch.</div>
+    </div></div>
+    <ul class="notes"><li><span class="num">11</span><span>← goes back to the Commits tab; the system back gesture does the same.</span></li></ul></div>
+  <div class="cap"><div class="cap-t"><span class="fr">H</span>A file · and All changes</div>
+    <div class="phone and"><div class="scr">
+      <div class="status"><span>9:41</span><span>▾ ▮</span></div>
+      <div class="top"><span>←</span><b class="mono" style="font-size:14px">useRows.ts</b><span class="tbtn">Done</span></div>
+      <div class="diff">
+        <div class="hd">@@ -18,7 +18,12 @@</div>
+        <div> const client = useClient();</div>
+        <div class="rm">-const rows = useQuery(['rows'], …);</div>
+        <div class="ad">+const rows = useInfiniteQuery({</div>
+        <div class="ad">+  queryKey: ['rows', id],</div>
+        <div class="ad">+  queryFn: ({ pageParam }) =&gt; …,</div>
+        <div class="ad">+});</div>
+        <div> return rows;</div>
+      </div>
+      <div class="sub" style="color:#77777f;font-weight:400;margin-top:10px">All changes tab = today's list:</div>
+      <div class="tabs"><span>Commits 3</span><span class="on">All changes 8</span></div>
+      <div class="li"><span class="t"><span class="file">src/pages/RowList.tsx</span></span><span class="mono" style="font-size:11.5px"><span class="add">+212</span> <span class="del">−31</span></span></div>
+      <div class="li dim"><span class="t">… 7 more</span></div>
+    </div></div>
+    <ul class="notes"><li><span class="num">12</span><span>Today's diff view and file list, unchanged.</span></li></ul></div>
+</div>
+
+<div class="section"><span class="sec ios">Rules</span><span class="sec-sub">Both platforms, matching the web.</span></div>
+<table class="cmp">
+  <tr><th>Case</th><th>Bar</th><th>Opens on</th></tr>
+  <tr><td>Commits reported, none uncommitted</td><td>N commits · +a −d · Merge</td><td>Commits</td></tr>
+  <tr><td>Commits + uncommitted work</td><td>N commits · + uncommitted · Commit</td><td>Commits, "Uncommitted changes" row first</td></tr>
+  <tr><td>No commit yet</td><td>Uncommitted · K files · Commit</td><td>All changes (no Commits list to show)</td></tr>
+  <tr><td>Runner too old to report commits</td><td>Today's bar, K files</td><td>Today's file list, no switch</td></tr>
+  <tr><td>Opened from elsewhere (a changed-files link)</td><td>—</td><td>All changes, as the web drawer now does</td></tr>
+  <tr><td>One commit</td><td>"1 commit"</td><td>Commits</td></tr>
+</table>
+
+<div class="section"><span class="sec ask">For you to decide</span><span class="sec-sub">Each changes what gets built.</span></div>
+<table class="cmp">
+  <tr><th>Decision</th><th>Recommended</th><th>Otherwise</th></tr>
+  <tr><td>A. Bar tap opens on</td><td>Commits (B, F): the point of the change, and what the web bar's list shows first.</td><td>All changes, with Commits one tap away: today's view stays the first thing seen.</td></tr>
+  <tr><td>B. Newest subject on the bar</td><td>Not on phones (A, E): it pushes out the line counts or the button. iPad and Mac show it, as the web does.</td><td>Show it on phones too, dropping the line counts.</td></tr>
+  <tr><td>C. Scope</td><td>iOS, iPadOS and macOS together (one SwiftUI code path), Android in parallel, shipped in one client release.</td><td>iOS first, Android after.</td></tr>
+</table>
+
+<div class="section"><span class="sec ios">Would touch</span><span class="sec-sub">For sizing only.</span></div>
+<table class="cmp">
+  <tr><td>Apple</td><td><code>OrbitKit/Models/DTOs.swift</code> (BranchCommit on the session detail), <code>OrbitKit/App/WorktreeBarLogic.swift</code> (count, which tab), <code>OrbitApp/Views/WorktreeBar.swift</code> (bar label, DiffSheet's segmented switch, a commit screen).</td></tr>
+  <tr><td>Android</td><td><code>reader/WorktreeModel.kt</code> (read branchCommits), <code>reader/WorktreeBarLogic.kt</code>, <code>reader/WorktreeBar.kt</code> (Pill's label, WorktreeChanges tabs, a commit screen).</td></tr>
+  <tr><td>Server, runner</td><td>Nothing: the session detail already carries <code>branchCommits</code>, and runners on beta.61 report them without merges.</td></tr>
+</table>
+</div>
+</body>
+</html>

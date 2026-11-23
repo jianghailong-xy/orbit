@@ -155,6 +155,10 @@ export interface RoutingModelRow extends RunFigures {
   outsideRuns: number;
   /** The other providers listing the same model (its `identity`): its Quality is pooled with theirs. */
   pooledWith: string[];
+  /** The row above is the same model: this one draws only its provider, and the Quality above stands for it. */
+  continues: boolean;
+  /** The row below is the same model: no rule is drawn between the two. */
+  continued: boolean;
 }
 
 /** The SubAgents view's rows, in its sections. */
@@ -230,18 +234,25 @@ export function routingSections(providers: readonly ProviderTierRow[], groups: r
       tiers,
       outsideRuns: tiers.reduce((total, tier) => total + (tier.outside ? tier.runs : 0), 0),
       pooledWith: entry ? [...(listedBy.get(identityOf(key)) ?? [])].filter((label) => label !== entry.provider.label) : [],
+      continues: false,
+      continued: false,
     };
   };
-  // Each model's rows right after its first, in the order the first came.
+  // Each model's rows right after its first, in the order the first came, and marked as one block.
   const together = (rows: RoutingModelRow[]) => {
     const firstAt = new Map<string, number>();
     rows.forEach((row, index) => {
       if (!firstAt.has(identityOf(row.key))) firstAt.set(identityOf(row.key), index);
     });
-    return rows
+    const ordered = rows
       .map((row, index) => ({ row, index, at: firstAt.get(identityOf(row.key))! }))
       .sort((a, b) => a.at - b.at || a.index - b.index)
       .map(({ row }) => row);
+    ordered.forEach((row, index) => {
+      row.continues = index > 0 && identityOf(ordered[index - 1].key) === identityOf(row.key);
+      row.continued = index < ordered.length - 1 && identityOf(ordered[index + 1].key) === identityOf(row.key);
+    });
+    return ordered;
   };
   const order = (key: string) => listed.get(key)?.order ?? Number.MAX_SAFE_INTEGER;
   const byRuns = (a: RoutingModelRow, b: RoutingModelRow) => b.runs - a.runs || order(a.key) - order(b.key);
