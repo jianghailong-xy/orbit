@@ -590,6 +590,7 @@ function useChatToolbar({
   configured,
   resolved,
   current,
+  codexSandboxUnavailable,
   change,
 }: {
   engine: AgentProvider;
@@ -598,6 +599,7 @@ function useChatToolbar({
   configured: ConfiguredProvider[];
   resolved: boolean;
   current: ChatConfig;
+  codexSandboxUnavailable?: boolean;
   change: (next: ChatConfigChange) => void;
 }) {
   const qc = useQueryClient();
@@ -619,7 +621,7 @@ function useChatToolbar({
   const cursorSettings = cursorAuto ? [] : cursorSettingRows(shownCursorPick);
   const onOwnModels = engine === AgentProvider.CLAUDE && !isLoginProvider(provider) && configured.some((p) => p.slug === provider);
   const permissionSemanticsFor = (label: string) =>
-    derivePermissionSemantics(engine, modeValue(label), onOwnModels ? undefined : shownModel, runner?.runsAsRoot, catalog);
+    derivePermissionSemantics(engine, modeValue(label), onOwnModels ? undefined : shownModel, runner?.runsAsRoot, catalog, codexSandboxUnavailable);
 
   const remember = (patch: { defaultEffort: string }) =>
     qc.setQueryData<Me>(meQuery().queryKey, (prev) =>
@@ -1092,6 +1094,7 @@ interface ChatSession {
   provider?: string | null;
   model?: string | null;
   permissionMode?: string | null;
+  codexSandboxUnavailable?: boolean;
   effort?: string | null;
   fastMode?: boolean | null;
   numTurns?: number;
@@ -1214,6 +1217,7 @@ function WikiChatSession({
     configured: machine.configured,
     resolved,
     current,
+    codexSandboxUnavailable: session?.codexSandboxUnavailable,
     change: (config) => configMut.mutate(config),
   });
   const online = runner?.online ?? false;

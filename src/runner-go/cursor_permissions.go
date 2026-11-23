@@ -383,6 +383,11 @@ func (b *cursorPermissionBridge) permission(id interface{}, params map[string]in
 	}
 	policy := b.policy()
 	switch {
+	// The Files drive is read-only in Plan, whatever a standing rule allows (plan_drive.go).
+	case policy.Mode == "plan" && planDriveWrite(ask.Name, mapValue(ask.Input)):
+		if b.now(id, ask.ToolUseID, cursorSelected(cursorRejectOnce)) {
+			b.note(ask.TurnID, "permission_denied", ask.ToolUseID, ask.Name, planDriveRefusal)
+		}
 	case b.preApproved(ask):
 		b.now(id, ask.ToolUseID, cursorSelected(cursorAllowOnce))
 	case policy.Answer == cursorAnswerRefuse:
@@ -428,10 +433,11 @@ func (b *cursorPermissionBridge) permission(id interface{}, params map[string]in
 
 // uploadsEdit is whether ask writes one file inside the session's uploads directory, once links are resolved.
 func (b *cursorPermissionBridge) uploadsEdit(ask cursorPermissionAsk) bool {
-	if b.uploads == "" || (ask.Name != "Write" && ask.Name != "Edit") {
+	if ask.Name != "Write" && ask.Name != "Edit" {
 		return false
 	}
-	return pathWithin(firstString(mapValue(ask.Input), "file_path"), b.uploads)
+	path := firstString(mapValue(ask.Input), "file_path")
+	return pathWithin(path, b.uploads) || pathWithinAny(path, driveGrantRoots())
 }
 
 // noteBypass says once per process why a session in Bypass is being asked at all.

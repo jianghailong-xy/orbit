@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -51,26 +50,4 @@ func volumeFilesystemOf(path string) (filesystem string, shared bool, err error)
 		return "", false, fmt.Errorf("no mount holds %s", path)
 	}
 	return filesystem, shared, nil
-}
-
-// mountinfoPath is a variable so tests can give their own table.
-var mountinfoPath = "/proc/self/mountinfo"
-
-// unescapeMountinfo undoes the kernel's octal escapes of a mountinfo field (\040 for a space).
-func unescapeMountinfo(field string) string {
-	if !strings.Contains(field, `\`) {
-		return field
-	}
-	var b strings.Builder
-	for i := 0; i < len(field); i++ {
-		if field[i] == '\\' && i+3 < len(field) {
-			if n, err := strconv.ParseUint(field[i+1:i+4], 8, 8); err == nil {
-				b.WriteByte(byte(n))
-				i += 3
-				continue
-			}
-		}
-		b.WriteByte(field[i])
-	}
-	return b.String()
 }

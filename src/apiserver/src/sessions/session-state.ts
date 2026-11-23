@@ -33,6 +33,8 @@ export interface SessionCapabilityFields extends RawSessionStateFields {
   provider?: string | null;
   providerBuiltin?: boolean | null;
   permissionMode?: string | null;
+  /** Its runner reported Codex's sandbox cannot start there, so Codex Auto runs with it off. */
+  codexSandboxUnavailable?: boolean | null;
   /** The release column (common/session-release.ts): a released session is what a resume revives. */
   finishedAt: Date | string | null;
   cancelRequestedAt: Date | string | null;
@@ -155,5 +157,9 @@ function derivePermissionSemanticsForSession(
   return derivePermissionSemantics(
     normalizeRuntimeProvider(session.provider, true),
     session.permissionMode,
+    undefined,
+    undefined,
+    undefined,
+    session.codexSandboxUnavailable,
   );
 }

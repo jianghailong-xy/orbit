@@ -612,11 +612,13 @@ test('quota that goes to waste first is spent first: nearly spent last, then the
   assert.equal(at('cost', [kimi(10, null), soon]).provider, 'codex');
   assert.equal(at('cost', [kimi(10, null), codex({ account: { quota: { utilization: 60, window: 'weekly' } } })]).provider, 'kimi');
 
-  // Balance ranks subscriptions as Cost does: the one expiring first leads, before any metered key.
+  // Balance chooses the model first (policy p7, owner 2026-11-22): DeepSeek's model has only a metered key, so the next
+  // model in the owner's order with a subscription takes over — Kimi's, though Codex's resets sooner. (Until p6 Balance
+  // ranked as Cost and picked Codex here.) Expiry still orders the accounts of one model: see `twins` below.
   const balance = at('balance', [DEEPSEEK, kimi(10, T0 + 480 * HOUR), soon]);
-  assert.equal(balance.provider, 'codex');
+  assert.equal(balance.provider, 'kimi');
   assert.match(balance.reasons.find((r) => r.startsWith('Picked'))!,
-    /\(Balance\): a subscription with 40% of its quota left until 2026-11-19T15:00Z, used before any metered key/);
+    /\(Balance\): model kimi-code\/k3, takes over tier M from the preferred deepseek-v4-flash, which has only metered keys; account kimi: the only account that can run it, a subscription with 90% of its quota left until 2026-12-09T12:00Z$/);
   assert.equal(at('balance', [DEEPSEEK, codex({ account: { quota: { utilization: 60, window: 'weekly' } } })]).provider, 'codex');
 
   // Intelligence: the stronger model first; expiry only between equals.
@@ -732,26 +734,32 @@ test('Cost: a subscription with headroom before a cheaper metered key; subscript
   assert.equal(noCheap.provider, 'mid-key');
 });
 
-test('Balance: every usable subscription before any metered key, as Cost (owner, 2026-11-19); keys by price', () => {
+test('Balance: a model with only metered keys yields to one with a subscription; between keys-only models, the owner\'s order', () => {
   const k = key('key', [{ model: 'k', effort: null, level: 'M', outputPricePerMTok: 3 }]);
   const cheaper = key('cheaper', [{ model: 'c', effort: null, level: 'M', outputPricePerMTok: 1 }]);
   const tight = route(input({ optimizeFor: 'balance', providers: [k, codex({ account: { quota: { utilization: 70, window: '5-hour' } } })] }));
   assert.equal(tight.provider, 'codex', 'a subscription 70% used still goes before a metered key');
-  assert.match(tight.reasons.find((r) => r.startsWith('Picked'))!, /\(Balance\): a subscription with 30% of its quota left, used before any metered key/);
+  assert.match(tight.reasons.find((r) => r.startsWith('Picked'))!,
+    /\(Balance\): model gpt-5\.6, takes over tier M from the preferred k, which has only metered keys; account codex: the only account that can run it, a subscription with 30% of its quota left$/);
+  // Two models on keys only: no subscription to take over, so the preferred model (the owner's first) keeps the run.
+  // Until p6 Balance ranked them by price and picked `cheaper`; the model is now chosen first (owner, 2026-11-22).
   const twoKeys = route(input({ optimizeFor: 'balance', providers: [k, cheaper] }));
-  assert.equal(twoKeys.provider, 'cheaper');
-  assert.match(twoKeys.reasons.find((r) => r.startsWith('Picked'))!, /\(Balance\): the cheapest in tier M: a metered key at \$1 per million/);
+  assert.equal(twoKeys.provider, 'key');
+  assert.match(twoKeys.reasons.find((r) => r.startsWith('Picked'))!, /\(Balance\): model k, preferred in tier M; account key: the only account/);
 });
 
-test('Intelligence: the stronger model in the tier first, then price', () => {
+test("Intelligence: the stronger model in the tier first, then the owner's order", () => {
   const sonnetHigh = key('sonnet-key', [{ model: SONNET, effort: 'high', level: 'L', outputPricePerMTok: 10 }]);
   const cheapL = key('cheap-l', [{ model: 'cheap-l', effort: null, level: 'L', outputPricePerMTok: 1 }]);
   const decision = route(input({ optimizeFor: 'intelligence', caller: { size: 'L' }, providers: [cheapL, sonnetHigh, claude()] }));
   assert.deepEqual([decision.provider, decision.model, decision.effort], ['claude', OPUS, 'high'],
     'Opus reaches XL, so it leads tier L over models whose ceiling is L');
   assert.match(decision.reasons.find((r) => r.startsWith('Picked'))!, /the strongest model in tier L \(reaches XL\)/);
+  // Same ceiling: the owner's order chooses the model, not the price (policy p7, owner 2026-11-22; until p6 the cheaper
+  // key, cheap-l, was first).
   const sameCeiling = route(input({ optimizeFor: 'intelligence', caller: { size: 'L' }, providers: [sonnetHigh, cheapL] }));
-  assert.equal(sameCeiling.provider, 'cheap-l', 'same ceiling: the cheaper first');
+  assert.equal(sameCeiling.provider, 'sonnet-key', "same ceiling: the owner's first model");
+  assert.equal(sameCeiling.fallbacks[0].provider, 'cheap-l');
   const cost = route(input({ optimizeFor: 'cost', caller: { size: 'L' }, providers: [cheapL, sonnetHigh] }));
   assert.equal(cost.provider, 'cheap-l');
 });

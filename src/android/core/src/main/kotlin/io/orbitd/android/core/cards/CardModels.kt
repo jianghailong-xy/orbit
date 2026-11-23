@@ -274,7 +274,13 @@ object CardCatalog {
         val digest = confirmation?.obj("currentVersion")?.text("digest")
         val openItems = standing["openItems"] as? JsonObject
         val startItem = openItems?.obj("startRequest")
-        if (confirmation != null && digest != null && startItem == null &&
+        // A confirmation on record is its receipt (OrbitKit `AcceptanceConfirmationReceiptCard`): "You started the project on 5 criteria",
+        // drawn from the read, so it is here on every device and after every reopen. The question is drawn only while it still asks:
+        // once the standing set is confirmed, the receipt says so, and the card that asked is not drawn dimmed beside it (board-4).
+        StartReceipt.of(confirmation)?.let { record ->
+            add(receipt(CardFamily.ACCEPTANCE, StartReceipt.heading, record, session, project, record.text("confirmedAt") ?: ""))
+        }
+        if (confirmation != null && digest != null && startItem == null && confirmation.text("state") != "CONFIRMED" &&
             (document.objects("acceptanceCriteriaItems").isNotEmpty() || confirmation.obj("confirmation") != null)) {
             val actions = if (confirmation.text("state") in setOf("UNCONFIRMED", "STALE") && document.objects("acceptanceCriteriaItems").isNotEmpty())
                 listOf(CardVerb.CONFIRM_CRITERIA) else emptyList()

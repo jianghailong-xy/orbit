@@ -152,7 +152,7 @@ private data class ScheduleRowModel(val id: String, val circle: ScheduleDisplay.
  * The Scheduled page: "Scheduled 6" and the workspace filter, the timeline's groups, the line at the end, and the detail sheet of
  * the row pressed. [focused] — a schedule a push or a card named — opens its sheet. [workspaces] are the quick-add line's choices,
  * [preferredWorkspace] is the initial choice. [openSession] opens a draft's conversation, and [openRun] opens a run's session.
- * [change] starts a conversation in the schedule's workspace.
+ * [change] opens the schedule's draft change conversation (§8.2).
  */
 @Composable
 fun ScheduledPage(store: ScheduledStore, workspaces: List<Pair<String, String>>, preferredWorkspace: String?, focused: String?,
@@ -582,6 +582,12 @@ private fun HistorySection(store: ScheduledStore, s: ScheduleView, detail: Sched
                         Column(Modifier.weight(1f)) {
                             Text(ScheduleDisplay.recordText(record), style = MaterialTheme.typography.bodyMedium)
                             Text(whenText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            // Asked for in the schedule's change conversation (§8.2): the person's words, opening it.
+                            record.askedText?.takeIf { record.sessionId != null }?.let { asked ->
+                                Text("“$asked”${SC.separator}${SC.ChangeConversation.conversation}",
+                                    Modifier.clickable { record.sessionId?.let(openSession) }.testTag("schedule-history-asked"),
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                            }
                         }
                         Chip(who.text, if (who.who == "USER" || who.who == "ALLOWED") ScheduleDisplay.TagTone.new else ScheduleDisplay.TagTone.mute)
                         if (ScheduleDisplay.recordUndoable(record)) TextButton(onClick = { scope.launch { store.undo(s.id, record.revision) } },
