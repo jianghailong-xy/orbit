@@ -769,7 +769,11 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 			return false
 		}
 		rec, recorded := ledger.get(resp.TurnID)
-		cut := recorded && rec.State == dshTurnPrompted && rec.Cut
+		// Handed back after a runner stop: cut by this binary's stop (Cut), or settled INTERRUPTED by an earlier
+		// binary's, which cancelled the turn at the stop and whose completion never reached Orbit (Orbit would not hand
+		// back a turn it had heard end). Either way Orbit's delivery is its continuation, and it is prompted. Any
+		// other settled turn is reported again as it settled; a prompted one never settled is a crash, not replayed.
+		cut := recorded && ((rec.State == dshTurnPrompted && rec.Cut) || (rec.State == dshTurnSettled && rec.Status == stInterrupted))
 		if recorded && !cut {
 			p.setTurn(resp.TurnID)
 			recoverTurn(resp, rec)

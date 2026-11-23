@@ -1516,6 +1516,36 @@ func TestDshLifecycleShutdownAndResume(t *testing.T) {
 	h.recordEvidence(t.Name())
 }
 
+// The production hang of 2026-11-23: an earlier binary's stop cancelled a dsh turn at once and settled it INTERRUPTED in
+// the ledger, and its completion never reached Orbit, which therefore handed the same turn back to the next process with
+// its continuation. That process re-sent the old settlement instead of prompting, and the turn never continued. It is
+// prompted now.
+func TestDshLifecycleTurnSettledInterruptedByAnEarlierStopContinues(t *testing.T) {
+	h := newLCHarness(t)
+	h.cp.add("t1", "message", "m1")
+	run := h.start(h.job())
+	first := h.settledOnce("t1", stSucceeded, "")
+	h.end(run, "e1")
+	// What the earlier binary left: t2 prompted, cancelled at the stop, settled INTERRUPTED in the ledger; Orbit has it
+	// in flight still.
+	ledger, err := loadDshTurnLedger(h.home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ledger.update(func() {
+		ledger.Turns["t2"] = &dshTurnRecord{State: dshTurnSettled, Status: stInterrupted, Subtype: "interrupted"}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h.cp.add("t2", "message", "continue-m2 [Orbit] The last message you were working on was interrupted because its runner restarted")
+	job := h.job()
+	job.RuntimeSessionID = first.RuntimeSessionID
+	next := h.start(job)
+	h.settledOnce("t2", stSucceeded, "reply to continue-m2 after [m1]")
+	h.end(next, "e2")
+	h.cp.checkClean(t)
+}
+
 // A turn that ends within the stop's drain is reported as any other, and nothing is cut.
 func TestDshLifecycleShutdownDrainLetsATurnFinish(t *testing.T) {
 	previous := shutdownDrainTimeout
