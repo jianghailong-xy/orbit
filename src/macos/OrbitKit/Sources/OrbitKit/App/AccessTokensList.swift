@@ -84,7 +84,7 @@ public enum AccessTokensList {
     /// Files (the Orbit Files drive) is one grant that reads and changes it, so Read-only leaves it out and Read & write
     /// includes it; Notifications (POST /api/notify) sends a push to the owner's own apps and reaches nothing else.
     /// Both as the web's accessTokens.ts has them (FILES_SCOPE, NOTIFY_SCOPE).
-    static let filesScope = "files"
+    static let filesScope = "documents"
     static let notifyScope = "notify"
     static let filesGroup = ScopeGroup(resource: "Files", read: filesScope, write: filesScope)
 
