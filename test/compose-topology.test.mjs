@@ -1367,7 +1367,7 @@ test('(t) Loki keeps the logs with a bounded retention, and Alloy reads them wit
     '    volumes:',
     '      - ./deploy/monitoring/alloy:/etc/orbit-alloy:ro',
     '      - /var/lib/docker/containers:/var/lib/docker/containers:ro',
-    '      - alloy-data:/var/lib/alloy/data',
+    '      - alloy-data:/alloy-data',
     '    tmpfs:',
     '      - /run/orbit-alloy',
     '      - /tmp',
