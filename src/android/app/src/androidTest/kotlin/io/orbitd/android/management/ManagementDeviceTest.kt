@@ -93,6 +93,8 @@ class ManagementDeviceTest {
     @Volatile private var modelRouting: Boolean? = null
     @Volatile private var revoked = emptySet<String>()
     @Volatile private var deepSeekLow = false
+    /** Providers → Model routing's pass: the tier list and a month of SubAgent runs, the same data the iOS probe's stub serves. */
+    @Volatile private var routingFixture = false
     /** A13g: the Machines & models pass — Codex signed out on the remote and OpenCode missing there, a second machine offline, a pool no
      * session can start on, and no keys, so OpenCode is Not set up. POST runners/:id/install starts [installRelay] for its engine. */
     @Volatile private var infraPass = false
@@ -551,6 +553,36 @@ class ManagementDeviceTest {
             } finally {
                 theme = "system"
                 runBlocking { app.session.logout() }
+            }
+        }
+    }
+
+    /**
+     * Providers → Model routing in the light and the dark appearance: Route by tier with Optimize For under it, then each model with
+     * its tier and its runs — routed by tier (two of them outside their tiers), called by name, not routed, and one folded away.
+     */
+    @Test fun modelRoutingPageInLightAndDark() {
+        start()
+        MockWebServer().use { server ->
+            server.dispatcher = dispatcher()
+            try {
+                role = "ADMIN"; runnerOnline = true; routingFixture = true
+                for (mode in listOf("light", "dark")) {
+                    theme = mode
+                    signIn(server); settings()
+                    click(hasText("Providers") and hasClickAction()); click(hasTestTag("model-routing"))
+                    await("Route by tier"); await("Routed by tier")
+                    capture("model-routing-top-$mode")
+                    click(hasTestTag("model-routing-idle"))
+                    await("qwen3-coder")
+                    compose.onNode(hasText("qwen3-coder")).performScrollTo()
+                    capture("model-routing-models-$mode")
+                    runBlocking { app.session.logout() }
+                    compose.waitUntil(15_000) { app.session.state.value is AuthState.SignedOut }
+                }
+            } finally {
+                routingFixture = false; theme = "system"
+                if (app.session.state.value !is AuthState.SignedOut) runBlocking { app.session.logout() }
             }
         }
     }
@@ -1393,6 +1425,8 @@ class ManagementDeviceTest {
                 "/api/providers" -> """[{"slug":"deepseek","label":"DeepSeek","runtime":"claude","defaultModel":"deepseek-chat"},{"slug":"dsh","label":"DeepSeek Harness","runtime":"dsh"},
                     {"slug":"openai-work","label":"OpenAI (work)","defaultModel":"gpt-5"}]"""
                 "/api/providers/mine" -> mine()
+                "/api/providers/subagent-tiers" -> if (routingFixture) ROUTING_TIERS else "[]"
+                "/api/tasks/model-routing/report/subagents" -> if (routingFixture) ROUTING_REPORT else "[]"
                 "/api/access-tokens" -> tokens()
                 "/api/providers/pools" -> pools()
                 "/api/providers/shared-pools" -> "[]"
@@ -1417,5 +1451,31 @@ class ManagementDeviceTest {
             }
             return MockResponse().setHeader("Content-Type", "application/json").setBody(body)
         }
+    }
+
+    private companion object {
+        val ROUTING_TIERS = """{"providers":[
+            {"slug":"claude","label":"Claude Code","kind":"builtin","providerId":null,"billing":"subscription","models":[
+              {"model":"claude-opus-5-5","levels":["L","XL"],"source":"catalogue","editable":true,"outputPricePerMTok":null},
+              {"model":"claude-sonnet-5-5","levels":["S","M"],"source":"catalogue","editable":true,"outputPricePerMTok":null}]},
+            {"slug":"deepseek","label":"DeepSeek","kind":"key","providerId":"p-ds","billing":"key","models":[
+              {"model":"deepseek-v4.1-flash","levels":["S"],"source":"owner","editable":true,"outputPricePerMTok":0.42},
+              {"model":"deepseek-v4.1-pro","levels":[],"source":null,"editable":true,"outputPricePerMTok":1.1}]},
+            {"slug":"local-vllm","label":"Local vLLM","kind":"key","providerId":"p-vllm","billing":"key","models":[
+              {"model":"qwen3-coder","levels":[],"source":null,"editable":true,"outputPricePerMTok":null}]}]}"""
+        private fun group(tier: String, provider: String, providerLabel: String, model: String, modelLabel: String, runs: Int, ended: Int,
+                          done: Int, cost: Double) =
+            """{"tier":"$tier","provider":"$provider","providerLabel":"$providerLabel","model":"$model","modelLabel":"$modelLabel",""" +
+                """"runs":$runs,"workflowCalls":0,"ended":$ended,"done":$done,"costUsd":$cost,"movedOn":0,"noSize":0}"""
+        val ROUTING_REPORT = """{"subagents":[""" + listOf(
+            group("L", "claude", "Claude Code", "claude-opus-5-5", "Opus 5.5", 12, 11, 10, 0.0),
+            group("XL", "claude", "Claude Code", "claude-opus-5-5", "Opus 5.5", 3, 3, 3, 0.0),
+            group("S", "claude", "Claude Code", "claude-opus-5-5", "Opus 5.5", 2, 2, 1, 0.0),
+            group("M", "claude", "Claude Code", "claude-sonnet-5-5", "Sonnet 5.5", 9, 9, 8, 0.0),
+            group("S", "deepseek", "DeepSeek", "deepseek-v4.1-flash", "DeepSeek V4.1 Flash", 14, 13, 12, 0.61),
+            group("M", "deepseek", "DeepSeek", "deepseek-v4.1-flash", "DeepSeek V4.1 Flash", 4, 4, 3, 0.22),
+            group("named", "deepseek", "DeepSeek", "deepseek-v4.1-pro", "DeepSeek V4.1 Pro", 2, 2, 2, 0.18),
+            group("not-routed", "claude", "Claude Code", "claude-sonnet-5-5", "Sonnet 5.5", 5, 5, 4, 0.0),
+        ).joinToString(",") + """],"workflows":[]}"""
     }
 }
