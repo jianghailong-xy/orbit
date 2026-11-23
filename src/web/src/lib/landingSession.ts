@@ -89,6 +89,8 @@ export const LANDING_PAGE_COPY = {
   COULD_NOT_MERGE: 'Could not merge',
   CONFLICT: 'conflict',
   STOPPED_NOT_LANDED: 'Stopped · not landed',
+  /** An attempt held on its pull request: it stopped nothing, it waits for GitHub (design §4.2). */
+  WAITING_FOR_GITHUB: 'Waiting for GitHub',
   TASK_ACCEPTANCE_EXITED: (code: string, expected: string): string =>
     `Task acceptance exited ${code} (expected ${expected}) on the combined tree`,
   CHECKS_TIMED_OUT: 'A check timed out on the combined tree',
@@ -565,7 +567,9 @@ function terminalCard(
         : attempt.state === 'ERROR'
           ? LANDING_PAGE_COPY.STOPPED_WITH_AN_ERROR
           : LANDING_PAGE_COPY.STOPPED_NOT_LANDED;
-  const failure = githubCheck
+  // Held on its pull request: nothing stopped it, and the pull request block under the card says where it stands.
+  const onPullRequest = attempt.state === 'PULL_REQUEST';
+  const failure = onPullRequest ? null : githubCheck
     ? `${label} · ${LANDING_PAGE_COPY.NOTHING_PUSHED_CLAUSE}`
     : failed
     ? `${failed.timedOut ? `${label} timed out ${LANDING_PAGE_COPY.ON_THE_COMBINED_TREE}` : LANDING_PAGE_COPY.TASK_ACCEPTANCE_EXITED(String(failed.exitCode ?? '—'), String(failed.expectedExitCode ?? 0))} · ${LANDING_PAGE_COPY.NOTHING_PUSHED_CLAUSE}`
@@ -576,12 +580,13 @@ function terminalCard(
           : LANDING_PAGE_COPY.STOPPED_NOT_LANDED;
   return {
     word,
-    state: attempt.state === 'READY' ? LANDING_PAGE_COPY.READY : clause,
+    state: attempt.state === 'READY' ? LANDING_PAGE_COPY.READY : onPullRequest ? LANDING_PAGE_COPY.WAITING_FOR_GITHUB : clause,
     right: attempt.state === 'READY'
       ? LANDING_PAGE_COPY.READY
+      : onPullRequest ? LANDING_PAGE_COPY.WAITING_FOR_GITHUB
       : mergeJob ? LANDING_PAGE_COPY.NOT_MERGED : LANDING_PAGE_COPY.NOT_LANDED,
     rightIsClock: false,
-    detail: attempt.state === 'READY' ? LANDING_PAGE_COPY.PASSED_CHECK : clause,
+    detail: attempt.state === 'READY' ? LANDING_PAGE_COPY.PASSED_CHECK : onPullRequest ? LANDING_PAGE_COPY.WAITING_FOR_GITHUB : clause,
     budget: null,
     progress: null,
     live: null,

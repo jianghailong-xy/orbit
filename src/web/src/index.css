@@ -30703,3 +30703,4 @@ td > .routing-report-tier + .model-routing-flag {
 .landing-pr-actions { display: flex; gap: 12px; font-size: 12px; }
 .landing-pr-tip { display: flex; justify-content: space-between; gap: 8px; margin: 0; padding: 8px 10px; font-size: 12px; border-radius: 8px; background: var(--brand-tint); border: 1px solid var(--brand-border); }
 .landing-pr-tip button { border: 0; background: none; cursor: pointer; color: var(--text-secondary); }
+.landings-window-entry > .landing-pr { margin: 8px 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-subtle); }

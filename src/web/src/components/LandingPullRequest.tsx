@@ -35,7 +35,7 @@ export const PULL_REQUEST_WORDS = {
   DISMISS: 'Hide this tip',
 } as const;
 
-export function pullRequestCard(pr: LandingPullRequestView, main: string, workspaceId?: string): PullRequestCardModel {
+export function pullRequestCard(pr: LandingPullRequestView, main: string, workspaceId: string | undefined = pr.workspaceId): PullRequestCardModel {
   const number = pr.number != null ? `#${pr.number}` : '';
   const url = pr.url;
   const view = url ? [{ label: PULL_REQUEST_WORDS.VIEW, href: url }] : [];

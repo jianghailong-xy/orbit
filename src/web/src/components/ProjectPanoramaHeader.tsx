@@ -686,7 +686,9 @@ function liveLine(
     state: unavailable ? 'Update unavailable'
       : silent ? LANDING_NO_REPORT
         : running && localLockWait(job) !== null ? LANDING_LIVENESS_WORDS.WAITING
-          : running ? (job.phase ? jobPhases(main)[job.phase] ?? 'running' : 'running') : 'queued',
+          : running ? (job.phase ? jobPhases(main)[job.phase] ?? 'running' : 'running')
+            // Held on its pull request, not queued: GitHub is what it waits for (design §4.2).
+            : job.state === 'PULL_REQUEST' ? 'waiting for GitHub' : 'queued',
     // An instant this clock cannot read is no elapsed time rather than `NaN` on the page: the row
     // stays up and counts from zero, which is the one thing it can still say truthfully.
     clock: liveness?.clock ?? landingClock(Number.isFinite(startedAt) ? elapsedAt - startedAt : 0),
