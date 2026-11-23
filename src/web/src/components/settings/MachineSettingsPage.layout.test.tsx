@@ -476,6 +476,19 @@ describe('a runner’s page, laid out as web.png', () => {
     expect($<HTMLElement>('.machine-meter-bar > span', capacityRow('Max Concurrent')).style.width).toBe('100%');
   });
 
+  it('saves Extra sessions on demand next to Max Concurrent, including zero', async () => {
+    const { sent } = await mount(machine('real wikova', { burstConcurrent: 2 }));
+    const row = capacityRow('Extra sessions on demand');
+    expect(row.previousElementSibling).toBe(capacityRow('Max Concurrent'));
+    const field = $('[role="combobox"][aria-label="Extra sessions on demand"]', row);
+    expect(text(field)).toBe('2');
+    await click(field);
+    const options = $$('[role="listbox"] [role="option"]');
+    expect(options.map(text)).toContain('32');
+    await press(options.find((option) => text(option) === '0')!);
+    expect(sent).toEqual([{ method: 'PATCH', path: `/runners/${RUNNER_ID}`, body: { burstConcurrent: 0 } }]);
+  });
+
   it('shows a floor set to something else as it is, and Off clears it', async () => {
     const { sent } = await mount(machine('real wikova', { minFreeDiskMb: 15000 }));
     expect(text($('.rd-keep-free'))).toBe('15 GB');

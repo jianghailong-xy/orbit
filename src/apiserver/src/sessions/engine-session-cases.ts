@@ -239,6 +239,12 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
       'async pin(ownerId: string, id: string) {\n    assertEngineSessionRow(await this.get(ownerId, id)); // ownership check (404s otherwise)',
     note: 'POST /pin',
   },
+  'SessionsService.runNow': {
+    file: 'sessions/sessions.service.ts',
+    snippet:
+      "assertEngineSessionRow(await this.get(ownerId, id)); // ownership check (404s otherwise); a landing is the platform's",
+    note: 'POST /run-now',
+  },
   'SessionsService.unpin': {
     file: 'sessions/sessions.service.ts',
     snippet:
@@ -369,6 +375,7 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /sessions/:id/archive': 'SessionsService.transitionEnd',
   'POST /sessions/:id/restore': 'SessionsService.restore',
   'POST /sessions/:id/pin': 'SessionsService.pin',
+  'POST /sessions/:id/run-now': 'SessionsService.runNow',
   'DELETE /sessions/:id/pin': 'SessionsService.unpin',
   'POST /sessions/:id/move': 'SessionsService.move',
   'PUT /sessions/:id/tags': 'SessionTagsService.setForSession',

@@ -66,6 +66,8 @@ import { VIEWER_STREAM_CAPS, ViewerStreamCaps } from '../sessions/viewer-stream-
 import { RealtimeService } from '../realtime/realtime.service';
 import { openStream, type HeldStream } from '../test-support/sse-client';
 import { viewerStreamCrossings } from '../test-support/viewer-door-checks';
+import { DriveContentService } from '../drive/drive-content.service';
+import { DriveService } from '../drive/drive.service';
 import { ShareLinksController } from '../share-links/share-links.controller';
 import { ShareLinksService } from '../share-links/share-links.service';
 import { SharedRateLimiter } from './public-surface.guard';
@@ -267,6 +269,9 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
       { provide: SessionsService, useValue: sessions },
       { provide: AttachmentsService, useValue: new AttachmentsService(prisma) },
       { provide: ShareLinksService, useValue: new ShareLinksService(prisma) },
+      // Drive file links, which nothing here shares or opens (share-links-drive-file.pg.spec.ts holds them).
+      { provide: DriveService, useValue: {} },
+      { provide: DriveContentService, useValue: {} },
       { provide: SharedRateLimiter, useValue: new SharedRateLimiter({ max: BUDGET, windowMs: 60_000 }) },
       { provide: ViewerStreamService, useValue: new ViewerStreamService(prisma, realtime, sessions) },
       { provide: ViewerStreamCaps, useValue: caps },

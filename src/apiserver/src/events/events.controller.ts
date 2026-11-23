@@ -5,7 +5,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { untilStopping } from '../common/graceful-stop';
-import { declaresListChanged, declaresListScopes, declaresOwnerRequests, declaresScheduleCards } from '../realtime/open-list-hints';
+import { declaresDriveChanged, declaresListChanged, declaresListScopes, declaresOwnerRequests, declaresScheduleCards } from '../realtime/open-list-hints';
 import { RealtimeService } from '../realtime/realtime.service';
 
 /** ~20s keepalive (decision Q5): its job is to let the CLIENT's byte watchdog detect a half-dead
@@ -33,9 +33,9 @@ export class EventsController {
   events(
     @CurrentUser() user: AuthUser,
     // The hints this client understands, comma-separated (docs/realtime-control-plane-stream.md
-    // §4.8). `list_changed`, `list_scopes`, `owner_requests` and `schedule_cards` exist; a stream that does
-    // not name one never receives its event, because every shipped client re-reads everything on a type it
-    // does not know. `list_scopes` adds `scopes` to `sessions.list_changed` and nothing else.
+    // §4.8). The stream uses opt-ins for `list_changed`, `owner_requests`, `schedule_cards` and `drive_changed`
+    // because shipped clients re-read everything on unknown event types. `list_scopes` adds
+    // `scopes` to `sessions.list_changed` when that event is enabled.
     @Query('hints') hints?: string | string[],
   ): Observable<MessageEvent> {
     // Ends as this apiserver stops, so the client opens it again on another (common/graceful-stop.ts).
@@ -44,6 +44,7 @@ export class EventsController {
         listChanged: declaresListChanged(hints),
         listScopes: declaresListScopes(hints),
         ownerRequests: declaresOwnerRequests(hints),
+        driveChanged: declaresDriveChanged(hints),
         scheduleCards: declaresScheduleCards(hints),
       }).pipe(map((e) => ({ data: e }) as MessageEvent)),
       interval(KEEPALIVE_MS).pipe(map(() => ({ data: { type: 'ping' } }) as MessageEvent)),

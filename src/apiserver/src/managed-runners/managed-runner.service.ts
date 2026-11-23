@@ -298,8 +298,8 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
    * An explicit sleep of a READY runner. Never of one with work: the records showing a turn queued or
    * running, a job, a landing or any other operation for it refuse the request (409
    * MANAGED_RUNNER_BUSY), and so does a runner that cannot sleep. Accepted, it is a desire: the
-   * manager drains the runner once its instance reports nothing in flight, and demand that comes
-   * first keeps it running.
+   * manager drains the runner once its instance reports nothing in flight in a report sent after the
+   * request, and demand that comes first keeps it running.
    */
   async sleep(ownerId: string, idempotencyKey: string, revision: number | undefined): Promise<ManagedRunnerStatus> {
     const runtime = this.operable();
@@ -327,7 +327,8 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
     }
     const { count } = await this.prisma.managedRunner.updateMany({
       where: { id: mapping.id, ownerId, revision, managementState: 'READY', desiredState: 'RUNNING' },
-      data: { desiredState: 'SLEEPING', lastRequestKey: idempotencyKey, revision: { increment: 1 } },
+      // When it was asked, on the clock the manager judges reports by: only a report sent after it lets it drain.
+      data: { desiredState: 'SLEEPING', sleepRequestedAt: runtime.manager.now(), lastRequestKey: idempotencyKey, revision: { increment: 1 } },
     });
     if (count === 0) throw this.revisionConflict(await this.owned(ownerId));
     runtime.worker.kick();

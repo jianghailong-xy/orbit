@@ -50,7 +50,7 @@ import { describe, expect, it } from 'vitest';
 const WEB_SRC = fileURLToPath(new URL('./', import.meta.url));
 
 /** The control-plane entities, as `entitiesFor` (lib/useControlPlane.tsx) names its events. */
-const ENTITIES = new Set(['task', 'session', 'project', 'workspace', 'checkout', 'tag', 'folder', 'provider', 'watch', 'wiki', 'terminal', 'ownerRequest', 'scheduleCard']);
+const ENTITIES = new Set(['task', 'session', 'project', 'workspace', 'checkout', 'tag', 'folder', 'provider', 'watch', 'wiki', 'terminal', 'ownerRequest', 'drive', 'scheduleCard']);
 
 /**
  * Sites that derive from no control-plane entity, with the reason. Frozen: every key must name a
@@ -96,6 +96,7 @@ const EXEMPT: Record<string, string> = {
   'src/lib/queries.ts#51': "share-link tokens are written from this tab; no control-plane event announces them",
   'src/lib/queries.ts#52': "access tokens are written from this tab; no control-plane event announces them",
   'src/lib/queries.ts#85': "link preview metadata read from the linked pages; no control-plane event announces it",
+  'src/lib/queries.ts#86': "the drive's share of storage, read when Files → Storage opens; no control-plane event announces it",
   'src/lib/useDirProbe.ts#1': "a runner filesystem probe; no control-plane event announces directory state",
   'src/pages/AdminEmailPage.tsx#1': "admin email settings are written from this tab; no control-plane event announces them",
   'src/pages/AdminGithubPage.tsx#1': "admin GitHub App settings are written from this tab; no control-plane event announces them",

@@ -321,6 +321,9 @@ test('the owner channel refuses a personal access token door by door and field b
       login: 404,
     },
     // Session guests (docs/session-guests-design.md §3): the People list, inviting by email, removing.
+    // Run now: this session's runner never beat, so the door itself refuses the login, 409 RUN_NOW_REFUSED (a free slot
+    // would not start it); queued-run-now.pg.spec.ts presses it for real.
+    { route: 'POST /sessions/:id/run-now', path: `/sessions/${sessionId}/run-now`, login: 409 },
     { route: 'GET /sessions/:id/guests', path: `/sessions/${sessionId}/guests`, login: 200 },
     { route: 'GET /sessions/:id/guests/suggestions', path: `/sessions/${sessionId}/guests/suggestions`, login: 200 },
     {

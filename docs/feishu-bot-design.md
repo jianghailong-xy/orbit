@@ -149,7 +149,7 @@ model FeishuApp {                     // feishu_app，每个账号至多一行
   appId              String    @unique                // cli_xxx；一个应用只能接到一个账号（§3.2）
   appSecretEnc       String                           // providers/provider-crypto.ts 的 encryptSecret
   enabled            Boolean   @default(true)
-  messageDetail      String    @default("TITLES_ONLY") // 'TITLES_ONLY' | 'FULL'（§6.4）
+  messageDetail      String    @default("FULL") // 'TITLES_ONLY' | 'FULL'（§6.4；1491 起默认 FULL）
   approvalsInFeishu  Boolean   @default(true)         // 卡片上答复审批（§7.2）
   defaultWorkspaceId String?   @db.Uuid               // 私聊新会话进哪个 workspace（§7.3）
   ownerOpenId        String?                          // 主人在这个应用里的 open_id，绑定后才有（§5）
@@ -300,9 +300,11 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
 
 ### 6.4 详情的边界（决定 5）
 
-发到飞书的内容存在飞书的服务器上（飞书在国内，Lark 在海外），所以详情可配置，**默认不带**（`TITLES_ONLY`）：
+发到飞书的内容存在飞书的服务器上（飞书在国内，Lark 在海外），所以详情可配置。最初**默认不带**（`TITLES_ONLY`）；
+2026-11-23 所有者改为**默认带**（`FULL`，迁移 1491 把已有应用也一并改成 `FULL`），不想带的在设置里关掉
+「Include details in alerts」。下文的「默认模式」指 `TITLES_ONLY`。
 
-- **默认**：提醒卡只带会话或项目的标题、事件种类、工具名。不带工具输入、recap、失败原因、agent `notify` 的原文、
+- **默认模式**（`TITLES_ONLY`）：提醒卡只带会话或项目的标题、事件种类、工具名。不带工具输入、recap、失败原因、agent `notify` 的原文、
   owner item 的正文、agent 提问的内容。
 - **详情模式**（`FULL`）：加上 §6.1 表里第三列的内容。
 - **在飞书里进行的对话不算详情**：从飞书开的会话（私聊或群），以及主人在飞书里回复过的会话，每轮的回复照常回到那条消息链
@@ -593,7 +595,7 @@ F0 → F1 → F2 → F3 串行，F3n 在 F3 之后两端并行。以后再做：
 2. **第一期就支持群聊派活。** §12 的任务全部属于第一期。
 3. **每个账号自己配置机器人的 key。** 每个账号填自己的飞书企业自建应用（§4、§5）。
 4. **群派活每单开一个话题**（§8.2）。
-5. **消息详情可配置，默认不带**（§6.4）。
+5. **消息详情可配置，默认不带**（§6.4）。2026-11-23 所有者改为默认带（`FULL`）。
 
 本文对其中两项的解读，所有者有异议就改：
 

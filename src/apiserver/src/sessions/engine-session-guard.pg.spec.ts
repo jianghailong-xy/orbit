@@ -321,6 +321,7 @@ const USER_DRIVERS: Readonly<Record<string, Drive>> = {
   'POST /sessions/:id/archive': (s, w, id) => s.sessions.complete(w.ownerId, id),
   'POST /sessions/:id/restore': (s, w, id) => s.sessions.restore(w.ownerId, id),
   'POST /sessions/:id/pin': (s, w, id) => s.sessions.pin(w.ownerId, id),
+  'POST /sessions/:id/run-now': (s, w, id) => s.sessions.runNow(w.ownerId, id, null),
   'DELETE /sessions/:id/pin': (s, w, id) => s.sessions.unpin(w.ownerId, id),
   'POST /sessions/:id/move': (s, w, id) => s.sessions.move(w.ownerId, id, {}),
   'PUT /sessions/:id/tags': (s, w, id) => s.tags.setForSession(w.ownerId, id, []),

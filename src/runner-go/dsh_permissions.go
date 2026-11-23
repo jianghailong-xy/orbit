@@ -280,7 +280,7 @@ func dshAutoRoutineEscalation(ask dshPermissionAsk, workspace string, extraRoots
 // session's uploads directory, once links are resolved. dsh's file sandbox grants only the workspace and the temp
 // areas, with no setting for another root; approving the escalation widens that one file operation, nothing else.
 func dshAutoUploadsEdit(ask dshPermissionAsk, workspace, uploads string) bool {
-	if uploads == "" || (ask.Name != "write" && ask.Name != "edit") {
+	if ask.Name != "write" && ask.Name != "edit" {
 		return false
 	}
 	input := mapValue(ask.Input)
@@ -294,7 +294,7 @@ func dshAutoUploadsEdit(ask dshPermissionAsk, workspace, uploads string) bool {
 		}
 		path = filepath.Join(workspace, path)
 	}
-	return pathWithin(path, uploads)
+	return pathWithin(path, uploads) || pathWithinAny(path, driveGrantRoots())
 }
 
 // A container command is never a routine escalation: a test stack's docker runs unasked inside the

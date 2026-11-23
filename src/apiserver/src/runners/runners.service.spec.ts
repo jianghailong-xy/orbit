@@ -166,6 +166,7 @@ test('reorderRunners handles workspaceless runners, filters invalid ids, and app
       labels: true,
       status: true,
       maxConcurrent: true,
+      burstConcurrent: true,
       version: true,
       lastHeartbeatAt: true,
       presence: { select: { lastBeatAt: true, backgroundJobSessionIds: true } },

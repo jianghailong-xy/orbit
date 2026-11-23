@@ -10,7 +10,7 @@
  *       the other platform (Lark's side is asked for a LARK app), an open platform that cannot be asked; and a
  *       request Orbit can refuse by itself asks Feishu nothing;
  *   (3) good credentials are saved after one token trade: the App Secret encrypted, decrypting to what was sent;
- *       messageDetail TITLES_ONLY, approvals in Feishu and the app's switch on; and PUT and GET answer the app
+ *       messageDetail FULL, approvals in Feishu and the app's switch on; and PUT and GET answer the app
  *       field by field without the secret, what is stored for it, or the token;
  *   (4) the same App ID saved by a second account is refused 409 `This Feishu app is already connected to another
  *       Orbit account.`, and the first account's row is untouched; with a wrong secret it is the 400 of (2);
@@ -168,7 +168,7 @@ test('Feishu apps: saved only once Feishu trades the credentials, one account pe
       'app_id text NOT NULL',
       'app_secret_enc text NOT NULL',
       'enabled bool NOT NULL = true',
-      "message_detail text NOT NULL = 'TITLES_ONLY'::text",
+      "message_detail text NOT NULL = 'FULL'::text",
       'approvals_in_feishu bool NOT NULL = true',
       'default_workspace_id uuid NULL',
       'owner_open_id text NULL',
@@ -337,7 +337,7 @@ test('Feishu apps: saved only once Feishu trades the credentials, one account pe
       hasSecret: true,
       secretUnreadable: false,
       enabled: true,
-      messageDetail: 'TITLES_ONLY',
+      messageDetail: 'FULL',
       approvalsInFeishu: true,
       showOrbit: true,
       defaultWorkspaceId: null,
@@ -362,7 +362,7 @@ test('Feishu apps: saved only once Feishu trades the credentials, one account pe
     assert.notEqual(row.app_secret_enc, APP_X.appSecret);
     assert.ok(!row.app_secret_enc.includes(APP_X.appSecret));
     assert.equal(decryptSecret(row.app_secret_enc), APP_X.appSecret, 'what is stored decrypts to what was sent');
-    assert.equal(row.message_detail, 'TITLES_ONLY');
+    assert.equal(row.message_detail, 'FULL');
     assert.equal(row.approvals_in_feishu, true);
     assert.equal(row.show_orbit, true, 'a new app shows Orbit, as every app did before (§15.2)');
     assert.equal(row.enabled, true);
@@ -416,18 +416,18 @@ test('Feishu apps: saved only once Feishu trades the credentials, one account pe
     // The account's choices, before it replaces the app.
     const off = await ask('PATCH', '/api/integrations/feishu', a.bearer, { enabled: false });
     assertApp(off, { enabled: false }, 'switched off');
-    const full = await ask('PATCH', '/api/integrations/feishu', a.bearer, { messageDetail: 'FULL' });
-    assertApp(full, { enabled: false, messageDetail: 'FULL' }, 'details on');
-    assert.equal((await appRows()).find((r) => r.id === row.id)?.message_detail, 'FULL');
+    const titles = await ask('PATCH', '/api/integrations/feishu', a.bearer, { messageDetail: 'TITLES_ONLY' });
+    assertApp(titles, { enabled: false, messageDetail: 'TITLES_ONLY' }, 'details off');
+    assert.equal((await appRows()).find((r) => r.id === row.id)?.message_detail, 'TITLES_ONLY');
     await sql.query(`UPDATE feishu_app SET approvals_in_feishu = false WHERE id = $1`, [row.id]);
     const hidden = await ask('PATCH', '/api/integrations/feishu', a.bearer, { showOrbit: false });
-    assertApp(hidden, { enabled: false, messageDetail: 'FULL', showOrbit: false }, 'Show Orbit in Feishu off');
+    assertApp(hidden, { enabled: false, messageDetail: 'TITLES_ONLY', showOrbit: false }, 'Show Orbit in Feishu off');
     assert.equal((await appRows()).find((r) => r.id === row.id)?.show_orbit, false);
 
     const replaced = await ask('PUT', '/api/integrations/feishu', a.bearer, APP_Y);
     assertApp(replaced, {
       platform: 'FEISHU', appId: APP_Y.appId, ownerOpenId: null, ownerName: null, botName: null, lastError: null,
-      enabled: false, messageDetail: 'FULL', approvalsInFeishu: false, showOrbit: false,
+      enabled: false, messageDetail: 'TITLES_ONLY', approvalsInFeishu: false, showOrbit: false,
     }, 'another app');
     const rows = await appRows();
     assert.equal(rows.length, 1);
@@ -435,12 +435,13 @@ test('Feishu apps: saved only once Feishu trades the credentials, one account pe
     assert.equal(decryptSecret(rows[0].app_secret_enc), APP_Y.appSecret);
 
     const freed = await ask('PUT', '/api/integrations/feishu', b.bearer, APP_X);
-    assertApp(freed, { appId: APP_X.appId, enabled: true, messageDetail: 'TITLES_ONLY', approvalsInFeishu: true, showOrbit: true }, "the old App ID, now B's");
+    assertApp(freed, { appId: APP_X.appId, enabled: true, messageDetail: 'FULL', approvalsInFeishu: true, showOrbit: true }, "the old App ID, now B's");
     assert.deepEqual((await appRows()).map((r) => [r.owner_id, r.app_id]).sort(), [[a.id, APP_Y.appId], [b.id, APP_X.appId]].sort());
 
     // A's app back on, for what follows.
     assertApp(await ask('PATCH', '/api/integrations/feishu', a.bearer, { enabled: true }), { enabled: true }, 'switched on');
     assertApp(await ask('PATCH', '/api/integrations/feishu', a.bearer, { showOrbit: true }), { showOrbit: true }, 'Show Orbit back on');
+    assertApp(await ask('PATCH', '/api/integrations/feishu', a.bearer, { messageDetail: 'FULL' }), { messageDetail: 'FULL' }, 'details back on');
   });
 
   await t.test('(6) PATCH, DELETE, an access token, and a secret the key in force cannot decrypt', async () => {
