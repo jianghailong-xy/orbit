@@ -362,6 +362,7 @@ apiserver's metrics listener runs, and it is reached by nothing.
 | --- | --- | --- | --- | --- | --- |
 | `METRICS_INTERNAL_PORT` | `integer` | Compose fixes `9091` | The apiserver's internal metrics listener, which serves `GET /metrics` alone without a token. `deploy/monitoring/prometheus.yml` scrapes this port. Unset outside Compose: no listener. | No | Fixed in Compose |
 | `METRICS_INTERNAL_HOST` | `string` (address) | Compose fixes `0.0.0.0`; `127.0.0.1` outside Compose | Where that listener binds. Every interface of the container, so Prometheus reaches it over the project network; it is published nowhere. | No | Fixed in Compose |
+| `ORBIT_MONITORING` | `string` | Written as `on` by the installer and, once, by the upgrade script | The record that the `monitoring` profile was switched on here. While the name is in `.env`, an upgrade never adds `monitoring` to `COMPOSE_PROFILES` again, so removing the profile ([Turn it off](self-hosting.md#monitoring)) sticks. Nothing in Compose reads it. | No | Read by the upgrade script |
 | `ORBIT_PROMETHEUS_RETENTION` | `string` (duration) | Optional; `15d` | How long Prometheus keeps its time series (`--storage.tsdb.retention.time`). | No | Recreate `prometheus` |
 | `ORBIT_PROMETHEUS_RETENTION_SIZE` | `string` (size) | Optional; `4GB` | The most disk Prometheus's time series may take; past it the oldest blocks go first (`--storage.tsdb.retention.size`). | No | Recreate `prometheus` |
 | `ORBIT_LOKI_RETENTION` | `string` (duration) | Optional; `168h` | How long Loki keeps log lines ([Logs](self-hosting.md#logs)). Hours, such as `72h` or `336h`. | No | Recreate `loki` |
@@ -437,6 +438,11 @@ which pins both from `ORBIT_REGISTRY`.
 | `ORBIT_NTFY_TOPIC` | `string` (secret) | Optional; none, and then no alert is delivered | The ntfy topic. On a public server it is the only secret. | Yes | Recreate `grafana` |
 | `ORBIT_ALERT_EMAIL` | `string` | Optional; a placeholder | Addresses for `orbit-email`, separated by `;`. Needs `GF_SMTP_*`. | No | Recreate `grafana` |
 | `ORBIT_ALERT_WEBHOOK_URL` | `string` (URL) | Optional; Prometheus on this host | Where `orbit-webhook` POSTs. | No | Recreate `grafana` |
+| `GF_SMTP_ENABLED` | `boolean` | Optional; `false` | Turns on Grafana's SMTP client, which `orbit-email` sends through ([Alerts](self-hosting.md#alerts)). | No | Recreate `grafana` |
+| `GF_SMTP_HOST` | `string` (`host:port`) | Optional; `localhost:25` | The SMTP server Grafana sends alert email through. | No | Recreate `grafana` |
+| `GF_SMTP_USER` | `string` | Optional; empty | The SMTP login. | No | Recreate `grafana` |
+| `GF_SMTP_PASSWORD` | `string` | Optional; empty | The SMTP password. | Yes | Recreate `grafana` |
+| `GF_SMTP_FROM_ADDRESS` | `string` (email) | Optional; `grafana@localhost.localdomain` | The sender address of an alert email. | No | Recreate `grafana` |
 | `ORBIT_WATCHDOG_URL` | `string` (URL) | Optional; Prometheus on this host | The external heartbeat URL the always-firing Watchdog is POSTed to every minute. | No | Recreate `grafana` |
 | `ORBIT_NOTIFY_TOKEN` | `string` (secret) | Optional; none, and then alerts do not go to the Orbit app | A personal access token holding only the `notify` scope. Every alert but the Watchdog is then also sent to `POST /api/notify` over the project network and pushed to that account's Orbit apps, with this server's `APNS_*` / `FCM_*` keys; without them the call is accepted and nothing is pushed. See [Alerts in the Orbit app](self-hosting.md#alerts-in-the-orbit-app). | Yes | Recreate `grafana` |
 
