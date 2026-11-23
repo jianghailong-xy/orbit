@@ -225,7 +225,7 @@
             "type": "prometheus",
             "uid": "orbit-prometheus"
           },
-          "expr": "sum(rate(orbit_http_request_duration_seconds_count{status=\"5xx\"}[5m])) / sum(rate(orbit_http_request_duration_seconds_count[5m]))",
+          "expr": "(sum(rate(orbit_http_request_duration_seconds_count{status=\"5xx\"}[5m])) or vector(0)) / sum(rate(orbit_http_request_duration_seconds_count[5m]))",
           "legendFormat": "",
           "refId": "A",
           "range": true

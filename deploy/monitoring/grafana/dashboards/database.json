@@ -754,7 +754,7 @@
             "type": "prometheus",
             "uid": "orbit-prometheus"
           },
-          "expr": "sum(rate(orbit_db_conflict_responses_total[5m]))",
+          "expr": "sum(rate(orbit_db_conflict_responses_total[5m])) or vector(0)",
           "legendFormat": "answered 503",
           "refId": "A",
           "range": true
