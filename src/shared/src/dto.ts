@@ -2765,6 +2765,12 @@ export type LoginBrowserState = 'requested' | LoginBrowserOutcome;
 /** Every LoginFailureReason, for a reader that checks one it is handed. */
 export const LOGIN_FAILURE_REASONS: readonly LoginFailureReason[] = ['expired'];
 
+/** Every LoginBrowserOutcome a runner may report, for a control plane to keep only these. */
+export const LOGIN_BROWSER_OUTCOMES: readonly LoginBrowserOutcome[] = ['opened', 'failed', 'code-taken'];
+
+/** Every LoginBrowserState a sign-in may be in. */
+export const LOGIN_BROWSER_STATES: readonly LoginBrowserState[] = ['requested', ...LOGIN_BROWSER_OUTCOMES];
+
 /** `code` of the 409 a new session gets when its engine is signed out on an online runner. */
 export const ENGINE_SIGNED_OUT = 'ENGINE_SIGNED_OUT';
 
