@@ -3317,7 +3317,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // rewrite), for an owner's Update Now of a busy runner; `managed_runner` is none of the preserved relations, no
       // row is written, and no trigger, function or DONE fence changes.
       // Written as 1430 on the project line, it was renumbered after main took 1430.
-      '1431_managed_runner_update_interrupt'],
+      '1431_managed_runner_update_interrupt',
+      // 1432 creates model_identity, a new table of model-id readings keyed by rule_key; 1433 inserts its seed rows
+      // into that table alone (ON CONFLICT DO NOTHING). Neither names a preserved relation, trigger, function or DONE
+      // fence.
+      '1432_model_identity',
+      '1433_model_identity_seed',
+      // 1434 replaces the Open-list counter functions `open_list_bump_session` and `open_list_bump_via_session` (1420),
+      // `open_list_bump_owner` (1428) and `open_list_bump_watch` (0641) so the per-session and per-workspace sources
+      // bump keys naming their workspace, and adds the pure helper `open_list_scope_key`. It creates, alters or drops no
+      // table, column, constraint or trigger, names or replaces none of the preserved triggers or functions, and runs
+      // no INSERT, UPDATE or DELETE at apply time.
+      '1434_open_list_scope_keys'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

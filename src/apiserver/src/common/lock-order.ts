@@ -401,7 +401,10 @@ export const LOCK_ORDER_COMPATIBLE = [
       'workspace write of a heartbeat\'s directory and disk probe alone (1428). Each decides that by ' +
       'comparing the statement\'s transition tables — 1428 also reads, without a lock, the ' +
       'workspace\'s PENDING sessions and their runners\' disk floors when its free bytes moved — so a ' +
-      'skipped bump only removes the one lock above, never adds one.',
+      'skipped bump only removes the one lock above, never adds one. Since 1434 the per-session and ' +
+      'per-workspace sources bump a key naming the workspace (`<source>@w:<ws>`, `<source>@c:<ws>`), found by ' +
+      'lock-free reads of the transition tables and the session rows they name; `open_list_bump` is unchanged, ' +
+      'so each of those keys is taken the same way, a statement in k workspaces takes k such rows, and none waits.',
   },
 ] as const;
 
