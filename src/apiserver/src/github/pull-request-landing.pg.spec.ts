@@ -266,9 +266,10 @@ async function harness(t: { after(fn: () => Promise<void> | void): void }) {
   async function queuedLanding(ownerId: string, workspace: { runnerId: string; workspaceId: string; fullName: string }, label: string, line: 'MAIN' | 'PROJECT_BRANCH' = 'MAIN') {
     const projectId = randomUUID();
     await prisma.project.create({ data: { id: projectId, ownerId, title: `The project ${label} lands into` } });
+    await prisma.projectRuntime.upsert({ where: { projectId }, create: { projectId }, update: {} });
     await prisma.projectCodebase.create({
       data: {
-        ownerId, projectId, canonicalRepoUrl: `https://github.com/${workspace.fullName}.git`, upstreamRef: 'refs/heads/main',
+        ownerId, projectId, canonicalRepoUrl: `https://github.com/${workspace.fullName}`, upstreamRef: 'refs/heads/main',
         integrationRef: line === 'MAIN' ? 'refs/heads/main' : `refs/heads/project/${projectId}`,
         refAuthority: 'REMOTE', integrationRefSource: 'EXPLICIT', integrationStartedAt: new Date(Date.now() - 60_000),
       },
@@ -283,7 +284,8 @@ async function harness(t: { after(fn: () => Promise<void> | void): void }) {
       data: {
         id: randomUUID(), ownerId, creatorId: ownerId, taskId: task.id, workspaceId: workspace.workspaceId,
         assignedRunnerId: workspace.runnerId, title: `ran ${label}`, prompt: 'do the work', branch: `orbit/pr-${task.id}`,
-        isolationStatus: 'worktree', status: RunStatus.SUCCEEDED, baseSha: SHA(`base-${label}`),
+        isolationStatus: 'worktree', status: RunStatus.SUCCEEDED, baseSha: SHA(`base-${label}`), startsTaskWork: true,
+        worktreeBranch: `orbit/pr-${task.id}`, worktreeDirty: false,
         changedFiles: WORK_REPORTED as never, createdAt: new Date(Date.now() - 2 * 86_400_000), finishedAt: new Date(Date.now() - 2 * 86_400_000),
       },
     });
