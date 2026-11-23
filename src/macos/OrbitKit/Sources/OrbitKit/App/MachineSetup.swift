@@ -122,18 +122,22 @@ public enum MachineSetup {
         return String(root[..<cut])
     }
 
-    /// The directory the folder step's name goes in: the machine's home on one that declares create-workdir/v2,
-    /// its Repos Folder on an older one.
-    public static func newFolderRoot(_ runner: Runner) -> String {
-        newFolderRoot(reposRoot: runner.reposRoot ?? "", capabilities: runner.capabilities)
+    /// Where a new folder named on this runner goes, as the server makes it: port of @orbit/shared `newFolderRootFor`,
+    /// held to src/shared/src/new-folder-root.fixture.json. A managed runner that has not reported yet takes its image's
+    /// home, whatever Repos Folder is stored from before; a runner that makes new folders and has reported its
+    /// Repos Folder takes `newFolderRoot`; any other makes none (nil).
+    public static func newFolderRootFor(managed: Bool, reposRoot: String?, capabilities: [String]?) -> String? {
+        if managed, capabilities?.isEmpty ?? true { return ManagedRunnerCopy.Setup.home }
+        let root = (reposRoot ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !root.isEmpty, capabilities?.contains(createWorkDirCapability) == true else { return nil }
+        return newFolderRoot(reposRoot: root, capabilities: capabilities)
     }
 
-    /// A managed runner can take a new folder before its first heartbeat.
+    /// The setup card's root: `newFolderRootFor`, the account's managed runner read as managed while it is set up or
+    /// asleep. Only a usable card shows or sends it, and a managed runner always has one, so "" is never drawn.
     public static func setupFolderRoot(_ runner: Runner, managedState: ManagedSetupState?) -> String {
-        if managedState != nil, (runner.reposRoot ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return ManagedRunnerCopy.Setup.reposRoot
-        }
-        return newFolderRoot(runner)
+        newFolderRootFor(managed: runner.managed == true || managedState != nil, reposRoot: runner.reposRoot,
+                         capabilities: runner.capabilities) ?? ""
     }
 
     public static func uncheckedFolder(name: String, root: String) -> PickedFolder? {
