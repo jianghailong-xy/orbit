@@ -593,7 +593,7 @@ import {
   type ManagedHeartbeatAnswer,
 } from '../managed-runners/managed-runner-sleep';
 import { readManagedRunnerStorage, type ManagedRunnerStorage } from '../managed-runners/managed-runner-storage';
-import { markUpdateNowCuts } from '../managed-runners/managed-runner-update-cut';
+import { markUpdateNowCuts, queueUpdateNowContinuation } from '../managed-runners/managed-runner-update-cut';
 import {
   RUNNER_OFFLINE_AFTER_MS,
   RunnerPresenceService,
@@ -8142,6 +8142,12 @@ export class RunnerApiController {
         where: { sessionId, kind: 'steer', status: 'PENDING', sendIntent: null },
         data: { kind: 'message' },
       });
+      // A turn an older runner ended INTERRUPTED at the owner's Update Now's stop, rather than keeping it for the next
+      // generation, is followed by the update's continuation (managed-runner-update-cut.ts), which the count below then
+      // finds queued: the session stays RUNNING for the next generation to take it.
+      if (completedTurn && !failSession && !unanswered) {
+        await queueUpdateNowContinuation(tx, runner.id, sessionId, completedTurn, dto.status);
+      }
       // If a follow-up arrived before this completion acquired the Session lock, the
       // current active slot passes directly to it and the inbox may deliver it next. With
       // no executable follow-up, release the slot while the runtime remains warm.
