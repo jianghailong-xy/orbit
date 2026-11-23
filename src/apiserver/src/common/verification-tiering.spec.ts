@@ -339,9 +339,13 @@ test('(l) tiering added no service and nothing that keeps running', () => {
   // nats is the runner link's message bus, which the runner link project added on 2026-10-25 beside link-gateway,
   // under the same Compose profile (docs/runner-link-design.md §6.3; project 34bc0CsOzPh9KshG7H3DW, task B1), not
   // this removal; test/compose-topology.test.mjs (p) pins it.
+  // prometheus, node-exporter, pg-monitor-role and postgres-exporter, and the volumes prometheus-data and
+  // pg-monitor-secret, are the monitoring profile the account owner decided on 2026-11-20 (project
+  // 350mFkGGRDovIfipePH2O, task 350mIIwdkZa5qmLnRglPv), not this removal; test/compose-topology.test.mjs (t) pins them.
   assert.deepEqual(services.sort(),
-    ['apiserver', 'docker-channel', 'gateway', 'link-gateway', 'managed-runner-firewall', 'nats', 'pg-socket', 'pgbackup',
-      'postgres', 'web', 'wiki-worker']);
+    ['apiserver', 'docker-channel', 'gateway', 'link-gateway', 'managed-runner-firewall', 'nats', 'node-exporter',
+      'pg-monitor-role', 'pg-monitor-secret', 'pg-socket', 'pgbackup', 'postgres', 'postgres-exporter', 'prometheus',
+      'prometheus-data', 'web', 'wiki-worker']);
 
   const scripts = JSON.parse(read('package.json')).scripts as Record<string, string>;
   assert.equal(Object.keys(scripts).some((name) => /daemon|worker|cron|watch/iu.test(name)), false);
