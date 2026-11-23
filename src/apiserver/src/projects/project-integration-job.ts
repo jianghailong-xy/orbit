@@ -1192,7 +1192,10 @@ const HANDED_OFF_FAILURE_CLASSES: ReadonlySet<LandingFailureClass> = new Set(['C
  * CHECK_FAILED, or the same two on a MAIN line's TASK_BRANCH candidate check or landing; a
  * PROJECT_BRANCH promotion has no task and so no task's session. The session is the one the job was
  * queued from (`job.session_id`, the delivered branch's), and all four of W4's conditions hold:
- *  1. it is a CONVERSATION that starts task work, not in Trash, with no cancel requested;
+ *  1. it is a CONVERSATION that starts task work, not in Trash, and no end other than its task's DONE was
+ *     asked of it: `end_reason` is null or `task_done`. Not `cancel_requested_at`, which every end request
+ *     writes beside its reason (common/session-release.ts) — the DONE's own end of its idle work session
+ *     (`claimParkedSessionEnd`) too, so every session that ended with its task's DONE carries it;
  *  2. it is still open, or it ended because its task was done (`task_done`) — a session a person ended
  *     is not revived;
  *  3. the task is still DONE and this session is still its newest work session;
@@ -1222,13 +1225,12 @@ export async function landingFixWorkSession(
   const session = await tx.session.findFirst({
     where: { id: input.sessionId },
     select: {
-      sessionKind: true, startsTaskWork: true, deletedAt: true, cancelRequestedAt: true,
-      finishedAt: true, endReason: true, taskId: true,
+      sessionKind: true, startsTaskWork: true, deletedAt: true, finishedAt: true, endReason: true, taskId: true,
     },
   });
   if (!session || session.sessionKind !== 'CONVERSATION' || !session.startsTaskWork
-    || session.deletedAt !== null || session.cancelRequestedAt !== null
-    || session.taskId !== input.taskId) return null;
+    || session.deletedAt !== null || session.taskId !== input.taskId) return null;
+  if (session.endReason !== null && session.endReason !== 'task_done') return null;
   if (session.finishedAt !== null && session.endReason !== 'task_done') return null;
 
   // 3.
