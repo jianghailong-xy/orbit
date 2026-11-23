@@ -237,7 +237,7 @@ test('the incident replayed: Cursor refuses run 1 with "Add a payment method to 
       assert.equal(features.accountFailuresSkipped, 1);
       assert.ok(decision.reasons.includes('Run 1 was refused by its account before it started — not counted'), decision.reasons.join(' | '));
       assert.ok(!decision.reasons.some((r) => r.startsWith('[escalate]')), decision.reasons.join(' | '));
-      assert.equal(decision.policyVersion, 3);
+      assert.equal(decision.policyVersion, 4);
 
       // The retry budget: the refusal is not one of the task's failures.
       assert.equal((await holdOff(s, [taskId])).has(taskId), false);

@@ -85,7 +85,7 @@ function assertDecision(
 ): void {
   const { reasons, engine, ...selection } = actual;
   const { engine: expectedEngine, ...rest } = expected;
-  assert.deepEqual(selection, { policyVersion: 3, ...rest });
+  assert.deepEqual(selection, { policyVersion: 4, ...rest });
   if (expectedEngine !== undefined) assert.equal(engine, expectedEngine);
   assert.ok(reasons.some((reason) => /^\[(coordinator|rule|escalate|not-routed)\]/.test(reason)));
   assert.ok(reasons.every((reason) => typeof reason === 'string' && reason.length > 0));
@@ -105,7 +105,7 @@ for (const [level, model, effort] of claudeTiers) {
 }
 
 test('policy version is three: account health removes, ranks and holds', () => {
-  assert.equal(MODEL_ROUTING_POLICY_VERSION, 3);
+  assert.equal(MODEL_ROUTING_POLICY_VERSION, 4);
 });
 
 test('no suggestion preserves the full baseline for new and nonfailed runs', () => {

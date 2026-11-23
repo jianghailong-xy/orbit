@@ -179,7 +179,7 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
   } });
   const pending = await task({ status: 'IN_PROGRESS' });
   const pendingRun = await run(pending, 1100, null, { status: 'PENDING', provider: 'codex', model: null });
-  await route(pending, pendingRun.id, 1100, { policyVersion: 3, level: 'M' });
+  await route(pending, pendingRun.id, 1100, { policyVersion: 4, level: 'M' });
 
   // Same policy/tier, a different actual model; the route's suggestion is not the grouping key.
   const sonnet = await task();
@@ -266,7 +266,7 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
   });
   await t.test('unfinished runs with no usage, completion or finish time return defined counts and NULL ratios', async () => {
     assert.deepEqual(group(await get(), 'shadow', 3, 'M', 'codex', null), {
-      policyVersion: 3, level: 'M', provider: 'codex', model: null, sampleCount: 1,
+      policyVersion: 4, level: 'M', provider: 'codex', model: null, sampleCount: 1,
       taskCount: 1, completedTaskCount: 0, firstPassTaskCount: 0, firstPassRate: 0,
       averageFailureCount: 0, tokensPerCompletedTask: null, costUsdPerCompletedTask: null, usageUnknownCompletedTaskCount: 0, durationP50Ms: null,
     });

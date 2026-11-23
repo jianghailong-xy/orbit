@@ -44,6 +44,7 @@ import { RUNNER_BEATS } from '../runners/runner-presence';
 import { readExecutableAcceptanceOutcome } from './executable-acceptance-round';
 import {
   MODEL_ROUTING_LEVELS,
+  baselineHealth,
   priorLevel,
   routeTaskRun,
   type ModelRoutingEngineState,
@@ -478,13 +479,27 @@ export interface TaskRouteSubject {
  * Null when the account has smart model selection off (common/model-routing-switch.ts): routing
  * does not exist then, so there is no decision to record, and the run is dispatched as before routing.
  */
-/** A planned route, with what the dispatch acts on before it freezes one (docs/routing-account-health-design.md §6.5, §7.5). */
-export type PlannedTaskRunRoute = TaskRunRoute & {
+/** What a dispatch acts on before it freezes a plan (docs/routing-account-health-design.md §6.5, §7.5). */
+interface PlannedHealth {
   /** Nothing can run it now: no run is started, and the task waits. */
   hold?: ModelRoutingHold;
   /** The pick's account is due its trial, which the dispatch claims before the run starts. */
   trial?: { subject: string; scopeModel: string; provider: string };
-};
+}
+
+/**
+ * A planned route, with what the dispatch acts on before it freezes one. With smart model selection off there is no
+ * route, and only what account health says of the baseline's account (`notRouted`): the run is dispatched as before
+ * routing, unless health holds it.
+ */
+export type PlannedTaskRunRoute = (TaskRunRoute & PlannedHealth & { notRouted?: undefined }) | (PlannedHealth & { notRouted: true });
+
+/** The route a plan freezes, without what the dispatch acted on: null when nothing was routed. */
+export function routeOfPlan(planned: PlannedTaskRunRoute | null): TaskRunRoute | null {
+  if (!planned || planned.notRouted) return null;
+  const { hold: _hold, trial: _trial, notRouted: _notRouted, ...route } = planned;
+  return route;
+}
 
 export async function planTaskRunRoute(
   reads: TaskRouteReads,
@@ -493,7 +508,7 @@ export async function planTaskRunRoute(
   prompt: string,
   health?: ReadonlyMap<string, RoutingHealthEntry[]>,
 ): Promise<PlannedTaskRunRoute | null> {
-  if (!modelRoutingEnabled(await reads.owner())) return null;
+  if (!modelRoutingEnabled(await reads.owner())) return baselineHealthPlan(reads, task, workspace, health);
   const { prisma, ownerId } = reads;
   const env = await routeEnvironment(reads, task, workspace.id, workspace.runnerId);
   const agent = await reads.workspace(workspace.id);
@@ -528,6 +543,7 @@ export async function planTaskRunRoute(
   const optimizeFor = optimizeForOf(await reads.owner());
   const decision = routeTaskRun({
     optimizeFor,
+    relaxBlockedPins: relaxBlockedPinsOf(await reads.owner()),
     features: structuralFeatures,
     task: {
       engine: task.engine ?? null,
@@ -561,8 +577,9 @@ export async function planTaskRunRoute(
   return {
     policyVersion: decision.policyVersion,
     // Only a decided tier is applied: one that kept the baseline (a model pin, no suggestion, no
-    // provider that can take it) changes nothing.
-    applied: decision.level !== null,
+    // provider that can take it) changes nothing. A pin relaxed off an account health set aside is applied too
+    // (docs/routing-account-health-design.md §7.5): a model pin moves with no tier.
+    applied: decision.level !== null || decision.relaxed === true,
     level: decision.level,
     engine: decision.engine,
     provider: decision.provider,
@@ -606,6 +623,45 @@ export async function planTaskRunRoute(
     ...(decision.hold ? { hold: decision.hold } : {}),
     ...(decision.trial ? { trial: decision.trial } : {}),
   };
+}
+
+/** UserPreferences.relaxBlockedPins (docs/routing-account-health-design.md §7.5): on only when written true. */
+export function relaxBlockedPinsOf(owner: { preferences: unknown } | null | undefined): boolean {
+  return (owner?.preferences as { relaxBlockedPins?: unknown } | null | undefined)?.relaxBlockedPins === true;
+}
+
+/**
+ * The plan of a run that is not routed, the owner's smart model selection being off: what account health says of the
+ * account its baseline (or its pins) would spend. A run there is not started while health sets that account aside,
+ * and claims the trial it is due, as a routed one does (§6.5, §7.5); no tier and no relaxation, which are routing.
+ * Null when health has nothing to say: an owner with no live row pays the one read the dispatch makes anyway.
+ */
+async function baselineHealthPlan(
+  reads: TaskRouteReads,
+  task: TaskRouteSubject,
+  workspace: { id: string; runnerId: string },
+  health?: ReadonlyMap<string, RoutingHealthEntry[]>,
+): Promise<PlannedTaskRunRoute | null> {
+  const index = health ?? await reads.health();
+  if (![...index.values()].some((entries) => entries.length > 0)) return null;
+  const env = await routeEnvironment(reads, task, workspace.id, workspace.runnerId);
+  const pool = await subagentRouteInput(reads.prisma as unknown as Prisma.TransactionClient, {
+    ownerId: reads.ownerId,
+    workspaceId: workspace.id,
+    runnerId: workspace.runnerId,
+    dto: { toolUseId: '', type: 'task', definitionSource: 'builtin' },
+    parent: { engine: env.engine, provider: env.provider, model: task.model ?? '', effort: null },
+    now: reads.now,
+    health: index,
+  });
+  const verdict = baselineHealth({
+    task: { engine: task.engine ?? null, provider: task.provider ?? null, model: task.model ?? null },
+    baseline: { engine: env.engine, engines: env.engines, provider: env.provider, model: task.model ?? null, effort: null },
+    history: [],
+    environment: { runtime: env.runtime },
+    pool,
+  });
+  return verdict.hold || verdict.trial ? { notRouted: true, ...verdict } : null;
 }
 
 /**
