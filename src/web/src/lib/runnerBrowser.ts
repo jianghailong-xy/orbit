@@ -98,8 +98,8 @@ export function runnerBrowserTabPath(runnerId: string, control = false): string 
  * Opens the runner's browser in its tab, already in control or view only. One tab per runner (a named window), so
  * pressing twice does not take both of the runner's two streams. Called on the click, so no pop-up blocker stops it.
  */
-export function openRunnerBrowserTab(runnerId: string, control: boolean): void {
-  window.open(runnerBrowserTabPath(runnerId, control), `orbit-browser-${runnerId}`);
+export function openRunnerBrowserTab(runnerId: string, control: boolean): Window | null {
+  return window.open(runnerBrowserTabPath(runnerId, control), `orbit-browser-${runnerId}`);
 }
 
 /** Whether the viewer runs on a Mac (or an iPad), whose paste key is ⌘V. */

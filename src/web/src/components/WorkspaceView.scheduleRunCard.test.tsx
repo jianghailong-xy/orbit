@@ -30,6 +30,11 @@ vi.mock('../api', async (importOriginal) => ({
 vi.mock('../lib/transcriptStore', () => ({
   loadTranscript: async () => null, saveTranscript: async () => {},
 }));
+// The fixture's clock labels are for a viewer in Shanghai.
+vi.mock('../lib/schedules', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../lib/schedules')>(),
+  viewerTimezone: () => 'Asia/Shanghai',
+}));
 
 const apiModule = await import('../api');
 const { WorkspaceView } = await import('./WorkspaceView');

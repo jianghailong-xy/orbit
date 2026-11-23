@@ -965,11 +965,8 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     + 'a self-managed one or a guest\'s view is 404 with no row written (managed-runners/browser-state.ts:122); '
     + 'browser-state.pg.spec.ts section 2 sends it as each and checks browser_clear_requested_at stayed NULL',
   'POST /runners/:id/browser/sign-in':
-    'behind the browser switch, which the census server leaves off (every caller 404 there); on, the runner is read by '
-    + '(runner id, the caller) through its managed_runner row before anything is written, the same lookup as clear\'s, '
-    + 'and another account\'s runner, a self-managed one or a guest\'s view is 404 with no row written '
-    + '(managed-runners/browser-state.ts:177, from signIn at :256); browser-state.pg.spec.ts section 2 sends that lookup '
-    + 'each of those callers through state and clear',
+    "behind the browser switch, which the census server leaves off. The owner's managed runner is read by (runnerId, ownerId) "
+    + 'before its sign-in is read or updated (managed-runners/browser-state.ts:177); login-runner-browser.pg.spec.ts sends it as another account.',
   // ── Still stuck (help center board 02 ②): the id is an Ask, which the census's fixture account has none of ──
   'GET /help/ask/:id/stuck':
     'the Ask is read by (id, the caller, help_ask set, not deleted) before anything else, so another account\'s Ask answers 404 (help/help-ask.ts:207, :238); help-ask-stuck.pg.spec.ts "another account" sends it with the owner\'s Ask',
@@ -989,12 +986,11 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
   'GET /schedules/:id':
     "read by (id, the caller) and nothing else, 404 for another account's id (schedules/schedule-reads.service.ts:98)",
   'GET /schedules/:id/change':
-    "the schedule is read by (id, the caller) and nothing else, 404 SCHEDULE_NOT_FOUND for another account's id "
-    + '(schedules/schedule-change-conversation.ts:76); its open conversation is then looked up by the same owner, which '
-    + 'schedule-change-conversation.pg.spec.ts checks finds none for another account',
+    "the schedule is looked up by (id, ownerId) before reading any conversation or opening. Another account's schedule returns 404 "
+    + '(schedules/schedule-change-conversation.ts:76).',
   'POST /schedules/:id/change':
-    "the schedule is read by (id, the caller) before any turn or session is written, 404 SCHEDULE_NOT_FOUND for another "
-    + "account's id (schedules/schedule-change-conversation.ts:52, :76); a call acting through a session is refused 403 first",
+    'the same owner-scoped schedule lookup returns 404 before appending a turn or creating a session '
+    + '(schedules/schedule-change-conversation.ts:76).',
   'GET /schedules/:id/runs':
     "the schedule is counted by (id, the caller) first, 404 for another account's id (schedules/schedule-reads.service.ts:128)",
   'POST /schedules/:id/pause':
