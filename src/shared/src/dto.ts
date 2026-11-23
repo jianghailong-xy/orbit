@@ -3288,6 +3288,9 @@ export interface RemoteSubagentClaim {
   prompt: string;
   /** How to run the child: the target workspace's own default engine and model, as a session claim hands it. */
   exec: AgentExecConfig;
+  /** The parent session's permission mode, which a read-only child's requests are answered by (§5.3); null from a
+   *  server that did not send it, when the runner reads the child's own mode instead. */
+  parentPermissionMode: string | null;
   /** The earlier run of this runner whose conversation this one continues, or null for a new conversation. */
   resumeOf: string | null;
 }
