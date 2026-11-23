@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/coder/websocket"
 )
 
 // An engine's sign-in finished in the runner's own browser (docs/runner-browser-engine-sign-in-design.md): the owner
@@ -149,7 +152,7 @@ func (r *loginRelay) openInLoginBrowser(ctx context.Context, lr LoginCommand, b 
 	logln("login: the sign-in page was opened in the runner's browser")
 	answer(loginBrowserOpened)
 	if callback, state, paste, ok := codeCallback(lr.Engine, published.URL); ok {
-		go r.takeCodeFromBrowser(run, lr, endpoint, callback, state, paste, func() { answer(loginBrowserCodeTaken) })
+		go r.takeCodeFromBrowser(run, lr, endpoint, tabID, callback, state, paste, func() { answer(loginBrowserCodeTaken) })
 	}
 }
 
@@ -234,34 +237,115 @@ func callbackCode(address string, callback *url.URL, state string) string {
 	return q.Get("code")
 }
 
-// takeCodeFromBrowser reads Chrome's pages until one is the callback for this sign-in, then hands its code to the CLI
-// as a paste is handed (submitCode, which also watches for the CLI refusing it). Once per attempt; it stops when the
-// attempt ends. A capture that never comes leaves the card's paste field, as before.
-func (r *loginRelay) takeCodeFromBrowser(run *loginRun, lr LoginCommand, endpoint string, callback *url.URL, state string, paste func(string) string, taken func()) {
+// loginBrowserWatchTab follows one tab's navigations (watchTabNavigations). A var so a test can stand in for Chrome.
+var loginBrowserWatchTab = watchTabNavigations
+
+// takeCodeFromBrowser waits for the callback that carries this sign-in's code, then hands the code to the CLI as a
+// paste is handed (submitCode, which also watches for the CLI refusing it). Once per attempt; it stops when the attempt
+// ends. A capture that never comes leaves the card's paste field, as before.
+//
+// Two ways, whichever sees it first:
+//   - the sign-in tab's own navigations, as Chrome reports them over DevTools (Page.frameNavigated). Each carries the
+//     address it was loaded at, so a callback page that strips the code from its address once it loads (Antigravity's
+//     does: antigravity.google/oauth-callback is all its address bar shows) is seen with the code all the same;
+//   - every page's current address, read every loginBrowserCaptureEvery: a callback reached in another tab, or a
+//     watch that could not be kept.
+func (r *loginRelay) takeCodeFromBrowser(run *loginRun, lr LoginCommand, endpoint, tabID string, callback *url.URL, state string, paste func(string) string, taken func()) {
+	ctx, stop := context.WithCancel(run.ctx)
+	defer stop()
+	found := make(chan string, 1)
+	offer := func(address string) {
+		if code := callbackCode(address, callback, state); code != "" {
+			select {
+			case found <- code:
+			default:
+			}
+		}
+	}
+	if tabID != "" {
+		go loginBrowserWatchTab(ctx, endpoint, tabID, offer)
+	}
 	tick := time.NewTicker(loginBrowserCaptureEvery)
 	defer tick.Stop()
 	for {
 		select {
-		case <-run.ctx.Done():
+		case <-ctx.Done():
+			return
+		case code := <-found:
+			logln("login: code taken from the runner's browser")
+			taken()
+			r.submitCode(LoginCommand{Action: "code", Engine: lr.Engine, Account: lr.Account, Attempt: run.attempt, Code: paste(code)}, run.report)
 			return
 		case <-tick.C:
 		}
-		ctx, cancel := context.WithTimeout(run.ctx, 5*time.Second)
-		targets, err := loginBrowserTargets(ctx, endpoint)
+		readCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		targets, err := loginBrowserTargets(readCtx, endpoint)
 		cancel()
 		if err != nil {
 			continue
 		}
 		for _, t := range targets {
-			if t.Type != "page" {
-				continue
-			}
-			if code := callbackCode(t.URL, callback, state); code != "" {
-				logln("login: code taken from the runner's browser")
-				taken()
-				r.submitCode(LoginCommand{Action: "code", Engine: lr.Engine, Account: lr.Account, Attempt: run.attempt, Code: paste(code)}, run.report)
-				return
+			if t.Type == "page" {
+				offer(t.URL)
 			}
 		}
+	}
+}
+
+// watchTabNavigations hands seen the address of every main-frame navigation of the tab with target id tabID, as Chrome
+// reports it (Page.frameNavigated), until ctx ends. A dropped DevTools connection is made again a second later; the
+// tab gone ends the watch. Nothing of an address is logged.
+func watchTabNavigations(ctx context.Context, endpoint, tabID string, seen func(address string)) {
+	for ctx.Err() == nil {
+		ws := ""
+		if targets, err := loginBrowserTargets(ctx, endpoint); err == nil {
+			for _, t := range targets {
+				if t.ID == tabID {
+					ws = t.WebSocketDebuggerURL
+				}
+			}
+			if ws == "" {
+				return // the tab is closed
+			}
+		}
+		if ws != "" {
+			followNavigations(ctx, ws, seen)
+		}
+		select {
+		case <-ctx.Done():
+		case <-time.After(time.Second):
+		}
+	}
+}
+
+// followNavigations is one DevTools connection to a page: Page.enable, then every Page.frameNavigated of its main frame.
+func followNavigations(ctx context.Context, ws string, seen func(address string)) {
+	c, _, err := websocket.Dial(ctx, ws, nil)
+	if err != nil {
+		return
+	}
+	defer c.CloseNow()
+	c.SetReadLimit(4 << 20)
+	if err := c.Write(ctx, websocket.MessageText, []byte(`{"id":1,"method":"Page.enable","params":{}}`)); err != nil {
+		return
+	}
+	for {
+		_, data, err := c.Read(ctx)
+		if err != nil {
+			return
+		}
+		var ev struct {
+			Method string `json:"method"`
+			Params struct {
+				Frame struct {
+					ParentID string `json:"parentId"`
+					URL      string `json:"url"`
+				} `json:"frame"`
+			} `json:"params"`
+		}
+		if json.Unmarshal(data, &ev) != nil || ev.Method != "Page.frameNavigated" || ev.Params.Frame.ParentID != "" {
+			continue
+		}
+		seen(ev.Params.Frame.URL)
 	}
 }
