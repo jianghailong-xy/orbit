@@ -355,10 +355,10 @@ describe('Settings search', () => {
   });
 
   it('clears the query with Esc before Esc leaves Settings', async () => {
-    await visit('/settings/storage');
+    await visit('/settings/profile');
     await type('theme');
     await press('Escape', document);
-    expect(addressBar()).toBe('/settings/storage');
+    expect(addressBar()).toBe('/settings/profile');
     expect(searchBox().value).toBe('');
     expect(navGroups()!.hidden).toBe(false);
     await press('Escape', document);

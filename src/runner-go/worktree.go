@@ -3190,17 +3190,15 @@ func isScratchCheckoutName(name string) bool {
 	return false
 }
 
-// resumableCheckoutIdle is how long nothing may have been written in a resumable session's checkout
-// before gcResumableCheckouts may take it: the owner's two weeks, and the same two weeks a clean
-// repair checkout gets (recoveryCheckoutRetention).
-const resumableCheckoutIdle = 14 * 24 * time.Hour
+// maxRetainedResumableCheckouts caps how many checkouts of resting sessions a roomy disk keeps, as
+// maxRetainedEligibleCheckouts does for ended ones. Without it "no pressure, no reclamation" let them grow without
+// bound: on the HPC runner on 2026-11-23, 378 checkouts held 471 GiB of a 915 GiB disk, almost all of them resting
+// sessions'. Past the cap the oldest go by the same rules as under the floor (gcResumableCheckouts), and come back
+// from their branch on the session's next claim. 64 is four per concurrent slot at the default max-concurrent of 16.
+const maxRetainedResumableCheckouts = 64
 
-// underBudgetFloor reports whether this reading is under a storage budget's floor. There gcResumableCheckouts sets two
-// of its rules aside for a resting session's checkout (docs/session-checkout-storage-design.md §5): it need not have
-// gone two weeks unwritten (resumableIdle), and a commit on the session's own branch counts as kept whether or not a
-// remote has it (checkoutHasNothingToLose), since the branch keeps it in the repository when the checkout goes and
-// the checkout is made again from the branch. A volume that open sessions fill would otherwise not be reclaimed in
-// time, and its channel would stop the runner first. Without a budget both rules stand.
+// underBudgetFloor reports whether this reading is under a storage budget's floor, where a look at resting checkouts
+// that found nothing waits minutes rather than an hour (worktreeSweeper.sweepResumable).
 func (p worktreeGCPressure) underBudgetFloor() bool {
 	return p.budget != nil && p.belowFloor()
 }
@@ -3211,15 +3209,6 @@ func (p worktreeGCPressure) measuredAfter(at time.Time) bool {
 	return ok && measured.After(at)
 }
 
-// resumableIdle is how long nothing may have been written in a resting session's checkout before a sweep may take
-// it: resumableCheckoutIdle, or no time at all under a storage budget's floor (underBudgetFloor).
-func resumableIdle(underBudget bool) time.Duration {
-	if underBudget {
-		return 0
-	}
-	return resumableCheckoutIdle
-}
-
 // checkoutProbeTimeout bounds the git probes on one checkout. The sweep runs on the claim loop, so a git
 // that hangs must cost it a checkout it could not judge, never the loop.
 const checkoutProbeTimeout = 30 * time.Second
@@ -3227,8 +3216,8 @@ const checkoutProbeTimeout = 30 * time.Second
 // resumableSweepWait is how long gcResumableCheckouts is left alone after a look that found nothing it could
 // take (worktreeSweeper.sweepResumable). A look runs on the claim loop, about 28 seconds over 149 checkouts at a
 // load of about 21, and on a host that stays under its floor with nothing to take, every five minutes would be
-// one message in eleven waiting behind it. What it finds changes slowly: a checkout has to go two weeks unwritten.
-// Under a storage budget's floor, where a checkout need not (underBudgetFloor), the wait is resumableBudgetSweepWait,
+// one message in eleven waiting behind it. A look that found nothing has kept every resting checkout for what it
+// holds, which changes only as sessions go cold. Under a storage budget's floor the wait is resumableBudgetSweepWait,
 // and a sweep run to make room for a new checkout (worktreeSweeper.makeRoom) does not wait at all: that checkout is
 // the change the wait assumes has not happened.
 const resumableSweepWait = time.Hour
@@ -3301,11 +3290,10 @@ var errKeepCheckout = errors.New("the checkout stays")
 // checkoutHasNothingToLose looks for one in the dependency directories, which this does not enter. So does
 // any error. A file gone between listing and reading was being written or removed just then.
 //
-// The walk stops at the first recent write. It runs on the claim loop, and most of its time would go on
-// checkouts in recent use, where the first file it reads will do: on a host with 157 checkouts at a
-// load of about 20, reading all of them took 49 to 101 seconds, and stopping there 17 to 25. With no
-// idle time to wait out (resumableIdle) only a write since the walk began is recent, so it reads the
-// whole checkout.
+// The walk stops at the first recent write. With no idle time to wait out, as gcResumableCheckouts asks, only
+// a write since the walk began is recent, so it reads the whole checkout: on a host with 157 checkouts at a
+// load of about 20, reading all of them took 49 to 101 seconds. So the sweep walks only the checkouts it is
+// about to take, oldest first (checkoutLastActivity), never all of them.
 func checkoutIdleSince(path string, idle time.Duration) (time.Time, bool) {
 	if info, err := os.Lstat(filepath.Join(path, ".git")); err != nil || !info.Mode().IsRegular() {
 		return time.Time{}, false
@@ -3551,34 +3539,37 @@ func (t *Transport) worktreesResumable(ids []string) (map[string]string, error) 
 	return branches, nil
 }
 
-// gcResumableCheckouts is the second half of a sweep, and runs only while the disk is still under
-// its floor after gcWorktrees: it reclaims the checkouts of sessions that can resume, oldest first,
-// and stops as soon as the disk is back above the floor. A session comes back from one of these with a
-// new checkout of its branch, so what it loses is installed dependencies and build output, which a reinstall
-// and a rebuild put back. Nothing that exists nowhere else goes.
+// gcResumableCheckouts is the second half of a sweep. It reclaims the checkouts of sessions that can resume, oldest
+// first, while the disk is still under its floor after gcWorktrees or more than maxRetainedResumableCheckouts of them
+// are on disk, and stops once neither holds. A session comes back from one of these with a new checkout of its branch,
+// so what it loses is installed dependencies and build output, which a reinstall and a rebuild put back. Nothing that
+// exists nowhere else goes.
 //
 // A checkout goes only if all of these hold: the control plane answers that its session is resumable
 // (worktreesResumable; that half is the only thing asked of it), nothing of the session is at work here
-// (checkoutDriven), no process or mount is in it (occupiedCheckouts), nothing was written in it for two
-// weeks (checkoutIdleSince) and it has nothing to lose (checkoutHasNothingToLose). Under a storage budget's
-// floor neither the two weeks nor a remote for its branch's commits is asked for (underBudgetFloor). All of
-// that is asked again immediately before it goes.
+// (checkoutDriven), no process or mount is in it (occupiedCheckouts), nothing was written in it while the sweep read it
+// (checkoutIdleSince) and it has nothing to lose (checkoutHasNothingToLose), a commit on the session's own branch
+// counting as kept: the branch and its commits stay in the repository when the checkout goes, and the checkout comes
+// back from the branch. All of that is asked again immediately before it goes. These were a storage budget's rules
+// until 2026-11-23; a machine's own floor asked for two weeks unwritten and a remote for every commit as well, and as
+// the runner pushes no session branch, that kept nearly every resting checkout that did any work.
 //
-// Its budget (resumableSweepBudget) starts with the first checkout that goes, or that could not be judged or
-// taken, and once it is spent the sweep stops between two checkouts. The next sweep judges what is left afresh,
-// which starts with the oldest. What the second look keeps ahead of that first one does not count: that time
-// takes nothing off the disk, and if it stopped a sweep it would stop the next at the same checkouts, and what is
-// behind them would never be reached. A sweep with nothing but those ends by itself, and then waits.
+// "Oldest" is checkoutLastActivity, which costs two stats, and not the newest write in the checkout, which costs a walk
+// of all of it: the sweep walks a checkout only when it is about to take it, never all of them.
 //
-// It reports whether it looked and found nothing: the rule kept every checkout and the disk is still under its
-// floor. A git command that failed or timed out on a checkout is the rule keeping it (checkoutHasNothingToLose),
-// and a look it could not finish is not this (reclaimResumableCheckout). With that it answers the reading that
-// found the disk still under its floor, which says how long the wait that follows is (worktreeSweeper.sweepResumable).
+// Its budget (resumableSweepBudget) starts with the first checkout that goes, or that could not be judged or taken, and
+// once it is spent the sweep stops between two checkouts. The next sweep judges what is left afresh, which starts with
+// the oldest. A checkout the rule keeps does not count: that time takes nothing off the disk, and if it stopped a sweep
+// it would stop the next at the same checkouts, and what is behind them would never be reached.
+//
+// It reports whether it looked and found nothing: the rule kept every checkout and the disk is still under its floor.
+// A git command that failed or timed out on a checkout is the rule keeping it (checkoutHasNothingToLose), and a look it
+// could not finish is not this (reclaimResumableCheckout). With that it answers the reading that found the disk still
+// under its floor, which says how long the wait that follows is (worktreeSweeper.sweepResumable). Over the cap alone
+// it never reports nothing found, so it waits for nothing: what it re-reads each sweep is the checkouts past the cap
+// that the rule kept.
 func gcResumableCheckouts(t *Transport, pool *sessionPool, pressure worktreeGCPressure) (bool, worktreeGCPressure) {
 	pressure = pressure.again()
-	if !pressure.belowFloor() {
-		return false, pressure
-	}
 	root := worktreesDir()
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -3590,9 +3581,22 @@ func gcResumableCheckouts(t *Transport, pool *sessionPool, pressure worktreeGCPr
 			names = append(names, e.Name())
 		}
 	}
+	if !pressure.belowFloor() && len(names) <= maxRetainedResumableCheckouts {
+		return false, pressure
+	}
 	resumable, err := t.worktreesResumable(names)
 	if err != nil {
 		logln("gc: worktrees-removable query failed, keeping every resumable checkout:", err)
+		return false, pressure
+	}
+	// resting counts the checkouts on disk the control plane called resumable, the ones the cap is on.
+	resting := 0
+	for _, name := range names {
+		if _, ok := resumable[name]; ok {
+			resting++
+		}
+	}
+	if !pressure.belowFloor() && resting <= maxRetainedResumableCheckouts {
 		return false, pressure
 	}
 	occupied, err := occupiedCheckouts(root)
@@ -3601,40 +3605,43 @@ func gcResumableCheckouts(t *Transport, pool *sessionPool, pressure worktreeGCPr
 		return false, pressure
 	}
 	type candidate struct {
-		name      string
-		lastWrite time.Time
+		name, branch string
+		active       time.Time
 	}
 	var candidates []candidate
-	underBudget := pressure.underBudgetFloor()
 	for _, name := range names {
-		branch, canResume := resumable[name]
-		if !canResume || occupied[name] {
-			continue
-		}
-		path := filepath.Join(root, name)
-		if lastWrite, idle := checkoutIdleSince(path, resumableIdle(underBudget)); idle && checkoutHasNothingToLose(path, branch, false, underBudget) {
-			candidates = append(candidates, candidate{name: name, lastWrite: lastWrite})
+		if branch, canResume := resumable[name]; canResume && !occupied[name] {
+			candidates = append(candidates, candidate{name: name, branch: branch, active: checkoutLastActivity(filepath.Join(root, name))})
 		}
 	}
-	sort.Slice(candidates, func(i, j int) bool { return candidates[i].lastWrite.Before(candidates[j].lastWrite) })
+	sort.SliceStable(candidates, func(i, j int) bool { return candidates[i].active.Before(candidates[j].active) })
 	// spending is when the first checkout began that went, or that could not be judged or taken. It stays zero for
 	// as long as the rule has kept every one.
 	var spending time.Time
 	for i, c := range candidates {
+		// The first look, git's questions before the walk, which reads the whole checkout.
+		path := filepath.Join(root, c.name)
+		if !checkoutHasNothingToLose(path, c.branch, false, true) {
+			continue
+		}
+		if _, idle := checkoutIdleSince(path, 0); !idle {
+			continue
+		}
 		now := pool.clock.Now()
 		if !spending.IsZero() && now.Sub(spending) >= resumableSweepBudget {
 			logln(fmt.Sprintf("gc: stopping this sweep of resumable checkouts after %s, its budget is %s; the next sweep goes on with the oldest of the %d left",
 				now.Sub(spending).Round(time.Second), resumableSweepBudget, len(candidates)-i))
 			return false, pressure
 		}
-		taken, err := reclaimResumableCheckout(t, pool, root, c.name, pressure.storage, pressure.underBudgetFloor())
+		taken, err := reclaimResumableCheckout(t, pool, root, c.name, pressure.storage, resumableReclaimReason(pressure))
 		if (taken || err != nil) && spending.IsZero() {
 			spending = now
 		}
 		if !taken {
 			continue
 		}
-		if pressure = pressure.again(); !pressure.belowFloor() {
+		resting--
+		if pressure = pressure.again(); !pressure.belowFloor() && resting <= maxRetainedResumableCheckouts {
 			return false, pressure
 		}
 	}
@@ -3643,6 +3650,44 @@ func gcResumableCheckouts(t *Transport, pool *sessionPool, pressure worktreeGCPr
 	}
 	pressure = pressure.again()
 	return pressure.belowFloor(), pressure
+}
+
+// resumableReclaimReason says why gcResumableCheckouts takes a checkout on this reading.
+func resumableReclaimReason(p worktreeGCPressure) string {
+	switch {
+	case p.underBudgetFloor():
+		return "under the storage budget's floor"
+	case p.belowFloor():
+		return "under the free-space floor"
+	default:
+		return fmt.Sprintf("over the cap of %d resting checkouts", maxRetainedResumableCheckouts)
+	}
+}
+
+// checkoutLastActivity is when a checkout was last worked in, as far as two stats can tell: the newer of its directory's
+// modification time and that of its HEAD's reflog, which every commit the runner makes at the end of a turn writes.
+// Not the index, which a `git status` may rewrite, the sweep's own included. A time it cannot read is the zero time,
+// sorted as oldest: the sweep's rule still has to let the checkout go.
+func checkoutLastActivity(path string) time.Time {
+	var newest time.Time
+	if info, err := os.Stat(path); err == nil {
+		newest = info.ModTime()
+	}
+	dotGit, err := os.ReadFile(filepath.Join(path, ".git"))
+	if err != nil {
+		return newest
+	}
+	gitDir, ok := strings.CutPrefix(strings.TrimSpace(string(dotGit)), "gitdir: ")
+	if !ok {
+		return newest
+	}
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(path, gitDir)
+	}
+	if info, err := os.Stat(filepath.Join(gitDir, "logs", "HEAD")); err == nil && info.ModTime().After(newest) {
+		newest = info.ModTime()
+	}
+	return newest
 }
 
 // reclaimResumableCheckout judges one checkout a second time and removes it. The session's branch stays,
@@ -3657,8 +3702,8 @@ func gcResumableCheckouts(t *Transport, pool *sessionPool, pressure worktreeGCPr
 // which is no answer about it and starts no wait: on a disk too full to write the mark, the next sweep may be able to.
 //
 // Under a storage budget, storage counts the checkout's bytes once it is gone (checkoutStorage.removing); nil counts
-// nothing. underBudget judges it by the rules of a storage budget's floor (underBudgetFloor).
-func reclaimResumableCheckout(t *Transport, pool *sessionPool, root, name string, storage *checkoutStorage, underBudget bool) (bool, error) {
+// nothing. reason is why it goes, for the log (resumableReclaimReason).
+func reclaimResumableCheckout(t *Transport, pool *sessionPool, root, name string, storage *checkoutStorage, reason string) (bool, error) {
 	if pool.checkoutDriven(name) {
 		return false, nil
 	}
@@ -3684,8 +3729,8 @@ func reclaimResumableCheckout(t *Transport, pool *sessionPool, root, name string
 		return false, nil
 	}
 	path := filepath.Join(root, name)
-	lastWrite, idle := checkoutIdleSince(path, resumableIdle(underBudget))
-	if !idle || !checkoutHasNothingToLose(path, branch, true, underBudget) {
+	lastWrite, idle := checkoutIdleSince(path, 0)
+	if !idle || !checkoutHasNothingToLose(path, branch, true, true) {
 		return false, nil
 	}
 	if _, err := git(path, "update-ref", absentRefName(name), "refs/heads/"+branch); err != nil {
@@ -3708,13 +3753,8 @@ func reclaimResumableCheckout(t *Transport, pool *sessionPool, root, name string
 	if repo != "" {
 		_, _ = git(repo, "worktree", "prune")
 	}
-	why := fmt.Sprintf("resumable session, clean and pushed, nothing written for %d days, no process or job in it; under the free-space floor",
-		int(time.Since(lastWrite).Hours()/24))
-	if underBudget {
-		why = fmt.Sprintf("resumable session, clean, its work on its branch, last written %s ago, no process or job in it; under the storage budget's floor",
-			humanDuration(time.Since(lastWrite)))
-	}
-	logln("gc: reclaimed checkout", name, "—", why+"; its branch and base ref are kept")
+	logln(fmt.Sprintf("gc: reclaimed checkout %s — resumable session, clean, its work on its branch, last written %s ago, no process or job in it; %s; its branch and base ref are kept",
+		name, humanDuration(time.Since(lastWrite)), reason))
 	return true, nil
 }
 

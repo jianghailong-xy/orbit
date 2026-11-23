@@ -56,9 +56,10 @@ export function sanitizeManagedWorkload(value: unknown): (ManagedRunnerWorkload 
   const operations = count(v.operations);
   const unflushedEvents = count(v.unflushedEvents);
   const idleSeconds = count(v.idleSeconds, MAX_IDLE_SECONDS);
-  if (activeTurns === null || backgroundJobs === null || operations === null || unflushedEvents === null || idleSeconds === null) return null;
+  const driveWrites = v.driveWrites === undefined ? 0 : count(v.driveWrites);
+  if (activeTurns === null || backgroundJobs === null || operations === null || unflushedEvents === null || idleSeconds === null || driveWrites === null) return null;
   const sleepReady = typeof v.sleepReady === 'string' && v.sleepReady.length <= 64 ? v.sleepReady : undefined;
-  return { activeTurns, backgroundJobs, operations, unflushedEvents, idleSeconds, ...(sleepReady ? { sleepReady } : {}) };
+  return { activeTurns, backgroundJobs, operations, unflushedEvents, idleSeconds, ...(driveWrites ? { driveWrites } : {}), ...(sleepReady ? { sleepReady } : {}) };
 }
 
 /** What the heartbeat route writes for the instance that sent `workload`. */
@@ -68,9 +69,10 @@ export function storedWorkloadFor(
   draining: boolean,
   now: Date,
 ): StoredManagedWorkload {
-  const { activeTurns, backgroundJobs, operations, unflushedEvents, idleSeconds } = workload;
+  const { activeTurns, backgroundJobs, operations, unflushedEvents, idleSeconds, driveWrites } = workload;
   return {
     activeTurns, backgroundJobs, operations, unflushedEvents, idleSeconds,
+    ...(driveWrites ? { driveWrites } : {}),
     generation: instance.generation,
     podUid: instance.podUid,
     receivedAt: now.toISOString(),
@@ -110,7 +112,7 @@ export function freshInstanceReport(
 
 /** Nothing in flight, by the runner's own account. */
 export function workloadIdle(workload: ManagedRunnerWorkload): boolean {
-  return workload.activeTurns === 0 && workload.backgroundJobs === 0 && workload.operations === 0 && workload.unflushedEvents === 0;
+  return workload.activeTurns === 0 && workload.backgroundJobs === 0 && workload.operations === 0 && workload.unflushedEvents === 0 && !workload.driveWrites;
 }
 
 export interface ManagedHeartbeatAnswer {

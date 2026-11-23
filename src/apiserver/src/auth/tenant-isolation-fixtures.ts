@@ -22,6 +22,8 @@ import { CRITERIA_WEAKENING_EFFECT_CLASS } from '../projects/criteria-weakening-
 import { DONE_REQUEST_DEDUPE_KEY, DONE_REQUEST_KIND, DONE_REQUEST_TITLE } from '../projects/project-done-request';
 import { handoffCrossingKey } from '../projects/project-handoff';
 import { SessionAttemptService } from '../projects/session-attempt.service';
+import { DriveChunksService } from '../drive/drive-chunks.service';
+import { DriveService, OWNER_WRITER } from '../drive/drive.service';
 import { encryptSecret } from '../providers/provider-crypto';
 import { PatService } from './pat.service';
 import { call, type Apiserver, type Reply } from './pat-test-apiserver';
@@ -669,6 +671,31 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       return id;
     };
 
+    // The drive: a folder, a file in it with two replaced versions (an empty overwrite each), and files deleted to Trash.
+    const drive = new DriveService(db as never);
+    const driveFolder = await drive.createFolder(ownerId, { name: `${name} census folder` });
+    const driveFile = await drive.createFile(ownerId, { parentId: driveFolder.id, name: 'census.txt' });
+    const driveOverwrite = async () => (await drive.commit(ownerId, {
+      commitId: randomUUID(), entryId: driveFile.id, mode: 'OVERWRITE', chunks: [], writer: OWNER_WRITER,
+    })).replacedVersionId!;
+    const driveVersionId = await driveOverwrite();
+    const spareDriveVersionId = await driveOverwrite();
+    const driveTrashed = async (label: string) =>
+      (await drive.moveToTrash(ownerId, (await drive.createFile(ownerId, { parentId: driveFolder.id, name: `${label}.txt` })).id)).trashGroupId;
+    const driveTrashGroupId = await driveTrashed('in-trash');
+    const spareDriveTrashGroupId = await driveTrashed('deleted-for-good');
+    const spareDriveRestoreGroupId = await driveTrashed('restored');
+    const spareDriveRestoreItemEntryId = (await drive.createFile(ownerId, { parentId: driveFolder.id, name: 'restored-alone.txt' })).id;
+    const spareDriveRestoreItemGroupId = (await drive.moveToTrash(ownerId, spareDriveRestoreItemEntryId)).trashGroupId;
+    const driveUpload = async (declaredSize: number) =>
+      (await new DriveChunksService(db as never, undefined as never).openStaging(ownerId, {
+        source: 'OWNER_UPLOAD', parentId: driveFolder.id, name: 'upload.bin', declaredSize,
+      })).id;
+    const driveUploadId = await driveUpload(10);
+    const spareDriveCompleteUploadId = await driveUpload(0);
+    const spareDriveAbandonUploadId = await driveUpload(10);
+    const spareDriveEntryId = (await drive.createFile(ownerId, { parentId: driveFolder.id, name: 'spare.txt' })).id;
+
     const shareTaskId = await task(`${name} shared task`);
     ok(await as('PUT', `/tasks/${shareTaskId}/share`, {}), 'a share link');
     const shareLinkId = (await db.shareLink.findFirstOrThrow({ where: { ownerId, taskId: shareTaskId } })).id;
@@ -783,6 +810,11 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       adminSubjectId: adminSubject.userId,
       adminSubjectTokenId,
       adminProviderId: await adminProvider(`${name}-admin-provider`),
+      driveFolderId: driveFolder.id,
+      driveFileId: driveFile.id,
+      driveVersionId,
+      driveTrashGroupId,
+      driveUploadId,
       spare: {
         accessTokenId: idOf(await as('POST', '/access-tokens', { name: `${name} spare`, scopes: ['tasks:read'] }), 'a token'),
         adminProviderId: await adminProvider(`${name}-admin-provider-spare`),
@@ -811,6 +843,14 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         guestUserId: spareGuestUserId,
         listId: idOf(await as('POST', '/task-lists', { title: `${name} spare list` }), 'a spare list'),
         taskId: await task(`${name} spare task`),
+        driveEntryId: spareDriveEntryId,
+        driveCompleteUploadId: spareDriveCompleteUploadId,
+        driveAbandonUploadId: spareDriveAbandonUploadId,
+        driveVersionId: spareDriveVersionId,
+        driveTrashGroupId: spareDriveTrashGroupId,
+        driveRestoreGroupId: spareDriveRestoreGroupId,
+        driveRestoreItemGroupId: spareDriveRestoreItemGroupId,
+        driveRestoreItemEntryId: spareDriveRestoreItemEntryId,
       },
     };
   }

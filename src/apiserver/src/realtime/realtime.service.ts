@@ -1440,6 +1440,21 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * The owner's drive changed (docs/orbit-files-drive-technical-design.md §5.4): a write committed rows to its change feed,
+   * the highest of them `seq`. THE PAYLOAD IS THE SEQ AND NOTHING ELSE: no name, path or size. An accelerant only: the Files
+   * page reads `GET /drive/changes` for what changed, and re-reads it on focus and reconnect. Published after the write
+   * commits, and only to the streams that declared `hints=drive_changed`.
+   */
+  publishDriveChanged(ownerId: string, seq: number): void {
+    this.publish(`${RealtimeService.USER_SCOPE}${ownerId}`, {
+      seq: 0,
+      type: RunEventType.DRIVE_CHANGED,
+      ts: new Date().toISOString(),
+      payload: { seq: String(seq) },
+    });
+  }
+
+  /**
    * What these sessions' schedule cards (`GET /sessions/:id/schedule-cards`) read may have moved: a card one of them put
    * up, a change it recorded, or a schedule its cards and records name. User-scoped, keyed by the owner like the
    * libraries; the payload names the sessions and nothing else, at most SCHEDULE_CARDS_CHANGED_MAX_SESSIONS of them, a
@@ -1480,10 +1495,12 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
 
   streamForUser(
     userId: string,
-    options: { listChanged?: boolean; listScopes?: boolean; ownerRequests?: boolean; scheduleCards?: boolean } = {},
+    options: { listChanged?: boolean; listScopes?: boolean; ownerRequests?: boolean; driveChanged?: boolean; scheduleCards?: boolean } = {},
   ): Observable<ControlEvent> {
     const events$ = this.hub.asObservable().pipe(
       filter((m) => controlTypeFor(m.event.type) !== null),
+      // `drive.changed` only for a stream that declared it (`?hints=drive_changed`), for the same reason.
+      filter((m) => options.driveChanged === true || m.event.type !== RunEventType.DRIVE_CHANGED),
       // `schedule_cards.changed` only for a stream that declared it (`?hints=schedule_cards`), like the hints below.
       filter((m) => options.scheduleCards === true || m.event.type !== RunEventType.SCHEDULE_CARDS_CHANGED),
       mergeMap((m) => this.toControlEvent(userId, m)),
@@ -1529,8 +1546,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       const data =
         taskChange
           ? taskChange instanceof Promise ? await taskChange : taskChange
-          : type === ControlEventType.SCHEDULE_CARDS_CHANGED
-            ? scheduleCardsChangedData(ev.payload)
+          : type === ControlEventType.DRIVE_CHANGED
+            ? { seq: String(ev.payload.seq ?? '') }
+            : type === ControlEventType.SCHEDULE_CARDS_CHANGED
+              ? scheduleCardsChangedData(ev.payload)
           : type === ControlEventType.AGENT_CHANGED
             ? {
                 agentId: String(ev.payload.id ?? ''),

@@ -835,6 +835,9 @@ export const fetchUserAvatarDataUrl = (userId: string): Promise<string> =>
 export const cancelQueuedTurn = (sessionId: string, turnId: string) =>
   api(`/sessions/${sessionId}/turns/${turnId}`, { method: 'DELETE' });
 
+export const runQueuedSessionNow = (sessionId: string) =>
+  api<{ ok: true; turnId: string; alreadyPassed: boolean }>(`/sessions/${sessionId}/run-now`, { method: 'POST' });
+
 /** Send a message queued for the next turn into the one running now (the tray's Steer). It becomes
  *  the steer it would have been had it been sent that way; with no turn to join, or an engine or
  *  runner that cannot take one, it stays queued and the refusal is CURRENT_WORK_UNAVAILABLE. */

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient, type Query, type QueryFilters } from '@tanstack/react-query';
-import { CONTROL_HINT_LIST_SCOPES, type WatchView } from '@orbit/shared';
+import { CONTROL_HINT_DRIVE_CHANGED, CONTROL_HINT_LIST_SCOPES, type WatchView } from '@orbit/shared';
 import { getToken } from '../api';
 import { streamReport } from './listBudget';
 import { cloneEventOf, hearClone, sameWorkspace } from './workspaceClone';
@@ -722,6 +722,9 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       // The owner's terminals: one asked to be approved, a request was decided or collected, or one was revoked
       // (`terminals.changed`). The approve card and Settings → Terminals both declare `terminal`.
       if (type === 'terminals.changed') return ['terminal'];
+      // The owner's drive: a write committed (`drive.changed`, asked for with `hints=drive_changed`). The Files page's
+      // reads declare `drive`; the feed's seq it carries is not needed to re-read what is on screen.
+      if (type === 'drive.changed') return ['drive'];
       // A request was filed, answered, expired or withdrawn: the open list's nudge (`hints=owner_requests`).
       if (type === 'owner_requests.changed') return ['ownerRequest'];
       // Some sessions' schedule cards moved (`hints=schedule_cards`); which sessions is `pendingCards`.
@@ -939,10 +942,11 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       returnedAt = onReturn;
       hinted = false;
       lastMsgAt = Date.now();
-      // `hints=list_changed` asks for the Open list's hint (docs/realtime-control-plane-stream.md §4.8), and `list_scopes`
-      // for the workspaces it names, so a workspace's list is read only for its own moves.
-      // `schedule_cards` asks for `schedule_cards.changed` (§4.10), which a session's schedule cards are read on.
-      es = new EventSource(`/api/events?access_token=${encodeURIComponent(getToken() ?? '')}&hints=list_changed,owner_requests,schedule_cards,${CONTROL_HINT_LIST_SCOPES}`);
+      // `list_changed` opts into Open-list hints (§4.8), and `list_scopes` adds their workspace scopes.
+      // The other opt-ins enable notifications for owner requests, schedule cards and committed drive writes.
+      es = new EventSource(
+        `/api/events?access_token=${encodeURIComponent(getToken() ?? '')}&hints=list_changed,owner_requests,schedule_cards,${CONTROL_HINT_LIST_SCOPES},${CONTROL_HINT_DRIVE_CHANGED}`,
+      );
       es.onopen = () => {
         lastMsgAt = Date.now();
         setLive(true);

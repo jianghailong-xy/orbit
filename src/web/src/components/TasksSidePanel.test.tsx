@@ -111,7 +111,8 @@ describe('TasksSidePanel nav', () => {
     // stood there are picked from the Tasks page's title, and this is the way to it. Runners and
     // Providers became the one Infrastructure (docs/mocks/infrastructure-page), which, renamed Machines &
     // models, moved to Settings and the account menu (docs/mocks/machines-and-models, 02).
-    expect(keys).toEqual(['projects', 'tasks', 'scheduled', 'waiting', 'wiki']);
+    // Files, the account's drive, went in directly under the Wiki (docs/mocks/orbit-files/02-web, frame 1).
+    expect(keys).toEqual(['projects', 'tasks', 'scheduled', 'waiting', 'wiki', 'files']);
     // The rows' own group head (WorkspacesHead) names them the way Projects names its rows; it is
     // no destination, so it is no TOP entry either.
     expect(source).not.toContain('tp-workspaces-head');

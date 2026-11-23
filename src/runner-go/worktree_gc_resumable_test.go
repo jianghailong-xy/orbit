@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -21,8 +22,9 @@ import (
 // The second half of a sweep (gcResumableCheckouts): under the disk's floor the checkouts of sessions
 // that can resume go too, oldest first, when they have nothing to lose. What these tests hold it to:
 //
-//   - the rule: an idle, clean, pushed checkout with no process goes, oldest first, and the sweep stops
-//     at the floor (TestResumableSweep*Reclaims*, *OldestFirst*);
+//   - the rule: a clean checkout with its work on its branch and no process goes, oldest first, and the sweep
+//     stops at the floor (TestResumableSweep*Reclaims*, *OldestFirst*), or once no more than
+//     maxRetainedResumableCheckouts are left on a roomy disk (TestResumableSweep*Cap*);
 //   - nothing else goes: every reason to keep a checkout has a case with a neighbour that does go, so
 //     the sweep is proved to have run, and each case ages the checkout again after setting itself up,
 //     so that this reason and no other is what keeps it (TestResumableSweepKeeps);
@@ -218,6 +220,10 @@ func ageCheckout(t *testing.T, path string, days int) {
 	}); err != nil {
 		t.Fatalf("age %s: %v", path, err)
 	}
+	// Its HEAD's reflog too, which lives in the repository and orders the sweep (checkoutLastActivity).
+	if gitDir, err := git(path, "rev-parse", "--absolute-git-dir"); err == nil {
+		_ = os.Chtimes(filepath.Join(gitDir, "logs", "HEAD"), when, when)
+	}
 }
 
 // commitAndPush commits and pushes in a checkout.
@@ -295,7 +301,7 @@ func TestResumableSweepReclaimsAnIdleCleanPushedCheckoutKeepingItsBranchAndBaseR
 
 	logs := captureLogs(t, func() { sweepOnFullDisk(f) })
 
-	requireCheckoutReclaimed(t, path, "an idle, clean, pushed checkout of a resumable session, under the floor")
+	requireCheckoutReclaimed(t, path, "a clean checkout of a resumable session, under the floor")
 	if got := mustGit(t, f.repo, "rev-parse", "orbit/sess-parked"); got != tip {
 		t.Fatalf("the branch must stay where it was, at %s, got %s", tip, got)
 	}
@@ -308,7 +314,7 @@ func TestResumableSweepReclaimsAnIdleCleanPushedCheckoutKeepingItsBranchAndBaseR
 	if out := mustGit(t, f.repo, "worktree", "list"); strings.Contains(out, "sess-parked") {
 		t.Fatalf("git must not go on listing the checkout:\n%s", out)
 	}
-	if !strings.Contains(logs, "gc: reclaimed checkout sess-parked — resumable session, clean and pushed, nothing written for 20 days") {
+	if !strings.Contains(logs, "gc: reclaimed checkout sess-parked — resumable session, clean, its work on its branch, last written 20 days ago, no process or job in it; under the free-space floor; its branch and base ref are kept") {
 		t.Fatalf("each reclaimed checkout says why in one line, got:\n%s", logs)
 	}
 	if entries, _ := os.ReadDir(worktreesDir()); len(entries) != 0 {
@@ -353,19 +359,19 @@ func TestResumableSweepReclaimsACheckoutOnTheBranchItsSessionAdopted(t *testing.
 	requireCheckoutReclaimed(t, path, "it stands on the branch it comes back on")
 }
 
-// Oldest by what was last written in it, not by the checkout directory's own time, which any file
-// created at its top moves and a write further down does not.
+// Oldest by when it was last worked in (checkoutLastActivity): the newer of the checkout directory's own time and its
+// HEAD's last move, which every turn-end commit makes. Not by name, and not by the directory's time alone.
 func TestResumableSweepTakesTheOldestFirstAndStopsAboveTheFloor(t *testing.T) {
 	f := newResumableFixture(t)
 	oldest := f.checkout(t, "sess-c-oldest")
 	ageCheckout(t, oldest, 60)
 	middle := f.checkout(t, "sess-a-middle")
 	ageCheckout(t, middle, 40)
-	// The newest write of all, under a checkout directory older than any other.
+	// The newest commit of all, under a checkout directory older than any other.
 	newest := f.checkout(t, "sess-b-newest")
 	ageCheckout(t, newest, 90)
 	old := time.Now().Add(-20 * 24 * time.Hour)
-	if err := os.Chtimes(filepath.Join(newest, "sess-b-newest.txt"), old, old); err != nil {
+	if err := os.Chtimes(filepath.Join(mustGit(t, newest, "rev-parse", "--absolute-git-dir"), "logs", "HEAD"), old, old); err != nil {
 		t.Fatal(err)
 	}
 
@@ -386,7 +392,7 @@ func TestResumableSweepTakesTheOldestFirstAndStopsAboveTheFloor(t *testing.T) {
 
 	requireCheckoutReclaimed(t, oldest, "the oldest goes first")
 	requireCheckoutReclaimed(t, middle, "the next oldest goes while the disk is still short")
-	requireCheckoutOnDisk(t, newest, "back above the floor, the sweep stops: the newest write stays, its directory's old time notwithstanding")
+	requireCheckoutOnDisk(t, newest, "back above the floor, the sweep stops: the newest commit stays, its directory's old time notwithstanding")
 }
 
 // In the order the run loop calls them: when the first half of the sweep gets the disk back above the
@@ -424,9 +430,6 @@ func TestResumableSweepKeeps(t *testing.T) {
 		prepare func(t *testing.T, f *resumableFixture, path, session string)
 		// atTheSecondLook marks the one reason only the second look asks about, for what it costs.
 		atTheSecondLook bool
-		// onlyWithoutABudget marks a reason a storage budget's floor sets aside (underBudgetFloor): the two weeks
-		// themselves, and a commit only the session's own branch has.
-		onlyWithoutABudget bool
 	}{
 		{name: "a modified tracked file", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			writeUnder(t, path, "base.txt", "changed and not committed\n")
@@ -445,35 +448,6 @@ func TestResumableSweepKeeps(t *testing.T) {
 			mustGit(t, f.repo, "config", "status.showUntrackedFiles", "no")
 			writeUnder(t, path, "scratch/untracked.txt", "only here\n")
 			ageCheckout(t, path, 20)
-		}},
-		{name: "a commit no remote has", onlyWithoutABudget: true, prepare: func(t *testing.T, f *resumableFixture, path, session string) {
-			commitFile(t, path, "unpushed.txt", "local\n", "unpushed")
-			ageCheckout(t, path, 20)
-		}},
-		{name: "a file written within two weeks, content unchanged", onlyWithoutABudget: true, prepare: func(t *testing.T, f *resumableFixture, path, session string) {
-			ageCheckout(t, path, 20)
-			now := time.Now().Add(-13 * 24 * time.Hour)
-			if err := os.Chtimes(filepath.Join(path, session+".txt"), now, now); err != nil {
-				t.Fatal(err)
-			}
-		}},
-		{name: "build output written within two weeks", onlyWithoutABudget: true, prepare: func(t *testing.T, f *resumableFixture, path, session string) {
-			ignoring(t, path, "dist/")
-			ageCheckout(t, path, 20)
-			writeUnder(t, path, "dist/deep/app.js", "a recent build is a recent use\n")
-			// Only the file itself is new: its directories say nothing.
-			ago := time.Now().Add(-20 * 24 * time.Hour)
-			for _, dir := range []string{path, filepath.Join(path, "dist"), filepath.Join(path, "dist", "deep")} {
-				_ = os.Chtimes(dir, ago, ago)
-			}
-		}},
-		{name: "a file deleted within two weeks", onlyWithoutABudget: true, prepare: func(t *testing.T, f *resumableFixture, path, session string) {
-			ignoring(t, path, "dist/")
-			writeUnder(t, path, "dist/deep/app.js", "a build\n")
-			ageCheckout(t, path, 20)
-			if err := os.Remove(filepath.Join(path, "dist", "deep", "app.js")); err != nil {
-				t.Fatal(err)
-			}
 		}},
 		{name: "an ignored .env, however old", prepare: func(t *testing.T, f *resumableFixture, path, session string) {
 			ignoring(t, path, ".env")
@@ -679,9 +653,6 @@ func TestResumableSweepKeeps(t *testing.T) {
 	for _, c := range cases {
 		// Under a storage budget's floor the same reasons keep a checkout however recently it was written.
 		for _, underABudget := range []bool{false, true} {
-			if underABudget && c.onlyWithoutABudget {
-				continue
-			}
 			name := c.name
 			if underABudget {
 				name = "under a storage budget's floor, " + name
@@ -769,15 +740,20 @@ func TestResumableSweepKeepsACheckoutGitCannotGiveAStatusFor(t *testing.T) {
 	requireCheckoutOnDisk(t, path, "git could not say what is in it")
 }
 
-// With no remote there is nowhere its commits could have been pushed to, so rev-list counts them all.
-func TestResumableSweepKeepsACheckoutOfARepositoryWithNoRemote(t *testing.T) {
+// With no remote nothing has been pushed anywhere, and the session's branch is what keeps its commits: the checkout
+// goes and the branch stays.
+func TestResumableSweepReclaimsACheckoutOfARepositoryWithNoRemoteKeepingItsBranch(t *testing.T) {
 	f := newResumableFixture(t)
 	path := f.checkout(t, "sess-no-remote")
+	tip := mustGit(t, path, "rev-parse", "HEAD")
 	mustGit(t, f.repo, "remote", "remove", "origin")
 
 	sweepOnFullDisk(f)
 
-	requireCheckoutOnDisk(t, path, "with no remote, nothing has been pushed")
+	requireCheckoutReclaimed(t, path, "its commits are on its branch, which stays")
+	if got := mustGit(t, f.repo, "rev-parse", "orbit/sess-no-remote"); got != tip {
+		t.Fatalf("the branch must stay at %s, got %s", tip, got)
+	}
 }
 
 // A directory named like a session that is a repository in its own right. git cannot remove it as a
@@ -903,6 +879,54 @@ func TestResumableSweepDoesNothingUnlessTheDiskIsUnderItsFloor(t *testing.T) {
 				t.Fatalf("asked the control plane %d times", f.queryCount())
 			}
 		})
+	}
+}
+
+// A roomy disk keeps no more than maxRetainedResumableCheckouts resting checkouts: past the cap the oldest go, by the
+// same rule as under the floor, so a checkout holding work no branch has stays, and the newest are the ones kept.
+// Sessions the control plane does not call resumable are not counted.
+func TestResumableSweepOverTheCapOnARoomyDiskTakesTheOldestDownToTheCap(t *testing.T) {
+	f := newResumableFixture(t)
+	dirty := f.checkout(t, "sess-dirty")
+	writeUnder(t, dirty, "scratch/untracked.txt", "only here\n")
+	ageCheckout(t, dirty, 90)
+	oldest := f.checkout(t, "sess-oldest")
+	ageCheckout(t, oldest, 80)
+	older := f.checkout(t, "sess-older")
+	ageCheckout(t, older, 70)
+	// On disk and kept by the control plane: not one of the resting checkouts the cap counts.
+	kept := f.checkout(t, "sess-on-its-way")
+	ageCheckout(t, kept, 100)
+	f.set(func() { f.answers["sess-on-its-way"] = "kept" })
+	// The cap's worth of newer ones, less one for the dirty checkout the rule keeps past it.
+	var newer []string
+	for i := 0; i < maxRetainedResumableCheckouts-1; i++ {
+		path := f.checkout(t, fmt.Sprintf("sess-newer-%02d", i))
+		ageCheckout(t, path, 1+i%30)
+		newer = append(newer, path)
+	}
+
+	logs := captureLogs(t, func() { gcResumableCheckouts(f.transport, f.pool, roomyDisk()) })
+
+	requireCheckoutReclaimed(t, oldest, "past the cap, the oldest goes")
+	requireCheckoutReclaimed(t, older, "and the next oldest, down to the cap")
+	requireCheckoutOnDisk(t, dirty, "past the cap too, but it holds work no branch has")
+	requireCheckoutOnDisk(t, kept, "the control plane keeps it, and the cap does not count it")
+	for _, path := range newer {
+		requireCheckoutOnDisk(t, path, "within the cap")
+	}
+	want := fmt.Sprintf("gc: reclaimed checkout sess-oldest — resumable session, clean, its work on its branch, last written 80 days ago, no process or job in it; over the cap of %d resting checkouts; its branch and base ref are kept", maxRetainedResumableCheckouts)
+	if !strings.Contains(logs, want) {
+		t.Fatalf("the log says why, want %q, got:\n%s", want, logs)
+	}
+
+	asked := f.queryCount()
+	logs = captureLogs(t, func() { gcResumableCheckouts(f.transport, f.pool, roomyDisk()) })
+	if strings.Contains(logs, "gc: reclaimed") || strings.Contains(logs, resumableWaitLine) {
+		t.Fatalf("at the cap nothing more goes, and nothing waits, got:\n%s", logs)
+	}
+	if f.queryCount() == asked {
+		t.Fatal("still more directories than the cap, so the sweep asks which are resting")
 	}
 }
 
@@ -1058,18 +1082,8 @@ func TestResumableSweepLooksAgainImmediatelyBeforeItRemoves(t *testing.T) {
 		{"the control plane went away", func(t *testing.T, f *resumableFixture, path string) {
 			f.set(func() { f.unavailable = true })
 		}},
-		{"a file was written", func(t *testing.T, f *resumableFixture, path string) {
-			now := time.Now()
-			if err := os.Chtimes(filepath.Join(path, "sess-parked.txt"), now, now); err != nil {
-				t.Error(err)
-			}
-		}},
 		{"a file appeared, and was dated back", func(t *testing.T, f *resumableFixture, path string) {
 			writeUnder(t, path, "untracked.txt", "new\n")
-			ageCheckout(t, path, 20)
-		}},
-		{"a commit was made, and dated back", func(t *testing.T, f *resumableFixture, path string) {
-			commitFile(t, path, "late.txt", "late\n", "late")
 			ageCheckout(t, path, 20)
 		}},
 		{"an ignored file appeared, and was dated back", func(t *testing.T, f *resumableFixture, path string) {
@@ -2319,11 +2333,11 @@ func (s *resumableSchedule) sweepAfter(d time.Duration, pressure worktreeGCPress
 	return logs, s.queryCount() != asked
 }
 
-// checkoutTheRuleKeeps is a checkout every look reads and none takes: it holds a commit no remote has.
+// checkoutTheRuleKeeps is a checkout every look reads and none takes: it holds a file no branch has.
 func (s *resumableSchedule) checkoutTheRuleKeeps(session string) string {
 	s.t.Helper()
 	path := s.checkout(s.t, session)
-	commitFile(s.t, path, "unpushed.txt", "local\n", "unpushed")
+	writeUnder(s.t, path, "scratch/untracked.txt", "only here\n")
 	ageCheckout(s.t, path, 20)
 	return path
 }
@@ -2710,12 +2724,6 @@ func TestResumableLookThatTheSecondLookKeptStartsAWait(t *testing.T) {
 			cmd.Dir = path
 			startProcess(t, cmd)
 		}},
-		{"a file was written", func(t *testing.T, s *resumableSchedule, path string) {
-			now := time.Now()
-			if err := os.Chtimes(filepath.Join(path, session+".txt"), now, now); err != nil {
-				t.Error(err)
-			}
-		}},
 		{"a repository turned up in a dependency directory, which only this look searches", func(t *testing.T, s *resumableSchedule, path string) {
 			ignoring(t, path, "node_modules/")
 			nested := filepath.Join(path, "node_modules", "dep")
@@ -2823,7 +2831,8 @@ func TestResumableSweepBudgetStopsItBetweenCheckouts(t *testing.T) {
 	requireCheckoutReclaimed(t, second, "59 seconds in, there is budget left")
 	requireCheckoutOnDisk(t, third, "60 seconds in, there is none")
 	requireCheckoutOnDisk(t, fourth, "the sweep has stopped")
-	if want := "after 1m0s, its budget is 1m0s; the next sweep goes on with the oldest of the 2 left"; !strings.Contains(logs, want) {
+	// Three left: the third, the fourth and the one the rule keeps, which nothing has judged yet.
+	if want := "after 1m0s, its budget is 1m0s; the next sweep goes on with the oldest of the 3 left"; !strings.Contains(logs, want) {
 		t.Fatalf("the log should say %q, got:\n%s", want, logs)
 	}
 	if got := strings.Count(logs, resumableBudgetLine); got != 1 {
@@ -2840,7 +2849,7 @@ func TestResumableSweepBudgetStopsItBetweenCheckouts(t *testing.T) {
 	}
 	requireCheckoutReclaimed(t, third, "the next sweep goes on with the oldest left")
 	requireCheckoutOnDisk(t, fourth, "and it has a budget of its own, which that one spent")
-	if !strings.Contains(logs, "the oldest of the 1 left") {
+	if !strings.Contains(logs, "the oldest of the 2 left") {
 		t.Fatalf("this one stopped on its budget too, got:\n%s", logs)
 	}
 

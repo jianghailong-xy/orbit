@@ -16,6 +16,7 @@ import { LEGACY_MANAGED_ADMISSION_DENIAL_MARKER, MANAGED_ADMISSION_DENIAL_MARKER
 import {
   ManagedRunnerConflict,
   type ManagedCredential,
+  type ManagedDriveMountDelivery,
   type ManagedFencingReceipt,
   type ManagedInstance,
   type ManagedReplacementVolume,
@@ -34,7 +35,9 @@ import {
   OWNER_ANNOTATION,
   RUNNER_ANNOTATION,
   bootstrapCredentialOf,
+  buildDriveMountSecret,
   buildManagedPod,
+  driveMountSecretName,
   buildManagedPvc,
   buildManagedSecret,
   managedAdmissionProbeName,
@@ -187,6 +190,7 @@ export class KubernetesBackend implements ManagedRunnerBackend {
   readonly terms = TERMS;
   readonly location: { readonly clusterKey: string; readonly namespace: string };
   readonly rollImage: string;
+  readonly driveMount?: ManagedDriveMountDelivery;
 
   constructor(
     private readonly kube: ManagedKubeClient,
@@ -194,6 +198,23 @@ export class KubernetesBackend implements ManagedRunnerBackend {
   ) {
     this.location = { clusterKey: profile.clusterKey, namespace: profile.kubernetes.namespace };
     this.rollImage = profile.runner.image;
+    if (profile.files) {
+      const secrets = kube.driveSecrets;
+      if (!secrets) throw new Error(`the profile gives runners the drive, but the client cannot reach namespace ${profile.files.namespace}`);
+      const namespace = profile.files.namespace;
+      this.driveMount = {
+        name: `Secret ${namespace}/mrf-<runner uuid>`,
+        read: async (mapping) => {
+          const secret = await secrets.get(driveMountSecretName(mapping.runnerId));
+          return secret ? credentialOf(secret) : null;
+        },
+        deliver: async (mapping, token) =>
+          credentialOf(await this.createOrReadBack(secrets, buildDriveMountSecret(this.identity(mapping), namespace, token))),
+        remove: async (mapping, credential) => {
+          await secrets.delete(driveMountSecretName(mapping.runnerId), { uid: (credential as KubeCredential).secret.metadata.uid });
+        },
+      };
+    }
   }
 
   names(runnerId: string) {
