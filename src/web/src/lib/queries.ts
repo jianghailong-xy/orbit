@@ -1901,3 +1901,20 @@ export const linkPreviewsQuery = (refs: readonly LinkPreviewRef[]) =>
       api<LinkPreviewsResponse>('/link-previews', { method: 'POST', body: { refs: [...refs] } }),
     enabled: refs.length > 0,
   });
+
+/** What `GET /drive/usage` answers: the account's total split into the drive's share (Trash included) and the rest, each byte once. */
+export interface DriveUsage {
+  totalBytes: number;
+  driveBytes: number;
+  trashBytes: number;
+  otherBytes: number;
+  storeUsedBytes?: number;
+  storeQuotaBytes?: number;
+  nearQuota?: boolean;
+}
+
+export const driveUsageQuery = () =>
+  queryOptions({
+    queryKey: ['drive', 'usage'] as const,
+    queryFn: () => api<DriveUsage>('/drive/usage'),
+  });

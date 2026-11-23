@@ -42,6 +42,7 @@ import {
   MoreOutlined,
   SettingOutlined,
   PaperClipOutlined,
+  FolderOpenOutlined,
   PauseCircleOutlined,
   PauseOutlined,
   PlayCircleOutlined,
@@ -56,6 +57,7 @@ import {
   ThunderboltOutlined,
   UndoOutlined,
   UnorderedListOutlined,
+  UploadOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AgentToolsDrawer, agentToolsMenuStatus } from './AgentToolsDrawer';
@@ -322,6 +324,7 @@ import {
   completeSession,
   cancelAutoRetry,
   cancelQueuedTurn,
+  runQueuedSessionNow,
   steerQueuedTurn,
   adoptSessionBranch,
   dismissMergeFailure,
@@ -388,7 +391,8 @@ import {
 } from './RunNeverStartedCard';
 import { claudeRegionHeld, claudeRegionHeldWords, useClaudeRegionCheckAgain } from '../lib/claudeRegion';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
-import { AntigravityRepairCard, antigravityRepair, AttachmentImage, QueuedFootCtx, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SandboxFixHelp, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
+import { DriveFilePicker } from './files/DriveFilePicker';
+import { AntigravityRepairCard, antigravityRepair, AttachmentImage, TurnStatusFootCtx, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SandboxFixHelp, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
 import { PendingTray, type PendingTrayRow } from './PendingTray';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
@@ -671,7 +675,13 @@ import {
   capacityHeldTitle,
   capacityHeldWaited,
   isCapacityHeld,
+  RUN_NOW,
+  RUN_NOW_FAILED,
+  runNowNote,
+  runningOverLimitHint,
+  runningOverLimitTag,
   type CapacityGate,
+  type RunningOverLimit,
 } from '../lib/queuedCapacity';
 import { type QueuedTurn, type RunEvent, useSessionStream } from '../lib/useSessionStream';
 import { SessionConversation } from './SessionConversation';
@@ -2204,12 +2214,21 @@ export function RunnerUpdatingTag({
 /**
  * The foot-row tag under a message a full runner, run or batch holds (board queued-card-runner-full ②③):
  * `Queued · runner full`, drawn as RunnerUpdatingTag draws its tag (and in its classes), the popover
- * counting how the slots are taken. Nothing to press there: a full machine has no action of its own.
+ * counting how the slots are taken and offering Run now where the server supports it.
  */
-export function CapacityHeldTag({ gate, machine }: { gate: CapacityGate; machine?: string | null }) {
+export function CapacityHeldTag({ gate, machine, runnerActive, runnerLimit, onRunNow, pending }: {
+  gate: CapacityGate;
+  machine?: string | null;
+  runnerActive?: number;
+  runnerLimit?: number;
+  onRunNow?: () => void;
+  pending?: boolean;
+}) {
   const now = useMinuteNow();
   const [open, setOpen] = useState(false);
   const waited = capacityHeldWaited(gate, now);
+  const note = onRunNow ? runNowNote(gate, machine, runnerActive, runnerLimit) : null;
+  if (!isCapacityHeld(gate)) return null;
   return (
     <span className="chat-runner-updating">
       Queued
@@ -2236,8 +2255,30 @@ export function CapacityHeldTag({ gate, machine }: { gate: CapacityGate; machine
               </>
             )}
           </p>
+          {note && (
+            <>
+              <div className="queued-run-now-action">
+                <Button variant="primary" size="small" loading={pending}
+                  disabled={gate.runNowAvailable !== true || !!gate.runNowRefusal} onClick={onRunNow}>
+                  {RUN_NOW}
+                </Button>
+              </div>
+              <p className="queued-run-now-note">{note}</p>
+            </>
+          )}
         </div>
       </Popover>
+    </span>
+  );
+}
+
+function RunningOverLimitFoot({ overflow }: { overflow: RunningOverLimit }) {
+  return (
+    <span className="chat-runner-updating">
+      Running
+      <Tooltip content={runningOverLimitHint(overflow)}>
+        <span className="chat-over-limit" tabIndex={0}>{runningOverLimitTag(overflow)}</span>
+      </Tooltip>
     </span>
   );
 }
@@ -2437,9 +2478,18 @@ export function HeldFoot({ tag, onCancel }: { tag: ReactNode; onCancel: () => vo
   );
 }
 
-/** The seq of the reader's last message in the transcript, or null where there is none. */
-export function lastUserEventSeq(events: ReadonlyArray<{ type: string; seq: number }>): number | null {
-  for (let i = events.length - 1; i >= 0; i--) if (events[i].type === 'user') return events[i].seq;
+/** The seq of the last user message, or the head of the open turn when requested. */
+export function lastUserEventSeq(
+  events: ReadonlyArray<{ type: string; seq: number; payload?: unknown }>,
+  openTurnOnly = false,
+): number | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const { type, seq, payload } = events[i];
+    if (openTurnOnly && type === 'turn_end') return null;
+    if (type !== 'user') continue;
+    if (openTurnOnly && (payload as { steer?: boolean } | null | undefined)?.steer === true) continue;
+    return seq;
+  }
   return null;
 }
 
@@ -3085,6 +3135,14 @@ export function WorkspaceView({
   // What a write made here re-reads the lists with: in the stream's coalescing window, which the
   // server's own event for the write joins (W5).
   const refreshSessionLists = useRefreshSessionLists();
+  const runNowMut = useMutation({
+    mutationFn: runQueuedSessionNow,
+    onError: (error: Error) => message.error(RUN_NOW_FAILED, error.message),
+    onSettled: (_data, _error, id) => {
+      refreshSessionLists();
+      return qc.invalidateQueries({ queryKey: ['session', id], exact: true });
+    },
+  });
   const sessionsQ = useQuery({
     ...sessionsOpts,
     enabled: !listProjectId,
@@ -4928,7 +4986,14 @@ export function WorkspaceView({
     />
   ) : capacityGate ? (
     // A full runner, run or batch, said in the same places by the same rules (board queued-card-runner-full ②④).
-    <CapacityHeldTag gate={capacityGate} machine={runnerShownName} />
+    <CapacityHeldTag
+      gate={capacityGate}
+      machine={runnerShownName}
+      runnerActive={activeSlots}
+      runnerLimit={runner.maxConcurrent}
+      onRunNow={selectedId && !selectedTrashed ? () => runNowMut.mutate(selectedId) : undefined}
+      pending={runNowMut.isPending && runNowMut.variables === selectedId}
+    />
   ) : null;
   // The reader's own waiting messages sit in the tray, which carries the tag itself; only where nothing
   // anywhere is waiting does it fall back to the last message they sent.
@@ -4958,6 +5023,13 @@ export function WorkspaceView({
             : queuedHeldTag,
         }
       : null;
+  const overflow: RunningOverLimit | null | undefined = selectedSession?.runningOverLimit;
+  const overflowSeq = overflow && !selectedTrashed && sessionRunStateOf(selectedSession) === 'RUNNING'
+    ? lastUserEventSeq(transcriptEvents, true)
+    : null;
+  const turnFoot = overflow && overflowSeq !== null
+    ? { seq: overflowSeq, tag: <RunningOverLimitFoot overflow={overflow} />, running: true }
+    : queuedFoot;
   // What stands in for an empty transcript — exactly one of these, so the loading skeleton can't
   // stack on top of the centered "waiting for a slot" pane. See lib/transcriptPaint.
   const placeholder = transcriptPlaceholder({
@@ -8639,8 +8711,10 @@ export function WorkspaceView({
         shownOnOwnModels ? undefined : shownModel,
         runner.runsAsRoot,
         runner.modelCatalog,
+        // The open session's runner reported Codex's sandbox cannot start there: Auto says it is off.
+        selected?.codexSandboxUnavailable === true,
       ),
-    [shownEngine, shownOnOwnModels, shownModel, runner.runsAsRoot, runner.modelCatalog],
+    [shownEngine, shownOnOwnModels, shownModel, runner.runsAsRoot, runner.modelCatalog, selected?.codexSandboxUnavailable],
   );
   // Model, Mode, Effort & Provider can be changed any time on a live session (the runner must be
   // online to act on it), and none of them aborts the running turn. When the change lands is the
@@ -11243,7 +11317,7 @@ export function WorkspaceView({
               )}
               {/* The transcript, in the contexts its cards read (SessionConversation). */}
               <MainCheckoutCtx.Provider value={mainCheckout.host}>
-              <QueuedFootCtx.Provider value={queuedFoot}>
+              <TurnStatusFootCtx.Provider value={turnFoot}>
               <SessionConversation
                 sessionId={selectedId}
                 stream={stream}
@@ -11267,7 +11341,7 @@ export function WorkspaceView({
                 jobQueuedWakes={jobQueuedWakes}
                 jobWhere={shownWorkspaceName ?? null}
               />
-              </QueuedFootCtx.Provider>
+              </TurnStatusFootCtx.Provider>
               </MainCheckoutCtx.Provider>
               {/* The conversation's last row while it is at rest: its recap whole, the line its list
                   row reads in one (SessionRecapCard). Above the cards that ask the owner something,
@@ -11890,6 +11964,7 @@ export function WorkspaceView({
         <SessionComposer
           text={text}
           setText={setText}
+          projectFolder={selectedSession?.projectMembership ? { id: selectedSession.projectMembership.projectId, title: selectedSession.projectMembership.projectTitle } : null}
           composerRefs={composerRefs}
           setComposerRefs={setComposerRefs}
           histIdx={histIdx}
@@ -12079,6 +12154,8 @@ export function WorkspaceView({
 export interface SessionComposerProps {
   text: string;
   setText: Dispatch<SetStateAction<string>>;
+  /** The session's project, whose folder under Files the picker opens on (D22). */
+  projectFolder?: { id: string; title: string } | null;
   composerRefs: ReferenceMap;
   setComposerRefs: Dispatch<SetStateAction<ReferenceMap>>;
   histIdx: number;
@@ -12164,6 +12241,7 @@ export interface SessionComposerProps {
 export function SessionComposer({
   text,
   setText,
+  projectFolder,
   composerRefs,
   setComposerRefs,
   histIdx,
@@ -12276,6 +12354,8 @@ export function SessionComposer({
   const lastComposerTap = useRef<{ at: number; x: number; y: number; held?: number } | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // The `+` menu's "From Files" picker (board docs/mocks/orbit-files, 02-web frame 8).
+  const [drivePickerOpen, setDrivePickerOpen] = useState(false);
   // Manual composer height (px). null = autoSize auto-grow (up to maxRows); once the user
   // drags the top handle, that height wins over autoSize until they double-click to reset.
   const [composerHeight, setComposerHeight] = useState<number | null>(null);
@@ -12466,6 +12546,23 @@ export function SessionComposer({
   });
   // The `+` menu "Shell" entry: prefix the draft with `!` so onSend routes it as a raw
   // shell command (run on the runner, bypassing claude). The user types the command after.
+  // Files the drive picker returned go into the draft as chips (`#name`, like a `#` reference) that are sent as their
+  // `/home/orbit/Files/…` paths, so the box shows names and the agent gets paths (board 02-web frame 8).
+  const insertDriveFiles = (files: { id: string; name: string; path: string }[]): void => {
+    let refs = composerRefs;
+    let chips = '';
+    for (const file of files) {
+      const taken = refs[file.name];
+      const parent = file.path.split('/').slice(-2, -1)[0] ?? '';
+      const token = taken && taken.path !== file.path ? `${parent}/${file.name}` : file.name;
+      refs = { ...refs, [token]: { kind: 'drive', id: file.id, path: file.path } };
+      chips += `#${token} `;
+    }
+    setComposerRefs(refs);
+    setText((t) => `${t}${t && !/\s$/.test(t) ? ' ' : ''}${chips}`);
+    setDrivePickerOpen(false);
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
   const insertShell = (): void => {
     setText((t) => (t.startsWith('!') ? t : `!${t}`));
     setTimeout(() => taRef.current?.focus(), 0);
@@ -12950,20 +13047,27 @@ export function SessionComposer({
           // WorkspaceView.composerMenu.test.tsx, drawn in
           // docs/mocks/composer-attach-menu-phone.html.
           items={[
+              // Each row says what it does and where the file comes from, with no heading to
+              // miss: "File" and "From Files" read alike (docs/mocks/composer-attach-labels).
               {
                 key: 'file',
-                icon: <PaperClipOutlined />,
-                label: 'File',
+                icon: <UploadOutlined />,
+                label: 'Upload File',
                 onSelect: () => fileInputRef.current?.click(),
               },
               {
                 key: 'image',
                 icon: <PictureOutlined />,
-                // One word per action, the way the native composer's `+` menu writes them
-                // (ComposerView.swift `addMenu`). Offered unconditionally too: a state the
-                // upload can't work in says so on pick, rather than greying the item out.
-                label: 'Image',
+                // Offered unconditionally: a state the upload can't work in says so on pick,
+                // rather than greying the item out.
+                label: 'Upload Image',
                 onSelect: () => imageInputRef.current?.click(),
+              },
+              {
+                key: 'drive',
+                icon: <FolderOpenOutlined />,
+                label: 'Add from Orbit Files',
+                onSelect: () => setTimeout(() => setDrivePickerOpen(true), 0),
               },
               { key: 'divider', type: 'separator' },
               {
@@ -13008,6 +13112,23 @@ export function SessionComposer({
             />
           }
         />
+        )}
+        {!shellMode && (
+          <Popover
+            side="top"
+            align="start"
+            arrow={false}
+            title={null}
+            open={drivePickerOpen}
+            onOpenChange={setDrivePickerOpen}
+            disabled={composerDisabled}
+            popupClassName="drive-picker-popover"
+            // No chip of its own: the picker opens from the `+` menu's From Files, and this
+            // zero-width, unfocusable button only anchors it beside the `+`.
+            trigger={<button type="button" className="composer-drive-anchor" tabIndex={-1} aria-hidden="true" />}
+          >
+            <DriveFilePicker projectFolder={projectFolder} onClose={() => setDrivePickerOpen(false)} onPick={insertDriveFiles} />
+          </Popover>
         )}
         {/* The workspace is only a Select when it can actually be picked (new, unlocked
             session); once read-only it shows as a static pill left of Model below. */}

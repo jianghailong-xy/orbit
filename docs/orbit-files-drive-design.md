@@ -145,10 +145,11 @@ quotas; folder share links; HTML, log and test-report preview; replacing git for
 
 - **Feasibility first.** The Cloud container drops every capability, sets `no-new-privileges` and allows no devices
   (`deploy/managed-runner/docker-channel/channel.py`, around line 575), and
-  `docs/session-checkout-storage-design.md` §3 forbids mounts in it. The mount therefore has to be made outside the
+  `docs/session-checkout-storage-design.md` §3 forbade mounts in it. The mount therefore has to be made outside the
   agent's container and passed in, on both the Kubernetes and the Docker backend (the Docker channel allows only its
   own data volume today), and that design must reopen §3 on purpose. If neither works, D1 needs another answer (for
-  example a sync folder), and rules 1 and 3 change with it.
+  example a sync folder), and rules 1 and 3 change with it. **Settled:** §3 now names the one exception, the mount
+  the `files.orbit.dev` CSI driver passes in at `/run/orbit-files` (deploy/managed-runner/files-csi/).
 - **Engine grants (D16).** Each engine's sandbox must list `/home/orbit/Files` as writable outside Plan mode (today
   Claude gets `--add-dir` for the uploads folder, `src/runner-go/claude_spawn.go:151`; Codex Auto's writable roots are
   in `src/runner-go/codex_auto_policy.go:31`), and as readable in Plan mode.

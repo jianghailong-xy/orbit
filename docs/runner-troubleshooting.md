@@ -160,12 +160,14 @@ disk has free. Until a new volume has been measured, it has neither the budget n
 
 | Free space | What goes |
 | --- | --- |
-| Above the floor | Only finished sessions' checkouts beyond the 32 most recent |
+| Above the floor | Finished sessions' checkouts beyond the 32 most recent, then resting sessions' checkouts beyond the 64 most recent |
 | Below the floor | Every finished session's checkout (Completed, in Trash, or moved to another runner), then the checkouts below |
 
-Below the floor the runner goes on to the checkouts of sessions that can still resume, oldest first, one at a
-time, and stops as soon as free space is back above the floor. One goes only if all of this holds, judged
-twice, the second time immediately before it goes:
+The runner then goes on to the checkouts of sessions that can still resume, oldest first, one at a time: below
+the floor until free space is back above it, and above the floor only while more than 64 of them are on disk,
+until 64 are left. Oldest means least recently worked in: the newer of the checkout directory's modification time
+and the last move of its `HEAD` (every turn-end commit is one). One goes only if all of this holds, judged twice,
+the second time immediately before it goes:
 
 - The control plane answers that the session is at rest on this runner and a message would resume it: waiting
   for input, failed, cancelled or otherwise ended but not Completed. A session queued for an engine, running,
@@ -174,37 +176,36 @@ twice, the second time immediately before it goes:
   commit under way. An idle session with no engine does not count as work.
 - No process has its working directory or executable in the checkout, or holds a file in it open, and nothing
   is mounted inside it. This is read from `/proc`, so on macOS and Windows these checkouts are never reclaimed.
-- Nothing in it has been written for 14 days. That covers every file and directory except those under a
-  dependency directory: `node_modules`, `.venv`, `venv`, `__pycache__`, `vendor`, `Pods` or `.gradle`.
+- Nothing in it is written while the runner reads it. Writes under a dependency directory (`node_modules`,
+  `.venv`, `venv`, `__pycache__`, `vendor`, `Pods` or `.gradle`) do not count.
 - `git status` reports nothing, untracked files included, whatever the repository's own settings say, and no
   file is marked assume-unchanged or skip-worktree.
 - Every ignored file or directory it holds can be made again, going by its name: the dependency directories
   above, or the build output `dist`, `build`, `.build`, `target`, `.next`, `.turbo`, `coverage` or
   `tsconfig.tsbuildinfo`. Anything else ignored, such as a local `.env` or a report, keeps the checkout, however
   old it is.
-- `git rev-list HEAD --not --remotes` is empty: every commit is on a remote. A repository with no remote
-  keeps its checkouts.
+- Every commit is on a remote or on the session's own branch (`git rev-list HEAD --not --remotes <branch>` is
+  empty). The branch and its commits stay in the repository when the checkout goes, and the checkout comes back
+  from the branch, so a commit only the branch has is not lost.
 - `HEAD` is on the session's own branch and its fork point is on record, no merge, rebase, cherry-pick, revert or
   bisect is half done, the worktree is not locked (`git worktree lock`), and no other repository is nested in
   it, a submodule or a clone in a dependency directory included.
 
-**Under a storage budget's floor** two of these rules are set aside, because resting sessions would otherwise
-fill the volume before any of their checkouts could go. Nothing need have gone 14 days unwritten: the checkout
-written to longest ago goes first. And a commit on the session's own branch counts as kept whether a remote has
-it or not, since the branch and its commits stay in the repository and the checkout comes back from the branch.
-Every other rule holds, so a checkout goes only when nothing in it would be lost.
+These are the same on every runner and under a storage budget's floor. Until 2026-11-23 a runner without a
+budget also asked for 14 days unwritten and for every commit on a remote. As the runner pushes no session
+branch, that kept nearly every resting checkout that did any work, and a busy runner's disk filled up with them.
 
 **When it looks.** All of this runs on the loop that claims messages, so no message is claimed on that runner
 while it does. Finished sessions' checkouts are looked over every five minutes with no time limit: below the floor
 every one of them goes in the same sweep. The checkouts of sessions that can resume are looked over on the same five
-minutes, below the floor only, within two limits:
+minutes, below the floor or over the 64, within two limits:
 
 - **A look that finds nothing waits an hour.** When the rule has kept every one of these checkouts and the disk is
   still below the floor, the runner logs `gc: no resumable checkout can go and the disk is still under its floor; not
   looking again until <time>, or sooner once the disk is back above its floor` and leaves them alone until then.
   Sweeps come every five minutes, so the next look is the first sweep after that time, 60 to 66 minutes after this
-  one ended. A checkout that reaches 14 days during a wait goes at the next look. A git command that fails or times
-  out on a checkout counts as the rule keeping it.
+  one ended. A git command that fails or times out on a checkout counts as the rule keeping it. Above the floor, a
+  look over the 64 that finds nothing starts no wait: it reads only the checkouts past the 64.
   The wait ends early once a sweep finds free space back above the floor: the next time the disk is short, the runner
   looks at once. A look that could not finish starts no wait, and the next sweep looks again: the control plane
   did not answer, `/proc` could not be read, or a checkout could not be marked or moved aside. The wait is only in

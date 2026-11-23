@@ -80,6 +80,7 @@ Usage:
   orbit watch <command>             Wait on Orbit tasks and sessions without polling
   orbit wiki <command>              Read the Orbit wiki and propose to it
   orbit file <command>              Keep files in Orbit instead of in the repository
+  orbit drive <command>             Work with the owner's Orbit Files drive
   orbit subagent <command>          Rate a SubAgent run this session started
   orbit secret exec NAME -- CMD     Run CMD with a secret the owner delivered to this runner
   orbit notify --message TEXT       Alert this account's devices with a line you write
@@ -240,6 +241,7 @@ running it when the machine is idle. Disable the periodic check with ORBIT_NO_EN
 	"watch":     watchHelp,
 	"wiki":      wikiHelp,
 	"file":      fileHelp,
+	"drive":     driveHelp,
 	"subagent":  subagentHelp,
 	"settings":  settingsHelp,
 	"token":     tokenHelp,
@@ -328,6 +330,7 @@ var leafHelpFamilies = map[string]bool{
 	"watch":     true,
 	"wiki":      true,
 	"file":      true,
+	"drive":     true,
 	"subagent":  true,
 	"settings":  true,
 	"session":   true,
@@ -474,6 +477,8 @@ func runOrbitCLI(args []string, in io.Reader, out, errW io.Writer) error {
 		return runCLICommand("orbit wiki", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdWikiCLI(args[1:], in, out) })
 	case "file":
 		return runCLICommand("orbit file", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdFileCLI(args[1:], out) })
+	case "drive":
+		return runCLICommand("orbit drive", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdDriveCLI(args[1:], out) })
 	case "subagent":
 		return runCLICommand("orbit subagent", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdSubagentCLI(args[1:], out) })
 	case "settings":
@@ -963,6 +968,8 @@ func cmdRun() {
 		fmt.Fprintln(os.Stderr, "managed runner instance:", err)
 		os.Exit(1)
 	}
+	// A runner that receives the Orbit Files drive shows it to its agents as ~/Files (drive_link.go).
+	ensureDriveLink(func(format string, args ...interface{}) { fmt.Fprintf(os.Stderr, format+"\n", args...) })
 	// A managed runner's volume has to survive its node's power loss (volume_durability.go): before
 	// anything runs Git there, it looks at what the last stop left.
 	recoverManagedRepositories()

@@ -98,6 +98,8 @@ export interface ManagedRunnerWorkload {
   operations: number;
   /** Events buffered for the control plane and not yet acknowledged by it. */
   unflushedEvents: number;
+  /** Orbit Files drive handles holding bytes no commit has taken yet; absent from a runner that has no drive. */
+  driveWrites?: number;
   /** How long, in whole seconds, all four have been zero; 0 while any is not. */
   idleSeconds: number;
   /** The `requestedAt` of a sleep request this instance, idle, is ready to honour: its acceptance.
