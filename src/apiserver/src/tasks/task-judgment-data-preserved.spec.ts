@@ -3332,8 +3332,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // row is written, and no trigger, function or DONE fence changes.
       // Written as 1430 on the project line, it was renumbered after main took 1430.
       '1431_managed_runner_update_interrupt',
-      // 1432 creates model_identity (rule_key, canonical_key, name, decided_at), a new table no preserved relation
-      // references; no existing row is written, and no trigger, function or DONE fence changes.
+      // 1432 creates model_identity (which model ids name one model, for display); 1433 seeds it with INSERTs. Neither
+      // touches a preserved relation, and no trigger, function or DONE fence changes.
       '1432_model_identity',
       // 1433 seeds model_identity with production's model ids, INSERT ... ON CONFLICT (rule_key) DO NOTHING into that
       // new table only; no preserved relation, trigger, function or DONE fence is touched.
@@ -3396,6 +3396,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // and a partial index on session; no row is written, and no preserved relation, trigger, function or DONE fence
       // changes. Written as 1430 on its task branch, it was renumbered after main took 1430 to 1464.
       '1465_session_run_now_over_capacity',
+      // 1490 adds session.listed_at (backfilled from last_turn_at/created_at, then defaulted) and conversation_turn.by_person,
+      // and a BEFORE UPDATE trigger on session (status, completed_at) that writes listed_at alone. session is not a
+      // preserved relation, none of the six preserved triggers/functions is named or replaced, and no DONE fence changes.
+      // Written as 1260 on its task branch, then 1434, then 1464; renumbered three times as main took each number.
+      '1490_session_listed_at',
       // 1491 sets feishu_app.message_detail's default to FULL and moves every TITLES_ONLY row to FULL: an ALTER and an
       // UPDATE of that table only, none of the preserved relations, and no trigger, function or DONE fence changes.
       '1491_feishu_details_by_default'],
