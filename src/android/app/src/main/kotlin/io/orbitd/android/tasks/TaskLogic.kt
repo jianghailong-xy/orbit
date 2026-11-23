@@ -140,11 +140,7 @@ fun resolvedRunState(session: JsonObject): String? {
     // The session facts first when sent: a released session is Finished (its work finished), Failed (a failed turn nobody asked to
     // end) or Ended, and an unreleased one reads its phase, an interrupted turn staying Interrupted until the release lands.
     if (SessionFacts.present(session)) {
-        if (SessionFacts.released(session) == true) return when {
-            SessionFacts.finished(session) -> "FINISHED"
-            SessionFacts.failed(session) -> "FAILED"
-            else -> "ENDED"
-        }
+        if (SessionFacts.released(session) == true) return SessionFacts.afterRelease(session)
         when (SessionFacts.phase(session)) {
             "PENDING" -> return "QUEUED"
             "RUNNING" -> return "RUNNING"

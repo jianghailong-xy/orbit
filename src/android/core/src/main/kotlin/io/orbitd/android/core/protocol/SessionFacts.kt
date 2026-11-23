@@ -29,9 +29,25 @@ object SessionFacts {
     /** Whether the payload carries the new facts: the server sends them together, and `released` is the one every reader needs. */
     fun present(o: JsonObject): Boolean = released(o) != null
 
-    /** The session's work finished: the server's `workFinished` when sent, else an end reason of task_done. */
-    fun finished(o: JsonObject): Boolean = workFinished(o) ?: (endReason(o) == "task_done")
+    /** What a release establishes about the session: "FINISHED" when its work finished (the server's `workFinished` when sent, else
+     * end reason task_done, else a landing container released with no end reason), "FAILED" when a failed turn ended it and nobody
+     * asked for the end, else "ENDED" (OrbitKit `SessionRunState.afterRelease`). */
+    fun afterRelease(endReason: String?, lastTurnOutcome: String?, workFinished: Boolean?, isLanding: Boolean = false): String = when {
+        workFinished ?: (endReason == "task_done" || (endReason == null && isLanding)) -> "FINISHED"
+        endReason == null && lastTurnOutcome == "FAILED" -> "FAILED"
+        else -> "ENDED"
+    }
+
+    fun afterRelease(o: JsonObject): String =
+        afterRelease(endReason(o), lastTurnOutcome(o), workFinished(o), (o["sessionKind"] as? JsonPrimitive)?.contentOrNull == "LANDING")
+
+    /** The session's work finished. */
+    fun finished(o: JsonObject): Boolean = afterRelease(o) == "FINISHED"
 
     /** Released after a failed turn with nobody having asked for the end: what "Failed" means (design §12). */
-    fun failed(o: JsonObject): Boolean = released(o) == true && lastTurnOutcome(o) == "FAILED" && endReason(o) == null
+    fun failed(o: JsonObject): Boolean = released(o) == true && afterRelease(o) == "FAILED"
+
+    /** Not released, yet being ended after an interrupted turn: "Interrupted" until the release lands. */
+    fun endingAfterInterrupt(released: Boolean?, endReason: String?, lastTurnOutcome: String?): Boolean =
+        released == false && endReason != null && lastTurnOutcome == "INTERRUPTED"
 }
