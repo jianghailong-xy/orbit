@@ -2933,6 +2933,8 @@ export class RunnerApiController {
       ...(keepWorkSessionIds.length > 0 ? { keepWorkSessionIds } : {}),
       leaseLostSessionIds: ownershipLostSessionIds,
       maxConcurrent: updated.maxConcurrent,
+      // Run now's headroom past it (ClaimedSession.overCapacity), adopted the same way.
+      burstConcurrent: updated.burstConcurrent,
       minFreeDiskMb: managedStorage ? managedStorage.minFreeDiskMb : updated.minFreeDiskMb,
       mergeRequests,
       commitRequests,
@@ -7293,6 +7295,8 @@ export class RunnerApiController {
           mergeRepairTurnEndedAt: true,
           // And whether this session asked to merge itself during the turn that just ended.
           mergeAfterTurnAt: true,
+          // The turn Run now started over the runner's limit, if this session runs one (sessions/run-now.ts).
+          overCapacityTurnId: true,
         },
       });
       // Read the row being completed before changing it. A reserved shell turn is the one path
@@ -8150,10 +8154,16 @@ export class RunnerApiController {
               status: 'PENDING',
             },
           });
+      // Run now's pass covered this one turn (decision B): answered, it is spent and the slot over the limit is
+      // returned. A turn put back in the queue has not been answered and keeps it.
+      const overCapacityEnded = current.overCapacityTurnId != null
+        && completedTurn?.id === current.overCapacityTurnId
+        && !(unanswered && !swallowed);
       // A stopped engine passes no slot on: a message queued behind the stop waits for a claim, where the hold decides.
+      // Nor does a turn that ran over the limit: its follow-up queues for a slot like any other message.
       const nextStatus = failSession
         ? RunStatus.FAILED
-        : regionStopped
+        : regionStopped || overCapacityEnded
           ? (pendingExecutable > 0 ? RunStatus.PENDING : RunStatus.AWAITING_INPUT)
           : statusAfterTurnCompleted(pendingExecutable > 0);
       // OWNER_CONFIRMED: a run that declared its work finished and has stopped working asks its
@@ -8296,6 +8306,7 @@ export class RunnerApiController {
           // Folded into the park so the row is written once (I3). The park is conditional, so
           // the branch below covers the case where it matched nothing.
           ...(clearsMergedState ? CLEARED_MERGE_STATE : {}),
+          ...(overCapacityEnded ? { overCapacityTurnId: null } : {}),
         },
       });
       if (parked.count === 0) {
@@ -8493,6 +8504,8 @@ export class RunnerApiController {
         currentWorkTerminalized,
         currentWorkRequeued,
         status: nextStatus,
+        // A follow-up the overflow turn left queued waits for a claim: the runner is woken below.
+        overCapacityRequeued: overCapacityEnded && nextStatus === RunStatus.PENDING,
         failSession,
         // What the STATUS below announces beside FAILED: a usage limit this turn armed is a retry
         // on its way, and the clients draw Retrying rather than Failed.
@@ -8641,6 +8654,7 @@ export class RunnerApiController {
     // RUNNING. Publish the committed row for every applied non-steer completion; task-bound
     // summaries carry taskId and clear the running overlay without waiting for reconciliation.
     if (finalized.applied && !finalized.steer) {
+      if ('overCapacityRequeued' in finalized && finalized.overCapacityRequeued) this.queue.notifySessionQueued(runner.id);
       // The turn's reply, registered to go back to the session's Feishu chain (docs/feishu-bot-design.md §7.5): after
       // the commit, one statement of its own, a failure only logged — the turn never waits on Feishu nor fails for it
       // (§1.3 item 6). A worker on any replica sends it (feishu/feishu-outbox.ts).

@@ -518,9 +518,8 @@ export interface SteerWithdrawHandle {
   withdrawing: ReadonlySet<string>;
   withdrawn: ReadonlySet<string>;
 }
-/** A tag for one user bubble's foot row, by the bubble's seq: what holds the message the reader sent
- *  last (WorkspaceView's RunnerUpdatingTag). Null where nothing holds one. */
-export const QueuedFootCtx = createContext<{ seq: number; tag: ReactNode } | null>(null);
+/** A tag for one user bubble's foot row, by its seq: what holds the turn or how it is running. */
+export const TurnStatusFootCtx = createContext<{ seq: number; tag: ReactNode; running?: boolean } | null>(null);
 
 export const SteerWithdrawCtx = createContext<SteerWithdrawHandle | null>(null);
 
@@ -2172,6 +2171,7 @@ function NodeList({
   const items = useMemo(() => groupToolRuns(nodes, chat), [nodes, chat]);
   const exporting = useContext(ExportCtx) !== null;
   const wakeName = useContext(WatchWakeNamesCtx);
+  const turnFoot = useContext(TurnStatusFootCtx);
   const renderItem = (item: NodeListItem) => {
     const seqs = item.kind === 'steps' ? item.nodes.map((node) => node.seq) : [item.node.seq];
     // The row a turn opens with, under its message and over everything the turn writes.
@@ -2184,6 +2184,9 @@ function NodeList({
         <StepsLine key={item.key} nodes={item.nodes} live={live} />
       ) : (
         <NodeView key={item.node.seq} node={item.node} live={live} />
+      ),
+      turnFoot?.running && item.kind === 'node' && item.node.seq === turnFoot.seq && (
+        <div key="running-over-limit" className="chat-user-meta">{turnFoot.tag}</div>
       ),
       head,
       ...seqs
@@ -3544,8 +3547,8 @@ function SteerState({ node, typed }: { node: TextNode; typed: string }) {
 function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   const exp = useContext(ExportCtx);
   const putBack = useContext(UndeliveredCtx);
-  const foot = useContext(QueuedFootCtx);
-  const held = foot && !queued && foot.seq === node.seq ? foot.tag : null;
+  const foot = useContext(TurnStatusFootCtx);
+  const held = foot && !foot.running && !queued && foot.seq === node.seq ? foot.tag : null;
   const [copied, setCopied] = useState(false);
   // The "Copied" reset is cancelled when this goes, so it never updates a component that is gone.
   const copiedReset = useRef<ReturnType<typeof setTimeout>>(undefined);

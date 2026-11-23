@@ -724,6 +724,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'POST /sessions/:id/complete': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/archive': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/restore': { request: (of) => ({ params: { id: of.sessionId } }) },
+  // Run now (sessions/run-now.ts): another account's queued message is not B's to put over A's runner's limit.
+  'POST /sessions/:id/run-now': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/pin': { request: (of) => ({ params: { id: of.sessionId } }) },
   'DELETE /sessions/:id/pin': { request: (of) => ({ params: { id: of.sessionId } }) },
   'GET /sessions/:id/move-targets': { request: (of) => ({ params: { id: of.sessionId } }) },

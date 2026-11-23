@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 39 |
-| `user` | 526 |
+| `user` | 527 |
 | `admin` | 31 |
 | `runner` | 229 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **829** |
+| **Total** | **830** |
 
 ## Public routes
 
@@ -452,6 +452,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/sessions/:id/resume` | body `Object`; path `id` | `SessionsController.resume` |
 | `GET` | `/api/sessions/:id/retry-message` | path `id` | `SessionsController.retryMessage` |
 | `POST` | `/api/sessions/:id/retry-message` | body `Object`; path `id` | `SessionsController.resendRetryMessage` |
+| `POST` | `/api/sessions/:id/run-now` | path `id` | `SessionsController.runNow` |
 | `GET` | `/api/sessions/:id/schedule-cards` | path `id` | `SchedulesController.sessionCards` |
 | `PATCH` | `/api/sessions/:id/settings` | body `Object`; path `id` | `SessionsController.updateSettings` |
 | `DELETE` | `/api/sessions/:id/share` | path `id` | `ShareLinksController.turnOffSessionLink` |

@@ -117,7 +117,12 @@ async function claimStatement(supportedProviders: AgentProvider[]) {
       if (rendered.text.includes('orbit.runner_supports_cursor')) settings = rendered;
       return 0;
     },
-    $queryRaw: async (...args: unknown[]) => { sql = renderRawQuery(args); return []; },
+    $queryRaw: async (...args: unknown[]) => {
+      // Only the claim statement: Run now's pass check (an EXISTS) follows a claim that took nothing.
+      const rendered = renderRawQuery(args);
+      if (rendered.text.includes('UPDATE "session" SET')) sql = rendered;
+      return [];
+    },
   };
   const prisma = {
     session: { findMany: async () => [] },
