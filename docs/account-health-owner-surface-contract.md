@@ -71,9 +71,25 @@ The owner says the account is fixed. Clears the account's live rows (`cleared_by
 any claimed trial. The next routed run uses the account as healthy; a refusal after it is **trip 1** of a new streak
 (1 h) and alerts again. `404` when the row is not the owner's or already cleared. After it, re-read `GET /account-health`.
 
-## 3. Held tasks and relaxed runs (for the task row and project items)
+## 3. Held tasks and relaxed runs (the task row and view, project items)
 
-- **Task read**: `accountHold` (already served; null unless a hold stands) is `{ kind: 'ACCOUNT_NEEDS_ACTION', reason, until, accounts: [{ provider, engine, line, until }], setting? }`.
-  `reason` is the sentence to show; `until` is when the first account is tried again; `setting` links `relaxBlockedPins`.
+Every client draws these the same way. Web's reference: `src/web/src/components/TaskAccountHold.tsx`.
+
+- **Task rows and the task view**: `accountHold` is served on the task read, on task list items (`GET /tasks`) and on a project's
+  task rows. Null unless a hold stands. Shape: `{ kind: 'ACCOUNT_NEEDS_ACTION', reason, until, accounts: [{ provider, engine, line, until }], setting? }`.
+  Draw: a **Held** pill, `reason` (it already holds the provider's words and `Next try at HH:MM`), a link **Open account** to the
+  account rows (web: `/settings/machines`), and when `setting` is present (`orbit-settings:relaxBlockedPins`) a second link **Run elsewhere**
+  to that setting. Not drawn while the task is running or queued, or when the sign-in `hold` stands (that one wins).
+- **Relaxed runs**: each session on the task read carries `route.relaxedRun`, a sentence or null: which pin, where it ran and why
+  (`Pinned to cursor, which can't run now (Cursor said "…"); runs on codex instead, on the same engine, at tier M`). Draw it, as it is,
+  under that run's row on the task view.
 - **Project open items read**: `accountWait` is `{ taskIds, title: "N tasks wait for an account", detailLine, until } | null`: one Needs you row, like `signIns`.
-- **Setting**: `relaxBlockedPins` (account preference, off by default): "Run pinned tasks elsewhere". Providers the owner blocked stay out either way.
+- **Setting**: `relaxBlockedPins` (account preference, off by default): "Run pinned tasks elsewhere", on Model routing
+  (`/settings/providers/routing`, anchor `relaxBlockedPins`; `SETTING_ROWS.relaxBlockedPins`). Providers the owner blocked stay out either way.
+
+## 4. Keys and pool members
+
+Blocks also land on metered keys and pool members. `GET /account-health` returns them with `providerId` (a key, or a Claude pool member,
+which is a key) or `poolId` + `account` (a Codex pool login); `engine` and `runnerId` are null. `line` carries the whole lead sentence
+(`Needs action · Anthropic said "…"`), because there is no engine to name. Draw it on the key's row (Providers → Keys) and on the pool
+member's row, with the same times and **Check again**, calling the same route. Web: `AccountHealthProviderLine`, `AccountHealthLoginLine`.

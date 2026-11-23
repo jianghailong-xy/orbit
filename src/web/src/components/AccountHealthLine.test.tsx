@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import type { AccountHealthBlock } from '../lib/accountHealth';
-import { AccountHealthLine } from './AccountHealthLine';
+import { AccountHealthLine, AccountHealthLoginLine, AccountHealthProviderLine } from './AccountHealthLine';
 
 vi.mock('../api', () => ({ api: vi.fn() }));
 const toast = { success: vi.fn(), error: vi.fn() };
@@ -71,5 +71,25 @@ describe('the account row of a blocked account', () => {
     expect(apiMock).toHaveBeenCalledWith('/account-health/BLOCK1/check', { method: 'POST' });
     expect(apiMock.mock.calls.some(([path]) => path === '/account-health')).toBe(true);
     expect(toast.success).toHaveBeenCalled();
+  });
+
+  it('draws a blocked key and a blocked pool login with the server\'s own sentence and Check again', async () => {
+    const key = block({ id: 'KEYBLK', subjectKey: 'provider:P1', runnerId: null, engine: null, account: null, providerId: 'P1', line: 'Needs action · Anthropic said "Your credit balance is too low"' });
+    const login = block({ id: 'LOGINBLK', subjectKey: 'pool-login:POOL:acc1', runnerId: null, engine: null, account: 'acc1', poolId: 'POOL', kind: 'CREDENTIAL_REFUSED', said: 'Session expired', line: 'Needs action · team-pool said "Session expired"' });
+    apiMock.mockImplementation(async (path: string) => (path === '/account-health' ? { blocks: [key, login] } : {}));
+    await act(async () => root.render(
+      <QueryClientProvider client={qc}>
+        <div id="k"><AccountHealthProviderLine providerId="P1" /></div>
+        <div id="l"><AccountHealthLoginLine poolId="POOL" accountId="acc1" /></div>
+        <div id="other"><AccountHealthProviderLine providerId="P2" /></div>
+      </QueryClientProvider>,
+    ));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+    expect(host.querySelector('#k .re-health-text')!.textContent).toContain('Anthropic said "Your credit balance is too low"');
+    expect(host.querySelector('#l .re-health-text')!.textContent).toContain('team-pool said "Session expired"');
+    expect(host.querySelector('#other .re-health')).toBeNull();
+    apiMock.mockClear();
+    await act(async () => host.querySelector<HTMLButtonElement>('#k button')!.click());
+    expect(apiMock).toHaveBeenCalledWith('/account-health/KEYBLK/check', { method: 'POST' });
   });
 });

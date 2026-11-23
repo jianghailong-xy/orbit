@@ -44,3 +44,15 @@ export function runnerAccountBlock(
 ): AccountHealthBlock | undefined {
   return blocks?.find((b) => b.runnerId === runnerId && b.engine === engine && b.account === account && b.scopeModel === '');
 }
+
+/** A task held because no account that could run it can run now (`accountHold` on the task reads; §7.5). */
+export interface TaskAccountHold {
+  kind: 'ACCOUNT_NEEDS_ACTION';
+  /** The sentence to show: the provider's words and the next try. */
+  reason: string;
+  /** When the first account is tried again (ISO). */
+  until: string;
+  accounts: Array<{ provider: string; engine: string | null; line: string; until: string }>;
+  /** A pinned task held with relaxation off: `orbit-settings:relaxBlockedPins`. */
+  setting?: string;
+}

@@ -25,6 +25,8 @@ import { ProjectBlockersCard, type ProjectBlockers } from '../components/Project
 import { CoordinatorQuestions } from '../components/CoordinatorQuestionCard';
 import { WaitingOnYouTaskBadge } from '../components/OwnerRequestCard';
 import { TaskSignInHoldNote } from '../components/TaskSignInHold';
+import { TaskAccountHoldNote } from '../components/TaskAccountHold';
+import type { TaskAccountHold } from '../lib/accountHealth';
 import { LazyBoundary } from '../components/ErrorBoundary';
 import { ProjectPromotion } from '../components/ProjectPromotionCard';
 import { ProjectReadyToRun } from '../components/ProjectReadyToRun';
@@ -1828,6 +1830,8 @@ export interface ProjectTask {
   title: string;
   /** Why the auto-run sweep holds this task although it reads Ready (server-computed); null or absent otherwise. */
   hold?: TaskSignInHold | null;
+  /** Why its next automatic start stands down: no account that could run it can run now (§7.5); null or absent otherwise. */
+  accountHold?: TaskAccountHold | null;
   // Keep this tied to the server's enum. A hand-written subset once omitted FAILED, so a failed
   // task reached the status-mark lookup at runtime even though TypeScript claimed it could not.
   status: TaskStatus;
@@ -2497,6 +2501,8 @@ function ProjectTaskRow({
                       by itself, and it will not until somebody signs in (the server's `hold`). */}
                   {task.hold ? (
                     <TaskSignInHoldNote hold={task.hold} />
+                  ) : task.accountHold ? (
+                    <TaskAccountHoldNote hold={task.accountHold} />
                   ) : workLabel ? (
                     <Badge data-testid="project-task-work-state" tone={tagTone(workLabel.color)}>
                       {workLabel.text}

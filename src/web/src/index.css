@@ -30484,3 +30484,9 @@ td > .routing-report-tier + .model-routing-flag {
 .re-health-text.needs-action {
   color: var(--orange, #d46b08);
 }
+.tdp-account-hold,
+.tdp-relaxed-run {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-3);
+}

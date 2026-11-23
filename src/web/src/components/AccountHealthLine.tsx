@@ -32,7 +32,8 @@ export function AccountHealthBlockLine({ block, now = Date.now() }: { block: Acc
     },
     onError: (error: Error) => { message.error("Couldn't check again", error.message); },
   });
-  const lead = classified
+  // The server's own sentence says whose words they are for a key or pool login, which have no engine of their own.
+  const lead = block.line ? block.line : classified
     ? (block.said ? `Needs action · ${product} said "${block.said}"` : `Needs action · ${product} refused this account`)
     : `Not used for now · failed to start ${block.trips + 1} runs`;
   const next = block.trialRunning
@@ -55,3 +56,17 @@ export function AccountHealthLine({ runnerId, engine, account }: { runnerId: str
   return block ? <AccountHealthBlockLine block={block} /> : null;
 }
 
+
+/** The line for a key (or a Claude pool member, which is a key): `provider:<id>`, drawn only while it is blocked. */
+export function AccountHealthProviderLine({ providerId }: { providerId: string }) {
+  const { data } = useQuery(accountHealthQuery);
+  const block = data?.blocks?.find((b) => b.providerId === providerId && b.scopeModel === '');
+  return block ? <AccountHealthBlockLine block={block} /> : null;
+}
+
+/** The line for a Codex pool login: `pool-login:<pool>:<account>`. */
+export function AccountHealthLoginLine({ poolId, accountId }: { poolId: string; accountId: string }) {
+  const { data } = useQuery(accountHealthQuery);
+  const block = data?.blocks?.find((b) => b.poolId === poolId && b.account === accountId && b.scopeModel === '');
+  return block ? <AccountHealthBlockLine block={block} /> : null;
+}
