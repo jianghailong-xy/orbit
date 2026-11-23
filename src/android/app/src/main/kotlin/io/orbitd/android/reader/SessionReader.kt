@@ -463,9 +463,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     LaunchedEffect(follow) { if (follow) { CardFocus.release(route.id!!); recordHeld = null } }
     LaunchedEffect(placed) {
         if (!placed || !ontoWaitingCard || placedAtCards || route.recordId != null) return@LaunchedEffect
-        placedAtCards = true
         positioning = true
         list.scrollToItem((list.layoutInfo.totalItemsCount - 2 - queuedShown).coerceAtLeast(0))
+        placedAtCards = true
         positioning = false
     }
     // The questions whose answers the turns on screen hand to the coordinator — the window's, and at the live tail the accepted head and
@@ -919,8 +919,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     item(key = "newer") { if (displayedWindow.newerAfter != null) TextButton(enabled = !displayedLoading, onClick = model::newer) { Text("Load newer messages") } }
                     item(key = "interaction-cards") {
                         Box(Modifier.onSizeChanged { cardsSize = it.height; if (rail.grew(it.height) && placed && follow && state.window.newerAfter == null) repin++ }) {
-                            // The list's height below the floating needs-you bar: a card brought in by its top lands under the bar, not behind it.
-                            CompositionLocalProvider(LocalCardViewport provides listHeight.coerceAtLeast(0)) { SessionCards(cards, openLink, discuss = discussCard) }
+                            // Let the rail's initial scroll finish before the card takes focus.
+                            val viewport = if (ontoWaitingCard && !placedAtCards) 0 else listHeight
+                            CompositionLocalProvider(LocalCardViewport provides viewport) { SessionCards(cards, openLink, discuss = discussCard) }
                         }
                     }
                     // A08-4: what is still waiting in the queue, as the turns it will be — after the decisions, before the tail.

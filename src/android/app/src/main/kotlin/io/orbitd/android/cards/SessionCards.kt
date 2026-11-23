@@ -199,8 +199,7 @@ fun SessionCardsReads(cards: SessionCardsModel) {
     }
 }
 
-/** The height of the list the rail is drawn in, in px, less what floats over its top; 0 where nobody says. A card asked for top first is brought in as a span of
- * nearly that height, which the list scrolls to by the card's top edge, whichever side of the screen the card is on. */
+/** The measured height available to bring in a waiting card by its top, in px. Zero while the reader positions the rail. */
 val LocalCardViewport = compositionLocalOf { 0 }
 
 /** A04 is the only live-state owner. Reconnection/foreground/REST invalidations all feed this rail. */
@@ -239,13 +238,14 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
             // A11 hook: the card a project page opened this conversation onto is brought into view once drawn.
             val requester = remember { BringIntoViewRequester() }
             val viewport = LocalCardViewport.current
-            if (focus != null && CardFocus.matches(focus, card.key)) LaunchedEffect(focus, card.key) {
+            val waiting = asked == CardFocus.WAITING
+            if (focus != null && CardFocus.matches(focus, card.key) && (!waiting || viewport > 0)) LaunchedEffect(focus, card.key) {
                 // The waiting card a project row opened onto shows its top, not its foot: a span from its top nearly the list's height.
-                if (asked == CardFocus.WAITING && viewport > 0) requester.bringIntoView(Rect(0f, 0f, 1f, viewport * 0.9f))
+                if (waiting) requester.bringIntoView(Rect(0f, 0f, 1f, viewport * 0.9f))
                 else requester.bringIntoView()
                 // Spent, and then held where it was brought to: the reader re-applies it as the conversation moves around it.
                 withFrameNanos { }
-                CardFocus.hold(session.id, card.key, asked == CardFocus.WAITING)
+                CardFocus.hold(session.id, card.key, waiting)
                 CardFocus.spend(session.id)
             }
             Box(Modifier.bringIntoViewRequester(requester).onGloballyPositioned { CardFocus.report(session.id, card.key, it.positionInRoot().y) }.then(if (CoordinatorQueue.isSent(card)) Modifier else Modifier.conversationCard())) {
