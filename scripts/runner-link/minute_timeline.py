@@ -65,13 +65,22 @@ slow_max = collections.defaultdict(lambda: (0, ''))
 for f in glob.glob(f'{run}/logs/apiserver*.log'):
     svc = os.path.basename(f)[:-4]
     for line in open(f, errors='replace'):
-        m = nest.search(re.sub(r'\x1b\[[0-9;]*m', '', line))
-        if not m: continue
-        h = int(m.group(4)) % 12 + (12 if m.group(7) == 'PM' else 0)
-        k = f'{h:02d}:{m.group(5)}'
+        # One JSON object per line where Compose runs it (ORBIT_LOG_FORMAT=json, src/apiserver/src/common/request-log.ts),
+        # its time in epoch milliseconds; Nest's text otherwise.
+        at = line.find('{"level":')
+        if at >= 0:
+            try: j = json.loads(line[at:])
+            except ValueError: continue
+            sm = re.fullmatch(r'(\S+) (\S+) (\d+)ms', str(j.get('message', '')))
+            if j.get('level') != 'warn' or j.get('context') != 'SlowRequestInterceptor' or not sm: continue
+            k, method, path, ms = minute(j['timestamp']), sm.group(1), sm.group(2), int(sm.group(3))
+        else:
+            m = nest.search(re.sub(r'\x1b\[[0-9;]*m', '', line))
+            if not m: continue
+            h = int(m.group(4)) % 12 + (12 if m.group(7) == 'PM' else 0)
+            k, method, path, ms = f'{h:02d}:{m.group(5)}', m.group(8), m.group(9), int(m.group(10))
         rows[k]['slow'] += 1
-        ms = int(m.group(10))
-        if ms > slow_max[k][0]: slow_max[k] = (ms, f'{svc} {m.group(8)} {m.group(9).split("?")[0]} {ms}ms')
+        if ms > slow_max[k][0]: slow_max[k] = (ms, f'{svc} {method} {path.split("?")[0]} {ms}ms')
 
 # 4. the database container's memory at the end of each minute.
 pg_mem = {}
