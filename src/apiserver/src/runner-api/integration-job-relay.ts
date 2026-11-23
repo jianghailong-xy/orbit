@@ -38,6 +38,7 @@ import {
   checkSawTheFinishedBranch,
   checkTimeoutSeconds,
   checksFor,
+  taskLandingCheckExemption,
   enqueueForDoneTask,
   integrationDedupeKey,
   integrationItemTitle,
@@ -129,6 +130,7 @@ import { clipCheckTail, redactCheckOutput, redactFailureDetail } from './check-o
 import { orderedIds } from '../common/lock-order';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { DISPATCH_PAUSED } from '../queue/dispatch-pause';
+import { MAX_LANDING_CHECK_EXEMPT_REASON_CHARS } from '../tasks/task-landing-check-exempt';
 
 /**
  * The heartbeat's half of the integration queue: what a runner is handed, and what it reports back
@@ -279,6 +281,10 @@ interface HeldClaim {
   acceptanceTimeoutSeconds: number | null;
   landingCheckCommand: string | null;
   landingCheckTimeoutSeconds: number | null;
+  landingCheckNone: boolean;
+  /** The task is exempt from the project's landing check, and why (§12.15 P-C2). */
+  landingCheckExempt: boolean;
+  landingCheckExemptReason: string | null;
   mergeCheckCommand: string | null;
   mergeCheckTimeoutSeconds: number | null;
   cancelRequestedAt: Date | null;
@@ -513,6 +519,7 @@ async function handOut(
     log.warn(`promotion check ${row.id} names no delivered commit: it is checked by its branch ${row.sourceRef}`);
   }
   const sourceSha = taskBranchCheck && !observes ? null : row.jobSourceSha;
+  const exemptReason = taskLandingCheckExemption(row);
   return {
     jobId: row.id,
     kind: row.kind as IntegrationJobCommand['kind'],
@@ -537,6 +544,8 @@ async function handOut(
     ...(row.mergeTreeSha ? { mergeTreeSha: row.mergeTreeSha } : {}),
     ...(row.confirmedAutomatically ? { automatic: true } : {}),
     checks: checksFor(row),
+    // §12.15 P-C2: `checks` already leaves the landing check out; this is what the runner records.
+    ...(exemptReason !== null ? { landingCheckExemptReason: exemptReason } : {}),
     cancelRequested: row.cancelRequestedAt != null,
     ...(unknownPushes.length > 0 ? { unknownPushes } : {}),
     // §2.2 J-T4: only a v2 claim is asked to report PUSH synchronously and wait for the answer.
@@ -766,6 +775,44 @@ async function claimOne(
   return rows[0] ?? null;
 }
 
+/** The landing check a TASK_EXEMPT landing records in place of running it (§12.15 P-C2). */
+function taskExemptCheck(reason: string): IntegrationCheckResult {
+  return {
+    name: 'LANDING_CHECK', command: '', expectedExitCode: 0, exitCode: null, timedOut: false,
+    durationMs: 0, outputTail: '', skipped: 'TASK_EXEMPT', reason,
+  };
+}
+
+/**
+ * Whether the landing this result is about skipped its landing check for its task's exemption, asked of
+ * the same rows `checksFor` built the command from. Read only for a landed LAND_TASK whose runner named
+ * no landing check, which is how a runner without TASK_EXEMPT answers one.
+ */
+async function taskExemptionAtResult(
+  tx: Prisma.TransactionClient,
+  job: {
+    taskId: string | null; codebaseId: string | null; targetRef: string; upstreamRef: string; skipMergeCheck: boolean;
+  },
+): Promise<string | null> {
+  const task = await tx.task.findUnique({
+    where: { id: job.taskId! },
+    select: { landingCheckExempt: true, landingCheckExemptReason: true },
+  });
+  if (!task?.landingCheckExempt || !job.codebaseId) return null;
+  const codebase = await tx.projectCodebase.findUnique({
+    where: { id: job.codebaseId },
+    select: { landingCheckCommand: true, landingCheckNone: true, mergeCheckCommand: true },
+  });
+  if (!codebase) return null;
+  return taskLandingCheckExemption({
+    kind: 'LAND_TASK', promotionSourceKind: null,
+    acceptanceCommand: null, acceptanceExpectedExitCode: null, acceptanceTimeoutSeconds: null,
+    ...codebase, mergeCheckTimeoutSeconds: null, skipMergeCheck: job.skipMergeCheck,
+    landingCheckExempt: task.landingCheckExempt, landingCheckExemptReason: task.landingCheckExemptReason,
+    targetRef: job.targetRef, upstreamRef: job.upstreamRef,
+  });
+}
+
 /**
  * The columns a `HeldClaim` is read from, over the aliases both statements that read one use: the
  * job as `j`, its codebase as `cb`, its source session as `s`, that session's workspace as `w` and
@@ -790,6 +837,9 @@ const HELD_CLAIM_COLUMNS = Prisma.sql`
       t."acceptance_timeout_seconds" AS "acceptanceTimeoutSeconds",
       cb."landing_check_command" AS "landingCheckCommand",
       cb."landing_check_timeout_seconds" AS "landingCheckTimeoutSeconds",
+      cb."landing_check_none" AS "landingCheckNone",
+      COALESCE(t."landing_check_exempt", false) AS "landingCheckExempt",
+      t."landing_check_exempt_reason" AS "landingCheckExemptReason",
       cb."merge_check_command" AS "mergeCheckCommand",
       cb."merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds",
       j."cancel_requested_at" AS "cancelRequestedAt",
@@ -1950,10 +2000,16 @@ export async function applyIntegrationJobResult(
     throw new IntegrationJobRefused('INVALID_RESULT', `${state} is not a result`);
   }
   for (const check of body.checks ?? []) {
-    if (check.skipped !== undefined && (check.skipped !== 'PATHS_EXEMPT'
-      || check.name !== 'LANDING_CHECK' || !Array.isArray(check.files) || check.files.length === 0
-      || !check.files.every((file) => typeof file === 'string' && file.length > 0))) {
-      throw new IntegrationJobRefused('INVALID_RESULT', 'a skipped landing check names PATHS_EXEMPT and its files');
+    if (check.skipped === undefined) continue;
+    const pathsExempt = check.skipped === 'PATHS_EXEMPT' && check.reason === undefined
+      && Array.isArray(check.files) && check.files.length > 0
+      && check.files.every((file) => typeof file === 'string' && file.length > 0);
+    const taskExempt = check.skipped === 'TASK_EXEMPT' && check.files === undefined
+      && typeof check.reason === 'string' && check.reason.trim() !== ''
+      && check.reason.length <= MAX_LANDING_CHECK_EXEMPT_REASON_CHARS;
+    if (check.name !== 'LANDING_CHECK' || !(pathsExempt || taskExempt)) {
+      throw new IntegrationJobRefused('INVALID_RESULT',
+        'a skipped landing check names PATHS_EXEMPT and its files, or TASK_EXEMPT and its reason');
     }
   }
   if (body.baselineRed === true && (state !== 'CHECK_FAILED'
@@ -2116,6 +2172,16 @@ export async function applyIntegrationJobResult(
     }
     const misfit = observationRefusal(job.kind, { state, phase: body.phase ?? null });
     if (misfit) throw new IntegrationJobRefused('INVALID_RESULT', misfit);
+    // §12.15 P-C2: a runner from before TASK_EXEMPT was handed the acceptance alone and says nothing of
+    // the landing check it was never given. A landing that landed so is recorded with the skip and its
+    // reason all the same, read from the rows the command was built from.
+    if (job.kind === 'LAND_TASK' && state === 'LANDED' && job.taskId
+      && !body.checks?.some((check) => check.name === 'LANDING_CHECK')) {
+      const reason = await taskExemptionAtResult(tx, job);
+      if (reason !== null) {
+        body = { ...body, checks: [...(body.checks ?? []), taskExemptCheck(reason)] };
+      }
+    }
     // O-J3: an observation that looked writes what it saw, task by task, with its terminal state.
     if (job.kind === 'OBSERVE_LANDING' && state === 'OBSERVED') {
       const observed = await applyObservedResult(tx, {
@@ -3079,7 +3145,7 @@ async function appendResultEvents(
         name: check.name,
         index,
         ...(check.scope ? { scope: check.scope } : {}),
-        ...(check.skipped ? { skipped: check.skipped, files: check.files } : {}),
+        ...(check.skipped ? { skipped: check.skipped, files: check.files, reason: check.reason } : {}),
         exitCode: check.exitCode,
         expectedExitCode: check.expectedExitCode,
         timedOut: check.timedOut,

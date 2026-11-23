@@ -41,7 +41,7 @@ import {
 import { CoordinatorWakeService } from './coordinator-wake.service';
 import { CriterionReadyProducer } from './criterion-ready.producer';
 import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
-import { INTEGRATION_JOB_CLAIM, PROMOTION_AUTOMATIC_LAND } from './project-integration-job';
+import { INTEGRATION_JOB_CLAIM, PROMOTION_AUTOMATIC_LAND, settleDeliveredIdentityAfterFinish } from './project-integration-job';
 import { configureProjectIntegration } from './project-integration-line';
 import { ProjectOpenItemService } from './project-open-item.service';
 import {
@@ -363,11 +363,6 @@ async function doneCodeTask(stack: Stack, w: World, label: string, criterionKey?
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
-      // The task's work has STOPPED MOVING: this is the column the LAND_TASK claim guard reads
-      // (contract §2.6 J-T1a), and a fixture that leaves it null is a task whose work is still in
-      // flight — the line holds such a job QUEUED by design, which is not what this scenario is
-      // about. A minute ago, so the claim that follows is unambiguously later than it.
-      finishedAt: new Date(Date.now() - 60_000),
       branch: `orbit/${label}`,
       isolationStatus: 'worktree',
       baseSha: 'b'.repeat(40),
@@ -409,6 +404,14 @@ async function doneCodeTask(stack: Stack, w: World, label: string, criterionKey?
   });
   const task = await db.task.findUniqueOrThrow({ where: { id: declared.id }, select: { status: true } });
   assert.equal(task.status, TaskStatus.DONE, 'the acceptance command agreed');
+  await db.$transaction(async (tx) => {
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: { status: RunStatus.SUCCEEDED, finishedAt: new Date(Date.now() - 60_000)},
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
+  });
   return { taskId: declared.id, sessionId };
 }
 

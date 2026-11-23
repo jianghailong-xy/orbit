@@ -16,6 +16,7 @@ import {
   MenuUnfoldOutlined,
   MoonOutlined,
   MoreOutlined,
+  OrderedListOutlined,
   PlusOutlined,
   QuestionCircleOutlined,
   SettingOutlined,
@@ -111,6 +112,8 @@ import { Menu, type MenuItem } from './ui/Menu';
 import { useMoveWikiToTrash } from './WikiTrashDialog';
 import { Tooltip } from './ui/Tooltip';
 import { HELP_PATH, useHelpDrawer } from '../lib/helpDrawer';
+import { OPTIMIZE_LABELS } from '../lib/settingsChange';
+import { MODEL_ROUTING_PAGE } from '../pages/settings/settingsIndex';
 
 const IS_MAC_PLATFORM =
   typeof navigator !== 'undefined' &&
@@ -191,6 +194,9 @@ const TOP: TopNavItem[] = [
   // the Workspaces; this one stands for them all, as Projects does: the whole count, the one way in on
   // the collapsed rail, and the way to a first wiki for an account with none to list.
   { key: 'wiki', icon: <SidebarNavIcon name="wiki" />, label: 'Wiki' },
+  // Orbit Files, the account's drive, directly under the Wiki (docs/mocks/orbit-files/02-web, frame 1). No count and no
+  // shortcut: nothing in Files waits on the owner. Its Trash and earlier versions are reached from inside it.
+  { key: 'files', icon: <SidebarNavIcon name="files" />, label: 'Files' },
   // No Following here: its watches are the waits agents keep for their own sessions, already shown
   // in each session's header and Watching strip, and those are what link to /following.
   // No Machines & models either (docs/mocks/machines-and-models, 02): where agents run and whose quota
@@ -253,6 +259,7 @@ export interface Runner {
   displayName?: string | null;
   online?: boolean;
   maxConcurrent?: number;
+  burstConcurrent?: number;
   // Persisted order of Infrastructure's machine cards; null until assigned by migration or a reorder.
   position?: number | null;
   // Live sessions currently occupying this runner's slots (of maxConcurrent).
@@ -508,6 +515,9 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
           ? (projectRowKey ?? 'projects')
           : onWiki
             ? (wikiRowKey ?? 'wiki')
+            // The Files page and its Trash are Files.
+            : loc.pathname === '/files' || loc.pathname.startsWith('/files/')
+              ? 'files'
             // Every task route — all tasks, one task, a list, the tasks in none — is the Tasks
             // page, whose title picks among them.
             : loc.pathname.startsWith('/tasks/') || loc.pathname.startsWith('/lists/')
@@ -1382,6 +1392,24 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                   ),
                   onSelect: () => navigate('/settings/machines/new'),
                 },
+            // Model routing, one step from anywhere: its end column says how routing runs now, Off or the Optimize For
+            // it routes by (absent means on, and Balance).
+            {
+              key: 'model-routing',
+              icon: <OrderedListOutlined />,
+              textValue: MODEL_ROUTING_PAGE.label,
+              label: (
+                <span className="tp-account-appearance-label">
+                  <span>{MODEL_ROUTING_PAGE.label}</span>
+                  <span className="tp-account-current-theme">
+                    {me.data?.preferences?.modelRouting === false
+                      ? 'Off'
+                      : OPTIMIZE_LABELS[me.data?.preferences?.optimizeFor ?? 'balance']}
+                  </span>
+                </span>
+              ),
+              onSelect: () => navigate(MODEL_ROUTING_PAGE.path),
+            },
             {
               key: 'settings',
               icon: <SettingOutlined />,

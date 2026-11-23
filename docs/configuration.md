@@ -51,6 +51,7 @@ output into a public report: expanded values can contain secrets.
 | `ORBIT_WATCHES_CANARY_OWNERS` | `string` | Optional; empty | Comma-separated account IDs enabled in Watch canary mode. | No; account identifiers are private diagnostic data | Recreate API |
 | `ORBIT_WIKI_MODE` → container `ORBIT_WIKI` | `enum`: `on`, `canary`, `off` | Optional; `on` | Wiki rollout. Disabled accounts receive `WIKI_DISABLED` and no Wiki tools/context. | No | Recreate API; no migration or runner release |
 | `ORBIT_WIKI_CANARY_OWNERS` | `string` | Optional; empty | Comma-separated account IDs enabled in Wiki canary mode. | No; account identifiers are private diagnostic data | Recreate API |
+| `ORBIT_RUN_STOPPED_WAKE_MODE` → container `ORBIT_RUN_STOPPED_WAKE` | `enum`: `on`, `off` | Optional; `on` | `off` stops the "Run stopped" wake (`TASK_RUN_STOPPED`), which tells a project's lead session when a task's run parks with nothing to wake it. | No | Recreate API; no migration or runner release |
 | `DEEPSEEK_API_KEY` | `secret` | Optional; empty names sessions with their own provider | Asynchronous session title/tag enrichment. When empty, a session is named by its own provider instead: on a configured API key the server holds (title and tags; not a Claude subscription token or an internal-host endpoint), or, for an engine's own sign-in, by Claude Code or Codex from inside the process running the session (title only). | Yes | Recreate API |
 | `DEEPSEEK_BASE_URL` | `URL` | Optional; `https://api.deepseek.com` | Endpoint for title/tag enrichment. | No; avoid credential-bearing URLs | Recreate API |
 | `DEEPSEEK_MODEL` | `string` | Optional; `deepseek-chat` | Model used for title/tag enrichment. | No | Recreate API |
@@ -136,7 +137,9 @@ with either backend. An invalid backend, an incomplete S3 configuration, or an e
 | `ORBIT_FILES_S3_REGION` | `string` | Optional with `s3`; `us-east-1` | Signing region. | No | Recreate API |
 | `ORBIT_FILES_S3_ACCESS_KEY_ID` | `secret` | Required with `s3`; otherwise empty | Access key ID for the bucket. | Yes | Recreate API |
 | `ORBIT_FILES_S3_SECRET_ACCESS_KEY` | `secret` | Required with `s3`; otherwise empty | Secret access key for the bucket. | Yes | Recreate API |
+| `ORBIT_FILES_S3_MIRROR` | `0` or `1` | Optional; `0` | Set to `1` to copy the bucket's `files/` prefix to `<ORBIT_BACKUP_SYNC_TARGET>-bucket` and schedule S3 mirror pruning. The sidecar uses the same S3 endpoint, bucket, region and key pair listed above. | No | Recreate `pgbackup` and `apiserver` |
 | `ORBIT_FILES_QUOTA_BYTES` | `integer` (bytes) | Optional; empty means no limit | The most one account may keep, each content counted once. Past it an upload is refused with `413` and the code `FILE_QUOTA_EXCEEDED`. For a hosted instance; a self-hosted deployment needs none. | No | Recreate API |
+| `ORBIT_FILES_STORE_QUOTA_BYTES` | `integer` (bytes) | Optional with `s3` | The S3 store's configured capacity across all accounts. Files → Storage warns at 80% based on S3 blob bytes recorded by Orbit, cached for three minutes. The storage backend enforces its own limit. | No | Recreate API |
 
 With `local`, `./data/files` is the only copy of those bytes: it is not in PostgreSQL or in any local backup. The
 off-host mirror copies it to `<target>-files` beside the archive; with `s3`, the bucket's versioning or replication
@@ -197,7 +200,7 @@ so a deployment installed before them keeps managed runners off.
 
 `profile.json` chooses the Docker backend (`"backend": "docker"`) and sets each runner's CPU, memory, process and
 volume limits, its image (by local image ID) and the address it reaches the deployment at. `channel.json` names
-the same image and the network `orbit-managed-runners`, and caps what a runner may be given. After editing either,
+the same image and the network `orbit-cloud-runners`, and caps what a runner may be given. After editing either,
 run `docker compose up -d --force-recreate docker-channel apiserver`.
 
 ### Runner link
@@ -303,7 +306,7 @@ network.
 | `8443/tcp` | `link-gateway` | The host, bound by `RUNNER_LINK_BIND`, published as `RUNNER_LINK_PORT` | The link gateway's own WebSocket listener on a link with a host name of its own. A same-origin link sets `RUNNER_LINK_PORT=0` and binds loopback, so nothing useful is published. |
 | `9464/tcp` | `link-gateway` | Host loopback only | `/metrics`. Keep it closed to the internet. |
 | `7300/tcp` | `docker-channel` on a channel host | Only the private addresses named by `--allow-peer` | The remote channel host's control API, over a private link. |
-| none | managed runner containers | The `orbit-managed-runners` network | Runners reach the deployment through the gateway's published port; they publish nothing themselves. |
+| none | managed runner containers | The `orbit-cloud-runners` network | Runners reach the deployment through the gateway's published port; they publish nothing themselves. |
 
 On the runner machine, Orbit publishes no port: the runner makes outbound HTTPS and WebSocket connections only.
 

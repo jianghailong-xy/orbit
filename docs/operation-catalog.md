@@ -1,7 +1,7 @@
 # Orbit operation catalogue v1.9.0
 
 > Generated from `src/runner-go/operation_catalog.go` — do not edit by hand.
-> Content hash: `a4bad2a671a51dfe0c2080f063fc46c5fdbeb888d9a5043d0fe6fa01f4396d42`.
+> Content hash: `df7dd7465618524b15c5c732725d0bf0ee4d6d0fd81586a5f675d4365417d8ed`.
 
 Every operation an Orbit agent can call is declared once in the operation catalogue. This table is that catalogue rendered for a person: `orbit capabilities --json` and the MCP `tools/list` payload are its two machine surfaces, and the leaf `--help` texts are held to it by tests. `MCP` and `CLI` say how each surface reaches the operation — `always`, an `orchestration` grant, an engine `permission_prompt` bridge, `session`-only, `headless`-only, or a `watch_switch`/`wiki_switch` — and `absent` when that surface deliberately has no door. Gates that must hold together are joined with `+` (for example `orchestration+watch_switch`). `Idempotency` is `read` (safe to repeat), `caller_key` (retry with the same key), `server_key` (a redelivered turn deduplicates) or `none` (re-read before retrying). `Plan` is what a session in Plan mode gets: the call `runs`, is `refused` with what to do instead, or its `own_gate` decides; the per-engine matrix is docs/permission-matrix.md.
 
@@ -20,7 +20,7 @@ Every operation an Orbit agent can call is declared once in the operation catalo
 | `inspect` | R1.8 | `project_get`? → `task_get` → `task_list`? → `session_get`? | Read the state of a project, a task or a session before deciding anything. |
 | `wait` | R1.9 | `task_await` → `session_await`? → `watch_create`? | Wait for Orbit work to finish without holding the turn open. |
 | `wiki` | R1.10 | `wiki_search` → `wiki_get`? → `wiki_propose`? → `wiki_note`? | Find what is already known about a file or a pattern, and keep what you learned. |
-| `files` | R1.11 | `file_upload` → `file_list`? → `file_fetch`? | Keep a screenshot, report or log in Orbit instead of the repository, or read one back. |
+| `files` | R1.11 | `file_upload` → `file_list`? → `file_fetch`? → `drive_put`? → `drive_get`? → `drive_list`? → `drive_move`? → `drive_delete`? | Keep a screenshot, report or log in Orbit instead of the repository, or read one back. |
 | `task-list` | R1.12 | `tasklist_list`? → `tasklist_create` → `tasklist_update`? | Give a class of work its own dispatch policy: a concurrency cap, a pause, standing instructions. |
 | `agent` | R1.13 | `agent_list` → `agent_update`? → `agent_create`? | Choose where work runs and under which identity, or change an agent's defaults. |
 | `finish-task` | — | `task_get` → `task_progress_report` → `bg_run`? → `task_evidence_submit` → `task_comment`? | Carry the task this session runs to its end: progress, checks and the evidence its criterion decides by. |
@@ -37,11 +37,20 @@ Every operation an Orbit agent can call is declared once in the operation catalo
 | `bg_list` | background_job | low | no | none | no | read | runs | always | absent | See this session's background jobs. |
 | `bg_output` | background_job | low | no | none | no | read | runs | always | absent | Read a background job's output. |
 | `bg_run` | background_job | high | yes | none | no | none | own_gate | always | absent | Run a command in the background on this runner. |
+| `browser_clear_logins` | browser | high | yes | card (`orbit_browser_clear_logins`) | yes | none | refused | browser_switch | session+browser_switch — `orbit browser clear-logins` | Stop the account's Orbit Cloud browser and delete its saved logins, after the owner confirms. |
+| `browser_open` | browser | low | no | none | no | read | runs | browser_switch | session+browser_switch — `orbit browser open` | Start the account's Orbit Cloud browser and get its tab's address, optionally opening a page in it. |
+| `browser_request_sign_in` | browser | low | no | none | no | read | runs | browser_switch | session+browser_switch — `orbit browser request-sign-in` | Ask the account owner to sign in to a site in the Orbit Cloud runner's browser, and wait for their answer. |
+| `browser_status` | browser | low | no | none | no | read | runs | browser_switch | session+browser_switch — `orbit browser status` | Read the state of the account's Orbit Cloud browser. |
 | `condition_get` | schedule | low | no | none | no | read | runs | always | absent | Read a task's or a schedule's condition: its state, newest samples and events. |
 | `criterion_check_report` | project | high | yes | none | no | none | refused | always | absent | Report the Agent check this session is running. |
 | `criterion_check_start` | project | high | yes | none | no | none | refused | always | absent | Start a criterion check as the project's coordinator. |
 | `criterion_confirm` | project | high | yes | none | no | none | refused | always | absent | Confirm a project criterion as the project's coordinator. |
 | `criterion_confirmation_withdraw` | project | high | yes | none | no | none | refused | always | absent | Withdraw a criterion confirmation as the project's coordinator. |
+| `drive_delete` | file | high | yes | none | yes | none | refused | always | always — `orbit drive rm` | Move an entry to the owner's Trash. |
+| `drive_get` | file | low | no | none | no | read | runs | always | session — `orbit drive get` | Download a drive file into this session's uploads directory. |
+| `drive_list` | file | low | no | none | no | read | runs | always | always — `orbit drive ls` | See the contents of a drive folder. |
+| `drive_move` | file | medium | yes | none | no | none | refused | always | always — `orbit drive mv` | Move or rename an entry on the drive. |
+| `drive_put` | file | medium | yes | none | no | none | refused | always | session — `orbit drive put` | Copy a local file into the owner's Orbit Files drive. |
 | `file_fetch` | file | low | no | none | no | read | runs | always | session — `orbit file fetch` | Read a file's bytes back. |
 | `file_list` | file | low | no | none | no | read | runs | always | always — `orbit file list` | See the files this session keeps. |
 | `file_pin` | file | medium | yes | none | no | none | refused | always | session — `orbit file pin` | Keep a file so it survives the turn. |
@@ -108,6 +117,9 @@ Every operation an Orbit agent can call is declared once in the operation catalo
 | `session_reply` | session | medium | yes | none | no | caller_key | refused | orchestration | orchestration — `orbit session reply` | Answer a request this session was sent. |
 | `session_search` | session | low | no | none | no | read | runs | orchestration | orchestration — `orbit session search` | Search sessions by their text. |
 | `session_send` | session | medium | yes | none | no | caller_key | refused | orchestration | orchestration — `orbit session send` | Send a message to a session. |
+| `settings_get` | account | low | no | none | no | read | runs | always | session — `orbit settings get` | Read the owner's Settings a conversation can propose a change to, with their tiers. |
+| `settings_propose` | account | high | yes | owner | no | none | runs | always | session — `orbit settings propose` | Propose a change to the owner's own Settings, on a card only they can save. |
+| `subagent_rate` | subagent | medium | yes | none | no | none | runs | always | session — `orbit subagent rate` | Rate how useful a SubAgent's result was. |
 | `task_attribution` | task | low | no | none | no | read | runs | always | always — `orbit task attribution` | Read where a task counts, where it was noticed, and what is blocking it. |
 | `task_await` | watch | medium | yes | none | no | caller_key | runs | watch_switch | session+watch_switch — `orbit task await` | Be woken when tasks finish, or as soon as one fails. |
 | `task_batch_pin` | task | medium | yes | none | no | none | refused | always | always — `orbit task batch-pin` | Re-pin many tasks' engine, provider or model in one request. |
@@ -169,6 +181,8 @@ Plan reads, waits and asks the owner, and refuses every other write. These are t
 | `schedule_update` | runs | changes a schedule inside what the owner allowed, or asks them on a card; it changes no code |
 | `schedule_wakeup` | runs | schedules this session's own next turn; it changes no work |
 | `session_await` | runs | waits on Orbit's own work for this session; a wait changes no work |
+| `settings_propose` | runs | puts a settings card in front of the owner; nothing is written until they save it |
+| `subagent_rate` | runs | records what this session made of a SubAgent's result; it changes no work |
 | `task_await` | runs | waits on Orbit's own work for this session; a wait changes no work |
 | `watch_cancel` | runs | stops a wait of this session's own |
 | `watch_create` | runs | waits on Orbit's own work for this session; a wait changes no work |

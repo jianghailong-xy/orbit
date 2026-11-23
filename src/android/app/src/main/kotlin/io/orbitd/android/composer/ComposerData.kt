@@ -648,6 +648,9 @@ internal fun retryIdentityOf(config: JsonObject) =
 internal fun terminal(detail: JsonObject) = detail.text("status") in setOf("ENDED", "FAILED", "CANCELLED", "COMPLETED") ||
     detail.text("runStatus") in setOf("ENDED", "FAILED", "CANCELLED", "COMPLETED")
 
+/** The seven run status words this build knows (`RunStatus`). */
+private val KNOWN_RUN_STATUSES = setOf("PENDING", "RUNNING", "SUCCEEDED", "FAILED", "CANCELLED", "AWAITING_INPUT", "INTERRUPTED")
+
 internal fun sendEndpoint(detail: JsonObject): String {
     val caps = detail["capabilities"] as? JsonObject
     if (caps != null) {
@@ -656,6 +659,8 @@ internal fun sendEndpoint(detail: JsonObject): String {
         error(caps.text("resumeBlockedReason") ?: "This session cannot receive messages.")
     }
     check(detail.text("lifecycleState") !in setOf("TRASHED", "COMPLETED")) { "Restore this session before sending." }
+    // A status outside the seven known words, or none at all, is never sent a turn in place: it is offered what an ended session is.
+    if (detail.text("status") !in KNOWN_RUN_STATUSES) return "resume"
     check(detail.text("status") in setOf("PENDING", "RUNNING", "AWAITING_INPUT", "ENDED", "FAILED", "CANCELLED")) { "Session state is unavailable." }
     return if (terminal(detail)) "resume" else "turns"
 }
@@ -665,7 +670,7 @@ internal fun SessionState?.canCompose() = this != null && fresh && !accessDenied
 /** The decision behind a task run whose model smart selection picked, while the composer still shows that model (OrbitKit
  * `ComposerLogic.smartRoute`; the session read's `route`): it marks the model chip ✦ and opens its menu on why. A model changed here
  * is this run's own, a session opened by hand has no route, a run on an Agent without smart selection has one that was not applied —
- * and so does every run while the account's switch (`preferences.modelRouting`, off by default) is off: all keep the chip as it was. */
+ * and so does every run while the account's switch (`preferences.modelRouting`, on by default) is off: all keep the chip as it was. */
 internal fun smartRoute(taskId: String?, route: JsonObject?, model: String, smartSelection: Boolean): JsonObject? {
     if (!smartSelection || taskId.isNullOrEmpty() || route == null || route.flag("applied") != true) return null
     if (route.text("level").isNullOrEmpty() || route.text("model") != model) return null

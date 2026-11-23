@@ -4,13 +4,13 @@ import { Logger } from '@nestjs/common';
 import { Prisma, type ManagedRunner } from '@prisma/client';
 import {
   MANAGED_RUNNER_CAPACITY_UNAVAILABLE,
-  MANAGED_RUNNER_SLEEP_CAPABILITY,
   MODEL_UNAVAILABLE,
   type ManagedRunnerReason,
 } from '@orbit/shared';
 
 import { generateToken, sha256 } from '../common/crypto.util';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import { issueDriveMountCredential, revokeDriveMountCredentials } from '../drive/drive-mount-credential';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { ManagedKubeClient } from './kube-client';
 import { KubernetesBackend } from './kubernetes-backend';
@@ -43,7 +43,8 @@ import {
 import { ownerAccountDisabled } from './managed-runner-eligibility';
 import { stopProofFor, type ManagedRunnerPredecessor, type ManagedRunnerStopProof } from './managed-runner-fencing';
 import type { ManagedRunnerProfile } from './managed-runner-profile';
-import { readStoredWorkload, workloadIdle, type StoredManagedWorkload } from './managed-runner-sleep';
+import { freshInstanceReport, workloadIdle, type StoredManagedWorkload } from './managed-runner-sleep';
+import { ownerUpdateDrain, ownerUpdatePending } from './managed-runner-status';
 import { readVolumeMeasurement, type VolumeMeasurement } from './managed-runner-storage';
 import { managedKeySupply, managedRuntimeSupply, type ManagedSupplyRunner } from './managed-runner-supply';
 import {
@@ -144,7 +145,7 @@ import { RUNNER_BEATS, RUNNER_SILENT_AFTER_MS, runnerLastBeatAt } from '../runne
  *     reports every stop (`stopSilentPrevious`, Docker); the host's report of that stop starts the next
  *     generation from the current image, as after a crash. Silence alone, on the current image, still
  *     authorizes nothing.
- *   - On a backend that moves instances onto its current image (`rollImage`, Kubernetes), a READY instance
+ *   - On a backend that moves instances onto its current image (`rollImage`, Kubernetes and Docker), a READY instance
  *     of a previous image is drained as for sleep once it is idle, and woken at once as the next generation
  *     on the current image (`rollPreviousImage`): an upgrade's new runner image reaches every runner
  *     without cutting short anything in flight.
@@ -365,7 +366,8 @@ export class ManagedRunnerManager {
   readonly holder: string;
   /** Where instances run: every infrastructure call this manager makes. */
   readonly backend: ManagedRunnerBackend;
-  private readonly now: () => Date;
+  /** The clock this manager judges everything by; an owner's sleep request is stamped on it too. */
+  readonly now: () => Date;
   private readonly random: () => number;
   private readonly log: Pick<Logger, 'warn' | 'error'>;
   private readonly linkOnly: () => boolean | Promise<boolean>;
@@ -393,6 +395,14 @@ export class ManagedRunnerManager {
     this.scope = options.ownLocationOnly
       ? { backend: this.backend.name, clusterKey: this.backend.location.clusterKey, namespace: this.backend.location.namespace }
       : { backend: this.backend.name };
+  }
+
+  /**
+   * Whether the manager may ask the backend to stop an instance on its own account — an accepted sleep past its drain
+   * time, a disabled owner's drain, a silent instance of a previous image — and not only for the owner's Update Now.
+   */
+  private get stopsUnasked(): boolean {
+    return !!this.backend.stopInstance && !this.backend.ownerStopsOnly;
   }
 
   /** Whether a mapping is one this manager drives (`scope`). */
@@ -753,6 +763,8 @@ export class ManagedRunnerManager {
       const adopted = await this.adoptCredential(issued.mapping, issued.credential);
       if (adopted) return { next: adopted };
     }
+    const drive = await this.ensureDriveMount(issued.mapping);
+    if (drive) return drive;
     return {
       next: await this.commit(issued.mapping, {
         managementState: 'STARTING',
@@ -829,6 +841,8 @@ export class ManagedRunnerManager {
       startupDeadlineAt: null,
       lastError: Prisma.DbNull,
       initialProvider,
+      // The next generation READY ends the owner's Update Now.
+      ...(ownerUpdatePending(mapping) ? { updateCompletedAt: this.now() } : {}),
     });
     return { done: 'READY' };
   }
@@ -844,17 +858,38 @@ export class ManagedRunnerManager {
     }
     this.checkInstance(mapping, instance);
     if (instance.terminated) return this.terminated(mapping, instance);
+    await this.recordImageOutdated(mapping, instance);
     // A stale heartbeat makes READY unusable (the status says so); it is not proof the instance died,
     // and on its own it authorizes nothing. Of a previous image, on a link-only server, it is asked to stop.
     return (await this.stopSilentPrevious(mapping, instance))
+      ?? (await this.ownerUpdate(mapping, instance))
       ?? (await this.rollPreviousImage(mapping, instance))
       ?? (await this.beginDrain(mapping))
       ?? { done: 'READY' };
   }
 
   /**
+   * What the owner's status says of the image (`update`): a READY instance made from a previous image, with the
+   * source commit the image it would be made from now was built from, is recorded as outdated since this pass first
+   * found it so (`imageOutdatedSince`, `currentImageSha`); anything else — current, or a backend that cannot name
+   * the current build — clears both. Written only when that changes, under this replica's lease, as a predicate
+   * write of its own columns that leaves `revision` alone: the status reads it, nothing decides on it.
+   */
+  private async recordImageOutdated(mapping: ManagedRunner, instance: ManagedInstance): Promise<void> {
+    const sha = instance.previousImage ? (instance.currentImageRevision ?? null) : null;
+    if (sha === mapping.currentImageSha && (sha === null) === (mapping.imageOutdatedSince === null)) return;
+    await this.prisma.managedRunner.updateMany({
+      where: { id: mapping.id, leaseHolder: this.holder },
+      data: {
+        currentImageSha: sha,
+        imageOutdatedSince: sha === null ? null : (mapping.imageOutdatedSince ?? this.now()),
+      },
+    });
+  }
+
+  /**
    * A READY instance made from a previous image (`previousImage`) on a backend that moves such instances onto the
-   * image it makes them from now (`rollImage`, Kubernetes): once it is idle — by its own fresh report and by the
+   * image it makes them from now (`rollImage`, Kubernetes and Docker): once it is idle — by its own fresh report and by the
    * records, as for sleep, but without waiting out the idle interval — it drains exactly as for sleep, marked as a
    * roll (`imageRollTo`). Demand calls the roll off like any drain, and the next idle pass tries again. Once the
    * instance has stopped and the mapping falls asleep, the mark wakes it at once: the next generation is made from
@@ -863,6 +898,69 @@ export class ManagedRunnerManager {
   private async rollPreviousImage(mapping: ManagedRunner, instance: ManagedInstance): Promise<Step | null> {
     const image = this.backend.rollImage;
     if (!image || !instance.previousImage || !instance.running || mapping.desiredState !== 'RUNNING') return null;
+    return this.rollWhenIdle(mapping, image, `idle on a previous image (${instance.previousImage})`);
+  }
+
+  /**
+   * The owner's Update Now (ManagedRunnerService.updateNow), in progress on a READY instance. An instance found already
+   * on the current image ends the request (`updateCompletedAt`). Otherwise, null when it stays:
+   *
+   *   - Asked of a busy runner with the owner's word that its turns may be interrupted (`updateInterruptTurns`), on a
+   *     backend whose host reports every stop it makes (`stopInstance`, Docker and Kubernetes): the instance is asked
+   *     to stop (`stopForOwnerUpdate`), and its host's report of the exit is read as for any stop (`terminated`).
+   *   - Otherwise — an idle runner's request, or a busy one's on a backend that cannot stop it — the same
+   *     roll as `rollPreviousImage`, on any backend: once the instance is idle, by its own fresh report and by the
+   *     records, it drains marked as a roll and wakes at once as the next generation, made from the image the backend
+   *     makes instances from now, on the same volume and runner. Nothing in flight is cut short: while busy it stays
+   *     READY and the next pass asks again. The mark names the backend's roll image, or where it has none the current
+   *     build's commit. Demand does not call that drain off (`drainAbort`).
+   */
+  private async ownerUpdate(mapping: ManagedRunner, instance: ManagedInstance): Promise<Step | null> {
+    if (!ownerUpdatePending(mapping)) return null;
+    if (!instance.previousImage) {
+      // A predicate write of its own column under this replica's lease, as recordImageOutdated's: nothing decides on it.
+      await this.prisma.managedRunner.updateMany({
+        where: { id: mapping.id, leaseHolder: this.holder, updateRequestedAt: mapping.updateRequestedAt },
+        data: { updateCompletedAt: this.now() },
+      });
+      return null;
+    }
+    if (!instance.running || mapping.desiredState !== 'RUNNING') return null;
+    if (mapping.updateInterruptTurns && this.backend.stopInstance) return this.stopForOwnerUpdate(mapping, instance);
+    const image = this.backend.rollImage ?? mapping.currentImageSha ?? instance.currentImageRevision ?? instance.previousImage;
+    return this.rollWhenIdle(
+      mapping,
+      image,
+      `its owner asked to update it (${mapping.updateRequestedAt!.toISOString()}), idle on a previous image (${instance.previousImage})`,
+    );
+  }
+
+  /**
+   * The owner's Update Now of a busy runner, with their word that its turns may be interrupted, on a backend whose host
+   * reports every stop it makes: the READY instance is asked to stop (`stopInstance`), as `stopSilentPrevious` asks.
+   * Docker sends SIGTERM with the profile's stop grace, and Kubernetes deletes the Pod with its termination grace, which
+   * the kubelet turns into the same SIGTERM; the runner's ordinary shutdown stops its turns, which stay resumable; that
+   * works on every runner image. Asking is no proof: the mapping stays READY, nothing is created, and
+   * every pass asks again until its host reports the exit. That report is the stop proof (`terminated`): recorded, the
+   * container removed by UID, its volume released, and only then the next generation made from the image the backend
+   * makes instances from now, on the same volume and runner. Demand changes none of it.
+   */
+  private async stopForOwnerUpdate(mapping: ManagedRunner, instance: ManagedInstance): Promise<Step> {
+    this.log.warn(
+      `managed runner ${mapping.id}: its owner asked to update it now (${mapping.updateRequestedAt!.toISOString()}), interrupting its turns; `
+        + `asking its ${this.backend.terms.instance} ${instance.uid} of generation ${mapping.generation}, made from a previous image `
+        + `(${instance.previousImage}), to stop`,
+    );
+    await this.backend.stopInstance!(mapping);
+    return { done: 'READY' };
+  }
+
+  /**
+   * The roll's drain, for `rollPreviousImage` and `ownerUpdate`: once the instance is idle — by its own fresh report
+   * and by the records, as for sleep, but without waiting out the idle interval — it drains exactly as for sleep,
+   * marked `imageRollTo`. Null while it is not idle.
+   */
+  private async rollWhenIdle(mapping: ManagedRunner, image: string, why: string): Promise<Step | null> {
     const now = this.now();
     const report = await this.instanceReport(mapping, now);
     if (!report || !workloadIdle(report) || report.draining) return null;
@@ -890,10 +988,7 @@ export class ManagedRunnerManager {
       },
     });
     if (count === 0) throw new Superseded();
-    this.log.warn(
-      `managed runner ${mapping.id}: idle on a previous image (${instance.previousImage}); draining generation ${mapping.generation} `
-        + `to wake it on ${image}`,
-    );
+    this.log.warn(`managed runner ${mapping.id}: ${why}; draining generation ${mapping.generation} to wake it on ${image}`);
     return { next: await this.reread(mapping.id) };
   }
 
@@ -906,9 +1001,10 @@ export class ManagedRunnerManager {
    * exit is, read as for any stop (`terminated`): recorded as the proof, the container removed by UID, its volume
    * released, and the next generation made from the image the profile names now, on the same volume and runner (or
    * asleep, if its owner asked). A stop reported by anything else, or a container gone, fences. Null when it stays.
+   * Never on Kubernetes (`stopsUnasked`), where only the owner's Update Now stops an instance.
    */
   private async stopSilentPrevious(mapping: ManagedRunner, instance: ManagedInstance): Promise<Step | null> {
-    if (!this.backend.stopInstance || !instance.previousImage || !instance.running) return null;
+    if (!this.stopsUnasked || !instance.previousImage || !instance.running) return null;
     if (!(await this.linkOnly())) return null;
     const now = this.now();
     const beats = await this.prisma.runner.findUnique({ where: { id: mapping.runnerId }, select: RUNNER_BEATS });
@@ -920,7 +1016,7 @@ export class ManagedRunnerManager {
         + `previous image (${instance.previousImage}) and silent since ${beat?.toISOString() ?? 'it started'}, on a server that takes runners `
         + `over the link alone; asking it to stop, so that the next generation starts from the current image`,
     );
-    await this.backend.stopInstance(mapping);
+    await this.backend.stopInstance!(mapping);
     return { done: 'READY' };
   }
 
@@ -936,20 +1032,15 @@ export class ManagedRunnerManager {
       where: { id: mapping.runnerId },
       select: { capabilities: true, ...RUNNER_BEATS, managedWorkload: true },
     });
-    if (!runner?.capabilities.includes(MANAGED_RUNNER_SLEEP_CAPABILITY)) return null;
-    const freshMs = this.profile.lifecycle.heartbeatFreshSeconds * 1000;
-    const beat = runnerLastBeatAt(runner);
-    if (!beat || now.getTime() - beat.getTime() > freshMs) return null;
-    const report = readStoredWorkload(runner.managedWorkload);
-    if (!report || report.generation !== mapping.generation || report.podUid !== mapping.podUid) return null;
-    const received = Date.parse(report.receivedAt);
-    return now.getTime() - received <= freshMs ? report : null;
+    return freshInstanceReport(runner, runnerLastBeatAt(runner), mapping, now, this.profile.lifecycle.heartbeatFreshSeconds * 1000);
   }
 
   /**
    * READY, and asked to sleep — by the owner, or by the idle interval having passed since the
    * runner became READY, since the last demand and by the instance's own count — with nothing in the
-   * records and nothing in flight on the instance: drain. Claims stop at once (the claim refuses a
+   * records and nothing in flight on the instance: drain. The owner's request is answered only by a
+   * report the instance sent after it (`sleepRequestedAt`): one from before may predate a write or a
+   * turn begun since, and draining on it would stop claims on a busy runner. Claims stop at once (the claim refuses a
    * draining mapping), and the instance's heartbeats carry the sleep request from now on. The
    * compare-and-set includes the demand revision this decision read, so demand that came meanwhile
    * keeps the runner READY.
@@ -965,6 +1056,7 @@ export class ManagedRunnerManager {
     if (!asked && now.getTime() - quietSince < idleMs) return null;
     const report = await this.instanceReport(mapping, now);
     if (!report || !workloadIdle(report) || report.draining) return null;
+    if (asked && mapping.sleepRequestedAt && Date.parse(report.receivedAt) <= mapping.sleepRequestedAt.getTime()) return null;
     if (!asked && Date.parse(report.receivedAt) - report.idleSeconds * 1000 > now.getTime() - idleMs) return null;
     if ((await managedRunnerWork(this.prisma, mapping.runnerId)).length > 0) return null;
     const { count } = await this.prisma.managedRunner.updateMany({
@@ -1050,7 +1142,7 @@ export class ManagedRunnerManager {
     }
     // Accepted: it stops by itself. Overdue is said, and forced only where the backend can (`stopOverdue`).
     const overdue = now.getTime() - mapping.stopAcknowledgedAt.getTime() > this.profile.lifecycle.drainSeconds * 1000;
-    const said = this.backend.stopInstance ? 'SLEEP_STOP_FORCED' : 'SLEEP_STOP_OVERDUE';
+    const said = this.stopsUnasked ? 'SLEEP_STOP_FORCED' : 'SLEEP_STOP_OVERDUE';
     if (overdue && (mapping.lastError as { code?: unknown } | null)?.code !== said) {
       await this.commit(mapping, { lastError: { ...managedRunnerReason(said), detail: `accepted at ${mapping.stopAcknowledgedAt.toISOString()}` } });
     }
@@ -1061,20 +1153,25 @@ export class ManagedRunnerManager {
   /**
    * A drain that is past its drain time since `since` — accepted and not yet stopped, or a disabled
    * owner's runner that has not stopped by itself — is stopped, where the backend's host reports
-   * every stop it makes (`stopInstance`: Docker; Kubernetes has none and nothing is forced). Asking
-   * is never the proof: the gate still waits for the host's report of the exit, then removes the
-   * instance by UID, as for a runner that stopped on its own.
+   * every stop it makes and the manager may ask it on its own account (`stopsUnasked`: Docker; on
+   * Kubernetes nothing is forced). Asking is never the proof: the gate still waits for the host's
+   * report of the exit, then removes the instance by UID, as for a runner that stopped on its own.
    */
   private async stopOverdue(mapping: ManagedRunner, since: Date, now: Date): Promise<void> {
-    if (!this.backend.stopInstance || now.getTime() - since.getTime() <= this.profile.lifecycle.drainSeconds * 1000) return;
+    if (!this.stopsUnasked || now.getTime() - since.getTime() <= this.profile.lifecycle.drainSeconds * 1000) return;
     this.log.warn(`managed runner ${mapping.id}: draining past its drain time; asking ${this.backend.terms.instance} ${mapping.podUid} to stop`);
-    await this.backend.stopInstance(mapping);
+    await this.backend.stopInstance!(mapping);
   }
 
-  /** Why an unaccepted drain is called off now, or null to keep waiting for the instance. */
+  /**
+   * Why an unaccepted drain is called off now, or null to keep waiting for the instance. The owner's Update Now
+   * (`ownerUpdateDrain`) is not called off by demand, nor by work waiting in the records: what came meanwhile waits for
+   * the next generation, which wakes at once. Its instance still has to report idle, as every drain's does.
+   */
   private async drainAbort(mapping: ManagedRunner, now: Date): Promise<DrainAbort | null> {
-    if (mapping.desiredState === 'RUNNING' || mapping.demandRevision !== mapping.drainDemandRevision) return 'DEMAND';
-    if ((await managedRunnerWork(this.prisma, mapping.runnerId)).length > 0) return 'WORK';
+    const owners = ownerUpdateDrain(mapping);
+    if (!owners && (mapping.desiredState === 'RUNNING' || mapping.demandRevision !== mapping.drainDemandRevision)) return 'DEMAND';
+    if (!owners && (await managedRunnerWork(this.prisma, mapping.runnerId)).length > 0) return 'WORK';
     const report = await this.instanceReport(mapping, now);
     if (!report) return 'TELEMETRY_MISSING';
     if (!workloadIdle(report)) return 'RUNNER_BUSY';
@@ -1155,6 +1252,8 @@ export class ManagedRunnerManager {
         });
         if (count === 0) throw new Superseded();
         await tx.runner.update({ where: { id: mapping.runnerId }, data: { tokenHash: sha256(generateToken(32)) } });
+        // The drive's mount credential of this generation goes with its runner credential (§8.2).
+        await revokeDriveMountCredentials(tx, mapping.runnerId, mapping.generation + 1);
         if (held && compute) await releaseCapacity(tx, held.pool, compute, null);
       },
       loggedRetry(this.log, 'managedRunners.fallAsleep'),
@@ -1291,6 +1390,12 @@ export class ManagedRunnerManager {
    *
    * Every such stop is logged with its exit code and whether it ran out of memory, and the owner's
    * reason says which, while it restarts and once it has failed.
+   *
+   * The stop the owner's Update Now asked for (`stopForOwnerUpdate`: their request may interrupt turns, and it is in
+   * progress, and the instance is the READY one of a previous image) is no failure: wanted running, it goes back to
+   * REQUESTED at once with the proof recorded and no attempt spent, no backoff and no restart reason (the status says
+   * `updating`), and the same gate makes the next generation from the current image. A stop of that next generation,
+   * made from the current image, is counted as any other.
    */
   private async terminated(mapping: ManagedRunner, instance: ManagedInstance): Promise<Step> {
     if (!instance.stopConfirmed) {
@@ -1307,6 +1412,20 @@ export class ManagedRunnerManager {
       this.log.warn(`${stopped}; its owner asked it to sleep, so it goes to sleep`);
       return {
         next: await this.commit(mapping, { ...recorded, managementState: 'DRAINING', imageRollTo: null, stateEnteredAt: now, drainDemandRevision: mapping.demandRevision, lastError: Prisma.DbNull }),
+      };
+    }
+    if (mapping.managementState === 'READY' && instance.previousImage && ownerUpdatePending(mapping) && mapping.updateInterruptTurns) {
+      this.log.warn(`${stopped}; stopped for its owner's Update Now, so generation ${mapping.generation + 1} is started on the same volume from the current image`);
+      return {
+        next: await this.commit(mapping, {
+          ...recorded,
+          managementState: 'REQUESTED',
+          stateEnteredAt: now,
+          attempt: 0,
+          nextAttemptAt: null,
+          startupDeadlineAt: null,
+          lastError: Prisma.DbNull,
+        }),
       };
     }
     const { maxAttempts } = this.profile.lifecycle;
@@ -1474,6 +1593,8 @@ export class ManagedRunnerManager {
         });
         if (count === 0) throw new Superseded();
         await tx.runner.update({ where: { id: mapping.runnerId }, data: { tokenHash: sha256(generateToken(32)) } });
+        // The drive's mount credential of this generation goes with its runner credential (§8.2).
+        await revokeDriveMountCredentials(tx, mapping.runnerId, mapping.generation + 1);
       },
       loggedRetry(this.log, 'managedRunners.fence'),
     );
@@ -1515,6 +1636,8 @@ export class ManagedRunnerManager {
         });
         if (count === 0) throw new Superseded();
         await tx.runner.update({ where: { id: mapping.runnerId }, data: { tokenHash: sha256(generateToken(32)) } });
+        // The drive's mount credential of this generation goes with its runner credential (§8.2).
+        await revokeDriveMountCredentials(tx, mapping.runnerId, mapping.generation + 1);
       },
       loggedRetry(this.log, 'managedRunners.advanceGeneration'),
     );
@@ -1736,6 +1859,8 @@ export class ManagedRunnerManager {
           });
           if (count === 0) throw new Superseded();
           if (retired) await tx.runner.update({ where: { id: mapping.runnerId }, data: { tokenHash: sha256(generateToken(32)) } });
+          // The drive's mount credential of the retired generation goes with its runner credential (§8.2).
+          if (retired) await revokeDriveMountCredentials(tx, mapping.runnerId, mapping.generation + 1);
           if (held && compute) await releaseCapacity(tx, held.pool, compute, null);
           await tx.activity.create({
             data: {
@@ -1871,6 +1996,38 @@ export class ManagedRunnerManager {
     const problem = this.backend.credentialProblem(credential, current);
     if (problem) throw new ManagedRunnerConflict('SECRET_CONFLICT', problem);
     return { mapping: current, credential };
+  }
+
+  /**
+   * The Orbit Files drive's mount credential of the mapping's generation, delivered for the mounter before any
+   * instance of the generation is created (docs/orbit-files-drive-technical-design.md §4.3, §6.1): the CSI plugin reads
+   * it when the kubelet publishes the drive. An older generation's is removed first. Issuing revokes every live mount
+   * credential of the runner, this generation's included, so one that was issued and never delivered (a crash, a
+   * failed create) holds nothing. Null once it is in place, or where runners receive no drive.
+   */
+  private async ensureDriveMount(mapping: ManagedRunner): Promise<Step | null> {
+    const drive = this.backend.driveMount;
+    if (!drive) return null;
+    const mine = (found: ManagedCredential) => found.ownerId === mapping.ownerId && found.runnerId === mapping.runnerId;
+    const current = (found: ManagedCredential) => mine(found) && found.generation === mapping.generation && !!found.token && !found.removing;
+    const found = await drive.read(mapping);
+    if (found && current(found)) return null;
+    if (found && !mine(found)) {
+      throw new ManagedRunnerConflict('DRIVE_SECRET_CONFLICT', `${drive.name} names another owner or runner`);
+    }
+    if (found) {
+      if (found.removing) return this.waitWithin(mapping);
+      await drive.remove(mapping, found);
+    }
+    await revokeDriveMountCredentials(this.prisma, mapping.runnerId, mapping.generation + 1);
+    const { token } = await issueDriveMountCredential(this.prisma, { ownerId: mapping.ownerId, runnerId: mapping.runnerId, generation: mapping.generation });
+    const delivered = await drive.deliver(mapping, token);
+    if (!mine(delivered)) throw new ManagedRunnerConflict('DRIVE_SECRET_CONFLICT', `${drive.name} names another owner or runner`);
+    if (current(delivered) && delivered.token === token) return null;
+    // Another one under the name (an older one not gone yet, or one whose credential the issue above revoked):
+    // removed, and this generation's delivered on a later pass.
+    if (!delivered.removing) await drive.remove(mapping, delivered);
+    return this.waitWithin(mapping);
   }
 
   /** An instance under the fixed name that is not this generation's is a conflict for an operator.

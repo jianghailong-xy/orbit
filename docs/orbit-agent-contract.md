@@ -386,11 +386,13 @@ What the text is held to (`src/runner-go/agent_primer_test.go`):
   scratch, which create answers which intent, MCP before the CLI, create versus start
   (`autoRunWhenReady` defaults to true), and that only a returned id is a success. A client may show
   no more than that, and Codex shows less, so it opens with what Orbit is for.
-- **Budgets**: the primer at most 3,200 bytes; Orbit's own instructions to an engine (the primer and
-  the paragraphs after it, without the agent's own prompt) at most 7,424 bytes (6,400 until
+- **Budgets**: the primer at most 3,456 bytes (3,200 until 2026-11-20, raised for primer 1.4.4's settings
+  paragraph, [`settings-from-conversation-design.md`](./settings-from-conversation-design.md) §7); Orbit's own
+  instructions to an engine (the primer and
+  the paragraphs after it, without the agent's own prompt) at most 8,192 bytes (6,400 until
   2026-11-15, raised to 7,000 on main for the delegate paragraph a top-level session gets and to 6,656 on the
   project line by v1.9.0 for the paragraph on the engine's own sub-agents; v1.10.0 carries both, 7,178 bytes in the
-  longest shape); no paragraph longer
+  longest shape, within 7,424; raised to 7,680 with primer 1.4.4, and to 8,192 on 2026-11-23 for the workflow paragraph); no paragraph longer
   than one Codex context value (900 bytes, under Codex's 1,000-token cap whatever the tokenizer);
   ASCII.
 - **Versioned and snapshotted**: the exact text of the primer and of the four shapes of the engine

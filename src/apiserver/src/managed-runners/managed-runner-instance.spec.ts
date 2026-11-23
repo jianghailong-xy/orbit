@@ -19,6 +19,8 @@ import {
   MANAGED_RUNNER_INSTANCE_SUPERSEDED,
   MANAGED_RUNNER_POD_UID_HEADER,
   MANAGED_RUNNER_ROTATE_REFUSED,
+  LEGACY_MANAGED_RUNNER_GENERATION_HEADER,
+  LEGACY_MANAGED_RUNNER_POD_UID_HEADER,
 } from '@orbit/shared';
 
 import { ACCOUNT_DISABLED } from '../auth/disabled-accounts';
@@ -62,6 +64,18 @@ function refused(record: ManagedRunnerInstanceRecord, h: Record<string, string>,
   assert.equal(verdict.reason.code, code, label);
   assert.equal(verdict.reason.retryable, status === 503, label);
 }
+
+test('a runner image from before the rename is still known by its old header names, and the new names win', () => {
+  const legacy = headers({
+    [MANAGED_RUNNER_GENERATION_HEADER]: undefined,
+    [MANAGED_RUNNER_POD_UID_HEADER]: undefined,
+    [LEGACY_MANAGED_RUNNER_GENERATION_HEADER]: '3',
+    [LEGACY_MANAGED_RUNNER_POD_UID_HEADER]: POD,
+  });
+  assert.deepEqual(verdictOf(mapping(), legacy), { authorized: true, instance: { mappingId: MAPPING, generation: 3, podUid: POD } });
+  refused(mapping(), { ...legacy, [LEGACY_MANAGED_RUNNER_GENERATION_HEADER]: '2' }, 403, MANAGED_RUNNER_INSTANCE_SUPERSEDED, 'a legacy predecessor');
+  refused(mapping(), headers({ [LEGACY_MANAGED_RUNNER_GENERATION_HEADER]: '3', [MANAGED_RUNNER_GENERATION_HEADER]: '2' }), 403, MANAGED_RUNNER_INSTANCE_SUPERSEDED, 'the new name over the old');
+});
 
 test('only the generation and Pod the manager recorded may use a managed runner’s credential', () => {
   assert.deepEqual(verdictOf(mapping(), headers()), { authorized: true, instance: { mappingId: MAPPING, generation: 3, podUid: POD } });

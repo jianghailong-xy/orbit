@@ -490,7 +490,7 @@ test('a run that files its own FAILED through the task door delivers it too',
       // self-report about work that has already stopped.
       await stack.db.session.update({
         where: { id: f.sessionId },
-        data: { status: RunStatus.FAILED },
+        data: { status: RunStatus.FAILED, finishedAt: new Date()},
       });
       await stack.tasks.update(f.ownerId, f.taskId, { status: DeclaredTaskStatus.FAILED });
 

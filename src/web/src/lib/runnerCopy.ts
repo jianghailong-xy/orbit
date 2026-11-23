@@ -259,12 +259,58 @@ export function runnerVersionUpdatingTo(version: string): string {
   return `updating to ${version}`;
 }
 /** A managed runner — the machine Orbit runs for the account — wherever its name is shown, unless the owner
- *  renamed it. Its stored name (`orbit-managed`) is the server's, not a word for anyone to read. */
+ *  renamed it. Its stored name (`orbit-managed` on a server before migration 1250) is the server's, not a word for anyone to read. */
 export const MANAGED_RUNNER_LABEL = 'Orbit Cloud';
 /** A managed runner's version, when it reports none that is a release (its image is `managed-<sha>`). */
 export const MANAGED_RUNNER_KEPT_UP_TO_DATE = 'Kept up to date by Orbit';
 /** About's Version note on a managed runner: Orbit rolls its image, so it neither updates itself nor needs to. */
-export const MANAGED_RUNNER_UPDATED_BY_ORBIT = 'Orbit updates this machine for you.';
+export const MANAGED_RUNNER_UPDATED_BY_ORBIT = 'Orbit moves it to each new build.';
+
+// MARK: Orbit Cloud's Update card (docs/managed-runner-update-now-design.md, board 2 to 4)
+
+/** About's Version on Orbit Cloud: the build it runs, with the day it was built when known. */
+export function managedBuildLine(sha: string): string {
+  return `Build ${sha}`;
+}
+export function managedBuildLineBuilt(sha: string, built: string): string {
+  return `Build ${sha} · ${built}`;
+}
+/** A build named by the day it was built: `the Nov 18 build`. */
+export function managedBuildNamed(name: string): string {
+  return `the ${name} build`;
+}
+/** `build` is the build's name with its first letter capital: `The Nov 18 build`. */
+export function managedUpdateAvailableTitle(build: string): string {
+  return `${build} is available`;
+}
+/** Orbit Cloud's machine row while a newer build waits: the update dot's word and its tooltip. */
+export const MANAGED_UPDATE_ROW_LABEL = 'Update';
+export const MANAGED_UPDATE_ROW_TITLE = 'A new build is available';
+export const MANAGED_UPDATE_AVAILABLE_BODY =
+  'It moves the next time this runner is idle. Update Now restarts it on the new build now — usually under a minute. Your files, sign-ins and sessions stay.';
+export function managedUpdateRestartingTitle(build: string): string {
+  return `Restarting on ${build}…`;
+}
+export function managedUpdateUpdatedTitle(build: string): string {
+  return `Updated to ${build}`;
+}
+export const MANAGED_UPDATE_TAG_UPDATED = 'Updated';
+export function managedUpdateNowBodyNone(build: string): string {
+  return `No turn is running. It restarts on ${build} — usually under a minute. Your files, sign-ins and sessions stay.`;
+}
+export function managedUpdateNowBodyOne(build: string): string {
+  return `It stops this turn and restarts on ${build} — usually under a minute. It then continues where it stopped, with a note that the update interrupted it.`;
+}
+export function managedUpdateNowBodyMany(build: string): string {
+  return `It stops these turns and restarts on ${build} — usually under a minute. Each one then continues where it stopped, with a note that the update interrupted it.`;
+}
+/** Below the turns: a new container ends background jobs and the services they started. */
+export function managedUpdateNowJobs(jobs: number, noun: string): string {
+  return `${jobs} ${noun} in these sessions stop, and so do the services they started. Waiting work starts once it is back.`;
+}
+export const MANAGED_UPDATE_NOW_SERVICES =
+  'Services started in these sessions stop. Waiting work starts once it is back.';
+
 export const RUNNER_RUNS_AS_ROOT = 'root';
 export const RUNNER_RUNS_AS_REGULAR_USER = 'regular user';
 export const RUNNER_ROOT_NO_BYPASS = 'Runs as root, so sessions here can’t use Bypass permissions.';
@@ -566,6 +612,10 @@ export function agentFixFixing(workspace: string): string {
   return `An agent is fixing this in ${workspace} · `;
 }
 export const AGENT_FIX_OPEN_SESSION = 'Open session';
+/** A transcript's history row, after the agent it was handed to finished; the link opens it. */
+export function agentFixFixed(workspace: string): string {
+  return `Fixed by an agent in ${workspace} · `;
+}
 /** Under the button on an Install failed panel: where the session would run. */
 export function agentFixStartsIn(workspace: string, engine: string): string {
   return `Starts a session in ${workspace} on this machine, with ${engine}.`;
@@ -577,6 +627,10 @@ export function agentFixSignInAbove(engine: string): string {
 /** The same, after a signed-out reason on the Update engines report, which sits above the engine rows. */
 export function agentFixSignInBelow(engine: string): string {
   return ` Sign in to ${engine} below to use this.`;
+}
+/** The same, after a signed-out reason in a transcript, which has no engine list of its own. */
+export function agentFixSignInOnMachinePage(engine: string): string {
+  return ` Sign in to ${engine} on the machine page to use this.`;
 }
 export const AGENT_FIX_FAILED = 'Couldn’t start the agent';
 

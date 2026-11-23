@@ -22,7 +22,7 @@ import {
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { engineUpdateFailedLines, engineUpdateLineFailed, type LoginEngine } from '@orbit/shared';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, cleanUpWorkspaceRepo } from '../../api';
 import { encodeId, routeId } from '../../lib/idCodec';
@@ -30,6 +30,8 @@ import { machineDraftPath, machineName } from '../../lib/machineSetup';
 import { managedRowOf, useManagedRunner, useWakeForSignIn } from '../../lib/managedRunner';
 import { RunnerBrowserSection } from './RunnerBrowserSection';
 import { ManagedRunnerNotice } from '../ManagedRunnerNotice';
+import { ManagedUpdateCard } from '../ManagedUpdateCard';
+import { managedVersionLine, readUpdateOutcome } from '../../lib/managedRunnerUpdate';
 import { machineEmpty, START_A_SESSION } from '../../lib/machineSetupCopy';
 import { publishedRunnerVersionQuery, workspaceSessionCountsQuery } from '../../lib/queries';
 import { AbandonedCheckouts } from '../AbandonedCheckouts';
@@ -50,6 +52,7 @@ import { Dialog } from '../ui/Dialog';
 import { Input } from '../ui/Input';
 import { Menu, type MenuItem } from '../ui/Menu';
 import { NumberInput } from '../ui/NumberInput';
+import { EXTRA_SESSIONS_ON_DEMAND } from '../../lib/queuedCapacity';
 import { Select } from '../ui/Select';
 import { Spinner } from '../ui/Spinner';
 import { copyText } from '../../lib/clipboard';
@@ -83,7 +86,6 @@ import {
   RUNNER_COPY_COMMAND,
   RUNNER_ENGINES,
   RUNNER_RESOURCES,
-  MANAGED_RUNNER_KEPT_UP_TO_DATE,
   MANAGED_RUNNER_NOT_REPORTED,
   MANAGED_RUNNER_UPDATED_BY_ORBIT,
   RUNNER_ENGINES_FOOTER,
@@ -136,6 +138,7 @@ import { CLAUDE_REGION_CHECK_AGAIN, claudeRegionChecked } from '../../lib/claude
 import { ago, ENGINE_CLI_NAME } from '../../lib/runnerEngines';
 import { useToast } from '../../lib/toast';
 import { MachineResources } from './MachineResources';
+import { MachineSecrets } from './MachineSecrets';
 import { SettingsCard, SettingsRow, SettingsSection } from './SettingsBlocks';
 import './Settings.css';
 
@@ -158,6 +161,8 @@ const WORKSPACES_ON_MACHINE = 'Workspaces on this machine';
 const DELETE_MACHINE = 'Delete machine';
 const DELETE_MACHINE_NOTE =
   'This removes the runner and its workspaces from your account. Re-register the machine to add it back.';
+// The ceiling enforced by UpdateRunnerDto for burstConcurrent.
+const MAX_EXTRA_SESSIONS = 32;
 
 const fmtTime = (d?: string | null): string =>
   d
@@ -249,6 +254,9 @@ const MANAGED_PILL = { ready: 'online', progress: 'offline', idle: 'offline', at
 
 export function MachineSettingsPage() {
   const runnerId = routeId(useParams().id);
+  // The Updated card's record is kept on this browser; the card says when it changes, so About's line follows.
+  const [, setOutcomeRead] = useState(0);
+  const refreshOutcome = useCallback(() => setOutcomeRead((n) => n + 1), []);
   const navigate = useNavigate();
   const [confirm, confirmation] = useConfirm();
   const message = useToast();
@@ -299,10 +307,10 @@ export function MachineSettingsPage() {
   const [maxDraft, setMaxDraft] = useState<number | null>(null);
   const maxTyped = useRef<number | null>(null);
   const maxButton = useRef<HTMLButtonElement>(null);
-  // Capacity saves as it changes — Max Concurrent on its dialog's Save, Keep Free on pick. The value goes
+  // Capacity saves as it changes — Max Concurrent on its dialog's Save, dropdowns on pick. The value goes
   // into the runner list at once, so a control doesn't snap back to the old number while the save lands.
   const capacityMut = useMutation({
-    mutationFn: (patch: { maxConcurrent?: number; minFreeDiskMb?: number | null }) =>
+    mutationFn: (patch: { maxConcurrent?: number; burstConcurrent?: number; minFreeDiskMb?: number | null }) =>
       api(`/runners/${runnerId}`, { method: 'PATCH', body: patch }),
     onMutate: async (patch) => {
       await qc.cancelQueries({ queryKey: ['runners'] });
@@ -319,8 +327,9 @@ export function MachineSettingsPage() {
       if (context?.previous) qc.setQueryData(['runners'], context.previous);
       message.error("Couldn't save the capacity", e.message);
     },
-    onSettled: () => {
+    onSettled: (_data, _error, patch) => {
       void qc.invalidateQueries({ queryKey: ['runners'] });
+      if (patch.burstConcurrent !== undefined) void qc.invalidateQueries({ queryKey: ['sessions'] });
     },
   });
   // Where the disk card's "Set a Reserve…" lands.
@@ -470,10 +479,13 @@ export function MachineSettingsPage() {
   const version = runner.version?.trim() || null;
   // The account's managed runner before it first reports (preparing, waiting for capacity, failed to
   // start): no version, no readings, no engines. Once it reports, the page is the ordinary one.
+  const managedOutcome = managed && runnerId ? readUpdateOutcome(runnerId) : null;
   const managedWaiting = !!managedRow && managedRow.kind !== 'available' && !version;
+  // Orbit Cloud's version line: the build it runs (`Build 95884b1 · Nov 16`), never "Kept up to date by Orbit".
+  const managedBuild = isManaged ? managedVersionLine(managed, version, managedOutcome) : null;
   const versionNote = (() => {
-    // Orbit rolls the managed runner's image: nothing here is for its owner to do.
-    if (isManaged) return isReleaseVersion(version) ? { text: MANAGED_RUNNER_UPDATED_BY_ORBIT, warn: false } : null;
+    // Orbit rolls the managed runner's image; its Update card (managed.status.update) says when one waits.
+    if (isManaged) return managedBuild || isReleaseVersion(version) ? { text: MANAGED_RUNNER_UPDATED_BY_ORBIT, warn: false } : null;
     if (!version || !latestVersion) return null;
     const stuck = attention.find((item) => item.kind === 'cannotSelfUpdate');
     if (stuck) return { text: stuck.short, warn: true };
@@ -731,7 +743,7 @@ export function MachineSettingsPage() {
       : RUNNER_OFFLINE;
   const metaline = [
     runner.hostname || null,
-    runnerVersionLine(version, isManaged),
+    managedBuild ?? runnerVersionLine(version, isManaged),
     runner.online && runner.lastHeartbeatAt ? `${RUNNER_ABOUT_LAST_CHECK_IN} ${ago(runner.lastHeartbeatAt, nowMs)}` : null,
   ].filter(Boolean) as string[];
   // The country its IP is in, ahead of the rest; hovering it says when it was checked.
@@ -784,6 +796,11 @@ export function MachineSettingsPage() {
       {/* The managed runner's own state, Retry and the way to a model included; none while it is ready. */}
       {managed && managed.display.kind !== 'available' && (
         <ManagedRunnerNotice managed={managed} className="machine-managed-notice" />
+      )}
+
+      {/* Orbit Cloud's own Update card (docs/managed-runner-update-now-design.md): its image is behind. */}
+      {managed && (
+        <ManagedUpdateCard managed={managed} machine={shownName} runnerId={runnerId ?? ""} idle={(runner.activeSessions ?? 0) === 0} onChange={refreshOutcome} />
       )}
 
       {/* The Update card (board 4): a release this runner is behind, in the phase it reports. */}
@@ -1002,6 +1019,26 @@ export function MachineSettingsPage() {
                 </Button>
               }
             />
+            {typeof runner.burstConcurrent === 'number' && (
+              <SettingsRow
+                title={EXTRA_SESSIONS_ON_DEMAND}
+                control={
+                  <Select
+                    aria-label={EXTRA_SESSIONS_ON_DEMAND}
+                    size="small"
+                    value={String(runner.burstConcurrent)}
+                    options={Array.from({ length: MAX_EXTRA_SESSIONS + 1 }, (_, slots) => ({
+                      value: String(slots),
+                      label: String(slots),
+                    }))}
+                    onValueChange={(value) => {
+                      if (value !== null) capacityMut.mutate({ burstConcurrent: Number(value) });
+                    }}
+                    disabled={capacityMut.isPending}
+                  />
+                }
+              />
+            )}
             <SettingsRow
               title={RUNNER_KEEP_FREE}
               control={
@@ -1086,6 +1123,9 @@ export function MachineSettingsPage() {
         )}
       </SettingsSection>
 
+      {/* Copies of the owner's secrets on this machine (Settings → Secrets, filtered). Renders nothing while there are none. */}
+      <MachineSecrets runnerId={runner.id} />
+
       {/* What worktree GC may never remove: finished sessions' checkouts that still hold uncommitted
           work. Renders nothing while there are none. */}
       <AbandonedCheckouts runnerId={runner.id} canDiscard={runner.capabilities?.includes('abandoned-checkout-v1') === true} />
@@ -1109,7 +1149,7 @@ export function MachineSettingsPage() {
             title={RUNNER_ABOUT_VERSION}
             control={
               <span className="machine-about-value">
-                {isManaged && !isReleaseVersion(version) ? MANAGED_RUNNER_KEPT_UP_TO_DATE : (version ?? '—')}
+                {managedBuild ?? (isManaged && !isReleaseVersion(version) ? '—' : (version ?? '—'))}
                 {versionNote && <small className={versionNote.warn ? 'warn' : undefined}>{versionNote.text}</small>}
               </span>
             }

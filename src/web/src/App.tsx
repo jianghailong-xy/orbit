@@ -25,8 +25,9 @@ import { RunnerBrowserPage } from './pages/RunnerBrowserPage';
 import { GeneralSettingsPage } from './pages/settings/GeneralPage';
 import { NotificationsSettingsPage } from './pages/settings/NotificationsPage';
 import { AppearanceSettingsPage } from './pages/settings/AppearancePage';
-import { StorageSettingsPage } from './pages/settings/StoragePage';
-import { StorageFilesPage } from './pages/settings/StorageFilesPage';
+import { StorageSettingsPage } from './pages/files/StoragePage';
+import { ModelRoutingPage } from './pages/settings/ModelRoutingPage';
+import { StorageFilesPage } from './pages/files/StorageFilesPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AdminSignInPage } from './pages/AdminSignInPage';
 import { AdminEmailPage } from './pages/AdminEmailPage';
@@ -44,6 +45,7 @@ import { SetupPage } from './pages/SetupPage';
 import { ProjectDetailPage, ProjectsPage } from './pages/ProjectsPage';
 import { SharedLinksPage } from './pages/SharedLinksPage';
 import { AccessTokensPage } from './pages/AccessTokensPage';
+import { SecretsPage } from './pages/SecretsPage';
 import { TerminalsPage } from './pages/TerminalsPage';
 import { FeishuConnectGroupPage } from './pages/FeishuConnectGroupPage';
 import { FeishuIntegrationPage } from './pages/FeishuIntegrationPage';
@@ -55,6 +57,8 @@ import { SharedWikiDocRoute } from './pages/SharedWikiPage';
 import { TaskRoute } from './pages/TaskRoute';
 import { FollowingPage } from './pages/FollowingPage';
 import { WaitingOnYouPage } from './pages/WaitingOnYouPage';
+import { FilesPage } from './pages/FilesPage';
+import { ScheduleChangePage } from './pages/ScheduleChangePage';
 import { ScheduledPage } from './pages/ScheduledPage';
 import { WikiPage } from './pages/WikiPage';
 import { HelpLayout } from './pages/help/HelpLayout';
@@ -79,6 +83,12 @@ function LegacySessionRedirect() {
 // `/runners` lands on /infrastructure with the query it carried, which opens a machine's Settings page:
 // older macOS/iOS clients open `/runners` and `/providers` with `?runner=<id>&engine=<engine>` to sign an
 // engine in, and that machine's page still opens on that engine.
+/** The old /settings/storage/:kind/:id addresses of one Storage row's files, now under Files. */
+function StorageSettingsRedirect() {
+  const { kind, id } = useParams();
+  return <Navigate to={`/files/storage/${kind}/${id}`} replace />;
+}
+
 function InfrastructureRedirect() {
   const { search } = useLocation();
   return <Navigate to={{ pathname: '/infrastructure', search }} replace />;
@@ -94,6 +104,13 @@ function ProvidersRedirect() {
   const rest = pathname.replace(/^\/(admin\/)?providers\/?/, '');
   const to = rest === '' || /^(new|pools)(\/|$)/.test(rest) ? rest : `keys/${rest}`;
   return <Navigate to={{ pathname: `/settings/providers${to ? `/${to}` : ''}`, search }} replace />;
+}
+
+// An address a page left, landing where it went with the query it carried (a link to the Routing report's
+// Workflows view for 7 days opens Model routing on the same view and period).
+function KeepQueryRedirect({ to }: { to: string }) {
+  const { search } = useLocation();
+  return <Navigate to={{ pathname: to, search }} replace />;
 }
 
 // /settings/machines/:id, drawn afresh for each machine so nothing typed on one carries to the next.
@@ -304,8 +321,9 @@ export function App() {
             <Route path="general" element={<GeneralSettingsPage />} />
             <Route path="notifications" element={<NotificationsSettingsPage />} />
             <Route path="appearance" element={<AppearanceSettingsPage />} />
-            <Route path="storage" element={<StorageSettingsPage />} />
-            <Route path="storage/:kind/:id" element={<StorageFilesPage />} />
+            {/* Storage moved into Files (docs/mocks/orbit-files, board choice a): the old addresses lead there. */}
+            <Route path="storage" element={<Navigate to="/files/storage" replace />} />
+            <Route path="storage/:kind/:id" element={<StorageSettingsRedirect />} />
             <Route path="profile" element={<ProfilePage />} />
             {/* Old account-settings link, now Profile. Keep the redirect so existing
                 bookmarks/deep links don't 404. */}
@@ -314,8 +332,12 @@ export function App() {
             <Route path="shared-links" element={<SharedLinksPage />} />
             {/* The personal access tokens this account has issued: issue, list, revoke. */}
             <Route path="access-tokens" element={<AccessTokensPage />} />
+            {/* Every copy of a secret on a machine, and the saved secrets (project "Secrets management page"). */}
+            <Route path="secrets" element={<SecretsPage />} />
             {/* The terminals this account has approved: list, revoke (docs/terminal-session-design.md). */}
             <Route path="terminals" element={<TerminalsPage />} />
+            {/* The Routing report's old address: it is on Providers → Model routing now, its view and filters kept. */}
+            <Route path="routing-report" element={<KeepQueryRedirect to="/settings/providers/routing" />} />
             {/* The account's own Feishu or Lark app (docs/feishu-bot-design.md §4.1, §4.2). */}
             <Route path="integrations/feishu" element={<FeishuIntegrationPage />} />
             {/* Connecting a Feishu group, opened from the bot's card with its one-time ticket (docs/feishu-bot-design.md §8.1). */}
@@ -335,6 +357,9 @@ export function App() {
             <Route path="providers/keys/:id" element={<ProviderConnectPage />} />
             <Route path="providers/pools" element={<SettingsPoolsPage />} />
             <Route path="providers/pools/:id" element={<ProviderPoolPage />} />
+            {/* Every model's tier beside how its runs went; Model tiers' old address leads here. */}
+            <Route path="providers/routing" element={<ModelRoutingPage />} />
+            <Route path="providers/tiers" element={<KeepQueryRedirect to="/settings/providers/routing" />} />
             <Route path="providers/:vendor" element={<SettingsKeysPage />} />
             <Route path="workspaces/:id" element={<SettingsWorkspacePage />} />
           </Route>
@@ -357,6 +382,35 @@ export function App() {
               element={
                 <FlushView>
                   <ScheduledPage />
+                </FlushView>
+              }
+            />
+            {/* A schedule's Change… (§8.2): Orbit's opening until the person's first words open the conversation. */}
+            <Route
+              path="scheduled/:id/change"
+              element={
+                <FlushView>
+                  <ScheduleChangePage />
+                </FlushView>
+              }
+            />
+            {/* Orbit Files, the account's drive (docs/mocks/orbit-files/02-web): `?folder=` opens a folder and `?file=`
+                picks a file in it; its Trash is reached from inside it. */}
+            <Route
+              path="files"
+              element={
+                <FlushView>
+                  <FilesPage />
+                </FlushView>
+              }
+            />
+            <Route path="files/storage" element={<FlushView><StorageSettingsPage /></FlushView>} />
+            <Route path="files/storage/:kind/:id" element={<FlushView><StorageFilesPage /></FlushView>} />
+            <Route
+              path="files/trash"
+              element={
+                <FlushView>
+                  <FilesPage view="trash" />
                 </FlushView>
               }
             />

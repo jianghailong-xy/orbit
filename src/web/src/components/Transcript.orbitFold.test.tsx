@@ -211,14 +211,14 @@ describe('turns Orbit opened, folded', () => {
   });
 
   it('folds only a short answer: a watch under 220 characters, anything else under 80, never a reply', () => {
+    // A scheduled wakeup: a background job's news draws nothing at all, so it has no line to fold under (JobCard).
     const wake = (id: string, name: string) => [
-      '<background-job-wake>',
-      '  A background job you started with bg_run has news you were waiting for; the control plane opened this turn for it:',
-      `    ${id}｜query｜bash q.sh｜${name}`,
-      '      ended｜completed｜exit code 0',
-      `      output /root/.orbit/runs/x/${id}.output｜this covers bytes 0–20`,
-      '  The control plane recorded this for you; the user did not write it. Read the whole output with mcp__orbit__bg_output by id.',
-      '</background-job-wake>',
+      '<scheduled-wakeup>',
+      '  The wakeup you asked for with schedule_wakeup is due; the control plane opened this turn for it:',
+      `    2026-11-20T10:00:00.000Z scheduled 300 seconds out, due 2026-11-20T10:05:00.000Z`,
+      `    reason: ${id} ${name}`,
+      '  The control plane recorded this for you; the user did not say it.',
+      '</scheduled-wakeup>',
     ].join('\n');
     const job = (min: number, id: string, reply: string) =>
       exchange(min, { text: wake(id, id), controlPlaneNote: wake(id, id) }, reply, ['mcp__orbit__bg_output']);
@@ -239,7 +239,7 @@ describe('turns Orbit opened, folded', () => {
     expect(events.filter((e) => e.type === 'assistant').map((e) => String(e.payload.text).length).slice(1, 5)).toEqual([14, 102, 211, 256]);
     mount(events);
     // Each folds alone: the job's long answer stands between them.
-    expect(text('.orbit-exchange-root .orbit-exchange-what').map((w) => w!.split(':')[0])).toEqual(['Background job finished', 'Watch triggered']);
+    expect(text('.orbit-exchange-root .orbit-exchange-what').map((w) => w!.split(':')[0])).toEqual(['Scheduled wakeup', 'Watch triggered']);
     expect(q('.orbit-exchanges')).toBeNull();
     // A job's answer of 80 or more, a watch's of 220 or more, and any reply stay drawn as they were.
     expect(container.textContent).toContain('Found it: the job waits on lane 7');
@@ -249,7 +249,9 @@ describe('turns Orbit opened, folded', () => {
     expect(text('.chat-msg.chat-assistant').some((t) => t!.includes('Duplicate wake'))).toBe(false);
   });
 
-  it('folds a SubAgent’s end like a job’s news: a short answer folds, a long one and a failure stay drawn', () => {
+  // A SubAgent's end draws nothing (its card is the end), so there is no line to fold the turn under: what the
+  // agent said next reads on as its answer, however short.
+  it('folds no SubAgent’s end: the turn draws nothing and the agent’s answer stays in view', () => {
     const sub = (min: number, block: string, reply: string) =>
       exchange(min, { text: block, controlPlaneNote: block }, reply, []);
     seq = 0;
@@ -258,22 +260,16 @@ describe('turns Orbit opened, folded', () => {
       ...exchange(0, { text: 'Deploy it and find the callers.' }, 'Two SubAgents started.', []),
       ...sub(5, SUBAGENT_DONE, 'Waiting for PID 916891.'),
       ...exchange(8, { text: 'ok' }, 'Noted.', []),
-      ...sub(10, SUBAGENT_STEER, `Three callers. ${'Each one reads the quota before it polls, so the spec covers all three. '.repeat(2)}`),
+      ...sub(10, SUBAGENT_STEER, 'Three callers.'),
       ...sub(15, SUBAGENT_FAILED, 'Fixing it.'),
       ...exchange(30, { text: 'thanks' }, 'Done.', []),
     ];
     mount(events);
-    // The short answer folds into one row named by the line's title and the SubAgent's description.
-    expect(text('.orbit-exchange-root .orbit-exchange-what')).toEqual(['SubAgent finished: Deploy 6bb50a957 to production']);
-    expect(text('.chat-msg.chat-assistant').some((t) => t!.includes('Waiting for PID 916891'))).toBe(false);
-    // An answer of 80 or more stays drawn, under its own line.
-    expect(container.textContent).toContain('Three callers. Each one reads the quota');
-    expect(all('.sawake').map((line) => line.querySelector('.bgwake-name')?.textContent)).toEqual([
-      'Find every caller of pollQuota',
-      'Write the poller spec',
-    ]);
-    // One that did not finish stays drawn however short the answer.
-    expect(container.textContent).toContain('Fixing it.');
+    expect(q('.orbit-exchange-root, .orbit-exchanges')).toBeNull();
+    expect(all('.bgwake, .orbitwake')).toHaveLength(0);
+    for (const reply of ['Waiting for PID 916891.', 'Three callers.', 'Fixing it.']) expect(container.textContent).toContain(reply);
+    // Only the words the reader typed are bubbles.
+    expect(all('.chat-user')).toHaveLength(3);
   });
 
   it('leaves a turn the agent has not answered as the line its card draws', () => {

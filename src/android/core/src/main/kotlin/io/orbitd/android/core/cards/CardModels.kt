@@ -37,9 +37,10 @@ data class CriteriaDecision(val commitToken: String, val decision: String, val b
 data class OwnerAnswer(val key: String, val option: Int? = null, val text: String? = null)
 /** `upstreamRef` is the project's main branch as a full `refs/heads/…` ref: the owner's choice on a press, a suggestion on a
  * coordinator's request, and absent when the card offered none (the project keeps the one it stands on). `deliveryMode` is how the
- * work reaches it (§10.5 O-L1), the owner's choice on a press and absent when the card offered none. */
+ * work reaches it (§10.5 O-L1), the owner's choice on a press and absent when the card offered none. `line` is absent from a
+ * request that names none (contract §12.15 P-M2): the line is decided when the first task with commits is done. */
 @Serializable
-data class ProjectStartSettings(val line: String, val automatic: Boolean, val maxConcurrentTasks: Int,
+data class ProjectStartSettings(val line: String? = null, val automatic: Boolean, val maxConcurrentTasks: Int,
     val mergeCheckCommand: String?, val projectBranchName: String? = null, val upstreamRef: String? = null,
     val deliveryMode: String? = null, val landingCheckCommand: String? = null,
     val landingCheckTimeoutSeconds: Int? = null, val mergeCheckTimeoutSeconds: Int? = null)
@@ -273,7 +274,13 @@ object CardCatalog {
         val digest = confirmation?.obj("currentVersion")?.text("digest")
         val openItems = standing["openItems"] as? JsonObject
         val startItem = openItems?.obj("startRequest")
-        if (confirmation != null && digest != null && startItem == null &&
+        // A confirmation on record is its receipt (OrbitKit `AcceptanceConfirmationReceiptCard`): "You started the project on 5 criteria",
+        // drawn from the read, so it is here on every device and after every reopen. The question is drawn only while it still asks:
+        // once the standing set is confirmed, the receipt says so, and the card that asked is not drawn dimmed beside it (board-4).
+        StartReceipt.of(confirmation)?.let { record ->
+            add(receipt(CardFamily.ACCEPTANCE, StartReceipt.heading, record, session, project, record.text("confirmedAt") ?: ""))
+        }
+        if (confirmation != null && digest != null && startItem == null && confirmation.text("state") != "CONFIRMED" &&
             (document.objects("acceptanceCriteriaItems").isNotEmpty() || confirmation.obj("confirmation") != null)) {
             val actions = if (confirmation.text("state") in setOf("UNCONFIRMED", "STALE") && document.objects("acceptanceCriteriaItems").isNotEmpty())
                 listOf(CardVerb.CONFIRM_CRITERIA) else emptyList()

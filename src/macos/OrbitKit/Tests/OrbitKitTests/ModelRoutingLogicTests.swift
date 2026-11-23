@@ -260,16 +260,12 @@ final class ModelRoutingLogicTests: XCTestCase {
         XCTAssertTrue(capped[3].hasSuffix("…"))
     }
 
-    // MARK: the Agent's switch
+    // MARK: the Agent has no switch
 
-    func testTheAgentCarriesItsSwitchAndTheFormWritesItOnlyWhenMoved() throws {
-        let on = try JSONDecoder().decode(Agent.self, from: Data(#"{"id":"a1","name":"orbit","modelRouting":true}"#.utf8))
-        XCTAssertEqual(on.modelRouting, true)
-        let older = try JSONDecoder().decode(Agent.self, from: Data(#"{"id":"a1","name":"orbit"}"#.utf8))
-        XCTAssertNil(older.modelRouting)
-        XCTAssertEqual(try json(UpdateAgentRequest(modelRouting: true))["modelRouting"] as? Bool, true)
-        XCTAssertEqual(try json(UpdateAgentRequest(modelRouting: false))["modelRouting"] as? Bool, false)
-        XCTAssertNil(try json(UpdateAgentRequest(name: "orbit"))["modelRouting"], "nil omits the key")
+    func testTheAgentCarriesNoSwitchAndTheFormNeverSendsOne() throws {
+        let agent = try JSONDecoder().decode(Agent.self, from: Data(#"{"id":"a1","name":"orbit","modelRouting":true}"#.utf8))
+        XCTAssertEqual(agent.name, "orbit", "an old server's field is ignored, not a failure")
+        XCTAssertNil(try json(UpdateAgentRequest(name: "orbit"))["modelRouting"])
     }
 
     // MARK: the composer
@@ -288,7 +284,7 @@ final class ModelRoutingLogicTests: XCTestCase {
         XCTAssertNil(ComposerLogic.smartRoute(taskID: "T", route: nil, modelID: "claude-opus-5-5", smartSelection: true))
     }
 
-    // MARK: the account's switch (preferences.modelRouting, off by default)
+    // MARK: the account's switch (preferences.modelRouting, on by default)
 
     /// Off, every run reads as it did before routing — no tier, no shadow line, no Why — and its
     /// model line is its own row alone (web parity: `route` in TaskDetailPanel.tsx is null).

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeftOutlined,
+  ArrowRightOutlined,
   BranchesOutlined,
   CheckCircleFilled,
   ClockCircleOutlined,
@@ -24,6 +25,7 @@ import {
   UnorderedListOutlined,
   UserOutlined,
 } from '@ant-design/icons';
+import { TASK_EXEMPT_COPY, exemptCheckReason } from '../lib/landingCheck';
 import type {
   IntegrationJobKind,
   IntegrationTimelineEntry,
@@ -40,6 +42,7 @@ import {
   landingAttemptCard,
   landingCheckLabel,
   landingCheckPassed,
+  landingCheckTaskExempt,
   landingTimelineText,
   scopedLandingEntries,
   landingEntryOk,
@@ -101,6 +104,7 @@ import { Menu, type MenuItem } from './ui/Menu';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { Spinner } from './ui/Spinner';
+import { useProjectIntegration } from '../lib/pollOwner';
 
 /** How long a landing the window was opened on stays outlined (board 03 f). */
 const FOCUS_OUTLINE_MS = 1_500;
@@ -194,7 +198,7 @@ export function ProjectLandingsWindow({
   const landings = useMemo(() => landingsWindow(rows, merges, { now: new Date() }), [rows, merges]);
 
   const cards = landings.now;
-  const integrationQ = useQuery({ ...projectIntegrationQuery(projectId), enabled: cards.length > 0 });
+  const integrationQ = useProjectIntegration(projectId, cards.length > 0);
   const promotionQ = useQuery({
     ...projectPromotionQuery(projectId),
     enabled: cards.some((card) => card.subject === 'PROMOTION'),
@@ -1201,7 +1205,8 @@ function LandingSteps({
           const last = index === steps.length - 1;
           const failed = step.entries.some(({ entry, index: at }) =>
             entryGlyph(entry, section.kind, section.entries, at).tone === 'failed');
-          return failed ? 'failed' : last && live ? 'running' : last && current && attempt?.state === 'QUEUED' ? 'pending' : 'ok';
+          const skipped = step.key === 'check:LANDING_CHECK' && landingCheckTaskExempt(step.summary) !== null;
+          return failed ? 'failed' : skipped ? 'skipped' : last && live ? 'running' : last && current && attempt?.state === 'QUEUED' ? 'pending' : 'ok';
         });
         const failedCount = statuses.filter((status) => status === 'failed').length;
         const isLast = sectionIndex === lastIndex;
@@ -1279,7 +1284,7 @@ function LandingSteps({
   );
 }
 
-type StepStatus = 'ok' | 'failed' | 'running' | 'pending';
+type StepStatus = 'ok' | 'failed' | 'running' | 'pending' | 'skipped';
 
 const STEP_ICON: Record<string, ReactNode> = {
   queue: <UnorderedListOutlined />,
@@ -1329,9 +1334,12 @@ function LandingStepRow({
         onClick={() => setManual(!open)}>
         <span className="chat-tool-caret">{open ? <DownOutlined /> : <RightOutlined />}</span>
         <span className="chat-tool-icon">{STEP_ICON[step.key]}</span>
-        <span className="chat-tool-name">{step.name}</span>
-        <span className="chat-tool-summary">{landingTimelineText(step.summary)}</span>
-        {status === 'failed' ? <CloseCircleFilled className="chat-tool-status err" />
+        <span className="chat-tool-name">{status === 'skipped' ? `${step.name} · ${TASK_EXEMPT_COPY.SKIPPED}` : step.name}</span>
+        <span className="chat-tool-summary">{status === 'skipped'
+          ? exemptCheckReason(landingCheckTaskExempt(step.summary)?.reason ?? '')
+          : landingTimelineText(step.summary)}</span>
+        {status === 'skipped' ? <ArrowRightOutlined className="chat-tool-status skipped" />
+          : status === 'failed' ? <CloseCircleFilled className="chat-tool-status err" />
           : status === 'running' ? <LoadingOutlined className="chat-tool-status running" spin />
             : status === 'pending' ? <ClockCircleOutlined className="chat-tool-status pending" />
               : <CheckCircleFilled className="chat-tool-status ok" />}
@@ -1402,7 +1410,7 @@ function TimelineLine({
             selectors={selectors}
           />
         ) : null}
-        {selectors && !landingCheckPassed(entry) ? (
+        {selectors && !landingCheckPassed(entry) && !landingCheckTaskExempt(entry) ? (
           <LandingInlineOutput
             key={`inline-${selectors.jobId}-${selectors.claim}-${selectors.round ?? 0}-${selectors.check}`}
             sessionId={sessionId}
@@ -1442,7 +1450,7 @@ function useSeen<T extends Element>(): [(node: T | null) => void, boolean] {
 }
 
 /** What a timeline mark says, and the ink it says it in (mockups 05 a/e/i). */
-type TimelineTone = 'queued' | 'running' | 'ok' | 'failed' | 'takeover';
+type TimelineTone = 'queued' | 'running' | 'ok' | 'failed' | 'takeover' | 'skipped';
 
 function entryGlyph(
   entry: IntegrationTimelineEntry,
@@ -1451,6 +1459,7 @@ function entryGlyph(
   index: number,
 ): { glyph: string; tone: TimelineTone } {
   if (entry.data?.skipped === 'PATHS_EXEMPT') return { glyph: '≡', tone: 'queued' };
+  if (landingCheckTaskExempt(entry)) return { glyph: '→', tone: 'skipped' };
   switch (entry.kind) {
     case 'TAKEN_OVER':
       return { glyph: '↗', tone: 'takeover' };

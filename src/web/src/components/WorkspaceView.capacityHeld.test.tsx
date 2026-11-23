@@ -4,7 +4,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { CapacityGate } from '../lib/queuedCapacity';
 import { PendingTray } from './PendingTray';
-import { CapacityHeldTag, QueuedTurnMeta, sessionLine, statusLabel } from './WorkspaceView';
+import type { AcceptedUserTurn } from '../lib/acceptedUserTurn';
+import { cancellableHeldTurn, CapacityHeldTag, HeldFoot, QueuedTurnMeta, sessionLine, statusLabel } from './WorkspaceView';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -60,8 +61,46 @@ describe('a session a full runner, run or batch holds', () => {
       'HPC is using all 16 slots: 10 sessions are running a turn and 6 hold a slot with a background job. This message is sent as soon as one frees up.Waiting 15 min.',
     );
     expect(document.body.textContent).toContain('Runner full');
-    // Board choice 4: nothing to press in it.
+    // A server that predates Run now supplies no action or refusal.
     expect(pop?.querySelectorAll('button')).toHaveLength(0);
+  });
+
+  it.each(['runner_at_capacity', 'tree_at_capacity', 'batch_at_capacity'])(
+    'offers Run now for %s and describes the next slot on the runner',
+    async (queuedReason) => {
+      const queuedActive = queuedReason === 'runner_at_capacity' ? 16 : 3;
+      const el = mount(<CapacityHeldTag
+        gate={{ ...gate, queuedReason, queuedActive, queuedLimit: queuedActive, runNowAvailable: true }}
+        machine="HPC" runnerActive={16} runnerLimit={16} onRunNow={() => {}}
+      />);
+      await act(async () => el.querySelector('button')!.click());
+      const pop = document.querySelector('.runner-updating-pop');
+      expect(pop?.querySelector('button')?.textContent).toBe('Run now');
+      expect(pop?.querySelector('button')?.disabled).toBe(false);
+      expect(pop?.querySelector('.queued-run-now-note')?.textContent).toBe(
+        'Starts it as the 17th session on HPC. This turn only; the limit stays 16.',
+      );
+    },
+  );
+
+  it.each(['runner_offline', 'runner_updating', 'disk_below_floor', 'WORKSPACE_CLONING', 'worktree_op_pending', null])(
+    'offers no Run now for %s even if availability is stale',
+    (queuedReason) => {
+      const el = mount(<CapacityHeldTag gate={{ queuedReason, runNowAvailable: true }} onRunNow={() => {}} />);
+      expect(el.querySelector('button')).toBeNull();
+    },
+  );
+
+  it.each([
+    'HPC is already 2 over its limit, the most it can take. Wait, or stop another session.',
+    'HPC takes no sessions over its limit: its Extra sessions on demand is 0.',
+  ])('disables Run now and shows the exact refusal: %s', async (runNowRefusal) => {
+    const el = mount(<CapacityHeldTag gate={{ ...gate, runNowAvailable: false, runNowRefusal }} machine="HPC" onRunNow={() => {}} />);
+    await act(async () => el.querySelector('button')!.click());
+    const pop = document.querySelector('.runner-updating-pop');
+    expect(pop?.querySelector('button')?.textContent).toBe('Run now');
+    expect(pop?.querySelector('button')?.disabled).toBe(true);
+    expect(pop?.querySelector('.queued-run-now-note')?.textContent).toBe(runNowRefusal);
   });
 
   it('a run that is full says run full', () => {
@@ -77,6 +116,26 @@ describe('a session a full runner, run or batch holds', () => {
     expect(el.textContent).toBe('Queued·runner fullCancel');
     act(() => (el.querySelector('a') as HTMLElement).click());
     expect(cancelled).toEqual(['t1']);
+  });
+
+  it('a message accepted but not yet taken reads `Queued · runner full · Cancel`, and Cancel takes it back', () => {
+    let cancelled = 0;
+    const el = mount(<HeldFoot tag={<CapacityHeldTag gate={gate} machine="HPC" />} onCancel={() => { cancelled += 1; }} />);
+    expect(el.textContent).toBe('Queued·runner full·Cancel');
+    act(() => (el.querySelector('button.chat-held-cancel') as HTMLButtonElement).click());
+    expect(cancelled).toBe(1);
+  });
+
+  it('only an accepted placeholder with an id, never the opening prompt nor an echoed message, is cancellable', () => {
+    const turn = (over: Partial<AcceptedUserTurn>): AcceptedUserTurn => ({
+      key: 'k', sessionId: 's', source: 'activeSnapshot', turnId: 't2', text: 'Why is task 6 still queued?',
+      acceptedAt: '2026-11-20T00:00:00.000Z', attachments: [], ...over,
+    });
+    const events = [{ type: 'user', seq: 3, turnId: 't1' }, { type: 'result', seq: 4 }, { type: 'user', seq: 4.5, turnId: 't2' }];
+    expect(cancellableHeldTurn(events, 4.5, [turn({})])?.turnId).toBe('t2');
+    expect(cancellableHeldTurn(events, 4.5, [turn({ opening: true })])).toBeNull();
+    expect(cancellableHeldTurn(events, 3, [turn({})])).toBeNull();
+    expect(cancellableHeldTurn([{ type: 'user', seq: 1.5, turnId: 'k' }], 1.5, [turn({ key: 'k', turnId: undefined })])).toBeNull();
   });
 
   it('the reader’s own waiting message in the tray says it in place of `Queued for next turn` (board ②)', () => {

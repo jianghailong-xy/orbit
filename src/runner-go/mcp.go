@@ -40,6 +40,8 @@ func cmdMcp() {
 		allowOrchestration:    mcpOrchestrationEnabled(),
 		watchesOff:            !watchesEnabledFromEnv(),
 		wikiOff:               !wikiEnabledFromEnv(),
+		browserOn:             browserToolsEnabledFromEnv(),
+		workflowsOff:          !workflowsEnabledFromEnv(),
 		scheduleRun:           scheduleRunFromEnv(),
 		onlyTools:             mcpToolsFromEnv(),
 		callTimeout:           mcpCallTimeoutFromEnv(),
@@ -58,6 +60,8 @@ type mcpServer struct {
 	allowOrchestration    bool   // L3: expose session_* tools (the account's orchestration switch)
 	watchesOff            bool   // spawned with ORBIT_WATCHES=off: no watch tools (watch_rollout.go)
 	wikiOff               bool   // spawned with ORBIT_WIKI=off: no wiki tools (wiki_tools.go)
+	browserOn             bool   // spawned with ORBIT_BROWSER=on: the browser tools (browser_tools.go)
+	workflowsOff          bool   // spawned with ORBIT_WORKFLOWS=off: no workflow tool (subagent_workflow.go)
 	scheduleRun           bool   // spawned with ORBIT_SCHEDULE_RUN=1: a scheduled run's session (schedule_tools.go)
 	// Spawned with ORBIT_MCP_TOOLS: these tools and no others, listed or called (the runner-hosted job an
 	// owner's wait is handed to, handOffOwnerWait). Nil serves every tool.
@@ -298,7 +302,11 @@ const noTaskMsg = "no taskId given and no current task in context (ORBIT_TASK_ID
 
 // Where the switch is: its own card on the web's and the Mac's Settings, and a row of the Sessions page
 // on the phones (docs/mocks/ios-settings-order).
-const orchestrationOffMsg = "session orchestration is turned off for this account (Settings → Session orchestration; on a phone, Settings → Sessions → Session orchestration)"
+// orchestrationOffMsg carries the Settings row's link (docs/settings-from-conversation-design.md §6): turning the switch
+// on gives agents more reach, so only the owner can, and the agent links the row rather than describing where it is.
+const orchestrationOffMsg = "session orchestration is turned off for this account, and only the owner can turn it on: " +
+	"link the row in your reply, [Let sessions orchestrate](orbit-settings:enableOrchestration) " +
+	"(Settings → Session orchestration; on a phone, Settings → Sessions → Session orchestration)"
 
 // How many tasks one task_create_batch call may create. Mirrors the server's
 // TASK_BATCH_CREATE_MAX so the tool rejects an oversized batch before the round-trip.
@@ -385,6 +393,49 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	return s.withRecovery(name, args, mark, s.runTool(name, args))
 }
 
+func driveToolDescriptors(obj func(map[string]interface{}, ...string) map[string]interface{}) []map[string]interface{} {
+	drivePath := map[string]interface{}{"type": "string", "description": "A drive path such as /Proj/r.md or ~/Files/Proj/r.md."}
+	return []map[string]interface{}{
+		{
+			"name": "drive_put",
+			"description": "Copy a local file into the owner's Orbit Files drive. Creates missing parent folders and " +
+				"keeps the previous version when overwriting a file. Returns an orbit-drive: link for replies.",
+			"inputSchema": obj(map[string]interface{}{
+				"localPath": map[string]interface{}{"type": "string", "description": "A file in this session's checkout or uploads directory."},
+				"path":      drivePath,
+			}, "localPath", "path"),
+			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
+		},
+		{
+			"name":        "drive_get",
+			"description": "Download a drive file into this session's uploads directory and return its local path and size.",
+			"inputSchema": obj(map[string]interface{}{"path": drivePath}, "path"),
+			"annotations": map[string]interface{}{"readOnlyHint": true},
+		},
+		{
+			"name":        "drive_list",
+			"description": "List one page of a drive folder with each entry's path, kind, size and modification time.",
+			"inputSchema": obj(map[string]interface{}{
+				"path":   map[string]interface{}{"type": "string", "description": "The folder's drive path. Omit it to list the root."},
+				"cursor": map[string]interface{}{"type": "string", "description": "The nextCursor from the previous page."},
+			}),
+			"annotations": map[string]interface{}{"readOnlyHint": true},
+		},
+		{
+			"name":        "drive_move",
+			"description": "Move or rename a drive entry. This overwrites an existing file at the destination.",
+			"inputSchema": obj(map[string]interface{}{"from": drivePath, "to": drivePath}, "from", "to"),
+			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
+		},
+		{
+			"name":        "drive_delete",
+			"description": "Move a drive entry to the owner's Trash. The owner can restore it from the Files page. Agents cannot see Trash.",
+			"inputSchema": obj(map[string]interface{}{"path": drivePath}, "path"),
+			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": true},
+		},
+	}
+}
+
 func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string]interface{} {
 	// Runner-hosted background jobs are not a control-plane call at all: they are
 	// forwarded to the local runner over this session's socket (mcp_bg.go).
@@ -401,8 +452,20 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 	if result, handled := s.callWikiTool(name, args); handled {
 		return result
 	}
+	// And the browser tools: `orbit browser` runs the same runBrowserTool (browser_tools.go).
+	if result, handled := s.callBrowserTool(name, args); handled {
+		return result
+	}
 	// So are the file tools: `orbit file` runs the same runFileTool (file_tools.go).
 	if result, handled := s.callFileTool(name, args); handled {
+		return result
+	}
+	// The Orbit Files drive's tools: `orbit drive` runs the same runDriveTool (drive_tools.go).
+	if result, handled := s.callDriveTool(name, args); handled {
+		return result
+	}
+	// The owner's Settings: `orbit settings` runs the same runSettingsTool (settings_tools.go).
+	if result, handled := s.callSettingsTool(name, args); handled {
 		return result
 	}
 	// And the scheduled tasks' tools, which act as this session (schedule_tools.go).
@@ -419,9 +482,20 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 		return s.callGuide(args)
 	}
 	if s.callTimeout > 0 && s.sessionID != "" && waitsForTheOwner(name, args) {
+		// A landing check the coordinator may set with no card is written here, at once, rather
+		// than handed to a job that waits for an owner nobody needs to ask.
+		if result, written := s.landingCheckWithoutCard(name, args); written {
+			return result
+		}
 		return s.handOffOwnerWait(name, args)
 	}
 	switch name {
+	case "subagent_rate":
+		raw, err := runSubagentRate(s.t, s.sessionID, args)
+		if err != nil {
+			return toolResult("subagent_rate: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
 	case "task_list":
 		limit, err := getBoundedOptionalNumber(args, "limit", maxTaskListLimit)
 		if err != nil {
@@ -710,59 +784,9 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 		if id == "" {
 			return toolResult("projectId is required", true)
 		}
-		_, structuredCriteria := args["acceptanceCriteriaItems"]
-		if status, present := args["status"]; present {
-			statusText, ok := status.(string)
-			if !ok || (statusText != "OPEN" && statusText != "DONE" && statusText != "CANCELLED") {
-				return toolResult("status must be OPEN, DONE or CANCELLED", true)
-			}
-		}
-		body := map[string]interface{}{}
-		// The same present-only copy task_update uses, and it is what gives each prose field all
-		// three outcomes for free: absent stays absent (the project keeps what it states), a string
-		// is forwarded as given, and an explicit null survives as null rather than being mistaken
-		// for "not supplied" — that last one is the whole clear path.
-		copyIfPresent(body, args, "title", "goal", "instructions", "status")
-		// The integration line travels as the object it is. Forwarded rather than picked apart here,
-		// so the fields the server validates are the fields the caller wrote; the server refuses the
-		// whole request when a session is on it, which is every call made through this tool.
-		if integration, present := args["integration"]; present {
-			settings, ok := integration.(map[string]interface{})
-			if !ok {
-				return toolResult("integration must be an object", true)
-			}
-			body["integration"] = settings
-		}
-		// The explicit non-code mark: true sets it, false clears it. Only a boolean: the server
-		// records who wrote it, so an accidental string must not reach it as some other value.
-		if nonCode, present := args["nonCode"]; present {
-			value, ok := nonCode.(bool)
-			if !ok {
-				return toolResult("nonCode must be true or false", true)
-			}
-			body["nonCode"] = value
-		}
-		// The mark's optional reason travels with it; the server refuses it sent alone.
-		if reason, present := args["nonCodeReason"]; present && reason != nil {
-			value, ok := reason.(string)
-			if !ok {
-				return toolResult("nonCodeReason must be a string", true)
-			}
-			body["nonCodeReason"] = value
-		}
-		if structuredCriteria {
-			items, err := normalizeMCPProjectAcceptanceItems(args["acceptanceCriteriaItems"], true)
-			if err != nil {
-				return toolResult(err.Error(), true)
-			}
-			body["acceptanceCriteriaItems"] = items
-		}
-		// The fence, counted separately: it names no field to write, so an update carrying only it
-		// would be a request that changes nothing while claiming to have gone through.
-		fields := len(body)
-		copyIfPresent(body, args, "expectedConfigRevision")
-		if fields == 0 {
-			return toolResult("no fields to update", true)
+		body, invalid := projectUpdateBody(args)
+		if invalid != "" {
+			return toolResult(invalid, true)
 		}
 		// A merge-check change goes to the owner first, and the edit itself goes with the calling
 		// session. Not to move anything — the server settles a project's coordinator when it is
@@ -1252,7 +1276,7 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "verification", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "startWhen", "engine", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff", "idempotencyKey")
+		copyIfPresent(body, args, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "verification", "acceptanceCriteria", "criterionKey", "codeless", "landingCheckExempt", "landingCheckExemptReason", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "startWhen", "engine", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff", "idempotencyKey")
 		// Before the card, so the card's forecast says what the yes will do (task_start_now.go).
 		startNow := getBool(args, "startNow")
 		if startNow {
@@ -1338,7 +1362,7 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
 			}
 			body := map[string]interface{}{"title": title}
-			copyIfPresent(body, item, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "startWhen", "engine", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef", "handoff")
+			copyIfPresent(body, item, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "codeless", "landingCheckExempt", "landingCheckExemptReason", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "startWhen", "engine", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef", "handoff")
 			// An item's startNow is its schedule alone: runAt = now, which the batch card already
 			// counts as starting within the minute. No item is started one by one — the server's
 			// once-a-minute scan starts them, so a batch stays one decision about how many runs begin.
@@ -1412,7 +1436,7 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 		// gives it all three outcomes for free: absent stays absent (the task keeps what it says),
 		// a string is forwarded as given, and an explicit null survives as null rather than being
 		// mistaken for "not supplied" — that last one is the whole clear path.
-		copyIfPresent(body, args, "title", "description", "status", "listId", "projectId", "fixesOpenItemId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "runAt", "engine", "provider", "model", "modelHint", "modelHintReason", "acceptanceCriteria", "criterionKey", "codeless", "codelessReason", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "dependsOnTaskIds", "autoRunWhenReady", "priority", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason", "handoff")
+		copyIfPresent(body, args, "title", "description", "status", "listId", "projectId", "fixesOpenItemId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "runAt", "engine", "provider", "model", "modelHint", "modelHintReason", "acceptanceCriteria", "criterionKey", "codeless", "codelessReason", "landingCheckExempt", "landingCheckExemptReason", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "dependsOnTaskIds", "autoRunWhenReady", "priority", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason", "handoff")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -2169,13 +2193,26 @@ var ownerWaitTools = map[string]bool{
 	"task_create": true, "task_create_batch": true, "project_create": true, "project_blocker_resolve": true,
 	"tasklist_propose_dag": true, "provider_create": true, "provider_update": true, "provider_delete": true,
 	"integration_skip_merge_check": true, "runner_delete": true, "agent_delete": true,
+	"browser_clear_logins": true,
+	// The owner signing in to a site in the Orbit Cloud browser (browser_tools.go).
+	browserRequestSignInTool: true,
 }
 
 // The merge-check fields, in the spelling the server's DTO and the card both use. Everything else
 // in an integration object — the line (`line`, `projectBranchName`, `upstreamRef`) and anything a
 // later version adds — belongs to the account owner, which is what `mergeCheckProposal` says by
 // refusing to cover it.
-var integrationMergeCheckFields = []string{"mergeCheckCommand", "mergeCheckTimeoutSeconds", "landingCheckCommand", "landingCheckTimeoutSeconds"}
+var integrationMergeCheckFields = []string{"mergeCheckCommand", "mergeCheckTimeoutSeconds", "landingCheckCommand", "landingCheckTimeoutSeconds", "landingCheck"}
+
+// The landing-check fields: the ones a project's coordinator may write with no card on a project
+// branch that has a merge check (contract §12.15 P-C1). The server decides whether that holds; the
+// runner only tries the write without a card first (landingCheckWithoutCard).
+var integrationLandingCheckFields = map[string]bool{"landingCheckCommand": true, "landingCheckTimeoutSeconds": true, "landingCheck": true}
+
+// landingCheckReasonField is the words of a cardless landing-check write (contract §12.15 P-R1): required
+// by the server on that write, at most 280 characters. It is not a setting, so it is neither a landing-check
+// field nor part of any card's proposal.
+const landingCheckReasonField = "landingCheckReason"
 
 // waitsForTheOwner says whether a call puts a card in front of the owner and blocks until it is
 // answered.
@@ -2541,6 +2578,122 @@ func resolveBlockerWithApproval(t *Transport, sessionID, projectID, blockerID, r
 	return raw, "", err
 }
 
+// projectUpdateBody is the body project_update sends for these arguments, or the sentence that
+// says why they cannot be sent. One builder for the tool and for landingCheckWithoutCard, so the
+// write tried without a card is the write the card would be about.
+func projectUpdateBody(args map[string]interface{}) (map[string]interface{}, string) {
+	_, structuredCriteria := args["acceptanceCriteriaItems"]
+	if status, present := args["status"]; present {
+		statusText, ok := status.(string)
+		if !ok || (statusText != "OPEN" && statusText != "DONE" && statusText != "CANCELLED") {
+			return nil, "status must be OPEN, DONE or CANCELLED"
+		}
+	}
+	body := map[string]interface{}{}
+	// The same present-only copy task_update uses, and it is what gives each prose field all
+	// three outcomes for free: absent stays absent (the project keeps what it states), a string
+	// is forwarded as given, and an explicit null survives as null rather than being mistaken
+	// for "not supplied" — that last one is the whole clear path.
+	copyIfPresent(body, args, "title", "goal", "instructions", "status")
+	// The integration line travels as the object it is. Forwarded rather than picked apart here,
+	// so the fields the server validates are the fields the caller wrote; the server refuses the
+	// whole request when a session is on it, which is every call made through this tool.
+	if integration, present := args["integration"]; present {
+		settings, ok := integration.(map[string]interface{})
+		if !ok {
+			return nil, "integration must be an object"
+		}
+		body["integration"] = settings
+	}
+	// The explicit non-code mark: true sets it, false clears it. Only a boolean: the server
+	// records who wrote it, so an accidental string must not reach it as some other value.
+	if nonCode, present := args["nonCode"]; present {
+		value, ok := nonCode.(bool)
+		if !ok {
+			return nil, "nonCode must be true or false"
+		}
+		body["nonCode"] = value
+	}
+	// The mark's optional reason travels with it; the server refuses it sent alone.
+	if reason, present := args["nonCodeReason"]; present && reason != nil {
+		value, ok := reason.(string)
+		if !ok {
+			return nil, "nonCodeReason must be a string"
+		}
+		body["nonCodeReason"] = value
+	}
+	if structuredCriteria {
+		items, err := normalizeMCPProjectAcceptanceItems(args["acceptanceCriteriaItems"], true)
+		if err != nil {
+			return nil, err.Error()
+		}
+		body["acceptanceCriteriaItems"] = items
+	}
+	// The fence, counted separately: it names no field to write, so an update carrying only it
+	// would be a request that changes nothing while claiming to have gone through.
+	fields := len(body)
+	copyIfPresent(body, args, "expectedConfigRevision")
+	if fields == 0 {
+		return nil, "no fields to update"
+	}
+	return body, ""
+}
+
+// landingCheckOnly says whether an integration object names landing-check fields and nothing else.
+func landingCheckOnly(settings map[string]interface{}) bool {
+	if len(settings) == 0 {
+		return false
+	}
+	named := 0
+	for key := range settings {
+		if key == landingCheckReasonField {
+			continue
+		}
+		if !integrationLandingCheckFields[key] {
+			return false
+		}
+		named++
+	}
+	return named > 0
+}
+
+// landingCheckWithoutCard writes a project_update whose integration object names only the landing
+// check, with no card, for the session that coordinates the project (contract §12.15 P-C1): on a
+// project branch with a merge check the server takes that write from the coordinator as it is.
+// written is false when the call is not one of these, or the server answered that this write still
+// needs the owner's card (403 INTEGRATION_SETTINGS_OWNER_ONLY, nothing written): the caller then
+// asks the owner as before. Any other failure is the call's answer.
+func (s *mcpServer) landingCheckWithoutCard(name string, args map[string]interface{}) (map[string]interface{}, bool) {
+	if name != "project_update" || !landingCheckOnly(integrationSettingsOf(args)) {
+		return nil, false
+	}
+	id := getString(args, "projectId")
+	body, invalid := projectUpdateBody(args)
+	if id == "" || invalid != "" {
+		return nil, false
+	}
+	raw, needsCard, err := updateProjectWithoutCard(s.t, s.sessionID, id, body)
+	if needsCard {
+		return nil, false
+	}
+	s.rec.sentBody(body)
+	if err != nil {
+		return toolResult("update project failed: "+err.Error(), true), true
+	}
+	return toolResult(prettyJSON(raw), false), true
+}
+
+// updateProjectWithoutCard sends the update with no card. needsCard is true when the server refused
+// it as a write that needs the owner's card, which writes nothing.
+func updateProjectWithoutCard(t *Transport, sessionID, projectID string, body map[string]interface{}) (raw json.RawMessage, needsCard bool, err error) {
+	raw, err = t.updateProject(sessionID, projectID, body)
+	var refused *transportHTTPError
+	if errors.As(err, &refused) && refused.statusCode == 403 && refused.code() == "INTEGRATION_SETTINGS_OWNER_ONLY" {
+		return nil, true, nil
+	}
+	return raw, false, err
+}
+
 // integrationSettingsOf reads an update's `integration` object, when it carries one.
 func integrationSettingsOf(args map[string]interface{}) map[string]interface{} {
 	settings, _ := args["integration"].(map[string]interface{})
@@ -2582,7 +2735,7 @@ func mergeCheckProposal(settings map[string]interface{}) (map[string]interface{}
 		return nil, false
 	}
 	for key := range settings {
-		if !isMergeCheckField(key) {
+		if key != landingCheckReasonField && !isMergeCheckField(key) {
 			return nil, false
 		}
 	}
@@ -2783,6 +2936,14 @@ func updateProjectWithApproval(t *Transport, sessionID, projectID string, body m
 	if sessionID != "" {
 		settings, _ := body["integration"].(map[string]interface{})
 		if proposal, gated := mergeCheckProposal(settings); gated {
+			// The project's coordinator sets the landing check of a project branch with a merge
+			// check without a card (§12.15 P-C1): try that first, and ask only when it is refused.
+			if landingCheckOnly(settings) {
+				raw, needsCard, err := updateProjectWithoutCard(t, sessionID, projectID, body)
+				if !needsCard {
+					return raw, "", err
+				}
+			}
 			input, err := projectMergeCheckCard(t, projectID, proposal)
 			if err != nil {
 				return nil, "", err
@@ -2887,6 +3048,9 @@ func (s *mcpServer) permissionPrompt(args map[string]interface{}) map[string]int
 	if answer, decided := s.answerOrbitToolPrompt(args); decided {
 		return answer
 	}
+	if s.planDriveWritePrompt(args) {
+		return toolResult(denyJSON(planDriveRefusal), false)
+	}
 	body, refusal := approvalBodyOfPrompt(args)
 	if refusal != "" {
 		return toolResult(denyJSON(refusal), false)
@@ -2967,6 +3131,22 @@ func (s *mcpServer) answerOrbitToolPrompt(args map[string]interface{}) (map[stri
 		return toolResult(denyJSON(refusal), false), true
 	}
 	return toolResult(allowJSON(args["input"], nil), false), true
+}
+
+// planDriveWritePrompt reports whether Claude's permission prompt asks about a write under the Files drive in a
+// session that is in Plan mode now, which is refused without a card (plan_drive.go). The live mode is read only for a
+// call that writes there; a mode that cannot be read leaves the call to the card, as before.
+func (s *mcpServer) planDriveWritePrompt(args map[string]interface{}) bool {
+	input, _ := args["input"].(map[string]interface{})
+	if !planDriveWrite(getString(args, "tool_name"), input) {
+		return false
+	}
+	mode := s.permissionMode
+	if mode == nil {
+		mode = sessionPermissionMode
+	}
+	current, known, err := mode()
+	return known && err == nil && current == "plan"
 }
 
 // askQuestionInput rebuilds AskUserQuestion's input for an allow decision: the

@@ -87,6 +87,8 @@ object ManagedRunner {
         val canEnsure: Boolean,
         val canWake: Boolean,
         val canRetry: Boolean,
+        /** The runner runs an older build than the current image's (docs/managed-runner-update-now-design.md); null when current or unknown. */
+        val update: ManagedUpdate? = null,
     )
 
     data class Display(
@@ -134,6 +136,7 @@ object ManagedRunner {
             canEnsure = actions?.bool("canEnsure") == true,
             canWake = actions?.bool("canWake") == true,
             canRetry = actions?.bool("canRetry") == true,
+            update = ManagedRunnerUpdateLogic.update(o),
         )
     }
 
@@ -229,7 +232,8 @@ object ManagedRunner {
         const val COMPOSER = "Your managed runner is asleep. Sending wakes it (about 10 s)."
     }
 
-    const val REPOS_ROOT = "/home/orbit/orbit-repos"
+    /** The managed runner's home, fixed by its image: a new folder goes here before it has reported (@orbit/shared MANAGED_RUNNER_HOME). */
+    const val HOME = "/home/orbit"
     object Setup {
         val NOTICE = mapOf(
             "preparing" to "Orbit is setting up your managed runner. You can create the workspace now; your first session starts when it’s ready.",

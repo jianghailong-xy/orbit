@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
+import { isReleasedStatus } from '../common/session-release';
 import { AgentProvider, PermissionMode, SESSION_SOURCE_PIN_V1 } from '@orbit/shared';
 import { encryptSecret } from '../providers/provider-crypto';
 import { QueueService } from '../queue/queue.service';
@@ -75,6 +76,8 @@ function sessions(runnerFacts: { capabilities: string[]; capabilitiesReportedAt:
     permissionMode: engine === AgentProvider.CURSOR ? PermissionMode.ACCEPT_EDITS : PermissionMode.DEFAULT,
     usesRuntimeDefaultModel: true, runtimeSessionId: '55555555-5555-4555-8555-555555555555', numTurns: 3,
     startedAt: new Date(), status: options.status ?? RunStatus.FAILED,
+    // A terminal row carries its release column (session_release_fact_chk).
+    ...(isReleasedStatus(options.status ?? RunStatus.FAILED) ? { finishedAt: new Date() } : {}),
     assignedRunnerId: runner.id, assignedRunner: runner, owner: { preferences: {} },
     workspace: null, cancelRequestedAt: null, completedAt: null, archivedAt: null,
     deletedAt: null, mergeStatus: null, commitStatus: null,
@@ -253,7 +256,12 @@ test('Rollback messages: a claim clears the install notice once a runner takes t
   let sql: { values: readonly unknown[] } | undefined;
   const tx = {
     $executeRaw: async () => 0,
-    $queryRaw: async (...args: unknown[]) => { sql = renderRawQuery(args); return []; },
+    $queryRaw: async (...args: unknown[]) => {
+      // Only the claim statement: Run now's pass check (an EXISTS) follows a claim that took nothing.
+      const rendered = renderRawQuery(args);
+      if (rendered.text.includes('UPDATE "session" SET')) sql = rendered;
+      return [];
+    },
   };
   const prisma = {
     session: { findMany: async () => [] },

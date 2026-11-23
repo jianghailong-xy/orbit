@@ -144,13 +144,15 @@ internal fun scheduleClock(iso: String?, timezone: String): String =
 private data class ScheduleRowModel(val id: String, val circle: ScheduleDisplay.CircleView, val title: String, val line: String,
     val repeats: Boolean, val time: String, val draft: Boolean, val paused: Boolean,
     /** A condition's row: the newest reading and its age, where a timed row shows its time (board ④ ②). */
-    val reading: ConditionDisplay.RowReading? = null, val open: () -> Unit)
+    val reading: ConditionDisplay.RowReading? = null,
+    /** The planned end, on its own line so the row's line never cuts it off. */
+    val end: String? = null, val open: () -> Unit)
 
 /**
  * The Scheduled page: "Scheduled 6" and the workspace filter, the timeline's groups, the line at the end, and the detail sheet of
  * the row pressed. [focused] — a schedule a push or a card named — opens its sheet. [workspaces] are the quick-add line's choices,
  * [preferredWorkspace] is the initial choice. [openSession] opens a draft's conversation, and [openRun] opens a run's session.
- * [change] starts a conversation in the schedule's workspace.
+ * [change] opens the schedule's draft change conversation (§8.2).
  */
 @Composable
 fun ScheduledPage(store: ScheduledStore, workspaces: List<Pair<String, String>>, preferredWorkspace: String?, focused: String?,
@@ -283,6 +285,14 @@ private fun rows(group: ScheduleDisplay.TimelineGroup, state: ScheduledStore.Sta
                 else { store.inspect(s.id); store.loadDetail(s.id) }
             }
         }
+        // A streak of missed slots as one row: "16 slots missed, 01:00–08:30".
+        is ScheduleDisplay.TimelineItem.Missed -> {
+            val s = item.schedule
+            ScheduleRowModel("${group.id}-${item.id}", ScheduleDisplay.runCircle("MISSED"), s.title,
+                ScheduleDisplay.missedText(item.runs, zone), repeats = false, time = scheduleClock(item.at, zone), draft = false, paused = false) {
+                store.inspect(s.id); store.loadDetail(s.id)
+            }
+        }
         is ScheduleDisplay.TimelineItem.Schedule -> {
             val s = item.schedule
             val inPaused = group.key == ScheduleDisplay.GroupKey.paused
@@ -303,8 +313,9 @@ private fun rows(group: ScheduleDisplay.TimelineGroup, state: ScheduledStore.Sta
                     store.inspect(s.id); store.loadDetail(s.id)
                 }
             }
-            ScheduleRowModel("${group.id}-${item.id}", circle, s.title, ScheduleDisplay.phoneRowLine(s.rule, s.workspaceName, s.accessLevel, s.state, s.heldReason, pausedAt, zone),
-                ScheduleDisplay.ruleRepeats(s.rule), time, draft = false, paused = inPaused) {
+            val line = ScheduleDisplay.phoneRowLine(s.rule, s.workspaceName, s.accessLevel, s.state, s.heldReason, pausedAt, zone)
+            ScheduleRowModel("${group.id}-${item.id}", circle, s.title, line,
+                ScheduleDisplay.ruleRepeats(s.rule), time, draft = false, paused = inPaused, end = ScheduleDisplay.endText(s, now, zone)) {
                 store.inspect(s.id); store.loadDetail(s.id)
             }
         }
@@ -341,6 +352,8 @@ private fun ScheduleRow(row: ScheduleRowModel) {
                 // One line, the phone's short grammar; the tail gives way if it must.
                 Text((if (row.repeats) "↻ " else "") + row.line, style = MaterialTheme.typography.bodySmall, color = secondary,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
+                // The planned end on its own line: "until 23:00 today · 3 runs left" is the part a reader must not lose.
+                row.end?.let { Text(it, Modifier.testTag("schedule-row-end"), style = MaterialTheme.typography.bodySmall, color = secondary) }
             }
         }
     }
@@ -421,7 +434,7 @@ private fun ScheduleDetailSheet(store: ScheduledStore, id: String, close: () -> 
             LaunchedEffect(conditionId) { conditionId?.let(store::loadCondition) }
             // A WHEN rule has no time, so its zone says nothing.
             val meta = listOfNotNull(ScheduleDisplay.ruleText(s.rule, ScheduleDisplay.RuleForm.short), s.timezone.takeIf { conditionId == null },
-                s.workspaceName, ScheduleDisplay.accessCopy(s.accessLevel).label).joinToString(SC.separator)
+                s.workspaceName, ScheduleDisplay.accessCopy(s.accessLevel).label, ScheduleDisplay.endText(s, now, zone)).joinToString(SC.separator)
             val next = s.nextDueAt?.let(ScheduleDisplay::parse)?.let { ScheduleDisplay.whenText(it, now, zone) } ?: "—"
             val lastLine = lastRun?.let { run ->
                 val at = ScheduleDisplay.parse(run.startedAt ?: run.plannedAt)?.let { ScheduleDisplay.whenText(it, now, zone) }.orEmpty()
@@ -569,6 +582,12 @@ private fun HistorySection(store: ScheduledStore, s: ScheduleView, detail: Sched
                         Column(Modifier.weight(1f)) {
                             Text(ScheduleDisplay.recordText(record), style = MaterialTheme.typography.bodyMedium)
                             Text(whenText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            // Asked for in the schedule's change conversation (§8.2): the person's words, opening it.
+                            record.askedText?.takeIf { record.sessionId != null }?.let { asked ->
+                                Text("“$asked”${SC.separator}${SC.ChangeConversation.conversation}",
+                                    Modifier.clickable { record.sessionId?.let(openSession) }.testTag("schedule-history-asked"),
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                            }
                         }
                         Chip(who.text, if (who.who == "USER" || who.who == "ALLOWED") ScheduleDisplay.TagTone.new else ScheduleDisplay.TagTone.mute)
                         if (ScheduleDisplay.recordUndoable(record)) TextButton(onClick = { scope.launch { store.undo(s.id, record.revision) } },

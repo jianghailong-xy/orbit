@@ -51,6 +51,10 @@ export const RUNNER_BROWSER_COPY = {
   clearAsked: 'Saved logins will be cleared when the runner next checks in',
   clearPending: 'Clearing when the runner next checks in…',
   clearFailed: "Couldn't clear saved logins",
+  // The sign-in request's banner above the tab's bar (board 03-agent-tools frame ①, notes ④ ⑤).
+  signInAsked: (site: string, title: string | null) => (title ? `Sign in to ${site}, asked by “${title}”` : `Sign in to ${site}`),
+  signedIn: 'I’m signed in',
+  signedInFailed: "Couldn't send your answer",
 } as const;
 
 /** `GET /runners/:id/browser`, or null when the server has no browser for it (the switch off answers 404). */
@@ -94,8 +98,8 @@ export function runnerBrowserTabPath(runnerId: string, control = false): string 
  * Opens the runner's browser in its tab, already in control or view only. One tab per runner (a named window), so
  * pressing twice does not take both of the runner's two streams. Called on the click, so no pop-up blocker stops it.
  */
-export function openRunnerBrowserTab(runnerId: string, control: boolean): void {
-  window.open(runnerBrowserTabPath(runnerId, control), `orbit-browser-${runnerId}`);
+export function openRunnerBrowserTab(runnerId: string, control: boolean): Window | null {
+  return window.open(runnerBrowserTabPath(runnerId, control), `orbit-browser-${runnerId}`);
 }
 
 /** Whether the viewer runs on a Mac (or an iPad), whose paste key is ⌘V. */

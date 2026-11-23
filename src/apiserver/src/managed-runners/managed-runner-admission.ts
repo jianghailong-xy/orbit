@@ -2,6 +2,8 @@ import type { ManagedRunnerManagementState } from '@prisma/client';
 
 import type { Pod } from './kube-client';
 import {
+  DRIVE_CSI_DRIVER,
+  DRIVE_MOUNT,
   GENERATION_ANNOTATION,
   OWNER_ANNOTATION,
   PVC_UID_ANNOTATION,
@@ -38,8 +40,13 @@ import {
  *   - its owner, runner, PVC UID and generation annotations are the mapping's, and that generation
  *     is reserved: the mapping is STARTING with no Pod recorded and a CREATE_POD pending;
  *   - every container runs the profile's pinned image, it has no ephemeral containers, and its
- *     volumes are only that claim, emptyDirs and its own bootstrap Secret — no host namespaces,
- *     host paths or privileged containers.
+ *     volumes are only that claim, emptyDirs, its own bootstrap Secret and at most one Orbit Files
+ *     drive volume — no host namespaces, host paths or privileged containers. The drive volume
+ *     (docs/orbit-files-drive-technical-design.md §6.1, B13) is a `csi` volume of `files.orbit.dev`
+ *     whose attributes are exactly `{ runnerId }` of this mapping, mounted only by the `runner`
+ *     container, only at /run/orbit-files, only with HostToContainer, writable. Outside this
+ *     namespace the cluster-wide policy `orbit-files-driver` refuses the driver
+ *     (deploy/managed-runner/files-csi/admission-policy.yaml), and the plugin checks the namespace too.
  *
  * Concurrent creates under the fixed name are left to the API server, which stores one object per
  * name; a create under any other name, or by anyone else, or for a generation that is not reserved,
@@ -53,7 +60,9 @@ import {
  */
 
 /** Every refusal message starts with this, so the manager's dry-run probe can recognise the guard. */
-export const MANAGED_ADMISSION_DENIAL_MARKER = 'orbit-managed-runner-admission';
+export const MANAGED_ADMISSION_DENIAL_MARKER = 'orbit-cloud-runner-admission';
+/** The marker an apiserver from before the rename starts its refusals with, while one may still answer the webhook. */
+export const LEGACY_MANAGED_ADMISSION_DENIAL_MARKER = 'orbit-managed-runner-admission';
 
 /** The parts of an AdmissionReview v1 request the decision reads. */
 export interface PodAdmissionRequest {
@@ -134,6 +143,34 @@ export function podImages(pod: Pod | null | undefined): string[] {
   return [...containersOf(pod, 'initContainers'), ...containersOf(pod, 'containers')].map((c) => String(c.image ?? ''));
 }
 
+/** Whether `volume` is this mapping's Orbit Files drive: the one CSI volume, naming only its runner. */
+function isDriveVolume(volume: PodVolume, mapping: PodAdmissionMapping): boolean {
+  const csi = volume.csi as { driver?: unknown; volumeAttributes?: unknown; readOnly?: unknown; fsType?: unknown; nodePublishSecretRef?: unknown } | undefined;
+  if (!csi || typeof csi !== 'object' || csi.driver !== DRIVE_CSI_DRIVER) return false;
+  if (Object.keys(csi).some((key) => key !== 'driver' && key !== 'volumeAttributes')) return false;
+  const attributes = csi.volumeAttributes as Record<string, unknown> | undefined;
+  return !!attributes && typeof attributes === 'object'
+    && Object.keys(attributes).length === 1 && attributes.runnerId === mapping.runnerId;
+}
+
+/** Why the drive volume `name` is mounted somewhere it may not be, or null: only the runner, at one path, as a slave. */
+function driveMountProblem(pod: Pod, name: string): string | null {
+  for (const key of ['initContainers', 'containers'] as const) {
+    for (const container of containersOf(pod, key)) {
+      const mounts = Array.isArray(container.volumeMounts) ? (container.volumeMounts as Array<Record<string, unknown>>) : [];
+      for (const mount of mounts.filter((m) => m.name === name)) {
+        if (key !== 'containers' || container.name !== 'runner') return `the drive is mounted in ${JSON.stringify(container.name)}, not only the runner`;
+        const extra = Object.keys(mount).filter((k) => !['name', 'mountPath', 'mountPropagation', 'readOnly'].includes(k));
+        if (extra.length > 0) return `the drive mount sets ${extra.join(', ')}`;
+        if (mount.mountPath !== DRIVE_MOUNT) return `the drive is mounted at ${JSON.stringify(mount.mountPath)}, not ${DRIVE_MOUNT}`;
+        if (mount.mountPropagation !== 'HostToContainer') return 'the drive is not mounted with HostToContainer propagation';
+        if (mount.readOnly === true) return 'the drive is mounted read-only';
+      }
+    }
+  }
+  return null;
+}
+
 /** Why the Pod is not the manager's runner template, or null when it is. */
 function templateProblem(pod: Pod, mapping: PodAdmissionMapping, policy: PodAdmissionPolicy): string | null {
   const spec = pod.spec as Record<string, unknown>;
@@ -143,15 +180,20 @@ function templateProblem(pod: Pod, mapping: PodAdmissionMapping, policy: PodAdmi
   const all = [...containersOf(pod, 'initContainers'), ...containersOf(pod, 'containers')];
   if (all.length === 0 || all.some((c) => c.image !== policy.image)) return 'a container does not run the pinned runner image';
   if (all.some((c) => (c.securityContext as Record<string, unknown> | undefined)?.privileged === true)) return 'a container is privileged';
+  let drive: string | null = null;
   for (const volume of volumesOf(pod)) {
     const kinds = Object.keys(volume).filter((key) => key !== 'name');
     const kind = kinds.length === 1 ? kinds[0] : null;
     if (kind === 'persistentVolumeClaim' && volume.persistentVolumeClaim?.claimName === mapping.pvcName) continue;
     if (kind === 'emptyDir') continue;
     if (kind === 'secret' && (volume.secret as { secretName?: unknown } | undefined)?.secretName === managedSecretName(mapping.runnerId)) continue;
+    if (kind === 'csi' && !drive && isDriveVolume(volume, mapping)) {
+      drive = volume.name;
+      continue;
+    }
     return `volume ${JSON.stringify(volume.name)} is not one a managed runner Pod may have`;
   }
-  return null;
+  return drive === null ? null : driveMountProblem(pod, drive);
 }
 
 /** Same identity, same volumes, same images, before and after an update. */

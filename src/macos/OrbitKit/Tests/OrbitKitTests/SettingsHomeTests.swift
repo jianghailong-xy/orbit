@@ -71,7 +71,7 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(SessionSettings.Row.allCases,
                        [.defaultPermission, .orchestration, .modelRouting, .optimizeFor, .promptSuggestions, .recaps])
         XCTAssertEqual(SessionSettings.Row.allCases.map(SessionSettings.title),
-                       ["Default permission", "Session orchestration", "Smart model selection", "Optimize For",
+                       ["Default permission", "Session orchestration", "Route by tier", "Optimize For",
                         "Suggested replies", "Session recaps"])
         XCTAssertEqual(SessionSettings.footer(.defaultPermission), SettingsCopy.defaultPermissionHint)
         XCTAssertEqual(SessionSettings.footer(.orchestration), SettingsCopy.letSessionsOrchestrateHint)
@@ -90,6 +90,16 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(SessionSettings.groups,
                        [.row(.defaultPermission), .translation, .row(.orchestration), .row(.modelRouting),
                         .row(.optimizeFor), .row(.promptSuggestions), .promptOptimizer, .row(.recaps)])
+    }
+
+    /// Optimize For is drawn only while smart model selection is on, the one thing that reads it
+    /// (owner, 2026-11-20); every other row always is.
+    func testOptimizeForShowsOnlyWhileSmartModelSelectionIsOn() {
+        XCTAssertTrue(SessionSettings.shows(.optimizeFor, smartModelSelection: true))
+        XCTAssertFalse(SessionSettings.shows(.optimizeFor, smartModelSelection: false))
+        for row in SessionSettings.Row.allCases where row != .optimizeFor {
+            XCTAssertTrue(SessionSettings.shows(row, smartModelSelection: false), row.rawValue)
+        }
     }
 
     // MARK: - What a row says

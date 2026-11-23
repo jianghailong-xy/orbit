@@ -45,6 +45,7 @@ import {
   enqueueForDoneTask,
   integrationDedupeKey,
   integrationItemTitle,
+  settleDeliveredIdentityAfterFinish,
 } from './project-integration-job';
 import { configureProjectIntegration } from './project-integration-line';
 import { recordIntegrationFailure, recordPromotionApproval } from './project-open-item';
@@ -331,6 +332,7 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<stri
   });
   const sessionId = randomUUID();
   const turnId = randomUUID();
+  const finishedAt = new Date(Date.now() - 60_000);
   await db.session.create({
     data: {
       id: sessionId,
@@ -346,9 +348,6 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<stri
       dispatchOrigin: SessionDispatchOrigin.USER,
       startsTaskWork: true,
       startedAt: new Date(),
-      // The task's work has stopped moving (§2.6 J-T1a): a minute ago, so every claim that follows
-      // is unambiguously later than it.
-      finishedAt: new Date(Date.now() - 60_000),
       branch: `orbit/${label}`,
       isolationStatus: 'worktree',
       baseSha: 'b'.repeat(40),
@@ -390,6 +389,15 @@ async function doneCodeTask(stack: Stack, w: World, label: string): Promise<stri
   });
   const task = await db.task.findUniqueOrThrow({ where: { id: declared.id }, select: { status: true } });
   assert.equal(task.status, TaskStatus.DONE, 'the acceptance command agreed');
+  // The task's work stopped a minute ago (§2.6 J-T1a), before any integration claim.
+  await db.$transaction(async (tx) => {
+    const finished = await tx.session.update({
+      where: { id: sessionId },
+      data: { status: RunStatus.SUCCEEDED, finishedAt},
+      select: { id: true, ownerId: true, taskId: true, startsTaskWork: true },
+    });
+    await settleDeliveredIdentityAfterFinish(tx, finished);
+  });
   return declared.id;
 }
 
@@ -653,7 +661,7 @@ test('(2) the refile path: a candidate retired because its check looked at a bra
             branch,
             isolationStatus: 'worktree',
             createdAt,
-            status: RunStatus.SUCCEEDED,
+            status: RunStatus.SUCCEEDED, 
             finishedAt,
             worktreeBranch: branch,
             worktreeDirty: false,

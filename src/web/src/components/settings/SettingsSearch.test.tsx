@@ -305,6 +305,19 @@ describe('Settings search', () => {
     expect(litRow()).toBe('key:k3');
   });
 
+  it('finds Model routing by its old pages’ names, and its routing switches under Providers', async () => {
+    await visit('/settings/general');
+    for (const query of ['model tiers', 'routing report', 'model rout']) {
+      await type(query);
+      expect(results().Providers?.[0]?.[0]?.replace(/[[\]]/g, ''), query).toBe('Model routing');
+    }
+    await type('optimize for');
+    expect(results()).toEqual({ Providers: [['[Optimize For]', 'Model routing']] });
+    await type('routing report');
+    await press('Enter');
+    expect(addressBar()).toBe('/settings/providers/routing');
+  });
+
   it('finds a workspace by name, and by its working directory', async () => {
     await visit('/settings/general');
     await type('websit');
@@ -342,10 +355,10 @@ describe('Settings search', () => {
   });
 
   it('clears the query with Esc before Esc leaves Settings', async () => {
-    await visit('/settings/storage');
+    await visit('/settings/profile');
     await type('theme');
     await press('Escape', document);
-    expect(addressBar()).toBe('/settings/storage');
+    expect(addressBar()).toBe('/settings/profile');
     expect(searchBox().value).toBe('');
     expect(navGroups()!.hidden).toBe(false);
     await press('Escape', document);

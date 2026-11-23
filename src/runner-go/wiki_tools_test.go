@@ -1725,7 +1725,7 @@ func writtenFlagIsParsed(action, name string) bool {
 // cited the way every other Orbit thing is: by a link the clients draw, not by a bare id.
 func TestWikiInstructionsLinkEntriesAndPreApproveTheCommands(t *testing.T) {
 	exe := "/usr/local/bin/orbit"
-	instructions := orbitCLIInstructions(exe, true, true, true)
+	instructions := orbitCLIInstructions(exe, true, true, true, true)
 	if !strings.Contains(instructions, "orbit-wiki:<id>") {
 		t.Errorf("the instructions do not tell an agent how to cite a wiki entry: %q", instructions)
 	}
@@ -1734,12 +1734,12 @@ func TestWikiInstructionsLinkEntriesAndPreApproveTheCommands(t *testing.T) {
 	}
 	// Every form says where a known pitfall is looked up, and only for a session that has the tool.
 	for _, form := range []struct{ inside, watches bool }{{false, true}, {true, true}, {false, false}, {true, false}} {
-		got := orbitCLIInstructions(exe, form.inside, form.watches, true)
+		got := orbitCLIInstructions(exe, form.inside, form.watches, true, true)
 		if !strings.Contains(got, "Before changing a file, use wiki_search with its path to look up known pitfalls, if your tool list has it.") {
 			t.Errorf("instructions (inside=%v, watches=%v) do not say to look a file up before changing it: %q", form.inside, form.watches, got)
 		}
 	}
-	rules := strings.Join(orbitCLIAllowedTools(exe, false), "\n")
+	rules := strings.Join(orbitCLIAllowedTools(exe, false, false), "\n")
 	for _, action := range []string{"search", "get", "propose", "verify", "import"} {
 		if !strings.Contains(rules, "Bash("+exe+" wiki "+action+" *)") {
 			t.Errorf("orbit wiki %s is advertised and pre-approved for nobody: %q", action, rules)

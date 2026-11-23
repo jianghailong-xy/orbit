@@ -155,6 +155,9 @@ test('evidence that cites a file', { skip: !URL, concurrency: 1, timeout: 600_00
       data: {
         id, title, prompt: title, ownerId: who.ownerId, creatorId: who.ownerId, workspaceId: who.workspaceId,
         assignedRunnerId: who.runnerId, status, startedAt: new Date(), runtimeSessionId: `runtime-${id}`,
+        ...(status === 'SUCCEEDED' || status === 'FAILED'
+          ? { finishedAt: new Date()}
+          : status === 'CANCELLED' ? { finishedAt: new Date()} : {}),
         provider: 'claude', taskId, startsTaskWork: taskId !== undefined,
       },
     });
@@ -369,6 +372,15 @@ test('evidence that cites a file', { skip: !URL, concurrency: 1, timeout: 600_00
     assert.deepEqual({ status: theirs.status, json: theirs.json }, { status: nothing.status, json: nothing.json }, 'another account\'s file is a file that is not there');
     const malformed = await submit(work, [work.tool, { kind: 'FILE', ref: 'not an id' }]);
     assert.deepEqual({ status: malformed.status, json: malformed.json }, { status: nothing.status, json: nothing.json });
+    // A drive file (docs/orbit-files-drive-technical-design.md §4.5) by any spelling: its content changes under its name, so
+    // it is refused by name, pointing at file_upload, which makes the evidence copy.
+    for (const ref of ['/home/orbit/Files/Proj/report.md', '~/Files/Proj/report.md', '/run/orbit-files/drive/Proj/report.md', 'orbit-drive:3bXk9sQ2a']) {
+      const drive = await submit(work, [work.tool, { kind: 'FILE', ref }]);
+      assert.equal(drive.status, 400, `${ref}: ${drive.text}`);
+      assert.equal(drive.json.code, 'EVIDENCE_FILE_IS_A_DRIVE_PATH', ref);
+      assert.equal(drive.json.requiredAction, 'UPLOAD_THE_FILE_AND_CITE_ITS_ID', ref);
+      assert.match(drive.json.message, /file_upload/, ref);
+    }
 
     for (const field of [{ sha256: 'a'.repeat(64) }, { width: 1, height: 1 }]) {
       const written = await submit(work, [work.tool, { ...asFile(shot), ...field }]);
@@ -478,7 +490,7 @@ test('evidence that cites a file', { skip: !URL, concurrency: 1, timeout: 600_00
     created(await submit(moving, [asFile(picture)]), 'the evidence');
     await reads(project.coordinator, picture, 'its coordinator, before it moves');
     // A task moves once its run has ended: a live claim holds it where it is.
-    await db.session.update({ where: { id: moving.sessionId }, data: { status: 'SUCCEEDED' } });
+    await db.session.update({ where: { id: moving.sessionId }, data: { status: 'SUCCEEDED', finishedAt: new Date()} });
     const elsewhere = await projectOf('the project it moved to');
     await db.task.update({ where: { id: moving.taskId }, data: { projectId: elsewhere.id, criterionDefinitionId: elsewhere.definitionId } });
     await readsNothing(project.coordinator, picture, 'the coordinator of the project it left');

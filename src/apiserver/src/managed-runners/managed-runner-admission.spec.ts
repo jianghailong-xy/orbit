@@ -113,7 +113,7 @@ test('the authorized Pod is admitted: the manager, the fixed name, the reserved 
 });
 
 test('any other Pod using the volume is refused: another name, no labels, a Job, a read-only mount, on the same node or another', () => {
-  const tenant = 'system:serviceaccount:orbit-managed-test:default';
+  const tenant = 'system:serviceaccount:orbit-cloud-test:default';
   const cases: Array<[string, PodAdmissionRequest, string]> = [
     ['another name, by the manager', create({ ...authorizedPod(), metadata: { ...authorizedPod().metadata, name: `${managedPodName(RUNNER)}-debug` } }), 'NOT_THE_FIXED_NAME'],
     ['another name, unlabelled, by someone else', create(podUsingTheVolume('backup'), tenant), 'NOT_THE_MANAGER'],
@@ -122,7 +122,7 @@ test('any other Pod using the volume is refused: another name, no labels, a Job,
     ['the fixed name, unlabelled and unannotated, by the manager', create(podUsingTheVolume(managedPodName(RUNNER))), 'NOT_THE_OWNER'],
     ['on the same node as the runner', create(podUsingTheVolume('same-node', { nodeName: 'node-a' }), tenant), 'NOT_THE_MANAGER'],
     ['on another node', create(podUsingTheVolume('cross-node', { nodeName: 'node-b' }), tenant), 'NOT_THE_MANAGER'],
-    ['labelled as a runner', create(podUsingTheVolume('impostor', { labels: { 'app.kubernetes.io/name': 'orbit-managed-runner' } }), tenant), 'NOT_THE_MANAGER'],
+    ['labelled as a runner', create(podUsingTheVolume('impostor', { labels: { 'app.kubernetes.io/name': 'orbit-cloud-runner' } }), tenant), 'NOT_THE_MANAGER'],
     ['read-only', create(podUsingTheVolume('reader', { readOnly: true }), tenant), 'NOT_THE_MANAGER'],
     ['a Job’s Pod', create(podUsingTheVolume('restore-job-x7k2p'), 'system:serviceaccount:kube-system:job-controller'), 'NOT_THE_MANAGER'],
   ];
@@ -157,8 +157,50 @@ test('the manager itself is refused for anything but the reserved generation’s
   tampered((pod) => void (pod.spec.ephemeralContainers = [{ name: 'debug', image: profile.runner.image }]), 'an ephemeral container');
 });
 
+test('the Orbit Files drive is the one addition: exactly its CSI volume, mounted only by the runner as designed', () => {
+  // docs/orbit-files-drive-technical-design.md §6.1 (B13): the Pod of a profile with the drive.
+  const drivePod = (generation = 3) =>
+    buildManagedPod({ ownerId: OWNER, runnerId: RUNNER, generation, namespace: NS }, PVC_UID, testManagedRunnerProfile({ files: true }));
+  assert.deepEqual(decide(create(drivePod())), { allowed: true, reason: 'AUTHORIZED' });
+  // Without it, as before: the drive is optional.
+  assert.deepEqual(decide(create(authorizedPod())), { allowed: true, reason: 'AUTHORIZED' });
+
+  type Mount = Record<string, unknown>;
+  const runnerMounts = (pod: Pod) => (pod.spec.containers as Array<{ volumeMounts: Mount[] }>)[0].volumeMounts;
+  const driveMount = (pod: Pod) => runnerMounts(pod).find((m) => m.name === 'orbit-files')!;
+  const driveVolume = (pod: Pod) => pod.spec.volumes!.find((v) => v.name === 'orbit-files') as unknown as { csi: Record<string, unknown> };
+  const tampered = (change: (pod: Pod) => void, label: string) => {
+    const pod = drivePod();
+    change(pod);
+    refusedWith(decide(create(pod)), 'NOT_THE_TEMPLATE', label);
+  };
+  tampered((pod) => void (driveVolume(pod).csi.volumeAttributes = { runnerId: OTHER_RUNNER }), 'another runner’s drive');
+  tampered((pod) => void (driveVolume(pod).csi.volumeAttributes = { runnerId: RUNNER, extra: 'x' }), 'an attribute beyond runnerId');
+  tampered((pod) => void (driveVolume(pod).csi.volumeAttributes = {}), 'no runnerId');
+  tampered((pod) => void delete driveVolume(pod).csi.volumeAttributes, 'no attributes');
+  tampered((pod) => void (driveVolume(pod).csi.driver = 'files.orbit.dev.evil'), 'another CSI driver');
+  tampered((pod) => void (driveVolume(pod).csi.readOnly = true), 'a read-only CSI volume');
+  tampered((pod) => void (driveVolume(pod).csi.nodePublishSecretRef = { name: 'mrf-x' }), 'a publish Secret');
+  tampered((pod) => void pod.spec.volumes!.push({ name: 'orbit-files-2', csi: { driver: 'files.orbit.dev', volumeAttributes: { runnerId: RUNNER } } }), 'a second drive volume');
+  tampered((pod) => void pod.spec.volumes!.push({ name: 'rbd', csi: { driver: 'rbd.csi.ceph.com', volumeAttributes: {} } }), 'any other CSI volume');
+  tampered((pod) => void (driveMount(pod).mountPath = '/home/orbit/Files'), 'mounted elsewhere');
+  tampered((pod) => void (driveMount(pod).mountPropagation = 'Bidirectional'), 'Bidirectional propagation');
+  tampered((pod) => void delete driveMount(pod).mountPropagation, 'no propagation');
+  tampered((pod) => void (driveMount(pod).readOnly = true), 'mounted read-only');
+  tampered((pod) => void (driveMount(pod).subPath = 'drive'), 'a subPath');
+  tampered((pod) => void (pod.spec.initContainers as Array<{ volumeMounts: Mount[] }>)[0].volumeMounts.push({ name: 'orbit-files', mountPath: '/run/orbit-files', mountPropagation: 'HostToContainer' }), 'mounted in the init container');
+  // Everything else is as strict as before, drive or not.
+  tampered((pod) => void ((pod.spec.containers as Array<Record<string, unknown>>)[0].securityContext = { privileged: true }), 'a privileged container beside the drive');
+  tampered((pod) => void pod.spec.volumes!.push({ name: 'host', hostPath: { path: '/dev/fuse' } }), 'a host path beside the drive');
+  tampered((pod) => void (pod.spec.hostPID = true), 'the host pid namespace beside the drive');
+
+  // An update may not add, change or remove it.
+  const update = (after: Pod): PodAdmissionRequest => ({ ...create(after), operation: 'UPDATE', object: after, oldObject: authorizedPod() });
+  refusedWith(decide(update(drivePod())), 'IMMUTABLE_IDENTITY', 'the drive added by an update');
+});
+
 test('volumes are resolved from the database, never from the Pod: unknown, aliased and doubled claims are refused', () => {
-  const tenant = 'system:serviceaccount:orbit-managed-test:default';
+  const tenant = 'system:serviceaccount:orbit-cloud-test:default';
   refusedWith(decide(create(podUsingTheVolume('x'), tenant), null), 'UNMAPPED_MANAGED_CLAIM', 'a managed name no mapping owns');
   const both = podUsingTheVolume('both');
   both.spec.volumes!.push({ name: 'other', persistentVolumeClaim: { claimName: managedPvcName(OTHER_RUNNER) } });
@@ -293,7 +335,7 @@ test('the webhook fails closed: a malformed review is 400, a database that fails
     namespace: NS,
     pvcName: { in: [managedPvcName(RUNNER)] },
   }, 'ownership is looked up by the claim, in this cluster and namespace');
-  const refused = await controller.review(review(create(podUsingTheVolume('other'), 'system:serviceaccount:orbit-managed-test:default')) as never);
+  const refused = await controller.review(review(create(podUsingTheVolume('other'), 'system:serviceaccount:orbit-cloud-test:default')) as never);
   assert.equal(refused.response.allowed, false);
 
   const failing = new ManagedRunnerAdmissionController({ managedRunner: { findMany: async () => { throw new Error('database down'); } } } as never, available);

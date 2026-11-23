@@ -144,6 +144,10 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         /// The record a change inside the envelope left here (§4): "Changed Codex stable check: time 10:00 →
         /// 09:00 · Undo", placed at its own `createdAt`.
         case scheduleRecord(scheduleID: String, revision: Int)
+        /// A scheduled task's change conversation (§8.2, board 03-change): Orbit's opening — the strip naming the
+        /// schedule and the schedule as it was when the conversation was opened — at the conversation's head,
+        /// before the person's first words, placed at the conversation's creation.
+        case scheduleChangeOpening
         /// A scheduled task's run, at the head of its own session: "Scheduled run · planned 10:00, started 10:01 ·
         /// access Check only · …" (§7.4), placed at the run's planned time.
         case scheduleRunStrip(runID: String)
@@ -254,6 +258,7 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         case .scheduleCard(let requestID):        return "schedule-card-\(PublicID.storageKey(requestID))"
         case .scheduleRecord(let scheduleID, let revision):
             return "schedule-record-\(PublicID.storageKey(scheduleID))@\(revision)"
+        case .scheduleChangeOpening:              return "schedule-change-opening"
         case .scheduleRunStrip(let runID):        return "schedule-run-strip-\(PublicID.storageKey(runID))"
         case .scheduleRunReport(let runID):       return "schedule-run-report-\(PublicID.storageKey(runID))"
         }
@@ -422,7 +427,7 @@ public enum DeliveryAnchor {
              .evidenceDecision, .ownerDecisionReceipt, .evidenceDecisionReceipt,
              .promotionApproval, .promotionReceipt, .coordinatorQuestion,
              .coordinatorQuestionRecord, .escalatedItem, .fusePause, .ownerRequest, .crossingBatch,
-             .scheduleCard, .scheduleRecord, .scheduleRunStrip, .scheduleRunReport:
+             .scheduleCard, .scheduleRecord, .scheduleChangeOpening, .scheduleRunStrip, .scheduleRunReport:
             return items.last?.id
         }
     }
@@ -639,7 +644,15 @@ public enum TranscriptRows {
             // rendered below while the prompt still awaits an answer — show only the interactive
             // card until it resolves, after which this one is the historical record (web parity:
             // Transcript.tsx hides the read-only copy while `live && !result`).
-            if !Approvals.duplicatesPendingApproval(item, pendingApprovals: state.pendingApprovals) {
+            // A SubAgent's end turn draws nothing: its card is the end (`SubagentCardEnd`). Its turn's
+            // head still follows, as it follows every turn that opened one.
+            // So does a background job's end, new output or stall (board C1): the job is one card from
+            // start to end (`BgJobCard`). The runner's launch pair for that job is the Background list's,
+            // not the transcript's: the bg_run call is the card.
+            if case .user(let bubble) = item, SubagentCardEnd.drawsNothing(bubble, queued: false)
+                || BgJobCard.drawsNothing(bubble, queued: false) {
+            } else if case .toolCall(let card) = item, BgJobCard.isRunnerJobLaunch(card) {
+            } else if !Approvals.duplicatesPendingApproval(item, pendingApprovals: state.pendingApprovals) {
                 rows.append(.item(item))
             }
             // Only a head with something to say gets a row: an empty one would still hold its insets.
@@ -657,7 +670,10 @@ public enum TranscriptRows {
         // carries the id the echo takes over (`appendUser`), so the echo replaces it in place rather
         // than removing one row and inserting another (web parity: `acceptedUserTurnEvent`, appended
         // after the last event).
-        rows.append(contentsOf: state.accepted.map { TranscriptRow.item(.user($0)) })
+        rows.append(contentsOf: state.accepted
+            .filter { !SubagentCardEnd.drawsNothing($0, queued: true) && !SubagentCardEnd.drawsNothing($0, queued: false)
+                && !BgJobCard.drawsNothing($0, queued: true) && !BgJobCard.drawsNothing($0, queued: false) }
+            .map { TranscriptRow.item(.user($0)) })
         // An anchor no longer in the window (its item was dropped — e.g. an optimistic bubble whose
         // send failed) would otherwise take the card down with it. Trail those instead of losing them.
         for card in statusCards where card.afterItemID.map({ anchored[$0] != nil }) == true {
@@ -683,8 +699,13 @@ public enum TranscriptRows {
         rows.append(contentsOf: state.pendingApprovals.map(TranscriptRow.approval))
         if showWorkingIndicator { rows.append(.working) }
         // …except the reader's own messages still on their way, which the tray above the composer
-        // holds instead (`PendingTray.holds`); what Orbit queued keeps its card here.
-        rows.append(contentsOf: state.queued.filter { !PendingTray.holds($0) }.map(TranscriptRow.queued))
+        // holds instead (`PendingTray.holds`); what Orbit queued keeps its card here — but a SubAgent's
+        // end waits on its own card (`SubagentCardEnd.queuedWake`), so the tail draws nothing for it, and
+        // so does a background job's news, whose card says it waits (`BgJobCard.queuedWake`, board E1).
+        rows.append(contentsOf: state.queued
+            .filter { !PendingTray.holds($0) && !SubagentCardEnd.drawsNothing($0, queued: true)
+                && !BgJobCard.drawsNothing($0, queued: true) }
+            .map(TranscriptRow.queued))
         // Zero-height tail row: a stable `scrollTo` target that always sits below the last message
         // (the last item's own id moves as it streams).
         rows.append(.bottom)
@@ -791,9 +812,9 @@ public enum TranscriptRows {
         // Agent→Workspace rename had rewritten "Agent" here). Their cards carry work of their own —
         // a nested transcript, progress — and must never fold into a run. So does Orbit's own
         // SubAgent (`mcp__orbit__delegate`), which draws the child's steps under the same block
-        // (docs/subagent-design.md §6.4).
+        // (docs/subagent-design.md §6.4), and an Orbit workflow, whose block counts its calls.
         case "AskUserQuestion", "ExitPlanMode", "mcp__orbit__session_create", "Task", "Agent", "Workflow",
-             SubagentBlock.toolName:
+             SubagentBlock.toolName, WorkflowBlock.toolName, BgJobCard.toolName:
             return false
         default:
             return true

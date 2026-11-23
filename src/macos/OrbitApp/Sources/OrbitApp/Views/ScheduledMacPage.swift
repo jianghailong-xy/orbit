@@ -208,6 +208,10 @@ struct ScheduledMacPage: View {
                     .font(.orbitLabel)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    // The planned end on its own line, so the 400 pt column never cuts it off.
+                    if let end = row.end {
+                        Text(end).font(.orbitLabel).foregroundStyle(.secondary).accessibilityIdentifier("schedule-row-end")
+                    }
                 }
             }
             .padding(.vertical, 7).padding(.horizontal, 8)
@@ -285,7 +289,12 @@ struct ScheduledMacDetail: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        if let scheduled = model.scheduled, let id = scheduled.inspectedID {
+        if let scheduled = model.scheduled, let draft = scheduled.changeDraft {
+            // The draft change conversation (board 03-change ③): the Mac draws it in this panel, as the web does.
+            ScheduleChangePage(scheduleID: draft.scheduleID)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .id(draft.scheduleID)
+        } else if let scheduled = model.scheduled, let id = scheduled.inspectedID {
             ScheduleDetailPanel(scheduleID: id)
                 .id(id)
         } else if let scheduled = model.scheduled, let panel = scheduled.draftPanel {

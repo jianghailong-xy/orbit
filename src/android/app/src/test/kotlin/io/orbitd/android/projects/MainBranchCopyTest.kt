@@ -73,7 +73,7 @@ class MainBranchCopyTest {
         assertEquals("directly into $b", RunSettings.lineInSentence("MAIN", b))
         assertEquals("a project branch", RunSettings.lineInSentence("PROJECT_BRANCH", b))
         // The request's row says the line the way the browser's does, directly into the branch the card opens with.
-        assertTrue(start.contains("runLineInSentence(settings.line, main),"))
+        assertTrue(start.contains("settings.line ? runLineInSentence(settings.line, main) : START_NO_LINE,"))
         assertTrue(web("components/ProjectProgressStatus.tsx").contains("startRequestSummary(settings, startMainBranch(settings.upstreamRef, standing))"))
         assertTrue(web("components/ProjectIntegrationLine.tsx").contains("runLineInSentence(suggested, startMainBranch(suggestion?.upstreamRef, view))"))
     }
@@ -85,7 +85,7 @@ class MainBranchCopyTest {
             assertTrue("projectStart.ts no longer says $it", start.contains(it))
         }
         val card = web("components/StartProjectCard.tsx")
-        listOf("upstream: standing?.repository ? startMainBranch(settings.upstreamRef, standing) : null,",
+        listOf("upstream: settings.line && standing?.repository ? startMainBranch(settings.upstreamRef, standing) : null,",
             "...(draft.upstream ? { upstreamRef: mainBranchRef(draft.upstream) } : {}),",
             "...(view.upstreamRef ? { upstreamRef: mainBranchRef(view.upstreamRef) } : {}),",
             "{lastMainBranch && draft.upstream === lastMainBranch.branch ? (").forEach {

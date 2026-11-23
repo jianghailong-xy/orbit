@@ -198,6 +198,9 @@ export interface PermissionSemantics {
    * newer Claude model.
    */
   shortNote?: string;
+  /** `off` when the runtime's command sandbox is not running for this session: commands run
+   *  unconfined. Absent everywhere else, which says nothing either way. */
+  sandbox?: 'off';
 }
 
 /**
@@ -801,6 +804,21 @@ export interface CursorKeyCheckResult {
   keyFingerprint: string;
 }
 
+/** What a runner states is executing in one session it supervises (RunnerHeartbeatRequest.executing). Each member is
+ *  the complete current value; one left out is not stated. */
+export interface RunnerSessionExecuting {
+  sessionId: string;
+  /** The engine is running a turn, one Orbit delivered or one it started itself (Session.engineTurnActive). */
+  engineTurnActive?: boolean;
+  /** The launch tool_use ids of the subagents and workflows still running (Session.runningSubagents). */
+  subagents?: string[];
+  /** The runner-hosted jobs still running, but services (Session.runningBgJobs). */
+  jobs?: string[];
+  /** Every background process still running: engine shells, Monitors, `!` shells and runner-hosted jobs
+   *  (Session.runningBgShells). */
+  shells?: string[];
+}
+
 export interface RunnerHeartbeatRequest {
   status: RunnerStatus;
   /** How many more active turns the runner can accept right now. Warm idle
@@ -819,6 +837,16 @@ export interface RunnerHeartbeatRequest {
    *  runners list counts them as running beside the sessions in a turn. Absent when there are
    *  none, and on older runners, which are counted by turns alone. */
   backgroundJobSessionIds?: string[];
+  /** For each session this process supervises, what is executing in it right now, stated whole (plan step 1.6): the
+   *  control plane replaces the session's inferred sets with the ones an entry gives, for sessions assigned to this
+   *  runner, open and leased to this process (runners/runner-executing-sets.ts). A set an entry leaves out, a session
+   *  no entry names, and a beat without the member (an older runner) leave the stored values as they are. */
+  executing?: RunnerSessionExecuting[];
+  /** When `executing` was composed, in Unix milliseconds on the runner's own clock: the clock its events' `ts` is
+   *  read on. A session whose sets an event batch moved at or after this instant keeps them as the batch left them,
+   *  since the beat was composed before that news (Session.executingEventAt). Absent on runners that predate it, whose
+   *  beats replace the sets as before. */
+  executingAt?: number;
   /** Commits this runner reported as failed that no longer fail for the reason they gave: the
    *  index lock they met is gone, or the branch has moved since. The control plane drops each
    *  settled error it still holds for that exact operation, so the worktree bar offers Commit
@@ -900,6 +928,9 @@ export interface RunnerBrowserReport {
   viewers: number;
   /** When this runner last cleared the saved logins (RFC 3339); absent if it never has since it started. */
   profileClearedAt?: string;
+  /** Whether the saved profile holds a cookie store, so saved logins may exist. Only that: never which sites. Absent
+   *  from a runner that predates it. */
+  savedLogins?: boolean;
 }
 
 /** GET /runners/:id/browser: the owner's managed runner browser, as its last heartbeat reported it. */
@@ -917,11 +948,63 @@ export interface RunnerBrowserState {
   clearRequestedAt: string | null;
   /** When the runner last reported clearing the saved logins. */
   profileClearedAt: string | null;
+  /** Whether saved logins exist, as the last report said (RunnerBrowserReport.savedLogins); null when no report said
+   *  it. Never which sites. */
+  savedLogins: boolean | null;
+}
+
+/**
+ * GET /runner/browser: browser_status and `orbit browser status`, the account's Orbit Cloud browser for any session of
+ * the account. Answered only while the browser switch is on (404 otherwise), so `enabled` is always true here; a client
+ * that gets a 404 reports it off.
+ */
+export interface RunnerBrowserStatus {
+  enabled: true;
+  /** The account's Orbit Cloud (managed) runner, or null when the account has none. */
+  runnerId: string | null;
+  state: RunnerBrowserState['state'];
+  /** Chrome is started. */
+  running: boolean;
+  /** The session holding the browser lease (public id), or null. */
+  holderSessionId: string | null;
+  holderTitle: string | null;
+  /** How many viewers are connected. */
+  viewers: number;
+  /** Whether saved logins exist; null when the runner has not said. Never which sites. */
+  savedLogins: boolean | null;
+  /** When the heartbeat this was read from arrived, or null. */
+  reportedAt: string | null;
+}
+
+/** The body of POST /runner/browser/open (browser_open, `orbit browser open [--url]`). */
+export interface RunnerBrowserOpenRequest {
+  /** A page for the remote Chrome to open (http or https). Absent: the browser is started and left on its page. */
+  url?: string;
+}
+
+/** Its answer: the open is handed to the Orbit Cloud runner's next heartbeat, which the runner is woken for at once. */
+export interface RunnerBrowserOpenResponse {
+  /** The account's Orbit Cloud runner. */
+  runnerId: string;
+  /** The browser's tab on this server (`/runners/:id/browser`, absolute), for a person to watch or take control in. */
+  tabUrl: string;
+  /** The page asked for, or null when none was. */
+  url: string | null;
+  requestedAt: string;
 }
 
 /** POST /runners/:id/browser/clear: Clear saved logins, accepted and waiting for the runner's next heartbeat. */
 export interface RunnerBrowserClearResponse {
   requestedAt: string;
+}
+
+/**
+ * `POST /runner/browser/clear` (browser_clear_logins, `orbit browser clear-logins`): the clear the owner's card allowed,
+ * requested of the account's Orbit Cloud runner, and the card it spent.
+ */
+export interface RunnerBrowserClearLoginsResponse extends RunnerBrowserClearResponse {
+  runnerId: string;
+  approvalId: string;
 }
 
 /** What a runner's self-updater last found:
@@ -1181,19 +1264,52 @@ export const CREATE_WORKDIR_CAPABILITY = 'create-workdir/v1';
  *  `<reposRoot>/<name>`. */
 export const CREATE_WORKDIR_HOME_CAPABILITY = 'create-workdir/v2';
 
+/** A managed runner's home, fixed by its image (deploy/managed-runner/image). A new folder on a managed runner that has
+ *  not reported yet goes here, as it does once it has: every managed image declares create-workdir/v2. */
+export const MANAGED_RUNNER_HOME = '/home/orbit';
+
 /** The directory a runner's new folders go in: its home, the parent of its reposRoot, when it declares
  *  CREATE_WORKDIR_HOME_CAPABILITY, else reposRoot itself. The separator is the one the root is written with. */
-/** A managed runner's repos folder, fixed by its image (deploy/managed-runner/image/entrypoint.py). A new folder on a
- *  managed runner that has not reported yet goes here: every runner version can make one inside its reposRoot. */
-export const MANAGED_RUNNER_REPOS_ROOT = '/home/orbit/orbit-repos';
-
 export function newFolderRoot(reposRoot: string, capabilities: readonly string[] | null | undefined): string {
-  const root = reposRoot.trim().replace(/(?<=.)[\\/]+$/, '');
-  if (!capabilities?.includes(CREATE_WORKDIR_HOME_CAPABILITY)) return root;
+  return capabilities?.includes(CREATE_WORKDIR_HOME_CAPABILITY) ? homeOfReposRoot(reposRoot) : trimReposRoot(reposRoot);
+}
+
+const trimReposRoot = (reposRoot: string): string => reposRoot.trim().replace(/(?<=.)[\\/]+$/, '');
+
+/** The directory a reported reposRoot sits in: the machine's home (`<home>/orbit-repos`). */
+function homeOfReposRoot(reposRoot: string): string {
+  const root = trimReposRoot(reposRoot);
   const cut = Math.max(root.lastIndexOf('/'), root.lastIndexOf('\\'));
   if (cut < 0) return root;
   // `/orbit-repos` sits in `/`, and `C:\orbit-repos` in `C:\`.
   return cut === 0 || root[cut - 1] === ':' ? root.slice(0, cut + 1) : root.slice(0, cut);
+}
+
+/** What newFolderRootFor reads of a runner. `capabilities` is what it has reported: a server passes [] for a runner
+ *  that has not reported yet (no capabilitiesReportedAt). `up` is whether it is online now, so that those are what its
+ *  running process declares; a managed runner that is not up wakes on its current image, whatever it declared before. */
+export interface NewFolderRunner {
+  managed: boolean;
+  up: boolean;
+  reposRoot: string | null | undefined;
+  capabilities: readonly string[] | null | undefined;
+}
+
+/** Where a new folder named on this runner goes, for every client and the server alike (new-folder-root.fixture.json):
+ *  on a managed runner that is not up, or has not reported yet, its image's home MANAGED_RUNNER_HOME, whatever Repos
+ *  Folder and capabilities are stored from an earlier process, so its first workspace can be made before it is up;
+ *  newFolderRoot on a runner that makes new folders and has reported its Repos Folder; null on any other. */
+export function newFolderRootFor(runner: NewFolderRunner): string | null {
+  if (runner.managed && (!runner.up || !runner.capabilities?.length)) return MANAGED_RUNNER_HOME;
+  const reposRoot = runner.reposRoot?.trim() ?? '';
+  if (reposRoot && runner.capabilities?.includes(CREATE_WORKDIR_CAPABILITY)) return newFolderRoot(reposRoot, runner.capabilities);
+  return null;
+}
+
+/** `<root>/<name>`: the separator the root is written with, never doubled. A new folder's path and a clone's. */
+export function newFolderPath(root: string, name: string): string {
+  const separator = root.includes('\\') && !root.includes('/') ? '\\' : '/';
+  return `${root.replace(/[\\/]+$/, '')}${separator}${name}`;
 }
 
 /** A runner that reports its machine's CPU, memory and disk on every heartbeat (RunnerHeartbeatRequest.resources).
@@ -1319,6 +1435,20 @@ export interface NewWorkspaceGithub {
 /** What a runner declares when it clones a GitHub workspace's repository on request (cloneRequests,
  *  docs/github-workspace-design.md §6). POST /sessions makes a GitHub workspace only on a runner that declares it. */
 export const CLONE_WORKDIR_CAPABILITY = 'clone-workdir/v1';
+
+/** What a runner declares when it clones into its home directory, the directory its reported reposRoot sits in:
+ *  a GitHub workspace's folder is then `<home>/<folder>` (cloneRootFor) rather than `<reposRoot>/<folder>`. */
+export const CLONE_WORKDIR_HOME_CAPABILITY = 'clone-workdir/v2';
+
+/** Where a GitHub workspace's clone goes on this runner, for every client and the server alike
+ *  (new-folder-root.fixture.json `clones`): its home on a runner that declares CLONE_WORKDIR_HOME_CAPABILITY, its
+ *  reposRoot on an older one; null on a runner that does not clone or has not reported its reposRoot. `capabilities` is
+ *  what it has reported ([] before it reports). */
+export function cloneRootFor(runner: { reposRoot?: string | null; capabilities?: readonly string[] | null }): string | null {
+  const reposRoot = runner.reposRoot?.trim() ?? '';
+  if (!reposRoot || !runner.capabilities?.includes(CLONE_WORKDIR_CAPABILITY)) return null;
+  return runner.capabilities.includes(CLONE_WORKDIR_HOME_CAPABILITY) ? homeOfReposRoot(reposRoot) : trimReposRoot(reposRoot);
+}
 
 /** A workspace's clone state (Workspace.cloneState); null for a workspace that does not come from GitHub. */
 export type WorkspaceCloneState = 'PENDING' | 'CLONING' | 'READY' | 'FAILED';
@@ -1484,6 +1614,10 @@ export interface RunnerHeartbeatResponse {
   /** Remote SubAgent runs on this runner to stop, because their parent stopped them or ended (§10.3): stop the
    *  child (10 s grace, then kill) and report STOPPED. Absent when there are none. */
   stopSubagentRunIds?: string[];
+  /** bg_run jobs on this runner its sessions' owners asked to stop from the app, listed on every full answer while
+   *  the job still runs (Session.runningBgJobs): kill each as bg_kill does, under BG_JOB_STOPPED_BY_OWNER. Sent only
+   *  to a runner that declares BG_OWNER_STOP_V1; absent when there are none. */
+  stopBackgroundJobs?: BackgroundJobStopCommand[];
   /** Supervised sessions that no longer belong to this exact runner process.
    *  Kept separate from durable user cancellation: a cold supervisor detaches
    *  without finalizing, while active/warm engines observe their endpoint fence. */
@@ -1492,6 +1626,9 @@ export interface RunnerHeartbeatResponse {
    *  adopts this live on each heartbeat, so a UI/API change to it takes effect within
    *  one heartbeat without restarting the runner. */
   maxConcurrent: number;
+  /** Extra sessions on demand (the editable DB value): how many turns past maxConcurrent an overflow claim
+   *  (`ClaimedSession.overCapacity`) may run at once. Adopted live like maxConcurrent. Absent on older control planes. */
+  burstConcurrent?: number;
   /** Branch merges the user requested from the UI for sessions this runner ran. The
    *  runner merges each session's branch into main on its local repo and reports the
    *  outcome back via POST /runner/sessions/:id/merge-result. Absent on older control
@@ -1568,6 +1705,11 @@ export interface RunnerHeartbeatResponse {
    *  Set once per request and cleared as it is handed over, like `checkSelfUpdate`; only a runner that declares
    *  BROWSER_CLEAR_V1 is asked, and its `browser.profileClearedAt` is the answer. */
   clearBrowserProfile?: boolean;
+  /** A session's browser_open (POST /runner/browser/open): start the browser if it is not running, and when `url` is
+   *  set open that page in it, unless another session than `sessionId` holds the browser's lease. Set once per request
+   *  and cleared as it is handed over, like `clearBrowserProfile`; only a runner that declares BROWSER_OPEN_V1 is
+   *  asked. */
+  openBrowser?: { sessionId: string; url?: string };
   /** This machine's free-space floor in MB (Runner.minFreeDiskMb), the same number the auto-run
    *  disk gate reads. Sent so the runner can apply it to work only it can see — reclaiming the
    *  session checkouts on its own disk — without keeping a second copy of the setting.
@@ -1677,6 +1819,16 @@ export const SELF_UPDATE_NOW_V1 = 'self-update-now/v1';
  *  refused a clear. runner-go asserts the same string. */
 export const BROWSER_CLEAR_V1 = 'browser-clear/v1';
 
+/** Declared by a managed runner that honours a session's browser_open (`openBrowser`): it starts the browser and opens
+ *  the page asked for through Chrome's DevTools. A runner without it is refused an open as too old. runner-go asserts
+ *  the same string. */
+export const BROWSER_OPEN_V1 = 'browser-open/v1';
+
+/** Declared by a managed runner that honours a LoginCommand `browser`: it opens the sign-in link of the attempt waiting
+ *  on it in the runner's browser (docs/runner-browser-engine-sign-in-design.md). A runner without it is refused Use the
+ *  runner's browser. runner-go asserts the same string. */
+export const LOGIN_RUNNER_BROWSER_V1 = 'login-runner-browser/v1';
+
 /** Declared by a runner that keeps a remote SubAgent's conversation when the run ends and continues it on a claim's
  *  `resumeOf` (docs/subagent-design.md §10.2). A resume is refused for a target runner without it, which would start
  *  a new conversation instead. runner-go declares the same string (subagentRemoteResumeCapabilityV1). */
@@ -1687,6 +1839,71 @@ export const SUBAGENT_REMOTE_RESUME_V1 = 'subagent-remote-resume/v1';
  *  runner without it, which would refuse the claim with SUBAGENT_WORKSPACE_NOT_GIT. runner-go declares the same string
  *  (subagentRemoteInPlaceCapabilityV1). */
 export const SUBAGENT_REMOTE_IN_PLACE_V1 = 'subagent-remote-in-place/v1';
+
+/** Declared by a runner that carries out the owner's stop of one bg_run job (`stopBackgroundJobs`, POST
+ *  /sessions/:id/background/jobs/:jobId/stop): it kills the job as bg_kill does, under the reason
+ *  BG_JOB_STOPPED_BY_OWNER. The stop is refused for a session whose runner does not declare it, and that runner's
+ *  jobs are listed as not stoppable. runner-go declares the same string (bgOwnerStopCapabilityV1). */
+export const BG_OWNER_STOP_V1 = 'bg-owner-stop/v1';
+
+/** Declared by a runner that admits a turn the server claimed over its limit (`ClaimedSession.overCapacity`, Run now,
+ *  docs/mocks/queued-run-now): past maxConcurrent up to maxConcurrent + burstConcurrent, evicting no running turn for
+ *  it. No overflow claim is made for a runner without it, and Run now on its sessions is refused as too old.
+ *  runner-go declares the same string. */
+export const OVER_CAPACITY_V1 = 'over-capacity/v1';
+
+/** The most Extra sessions on demand (Runner.burstConcurrent) a runner may be given; its default is 2. */
+export const RUNNER_BURST_CONCURRENT_MAX = 32;
+
+/** The reason a bg_run job killed by its session's owner from the app carries, on its terminal background_task, its
+ *  wake and its row of GET /sessions/:id/background. runner-go names the kill the same (bgStoppedByOwnerReason). */
+export const BG_JOB_STOPPED_BY_OWNER = 'stopped_by_owner';
+
+/** One bg_run job the owner asked to stop, as a heartbeat answer lists it (`stopBackgroundJobs`). */
+export interface BackgroundJobStopCommand {
+  sessionId: string;
+  /** The id bg_run returned (`bgj_…`). */
+  jobId: string;
+}
+
+/** The answer of POST /sessions/:id/background/jobs/:jobId/stop. `stopping`: the runner has been asked and the job
+ *  still runs; its end arrives as the job's terminal background_task. `killed`: the job has already ended stopped by
+ *  the owner, so a repeat of the stop changes nothing. */
+export interface BackgroundJobStopResponse {
+  jobId: string;
+  status: 'stopping' | 'killed';
+}
+
+/** Declared by a runner that answers the link's BackgroundJobTailRequest: the newest lines of one bg_run job's output,
+ *  read from its file for GET /sessions/:id/background/jobs/:jobId/tail. The read is refused for a session whose
+ *  runner does not declare it (RUNNER_CANNOT_READ_JOB_OUTPUT). runner-go declares the same string
+ *  (bgOutputTailCapabilityV1). */
+export const BG_OUTPUT_TAIL_V1 = 'bg-output-tail/v1';
+
+/** The most lines GET /sessions/:id/background/jobs/:jobId/tail answers with: what a job card's opened view shows. */
+export const BG_JOB_TAIL_MAX_LINES = 40;
+
+/** The most bytes of text (UTF-8, all lines together) that read answers with. */
+export const BG_JOB_TAIL_MAX_BYTES = 8 * 1024;
+
+/** The answer of GET /sessions/:id/background/jobs/:jobId/tail: the newest lines of a bg_run job's output, as the
+ *  runner hosting it read them from the job's file just now. */
+export interface BackgroundJobTailResponse {
+  jobId: string;
+  /** The job as its runner holds it: `running`, `completed`, `failed` or `killed`. */
+  status: string;
+  /** Its exit code once it has exited; null while it runs, and for a job killed before it exited. */
+  exitCode: number | null;
+  /** The output's last lines, oldest first, without terminal colour codes: at most BG_JOB_TAIL_MAX_LINES of them and
+   *  BG_JOB_TAIL_MAX_BYTES together. The last one may still be being written. */
+  lines: string[];
+  /** Whether the output holds older lines than `lines`. */
+  truncated: boolean;
+  /** How long the output file was when it was read, in bytes. */
+  outputBytes: number;
+  /** When the server had the runner's answer (ISO 8601). */
+  readAt: string;
+}
 
 /** The body of POST /runners/:id/self-update/now: the owner's explicit "interrupt these turns". */
 export interface RunnerSelfUpdateNowRequest {
@@ -1789,7 +2006,7 @@ export interface RunnerRegion {
  *  clients fall back to comparing the id with the managed status's runnerId. */
 export interface RunnerRowIdentity {
   id: string;
-  /** The name it registered with. A managed runner's is `orbit-managed`, which no client shows. */
+  /** The name it registered with. A managed runner's is `Orbit Cloud` (`orbit-managed` before migration 1250). */
   name: string;
   /** The name its owner gave it, which wins over both. */
   displayName: string | null;
@@ -2121,7 +2338,9 @@ export type AntigravityKeyAvailableByRunner = Record<string, boolean>;
  * machine, which puts back the Google login a replacement had set aside.
  */
 export interface LoginCommand {
-  action: 'start' | 'code' | 'cancel';
+  /** `browser` (to a runner that declares LOGIN_RUNNER_BROWSER_V1): open the attempt's sign-in link in the runner's
+   *  browser, the owner's Use the runner's browser. Redelivered until the runner reports `browser` on that attempt. */
+  action: 'start' | 'code' | 'cancel' | 'browser';
   /** Which CLI to sign in. Absent from an older control plane, which only ever drove claude. A
    *  `cursor` start, Default's included, goes only to a runner that declares `cursor-account-login/v1`:
    *  an older one signs in Claude Code for an engine it does not know. */
@@ -2253,6 +2472,9 @@ export interface LoginResult {
    *  timed out"), which a client answers with a new link rather than a retry. `message` still says it
    *  in words. Absent for every other failure. */
   reason?: LoginFailureReason;
+  /** What became of a LoginCommand `browser`, on a repeat of the attempt's waiting report: the link opened in the
+   *  runner's browser, could not be, or the runner took Claude Code's code from that browser and handed it to the CLI. */
+  browser?: LoginBrowserOutcome;
   /** The `attempt` of the start this reports on. A report about an attempt the control plane has
    *  moved past (cancelled, or replaced by a new sign-in) changes nothing. Absent from an older
    *  runner, whose reports are taken as they come. */
@@ -2414,11 +2636,18 @@ export type RunnerEngineUpdateDismissals = Partial<Record<ReportedEngine, string
 
 /**
  * Fix with an agent (POST /runners/:id/attention/:kind/fix): the machine-side warnings a press hands to
- * an agent on that machine. `engineNotUpdating` and `installFailed` name an engine; `cannotSelfUpdate`
- * (the runner can't update itself, or its updates are turned off) is the runner's own, and so is
- * `engineUpdateFailed` (an Update engines run whose report has failed lines, whichever engines they name).
+ * an agent on that machine. `engineNotUpdating`, `installFailed` and `sandboxMissing` name an engine;
+ * `cannotSelfUpdate` (the runner can't update itself, or its updates are turned off) is the runner's own,
+ * and so is `engineUpdateFailed` (an Update engines run whose report has failed lines, whichever engines
+ * they name). `sandboxMissing` is the engine's own prerequisite a session's transcript caught (Codex
+ * without bubblewrap on PATH).
  */
-export type RunnerAttentionFixKind = 'engineNotUpdating' | 'cannotSelfUpdate' | 'installFailed' | 'engineUpdateFailed';
+export type RunnerAttentionFixKind =
+  | 'engineNotUpdating'
+  | 'cannotSelfUpdate'
+  | 'installFailed'
+  | 'engineUpdateFailed'
+  | 'sandboxMissing';
 
 /** Why no agent can start on a machine: it is offline, no workspace runs on it, or the engine its
  *  most recently used workspace runs on is signed out there. */
@@ -2427,11 +2656,24 @@ export type RunnerAgentFixBlockedCode = 'offline' | 'noWorkspace' | 'engineSigne
 /** An agent already at work on one warning: the session a press started, while it is open. */
 export interface RunnerAgentFixing {
   kind: RunnerAttentionFixKind;
-  /** The engine for `engineNotUpdating` and `installFailed`; null for `cannotSelfUpdate` and `engineUpdateFailed`. */
+  /** The engine for `engineNotUpdating`, `installFailed` and `sandboxMissing`; null for
+   *  `cannotSelfUpdate` and `engineUpdateFailed`. */
   engine: ReportedEngine | null;
   sessionId: string;
   workspaceId: string;
   workspaceName: string;
+}
+
+/** The latest agent a warning was handed to once its session is over. A transcript row is history,
+ *  so it shows what was done about it instead of offering a second agent; the session stays openable. */
+export interface RunnerAgentFixHandled {
+  kind: RunnerAttentionFixKind;
+  engine: ReportedEngine | null;
+  sessionId: string;
+  workspaceId: string;
+  workspaceName: string;
+  /** How that session ended. */
+  status: 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
 }
 
 /**
@@ -2450,11 +2692,13 @@ export interface RunnerAgentFix {
   blocked: { code: RunnerAgentFixBlockedCode; message: string } | null;
   /** The warnings an agent is fixing now, each with its open session. */
   fixing: RunnerAgentFixing[];
+  /** The warnings whose latest agent session is over, each with how it ended. */
+  handled: RunnerAgentFixHandled[];
 }
 
 /** POST /runners/:id/attention/:kind/fix body. */
 export interface RunnerAttentionFixRequest {
-  /** Required for `engineNotUpdating` and `installFailed`. */
+  /** Required for `engineNotUpdating`, `installFailed` and `sandboxMissing`. */
   engine?: ReportedEngine;
   /** `cannotSelfUpdate` only: the newest runner release the client knows of (it reads dl/version.json),
    *  quoted in the agent's first message. */
@@ -2565,14 +2809,29 @@ export interface RunnerLoginState {
   /** Why a `failed` sign-in failed, when a client answers it differently (LoginResult.reason).
    *  Present only on such a failure. */
   reason?: LoginFailureReason;
+  /** The owner's Use the runner's browser for this attempt: `requested` until the runner answers, then its answer
+   *  (LoginResult.browser). Present only while a sign-in is waiting on its link and the owner asked for it. */
+  browser?: LoginBrowserState;
 }
 
 /** Why a sign-in failed, when a client answers it differently from any other failure: `expired` is
  *  the sign-in link running out before anyone signed in with it. */
 export type LoginFailureReason = 'expired';
 
+/** LoginResult.browser: what a runner did with a LoginCommand `browser`. */
+export type LoginBrowserOutcome = 'opened' | 'failed' | 'code-taken';
+
+/** RunnerLoginState.browser: the owner asked, and what the runner answered. */
+export type LoginBrowserState = 'requested' | LoginBrowserOutcome;
+
 /** Every LoginFailureReason, for a reader that checks one it is handed. */
 export const LOGIN_FAILURE_REASONS: readonly LoginFailureReason[] = ['expired'];
+
+/** Every LoginBrowserOutcome a runner may report, for a control plane to keep only these. */
+export const LOGIN_BROWSER_OUTCOMES: readonly LoginBrowserOutcome[] = ['opened', 'failed', 'code-taken'];
+
+/** Every LoginBrowserState a sign-in may be in. */
+export const LOGIN_BROWSER_STATES: readonly LoginBrowserState[] = ['requested', ...LOGIN_BROWSER_OUTCOMES];
 
 /** `code` of the 409 a new session gets when its engine is signed out on an online runner. */
 export const ENGINE_SIGNED_OUT = 'ENGINE_SIGNED_OUT';
@@ -2856,8 +3115,102 @@ export interface SubagentRunView {
   readonly: boolean;
   /** Paths the child's edit tools wrote, as the runner collected them; empty while it runs and for a read-only run. */
   changedFiles: string[];
+  /** The Orbit workflow this run is a call of (docs/subagent-workflow-design.md §5.2): the `id` of its
+   *  `WorkflowRunView`. Such a run's `toolUseId` is `<the workflow call's tool_use id>#<callIndex>`. Null, as are
+   *  the three below, on a `delegate` call's run. */
+  workflowRunId: string | null;
+  /** The call's place in the script, numbered from 0 in the order the script made its `agent()` calls. */
+  callIndex: number | null;
+  /** The `agent()` call's `label` and `phase`, as the script gave them; null when it gave none. */
+  label: string | null;
+  phase: string | null;
   createdAt: string;
   endedAt: string | null;
+}
+
+/**
+ * One Orbit workflow as a client reads it (`GET /sessions/:id/workflows`, docs/subagent-workflow-design.md §5.1),
+ * keyed by the `mcp__orbit__workflow` call it belongs to. Its calls are SubAgent runs (`GET /sessions/:id/subagents`)
+ * whose `workflowRunId` is this `id`.
+ */
+export interface WorkflowRunView {
+  id: string;
+  /** The `mcp__orbit__workflow` call's tool_use id. */
+  toolUseId: string;
+  /** The script's `meta`: its name, description and phase titles, in the script's order. */
+  name: string;
+  description: string | null;
+  phases: string[];
+  status: SubagentRunStatus;
+  /** Calls that finished, and calls that ended any other way. While the workflow runs they and `costUsd` are
+   *  counted from its calls' runs; once it has ended they are what the runner reported for the whole script. */
+  callsDone: number;
+  callsFailed: number;
+  costUsd: number;
+  /** The cost limit the call set; null when it set none, the default: the workflow has no limit. */
+  maxCostUsd: number | null;
+  /** Why it did not finish, truncated: the script's error, or what interrupted or stopped it. Null while it runs
+   *  and when it finished. */
+  error: string | null;
+  createdAt: string;
+  endedAt: string | null;
+}
+
+/** A SubAgents report row's tier: the pick's, `named` when the call or its definition named the model, `not-routed`
+ *  when smart model selection was off. */
+export type SubagentReportTier = SubagentSize | 'named' | 'not-routed';
+
+/**
+ * One row of the routing report's SubAgents view (`GET /tasks/model-routing/report/subagents`, docs/subagent-design.md
+ * §7, board docs/mocks/subagent-workflow/08-report.html): the SubAgent runs routed at one tier onto one provider and
+ * model, workflow calls included. A run counts under the pick its decision recorded, wherever a usage limit moved it.
+ */
+export interface SubagentReportGroup {
+  tier: SubagentReportTier;
+  /** The pick's provider slug, and its name on the account (the slug when it has none). Null when no candidate was left. */
+  provider: string | null;
+  providerLabel: string | null;
+  /** The pick's model, and how the owner's tables name it (the id when they do not). Null when no candidate was left. */
+  model: string | null;
+  modelLabel: string | null;
+  runs: number;
+  /** Of `runs`, calls of an Orbit workflow: the Workflows view's calls are these. */
+  workflowCalls: number;
+  /** Runs that have ended, and of them those that finished (DONE). */
+  ended: number;
+  done: number;
+  /** What the runs reported; a subscription that reports no price adds 0. */
+  costUsd: number;
+  /** Runs that moved on to the next candidate after a usage limit, capacity or a failed login. */
+  movedOn: number;
+  /** Runs whose tier was their type's default: the call gave no size, and its definition none. */
+  noSize: number;
+}
+
+/**
+ * One row of the routing report's Workflows view: the runs of the Orbit workflows of one name (`meta.name`). Their
+ * calls are SubAgent runs, so the SubAgents view counts them too.
+ */
+export interface WorkflowReportGroup {
+  name: string;
+  /** The newest description its runs gave; null when none gave one. */
+  description: string | null;
+  runs: number;
+  /** Of `runs`, those still running. */
+  running: number;
+  calls: number;
+  /** Calls that ended without finishing: failed, interrupted or stopped. */
+  failedCalls: number;
+  /** What its calls reported. */
+  costUsd: number;
+  /** The median time its ended runs took, in milliseconds; null while none has ended. */
+  durationP50Ms: number | null;
+}
+
+/** `GET /tasks/model-routing/report/subagents?since=&agentId=`: the routing report's SubAgents and Workflows views. */
+export interface SubagentRoutingReport {
+  subagents: SubagentReportGroup[];
+  workflows: WorkflowReportGroup[];
 }
 
 /** What the runner sends when the parent model calls `delegate` (§5.1 step 2). */
@@ -2970,13 +3323,93 @@ export interface ProviderModelTier {
   model: string;
   /** The tiers this model fills, lowest first, at whatever effort each takes. Empty: ranked after tiered models. */
   levels: SubagentSize[];
-  /** `catalogue`: the preset or the built-in tier table. `owner`: set on this page. Null: nobody has. */
+  /** `catalogue`: the preset, the built-in tier table or the model's family. `owner`: set on this page. Null: nobody has. */
   source: 'catalogue' | 'owner' | null;
-  /** The owner may set or clear it (PATCH /providers/mine/:providerId/model-tier): a model of a key's own
-   *  list that the catalogue gives no tier. */
+  /** The owner may set or clear it: a model of a key's own list that the catalogue gives no tier
+   *  (PATCH /providers/mine/:providerId/model-tier), or any model of a built-in engine's catalogue
+   *  (PATCH /providers/builtin/:slug/model-tier, which overrides the catalogue's tier). */
   editable: boolean;
+  /** Set on a built-in engine's untiered model whose family's newest model, this one, is tiered on that engine:
+   *  routing deliberately uses the newest, so the client reads "Older · uses <model>", not "Not set". Display only. */
+  supersededBy?: string;
   /** USD per million output tokens, when known (models.dev); null for a subscription or an unpriced key. */
   outputPricePerMTok: number | null;
+  /** How well this model completed work, for display only: routing never reads it (docs/subagent-design.md §7.1).
+   *  Pooled over every row of the same `identity`, on any provider or engine. */
+  quality: ModelQuality;
+  /** Which model this is on any provider or engine (apiserver model-identity.ts): rows with one `key` are one
+   *  model, `name` its vendor name (null when none is known). Display only. */
+  identity?: { key: string; name: string | null };
+}
+
+/** How far back the Model tiers quality reads, in days. */
+export const MODEL_QUALITY_WINDOW_DAYS = 90;
+/** A rating this many days old weighs half as much as one made today. */
+export const MODEL_QUALITY_HALF_LIFE_DAYS = 30;
+/** Fewer ratings than this read as "Not enough ratings": no average is given. */
+export const MODEL_QUALITY_MIN_RATINGS = 5;
+/** Fewer completed tasks than this read as "Not enough tasks": no rate is given. */
+export const MODEL_QUALITY_MIN_TASKS = 10;
+
+/** Who rated a model's SubAgent runs: the parent sessions' own model, and how many of the ratings it gave. */
+export interface ModelQualityRater {
+  engine: string | null;
+  provider: string;
+  model: string | null;
+  /** The model's name as the owner's tables give it, else its id; null when the parent named no model. */
+  label: string | null;
+  count: number;
+}
+
+/**
+ * SubAgent runs on this model in the last MODEL_QUALITY_WINDOW_DAYS days, and how the parents that started them
+ * rated them (subagent_rate, 1 to 5). The average weighs each rating by its age (half-life
+ * MODEL_QUALITY_HALF_LIFE_DAYS); it is null below MODEL_QUALITY_MIN_RATINGS ratings.
+ */
+export interface ModelSubagentQuality {
+  averageRating: number | null;
+  ratedCount: number;
+  /** The runs that ended, rated or not. */
+  runCount: number;
+  /** Most ratings first. */
+  raters: ModelQualityRater[];
+}
+
+/**
+ * Tasks whose first run was on this model in the last MODEL_QUALITY_WINDOW_DAYS days and that are done, and how
+ * many of them passed first time: one run, never failed, sent back or failed by a verifier. A run that failed on a
+ * usage limit or a model at capacity is not counted at all. The rate is null below MODEL_QUALITY_MIN_TASKS.
+ */
+export interface ModelTaskQuality {
+  firstPassRate: number | null;
+  firstPassTaskCount: number;
+  completedTaskCount: number;
+}
+
+export interface ModelQuality {
+  subagent: ModelSubagentQuality;
+  tasks: ModelTaskQuality;
+}
+
+/** POST /runner/sessions/:id/subagents/:runId/rating (subagent_rate): the parent's rating of a run it started. */
+export interface SubagentRatingRequest {
+  /** 1 = discarded it or had to redo it, 3 = usable after fixes, 5 = used as-is. */
+  score: number;
+  /** Up to SUBAGENT_RATING_NOTE_MAX characters. */
+  note?: string;
+}
+
+export const SUBAGENT_RATING_NOTE_MAX = 500;
+
+export interface SubagentRatingResponse {
+  runId: string;
+  score: number;
+  note: string | null;
+  ratedAt: string;
+  /** The rating parent's own engine, provider and model, as the session ran when it rated. */
+  rater: { engine: string | null; provider: string; model: string | null };
+  /** A rating this run already had was replaced. */
+  replaced: boolean;
 }
 
 /** One provider as the SubAgents settings and the Tier column list it, in the owner's provider order. */
@@ -2995,7 +3428,8 @@ export interface SubagentTiersResponse {
   providers: ProviderTierRow[];
 }
 
-/** PATCH /providers/mine/:id/model-tier: set or clear (null) the owner's tier for one model of that key. */
+/** PATCH /providers/mine/:id/model-tier, or PATCH /providers/builtin/:engine/model-tier: set or clear (null) the
+ *  owner's tier for one model of that key, or of that built-in engine's catalogue. */
 export interface ProviderModelTierUpdate {
   model: string;
   tier: SubagentSize | null;
@@ -3052,6 +3486,13 @@ export interface ClaimedSession {
   codelessCheckout?: boolean;
   /** The branch a `codelessCheckout` run makes at finalize if it changed anything. */
   codelessBranch?: string;
+  /** Run now (docs/mocks/queued-run-now): this claim takes the session past the runner's maxConcurrent, as the turn
+   *  its owner let start over the limit (`overCapacityTurnId`). Sent only to a runner that declares OVER_CAPACITY_V1,
+   *  which admits it up to maxConcurrent + burstConcurrent and evicts no running turn for it. When that turn ends the
+   *  slot is returned: the session's next message is claimed as any other. Absent on every ordinary claim. */
+  overCapacity?: boolean;
+  /** The conversation turn the overflow covers, beside `overCapacity`. */
+  overCapacityTurnId?: string;
   /** Agent opt-in: if workDir isn't a git repo, the runner `git init`s it (default
    *  .gitignore + baseline commit) so the session can still be worktree-isolated. */
   autoInitGit?: boolean;
@@ -3113,6 +3554,14 @@ export interface ClaimedSession {
    *  ORBIT_WIKI, wiki/wiki-rollout.ts). Injected as ORBIT_WIKI=off so `orbit mcp` and the CLI leave out the wiki
    *  tools. Absent means on. */
   wikiDisabled?: boolean;
+  /** Present, and true, only while the Orbit Cloud browser is switched on on this server
+   *  (ORBIT_MANAGED_RUNNER_BROWSER_ENABLED with managed runners on, managed-runner-browser-gate.ts). Injected as
+   *  ORBIT_BROWSER=on so `orbit mcp` and the CLI offer the browser tools; absent, they are not there at all. */
+  browserEnabled?: boolean;
+  /** Present, and true, only when this session's Agent may not start a workflow: its Workflows switch is off, or its
+   *  SubAgents are (docs/subagent-workflow-design.md §9 D2). Injected as ORBIT_WORKFLOWS=off so `orbit mcp` leaves out
+   *  the `workflow` tool; `delegate` is not affected. Absent means on. */
+  workflowsDisabled?: boolean;
   /** Present, and true, only for the session of a scheduled task's run (`Session.scheduleRunId`, docs/scheduled-
    *  tasks-design.md §7.1). Injected as ORBIT_SCHEDULE_RUN=1 so `orbit mcp` lists schedule_run_report. */
   scheduleRun?: boolean;
@@ -3589,6 +4038,10 @@ export interface ReclaimSession {
   watchesDisabled?: boolean;
   /** The wiki not switched on for the owner, cf. ClaimedSession.wikiDisabled. */
   wikiDisabled?: boolean;
+  /** The Orbit Cloud browser switched on, cf. ClaimedSession.browserEnabled. */
+  browserEnabled?: boolean;
+  /** Workflows not on for the session's Agent, cf. ClaimedSession.workflowsDisabled. */
+  workflowsDisabled?: boolean;
   /** A scheduled task's run, cf. ClaimedSession.scheduleRun. */
   scheduleRun?: boolean;
   /** Fresh runner/session-bound proof for the runner's private credential store. */
@@ -4145,8 +4598,11 @@ export interface IntegrationCheckResult extends Omit<IntegrationCheckSpec, 'time
   scope?: 'COMBINED' | 'BASELINE';
   /** The exact tree measured by the baseline check, before it ran (K4). */
   treeSha?: string;
-  skipped?: 'PATHS_EXEMPT';
+  /** A landing check not run: PATHS_EXEMPT names the `files` that changed (§11 K2), TASK_EXEMPT the
+   *  `reason` its task is exempt (§12.15 P-C2). */
+  skipped?: 'PATHS_EXEMPT' | 'TASK_EXEMPT';
   files?: string[];
+  reason?: string;
   exitCode: number | null;
   timedOut: boolean;
   durationMs: number;
@@ -4200,6 +4656,11 @@ export interface IntegrationJobCommand {
    *  `promotion-automatic-land/v1`; absent on every other job. */
   automatic?: boolean;
   checks: IntegrationCheckSpec[];
+  /** LAND_TASK of a task exempt from the project's landing check (§12.15 P-C2): why. `checks` already
+   *  leaves the landing check out; this is only what the runner records as the skipped
+   *  `{ name: 'LANDING_CHECK', skipped: 'TASK_EXEMPT', reason }`. An older runner ignores it, and the
+   *  control plane records that skip itself when the landing lands. */
+  landingCheckExemptReason?: string;
   /** Somebody asked for this job to stop. Today's runner reads it once, when it starts the job (and
    *  a takeover's new process reads the request its claim carries), so a request written while a
    *  legacy job runs only takes effect if the job is claimed again; the progress protocol adds it to

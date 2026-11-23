@@ -42,13 +42,13 @@ controllers and their decorators, so it lists what the server mounts, not what a
 
 | Caller | Routes |
 | --- | --- |
-| `public` | 37 |
-| `user` | 482 |
+| `public` | 39 |
+| `user` | 527 |
 | `admin` | 31 |
-| `runner` | 205 |
+| `runner` | 229 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **759** |
+| **Total** | **830** |
 
 ## Public routes
 
@@ -65,6 +65,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/auth/methods` | — | `AuthController.methods` |
 | `POST` | `/api/auth/refresh` | body `RefreshDto` | `AuthController.refresh` |
 | `GET` | `/api/auth/setup-status` | — | `AuthController.setupStatus` |
+| `GET` | `/api/drive/dl/:token` | path `token` | `DriveDownloadController.open` |
 | `ALL` | `/api/gw/anthropic` | — | `AnthropicGatewayController.forward` |
 | `ALL` | `/api/gw/anthropic/{*path}` | — | `AnthropicGatewayController.forward` |
 | `ALL` | `/api/gw/codex` | — | `PoolGatewayController.forward` |
@@ -82,6 +83,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/shared/:token/artifacts` | path `token`; query `path` | `SharedController.artifact` |
 | `GET` | `/api/shared/:token/attachments/:id` | path `id`, `token` | `SharedController.attachment` |
 | `GET` | `/api/shared/:token/card` | path `token` | `SharedController.card` |
+| `GET` | `/api/shared/:token/content` | path `token` | `SharedController.content` |
 | `GET` | `/api/shared/:token/docs/:slug` | path `slug`, `token` | `SharedController.wikiDoc` |
 | `GET` | `/api/shared/:token/events` | path `token`; query `after`, `before`, `limit`, `maxPayload` | `SharedController.events` |
 | `GET` | `/api/shared/:token/events/:seq` | path `seq`, `token` | `SharedController.event` |
@@ -103,8 +105,11 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/access-tokens/device/:userCode/approve` | path `userCode` | `PatDeviceLoginController.approve` |
 | `POST` | `/api/access-tokens/device/:userCode/deny` | path `userCode` | `PatDeviceLoginController.deny` |
 | `GET` | `/api/account-secrets` | — | `AccountSecretsController.list` |
-| `DELETE` | `/api/account-secrets/:id` | path `id` | `AccountSecretsController.remove` |
+| `POST` | `/api/account-secrets` | body `CreateAccountSecretDto` | `AccountSecretsController.create` |
+| `DELETE` | `/api/account-secrets/:id` | path `id`; query `revokeCopies` | `AccountSecretsController.remove` |
 | `PUT` | `/api/account-secrets/:id` | body `ReplaceAccountSecretDto`; path `id` | `AccountSecretsController.replace` |
+| `GET` | `/api/account-secrets/grants` | query `removed` | `AccountSecretsController.grants` |
+| `POST` | `/api/account-secrets/grants/:id/revoke` | path `id` | `AccountSecretsController.revokeGrant` |
 | `GET` | `/api/agents` | — | `WorkspacesController.list` |
 | `POST` | `/api/agents` | body `CreateWorkspaceDto` | `WorkspacesController.create` |
 | `DELETE` | `/api/agents/:id` | path `id` | `WorkspacesController.remove` |
@@ -133,6 +138,33 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/auth/google/link` | body `GoogleLinkDto` | `GoogleAuthController.link` |
 | `POST` | `/api/auth/google/link/confirm` | body `GoogleExchangeDto` | `GoogleAuthController.confirmLink` |
 | `GET` | `/api/conditions/:id` | path `id` | `ConditionsController.get` |
+| `GET` | `/api/drive/changes` | query `since` | `DriveController.changes` |
+| `GET` | `/api/drive/entries` | query `cursor`, `limit`, `parentId` | `DriveController.list` |
+| `DELETE` | `/api/drive/entries/:id` | path `id` | `DriveController.moveToTrash` |
+| `GET` | `/api/drive/entries/:id` | path `id` | `DriveController.get` |
+| `PATCH` | `/api/drive/entries/:id` | body `UpdateDriveEntryDto`; path `id` | `DriveController.update` |
+| `GET` | `/api/drive/entries/:id/content` | path `id` | `DriveController.download` |
+| `POST` | `/api/drive/entries/:id/download-link` | body `DriveDownloadLinkDto`; path `id` | `DriveController.downloadLink` |
+| `POST` | `/api/drive/entries/:id/share-check` | path `id` | `DriveController.shareCheck` |
+| `GET` | `/api/drive/entries/:id/versions` | path `id` | `DriveController.versions` |
+| `POST` | `/api/drive/folders` | body `CreateDriveFolderDto` | `DriveController.createFolder` |
+| `GET` | `/api/drive/resolve` | query `path` | `DriveController.resolve` |
+| `GET` | `/api/drive/search` | query `cursor`, `limit`, `q` | `DriveController.search` |
+| `DELETE` | `/api/drive/trash` | — | `DriveController.emptyTrash` |
+| `GET` | `/api/drive/trash` | query `cursor`, `limit` | `DriveController.trash` |
+| `DELETE` | `/api/drive/trash/groups/:id` | path `id` | `DriveController.deleteGroup` |
+| `GET` | `/api/drive/trash/groups/:id` | path `id`; query `cursor`, `limit`, `parentId` | `DriveController.trashGroup` |
+| `POST` | `/api/drive/trash/groups/:id/items/:entryId/restore` | path `entryId`, `id` | `DriveController.restoreItem` |
+| `POST` | `/api/drive/trash/groups/:id/restore` | path `id` | `DriveController.restoreGroup` |
+| `POST` | `/api/drive/uploads` | body `OpenDriveUploadDto` | `DriveController.openUpload` |
+| `DELETE` | `/api/drive/uploads/:id` | path `id` | `DriveController.abandonUpload` |
+| `GET` | `/api/drive/uploads/:id` | path `id` | `DriveController.uploadStatus` |
+| `PUT` | `/api/drive/uploads/:id/chunks/:idx` | path `id`, `idx` | `DriveController.putChunk` |
+| `POST` | `/api/drive/uploads/:id/complete` | path `id` | `DriveController.completeUpload` |
+| `GET` | `/api/drive/usage` | — | `DriveController.usage` |
+| `DELETE` | `/api/drive/versions/:id` | path `id` | `DriveController.deleteVersion` |
+| `GET` | `/api/drive/versions/:id/content` | path `id` | `DriveController.downloadVersion` |
+| `POST` | `/api/drive/versions/:id/restore` | body `RestoreDriveVersionDto`; path `id` | `DriveController.restoreVersion` |
 | `GET` | `/api/events` | query `hints` | `EventsController.events` |
 | `GET` | `/api/guest-sessions` | — | `GuestSessionsController.list` |
 | `GET` | `/api/guest-sessions/:id` | path `id`; query `limit`, `maxPayload` | `GuestSessionsController.get` |
@@ -174,11 +206,13 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/managed-runner/ensure` | body `ManagedRunnerWriteDto` | `ManagedRunnerController.ensure` |
 | `POST` | `/api/managed-runner/retry` | body `ManagedRunnerWriteDto` | `ManagedRunnerController.retry` |
 | `POST` | `/api/managed-runner/sleep` | body `ManagedRunnerWriteDto` | `ManagedRunnerController.sleep` |
+| `POST` | `/api/managed-runner/update-now` | body `ManagedRunnerUpdateNowDto` | `ManagedRunnerController.updateNow` |
 | `POST` | `/api/managed-runner/wake` | body `ManagedRunnerWriteDto` | `ManagedRunnerController.wake` |
 | `GET` | `/api/metrics` | — | `MetricsController.read` |
 | `GET` | `/api/outcomes/inbox` | query `limit` | `OutcomeSurfacesController.inbox` |
 | `GET` | `/api/owner-requests` | query `state` | `OwnerRequestsController.list` |
 | `GET` | `/api/owner-requests/:id` | path `id` | `OwnerRequestsController.get` |
+| `POST` | `/api/owner-requests/:id/apply-settings` | path `id` | `OwnerRequestsController.applySettings` |
 | `POST` | `/api/owner-requests/:id/create-wiki` | path `id` | `OwnerRequestsController.createWiki` |
 | `POST` | `/api/owner-requests/:id/decline` | body `DeclineOwnerRequestDto`; path `id` | `OwnerRequestsController.decline` |
 | `POST` | `/api/owner-requests/:id/done` | body `CompleteOwnerRequestDto`; path `id` | `OwnerRequestsController.complete` |
@@ -199,10 +233,10 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/projects/:id/acceptance/merge-evidence` | body `RecordMergeEvidenceDto`; path `id` | `ProjectsController.recordMergeEvidence` |
 | `POST` | `/api/projects/:id/blockers/:blockerId/resolve` | body `ResolveProjectBlockerDto`; path `blockerId`, `id` | `ProjectsController.resolveBlocker` |
 | `POST` | `/api/projects/:id/coordinator` | body `OpenProjectCoordinatorDto`; path `id` | `ProjectsController.openCoordinator` |
-| `POST` | `/api/projects/:id/coordinator/handoff` | path `id` | `CoordinatorHandoffController.start` |
+| `POST` | `/api/projects/:id/coordinator/handoff` | body `Object`; path `id` | `CoordinatorHandoffController.start` |
 | `POST` | `/api/projects/:id/coordinator/handoff/cancel` | path `id` | `CoordinatorHandoffController.cancel` |
-| `POST` | `/api/projects/:id/coordinator/handoff/retry` | path `id` | `CoordinatorHandoffController.retry` |
-| `POST` | `/api/projects/:id/coordinator/handoff/skip` | path `id` | `CoordinatorHandoffController.skip` |
+| `POST` | `/api/projects/:id/coordinator/handoff/retry` | body `Object`; path `id` | `CoordinatorHandoffController.retry` |
+| `POST` | `/api/projects/:id/coordinator/handoff/skip` | body `Object`; path `id` | `CoordinatorHandoffController.skip` |
 | `GET` | `/api/projects/:id/coordinator/pending-waits` | path `id` | `CoordinatorHandoffController.pendingWaits` |
 | `POST` | `/api/projects/:id/coordinator/rebind` | body `RebindProjectCoordinatorDto`; path `id` | `ProjectsController.rebindCoordinator` |
 | `POST` | `/api/projects/:id/coordinator/replace` | body `ReplaceProjectCoordinatorDto`; path `id` | `ProjectsController.replaceCoordinator` |
@@ -236,6 +270,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/projects/:id/promotions/:promotionId/integration/retry` | body `RetryIntegrationDto`; path `id`, `promotionId` | `ProjectIntegrationRetryController.retryPromotionCheck` |
 | `POST` | `/api/projects/:id/resume` | path `id` | `ProjectsController.resume` |
 | `POST` | `/api/projects/:id/sessions/complete` | path `id` | `ProjectsController.completeSessions` |
+| `POST` | `/api/projects/:id/setting-changes/:changeId/revert` | path `changeId`, `id` | `ProjectsController.revertSettingChange` |
 | `DELETE` | `/api/projects/:id/share` | path `id` | `ShareLinksController.turnOffProjectLink` |
 | `GET` | `/api/projects/:id/share` | path `id` | `ShareLinksController.projectLink` |
 | `PUT` | `/api/projects/:id/share` | body `PutShareLinkDto`; path `id` | `ShareLinksController.putProjectLink` |
@@ -255,6 +290,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/projects/sidebar` | — | `ProjectsController.sidebar` |
 | `POST` | `/api/prompt-optimizations` | body `PromptOptimizationDto` | `PromptOptimizerController.optimize` |
 | `GET` | `/api/providers` | — | `ProvidersController.list` |
+| `PATCH` | `/api/providers/builtin/:engine/model-tier` | body `UpdateProviderModelTierDto`; path `engine` | `ProvidersController.setBuiltinModelTier` |
 | `GET` | `/api/providers/mine` | — | `ProvidersController.listMine` |
 | `POST` | `/api/providers/mine` | body `CreateModelProviderDto` | `ProvidersController.createMine` |
 | `DELETE` | `/api/providers/mine/:id` | path `id` | `ProvidersController.removeMine` |
@@ -307,6 +343,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runners/:id/attention/:kind/fix` | body `Object`; path `id`, `kind` | `RunnerAttentionFixController.fix` |
 | `GET` | `/api/runners/:id/browser` | path `id` | `ManagedRunnerBrowserController.state` |
 | `POST` | `/api/runners/:id/browser/clear` | path `id` | `ManagedRunnerBrowserController.clear` |
+| `POST` | `/api/runners/:id/browser/sign-in` | path `id` | `ManagedRunnerBrowserController.signIn` |
 | `GET` | `/api/runners/:id/claude-history` | path `id`; query `workDir` | `RunnersController.claudeHistory` |
 | `POST` | `/api/runners/:id/claude-history` | body `Object`; path `id` | `RunnersController.askClaudeHistory` |
 | `DELETE` | `/api/runners/:id/codex-accounts/:account` | path `account`, `id` | `RunnersController.removeCodexAccount` |
@@ -345,6 +382,8 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/schedules` | query `state`, `workspaceId` | `SchedulesController.list` |
 | `DELETE` | `/api/schedules/:id` | path `id` | `SchedulesController.remove` |
 | `GET` | `/api/schedules/:id` | path `id` | `SchedulesController.get` |
+| `GET` | `/api/schedules/:id/change` | path `id` | `SchedulesController.change` |
+| `POST` | `/api/schedules/:id/change` | body `ScheduleChangeDto`; path `id` | `SchedulesController.openChange` |
 | `POST` | `/api/schedules/:id/pause` | path `id` | `SchedulesController.pause` |
 | `POST` | `/api/schedules/:id/resume` | path `id` | `SchedulesController.resume` |
 | `POST` | `/api/schedules/:id/run` | path `id` | `SchedulesController.runNow` |
@@ -375,6 +414,8 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `DELETE` | `/api/sessions/:id/auto-retry` | path `id` | `SessionsController.cancelAutoRetry` |
 | `POST` | `/api/sessions/:id/auto-retry` | body `Object`; path `id` | `SessionsController.armAutoRetry` |
 | `GET` | `/api/sessions/:id/background` | path `id` | `SessionsController.backgroundShells` |
+| `POST` | `/api/sessions/:id/background/jobs/:jobId/stop` | path `id`, `jobId` | `SessionsController.stopBackgroundJob` |
+| `GET` | `/api/sessions/:id/background/jobs/:jobId/tail` | path `id`, `jobId`; query `lines` | `SessionsController.backgroundJobTail` |
 | `POST` | `/api/sessions/:id/checkout/discard` | path `id` | `SessionsController.discardCheckout` |
 | `POST` | `/api/sessions/:id/commit` | path `id` | `SessionsController.commitWorktree` |
 | `GET` | `/api/sessions/:id/compact` | path `id` | `SessionsController.getCompact` |
@@ -396,6 +437,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/sessions/:id/interrupt` | body `Object`; path `id` | `SessionsController.interrupt` |
 | `GET` | `/api/sessions/:id/landing/log` | path `id`; query `check`, `claim`, `cursor`, `jobId`, `round` | `SessionsController.landingLog` |
 | `POST` | `/api/sessions/:id/merge` | body `Object`; path `id` | `SessionsController.mergeToMain` |
+| `POST` | `/api/sessions/:id/merge-failure/dismiss` | path `id` | `SessionsController.dismissMergeFailure` |
 | `GET` | `/api/sessions/:id/merge-receipts` | path `id`; query `limit` | `SessionsController.listMergeReceipts` |
 | `POST` | `/api/sessions/:id/merge-receipts` | body `RecordMergeReceiptDto`; path `id` | `SessionsController.recordMergeReceipt` |
 | `POST` | `/api/sessions/:id/merge-repair` | body `Object`; path `id` | `SessionsController.mergeRepair` |
@@ -410,6 +452,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/sessions/:id/resume` | body `Object`; path `id` | `SessionsController.resume` |
 | `GET` | `/api/sessions/:id/retry-message` | path `id` | `SessionsController.retryMessage` |
 | `POST` | `/api/sessions/:id/retry-message` | body `Object`; path `id` | `SessionsController.resendRetryMessage` |
+| `POST` | `/api/sessions/:id/run-now` | path `id` | `SessionsController.runNow` |
 | `GET` | `/api/sessions/:id/schedule-cards` | path `id` | `SchedulesController.sessionCards` |
 | `PATCH` | `/api/sessions/:id/settings` | body `Object`; path `id` | `SessionsController.updateSettings` |
 | `DELETE` | `/api/sessions/:id/share` | path `id` | `ShareLinksController.turnOffSessionLink` |
@@ -425,15 +468,18 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/sessions/:id/turns/:turnId/translation/retry` | path `id`, `turnId` | `SessionsController.retryTurnTranslation` |
 | `POST` | `/api/sessions/:id/turns/:turnId/translation/send-as-written` | path `id`, `turnId` | `SessionsController.sendTurnAsWritten` |
 | `POST` | `/api/sessions/:id/turns/current-work-routing` | body `Object`; path `id` | `SessionsController.routedTurn` |
+| `GET` | `/api/sessions/:id/workflows` | path `id` | `SessionsController.workflowRuns` |
 | `GET` | `/api/sessions/:id/worktree-file` | path `id`; query `path` | `SessionsController.worktreeFile` |
 | `GET` | `/api/sessions/compact` | query `parentSessionId`, `status` | `SessionsController.listCompact` |
 | `GET` | `/api/sessions/counts` | — | `SessionsController.counts` |
 | `POST` | `/api/sessions/import` | body `Object` | `SessionsController.importSession` |
 | `POST` | `/api/sessions/import-batch` | body `Object` | `SessionsController.importBatch` |
 | `GET` | `/api/sessions/imported` | query `workspaceId` | `SessionsController.importedCount` |
+| `GET` | `/api/sessions/project-placement` | query `projectIds`, `view` | `SessionsController.projectPlacement` |
 | `POST` | `/api/sessions/remove-imported` | body `Object` | `SessionsController.removeImported` |
 | `GET` | `/api/sessions/search` | query `limit`, `q` | `SessionsController.search` |
 | `GET` | `/api/share-links` | query `kind` | `ShareLinksController.list` |
+| `POST` | `/api/share-links` | body `ShareDriveFileDto` | `ShareLinksController.shareDriveFile` |
 | `DELETE` | `/api/share-links/:id` | path `id` | `ShareLinksController.turnOff` |
 | `POST` | `/api/share-links/turn-off` | body `TurnOffShareLinksDto` | `ShareLinksController.turnOffMany` |
 | `GET` | `/api/task-lists` | — | `TaskListsController.list` |
@@ -482,6 +528,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/tasks/evidence-decisions/pending` | query `decidingSessionId` | `PendingEvidenceJudgmentsController.pending` |
 | `GET` | `/api/tasks/labels` | query `assigneeId`, `listId`, `projectId` | `TasksController.labelSummary` |
 | `GET` | `/api/tasks/model-routing/report` | query `agentId`, `since` | `TaskModelRoutingReportController.read` |
+| `GET` | `/api/tasks/model-routing/report/subagents` | query `agentId`, `since` | `TaskModelRoutingReportController.readSubagents` |
 | `GET` | `/api/tasks/page` | query `assigneeId`, `counts`, `creatorSessionId`, `cursor`, `labels`, `limit`, `listId`, `minPriority`, `projectId`, `q`, `status` | `TasksController.listPage` |
 | `GET` | `/api/terminals` | — | `TerminalsController.list` |
 | `DELETE` | `/api/terminals/:id` | path `id` | `TerminalsController.revoke` |
@@ -496,7 +543,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/users/me/avatar` | — | `UsersController.avatar` |
 | `PUT` | `/api/users/me/avatar` | — | `UsersController.setAvatar` |
 | `PATCH` | `/api/users/me/preferences` | body `UpdatePreferencesDto` | `UsersController.updatePreferences` |
-| `GET` | `/api/watches` | query `needsAttention`, `state` | `WatchesController.list` |
+| `GET` | `/api/watches` | query `following`, `needsAttention`, `state` | `WatchesController.list` |
 | `POST` | `/api/watches` | body `CreateWatchDto` | `WatchesController.create` |
 | `GET` | `/api/watches/:id` | path `id` | `WatchesController.get` |
 | `PATCH` | `/api/watches/:id` | body `UpdateWatchDto`; path `id` | `WatchesController.update` |
@@ -624,6 +671,10 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/runner/agents` | — | `RunnerAgentsController.listWorkspaces` |
 | `POST` | `/api/runner/agents` | body `Object` | `RunnerAgentsController.createWorkspace` |
 | `PATCH` | `/api/runner/agents/:id` | body `Object`; path `id` | `RunnerAgentsController.updateWorkspace` |
+| `GET` | `/api/runner/browser` | — | `RunnerBrowserController.status` |
+| `POST` | `/api/runner/browser/clear` | body `Object` | `RunnerBrowserController.clear` |
+| `POST` | `/api/runner/browser/open` | body `Object` | `RunnerBrowserController.open` |
+| `POST` | `/api/runner/browser/sign-in-requests` | body `BrowserSignInRequestDto` | `RunnerBrowserController.requestSignIn` |
 | `POST` | `/api/runner/claude-account-swap-result` | body `Object` | `RunnerApiController.claudeAccountSwapResult` |
 | `POST` | `/api/runner/claude-history-result` | body `Object` | `RunnerApiController.claudeHistoryResult` |
 | `POST` | `/api/runner/codex-account-remove-result` | body `Object` | `RunnerApiController.codexAccountRemoveResult` |
@@ -633,6 +684,23 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/cursor-key-check-result` | body `CursorKeyCheckResultDto` | `RunnerApiController.cursorKeyCheckResult` |
 | `POST` | `/api/runner/deregister` | — | `RunnerApiController.deregister` |
 | `POST` | `/api/runner/dir-probe-result` | body `Object` | `RunnerApiController.dirProbeResult` |
+| `GET` | `/api/runner/drive/changes` | query `since`, `wait` | `RunnerDriveController.changes` |
+| `GET` | `/api/runner/drive/chunks/:sha256` | path `sha256` | `RunnerDriveController.chunk` |
+| `POST` | `/api/runner/drive/commit` | body `RunnerDriveCommitDto` | `RunnerDriveController.commit` |
+| `GET` | `/api/runner/drive/commits/:commitId` | path `commitId` | `RunnerDriveController.commitStatus` |
+| `POST` | `/api/runner/drive/create` | body `RunnerDriveCreateDto` | `RunnerDriveController.create` |
+| `POST` | `/api/runner/drive/delete` | body `RunnerDriveDeleteDto` | `RunnerDriveController.remove` |
+| `GET` | `/api/runner/drive/list` | query `cursor`, `id`, `limit`, `path` | `RunnerDriveController.list` |
+| `GET` | `/api/runner/drive/manifest` | query `id`, `path` | `RunnerDriveController.manifest` |
+| `POST` | `/api/runner/drive/mkdir` | body `RunnerDriveMkdirDto` | `RunnerDriveController.mkdir` |
+| `POST` | `/api/runner/drive/rename` | body `RunnerDriveRenameDto` | `RunnerDriveController.rename` |
+| `POST` | `/api/runner/drive/stagings` | body `RunnerDriveStagingDto` | `RunnerDriveController.openStaging` |
+| `GET` | `/api/runner/drive/stagings/:id/chunks/:idx` | path `id`, `idx` | `RunnerDriveController.readChunk` |
+| `PUT` | `/api/runner/drive/stagings/:id/chunks/:idx` | path `id`, `idx` | `RunnerDriveController.putChunk` |
+| `POST` | `/api/runner/drive/stagings/:id/keepalive` | body `RunnerDriveKeepaliveDto`; path `id` | `RunnerDriveController.keepalive` |
+| `GET` | `/api/runner/drive/stat` | query `id`, `path` | `RunnerDriveController.stat` |
+| `GET` | `/api/runner/drive/usage` | — | `RunnerDriveController.usage` |
+| `POST` | `/api/runner/drive/utimens` | body `RunnerDriveUtimensDto` | `RunnerDriveController.utimens` |
 | `GET` | `/api/runner/files` | query `evidenceId`, `sessionId`, `taskId` | `RunnerFilesController.list` |
 | `POST` | `/api/runner/git-credential` | body `RunnerGitCredentialDto` | `RunnerGitCredentialController.credential` |
 | `POST` | `/api/runner/heartbeat` | body `Object` | `RunnerApiController.heartbeat` |
@@ -725,11 +793,11 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/sessions/:id/end` | path `id` | `RunnerSessionsController.endSession` |
 | `GET` | `/api/runner/sessions/:id/events` | path `id`; query `after`, `limit` | `RunnerApiController.sessionEvents` |
 | `POST` | `/api/runner/sessions/:id/events` | body `Object`; path `id` | `RunnerApiController.events` |
-| `POST` | `/api/runner/sessions/:id/file-bundles` | body `CreateFileBundleDto`; path `id` | `RunnerFilesController.createBundle` |
-| `POST` | `/api/runner/sessions/:id/files` | body `UploadFileDto`; path `id` | `RunnerApiController.uploadFile` |
+| `POST` | `/api/runner/sessions/:id/file-bundles` | body `CreateFileBundleDto`; path `id`; query `subagentRunId` | `RunnerFilesController.createBundle` |
+| `POST` | `/api/runner/sessions/:id/files` | body `UploadFileDto`; path `id`; query `subagentRunId` | `RunnerApiController.uploadFile` |
 | `GET` | `/api/runner/sessions/:id/files/:fileId` | path `fileId`, `id` | `RunnerFilesController.describe` |
-| `DELETE` | `/api/runner/sessions/:id/files/:fileId/pin` | path `fileId`, `id` | `RunnerFilesController.unpin` |
-| `PUT` | `/api/runner/sessions/:id/files/:fileId/pin` | path `fileId`, `id` | `RunnerFilesController.pin` |
+| `DELETE` | `/api/runner/sessions/:id/files/:fileId/pin` | path `fileId`, `id`; query `subagentRunId` | `RunnerFilesController.unpin` |
+| `PUT` | `/api/runner/sessions/:id/files/:fileId/pin` | path `fileId`, `id`; query `subagentRunId` | `RunnerFilesController.pin` |
 | `POST` | `/api/runner/sessions/:id/finalize` | body `Object`; path `id` | `RunnerApiController.finalize` |
 | `POST` | `/api/runner/sessions/:id/import-result` | body `Object`; path `id` | `RunnerApiController.importResult` |
 | `GET` | `/api/runner/sessions/:id/inbox` | path `id`; query `acceptsSteer`, `leaseGeneration`, `runningTurnId` | `RunnerApiController.inbox` |
@@ -750,6 +818,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `PATCH` | `/api/runner/sessions/:id/subagents/:runId` | body `SubagentRunUpdateDto`; path `id`, `runId` | `RunnerSubagentsController.updateSubagentRun` |
 | `GET` | `/api/runner/sessions/:id/subagents/:runId/events` | path `id`, `runId`; query `after` | `RunnerSubagentsController.readRelayedSubagentEvents` |
 | `POST` | `/api/runner/sessions/:id/subagents/:runId/fallback` | body `SubagentFallbackDto`; path `id`, `runId` | `RunnerSubagentsController.nextSubagentCandidate` |
+| `POST` | `/api/runner/sessions/:id/subagents/:runId/rating` | body `SubagentRatingDto`; path `id`, `runId` | `RunnerSubagentsController.rateSubagentRun` |
 | `POST` | `/api/runner/sessions/:id/subagents/:runId/stop` | path `id`, `runId` | `RunnerSubagentsController.stopRemoteSubagentRun` |
 | `POST` | `/api/runner/sessions/:id/takeover-leases` | body `Object`; path `id` | `RunnerApiController.takeoverLeases` |
 | `POST` | `/api/runner/sessions/:id/turn-complete` | body `Object`; path `id` | `RunnerApiController.turnComplete` |
@@ -763,6 +832,8 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/runner/sessions/search` | query `limit`, `q` | `RunnerSessionsController.searchSessions` |
 | `POST` | `/api/runner/sessions/takeover-leases` | body `Object` | `RunnerApiController.takeoverLeasesBatch` |
 | `POST` | `/api/runner/sessions/worktrees-removable` | body `Object` | `RunnerApiController.worktreesRemovable` |
+| `GET` | `/api/runner/settings` | — | `RunnerOwnerRequestsController.settings` |
+| `POST` | `/api/runner/settings-proposals` | body `ProposeSettingsDto` | `RunnerOwnerRequestsController.proposeSettings` |
 | `PATCH` | `/api/runner/subagent-runs/:runId` | body `SubagentRunUpdateDto`; path `runId` | `RunnerSubagentsController.endRemoteSubagentRun` |
 | `POST` | `/api/runner/subagent-runs/:runId/claim` | path `runId` | `RunnerSubagentsController.claimRemoteSubagentRun` |
 | `POST` | `/api/runner/subagent-runs/:runId/events` | body `Object`; path `runId` | `RunnerSubagentsController.relaySubagentEvents` |

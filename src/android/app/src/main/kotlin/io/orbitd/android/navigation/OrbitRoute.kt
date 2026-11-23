@@ -19,6 +19,10 @@ enum class Destination { WORKSPACES, WORKSPACE, FOLDER, SEARCH, SESSION, DRAFT, 
     /** Scheduled tasks (docs/scheduled-tasks-design.md §9.2): account-wide, in the drawer only. `id` the schedule whose detail sheet
      * opens over the timeline, from a push or a card's Open. */
     SCHEDULED,
+    /** A schedule's draft change conversation (§8.2, board 03-change ③): `id` the schedule. The page reads
+     * `GET /schedules/:id/change`; a conversation already open — or opened by the first words sent here — takes its
+     * place. */
+    SCHEDULE_CHANGE,
     /** A session someone shared with this account (docs/session-guests-design.md §4): `id` the session, drawn as the guest view. A
      *  Shared with me row opens it; a session link the owner's read answers 404 for draws the same view through `SESSION`. */
     GUEST_SESSION }
@@ -59,6 +63,9 @@ data class OrbitNavigation(
     fun push(route: OrbitRoute): OrbitNavigation = if (current == route) this
         else copy(stacks = stacks + (section to (frames + route)))
     fun back(): OrbitNavigation = if (!canGoBack) this else copy(stacks = stacks + (section to frames.dropLast(1)))
+    /** The page on top gives way to [route] in its place (iOS `NavState.replaceTop`): a draft becomes the session it created,
+     * so Back goes where the draft would have, never to the draft again. */
+    fun replaceTop(route: OrbitRoute): OrbitNavigation = copy(stacks = stacks + (section to (frames.dropLast(1) + route)))
     /** A drawer row's tap (iOS `openDrawerDestination`, 3d50935b4): the row of the destination already showing leaves
      * its page as it is — the tap only closes the drawer — and any other lands on its destination's root page, the
      * stack being left going with it. A workspace's lands on the folder page its list was left on, while [hasFolder]
@@ -137,6 +144,18 @@ fun guestDestination(id: String) = "guest:${ObjectId.canonical(id) ?: id}"
 /** The destination of a drawer Set up <machine> row (iOS `DrawerDestination.machineDraft`). */
 fun machineDraftDestination(id: String) = "setup:${ObjectId.canonical(id) ?: id}"
 
+/** A machine's new session page opened as New workspace while the machine has one (docs/mocks/new-workspace-form/02-apple-entry, owner
+ *  A 2026-11-20; iOS `AppModel.openNewWorkspace`): the setup card makes one more instead of moving on to the first. */
+const val NEW_WORKSPACE_RECORD = "new-workspace"
+
+/** New workspace on a machine, from the drawer's + or the machine page's row: its new session page with the setup card. One with no
+ *  workspace yet gets the page its Set up row opens. */
+fun newWorkspaceRoute(runnerId: String, hasWorkspace: Boolean, origin: Origin) =
+    OrbitRoute(Destination.DRAFT, id = runnerId, recordId = NEW_WORKSPACE_RECORD.takeIf { hasWorkspace }, origin = origin)
+
+/** The page [newWorkspaceRoute] opens on a machine that has a workspace. */
+val OrbitRoute.addsWorkspace get() = destination == Destination.DRAFT && workspaceId == null && recordId == NEW_WORKSPACE_RECORD
+
 /** The Wiki and Watch pages, whose state is the frame's own (MainActivity drops it once the frame left every stack). */
 val OrbitRoute.isWikiOrWatch get() = destination == Destination.WATCH || destination.name.startsWith("WIKI")
 
@@ -212,6 +231,11 @@ object OrbitLinks {
         val scheme = uri.scheme?.lowercase().orEmpty()
         var kind: Destination? = null
         var id: String? = null
+        // `orbit-settings:<key>` opens Settings at that row (design §6): its page, the row asked for in recordId. Theme has no page.
+        if (scheme == "orbit-settings") {
+            val place = io.orbitd.android.core.cards.SettingsFromConversation.place(uri.schemeSpecificPart) ?: return null
+            return OrbitRoute(Destination.SETTINGS, place.page, recordId = place.key, origin = origin)
+        }
         if (scheme.startsWith("orbit-")) {
             kind = references[scheme.removePrefix("orbit-")]
             id = if (kind == Destination.SESSION) uri.schemeSpecificPart.substringBefore('?') else uri.schemeSpecificPart

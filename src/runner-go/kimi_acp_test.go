@@ -1372,7 +1372,7 @@ func TestKimiPlanReviewBecomesStructuredQuestion(t *testing.T) {
 
 func TestKimiPromptCarriesAgentAndOrbitInstructions(t *testing.T) {
 	agent := AgentExecConfig{SystemPrompt: "Review carefully", AppendSystemPrompt: "Keep it short"}
-	got := kimiPromptText(agent, "/opt/orbit", "hello", false, true)
+	got := kimiPromptText(agent, "/opt/orbit", "hello", false, true, true)
 	for _, want := range []string{"<orbit-agent-instructions>", "Review carefully", "Keep it short", "/opt/orbit", "hello"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("prompt %q missing %q", got, want)
@@ -1579,5 +1579,63 @@ func TestKimiPermissionToolInputMissesUnknownCall(t *testing.T) {
 	}, "0:tool_2")
 	if firstString(mapValue(got), "description") != "Running: pwd" {
 		t.Fatalf("input = %#v, want the request's own action line", got)
+	}
+}
+
+// A read-only Kimi SubAgent runs in plan mode, which asks about every shell call. Its shell requests follow the
+// parent's mode, read when each is asked: no card under Auto or Bypass, a card under any other mode. Its edit
+// tools stay with plan, and a Kimi child that is not read-only is untouched.
+func TestKimiReadonlySubagentShellFollowsParentMode(t *testing.T) {
+	options := []interface{}{
+		map[string]interface{}{"optionId": "approve_once", "kind": "allow_once"},
+		map[string]interface{}{"optionId": "reject", "kind": "reject_once"},
+	}
+	live := &sessionLiveMode{}
+	parent := &ClaimedSession{SessionID: "parent", Agent: AgentExecConfig{PermissionMode: "auto"}, liveMode: live}
+	child := subagentChildJob(parent, AgentExecConfig{Provider: providerKimi}, subagentDefinition{Name: "explore", Readonly: true}, "run1", providerKimi, "")
+	if child.Agent.PermissionMode != "plan" || !child.readonlySubagent {
+		t.Fatalf("read-only Kimi child mode = %q, readonly %t; want plan, true", child.Agent.PermissionMode, child.readonlySubagent)
+	}
+	shell := map[string]interface{}{"command": "git grep -n foo origin/main -- src | head"}
+	ask := func(toolName string) (string, bool) {
+		return kimiAutomaticPermissionOption(child, toolName, shell, options, "")
+	}
+
+	// The parent's claim says Auto and nothing has published a live mode yet.
+	for _, toolName := range []string{"Bash", "Terminal"} {
+		if got, decided := ask(toolName); got != "approve_once" || !decided {
+			t.Fatalf("%s under an Auto parent = %q, %t; want approve_once, true", toolName, got, decided)
+		}
+	}
+	if got, decided := kimiAutomaticPermissionOption(child, "Edit", map[string]interface{}{"file_path": "a.go"}, options, ""); decided {
+		t.Fatalf("Edit under an Auto parent = %q; a read-only child's edits are never answered here", got)
+	}
+
+	// The parent moves to Default mid-run: the next shell call files a card.
+	live.mode = "default"
+	if got, decided := ask("Bash"); decided {
+		t.Fatalf("Bash under a Default parent = %q; want a card", got)
+	}
+	// The child's own mode is plan, so a Don't Ask parent files a card too.
+	for mode, want := range map[string]bool{"bypassPermissions": true, "plan": false, "acceptEdits": false, "dontAsk": false} {
+		live.mode = mode
+		if _, decided := ask("Bash"); decided != want {
+			t.Fatalf("Bash under a %s parent decided = %t; want %t", mode, decided, want)
+		}
+	}
+
+	// A Kimi child that is not read-only keeps its own mode and gets no answer from here.
+	live.mode = "auto"
+	general := subagentChildJob(parent, AgentExecConfig{Provider: providerKimi, PermissionMode: "default"}, subagentDefinition{Name: "general"}, "run2", providerKimi, "")
+	if general.readonlyParentMode != nil {
+		t.Fatal("a Kimi child that is not read-only must not carry the parent's mode")
+	}
+	if got, decided := kimiAutomaticPermissionOption(general, "Bash", shell, options, ""); decided {
+		t.Fatalf("Bash in a general Kimi child = %q; want a card", got)
+	}
+	// A top-level session in plan mode is not a SubAgent: its shell calls still ask.
+	session := &ClaimedSession{Agent: AgentExecConfig{PermissionMode: "plan"}}
+	if got, decided := kimiAutomaticPermissionOption(session, "Bash", shell, options, ""); decided {
+		t.Fatalf("Bash in a plan-mode session = %q; want a card", got)
 	}
 }

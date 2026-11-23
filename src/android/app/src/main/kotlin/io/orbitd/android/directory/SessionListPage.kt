@@ -32,6 +32,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
+import io.orbitd.android.OrbitApplication
+import io.orbitd.android.composer.CloneHeard
+import io.orbitd.android.composer.CloneState
+import io.orbitd.android.composer.WorkspaceClone
+import kotlinx.coroutines.flow.MutableStateFlow
 import io.orbitd.android.R
 import io.orbitd.android.management.LocalSessionRecaps
 import io.orbitd.android.navigation.DrawerCopy
@@ -110,8 +115,13 @@ internal fun SessionRow(session: DirectorySession, machine: String?, onOpen: () 
     deleted: Boolean = false, watching: WatchSessionSummary? = null, mark: SessionProjectMark? = null, onOptions: () -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val recaps = LocalSessionRecaps.current
-    val line = remember(session, deleted, watching, recaps, machine) {
-        SessionLine.make(session, live = !deleted, watching = watching, recaps = recaps, machine = machine)
+    // A session held by its clone says git's percentage once the stream has relayed one.
+    val clones = (LocalContext.current.applicationContext as? OrbitApplication)?.clones
+    val heard by (clones?.all ?: remember { MutableStateFlow(emptyMap<String, CloneHeard>()) }).collectAsState()
+    val cloneProgress = session.takeIf { QueuedClone.isCloning(it.queuedGate) }?.workspace?.let { heard[WorkspaceClone.keyOf(it)] }
+        ?.takeIf { it.state == CloneState.CLONING }?.progress
+    val line = remember(session, deleted, watching, recaps, machine, cloneProgress) {
+        SessionLine.make(session, live = !deleted, watching = watching, recaps = recaps, machine = machine, cloneProgress = cloneProgress)
     }
     val word = remember(session, watching) { SessionHeader.statusWord(session, watching) }
     Column(Modifier.fillMaxWidth()
@@ -165,10 +175,10 @@ internal fun RowSpinner(modifier: Modifier = Modifier) {
 /** A folder's row (iOS `SessionFolderRowView`): its name, what the sessions it holds would have said — how many wait on you, else a
  * spinner, else the breathing mark, by the drawer's rule — their count (unless some wait on you) and a chevron. A tap opens it and a long press is its menu. */
 @Composable
-internal fun FolderRow(folder: Folder, sessions: List<DirectorySession>, runnerOffline: Boolean, watching: Map<String, WatchSessionSummary>,
+internal fun FolderRow(folder: Folder, sessions: List<DirectorySession>, count: Int, runnerOffline: Boolean, watching: Map<String, WatchSessionSummary>,
     onOpen: () -> Unit, onOptions: () -> Unit) {
     FolderRow(folder.id, folder.name, FolderRowSummary(
-        count = sessions.size,
+        count = count,
         needsYou = sessions.folderNeedsYouCount(),
         running = !runnerOffline && sessions.any { it.isRunning() },
         jobs = !runnerOffline && sessions.any { it.isRunningJob(watching[watchKey(it.id)]) },

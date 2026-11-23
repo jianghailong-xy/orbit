@@ -15,8 +15,6 @@ object DshRuntime {
     const val ENGINE = "dsh"
     /** The heartbeat capability the server requires before it creates, resumes or hands out a Harness session. */
     const val RUNNER_CAPABILITY = "provider:dsh"
-    /** What a `!` command gets on Harness, which has no shell bridge: the command stays in the composer rather than going out to fail. */
-    const val SHELL_REFUSAL = "DeepSeek Harness sessions don't run ! shell commands — ask the agent to run it instead."
     /** A Harness session's model while the runner has reported none: the runtime picks, and no other runtime's words describe that. */
     const val PICKED_BY = "Picked by DeepSeek Harness"
 

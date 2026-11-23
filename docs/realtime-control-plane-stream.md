@@ -164,7 +164,7 @@ export enum ControlEventType {
 - `SESSION_ENDED`:`{ status, runStatus, sessionState, runState, lifecycleState, endReason }`。例如运行中的 Session 被用户 Complete 后,是 `runState=ENDED`(中性终态)、`lifecycleState=COMPLETED`;新客户端分别展示执行结果与所在位置,"是哪个动作结束的"读 `endReason` 而不是读 `runState`(见 [session-lifecycle-design.md](./session-lifecycle-design.md) §2.1)。兼容 payload 可额外携带 `filingState=ARCHIVED`。
 - `SESSION_ERROR`(决议 Q3):`{ message, recoverable }`。`recoverable=false` 通常伴随 status→FAILED 的 `session.updated`(列表行由后者更新);`recoverable=true` 是中途错误(如内容过滤),status 仍可能停在 `AWAITING_INPUT`,此事件携带 `session.updated` 没有的信息。**客户端通知去重见 §5.2**。
 - `APPROVAL_*`:`{ approvalId, pendingApprovals }`(计数用于角标/红点;明细仍走现有 approvals 端点)。
-- `BACKGROUND_TASK`:`{ name, status, exitCode? }`。
+- `BACKGROUND_TASK`:`{ name, status, exitCode?, toolUseId?, kind? }`。`toolUseId` and `kind` are sent when the runner reported them: a runner-hosted job re-reports itself `running` once a minute, and they are what lets a client tell that heartbeat (same `toolUseId`) and a `service` (which no tally counts) from a counted job starting.
 
 ### 4.3 控制面事件子集(从 hub 里筛什么)
 
@@ -274,7 +274,7 @@ GET /api/events?hints=list_changed
 
 - 信封 `{ type: 'sessions.list_changed', sessionId: '', agentId: null, ts, data: { version } }`,用户级(`sessionId` 为空串)。
 - 含义是"该账户的 Open 列表**可能**读出来不一样了",不是变更本身。客户端收到后发一次条件增量读 `GET /sessions?view=open&since=<cursor>`;版本没变时服务端回空 delta、不构建。**正确性只来自那次读**,提示丢了只是晚一点,由客户端的慢兜底读补上。
-- `data.version` 是发送时该账户的 Open 列表数据版本(`readOpenListVersion`),即未带过滤条件的 Open 列表 ETag `W/"ol1-<version>"` 的不透明部分。带过滤条件的 ETag 由它派生,不相等;客户端只拿它和上一条提示比较。
+- `data.version` 是**不透明令牌**,不是 Open 列表的数据版本,也不是 `W/"ol1-…"` ETag 的一部分。它由账户的计数器总和与时钟部分(各 runner 的 id、名称、状态与是否在线,runner 当前持有后台任务的会话,分享链接,外部运行中的回合,以及各时钟阈值的计数)合成,**不含 runner 心跳**。客户端只拿它和同一连接上一条提示比较,不做任何其他用途。
 - **新连接先收到一条**:每条声明了提示的流在订阅后的第一个 tick(约 1 s 内)收到一条带当前版本的提示,不管有没有变化。客户端连接前后各自会读一次列表(先后顺序不定),这第一条提示就是重连读要对齐的版本(见 [list-freshness-design.md](./list-freshness-design.md) R4);连接与读之间提交的写不会被吞进"基线"里。
 - 之后,**"上次告知的版本"按流记录,不按账户**:某条流只在版本与它上次收到的不同时才收到下一条,每条流**每秒至多一条**。同一账户后连上的流不会继承别的流已经收到的版本。
 
@@ -285,11 +285,49 @@ GET /api/events?hints=list_changed
 
 实现在 `src/apiserver/src/realtime/open-list-hints.ts`;只读、不写、不加锁。同一时刻只有一条 tick 链:tick 进行中到来的新流,由这次 tick 结束后排下一次。多副本下每个进程只管连在自己身上的流。
 
+**Which workspaces moved: `scopes` (opt-in, `hints=list_changed,list_scopes`).** Design and soundness argument: [list-freshness-scope-hints.md](./list-freshness-scope-hints.md) §5.1 and §6.
+
+- A stream that also declares `list_scopes` (`CONTROL_HINT_LIST_SCOPES`) gets the same event with one more field, `data: { version, scopes? }`. `scopes` is the public ids of the workspaces whose Open lists may read differently since the previous hint to this stream, never empty. When it is absent, any list may.
+- It is absent on the first hint after a connect, when an account-wide source moved (a task, a project, a decision, a tag…), when a clock threshold flipped, and when a runner's id, name, status or liveness changed.
+- Such a stream gets **no hint at all** on a tick in which only rows outside every Open list moved (a completed session, a scheduled run) and no workspace depends on them.
+- Where the names come from: since migration 1464 the sources that hang on one session or one workspace (`session`, `conversation_turn`, `approval`, `session_tag_link`, `scheduled_wakeup`, `watch`, `workspace`, and `session_request` for both of its sessions) bump `open_list_epoch` keys `<source>@w:<workspace>` (a row in an Open list) or `<source>@c:<workspace>` (one in none); a session's root, task or workspace change also bumps the account's `session` key. Every other source stays account-wide. The poller reads the keys apart in the same 1 s statement, and also names the workspace at the other end of each OPEN request whose peer moved, including a request whose two peers sit in one workspace, and, whenever any workspace moved, the workspaces holding an Open PENDING row (rebuilt on every `since=` read, since its queued gate counts other sessions on its runner). A row rooted in a LANDING session is not read for this: the landing's own writes move no counter, and its progress writes account-wide sources, which name no workspace.
+- **The client rule:** with `scopes` present, read an Open list only if it has no workspace filter or its workspace is among the scopes, unioning the scopes of every hint in the 1 s window. Without `scopes`, read every list, as before.
+- **A stream that does not declare `list_scopes`** (the shipped Mac, iPhone and Android apps) gets exactly what it got before: `{ version }` whenever the token moved. An old server ignores `list_scopes` and never sends `scopes`, so a new client on it reads every list.
+
 **同版本只构建一次。** 一次变化会同时提示该账户的所有设备。`SessionsService.list` / `listOpenSince` 对同一 `(owner, 过滤条件(含 confinedTo 与 limit), version)` 的并发读共享一次构建:在途的读等同一个 promise,构建完成后约 5 s 内的同版本读直接用它(每个读拿一份拷贝)。
 
 **事件摘要每事件只读一次。** `session.created/updated` 的 `ControlSessionSummary`(以及其它需要查库的事件载荷)按 hub 消息读一次,在该账户本进程的所有连接间共享;每个连接拿到的内容与各自读一次时相同。
 
 ---
+
+### 4.9 `owner_requests.changed`: a request changed (opt-in)
+
+```
+GET /api/events?hints=owner_requests
+```
+
+`hints` is comma-separated (`list_changed,owner_requests` declares both); unknown values are ignored (`CONTROL_HINT_OWNER_REQUESTS`). **A stream that did not declare it never receives `owner_requests.changed`**, for the reason §4.8 gives: shipped clients re-read everything on a type they do not know. Nothing changes for them, and the asking session's `session.updated` is still published exactly as before.
+
+- Envelope `{ type: 'owner_requests.changed', sessionId: '', agentId: null, ts, data: { version } }`, user-scoped (`sessionId` empty). `version` is opaque. It is a nudge to make a conditional `GET /owner-requests?state=open`, never a change to apply.
+- **Derived, not published by the writers** (`realtime/owner-request-hints.ts`), like §4.8. An owner request is written by an agent's own filing and answer, the expiry sweep, a wiki being made, schedules, conditions (can't-read and still-waiting items) and secret delivery, in five services and about thirty call sites, mostly inside transactions with no commit hook. Every write moves the row's `updated_at`, so once a second one statement reads the count and newest `updated_at` of each watched account's PENDING requests (all the open list draws, through the `(owner_id, state, created_at)` index, so its cost follows what is open and not the account's history); the signal therefore covers filed, answered, expired, withdrawn, declined and any other change of a request, by any writer including a later one, and is sent after the commit.
+- A new stream is told the current version about a second after it connects, whether or not anything moved; a client's connect-time read is answered against it. After that a stream is told only a version that differs from the one it holds, at most once a second (several writes in a second are one event). An event unrelated to requests (a plain `session.updated`) moves nothing and sends nothing.
+- A request that passes its deadline is read as expired before the sweep writes it; the event follows the sweep's write, and a client keeps its safety read for the gap.
+
+### 4.10 `schedule_cards.changed`: a session's schedule cards changed (opt-in)
+
+```
+GET /api/events?hints=schedule_cards
+```
+
+Declared like §4.9 (`CONTROL_HINT_SCHEDULE_CARDS`); **a stream that did not declare it never receives it**, and every event a shipped client re-reads the cards on is still published exactly as before.
+
+- Envelope `{ type: 'schedule_cards.changed', sessionId: '', agentId: null, ts, data: { cardSessionIds, resync } }`, user-scoped. `cardSessionIds` names the sessions whose `GET /sessions/:id/schedule-cards` may read differently, at most `SCHEDULE_CARDS_CHANGED_MAX_SESSIONS` (100); a wider change is `{ cardSessionIds: [], resync: true }`, every session's cards. A nudge to re-read those cards, never a change to apply.
+- **Published by the writers**, after their commit (`SchedulesService.announceCards`): every write of `SchedulesService` that moves a card, a change record or a schedule they draw — create, update, decide, pause, resume, end, remove, undo. It names the session that wrote, the session a card was asked by, and every session whose cards or records name the schedule. A run's own state (the `run` of a scheduled run's session) is not announced: it moves with that session's run, whose own `session.*` events a client follows while the run is open.
+- An accelerant: what a card says by the clock alone (expiry) and a workspace rename are left to the cards' safety read.
+
+### 4.11 `task.changed` names its rows' creators and projects (additive)
+
+A bounded `task.changed` (`resync: false`) also carries `creatorSessionIds`: the sessions that created the rows `taskIds` names (`task.creator_session_id`), each once; and `rowProjectIds`, the projects those rows are in (`task.project_id`), each once, which a client scopes a project's integration line by. Read once per event, after the publish, for every stream of the owner. It is **absent** from a resync, from a change naming a row that is not found (deleted, another owner's), when the read fails, and from an older server — and a client that scopes a session's "Tasks created here" read by it reads that row again whenever it is absent. Every other reader ignores the field. Because the read happens on the way out, a bounded `task.changed` may reach a stream after a nudge published just after it, as a session's events already can.
 
 ## 5. 客户端设计(macOS,`src/macos`)
 
@@ -336,6 +374,14 @@ GET /api/events?hints=list_changed
   后,Open 列表与 `session-counts` 只在提示上读(1 s 合并,同一列表至多一个读在途),其它事件不再读它们;
   整份(无 `limit`)的 Open 列表用 `since=` 增量读,delta 应用在服务端上次给的基底上(`lib/openListDelta.ts`)。
   项目页 panorama 的读由 `project.changed`、成员会话事件与 `task.changed` 驱动(≥ 5 s 一次),兜底 60 s。
+- A session page's "Tasks created here" (`GET /sessions/:id/created-tasks`) is read on a `task.changed` that names this
+  session in `creatorSessionIds` or names one of its rows (§4.11), on a resync or a change without creators, and on the
+  `session.*` events of this session and of the runs of its rows; besides that, the list budget's safety read. Its schedule
+  cards are read on `schedule_cards.changed` naming the session (§4.10, `hints=schedule_cards`), and, for a scheduled
+  run's session while its run is open, on that session's own `session.*` events; a session's approvals and background
+  jobs read neither.
+- One read serves a page: the project integration line and the session detail have one interval owner each, every
+  other part of the page reads the same cache entry, which the stream keeps current for the safety read's minute.
 - 看门狗与原生端同构:服务端每 ~20s 一个 ping,**45s 无任何消息**判定半死并重连
   (`EventSource` 没有读超时,`onerror` 不一定触发)。
 

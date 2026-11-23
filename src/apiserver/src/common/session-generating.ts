@@ -1,5 +1,7 @@
 import { RunStatus } from '@prisma/client';
 
+import { DISPATCHED_TURN, ENGINE_TURN } from './session-working';
+
 /**
  * Whether the engine is producing output for this session right now.
  *
@@ -12,19 +14,21 @@ import { RunStatus } from '@prisma/client';
  * clients show — and which sessions can be holding a live approval, since a permission prompt
  * raised mid-wake-up needs answering exactly as much as one raised on a dispatched turn.
  *
- * Mirrors `isGenerating` in the web console and `Session.isGenerating` in OrbitKit.
+ * Mirrors `isGenerating` in the web console and `Session.isGenerating` in OrbitKit. Built from the
+ * facts in ./session-working.ts; it is narrower than `isSessionExecuting` on purpose (no subagent,
+ * no background job, only a parked session's engine turn).
  */
 export const isSessionGenerating = (session: {
   status: RunStatus;
   engineTurnActive?: boolean | null;
 }): boolean =>
-  session.status === RunStatus.RUNNING ||
-  (session.status === RunStatus.AWAITING_INPUT && session.engineTurnActive === true);
+  DISPATCHED_TURN.holds(session) ||
+  (session.status === RunStatus.AWAITING_INPUT && ENGINE_TURN.holds(session));
 
 /** The same predicate as a Prisma filter, for counts that aggregate instead of fetching rows. */
 export const GENERATING_SESSION_FILTER = {
   OR: [
-    { status: RunStatus.RUNNING },
-    { status: RunStatus.AWAITING_INPUT, engineTurnActive: true },
+    DISPATCHED_TURN.where,
+    { status: RunStatus.AWAITING_INPUT, ...ENGINE_TURN.where },
   ],
 };

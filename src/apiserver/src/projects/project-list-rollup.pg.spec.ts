@@ -6,6 +6,7 @@ import {
   SessionDispatchOrigin, TaskStatus,
 } from '@prisma/client';
 import { Client } from 'pg';
+import { isReleasedStatus } from '../common/session-release';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -380,6 +381,7 @@ test('a dispatched task is running in the index rather than ready, and the page 
       await db.session.create({
         data: {
           ownerId, creatorId: ownerId, taskId, title: `run of ${taskId}`, prompt: 'do it', status,
+          ...(isReleasedStatus(status) ? { finishedAt: new Date()} : {}),
           dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
         },
       });
@@ -724,11 +726,15 @@ test('the rail reaches the index’s running count from the rows that can be run
       extra: Partial<Prisma.SessionUncheckedCreateInput> = {},
     ): Promise<string> => {
       const id = randomUUID();
+      const sessionStatus = extra.status ?? status;
       await db.session.create({
         data: {
           id, ownerId, creatorId: ownerId, taskId, title: `run of ${taskId}`, prompt: 'do it',
-          status, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+          status: sessionStatus, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
           ...extra,
+          ...(isReleasedStatus(sessionStatus) ? {
+            finishedAt: extra.finishedAt ?? new Date(),
+          } : {}),
         },
       });
       return id;
@@ -903,11 +909,12 @@ test('the rail reaches the index’s running count from the rows that can be run
       await t.test('the rail’s read is page-wide, not one query per project', async () => {
         rawQueries = 0;
         assert.equal((await rail.listSidebar(ownerId)).length, 3);
-        // Three: the running count and the activity instant, the blockers behind the amber count,
-        // and the open items behind them. The project rows themselves are a `findMany`. The
-        // property under test is that this number does not grow with the number of projects, which
-        // is what the rail’s 15-second cadence needs.
-        assert.equal(rawQueries, 3, 'canonical running count, blockers and the items behind them');
+        // Four: the running count and the activity instant, the blockers behind the amber count,
+        // the open items behind them, and the open fuse pauses (`fuse` on each row). The project
+        // rows themselves are a `findMany`. The property under test is that this number does not
+        // grow with the number of projects, which is what the rail’s 15-second cadence needs.
+        assert.equal(rawQueries, 4,
+          'canonical running count, blockers, the items behind them and the open fuse pauses');
       });
 
       await t.test('taskCounts matches the maintained status tally and excludes CANCELLED', async () => {

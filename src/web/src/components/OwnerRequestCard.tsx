@@ -18,6 +18,7 @@ import { rehypeCodeWords } from '../lib/codeWords';
 import { decisionReceiptAnchor } from '../lib/decisionReceipt';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import {
+  BROWSER_SIGN_IN_COPY,
   KIND_TAGS,
   WAITING_ON_YOU,
   deviceLabel,
@@ -36,6 +37,7 @@ import {
   type OwnerRequestStep,
 } from '../lib/ownerRequests';
 import { accountSecretsQuery, ownerRequestsQuery, runnersQuery } from '../lib/queries';
+import { openRunnerBrowserTab } from '../lib/runnerBrowser';
 import {
   WIKI_CREATE_CHANGE_SETTINGS,
   WIKI_CREATE_MAINTENANCE,
@@ -62,6 +64,7 @@ import { Textarea } from './ui/Textarea';
 import { WikiCreateDialog, sameId, useWikiWorkspaceChoices } from './WikiSetUpDialog';
 import { ScheduleWaitingCard, isScheduleWaitingKind } from './ScheduleWaitingCard';
 import { ConditionWaitingCard, isConditionWaitingKind } from './ConditionWaitingCard';
+import { SettingsChangeCard, SettingsChangeFolded } from './SettingsChangeCard';
 import './OwnerRequest.css';
 import { useMachineName } from '../lib/managedRunner';
 
@@ -105,6 +108,8 @@ const PRIMARY: Readonly<Record<AgentRequestKind, string>> = {
   MANUAL_STEP: 'Mark done',
   CONFIRM: 'Confirm',
   WIKI_CREATE: 'Create wiki',
+  SETTINGS_CHANGE: 'Save changes',
+  BROWSER_SIGN_IN: BROWSER_SIGN_IN_COPY.openBrowser,
 };
 
 /** The runner a secret goes to, by the name the owner knows it by. */
@@ -401,6 +406,12 @@ export function OwnerRequestCard(props: {
 }): JSX.Element {
   // A scheduled task's items (failed, held, a run's approval, a run's wider envelope) are answered through the door of
   // what they point at, so they draw their own body in the same frame.
+  // A proposed change to the owner's Settings is drawn as a confirmation card (docs/settings-from-conversation-design.md
+  // §8.1); answered, as its own one-line fold. Expired or withdrawn, it reads as any request does.
+  if (props.request.kind === 'SETTINGS_CHANGE') {
+    if (props.request.state === 'PENDING') return <SettingsChangeCard request={props.request} />;
+    if (props.request.state === 'DONE' || props.request.state === 'DECLINED') return <SettingsChangeFolded request={props.request} />;
+  }
   if (props.request.state === 'PENDING' && isConditionWaitingKind(props.request.kind)) {
     return <ConditionWaitingCard request={props.request} now={props.now} />;
   }
@@ -476,20 +487,32 @@ function AgentRequestCard({ request: given, now = Date.now(), onChat }: {
         </span>
       </header>
       <div className="owner-request-body">
+        {request.kind === 'BROWSER_SIGN_IN' ? <p className="owner-request-eyebrow">{BROWSER_SIGN_IN_COPY.eyebrow}</p> : null}
         <div className="owner-request-title-row">
           <h3 className="owner-request-title">{request.title}</h3>
           <span className="owner-request-kind">{KIND_TAGS[request.kind]}</span>
         </div>
-        <div className="owner-request-why md">
-          <Markdown
-            remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeCodeWords]}
-            urlTransform={referenceUrlTransform}
-            components={{ a: ReferenceLink }}
-          >
-            {request.why}
-          </Markdown>
-        </div>
+        {request.kind === 'BROWSER_SIGN_IN' ? (
+          // The agent's reason, quoted as its own words; the session that asked; what signing in here means.
+          <>
+            <div className="owner-request-why">{`“${request.why}”`}</div>
+            {request.askedBySessionTitle?.trim() ? (
+              <p className="owner-request-notice">{BROWSER_SIGN_IN_COPY.fromSession(request.askedBySessionTitle.trim())}</p>
+            ) : null}
+            <p className="owner-request-notice">{BROWSER_SIGN_IN_COPY.note}</p>
+          </>
+        ) : (
+          <div className="owner-request-why md">
+            <Markdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeCodeWords]}
+              urlTransform={referenceUrlTransform}
+              components={{ a: ReferenceLink }}
+            >
+              {request.why}
+            </Markdown>
+          </div>
+        )}
         {request.blocksTaskIds.length > 0 || request.secretSpec ? (
           <dl className="owner-request-facts">
             {request.blocksTaskIds.length > 0 ? (
@@ -591,6 +614,23 @@ function AgentRequestCard({ request: given, now = Date.now(), onChat }: {
             </button>
             {changing ? <WikiCreateDialog workspaceId={request.workspaceId ?? null} onClose={() => setChanging(false)} /> : null}
           </CardActions>
+        ) : request.kind === 'BROWSER_SIGN_IN' ? (
+          // Open browser does not answer the card: Signed in is pressed in the browser tab, once the owner has.
+          <CardActions className="owner-request-actions">
+            <CardActionButton
+              tone="primary"
+              disabled={!request.browserRunnerId || closed}
+              onClick={() => openRunnerBrowserTab(request.browserRunnerId!, true)}
+            >
+              {PRIMARY.BROWSER_SIGN_IN}
+            </CardActionButton>
+            <CardActionButton
+              disabled={end.isPending || closed}
+              onClick={() => end.mutate({ to: 'decline', body: { reason: BROWSER_SIGN_IN_COPY.notNow } })}
+            >
+              {BROWSER_SIGN_IN_COPY.notNow}
+            </CardActionButton>
+          </CardActions>
         ) : declining ? (
           <div className="owner-request-decline">
             <Textarea
@@ -648,6 +688,7 @@ function AgentRequestCard({ request: given, now = Date.now(), onChat }: {
 /** The summary's second line: what came of it. */
 function outcomeLine(request: OwnerRequest, runner: string): string {
   const note = request.resolutionNote?.trim();
+  if (request.kind === 'BROWSER_SIGN_IN' && request.state === 'DECLINED') return BROWSER_SIGN_IN_COPY.notNow;
   if (request.state === 'DECLINED') return note ? `Declined: “${note}”` : 'Declined';
   if (request.state === 'EXPIRED') return 'Expired before anyone answered';
   if (request.state === 'WITHDRAWN') return note ? `Withdrawn: “${note}”` : 'Withdrawn';
@@ -662,6 +703,7 @@ function outcomeLine(request: OwnerRequest, runner: string): string {
     if (label) return said ? `${label}: “${said}”` : label;
     return said ? `“${said}”` : 'Answered';
   }
+  if (request.kind === 'BROWSER_SIGN_IN') return BROWSER_SIGN_IN_COPY.signedIn(request.browserSite ?? '');
   if (request.kind === 'WIKI_CREATE') return request.answer?.name ? `Created the wiki ${request.answer.name}` : 'Wiki created';
   return request.kind === 'CONFIRM' ? 'Confirmed' : 'Marked done';
 }
@@ -722,7 +764,14 @@ const ENDING_ICON: Readonly<Record<string, ReactNode>> = {
 };
 
 /** A request that has ended, as one row: how, who, when, and from which device. */
-export function OwnerRequestResolved({ request: given, now = Date.now() }: { request: OwnerRequest; now?: number }): JSX.Element {
+export function OwnerRequestResolved({ request, now = Date.now() }: { request: OwnerRequest; now?: number }): JSX.Element {
+  if (request.kind === 'SETTINGS_CHANGE' && (request.state === 'DONE' || request.state === 'DECLINED')) {
+    return <SettingsChangeFolded request={request} />;
+  }
+  return <AgentRequestResolved request={request} now={now} />;
+}
+
+function AgentRequestResolved({ request: given, now }: { request: OwnerRequest; now: number }): JSX.Element {
   const door = useSecretDoor(given);
   const request = door.current;
   // A delivered key's whole story on a DONE request; on any other ending, only a removal the owner must be told of —

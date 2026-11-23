@@ -395,7 +395,16 @@ export const LOCK_ORDER_COMPATIBLE = [
       'row is held inserts one keyed from `open_list_epoch_shard_seq`, a key no other insert can be ' +
       'holding. A lock nobody waits for is no edge of a wait graph. With 0484\'s single row per ' +
       '(owner, source), held to commit, it was both: writers of one account queued on it, and two ' +
-      'taking two counters in opposite write orders deadlocked (open-list-version.pg.spec.ts).',
+      'taking two counters in opposite write orders deadlocked (open-list-version.pg.spec.ts). ' +
+      'Some UPDATEs bump nothing at all: a landing\'s renewal (0512), a watch\'s clock (0641), and a ' +
+      'session or conversation_turn write that changes only columns no Open list reads (1420), and a ' +
+      'workspace write of a heartbeat\'s directory and disk probe alone (1428). Each decides that by ' +
+      'comparing the statement\'s transition tables — 1428 also reads, without a lock, the ' +
+      'workspace\'s PENDING sessions and their runners\' disk floors when its free bytes moved — so a ' +
+      'skipped bump only removes the one lock above, never adds one. Since 1464 the per-session and ' +
+      'per-workspace sources bump a key naming the workspace (`<source>@w:<ws>`, `<source>@c:<ws>`), found by ' +
+      'lock-free reads of the transition tables and the session rows they name; `open_list_bump` is unchanged, ' +
+      'so each of those keys is taken the same way, a statement in k workspaces takes k such rows, and none waits.',
   },
 ] as const;
 

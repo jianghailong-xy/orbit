@@ -3,6 +3,7 @@ import { queryOptions, useQuery } from '@tanstack/react-query';
 import {
   scheduleNeedsCount,
   type ScheduleCard,
+  type ScheduleChangeConversationResponse,
   type ScheduleChangeRecord,
   type ScheduleDetailResponse,
   type ScheduleDraftsResponse,
@@ -12,6 +13,14 @@ import {
 } from '@orbit/shared';
 import { api } from '../api';
 import { streamPoll } from './listBudget';
+import type { SessionReach, SessionReachDeclaration } from './sessionReach';
+
+/** The sessions a sentence on the Scheduled page opened, whose agent's card the drafts list waits for. */
+const draftsAwaited = new Set<string>();
+/** The Scheduled page sent a sentence: the session it opened is one the drafts list follows. */
+export const awaitDraftFrom = (sessionId: string): void => {
+  draftsAwaited.add(sessionId);
+};
 import { SCHEDULED_RUNS_FOLDER } from './sessionFolders';
 
 /**
@@ -37,7 +46,8 @@ export function scheduleClock(at: string | Date, timezone: string): string {
 export const schedulesQuery = (workspaceId?: string | null, state?: 'all') =>
   queryOptions({
     queryKey: ['schedules', 'list', workspaceId ?? 'any', state ?? 'open'] as const,
-    meta: { entities: ['session', 'workspace'] },
+    // Owner-wide: no one session's event moves it (lib/sessionReach). Its own poll is its safety read.
+    meta: { entities: ['session', 'workspace'], sessionReach: 'none' satisfies SessionReach },
     queryFn: () => {
       const params = new URLSearchParams();
       if (workspaceId) params.set('workspaceId', workspaceId);
@@ -51,7 +61,20 @@ export const schedulesQuery = (workspaceId?: string | null, state?: 'all') =>
 export const scheduleDetailQuery = (id: string) =>
   queryOptions({
     queryKey: ['schedules', 'detail', id] as const,
-    meta: { entities: ['session', 'workspace'] },
+    // Its runs are scheduled runs of its workspace (lib/sessionReach), and its cards the asking sessions'.
+    meta: {
+      entities: ['session', 'workspace'],
+      sessionReach: ((data: unknown) => {
+        const detail = data as ScheduleDetailResponse | undefined;
+        if (!detail) return { sessions: [] };
+        return {
+          scheduledRuns: detail.schedule.workspaceId,
+          holds: [detail.lastRun, ...detail.recentRuns].map((run) => run?.sessionId ?? '')
+            .concat(detail.pendingCards.map((card) => card.askedBySessionId ?? ''))
+            .filter(Boolean),
+        };
+      }) satisfies SessionReachDeclaration,
+    },
     queryFn: () => api<ScheduleDetailResponse>(`/schedules/${encodeURIComponent(id)}`),
     refetchInterval: streamPoll(30_000),
   });
@@ -59,7 +82,17 @@ export const scheduleDetailQuery = (id: string) =>
 export const scheduleDraftsQuery = () =>
   queryOptions({
     queryKey: ['schedules', 'drafts'] as const,
-    meta: { entities: ['session'] },
+    // A draft comes from a session's agent: the sessions its cards were asked by, and the ones this tab is waiting on
+    // for a card (awaitDraftFrom), are the ones whose events can move it (lib/sessionReach).
+    meta: {
+      entities: ['session'],
+      sessionReach: ((data: unknown) => ({
+        sessions: [
+          ...((data as ScheduleDraftsResponse | undefined)?.drafts ?? []).map((card) => card.askedBySessionId ?? ''),
+          ...draftsAwaited,
+        ].filter(Boolean),
+      })) satisfies SessionReachDeclaration,
+    },
     queryFn: () => api<ScheduleDraftsResponse>('/schedules/drafts'),
     refetchInterval: streamPoll(15_000),
   });
@@ -67,14 +100,29 @@ export const scheduleDraftsQuery = () =>
 export const scheduleRequestQuery = (id: string) =>
   queryOptions({
     queryKey: ['schedules', 'request', id] as const,
-    meta: { entities: ['session'] },
+    // The asking session's events are the ones that can move it (lib/sessionReach).
+    meta: {
+      entities: ['session'],
+      sessionReach: ((data: unknown) => {
+        const asker = (data as ScheduleCard | undefined)?.askedBySessionId;
+        return asker ? { session: asker } : 'none';
+      }) satisfies SessionReachDeclaration,
+    },
     queryFn: () => api<ScheduleCard>(`/schedule-requests/${encodeURIComponent(id)}`),
   });
 
+/**
+ * What one session put up (§9.2): its cards, its change records, and the run it serves. Read on the events that can
+ * move it and otherwise only on the safety read: `schedule_cards.changed` naming the session (a card put up or
+ * decided, a change recorded or undone, a schedule its cards name edited), and, for a scheduled run's session while its
+ * run is open, that session's own `session.*` events, which move the run (useControlPlane). Its approvals, background
+ * jobs and every other session event say nothing of its cards. The session page reads it once
+ * (ScheduleCards `useSessionScheduleCards`) for everything it draws.
+ */
 export const sessionScheduleCardsQuery = (sessionId: string) =>
   queryOptions({
     queryKey: ['schedules', 'session', sessionId] as const,
-    meta: { entities: ['session'] },
+    meta: { entities: ['scheduleCard'], scheduleCardsOf: sessionId },
     queryFn: () => api<SessionScheduleCardsResponse>(`/sessions/${encodeURIComponent(sessionId)}/schedule-cards`),
     refetchInterval: streamPoll(20_000),
   });
@@ -97,6 +145,26 @@ export function scheduleRunSessionPath(run: Pick<ScheduleRunView, 'sessionId'>):
 /** The Scheduled page with one schedule open in the inspector. */
 export function schedulePath(scheduleId: string): string {
   return `/scheduled?id=${encodeURIComponent(scheduleId)}`;
+}
+
+/** A schedule's change conversation (§8.2): the draft page, which goes on to the open one when there is one. */
+export function scheduleChangePath(scheduleId: string): string {
+  return `/scheduled/${encodeURIComponent(scheduleId)}/change`;
+}
+
+export const scheduleChangeQuery = (id: string) =>
+  queryOptions({
+    queryKey: ['schedules', 'change', id] as const,
+    meta: { entities: ['session'] },
+    queryFn: () => api<ScheduleChangeConversationResponse>(`/schedules/${encodeURIComponent(id)}/change`),
+  });
+
+/** Opens the change conversation with the person's first words (or says them in the one already open). */
+export function openScheduleChange(id: string, text: string) {
+  return api<{ sessionId: string; created: boolean }>(`/schedules/${encodeURIComponent(id)}/change`, {
+    method: 'POST',
+    body: { text },
+  });
 }
 
 /** Undo a recorded change through the door the record names. */

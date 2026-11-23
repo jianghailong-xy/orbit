@@ -308,8 +308,9 @@ async function insertSession(owner: string, status: string, runnerId: string): P
   const id = randomUUID();
   await sql.query(
     `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","status","assigned_runner_id",
-                           "provider","provider_builtin","num_turns","started_at","runtime_session_id")
-     VALUES ($1,'watch observer','the opening prompt',$2,$2,now(),$3,$4,'claude',TRUE,1,now(),$5)`,
+                           "provider","provider_builtin","num_turns","started_at","runtime_session_id", "finished_at")
+     VALUES ($1,'watch observer','the opening prompt',$2,$2,now(),$3,$4,'claude',TRUE,1,now(),$5,
+             CASE WHEN $3::run_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED') THEN now() END)`,
     [id, owner, status, runnerId, `runtime-${id}`],
   );
   return id;
@@ -908,8 +909,8 @@ test('task_await on a forked task: the wake carries its branch, forkSha, the sna
   // The forked task's run, on the branch its work is on; the open one's run has not made one yet.
   await sql.query(
     `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","updated_at","status","assigned_runner_id",
-                           "provider","provider_builtin","task_id","branch")
-     VALUES ($1,'the forked run','go',$2,$2,now(),'SUCCEEDED',$3,'claude',TRUE,$4,'orbit/finish-the-claim-refactor-1a2b3c')`,
+                           "provider","provider_builtin","task_id","branch","finished_at")
+     VALUES ($1,'the forked run','go',$2,$2,now(),'SUCCEEDED',$3,'claude',TRUE,$4,'orbit/finish-the-claim-refactor-1a2b3c',now())`,
     [randomUUID(), owner, runner, done],
   );
   const watch = await createWatch(owner, {

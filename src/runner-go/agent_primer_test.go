@@ -46,19 +46,24 @@ var agentPrimerHashes = map[string]string{
 	// 1.4.3: "first 7 tasks" became "first few tasks": the number is the account's cardFreeTaskCreates, 8 by
 	// default (2026-11-20), and task_create / task_create_batch say so.
 	"1.4.3": "c3448ac46513b451f958748518b6e6a0cfdacb7a5d02b4083167ed2ebec35eb9",
+	// 1.4.4: a paragraph for settings from a conversation (docs/settings-from-conversation-design.md §7): call
+	// settings_get, then settings_propose, and link the row a refused key returns. The primer's budget went from 3,200
+	// to 3,456 bytes and the engine instructions' from 7,424 to 7,680 to hold it (owner, 2026-11-20).
+	"1.4.4": "a96eda93645d97fa5b8b8cea9508b86dc3d57bd3bdb59246c1b20b1cb1174df9",
 }
 
 // The snapshots: the primer exactly as `initialize` sends it, and the four shapes of the instructions
 // the runner writes into an engine, so any change to what an agent reads first is a visible diff.
 // Regenerate with ORBIT_UPDATE_PRIMER_SNAPSHOTS=1 go test -run TestAgentPrimerSnapshots .
 func TestAgentPrimerSnapshots(t *testing.T) {
+	fakeDriveMount(t, false)
 	const exe = "/usr/local/bin/orbit"
 	snapshots := map[string]string{
 		"mcp-instructions.txt":                agentPrimer,
-		"engine-instructions-free.txt":        orbitCLIInstructions(exe, false, true, true),
-		"engine-instructions-free-nowait.txt": orbitCLIInstructions(exe, false, false, true),
-		"engine-instructions-task.txt":        orbitCLIInstructions(exe, true, true, true),
-		"engine-instructions-task-nowait.txt": orbitCLIInstructions(exe, true, false, true),
+		"engine-instructions-free.txt":        orbitCLIInstructions(exe, false, true, true, true),
+		"engine-instructions-free-nowait.txt": orbitCLIInstructions(exe, false, false, true, true),
+		"engine-instructions-task.txt":        orbitCLIInstructions(exe, true, true, true, true),
+		"engine-instructions-task-nowait.txt": orbitCLIInstructions(exe, true, false, true, true),
 	}
 	names := make([]string, 0, len(snapshots))
 	for name := range snapshots {
@@ -119,7 +124,7 @@ func TestAgentPrimerBudgets(t *testing.T) {
 	// An executable path longer than any runner's, so a paragraph that names it still fits one value.
 	long := "/home/a-long-account-name/.orbit/bin/versions/0.1.999/orbit"
 	for _, form := range []struct{ inside, watches bool }{{false, true}, {true, true}, {false, false}, {true, false}} {
-		instructions := orbitCLIInstructions(long, form.inside, form.watches, true)
+		instructions := orbitCLIInstructions(long, form.inside, form.watches, true, true)
 		if n := len(instructions); n > orbitInstructionsMaxBytes {
 			t.Errorf("instructions (inside=%v, watches=%v) are %d bytes, over their %d-byte budget", form.inside, form.watches, n, orbitInstructionsMaxBytes)
 		}
@@ -390,7 +395,7 @@ func primerCarriers(t *testing.T, job *ClaimedSession) map[string]string {
 		return strings.Join(values, "\n\n")
 	}
 	developerMessage := func() string {
-		items := codexInjectedAgentItems(job.instructionAgent(), exe, job.insideRecordedWork(), job.watchesOn())
+		items := codexInjectedAgentItems(job.instructionAgent(), exe, job.insideRecordedWork(), job.watchesOn(), true)
 		return items[0]["content"].([]map[string]interface{})[0]["text"].(string)
 	}
 	turnInput := func() string {
@@ -469,7 +474,7 @@ func TestCodexPutsThePrimerBackAfterCompaction(t *testing.T) {
 	if after == before {
 		t.Fatalf("a compaction left the context generation at %d, so Codex keeps the keys it already dropped", after)
 	}
-	for key := range codexAgentAdditionalContext(AgentExecConfig{}, exe, after, false, true) {
+	for key := range codexAgentAdditionalContext(AgentExecConfig{}, exe, after, false, true, true) {
 		if strings.HasPrefix(key, fmt.Sprintf("orbit_%08d_", before)) {
 			t.Errorf("key %s survives the compaction unchanged", key)
 		}
@@ -479,7 +484,7 @@ func TestCodexPutsThePrimerBackAfterCompaction(t *testing.T) {
 	items := &codexAppServer{instructionMode: codexInstructionsInjectItems}
 	items.markInstructionContextForRefresh()
 	items.prepareInstructionContext(func() error {
-		for _, item := range codexInjectedAgentItems(AgentExecConfig{}, exe, false, true) {
+		for _, item := range codexInjectedAgentItems(AgentExecConfig{}, exe, false, true, true) {
 			injected = append(injected, item["content"].([]map[string]interface{})[0]["text"].(string))
 		}
 		return nil
@@ -532,6 +537,12 @@ func TestThePrimerDoesNotComeFromTheRepository(t *testing.T) {
 // `orbit mcp help` is the help, not a server reading stdin.
 func TestOrbitMCPHelpMatchesTheRuntimesAndTheCatalogue(t *testing.T) {
 	t.Setenv("ORBIT_HOME", t.TempDir())
+	// Off means absent: with the browser off the help does not name it (browser_tools.go).
+	t.Setenv(envBrowser, "off")
+	if flat := strings.Join(strings.Fields(mcpHelp()), " "); strings.Contains(flat, "Orbit Cloud browser") {
+		t.Errorf("the browser is off and the help names it")
+	}
+	t.Setenv(envBrowser, "on")
 	help := mcpHelp()
 	for _, argv := range [][]string{{"mcp", "help"}, {"mcp", "--help"}, {"mcp", "-h"}, {"help", "mcp"}} {
 		var out, errW bytes.Buffer

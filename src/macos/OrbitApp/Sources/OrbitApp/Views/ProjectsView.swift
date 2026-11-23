@@ -527,7 +527,7 @@ struct ProjectDetailView: View {
                                 .onDisappear { headerOnScreen = false }
                         }
                         .listRowBackground(Color.clear)
-                    case .openItems:      openItemsAttention(store, document, now: now)
+                    case .openItems:      openItemsPageSection(store, document, now: now)
                     case .overview:       overviewSection(store, document)
                     case .coordinator:    coordinatorSection(store, document, now: now)
                     case .runSettings:    runSettingsSection(store, document, now: now)
@@ -566,6 +566,16 @@ struct ProjectDetailView: View {
                             withAnimation { proxy.scrollTo(ProjectDone.nonCodeAnchor, anchor: .center) }
                         }
                     })
+                case .coordinatorChanges:
+                    CoordinatorChangesPage(
+                        projectTitle: document.title,
+                        changes: store.document?.settingChanges ?? [],
+                        taskTitles: Dictionary(store.tasks.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first }),
+                        revert: { changeID in try await store.revertSettingChange(changeID) },
+                        openTask: { taskID in
+                            pageSheet = nil
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { openTask(taskID) }
+                        })
                 case .landingCheck:
                     if let view = store.integration {
                         MergeCheckEditor(store: store, view: view,
@@ -780,31 +790,32 @@ struct ProjectDetailView: View {
         .accessibilityValue(summary?.subtitle ?? (store.openItemsUnread ? "Couldn't load open items" : "Loading"))
     }
 
+    /// Open items on the page itself, at all times (D3 A), where web's mobile page draws them: after
+    /// the title area, before Work overview — the header's "N need you · oldest first", then the Needs
+    /// you rows (the owner's own Record as done… · not asked yet among them). The toolbar's Open items stays, a way here from anywhere.
     @ViewBuilder
-    private func openItemsAttention(_ store: ProjectDetailModel, _ document: ProjectDocument,
-                                    now: Date) -> some View {
-        let summary = ProjectPage.openItemsSummary(status: document.status, started: document.started,
-                                                  items: store.openItems)
-        if let attention = summary?.attention {
+    private func openItemsPageSection(_ store: ProjectDetailModel, _ document: ProjectDocument,
+                                      now: Date) -> some View {
+        if let section = ProjectPage.openItemsSection(status: document.status, started: document.started,
+                                                      derivedDone: document.derivedDone, items: store.openItems) {
             Section {
-                Button { pageSheet = .openItems } label: {
-                    HStack(spacing: 8) {
-                        Label(attention, systemImage: "exclamationmark.circle")
-                        Spacer(minLength: 8)
-                        Image(systemName: "chevron.forward").font(.orbitMeta.weight(.semibold))
-                    }
-                    .font(.orbitLabel.weight(.semibold))
-                    .foregroundStyle(Color.orange)
-                    .padding(.vertical, 4)
-                    .contentShape(Rectangle())
+                if section.drawsNeedsYou {
+                    groupLabel(ProjectPage.needsYouGroup)
+                    if let start = section.start { startItem(start, store: store, now: now) }
+                    if let done = section.done { doneItem(done, store: store, now: now) }
+                    ForEach(section.needsYou) { row in openItem(row, store: store, now: now) }
                 }
-                .buttonStyle(.plain)
+            } header: {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(ProjectPage.openItemsHeading)
+                    Text(section.hint)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .textCase(nil)
             }
-            .listRowBackground(Color.orange.opacity(0.1))
-        } else if let start = StartProject.pageRow(status: document.status, started: document.started,
-                                                   openItems: store.openItems), start.request == nil {
-            // Starting an unstarted project remains discoverable even with no pending request.
-            Section { startItem(start, store: store, now: now) }
+            .id(ProjectPage.openItemsHeading)
         }
     }
 
@@ -1159,7 +1170,7 @@ struct ProjectDetailView: View {
     /// read, and its Retry goes through the page's store, which reads the landing again.
     @ViewBuilder
     private func landingRow(_ store: ProjectDetailModel) -> some View {
-        if let integration = store.integration, integration.inFlight != nil {
+        if let integration = store.integration, integration.inFlight != nil, !ProjectPage.noLineYet(integration) {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 // The Work overview draws every job in flight, a merge job included: the merge
                 // card lives on the project's sessions page, which this page does not have, and
@@ -1430,6 +1441,7 @@ struct ProjectDetailView: View {
         if RunSettings.shown(started: document.started) {
             Section {
                 if let view = store.integration {
+                    runSettingsSummary(store, view, document: document)
                     // First, because it decides whether the landing settings under it mean anything.
                     deliversSetting(store, view, document: document)
                     if document.nonCode {
@@ -1448,15 +1460,21 @@ struct ProjectDetailView: View {
                                 Text(LandingCheckCopy.label)
                                 Text(LandingCheckCopy.main).font(.orbitLabel).foregroundStyle(.secondary)
                             } else {
-                                Button { pageSheet = .landingCheck } label: {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(LandingCheckCopy.label)
-                                        Text(view.landingCheckCommand ?? LandingCheckCopy.inheritedCommand(view.mergeCheckCommand)).font(.orbitMono)
-                                        Text(view.landingCheckTimeoutSeconds.map { "\($0) seconds" }
-                                             ?? LandingCheckCopy.inheritedTimeout(view.mergeCheckTimeoutSeconds)).font(.orbitLabel)
-                                        Text(LandingCheckCopy.hint).font(.orbitLabel).foregroundStyle(.secondary)
-                                    }.frame(maxWidth: .infinity, alignment: .leading)
-                                }.buttonStyle(.plain).disabled(store.busy)
+                                // Board 03 b, c (D3, D4, D9): the three values, the command, who
+                                // set it and when.
+                                LandingCheckSettingRow(
+                                    view: view, busy: store.busy,
+                                    onEditCommand: { pageSheet = .landingCheck },
+                                    onChoose: { mode in
+                                        Task { notice = await store.updateIntegration(LandingCheckSetting.write(mode)) }
+                                    })
+                            }
+                        }
+                        // Board 03 b (D6): the coordinator's changes, one row into their page —
+                        // from a server that keeps them.
+                        if view.line == .projectBranch, let changes = document.settingChanges {
+                            CoordinatorChangesEntryRow(count: CoordinatorChanges.count(changes)) {
+                                pageSheet = .coordinatorChanges
                             }
                         }
                         mergeCheckSetting(store, view, document: document)
@@ -1475,6 +1493,31 @@ struct ProjectDetailView: View {
                 sectionHeader(StartProject.howItRuns, detail: RunSettings.appliesFromNextTask)
             }
         }
+    }
+
+    /// How it runs opens with web's one-line summary (`project-run-settings-summary`): "Automatic On"
+    /// over the line, its branch and how many tasks run at once.
+    private func runSettingsSummary(_ store: ProjectDetailModel, _ view: ProjectIntegrationView,
+                                    document: ProjectDocument) -> some View {
+        let summary = RunSettings.summary(view, projectID: document.id,
+                                          automatic: document.coordinatorEnabled ?? false,
+                                          maxConcurrentTasks: store.pendingConcurrency ?? document.maxConcurrentTasks,
+                                          nonCode: document.nonCode)
+        return HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Circle().fill(Color.accentColor).frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(summary.title).font(.orbitSubtext.weight(.semibold))
+                if !summary.line.isEmpty {
+                    Text(summary.line)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("project-run-settings-summary")
     }
 
     /// Delivers (board 01 A–C): Code or Not code, each with what choosing it means, and — on a marked
@@ -2655,11 +2698,7 @@ struct ProjectDetailView: View {
     private func confirmMessage(_ store: ProjectDetailModel) -> String {
         switch confirmingStatus {
         case .done?:
-            let criteria = store.document?.acceptanceCriteriaItems ?? []
-            let settled = criteria.filter { $0.satisfied == true }.count
-            let noReceipt = criteria.filter { $0.landing == "UNKNOWN" }.count
-            let noun = criteria.count == 1 ? "criterion" : "criteria"
-            return "\(criteria.count) stated \(noun) · \(settled) settled by the work filed under them · \(noReceipt) with no merge receipt"
+            return ProjectDone.recordAsDoneTally(store.document)
         case .cancelled?:
             var unfinished = 0
             if let b = store.panorama?.buckets {
@@ -2743,6 +2782,8 @@ private enum ProjectPageSheet: String, Identifiable {
     case landingJobs
     /// Change workspace: where the project is coordinated from.
     case coordinatorChange
+    /// Coordinator's changes (board 05): the coordinator's landing-check writes, and Revert.
+    case coordinatorChanges
 
     var id: String { rawValue }
 }

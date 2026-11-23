@@ -1,17 +1,21 @@
-import type { ComponentProps, ContextType } from 'react';
+import { useMemo, type ComponentProps, type ContextType } from 'react';
 import type { SubagentRunView } from '@orbit/shared';
 import { useNavigate } from 'react-router-dom';
 import { encodeId } from '../lib/idCodec';
 import { useSubagentRuns } from '../lib/subagentRuns';
+import { useWorkflowRuns, WorkflowRunsCtx } from '../lib/workflowRuns';
 import type { SessionStream } from '../lib/useSessionStream';
 import { OrbitLinkCardsProvider } from './OrbitLinkCard';
+import { BgJobHostCtx, JobQueuedWakesCtx } from './JobCard';
 import { AnsweredQuestionsCtx } from './OwnerAnswerLine';
+import { SubagentQueuedWakesCtx } from './SubagentCardEnd';
 import { WikiDraftCardCtx, type WikiDraftCardHost } from './WikiDraftCard';
 import {
   AuthErrorCtx,
   AutoRetryCtx,
   EventFullCtx,
   LiveToolOutputsCtx,
+  SandboxFixCtx,
   SessionNavCtx,
   SteerWithdrawCtx,
   StreamingDraftsCtx,
@@ -25,6 +29,7 @@ import {
 } from './Transcript';
 
 const NO_SUBAGENT_WAITING: ReadonlyMap<string, string> = new Map();
+const NO_QUEUED_WAKES: ReadonlyMap<string, () => void> = new Map();
 const NO_EVENTS: SessionStream['transcriptEvents'] = [];
 
 /**
@@ -46,6 +51,7 @@ export function SessionConversation({
   inserts,
   authErrorHelp,
   autoRetryHelp,
+  sandboxFixHelp = null,
   restoreUndelivered,
   steerWithdrawal,
   linkStateWord,
@@ -54,6 +60,9 @@ export function SessionConversation({
   wikiChat = null,
   subagentWaiting = NO_SUBAGENT_WAITING,
   subagentRuns: givenRuns,
+  subagentQueuedWakes = NO_QUEUED_WAKES,
+  jobQueuedWakes = NO_QUEUED_WAKES,
+  jobWhere = null,
 }: {
   sessionId: string;
   stream: SessionStream;
@@ -64,6 +73,8 @@ export function SessionConversation({
   inserts: readonly TranscriptInsert[];
   authErrorHelp: ContextType<typeof AuthErrorCtx>;
   autoRetryHelp: ContextType<typeof AutoRetryCtx>;
+  /** Fix with an agent under a caught sandbox warning (`SandboxFixCtx`); null where there is no machine. */
+  sandboxFixHelp?: ContextType<typeof SandboxFixCtx>;
   restoreUndelivered: ContextType<typeof UndeliveredCtx>;
   steerWithdrawal: ContextType<typeof SteerWithdrawCtx>;
   /** The word a link card says for the session it links to. Pass a module-level function: it
@@ -78,10 +89,22 @@ export function SessionConversation({
   subagentWaiting?: ReadonlyMap<string, string>;
   /** The session's SubAgent runs, when the page already reads them (`useSubagentRuns`); else read here. */
   subagentRuns?: ReadonlyMap<string, SubagentRunView>;
+  /** Each SubAgent end turn still on the queue, by run id: its `Don't send` (`SubagentQueuedWakesCtx`). */
+  subagentQueuedWakes?: ReadonlyMap<string, () => void>;
+  /** Each background job's wake still on the queue, by job id: its `Don't send` (`JobQueuedWakesCtx`). */
+  jobQueuedWakes?: ReadonlyMap<string, () => void>;
+  /** Where the session runs, as a bg_run job's opened card names it (`BgJobHost.where`). */
+  jobWhere?: string | null;
 }) {
   const navigate = useNavigate();
   const ownRuns = useSubagentRuns(sessionId, givenRuns ? NO_EVENTS : stream.transcriptEvents);
   const subagentRuns = givenRuns ?? ownRuns;
+  const workflowRuns = useWorkflowRuns(sessionId, stream.transcriptEvents);
+  // Where a bg_run job's card reads its tail and asks to stop it, and the list that says whether it can be.
+  const jobHost = useMemo(
+    () => ({ sessionId, serverShells: stream.serverBgShells, where: jobWhere }),
+    [sessionId, stream.serverBgShells, jobWhere],
+  );
   return (
     <SessionNavCtx.Provider value={(rawId) => navigate(`/sessions/${encodeId(rawId)}`)}>
       <EventFullCtx.Provider value={stream.fetchEventFull}>
@@ -92,7 +115,11 @@ export function SessionConversation({
                 <LiveToolOutputsCtx.Provider value={stream.liveToolOutputs}>
                   <TaskActivityCtx.Provider value={stream.taskActivity}>
                     <SubagentRunsCtx.Provider value={subagentRuns}>
+                    <WorkflowRunsCtx.Provider value={workflowRuns}>
                     <SubagentWaitingCtx.Provider value={subagentWaiting}>
+                    <SubagentQueuedWakesCtx.Provider value={subagentQueuedWakes}>
+                    <BgJobHostCtx.Provider value={jobHost}>
+                    <JobQueuedWakesCtx.Provider value={jobQueuedWakes}>
                     <StreamingDraftsCtx.Provider value={stream.streamingDrafts}>
                       {/* The links in this conversation, drawn as cards. The provider is what makes a
                           card possible at all — the shared page and the export mount none — and it
@@ -101,19 +128,25 @@ export function SessionConversation({
                       <OrbitLinkCardsProvider stateWord={linkStateWord} refreshKey={linkRefreshKey}>
                         <AnsweredQuestionsCtx.Provider value={answeredQuestions}>
                           <WikiDraftCardCtx.Provider value={wikiChat}>
-                            <Transcript
-                              events={stream.transcriptEvents}
-                              live={live}
-                              turnImages={turnImages}
-                              artifactSessionId={sessionId}
-                              streamingAfterSeq={stream.streamingAfterSeq}
-                              inserts={inserts}
-                            />
+                            <SandboxFixCtx.Provider value={sandboxFixHelp}>
+                              <Transcript
+                                events={stream.transcriptEvents}
+                                live={live}
+                                turnImages={turnImages}
+                                artifactSessionId={sessionId}
+                                streamingAfterSeq={stream.streamingAfterSeq}
+                                inserts={inserts}
+                              />
+                            </SandboxFixCtx.Provider>
                           </WikiDraftCardCtx.Provider>
                         </AnsweredQuestionsCtx.Provider>
                       </OrbitLinkCardsProvider>
                     </StreamingDraftsCtx.Provider>
+                    </JobQueuedWakesCtx.Provider>
+                    </BgJobHostCtx.Provider>
+                    </SubagentQueuedWakesCtx.Provider>
                     </SubagentWaitingCtx.Provider>
+                    </WorkflowRunsCtx.Provider>
                     </SubagentRunsCtx.Provider>
                   </TaskActivityCtx.Provider>
                 </LiveToolOutputsCtx.Provider>

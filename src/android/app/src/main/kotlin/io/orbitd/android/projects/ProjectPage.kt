@@ -95,10 +95,11 @@ object ProjectPage {
 
     /** The lanes; the two that say where work is name the project's main branch, `main` (web's `integrationLanes`). */
     fun overviewCells(b: JsonObject, taskCount: Int, line: String?, started: Boolean?, paused: Boolean = false, manualReadyCount: Int = 0,
-        main: String = RunSettings.defaultMainBranch): List<OverviewCell> {
+        main: String = RunSettings.defaultMainBranch, noLine: Boolean = false): List<OverviewCell> {
         val readyFootnote = if (started == false) readyUntilStarted else if (paused) readyWhilePaused
             else if (b.n("ready") > 0 && manualReadyCount == b.n("ready")) "can start manually" else "can start now"
-        if (reportsIntegrationLanes(b)) {
+        // A project that started with no line has no landing to count (§12.16): the lanes without the landing ones.
+        if (reportsIntegrationLanes(b) && !noLine) {
             val landing = b.n("waitingForLanding")
             val lanes = mutableListOf(
                 OverviewCell("running", "Running", b.n("running"), "task work in progress", Glyph.DISC),
@@ -175,6 +176,9 @@ object ProjectPage {
     const val landingTakenOver = "Taken over"
     const val landingFirstStarted = "first started"
     const val landingUsually = "usually"
+    /** The state word of a claimed job waiting for its runner's local lock: it has not started its work, so it is not fetching and has
+     * no output to be quiet about (web `LANDING_LIVENESS_WORDS.WAITING`). */
+    const val landingWaiting = "waiting"
     /** "round 2 of 3" for a task's landing, "round 1" for a merge check or a merge into main (iOS `landingRoundClause`): the M is the
      * kind's own most rounds per claim (`ExceptionCards.landTaskRoundsPerClaim`), never the check's count, and a kind with one round —
      * or one this client does not know — names no M. */
@@ -234,7 +238,7 @@ object ProjectPage {
         return liveLine(word, what, running, inFlight.text("phase"), inFlight.text("startedAt"), inFlight.text("heartbeatAt"), now, updatedAt, unavailable, main,
             silent, wait, inFlight.text("runner"), inFlight.text("kind"), inFlight.number("claim"), inFlight.number("round"), inFlight.obj("check"),
             inFlight.text("stepStartedAt"), inFlight.text("outputMovedAt"), inFlight.number("typicalMs"), inFlight.text("liveness"),
-            firstStartedAt(view, inFlight.text("jobId")))
+            firstStartedAt(view, inFlight.text("jobId")), inFlight.obj("blockingReason"))
     }
 
     /** When the attempt behind a job FIRST started: the `landTask` row's own `startedAt` is the column a claim leaves alone across
@@ -306,7 +310,7 @@ object ProjectPage {
                     job.text("heartbeatAt"), now, updatedAt, unavailable, main, runner = job.text("runnerName"), kind = job.text("kind"),
                     claim = job.number("claim"), round = job.number("round"), check = job.obj("check"), stepStartedAt = job.text("stepStartedAt"),
                     outputMovedAt = job.text("outputMovedAt"), typicalMs = job.number("typicalMs"), livenessWord = job.text("liveness"),
-                    firstStartedAt = firstStartedAt(view, job.text("jobId")))
+                    firstStartedAt = firstStartedAt(view, job.text("jobId")), blockingReason = job.obj("blockingReason"))
             LandingJobLine(job.text("jobId").orEmpty(), job.text("taskId"), line, landingJobDetail(job, zone, main), job.flag("retryable"),
                 job.text("landingSessionId")?.takeIf { it.isNotEmpty() }, mergeJob, job.flag("skippable"), job.text("skipCheck"))
         }
@@ -321,7 +325,7 @@ object ProjectPage {
      * than 90 s; SILENT freezes it at the runner's last word, and LEGACY at the read it came with (iOS `landingLiveness`). */
     private fun landingLiveness(liveness: String?, running: Boolean, startedAt: String?, heartbeatAt: String?, kind: String?, claim: Int?, round: Int?,
         check: JsonObject?, stepStartedAt: String?, outputMovedAt: String?, typicalMs: Int?, runner: String?, firstStartedAt: String?,
-        now: Instant, updatedAt: Instant?): LandingLiveness? {
+        now: Instant, updatedAt: Instant?, lockWait: String? = null): LandingLiveness? {
         if (liveness == null || liveness == "LEASE_EXPIRED" || !running) return null
         val stepStart = ProjectTime.parse(stepStartedAt ?: startedAt.orEmpty())
         val heartbeat = heartbeatAt?.let(ProjectTime::parse)
@@ -340,7 +344,9 @@ object ProjectPage {
         // the 360 dp Android card) elide everything past it, and the board says the liveness there — "checking · output 1s ago"
         // (v4 04 and 07). The claim, round and the usual duration follow it and are read in full on the wider rows.
         val clauses = mutableListOf<String>()
-        when (liveness) {
+        // A job waiting for its runner's local lock has not started: what holds it leads the line, and the step's clock is the wait's.
+        if (lockWait != null) clauses += lockWait
+        else when (liveness) {
             "LIVE" -> if (outputMoved != null) clauses += "${landingOutput.replaceFirstChar { it.lowercase() }} " +
                 "${max(0, Math.round(seconds(outputMoved, now)))}s ago"
             "QUIET" -> {
@@ -369,13 +375,21 @@ object ProjectPage {
         return LandingLiveness(if (budget != null) "$stepClock $landingOf ${budget}m" else stepClock, clauses, ticking)
     }
 
+    /** The server's sentence about a claimed job waiting for its runner's local lock, naming the job holding it — or null for any
+     * other job. A SILENT runner keeps its own words (web `localLockWait`). */
+    private fun localLockWait(running: Boolean, liveness: String?, blockingReason: JsonObject?): String? {
+        if (!running || liveness == "SILENT" || liveness == "LEASE_EXPIRED") return null
+        return if (blockingReason?.text("code") == "WAITING_LOCAL_LOCK") blockingReason.text("summary") else null
+    }
+
     /** A job running or waiting its turn. `unavailable` freezes the clock at the last update the app had and stops the row claiming
      * activity; `silent` freezes it at the last REPORT instead — the same freeze, reached from the runner's silence rather than this
      * app's read — and the freshness slot then says where the reports stand rather than a false "Updated". */
     private fun liveLine(word: String, what: String?, running: Boolean, phase: String?, startedAt: String?, heartbeatAt: String?, now: Instant,
         updatedAt: Instant?, unavailable: Boolean, main: String, silent: Boolean = false, wait: String? = null, runner: String? = null,
         kind: String? = null, claim: Int? = null, round: Int? = null, check: JsonObject? = null, stepStartedAt: String? = null, outputMovedAt: String? = null,
-        typicalMs: Int? = null, livenessWord: String? = null, firstStartedAt: String? = null): LandingLine {
+        typicalMs: Int? = null, livenessWord: String? = null, firstStartedAt: String? = null, blockingReason: JsonObject? = null): LandingLine {
+        val lockWait = localLockWait(running, livenessWord, blockingReason)
         // A queued job's heartbeat and phase can be an earlier claim's: only a running job's count.
         val reported = heartbeatAt?.let(ProjectTime::parse)
         val lastUpdate = if (running) reported ?: updatedAt else updatedAt
@@ -384,9 +398,10 @@ object ProjectPage {
         val elapsed = startedAt?.let(ProjectTime::parse)?.let { seconds(it, elapsedAt) } ?: 0.0
         val report = if (silent) (if (reported != null) age?.let { landingNoReportFor(it) } else null) ?: landingNoReportYet
             else age?.let { if (it == 0) "Updated just now" else "Updated ${it}m ago" }
-        val state = when { unavailable -> "Update unavailable"; silent -> landingNoReport; running -> phaseWords(main)[phase] ?: "running"; else -> "queued" }
+        val state = when { unavailable -> "Update unavailable"; silent -> landingNoReport; running && lockWait != null -> landingWaiting
+            running -> phaseWords(main)[phase] ?: "running"; else -> "queued" }
         val v6 = if (unavailable) null else landingLiveness(livenessWord, running, startedAt, heartbeatAt, kind, claim, round, check, stepStartedAt,
-            outputMovedAt, typicalMs, runner, firstStartedAt, now, updatedAt)
+            outputMovedAt, typicalMs, runner, firstStartedAt, now, updatedAt, lockWait)
         // A legacy claim's runner reports only between steps, so its quiet is not a stall: the ring keeps turning and the line says
         // why. SILENT is the state that stops it.
         return LandingLine(word, what, running && !unavailable && !silent && livenessWord != "SILENT", state,
@@ -438,7 +453,11 @@ object ProjectPage {
     fun criterionWork(c: JsonObject, integrationRef: String?, main: String = RunSettings.defaultMainBranch): CriterionWork? {
         val satisfied = ProjectDoc.satisfied(c) ?: return null
         var landing: String? = null; var warning: String? = null
-        if (satisfied) c.text("landing")?.let { raw -> when (raw) {
+        // D2 A: a landing reason read for it decides the half-sentence, in the Done card's words; an unmet criterion says none. Absent
+        // (a public page, an older server, a non-code project) the row keeps the words its `landing` lane gives it.
+        val reasoned = "landingReason" in c
+        if (reasoned) landing = criterionLandingHalfSentence(satisfied, c.text("landingReason"), main)
+        else if (satisfied) c.text("landing")?.let { raw -> when (raw) {
             "ON_INTEGRATION_LINE" -> { landing = "on ${integrationRef ?: "the project branch"}"; warning = "not on $main yet" }
             "LANDED" -> landing = "on $main"
             "UNKNOWN" -> landing = "no merge receipt either way"
@@ -449,7 +468,23 @@ object ProjectPage {
                 CriterionWork.HeldUp(it.text("taskId").orEmpty(), it.text("title").orEmpty(), requiredActionSentence[it.text("requiredAction")] ?: it.text("requiredAction").orEmpty())
             })
         }
-        return CriterionWork(if (satisfied) metByItsWork else notMetByItsWork, landing, warning, satisfied && c.text("landing") == "UNKNOWN", reasons)
+        val flagged = if (reasoned) c.text("landingReason") in setOf("NO_RECEIPT", "NO_BRANCH") else c.text("landing") == "UNKNOWN"
+        return CriterionWork(if (satisfied) metByItsWork else notMetByItsWork, landing, warning, satisfied && flagged, reasons)
+    }
+    /** A criterion's landing half-sentence on the project page (D2 A): the Done card's words for its `landingReason`, and none for a
+     * criterion its work has not met — that work has not landed anywhere yet, whatever the landing lane says. Web's and OrbitKit's
+     * `criterionLandingHalfSentence`, held to src/shared/src/project-page-labels.fixture.json. */
+    fun criterionLandingHalfSentence(satisfied: Boolean?, landingReason: String?, main: String = RunSettings.defaultMainBranch): String? =
+        if (satisfied == true) ProjectDone.landingReasonLabel(landingReason, main) else null
+    /** Each criterion with its `landingReason` from the done read, matched by id — the items do not carry it. A non-code project's
+     * reasons are all null by design (it reads no landing), so it keeps the rows it always drew. Web's and OrbitKit's
+     * `withLandingReasons`. */
+    fun withLandingReasons(criteria: List<JsonObject>, derivedDone: JsonObject?): List<JsonObject> {
+        if (derivedDone == null || derivedDone.flag("nonCode")) return criteria
+        val byId = derivedDone.objects("criteria").filter { it.text("definitionId") != null }
+            .associate { it.text("definitionId")!! to (it["landingReason"] ?: JsonNull) }
+        if (byId.isEmpty()) return criteria
+        return criteria.map { c -> byId[c.text("id")]?.let { JsonObject(c + ("landingReason" to it)) } ?: c }
     }
     const val criteriaPreviewCompact = 4
     fun criteriaStanding(count: Int) = "$count ${if (count == 1) "criterion" else "criteria"} stated. Whether one is met is read off the work filed under it; nothing in Orbit judges the criteria themselves."
@@ -623,9 +658,31 @@ object ProjectPage {
         val state = t.obj("integration")?.text("state") ?: return null
         return if (state in integratingStates) "integrating" else if (state in landedStates) "landed" else null
     }
-    fun workTag(t: JsonObject): Tag? = when (workState(t)) {
+    /** A running task whose background jobs have said nothing for ten minutes (`runStalled`; web `RUN_STALLED`). */
+    const val runStalled = "no output 10+ min"
+    /** A task set to start by hand (`autoRunWhenReady: false`), as its row says it: the Project started card's words for the same
+     * tasks. Web's `PROJECT_TASK_STARTS_BY_HAND`, OrbitKit's `ProjectPage.startsByHand`. */
+    const val startsByHand = "set to start by hand"
+    private val runReasonLabel = mapOf("TURN" to "Turn in progress", "BACKGROUND_JOB" to "Background job", "WAITING" to "Waiting to be woken")
+    /** What a running task says it is doing: "Running · Background job", and "· no output 10+ min" when it stalled; null when the
+     * server gave no reason. Web's and OrbitKit's `runningLabel`. */
+    fun runningLabel(runReason: String?, runStalled: Boolean): String? {
+        if (runReason.isNullOrEmpty()) return null
+        val label = "Running · ${runReasonLabel[runReason] ?: runReason}"
+        return if (runStalled) "$label · ${ProjectPage.runStalled}" else label
+    }
+    fun workTag(t: JsonObject): Tag? {
+        val state = workState(t)
+        // Held for a person to start (G5): said on the row in the Project started card's words. `false`, not absent — an older server
+        // sends no flag, and that is no claim.
+        if (t["autoRunWhenReady"] == JsonPrimitive(false) && (state == "READY" || (state == "BLOCKED" && !waitsForLanding(t))))
+            return if (state == "READY") Tag("Ready · $startsByHand", TagTone.WARNING) else Tag("Blocked · $startsByHand", TagTone.NEUTRAL)
+        return workTagByState(t, state)
+    }
+    private fun workTagByState(t: JsonObject, state: String): Tag? = when (state) {
         "READY" -> Tag(if (t.flag("autoRunWhenReady")) "Ready · automatic dispatch" else "Ready · can start now", TagTone.WARNING)
-        "RUNNING" -> Tag("Running", TagTone.BRAND)
+        // A stalled run (G4) says so on its row as well as in the run queue.
+        "RUNNING" -> if (t.flag("runStalled")) Tag("Running · $runStalled", TagTone.WARNING) else Tag("Running", TagTone.BRAND)
         "BLOCKED" -> if (waitsForLanding(t)) null else Tag("Blocked", TagTone.NEUTRAL)
         "AWAITING_VERIFICATION" -> Tag(when (t.text("verificationState")) {
             "FAILED" -> "Verification failed"; "MISSING" -> "Missing verifier"; "RUNNING" -> "Awaiting verification · verifier running"
@@ -690,9 +747,10 @@ object ProjectPage {
             add("settled", "Done / Cancelled", settled, settled = true)
         }
     }
-    fun rowTags(task: JsonObject, heading: String, ref: String?, upstreamRef: String?): List<Tag> = buildList {
+    /** [noLine]: the project started with no line (§12.16), and its rows have no landing segment. */
+    fun rowTags(task: JsonObject, heading: String, ref: String?, upstreamRef: String?, noLine: Boolean = false): List<Tag> = buildList {
         workTag(task)?.let { lane -> if (lane.text != heading && !heading.startsWith(lane.text + " · ")) add(lane) }
-        integrationTag(task, ref, upstreamRef)?.let(::add)
+        if (!noLine) integrationTag(task, ref, upstreamRef)?.let(::add)
     }
     fun taskGlyph(t: JsonObject) = when (t.text("status")) { "IN_PROGRESS" -> Glyph.DISC; "OPEN" -> Glyph.TRIANGLE; "DONE" -> Glyph.CHECK; "FAILED" -> Glyph.CROSS; else -> Glyph.SQUARE }
 
@@ -823,7 +881,7 @@ object ProjectPage {
     fun queueImpactTruncated(maxTasks: Int) = "Impact ranking not computed" to
         "This project has more than $maxTasks unfinished tasks, so tasks are shown without downstream impact ranking."
     fun queueRowState(item: JsonObject) = when (item.text("runState")) {
-        "RUNNING" -> "Work in progress"
+        "RUNNING" -> runningLabel(item.text("runReason"), item.flag("runStalled")) ?: "Work in progress"
         "QUEUED" -> "Waiting for runner"
         "PAUSED" -> item.obj("pausedList")?.text("title")?.takeIf { it.isNotEmpty() }?.let { "List paused · $it" } ?: "List paused"
         else -> "Prerequisites complete"
@@ -854,12 +912,7 @@ object ProjectPage {
     }
     fun confirmButton(status: String) = when (status) { "DONE" -> "Record as done"; "CANCELLED" -> "Record as cancelled"; else -> "Reopen" }
     fun confirmMessage(status: String, doc: JsonObject, buckets: JsonObject?): String = when (status) {
-        "DONE" -> {
-            val criteria = doc.objects("acceptanceCriteriaItems")
-            val settled = criteria.count { ProjectDoc.satisfied(it) == true }
-            val noReceipt = criteria.count { it.text("landing") == "UNKNOWN" }
-            "${criteria.size} stated ${if (criteria.size == 1) "criterion" else "criteria"} · $settled settled by the work filed under them · $noReceipt with no merge receipt"
-        }
+        "DONE" -> ProjectDone.recordAsDoneTally(doc)
         "CANCELLED" -> {
             val unfinished = buckets?.let { it.n("running") + it.n("ready") + it.n("blocked") + it.n("awaitingVerification") + it.n("failed") } ?: 0
             "$unfinished unfinished ${if (unfinished == 1) "task stays" else "tasks stay"} filed under it and won’t start. A run already going is not stopped."
@@ -956,7 +1009,7 @@ object StartProjectCopy {
      * Merge check: Set · At most 2 tasks at a time". [branch] is the project branch, named when tasks land on it. */
     fun settingsLine(draft: Draft, branch: String): String = listOfNotNull(
         if (draft.automatic) RunSettings.automatic else "${RunSettings.automatic} off",
-        if (draft.line == "MAIN") RunSettings.lineMain(draft.main) else branch,
+        when (draft.line) { null -> LandingMeasuredCopy.landsWhenATaskCommits; "MAIN" -> RunSettings.lineMain(draft.main); else -> branch },
         draft.upstream?.let { "${RunSettings.mainBranch}: $it" },
         "${RunSettings.mergeCheck}: ${if (draft.hasMergeCheck) RunSettings.mergeCheckSet else RunSettings.mergeCheckNone}",
         "${RunSettings.atMost} ${draft.maxConcurrentTasks} ${RunSettings.tasksAtATime(draft.maxConcurrentTasks)}",
@@ -982,11 +1035,12 @@ object StartProjectCopy {
     data class ComesToYouItem(val text: String, val detail: String? = null)
     /** The Automatic switch's consequence, listed (`StartProject.comesToYou`); the merges name the project's main branch. An agent
      * that pushes its own work to main ([deliveryMode] AGENT_PUSH) asks nobody to merge it (§10.5 O-L2): no merge comes to the owner. */
-    fun comesToYou(automatic: Boolean, line: String, ownerConfirmed: List<NamedTask>, evidenceJudged: Int, escalationSeconds: Int,
+    fun comesToYou(automatic: Boolean, line: String?, ownerConfirmed: List<NamedTask>, evidenceJudged: Int, escalationSeconds: Int,
         main: String = RunSettings.defaultMainBranch, deliveryMode: String? = null): List<ComesToYouItem> {
         val confirms = if (ownerConfirmed.size > 3) listOf(ComesToYouItem(tasksYouConfirm(ownerConfirmed.size)))
             else ownerConfirmed.map { ComesToYouItem("${it.label} · ${it.title}", youConfirm) }
-        val merges = if (line == "MAIN") { if (deliveryMode == "AGENT_PUSH") emptyList() else listOf(ComesToYouItem(eachMergeInto(main))) }
+        // A request with no line decides nothing about merging, so no merge comes to the owner on it.
+        val merges = if (line == null) emptyList() else if (line == "MAIN") { if (deliveryMode == "AGENT_PUSH") emptyList() else listOf(ComesToYouItem(eachMergeInto(main))) }
             else if (automatic) emptyList() else listOf(ComesToYouItem(mergingInto(main)))
         val criteria = ComesToYouItem(criteriaChanges)
         if (automatic) return confirms + merges + criteria + ComesToYouItem(problemsUnresolved(within(escalationSeconds)))
@@ -1107,9 +1161,10 @@ object StartProjectCopy {
     }
 
     /** The request's row: who asked and what it suggests — directly into the main branch the start opens with ([startMainBranch]),
-     * which a page holding no integration read takes from the suggestion alone. */
+     * which a page holding no integration read takes from the suggestion alone. A request that names no line says so in the start
+     * card's own sentence ([LandingMeasuredCopy.landsWhenATaskCommits]), never "a project branch". */
     fun requestSummary(settings: JsonObject, main: String = RunSettings.mainBranchName(settings.text("upstreamRef"))) = listOf(rowAsked,
-        RunSettings.lineInSentence(settings.text("line"), main),
+        settings.text("line")?.let { RunSettings.lineInSentence(it, main) } ?: LandingMeasuredCopy.landsWhenATaskCommits,
         "${RunSettings.automatic} ${if (settings.flag("automatic")) "on" else "off"}", "at most ${settings.number("maxConcurrentTasks") ?: 1} at a time").joinToString(" · ")
     /** The start's row in Open items (`StartProject.PageRow`): the coordinator's request, answered on its card, or the owner's own Start…. */
     sealed interface PageRow { data class Asked(val row: JsonObject) : PageRow; data object Own : PageRow }
@@ -1128,8 +1183,9 @@ object StartProjectCopy {
         val live = graph.marks.filter { status(it) != "CANCELLED" }.map { it.id }.toSet()
         return graph.marks.any { it.kind == MarkKind.RUN } || graph.edges.any { it.source in live && it.target in live }
     }
-    /** `upstreamRef` is the main branch as a full ref: a coordinator's suggestion, or the one the project already stands on. */
-    data class Settings(val line: String, val projectBranchName: String?, val automatic: Boolean, val maxConcurrentTasks: Int, val mergeCheckCommand: String?,
+    /** `upstreamRef` is the main branch as a full ref: a coordinator's suggestion, or the one the project already stands on. `line` is
+     * null on a coordinator's request that names none (§12.15 P-M2). */
+    data class Settings(val line: String?, val projectBranchName: String?, val automatic: Boolean, val maxConcurrentTasks: Int, val mergeCheckCommand: String?,
         val upstreamRef: String? = null, val landingCheckCommand: String? = null,
         val landingCheckTimeoutSeconds: Int? = null, val mergeCheckTimeoutSeconds: Int? = null)
     /** `StartProject.defaultSettings`: the decided line, else a branch when the plan has dependencies — and the main branch the
@@ -1156,7 +1212,9 @@ object StartProjectCopy {
     fun request(row: JsonObject?): Request? {
         val asked = row?.obj("startRequest") ?: return null
         val settings = asked.obj("settings") ?: return null
-        val line = settings.text("line")?.takeIf { it == "MAIN" || it == "PROJECT_BRANCH" } ?: return null
+        // No line is a request of its own (§12.15 P-M2); a line this build cannot name is not.
+        val line = when (val named = settings["line"]) { null, JsonNull -> null
+            else -> (named as? JsonPrimitive)?.contentOrNull?.takeIf { it == "MAIN" || it == "PROJECT_BRANCH" } ?: return null }
         val automatic = (settings["automatic"] as? JsonPrimitive)?.booleanOrNull ?: return null
         val count = settings.number("maxConcurrentTasks")?.takeIf { it >= 0 } ?: return null
         val check = when (val value = settings["mergeCheckCommand"]) { null, JsonNull -> null; is JsonPrimitive -> if (value.isString) value.content else return null; else -> return null }
@@ -1168,10 +1226,10 @@ object StartProjectCopy {
      * the main branch by name, `refs/heads/` left off: what the row shows and the picker takes — null for a project with no
      * repository, which has no main branch to choose, and for an integration read that did not answer. `deliveryMode` is how the work
      * reaches it (§10.5 O-L1, A-Q21) — null where the card offers no choice: a read that does not say, or a server that predates it. */
-    data class Draft(val line: String, val automatic: Boolean, val maxConcurrentTasks: Int, val mergeCheckCommand: String = "",
+    data class Draft(val line: String?, val automatic: Boolean, val maxConcurrentTasks: Int, val mergeCheckCommand: String = "",
         val upstream: String? = null, val deliveryMode: String? = null, val landingCheckCommand: String = "",
         val landingCheckTimeoutSeconds: Int? = null, val mergeCheckTimeoutSeconds: Int? = null) {
-        val complete get() = (line == "MAIN" || line == "PROJECT_BRANCH") && maxConcurrentTasks in 1..StartProjectCopy.maxConcurrentTasks && (landingCheckTimeoutSeconds == null || landingCheckTimeoutSeconds > 0)
+        val complete get() = (line == null || line == "MAIN" || line == "PROJECT_BRANCH") && maxConcurrentTasks in 1..StartProjectCopy.maxConcurrentTasks && (landingCheckTimeoutSeconds == null || landingCheckTimeoutSeconds > 0)
         val hasMergeCheck get() = mergeCheckCommand.isNotBlank()
         /** The branch every sentence about where work goes names: the one on the card, or main for a project with none. */
         val main get() = upstream ?: RunSettings.defaultMainBranch
@@ -1182,8 +1240,9 @@ object StartProjectCopy {
              * that says how the work reaches it offers that choice — opened on what the project already chose when that is AGENT_PUSH
              * on a line that stays main, and otherwise on PLATFORM, the default. */
             fun of(settings: Settings, view: JsonObject? = null) = Draft(settings.line, true, settings.maxConcurrentTasks, settings.mergeCheckCommand.orEmpty(),
-                if (ProjectMainBranch.repository(view) != null) startMainBranch(settings.upstreamRef, view) else null,
-                view?.text("deliveryMode")?.let { RunSettings.delivery(settings.line, it) }, settings.landingCheckCommand.orEmpty(),
+                // A request with no line offers no main branch: nothing about the line is written at the start.
+                if (settings.line != null && ProjectMainBranch.repository(view) != null) startMainBranch(settings.upstreamRef, view) else null,
+                view?.text("deliveryMode")?.takeIf { settings.line != null }?.let { RunSettings.delivery(settings.line, it) }, settings.landingCheckCommand.orEmpty(),
                 settings.landingCheckTimeoutSeconds, settings.mergeCheckTimeoutSeconds)
         }
     }
@@ -1192,9 +1251,11 @@ object StartProjectCopy {
     fun body(request: Request, draft: Draft, requestId: String?): JsonObject = buildJsonObject {
         val branch = request.settings.projectBranchName.orEmpty()
         val check = draft.mergeCheckCommand.trim()
-        put("criteriaDigest", request.criteriaDigest); put("line", draft.line)
+        put("criteriaDigest", request.criteriaDigest)
+        // A request with no line is answered with none (§12.15 P-M2), and nothing that only a line means rides with it.
+        draft.line?.let { put("line", it) }
         if (draft.line == "PROJECT_BRANCH" && branch.isNotEmpty()) put("projectBranchName", branch)
-        draft.upstream?.let { put("upstreamRef", RunSettings.mainBranchRef(it)) }
+        if (draft.line != null) draft.upstream?.let { put("upstreamRef", RunSettings.mainBranchRef(it)) }
         put("automatic", draft.automatic); put("maxConcurrentTasks", draft.maxConcurrentTasks)
         put("mergeCheckCommand", if (check.isEmpty()) JsonNull else JsonPrimitive(check))
         if (draft.line == "PROJECT_BRANCH") {
@@ -1305,7 +1366,9 @@ object RunSettings {
     const val automaticOff = "You decide when each task is done and when the branch goes into main."
     const val automaticOffMain = "You decide when each task is done, and each merge into main asks you."
     /** …said of the project's main branch: the five constants above, for a project on main. */
-    fun automaticSays(automatic: Boolean, line: String, hasMergeCheck: Boolean, main: String = defaultMainBranch) = when {
+    fun automaticSays(automatic: Boolean, line: String?, hasMergeCheck: Boolean, main: String = defaultMainBranch) = when {
+        // A request with no line (§12.15 P-M2) decides nothing about where work lands: no sentence names a branch (web's runAutomaticSays).
+        line == null -> if (automatic) "The coordinator decides when each task is done." else "You decide when each task is done."
         !automatic -> if (line == "MAIN") "You decide when each task is done, and each merge into $main asks you."
             else "You decide when each task is done and when the branch goes into $main."
         line == "MAIN" -> "The coordinator decides when each task is done. Each merge into $main still asks you."

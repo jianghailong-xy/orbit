@@ -126,8 +126,16 @@ func hostSetup(env hostSetupEnv, server string) error {
 		return errors.New("setup needs --server <url>: the control plane this host's runners register against")
 	}
 	if env.geteuid() != 0 {
-		// The only root step in the whole design. Print the exact line to re-run rather
-		// than leaving the operator to reconstruct it from the error.
+		// The only root step in the whole design. Print the exact lines to run rather than
+		// leaving the operator to reconstruct them from the error. Setup runs only from the
+		// machine's binary (checkBinary), so a run from any other copy, an account's own
+		// included, is told to put a root-owned copy in place first: re-running that copy under
+		// sudo would only be refused next.
+		if exe, err := env.executable(); err == nil && exe != machineBinaryPath {
+			how, fix, rerun := machineCopy(exe, server)
+			return fmt.Errorf("setup writes machine-wide systemd units, so it must run as root and from %s, the one binary the host broker runs, rather than %s.\n"+
+				"%s\n  %s\n  %s", machineBinaryPath, exe, how, fix, rerun)
+		}
 		return fmt.Errorf("setup writes machine-wide systemd units and must run as root — re-run: sudo %s host setup --server %s",
 			env.sudoName(), server)
 	}

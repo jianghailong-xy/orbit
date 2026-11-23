@@ -130,7 +130,7 @@ release_of() {
   MR_IMAGE=""
   if git cat-file -e "$1:deploy/managed-runner/image/Dockerfile" 2>/dev/null; then
     MR_TAG="$(git log -1 --format=%H "$1" -- "${MANAGED_RUNNER_INPUTS[@]}")"
-    MR_IMAGE="$REGISTRY/orbit-managed-runner:$MR_TAG"
+    MR_IMAGE="$REGISTRY/orbit-cloud-runner:$MR_TAG"
   fi
   base="$(git show "$1:deploy/two-stage/base-images.env")"
   for name in ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE; do
@@ -335,7 +335,7 @@ deploy_stage() {
     | on_target "mkdir -p $DIR/.upgrade && cd $DIR && rm -rf $stage && tar -x"
   on_target "cat > $DIR/.upgrade/deploy-stage.sh" <deploy/two-stage/deploy-stage.sh
   on_target "ORBIT_DEPLOY_DIR=$DIR ORBIT_RELEASE_COMMIT=$COMMIT ORBIT_REGISTRY=$REGISTRY ORBIT_LINK_GATEWAY_TAG=$LINK_TAG \
-ORBIT_NGINX_IMAGE=$ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE=$ORBIT_NATS_IMAGE ORBIT_MANAGED_RUNNER_IMAGE=$MR_REF \
+ORBIT_NGINX_IMAGE=$ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE=$ORBIT_NATS_IMAGE ORBIT_MANAGED_RUNNER_IMAGE=$MR_REF ORBIT_MANAGED_RUNNER_REVISION=$MR_TAG \
 ORBIT_DEPLOY_PULL_BASE=$PULL_BASE ORBIT_DEPLOY_PRUNE=$PRUNE ORBIT_DEPLOY_PLAN=$plan ORBIT_DEPLOY_STOP_THEN_START=$STOP_THEN_START \
 bash $DIR/.upgrade/deploy-stage.sh" || status=$?
   if [ "$status" -eq 255 ]; then

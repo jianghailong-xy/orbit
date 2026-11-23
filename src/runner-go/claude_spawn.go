@@ -61,6 +61,8 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 		job.AllowOrchestration,
 		job.insideRecordedWork(),
 		job.watchesOn(),
+		job.BrowserEnabled,
+		job.workflowsOn(),
 	)
 	// Orbit ships its own task tools via the `orbit` MCP server (mcp__orbit__task_*).
 	// Claude's built-in Task* tools collide by intent: an agent told to "create tasks"
@@ -151,6 +153,11 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 	upDir := uploadsDir(job.SessionID)
 	if err := os.MkdirAll(upDir, 0o755); err == nil {
 		args = append(args, "--add-dir", upDir)
+	}
+	// The drive is a workspace root beside the uploads folder in every mode. In Plan it is only read: the permission
+	// prompt and the PreToolUse hook refuse a write there (plan_drive.go, design §7.2).
+	for _, root := range driveGrantRoots() {
+		args = append(args, "--add-dir", root)
 	}
 	return args
 }
@@ -261,6 +268,8 @@ func spawnClaude(ctx context.Context, job *ClaimedSession, execDir string, args 
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
 		envWatches+"="+watchesEnv(job.WatchesDisabled),
 		envWiki+"="+wikiEnv(job.WikiDisabled),
+		envBrowser+"="+browserEnv(job.BrowserEnabled),
+		envWorkflows+"="+workflowsEnv(job.WorkflowsDisabled),
 		envScheduleRun+"="+scheduleRunEnv(job.ScheduleRun),
 		envScheduledCheckOnly+"="+scheduledCheckOnlyEnv(job.Agent.ScheduledCheckOnly),
 		"ORBIT_SPAWN_DEPTH="+strconv.Itoa(job.SpawnDepth),
@@ -268,6 +277,8 @@ func spawnClaude(ctx context.Context, job *ClaimedSession, execDir string, args 
 	// Where `orbit mcp` (a child of this process) reaches the runner to start a
 	// background job the runner will own (bgJobEnvPairs).
 	cmd.Env = append(cmd.Env, bgJobEnvPairs(job.SessionID)...)
+	// On the Orbit Cloud runner with the browser on, a tool the agent runs opens its pages there (browser_opener.go).
+	cmd.Env = browserOpenerEnv(cmd.Env, job.BrowserEnabled)
 	// A claude that does not talk to Anthropic runs while the region check answers blocked, with its nonessential
 	// traffic off: that keeps a Claude login stored here from going to Anthropic with it (claude_region.go).
 	cmd.Env = claudeQuietEnv(cmd.Env, job.Agent.Env)

@@ -12,6 +12,9 @@ import OrbitKit
 struct WorktreeBar: View {
     @Environment(AppModel.self) private var app
     @Environment(\.openURL) private var openURL
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
     let console: ConsoleModel
     /// The bar opens one sheet at a time — the session's diff, or the merge recovery's review — so
     /// they share one `.sheet(item:)` host rather than stacking two `.sheet`s on the container.
@@ -191,7 +194,8 @@ struct WorktreeBar: View {
                     // long-press (right-click on macOS) context menu — a plain tap can no longer silently
                     // copy, and the Commit/Merge control stays its own target so a diff tap can't fire it.
                     branchSummary(branch: displayBranch, add: add, del: del, count: files.count,
-                                  committed: primary == .merge)
+                                  committed: primary == .merge, commits: d.branchCommits,
+                                  dirty: d.worktreeDirty == true)
                     // The action button keeps its size (web `flex: none`); the branch/stat truncate first
                     // under narrow width.
                     switch primary {
@@ -221,15 +225,27 @@ struct WorktreeBar: View {
             // sitting on its bottom border (web `.wt-merge-inset`, board docs/mocks/merge-conflict-strip).
             if d.mergeRecovery == nil, conflict != nil || failure != nil {
                 Divider()
-                Group {
-                    if let conflict {
-                        WorktreeMergeConflictView(conflict: conflict).id(d.mergeError ?? "")
-                    } else if let failure {
-                        failureView(message: failure)
+                HStack(alignment: .top, spacing: 8) {
+                    Group {
+                        if let conflict {
+                            WorktreeMergeConflictView(conflict: conflict).id(d.mergeError ?? "")
+                        } else if let failure {
+                            failureView(message: failure)
+                        }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    // Closes it everywhere (web `.wt-merge-dismiss`, board docs/mocks/merge-error-dismiss).
+                    Button { Task { await console.worktree.dismissMergeFailure() } } label: {
+                        Image(systemName: "xmark").font(.orbitLabel)
+                            .padding(4).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain).foregroundStyle(.secondary)
+                    .disabled(console.worktree.busy)
+                    .accessibilityLabel("Dismiss")
+                    .help("Dismiss")
+                    .padding(.top, -4)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 10).padding(.top, 9).padding(.bottom, 10)
+                .padding(.leading, 10).padding(.trailing, 6).padding(.top, 9).padding(.bottom, 10)
             }
             // A merge held for target recovery is the bar's second row: what holds it, one line, and
             // the review behind it in a sheet — never the review itself, which is taller than the band
@@ -272,11 +288,12 @@ struct WorktreeBar: View {
     }
 
     @ViewBuilder
-    private func branchSummary(branch: String, add: Int, del: Int, count: Int, committed: Bool) -> some View {
+    private func branchSummary(branch: String, add: Int, del: Int, count: Int, committed: Bool,
+                               commits: [BranchCommit]? = nil, dirty: Bool = false) -> some View {
         if count == 0 {
             HStack(spacing: 8) {
                 branchLabel(branch)
-                statView(add: add, del: del, count: count, committed: committed)
+                summaryStat(add: add, del: del, count: count, committed: committed, commits: commits, dirty: dirty)
                 Spacer(minLength: 4)
             }
             .layoutPriority(1)
@@ -285,7 +302,7 @@ struct WorktreeBar: View {
             Button { sheet = .diff } label: {
                 HStack(spacing: 8) {
                     branchLabel(branch)
-                    statView(add: add, del: del, count: count, committed: committed)
+                    summaryStat(add: add, del: del, count: count, committed: committed, commits: commits, dirty: dirty)
                     Spacer(minLength: 4)
                 }
                 .contentShape(Rectangle())
@@ -326,6 +343,51 @@ struct WorktreeBar: View {
             try? await Task.sleep(nanoseconds: 1_500_000_000)
             copied = false
         }
+    }
+
+    /// The bar counted in commits when the runner reports them (board session-commits-first/02-native A),
+    /// else today's file count.
+    @ViewBuilder
+    private func summaryStat(add: Int, del: Int, count: Int, committed: Bool, commits: [BranchCommit]?, dirty: Bool) -> some View {
+        if let commits {
+            commitsStatView(commits: commits, dirty: dirty, add: add, del: del, fileCount: count)
+        } else {
+            statView(add: add, del: del, count: count, committed: committed)
+        }
+    }
+
+    /// "3 commits + uncommitted  +479 −54", or "Uncommitted · 8 files" before the first commit. Short of
+    /// room it drops the line counts, then the "+ uncommitted" tag, never the count. The newest subject
+    /// leads on a wide bar (iPad, Mac), as on the web; a phone row has no room for it, and the sheet
+    /// opens on the commit list instead.
+    private func commitsStatView(commits: [BranchCommit], dirty: Bool, add: Int, del: Int, fileCount: Int) -> some View {
+        let lines = (Text("+\(add)").foregroundStyle(.green) + Text(" −\(del)").foregroundStyle(.red)).font(.orbitMono)
+        let label = commits.isEmpty
+            ? Text("Uncommitted").fontWeight(.semibold)
+                + Text(" · \(fileCount) \(fileCount == 1 ? "file" : "files")").foregroundStyle(.secondary)
+            : Text(WorktreeBarLogic.commitCountLabel(commits.count)).fontWeight(.semibold)
+        let pending = dirty && !commits.isEmpty ? Text(" + uncommitted").foregroundStyle(.orange) : Text("")
+        let latest = commits.first.map { Text(" · ").foregroundStyle(.secondary) + Text($0.subject) } ?? Text("")
+        return ViewThatFits(in: .horizontal) {
+            if showsLatestSubject {
+                (label + pending + latest + Text("  ") + lines).fixedSize()
+            }
+            (label + pending + Text("  ") + lines).fixedSize()
+            (label + pending).fixedSize()
+            label.fixedSize()
+        }
+        .font(.orbitLabel)
+        .lineLimit(1)
+        .layoutPriority(1)
+    }
+
+    /// Whether the bar may lead with the newest commit's subject: not on a phone (board decision B).
+    private var showsLatestSubject: Bool {
+        #if os(iOS)
+        horizontalSizeClass == .regular
+        #else
+        true
+        #endif
     }
 
     /// The count is the row's reading: it takes its room before the branch name, which gives way
@@ -853,8 +915,13 @@ private struct WTChip: View {
 /// file list and its `+/−` stats come from the (already-loaded) `changedFiles`; the diff is lazy.
 struct DiffSheet: View {
     let console: ConsoleModel
+    /// Opened from somewhere that names no commit (the main checkout's changed-files link): the whole
+    /// branch, never the commit list (web parity: the drawer opens on All changes).
+    var startOnAllChanges = false
     @Environment(\.dismiss) private var dismiss
     @State private var branchCopied = false
+    /// The tab chosen by hand; nil until then, which reads as the opening tab.
+    @State private var chosenTab: WorktreeBarLogic.DiffTab?
 
     var body: some View {
         let files = console.worktree.detail?.changedFiles ?? []
@@ -862,13 +929,54 @@ struct DiffSheet: View {
         let branch = detail?.projectMembership?.role == .coordinator
             ? (detail?.projectIntegrationRef ?? detail?.branch)
             : detail?.branch
+        // Commits first (board session-commits-first/02-native B): the sheet opens on the branch's commits
+        // when the runner reports any, with the file list one tab away; without them it is today's list.
+        let commits = detail?.branchCommits ?? []
+        let opening = WorktreeBarLogic.openingTab(commits: detail?.branchCommits)
+        let tab = opening == nil ? WorktreeBarLogic.DiffTab.allChanges
+            : (chosenTab ?? (startOnAllChanges ? .allChanges : opening!))
         NavigationStack {
             List {
-                ForEach(files) { file in
-                    NavigationLink {
-                        DiffFileView(console: console, file: file)
-                    } label: {
-                        DiffFileRow(file: file)
+                if opening != nil {
+                    Section {
+                        Picker("Show", selection: Binding(get: { tab }, set: { chosenTab = $0 })) {
+                            Text(commitsTabTitle(commits.count))
+                                .tag(WorktreeBarLogic.DiffTab.commits)
+                            Text("All changes \(files.count)").tag(WorktreeBarLogic.DiffTab.allChanges)
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+                }
+                if tab == .commits {
+                    Section {
+                        if detail?.worktreeDirty == true {
+                            // Work no commit holds yet: it is in All changes, as on the web.
+                            Button { chosenTab = .allChanges } label: { PendingCommitRow() }
+                                .buttonStyle(.plain)
+                        }
+                        ForEach(commits) { commit in
+                            NavigationLink {
+                                CommitDetailView(console: console, commit: commit, commits: commits,
+                                                 branchFiles: files, worktreeDirty: detail?.worktreeDirty == true)
+                            } label: {
+                                BranchCommitRow(commit: commit)
+                            }
+                        }
+                    } footer: {
+                        if let based = WorktreeBarLogic.basedOn(mergeTarget: detail?.mergeTarget, baseSha: detail?.baseSha) {
+                            Text("Based on \(based)")
+                        }
+                    }
+                } else {
+                    ForEach(files) { file in
+                        NavigationLink {
+                            DiffFileView(console: console, file: file)
+                        } label: {
+                            DiffFileRow(file: file)
+                        }
                     }
                 }
             }
@@ -897,6 +1005,10 @@ struct DiffSheet: View {
         #endif
     }
 
+    private func commitsTabTitle(_ n: Int) -> String {
+        n >= WorktreeBarLogic.commitsMax ? "Commits \(WorktreeBarLogic.commitsMax)+" : "Commits \(n)"
+    }
+
     private func copyBranch(_ branch: String) {
         PlatformPasteboard.copyString(branch)
         PlatformHaptics.success()
@@ -905,6 +1017,122 @@ struct DiffSheet: View {
             try? await Task.sleep(nanoseconds: 1_500_000_000)
             branchCopied = false
         }
+    }
+}
+
+/// One commit in the sheet's commit list: subject, then short sha · age · file count, and the label of a
+/// commit the runner made itself (web `CommitRow`).
+struct BranchCommitRow: View {
+    let commit: BranchCommit
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .strokeBorder(saved == nil ? Color.clear : Color.secondary.opacity(0.6), lineWidth: 1.5)
+                .background(Circle().fill(saved == nil ? Color.secondary : Color.clear))
+                .frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(commit.subject.isEmpty ? "(no message)" : commit.subject)
+                    .font(.orbitLabel.weight(.semibold)).lineLimit(1)
+                HStack(spacing: 5) {
+                    Text(WorktreeBarLogic.shortSha(commit.sha)).font(.orbitMonoFine)
+                    Text(meta)
+                    if let saved {
+                        Text(saved)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 4))
+                    }
+                }
+                .font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var saved: String? { WorktreeBarLogic.savedByLabel(commit.savedBy) }
+
+    private var meta: String {
+        let n = commit.files.count
+        let files = "\(n)\(commit.filesTruncated == true ? "+" : "") \(n == 1 ? "file" : "files")"
+        if let ago = RelativeTime.ago(commit.committedAt) { return "· \(ago) · \(files)" }
+        return "· \(files)"
+    }
+}
+
+/// The commit list's first row while the worktree holds work no commit has.
+struct PendingCommitRow: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            Circle().strokeBorder(Color.orange, style: StrokeStyle(lineWidth: 1.5, dash: [2, 2])).frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Uncommitted changes").font(.orbitLabel.weight(.semibold))
+                Text("Not committed yet · shown under All changes").font(.orbitMeta).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right").font(.orbitMeta).foregroundStyle(.tertiary)
+        }
+        .contentShape(Rectangle())
+        .padding(.vertical, 2)
+    }
+}
+
+/// A commit, pushed from the list (board 02-native C): its message first, the why, then only its own
+/// files. A file opens the branch's diff of it: patches are per branch, which the note under the files
+/// says when that differs from this commit alone.
+struct CommitDetailView: View {
+    let console: ConsoleModel
+    let commit: BranchCommit
+    let commits: [BranchCommit]
+    let branchFiles: [SessionChangedFile]
+    let worktreeDirty: Bool
+
+    var body: some View {
+        let stat = WorktreeBarLogic.commitStat(commit)
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(commit.subject.isEmpty ? "(no message)" : commit.subject)
+                        .font(.headline).textSelection(.enabled)
+                    HStack(spacing: 5) {
+                        if let ago = RelativeTime.ago(commit.committedAt) {
+                            Text(ago)
+                            Text("·")
+                        }
+                        Text("+\(stat.add)").foregroundStyle(.green).font(.orbitMono)
+                        Text("−\(stat.del)").foregroundStyle(.red).font(.orbitMono)
+                        Text("· \(commit.files.count) \(commit.files.count == 1 ? "file" : "files")")
+                        if let saved = WorktreeBarLogic.savedByLabel(commit.savedBy) { Text("· \(saved)") }
+                    }
+                    .font(.orbitMeta).foregroundStyle(.secondary)
+                    if let body = commit.body, !body.isEmpty {
+                        Text(body).font(.orbitLabel).textSelection(.enabled).padding(.top, 2)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            Section {
+                ForEach(commit.changedFiles) { file in
+                    // The branch's row for the file carries its status letter and is what the diff loads by.
+                    let shown = branchFiles.first { $0.path == file.path } ?? file
+                    NavigationLink {
+                        DiffFileView(console: console, file: shown)
+                    } label: {
+                        DiffFileRow(file: SessionChangedFile(path: file.path, additions: file.additions,
+                                                             deletions: file.deletions, status: shown.status))
+                    }
+                }
+            } header: {
+                Text("Files")
+            } footer: {
+                if WorktreeBarLogic.commitDiffsShowMore(commit, among: commits, worktreeDirty: worktreeDirty) {
+                    Text(WorktreeBarLogic.commitDiffsShowMoreNote)
+                }
+            }
+        }
+        .navigationTitle(WorktreeBarLogic.shortSha(commit.sha))
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
     }
 }
 
@@ -1044,6 +1272,10 @@ struct BackgroundTrayView: View {
     let row: BackgroundRowRule.Row?
     /// The band is folded away (`TypingFold`, the folded pill): the names stop rotating.
     var paused = false
+    /// Scrolls the conversation to a bg_run job's card (R1): whether it found one to scroll to.
+    var revealJob: ((String) -> Bool)? = nil
+    /// The owner's stop of a running bg_run job (R3).
+    var stopJob: ((String) async throws -> Void)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @State private var open = false
@@ -1089,11 +1321,21 @@ struct BackgroundTrayView: View {
     private var rows: some View {
         VStack(spacing: 0) {
             ForEach(procs) { proc in
-                BackgroundRow(proc: proc, progress: progress[proc.id], expanded: expandedID == proc.id) {
-                    withAnimation(.easeOut(duration: 0.12)) {
-                        expandedID = expandedID == proc.id ? nil : proc.id
-                    }
-                }
+                BackgroundRow(proc: proc, progress: progress[proc.id], expanded: expandedID == proc.id,
+                              onToggle: {
+                                  // A bg_run job's row goes to its Job card, as the Agents list goes to a
+                                  // run's block (R1); one whose card is not loaded opens here as ever.
+                                  if WorktreeBarLogic.jobRowScrollsToCard(proc), revealJob?(proc.id) == true {
+                                      withAnimation(.easeOut(duration: 0.12)) { open = false }
+                                      return
+                                  }
+                                  withAnimation(.easeOut(duration: 0.12)) {
+                                      expandedID = expandedID == proc.id ? nil : proc.id
+                                  }
+                              },
+                              onStop: stopJob.flatMap { stop in
+                                  WorktreeBarLogic.jobRowOffersStop(proc) ? { try await stop(proc.id) } : nil
+                              })
             }
         }
     }
@@ -1115,7 +1357,7 @@ struct BackgroundTrayView: View {
     /// The name the row shows now.
     private func current(_ row: BackgroundRowRule.Row) -> BackgroundRowRule.Item {
         switch row.name {
-        case .one(let item), .pinned(let item): return item
+        case .one(let item): return item
         case .rotate(let items, _, _): return items[turn % items.count]
         }
     }
@@ -1124,7 +1366,7 @@ struct BackgroundTrayView: View {
     /// folded away; it starts again from where it was.
     private var rotationPaused: Bool { open || paused || scenePhase != .active }
 
-    /// "Background", the name and its mark, the count: only the name moves, by a push from below,
+    /// "Background", the name, the count and its mark: only the name moves, by a push from below,
     /// or — with Reduce Motion — a crossfade in place.
     private func folded(_ row: BackgroundRowRule.Row) -> some View {
         let item = current(row)
@@ -1143,14 +1385,15 @@ struct BackgroundTrayView: View {
             .clipped()
             // The screen reader reads the row's own label, never a name that changes every 3 s.
             .accessibilityHidden(true)
-            BackgroundRowMarkView(mark: item.mark)
+            // The count, then the mark, at the right edge before the chevron, as AgentsBandRow ends.
             if !row.countParts.isEmpty {
                 row.countParts.enumerated().reduce(Text("")) { line, part in
                     line + Text(part.offset == 0 ? "" : " · ")
-                        + Text(part.element.text).foregroundStyle(part.element.kind == "failed" ? Color.red : Color.secondary)
+                        + Text(part.element.text)
                 }
                 .font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1).fixedSize()
             }
+            BackgroundRowMarkView(mark: item.mark)
             Image(systemName: "chevron.right")
                 .font(.orbitMeta.weight(.semibold)).foregroundStyle(.secondary)
         }
@@ -1200,12 +1443,14 @@ struct BackgroundTrayView: View {
 }
 
 /// The folded row's mark: the list row's own spinner and SF Symbols (`BackgroundRow.statusIcon`).
+/// The spinner is the app's one running mark (`SpinnerGlyph`, as on a running session), not the
+/// system activity indicator, so the bars above the composer do not show two kinds of loading.
 private struct BackgroundRowMarkView: View {
     let mark: BackgroundRowRule.Mark
 
     var body: some View {
         switch mark {
-        case .running: ProgressView().controlSize(.small)
+        case .running: SpinnerGlyph(color: .accentColor)
         case .done:    Image(systemName: "checkmark.circle.fill").font(.orbitLabel).foregroundStyle(.green)
         case .failed:  Image(systemName: "xmark.circle.fill").font(.orbitLabel).foregroundStyle(.red)
         case .killed:  Image(systemName: "stop.circle").font(.orbitLabel).foregroundStyle(.secondary)
@@ -1220,6 +1465,10 @@ private struct BackgroundRow: View {
     var progress: TaskProgress? = nil
     let expanded: Bool
     let onToggle: () -> Void
+    /// A running bg_run job its runner can stop (R3); nil for anything else.
+    var onStop: (() async throws -> Void)? = nil
+    @State private var asking = false
+    @State private var stopFailed: String?
 
     /// An async agent or a workflow rather than a shell: named by kind, and opening to its progress.
     private var isTask: Bool { proc.kind == "agent" || proc.kind == "workflow" }
@@ -1240,11 +1489,28 @@ private struct BackgroundRow: View {
                 if let ts = proc.startedAt, let rel = RelativeTime.format(ts) {
                     Text(rel).font(.orbitMeta).foregroundStyle(.secondary)
                 }
+                if onStop != nil {
+                    Button(BgJobCard.stop) { asking = true }
+                        .buttonStyle(.plain).font(.orbitMeta).foregroundStyle(.tint)
+                        .accessibilityIdentifier("bg-job-stop")
+                }
                 Image(systemName: expanded ? "chevron.down" : "chevron.right")
                     .font(.orbitMeta).foregroundStyle(.tertiary)
             }
             .contentShape(Rectangle())
             .onTapGesture(perform: onToggle)
+            .orbitConfirmation(BgJobCard.stopConfirm, isPresented: $asking) {
+                Button(BgJobCard.stop, role: .destructive) {
+                    guard let onStop else { return }
+                    Task {
+                        do { try await onStop(); stopFailed = nil } catch { stopFailed = APIClient.failureReason(error) }
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            if let stopFailed {
+                Text(stopFailed).font(.orbitMeta).foregroundStyle(.red).padding(.leading, 26)
+            }
             // Where a running workflow is, or what a running agent is on — the row's second line.
             if isTask, proc.status == "running", let progress, let line = TaskProgressCopy.trayLine(progress) {
                 Text(line).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1)
@@ -1279,11 +1545,11 @@ private struct BackgroundRow: View {
         .padding(.horizontal, 12).padding(.vertical, 6)
     }
 
-    /// Status glyph mirroring web's `BgStatusIcon`. Uses `ProgressView` for the live spinner like the
-    /// neighbouring tool cards do — safe here since the tray isn't inside the recycling transcript List.
+    /// Status glyph mirroring web's `BgStatusIcon`. The live spinner is the folded row's own
+    /// (`SpinnerGlyph`), so the row keeps its mark when tapped open.
     @ViewBuilder private var statusIcon: some View {
         switch proc.status {
-        case "running":   ProgressView().controlSize(.small)
+        case "running":   SpinnerGlyph(color: .accentColor)
         case "completed": Image(systemName: "checkmark.circle.fill").font(.orbitLabel).foregroundStyle(.green)
         case "failed":    Image(systemName: "xmark.circle.fill").font(.orbitLabel).foregroundStyle(.red)
         case "killed":    Image(systemName: "stop.circle").font(.orbitLabel).foregroundStyle(.secondary)

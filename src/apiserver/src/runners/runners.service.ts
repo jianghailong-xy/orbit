@@ -24,7 +24,8 @@ import type {
   SlashCommandInfo,
   RunnerUpdateTurn,
 } from '@orbit/shared';
-import { CLAUDE_REGION_UNSUPPORTED, CLAUDE_REGION_V1, LOGIN_FAILURE_REASONS, SELF_UPDATE_NOW_V1, SELF_UPDATE_POSTPONE_V1 } from '@orbit/shared';
+import { CLAUDE_REGION_UNSUPPORTED, CLAUDE_REGION_V1, SELF_UPDATE_NOW_V1, SELF_UPDATE_POSTPONE_V1 } from '@orbit/shared';
+import { loginStateOf } from './login-state';
 import type {
   RunnerSelfUpdateNowRequest,
   RunnerSelfUpdateNowResponse,
@@ -81,10 +82,7 @@ import {
   claudeAccountSwapWaitingOf,
 } from './claude-account-swap';
 import { openCodeKeyRows, runsOnOpenCode } from '../providers/custom-provider';
-
-/** The statuses an abandoned checkout can belong to: a session that has stopped running for good.
- *  A parked one can be dirty between turns and is not abandoned, so it is not listed. */
-const FINISHED_SESSION_STATUSES = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
+import { releasedFilter } from '../common/session-release';
 
 // Cap device-enrollment userCode lookups per user, so an authenticated insider
 // cannot brute-force another user's pending enrollment code online.
@@ -155,6 +153,8 @@ export class RunnersService {
         labels: true,
         status: true,
         maxConcurrent: true,
+        // Extra sessions on demand, edited beside maxConcurrent: how far past it Run now may go.
+        burstConcurrent: true,
         version: true,
         // When it was last heard from (runners/runner-presence.ts), shown as `lastHeartbeatAt`, and the
         // sessions its background jobs hold slots for, which `activeSessions` counts while it is online.
@@ -562,6 +562,7 @@ export class RunnersService {
     const data: {
       displayName?: string | null;
       maxConcurrent?: number;
+      burstConcurrent?: number;
       minFreeDiskMb?: number | null;
     } = {};
     if (dto.displayName !== undefined) {
@@ -572,6 +573,11 @@ export class RunnersService {
     // next cycle without restarting the runner.
     if (dto.maxConcurrent !== undefined) {
       data.maxConcurrent = dto.maxConcurrent;
+    }
+    // Extra sessions on demand: read by the next overflow claim and by the session list's Run now, so it too
+    // takes effect at once. 0 turns Run now off on this machine.
+    if (dto.burstConcurrent !== undefined) {
+      data.burstConcurrent = dto.burstConcurrent;
     }
     // Read by the auto-run sweep against each workspace's own measured filesystem; null clears
     // the floor. Also effective next sweep — nothing to restart.
@@ -587,6 +593,7 @@ export class RunnersService {
         name: true,
         displayName: true,
         maxConcurrent: true,
+        burstConcurrent: true,
         minFreeDiskMb: true,
       },
     });
@@ -606,7 +613,9 @@ export class RunnersService {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId }, select: { id: true } });
     if (!runner) throw new NotFoundException('runner not found');
     const rows = await this.prisma.abandonedCheckout.findMany({
-      where: { runnerId: id, ownerId, session: { status: { in: FINISHED_SESSION_STATUSES } } },
+      // An abandoned checkout belongs to a session that has stopped running for good: released. A parked one can be
+      // dirty between turns and is not abandoned, so it is not listed.
+      where: { runnerId: id, ownerId, session: releasedFilter() },
       orderBy: { observedAt: 'asc' },
       select: {
         sessionId: true,
@@ -753,6 +762,7 @@ export class RunnersService {
         loginMessage: null,
         loginExpiresAt: null,
         loginReason: null,
+        loginBrowser: null,
         loginAt: new Date(),
       },
     });
@@ -829,6 +839,7 @@ export class RunnersService {
         loginMessage: null,
         loginExpiresAt: null,
         loginReason: null,
+        loginBrowser: null,
         loginAt: stopOnRunner ? runner.loginAt : null,
       },
     });
@@ -906,14 +917,14 @@ export class RunnersService {
     engine: LoginEngine,
     account: string,
   ): Promise<RunnerClaudeAccountSwapState> {
-    if (engine !== 'claude') throw new BadRequestException('Only a Claude Code account can be made the Default');
-    if (account === 'default') throw new BadRequestException('This account is already the Default');
-    if (!ACCOUNT_ID_PATTERN.test(account ?? '')) throw new BadRequestException('Unknown account');
     const runner = await this.prisma.runner.findFirst({
       where: { id, ownerId },
       select: { engines: true, capabilities: true, capabilitiesReportedAt: true, claudeAccountSwapStatus: true },
     });
     if (!runner) throw new NotFoundException('runner not found');
+    if (engine !== 'claude') throw new BadRequestException('Only a Claude Code account can be made the Default');
+    if (account === 'default') throw new BadRequestException('This account is already the Default');
+    if (!ACCOUNT_ID_PATTERN.test(account ?? '')) throw new BadRequestException('Unknown account');
     const capabilities = runner.capabilitiesReportedAt ? (runner.capabilities ?? []) : [];
     if (!capabilities.includes(CLAUDE_ACCOUNT_SWAP_V1) || !capabilities.includes(CLAUDE_ACCOUNT_MOVE_V1)) {
       throw new BadRequestException(CLAUDE_ACCOUNT_SWAP_TOO_OLD);
@@ -1636,35 +1647,6 @@ export async function accountRemoveSessionsOf(
   return out;
 }
 
-/** Project a runner row onto the browser-facing relay view (no code, ever). */
-function loginStateOf(r: {
-  loginStatus: string | null;
-  loginEngine: string | null;
-  loginAccount?: string | null;
-  loginUrl: string | null;
-  loginUserCode: string | null;
-  loginMessage: string | null;
-  loginExpiresAt?: Date | null;
-  loginReason?: string | null;
-}): RunnerLoginState {
-  // A cancel still owed to the runner (cancelLogin) is a sign-in the user has already dismissed.
-  const status = r.loginStatus === 'cancelling' ? null : r.loginStatus;
-  const waiting = status === 'awaiting_code' || status === 'awaiting_approval';
-  const reason = LOGIN_FAILURE_REASONS.find((known) => known === r.loginReason);
-  return {
-    status: (status as RunnerLoginState['status']) ?? null,
-    // A row written before the relay drove anything but claude carries no engine.
-    engine: status ? ((r.loginEngine as LoginEngine) ?? 'claude') : null,
-    userCode: r.loginUserCode,
-    url: r.loginUrl,
-    message: r.loginMessage,
-    account: status ? (r.loginAccount ?? null) : null,
-    // As the runner reported them (RunnerApiController.loginResult): how long the link lasts while one
-    // is waiting, and why a sign-in failed when a client answers that differently.
-    ...(waiting && r.loginExpiresAt ? { expiresAt: r.loginExpiresAt.toISOString() } : {}),
-    ...(status === 'failed' && reason ? { reason } : {}),
-  };
-}
 
 /**
  * A device enrollment nobody has decided is open to whoever holds its code — that is the device

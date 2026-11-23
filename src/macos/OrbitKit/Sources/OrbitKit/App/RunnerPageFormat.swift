@@ -34,7 +34,7 @@ public enum RunnerPageFormat {
 
     /// The name every screen shows a machine by: the owner's alias, else Orbit Cloud for the account's
     /// managed runner (its row's `managed`, else `ManagedRunnerIdentity`, the managed status's runnerId —
-    /// never its stored name `orbit-managed`), else the machine's own name.
+    /// never its stored name, `orbit-managed` on a server before migration 1250), else the machine's own name.
     public static func displayName(_ runner: Runner) -> String {
         displayName(runner, managedRunnerID: ManagedRunnerIdentity.runnerID)
     }
@@ -131,8 +131,8 @@ public enum RunnerPageFormat {
 
     /// `vmi3129740 · v0.1.197` — the list's second line for a machine that is up, whether or not
     /// this one is: a hostname empty or the same as the name shown is left out.
-    /// A managed runner's version is `RunnerAttention.runnerVersionLine`'s: its release or "Kept up to date
-    /// by Orbit", never `managed-<sha>`.
+    /// A managed runner's version is `RunnerAttention.runnerVersionLine`'s: its release or its build line
+    /// (`Build 95884b1 · Nov 16`), never `managed-<sha>`.
     public static func hostLine(_ runner: Runner, managed: Bool? = nil) -> String {
         let orbitCloud = managed ?? isManaged(runner)
         let shown = displayName(runner, managedRunnerID: orbitCloud ? runner.id : nil)
@@ -1051,11 +1051,14 @@ public enum RunnerPageFormat {
     /// says which it is; an older one is judged by `runsAsRoot`, as before.
     ///
     /// The account's managed runner (Orbit Cloud) says only that Orbit updates it: its release with that
-    /// note, or "Kept up to date by Orbit" for an image that reports no release — never `managed-<sha>`.
+    /// note, or the build it runs (`Build 95884b1 · Nov 16`) for an image that reports no release — never
+    /// `managed-<sha>`, and "Kept up to date by Orbit" only when no build is known.
     public static func versionValue(_ runner: Runner, latest: String?, managed: Bool? = nil) -> String? {
         if managed ?? isManaged(runner) {
             guard let version = runner.version?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  RunnerAttention.isReleaseVersion(version) else { return RunnerPageCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE }
+                  RunnerAttention.isReleaseVersion(version) else {
+                return RunnerAttention.runnerVersionLine(runner.version, managed: true)
+            }
             return version + RunnerPageCopy.RUNNER_LINE_SEPARATOR + RunnerPageCopy.MANAGED_RUNNER_UPDATED_BY_ORBIT
         }
         guard let version = runner.version?.trimmingCharacters(in: .whitespacesAndNewlines), !version.isEmpty else {

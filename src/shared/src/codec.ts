@@ -77,6 +77,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'codebaseId',
   // `project_criterion_confirmation.check_task_id` — the task an Agent check of a criterion ran as (0545).
   'checkTaskId',
+  // `owner_request_secret.saved_secret_id` (1400): the saved secret "Use saved" made a grant from, the id the owner's
+  // card already sends in a submit body. An address, not a fence.
+  'savedSecretId',
   'id',
   'ownerId',
   'userId',
@@ -95,6 +98,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'lastSeenRunId',
   'envelopeWorkspaceId',
   'createdFromSessionId',
+  // The schedule a change conversation changes (migration 1447).
+  'changeScheduleId',
   // A scheduled task's Waiting on you item (migration 0840): the change request its Allow or Decline answers.
   'scheduleChangeRequestId',
   'authorSessionId',
@@ -169,6 +174,14 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'coordinatorSessionId',
   // The coordinator conversation that last wrote a project's non-code mark (migration 0535): an address.
   'nonCodeSetBySessionId',
+  // The coordinator conversation that last wrote a project's landing check with no card (migration 1310): an address.
+  'landingCheckSetBySessionId',
+  // The coordinator conversation that exempted a task from its project's landing check (migration 1350): an address.
+  'landingCheckExemptBySessionId',
+  // The coordinator conversation that wrote a recorded landing-check change (migration 1390): an address.
+  'writtenBySessionId',
+  // The change an owner's revert put back (migration 1390): the id the history lists it under.
+  'revertsChangeId',
   'workspaceId',
   // The workspaces a personal access token is confined to (migration 0383): addresses its owner
   // picks when issuing it and reads back in the token list — never a fence.
@@ -187,6 +200,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'runnerId',
   'assignedRunnerId',
   'targetRunnerId',
+  // A BROWSER_SIGN_IN owner request's Orbit Cloud runner (migration 1393): the card's Open browser
+  // opens /runners/:id/browser with it, so it is an address the client hands back.
+  'browserRunnerId',
   'taskId',
   // A concrete repair task's exception item (migration 0379), an address the task/open-item
   // readers hand back to the task or project routes.
@@ -368,6 +384,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // A CURRENT_WORK receipt names the exact executable it was aimed at. That is a row address
   // (not a delivery fence), so it must use the same public spelling as turnId.
   'targetTurnId',
+  // Run now's pass (Session.overCapacityTurnId): the queued turn it covers, handed to the runner beside overCapacity.
+  'overCapacityTurnId',
   // The turn the newest runner link inbox fetch handed out (`session.inbox_request_turn_id`, 0448),
   // which the same fetch sent again is answered with. The server looks the turn up by it; no runner
   // echoes it, and the request id beside it is what a resend is matched by. A turn's address.
@@ -380,6 +398,12 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // The wiki space a public link is rooted at (`share_link.wiki_space_id`, 0403): the space's own id,
   // the one `/wiki/spaces/:id/share` takes. An address, never a fence.
   'wikiSpaceId',
+  // The drive file a public link is rooted at (`share_link.drive_entry_id`, 1340): the entry's own id,
+  // the one `POST /share-links` takes with kind DRIVE_FILE. An address, never a fence.
+  'driveEntryId',
+  // The version of that file the link is pinned to (`share_link.drive_version_id`): an address read back out of the
+  // link's own row, never a fence.
+  'driveVersionId',
   // Owner Ratification's durable decision, reusable authority and two-phase action ledgers. These
   // all name rows a caller can inspect or hand back; whether the named authority is still valid is
   // decided by the database from its immutable scope, not by preserving UUID spelling.
@@ -493,6 +517,12 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // response bodies, so they follow the same rule (see the `@IsPublicId({ each: true })` DTOs).
   'tagIds',
   'taskIds',
+  // `task.changed`'s `creatorSessionIds` and `rowProjectIds`, and `schedule_cards.changed`'s `cardSessionIds`
+  // (control-plane stream): the sessions that created the changed tasks and the projects they are in, and the sessions
+  // whose schedule cards moved.
+  'creatorSessionIds',
+  'rowProjectIds',
+  'cardSessionIds',
   // `owner_request.blocks_task_ids` (0503): the tasks an owner request blocks — task addresses like `taskIds`.
   'blocksTaskIds',
   'dependsOnTaskIds',
@@ -694,6 +724,23 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // reference with no foreign key). Addresses a reader follows — never a fence: a press is decided on the card's row.
   'draftId',
   'replacesId',
+  // An Orbit Files drive write not committed yet (migration 1283, docs/orbit-files-drive-technical-design.md §1.1): the
+  // upload or handle a chunk row belongs to, which the upload and door routes address. Never a fence.
+  'stagingId',
+  // The drive's name layer (migration 1327, docs/orbit-files-drive-technical-design.md §1.1): an entry's current version,
+  // the Trash group holding an entry or a version, and who last wrote an entry, made a version or deleted into a group
+  // (the session and the runner, §3.6). Addresses the owner's routes answer and accept. Never a fence.
+  'currentVersionId',
+  'trashGroupId',
+  'lastWriterSessionId',
+  'lastWriterRunnerId',
+  'writerSessionId',
+  'writerRunnerId',
+  'actorRunnerId',
+  // A file a rename onto an existing file removed (migration 1438, §3.2): the entry its handle's first later commit made
+  // in Trash (`drive_removed_entry.successor_id`), read by id and checked. An entry's address like `entryId`, with no
+  // foreign key on purpose, so it may name a file since purged. Never a fence.
+  'successorId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner

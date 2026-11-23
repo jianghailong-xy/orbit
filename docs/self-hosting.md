@@ -10,7 +10,9 @@ and [runner troubleshooting](runner-troubleshooting.md) when enrollment or execu
 
 ## Requirements
 
-- Docker Engine with the Compose plugin
+- Docker Engine with the Compose and buildx plugins. Ubuntu's and Debian's `docker.io` packages leave buildx out:
+  `scripts/install-server.sh` installs `docker-buildx` with apt where it is missing, and without it Compose warns
+  on every build and falls back to its own builder
 - Enough CPU, memory, and disk to build the images and retain Postgres data
 - A Linux host for the server deployment
 - One or more runner machines with a supported runtime installed and authenticated, or room on this host for
@@ -37,8 +39,9 @@ cd orbit
 ```
 
 For a new deployment, `scripts/install-server.sh` does the rest of this section and the next: it writes `.env`
-with two independently generated secrets, prepares [managed runners](#managed-runners), firewalls their network on
-this host, sets up the [runner link](#runner-link), and starts the stack. Give it the external origin when you serve
+with two independently generated secrets, sets up the [runner link](#runner-link), and starts the stack. With
+`--managed-runners` it also prepares [managed runners](#managed-runners) (Orbit Cloud) and firewalls their network on
+this host; without it they are off. Give it the external origin when you serve
 Orbit on a domain or at an address of its own:
 
 ```bash
@@ -243,10 +246,11 @@ Each session works in a checkout of its own, under `<ORBIT_HOME>/worktrees` (`~/
 Three things keep them from filling the runner's disk:
 
 - **Keep Free.** Set on the runner's page (Capacity), it is the free space below which the runner reclaims
-  checkouts: finished sessions' first, then those of resting sessions left unwritten for two weeks, when nothing
-  in them would be lost. With none set, a registered runner reclaims only finished sessions' checkouts beyond the
-  32 most recent. Set it at least as high as whatever else guards that disk. A managed runner has a default floor,
-  and takes resting sessions' checkouts sooner ([Their storage](#their-storage)).
+  checkouts: finished sessions' first, then resting sessions' least recently worked in, when nothing in them would
+  be lost (their work stays on their branch and the checkout comes back from it). Whatever the floor, a runner
+  keeps no more than the 32 most recent finished sessions' checkouts and the 64 most recent resting sessions'. Set
+  it at least as high as whatever else guards that disk. A managed runner has a default floor
+  ([Their storage](#their-storage)).
 - **Cloned checkouts.** Where the filesystem can clone files, on APFS, XFS made with `reflink=1`, btrfs, or
   OpenZFS 2.2 or later with block cloning enabled, a session's checkout is cloned from the workspace's own
   checkout and costs next to nothing on disk until its files change. The workspace's checkout has to be on the
@@ -1277,7 +1281,8 @@ optimization left. Only statements whose text is fixed can be named:
 
 ## Managed runners
 
-A new deployment gives every account a runner of its own, so nobody has to register a machine before a first
+Managed runners (Orbit Cloud) are off in a new deployment unless it is installed with `--managed-runners`, or an
+administrator switches them on later (below). Where they are on, every account gets a runner of its own, so nobody has to register a machine before a first
 session. It is a container on this host's Docker, given when the account signs in, with a data volume that keeps
 its checkouts, sessions and engine sign-ins. After an hour with nothing to do it sleeps: the container stops and
 the volume stays. A new message, a task that can run or a scheduled wakeup starts it again, on the same volume.
@@ -1290,7 +1295,7 @@ Runners that people register themselves keep working beside it.
 
 ### What the install sets up
 
-`scripts/install-server.sh` prepares managed runners, then writes three lines into `.env`:
+`scripts/install-server.sh --managed-runners` prepares managed runners, then writes three lines into `.env`:
 
 ```dotenv
 ORBIT_MANAGED_RUNNERS_ENABLED=true
@@ -1320,9 +1325,9 @@ COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall
   ([where each setting lives](managed-runner-docker-operations.md#where-each-setting-lives)).
 - **The image.** The script builds the managed runner image from
   [deploy/managed-runner/image](../deploy/managed-runner/image/Dockerfile) on this host, as
-  `orbit-managed-runner:local`, and pushes it nowhere. Both files name it by its local image ID. To use an image
+  `orbit-cloud-runner:local`, and pushes it nowhere. Both files name it by its local image ID. To use an image
   built elsewhere from a commit you reviewed, load it with `docker load` and pass `--managed-runner-image <image>`.
-- **Their network.** `orbit-managed-runners`, an IPv4-only bridge network on which containers cannot reach one
+- **Their network.** `orbit-cloud-runners`, an IPv4-only bridge network on which containers cannot reach one
   another. A runner reaches the internet (its model's endpoint, Git hosts) and reaches this deployment the way a
   runner on another machine does: through the gateway's published port 2086, at the host's address on that network.
   It reaches neither another runner nor the stack's own containers.
@@ -1332,14 +1337,15 @@ COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall
   writing anything the install checks that this host can carry the rules; then it applies them once and checks from
   the network that this host and a private address are refused and that DNS still resolves, and once the stack is up
   that the gateway's port is reached. Where any of that fails it stops and says why.
-- **Their server address.** `profile.json` gives each runner `http://<gateway of orbit-managed-runners>:2086`. A
+- **Their server address.** `profile.json` gives each runner `http://<gateway of orbit-cloud-runners>:2086`. A
   runner sends its credential with every request, and a managed runner accepts plain HTTP to any private address,
   so keep `runner.serverUrl` on this host's own address on that network, or make it `https://`. Never point it at
   another machine over plain HTTP, a LAN address included.
 
 The first account, the administrator created at `/setup`, is given its runner when it signs in. The runner takes
 sessions once a runtime is signed in on it; until then it reports that none is installed and signed in.
-`--no-managed-runners` installs with `ORBIT_MANAGED_RUNNERS_ENABLED=false` and prepares none of the above.
+Without `--managed-runners` the install writes `ORBIT_MANAGED_RUNNERS_ENABLED=false` and prepares none of the above
+(`--no-managed-runners` says the same explicitly).
 `--no-managed-runner-firewall` installs managed runners without their firewall and leaves this host's firewall alone:
 `COMPOSE_PROFILES` then names `managed-runners-docker` alone, `.env` carries a note that the firewall is off, and the
 install says so as it starts and as it ends. Read [Isolation and its limits](#isolation-and-its-limits) before
@@ -1426,7 +1432,7 @@ Managed runners are switched in `.env`, and only there. An upgrade never writes 
   that is running keeps running, every volume stays, and switching them on again carries on from where they were.
 - **On again:** set `ORBIT_MANAGED_RUNNERS_ENABLED=true` and run `docker compose up -d apiserver`.
 - **On, for a deployment installed without them:** every deployment installed before managed runners existed, and
-  one installed with `--no-managed-runners`. Upgrade it first, then, from its checkout:
+  one installed without `--managed-runners`. Upgrade it first, then, from its checkout:
 
   ```bash
   scripts/install-server.sh --enable-managed-runners
@@ -1466,7 +1472,7 @@ runner in their image never updates itself, so each upgrade:
 1. stops before building anything unless `channel.json` and `profile.json` are in the managed runners' directory,
    as Compose binds it into `docker-channel`;
 2. rebuilds `docker-channel` with the other images, then the managed runner image from this checkout, as
-   `orbit-managed-runner:local`, on this host and pushed nowhere;
+   `orbit-cloud-runner:local`, on this host and pushed nowhere;
 3. when the image ID is new, writes it into both files (the channel's `image`, the profile's `runner.image`), each
    file replaced whole by a rename;
 4. recreates the other services, then the apiserver if that did not recreate it, and with it any
@@ -1562,7 +1568,7 @@ the way any runner on the internet does, at its public `https://` address. The d
 server (10.66.0.1)                                   channel host (10.66.0.3)
 apiserver ── HTTP + bearer token, private link ──▶  docker-channel   listens on 10.66.0.3:7300 only, for 10.66.0.1 only
   profile.json: docker.hosts[].channel.url            managed-runner-firewall   rules on this host
-                                                      orbit-managed-runner image   built here, from the server's commit
+                                                      orbit-cloud-runner image   built here, from the server's commit
                                                       mr-<runner> containers ── https://<server> ──▶ the server
 ```
 
@@ -1572,7 +1578,7 @@ What a channel host needs:
   others share. The channel speaks plain HTTP with a bearer token, and answers only the source addresses you name.
 - Docker with the Compose plugin, rootful, on its iptables firewall backend, as for the
   [managed runners' firewall](#isolation-and-its-limits) on a single host. No deployment with managed runners on the
-  same host: the kit's containers have the same names (`orbit-docker-channel`, `orbit-managed-runner-firewall`).
+  same host: the kit's containers have the same names (`orbit-docker-channel`, `orbit-cloud-runner-firewall`).
 - A checkout of this repository, for the kit to build from, and root.
 - The server at a public `https://` address its runners can reach. The firewall refuses every private address, so a
   runner never reaches the server over the private link, and the profile refuses a plain `http://` `runner.serverUrl`
@@ -1596,8 +1602,8 @@ the channel makes) are optional; without `--commit` it builds the checkout as it
 changes. It then does what a single host's install does for its managed runners, with the same code
 (`deploy/managed-runner/host.sh`):
 
-1. checks that the host can carry the firewall's rules, makes the `orbit-managed-runners` network, and builds the
-   managed runner image as `orbit-managed-runner:local`, pushed nowhere;
+1. checks that the host can carry the firewall's rules, makes the `orbit-cloud-runners` network, and builds the
+   managed runner image as `orbit-cloud-runner:local`, pushed nowhere;
 2. writes `data/channel-host` (mode 0700): the channel's `token`, `channel.json` (listening on `--listen` for the
    `--allow-peer` addresses alone, naming the image by its ID) after the channel's own check of it, `firewall/config.json`,
    and `compose.env`, which names the directory for
@@ -1608,7 +1614,7 @@ changes. It then does what a single host's install does for its managed runners,
 5. prints the entry for the server's profile and where the token is:
 
    ```text
-   { "instanceId": "orbit-1a2b3c4d", "channel": { "url": "http://10.66.0.3:7300" }, "tokenFile": "/var/lib/orbit-managed-runners/orbit-1a2b3c4d.token" }
+   { "instanceId": "orbit-1a2b3c4d", "channel": { "url": "http://10.66.0.3:7300" }, "tokenFile": "/var/lib/orbit-cloud-runners/orbit-1a2b3c4d.token" }
    ```
 
 `remote-host.sh status` says what runs there: the instance and its listener, the image `channel.json` names and the
@@ -1637,7 +1643,7 @@ Copy the channel host's `data/channel-host/token` into the server's `data/manage
   "resourceProfileId": "docker-default",
   "docker": {
     "hosts": [
-      { "instanceId": "orbit-1a2b3c4d", "channel": { "url": "http://10.66.0.3:7300" }, "tokenFile": "/var/lib/orbit-managed-runners/orbit-1a2b3c4d.token" }
+      { "instanceId": "orbit-1a2b3c4d", "channel": { "url": "http://10.66.0.3:7300" }, "tokenFile": "/var/lib/orbit-cloud-runners/orbit-1a2b3c4d.token" }
     ]
   },
   "storage": { "capacity": "20Gi" },
@@ -1774,6 +1780,16 @@ Run without root, it changes nothing and says what to run instead:
 orbit host: setup writes machine-wide systemd units and must run as root — re-run: sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
 ```
 
+Run without root from any other copy, such as the account's own one where install.sh put it, it names the copy to put
+in place first, since setup would refuse to run from that copy under sudo too:
+
+```text
+orbit host: setup writes machine-wide systemd units, so it must run as root and from /usr/local/bin/orbit, the one binary the host broker runs, rather than /home/alice/.orbit/bin/orbit.
+Put a root-owned copy in place, then set the host up from it:
+  sudo install -o 0 -g 0 -m 0755 /home/alice/.orbit/bin/orbit /usr/local/bin/orbit
+  sudo /usr/local/bin/orbit host setup --server https://orbit.example.com
+```
+
 Setup refuses any binary other than `/usr/local/bin/orbit` before it writes or runs anything. Root's own copy, where
 install.sh puts it, is one:
 
@@ -1821,7 +1837,7 @@ A machine set up by an earlier release, whose runners are `orbit-runner@<uid>`, 
 Each account registers its own runner, as itself:
 
 ```bash
-orbit register --server https://orbit.example.com --name build-01-alice
+orbit register --server https://orbit.example.com --name test-user-e2e
 ```
 
 `--server` can be left off when the binary came from this deployment, whose origin is then its default. The name
@@ -1853,15 +1869,15 @@ register from the account's own copy there.
 The broker enables and starts the account's instance, nothing asks for a password, and the command ends with:
 
 ```text
-    ✓ Approved — build-01-alice is now a runner.
+    ✓ Approved — test-user-e2e is now a runner.
     ✓ Put this account's own copy of orbit at /home/alice/.orbit/bin/orbit, which its runner runs and updates.
     Waiting for the runner to reach https://orbit.example.com (up to 2m0s)…
     ✓ Background service started as alice (runs at boot).
       Stop or remove it later with `orbit unregister`.
 
-✓ Setup complete — build-01-alice is online.
+✓ Setup complete — test-user-e2e is online.
 
-    Machine  build-01-alice (build-01)
+    Machine  test-user-e2e (build-01)
     Next     Start a session
              https://orbit.example.com/runners/30tWePD4IYjCW1G8zmKpO/new
     orbit status · orbit doctor · orbit unregister
@@ -1917,8 +1933,8 @@ config is removed. Its own copy of orbit stays. Every other account's runner kee
 
 ```text
 ✓ removed the orbit-runner@alice.service runner service
-✓ deleted "build-01-alice" from the control plane
-✓ unregistered "build-01-alice"
+✓ deleted "test-user-e2e" from the control plane
+✓ unregistered "test-user-e2e"
 ```
 
 ### Moving a machine set up by an earlier release
@@ -2168,8 +2184,8 @@ its steps after the ones above:
 
 ```bash
 docker build -f deploy/managed-runner/image/Dockerfile --build-arg "ORBIT_SOURCE_SHA=$(git rev-parse HEAD)" \
-  -t orbit-managed-runner:local .
-docker image inspect -f '{{.Id}}' orbit-managed-runner:local
+  -t orbit-cloud-runner:local .
+docker image inspect -f '{{.Id}}' orbit-cloud-runner:local
 # Write that ID as "image" in data/managed-runners/channel.json and as runner.image in profile.json, then:
 docker compose up -d --wait --no-deps --force-recreate apiserver
 docker compose up -d --wait --no-deps --force-recreate docker-channel

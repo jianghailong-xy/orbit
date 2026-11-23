@@ -35,7 +35,7 @@ test('every field a manager acts on is required and checked', () => {
     ['an API server with credentials', (p) => (p.kubernetes.apiServer = 'https://u:p@kube.invalid'), /must not carry credentials/],
     ['a placeholder', (p) => (p.clusterKey = 'REPLACE_ME'), /clusterKey is still a placeholder/],
     ['a template token', (p) => (p.storage.className = '${storage.className}'), /storage\.className is still a placeholder/],
-    ['an image by tag', (p) => (p.runner.image = 'registry.invalid/orbit-managed-runner:latest'), /runner\.image must be pinned by digest/],
+    ['an image by tag', (p) => (p.runner.image = 'registry.invalid/orbit-cloud-runner:latest'), /runner\.image must be pinned by digest/],
     ['a remote plain-http Orbit server', (p) => (p.runner.serverUrl = 'http://orbit.invalid'), /runner\.serverUrl must be an https URL/],
     ['a capacity that is no quantity', (p) => (p.storage.capacity = 'twenty gigs'), /storage\.capacity is not a quantity/],
     ['no attempt budget', (p) => delete p.lifecycle.maxAttempts, /lifecycle\.maxAttempts must be an integer/],
@@ -50,6 +50,21 @@ test('every field a manager acts on is required and checked', () => {
   }
 });
 
+test('the drive is optional, and its Secrets never share the runner namespace', () => {
+  const profile = testManagedRunnerProfile({ files: true });
+  assert.deepEqual(parseManagedRunnerProfile(structuredClone(profile)), { ok: true, profile });
+  assert.equal(parseManagedRunnerProfile(structuredClone(testManagedRunnerProfile())).ok, true, 'absent: no drive');
+  const refused = (change: (p: Record<string, any>) => void, expected: RegExp) => {
+    const p = structuredClone(profile) as unknown as Record<string, any>;
+    change(p);
+    const result = parseManagedRunnerProfile(p);
+    assert.ok(!result.ok && result.problems.some((problem) => expected.test(problem)), JSON.stringify(result));
+  };
+  refused((p) => (p.files.namespace = p.kubernetes.namespace), /files\.namespace must not be kubernetes\.namespace/);
+  refused((p) => (p.files.namespace = 'Orbit_Files'), /files\.namespace must be a DNS label/);
+  refused((p) => (p.files = {}), /files\.namespace must be a non-empty string/);
+});
+
 test('http to a loopback Orbit server is allowed for a local fake control plane, as the image allows it', () => {
   assert.equal(withChange((p) => (p.runner.serverUrl = 'http://127.0.0.1:3000')).ok, true);
 });
@@ -61,12 +76,13 @@ test('the shipped example is refused as it stands, and validates once an operato
   assert.ok(!refused.ok && refused.problems.some((p) => /valueKind must be "actual"/.test(p)));
   assert.ok(!refused.ok && refused.problems.some((p) => /placeholder/.test(p)));
 
-  // Same keys as the fixture, nothing missing and nothing extra: the example is the contract's shape.
+  // Same keys as the fixture with every optional section, nothing missing and nothing extra: the example is the
+  // contract's shape.
   const keys = (value: unknown, prefix = ''): string[] =>
     value && typeof value === 'object' && !Array.isArray(value)
       ? Object.entries(value).flatMap(([k, v]) => keys(v, `${prefix}${k}.`))
       : [prefix.slice(0, -1)];
-  assert.deepEqual(keys(example).sort(), keys(testManagedRunnerProfile()).sort());
+  assert.deepEqual(keys(example).sort(), keys(testManagedRunnerProfile({ files: true })).sort());
 });
 
 test('the loader reads only the explicit path, and refuses none, a relative one, or an unreadable one', () => {

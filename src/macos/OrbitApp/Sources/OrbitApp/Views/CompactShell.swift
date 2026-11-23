@@ -1155,12 +1155,22 @@ struct NavigationDrawer: View {
             Divider()
                 .padding(.leading, DrawerMetrics.textLeading)
                 .padding(.trailing, DrawerMetrics.hInset)
-            Text(AppSection.agents.title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.leading, DrawerMetrics.textLeading)
-                .padding(.top, 14)
-                .padding(.bottom, 4)
+            // New workspace on any machine (docs/mocks/new-workspace-form/02-apple-entry, owner A): the + at the
+            // group's trailing edge, a menu of machines or the one machine's page.
+            HStack(spacing: 8) {
+                Text(AppSection.agents.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                NewWorkspaceButton(machines: model.agents?.newWorkspaceMachines ?? []) { runnerID in
+                    model.openNewWorkspace(runnerID)
+                    close()
+                }
+            }
+            .padding(.leading, DrawerMetrics.textLeading)
+            .padding(.trailing, DrawerMetrics.textLeading - 4)
+            .padding(.top, 14)
+            .padding(.bottom, 4)
         }
         .padding(.top, 8)
         .frame(maxWidth: .infinity, alignment: .leading)

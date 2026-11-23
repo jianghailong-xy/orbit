@@ -309,7 +309,7 @@ func (d *cliDiscovery) cliOperations() []*operation {
 		}
 	}
 	for _, op := range d.built.Ops {
-		if op.CLI != nil && !listed[op.Tool] {
+		if op.CLI != nil && !listed[op.Tool] && !browserOpAbsent(op) {
 			ops = append(ops, op)
 		}
 	}
@@ -397,7 +397,7 @@ func (d *cliDiscovery) family(name string) (capabilityFamilyDocument, error) {
 // does not have), or an error pointing at the summary.
 func (d *cliDiscovery) id(tool string) (capabilityIDDocument, error) {
 	op := d.built.ByTool[tool]
-	if op == nil {
+	if op == nil || browserOpAbsent(op) {
 		return capabilityIDDocument{}, fmt.Errorf("no operation %q in the catalogue; `%s capabilities --summary --json` lists them", tool, d.exe)
 	}
 	return capabilityIDDocument{discoveryHeader: d.header("capability"), Capability: d.view(op, true)}, nil

@@ -36,6 +36,8 @@ export const PAT_SCOPES = [
   'wiki:read',
   'wiki:write',
   'events:read',
+  // The owner's Orbit Files drive (/drive/*): one scope for reading and writing it, so it is not a `:read` and the read-only preset leaves it out.
+  'files',
 ] as const;
 export type PatScopeName = (typeof PAT_SCOPES)[number];
 

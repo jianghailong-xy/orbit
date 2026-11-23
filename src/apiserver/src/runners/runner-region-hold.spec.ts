@@ -165,6 +165,7 @@ test('a resolved credential is read for the region check as its key, sign-in or 
 function moveFacts(over: Partial<SessionMoveFacts> = {}): SessionMoveFacts {
   return {
     status: RunStatus.PENDING,
+    finishedAt: null,
     deletedAt: null,
     completedAt: null,
     importSourceCwd: null,

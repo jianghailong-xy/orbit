@@ -5,6 +5,7 @@ import io.orbitd.android.navigation.ObjectId
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -81,6 +82,9 @@ data class NewWorkspaceRequest(
 /** A machine as a Set up row names it (rule 9). */
 data class MachineToSetUp(val id: String, val name: String, val managed: Boolean = false)
 
+/** A machine the drawer's New workspace + offers, with how many workspaces it has (iOS `NewWorkspaceMachine`). */
+data class NewWorkspaceMachine(val id: String, val name: String, val online: Boolean, val workspaces: Int)
+
 /**
  * How a checked path reads, and whether it may be used. Rule 4: what isn't there can't be picked; a folder that is not a git
  * repository can, and says what that costs; a repository names its branch.
@@ -101,7 +105,7 @@ sealed interface PickedFolder {
 
     data class Existing(override val path: String, val note: String) : PickedFolder
     data class New(val name: String, override val path: String) : PickedFolder
-    /** A clone of one of the person's GitHub repositories into `<reposRoot>/<name>` (docs/github-workspace-design.md §5.3). */
+    /** A clone of one of the person's GitHub repositories into `<cloneRoot>/<name>` (cloneRootFor, docs/github-workspace-design.md §5.3). */
     data class Github(val pick: GithubPick) : PickedFolder {
         override val path: String get() = pick.path
     }
@@ -151,6 +155,8 @@ object MachineSetup {
     const val CREATE_WORKDIR_CAPABILITY = "create-workdir/v1"
     /** What a runner declares when it clones a GitHub repository on request (docs/github-workspace-design.md §6). */
     const val CLONE_WORKDIR_CAPABILITY = "clone-workdir/v1"
+    /** A runner that clones into its home, the directory its reposRoot sits in, rather than into reposRoot. */
+    const val CLONE_WORKDIR_HOME_CAPABILITY = "clone-workdir/v2"
 
     /** A runner that makes a new folder in its home, the directory its reposRoot (`<home>/orbit-repos`) sits in. */
     const val CREATE_WORKDIR_HOME_CAPABILITY = "create-workdir/v2"
@@ -167,8 +173,20 @@ object MachineSetup {
      * Whether a machine clones a GitHub repository on request: it declares clone-workdir/v1 and has reported the Repos Folder the clone
      * goes in. POST /sessions refuses either missing.
      */
-    fun clonesRepositories(runner: JsonObject): Boolean =
-        CLONE_WORKDIR_CAPABILITY in runner.strings("capabilities") && !runner.text("reposRoot")?.trim().isNullOrEmpty()
+    fun clonesRepositories(runner: JsonObject): Boolean = cloneRootOf(runner) != null
+
+    /**
+     * Where a GitHub workspace's clone goes, as the server puts it: port of @orbit/shared `cloneRootFor`, held to
+     * src/shared/src/new-folder-root.fixture.json `clones`. Home on a runner that declares clone-workdir/v2, reposRoot on an older one,
+     * null on one that does not clone or has not reported its reposRoot.
+     */
+    fun cloneRootFor(reposRoot: String?, capabilities: List<String>?): String? {
+        val root = reposRoot?.trim().orEmpty()
+        if (root.isEmpty() || capabilities?.contains(CLONE_WORKDIR_CAPABILITY) != true) return null
+        return if (CLONE_WORKDIR_HOME_CAPABILITY in capabilities) homeOfReposRoot(root) else trimReposRoot(root)
+    }
+
+    fun cloneRootOf(runner: JsonObject): String? = cloneRootFor(runner.text("reposRoot"), runner.strings("capabilities"))
 
     private val homePrefix = Regex("""^(?:/Users/[^/]+|/home/[^/]+|/root)(?=/|$)""")
 
@@ -201,19 +219,46 @@ object MachineSetup {
      * The directory a runner's new folders go in: its home, the parent of its reposRoot, when it declares create-workdir/v2, else
      * reposRoot itself. The separator is the one the root is written with. Port of @orbit/shared `newFolderRoot`.
      */
-    fun newFolderRoot(reposRoot: String, capabilities: List<String>?): String {
+    fun newFolderRoot(reposRoot: String, capabilities: List<String>?): String =
+        if (capabilities?.contains(CREATE_WORKDIR_HOME_CAPABILITY) == true) homeOfReposRoot(reposRoot) else trimReposRoot(reposRoot)
+
+    private fun trimReposRoot(reposRoot: String): String {
         var root = reposRoot.trim()
         while (root.length > 1 && (root.endsWith("/") || root.endsWith("\\"))) root = root.dropLast(1)
-        if (capabilities?.contains(CREATE_WORKDIR_HOME_CAPABILITY) != true) return root
+        return root
+    }
+
+    /** The directory a reported reposRoot sits in: the machine's home (`<home>/orbit-repos`). */
+    private fun homeOfReposRoot(reposRoot: String): String {
+        val root = trimReposRoot(reposRoot)
         val cut = maxOf(root.lastIndexOf('/'), root.lastIndexOf('\\'))
         if (cut < 0) return root
         // `/orbit-repos` sits in `/`, and `C:\orbit-repos` in `C:\`.
         return if (cut == 0 || root[cut - 1] == ':') root.take(cut + 1) else root.take(cut)
     }
 
-    /** The directory the folder step's name goes in: the machine's home, or its Repos Folder on an older runner. */
-    fun newFolderRootOf(runner: JsonObject): String =
-        newFolderRoot(runner.text("reposRoot").orEmpty(), runner.strings("capabilities"))
+    /**
+     * Where a new folder named on this runner goes, as the server makes it: port of @orbit/shared `newFolderRootFor`, held to
+     * src/shared/src/new-folder-root.fixture.json. A managed runner that is not up, or has not reported yet, takes its image's home,
+     * whatever an earlier process declared; a runner that makes new folders and has reported its Repos Folder takes [newFolderRoot]; any
+     * other makes none (null).
+     */
+    fun newFolderRootFor(managed: Boolean, up: Boolean, reposRoot: String?, capabilities: List<String>?): String? {
+        if (managed && (!up || capabilities.isNullOrEmpty())) return ManagedRunner.HOME
+        val root = reposRoot?.trim().orEmpty()
+        if (root.isEmpty() || capabilities?.contains(CREATE_WORKDIR_CAPABILITY) != true) return null
+        return newFolderRoot(root, capabilities)
+    }
+
+    /** The setup card's root: [newFolderRootFor], the account's managed runner read as managed while it is set up or asleep. Only a
+     *  usable card shows or sends it, and a managed runner always has one, so "" is never drawn. */
+    fun setupFolderRoot(runner: JsonObject, managedSetup: Boolean): String =
+        newFolderRootFor(
+            managed = managedSetup || RunnerPage.isManaged(runner),
+            up = (runner["online"] as? JsonPrimitive)?.booleanOrNull == true,
+            reposRoot = runner.text("reposRoot"),
+            capabilities = runner.strings("capabilities"),
+        ).orEmpty()
 
     /**
      * Whether a machine too old to answer gets there by itself: not one that reports its updater off, or unable to write where it is
@@ -295,6 +340,122 @@ object MachineSetup {
         if (!verdict.usable) return null
         return if (probe.exists) PickedFolder.Existing(probe.path, verdict.short)
         else PickedFolder.New(name, newFolderPath(root, name))
+    }
+
+    /**
+     * A folder field's text that names a whole path (`/srv/app`, `~/code/app`) rather than one folder in the machine's home
+     * (docs/mocks/new-workspace-form, decision 2 A; web `isFolderPath`): the machine is asked about that path itself.
+     */
+    fun isFolderPath(typed: String): Boolean = typed.startsWith("/") || typed.startsWith("~")
+
+    /** A path's last segment, what the workspace's name follows for a full path (web `folderName`). */
+    fun folderName(path: String): String {
+        val trimmed = path.trimEnd('/', '\\')
+        return trimmed.split('/', '\\').last().ifEmpty { path }
+    }
+
+    /**
+     * What Create workspace picks on a full path's answer: the directory as it stands. Nothing is made for a path outside the machine's
+     * home, so one that isn't there is refused as any folder is (web `folderPathPick`).
+     */
+    fun folderPathPick(probe: DirProbe, machine: String): PickedFolder? {
+        val verdict = folderVerdict(probe, machine)
+        return if (verdict.usable) PickedFolder.Existing(probe.path, verdict.short) else null
+    }
+
+    /**
+     * The path the card's folder field asks the machine about: a full path as typed, a name where it would go, and nothing for anything
+     * else. Null too where nothing can be asked (a managed runner not up, a machine offline or too old to check folders).
+     */
+    fun folderQuestion(folder: String, root: String, canAsk: Boolean): String? {
+        if (!canAsk) return null
+        if (isFolderPath(folder)) return folder
+        return if (isValidNewFolder(folder)) newFolderPath(root, folder) else null
+    }
+
+    /**
+     * What the typed folder would make the workspace in, on the machine's answer about it ([found]). A managed runner that isn't up
+     * ([managedSetup] non-null) takes a name unchecked, but a full path only once it has been checked.
+     */
+    fun typedPick(folder: String, found: DirProbe?, root: String, machine: String, managedSetup: String?): PickedFolder? {
+        val fullPath = isFolderPath(folder)
+        if (managedSetup != null) return if (!fullPath && isValidNewFolder(folder)) PickedFolder.New(folder, newFolderPath(root, folder)) else null
+        if (found == null) return null
+        if (fullPath) return folderPathPick(found, machine)
+        return if (isValidNewFolder(folder)) newFolderPick(found, folder, root, machine) else null
+    }
+
+    /** The folder the workspace's Name follows: the typed name, or a full path's last segment. */
+    fun followedName(folder: String): String = if (isFolderPath(folder)) folderName(folder) else folder
+
+    /** The line under the card's folder field (iOS `MachineSetup.folderLine`). */
+    sealed interface FolderLine {
+        data class Meta(val text: String) : FolderLine
+        data class Verdict(val text: String, val tone: FolderVerdict.Tone) : FolderLine
+        data object NoAnswer : FolderLine
+        data object Checking : FolderLine
+    }
+
+    /**
+     * What the folder field's line says. [folder] is the field's text trimmed, [found] the machine's answer about the path
+     * [folderQuestion] asked (null while there is none for it), and [unanswered] that the machine gave no answer to that question.
+     * [pathHintRoot] is set where the card's hint says a full path is taken too (New workspace on a machine that has one): the directory a
+     * name goes in.
+     */
+    fun folderLine(
+        folder: String,
+        createError: String?,
+        found: DirProbe?,
+        unanswered: Boolean,
+        machine: String,
+        managedSetup: String? = null,
+        pathHintRoot: String? = null,
+    ): FolderLine {
+        // Why the last Create workspace was refused stands in for the rest until the next try.
+        if (createError != null) return FolderLine.Verdict(MachineSetupCopy.setupCreateFailed(createError), FolderVerdict.Tone.BAD)
+        if (folder.isEmpty()) {
+            return FolderLine.Meta(pathHintRoot?.let { MachineSetupCopy.setupFolderOrPathHint(it.trimEnd('/', '\\')) } ?: MachineSetupCopy.SETUP_FOLDER_HINT)
+        }
+        val fullPath = isFolderPath(folder)
+        if (!fullPath && !isValidNewFolder(folder)) return FolderLine.Verdict(MachineSetupCopy.SETUP_NEW_FOLDER_INVALID, FolderVerdict.Tone.BAD)
+        if (managedSetup != null) {
+            return FolderLine.Meta(if (fullPath) MachineSetupCopy.setupPathUnchecked(machine) else ManagedRunner.Setup.FOLDER_UNCHECKED.getValue(managedSetup))
+        }
+        if (found != null) {
+            // A full path must already be there: it says what it found, or that nothing is.
+            if (fullPath) return folderVerdict(found, machine).let { FolderLine.Verdict(it.text, it.tone) }
+            val verdict = newFolderVerdict(found, machine)
+            // Nothing there yet reads as a note; anything there, or a check that failed, says what it is.
+            return if (found.exists || !verdict.usable) FolderLine.Verdict(verdict.text, verdict.tone)
+            else FolderLine.Meta(MachineSetupCopy.SETUP_NEW_FOLDER_WITH_WORKSPACE)
+        }
+        return if (unanswered) FolderLine.NoAnswer else FolderLine.Checking
+    }
+
+    /**
+     * The machines the drawer's New workspace + offers (docs/mocks/new-workspace-form/02-apple-entry, owner A 2026-11-20; iOS
+     * `AgentListLogic.newWorkspaceMachines`): every machine of the account, whatever it already holds, in the runner list's order with
+     * the managed runner first.
+     */
+    fun newWorkspaceMachines(
+        runners: List<JsonObject>?,
+        workspaces: List<JsonObject>,
+        nowMs: Long = System.currentTimeMillis(),
+        managedStatus: ManagedRunner.Status? = null,
+    ): List<NewWorkspaceMachine> {
+        if (runners == null) return emptyList()
+        val managedId = managedStatus?.runnerId ?: ManagedRunnerIdentity.runnerId
+        return RunnerPage.managedRunnerFirst(runners, managedId).mapNotNull { runner ->
+            val id = runner.text("id") ?: return@mapNotNull null
+            NewWorkspaceMachine(
+                id = id,
+                name = RunnerPage.displayName(runner, managedId),
+                online = !RunnerPage.isOffline(runner, nowMs),
+                workspaces = workspaces.count {
+                    (it["deletedAt"] == null || it["deletedAt"] is JsonNull) && ObjectId.same(it.text("runnerId"), id)
+                },
+            )
+        }
     }
 
     /**

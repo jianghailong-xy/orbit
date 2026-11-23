@@ -105,6 +105,8 @@ public enum MachineSetup {
     public static let createWorkDirCapability = "create-workdir/v1"
     /// What a runner declares when it clones a GitHub repository on request (docs/github-workspace-design.md §6).
     public static let cloneWorkDirCapability = "clone-workdir/v1"
+    /// What a runner declares when it clones into its home, the directory its reposRoot sits in, rather than reposRoot.
+    public static let cloneWorkDirHomeCapability = "clone-workdir/v2"
     /// What a runner declares when it makes a new folder in its home, the directory its reposRoot sits in
     /// (`<home>/orbit-repos`): `newFolder` is then `<home>/<name>` rather than `<reposRoot>/<name>`.
     public static let createWorkDirHomeCapability = "create-workdir/v2"
@@ -113,27 +115,40 @@ public enum MachineSetup {
     /// create-workdir/v2, else reposRoot itself (@orbit/shared `newFolderRoot`, as the server joins it). The
     /// separator is the one the root is written with.
     public static func newFolderRoot(reposRoot: String, capabilities: [String]?) -> String {
+        capabilities?.contains(createWorkDirHomeCapability) == true ? homeOfReposRoot(reposRoot) : trimReposRoot(reposRoot)
+    }
+
+    private static func trimReposRoot(_ reposRoot: String) -> String {
         var root = reposRoot.trimmingCharacters(in: .whitespacesAndNewlines)
         while root.count > 1, root.hasSuffix("/") || root.hasSuffix("\\") { root.removeLast() }
-        guard capabilities?.contains(createWorkDirHomeCapability) == true,
-              let cut = root.lastIndex(where: { $0 == "/" || $0 == "\\" }) else { return root }
+        return root
+    }
+
+    /// The directory a reported reposRoot sits in: the machine's home (`<home>/orbit-repos`).
+    private static func homeOfReposRoot(_ reposRoot: String) -> String {
+        let root = trimReposRoot(reposRoot)
+        guard let cut = root.lastIndex(where: { $0 == "/" || $0 == "\\" }) else { return root }
         // `/orbit-repos` sits in `/`, and `C:\orbit-repos` in `C:\`.
         if cut == root.startIndex || root[root.index(before: cut)] == ":" { return String(root[...cut]) }
         return String(root[..<cut])
     }
 
-    /// The directory the folder step's name goes in: the machine's home on one that declares create-workdir/v2,
-    /// its Repos Folder on an older one.
-    public static func newFolderRoot(_ runner: Runner) -> String {
-        newFolderRoot(reposRoot: runner.reposRoot ?? "", capabilities: runner.capabilities)
+    /// Where a new folder named on this runner goes, as the server makes it: port of @orbit/shared `newFolderRootFor`,
+    /// held to src/shared/src/new-folder-root.fixture.json. A managed runner that is not up, or has not reported yet,
+    /// takes its image's home, whatever an earlier process declared; a runner that makes new folders and has reported
+    /// its Repos Folder takes `newFolderRoot`; any other makes none (nil).
+    public static func newFolderRootFor(managed: Bool, up: Bool, reposRoot: String?, capabilities: [String]?) -> String? {
+        if managed, !up || (capabilities?.isEmpty ?? true) { return ManagedRunnerCopy.Setup.home }
+        let root = (reposRoot ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !root.isEmpty, capabilities?.contains(createWorkDirCapability) == true else { return nil }
+        return newFolderRoot(reposRoot: root, capabilities: capabilities)
     }
 
-    /// A managed runner can take a new folder before its first heartbeat.
+    /// The setup card's root: `newFolderRootFor`, the account's managed runner read as managed while it is set up or
+    /// asleep. Only a usable card shows or sends it, and a managed runner always has one, so "" is never drawn.
     public static func setupFolderRoot(_ runner: Runner, managedState: ManagedSetupState?) -> String {
-        if managedState != nil, (runner.reposRoot ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return ManagedRunnerCopy.Setup.reposRoot
-        }
-        return newFolderRoot(runner)
+        newFolderRootFor(managed: runner.managed == true || managedState != nil, up: runner.online == true,
+                         reposRoot: runner.reposRoot, capabilities: runner.capabilities) ?? ""
     }
 
     public static func uncheckedFolder(name: String, root: String) -> PickedFolder? {
@@ -154,9 +169,19 @@ public enum MachineSetup {
 
     /// Whether a machine clones a GitHub repository on request: it declares clone-workdir/v1 and has reported the
     /// Repos Folder the clone goes in. POST /sessions refuses either missing.
-    public static func clonesRepositories(_ runner: Runner) -> Bool {
-        runner.capabilities?.contains(cloneWorkDirCapability) == true
-            && !(runner.reposRoot ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    public static func clonesRepositories(_ runner: Runner) -> Bool { cloneRoot(runner) != nil }
+
+    /// Where a GitHub workspace's clone goes, as the server puts it: port of @orbit/shared `cloneRootFor`, held to
+    /// src/shared/src/new-folder-root.fixture.json `clones`. Home on a runner that declares clone-workdir/v2,
+    /// reposRoot on an older one, nil on one that does not clone or has not reported its reposRoot.
+    public static func cloneRootFor(reposRoot: String?, capabilities: [String]?) -> String? {
+        let root = (reposRoot ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !root.isEmpty, let capabilities, capabilities.contains(cloneWorkDirCapability) else { return nil }
+        return capabilities.contains(cloneWorkDirHomeCapability) ? homeOfReposRoot(root) : trimReposRoot(root)
+    }
+
+    public static func cloneRoot(_ runner: Runner) -> String? {
+        cloneRootFor(reposRoot: runner.reposRoot, capabilities: runner.capabilities)
     }
 
     /// A path as the board writes it: the home folder as `~` (`/Users/austin/orbit-repos/x` → `~/orbit-repos/x`).
@@ -279,6 +304,52 @@ public enum MachineSetup {
             : .new(name: name, path: newFolderPath(root: root, name: name))
     }
 
+    /// A folder field's text that names a whole path (`/srv/app`, `~/code/app`) rather than one folder in the machine's
+    /// home (docs/mocks/new-workspace-form, decision 2 A; web `isFolderPath`): the machine is asked about that path itself.
+    public static func isFolderPath(_ typed: String) -> Bool {
+        typed.hasPrefix("/") || typed.hasPrefix("~")
+    }
+
+    /// A path's last segment, what the workspace's name follows for a full path (web `folderName`).
+    public static func folderName(_ path: String) -> String {
+        var trimmed = path
+        while trimmed.hasSuffix("/") || trimmed.hasSuffix("\\") { trimmed.removeLast() }
+        let last = trimmed.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "/" || $0 == "\\" }).last
+        return last.map(String.init).flatMap { $0.isEmpty ? nil : $0 } ?? path
+    }
+
+    /// What Create workspace picks on a full path's answer: the directory as it stands. Nothing is made for a path
+    /// outside the machine's home, so one that isn't there is refused as any folder is (web `folderPathPick`).
+    public static func folderPathPick(_ probe: DirProbe, machine: String) -> PickedFolder? {
+        let verdict = folderVerdict(probe, machine: machine)
+        return verdict.usable ? .existing(path: probe.path, note: verdict.short) : nil
+    }
+
+    /// The path the card's folder field asks the machine about: a full path as typed, a name where it would go, and
+    /// nothing for anything else. Nil too where nothing can be asked (a managed runner not up, a machine offline or
+    /// too old to check folders).
+    public static func folderQuestion(folder: String, root: String, canAsk: Bool) -> String? {
+        guard canAsk else { return nil }
+        if isFolderPath(folder) { return folder }
+        return isValidNewFolder(folder) ? newFolderPath(root: root, name: folder) : nil
+    }
+
+    /// What the typed folder would make the workspace in, on the machine's answer about it (`found`). A managed runner
+    /// that isn't up takes a name unchecked, but a full path only once it has been checked.
+    public static func typedPick(folder: String, found: DirProbe?, root: String, machine: String,
+                                 managedState: ManagedSetupState?) -> PickedFolder? {
+        let fullPath = isFolderPath(folder)
+        if managedState != nil { return fullPath ? nil : uncheckedFolder(name: folder, root: root) }
+        guard let found else { return nil }
+        if fullPath { return folderPathPick(found, machine: machine) }
+        return isValidNewFolder(folder) ? newFolderPick(found, name: folder, root: root, machine: machine) : nil
+    }
+
+    /// The folder the workspace's Name follows: the typed name, or a full path's last segment.
+    public static func followedName(folder: String) -> String {
+        isFolderPath(folder) ? folderName(folder) : folder
+    }
+
     /// The login CLIs installed here, in the app's order.
     public static func installedLogins(_ engines: [RunnerEngineHealth]?) -> [LoginEngine] {
         LoginEngine.allCases.filter { engine in
@@ -329,18 +400,31 @@ public enum MachineSetup {
     }
 
     /// The line under the card's folder field (web `MachineSetupCard`). `folder` is the field's text trimmed,
-    /// `found` the machine's answer about `<root>/<folder>` (nil while there is none for it), and `unanswered`
-    /// that the machine gave no answer to that question.
+    /// `found` the machine's answer about the path `folderQuestion` asked (nil while there is none for it), and
+    /// `unanswered` that the machine gave no answer to that question. `pathHintRoot` is set where the card's hint says
+    /// a full path is taken too (New workspace on a machine that has one): the directory a name goes in.
     public static func folderLine(folder: String, createError: String?, found: DirProbe?, unanswered: Bool,
-                                  machine: String, managedState: ManagedSetupState? = nil) -> SetupFolderLine {
+                                  machine: String, managedState: ManagedSetupState? = nil,
+                                  pathHintRoot: String? = nil) -> SetupFolderLine {
         // Why the last Create workspace was refused stands in for the rest until the next try.
         if let createError { return .createFailed(MachineSetupCopy.setupCreateFailed(why: createError)) }
-        if folder.isEmpty { return .meta(MachineSetupCopy.SETUP_FOLDER_HINT) }
-        if !isValidNewFolder(folder) { return .verdict(MachineSetupCopy.SETUP_NEW_FOLDER_INVALID, .bad) }
+        if folder.isEmpty {
+            guard var root = pathHintRoot else { return .meta(MachineSetupCopy.SETUP_FOLDER_HINT) }
+            while root.hasSuffix("/") || root.hasSuffix("\\") { root.removeLast() }
+            return .meta(MachineSetupCopy.setupFolderOrPathHint(root: root))
+        }
+        let fullPath = isFolderPath(folder)
+        if !fullPath, !isValidNewFolder(folder) { return .verdict(MachineSetupCopy.SETUP_NEW_FOLDER_INVALID, .bad) }
+        if managedState != nil, fullPath { return .meta(MachineSetupCopy.setupPathUnchecked(machine: machine)) }
         if let state = managedState {
             return .meta(state == .preparing ? ManagedRunnerCopy.Setup.FolderUnchecked.preparing : ManagedRunnerCopy.Setup.FolderUnchecked.asleep)
         }
         if let found {
+            // A full path must already be there: it says what it found, or that nothing is.
+            if fullPath {
+                let verdict = folderVerdict(found, machine: machine)
+                return .verdict(verdict.text, verdict.tone)
+            }
             let verdict = newFolderVerdict(found, machine: machine)
             // Nothing there yet reads as a note; anything there says what it is, and so does a check that failed.
             if !found.exists, verdict.usable { return .meta(MachineSetupCopy.SETUP_NEW_FOLDER_WITH_WORKSPACE) }

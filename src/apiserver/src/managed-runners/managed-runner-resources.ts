@@ -22,6 +22,13 @@ import type { ManagedRunnerProfile } from './managed-runner-profile';
  * ORBIT_MANAGED_RUNNER_POD_UID, which the image entrypoint checks against the Secret and the runner
  * sends with every request (managed-runner-instance.ts).
  *
+ * With the profile's `files` section the Pod also receives the Orbit Files drive (docs/orbit-files-drive-technical-
+ * design.md §6.1): one inline CSI volume of the `files.orbit.dev` node plugin, naming only the runner, mounted in the
+ * runner container at /run/orbit-files with HostToContainer propagation. Nothing else of the Pod changes: the runner
+ * container's security context is the same with or without it. The plugin reads that generation's mount credential
+ * from Secret `mrf-<runner uuid>` in the files namespace, which the manager writes (`buildDriveMountSecret`) and the
+ * runner never sees.
+ *
  * The Pod carries one finalizer, MANAGED_STOP_REPORT_FINALIZER: deleted by anyone — an operator's
  * `kubectl delete`, an eviction, a drain — it stays, terminal, with its kubelet's report of the stop,
  * until the manager has recorded that report and takes the finalizer off. Without it the kubelet's
@@ -37,7 +44,7 @@ export const GENERATION_ANNOTATION = 'orbit.dev/generation';
 export const PVC_UID_ANNOTATION = 'orbit.dev/pvc-uid';
 
 /** The runner name every managed runner reports, and ORBIT_RUNNER_NAME in its Pod. */
-export const MANAGED_RUNNER_NAME = 'orbit-managed';
+export const MANAGED_RUNNER_NAME = 'Orbit Cloud';
 /**
  * The manager's finalizer on every Pod it creates: taken off by the manager alone, once it has
  * recorded the Pod's stop (kubernetes-backend.ts, `removeInstance`).
@@ -53,6 +60,10 @@ export const CREDENTIAL_FILE_ENV = 'ORBIT_RUNNER_CREDENTIAL_FILE';
 /** The instance identity the runner sends (runner-go managed_instance.go), from the Downward API. */
 export const GENERATION_ENV = 'ORBIT_MANAGED_RUNNER_GENERATION';
 export const POD_UID_ENV = 'ORBIT_MANAGED_RUNNER_POD_UID';
+/** The Orbit Files CSI driver, and where the runner container receives the drive's plain parent directory. */
+export const DRIVE_CSI_DRIVER = 'files.orbit.dev';
+export const DRIVE_VOLUME = 'orbit-files';
+export const DRIVE_MOUNT = '/run/orbit-files';
 
 function canonical(runnerId: string): string {
   const id = runnerId.toLowerCase();
@@ -63,6 +74,8 @@ function canonical(runnerId: string): string {
 export const managedPodName = (runnerId: string): string => `mr-${canonical(runnerId)}`;
 export const managedPvcName = (runnerId: string): string => `mr-data-${canonical(runnerId)}`;
 export const managedSecretName = (runnerId: string): string => `mr-boot-${canonical(runnerId)}`;
+/** The mount credential's Secret, in the files namespace (never the runner's). */
+export const driveMountSecretName = (runnerId: string): string => `mrf-${canonical(runnerId)}`;
 /** The ConfigMap an operator writes a fencing receipt into (managed-runner-fencing.ts). */
 export const managedFencingReceiptName = (runnerId: string): string => `mr-fence-${canonical(runnerId)}`;
 /** A dry-run Pod the admission guard must refuse: proof the guard is in force before a real create. */
@@ -113,7 +126,34 @@ export function buildManagedSecret(identity: ManagedRunnerIdentity, credential: 
     metadata: {
       name: managedSecretName(identity.runnerId),
       namespace: identity.namespace,
-      labels: { 'app.kubernetes.io/name': 'orbit-managed-runner' },
+      labels: { 'app.kubernetes.io/name': 'orbit-cloud-runner' },
+      annotations: {
+        [OWNER_ANNOTATION]: identity.ownerId,
+        [RUNNER_ANNOTATION]: identity.runnerId,
+        [GENERATION_ANNOTATION]: String(identity.generation),
+      },
+    },
+    data: {
+      [BOOTSTRAP_KEY]: Buffer.from(credential, 'utf8').toString('base64'),
+      [BOOTSTRAP_GENERATION_KEY]: Buffer.from(String(identity.generation), 'utf8').toString('base64'),
+    },
+  };
+}
+
+/**
+ * The mount credential of `identity.generation`, for the CSI plugin in `namespace` (§4.3, §6.1): the same keys and
+ * identity annotations as the bootstrap Secret, immutable, replaced when the generation advances.
+ */
+export function buildDriveMountSecret(identity: ManagedRunnerIdentity, namespace: string, credential: string): Secret {
+  return {
+    apiVersion: 'v1',
+    kind: 'Secret',
+    type: 'Opaque',
+    immutable: true,
+    metadata: {
+      name: driveMountSecretName(identity.runnerId),
+      namespace,
+      labels: { 'app.kubernetes.io/name': 'orbit-files-mount' },
       annotations: {
         [OWNER_ANNOTATION]: identity.ownerId,
         [RUNNER_ANNOTATION]: identity.runnerId,
@@ -156,7 +196,7 @@ export function buildManagedPod(identity: ManagedRunnerIdentity, pvcUid: string,
       namespace: identity.namespace,
       finalizers: [MANAGED_STOP_REPORT_FINALIZER],
       labels: {
-        'app.kubernetes.io/name': 'orbit-managed-runner',
+        'app.kubernetes.io/name': 'orbit-cloud-runner',
         'orbit-test-environment': profile.environmentId,
       },
       annotations: {
@@ -217,7 +257,13 @@ export function buildManagedPod(identity: ManagedRunnerIdentity, pvcUid: string,
             { name: POD_UID_ENV, valueFrom: { fieldRef: { fieldPath: 'metadata.uid' } } },
           ],
           resources: runner.resources.runner,
-          volumeMounts: [...stateMounts, { name: 'bootstrap', mountPath: BOOTSTRAP_MOUNT, readOnly: true }],
+          volumeMounts: [
+            ...stateMounts,
+            { name: 'bootstrap', mountPath: BOOTSTRAP_MOUNT, readOnly: true },
+            // The plugin's plain per-runner directory; the drive's FUSE mount sits below it at drive/, and a
+            // remount there reaches this container through HostToContainer.
+            ...(profile.files ? [{ name: DRIVE_VOLUME, mountPath: DRIVE_MOUNT, mountPropagation: 'HostToContainer' }] : []),
+          ],
         },
       ],
       volumes: [
@@ -236,6 +282,7 @@ export function buildManagedPod(identity: ManagedRunnerIdentity, pvcUid: string,
             ],
           },
         },
+        ...(profile.files ? [{ name: DRIVE_VOLUME, csi: { driver: DRIVE_CSI_DRIVER, volumeAttributes: { runnerId: identity.runnerId } } }] : []),
       ],
     },
   };
@@ -287,13 +334,14 @@ export function pvIdentityProblem(
   return null;
 }
 
-export function secretIdentityProblem(secret: Secret, identity: ManagedRunnerIdentity): string | null {
-  const annotated = annotationProblem('the bootstrap Secret', secret.metadata, identity);
+/** Why a credential Secret is not the mapping generation's: the bootstrap Secret, or (`kind`) the mount Secret. */
+export function secretIdentityProblem(secret: Secret, identity: ManagedRunnerIdentity, kind = 'the bootstrap Secret'): string | null {
+  const annotated = annotationProblem(kind, secret.metadata, identity);
   if (annotated) return annotated;
   if (secret.metadata.annotations?.[GENERATION_ANNOTATION] !== String(identity.generation)) {
-    return 'the bootstrap Secret is for another generation';
+    return `${kind} is for another generation`;
   }
-  if (!bootstrapCredentialOf(secret)) return 'the bootstrap Secret carries no credential';
+  if (!bootstrapCredentialOf(secret)) return `${kind} carries no credential`;
   return null;
 }
 

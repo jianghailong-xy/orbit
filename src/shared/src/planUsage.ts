@@ -107,6 +107,27 @@ function bucketGroup(bucket: PlanUsageBucket): string {
 }
 
 /**
+ * The windows that cap a whole Antigravity or Cursor account, not one model of it, with the name a
+ * reason calls each by: Antigravity's shared buckets (`gemini-5h`, `3p-weekly`), whose group names no
+ * model — a group of one model's own (`gemini-argon-wtu`) only rules out that model, as Opus's weekly
+ * window does on Claude — and the usage limit a Cursor account met this period (cursorWindows). Cursor's
+ * reading is not one: past its included usage a paid plan goes on, on demand. Empty for other engines.
+ */
+export function accountCapWindows(snapshot: PlanUsageSnapshot): Array<[PlanUsageWindow, string]> {
+  const buckets = (snapshot.buckets ?? [])
+    .filter((bucket) => !bucketGroup(bucket).includes('-'))
+    .map((bucket): [PlanUsageWindow, string] => [bucketWindow(bucket), bucket.window === '5h' ? '5-hour' : bucket.window]);
+  const limit = cursorWindows(snapshot).limit;
+  return limit ? [...buckets, [limit, 'usage limit']] : buckets;
+}
+
+/** Whether a Cursor snapshot carries any reading of its included usage: the quota was read, spent or not. */
+export function cursorUsageRead(snapshot: PlanUsageSnapshot): boolean {
+  const { limit, reading } = cursorWindows(snapshot);
+  return Boolean(limit || reading);
+}
+
+/**
  * The buckets of an Antigravity account that a run on `model` spends. agy's `/usage` groups buckets
  * by the models that share them, and the runner reports them flattened, by id alone (contract
  * §16.6). On agy 1.4.12 (2026-11-01, a Pro plan): Gemini Flash and Pro share `gemini-weekly` and
@@ -189,13 +210,20 @@ function windowsWithLength(snapshot: PlanUsageSnapshot): Array<{ window: PlanUsa
  * to expire.
  */
 export function quotaExpiresAt(snapshot: PlanUsageSnapshot | null | undefined, now: Date): number {
+  return quotaExpiry(snapshot, now).at;
+}
+
+/** quotaExpiresAt's moment, with the length in minutes of the window whose reset it is: null when no window
+ *  ahead says how long it is (or none is ahead). What tells a weekly quota about to go to waste from a 5-hour
+ *  window that always resets within hours. */
+export function quotaExpiry(snapshot: PlanUsageSnapshot | null | undefined, now: Date): { at: number; mins: number | null } {
   const ahead = (snapshot ? windowsWithLength(snapshot) : []).filter(
     ({ window }) => Date.parse(window.resetsAt ?? '') > now.getTime(),
   );
-  if (ahead.length === 0) return Number.POSITIVE_INFINITY;
+  if (ahead.length === 0) return { at: Number.POSITIVE_INFINITY, mins: null };
   const longest = Math.max(...ahead.map(({ mins }) => mins ?? -1));
   const pick = longest >= 0 ? ahead.filter(({ mins }) => (mins ?? -1) === longest) : ahead;
-  return Math.max(...pick.map(({ window }) => Date.parse(window.resetsAt!)));
+  return { at: Math.max(...pick.map(({ window }) => Date.parse(window.resetsAt!))), mins: longest >= 0 ? longest : null };
 }
 
 /** Whether any window of `snapshot` is nearly spent — SHORT_WINDOW_NEAR_LIMIT_UTILIZATION for one of

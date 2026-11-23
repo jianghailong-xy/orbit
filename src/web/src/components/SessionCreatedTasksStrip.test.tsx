@@ -91,6 +91,7 @@ beforeEach(() => {
   vi.mocked(api).mockImplementation(async (path: string) => {
     requested.push(path);
     if (path === `/sessions/${SESSION}/created-tasks`) return answer as never;
+    if (path === '/watches?following=true') return watching as never;
     if (path === '/watches?needsAttention=true') return [] as never;
     const state = /^\/watches\?state=([A-Z]+)$/.exec(path);
     if (state) return watching.filter((w) => w.state === state[1]) as never;
@@ -109,7 +110,8 @@ afterEach(() => {
   watching = [];
 });
 
-/** A fresh strip over `data`, once its one read has been answered and drawn. */
+/** A fresh strip over `data`, as the session page hands it the read it owns, once the strip's watch read has answered
+ *  and been drawn. The strip reads no created tasks of its own: one read serves the page. */
 async function mount(data: SessionCreatedTasks, watches: WatchView[] = []): Promise<void> {
   if (root) act(() => root!.unmount());
   answer = data;
@@ -121,20 +123,18 @@ async function mount(data: SessionCreatedTasks, watches: WatchView[] = []): Prom
     root!.render(
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          <SessionCreatedTasksStrip sessionId={SESSION} />
+          <SessionCreatedTasksStrip sessionId={SESSION} tasks={data} />
         </MemoryRouter>
       </QueryClientProvider>,
     );
   });
-  const key = sessionCreatedTasksQuery(SESSION).queryKey;
   await act(async () => {
-    await vi.waitFor(() => expect(client.getQueryState(key)?.status).toBe('success'));
     await vi.waitFor(() => expect(client.getQueryState(watchesQuery().queryKey)?.status).toBe('success'));
     // The cache settles a tick before the observers hear of it.
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
-  expect(requested.filter((path) => !path.startsWith('/watches'))).toEqual([`/sessions/${SESSION}/created-tasks`]);
+  expect(requested.filter((path) => !path.startsWith('/watches'))).toEqual([]);
 }
 
 async function click(el: Element | null): Promise<void> {
@@ -202,8 +202,8 @@ describe('the collapsed row', () => {
       );
       const named = c.created!.items.find((item) => item.id === c.band!.row)!;
       const pill = named.running ? 'Running' : named.queued ? 'Queued' : null;
-      if (pill) expect(one('.ct-count + .status-pill')?.textContent, c.name).toBe(pill);
-      else expect(one('.ct-count + .status-pill'), c.name).not.toBeNull();
+      if (pill) expect(one('.wt-spacer + .status-pill')?.textContent, c.name).toBe(pill);
+      else expect(one('.wt-spacer + .status-pill'), c.name).not.toBeNull();
       expect(one('.ct-one'), c.name).toBeNull();
     }
   });
@@ -213,7 +213,7 @@ describe('the collapsed row', () => {
       created({ total: 2, done: 2, items: [row(2, { status: 'DONE' }), row(1, { status: 'DONE' })] }),
     );
     expect(one('.bg-tray-count')?.textContent).toBe('2 · Task 1');
-    expect(one('.ct-count + .status-pill')?.textContent).toBe('Done');
+    expect(one('.wt-spacer + .status-pill')?.textContent).toBe('Done');
     expect(one('.ct-failed')).toBeNull();
   });
 
@@ -518,9 +518,11 @@ describe('keeping it current', () => {
     expect(sessionCreatedTasksQuery(SESSION).queryKey.slice(0, 1)).toEqual(['tasks']);
   });
 
-  it('polls while a row is running or queued, and not otherwise', () => {
-    expect(interval(created({ total: 1, running: 1, items: [row(1, { running: true })] }))).toBe(15_000);
-    expect(interval(created({ total: 1, items: [row(1, { queued: true })] }))).toBe(15_000);
+  // Its runs' own events read it (lib/useControlPlane.readOwners.test.tsx), so with the stream live the poll is the
+  // list budget's safety read, once a minute; through an outage it backs off no faster than every 15 s.
+  it('polls while a row is running or queued, at the safety read\'s minute, and not otherwise', () => {
+    expect(interval(created({ total: 1, running: 1, items: [row(1, { running: true })] }))).toBe(60_000);
+    expect(interval(created({ total: 1, items: [row(1, { queued: true })] }))).toBe(60_000);
     expect(interval(created({ total: 1, done: 1, items: [row(1, { status: 'DONE' })] }))).toBe(false);
     expect(interval(undefined)).toBe(false);
   });

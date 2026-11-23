@@ -23,8 +23,10 @@ vi.mock('../api', async (importOriginal) => ({
   api: vi.fn(),
   askDirProbe: vi.fn(),
   readDirProbe: vi.fn(),
+  askClaudeHistory: vi.fn(),
+  getClaudeHistory: vi.fn(),
 }));
-const { api, askDirProbe, readDirProbe } = await import('../api');
+const { api, askClaudeHistory, askDirProbe, getClaudeHistory, readDirProbe } = await import('../api');
 const { MachineSetupCard, RevealedOnArrival } = await import('./MachineSetupCard');
 
 const RUNNER_ID = encodeId('0199f0a8-3c2e-7b51-9a6e-1f2d3c4b5a69');
@@ -74,12 +76,18 @@ const onCreate = vi.fn();
 
 function render(
   runner: never,
-  { creating = false, createError = null as string | null, welcome = false, managed = null as ManagedRunner | null } = {},
+  {
+    creating = false,
+    createError = null as string | null,
+    welcome = false,
+    managed = null as ManagedRunner | null,
+    headless = false,
+  } = {},
 ) {
   return (
     <QueryClientProvider client={client!}>
       <MemoryRouter>
-        <MachineSetupCard runner={runner} managed={managed} onCreate={onCreate} creating={creating} createError={createError} welcome={welcome} />
+        <MachineSetupCard runner={runner} managed={managed} onCreate={onCreate} creating={creating} createError={createError} welcome={welcome} headless={headless} />
       </MemoryRouter>
     </QueryClientProvider>
   );
@@ -95,7 +103,7 @@ async function settle(): Promise<void> {
 
 async function open(
   runner: never = machine(),
-  options: { creating?: boolean; createError?: string | null; welcome?: boolean; managed?: ManagedRunner | null } = {},
+  options: { creating?: boolean; createError?: string | null; welcome?: boolean; managed?: ManagedRunner | null; headless?: boolean } = {},
 ): Promise<HTMLDivElement> {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   host = document.createElement('div');
@@ -159,6 +167,10 @@ beforeEach(() => {
   vi.mocked(askDirProbe).mockImplementation(async (_runner, path) => ({ path, status: 'pending' }));
   vi.mocked(readDirProbe).mockReset();
   vi.mocked(readDirProbe).mockImplementation(async (_runner, path) => ({ path, status: 'done', result: runnerSays(path) }));
+  // No folder holds Claude Code history unless a test says so.
+  vi.mocked(askClaudeHistory).mockReset();
+  vi.mocked(askClaudeHistory).mockRejectedValue(new Error('no history here'));
+  vi.mocked(getClaudeHistory).mockReset();
 });
 
 afterEach(async () => {
@@ -214,7 +226,7 @@ describe('the folder: one name, in the machine’s home', () => {
     expect(field('name').value).toBe('payments-api');
     await press(createButton());
     expect(onCreate.mock.calls).toEqual([
-      [{ kind: 'new', name: 'payments-api', path: '/home/orbit/payments-api' }, 'payments-api'],
+      [{ kind: 'new', name: 'payments-api', path: '/home/orbit/payments-api' }, 'payments-api', null],
     ]);
   });
 
@@ -238,7 +250,7 @@ describe('the folder: one name, in the machine’s home', () => {
     expect(said(page.querySelector('[data-field="folder"] .msc-verdict.ok'))).toBe('Found · git repository · main');
     await press(createButton());
     expect(onCreate.mock.calls).toEqual([
-      [{ kind: 'existing', path: '/home/orbit/payments', note: 'git repository · main' }, 'payments'],
+      [{ kind: 'existing', path: '/home/orbit/payments', note: 'git repository · main' }, 'payments', null],
     ]);
   });
 
@@ -292,7 +304,7 @@ describe('the folder: one name, in the machine’s home', () => {
 
   it('refuses what the server would, and says what it takes', async () => {
     await open();
-    for (const name of ['../up', 'with space', '..', '/home/orbit/notes']) {
+    for (const name of ['../up', 'with space', '..', 'code/api']) {
       await type(field('folder'), name);
       await settle();
       expect(createButton().disabled, name).toBe(true);
@@ -305,6 +317,81 @@ describe('the folder: one name, in the machine’s home', () => {
     expect(said(page.querySelector('.msc-prefix'))).toBe('/home/orbit/orbit-repos/');
     await checkFolder('payments');
     expect(vi.mocked(askDirProbe).mock.calls).toEqual([[RUNNER_ID, '/home/orbit/orbit-repos/payments']]);
+  });
+});
+
+describe('a full path (docs/mocks/new-workspace-form, decision 2 A)', () => {
+  const HISTORY = {
+    conversations: 2,
+    transcripts: [
+      { id: 't1', title: 'Fix the flaky spec', lastActiveAt: '2026-11-10T08:00:00.000Z', messages: 12, bytes: 2048 },
+      { id: 't2', title: 'Plan', lastActiveAt: '2026-11-09T08:00:00.000Z', messages: 4, bytes: 1024 },
+    ],
+    windowDays: 30,
+    bytes: 3072,
+  };
+
+  it('is asked about as typed, drops the home prefix, and is used as it stands', async () => {
+    const page = await open();
+    await checkFolder('/home/orbit/code/api');
+    expect(vi.mocked(askDirProbe).mock.calls).toEqual([[RUNNER_ID, '/home/orbit/code/api']]);
+    expect(page.querySelector('[data-field="folder"] .msc-prefix')).toBeNull();
+    expect(said(page.querySelector('[data-field="folder"] .msc-verdict.ok'))).toBe('Found · git repository · develop');
+    expect(field('name').value).toBe('api');
+    await press(createButton());
+    expect(onCreate.mock.calls).toEqual([
+      [{ kind: 'existing', path: '/home/orbit/code/api', note: 'git repository · develop' }, 'api', null],
+    ]);
+  });
+
+  it('takes ~ as the machine’s home, and never makes a folder outside it', async () => {
+    await open();
+    await checkFolder('~/nowhere');
+    expect(vi.mocked(askDirProbe).mock.calls).toEqual([[RUNNER_ID, '~/nowhere']]);
+    expect(line('folder')).toBe('No such directory on orbit@austin.');
+    expect(createButton().disabled).toBe(true);
+  });
+
+  it('a managed runner that isn’t up takes it only once it can check it', async () => {
+    const managed = managedIn('sleeping');
+    expect(managedSetupState(RUNNER_ID, managed.status)).toBe('asleep');
+    await open(machine({ online: false, status: 'OFFLINE' }), { managed });
+    await checkFolder('/srv/app');
+    expect(askDirProbe).not.toHaveBeenCalled();
+    expect(line('folder')).toBe('orbit@austin checks a full path once it’s up.');
+    expect(createButton().disabled).toBe(true);
+  });
+
+  it('a folder there with Claude Code history offers it, and Create carries what is picked', async () => {
+    vi.mocked(askClaudeHistory).mockReset();
+    vi.mocked(askClaudeHistory).mockResolvedValue(undefined as never);
+    vi.mocked(getClaudeHistory).mockResolvedValue({ status: 'done', result: HISTORY } as never);
+    const page = await open();
+    await checkFolder('/home/orbit/code/api');
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 3200)));
+    await settle();
+    expect(vi.mocked(askClaudeHistory)).toHaveBeenCalledWith(RUNNER_ID, '/home/orbit/code/api');
+    const choices = [...page.querySelectorAll<HTMLElement>('[data-field="history"] [role="radio"]')];
+    expect(choices).toHaveLength(3);
+    await press(choices[1]);
+    await press(createButton());
+    expect(onCreate.mock.calls).toEqual([
+      [{ kind: 'existing', path: '/home/orbit/code/api', note: 'git repository · develop' }, 'api', { history: HISTORY, mode: 'latest' }],
+    ]);
+  }, 15_000);
+
+  it('a new folder never asks about history', async () => {
+    await open();
+    await checkFolder('payments-api');
+    expect(askClaudeHistory).not.toHaveBeenCalled();
+  });
+});
+
+describe('in Settings (decision 1 A): the same card, headless', () => {
+  it('draws no head, and its hint says a full path is taken', async () => {
+    const page = await open(machine(), { headless: true });
+    expect(page.querySelector('.msc-head')).toBeNull();
+    expect(line('folder')).toBe('A name in /home/orbit, or a full path. Uses the folder if it exists, otherwise creates it.');
   });
 });
 
@@ -358,7 +445,7 @@ describe('the name: the folder’s until it is edited', () => {
       field('name').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     });
     expect(onCreate).toHaveBeenCalledTimes(2);
-    expect(onCreate.mock.calls[0]).toEqual([{ kind: 'new', name: 'app', path: '/home/orbit/app' }, 'app']);
+    expect(onCreate.mock.calls[0]).toEqual([{ kind: 'new', name: 'app', path: '/home/orbit/app' }, 'app', null]);
   });
 });
 
@@ -497,8 +584,8 @@ const managedIn = (name: string): ManagedRunner => {
 
 describe('the managed runner before it is up', () => {
   for (const [name, root] of [
-    // Never reported: the image's fixed repos folder.
-    ['preparing: starting', '/home/orbit/orbit-repos/'],
+    // Never reported: the image's home.
+    ['preparing: starting', '/home/orbit/'],
     // Asleep after it had reported its home.
     ['sleeping', '/home/orbit/'],
   ] as const) {
@@ -517,9 +604,23 @@ describe('the managed runner before it is up', () => {
       expect(askDirProbe).not.toHaveBeenCalled();
       expect(field('name').value).toBe('my-project');
       await press(createButton());
-      expect(onCreate).toHaveBeenCalledWith({ kind: 'new', name: 'my-project', path: `${root}my-project` }, 'my-project');
+      expect(onCreate).toHaveBeenCalledWith({ kind: 'new', name: 'my-project', path: `${root}my-project` }, 'my-project', null);
     });
   }
+
+  it('asleep since an image that declared create-workdir/v1 only: offers its home, where it makes it on waking', async () => {
+    const managed = managedIn('sleeping');
+    const runner = machine({ online: false, status: 'OFFLINE', reposRoot: '/home/orbit/orbit-repos', capabilities: ['dir-probe/v1', 'create-workdir/v1'] });
+    const page = await open(runner, { managed });
+    expect(said(page.querySelector('.msc-prefix'))).toBe('/home/orbit/');
+  });
+
+  it('preparing: starting, with a Repos Folder stored from an earlier image, still offers where the server makes it', async () => {
+    const managed = managedIn('preparing: starting');
+    const runner = machine({ online: false, status: 'OFFLINE', reposRoot: '/var/lib/orbit/home/orbit-repos', capabilities: [], engines: null });
+    const page = await open(runner, { managed });
+    expect(said(page.querySelector('.msc-prefix'))).toBe('/home/orbit/');
+  });
 
   it('reads any other runner as before: offline, with nothing to type', async () => {
     const managed = managedIn('sleeping');

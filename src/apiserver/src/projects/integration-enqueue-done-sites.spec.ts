@@ -160,6 +160,25 @@ const SETTLED_BY_CALLER: ReadonlyMap<string, { by: string; why: string }> = new 
   ],
 ]);
 
+/**
+ * Finish writes of sessions that never carry task work, so there is no delivered identity to settle:
+ * `settleDeliveredIdentityAfterFinish` would answer null for every row they write (no task id, or a
+ * session that starts no task work). They write `finished_at` because it is the release column
+ * (docs/session-three-state-design.md §4.2), not because a task's work ended.
+ */
+const ENDS_NO_TASK_WORK: ReadonlyMap<string, string> = new Map([
+  [
+    'projects/landing-session.ts#settleLanding',
+    'A LANDING session is created with taskId null and startsTaskWork false (ensureLandingSession); '
+      + 'the task it lands is reached through the landing row, whose DONE path settles the identity.',
+  ],
+  [
+    'runner-api/runner-api.controller.ts#importResult',
+    'An imported transcript session is created with no task (SessionsService import), and a failed '
+      + 'import ends it before any turn ran.',
+  ],
+]);
+
 /** Blank out comments without moving a line: these files describe their own writes in prose. */
 function withoutComments(source: string): string {
   return source
@@ -362,7 +381,7 @@ test('enqueueForDoneTask settles the identity, and so does every write of a work
   );
   const settling = new Set(declarationsCalling(sources, SETTLE_AFTER_FINISH));
   const missing = finishes.filter((site) => {
-    if (settling.has(site)) return false;
+    if (settling.has(site) || ENDS_NO_TASK_WORK.has(site)) return false;
     const caller = SETTLED_BY_CALLER.get(site);
     return !caller || !settling.has(caller.by);
   });
@@ -375,6 +394,8 @@ test('enqueueForDoneTask settles the identity, and so does every write of a work
   );
   const stale = [...SETTLED_BY_CALLER.keys()].filter((site) => !finishes.includes(site) || settling.has(site));
   assert.deepEqual(stale, [], 'SETTLED_BY_CALLER names a site that does not need it');
+  const staleNoWork = [...ENDS_NO_TASK_WORK.keys()].filter((site) => !finishes.includes(site) || settling.has(site));
+  assert.deepEqual(staleNoWork, [], 'ENDS_NO_TASK_WORK names a site that does not need it');
 });
 
 test('the census notices a DONE that states no identity, and a finish that settles nothing', () => {
@@ -413,4 +434,57 @@ test('the census notices a DONE that states no identity, and a finish that settl
   }];
   assert.deepEqual(declarationsCalling(corrected, IDENTITY_IN_DONE_WRITE), ['tasks/new-door.service.ts#settle']);
   assert.deepEqual(declarationsCalling(corrected, SETTLE_AFTER_FINISH), ['tasks/new-door.service.ts#end']);
+});
+
+/**
+ * The first line of `declaration` in `file` that calls what `call` matches, comments blanked — or -1.
+ * Where in the declaration a call sits is the fact the P-M1 census below is about: the decision has to
+ * come before anything is written.
+ */
+function firstCallIn(sources: readonly ScannedSource[], file: string, declaration: string, call: RegExp): number {
+  const source = sources.find((candidate) => candidate.path === file);
+  if (!source) return -1;
+  const code = withoutComments(source.content);
+  const units = unitsByLine(code);
+  return code.split('\n').findIndex((line, index) => units[index] === declaration && call.test(line));
+}
+
+test('§12.15 P-M1: every route a DONE can take reads the delivered identity before it queues or starts a line', () => {
+  const sources = productionSources(SRC);
+  const JOB = 'projects/project-integration-job.ts';
+  // At the DONE: the decision comes before the line is started and before any route is queued, so a
+  // branch with no commit of its own reaches neither.
+  const decided = firstCallIn(sources, JOB, 'queueForDoneTask', /\bdeliveredRoute\s*\(/);
+  assert.ok(decided >= 0, 'queueForDoneTask no longer reads the delivered identity (§12.15 P-M1)');
+  for (const write of [/\bstartOnFirstIntegration\s*\(/, /\bqueueLandingForWork\s*\(/, /\bbackfillFinishedCodeTasks\s*\(/]) {
+    const at = firstCallIn(sources, JOB, 'queueForDoneTask', write);
+    assert.ok(at > decided, `queueForDoneTask calls ${write.source} before it has decided on the delivered identity`);
+  }
+  // Where the identity is frozen late: the finish decides the route the moving DONE left to it.
+  assert.ok(
+    declarationsCalling(sources, /\bqueueForDoneTask\s*\(/).includes(`${JOB}#settleDeliveredIdentity`),
+    'the finish that freezes a DONE task\'s identity no longer decides its route (§12.15 P-M1, O-L4 3)',
+  );
+  // And on the line's starting beat, for the project's other finished tasks.
+  const backfilled = firstCallIn(sources, JOB, 'backfillFinishedCodeTasks', /\bemptyBranchRoute\s*\(/);
+  assert.ok(backfilled >= 0, 'backfillFinishedCodeTasks queues finished tasks without the P-M1 decision');
+  for (const write of [/\bqueueLandTask\s*\(/, /\bqueueTaskBranchCandidate\s*\(/]) {
+    const at = firstCallIn(sources, JOB, 'backfillFinishedCodeTasks', write);
+    assert.ok(at > backfilled, `backfillFinishedCodeTasks calls ${write.source} before the P-M1 decision`);
+  }
+});
+
+test('the P-M1 census notices a route queued before the decision', () => {
+  const misordered: ScannedSource[] = [{
+    path: 'projects/project-integration-job.ts',
+    content: [
+      'async function queueForDoneTask(tx: Prisma.TransactionClient, ownerId: string, taskId: string) {',
+      '  const first = await startOnFirstIntegration(tx, { ownerId, projectId, taskId });',
+      '  const delivered = await deliveredRoute(tx, ownerId, taskId);',
+      '}',
+    ].join('\n'),
+  }];
+  const decided = firstCallIn(misordered, 'projects/project-integration-job.ts', 'queueForDoneTask', /\bdeliveredRoute\s*\(/);
+  const started = firstCallIn(misordered, 'projects/project-integration-job.ts', 'queueForDoneTask', /\bstartOnFirstIntegration\s*\(/);
+  assert.ok(decided > started, 'the fixture should read as a line started before the decision');
 });

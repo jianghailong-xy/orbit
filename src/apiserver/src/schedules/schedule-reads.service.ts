@@ -9,11 +9,21 @@
  *     what one session put up — its cards and the records of the changes it made.
  */
 import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
-import type { ScheduleWaitingTask } from '@orbit/shared';
-import type { Prisma, Schedule, ScheduleChangeRequestKind, ScheduleChangeRequestState, ScheduleState } from '@prisma/client';
+import type { ScheduleChangeOpening, ScheduleRunSessionStatus, ScheduleRunTry, ScheduleWaitingTask } from '@orbit/shared';
+import type {
+  Prisma,
+  Schedule,
+  ScheduleChangeRequestKind,
+  ScheduleChangeRequestState,
+  ScheduleRun,
+  ScheduleState,
+} from '@prisma/client';
 
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import { PrismaService } from '../prisma/prisma.service';
+import { openingTurnKey } from '../sessions/orbit-authored-turn';
+import { sessionCapacityGate } from '../sessions/queued-reason-sql';
+import { scheduleRunDeadline } from './schedule-runs.service';
 import {
   scheduleCardViews,
   scheduleFindingView,
@@ -306,7 +316,7 @@ export class ScheduleReadsService {
   async sessionCards(ownerId: string, sessionId: string) {
     const session = await this.prisma.session.findFirst({
       where: { id: sessionId, ownerId },
-      select: { id: true, runSource: true, scheduleRunId: true },
+      select: { id: true, runSource: true, scheduleRunId: true, changeScheduleId: true, scheduleChangeOpening: true },
     });
     if (!session) throw new NotFoundException('session not found');
     const [{ requests }, revisions, run] = await Promise.all([
@@ -321,12 +331,76 @@ export class ScheduleReadsService {
         ? this.prisma.scheduleRun.findFirst({ where: { id: session.scheduleRunId, schedule: { ownerId } } })
         : null,
     ]);
-    const undoneBy = await this.undoneBy(revisions.map((r) => ({ scheduleId: r.scheduleId, revision: r.revision })));
+    const [undoneBy, runStatus] = await Promise.all([
+      this.undoneBy(revisions.map((r) => ({ scheduleId: r.scheduleId, revision: r.revision }))),
+      run ? this.runStatus(sessionId, run) : null,
+    ]);
     return {
       run: run ? scheduleRunView(run) : null,
+      runStatus,
+      // The opening it was drawn with keeps the schedule's id even once the schedule is deleted (the column is SET NULL).
+      change: session.scheduleChangeOpening ? (session.scheduleChangeOpening as unknown as ScheduleChangeOpening) : null,
       cards: requests,
       records: revisions.map((r) =>
         scheduleRecordView(r.schedule.id, r.schedule.title, r, undoneBy.get(`${r.scheduleId}:${r.revision}`) ?? null)),
+    };
+  }
+
+  /**
+   * Where a run stands for one of its sessions (board docs/mocks/scheduled-run-not-started ②③④): every try it made
+   * (the sessions that name it, oldest first) and whether each reached its engine — its first turn delivered, as the
+   * run's own watch pass reads it (ScheduleRunsService.reconcileRun) — when it gave up, its next try, the schedule's
+   * next run, and, while a full runner, run or batch holds its current session, that gate and the deadline it waits to.
+   */
+  private async runStatus(sessionId: string, run: ScheduleRun): Promise<ScheduleRunSessionStatus> {
+    const [sessions, schedule] = await Promise.all([
+      this.prisma.session.findMany({
+        where: { scheduleRunId: run.id },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        select: { id: true, createdAt: true, startedAt: true },
+      }),
+      this.prisma.schedule.findUniqueOrThrow({
+        where: { id: run.scheduleId },
+        select: { rule: true, timezone: true, nextDueAt: true },
+      }),
+    ]);
+    const delivered = sessions.length === 0
+      ? []
+      : await this.prisma.conversationTurn.findMany({
+          where: {
+            OR: sessions.map((s) => ({ sessionId: s.id, clientTurnId: openingTurnKey(s.id) })),
+            deliveredAt: { not: null },
+          },
+          select: { sessionId: true },
+        });
+    const reached = new Set(delivered.map((t) => t.sessionId));
+    const tries: ScheduleRunTry[] = sessions.map((s) => ({
+      sessionId: s.id,
+      startedAt: s.createdAt.toISOString(),
+      claimed: s.startedAt !== null,
+      reachedEngine: reached.has(s.id),
+    }));
+    const index = tries.findIndex((t) => t.sessionId === sessionId);
+    const ended = run.state === 'MISSED' || run.state === 'CANCELLED' || run.state === 'SKIPPED';
+    const gate = run.state === 'RUNNING' && run.sessionId && !reached.has(run.sessionId)
+      ? await sessionCapacityGate(this.prisma, run.sessionId)
+      : null;
+    return {
+      tries,
+      thisTry: index < 0 ? null : index + 1,
+      gaveUpAt: ended && tries.every((t) => !t.reachedEngine) ? run.endedAt?.toISOString() ?? null : null,
+      notBeforeAt: run.state === 'QUEUED' ? run.notBeforeAt?.toISOString() ?? null : null,
+      nextDueAt: schedule.nextDueAt?.toISOString() ?? null,
+      queue: gate
+        ? {
+            queuedReason: gate.reason,
+            queuedActive: gate.active,
+            queuedLimit: gate.limit,
+            queuedHeldByJobs: gate.heldByJobs,
+            since: gate.since.toISOString(),
+            deadline: new Date(scheduleRunDeadline(schedule, run)).toISOString(),
+          }
+        : null,
     };
   }
 

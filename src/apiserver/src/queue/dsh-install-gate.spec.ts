@@ -133,7 +133,12 @@ test('dsh install gate: the queue holds the runner\'s dsh rows with the notice a
     let claim: { strings: readonly string[]; values: readonly unknown[] } | undefined;
     const tx = {
       $executeRaw: async () => 0,
-      $queryRaw: async (...args: unknown[]) => { claim = renderRawQuery(args); return []; },
+      $queryRaw: async (...args: unknown[]) => {
+        // Only the claim statement: Run now's pass check (an EXISTS) follows a claim that took nothing.
+        const rendered = renderRawQuery(args);
+        if (rendered.text.includes('UPDATE "session" SET')) claim = rendered;
+        return [];
+      },
     };
     const prisma = {
       session: {
@@ -172,7 +177,12 @@ async function claimStatement(dshUnavailable: string | null) {
       if (rendered.text.includes('orbit.runner_supports_dsh')) settings = rendered;
       return 0;
     },
-    $queryRaw: async (...args: unknown[]) => { sql = renderRawQuery(args); return []; },
+    $queryRaw: async (...args: unknown[]) => {
+      // Only the claim statement: Run now's pass check (an EXISTS) follows a claim that took nothing.
+      const rendered = renderRawQuery(args);
+      if (rendered.text.includes('UPDATE "session" SET')) sql = rendered;
+      return [];
+    },
   };
   const prisma = {
     session: { findMany: async () => [] },

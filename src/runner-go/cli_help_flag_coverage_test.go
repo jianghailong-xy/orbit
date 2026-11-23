@@ -26,6 +26,9 @@ func TestPerActionHelpDocumentsEveryAdvertisedFlag(t *testing.T) {
 		"watch":     watchActionHelp,
 		"wiki":      wikiActionHelp,
 		"file":      fileActionHelp,
+		"drive":     driveActionHelp,
+		"browser":   browserActionHelp,
+		"subagent":  subagentActionHelp,
 	}
 	flagRe := regexp.MustCompile(`--[a-z][a-z0-9-]*`)
 
@@ -33,7 +36,7 @@ func TestPerActionHelpDocumentsEveryAdvertisedFlag(t *testing.T) {
 		baseCLICapabilities, providerCLICapabilities, projectCLICapabilities,
 		notifyCLICapabilities, sessionCLICapabilities, agentCLICapabilities,
 		runnerCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities,
-		fileCLICapabilities, userCLICapabilities, guideCLICapabilities,
+		fileCLICapabilities, driveCLICapabilities, subagentCLICapabilities, browserCLICapabilities, userCLICapabilities, guideCLICapabilities,
 	} {
 		for _, spec := range list {
 			help, ok := "", false

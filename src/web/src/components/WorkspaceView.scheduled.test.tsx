@@ -16,7 +16,7 @@ const CSS = readFileSync(new URL('./Scheduled.css', import.meta.url), 'utf8');
 describe('a workspace’s session list', () => {
   it('draws run sessions only on the Scheduled runs folder’s page, even ones a server sent elsewhere', () => {
     expect(SOURCE).toContain("const onScheduledRuns = !listProjectId && searchParams.get('folder') === SCHEDULED_RUNS_FOLDER;");
-    expect(SOURCE).toContain("const rows = (sessionsQ.data ?? []).filter((row) => (row.runSource === 'SCHEDULE') === onScheduledRuns);");
+    expect(SOURCE).toContain("row.runSource !== 'SCHEDULE_CHANGE' && (row.runSource === 'SCHEDULE') === onScheduledRuns);");
     expect(SOURCE).toContain('scheduled: onScheduledRuns,');
     // Every list the column draws comes from those rows; nothing re-reads the raw answer for rows.
     expect(SOURCE).not.toMatch(/sessionsQ\.data \?\? \[\]\)\.slice\(\)/);
@@ -36,20 +36,22 @@ describe('a workspace’s session list', () => {
 
 describe('a conversation', () => {
   it('draws its scheduled-task cards and change lines where they happened', () => {
-    expect(SOURCE).toContain('const scheduleInserts = useSessionScheduleInserts(selectedTrashed ? null : selectedId, transcriptEvents, scheduleRun);');
+    expect(SOURCE).toContain('const scheduleCards = useSessionScheduleCards(selectedTrashed ? null : selectedId);');
+    expect(SOURCE).toMatch(
+      /const scheduleInserts = useSessionScheduleInserts\(\n\s+selectedTrashed \? null : selectedId,\n\s+scheduleCards,\n\s+transcriptEvents,\n\s+scheduleRun,/,
+    );
     expect(SOURCE).toMatch(/\[\.\.\.decisionReceipts, \.\.\.questionRecords, \.\.\.ownerRequestCards, \.\.\.scheduleInserts,/);
   });
 
-  it('opens Change… with the schedule named in a new conversation’s composer, never a form', () => {
-    expect(SOURCE).toContain('const seed = entry?.usr?.composerText;');
-    expect(SOURCE).toContain('setText(seed);');
+  it('no longer seeds a new conversation for Change…: that is the schedule’s change conversation (§8.2)', () => {
+    expect(SOURCE).not.toContain('composerText');
   });
 });
 
 describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
   it('is known by the detail’s runSource and finds its run from the session alone', () => {
     expect(SOURCE).toContain("const isScheduleRun = detailForSelected?.runSource === 'SCHEDULE';");
-    expect(SOURCE).toContain('useScheduleRunOfSession(isScheduleRun && !selectedTrashed ? selectedId : null)');
+    expect(SOURCE).toContain('useScheduleRunOfSession(isScheduleRun && !selectedTrashed ? selectedId : null, scheduleCards)');
     expect(SOURCE).not.toContain("searchParams.get('schedule')");
   });
 

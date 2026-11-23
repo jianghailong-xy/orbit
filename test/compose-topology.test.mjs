@@ -389,7 +389,7 @@ test('(s) the two-stage release names each image through variables, and changes 
   // two-stage release deploys, still built where they run and named as before.
   assert.deepEqual(lines.filter((line) => /^\s+image:/.test(line) && !TWO_STAGE_IMAGES.has(line) && !TWO_STAGE_WEB_IMAGE.endsWith(line)),
     ['    image: postgres:16-alpine', '    image: postgres:16-alpine', '    image: orbit-docker-channel:local',
-      '    image: orbit-managed-runner-firewall:local']);
+      '    image: orbit-cloud-runner-firewall:local']);
 });
 
 /** What Compose acts on: comments and blank lines document a block, they cannot run a process. */
@@ -515,11 +515,13 @@ const APPROVED_APISERVER_BLOCKS = [
     '      ORBIT_FILES_S3_ACCESS_KEY_ID: "${ORBIT_FILES_S3_ACCESS_KEY_ID:-}"',
     '      ORBIT_FILES_S3_SECRET_ACCESS_KEY: "${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}"',
     '      ORBIT_FILES_S3_REGION: "${ORBIT_FILES_S3_REGION:-}"',
+    '      ORBIT_FILES_S3_MIRROR: "${ORBIT_FILES_S3_MIRROR:-0}"',
   ],
   // Orbit Files' quota and grace period (2026-11-03, the top of this file): the quota, empty unless the host's .env sets it,
   // and pgbackup's two retention values with its own defaults. They come right after the store's lines in the file.
   [
     '      ORBIT_FILES_QUOTA_BYTES: "${ORBIT_FILES_QUOTA_BYTES:-}"',
+    '      ORBIT_FILES_STORE_QUOTA_BYTES: "${ORBIT_FILES_STORE_QUOTA_BYTES:-}"',
     '      ORBIT_BASE_BACKUP_INTERVAL: "${ORBIT_BASE_BACKUP_INTERVAL:-86400}"',
     '      ORBIT_BASE_BACKUP_KEEP: "${ORBIT_BASE_BACKUP_KEEP:-2}"',
   ],
@@ -530,8 +532,11 @@ const APPROVED_APISERVER_BLOCKS = [
   [
     '      ORBIT_MANAGED_RUNNERS_ENABLED: "${ORBIT_MANAGED_RUNNERS_ENABLED:-false}"',
     '      ORBIT_MANAGED_RUNNER_BROWSER_ENABLED: "${ORBIT_MANAGED_RUNNER_BROWSER_ENABLED:-false}"',
-    '      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-managed-runners/profile.json',
+    '      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-cloud-runners/profile.json',
     '    volumes:',
+    '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-cloud-runners:ro"',
+    // Amended on 2026-11-20, when the owner renamed orbit-managed to orbit-cloud with a migration: the same directory,
+    // read-only, at its path from before, which profile.json and channel.json written by an earlier install name.
     '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners:ro"',
   ],
   // Orbit Files' directory (2026-11-02, the top of this file): the local store and the uploads' temporary files, a bind
@@ -556,6 +561,14 @@ const APPROVED_WEB_BLOCK = [
 ];
 // Orbit Files' off-host copy (2026-11-02, the top of this file): the sidecar reads the files directory and cannot write it.
 const PGBACKUP_FILES_MOUNT = '      - ./data/files:/var/lib/orbit/files:ro';
+const PGBACKUP_S3_MIRROR = [
+  '      ORBIT_FILES_S3_MIRROR: "${ORBIT_FILES_S3_MIRROR:-0}"',
+  '      ORBIT_FILES_S3_ENDPOINT: "${ORBIT_FILES_S3_ENDPOINT:-}"',
+  '      ORBIT_FILES_S3_BUCKET: "${ORBIT_FILES_S3_BUCKET:-}"',
+  '      ORBIT_FILES_S3_ACCESS_KEY_ID: "${ORBIT_FILES_S3_ACCESS_KEY_ID:-}"',
+  '      ORBIT_FILES_S3_SECRET_ACCESS_KEY: "${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}"',
+  '      ORBIT_FILES_S3_REGION: "${ORBIT_FILES_S3_REGION:-}"',
+];
 // The approved additions to postgres's command that (k) sets aside, which (i) pins byte for byte with the rest of the
 // service. Each is found by its LAST line: `      - -c` opens every setting, so a block's first line would find the
 // command's first setting instead. Only its lines and the comment directly above them go, up to the directive before
@@ -570,7 +583,7 @@ const APPROVED_POSTGRES_BLOCKS = [
   ],
 ];
 test('nothing beyond the approved configuration was added to pgbackup, apiserver or web', () => {
-  const approved = { pgbackup: [PGBACKUP_FILES_MOUNT], apiserver: APPROVED_APISERVER_ADDITIONS, web: APPROVED_WEB_BLOCK };
+  const approved = { pgbackup: [...PGBACKUP_S3_MIRROR, PGBACKUP_FILES_MOUNT], apiserver: APPROVED_APISERVER_ADDITIONS, web: APPROVED_WEB_BLOCK };
   for (const [name, additions] of Object.entries(approved)) {
     assert.deepEqual(
       directivesNotInBaseline(currentServices.get(name), survivingConfigurationServices.get(name)),
@@ -603,7 +616,7 @@ function withoutService(source, name) {
  */
 function withoutApprovedAdditions(source) {
   let lines = source.split('\n');
-  for (const block of [...APPROVED_APISERVER_BLOCKS, [PGBACKUP_FILES_MOUNT], APPROVED_WEB_BLOCK]) {
+  for (const block of [PGBACKUP_S3_MIRROR, ...APPROVED_APISERVER_BLOCKS, [PGBACKUP_FILES_MOUNT], APPROVED_WEB_BLOCK]) {
     const first = lines.indexOf(block[0]);
     assert.ok(first > 0, `docker-compose.yml no longer has the approved ${block[0].trim()}`);
     const last = lines.indexOf(block[block.length - 1], first);
@@ -714,15 +727,18 @@ test('(m) the Docker channel is exactly the service the owner allowed on 2026-10
     '    container_name: orbit-docker-channel',
     '    restart: unless-stopped',
     '    network_mode: none',
-    '    command: ["serve", "--config", "/var/lib/orbit-managed-runners/channel.json", "--disk-probe-path", "/var/lib/orbit-docker-volumes"]',
+    '    command: ["serve", "--config", "/var/lib/orbit-cloud-runners/channel.json", "--disk-probe-path", "/var/lib/orbit-docker-volumes"]',
     '    volumes:',
     '      - /var/run/docker.sock:/var/run/docker.sock',
+    '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-cloud-runners"',
+    // Amended on 2026-11-20 (orbit-managed renamed orbit-cloud, with a migration): the same directory at its path from
+    // before, which an earlier install's channel.json names.
     '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners"',
     '      - type: volume',
     '        target: /var/lib/orbit-docker-volumes',
     '        read_only: true',
     '    healthcheck:',
-    '      test: ["CMD", "python3", "-c", "import socket; socket.socket(socket.AF_UNIX).connect(\'/var/lib/orbit-managed-runners/channel.sock\')"]',
+    '      test: ["CMD", "python3", "-c", "import socket; socket.socket(socket.AF_UNIX).connect(\'/var/lib/orbit-cloud-runners/channel.sock\')"]',
     '      interval: 5s',
     '      timeout: 5s',
     '      retries: 6',
@@ -757,8 +773,8 @@ test('(n) the managed runners\' firewall is exactly the service the owner allowe
     '    build:',
     '      context: .',
     '      dockerfile: deploy/managed-runner/firewall/Dockerfile',
-    '    image: orbit-managed-runner-firewall:local',
-    '    container_name: orbit-managed-runner-firewall',
+    '    image: orbit-cloud-runner-firewall:local',
+    '    container_name: orbit-cloud-runner-firewall',
     '    restart: unless-stopped',
     '    network_mode: host',
     '    cap_drop: [ALL]',
@@ -766,14 +782,14 @@ test('(n) the managed runners\' firewall is exactly the service the owner allowe
     '    security_opt: ["no-new-privileges:true"]',
     '    read_only: true',
     '    volumes:',
-    '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}/firewall:/var/lib/orbit-managed-runner-firewall"',
+    '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}/firewall:/var/lib/orbit-cloud-runner-firewall"',
     '      - type: bind',
     '        source: "${ORBIT_MANAGED_RUNNER_FIREWALL_XTABLES_LOCK:-/dev/null}"',
     '        target: /run/xtables.lock',
     '        bind:',
     '          create_host_path: false',
     '    healthcheck:',
-    '      test: ["CMD", "python3", "-I", "/opt/orbit-managed-runner-firewall/firewall.py", "status"]',
+    '      test: ["CMD", "python3", "-I", "/opt/orbit-cloud-runner-firewall/firewall.py", "status"]',
     '      interval: 10s',
     '      timeout: 5s',
     '      retries: 3',

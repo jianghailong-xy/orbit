@@ -32,8 +32,8 @@ const delegateBlockOf = (toolUseId: string): HTMLElement | null =>
  * branch bar: Apple's `AgentsBandRow` and `AgentsSheet` (docs/mocks/agents-band-models; no cost, as the Apple
  * clients dropped it). Folded, it says what the running one is doing and where it runs: its machine and its
  * model, when either is not the session's own. With none running it says where the work went: how many
- * machines, then each model with how many runs took it. Failures are counted in red at its right edge in
- * every state, before the spinner while one runs. Always
+ * machines, then each model with how many runs took it. A failed run is not counted on the line: the reader
+ * can do nothing about it (the agent that started it was told); its row in the list keeps its red ✕. Always
  * one line: narrower, the models after the first fold into "+n", then the words give way to the marks. It
  * opens in place, as Background processes does, to every run, the running ones first, in one list with no
  * headings. A row folds the list, scrolls the conversation to the run's block and opens it. Absent until the
@@ -72,6 +72,7 @@ export function SessionAgentsStrip({
           <RunGlyph
             running={run.status === "RUNNING"}
             failed={subagentRunFailed(run)}
+            stopped={run.status === "STOPPED"}
           />
           <span
             className="bg-shell-cmd ag-title"
@@ -102,11 +103,6 @@ export function SessionAgentsStrip({
         </span>
         <Spread summary={summary} parent={parent} />
         <span className="wt-spacer" />
-        {summary.failed > 0 && (
-          <span className="ag-failed">
-            <CloseCircleFilled /> {summary.failed} failed
-          </span>
-        )}
         {summary.running > 0 && <RunGlyph running failed={false} />}
         <button
           type="button"
@@ -129,11 +125,12 @@ export function SessionAgentsStrip({
   );
 }
 
-/** Running, failed or done, in the tool cards' own marks. */
-function RunGlyph({ running, failed }: { running: boolean; failed: boolean }) {
+/** Running, failed, stopped or done, in the tool cards' own marks. */
+function RunGlyph({ running, failed, stopped = false }: { running: boolean; failed: boolean; stopped?: boolean }) {
   if (running)
     return <LoadingOutlined spin className="chat-tool-status running" />;
   if (failed) return <CloseCircleFilled className="chat-tool-status err" />;
+  if (stopped) return <span className="chat-tool-status stopped" role="img" aria-label="stopped" />;
   return <CheckCircleFilled className="chat-tool-status ok" />;
 }
 
@@ -258,7 +255,7 @@ function RowFacts({ run }: { run: SubagentRunView }) {
   );
 }
 
-/** What a screen reader hears for the folded line: `Agents: 12, 4 machines, Opus 5.5 9 runs, 1 failed`. */
+/** What a screen reader hears for the folded line: `Agents: 12, 4 machines, Opus 5.5 9 runs`. */
 function spokenLine(summary: SubagentSessionSummary): string {
   const parts = [`Agents: ${summary.band}`];
   const current = summary.current;
@@ -271,6 +268,5 @@ function spokenLine(summary: SubagentSessionSummary): string {
         parts.push(`${m.label} ${m.count === 1 ? "1 run" : `${m.count} runs`}`);
     }
   }
-  if (summary.failed > 0) parts.push(`${summary.failed} failed`);
   return parts.join(", ");
 }

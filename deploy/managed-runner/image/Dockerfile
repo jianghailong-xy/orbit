@@ -15,7 +15,7 @@ FROM node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb98
 # Preserve the whole native layout, including codex-path/rg and package resources.
 # Invoke its native binary directly so there is no npm wrapper in the signal path.
 RUN test "$(node --version)" = v26.10.0 \
- && npm install --global --ignore-scripts --no-audit --no-fund @openai/codex@0.170.0 \
+ && npm install --global --ignore-scripts --no-audit --no-fund @openai/codex@0.171.0 \
  && mv /usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-*/vendor/*-unknown-linux-musl /opt/codex \
  && test -x /opt/codex/bin/codex \
  && test -x /opt/codex/codex-path/rg
@@ -25,7 +25,7 @@ FROM node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb98
 # postinstall only copies its platform package's native binary over a stub: take that binary
 # directly, so no Node wrapper sits in the signal path either.
 RUN test "$(node --version)" = v26.10.0 \
- && npm install --global --ignore-scripts --no-audit --no-fund @anthropic-ai/claude-code@2.1.328 \
+ && npm install --global --ignore-scripts --no-audit --no-fund @anthropic-ai/claude-code@2.1.330 \
  && install -D -m 0755 \
       "/usr/local/lib/node_modules/@anthropic-ai/claude-code/node_modules/@anthropic-ai/claude-code-linux-$(node -p process.arch)/claude" \
       /opt/claude/bin/claude
@@ -71,18 +71,18 @@ ARG TARGETARCH
 # minutes at 81.7 MB of the Kimi binary until it was killed by hand.
 ARG FETCH="curl -fsSL --connect-timeout 30 --speed-limit 4096 --speed-time 60 --retry 5 --retry-delay 10 --retry-all-errors"
 RUN case "$TARGETARCH" in \
-      amd64) target=linux-x64 sum=5999b710b1a34c19e93989973c54a8f1c167df8f8bec2fbf3171bfc304f6bdb9 ;; \
-      arm64) target=linux-arm64 sum=4e97ef1e7c32abad5fd581a4884111e11348677aa51207490c0568e9af028eae ;; \
+      amd64) target=linux-x64 sum=7f82148d26467874400d19ee8d23ead13cece9cd0c17648a5622cae480a5a596 ;; \
+      arm64) target=linux-arm64 sum=1b13bc1f04781f7e6767162177c3081053b5ba68a2e4fdfeb8ed1d6286dbf6e3 ;; \
       *) exit 1 ;; esac \
- && $FETCH -o /tmp/kimi "https://code.kimi.com/kimi-code/binaries/2.6.3/kimi-code-$target" \
+ && $FETCH -o /tmp/kimi "https://code.kimi.com/kimi-code/binaries/2.7.2/kimi-code-$target" \
  && echo "$sum  /tmp/kimi" | sha256sum -c - \
  && install -D -m 0755 /tmp/kimi /opt/kimi-code/bin/kimi \
  && rm /tmp/kimi
 RUN case "$TARGETARCH" in \
-      amd64) path=linux-x64/cli_linux_x64.tar.gz sum=26de25fccb3fbf0b093e090ce14a14ac1df1ec3e90ef4ea6106887d3a81b0cc9edb0dadea7b9101d07f9606eba159062a6fb7b78e91b73f7520684a24db73428 ;; \
-      arm64) path=linux-arm/cli_linux_arm64.tar.gz sum=1030d89ce9e5cb39509e272cb89b71fde0e0d5d6527b7392525d5ef2683da54fb49230449107486d91c02ded39a678faaa649b2041304a6cf82a3a332d5819d9 ;; \
+      amd64) path=linux-x64/cli_linux_x64.tar.gz sum=83311d3f354567612dc16c1ae2ea9b503d6f6833aa4e138d39aa229da3f3bb99b0e4d7cca0bce4796b0060d6a51d8113eb7449ed5dc0e7900bf217107ea5bff9 ;; \
+      arm64) path=linux-arm/cli_linux_arm64.tar.gz sum=c9b29bba475f63a1a80161ae93ba72b221c7a586d9851e4d0061546704bab66d6b2760b25d716d191724fc7564f3246456ee151e28aa37af48dbcd72bdc6c463 ;; \
       *) exit 1 ;; esac \
- && $FETCH -o /tmp/agy.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.12-5281398513336320/$path" \
+ && $FETCH -o /tmp/agy.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.14-5302690847260672/$path" \
  && echo "$sum  /tmp/agy.tar.gz" | sha512sum -c - \
  && mkdir /tmp/agy && tar -xzf /tmp/agy.tar.gz -C /tmp/agy --no-same-owner \
  && install -D -m 0755 /tmp/agy/antigravity /opt/agy/bin/agy \
@@ -115,10 +115,11 @@ RUN mkdir -p /etc/ssl/certs \
       > /etc/apt/sources.list \
  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt update \
  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt install --no-install-recommends -y \
-      bash ca-certificates curl git openssh-client ripgrep sqlite3 python3 procps tini \
+      bash ca-certificates curl duperemove git openssh-client ripgrep sqlite3 python3 procps tini \
  && apt-get install --no-install-recommends -y \
       chromium=154.0.8037.57-1~deb13u1 chromium-common=154.0.8037.57-1~deb13u1 \
       xvfb=2:21.1.16-1.3+deb13u4 x11vnc=0.9.17-1 \
+      xclip=0.13-4 xdotool=1:3.20160805.1-5.1 \
       fonts-noto-cjk=1:20240730+repack1-1 fonts-noto-color-emoji=2.051-0+deb13u1 \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd --gid 10001 orbit \
@@ -135,6 +136,7 @@ COPY --from=downloads /opt/agy/ /opt/agy/
 COPY --from=downloads /opt/orbit-engines/ /opt/orbit-engines/
 COPY --from=dsh /opt/orbit-engines/engines/ /opt/orbit-engines/engines/
 COPY --chmod=0644 deploy/managed-runner/image/pins.json /usr/local/share/orbit/pins.json
+COPY --chmod=0644 deploy/managed-runner/image/orbit-browser-opener.sh /etc/profile.d/orbit-browser-opener.sh
 ENV PATH="/usr/local/go/bin:${PATH}" \
     HOME=/home/orbit \
     ORBIT_HOME=/home/orbit/.orbit \
@@ -163,6 +165,10 @@ RUN ln -s /opt/codex/bin/codex /usr/local/bin/codex \
  && chmod 0755 /usr/local/share/orbit \
  && git config --system user.name 'Orbit Runner' \
  && git config --system user.email runner@orbit.invalid
+# An image before a944a7f362 kept home at /var/lib/orbit/home. The entrypoint moves such a volume's home to /home/orbit
+# (move_earlier_home); this link keeps the paths that home recorded inside itself (git worktree links, the runner's
+# session state) resolving there.
+RUN install -d -o root -g root -m 0755 /var/lib/orbit && ln -s /home/orbit /var/lib/orbit/home
 # What changes with every source commit comes after the slow steps above, so a new commit reuses
 # them and rebuilds only the runner binary, the entrypoint and the version record. A build argument
 # reaches every RUN after its ARG, so the source SHA must not be declared any earlier.
@@ -208,6 +214,8 @@ actual = {
     'ripgrep': version('rg', '--version'),
     'sqlite': version('sqlite3', '--version'),
     'tini': version('/usr/bin/tini', '--version'),
+    # The runner shares duplicate files on its volume with it while idle (src/runner-go/managed_dedupe.go).
+    'duperemove': package('duperemove', '/usr/bin/duperemove'),
     'opencode': version('opencode', '--version'),
     'kimi': version('kimi', '--version'),
     'agy': version('agy', '--version'),
@@ -215,6 +223,8 @@ actual = {
     'chromium': version('chromium', '--version'),
     'xvfb': package('xvfb', '/usr/bin/Xvfb'),
     'x11vnc': first_line('x11vnc', '-version'),
+    'xclip': package('xclip', '/usr/bin/xclip'),
+    'xdotool': package('xdotool', '/usr/bin/xdotool'),
     'fontsNotoCjk': package('fonts-noto-cjk'),
     'fontsNotoColorEmoji': package('fonts-noto-color-emoji'),
     'playwrightMcp': version('playwright-mcp', '--version'),
@@ -224,10 +234,11 @@ store = Path(os.environ['ORBIT_ENGINE_STORE'])
 if platform.machine() == 'x86_64':
     actual['cursor'] = version(str(store / 'cursor/versions/2026.10.14-941492e/cursor-agent'), '--version')
     actual['dsh'] = version(str(store / 'engines/dsh/0.2.0-rc.2/node_modules/.bin/dsh'), '--version')
-expected_versions = {'go': 'go1.27.1', 'node': 'v26.10.0', 'codex': 'codex-cli 0.170.0',
-                     'claude': '2.1.328 (Claude Code)', 'opencode': '1.19.6', 'kimi': '2.6.3', 'agy': '1.5.12'}
+expected_versions = {'go': 'go1.27.1', 'node': 'v26.10.0', 'codex': 'codex-cli 0.171.0',
+                     'claude': '2.1.330 (Claude Code)', 'opencode': '1.19.6', 'kimi': '2.7.2', 'agy': '1.5.14'}
 expected_versions.update(chromium='Chromium 154.0.8037.57 built on Debian GNU/Linux 13 (trixie)',
                          xvfb='2:21.1.16-1.3+deb13u4', x11vnc='x11vnc: 0.9.17 lastmod: 2025-04-11',
+                         xclip='0.13-4', xdotool='1:3.20160805.1-5.1',
                          fontsNotoCjk='1:20240730+repack1-1', fontsNotoColorEmoji='2.051-0+deb13u1',
                          playwrightMcp='Version 0.0.85')
 if platform.machine() == 'x86_64':

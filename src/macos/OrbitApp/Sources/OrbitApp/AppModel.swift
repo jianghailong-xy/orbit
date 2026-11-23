@@ -121,6 +121,9 @@ final class AppModel {
     /// stack: the page under it keeps its section, its stack and its scroll, and closing the task
     /// is clearing this. Nil on a phone, which pushes the task over the console instead.
     var taskOverPageID: String?
+    /// The Settings row an `orbit-settings:` link asked to be shown: its page scrolls to it and flashes it, then
+    /// clears this (`SettingsAnchorScroll`).
+    var settingsAnchor: String?
     /// The task whose detail fills the pane — and, in the three-column shell, the row drawn as
     /// selected. Kept under its old name so its readers (the pane, the deep-link route, the
     /// delete/404 guards, the scope switch) needed no change, with the difference that it is read
@@ -361,8 +364,10 @@ final class AppModel {
     @ObservationIgnored private var pollSleeper: Task<Void, Never>?
     /// Whether the app can be seen (docs/list-freshness-design.md §4 R3). While it cannot — on macOS
     /// hidden, minimized, covered by other windows or with its windows closed — no timed read is
-    /// made: neither the app's tick nor any page's poll (`ViewPoll`). Reads an event asks for go on,
-    /// so the menu-bar badge and the notifications stay current. See `setAppVisible`.
+    /// made: neither the app's tick nor any page's poll (`ViewPoll`). Nor does an event read: it
+    /// updates what is held in memory — the rows its payload carries, the menu-bar badge, the
+    /// notifications they post — and what it would have read is owed, once per list, until the app
+    /// is shown (`VisibilityGate.read`; the Open list's as a hint to `AppPoll`). See `setAppVisible`.
     @ObservationIgnored private(set) var appVisible = true
     /// Open-list reads in a row that failed (offline): what every page poll backs off by (§4 R2).
     var pollFailures: Int { appPoll?.failures ?? 0 }
@@ -566,6 +571,8 @@ final class AppModel {
         libraryRefreshTask?.cancel()
         libraryRefreshTask = nil
         libraryRefreshQueue = CoalescedRefreshQueue()
+        // The reads owed while hidden were the previous instance's.
+        VisibilityGate.app.forgetOwedReads()
         sessionsLoadGeneration &+= 1
         sessionsLoadTask?.cancel()
         sessionsLoadTask = nil
@@ -653,6 +660,7 @@ final class AppModel {
                                           store: ConsoleRegistry.defaultStore(for: url))
         launchSnapshots = LaunchSnapshotStore.defaultStore(for: url)
         machineSetups = [:]
+        newWorkspaceRunners = []
         // A console's fleeting confirmations ("Merged into main", "Committed changes") ride the app's
         // one toast host, not the status line above the composer — see `showToast`.
         consoleRegistry?.onToast = { [weak self] request, sessionID in
@@ -670,6 +678,9 @@ final class AppModel {
             self?.rememberDefaultPermissionMode(raw)
         }
         consoleRegistry?.managedRunner = managedRunnerModel
+        // A console's runner read is the tick's runner snapshot too: one `/runners` on the way back
+        // from hidden, not one each.
+        consoleRegistry?.onRunnersRead = { [weak self] rows in self?.adoptRunnerRows(rows) }
         consoleRegistry?.seedSessionContext = { [weak self] console in
             guard let self, let session = self.session(id: console.sessionID) else { return }
             console.seedSessionContext(
@@ -922,6 +933,8 @@ final class AppModel {
         libraryRefreshTask?.cancel()
         libraryRefreshTask = nil
         libraryRefreshQueue = CoalescedRefreshQueue()
+        // The reads owed while hidden were this account's.
+        VisibilityGate.app.forgetOwedReads()
         sessionsLoadGeneration &+= 1
         sessionsLoadTask?.cancel()
         sessionsLoadTask = nil
@@ -956,6 +969,7 @@ final class AppModel {
         }
         signedIn = false
         machineSetups = [:]
+        newWorkspaceRunners = []
         sharedWithMe = []
         sessions = []
         needsYouSessions = []
@@ -1016,8 +1030,9 @@ final class AppModel {
         #endif
     }
 
-    /// The app can be seen again, or no longer can (§4 R3). Shown again, the poll wakes at once for
-    /// the one read it owes (`AppPoll`); every page poll checks this before each read (`ViewPoll`).
+    /// The app can be seen again, or no longer can (§4 R3). Shown again, the reads events owed while
+    /// it was hidden are made, once each (`VisibilityGate.read`), and the poll wakes at once for the
+    /// one Open-list read it owes (`AppPoll`); every page poll checks this before each read (`ViewPoll`).
     func setAppVisible(_ visible: Bool) {
         guard visible != appVisible else { return }
         appVisible = visible
@@ -1110,7 +1125,7 @@ final class AppModel {
         // absent from Open by definition. Refresh only that one focused fallback so a
         // remote lifecycle change or permanent deletion cannot leave a ghost console.
         await refreshFocusedSessionDetailIfNeeded()
-        await refreshWatchesIfDue()
+        await watches?.refreshIfDue(live: controlPlaneLive)
         await refreshOwnerRequestsIfDue()
         await refreshScheduledIfDue()
         await projects?.refreshIfDue(live: controlPlaneLive)
@@ -1131,18 +1146,9 @@ final class AppModel {
         pollSleeper = nil
     }
 
-    /// The watch list's floor. `watch.changed` names a watch the moment it moves and the session and
-    /// task events nudge the list, so with the stream live this is the minute's safety read (§4 R1);
-    /// without the stream, every 30 s, as before.
-    private var watchesRefreshNotBefore = Date.distantPast
+    /// The cadence the owner requests and the schedules ride without the stream: the watch list's
+    /// (`WatchesModel.refreshIfDue`, whose floor counts from its last read, nudged or not).
     private static let watchesRefreshInterval: TimeInterval = 30
-
-    private func refreshWatchesIfDue(now: Date = Date()) async {
-        guard now >= watchesRefreshNotBefore, let watches else { return }
-        watchesRefreshNotBefore = now.addingTimeInterval(
-            controlPlaneLive ? PollSchedule.liveFallback : Self.watchesRefreshInterval)
-        await watches.load()
-    }
 
     /// The owner requests' floor: no event names them, so they ride the watches' cadence — a minute
     /// apart with the control stream live, 30 s without it — and every press reads its answer back.
@@ -1174,6 +1180,7 @@ final class AppModel {
         selectedSection = .scheduled
         nav.path = []
         scheduled?.draftPanel = nil
+        scheduled?.changeDraft = nil
         scheduled?.inspectedID = id
     }
 
@@ -1182,6 +1189,7 @@ final class AppModel {
         ownerRequests?.inboxPresented = false
         scheduled?.inspectedID = nil
         scheduled?.draftPanel = nil
+        scheduled?.changeDraft = nil
         route(to: .session(sessionID), inScheduledRuns: true)
     }
 
@@ -1269,9 +1277,25 @@ final class AppModel {
     /// has to be read again — but only the Open list, by its conditional read, and what is on screen.
     /// A connection used to re-read every library the app holds, 12–20 requests, and a proxy that
     /// accepted and dropped the stream every second turned that into thousands a minute.
+    ///
+    /// A connection made while the app cannot be seen reads nothing (§4 R3): the Open list is owed to
+    /// the poll as a hint, and the rest is aligned once, when the app is shown — with whatever is on
+    /// screen then.
     private func reconcileOnConnect() async {
+        guard appVisible else {
+            appPoll?.hint(version: nil, at: Date())
+            VisibilityGate.app.read("app.reconnect") { [weak self] in
+                Task { await self?.alignOnScreenAfterConnect() }
+            }
+            return
+        }
         appPoll?.noteOpenRead(at: Date())
         await loadSessions()   // rebuild from snapshot, then follow
+        await alignOnScreenAfterConnect()
+    }
+
+    /// What a connection reads besides the Open list: what is on screen, and the libraries that never loaded.
+    private func alignOnScreenAfterConnect() async {
         await refreshFocusedSessionDetailIfNeeded()
         // The tasks the console on screen draws in its card.
         nudgeCreatedTasks()
@@ -1358,7 +1382,7 @@ final class AppModel {
         if let (workspaceID, clone) = WorkspaceClone.event(type: ev.type.rawValue, data: ev.data,
                                                            envelopeAgentID: ev.agentId) {
             guard cloneLedger.hear(workspaceID, clone) else { return }
-            consoleRegistry?.cloneStateMoved(workspaceID: workspaceID)
+            whenSeen("clone:\(workspaceID)") { $0.consoleRegistry?.cloneStateMoved(workspaceID: workspaceID) }
         }
         switch ControlEventRoute.of(ev) {
         // A task event carries the changed row ids. Fold those exact rows into the loaded page;
@@ -1402,7 +1426,9 @@ final class AppModel {
         // the project: its conversations' decision cards are read again, and its summary with them.
         // It moves no session row.
         case .projectDecisions(let projectID):
-            consoleRegistry?.criteriaDecisionsChanged(projectID: projectID)
+            whenSeen("criteria-decisions:\(projectID ?? "*")") {
+                $0.consoleRegistry?.criteriaDecisionsChanged(projectID: projectID)
+            }
             nudgeProjects()
         // The server named a watch: made, edited, paused, resumed, stopped, matched, expired, ended,
         // or a delivery of it delivered or dead-lettered (docs/watch-contract.md §8.1). The watch
@@ -1414,22 +1440,26 @@ final class AppModel {
         // included). It moves no session row: falling through to the snapshot below would be the web's
         // `groupsFor` default of `['sessions']`, a list refetch for an event about something else.
         case .wiki:
-            wiki?.nudge()
-            // A card made, replaced or pressed, or its rewrite moving (contract `chat.realtime`).
-            wikiChat?.nudge()
+            whenSeen("wiki") {
+                $0.wiki?.nudge()
+                // A card made, replaced or pressed, or its rewrite moving (contract `chat.realtime`).
+                $0.wikiChat?.nudge()
+            }
         // A terminal asked to be approved, a request was decided, or a terminal was revoked: the approve card's
         // requests and Settings → Terminals are read again, and nothing else.
         case .terminals:
-            Task {
-                await ownerRequests?.loadTerminalRequests()
-                await terminals?.load()
+            whenSeen("terminals") { app in
+                Task {
+                    await app.ownerRequests?.loadTerminalRequests()
+                    await app.terminals?.load()
+                }
             }
         // A folder was created, renamed or deleted, here or on another device: re-read the library
         // the Move panel lists (docs/session-folders-move-design.md §5.6). The event names the folder
         // and nothing else, and a session moved between folders is a `session.updated` of its own,
         // so this refetches no list.
         case .folders:
-            Task { await loadSessionFolders() }
+            whenSeen("folders") { app in Task { await app.loadSessionFolders() } }
         // AgentsModel.load() fetches the provider catalog with the list; provider edits do not
         // change task-row membership or live overlays.
         case .providers:
@@ -1438,11 +1468,13 @@ final class AppModel {
             // A shared pool's people are told of every change to it — a key going in, a rule — so a
             // pool page that is open shows it. Read only once Machines & models has asked for the list —
             // and the account's own keys likewise, which only that page reads.
-            if sharedPools?.loadState.hasLoaded == true {
-                Task { await sharedPools?.load() }
-            }
-            if agents?.ownKeysState.hasLoaded == true {
-                Task { await agents?.loadOwnKeys() }
+            whenSeen("providers") { app in
+                if app.sharedPools?.loadState.hasLoaded == true {
+                    Task { await app.sharedPools?.load() }
+                }
+                if app.agents?.ownKeysState.hasLoaded == true {
+                    Task { await app.agents?.loadOwnKeys() }
+                }
             }
         case .sessionRow:
             if let summary = ev.payload(ControlSessionSummary.self) {
@@ -1496,13 +1528,15 @@ final class AppModel {
         // A tag was made, renamed, recolored or deleted: the library the picker and the chips read,
         // and the Open list, whose rows draw a tag's name and color.
         case .tags:
-            Task { await loadSessionTags() }
+            whenSeen("tags") { app in Task { await app.loadSessionTags() } }
             scheduleControlRefresh()
         // The translator started or stopped being skipped: the composer's language tag reads the account's
         // `translationUnavailableUntil`, so the account is read again.
         case .account:
-            Task { @MainActor [weak self] in
-                if let self, let me = try? await self.api?.me() { self.assignIfChanged(\.user, me) }
+            whenSeen("account") { app in
+                Task { @MainActor [weak app] in
+                    if let app, let me = try? await app.api?.me() { app.assignIfChanged(\.user, me) }
+                }
             }
         // The reserved `notification` channel, and any type this client does not know: nothing to read.
         case .nothing:
@@ -1515,6 +1549,15 @@ final class AppModel {
     private func nudgeProjects() {
         projects?.nudge()
         projectHints &+= 1
+    }
+
+    /// A read an event asks for (§4 R3): made now while the app can be seen; while it cannot, owed
+    /// under `key` — one read however many events ask — and made once when it is shown again.
+    private func whenSeen(_ key: String, _ read: @escaping (AppModel) -> Void) {
+        VisibilityGate.app.read("app.\(key)") { [weak self] in
+            guard let self else { return }
+            read(self)
+        }
     }
 
     /// A row saying "Under review" stops saying it when its review's window runs out, which nothing on
@@ -1559,7 +1602,8 @@ final class AppModel {
         if let cached = sessionDetails.resolve(summary.id) {
             sessionDetails.store(cached.applyingCoordinatorHandoff(summary))
         } else if consoleRegistry?.peek(summary.id) != nil {
-            refreshUnlistedSession(summary.id, adoptingAgent: false)
+            let id = summary.id
+            whenSeen("unlisted-session:\(id)") { $0.refreshUnlistedSession(id, adoptingAgent: false) }
         }
     }
 
@@ -1616,7 +1660,14 @@ final class AppModel {
 
     /// Strict single-flight with trailing-edge drain. `take()` clears only the work already seen;
     /// an event that arrives during either awaited load remains pending for the next pass.
+    ///
+    /// While the app cannot be seen the queue only gathers (§4 R3): the drain is owed, and on the way
+    /// back one pass reads what every event meanwhile asked for.
     private func startLibraryRefreshDrain() {
+        guard appVisible else {
+            whenSeen("library") { $0.startLibraryRefreshDrain() }
+            return
+        }
         guard libraryRefreshTask == nil else { return }
         libraryRefreshGeneration &+= 1
         let generation = libraryRefreshGeneration
@@ -1626,6 +1677,11 @@ final class AppModel {
                 do { try await Task.sleep(nanoseconds: 200_000_000) }
                 catch { break }
                 guard self.libraryRefreshGeneration == generation else { break }
+                // Hidden since it was asked: what is queued waits for the app to be shown.
+                guard self.appVisible else {
+                    self.whenSeen("library") { $0.startLibraryRefreshDrain() }
+                    break
+                }
 
                 let pass = self.libraryRefreshQueue.take()
                 if pass.fullTargets.contains(.agents) {
@@ -1656,7 +1712,14 @@ final class AppModel {
     /// reach here, and this is a whole-list fetch + re-render, so the window matches web's 500ms
     /// rather than the old 200ms — with several sessions running, that alone was up to five
     /// full refreshes a second.
+    ///
+    /// While the app cannot be seen nothing is read (§4 R3): the read is owed to the poll as a hint,
+    /// which makes the one conditional Open-list read when the app is shown, the floors behind it.
     private func scheduleControlRefresh() {
+        guard appVisible else {
+            appPoll?.hint(version: nil, at: Date())
+            return
+        }
         controlRefreshPending = true
         guard controlRefreshTask == nil else { return }
         controlRefreshGeneration &+= 1
@@ -1668,6 +1731,11 @@ final class AppModel {
                 catch { break }
                 guard self.controlRefreshGeneration == generation else { break }
                 self.controlRefreshPending = false
+                // Hidden since it was asked: the poll owes the read instead.
+                guard self.appVisible else {
+                    self.appPoll?.hint(version: nil, at: Date())
+                    break
+                }
                 // This read answers the hints before it, and the poll's minute read counts from it.
                 self.appPoll?.noteOpenRead(at: Date())
                 await self.loadSessions()
@@ -2117,10 +2185,23 @@ final class AppModel {
         show(.compose(agentID: id, folderID: nil), agent: id)
     }
 
-    /// A schedule's Change… (board 01 ③ 1): no form — a new conversation in the schedule's workspace, where the
-    /// change is said and its card or record comes back.
+    /// A schedule's Change… (§8.2, board 03-change): the schedule's open change conversation if it has one,
+    /// else a draft change conversation — Orbit's opening and a composer, nothing written yet — whose first
+    /// words open the session. No form, and no blank composer: the conversation knows its schedule.
     func openChangeConversation(for schedule: ScheduleView) {
-        show(.compose(agentID: schedule.workspaceId, folderID: nil), agent: schedule.workspaceId)
+        Task { @MainActor in
+            guard let answer = await scheduled?.changeConversation(schedule.id) else { return }
+            if let sessionID = answer.sessionId {
+                scheduled?.changeDraft = nil
+                route(to: .session(sessionID))
+            } else {
+                selectedSection = .scheduled
+                nav.path = []
+                scheduled?.draftPanel = nil
+                scheduled?.inspectedID = nil
+                scheduled?.changeDraft = ScheduledModel.ChangeDraft(scheduleID: schedule.id)
+            }
+        }
     }
 
     private func newSessionWithNoWorkspace() {
@@ -2196,6 +2277,29 @@ final class AppModel {
         }
     }
 
+    /// Open Settings at one row (an `orbit-settings:` link's Open in Settings, design §6): the page that holds it
+    /// — on iOS the sheet, pushed to that page — with the row asked to scroll into view and flash. Theme, which
+    /// has no page of its own on the phone, opens Settings' own list.
+    func openSettings(at place: SettingPlace) {
+        settingsAnchor = place.key
+        #if os(iOS)
+        if let page = place.page { nav.openSettings(at: page) } else { nav.openSettings() }
+        #else
+        selectedSection = .settings
+        #endif
+    }
+
+    /// Undo of a change made from a conversation (design §5.3): the owner's own preferences PATCH.
+    func undoSettingsChange(_ values: [String: JSONValue]) async throws {
+        guard let api, !values.isEmpty else { return }
+        user = try await api.undoSettingsChange(values)
+    }
+
+    /// The account read again, for the marks a just-applied card wrote.
+    func reloadUser() async {
+        if let me = try? await api?.me() { assignIfChanged(\.user, me) }
+    }
+
     /// Settings → GitHub: the sheet's page on iOS, the Settings section on the Mac, where GitHub is a group of its form.
     func showGithubSettings() {
         #if os(iOS)
@@ -2242,6 +2346,28 @@ final class AppModel {
     func openMachineDraft(_ runnerID: String) {
         selectedSection = .agents
         nav.openMachineDraft(runnerID: runnerID)
+    }
+
+    /// The machines whose new session page was opened as New workspace while they had a workspace already
+    /// (docs/mocks/new-workspace-form/02-apple-entry, owner A 2026-11-20), by storage key: that page makes one more
+    /// rather than moving on to the first.
+    private(set) var newWorkspaceRunners: Set<String> = []
+
+    func addsWorkspace(on runnerID: String) -> Bool {
+        newWorkspaceRunners.contains(PublicID.storageKey(runnerID))
+    }
+
+    /// New workspace on a machine, from the Workspaces group's + or the machine page's row: its new session page,
+    /// with the setup card, whatever the machine holds. One with no workspace yet gets the page its Set up row opens.
+    func openNewWorkspace(_ runnerID: String) {
+        settingsPresented = false
+        let key = PublicID.storageKey(runnerID)
+        if agents?.firstWorkspace(onRunner: runnerID) != nil {
+            newWorkspaceRunners.insert(key)
+        } else {
+            newWorkspaceRunners.remove(key)
+        }
+        openMachineDraft(runnerID)
     }
 
     // MARK: Shared with me — the sessions other people invited this account to reply in
@@ -2312,6 +2438,7 @@ final class AppModel {
                                                                             runnerID: runnerID))
             await agents?.load()
             machineSetups[PublicID.storageKey(runnerID)] = nil
+            newWorkspaceRunners.remove(PublicID.storageKey(runnerID))
             if machineDraftRunnerID == runnerID { show(.compose(agentID: made.id, folderID: nil), agent: made.id) }
             return nil
         } catch {
@@ -2322,7 +2449,8 @@ final class AppModel {
     /// The machine got a workspace some other way (another device, the web's form): the page moves on
     /// to it, and what was being set up here no longer applies.
     func machineGotWorkspace(_ runnerID: String) {
-        guard machineDraftRunnerID == runnerID, let workspace = agents?.firstWorkspace(onRunner: runnerID)
+        guard machineDraftRunnerID == runnerID, !addsWorkspace(on: runnerID),
+              let workspace = agents?.firstWorkspace(onRunner: runnerID)
         else { return }
         machineSetups[PublicID.storageKey(runnerID)] = nil
         show(.compose(agentID: workspace.id, folderID: nil), agent: workspace.id)
@@ -2332,6 +2460,7 @@ final class AppModel {
     func leaveMachineDraft(_ runnerID: String) {
         guard machineDraftRunnerID == runnerID else { return }
         machineSetups[PublicID.storageKey(runnerID)] = nil
+        newWorkspaceRunners.remove(PublicID.storageKey(runnerID))
         nav.popToRoot()
     }
 
@@ -2884,6 +3013,58 @@ final class AppModel {
         }
     }
 
+    /// Pause on a started project's row (design §4.3): nothing new starts or merges; runs already going
+    /// finish. No confirmation, because Undo (a Resume) takes it back.
+    func pauseProject(_ row: SessionProjectRow) {
+        guard let api else { return }
+        Task { @MainActor in
+            do { _ = try await api.pauseProject(row.projectId) }
+            catch {
+                showPauseRefusal(error, row: row, resuming: false)
+                return
+            }
+            await projects?.load()
+            showToast(SessionProjectCopy.pausedTitle, subtitle: row.title,
+                      detail: SessionProjectCopy.pausedStill(running: row.runningCount),
+                      icon: "pause.fill", undo: { [weak self] in self?.resumeProject(row) })
+        }
+    }
+
+    /// Resume: the daily limit's episode when that paused it, the owner's pause when that did, both
+    /// when both. Neither raises the limit, and only the limit's says so in a toast.
+    func resumeProject(_ row: SessionProjectRow) {
+        guard let api else { return }
+        let calls = row.resumeCalls
+        Task { @MainActor in
+            do {
+                for call in calls {
+                    switch call {
+                    case .fuse(let episodeID): _ = try await api.resumeProjectFuse(projectID: row.projectId, episodeID: episodeID)
+                    case .owner: _ = try await api.resumeProject(row.projectId)
+                    }
+                }
+            } catch {
+                showPauseRefusal(error, row: row, resuming: true)
+                await projects?.load()
+                return
+            }
+            await projects?.load()
+            if calls.contains(where: { if case .fuse = $0 { return true } else { return false } }) {
+                showToast(SessionProjectCopy.resumedTitle, subtitle: row.title,
+                          detail: SessionProjectCopy.resumedLimitNote, icon: "play.fill")
+            }
+        }
+    }
+
+    private func showPauseRefusal(_ error: Error, row: SessionProjectRow, resuming: Bool) {
+        var status: Int?
+        var body: String?
+        if case APIError.http(let code, let text) = error { status = code; body = text }
+        showToast(SessionProjectCopy.refusedTitle(resuming: resuming), subtitle: row.title,
+                  detail: SessionProjectCopy.refusedReason(status: status, body: body, resuming: resuming),
+                  tone: .error)
+    }
+
     /// Move a completed/trashed session back to Open (also the Undo target).
     func moveSessionToOpen(_ id: String) {
         guard let api else { return }
@@ -3141,8 +3322,9 @@ final class AppModel {
     /// runner's next heartbeats (60 s apart) without waiting on the list's own refresh.
     func refreshMainCheckoutSoon() {
         Task { @MainActor [weak self] in
-            for seconds in [5, 30, 70] as [UInt64] {
-                try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+            for seconds in [5, 30, 70] as [TimeInterval] {
+                // Not while the app cannot be seen (§4 R3): shown again, the read it missed is made once.
+                await VisibilityGate.app.pause(seconds)
                 await self?.agents?.load()
             }
         }

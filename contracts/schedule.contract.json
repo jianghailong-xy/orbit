@@ -51,6 +51,7 @@
     ],
     "failureReasons": [
       "RUNNER_UNAVAILABLE",
+      "RUNNER_FULL",
       "QUOTA",
       "ENGINE_CRASHED_BEFORE_START",
       "REPORTED_FAILED",
@@ -285,6 +286,7 @@
     },
     "failureReasons": {
       "RUNNER_UNAVAILABLE": "found no runner online",
+      "RUNNER_FULL": "waited for a full runner until its window closed",
       "QUOTA": "hit the engine's usage limit",
       "ENGINE_CRASHED_BEFORE_START": "stopped before its engine started",
       "REPORTED_FAILED": "reported a failure",
@@ -427,6 +429,30 @@
       "WORKSPACE": "Keep in {workspace}",
       "other": "Keep as it is"
     },
+    "every": {
+      "minutes": "Every {count} min",
+      "hour": "Every hour",
+      "hours": "Every {count} hours",
+      "window": "{interval}, {time}–{until}",
+      "from": "{interval} from {time}",
+      "days": "{rule}, {days}",
+      "workweek": "Mon–Fri",
+      "weekend": "weekends"
+    },
+    "end": {
+      "until": "until {when}",
+      "today": "{time} today",
+      "tomorrow": "{time} tomorrow",
+      "runLeft": "1 run left",
+      "runsLeft": "{count} runs left",
+      "missed": "{count} slots missed, {from}–{to}",
+      "missedDated": "{count} slots missed, {fromDate}, {from}–{toDate}, {to}",
+      "endLabel": "Ends",
+      "extend": "Extend the end",
+      "remove": "Remove the end",
+      "extendAsk": "{title}: extend the end",
+      "removeAsk": "{title}: remove the end"
+    },
     "history": {
       "who": {
         "USER": "You",
@@ -441,6 +467,7 @@
         "rule": "Time",
         "timezone": "Time zone",
         "endAt": "Ends",
+        "maxRuns": "Runs",
         "accessLevel": "Access",
         "runLimitMinutes": "Run limit",
         "workspaceId": "Workspace",
@@ -456,6 +483,20 @@
       "ended": "Ended: {reason}",
       "minutes": "{minutes} min",
       "noEnd": "no end"
+    },
+    "changeConversation": {
+      "title": "Change {title}",
+      "lead": "What should change about {title}? This is what it does now:",
+      "does": "Does",
+      "when": "When",
+      "runsIn": "Runs in",
+      "may": "May",
+      "costs": "Costs",
+      "tail": "I can change the time, the days, what it checks and how it reports right away, and you can undo it. More runs, longer runs, more access or another workspace need your Allow.",
+      "placeholder": "Say what to change…",
+      "openSchedule": "Open",
+      "openInScheduled": "Open in Scheduled",
+      "conversation": "conversation"
     },
     "record": {
       "changed": "Changed {title}: {change}",
@@ -523,7 +564,8 @@
     },
     "push": {
       "failedBody": "The last run {reason}. It keeps running until you pause it.",
-      "goalReachedTitle": "{title} ended itself"
+      "goalReachedTitle": "{title} ended itself",
+      "stoppedAsPlanned": "Stopped as planned after {runs}"
     },
     "empty": {
       "lead": "Nothing scheduled. Say what should happen and when; an agent sets it up and asks you once.",

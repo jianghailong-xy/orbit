@@ -1,7 +1,7 @@
 # Managed runners on Docker: backup, restore and failure handling
 
 This runbook is for a deployment whose managed runners run on its own Docker: a new deployment that
-`scripts/install-server.sh` installed, or one an administrator switched on with `--enable-managed-runners`
+`scripts/install-server.sh --managed-runners` installed, or one an administrator switched on with `--enable-managed-runners`
 ([Self-hosting](self-hosting.md#managed-runners)). Every account has a runner of its own: a container
 `mr-<runner uuid>` and a data volume `mr-data-<runner uuid>` on this host's disk. The volume holds the account's
 checkouts, sessions, uploads and engine sign-ins, and nothing else keeps a copy of it.
@@ -55,7 +55,7 @@ The procedures carry over with those substitutions:
 - **Back up, check, restore a volume:** `volume-backup.sh` on the channel host, and the backup copied off it with
   `data/channel-host`. Disabling the account and the query that shows it `SLEEPING` are the server's.
 - **Delete a volume:** `allowVolumeRemoval` in `data/channel-host/channel.json`, then
-  `ch run --rm docker-channel check-config --config /var/lib/orbit-managed-runners/channel.json` and
+  `ch run --rm docker-channel check-config --config /var/lib/orbit-cloud-runners/channel.json` and
   `ch up -d --force-recreate docker-channel` on the channel host; the `DELETE` from the server, as above.
 - **The channel is down:** `ch logs` and `ch up -d docker-channel` on the channel host. Only that host's runners wait
   (`CHANNEL_UNREACHABLE`).
@@ -69,6 +69,25 @@ The procedures carry over with those substitutions:
   there; keep it that way. A channel host always runs its firewall: the kit has no way to turn it off.
 - **Settings:** the `channel.json` and `firewall/config.json` rows of [Where each setting lives](#where-each-setting-lives)
   are the channel host's, applied with `ch`; the `profile.json` rows are the server's.
+
+## Names from before orbit-cloud (2026-11-20)
+
+Until 2026-11-20 these names said `orbit-managed`; they now say `orbit-cloud`. A host installed before then keeps working
+without changes:
+
+- Compose mounts the managed runners' directory at `/var/lib/orbit-cloud-runners`, and also at
+  `/var/lib/orbit-managed-runners`, the path that `channel.json` and `profile.json` from an earlier install name.
+  The remote-host kit's `compose.yml` does the same.
+- The runners' network is whatever `channel.json` names. A host installed earlier keeps `orbit-managed-runners`, and
+  `--enable-managed-runner-firewall` firewalls that network. A new install makes `orbit-cloud-runners`.
+- The firewall's image and container are `orbit-cloud-runner-firewall`, and its rules carry the comment
+  `orbit-cloud-runners`. It finds its own rules by the chain they jump to, not by that comment. So when it is next
+  recreated (a remote host's `upgrade`, or `--enable-managed-runner-firewall`), it replaces the rules the earlier
+  container made, and Compose replaces that container. `/upgrade` still leaves the firewall as it is.
+- The runner image is tagged `orbit-cloud-runner:local`. `channel.json` and `profile.json` name it by its image ID, so
+  the tag's name changes nothing that runs.
+- A runner container made from an image built before the rename sends `X-Orbit-Managed-Runner-*` headers. The apiserver
+  reads them as well as `X-Orbit-Cloud-Runner-*`.
 
 ## What there is to keep
 
@@ -131,7 +150,7 @@ the manager takes the stop for a crash and starts the runner again at once, on t
 
 ```bash
 V=mr-data-<runner uuid>
-B=/var/backups/orbit-managed-runners/$(date -u +%Y%m%dT%H%M%SZ)
+B=/var/backups/orbit-cloud-runners/$(date -u +%Y%m%dT%H%M%SZ)
 scripts/managed-runner/volume-backup.sh backup "$V" "$B"
 ```
 
@@ -229,7 +248,7 @@ runner again, and in this order:
    start the channel on it:
 
    ```bash
-   docker compose run --rm docker-channel check-config --config /var/lib/orbit-managed-runners/channel.json
+   docker compose run --rm docker-channel check-config --config /var/lib/orbit-cloud-runners/channel.json
    docker compose up -d --force-recreate docker-channel
    ```
 
@@ -368,7 +387,7 @@ presses Retry:
 - **Raise its limit.** Add the volume to `volumeLimitOverrides` in `data/managed-runners/channel.json`, then restart
   only the channel (`docker compose up -d --force-recreate docker-channel`). Its owner presses Retry. A malformed
   entry stops the channel from starting at all, so check it with
-  `docker compose run --rm docker-channel check-config --config /var/lib/orbit-managed-runners/channel.json`.
+  `docker compose run --rm docker-channel check-config --config /var/lib/orbit-cloud-runners/channel.json`.
 
   ```json
   "volumeLimitOverrides": { "mr-data-<runner uuid>": 42949672960 }
@@ -662,12 +681,12 @@ and a single-label name. Over plain HTTP the credential crosses whatever network
 address.
 
 **Point `serverUrl` only at this host's own address on the managed runners' network: the gateway of
-`orbit-managed-runners`, where the gateway's published port 2086 answers. Use `https://` for anything else.** The
-install writes exactly that (`http://<gateway of orbit-managed-runners>:2086`), and it is the one address and port of
+`orbit-cloud-runners`, where the gateway's published port 2086 answers. Use `https://` for anything else.** The
+install writes exactly that (`http://<gateway of orbit-cloud-runners>:2086`), and it is the one address and port of
 this host the managed runners' firewall leaves a runner (its `gateway` and `apiPort`). To check a deployment:
 
 ```bash
-docker network inspect orbit-managed-runners -f '{{range .IPAM.Config}}{{.Gateway}} {{end}}'
+docker network inspect orbit-cloud-runners -f '{{range .IPAM.Config}}{{.Gateway}} {{end}}'
 grep '"serverUrl"' data/managed-runners/profile.json      # http://<that gateway>:2086, or an https:// URL
 ```
 
@@ -701,7 +720,7 @@ traffic to private ranges (`DOCKER-USER`). Keep host services bound to loopback 
 
 ## The managed runners' firewall
 
-A new deployment firewalls its managed runners' network on this host (`managed-runner-firewall`,
+A new deployment with managed runners firewalls their network on this host (`managed-runner-firewall`,
 [deploy/managed-runner/firewall](../deploy/managed-runner/firewall/README.md)): from that network a runner reaches the
 gateway's published port at the network's gateway address, DNS, and public addresses. Every other port of this host,
 on any of its addresses, and every private, shared, link-local and reserved address behind it is refused, the cloud
@@ -720,8 +739,8 @@ docker compose run --rm --no-deps managed-runner-firewall show    # the rules as
 And from the network itself, without privilege, as the install checks it:
 
 ```bash
-GW="$(docker network inspect orbit-managed-runners -f '{{range .IPAM.Config}}{{.Gateway}}{{end}}')"
-docker run --rm --network orbit-managed-runners --user 65534:65534 orbit-managed-runner-firewall:local \
+GW="$(docker network inspect orbit-cloud-runners -f '{{range .IPAM.Config}}{{.Gateway}}{{end}}')"
+docker run --rm --network orbit-cloud-runners --user 65534:65534 orbit-cloud-runner-firewall:local \
   probe --reach "$GW:2086" --blocked "$GW:22" --blocked 169.254.169.254:80 --blocked 10.255.255.1:9 --resolve github.com
 ```
 
@@ -741,7 +760,7 @@ pod, NodePort or node address, also in the seconds after kube-router moves its j
 configured for it. Check it as above, and also:
 
 ```bash
-iptables -S FORWARD | sed -n 2p              # -A FORWARD -i br-… -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD
+iptables -S FORWARD | sed -n 2p              # -A FORWARD -i br-… -m comment --comment orbit-cloud-runners -j ORBIT-MR-FORWARD
 iptables -t nat -S PREROUTING | sed -n 2p    # -A PREROUTING -i br-… … -j ORBIT-MR-PREROUTING, before KUBE-SERVICES
 iptables -t raw -S PREROUTING | sed -n 2p    # -A PREROUTING -i br-… … -j ORBIT-MR-RAW
 ip rule | sed -n 2p                          # 1:  from all fwmark 0x100000/0x100000 iif br-… prohibit
@@ -846,13 +865,13 @@ firewall's log says what is wrong (`docker compose logs managed-runner-firewall`
 - **"Docker's chains are in neither iptables backend":** Docker was switched to its nftables backend, or to
   `"iptables": false`. Switch it back, or turn the firewall off.
 - **"the bridge … is not in this network namespace", or the channel's "its rules are for the bridge …, and network
-  orbit-managed-runners has … now":** the network was removed and made again. Its gateway may have changed too, and with
+  orbit-cloud-runners has … now":** the network was removed and made again. Its gateway may have changed too, and with
   it `runner.serverUrl` ([Plain HTTP to the server](#plain-http-to-the-server-only-on-this-hosts-container-network)).
   Set `bridge` (`br-` and the first 12 characters of the network's ID) and `gateway` in `config.json` from
-  `docker network inspect orbit-managed-runners -f '{{.Id}} {{json .IPAM.Config}}'`, then
+  `docker network inspect orbit-cloud-runners -f '{{.Id}} {{json .IPAM.Config}}'`, then
   `docker compose restart managed-runner-firewall`.
 - **Runners resolve no names after Docker's `dns` setting (daemon.json) changed:** read the servers Docker now forwards
-  to from the network, `docker run --rm --network orbit-managed-runners orbit-managed-runner-firewall:local docker-dns`,
+  to from the network, `docker run --rm --network orbit-cloud-runners orbit-cloud-runner-firewall:local docker-dns`,
   into `dnsServers`, and restart the service. With the host's own resolv.conf the list is empty: Docker forwards those
   queries from the host's namespace, which the rules do not see.
 

@@ -44,6 +44,10 @@ const (
 	// envSubagentRunID marks an engine started as a SubAgent. Its `orbit mcp` offers no delegate tool:
 	// a SubAgent cannot hand work on again (§0).
 	envSubagentRunID = "ORBIT_SUBAGENT_RUN_ID"
+	// envSubagentRemoteMode is the permission mode a remote SubAgent was claimed in (docs/subagent-design.md §10.2).
+	// Its machine hosts no socket for the parent session, so this is the mode Orbit's Plan gate reads for it
+	// (sessionPermissionMode).
+	envSubagentRemoteMode = "ORBIT_SUBAGENT_REMOTE_MODE"
 
 	delegateToolName = "delegate"
 	// The tool's name as the parent's engine reports it, which the events ingest counts (RUNTIME_SUBAGENT_TOOLS).
@@ -185,14 +189,15 @@ func delegateToolDescriptor(obj func(map[string]interface{}, ...string) map[stri
 			" records its cost and brings its result back even if this engine is recycled." +
 			" It sees your uncommitted changes, edits files directly and never commits;" +
 			" its edits stay in your working tree for you to review and commit. Its progress is shown nested under this" +
-			" call. In the foreground (the default) the call returns { runId, status, result, changedFiles, model, costUsd }" +
+			" call. In the foreground (the default) the call returns { runId, status, result, changedFiles, model, costUsd, rate }" +
 			" when it ends; if it runs longer than this call may wait, the call returns status \"running\" and Orbit starts" +
 			" a turn in this session with the result when it ends: end your turn then instead of polling. With" +
 			" background: true it returns { runId, status: \"running\" } at once and Orbit wakes this session with the" +
 			" result when it ends. SubAgents share your working tree; give parallel ones disjoint files. A SubAgent cannot" +
 			" ask the user anything and cannot delegate further. With workspace (any workspace of this account, by" +
 			" name) or needs (runner capabilities such as \"os:darwin\"), it runs on that workspace's machine instead:" +
-			" remote SubAgents run on that workspace's own HEAD in its own repository and return text only. They do not see your uncommitted" +
+			" remote SubAgents run on that workspace's own HEAD in its own repository and return text only, plus" +
+			" any file they keep with file_upload. They do not see your uncommitted" +
 			" changes (commit and push first if they must), and nothing they change comes back; the result names what" +
 			" they discarded. Before naming a workspace, provider_list with that workspace says which provider × engine" +
 			" its runner can run, with the reason for each it cannot. " + subagentTypesDescription(defs),
@@ -308,6 +313,9 @@ func delegateResult(r subagentReport) map[string]interface{} {
 	}
 	if r.Workspace != "" {
 		out["workspace"] = r.Workspace
+	}
+	if r.Status != subagentStatusRunning {
+		out["rate"] = "Once you have used this result, rate it with subagent_rate (runId, score 1-5, optional note): 1 discarded or redone, 3 usable after fixes, 5 used as-is. Optional; nothing waits on it."
 	}
 	return toolResult(prettyJSON(subagentJSON(out)), r.Status == subagentStatusFailed)
 }
@@ -777,10 +785,13 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 		toolUseID = "delegate_" + strings.TrimPrefix(id, "bgj_")
 	}
 	body := subagentStartBody(args, def, toolUseID, background)
-	if resumeFrom != nil && resumeFrom.Workspace != "" {
-		// The server sends it to the workspace and runner that ran it, which continues its conversation (§10.2).
+	if resumeFrom != nil {
+		// The server opens it where it ran: on another workspace's runner (§10.2), or here on the engine, provider and model
+		// its last attempt ran on, which hold its conversation, rather than routing it again.
 		body["resumeOf"] = resumeFrom.RunID
-		body["prompt"] = prompt
+		if resumeFrom.Workspace != "" {
+			body["prompt"] = prompt
+		}
 	}
 	if description := strings.TrimSpace(getString(args, "description")); description != "" {
 		body["description"] = description
@@ -836,6 +847,14 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 	}
 	engine := subagentEngine(created.Exec, s.job)
 	if resumeFrom != nil && resumeFrom.Engine != "" {
+		if engine != resumeFrom.Engine {
+			// A control plane that routed the resume afresh, onto another engine: that engine would get the model and
+			// credential without the conversation, and the conversation's engine a model it cannot run.
+			why := fmt.Sprintf("the control plane would resume it on %s, but its conversation is %s's. Start a new SubAgent with the full brief instead",
+				engine, resumeFrom.Engine)
+			s.patchSubagent(created.RunID, subagentReport{RunID: created.RunID, Status: subagentStatusFailed, Result: "The SubAgent failed: " + why + "."}, nil, false)
+			return subagentReport{}, errors.New(why)
+		}
 		engine = resumeFrom.Engine
 	}
 	engineSession, stateDir := "", subagentDir(s.sessionID, created.RunID)
@@ -1608,6 +1627,17 @@ func subagentChildJob(parent *ClaimedSession, exec AgentExecConfig, def subagent
 			// The server already narrows a read-only run on any other engine to plan mode (§5.3); kept here so the
 			// child never reads wider.
 			child.Agent.PermissionMode = "plan"
+			// Plan mode asks about every shell call; the parent's mode, read when one is asked, answers it instead
+			// (owner, 2026-11-20; kimiReadonlyShellFollowsParent).
+			parentLive, parentMode := parent.liveMode, parent.Agent.PermissionMode
+			child.readonlyParentMode = func() string {
+				if parentLive != nil {
+					if mode := parentLive.current(); mode != "" {
+						return mode
+					}
+				}
+				return parentMode
+			}
 		}
 	}
 	child.RuntimeSessionID = engineSession

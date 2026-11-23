@@ -22,6 +22,7 @@ function resumable(overrides: Record<string, unknown> = {}) {
     completedAt: null,
     archivedAt: null,
     deletedAt: null,
+    finishedAt: NOW,
     cancelRequestedAt: NOW,
     startedAt: new Date('2026-08-01T10:00:00.000Z'),
     numTurns: 1,
@@ -100,8 +101,8 @@ test('terminal cancelRequestedAt is historical, not an ENDING resume blocker', (
 test('capability blockers follow the mutation guard ordering', () => {
   const cases = [
     [{ deletedAt: NOW }, 'TRASHED'],
-    [{ status: RunStatus.RUNNING, cancelRequestedAt: NOW }, 'ENDING'],
-    [{ status: RunStatus.RUNNING, cancelRequestedAt: null }, 'NOT_TERMINAL'],
+    [{ status: RunStatus.RUNNING, finishedAt: null, cancelRequestedAt: NOW }, 'ENDING'],
+    [{ status: RunStatus.RUNNING, finishedAt: null, cancelRequestedAt: null }, 'NOT_TERMINAL'],
     [{ startedAt: null }, 'NOT_STARTED'],
     [{ runtimeSessionId: null, numTurns: 1 }, 'MISSING_CONTEXT'],
     [{ assignedRunnerId: null, assignedRunner: null }, 'NO_RUNNER'],

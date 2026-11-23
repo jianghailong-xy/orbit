@@ -1,0 +1,136 @@
+{
+  "about": [
+    "Where a new folder named on a runner goes: newFolderRootFor and newFolderPath (dto.ts). The server makes the",
+    "workspace there (POST /sessions newWorkspace.newFolder, POST /workspaces newFolder) and every client's setup card",
+    "shows and probes the same path, so all of them are held to these cases. `capabilities` is what the runner has",
+    "reported ([] before it reports); `root` null means it cannot make a new folder; `path` is `root` joined with `app`.",
+    "`up` is whether the runner is online now: a managed runner that is not up wakes on its current image, so what it",
+    "declared before (a Repos Folder, capabilities) does not decide; any other runner is read from what it declared.",
+    "`clones` holds cloneRootFor, where a GitHub workspace's clone goes, to the same shape: no `managed`, since a clone",
+    "waits for the runner to report either way."
+  ],
+  "cases": [
+    {
+      "name": "a managed runner that has not reported yet takes its image's home",
+      "runner": { "managed": true, "up": false, "reposRoot": null, "capabilities": [] },
+      "root": "/home/orbit",
+      "path": "/home/orbit/app"
+    },
+    {
+      "name": "a managed runner that has not reported ignores a Repos Folder stored from before",
+      "runner": { "managed": true, "up": false, "reposRoot": "/var/lib/orbit/home/orbit-repos", "capabilities": [] },
+      "root": "/home/orbit",
+      "path": "/home/orbit/app"
+    },
+    {
+      "name": "a managed runner asleep since an earlier image ignores what that image declared",
+      "runner": { "managed": true, "up": false, "reposRoot": "/home/orbit/orbit-repos", "capabilities": ["create-workdir/v1"] },
+      "root": "/home/orbit",
+      "path": "/home/orbit/app"
+    },
+    {
+      "name": "a managed runner that reported is read as any machine: no Repos Folder, no new folder",
+      "runner": { "managed": true, "up": true, "reposRoot": "  ", "capabilities": ["create-workdir/v1", "create-workdir/v2"] },
+      "root": null,
+      "path": null
+    },
+    {
+      "name": "a managed runner that reported is read as any machine: too old, no new folder",
+      "runner": { "managed": true, "up": true, "reposRoot": "/home/orbit/orbit-repos", "capabilities": ["dir-probe/v1"] },
+      "root": null,
+      "path": null
+    },
+    {
+      "name": "a managed runner up on an earlier image makes it in its Repos Folder, as it declares",
+      "runner": { "managed": true, "up": true, "reposRoot": "/home/orbit/orbit-repos", "capabilities": ["create-workdir/v1"] },
+      "root": "/home/orbit/orbit-repos",
+      "path": "/home/orbit/orbit-repos/app"
+    },
+    {
+      "name": "a managed runner that reported makes it in its home",
+      "runner": { "managed": true, "up": true, "reposRoot": "/home/orbit/orbit-repos", "capabilities": ["create-workdir/v1", "create-workdir/v2"] },
+      "root": "/home/orbit",
+      "path": "/home/orbit/app"
+    },
+    {
+      "name": "a machine that makes folders in its home",
+      "runner": { "managed": false, "up": true, "reposRoot": "/root/orbit-repos/", "capabilities": ["create-workdir/v1", "create-workdir/v2"] },
+      "root": "/root",
+      "path": "/root/app"
+    },
+    {
+      "name": "a machine that is offline is read from what it declared",
+      "runner": { "managed": false, "up": false, "reposRoot": "/root/orbit-repos", "capabilities": ["create-workdir/v1", "create-workdir/v2"] },
+      "root": "/root",
+      "path": "/root/app"
+    },
+    {
+      "name": "an older machine makes them in its Repos Folder",
+      "runner": { "managed": false, "up": true, "reposRoot": "/Users/austin/orbit-repos", "capabilities": ["create-workdir/v1"] },
+      "root": "/Users/austin/orbit-repos",
+      "path": "/Users/austin/orbit-repos/app"
+    },
+    {
+      "name": "a Windows machine keeps its separator",
+      "runner": { "managed": false, "up": true, "reposRoot": "C:\\Users\\orbit\\orbit-repos", "capabilities": ["create-workdir/v1", "create-workdir/v2"] },
+      "root": "C:\\Users\\orbit",
+      "path": "C:\\Users\\orbit\\app"
+    },
+    {
+      "name": "a Repos Folder at the top of the disk sits in its root",
+      "runner": { "managed": false, "up": true, "reposRoot": "/orbit-repos", "capabilities": ["create-workdir/v1", "create-workdir/v2"] },
+      "root": "/",
+      "path": "/app"
+    },
+    {
+      "name": "a machine too old to make folders makes none",
+      "runner": { "managed": false, "up": true, "reposRoot": "/root/orbit-repos", "capabilities": [] },
+      "root": null,
+      "path": null
+    },
+    {
+      "name": "a machine that has not reported its Repos Folder makes none",
+      "runner": { "managed": false, "up": true, "reposRoot": null, "capabilities": ["create-workdir/v1", "create-workdir/v2"] },
+      "root": null,
+      "path": null
+    }
+  ],
+  "clones": [
+    {
+      "name": "a runner that clones into its home",
+      "runner": { "reposRoot": "/home/orbit/orbit-repos", "capabilities": ["clone-workdir/v1", "clone-workdir/v2"] },
+      "root": "/home/orbit",
+      "path": "/home/orbit/app"
+    },
+    {
+      "name": "an older runner clones into its Repos Folder",
+      "runner": { "reposRoot": "/root/orbit-repos/", "capabilities": ["clone-workdir/v1"] },
+      "root": "/root/orbit-repos",
+      "path": "/root/orbit-repos/app"
+    },
+    {
+      "name": "making new folders in home does not move clones there",
+      "runner": { "reposRoot": "/root/orbit-repos", "capabilities": ["clone-workdir/v1", "create-workdir/v1", "create-workdir/v2"] },
+      "root": "/root/orbit-repos",
+      "path": "/root/orbit-repos/app"
+    },
+    {
+      "name": "a Windows machine keeps its separator",
+      "runner": { "reposRoot": "C:\\Users\\orbit\\orbit-repos", "capabilities": ["clone-workdir/v1", "clone-workdir/v2"] },
+      "root": "C:\\Users\\orbit",
+      "path": "C:\\Users\\orbit\\app"
+    },
+    {
+      "name": "a runner that does not clone clones nowhere",
+      "runner": { "reposRoot": "/root/orbit-repos", "capabilities": ["create-workdir/v1", "create-workdir/v2"] },
+      "root": null,
+      "path": null
+    },
+    {
+      "name": "a runner that has not reported clones nowhere",
+      "runner": { "reposRoot": "/var/lib/orbit/home/orbit-repos", "capabilities": [] },
+      "root": null,
+      "path": null
+    }
+  ]
+}

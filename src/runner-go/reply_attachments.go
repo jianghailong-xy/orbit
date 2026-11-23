@@ -39,10 +39,14 @@ const replyAttachmentBudget = 20 * time.Second
 // (outsideReplyFilesNote), and a link to a local file that is not there gets one too (missingReplyFilesNote); a failed
 // upload of a file inside them does not, as before.
 func attachLocalReplyFiles(ctx context.Context, t *Transport, sessionID string, events []RunEvent, roots []string, memo *replyAttachmentIDs) {
-	if t == nil || memo == nil || len(events) == 0 || len(roots) == 0 {
+	if t == nil || memo == nil || len(events) == 0 {
 		return
 	}
 	upload := memo.uploader(t, sessionID)
+	resolveDrive := func(ctx context.Context, p string) (string, error) {
+		entry, err := driveStat(ctx, t, p)
+		return entry.ID, err
+	}
 	for i := range events {
 		if events[i].Type != evAssistant {
 			continue
@@ -54,7 +58,7 @@ func attachLocalReplyFiles(ctx context.Context, t *Transport, sessionID string, 
 		if !strings.Contains(text, "](") {
 			continue
 		}
-		rewritten, outside, missing := rewriteLocalMarkdownLinks(ctx, text, roots, upload)
+		rewritten, outside, missing := rewriteLocalMarkdownLinks(ctx, text, roots, upload, resolveDrive)
 		// A failed flush restores the batch it already rewrote, so a retry sees the note it added.
 		if note := outsideReplyFilesNote(outside) + missingReplyFilesNote(missing); note != "" && !strings.HasSuffix(rewritten, note) {
 			rewritten += note

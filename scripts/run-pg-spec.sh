@@ -96,6 +96,9 @@ done
 for spec in "${SPECS[@]}"; do
   case "$spec" in
     "$API/src/"*.pg.spec.ts) ;;
+    # A spec that needs more than PostgreSQL (root and /dev/fuse: drive/drive-mount.pg.e2e.ts), run here by hand. CI's
+    # roster (scripts/project-pg-matrix.sh) takes *.pg.spec only, so it never meets one it cannot run.
+    "$API/src/"*.pg.e2e.ts) ;;
     *) die "not an apiserver pg spec: $spec" ;;
   esac
 done
@@ -118,7 +121,26 @@ PRISMA="$API/node_modules/.bin/prisma"; [ -x "$PRISMA" ] || PRISMA="$REPO/node_m
 
 echo "==> building the test tree (rm -rf build first)"
 rm -rf "$API/build"
-( cd "$API" && "$TSC" -p tsconfig.test.json ) || die "tsconfig.test.json failed to compile"
+# RUN_PG_SPEC_COMPILE=specs compiles only the named specs and what they import, into the same
+# build/ layout (rootDir is src). For machines whose memory cap kills the whole test tree's tsc;
+# the rest of the tree is then not type-checked by this run. RUN_PG_SPEC_TSC_FLAGS is laid after the
+# project flag either way: `--singleThreaded` keeps a whole-tree compile under a job memory ceiling that
+# kills the default parallel build (about 3.7 GB instead of 5.9 GB).
+# shellcheck disable=SC2086
+case "${RUN_PG_SPEC_COMPILE:-}" in
+  '')
+    ( cd "$API" && "$TSC" -p tsconfig.test.json ${RUN_PG_SPEC_TSC_FLAGS:-} ) || die "tsconfig.test.json failed to compile"
+    ;;
+  specs)
+    SUBSET="$API/.tsconfig.pg-specs.$$.json"
+    "$NODE" -e 'require("node:fs").writeFileSync(process.argv[1], JSON.stringify({ extends: "./tsconfig.test.json", files: process.argv.slice(2), include: [] }))' \
+      "$SUBSET" "${SPECS[@]}" || die "could not write the subset tsconfig"
+    ( cd "$API" && "$TSC" -p "$SUBSET" ${RUN_PG_SPEC_TSC_FLAGS:-} ); status=$?
+    rm -f "$SUBSET"
+    [ "$status" = 0 ] || die "the named specs failed to compile"
+    ;;
+  *) die "RUN_PG_SPEC_COMPILE must be unset or specs" ;;
+esac
 # The overlay's `src/node_modules/@orbit/shared` already answers for everything under `build/`;
 # this one is here because it is nearer still, and because `build/` is this script's own to lay out.
 mkdir -p "$API/build/node_modules/@orbit"

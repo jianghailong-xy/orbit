@@ -410,7 +410,7 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     assert.equal(decision.model, 'claude-opus-5-5');
     assert.equal(decision.effort, 'high');
     assert.equal(decision.applied, true);
-    assert.equal(decision.policyVersion, 'p5-expiry-first-1');
+    assert.equal(decision.policyVersion, 'p7-model-then-account-1');
     assert.equal(decision.tierNote, 'Tier L, set by the caller');
     assert.equal(decision.note, 'subscription pool, Bob with 80% quota left');
     // The pick names when Bob's quota resets: the fixture's window, relative to now (p5-expiry-first-1).
@@ -432,13 +432,47 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     // Its only model has no tier, so it joins as its default model, after every tiered candidate.
     assert.deepEqual(why(custom), [['opencode', null, "opencode is not installed on the parent's runner"]]);
     assert.deepEqual(why(spent.slug), [['codex', null,
-      'Every account in the pool is at or above 90% of its quota or paused: carol@team.invalid at 96% of its weekly quota']]);
+      'No account in the pool can run: carol@team.invalid at 96% of its weekly quota']]);
     // The members are listed on their own too, with an empty model list of their own.
     assert.deepEqual(why(alice), [['claude', null, 'No models listed for claude']]);
     assert.deepEqual(why(deepseek), [
       ['opencode', null, "opencode is not installed on the parent's runner"],
       ['dsh', null, "dsh is not installed on the parent's runner"],
     ]);
+  });
+
+  await t.test('a resume on this machine opens where the run ran, never routed again; refused while it runs or unknown', async () => {
+    const sessionId = await parentSession();
+    const first = await subagents.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_resume_first', size: 'M' }));
+    // Its last attempt ran on Opus at high: not what tier S, which the resume asks for, routes to.
+    await prisma.subagentRun.update({
+      where: { id: first.runId },
+      data: { attempts: [{ attempt: 1, engine: 'claude', provider: 'claude', model: 'claude-opus-5-5', effort: 'high',
+        outcome: 'RUNNING', startedAt: new Date().toISOString() }] },
+    });
+    const code = (expected: string) => (error: unknown) =>
+      (error as { getResponse?: () => { code?: string } }).getResponse?.()?.code === expected;
+    await assert.rejects(subagents.createSubagentRun(runner, sessionId, create({
+      toolUseId: 'toolu_resume_early', resumeOf: first.runId, size: 'S',
+    })), (error: unknown) => error instanceof ConflictException && code('SUBAGENT_RESUME_RUNNING')(error));
+
+    await subagents.updateSubagentRun(runner, sessionId, first.runId, update({ status: 'DONE', resultSummary: 'half done' }));
+    const resumed = await subagents.createSubagentRun(runner, sessionId, create({
+      toolUseId: 'toolu_resume_again', resumeOf: first.runId, size: 'S',
+    }));
+    t.diagnostic(`resumed decision ${JSON.stringify(resumed.decision)}`);
+    assert.equal(resumed.decision.tierSource, 'not-routed');
+    assert.deepEqual([resumed.decision.engine, resumed.decision.provider, resumed.decision.model, resumed.decision.effort],
+      ['claude', 'claude', 'claude-opus-5-5', 'high'], 'the last attempt\'s target, not tier S\'s');
+    assert.deepEqual(resumed.decision.reasons, [`Resumes ${first.runId} where it ran: claude-opus-5-5 on claude`]);
+    assert.deepEqual(resumed.decision.fallbacks, [], 'a conversation does not move to another engine');
+    assert.equal(resumed.exec.model, 'claude-opus-5-5');
+    const row = await prisma.subagentRun.findUniqueOrThrow({ where: { id: resumed.runId } });
+    assert.deepEqual((row.attempts as Array<{ model: string }>).map((a) => a.model), ['claude-opus-5-5']);
+
+    await assert.rejects(subagents.createSubagentRun(runner, sessionId, create({
+      toolUseId: 'toolu_resume_unknown', resumeOf: randomUUID(),
+    })), (error: unknown) => error instanceof NotFoundException && code('SUBAGENT_RESUME_NOT_FOUND')(error));
   });
 
   await t.test('an empty pool is refused NO_SUBAGENT_PROVIDER with each provider\'s reason, and opens no run', async () => {
@@ -558,7 +592,7 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     // The parent ends while the run is RUNNING. By an ordinary end its token is refused; by a coordinator handover
     // it keeps serving the run left running (kept-subagent-gateway.ts), until that run ends.
     await prisma.session.update({
-      where: { id: sessionId }, data: { status: RunStatus.CANCELLED, completedAt: new Date(), endReason: 'completed' },
+      where: { id: sessionId }, data: { status: RunStatus.CANCELLED, finishedAt: new Date(), completedAt: new Date(), endReason: 'completed' },
     });
     assert.equal(await gateway.caller(token!), null, 'an ordinary end refuses the token at once');
     const projectId = (await prisma.project.create({ data: { ownerId, title: 'handover keeps the SubAgent' } })).id;

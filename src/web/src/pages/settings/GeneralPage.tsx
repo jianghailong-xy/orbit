@@ -1,7 +1,6 @@
 import { TRANSLATION_LANGUAGE_NAMES, TRANSLATION_LANGUAGES, type TranslationLanguage } from '@orbit/shared';
 import { SettingsCard, SettingsHeader, SettingsRow, SettingsSection } from '../../components/settings';
 import { NumberInput } from '../../components/ui/NumberInput';
-import { Segmented } from '../../components/ui/Segmented';
 import { Select } from '../../components/ui/Select';
 import { Switch } from '../../components/ui/Switch';
 import { agentLanguageOf, translationLanguageOf } from '../../lib/translation';
@@ -17,14 +16,6 @@ export const GENERAL_HINTS = {
   defaultPermissionMode: {
     short: S.defaultPermissionMode.description,
     full: 'The mode a new session starts in, unless the composer picks another. Account-wide: the mode is a property of the run, not of the workspace it runs in.',
-  },
-  modelRouting: {
-    short: S.modelRouting.description,
-    full: "Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before.",
-  },
-  optimizeFor: {
-    short: S.optimizeFor.description,
-    full: 'Cost spends subscriptions before metered keys. Balance spends the quota that expires first, then the most room. Intelligence puts the strongest model first. For every Agent, its SubAgents and its smart-selected task runs.',
   },
   promptSuggestions: {
     short: S.promptSuggestions.description,
@@ -82,40 +73,6 @@ export function GeneralSettingsPage() {
                 options={MODE_OPTIONS}
                 onValueChange={(v) => v !== null && save.mutate({ defaultPermissionMode: v })}
                 loading={save.isPending}
-              />
-            }
-          />
-          {/* Absent means OFF, unlike the switches below — only turning it on has to be written. */}
-          <SettingsRow
-            anchor={S.modelRouting.anchor}
-            title={S.modelRouting.title}
-            description={h.modelRouting.short}
-            tooltip={h.modelRouting.full}
-            control={
-              <Switch
-                aria-label="Smart model selection"
-                checked={prefs.modelRouting === true}
-                onCheckedChange={(v) => save.mutate({ modelRouting: v })}
-                loading={save.isPending}
-              />
-            }
-          />
-          {/* Account-wide since 2026-11-19 (board docs/mocks/routing-mode-account); absent means Balance. */}
-          <SettingsRow
-            anchor={S.optimizeFor.anchor}
-            title={S.optimizeFor.title}
-            description={h.optimizeFor.short}
-            tooltip={h.optimizeFor.full}
-            control={
-              <Segmented<'cost' | 'balance' | 'intelligence'>
-                aria-label="Optimize For"
-                value={prefs.optimizeFor ?? 'balance'}
-                onValueChange={(v) => save.mutate({ optimizeFor: v })}
-                options={[
-                  { value: 'cost', label: 'Cost' },
-                  { value: 'balance', label: 'Balance' },
-                  { value: 'intelligence', label: 'Intelligence' },
-                ]}
               />
             }
           />

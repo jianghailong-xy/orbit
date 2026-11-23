@@ -121,6 +121,7 @@ object ScheduleCopy {
     )
     val failureReasons: Map<String, String> = mapOf(
         "RUNNER_UNAVAILABLE" to "found no runner online",
+        "RUNNER_FULL" to "waited for a full runner until its window closed",
         "QUOTA" to "hit the engine's usage limit",
         "ENGINE_CRASHED_BEFORE_START" to "stopped before its engine started",
         "REPORTED_FAILED" to "reported a failure",
@@ -228,6 +229,30 @@ object ScheduleCopy {
         "WORKSPACE" to "Keep in {workspace}",
         "other" to "Keep as it is",
     )
+    object Every {
+        const val minutes = "Every {count} min"
+        const val hour = "Every hour"
+        const val hours = "Every {count} hours"
+        const val window = "{interval}, {time}–{until}"
+        const val from = "{interval} from {time}"
+        const val days = "{rule}, {days}"
+        const val workweek = "Mon–Fri"
+        const val weekend = "weekends"
+    }
+    object End {
+        const val until = "until {when}"
+        const val today = "{time} today"
+        const val tomorrow = "{time} tomorrow"
+        const val runLeft = "1 run left"
+        const val runsLeft = "{count} runs left"
+        const val missed = "{count} slots missed, {from}–{to}"
+        const val missedDated = "{count} slots missed, {fromDate}, {from}–{toDate}, {to}"
+        const val endLabel = "Ends"
+        const val extend = "Extend the end"
+        const val remove = "Remove the end"
+        const val extendAsk = "{title}: extend the end"
+        const val removeAsk = "{title}: remove the end"
+    }
     object History {
         val who: Map<String, String> = mapOf(
             "USER" to "You",
@@ -242,6 +267,7 @@ object ScheduleCopy {
             "rule" to "Time",
             "timezone" to "Time zone",
             "endAt" to "Ends",
+            "maxRuns" to "Runs",
             "accessLevel" to "Access",
             "runLimitMinutes" to "Run limit",
             "workspaceId" to "Workspace",
@@ -257,6 +283,20 @@ object ScheduleCopy {
         const val ended = "Ended: {reason}"
         const val minutes = "{minutes} min"
         const val noEnd = "no end"
+    }
+    object ChangeConversation {
+        const val title = "Change {title}"
+        const val lead = "What should change about {title}? This is what it does now:"
+        const val does = "Does"
+        const val `when` = "When"
+        const val runsIn = "Runs in"
+        const val may = "May"
+        const val costs = "Costs"
+        const val tail = "I can change the time, the days, what it checks and how it reports right away, and you can undo it. More runs, longer runs, more access or another workspace need your Allow."
+        const val placeholder = "Say what to change…"
+        const val openSchedule = "Open"
+        const val openInScheduled = "Open in Scheduled"
+        const val conversation = "conversation"
     }
     object Record {
         const val changed = "Changed {title}: {change}"
@@ -284,8 +324,8 @@ object ScheduleCopy {
             "ACCESS_LEVEL" to "Let {title} open PRs?",
             "RUNS_PER_WEEK" to "Let {title} run more often?",
             "RUN_LIMIT" to "Let {title} run longer?",
-            "WORKSPACE" to "Let {title} run in {workspace}?",
             "PROBE_COMMAND" to "Let {title} check with a new command?",
+            "WORKSPACE" to "Let {title} run in {workspace}?",
         )
         const val now = "Now"
         const val asked = "Asked"
@@ -315,6 +355,7 @@ object ScheduleCopy {
     object Push {
         const val failedBody = "The last run {reason}. It keeps running until you pause it."
         const val goalReachedTitle = "{title} ended itself"
+        const val stoppedAsPlanned = "Stopped as planned after {runs}"
     }
     object Empty {
         const val lead = "Nothing scheduled. Say what should happen and when; an agent sets it up and asks you once."
@@ -438,6 +479,7 @@ object ScheduleCopy {
         "runStates.HELD" to runStates.getValue("HELD"),
         "runStates.CANCELLED" to runStates.getValue("CANCELLED"),
         "failureReasons.RUNNER_UNAVAILABLE" to failureReasons.getValue("RUNNER_UNAVAILABLE"),
+        "failureReasons.RUNNER_FULL" to failureReasons.getValue("RUNNER_FULL"),
         "failureReasons.QUOTA" to failureReasons.getValue("QUOTA"),
         "failureReasons.ENGINE_CRASHED_BEFORE_START" to failureReasons.getValue("ENGINE_CRASHED_BEFORE_START"),
         "failureReasons.REPORTED_FAILED" to failureReasons.getValue("REPORTED_FAILED"),
@@ -535,6 +577,26 @@ object ScheduleCopy {
         "keep.RUN_LIMIT" to keep.getValue("RUN_LIMIT"),
         "keep.WORKSPACE" to keep.getValue("WORKSPACE"),
         "keep.other" to keep.getValue("other"),
+        "every.minutes" to Every.minutes,
+        "every.hour" to Every.hour,
+        "every.hours" to Every.hours,
+        "every.window" to Every.window,
+        "every.from" to Every.from,
+        "every.days" to Every.days,
+        "every.workweek" to Every.workweek,
+        "every.weekend" to Every.weekend,
+        "end.until" to End.until,
+        "end.today" to End.today,
+        "end.tomorrow" to End.tomorrow,
+        "end.runLeft" to End.runLeft,
+        "end.runsLeft" to End.runsLeft,
+        "end.missed" to End.missed,
+        "end.missedDated" to End.missedDated,
+        "end.endLabel" to End.endLabel,
+        "end.extend" to End.extend,
+        "end.remove" to End.remove,
+        "end.extendAsk" to End.extendAsk,
+        "end.removeAsk" to End.removeAsk,
         "history.who.USER" to History.who.getValue("USER"),
         "history.who.SESSION" to History.who.getValue("SESSION"),
         "history.who.RUN" to History.who.getValue("RUN"),
@@ -545,6 +607,7 @@ object ScheduleCopy {
         "history.fields.rule" to History.fields.getValue("rule"),
         "history.fields.timezone" to History.fields.getValue("timezone"),
         "history.fields.endAt" to History.fields.getValue("endAt"),
+        "history.fields.maxRuns" to History.fields.getValue("maxRuns"),
         "history.fields.accessLevel" to History.fields.getValue("accessLevel"),
         "history.fields.runLimitMinutes" to History.fields.getValue("runLimitMinutes"),
         "history.fields.workspaceId" to History.fields.getValue("workspaceId"),
@@ -559,6 +622,18 @@ object ScheduleCopy {
         "history.ended" to History.ended,
         "history.minutes" to History.minutes,
         "history.noEnd" to History.noEnd,
+        "changeConversation.title" to ChangeConversation.title,
+        "changeConversation.lead" to ChangeConversation.lead,
+        "changeConversation.does" to ChangeConversation.does,
+        "changeConversation.when" to ChangeConversation.`when`,
+        "changeConversation.runsIn" to ChangeConversation.runsIn,
+        "changeConversation.may" to ChangeConversation.may,
+        "changeConversation.costs" to ChangeConversation.costs,
+        "changeConversation.tail" to ChangeConversation.tail,
+        "changeConversation.placeholder" to ChangeConversation.placeholder,
+        "changeConversation.openSchedule" to ChangeConversation.openSchedule,
+        "changeConversation.openInScheduled" to ChangeConversation.openInScheduled,
+        "changeConversation.conversation" to ChangeConversation.conversation,
         "record.changed" to Record.changed,
         "record.ended" to Record.ended,
         "record.byThisRun" to Record.byThisRun,
@@ -579,8 +654,8 @@ object ScheduleCopy {
         "envelopeCard.titles.ACCESS_LEVEL" to EnvelopeCard.titles.getValue("ACCESS_LEVEL"),
         "envelopeCard.titles.RUNS_PER_WEEK" to EnvelopeCard.titles.getValue("RUNS_PER_WEEK"),
         "envelopeCard.titles.RUN_LIMIT" to EnvelopeCard.titles.getValue("RUN_LIMIT"),
-        "envelopeCard.titles.WORKSPACE" to EnvelopeCard.titles.getValue("WORKSPACE"),
         "envelopeCard.titles.PROBE_COMMAND" to EnvelopeCard.titles.getValue("PROBE_COMMAND"),
+        "envelopeCard.titles.WORKSPACE" to EnvelopeCard.titles.getValue("WORKSPACE"),
         "envelopeCard.now" to EnvelopeCard.now,
         "envelopeCard.asked" to EnvelopeCard.asked,
         "envelopeCard.accessJoin" to EnvelopeCard.accessJoin,
@@ -603,6 +678,7 @@ object ScheduleCopy {
         "waiting.widen.body" to Waiting.widenBody,
         "push.failedBody" to Push.failedBody,
         "push.goalReachedTitle" to Push.goalReachedTitle,
+        "push.stoppedAsPlanned" to Push.stoppedAsPlanned,
         "empty.lead" to Empty.lead,
         "empty.examples.0" to Empty.examples[0],
         "empty.examples.1" to Empty.examples[1],

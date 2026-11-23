@@ -156,6 +156,13 @@ services:
       # its own on the far side — the mirror deletes anything there it did not put there.
       ORBIT_BACKUP_SYNC_TARGET: "${ORBIT_BACKUP_SYNC_TARGET:-}"
       ORBIT_BACKUP_SYNC_SSH_PORT: "${ORBIT_BACKUP_SYNC_SSH_PORT:-22}"
+      # Optional one-way copy of the bucket's files/ prefix to the archive's -bucket sibling.
+      ORBIT_FILES_S3_MIRROR: "${ORBIT_FILES_S3_MIRROR:-0}"
+      ORBIT_FILES_S3_ENDPOINT: "${ORBIT_FILES_S3_ENDPOINT:-}"
+      ORBIT_FILES_S3_BUCKET: "${ORBIT_FILES_S3_BUCKET:-}"
+      ORBIT_FILES_S3_ACCESS_KEY_ID: "${ORBIT_FILES_S3_ACCESS_KEY_ID:-}"
+      ORBIT_FILES_S3_SECRET_ACCESS_KEY: "${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}"
+      ORBIT_FILES_S3_REGION: "${ORBIT_FILES_S3_REGION:-}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -306,24 +313,29 @@ services:
       ORBIT_FILES_S3_ACCESS_KEY_ID: "${ORBIT_FILES_S3_ACCESS_KEY_ID:-}"
       ORBIT_FILES_S3_SECRET_ACCESS_KEY: "${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}"
       ORBIT_FILES_S3_REGION: "${ORBIT_FILES_S3_REGION:-}"
+      ORBIT_FILES_S3_MIRROR: "${ORBIT_FILES_S3_MIRROR:-0}"
       # The most one account may keep in Orbit Files, in bytes: past it an upload is refused. Empty means no limit, a
       # self-hosted deployment's default. A hosted instance sets it.
       ORBIT_FILES_QUOTA_BYTES: "${ORBIT_FILES_QUOTA_BYTES:-}"
+      ORBIT_FILES_STORE_QUOTA_BYTES: "${ORBIT_FILES_STORE_QUOTA_BYTES:-}"
       # The two values pgbackup keeps base backups by, with its defaults: an expired file's bytes go no sooner than
       # max(7 days, interval x (keep + 1)) after its tombstone, so restoring any retained backup finds the bytes its rows name.
       ORBIT_BASE_BACKUP_INTERVAL: "${ORBIT_BASE_BACKUP_INTERVAL:-86400}"
       ORBIT_BASE_BACKUP_KEEP: "${ORBIT_BASE_BACKUP_KEEP:-2}"
       # Optional: managed runners (docs/self-hosting.md, "Managed runners"): every account gets a runner of its own,
-      # a container on this host's Docker, at sign-in. Off unless the host's .env says true. A fresh install
-      # (scripts/install-server.sh) writes that line and an upgrade never does, so a deployment that predates managed
+      # a container on this host's Docker, at sign-in. Off unless the host's .env says true. A fresh install with
+      # --managed-runners (scripts/install-server.sh) writes that line and an upgrade never does, so a deployment that predates managed
       # runners keeps them off. The profile read here, the Docker channel's token and its socket are the files in
       # ORBIT_MANAGED_RUNNERS_DIR, mounted below.
       ORBIT_MANAGED_RUNNERS_ENABLED: "${ORBIT_MANAGED_RUNNERS_ENABLED:-false}"
       # Orbit Cloud browser, off unless the host's .env says true (docs/runner-browser-design.md §2).
       ORBIT_MANAGED_RUNNER_BROWSER_ENABLED: "${ORBIT_MANAGED_RUNNER_BROWSER_ENABLED:-false}"
-      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-managed-runners/profile.json
+      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-cloud-runners/profile.json
     volumes:
       # Read-only. With ORBIT_MANAGED_RUNNERS_DIR unset, /dev/null stands in, so nothing is created on the host.
+      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-cloud-runners:ro"
+      # The same directory at its path from before the rename, which channel.json and profile.json written by an
+      # earlier install still name inside them.
       - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners:ro"
       # The files directory (ORBIT_FILES_DIR's default), the way ./data/postgres holds the database: the bytes of every
       # attachment the local store keeps, and the temporary files uploads arrive in.
@@ -436,8 +448,8 @@ services:
   # (deploy/managed-runner/docker-channel), the one process given the Docker socket. It makes each account's runner
   # container and data volume from its own template, and touches nothing without its instance's label. The apiserver
   # reaches it only through its unix socket in ORBIT_MANAGED_RUNNERS_DIR, and it needs no network of its own.
-  # It runs only under the managed-runners-docker profile, which a fresh install switches on in .env
-  # (scripts/install-server.sh) and an upgrade never does.
+  # It runs only under the managed-runners-docker profile, which a fresh install with --managed-runners switches on
+  # in .env (scripts/install-server.sh) and an upgrade never does.
   docker-channel:
     profiles: [managed-runners-docker]
     build:
@@ -451,16 +463,18 @@ services:
     # The disk the storage budget is measured on: an empty volume of the channel's own, read-only, which Docker keeps
     # beside every runner's data volume whatever filesystem its data root is on. This container sees neither the data
     # root nor what is in it.
-    command: ["serve", "--config", "/var/lib/orbit-managed-runners/channel.json", "--disk-probe-path", "/var/lib/orbit-docker-volumes"]
+    command: ["serve", "--config", "/var/lib/orbit-cloud-runners/channel.json", "--disk-probe-path", "/var/lib/orbit-docker-volumes"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-cloud-runners"
+      # Its path from before the rename, which an earlier install's channel.json still names.
       - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners"
       - type: volume
         target: /var/lib/orbit-docker-volumes
         read_only: true
     healthcheck:
       # Serving: its socket takes a connection. Every request on it still needs the token.
-      test: ["CMD", "python3", "-c", "import socket; socket.socket(socket.AF_UNIX).connect('/var/lib/orbit-managed-runners/channel.sock')"]
+      test: ["CMD", "python3", "-c", "import socket; socket.socket(socket.AF_UNIX).connect('/var/lib/orbit-cloud-runners/channel.sock')"]
       interval: 5s
       timeout: 5s
       retries: 6
@@ -471,15 +485,15 @@ services:
   # nothing else of this host or of the private networks behind it. It runs in the host's network namespace with
   # NET_ADMIN and NET_RAW, never with the Docker socket; it checks the rules every 10 s, repairs what changed, and leaves
   # them in place when it stops. The Docker channel starts no runner container while it does not report them in force.
-  # It runs only under the managed-runner-firewall profile, which a fresh install switches on in .env beside the Docker
-  # backend's (scripts/install-server.sh; --no-managed-runner-firewall leaves it off), and an upgrade never does.
+  # It runs only under the managed-runner-firewall profile, which a fresh install with --managed-runners switches on in
+  # .env beside the Docker backend's (scripts/install-server.sh; --no-managed-runner-firewall leaves it off), and an upgrade never does.
   managed-runner-firewall:
     profiles: [managed-runner-firewall]
     build:
       context: .
       dockerfile: deploy/managed-runner/firewall/Dockerfile
-    image: orbit-managed-runner-firewall:local
-    container_name: orbit-managed-runner-firewall
+    image: orbit-cloud-runner-firewall:local
+    container_name: orbit-cloud-runner-firewall
     restart: unless-stopped
     logging: *logging
     network_mode: host
@@ -489,7 +503,7 @@ services:
     read_only: true
     volumes:
       # Its configuration, and the status the Docker channel reads.
-      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}/firewall:/var/lib/orbit-managed-runner-firewall"
+      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}/firewall:/var/lib/orbit-cloud-runner-firewall"
       # The legacy iptables backend's lock, which Docker's own iptables calls take too; the install names it only where
       # the host's iptables is legacy. Never made on the host: a directory there would break the host's iptables.
       - type: bind
@@ -499,7 +513,7 @@ services:
           create_host_path: false
     healthcheck:
       # Healthy while its status says the rules are in force: what the Docker channel reads before it starts a runner.
-      test: ["CMD", "python3", "-I", "/opt/orbit-managed-runner-firewall/firewall.py", "status"]
+      test: ["CMD", "python3", "-I", "/opt/orbit-cloud-runner-firewall/firewall.py", "status"]
       interval: 10s
       timeout: 5s
       retries: 3
