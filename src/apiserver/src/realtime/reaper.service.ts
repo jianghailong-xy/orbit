@@ -1138,6 +1138,8 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     // WORK_ELSEWHERE item its frozen identity opened (§12.15 P-M1).
     if ('identitySettled' in outcome && outcome.identitySettled && taskId) {
       await this.openItems?.deliverForTasks([taskId]);
+      // §12.5 W7: a failed landing this session held, handed back by this finish (TURN_FAILED), whatever it names.
+      await this.openItems?.offerLandingFixesTo(sessionId);
       // And the project facts the deferred landing held (PROJECT_TASKS_SETTLED / looks-finished),
       // re-derived now that it is decided. The dependents themselves are the 60 s ready sweep's.
       if (this.completionInputs) {

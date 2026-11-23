@@ -2,6 +2,7 @@ import { Prisma, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { INTEGRATION_CLAIM_STALE_MS } from '@orbit/shared';
 import { RELEASE_WORK_SELECT, releaseFinishedTheWork } from '../common/session-release';
+import { LANDING_FIX_TURN_KEY_PREFIX } from '../sessions/watch-turn-key';
 import { notifyRunnerWakeOnCommit } from '../realtime/runner-wake';
 import { LANDING_SESSION_CANDIDATES, LANDING_WORK_SESSION_SELECT, landingWorkSession } from './landing-source-branch';
 import {
@@ -23,9 +24,13 @@ import {
 } from './project-integration-event';
 import {
   INTEGRATION_ITEM_KINDS,
+  handBackLandingFix,
+  landingFixHandBackOf,
   markOpenItemsHandling,
   recordLandingUnobserved,
   resolveLeaseExpiredItems,
+  type LandingFixHandBack,
+  type LandingFixReturnReason,
   type OpenItemHandlingStart,
 } from './project-open-item';
 import { checkpointLandingGate, latestAcceptedCheckpoint } from './task-checkpoint.service';
@@ -1200,6 +1205,9 @@ const HANDED_OFF_FAILURE_CLASSES: ReadonlySet<LandingFailureClass> = new Set(['C
  *     is not revived;
  *  3. the task is still DONE and this session is still its newest work session;
  *  4. fewer than {@link LANDING_FIX_ROUNDS} generations of this task segment were asked for by it (W8).
+ *
+ * When 1–3 hold and only 4 does not, the failure is the coordinator's at once, handed back ROUNDS_EXHAUSTED (W8,
+ * W-T4 through H3): `roundsExhausted` says of the session what the item's payload carries.
  */
 export async function landingFixWorkSession(
   tx: Prisma.TransactionClient,
@@ -1214,8 +1222,10 @@ export async function landingFixWorkSession(
     failureClass: LandingFailureClass | null;
     /** The candidate's source kind, for a promotion job; null for a task landing. */
     candidateSourceKind: string | null;
+    /** The generation this job reruns, when it is one: the landing-fix round the session's last words are from. */
+    retryOfJobId?: string | null;
   },
-): Promise<string | null> {
+): Promise<{ sessionId: string; roundsExhausted: LandingFixHandBack | null } | null> {
   if (!input.failureClass || !HANDED_OFF_FAILURE_CLASSES.has(input.failureClass)) return null;
   const promotion = input.jobKind === 'CHECK_PROMOTION' || input.jobKind === 'LAND_PROMOTION';
   if (!(input.jobKind === 'LAND_TASK' || (promotion && input.candidateSourceKind === 'TASK_BRANCH'))) return null;
@@ -1247,8 +1257,15 @@ export async function landingFixWorkSession(
       ...(input.landingId ? { landingId: input.landingId } : {}),
     },
   });
-  if (rounds >= LANDING_FIX_ROUNDS) return null;
-  return input.sessionId;
+  if (rounds >= LANDING_FIX_ROUNDS) {
+    return {
+      sessionId: input.sessionId,
+      roundsExhausted: await landingFixHandBackOf(tx, {
+        sessionId: input.sessionId, integrationJobId: input.retryOfJobId ?? null, landingId: input.landingId,
+      }),
+    };
+  }
+  return { sessionId: input.sessionId, roundsExhausted: null };
 }
 
 /** W7's `retry_reason` (§12.4): the generation a task's own work session fixed, which it is the requester of. */
@@ -1263,9 +1280,12 @@ export const LANDING_FIX_RETRY_REASON = "Fixed by the task's own session";
  * branch as it now stands (§10.5 O-L4, no exception: W6 cleared the old one with the turn). `deliveredSha` is the
  * commit it froze, or null when the settled work names none.
  *
- *   * Not this edge, but the hand-backs of task 350mtSNTuKUVNMbsj7Srd: a release that did not finish the work — a
- *     failed turn, a session somebody ended — is TURN_FAILED or SESSION_ENDED, and work that settled on the commit the
- *     failed job was handed is NO_NEW_COMMIT. Nothing is queued, and the item stays in the session's hands.
+ *   * The hand-backs (W-T5, `landingFixReturnAtFinish`), once the landing-fix turn was delivered: a session a person
+ *     ended or deleted is SESSION_ENDED; a fix turn that failed, was interrupted or was cut off, or a release that did
+ *     not finish the work, is TURN_FAILED; work that settled on the commit the failed job was handed is NO_NEW_COMMIT.
+ *     The identity is already frozen again by the settlement that called this (O-L4, no exception), nothing is queued,
+ *     and the item is the coordinator's from now (`handBackLandingFix`), delivered after the commit
+ *     (`ProjectOpenItemService.offerLandingFixesTo`).
  *   * Any other commit lands again: the next generation, with the work session as requester and the failed
  *     generation's class copied (CONFLICT too, R1) — a LAND_TASK through `queueLandingRetry`, or on a MAIN line the
  *     check of a new candidate (`recheckFixedCandidate`), which the item is then about. The item is marked H1 by its
@@ -1292,15 +1312,30 @@ async function landAgainAfterLandingFix(
   if (!held?.integrationJobId) return false;
   const finished = await tx.session.findUniqueOrThrow({
     where: { id: input.sessionId },
-    select: RELEASE_WORK_SELECT,
+    select: { ...RELEASE_WORK_SELECT, deletedAt: true },
   });
-  // TURN_FAILED or SESSION_ENDED, and below NO_NEW_COMMIT: the hand-backs, not this edge.
-  if (!releaseFinishedTheWork(finished)) return true;
   const failed = await tx.projectIntegrationJob.findUniqueOrThrow({
     where: { id: held.integrationJobId },
     select: { id: true, kind: true, state: true, checks: true, baselineRed: true, sourceSha: true, promotionId: true },
   });
-  if (input.deliveredSha !== null && input.deliveredSha === failed.sourceSha) return true;
+  const fixTurn = await tx.conversationTurn.findUnique({
+    where: { sessionId_clientTurnId: { sessionId: input.sessionId, clientTurnId: landingFixTurnKey(failed.id) } },
+    select: { outcome: true },
+  });
+  if (fixTurn) {
+    const reason = landingFixReturnAtFinish(
+      finished, fixTurn, input.deliveredSha !== null && input.deliveredSha === failed.sourceSha,
+    );
+    if (reason) {
+      await handBackLandingFix(tx, { itemId: held.id, reason });
+      return true;
+    }
+  } else {
+    // Not offered yet: a session that was on its way to its DONE's end when the failure was handed to it. Its finish
+    // is where the landing-fix turn is delivered (`offerLandingFixesTo`), so nothing is decided here.
+    if (!releaseFinishedTheWork(finished)) return true;
+    if (input.deliveredSha !== null && input.deliveredSha === failed.sourceSha) return true;
+  }
 
   const retry: LandingRetryRequest = {
     ofJobId: failed.id,
@@ -1325,6 +1360,38 @@ async function landAgainAfterLandingFix(
     await markOpenItemsHandling(tx, [held.id], { ...handling, jobId: candidate.jobId });
   }
   return true;
+}
+
+/** The end reasons a person writes (`SessionEndReason`): ended, moved to Completed, deleted, stopped. */
+const PERSON_END_REASONS: ReadonlySet<string> = new Set(['ended', 'completed', 'deleted', 'cancelled']);
+
+/** The landing-fix turn's key (`landing-fix-turn.ts#landingFixTurnId`), spelled here: that module imports this one. */
+function landingFixTurnKey(jobId: string): string {
+  return `${LANDING_FIX_TURN_KEY_PREFIX}${jobId}`;
+}
+
+/**
+ * W7's hand-back at the finish of a work session whose landing-fix turn was delivered (§12.5, W-T5), or null when its
+ * work settled with a new commit and lands again (W-T2). In this order, because each is the more specific reading of
+ * the next: a session a person ended or put in Trash is SESSION_ENDED; one the reaper ended because its task was
+ * cancelled is TASK_MOVED_ON; a fix turn that failed, was interrupted or was cut off, or a release that did not finish
+ * the work (no end reason: a failure, a runner gone), is TURN_FAILED; and work that settled on the commit the failed
+ * job was handed is NO_NEW_COMMIT.
+ */
+function landingFixReturnAtFinish(
+  finished: { finishedAt: Date | null; endReason: string | null; sessionKind: string; deletedAt: Date | null },
+  fixTurn: { outcome: string | null },
+  sameCommit: boolean,
+): LandingFixReturnReason | null {
+  if (finished.deletedAt !== null || (finished.endReason !== null && PERSON_END_REASONS.has(finished.endReason))) {
+    return 'SESSION_ENDED';
+  }
+  if (finished.endReason === 'task_cancelled') return 'TASK_MOVED_ON';
+  if (!releaseFinishedTheWork(finished)
+    || fixTurn.outcome === 'FAILED' || fixTurn.outcome === 'INTERRUPTED' || fixTurn.outcome === 'CANCELLED') {
+    return 'TURN_FAILED';
+  }
+  return sameCommit ? 'NO_NEW_COMMIT' : null;
 }
 
 /**

@@ -8649,6 +8649,9 @@ export class RunnerApiController {
       // The exception item that same transaction opened, handed to whoever is responsible for it
       // (contract §4.4 X-D4 1).
       await this.openItems?.deliverForTasks([finalized.taskId]);
+      // §12.5 W7: a failed landing this session held, handed back by the finish its failed turn wrote (TURN_FAILED);
+      // a MAIN line's item names no task, so the task's delivery above does not find it.
+      await this.openItems?.offerLandingFixesTo(sessionId);
     }
     // TURN_END events are flushed before /turn-complete, so their control summary can still see
     // RUNNING. Publish the committed row for every applied non-steer completion; task-bound

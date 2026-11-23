@@ -429,7 +429,7 @@ import {
   terminalizePendingCurrentWorkSteers,
 } from './current-work-delivery';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
-import { returnQueuedTurns } from '../projects/project-open-item';
+import { handBackLandingFixesOfSession, returnQueuedTurns } from '../projects/project-open-item';
 import { type OpenListBase, OpenListDeltaStore } from './open-list-delta';
 import { type OpenListVersionParts, openListEtag, readOpenListVersion, readOpenListVersionParts } from './open-list-version';
 import {
@@ -10333,7 +10333,25 @@ export class SessionsService {
     );
     await reprojectAfterSettledChecks(this.prisma, ended.checksSettled, this.logger);
     if (ended.settledProjectId) await this.routeSettledFacts(ended.settledProjectId);
+    if (ended.settledProjectId || (ended.changed && lifecycle === 'deletedAt')) {
+      await this.deliverLandingFixesAfterFinish(sessionId);
+    }
     return ended;
+  }
+
+  /**
+   * Revision 42 (§12.5 W7): an end that finished a work session here — one that never ran — or moved it to Trash may have
+   * handed back the failed landing it held (SESSION_ENDED); it is the coordinator's from that commit, and delivered now. Found by
+   * `ModuleRef` as `routeSettledFacts` finds its router; without one, the coordinator's next turn end delivers it.
+   */
+  private async deliverLandingFixesAfterFinish(sessionId: string): Promise<void> {
+    if (!this.moduleRef) return;
+    try {
+      const { ProjectOpenItemService } = await import('../projects/project-open-item.service.js');
+      await this.moduleRef.get(ProjectOpenItemService, { strict: false }).offerLandingFixesTo(sessionId);
+    } catch (e) {
+      this.logger.warn(`landing fixes handed back by an end not delivered: ${e instanceof Error ? e.message : e}`);
+    }
   }
 
   /**
@@ -10552,6 +10570,12 @@ export class SessionsService {
         clientTurnId: randomUUID(),
         ...(endTurnContent !== undefined ? { content: endTurnContent } : {}),
       });
+    }
+    // Revision 42 (§12.5 W7): a work session moved to Trash hands back the failed landing it holds, SESSION_ENDED, in
+    // this transaction (the items are rank 60, after this Session's rank 30). Its finish cannot decide it: a trashed
+    // session is no work a delivered identity is read from (`readDeliveredIdentity`), so no settlement reaches W7.
+    if (lifecycle === 'deletedAt' && session.startsTaskWork) {
+      await handBackLandingFixesOfSession(tx, sessionId, 'SESSION_ENDED');
     }
     return {
       changed: true,
