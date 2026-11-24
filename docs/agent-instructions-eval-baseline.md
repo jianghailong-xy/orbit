@@ -178,6 +178,32 @@ These are the baseline as it stands, not defects of this step, and later steps m
 - Claude Code I3 (5/10): in five runs it used its own `Agent` tool.
 - Claude Code I5 (7/10), I6 (1/10) and I7 (1/10): as above.
 
+## Kimi Code smoke run (step 3)
+
+Step 3 may change Kimi's carrier (the whole instruction block in every prompt) only after a smoke run of E1, E3 and
+X2 passes on Kimi (design §6). The eval now drives Kimi Code too (`kimiEvalEngine`, `agent_eval_kimi_test.go`: the
+runner's own private Kimi home, `kimi acp`, prompts and stream handling), and the smoke run was played on
+2026-11-24 with Kimi Code 2.7.3, its configured default model, on commit `74097fc3f2` (Kimi's instructions as they
+are today), two runs per case:
+
+| Scenario | Kimi Code 2.7.3 |
+| --- | --- |
+| `E1-record-task` | 0/2 |
+| `E3-create-no-start` | 0/2 |
+| `X2-approval-declined` | 2/2 |
+
+Report: [`agent-eval/instructions-step0/kimi-smoke.json`](agent-eval/instructions-step0/kimi-smoke.json) (and `.md`).
+
+**It does not pass, and Kimi's carrier is left as it is.** Every E1 and E3 run failed one clause and only that one:
+`reply_links_task`, the reply does not link the task as `orbit-task:<id>`. In each, the agent recorded the work in
+Orbit with `task_create`, held, and did not start it. But a Kimi session's `orbit mcp` has a call deadline
+(`ORBIT_MCP_CALL_TIMEOUT_SECONDS`), so a call that waits for the owner's card is handed to a runner-hosted job
+(`handOffOwnerWait`). The call answers "not done yet" at once, and the created task's id arrives in the next turn,
+when Orbit wakes the session with the job's output. The eval plays no such wake turn, so the agent never has an id to
+link. That is a gap in the harness, not something the instructions decide. The same would hold for every engine with
+a call deadline (Cursor, DeepSeek Harness). Until the eval plays that wake, it cannot measure what moving Kimi's
+instructions to the first prompt would cost.
+
 ## How it was run
 
 ```bash

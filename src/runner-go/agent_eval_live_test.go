@@ -720,6 +720,9 @@ func TestAgentEvalLive(t *testing.T) {
 					eng = &claudeEvalEngine{model: claudeModel, effort: effort}
 				case providerCodex:
 					eng = &codexEvalEngine{model: codexModel, effort: effort}
+				case providerKimi:
+					// The engine's own configured model, as a session with no model of its own runs.
+					eng = &kimiEvalEngine{}
 				default:
 					t.Fatalf("%s names no engine the eval drives: %s", evalEnginesEnv, engine)
 				}

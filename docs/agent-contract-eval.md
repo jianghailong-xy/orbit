@@ -77,6 +77,10 @@ spawns one:
   skill root and `handleCodexAppNotification`. `bridgeCodexApprovalWithContext` is pointed at the eval's control
   plane, so a consent Orbit does not answer itself becomes a card that the eval's owner answers. A compaction is
   `thread/compact/start`, and a resume is a new app-server with `thread/resume`.
+- **Kimi Code** (`--engines kimi`): the session's private Kimi home with Orbit's MCP server in it, `startKimiACP`,
+  its handshake and `configureSession`, each prompt built by `prepareKimiPrompt` and its stream read by
+  `handleKimiNotification`. It plays no compaction or resume. A call that waits for the owner is handed to a
+  runner-hosted job on Kimi (`handOffOwnerWait`), and the eval does not yet play the turn that job's wake opens.
 
 The process running the eval is the `orbit` the session is given. The test binary serves as `orbit mcp` and, under
 `ORBIT_EVAL_AS_ORBIT_CLI`, as the CLI for every command. So the engine sees the absolute executable, the allowlist
