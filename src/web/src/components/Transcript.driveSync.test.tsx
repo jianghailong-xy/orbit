@@ -10,7 +10,7 @@ const { api } = await import('../api');
 const apiMock = vi.mocked(api);
 
 import { type RunEvent, Transcript } from './Transcript';
-import { resetDocumentsSyncs } from '../lib/documentsSyncs';
+import { resetDriveSyncs } from '../lib/driveSyncs';
 
 /**
  * A documents_sync call is its sync's card, a row of its own rather than a step (board docs/mocks/documents-sync-card);
@@ -34,7 +34,7 @@ let container: HTMLDivElement;
 let root: Root;
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  resetDocumentsSyncs();
+  resetDriveSyncs();
   apiMock.mockReset();
   apiMock.mockImplementation(async (path: string) => (path === '/documents/syncs' ? { syncs: [SYNC] } : SYNC) as never);
   container = document.createElement('div');
@@ -44,7 +44,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
-  resetDocumentsSyncs();
+  resetDriveSyncs();
 });
 
 const mount = async (events: RunEvent[]) => {

@@ -21,24 +21,24 @@ import {
   UploadOutlined,
 } from '@ant-design/icons';
 import Markdown from '../components/Markdown';
-import { DocumentsWriterName } from '../components/documents/DocumentsWriterName';
-import { DocumentsMoveDialog } from '../components/documents/DocumentsMoveDialog';
-import { DocumentsShareDialog } from '../components/documents/DocumentsShareDialog';
-import { DocumentsUploadTray } from '../components/documents/DocumentsUploadTray';
-import { DocumentsTrash } from '../components/documents/DocumentsTrash';
+import { DriveWriterName } from '../components/drive/DriveWriterName';
+import { DriveMoveDialog } from '../components/drive/DriveMoveDialog';
+import { DriveShareDialog } from '../components/drive/DriveShareDialog';
+import { DriveUploadTray } from '../components/drive/DriveUploadTray';
+import { DriveTrash } from '../components/drive/DriveTrash';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Menu, type MenuItem } from '../components/ui/Menu';
 import {
-  createDocumentsFolder,
-  documentsBlob,
-  downloadDocumentsFile,
-  documentsEntryQuery,
-  documentsFolderQuery,
-  documentsSearchQuery,
+  createDriveFolder,
+  driveBlob,
+  downloadDriveFile,
+  driveEntryQuery,
+  driveFolderQuery,
+  driveSearchQuery,
   useSettled,
-  documentsShareLinksQuery,
-  documentsVersionsQuery,
+  driveShareLinksQuery,
+  driveVersionsQuery,
   formatSize,
   formatWhen,
   isHtml,
@@ -49,20 +49,20 @@ import {
   PDF_PREVIEW_BYTES,
   PICTURE_PREVIEW_BYTES,
   pictureType,
-  renameDocumentsEntry,
-  restoreDocumentsGroup,
-  restoreDocumentsVersion,
+  renameDriveEntry,
+  restoreDriveGroup,
+  restoreDriveVersion,
   TEXT_PREVIEW_BYTES,
-  trashDocumentsEntry,
-  type DocumentsEntry,
-  type DocumentsShareLink,
-} from '../lib/documents';
-import { useDocumentsSyncs } from '../lib/documentsSyncs';
-import { addUploads, useDocumentsUploads, type UploadRequest } from '../lib/documentsUploads';
+  trashDriveEntry,
+  type DriveEntry,
+  type DriveShareLink,
+} from '../lib/drive';
+import { useDriveSyncs } from '../lib/driveSyncs';
+import { addUploads, useDriveUploads, type UploadRequest } from '../lib/driveUploads';
 import { showToast } from '../lib/toastStore';
 import { useToast } from '../lib/toast';
 import { userFileUrl } from '../lib/userFile';
-import './DocumentsPage.css';
+import './DrivePage.css';
 
 // ── drag and drop ──────────────────────────────────────────────────────────────────────────────
 
@@ -144,7 +144,7 @@ function TreeFolder({
   onDropFiles: (event: DragEvent, folder: { id: string; name: string }) => void;
 }) {
   const isOpen = open.has(folder.id);
-  const listing = useQuery({ ...documentsFolderQuery(folder.root ? null : folder.id), enabled: isOpen });
+  const listing = useQuery({ ...driveFolderQuery(folder.root ? null : folder.id), enabled: isOpen });
   const [over, setOver] = useState(false);
   return (
     <>
@@ -206,7 +206,7 @@ function TreeFolder({
 
 // ── the preview pane ───────────────────────────────────────────────────────────────────────────
 
-function EntryIcon({ entry }: { entry: Pick<DocumentsEntry, 'kind' | 'name'> }) {
+function EntryIcon({ entry }: { entry: Pick<DriveEntry, 'kind' | 'name'> }) {
   if (entry.kind === 'FOLDER') return <FolderFilled className="files-folder-icon" aria-hidden="true" />;
   if (pictureType(entry.name)) return <FileImageOutlined className="files-file-icon picture" aria-hidden="true" />;
   if (isMarkdown(entry.name)) return <FileMarkdownOutlined className="files-file-icon" aria-hidden="true" />;
@@ -220,7 +220,7 @@ function EntryIcon({ entry }: { entry: Pick<DocumentsEntry, 'kind' | 'name'> }) 
  * A URL for a file's whole bytes labelled as `type` (the content route is login-only, so no `<img src>` or frame can
  * point at it): null while it loads, 'failed' when it could not be read.
  */
-function useFileUrl(file: DocumentsEntry, type: string): string | null | 'failed' {
+function useFileUrl(file: DriveEntry, type: string): string | null | 'failed' {
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -228,7 +228,7 @@ function useFileUrl(file: DocumentsEntry, type: string): string | null | 'failed
     let stale = false;
     setUrl(null);
     setFailed(false);
-    void documentsBlob('entries', file.id)
+    void driveBlob('entries', file.id)
       .then((blob) => userFileUrl(new Blob([blob], { type })))
       .then((next) => {
         made = next;
@@ -245,7 +245,7 @@ function useFileUrl(file: DocumentsEntry, type: string): string | null | 'failed
 }
 
 /** A picture drawn from its bytes. */
-function PicturePreview({ file }: { file: DocumentsEntry }) {
+function PicturePreview({ file }: { file: DriveEntry }) {
   const url = useFileUrl(file, pictureType(file.name)!);
   if (url === 'failed') return <div className="files-preview-none">Couldn't load the preview.</div>;
   if (!url) return <div className="files-preview-loading">Loading preview…</div>;
@@ -253,7 +253,7 @@ function PicturePreview({ file }: { file: DocumentsEntry }) {
 }
 
 /** A PDF in the browser's own viewer, in a frame of the pane (nginx.conf's frame-src admits the blob: URL). */
-function PdfPreview({ file }: { file: DocumentsEntry }) {
+function PdfPreview({ file }: { file: DriveEntry }) {
   const url = useFileUrl(file, 'application/pdf');
   if (url === 'failed') return <div className="files-preview-none">Couldn't load the preview.</div>;
   if (!url) return <div className="files-preview-loading">Loading preview…</div>;
@@ -261,7 +261,7 @@ function PdfPreview({ file }: { file: DocumentsEntry }) {
 }
 
 /** What a preview cut at `TEXT_PREVIEW_BYTES` says under itself. */
-function CutNote({ file }: { file: DocumentsEntry }) {
+function CutNote({ file }: { file: DriveEntry }) {
   if (file.sizeBytes <= TEXT_PREVIEW_BYTES) return null;
   return (
     <div className="files-preview-note">
@@ -271,7 +271,7 @@ function CutNote({ file }: { file: DocumentsEntry }) {
 }
 
 /** Plain text or code as it is written. */
-function TextPreview({ file }: { file: DocumentsEntry }) {
+function TextPreview({ file }: { file: DriveEntry }) {
   const text = useFileText(file);
   if (text.isError) return <div className="files-preview-none">Couldn't load the preview.</div>;
   if (text.data === undefined) return <div className="files-preview-loading">Loading preview…</div>;
@@ -287,7 +287,7 @@ function TextPreview({ file }: { file: DocumentsEntry }) {
  * A web page drawn in a frame with every sandbox permission off: it runs no script, has no origin (so it reaches
  * neither the login nor this page), submits no form and navigates nowhere.
  */
-function HtmlPreview({ file }: { file: DocumentsEntry }) {
+function HtmlPreview({ file }: { file: DriveEntry }) {
   const text = useFileText(file);
   if (text.isError) return <div className="files-preview-none">Couldn't load the preview.</div>;
   if (text.data === undefined) return <div className="files-preview-loading">Loading preview…</div>;
@@ -300,15 +300,15 @@ function HtmlPreview({ file }: { file: DocumentsEntry }) {
 }
 
 /** The start of a text file: `TEXT_PREVIEW_BYTES` read with a Range. */
-function useFileText(file: DocumentsEntry) {
+function useFileText(file: DriveEntry) {
   return useQuery({
     queryKey: ['drive', 'preview-text', file.id, file.currentVersionId, file.seq],
     meta: { entities: ['drive'] },
-    queryFn: async () => (await documentsBlob('entries', file.id, TEXT_PREVIEW_BYTES)).text(),
+    queryFn: async () => (await driveBlob('entries', file.id, TEXT_PREVIEW_BYTES)).text(),
   });
 }
 
-function MarkdownPreview({ file }: { file: DocumentsEntry }) {
+function MarkdownPreview({ file }: { file: DriveEntry }) {
   const text = useFileText(file);
   if (text.isError) return <div className="files-preview-none">Couldn't load the preview.</div>;
   if (text.data === undefined) return <div className="files-preview-loading">Loading preview…</div>;
@@ -319,7 +319,7 @@ function MarkdownPreview({ file }: { file: DocumentsEntry }) {
   );
 }
 
-function Preview({ file }: { file: DocumentsEntry }) {
+function Preview({ file }: { file: DriveEntry }) {
   if (pictureType(file.name) && file.sizeBytes <= PICTURE_PREVIEW_BYTES) return <PicturePreview file={file} />;
   if (isMarkdown(file.name)) return <MarkdownPreview file={file} />;
   if (isPdf(file.name)) {
@@ -336,22 +336,22 @@ function Preview({ file }: { file: DocumentsEntry }) {
 /** Download a file (or one version) through the browser's own download; a failure is said in a toast. */
 async function download(toast: ReturnType<typeof useToast>, fileId: string, name: string, versionId?: string): Promise<void> {
   try {
-    await downloadDocumentsFile(fileId, versionId);
+    await downloadDriveFile(fileId, versionId);
   } catch (error) {
     toast.error(`Couldn't download ${name}`, messageOf(error));
   }
 }
 
 /** A file's replaced versions, each restorable as the current one or as a copy (board choice c). */
-function EarlierVersions({ file }: { file: DocumentsEntry }) {
+function EarlierVersions({ file }: { file: DriveEntry }) {
   const client = useQueryClient();
   const toast = useToast();
   const [open, setOpen] = useState(false);
-  const versions = useQuery(documentsVersionsQuery(file.id));
+  const versions = useQuery(driveVersionsQuery(file.id));
   const earlier = (versions.data?.versions ?? []).filter((v) => !v.current);
   const restore = async (versionId: string, as: 'CURRENT' | 'COPY') => {
     try {
-      const entry = await restoreDocumentsVersion(versionId, as);
+      const entry = await restoreDriveVersion(versionId, as);
       await client.invalidateQueries({ queryKey: ['drive'] });
       toast.success(as === 'CURRENT' ? 'Restored as the current version' : 'Restored as a copy', entry.name);
     } catch (error) {
@@ -369,7 +369,7 @@ function EarlierVersions({ file }: { file: DocumentsEntry }) {
           {earlier.map((version) => (
             <li key={version.id}>
               <div>
-                {formatWhen(version.createdAt)} · {formatSize(version.sizeBytes)} · <DocumentsWriterName writer={version.writer} />
+                {formatWhen(version.createdAt)} · {formatSize(version.sizeBytes)} · <DriveWriterName writer={version.writer} />
               </div>
               <div className="files-version-actions">
                 <Button size="small" onClick={() => void restore(version.id, 'CURRENT')}>
@@ -401,14 +401,14 @@ function DetailsPane({
   onShare,
   onOpenFolder,
 }: {
-  entry: DocumentsEntry;
-  link: DocumentsShareLink | null;
+  entry: DriveEntry;
+  link: DriveShareLink | null;
   menu: ReactNode;
   onShare: (moveToCurrent: boolean) => void;
   onOpenFolder: (id: string) => void;
 }) {
   const toast = useToast();
-  const detail = useQuery(documentsEntryQuery(entry.id));
+  const detail = useQuery(driveEntryQuery(entry.id));
   const isFile = entry.kind === 'FILE';
   return (
     <aside className="files-pane" aria-label={`${entry.name} details`}>
@@ -420,7 +420,7 @@ function DetailsPane({
         <dd>{formatWhen(entry.lastWriter.at)}</dd>
         <dt>By</dt>
         <dd>
-          <DocumentsWriterName writer={entry.lastWriter} />
+          <DriveWriterName writer={entry.lastWriter} />
         </dd>
         <dt>Path</dt>
         <dd className="files-pane-path">{detail.data?.path ? `/Documents${detail.data.path}` : '…'}</dd>
@@ -470,8 +470,8 @@ function DetailsPane({
 // ── the page ───────────────────────────────────────────────────────────────────────────────────
 
 type Dialog =
-  | { kind: 'move'; entry: DocumentsEntry }
-  | { kind: 'share'; entry: DocumentsEntry; moveToCurrent: boolean }
+  | { kind: 'move'; entry: DriveEntry }
+  | { kind: 'share'; entry: DriveEntry; moveToCurrent: boolean }
   | null;
 
 /**
@@ -479,22 +479,22 @@ type Dialog =
  * who last wrote each file, and the picked file's preview and details. Trash and earlier versions are reached from in
  * here (board choice a). `/documents/trash` is its Trash.
  */
-export function DocumentsPage({ view = 'files' }: { view?: 'files' | 'trash' }) {
-  if (view === 'trash') return <DocumentsTrash />;
-  return <DocumentsBrowser />;
+export function DrivePage({ view = 'files' }: { view?: 'files' | 'trash' }) {
+  if (view === 'trash') return <DriveTrash />;
+  return <DriveBrowser />;
 }
 
-function DocumentsBrowser() {
+function DriveBrowser() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const client = useQueryClient();
   const toast = useToast();
   const folderId = params.get('folder');
   const selectedId = params.get('file');
-  const listing = useQuery(documentsFolderQuery(folderId));
-  const links = useQuery(documentsShareLinksQuery());
-  const { uploads, completed } = useDocumentsUploads();
-  const syncs = useDocumentsSyncs();
+  const listing = useQuery(driveFolderQuery(folderId));
+  const links = useQuery(driveShareLinksQuery());
+  const { uploads, completed } = useDriveUploads();
+  const syncs = useDriveSyncs();
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -505,8 +505,8 @@ function DocumentsBrowser() {
   // not blur the field away; otherwise (null) the ⋯ it opened from.
   const renameInput = useRef<HTMLInputElement>(null);
   const folder = listing.data?.folder ?? null;
-  const rootId = useQuery(documentsFolderQuery(null)).data?.folder.id ?? null;
-  const here = useQuery(documentsEntryQuery(folder && folder.parentId ? folder.id : null));
+  const rootId = useQuery(driveFolderQuery(null)).data?.folder.id ?? null;
+  const here = useQuery(driveEntryQuery(folder && folder.parentId ? folder.id : null));
 
   // A press anywhere but the name field leaves the name as it was (Escape does too; Enter keeps the new one). Not on blur:
   // the menu Rename was picked from moves focus as it closes.
@@ -564,9 +564,9 @@ function DocumentsBrowser() {
   // The search box looks through the whole drive; each result names the folder it is in.
   const searching = search.trim() !== '';
   const settled = useSettled(search.trim());
-  const found = useQuery({ ...documentsSearchQuery(settled), enabled: settled !== '' });
+  const found = useQuery({ ...driveSearchQuery(settled), enabled: settled !== '' });
   const selected = entries.find((entry) => entry.id === selectedId) ?? null;
-  const linkOf = (entry: DocumentsEntry) => links.data?.find((link) => link.root.id === entry.id) ?? null;
+  const linkOf = (entry: DriveEntry) => links.data?.find((link) => link.root.id === entry.id) ?? null;
   const folderName = folder?.parentId ? folder.name : 'Drive';
 
   const dropInto = (event: DragEvent, target: { id: string; name: string } | null) => {
@@ -581,7 +581,7 @@ function DocumentsBrowser() {
 
   const newFolder = async (parentId: string | null) => {
     try {
-      const made = await createDocumentsFolder(parentId, 'New folder');
+      const made = await createDriveFolder(parentId, 'New folder');
       await client.invalidateQueries({ queryKey: ['drive', 'folder'] });
       setRenaming({ id: made.id, name: made.name });
     } catch (error) {
@@ -596,7 +596,7 @@ function DocumentsBrowser() {
     setRenaming(null);
     if (!entry || !name || name === entry.name) return;
     try {
-      await renameDocumentsEntry(entry.id, name);
+      await renameDriveEntry(entry.id, name);
       await client.invalidateQueries({ queryKey: ['drive'] });
     } catch (error) {
       toast.error(`Couldn't rename ${entry.name}`, messageOf(error));
@@ -604,9 +604,9 @@ function DocumentsBrowser() {
   };
 
   // Move to Trash asks nothing; Undo puts it back (board choice b).
-  const moveToTrash = async (entry: DocumentsEntry) => {
+  const moveToTrash = async (entry: DriveEntry) => {
     try {
-      const { trashGroupId } = await trashDocumentsEntry(entry.id);
+      const { trashGroupId } = await trashDriveEntry(entry.id);
       if (selectedId === entry.id) select(null);
       await client.invalidateQueries({ queryKey: ['drive'] });
       showToast({
@@ -619,7 +619,7 @@ function DocumentsBrowser() {
           label: 'Undo',
           ariaLabel: `Undo moving ${entry.name} to Trash`,
           onClick: () =>
-            void restoreDocumentsGroup(trashGroupId)
+            void restoreDriveGroup(trashGroupId)
               .then(() => client.invalidateQueries({ queryKey: ['drive'] }))
               .catch((error: unknown) => toast.error(`Couldn't restore ${entry.name}`, messageOf(error))),
         },
@@ -629,7 +629,7 @@ function DocumentsBrowser() {
     }
   };
 
-  const rowMenu = (entry: DocumentsEntry): MenuItem[] => [
+  const rowMenu = (entry: DriveEntry): MenuItem[] => [
     entry.kind === 'FOLDER'
       ? { key: 'open', label: 'Open', onSelect: () => openFolder(entry.id) }
       : { key: 'open', label: 'Open', onSelect: () => select(entry.id) },
@@ -651,7 +651,7 @@ function DocumentsBrowser() {
     { key: 'trash', label: 'Move to Trash', danger: true, onSelect: () => void moveToTrash(entry) },
   ];
 
-  const moreButton = (entry: DocumentsEntry, className = 'files-row-more') => (
+  const moreButton = (entry: DriveEntry, className = 'files-row-more') => (
     <Menu
       items={rowMenu(entry)}
       returnFocus={renameInput}
@@ -688,10 +688,10 @@ function DocumentsBrowser() {
           <Button variant="primary" icon={<UploadOutlined />} onClick={() => picker.current?.click()}>
             Upload
           </Button>
-          <Button icon={<DeleteOutlined />} onClick={() => navigate('/documents/trash')}>
+          <Button icon={<DeleteOutlined />} onClick={() => navigate('/drive/trash')}>
             Trash
           </Button>
-          <Button icon={<DatabaseOutlined />} onClick={() => navigate('/documents/storage')}>
+          <Button icon={<DatabaseOutlined />} onClick={() => navigate('/drive/storage')}>
             Storage
           </Button>
           <input
@@ -736,7 +736,7 @@ function DocumentsBrowser() {
           onDrop={(event) => dropInto(event, null)}
         >
           <div className="files-crumbs">
-            <Link to="/documents">Drive</Link>
+            <Link to="/drive">Drive</Link>
             {crumbs.map((name, i) => (
               <span key={`${name}-${i}`}>
                 <span className="files-crumb-sep"> › </span>
@@ -850,7 +850,7 @@ function DocumentsBrowser() {
                       </span>
                     </td>
                     <td className="files-col-writer">
-                      <DocumentsWriterName writer={entry.lastWriter} />
+                      <DriveWriterName writer={entry.lastWriter} />
                     </td>
                     <td className="files-col-size">{entry.kind === 'FILE' ? formatSize(entry.sizeBytes) : '—'}</td>
                     <td className="files-col-when">{formatWhen(entry.lastWriter.at)}</td>
@@ -891,7 +891,7 @@ function DocumentsBrowser() {
               <span>Files or folders, any size</span>
             </div>
           )}
-          <DocumentsUploadTray uploads={uploads} syncs={syncs} />
+          <DriveUploadTray uploads={uploads} syncs={syncs} />
         </section>
         {selected && (
           <DetailsPane
@@ -904,10 +904,10 @@ function DocumentsBrowser() {
         )}
       </div>
       {dialog?.kind === 'move' && rootId && (
-        <DocumentsMoveDialog entry={dialog.entry} rootId={rootId} onClose={() => setDialog(null)} />
+        <DriveMoveDialog entry={dialog.entry} rootId={rootId} onClose={() => setDialog(null)} />
       )}
       {dialog?.kind === 'share' && (
-        <DocumentsShareDialog
+        <DriveShareDialog
           file={dialog.entry}
           existing={linkOf(dialog.entry)}
           moveToCurrent={dialog.moveToCurrent}

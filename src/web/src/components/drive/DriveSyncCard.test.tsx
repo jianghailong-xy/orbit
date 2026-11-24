@@ -7,15 +7,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const apiMock = vi.hoisted(() => vi.fn());
 vi.mock('../../api', () => ({ api: apiMock }));
 
-import { documentsSyncIdOf, resetDocumentsSyncs, type DocumentsSyncView } from '../../lib/documentsSyncs';
-import { DocumentsSyncCard } from './DocumentsSyncCard';
+import { driveSyncIdOf, resetDriveSyncs, type DriveSyncView } from '../../lib/driveSyncs';
+import { DriveSyncCard } from './DriveSyncCard';
 
 /**
  * An agent's documents_sync call drawn as its sync's card (board docs/mocks/documents-sync-card): every state, the fold
  * of a clean end, the failed paths, and a sync read by id once it is too old for the tray's list.
  */
 
-const sync = (over: Partial<DocumentsSyncView> = {}): DocumentsSyncView => ({
+const sync = (over: Partial<DriveSyncView> = {}): DriveSyncView => ({
   id: 's1',
   status: 'UPLOADING',
   sourceName: 'stage',
@@ -44,7 +44,7 @@ let root: Root;
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  resetDocumentsSyncs();
+  resetDriveSyncs();
   apiMock.mockReset();
   host = document.createElement('div');
   document.body.append(host);
@@ -53,10 +53,10 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   host.remove();
-  resetDocumentsSyncs();
+  resetDriveSyncs();
 });
 
-async function draw(list: DocumentsSyncView[], byId?: DocumentsSyncView) {
+async function draw(list: DriveSyncView[], byId?: DriveSyncView) {
   apiMock.mockImplementation(async (path: string) => {
     if (path === '/documents/syncs') return { syncs: list };
     if (byId && path === `/documents/syncs/${byId.id}`) return byId;
@@ -65,7 +65,7 @@ async function draw(list: DocumentsSyncView[], byId?: DocumentsSyncView) {
   await act(async () => {
     root.render(
       <MemoryRouter>
-        <DocumentsSyncCard syncId="s1" />
+        <DriveSyncCard syncId="s1" />
       </MemoryRouter>,
     );
   });
@@ -77,15 +77,15 @@ async function draw(list: DocumentsSyncView[], byId?: DocumentsSyncView) {
 
 describe('the sync card', () => {
   it('names the sync from a documents_sync answer, and nothing from an older one', () => {
-    expect(documentsSyncIdOf('{"jobId":"bgj_1","syncId":"s1"}')).toBe('s1');
+    expect(driveSyncIdOf('{"jobId":"bgj_1","syncId":"s1"}')).toBe('s1');
     // What a runner sends today: its answer as a receipt, the call's own answer under `entity`.
     const receipt = (entity: object, ok = true) =>
       JSON.stringify({ receiptVersion: 1, ok, outcome: ok ? 'written' : 'refused', operation: 'documents_sync', id: 'bgj_1', entity });
-    expect(documentsSyncIdOf(receipt({ jobId: 'bgj_1', status: 'running', syncId: '35344yWPof4phuXdrUNez' }))).toBe('35344yWPof4phuXdrUNez');
-    expect(documentsSyncIdOf(receipt({ jobId: 'bgj_1', status: 'running' }))).toBeNull();
-    expect(documentsSyncIdOf(receipt({ syncId: 's1' }, false))).toBeNull();
-    expect(documentsSyncIdOf('{"jobId":"bgj_1","status":"running"}')).toBeNull();
-    expect(documentsSyncIdOf('not json')).toBeNull();
+    expect(driveSyncIdOf(receipt({ jobId: 'bgj_1', status: 'running', syncId: '35344yWPof4phuXdrUNez' }))).toBe('35344yWPof4phuXdrUNez');
+    expect(driveSyncIdOf(receipt({ jobId: 'bgj_1', status: 'running' }))).toBeNull();
+    expect(driveSyncIdOf(receipt({ syncId: 's1' }, false))).toBeNull();
+    expect(driveSyncIdOf('{"jobId":"bgj_1","status":"running"}')).toBeNull();
+    expect(driveSyncIdOf('not json')).toBeNull();
   });
 
   it('draws checking with no total yet', async () => {
@@ -133,7 +133,7 @@ describe('the sync card', () => {
   it('draws a stopped sync and a failed one', async () => {
     expect(await draw([sync({ status: 'STOPPED', endedAt: '2026-11-24T07:40:00Z' })])).toContain('Sync stopped');
     act(() => root.unmount());
-    resetDocumentsSyncs();
+    resetDriveSyncs();
     root = createRoot(host);
     const text = await draw([sync({ status: 'FAILED', error: '/书格 is a file in Drive, not a folder.', endedAt: '2026-11-24T06:57:05Z' })]);
     expect(text).toContain('Sync failed');

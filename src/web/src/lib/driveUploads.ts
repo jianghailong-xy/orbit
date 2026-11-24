@@ -14,7 +14,7 @@ import { sha256Hex } from './sha256';
 
 export type UploadStatus = 'queued' | 'uploading' | 'paused' | 'needs-file' | 'failed' | 'done';
 
-export interface DocumentsUpload {
+export interface DriveUpload {
   key: string;
   name: string;
   size: number;
@@ -38,7 +38,7 @@ export interface DocumentsUpload {
 }
 
 /** The fields kept across a reload. */
-type Kept = Pick<DocumentsUpload, 'key' | 'name' | 'size' | 'lastModified' | 'parentId' | 'parentName' | 'relativePath' | 'dropKey' | 'uploadId'>;
+type Kept = Pick<DriveUpload, 'key' | 'name' | 'size' | 'lastModified' | 'parentId' | 'parentName' | 'relativePath' | 'dropKey' | 'uploadId'>;
 
 const STORAGE_KEY = 'orbit:drive-uploads';
 const DROPS_KEY = 'orbit:drive-upload-drops';
@@ -47,7 +47,7 @@ const DROPS_KEY = 'orbit:drive-upload-drops';
 const RETRIES = 3;
 const RETRY_BASE_MS = 1000;
 
-let uploads: DocumentsUpload[] = [];
+let uploads: DriveUpload[] = [];
 /** dropKey → the top folder the drop's first file made. */
 let drops: Record<string, string> = {};
 let completed = 0;
@@ -55,7 +55,7 @@ const listeners = new Set<() => void>();
 let running: { key: string; abort: AbortController } | null = null;
 let loaded = false;
 let sequence = 0;
-let snapshot: { uploads: DocumentsUpload[]; completed: number } = { uploads, completed };
+let snapshot: { uploads: DriveUpload[]; completed: number } = { uploads, completed };
 
 const newKey = () => `up-${Date.now().toString(36)}-${(sequence += 1)}`;
 
@@ -106,7 +106,7 @@ function emit(): void {
   for (const listener of listeners) listener();
 }
 
-function patch(key: string, change: Partial<DocumentsUpload>): void {
+function patch(key: string, change: Partial<DriveUpload>): void {
   uploads = uploads.map((u) => (u.key === key ? { ...u, ...change } : u));
   emit();
 }
@@ -204,7 +204,7 @@ export function clearFinishedUploads(): void {
 }
 
 /** Every upload, and how many have completed since the page loaded (what the Files page re-reads its folder on). */
-export function useDocumentsUploads(): { uploads: DocumentsUpload[]; completed: number } {
+export function useDriveUploads(): { uploads: DriveUpload[]; completed: number } {
   readKept();
   return useSyncExternalStore(
     (listener) => {
@@ -357,7 +357,7 @@ async function sendOnce(key: string, signal: AbortSignal): Promise<{ id: string 
 }
 
 /** For tests: forget every upload and what was kept. */
-export function resetDocumentsUploadsForTest(): void {
+export function resetDriveUploadsForTest(): void {
   running?.abort.abort();
   running = null;
   uploads = [];

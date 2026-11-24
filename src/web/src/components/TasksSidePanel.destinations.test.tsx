@@ -360,11 +360,11 @@ describe('Files, the row under the Wiki', () => {
     serve();
     await visit('/tasks');
     await click(topEntry('Drive'));
-    expect(location).toBe('/documents');
+    expect(location).toBe('/drive');
     expect(litTopEntries()).toEqual(['Drive']);
   });
 
-  it.each(['/documents', '/documents?folder=x&file=y', '/documents/trash'])('lights Files, in either form, on %s', async (path) => {
+  it.each(['/drive', '/drive?folder=x&file=y', '/drive/trash'])('lights Files, in either form, on %s', async (path) => {
     serve();
     await visit(path);
     expect(litTopEntries()).toEqual(['Drive']);

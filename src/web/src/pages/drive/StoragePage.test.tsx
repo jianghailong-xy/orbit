@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
-import { documentsUsageQuery, meQuery, storageUsageQuery, type DocumentsUsage, type StorageUsage } from '../../lib/queries';
+import { driveUsageQuery, meQuery, storageUsageQuery, type DriveUsage, type StorageUsage } from '../../lib/queries';
 import { StorageSettingsPage } from './StoragePage';
 
 const MB = 1024 * 1024;
@@ -27,11 +27,11 @@ function usage(extra: Partial<StorageUsage> = {}): StorageUsage {
 }
 
 /** The page with this answer in the cache, or none at all, as while it is being read. */
-function render(answer?: StorageUsage, drive?: DocumentsUsage) {
+function render(answer?: StorageUsage, drive?: DriveUsage) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(meQuery().queryKey, { id: 'u1', email: 'a@b.c', name: 'A', preferences: {} });
   if (answer) qc.setQueryData(storageUsageQuery().queryKey, answer);
-  if (drive) qc.setQueryData(documentsUsageQuery().queryKey, drive);
+  if (drive) qc.setQueryData(driveUsageQuery().queryKey, drive);
   return renderToStaticMarkup(
     <QueryClientProvider client={qc}>
       <MemoryRouter>

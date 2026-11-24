@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import type { DocumentsWriter } from '../../lib/documents';
+import type { DriveWriter } from '../../lib/drive';
 import { sessionQuery } from '../../lib/queries';
 
 /** Said where an agent wrote and its session could not be checked (rule 6): no link, since there is none to follow. */
@@ -21,7 +21,7 @@ function AgentInSession({ sessionId }: { sessionId: string }) {
  * Who last wrote a file (§3.6, board rule 6): "You" for the owner; "Agent in <session>" with a link where the session
  * was checked; otherwise "An agent on Orbit Cloud".
  */
-export function DocumentsWriterName({ writer }: { writer: DocumentsWriter }) {
+export function DriveWriterName({ writer }: { writer: DriveWriter }) {
   if (writer.kind === 'OWNER') return <span className="files-writer-you">You</span>;
   if (writer.sessionId) return <AgentInSession sessionId={writer.sessionId} />;
   return <span className="files-writer-cloud">{UNCHECKED_AGENT}</span>;

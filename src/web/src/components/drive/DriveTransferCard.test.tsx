@@ -125,7 +125,7 @@ describe('drive transfer pace', () => {
     const { createRoot } = await import('react-dom/client');
     const { JSDOM } = await import('jsdom');
     const { vi } = await import('vitest');
-    const { DocumentsTransferCard } = await import('./DocumentsTransferCard');
+    const { DriveTransferCard } = await import('./DriveTransferCard');
     const dom = new JSDOM('<!doctype html><div id="root"></div>');
     vi.stubGlobal('window', dom.window);
     vi.stubGlobal('document', dom.window.document);
@@ -137,7 +137,7 @@ describe('drive transfer pace', () => {
       root.render(
         <QueryClientProvider client={new QueryClient()}>
           <MemoryRouter>
-            <DocumentsTransferCard
+            <DriveTransferCard
               kind="put"
               live
               files={[{ id: 'a', path: '/S/a.jpg', status: 'done', sent: 1_000_000, size: 1_000_000 }, file('b', sent)]}

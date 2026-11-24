@@ -29,9 +29,9 @@ vi.mock('./components/AppShell', async () => {
     FlushView: ({ children }: { children: ReactNode }) => children,
   };
 });
-vi.mock('./pages/DocumentsPage', () => ({ DocumentsPage: () => <p>files page</p> }));
-vi.mock('./pages/documents/StoragePage', () => ({ StorageSettingsPage: () => <p>files storage</p> }));
-vi.mock('./pages/documents/StorageFilesPage', () => ({ StorageFilesPage: () => <p>files storage rows</p> }));
+vi.mock('./pages/DrivePage', () => ({ DrivePage: () => <p>files page</p> }));
+vi.mock('./pages/drive/StoragePage', () => ({ StorageSettingsPage: () => <p>files storage</p> }));
+vi.mock('./pages/drive/StorageFilesPage', () => ({ StorageFilesPage: () => <p>files storage rows</p> }));
 vi.mock('./pages/NotFoundPage', () => ({ NotFoundPage: () => <p>not found page</p> }));
 
 let container: HTMLDivElement;
@@ -93,7 +93,7 @@ const driveCalls = () => apiMock.mock.calls.filter(([path]) => /^\/(drive|docume
 const OFF = { managedRunners: { enabled: false }, documents: { enabled: false } };
 
 describe('Drive switch on the routes', () => {
-  it.each(['/documents', '/documents/trash', '/documents/storage', '/documents/storage/projects/abc', '/settings/storage', '/files'])(
+  it.each(['/drive', '/drive/trash', '/drive/storage', '/drive/storage/projects/abc', '/settings/storage', '/files'])(
     'off: %s is the not-found page and asks nothing of /drive',
     async (path) => {
       serve(OFF);
@@ -106,14 +106,14 @@ describe('Drive switch on the routes', () => {
 
   it('on: /documents and Storage mount', async () => {
     serve({ managedRunners: { enabled: false }, documents: { enabled: true } });
-    await visit('/documents');
+    await visit('/drive');
     expect(container.textContent).toContain('files page');
-    await act(async () => window.history.pushState(null, '', '/documents/storage'));
+    await act(async () => window.history.pushState(null, '', '/drive/storage'));
   });
 
   it('absent member (a server from before the switch): on', async () => {
     serve({ managedRunners: { enabled: false } });
-    await visit('/documents/storage');
+    await visit('/drive/storage');
     expect(container.textContent).toContain('files storage');
   });
 
@@ -122,7 +122,7 @@ describe('Drive switch on the routes', () => {
       if (path === '/auth/capabilities') throw new Error('down');
       return [];
     }) as typeof api);
-    await visit('/documents');
+    await visit('/drive');
     // The capability read retries once before it gives up.
     await vi.waitFor(() => expect(container.textContent).toContain('files page'), { timeout: 5000 });
   });

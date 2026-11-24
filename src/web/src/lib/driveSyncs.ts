@@ -8,11 +8,11 @@ import { api } from '../api';
  * only hides ended syncs on this browser (their ids are kept in localStorage).
  */
 
-export type DocumentsSyncStatus = 'CHECKING' | 'UPLOADING' | 'DONE' | 'FAILED' | 'STOPPED';
+export type DriveSyncStatus = 'CHECKING' | 'UPLOADING' | 'DONE' | 'FAILED' | 'STOPPED';
 
-export interface DocumentsSyncView {
+export interface DriveSyncView {
   id: string;
-  status: DocumentsSyncStatus;
+  status: DriveSyncStatus;
   sourceName: string;
   destPath: string;
   destEntryId: string | null;
@@ -34,25 +34,25 @@ export interface DocumentsSyncView {
 }
 
 /** A sync as the tray draws it: the server's view and the bytes a second between the last two reads. */
-export interface DocumentsSync extends DocumentsSyncView {
+export interface DriveSync extends DriveSyncView {
   rate: number | null;
 }
 
-export const syncRunning = (sync: Pick<DocumentsSyncView, 'status'>): boolean =>
+export const syncRunning = (sync: Pick<DriveSyncView, 'status'>): boolean =>
   sync.status === 'CHECKING' || sync.status === 'UPLOADING';
 
 const DISMISSED_KEY = 'orbit:documents-syncs-dismissed';
 const POLL_MS = 5000;
 
-let syncs: DocumentsSync[] = [];
+let syncs: DriveSync[] = [];
 let dismissed = new Set<string>();
 let loadedDismissed = false;
 const listeners = new Set<() => void>();
-let snapshot: DocumentsSync[] = [];
+let snapshot: DriveSync[] = [];
 let timer: ReturnType<typeof setInterval> | null = null;
 let reading = false;
 let readAgain = false;
-/** Whether a read of the list has answered, and how many times: what useDocumentsSync waits on before it reads by id. */
+/** Whether a read of the list has answered, and how many times: what useDriveSync waits on before it reads by id. */
 let listRead = false;
 let listReads = 0;
 
@@ -76,14 +76,14 @@ function publish(): void {
  * Read the syncs again. A call while a read is in flight is not dropped: it asks for one more read when that one ends,
  * so the event announcing a sync's end is never answered by the read that started before it.
  */
-export async function refreshDocumentsSyncs(): Promise<void> {
+export async function refreshDriveSyncs(): Promise<void> {
   if (reading) {
     readAgain = true;
     return;
   }
   reading = true;
   try {
-    const { syncs: read } = await api<{ syncs: DocumentsSyncView[] }>('/documents/syncs');
+    const { syncs: read } = await api<{ syncs: DriveSyncView[] }>('/documents/syncs');
     const before = new Map(syncs.map((sync) => [sync.id, sync]));
     syncs = read.map((sync) => {
       const was = before.get(sync.id);
@@ -101,7 +101,7 @@ export async function refreshDocumentsSyncs(): Promise<void> {
     reading = false;
     if (readAgain) {
       readAgain = false;
-      void refreshDocumentsSyncs();
+      void refreshDriveSyncs();
     }
   }
 }
@@ -119,15 +119,15 @@ export function clearFinishedSyncs(): void {
 }
 
 const onFocus = (): void => {
-  if (document.visibilityState !== 'hidden') void refreshDocumentsSyncs();
+  if (document.visibilityState !== 'hidden') void refreshDriveSyncs();
 };
 
 function start(): void {
-  void refreshDocumentsSyncs();
+  void refreshDriveSyncs();
   window.addEventListener('focus', onFocus);
   document.addEventListener('visibilitychange', onFocus);
   timer = setInterval(() => {
-    if (document.visibilityState !== 'hidden' && syncs.some(syncRunning)) void refreshDocumentsSyncs();
+    if (document.visibilityState !== 'hidden' && syncs.some(syncRunning)) void refreshDriveSyncs();
   }, POLL_MS);
 }
 
@@ -147,12 +147,12 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-export function useDocumentsSyncs(): DocumentsSync[] {
+export function useDriveSyncs(): DriveSync[] {
   return useSyncExternalStore(subscribe, () => snapshot);
 }
 
 /** For tests: forget everything held in memory. */
-export function resetDocumentsSyncs(): void {
+export function resetDriveSyncs(): void {
   stop();
   syncs = [];
   snapshot = [];
@@ -169,9 +169,9 @@ export function resetDocumentsSyncs(): void {
  * the tray's list, which `drive.sync` keeps current, whether or not the tray cleared it; a sync too old for that list
  * (ended over a day ago) is read once by id. Null until it is known, and when it cannot be read.
  */
-export function useDocumentsSync(id: string): DocumentsSync | null {
+export function useDriveSync(id: string): DriveSync | null {
   const listed = useSyncExternalStore(subscribe, () => syncs).find((sync) => sync.id === id) ?? null;
-  const [read, setRead] = useState<DocumentsSync | null>(null);
+  const [read, setRead] = useState<DriveSync | null>(null);
   const [tried, setTried] = useState(false);
   useEffect(() => {
     if (listed || tried) return;
@@ -179,7 +179,7 @@ export function useDocumentsSync(id: string): DocumentsSync | null {
     if (!listRead) return;
     let gone = false;
     setTried(true);
-    api<DocumentsSyncView>(`/documents/syncs/${encodeURIComponent(id)}`)
+    api<DriveSyncView>(`/documents/syncs/${encodeURIComponent(id)}`)
       .then((sync) => !gone && setRead({ ...sync, rate: null }))
       .catch(() => undefined);
     return () => {
@@ -190,13 +190,13 @@ export function useDocumentsSync(id: string): DocumentsSync | null {
 }
 
 /** The MCP name of the tool an agent starts a sync with. */
-export const DOCUMENTS_SYNC_TOOL = 'mcp__orbit__documents_sync';
+export const DRIVE_SYNC_TOOL = 'mcp__orbit__documents_sync';
 
 /**
  * The sync a documents_sync call's answer names, or null for one that names none (a runner from before the card). A
  * runner that answers with a receipt puts the call's own answer under `entity`, and a refused receipt names nothing.
  */
-export function documentsSyncIdOf(text: string): string | null {
+export function driveSyncIdOf(text: string): string | null {
   try {
     const parsed = JSON.parse(text) as Record<string, unknown>;
     if (parsed.receiptVersion !== undefined && parsed.ok === false) return null;

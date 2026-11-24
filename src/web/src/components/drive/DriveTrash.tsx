@@ -5,23 +5,23 @@ import { Button } from '../ui/Button';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { Menu } from '../ui/Menu';
 import {
-  deleteDocumentsGroup,
-  documentsEntryQuery,
-  documentsShareLinksQuery,
-  documentsTrashQuery,
-  emptyDocumentsTrash,
+  deleteDriveGroup,
+  driveEntryQuery,
+  driveShareLinksQuery,
+  driveTrashQuery,
+  emptyDriveTrash,
   formatSize,
   formatWhen,
   groupEndsALink,
   messageOf,
-  restoreDocumentsGroup,
-  restoreDocumentsItem,
-  restoreDocumentsVersion,
-  type DocumentsEntry,
-  type DocumentsTrashGroup,
-} from '../../lib/documents';
+  restoreDriveGroup,
+  restoreDriveItem,
+  restoreDriveVersion,
+  type DriveEntry,
+  type DriveTrashGroup,
+} from '../../lib/drive';
 import { useToast } from '../../lib/toast';
-import { DocumentsWriterName } from './DocumentsWriterName';
+import { DriveWriterName } from './DriveWriterName';
 
 /** Said in the confirmation of a delete for good that ends a link (§9). */
 export const ENDS_A_SHARE_LINK = 'This ends a share link.';
@@ -37,25 +37,25 @@ const items = (n: number) => `${n} ${n === 1 ? 'item' : 'items'}`;
  * restores as the current version or as a copy (choice c). Each group can be deleted for good; when that would end a
  * share link, the question says so.
  */
-export function DocumentsTrash() {
+export function DriveTrash() {
   const navigate = useNavigate();
   const client = useQueryClient();
   const toast = useToast();
   const [confirm, holder] = useConfirm();
-  const trash = useQuery(documentsTrashQuery());
-  const links = useQuery(documentsShareLinksQuery());
+  const trash = useQuery(driveTrashQuery());
+  const links = useQuery(driveShareLinksQuery());
   // A shared file in Trash has a paused link; which group it went in is its own entry's.
   const paused = (links.data ?? []).filter((link) => link.state === 'PAUSED');
-  const pausedEntries = useQueries({ queries: paused.map((link) => documentsEntryQuery(link.root.id)) });
+  const pausedEntries = useQueries({ queries: paused.map((link) => driveEntryQuery(link.root.id)) });
   const trashGroupOf = new Map(paused.map((link, i) => [link.root.id, pausedEntries[i]?.data?.trashGroupId ?? null]));
   const groups = trash.data ?? [];
   const total = groups.reduce((sum, g) => sum + g.itemCount, 0);
   const bytes = groups.reduce((sum, g) => sum + g.sizeBytes, 0);
   const refresh = () => client.invalidateQueries({ queryKey: ['drive'] });
 
-  const restore = async (group: DocumentsTrashGroup) => {
+  const restore = async (group: DriveTrashGroup) => {
     try {
-      const { entryIds } = await restoreDocumentsGroup(group.id);
+      const { entryIds } = await restoreDriveGroup(group.id);
       await refresh();
       toast.success(`Restored ${items(entryIds.length || group.itemCount)}`, `To ${folderLabel(group.folderPath)}`);
     } catch (error) {
@@ -64,9 +64,9 @@ export function DocumentsTrash() {
   };
 
   // One item back without the rest (rule 3): a file out of an agent's `rm -rf`.
-  const restoreOne = async (group: DocumentsTrashGroup, item: DocumentsEntry) => {
+  const restoreOne = async (group: DriveTrashGroup, item: DriveEntry) => {
     try {
-      await restoreDocumentsItem(group.id, item.id);
+      await restoreDriveItem(group.id, item.id);
       await refresh();
       toast.success(`Restored ${item.name}`, `To ${folderLabel(group.folderPath)}`);
     } catch (error) {
@@ -74,9 +74,9 @@ export function DocumentsTrash() {
     }
   };
 
-  const restoreVersion = async (group: DocumentsTrashGroup, as: 'CURRENT' | 'COPY') => {
+  const restoreVersion = async (group: DriveTrashGroup, as: 'CURRENT' | 'COPY') => {
     try {
-      const entry = await restoreDocumentsVersion(group.version!.id, as);
+      const entry = await restoreDriveVersion(group.version!.id, as);
       await refresh();
       toast.success(as === 'CURRENT' ? 'Restored as the current version' : 'Restored as a copy', entry.name);
     } catch (error) {
@@ -84,7 +84,7 @@ export function DocumentsTrash() {
     }
   };
 
-  const deleteForGood = (group: DocumentsTrashGroup) => {
+  const deleteForGood = (group: DriveTrashGroup) => {
     const endsLink = groupEndsALink(group, links.data ?? [], trashGroupOf);
     void confirm({
       title: 'Delete for good?',
@@ -103,7 +103,7 @@ export function DocumentsTrash() {
       cancelText: 'Cancel',
       danger: true,
       onConfirm: async () => {
-        await deleteDocumentsGroup(group.id);
+        await deleteDriveGroup(group.id);
         await refresh();
       },
     });
@@ -125,13 +125,13 @@ export function DocumentsTrash() {
       cancelText: 'Cancel',
       danger: true,
       onConfirm: async () => {
-        await emptyDocumentsTrash();
+        await emptyDriveTrash();
         await refresh();
       },
     });
   };
 
-  const groupMenu = (group: DocumentsTrashGroup) => (
+  const groupMenu = (group: DriveTrashGroup) => (
     <Menu
       items={[{ key: 'delete', label: 'Delete for good…', danger: true, onSelect: () => deleteForGood(group) }]}
       trigger={
@@ -152,7 +152,7 @@ export function DocumentsTrash() {
           </span>
         </h1>
         <div className="files-head-actions">
-          <Button icon={<LeftOutlined />} onClick={() => navigate('/documents')}>
+          <Button icon={<LeftOutlined />} onClick={() => navigate('/drive')}>
             Drive
           </Button>
           <Button danger icon={<DeleteOutlined />} disabled={groups.length === 0} onClick={empty}>
@@ -181,7 +181,7 @@ export function DocumentsTrash() {
                 <span className="files-name">{group.version.entry.name}</span>
                 <span className="files-trash-detail">
                   earlier version, written {formatWhen(group.version.createdAt)} by{' '}
-                  <DocumentsWriterName writer={group.version.writer} /> · replaced by <DocumentsWriterName writer={group.actor} />
+                  <DriveWriterName writer={group.version.writer} /> · replaced by <DriveWriterName writer={group.actor} />
                 </span>
                 <span className="files-trash-size">{formatSize(group.version.sizeBytes)}</span>
                 <Button size="small" onClick={() => void restoreVersion(group, 'CURRENT')}>
@@ -197,7 +197,7 @@ export function DocumentsTrash() {
               <header className="files-trash-group-head">
                 <span>
                   <strong>From {folderLabel(group.folderPath)}</strong> · deleted {formatWhen(group.createdAt)} by{' '}
-                  <DocumentsWriterName writer={group.actor} /> · {items(group.itemCount)} · {formatSize(group.sizeBytes)}
+                  <DriveWriterName writer={group.actor} /> · {items(group.itemCount)} · {formatSize(group.sizeBytes)}
                 </span>
                 <span className="files-trash-group-actions">
                   <Button size="small" onClick={() => void restore(group)}>

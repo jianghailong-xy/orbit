@@ -6,9 +6,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const apiMock = vi.hoisted(() => vi.fn());
 vi.mock('../api', () => ({ api: apiMock }));
 
-import { clearFinishedSyncs, refreshDocumentsSyncs, resetDocumentsSyncs, useDocumentsSyncs, type DocumentsSync, type DocumentsSyncView } from './documentsSyncs';
+import { clearFinishedSyncs, refreshDriveSyncs, resetDriveSyncs, useDriveSyncs, type DriveSync, type DriveSyncView } from './driveSyncs';
 
-const view = (id: string, status: DocumentsSyncView['status']): DocumentsSyncView => ({
+const view = (id: string, status: DriveSyncView['status']): DriveSyncView => ({
   id,
   status,
   sourceName: 'out',
@@ -32,17 +32,17 @@ const view = (id: string, status: DocumentsSyncView['status']): DocumentsSyncVie
 });
 
 beforeEach(() => {
-  resetDocumentsSyncs();
+  resetDriveSyncs();
   localStorage.clear();
   apiMock.mockReset();
 });
 
 function mount() {
-  const seen = { current: [] as DocumentsSync[] };
+  const seen = { current: [] as DriveSync[] };
   const host = document.createElement('div');
   const root = createRoot(host);
   const Probe = () => {
-    seen.current = useDocumentsSyncs();
+    seen.current = useDriveSyncs();
     return null;
   };
   act(() => root.render(createElement(Probe)));
@@ -59,7 +59,7 @@ describe('drive syncs store', () => {
     expect(apiMock).toHaveBeenCalledWith('/documents/syncs');
 
     apiMock.mockResolvedValue({ syncs: [view('a', 'DONE'), view('b', 'UPLOADING')] });
-    await act(() => refreshDocumentsSyncs());
+    await act(() => refreshDriveSyncs());
     expect(first.seen.current.map((s) => s.status)).toEqual(['DONE', 'UPLOADING']);
 
     act(() => clearFinishedSyncs());
@@ -67,7 +67,7 @@ describe('drive syncs store', () => {
     first.unmount();
 
     // A reload: memory is gone, localStorage stays.
-    resetDocumentsSyncs();
+    resetDriveSyncs();
     const second = mount();
     await settle();
     expect(second.seen.current.map((s) => s.id)).toEqual(['b']);

@@ -1,17 +1,17 @@
 /**
  * An agent's transfers to and from Documents (`documents_put` / `documents_get`, `drive_put` / `drive_get` before the
  * rename), as the chat's transfer card draws them
- * (DocumentsTransferCard, board docs/mocks/agent-drive-transfer).
+ * (DriveTransferCard, board docs/mocks/agent-drive-transfer).
  *
  * While a call runs, the runner sends its bytes as the call's live `tool_output`, one sentence restating the whole
- * count: "Uploaded 3355443 of 11954323 bytes" (runner-go documents_progress.go, documentsProgressLine). The durable
+ * count: "Uploaded 3355443 of 11954323 bytes" (runner-go documents_progress.go, driveProgressLine). The durable
  * tool_result replaces it when the call ends, so a finished card is drawn from results alone.
  */
-import { formatSize } from './documents';
+import { formatSize } from './drive';
 
-export type DocumentsTransferKind = 'put' | 'get';
+export type DriveTransferKind = 'put' | 'get';
 
-const TOOLS: Record<string, DocumentsTransferKind> = {
+const TOOLS: Record<string, DriveTransferKind> = {
   mcp__orbit__documents_put: 'put',
   mcp__orbit__documents_get: 'get',
   // Their names before the Documents rename, which stored transcripts carry.
@@ -19,14 +19,14 @@ const TOOLS: Record<string, DocumentsTransferKind> = {
   mcp__orbit__drive_get: 'get',
 };
 
-export function documentsTransferKind(toolName: string): DocumentsTransferKind | null {
+export function driveTransferKind(toolName: string): DriveTransferKind | null {
   return TOOLS[toolName] ?? null;
 }
 
 const PROGRESS_LINE = /^(Uploaded|Downloaded) (\d+) of (\d+) bytes$/;
 
-/** The bytes a progress line counts, or null when the text is not one. Keep in sync with documentsProgressLine. */
-export function parseDocumentsProgress(content: unknown): { sent: number; size: number } | null {
+/** The bytes a progress line counts, or null when the text is not one. Keep in sync with driveProgressLine. */
+export function parseDriveProgress(content: unknown): { sent: number; size: number } | null {
   if (typeof content !== 'string') return null;
   const match = PROGRESS_LINE.exec(content);
   if (!match) return null;
@@ -39,7 +39,7 @@ export function parseDocumentsProgress(content: unknown): { sent: number; size: 
 /** A drive path as the owner reads it in Documents: `~/Documents/a`, `/home/orbit/Documents/a` and the mount's
  * `/run/orbit-documents/drive/a` are `/a`, as are the spellings from before the rename (`~/Files/a`, `/home/orbit/Files/a`,
  * `/run/orbit-files/drive/a`), which the runner still accepts. */
-export function documentsDisplayPath(raw: unknown): string {
+export function driveDisplayPath(raw: unknown): string {
   let p = typeof raw === 'string' ? raw.trim() : '';
   for (const prefix of ['~/Documents', '/home/orbit/Documents', '~/Files', '/home/orbit/Files', '/run/orbit-documents/drive', '/run/orbit-files/drive']) {
     if (p === prefix || p.startsWith(`${prefix}/`)) p = p.slice(prefix.length);
@@ -48,13 +48,13 @@ export function documentsDisplayPath(raw: unknown): string {
   return p.replace(/\/+/g, '/');
 }
 
-export type DocumentsFileStatus = 'waiting' | 'running' | 'done' | 'failed' | 'stopped';
+export type DriveFileStatus = 'waiting' | 'running' | 'done' | 'failed' | 'stopped';
 
-export type DocumentsTransferFile = {
+export type DriveTransferFile = {
   id: string;
   /** The file's drive path. */
   path: string;
-  status: DocumentsFileStatus;
+  status: DriveFileStatus;
   /** Bytes moved so far; for a finished file, its size. */
   sent: number;
   /** Null until the call has said how big the file is. */
@@ -67,7 +67,7 @@ export type DocumentsTransferFile = {
 };
 
 /** What one call's input, result and live line say about its file. */
-export function documentsTransferFile(input: {
+export function driveTransferFile(input: {
   id: string;
   toolInput: unknown;
   result?: { text: string; isError?: boolean };
@@ -75,11 +75,11 @@ export function documentsTransferFile(input: {
   live: boolean;
   ts?: string;
   resultTs?: string;
-}): DocumentsTransferFile {
+}): DriveTransferFile {
   const toolInput = (input.toolInput ?? {}) as Record<string, unknown>;
-  const file: DocumentsTransferFile = {
+  const file: DriveTransferFile = {
     id: input.id,
-    path: documentsDisplayPath(toolInput.path),
+    path: driveDisplayPath(toolInput.path),
     status: 'waiting',
     sent: 0,
     size: null,
@@ -107,7 +107,7 @@ export function documentsTransferFile(input: {
       ...(typeof answer.link === 'string' && /^orbit-(?:document|drive):/.test(answer.link) ? { link: answer.link } : {}),
     };
   }
-  const progress = parseDocumentsProgress(input.progress);
+  const progress = parseDriveProgress(input.progress);
   // A call with no result in a session that is no longer running was cut off.
   if (progress) return { ...file, status: input.live ? 'running' : 'stopped', sent: progress.sent, size: progress.size };
   return { ...file, status: input.live ? 'waiting' : 'stopped' };
@@ -146,13 +146,13 @@ export function commonFolder(paths: string[]): string {
   return shared.length ? `/${shared.join('/')}/` : '/';
 }
 
-export type DocumentsTransferSummary = {
-  kind: DocumentsTransferKind;
+export type DriveTransferSummary = {
+  kind: DriveTransferKind;
   folder: string;
   total: number;
   done: number;
   failed: number;
-  running: DocumentsTransferFile | null;
+  running: DriveTransferFile | null;
   waiting: number;
   stopped: number;
   /** Bytes moved by every file so far. */
@@ -166,8 +166,8 @@ export type DocumentsTransferSummary = {
   elapsedMs: number | null;
 };
 
-export function summarizeDocumentsTransfer(kind: DocumentsTransferKind, files: DocumentsTransferFile[]): DocumentsTransferSummary {
-  const count = (status: DocumentsFileStatus) => files.filter((f) => f.status === status).length;
+export function summarizeDriveTransfer(kind: DriveTransferKind, files: DriveTransferFile[]): DriveTransferSummary {
+  const count = (status: DriveFileStatus) => files.filter((f) => f.status === status).length;
   const running = files.find((f) => f.status === 'running') ?? null;
   const done = count('done');
   const open = files.filter((f) => f.status === 'running' || f.status === 'waiting');
@@ -209,7 +209,7 @@ export function transferRate(samples: ReadonlyArray<{ at: number; bytes: number 
   return Math.max(0, (last.bytes - first.bytes) / (span / 1000));
 }
 
-/** As the Documents page's upload tray says it (DocumentsUploadTray). */
+/** As the Documents page's upload tray says it (DriveUploadTray). */
 export function timeLeftText(leftBytes: number, rate: number): string | null {
   if (!rate) return null;
   const seconds = leftBytes / rate;

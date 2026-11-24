@@ -3,7 +3,7 @@ import { DownloadOutlined } from '@ant-design/icons';
 import { sharedDriveFileUrl, type SharedDriveFile } from '../api';
 import { PublicShell } from '../components/PublicShell';
 import { LinkButton } from '../components/ui/Button';
-import { formatSize, isPdf, PDF_PREVIEW_BYTES } from '../lib/documents';
+import { formatSize, isPdf, PDF_PREVIEW_BYTES } from '../lib/drive';
 import { userFileUrl } from '../lib/userFile';
 import './SharedDriveFilePage.css';
 

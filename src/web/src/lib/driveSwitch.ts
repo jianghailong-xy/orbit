@@ -14,7 +14,7 @@ import { serverCapabilitiesQuery } from './managedRunner';
  * `off`: the server said Documents is off; a drive link already in a transcript stays a card until then.
  * `settled`: the capability read has finished.
  */
-export function useDocumentsEnabled(ask = true): { enabled: boolean; off: boolean; settled: boolean } {
+export function useDriveEnabled(ask = true): { enabled: boolean; off: boolean; settled: boolean } {
   const capabilities = useQuery({ ...serverCapabilitiesQuery(), enabled: ask });
   const settled = capabilities.isFetched;
   const off = settled && capabilities.data?.documents?.enabled === false;
@@ -26,7 +26,7 @@ export function useDocumentsEnabled(ask = true): { enabled: boolean; off: boolea
  * what a transcript draws: a drive link stays a card until the server says off, and a transcript drawn outside any
  * QueryClient (a test, an embed) reads as on.
  */
-export function useDocumentsSaidOff(): boolean {
+export function useDriveSaidOff(): boolean {
   const client = useContext(QueryClientContext);
   const read = () => client?.getQueryData<Partial<ServerCapabilities> | null>(serverCapabilitiesQuery().queryKey)?.documents?.enabled === false;
   const [off, setOff] = useState(read);

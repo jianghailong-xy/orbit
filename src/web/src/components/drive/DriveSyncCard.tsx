@@ -1,9 +1,9 @@
-import '../../pages/DocumentsPage.css';
+import '../../pages/DrivePage.css';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { formatSize } from '../../lib/documents';
-import { useDocumentsSync, syncRunning, type DocumentsSync } from '../../lib/documentsSyncs';
-import { durationText, rateText, timeLeftText } from '../../lib/documentsTransfer';
+import { formatSize } from '../../lib/drive';
+import { useDriveSync, syncRunning, type DriveSync } from '../../lib/driveSyncs';
+import { durationText, rateText, timeLeftText } from '../../lib/driveTransfer';
 
 /** Failed paths the card shows before "Show all". */
 const FAILED_SHOWN = 5;
@@ -27,7 +27,7 @@ function Bar({ fraction, tone, indeterminate, label }: { fraction: number; tone?
   );
 }
 
-function took(sync: DocumentsSync): string {
+function took(sync: DriveSync): string {
   return sync.endedAt ? ` in ${durationText(Date.parse(sync.endedAt) - Date.parse(sync.startedAt))}` : '';
 }
 
@@ -36,8 +36,8 @@ function took(sync: DocumentsSync): string {
  * Documents tray, kept current after the agent's turn ends, since the sync runs in the background. A sync that ends
  * cleanly folds to one line; failures, a stop and a failed sync stay open.
  */
-export function DocumentsSyncCard({ syncId }: { syncId: string }) {
-  const sync = useDocumentsSync(syncId);
+export function DriveSyncCard({ syncId }: { syncId: string }) {
+  const sync = useDriveSync(syncId);
   const navigate = useNavigate();
   const running = sync ? syncRunning(sync) : false;
   const clean = !!sync && sync.status === 'DONE' && sync.failedCount === 0;
@@ -58,7 +58,7 @@ export function DocumentsSyncCard({ syncId }: { syncId: string }) {
     );
   }
   const openFolder = sync.destEntryId
-    ? () => navigate(`/documents?${new URLSearchParams({ folder: sync.destEntryId! })}`)
+    ? () => navigate(`/drive?${new URLSearchParams({ folder: sync.destEntryId! })}`)
     : null;
   const folderLink = (
     <button type="button" className="drive-xfer-link" onClick={openFolder ?? undefined} disabled={!openFolder}>

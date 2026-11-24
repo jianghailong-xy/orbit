@@ -4,7 +4,7 @@ import { DownOutlined, FolderFilled, FolderAddOutlined, RightOutlined } from '@a
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 import { Input } from '../ui/Input';
-import { createDocumentsFolder, documentsFolderQuery, messageOf, moveDocumentsEntry, type DocumentsEntry } from '../../lib/documents';
+import { createDriveFolder, driveFolderQuery, messageOf, moveDriveEntry, type DriveEntry } from '../../lib/drive';
 import { useToast } from '../../lib/toast';
 
 interface Pick {
@@ -24,14 +24,14 @@ function PickerFolder({
 }: {
   folder: Pick & { root?: boolean };
   depth: number;
-  moving: DocumentsEntry;
+  moving: DriveEntry;
   picked: string | null;
   onPick: (folder: Pick) => void;
   open: ReadonlySet<string>;
   toggle: (id: string) => void;
 }) {
   const isOpen = open.has(folder.id);
-  const listing = useQuery({ ...documentsFolderQuery(folder.root ? null : folder.id), enabled: isOpen });
+  const listing = useQuery({ ...driveFolderQuery(folder.root ? null : folder.id), enabled: isOpen });
   const here = moving.parentId === folder.id;
   // A folder cannot go into itself.
   const itself = moving.id === folder.id;
@@ -86,7 +86,7 @@ function PickerFolder({
  * Move to… (board 02-web frame 4): a folder picker over the drive's folders, the item's own folder greyed, with
  * New folder, which adds a folder under the picked one and picks it.
  */
-export function DocumentsMoveDialog({ entry, rootId, onClose }: { entry: DocumentsEntry; rootId: string; onClose: () => void }) {
+export function DriveMoveDialog({ entry, rootId, onClose }: { entry: DriveEntry; rootId: string; onClose: () => void }) {
   const client = useQueryClient();
   const toast = useToast();
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set([rootId]));
@@ -107,7 +107,7 @@ export function DocumentsMoveDialog({ entry, rootId, onClose }: { entry: Documen
     const name = (naming ?? '').trim();
     if (!name) return;
     try {
-      const made = await createDocumentsFolder(under.id, name);
+      const made = await createDriveFolder(under.id, name);
       await client.invalidateQueries({ queryKey: ['drive', 'folder'] });
       setOpen((was) => new Set([...was, under.id]));
       setPicked({ id: made.id, name: made.name });
@@ -122,7 +122,7 @@ export function DocumentsMoveDialog({ entry, rootId, onClose }: { entry: Documen
     setBusy(true);
     setError(null);
     try {
-      await moveDocumentsEntry(entry.id, picked.id);
+      await moveDriveEntry(entry.id, picked.id);
       await client.invalidateQueries({ queryKey: ['drive'] });
       toast.success(`Moved to ${picked.name}`, entry.name);
       onClose();

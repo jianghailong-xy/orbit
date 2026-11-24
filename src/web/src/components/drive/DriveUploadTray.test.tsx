@@ -3,11 +3,11 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { DocumentsSync } from '../../lib/documentsSyncs';
-import type { DocumentsUpload } from '../../lib/documentsUploads';
-import { DocumentsUploadTray } from './DocumentsUploadTray';
+import type { DriveSync } from '../../lib/driveSyncs';
+import type { DriveUpload } from '../../lib/driveUploads';
+import { DriveUploadTray } from './DriveUploadTray';
 
-const sync = (over: Partial<DocumentsSync>): DocumentsSync => ({
+const sync = (over: Partial<DriveSync>): DriveSync => ({
   id: 's1',
   status: 'UPLOADING',
   sourceName: 'out',
@@ -32,7 +32,7 @@ const sync = (over: Partial<DocumentsSync>): DocumentsSync => ({
   ...over,
 });
 
-const upload = (over: Partial<DocumentsUpload> = {}): DocumentsUpload => ({
+const upload = (over: Partial<DriveUpload> = {}): DriveUpload => ({
   key: 'u1',
   name: 'a.pdf',
   size: 2000,
@@ -54,14 +54,14 @@ const upload = (over: Partial<DocumentsUpload> = {}): DocumentsUpload => ({
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 
-const show = (syncs: DocumentsSync[], uploads: DocumentsUpload[] = []) => {
+const show = (syncs: DriveSync[], uploads: DriveUpload[] = []) => {
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host);
   act(() => {
     root!.render(
       <MemoryRouter>
-        <DocumentsUploadTray uploads={uploads} syncs={syncs} />
+        <DriveUploadTray uploads={uploads} syncs={syncs} />
       </MemoryRouter>,
     );
   });

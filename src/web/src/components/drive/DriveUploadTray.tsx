@@ -1,8 +1,8 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckOutlined, WarningFilled } from '@ant-design/icons';
-import { formatSize } from '../../lib/documents';
-import { clearFinishedSyncs, syncRunning, type DocumentsSync } from '../../lib/documentsSyncs';
+import { formatSize } from '../../lib/drive';
+import { clearFinishedSyncs, syncRunning, type DriveSync } from '../../lib/driveSyncs';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 import { AppLink } from '../AppLink';
@@ -11,13 +11,13 @@ import {
   clearFinishedUploads,
   pauseUpload,
   resumeUpload,
-  type DocumentsUpload,
-} from '../../lib/documentsUploads';
+  type DriveUpload,
+} from '../../lib/driveUploads';
 import { useToast } from '../../lib/toast';
 
-const percent = (upload: DocumentsUpload) => (upload.size === 0 ? 100 : Math.floor((upload.sentBytes / upload.size) * 100));
+const percent = (upload: DriveUpload) => (upload.size === 0 ? 100 : Math.floor((upload.sentBytes / upload.size) * 100));
 
-function timeLeft(upload: DocumentsUpload): string | null {
+function timeLeft(upload: DriveUpload): string | null {
   if (!upload.rate) return null;
   const seconds = (upload.size - upload.sentBytes) / upload.rate;
   if (seconds < 60) return 'under a minute left';
@@ -25,7 +25,7 @@ function timeLeft(upload: DocumentsUpload): string | null {
 }
 
 /** The line under a row's bar: what it is doing, and what pressing its button will do. */
-function statusLine(upload: DocumentsUpload): string {
+function statusLine(upload: DriveUpload): string {
   const sent = `${formatSize(upload.sentBytes)} of ${formatSize(upload.size)}`;
   switch (upload.status) {
     case 'queued':
@@ -46,7 +46,7 @@ function statusLine(upload: DocumentsUpload): string {
 }
 
 /** One row of the tray. */
-function TrayRow({ upload }: { upload: DocumentsUpload }) {
+function TrayRow({ upload }: { upload: DriveUpload }) {
   const picker = useRef<HTMLInputElement>(null);
   const toast = useToast();
   const where = upload.relativePath ? upload.relativePath.split('/').slice(0, -1).join('/') : upload.parentName;
@@ -118,11 +118,11 @@ const plural = (n: number, one: string, many: string) => `${n.toLocaleString()} 
 const clock = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 const folderName = (path: string) => path.split('/').filter(Boolean).pop() ?? path;
 
-const syncPercent = (sync: DocumentsSync) =>
+const syncPercent = (sync: DriveSync) =>
   !sync.bytesTotal ? 0 : Math.min(100, Math.floor((sync.bytesSent / sync.bytesTotal) * 100));
 
 /** The line under a sync row's bar, or the whole outcome once it ended. */
-function syncStatusLine(sync: DocumentsSync, details: ReactNode): ReactNode {
+function syncStatusLine(sync: DriveSync, details: ReactNode): ReactNode {
   switch (sync.status) {
     case 'CHECKING':
       return `Checking files… ${sync.filesSeen.toLocaleString()} so far`;
@@ -162,7 +162,7 @@ function syncStatusLine(sync: DocumentsSync, details: ReactNode): ReactNode {
 }
 
 /** What an agent's sync could not send: each path with its error, and what to do next. */
-function SyncDetailsDialog({ sync, onClose }: { sync: DocumentsSync; onClose: () => void }) {
+function SyncDetailsDialog({ sync, onClose }: { sync: DriveSync; onClose: () => void }) {
   const navigate = useNavigate();
   const name = folderName(sync.destPath);
   const more = sync.failedCount - sync.failed.length;
@@ -176,7 +176,7 @@ function SyncDetailsDialog({ sync, onClose }: { sync: DocumentsSync; onClose: ()
       footer={
         <>
           {sync.destEntryId && (
-            <Button onClick={() => navigate(`/documents?folder=${encodeURIComponent(sync.destEntryId!)}`)}>{`Open ${name}`}</Button>
+            <Button onClick={() => navigate(`/drive?folder=${encodeURIComponent(sync.destEntryId!)}`)}>{`Open ${name}`}</Button>
           )}
           <Button variant="primary" onClick={onClose}>
             Done
@@ -206,7 +206,7 @@ function SyncDetailsDialog({ sync, onClose }: { sync: DocumentsSync; onClose: ()
 }
 
 /** One agent's directory sync (board documents-sync-tray). It has no Pause or Cancel: the agent owns the run. */
-function SyncRow({ sync }: { sync: DocumentsSync }) {
+function SyncRow({ sync }: { sync: DriveSync }) {
   const navigate = useNavigate();
   const [details, setDetails] = useState(false);
   const running = syncRunning(sync);
@@ -227,7 +227,7 @@ function SyncRow({ sync }: { sync: DocumentsSync }) {
     <li
       className={`files-tray-row files-tray-sync files-tray-sync-${sync.status.toLowerCase()}${sync.destEntryId ? ' clickable' : ''}`}
       data-sync={sync.sourceName}
-      onClick={() => sync.destEntryId && navigate(`/documents?folder=${encodeURIComponent(sync.destEntryId)}`)}
+      onClick={() => sync.destEntryId && navigate(`/drive?folder=${encodeURIComponent(sync.destEntryId)}`)}
     >
       <div className="files-tray-name">
         <span className="files-tray-file">
@@ -284,7 +284,7 @@ function SyncRow({ sync }: { sync: DocumentsSync }) {
  * The upload tray (board 02-web frame 3): every upload in one corner, as it goes. Large files go up in parts, so there is
  * no size limit (D12); a dropped connection or a closed tab pauses rather than fails.
  */
-export function DocumentsUploadTray({ uploads, syncs = [] }: { uploads: DocumentsUpload[]; syncs?: DocumentsSync[] }) {
+export function DriveUploadTray({ uploads, syncs = [] }: { uploads: DriveUpload[]; syncs?: DriveSync[] }) {
   const [hidden, setHidden] = useState(false);
   if (uploads.length + syncs.length === 0) return null;
   const done = uploads.filter((u) => u.status === 'done').length + syncs.filter((s) => !syncRunning(s)).length;

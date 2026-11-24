@@ -175,7 +175,7 @@ export function StorageFilesPage() {
   const title = first ? (kind === 'weeks' ? `Week of ${weekLabel(first.title)}` : first.title) : isError ? 'Storage' : '…';
   return (
     <div className="settings-page storage-files-page">
-      <button type="button" className="settings-back storage-files-back" onClick={() => navigate('/documents/storage')}>
+      <button type="button" className="settings-back storage-files-back" onClick={() => navigate('/drive/storage')}>
         <LeftOutlined />
         <span>Storage</span>
       </button>
