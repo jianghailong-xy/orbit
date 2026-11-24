@@ -80,7 +80,15 @@ spawns one:
 - **Kimi Code** (`--engines kimi`): the session's private Kimi home with Orbit's MCP server in it, `startKimiACP`,
   its handshake and `configureSession`, each prompt built by `prepareKimiPrompt` and its stream read by
   `handleKimiNotification`. It plays no compaction or resume. A call that waits for the owner is handed to a
-  runner-hosted job on Kimi (`handOffOwnerWait`), and the eval does not yet play the turn that job's wake opens.
+  runner-hosted job on Kimi (`handOffOwnerWait`), and the eval plays the turn that job's wake opens (below).
+
+**The wake turn of a handed-off owner wait.** An engine that ends tool calls on a deadline (Kimi Code; Cursor and
+DeepSeek Harness too) is not held in a call that waits for the owner: the call answers "not done yet", and what it
+wrote, such as the id of the task it filed, reaches the agent when the job exits and Orbit wakes the session with its
+output. After every turn, the eval waits for the owner waits that turn handed off to end, and plays one more turn whose
+words are the control plane's wake block (`buildBackgroundWakeBlock`, ported in `agent_eval_wake_test.go` and pinned to
+its words by a test). That turn belongs to the scenario turn it follows and is graded with it, as a follow-up is.
+Claude Code and Codex hold such a call inline, start no job, and play no wake turn.
 
 The process running the eval is the `orbit` the session is given. The test binary serves as `orbit mcp` and, under
 `ORBIT_EVAL_AS_ORBIT_CLI`, as the CLI for every command. So the engine sees the absolute executable, the allowlist
