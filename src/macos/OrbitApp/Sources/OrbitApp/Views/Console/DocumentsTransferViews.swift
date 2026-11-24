@@ -74,7 +74,8 @@ struct DocumentsTransferCardView: View {
                       stalledFor: TimeInterval?) -> some View {
         let words = DocumentsTransfer.words(kind)
         let firstEntry = files.first { $0.entryID != nil }?.entryID
-        let tint: Color = summary.finished ? (summary.clean ? .green : summary.failed > 0 ? .red : .secondary)
+        // A run that ended with a failure shows the share that went, green; one cut off is grey.
+        let tint: Color = summary.finished ? (summary.clean || summary.failed > 0 ? .green : .secondary)
             : stalledFor != nil ? .orange : .accentColor
         return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
@@ -97,9 +98,7 @@ struct DocumentsTransferCardView: View {
                     .transferLinkStyle().font(.orbitLabel)
             }
             VStack(alignment: .leading, spacing: 5) {
-                ProgressView(value: summary.finished && summary.clean ? 1 : summary.fraction)
-                    .progressViewStyle(.linear)
-                    .tint(tint)
+                TransferBar(fraction: summary.finished && summary.clean ? 1 : summary.fraction, tint: tint, height: 6)
                     .accessibilityLabel(words.title)
                 HStack(spacing: 6) {
                     Text(DocumentsTransfer.counting(summary)).fontWeight(.semibold)
@@ -176,9 +175,7 @@ struct DocumentsTransferCardView: View {
             }
             .font(.orbitLabel)
             if file.status == .running, let size = file.size {
-                ProgressView(value: Double(file.sent), total: Double(max(size, 1)))
-                    .progressViewStyle(.linear)
-                    .controlSize(.mini)
+                TransferBar(fraction: Double(file.sent) / Double(max(size, 1)), tint: .accentColor, height: 3)
                     .padding(.leading, 24)
             }
             if file.status == .failed, let error = file.error {
@@ -231,10 +228,10 @@ struct DocumentsTransferCardView: View {
                 Text("\(words.going) \(file.name)")
                 if let size = file.size {
                     Text("· \(DocumentsLogic.formatSize(file.sent)) of \(DocumentsLogic.formatSize(size))"
-                         + (rate.map { " · \(DocumentsLogic.rate($0))" } ?? ""))
+                         + (rate.flatMap { $0 > 0 ? " · \(DocumentsLogic.rate($0))" : nil } ?? ""))
                         .foregroundStyle(.secondary)
-                    ProgressView(value: Double(file.sent), total: Double(max(size, 1)))
-                        .progressViewStyle(.linear).controlSize(.mini).frame(width: 96)
+                    TransferBar(fraction: Double(file.sent) / Double(max(size, 1)), tint: .accentColor, height: 4)
+                        .frame(width: 96)
                 }
             }
         }
@@ -264,5 +261,28 @@ private extension View {
         #else
         buttonStyle(.borderless).foregroundStyle(Color.accentColor)
         #endif
+    }
+}
+
+
+/// The card's bar: drawn, not a `ProgressView`, so it keeps its colour whether or not its window is the key one (an
+/// inactive window's progress bar is grey), as the web's bar does.
+private struct TransferBar: View {
+    let fraction: Double
+    let tint: Color
+    let height: CGFloat
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.primary.opacity(0.08))
+                Capsule().fill(tint)
+                    .frame(width: geo.size.width * min(1, max(0, fraction)))
+                    .animation(.easeOut(duration: 0.4), value: fraction)
+            }
+        }
+        .frame(height: height)
+        .accessibilityElement()
+        .accessibilityValue("\(Int((min(1, max(0, fraction)) * 100).rounded())) percent")
     }
 }
