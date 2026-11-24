@@ -91,6 +91,8 @@ class LandingBoardStackDeviceTest {
             await(head); scrollTo(head)
             capture("landings-$key")
         }
+        // The links above started the app's activity again from the test; end it so the rule can close the scenario.
+        if (only == null) { runBlocking { app.session.logout() }; compose.activityRule.scenario.onActivity { it.finish() }; Thread.sleep(2_000); return }
         // The workspace's Landing section, as the settings page draws each of its states.
         val names = mapOf("pullRequest" to "opened-with-checks-running", "pushAsMe" to "push-as-me-on", "refused" to "push-refused",
             "notFromGithub" to "not-from-github", "permissionsPending" to "permissions-pending", "notConnected" to "github-not-connected")
