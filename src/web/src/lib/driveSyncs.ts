@@ -189,11 +189,15 @@ export function useDriveSync(id: string): DriveSync | null {
   return listed ?? read;
 }
 
-/** The MCP name of the tool an agent starts a sync with. */
-export const DRIVE_SYNC_TOOL = 'mcp__orbit__documents_sync';
+/**
+ * Whether an MCP tool name is the tool an agent starts a sync with: drive_sync, or documents_sync, its name while Drive
+ * was called Documents, which stored transcripts and runners already deployed carry.
+ */
+export const isDriveSyncTool = (name: string): boolean =>
+  name === 'mcp__orbit__drive_sync' || name === 'mcp__orbit__documents_sync';
 
 /**
- * The sync a documents_sync call's answer names, or null for one that names none (a runner from before the card). A
+ * The sync a drive_sync call's answer names, or null for one that names none (a runner from before the card). A
  * runner that answers with a receipt puts the call's own answer under `entity`, and a refused receipt names nothing.
  */
 export function driveSyncIdOf(text: string): string | null {

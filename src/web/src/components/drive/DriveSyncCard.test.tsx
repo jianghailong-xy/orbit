@@ -11,7 +11,7 @@ import { driveSyncIdOf, resetDriveSyncs, type DriveSyncView } from '../../lib/dr
 import { DriveSyncCard } from './DriveSyncCard';
 
 /**
- * An agent's documents_sync call drawn as its sync's card (board docs/mocks/documents-sync-card): every state, the fold
+ * An agent's drive_sync call drawn as its sync's card (board docs/mocks/documents-sync-card): every state, the fold
  * of a clean end, the failed paths, and a sync read by id once it is too old for the tray's list.
  */
 
@@ -76,12 +76,13 @@ async function draw(list: DriveSyncView[], byId?: DriveSyncView) {
 }
 
 describe('the sync card', () => {
-  it('names the sync from a documents_sync answer, and nothing from an older one', () => {
+  it('names the sync from a drive_sync or documents_sync answer, and nothing from an older one', () => {
     expect(driveSyncIdOf('{"jobId":"bgj_1","syncId":"s1"}')).toBe('s1');
     // What a runner sends today: its answer as a receipt, the call's own answer under `entity`.
-    const receipt = (entity: object, ok = true) =>
-      JSON.stringify({ receiptVersion: 1, ok, outcome: ok ? 'written' : 'refused', operation: 'documents_sync', id: 'bgj_1', entity });
+    const receipt = (entity: object, ok = true, operation = 'drive_sync') =>
+      JSON.stringify({ receiptVersion: 1, ok, outcome: ok ? 'written' : 'refused', operation, id: 'bgj_1', entity });
     expect(driveSyncIdOf(receipt({ jobId: 'bgj_1', status: 'running', syncId: '35344yWPof4phuXdrUNez' }))).toBe('35344yWPof4phuXdrUNez');
+    expect(driveSyncIdOf(receipt({ jobId: 'bgj_1', status: 'running', syncId: 's2' }, true, 'documents_sync'))).toBe('s2');
     expect(driveSyncIdOf(receipt({ jobId: 'bgj_1', status: 'running' }))).toBeNull();
     expect(driveSyncIdOf(receipt({ syncId: 's1' }, false))).toBeNull();
     expect(driveSyncIdOf('{"jobId":"bgj_1","status":"running"}')).toBeNull();
