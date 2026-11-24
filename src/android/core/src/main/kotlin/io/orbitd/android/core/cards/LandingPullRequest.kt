@@ -38,6 +38,8 @@ object PullRequestWords {
     const val TIP_LINK = "Landing settings ›"
     const val DISMISS = "Hide this tip"
     const val OPEN_SESSION = "Open session"
+    /** An attempt held on its pull request: it stopped nothing, it waits for GitHub (design §4.2). */
+    const val WAITING_FOR_GITHUB = "Waiting for GitHub"
 }
 
 object LandingPullRequest {

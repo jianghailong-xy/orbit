@@ -58,8 +58,6 @@ object LandingSessionCopy {
     const val NOT_LANDED = "Not landed"
     const val NOT_MERGED = "Not merged"
     const val READY = "Ready"
-    /** An attempt held on its pull request: it stopped nothing, it waits for GitHub (design §4.2). */
-    const val WAITING_FOR_GITHUB = "Waiting for GitHub"
     const val PASSED_CHECK = "Passed the check · waiting for the owner"
     const val PASSED_ON_THE_TREE = "✓ Passed on the combined tree"
     const val LANDED_EXACTLY = "Landed exactly the tested tree"
@@ -618,10 +616,10 @@ object LandingSessionModel {
             else -> LandingSessionCopy.STOPPED_NOT_LANDED
         }
         val ready = attempt.state == "READY"
-        val waiting = if (ready) LandingSessionCopy.READY else if (onPullRequest) LandingSessionCopy.WAITING_FOR_GITHUB else clause
+        val waiting = if (ready) LandingSessionCopy.READY else if (onPullRequest) PullRequestWords.WAITING_FOR_GITHUB else clause
         return LandingAttemptCard(word, waiting,
-            if (ready) LandingSessionCopy.READY else if (onPullRequest) LandingSessionCopy.WAITING_FOR_GITHUB else if (mergeJob) LandingSessionCopy.NOT_MERGED else LandingSessionCopy.NOT_LANDED,
-            false, if (ready) LandingSessionCopy.PASSED_CHECK else if (onPullRequest) LandingSessionCopy.WAITING_FOR_GITHUB else clause, null, null, null, false, null,
+            if (ready) LandingSessionCopy.READY else if (onPullRequest) PullRequestWords.WAITING_FOR_GITHUB else if (mergeJob) LandingSessionCopy.NOT_MERGED else LandingSessionCopy.NOT_LANDED,
+            false, if (ready) LandingSessionCopy.PASSED_CHECK else if (onPullRequest) PullRequestWords.WAITING_FOR_GITHUB else clause, null, null, null, false, null,
             if (unavailable) null else failure, false, false, stoppedOnFailure = attempt.state in FAILURE_STATES)
     }
 

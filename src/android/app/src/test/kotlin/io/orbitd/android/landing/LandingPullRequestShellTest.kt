@@ -28,7 +28,6 @@ import io.orbitd.android.projects.ProjectLandingCardView
 import io.orbitd.android.projects.ProjectPage
 import io.orbitd.android.reader.LandingPullRequestCard
 import io.orbitd.android.reader.LandingPullRequestEnv
-import io.orbitd.android.reader.LandingSessionCopy
 import io.orbitd.android.reader.LandingSessionModel
 import io.orbitd.android.reader.LocalLandingPullRequest
 import io.orbitd.android.ui.OrbitTheme
@@ -137,7 +136,7 @@ class LandingPullRequestShellTest {
         assertEquals("PULL_REQUEST", view.currentAttempt!!.state)
         assertEquals(pr("b"), view.pullRequest)
         val card = LandingSessionModel.attemptCard(view, Instant.parse("2026-11-23T23:40:00Z"))!!
-        assertEquals(LandingSessionCopy.WAITING_FOR_GITHUB, card.state)
+        assertEquals(PullRequestWords.WAITING_FOR_GITHUB, card.state)
         assertNull(card.failure)
     }
 

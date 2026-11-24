@@ -99,6 +99,7 @@ class LandingPullRequestTest {
         assertEquals(PullRequestWords.LOG, tip["LOG"]); assertEquals(PullRequestWords.SETTINGS, tip["SETTINGS"])
         assertEquals(PullRequestWords.TIP, tip["TIP"]); assertEquals(PullRequestWords.TIP_LINK, tip["TIP_LINK"])
         assertEquals(PullRequestWords.DISMISS, tip["DISMISS"])
+        assertTrue(File(root, "src/web/src/lib/landingSession.ts").readText().contains("WAITING_FOR_GITHUB: '${PullRequestWords.WAITING_FOR_GITHUB}'"))
     }
 
     @Test fun theNoticesReadTheServersFacts() {
