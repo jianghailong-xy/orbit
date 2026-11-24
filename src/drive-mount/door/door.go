@@ -1,4 +1,4 @@
-// Package door speaks the runner drive door, /api/runner/documents/* (docs/documents-drive-technical-design.md §4.2,
+// Package door speaks the runner drive door, /api/runner/drive/* (docs/documents-drive-technical-design.md §4.2,
 // §4.3), for the mount daemon.
 //
 //   - Every request carries the mount credential and the managed-runner instance it was issued for (generation and
@@ -284,7 +284,7 @@ func Transient(err error) bool {
 
 // Config is how a client reaches its door.
 type Config struct {
-	// BaseURL is the server's root, e.g. https://orbit.example.com; routes go under /api/runner/documents.
+	// BaseURL is the server's root, e.g. https://orbit.example.com; routes go under /api/runner/drive.
 	BaseURL string
 	// Token is the mount credential (or, for a self-registered runner in tests, a runner credential).
 	Token string
@@ -321,7 +321,7 @@ func (c *Config) defaults() {
 		c.ProbeInterval = 5 * time.Second
 	}
 	if c.UserAgent == "" {
-		c.UserAgent = "orbit-documents-mount"
+		c.UserAgent = "orbit-drive-mount"
 	}
 }
 
@@ -410,7 +410,7 @@ const (
 )
 
 func (c *Client) url(route string, query url.Values) string {
-	u := strings.TrimRight(c.cfg.BaseURL, "/") + "/api/runner/documents" + route
+	u := strings.TrimRight(c.cfg.BaseURL, "/") + "/api/runner/drive" + route
 	if len(query) > 0 {
 		u += "?" + query.Encode()
 	}

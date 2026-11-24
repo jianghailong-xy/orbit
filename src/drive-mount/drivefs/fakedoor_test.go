@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"orbit/documents-mount/door"
+	"orbit/drive-mount/door"
 )
 
 // fakeDoor is the runner drive door's rules as far as these tests need them, in memory: create with an empty first
@@ -170,7 +170,7 @@ func (f *fakeDoor) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	route := strings.TrimPrefix(r.URL.Path, "/api/runner/documents")
+	route := strings.TrimPrefix(r.URL.Path, "/api/runner/drive")
 	var body map[string]interface{}
 	if r.Method == http.MethodPost {
 		_ = json.NewDecoder(r.Body).Decode(&body)

@@ -46,14 +46,14 @@ func TestErrorsLogSaysWhyAndKeepsTheLastLines(t *testing.T) {
 func TestUnsentKeepsTheBytesUnderItsLimit(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Date(2026, 11, 20, 10, 0, 0, 0, time.UTC)
-	r := NewReporter(ReporterOptions{Dir: dir, ShownDir: "/run/orbit-documents", UnsentLimit: 25, Now: func() time.Time { return now }})
+	r := NewReporter(ReporterOptions{Dir: dir, ShownDir: "/run/orbit-drive", UnsentLimit: 25, Now: func() time.Time { return now }})
 	first := r.SaveUnsent("a.txt", []byte("0123456789"), UnsentRecord{CommitID: "c1", EntryID: "e1"})
 	now = now.Add(time.Second)
 	second := r.SaveUnsent("b.txt", []byte("0123456789"), UnsentRecord{CommitID: "c2", EntryID: "e2"})
 	if data, err := os.ReadFile(filepath.Join(dir, "unsent", first)); err != nil || string(data) != "0123456789" {
 		t.Fatalf("first: %q %v", data, err)
 	}
-	if r.UnsentPath(first) != "/run/orbit-documents/unsent/"+first {
+	if r.UnsentPath(first) != "/run/orbit-drive/unsent/"+first {
 		t.Fatalf("shown as %s", r.UnsentPath(first))
 	}
 	now = now.Add(time.Second)

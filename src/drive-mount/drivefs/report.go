@@ -16,7 +16,7 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
-// Reporter writes what an agent reads beside the mount, in the plain parent directory /run/orbit-documents (§5.6, §5.7):
+// Reporter writes what an agent reads beside the mount, in the plain parent directory /run/orbit-drive (§5.6, §5.7):
 //
 //   - errors.log, one line per refusal or failure, saying why (an errno alone does not), the last 1,000 lines;
 //   - status.json, whether the drive is connected, since when not, and how many handles hold uncommitted bytes;
@@ -40,7 +40,7 @@ type Reporter struct {
 
 // ReporterOptions say where the reporter writes.
 type ReporterOptions struct {
-	// Dir is the plain parent directory, /run/orbit-documents: errors.log, status.json and unsent/ are in it.
+	// Dir is the plain parent directory, /run/orbit-drive: errors.log, status.json and unsent/ are in it.
 	Dir string
 	// ShownDir is how agents know Dir, for the paths errors.log names (defaults to Dir).
 	ShownDir string

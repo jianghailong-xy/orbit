@@ -21,7 +21,7 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"golang.org/x/sys/unix"
 
-	"orbit/documents-mount/door"
+	"orbit/drive-mount/door"
 )
 
 // These tests mount the file system for real, over go-fuse, in front of fakeDoor: they need /dev/fuse and root (they
@@ -52,7 +52,7 @@ func mountFakeDoor(t *testing.T, opts Options, cfg door.Config) (*fakeDoor, stri
 			t.Fatal(err)
 		}
 	}
-	rep := NewReporter(ReporterOptions{Dir: state, ShownDir: "/run/orbit-documents"})
+	rep := NewReporter(ReporterOptions{Dir: state, ShownDir: "/run/orbit-drive"})
 	opts.SpoolDir = filepath.Join(dir, "spool")
 	opts.Reporter = rep
 	cfg.BaseURL, cfg.Token = f.srv.URL, "t"
@@ -565,7 +565,7 @@ func TestOneSlowAnswerDoesNotFailTheRestOfAnRmRf(t *testing.T) {
 		if r.URL.Query().Get("wait") != "" {
 			return 4 * time.Second // a long poll with nothing to say
 		}
-		route := strings.TrimPrefix(r.URL.Path, "/api/runner/documents")
+		route := strings.TrimPrefix(r.URL.Path, "/api/runner/drive")
 		if r.Method == http.MethodGet && (route == "/stat" || route == "/list") && slowed.CompareAndSwap(false, true) {
 			return meta * 12 / 9
 		}

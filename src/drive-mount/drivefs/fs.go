@@ -25,7 +25,7 @@ import (
 
 	"github.com/hanwen/go-fuse/v2/fuse"
 
-	"orbit/documents-mount/door"
+	"orbit/drive-mount/door"
 )
 
 const (
@@ -229,15 +229,15 @@ func MountOptions(debug bool) *fuse.MountOptions {
 		MaxWrite:             1 << 20,
 		EnableLocks:          true,
 		IgnoreSecurityLabels: true,
-		FsName:               "orbit-documents",
-		Name:                 "orbit-documents",
+		FsName:               "orbit-drive",
+		Name:                 "orbit-drive",
 		ExtraCapabilities:    fuse.CAP_ATOMIC_O_TRUNC,
 		Debug:                debug,
 		Options:              []string{"default_permissions"},
 	}
 }
 
-func (fs *FS) String() string { return "orbit-documents" }
+func (fs *FS) String() string { return "orbit-drive" }
 
 // Init is the kernel's first request: from here on the file system can notify the kernel.
 func (fs *FS) Init(server *fuse.Server) { fs.server = server }

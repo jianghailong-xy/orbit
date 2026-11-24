@@ -11,7 +11,7 @@ import (
 
 	"github.com/hanwen/go-fuse/v2/fuse"
 
-	"orbit/documents-mount/drivefs"
+	"orbit/drive-mount/drivefs"
 )
 
 // Salvage moves what a dead daemon left in spool's write area (<spool>/w, one file per chunk of an open write, named
@@ -25,7 +25,7 @@ func Salvage(root, spool string, limit int64) int {
 	if err != nil || len(entries) == 0 {
 		return 0
 	}
-	rep := drivefs.NewReporter(drivefs.ReporterOptions{Dir: root, ShownDir: "/run/orbit-documents", UnsentLimit: limit})
+	rep := drivefs.NewReporter(drivefs.ReporterOptions{Dir: root, ShownDir: "/run/orbit-drive", UnsentLimit: limit})
 	names := make([]string, 0, len(entries))
 	for _, e := range entries {
 		if e.Type().IsRegular() {
