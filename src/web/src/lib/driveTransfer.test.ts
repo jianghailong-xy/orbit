@@ -23,6 +23,7 @@ describe('drive transfer progress', () => {
     expect(driveDisplayPath('/home/orbit/Drive/Shuge/a.jpg')).toBe('/Shuge/a.jpg');
     expect(driveDisplayPath('~/Documents/Shuge/a.jpg')).toBe('/~/Documents/Shuge/a.jpg');
     expect(driveDisplayPath('/home/orbit/Files/Shuge/a.jpg')).toBe('/home/orbit/Files/Shuge/a.jpg');
+    expect(driveDisplayPath('/run/orbit-drive/drive/Shuge/a.jpg')).toBe('/Shuge/a.jpg');
     expect(driveDisplayPath('/run/orbit-documents/drive/Shuge/a.jpg')).toBe('/Shuge/a.jpg');
     expect(driveDisplayPath('/run/orbit-files/drive/Shuge/a.jpg')).toBe('/Shuge/a.jpg');
     expect(driveDisplayPath('Shuge//a.jpg')).toBe('/Shuge/a.jpg');

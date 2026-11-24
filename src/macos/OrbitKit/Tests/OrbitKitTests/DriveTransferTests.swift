@@ -42,6 +42,7 @@ final class DriveTransferTests: XCTestCase {
         XCTAssertEqual(DriveTransfer.displayPath("~/Documents/书格/a.jpg"), "/书格/a.jpg")
         XCTAssertEqual(DriveTransfer.displayPath("/home/orbit/Documents/书格/a.jpg"), "/书格/a.jpg")
         XCTAssertEqual(DriveTransfer.displayPath("~/Files/书格/a.jpg"), "/书格/a.jpg")
+        XCTAssertEqual(DriveTransfer.displayPath("/run/orbit-drive/drive/书格/a.jpg"), "/书格/a.jpg")
         XCTAssertEqual(DriveTransfer.displayPath("/run/orbit-documents/drive/书格/a.jpg"), "/书格/a.jpg")
         XCTAssertEqual(DriveTransfer.displayPath("书格//a.jpg"), "/书格/a.jpg")
         XCTAssertEqual(DriveTransfer.commonFolder(["/S/d/单幅/a.jpg", "/S/d/老地图/b.jpg"]), "/S/d/")

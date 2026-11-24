@@ -36,11 +36,11 @@ export function parseDriveProgress(content: unknown): { sent: number; size: numb
   return { sent: Math.min(sent, size), size };
 }
 
-/** A drive path as the owner reads it: `~/Drive/a`, `/home/orbit/Drive/a` and the mount's `/run/orbit-documents/drive/a`
- * (or `/run/orbit-files/drive/a` in an older Pod) are `/a`. */
+/** A drive path as the owner reads it: `~/Drive/a`, `/home/orbit/Drive/a` and the mount's `/run/orbit-drive/drive/a`
+ * (or `/run/orbit-documents/drive/a` and `/run/orbit-files/drive/a` in an older Pod) are `/a`. */
 export function driveDisplayPath(raw: unknown): string {
   let p = typeof raw === 'string' ? raw.trim() : '';
-  for (const prefix of ['~/Drive', '/home/orbit/Drive', '/run/orbit-documents/drive', '/run/orbit-files/drive']) {
+  for (const prefix of ['~/Drive', '/home/orbit/Drive', '/run/orbit-drive/drive', '/run/orbit-documents/drive', '/run/orbit-files/drive']) {
     if (p === prefix || p.startsWith(`${prefix}/`)) p = p.slice(prefix.length);
   }
   if (!p.startsWith('/')) p = `/${p}`;

@@ -38,12 +38,12 @@ public enum DriveTransfer {
     // MARK: one file
 
     /// A Documents path as the owner reads it: `~/Documents/a`, `/home/orbit/Documents/a` and the mount's
-    /// `/run/orbit-documents/drive/a` are `/a`, as are the spellings from before the rename, which the runner still
-    /// accepts.
+    /// `/run/orbit-drive/drive/a` are `/a`, as are the spellings from before the renames (the mount at
+    /// `/run/orbit-documents` and `/run/orbit-files` in an older Pod).
     public static func displayPath(_ raw: String?) -> String {
         var p = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         for prefix in ["~/Documents", "/home/orbit/Documents", "~/Files", "/home/orbit/Files",
-                       "/run/orbit-documents/drive", "/run/orbit-files/drive"] where p == prefix || p.hasPrefix(prefix + "/") {
+                       "/run/orbit-drive/drive", "/run/orbit-documents/drive", "/run/orbit-files/drive"] where p == prefix || p.hasPrefix(prefix + "/") {
             p = String(p.dropFirst(prefix.count))
         }
         if !p.hasPrefix("/") { p = "/" + p }
