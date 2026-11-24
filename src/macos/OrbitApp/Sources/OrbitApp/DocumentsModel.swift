@@ -251,6 +251,16 @@ final class DocumentsModel {
         go(to: next)
     }
 
+    /// Open a file where it lives, selected, from its id alone (a file an agent's transfer card names). One no longer
+    /// there opens the drive's root.
+    func reveal(entryID: String) async {
+        guard let entry = try? await api.documentsEntry(entryID) else {
+            open(folder: nil)
+            return
+        }
+        reveal(entry)
+    }
+
     /// Open a file where it lives, selected (a search result, a file a sync wrote).
     func reveal(_ entry: DocumentsEntry) {
         open(folder: entry.parentId)

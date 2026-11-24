@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import {
   toUuid,
   uuidToBase62,
+  WIKI_CHAT_DRAFTS_NOTE_COUNTS,
   WIKI_CHAT_NOTE_TAGS,
   wikiChatContextErrors,
   wikiChatDraftLabel,
@@ -25,6 +26,7 @@ import {
   type WikiChatDraftState,
   type WikiChatDraftView,
   type WikiChatPlanChangeView,
+  type WikiChatRewriteHeld,
   type WikiChatSectionRef,
   type WikiDocsFollowWaiting,
   type WikiJobKind,
@@ -74,6 +76,9 @@ export const DRAFT_SELECT = {
   changesetId: true,
   trustBefore: true,
   undoneAt: true,
+  autoQueuedAt: true,
+  held: true,
+  heldById: true,
   seenAt: true,
   toldAt: true,
   createdAt: true,
@@ -156,6 +161,11 @@ export interface DraftFacts {
    * confirmed one. Undo is off for it (contract `chat.presses.undo`; C17).
    */
   planMoved: ReadonlySet<string>;
+  /**
+   * Each rewrite card held draft (contract `chat.drafts.auto`) whose card it waits on is still an open draft: it shows
+   * the wait, and that card's Apply or Discard queues it. One whose card ended any other way is a plain draft.
+   */
+  heldOpen: ReadonlySet<string>;
 }
 
 /**
@@ -164,8 +174,8 @@ export interface DraftFacts {
  * active, or a section it would rewrite was written since it was drafted. A base is only read for a card nobody pressed:
  * the press decides an applied or discarded card's state whatever moved after it.
  */
-export async function draftFacts(db: Reader, ownerId: string, rows: readonly DraftRow[]): Promise<DraftFacts> {
-  if (rows.length === 0) return { openChats: new Set(), replacedBy: new Map(), moved: new Set(), planMoved: new Set() };
+export async function draftFacts(db: Reader, ownerId: string, rows: readonly DraftRow[], withHeld = true): Promise<DraftFacts> {
+  if (rows.length === 0) return { openChats: new Set(), replacedBy: new Map(), moved: new Set(), planMoved: new Set(), heldOpen: new Set() };
   const chats = await db.session.findMany({
     where: { ownerId, id: { in: [...new Set(rows.map((row) => row.sessionId))] } },
     select: { id: true, finishedAt: true, deletedAt: true },
@@ -177,7 +187,7 @@ export async function draftFacts(db: Reader, ownerId: string, rows: readonly Dra
   });
   const replacedBy = new Map(successors.map((successor) => [successor.replacesId!, successor.id]));
 
-  const open = rows.filter((row) => row.decision === null && !replacedBy.has(row.id) && openChats.has(row.sessionId));
+  const open = rows.filter((row) => row.decision === null && row.autoQueuedAt === null && !replacedBy.has(row.id) && openChats.has(row.sessionId));
   const moved = new Set<string>();
   if (open.length > 0) {
     const entryIds = [...new Set(open.flatMap((row) => storedOps(row.ops).map((op) => op.entryId).filter((id): id is string => id !== null)))];
@@ -249,7 +259,27 @@ export async function draftFacts(db: Reader, ownerId: string, rows: readonly Dra
       if (!newest || newest.status !== 'confirmed' || made === null || newest.version !== made) planMoved.add(row.id);
     }
   }
-  return { openChats, replacedBy, moved, planMoved };
+  // A held card's wait stands while the card it waits on is an open draft (read one level down, never further).
+  const heldOpen = new Set<string>();
+  const holding = withHeld ? rows.filter((row) => row.held === 'draft' && row.heldById !== null && row.decision === null && row.autoQueuedAt === null) : [];
+  if (holding.length > 0) {
+    const blockers = await db.wikiChatDraft.findMany({ where: { ownerId, id: { in: [...new Set(holding.map((row) => row.heldById!))] } }, select: DRAFT_SELECT });
+    const blockerFacts = await draftFacts(db, ownerId, blockers, false);
+    const openBlockers = new Set(blockers.filter((one) => draftStateOf(one, blockerFacts) === 'draft').map((one) => one.id));
+    for (const row of holding) if (openBlockers.has(row.heldById!)) heldOpen.add(row.id);
+  }
+  return { openChats, replacedBy, moved, planMoved, heldOpen };
+}
+
+/**
+ * Why an open rewrite card waits for a press (contract `chat.drafts.auto`, `wikiChatHeldLine`): what it stored when it
+ * was drafted — web or budget — or, while the card it waits on is still an open draft, draft. Null on any card that is
+ * not a draft, and on a held draft card whose card ended any other way.
+ */
+export function heldOf(row: DraftRow, state: WikiChatDraftState, facts: DraftFacts): WikiChatRewriteHeld | null {
+  if (state !== 'draft' || row.held === null) return null;
+  if (row.held === 'draft') return facts.heldOpen.has(row.id) ? 'draft' : null;
+  return row.held as WikiChatRewriteHeld;
 }
 
 /** A card's state (contract `chat.drafts.derivation`), from its own columns and its facts. */
@@ -260,6 +290,7 @@ export function draftStateOf(row: DraftRow, facts: DraftFacts): WikiChatDraftSta
     replaced: facts.replacedBy.has(row.id),
     chatOpen: facts.openChats.has(row.sessionId),
     baseMoved: facts.moved.has(row.id),
+    autoQueued: row.autoQueuedAt !== null,
   });
 }
 
@@ -352,7 +383,9 @@ export async function draftRewrites(
     const read = await readPlanCardRewrites(db, ownerId, spaceId, plans.filter((row) => row.spaceId === spaceId));
     for (const [id, rewrite] of read) out.set(id, rewrite);
   }
-  const pressed = rows.filter((row) => row.kind !== 'plan' && (row.decision === 'applied' || row.decision === 'edited') && storedSections(row.rewrites).length > 0);
+  // Pressed, or queued without a press (contract `chat.drafts.auto`): both carried by a follow job's press fact.
+  const pressed = rows.filter((row) => row.kind !== 'plan' && (row.decision === 'applied' || row.decision === 'edited' || row.autoQueuedAt !== null)
+    && storedSections(row.rewrites).length > 0);
   for (const spaceId of new Set(pressed.map((row) => row.spaceId))) {
     const ids = pressed.filter((row) => row.spaceId === spaceId).map((row) => row.id);
     // The follow's read takes the service's client and reads through model delegates and $queryRaw alone, which a
@@ -602,6 +635,8 @@ export async function draftViews(db: Reader, ownerId: string, rows: readonly Dra
       replacedBy: facts.replacedBy.has(row.id) ? uuidToBase62(facts.replacedBy.get(row.id)!) : null,
       decision: (row.decision as WikiChatDraftView['decision']) ?? null,
       decidedAt: row.decidedAt?.toISOString() ?? null,
+      autoQueuedAt: row.autoQueuedAt?.toISOString() ?? null,
+      held: heldOf(row, state, facts),
       undoneAt: row.undoneAt?.toISOString() ?? null,
       undoable: wikiChatDraftUndoable(row.kind as WikiChatDraftKind, state, storedOps(row.ops), facts.planMoved.has(row.id)),
       changesetId: row.changesetId,
@@ -645,7 +680,7 @@ export async function chatWaitingOfSpaces(db: Reader, ownerId: string, spaceIds:
   const out = new Map<string, number>(spaceIds.map((id) => [id, 0]));
   if (spaceIds.length === 0) return out;
   const rows = await db.wikiChatDraft.findMany({
-    where: { ownerId, spaceId: { in: [...spaceIds] }, decision: { in: ['applied', 'edited'] }, undoneAt: null, seenAt: null },
+    where: { ownerId, spaceId: { in: [...spaceIds] }, OR: [{ decision: { in: ['applied', 'edited'] } }, { autoQueuedAt: { not: null } }], undoneAt: null, seenAt: null },
     select: DRAFT_SELECT,
   });
   const candidates = rows.filter((row) => pressedSections(row).length > 0);
@@ -657,7 +692,7 @@ export async function chatWaitingOfSpaces(db: Reader, ownerId: string, spaceIds:
   const counted = candidates.filter((row) => !trashed.has(row.sessionId));
   const rewrites = await draftRewrites(db, ownerId, counted);
   for (const row of counted) {
-    const card = cardOf(row, 'applied', rewrites.get(row.id), null);
+    const card = cardOf(row, row.autoQueuedAt !== null ? 'rewritten' : 'applied', rewrites.get(row.id), null);
     const waits = card.rewrite !== null
       && (card.rewrite.result === 'waiting' || ((card.rewrite.result === 'same' || card.rewrite.result === 'failed') && !card.rewrite.seen));
     if (waits) out.set(row.spaceId, (out.get(row.spaceId) ?? 0) + 1);
@@ -781,39 +816,82 @@ function uuidOrNull(id: string): string | null {
 // ── The note the agent is told the presses with ───────────────────────────────────────────────
 
 /**
- * `<orbit_wiki_drafts>` (contract `chat.notes.drafts`): with the owner's next message after one or more presses, one
- * line for each card of the chat pressed since the agent was last told — its id, its label, what became of it (applied,
- * edited, discarded or undone), for an applied one the entries it wrote with their trust, and how its rewrite stands
- * then. Stamps `told_at` on each in the delivery's transaction, so a delivery rolled back tells the next one. Null when
- * nothing was pressed since.
+ * `<orbit_wiki_drafts>` (contract `chat.notes.drafts`): with the owner's next message, one line for each card of the chat
+ * that changed since the agent was last told — pressed by the owner (applied, edited, discarded or undone), or rewritten,
+ * queued without a press (`chat.drafts.auto`) — its id, its label, what became of it, for an applied one the entries it
+ * wrote with their trust, and how its rewrite stands then; and one for each card told before whose rewrite has settled
+ * since (settled), so a rewrite the agent heard was running reaches it once it ends. Stamps `told_at` on each in the
+ * delivery's transaction, so a delivery rolled back tells the next one. Null when nothing changed since.
  */
 export async function draftsNote(db: Reader, input: { ownerId: string; sessionId: string }): Promise<string | null> {
   const rows = await db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
     SELECT d."id"::text AS "id" FROM "wiki_chat_draft" d
-     WHERE d."owner_id" = ${input.ownerId}::uuid AND d."session_id" = ${input.sessionId}::uuid AND d."decision" IS NOT NULL
-       AND (d."told_at" IS NULL OR d."told_at" < GREATEST(d."decided_at", COALESCE(d."undone_at", d."decided_at")))
-     ORDER BY GREATEST(d."decided_at", COALESCE(d."undone_at", d."decided_at")), d."id"`);
-  if (rows.length === 0) return null;
-  const drafts = await db.wikiChatDraft.findMany({ where: { ownerId: input.ownerId, id: { in: rows.map((row) => row.id) } }, select: DRAFT_SELECT });
-  const byId = new Map(drafts.map((row) => [row.id, row]));
-  const ordered = rows.map((row) => byId.get(row.id)).filter((row): row is DraftRow => row !== undefined);
+     WHERE d."owner_id" = ${input.ownerId}::uuid AND d."session_id" = ${input.sessionId}::uuid
+       AND (d."decision" IS NOT NULL OR d."auto_queued_at" IS NOT NULL)
+       AND (d."told_at" IS NULL OR d."told_at" < GREATEST(d."decided_at", d."auto_queued_at", d."undone_at"))
+     ORDER BY GREATEST(d."decided_at", d."auto_queued_at", d."undone_at"), d."id"`);
+  const changedIds = new Set(rows.map((row) => row.id));
+  // Told before, its rewrite then unsettled: told again once the rewrite has ended since.
+  const told = await db.wikiChatDraft.findMany({
+    where: {
+      ownerId: input.ownerId,
+      sessionId: input.sessionId,
+      toldAt: { not: null },
+      undoneAt: null,
+      OR: [{ decision: { in: ['applied', 'edited'] } }, { autoQueuedAt: { not: null } }],
+    },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: DRAFT_SELECT,
+  });
+  const candidates = told.filter((row) => !changedIds.has(row.id) && pressedSections(row).length > 0);
+  const results = candidates.length === 0 ? new Map<string, WikiDocsFollowRewrite>() : await draftRewrites(db, input.ownerId, candidates);
+  const settled = candidates.filter((row) => {
+    const at = results.get(row.id)?.settledAt;
+    return at !== null && at !== undefined && new Date(at) > row.toldAt!;
+  });
+  if (rows.length === 0 && settled.length === 0) return null;
+  const drafts = rows.length === 0
+    ? []
+    : await db.wikiChatDraft.findMany({ where: { ownerId: input.ownerId, id: { in: rows.map((row) => row.id) } }, select: DRAFT_SELECT });
+  const byId = new Map([...drafts, ...settled].map((row) => [row.id, row]));
+  const ordered = [...rows.map((row) => byId.get(row.id)), ...settled].filter((row): row is DraftRow => row !== undefined);
   const views = await draftViews(db, input.ownerId, ordered);
-  const counts = { applied: 0, edited: 0, discarded: 0, undone: 0 };
+  const counts = { applied: 0, edited: 0, discarded: 0, undone: 0, rewritten: 0, settled: 0 };
   const lines: string[] = [];
+  const settledIds = new Set(settled.map((row) => row.id));
   for (const view of views) {
-    const what = view.undoneAt !== null ? 'undone' : (view.decision as 'applied' | 'edited' | 'discarded');
+    const row = byId.get(view.id)!;
+    const what = settledIds.has(view.id)
+      ? 'settled'
+      : view.undoneAt !== null
+        ? 'undone'
+        : row.autoQueuedAt !== null ? 'rewritten' : (view.decision as 'applied' | 'edited' | 'discarded');
     counts[what] += 1;
     const id = uuidToBase62(view.id);
+    const rewriteLine = view.rewrite
+      ? ` Rewrite: ${wikiChatResultLine({ result: view.rewrite.result, reason: view.rewrite.reason, sha: view.rewrite.sha, seen: view.rewrite.seen, sections: view.rewrite.sections.map((s) => ({ where: s.where, result: s.result, ...(s.changed !== null ? { changed: s.changed } : {}) })) })}.`
+      : '';
+    if (what === 'settled') {
+      lines.push(`- ${id} ${view.label}: its rewrite has finished since you were told of it.${rewriteLine}`);
+      continue;
+    }
+    if (what === 'rewritten') {
+      const when = row.heldById !== null ? 'once the owner decided the card it waited on' : 'when you drafted it';
+      lines.push(`- ${id} ${view.label}: rewritten from main without a press, ${when}. The owner confirmed nothing; they can undo it.${rewriteLine || ' Its rewrite has not been queued.'}`);
+      continue;
+    }
     if (what === 'discarded') {
       lines.push(`- ${id} ${view.label}: discarded. Nothing of it was written.`);
       continue;
     }
     if (what === 'undone') {
       // A plan card's Undo put the plan back as a version of its own (C17): the agent drafts from that one next.
-      const undid = view.kind === 'plan' ? storedPlanChange(byId.get(view.id)!)?.undoVersion ?? null : null;
+      const undid = view.kind === 'plan' ? storedPlanChange(row)?.undoVersion ?? null : null;
       lines.push(undid !== null && view.change
         ? `- ${id} ${view.label}: undone. The plan is back to what version ${view.change.baseVersion} said, stored and confirmed as version ${undid}, and the sections its rebuild wrote were restored where nothing wrote them since.`
-        : `- ${id} ${view.label}: undone. What its Apply wrote was taken back, and the sections it rewrote were restored where nothing wrote them since.`);
+        : row.autoQueuedAt !== null
+          ? `- ${id} ${view.label}: undone by the owner. The sections its rewrite wrote were restored where nothing wrote them since.`
+          : `- ${id} ${view.label}: undone. What its Apply wrote was taken back, and the sections it rewrote were restored where nothing wrote them since.`);
       continue;
     }
     const written = view.ops
@@ -827,12 +905,10 @@ export async function draftsNote(db: Reader, input: { ownerId: string; sessionId
       ? ` It made version ${view.change.version} of the plan from version ${view.change.baseVersion} and confirmed it; the documents are rebuilt from it.`
       : '';
     const wrote = written.length > 0 ? ` It wrote ${written.join(', ')}.` : view.kind === 'rewrite' ? ' It wrote no entry.' : made;
-    const rewrite = view.rewrite
-      ? ` Rewrite: ${wikiChatResultLine({ result: view.rewrite.result, reason: view.rewrite.reason, sha: view.rewrite.sha, seen: view.rewrite.seen, sections: view.rewrite.sections.map((s) => ({ where: s.where, result: s.result, ...(s.changed !== null ? { changed: s.changed } : {}) })) })}.`
-      : view.rewrites.length > 0 ? ' Its rewrite has not been queued.' : '';
+    const rewrite = rewriteLine || (view.rewrites.length > 0 ? ' Its rewrite has not been queued.' : '');
     lines.push(`- ${id} ${view.label}: ${what} by the owner.${wrote}${rewrite}`);
   }
   await db.wikiChatDraft.updateMany({ where: { ownerId: input.ownerId, id: { in: ordered.map((row) => row.id) } }, data: { toldAt: new Date() } });
-  const head = `<${WIKI_CHAT_NOTE_TAGS.drafts} ${(['applied', 'edited', 'discarded', 'undone'] as const).map((key) => wikiChatNoteAttribute(key, counts[key])).join(' ')}>`;
-  return [head, 'The owner pressed these cards since your last turn:', ...lines, `</${WIKI_CHAT_NOTE_TAGS.drafts}>`].join('\n');
+  const head = `<${WIKI_CHAT_NOTE_TAGS.drafts} ${WIKI_CHAT_DRAFTS_NOTE_COUNTS.map((key) => wikiChatNoteAttribute(key, counts[key])).join(' ')}>`;
+  return [head, 'What became of your cards since your last turn:', ...lines, `</${WIKI_CHAT_NOTE_TAGS.drafts}>`].join('\n');
 }

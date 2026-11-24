@@ -549,6 +549,8 @@ Confirm 时，模式对它生效过、还没人答的 op 变 `accepted`（§7.5�
   记 `edited`。没点名 challenge 的 amend 不关任何 challenge。
 - `wiki.ts` 的 `WIKI_EFFECT_POLICY` 是这张表的数据形态，`wikiOpEffect()` 给出单个 op 的结论。
 - **决定**：`POST /api/wiki/changesets/:id/decide`，逐个 op 给 `accept` / `edit` / `reject`；只在 owner 通道（§11）。
+- 这张表管条目。wiki 聊天里「从 main 重写」的卡（方案 A，§28.5）不是条目的 op：在写死的边界内起草即排服务端的重写，字由服务端的作业写，agent 仍然
+  没有接受、确认、覆写页面的工具（`agentSurface.notTools`：agent 能让服务端按 main 重写它点名的节，不能决定写什么字）。
 
 ### 7.3 审阅模式（判据 7）
 
@@ -915,7 +917,10 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
     `plan.` 起；`change` 不是对象、带了 docs、categories（或 doc、category）以外的键、同一篇写了两次、开了没有一篇归进去的大类，都是这道闸的 schema 错；
     没有确认过的 plan 拒 `WIKI_PLAN_UNCONFIRMED`；有一版 plan 草稿在等 owner 时拒 `WIKI_PLAN_STALE`（按下会连它一起确认，而 owner 没看过它，
     先在 Plan 页确认或重拟）。卡上存过闸后的每一篇（各节的 key 按按下时会给的 key 补上，项目一律存 id）、要开的大类和起草时依据的版本，plan 一个字不写。
-    它不接受、不确认、不决定、不覆写页面，`notTools` 一字不改。工具说明一字不差写在 `agentSurface.chat.draft.description`。
+    它不接受、不确认、不决定、不覆写页面；方案 A 之后，边界内的 rewrite 卡起草即排服务端按 main 的重写（§28.5），字仍是服务端的，`notTools` 照此改了措辞
+    （agent 能让服务端按 main 重写它点名的节，不能决定写什么字）。回答 `{ status: draft, draftId, kind, rewrites, state, held }`：`state` 是 `rewritten`（起草即排上）
+    或 `draft`，`held` 是边界内却留给按的原因或 null；`status` 仍是 `draft`，留给读它的 runner。工具说明一字不差写在 `agentSurface.chat.draft.description`，
+    这一步不改：它随 runner 发版改（D8，T7）。
   - **`agentSurface.tools` 是五个**（C6）：runner-go 的 `TestWikiAgentSurfaceIsTheContracts` 要求它与 binary 实际提供的工具相等，`wiki_draft` 随 runner
     提供它的那次发版（C6，要 owner 发 runner 版）进了 `tools`、`toolSpecs`、`cli`，同时登记了 cli/mcp 对照（`sections` 在命令行是可重复的
     `--section doc/key`）、help 覆盖与 agent_instructions 三张 family 表；`replaces` 随之进了 `toolSpecs.wiki_propose.params` 与
@@ -1038,8 +1043,8 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
   5% 线、材料不变不重写、Reject / 退役 / 锚点失效撤句并标待重写、不进推送也不能当出处、跨租户 404；Swift 的 `WikiDocsContractTests` 钉住闭集、
   读取形状，以及会话记录脚注拼出 `SessionRecordLink` 深链。Go 的 `TestWikiDoc*`（钉住 runner 门写入请求的字段与路由）随 runner 的文档代码在 P11 删除。
 - **wiki 聊天、跟进与留版**（§28–§30）：`wikiChatContract.spec.ts` 钉住 `chat`、`docs.follow`、`docs.versions` 的闭集、限额（20 句、5 节、
-  每天 40 节、每节 5 版，并从设计原文里读出这几个数）、全部英文文案（与 `WIKI_CHAT_COPY` 相等，设计表格与效果图 42 里的句子逐字在场，没有一个中文字）、
-  `<orbit_wiki_chat>` 的原文、路由都在用户门（`wiki_draft` 的在 runner 门）、`tools` 是五个而 `wiki_draft` 的规格与 `chat.draft` 一致、`notTools` 一字不改、
+  每天 40 节、每节 5 版、每天 20 节不按就写，并从设计原文里读出这几个数）、全部英文文案（与 `WIKI_CHAT_COPY` 相等，设计表格与效果图 42 里的句子逐字在场，没有一个中文字）、
+  `<orbit_wiki_chat>` 的原文、路由都在用户门（`wiki_draft` 的在 runner 门）、`tools` 是五个而 `wiki_draft` 的规格与 `chat.draft` 一致、`notTools` 是方案 A 之后的那句、
   `jobs.onePerSpace` 的两条部分唯一索引与任意两种作业能否并行，并把 `wiki-chat.fixture.json` 的每条向量跑过 `wikiChat.ts` 的函数：
   卡的状态与按钮、卡下那一行、圆按钮的三个数与四种样子、「等你」、跟进作业等待的原因、Rewrites、逐句对照、附注标签、`wikiContext` 的校验、
   Activity 的 Docs 行。OrbitKit 的镜像（C11）读同一份向量；服务端的行为（建聊天、按压、跟进、留版）由 C3–C6 的 pg spec 逐条断言——草稿与按压在
@@ -3383,7 +3388,7 @@ C6（草稿与按压）、C8 与 C9（web）、C11（iOS）、C12（plan 卡）�
 | `<orbit_wiki_contents>` | 第一条消息，不论停在哪一页；之后只在已确认 plan 的版本与这个聊天上次收到的（`session.wiki_chat_contents_version`，迁移 1561）不同时再送。两个标记都和 `told_at` 一样写在投递的事务里，claim 回滚就重送 | wiki 的结构，一份视图而不是出处（头一句这样写）：已确认 plan 的版本；每篇的编号、slug、标题、大类；每节的序号、key、标题、写成没有、写成时的 `repoSha`（前 12 位）。没有 covers，没有句子。由已确认 plan 加一次只读 key 与 `repoSha` 的查询得出（不用读全部句子的 `writtenSections`）。上限：正文至多 30000 个字符（`WIKI_CHAT_CONTENTS_MAX_CHARS`），超出就只列节号、key 与写没写；量得：35 篇（`rules.docsMax`）每篇 8 节的 plan 完整形式 25942 个字符 | `Wiki contents` |
 | `<orbit_wiki_page>` | `wikiContext` 带了当前页 | 文档的节：标题、现在的句子与脚注、这一节的 `repoSha`；条目：同 `wiki_get` 的回答；plan 的篇：已确认 plan 里这一篇的完整定义，形状就是 plan 卡 `change.docs` 里的一篇（每节的 covers、sources 都在），页面停在某一节时点名那一节，并写明一张卡怎样改几篇、怎样把这一篇拆开（C17），以及写法要求放在节的 covers 上（会话读不了 plan，页面替它带过去，`plan.who`；C12）。这段话是服务端的，不等 runner 发版就到 agent | `Wiki page · 3.1 §3` / `Wiki entry · <标题>` / `Wiki plan · 3.1`（停在一节时 `Wiki plan · 3.1 §2`） |
 | `<orbit_wiki_selection>` | `wikiContext` 带了选区 | 选中的句子按阅读顺序、在各自的节标题下，每句带脚注：仓库原文 `path@sha#L起-止`、记录 `<种类> <记录 id> in session <会话 id>`、经由的条目 `via entry <id>`。服务端投递时按 id 读（句子、文档读给的脚注、同样脱敏），从不收客户端的文字 | `Wiki selection · 3.1 §3 · 1 sentence · 2 sources`（跨节写 `3.1 §3–§4`） |
-| `<orbit_wiki_drafts>` | owner 按过之后的下一条消息 | 自 agent 上一轮以来按过的每张卡一行：id、标签、结果（applied / edited / discarded / undone），已 Apply 的写了哪些条目、什么 trust，以及重写此刻怎样 | `Wiki drafts · 1 applied, 1 discarded` |
+| `<orbit_wiki_drafts>` | owner 按过、有卡起草即写、或告诉过的卡的重写之后结束了，之后的下一条消息 | 自 agent 上一轮以来每张有变化的卡一行：id、标签、结果（applied / edited / discarded / undone；rewritten：没按就排上的重写卡；settled：告诉过、重写此后才结束的卡），已 Apply 的写了哪些条目、什么 trust，以及重写此刻怎样；标签依次带 `applied`、`edited`、`discarded`、`undone`、`rewritten`、`settled` 六个数 | `Wiki drafts · 1 applied, 1 discarded`、`Wiki drafts · 1 rewritten, 1 finished` |
 
 - **`wikiContext`**：`{ page?, selection? }`。`page` 是 `{ kind: "doc", docSlug, sectionKey }`、`{ kind: "entry", entryId }`、`{ kind: "plan", docSlug, sectionKey? }` 之一（plan 页停在某一节时带它的 `sectionKey`，C12）；
   `selection` 是 `{ docSlug, sectionKey, sentenceIds }`：`sectionKey` 是选区起点所在的节，`sentenceIds` 是这一篇的 1 到 20 个句子 id（`chat.rules.selectionSentencesMax`）、
@@ -3396,10 +3401,11 @@ C6（草稿与按压）、C8 与 C9（web）、C11（iOS）、C12（plan 卡）�
 - **一张卡是自己表里的一行**（`wiki_chat_draft`），不是变更集（设计 §7.1）：不占 `pendingOpsPerSpace`，不留 `proposed` 的条目，不进 Review、不走核实，
   不算 `opsPerTurn` / `opsPerSession`（它不等审阅），至多 `opsPerChangeset` 个 op。存 id、owner、space、聊天会话、种类、agent 的理由；entry 卡的 op（照请求、
   逐条校验过）与 add / supersede 旁的 `similar[]`；rewrite 卡的节与理由；plan 卡的改动；Rewrites；`tainted`（起草时这场聊天读过网页）；`replaces`；
-  按压（决定、时间、记下的变更集）；`undone_at`；`seen_at`。
+  按压（决定、时间、记下的变更集）；`undone_at`；`seen_at`；以及 rewrite 卡的 `auto_queued_at`（没按就排上的时间）、`held`（边界内却留给按的原因：
+  `web`、`budget`、`draft`）和 `held_by_id`（`draft` 时它等的那张卡），迁移 1574。
 - **三种**：`entry`（`wiki_propose` 的 op，或 `wiki_note` 的 `corrects` 起草的 challenge；标签 `Add <kind>`、`Amend entry`、`Supersede entry`、`Retire entry`、
-  `Reinforce entry`、`Challenge entry`，多个 op 写 `N changes`）；`rewrite`（`wiki_draft`：这几节从 main 重写，设计 §6 第二行；按下只排重写，不写条目；标签
-  `Rewrite from main`，按钮 `Rewrite`）；`plan`（`wiki_draft`：一篇或几篇改成什么样，设计 §6 第三行；按下一次完成编辑、确认、重建；标签 `Plan change`，按钮
+  `Reinforce entry`、`Challenge entry`，多个 op 写 `N changes`）；`rewrite`（`wiki_draft`：这几节从 main 重写，设计 §6 第二行；不写条目；在方案 A 的边界内起草即写、
+  不按，读 `rewritten`；边界外是草稿，按下只排重写；标签 `Rewrite from main`，按钮 `Apply`（D7，不再是 `Rewrite`）；`plan`（`wiki_draft`：一篇或几篇改成什么样，设计 §6 第三行；按下一次完成编辑、确认、重建；标签 `Plan change`，按钮
   `Apply & rebuild`、`Open in Plan`；C12，一张卡改多篇 C17）。plan 卡的 sections（也就是它的 Rewrites）是改动在各篇里新增、改了定义或移进来的节，
   按改后 plan 的篇序、篇内的节序：重建要写的就是这些，多少节都算——plan 卡不排强制节，所以不受 `rules.rewritesMax` 限制，行里存在 `sections`，
   `rewrites` 列留空。卡面是 `wikiChatPlanFace(change)`（图 42 ③）：标题是改动的各篇（`3.1 Sessions runtime · 3.5 Delivery and heartbeats`，
@@ -3411,17 +3417,29 @@ C6（草稿与按压）、C8 与 C9（web）、C11（iOS）、C12（plan 卡）�
   完整会话页、手机上画的都是同一张卡；不认识这个回答的客户端按普通工具调用画（设计 §9）。
 - **替换**：新卡用 `replaces` 指同一场聊天里还开着的卡，被指的卡从此读 `Replaced`，只有一串里最新的能按。指的卡不开着或不是这场聊天的：拒 `WIKI_SCHEMA`
   （`replaces`），什么都不建。
+- **方案 A：起草即写的边界**（`chat.drafts.auto`，设计 §7.2，owner 11-22 定）。全部成立时，rewrite 卡不按就写：卡是 `kind: rewrite`（不带条目 op、
+  不带 plan 改动）；节至多 `rules.rewritesMax`，都是已确认 plan 里写过的节（`wiki_draft` 照旧拒别的）；这场聊天起草时没读过网页（`tainted`）；
+  这个 space 今天（UTC）不按就写的节加上这张卡的不超过 `chat.rules.chatAutoSectionsPerDay` = 20。今天的数是这个 space 今天起草的、没按就排上
+  或在等另一张卡的 rewrite 卡的节数，在 space 的事务级 advisory 锁（`pg_advisory_xact_lock`，在任何文档锁之前取）下读，所以同时起草的两张卡
+  不会一起越过；Undo 不退还（D5）。成立时，在起草调用的同一个事务里把节标 stale、并进 space 的跟进作业（优先级 1，事实标 `auto`，§29.1），
+  写 `auto_queued_at`；`decision` 仍是 null——owner 什么都没按（D4）。缺一条就仍是草稿，存下原因（`held`）：`web` → 卡上写
+  `Apply to write: this chat read web content`；`budget` → `Apply to write: today's automatic rewrites are used up`（之后读不回来，所以要存）。
+  另一种等待（D6）：这场聊天里还有一张开着的卡（草稿，没被替换、没 changed）会重写同一节时，这张卡 `held = draft`、`held_by_id` 指那张卡，
+  节在起草时就计入今天的数；那张卡 Apply 时这张卡在同一事务里一起排上、并进同一个作业，Discard 时这张卡排上；那张卡以别的方式结束（被替换、
+  changed、聊天结束）时，这张卡就是普通草稿，没有那一行，按 Apply 才写。owner 随时可以自己按 Apply，那是一次普通的按压。等待时卡上写
+  `Written once you apply or discard the draft that rewrites the same section`。三行都由 `wikiChatHeldLine` 给出。
 - **状态**读时推导，不另存（设计 §3，同落地会话「活性读时推导」）：`wikiChatDraftState` 依次取第一个成立的。
 
 | 状态 | 显示 | 条件 | 动作 |
 | --- | --- | --- | --- |
 | `applied` | `Applied · Confirmed by you`；卡里有 challenge、它在按压所记变更集里的决定还是 pending 时写 `Applied · In Review` · `Keep, amend or retire the entry in Review.`，链到那条条目的 Review（`wikiChatAppliedInReview`：按下立起的标记要你在 Review 里答，没有确认任何东西）；plan 卡在 plan 之后又动过、Undo 不可用时写 `The plan has changed since, so this can no longer be undone.`（`wikiChatPlanMovedNote`，C17） | 按过 Apply 或 Edit | Undo（可撤时）· Open entry（entry 卡）· Open in Plan（plan 卡，C17）；重写的动作见 28.8 |
-| `undone` | `Undone` | 按过 Apply，又按了 Undo | — |
+| `rewritten` | `Rewritten from main`（不写 `Confirmed by you`：owner 没确认过） | 方案 A 的边界内没按就排上（`auto_queued_at`） | Undo · 重写的动作见 28.8（写完后 See changes） |
+| `undone` | `Undone` | 按过 Apply，或没按就写了，又按了 Undo | — |
 | `discarded` | `Discarded` | 按过 Discard | — |
 | `replaced` | `Replaced` · `A newer draft took over.` | 这场聊天里有新卡替换了它 | — |
 | `not_applied` | `Not applied` | 聊天结束（不在 `OPEN_SESSION_STATUSES` 里）或进了 Trash，卡没处理 | — |
 | `changed` | `Changed since this draft` | 它改的条目离开了 `baseRevision`（或不再 active），或它要重写的节在起草之后被写过，或（plan 卡）plan 离开了它起草时依据的版本：之后存过新的一版，草稿或确认版都算 | Redo（替 owner 发一句话，agent 重起草）· Discard |
-| `draft` | `Draft · <标签>` | 刚起草 | entry：Apply · Edit · Discard；rewrite：Rewrite · Discard；plan：Apply & rebuild · Open in Plan · Discard |
+| `draft` | `Draft · <标签>`；留给按的 rewrite 卡下一行写 `wikiChatHeldLine(held)` | 刚起草 | entry：Apply · Edit · Discard；rewrite：Apply · Discard；plan：Apply & rebuild · Open in Plan · Discard |
 
 - `tainted` 是标签不是状态：任何状态上都写 `Based on web content` · `Read before you apply.`（污染标记照旧）。恢复出来或 resume 的聊天，没按过的卡读回原来的样子
   （状态跟着会话走，同 10-09 设计 §6）。
@@ -3429,7 +3447,8 @@ C6（草稿与按压）、C8 与 C9（web）、C11（iOS）、C12（plan 卡）�
   附件里的节（新的在前）→ 有句子的脚注经由这张卡所改条目（`via_entry_id`）的节，按 plan 顺序 → 新条目按 `docs.affected.fit` 合得上的节，分数高的在前、同分按
   plan 顺序；去重，只取已确认 plan 里写过的节，至多 5 节（`chat.rules.rewritesMax`）。rewrite 卡的就是 `wiki_draft` 给的节。一节都没有的卡，Apply 只写条目。
 - **读**：`GET /api/wiki/chat-drafts/:id` 与 `GET /api/wiki/chats/:id/drafts`（一场聊天的全部卡，旧的在前）回
-  `{ id, sessionId, kind, state, label, rationale, ops, sections, rewrites, similar, tainted, replaces, replacedBy, decision, decidedAt, undoneAt, undoable, changesetId, rewrite, change, createdAt }`；
+  `{ id, sessionId, kind, state, label, rationale, ops, sections, rewrites, similar, tainted, replaces, replacedBy, decision, decidedAt, autoQueuedAt, held, undoneAt, undoable, changesetId, rewrite, change, createdAt }`；
+  `autoQueuedAt` 是没按就排上的时间或 null，`held` 是草稿留给按的原因（`draft` 只在它等的卡仍是开着的草稿时）或 null；
   `ops` 带各自条目现在的样子，`rewrites` 带篇号、节号和标题，`rewrite` 是 `{ jobId, result, reason, sha, sections: [{ doc, key, where, result, changed, versionId }], seen, settledAt }` 或 null；
   `change` 只有 plan 卡有（别的卡是 null；C17）：`{ baseVersion, version, docs: [{ slug, title, number, added, category: { key, title, opens }, fields, sections: [{ key, title, number, edit, fields, covers }] }], moves: [{ title, from: { doc, number, key, section }, to: { doc, number, key, section }, fields, covers }] }`——
   起草时依据的确认版和按下造出的版本（没按时 null）；放进去的每一篇，按改后 plan 的篇序：`number` 是依据版里的篇号，新篇（`added`）是改动放它的位置，
@@ -3447,12 +3466,14 @@ C6（草稿与按压）、C8 与 C9（web）、C11（iOS）、C12（plan 卡）�
 | --- | --- |
 | `apply` | entry 卡：一个事务里重新校验（出处；CAS：底版变了拒 `WIKI_REVISION_CONFLICT`，什么都不写，卡读 changed），记成 origin `agent`、会话是这场聊天的变更集，并由 owner 当场接受（op `pending → accepted`，效果见 §7.7）：trust `confirmed`，原则类 `owner`，不走核实；同一事务里把卡的 Rewrites 作为强制节排进 `docs_follow`（§29）。rewrite 卡：只排这几节，什么都不写。plan 卡（C12）：一个事务里，先锁卡，再锁 space 行（FOR NO KEY UPDATE，同 plan 的每个写入；只锁在用的 wiki：锁卡之后 wiki 进了回收站，就回 404，什么都不写，`space.trash`）；plan 必须还停在卡起草时依据的版本，之后存过别的版本拒 `WIKI_REVISION_CONFLICT`、卡读 changed；把卡的改动——每一篇，连同要开的大类（C17）——依次套到那一版上，对改完的整份 plan 照接受修改建议那样再过一遍闸（`plan.proposals.accept`：plan 的闸，保护和篇数都算，引用重新读）；结果存成 origin `owner` 的新版本，同 owner 的编辑（`plan.routes.edit`），并确认它（`plan.routes.confirm`），在用的那版被取代；按压连同它造出的版本号记在卡上。提交之后，照确认那样请求这一版的构建（`plan.jobs.request`），卡记下这次构建。过不了闸是 `WIKI_PLAN_GATE` 带全部错误（每一篇的），什么都不写——没有版本、没有确认、没有构建、没有按压——卡在按钮下列出原因和每一条错，仍是草稿 |
 | `edit` | 同 Review 的 Edit（`effectPolicy.decide.edit`）：`{ ops: [{ seq, changes }] }` 把 owner 的版本按 amend 的 changes 叠在卡的 op 上，记 `edited`，修订作者是 owner（`trust.edited`），其余同 apply。只对 entry 卡 |
-| `discard` | 只标记这张卡，别的什么都不写：不记 Not true，不写原因，不留反例——它从来不是条目 |
-| `undo` | 一个事务里：entry 卡经 `reviewModes.revert` 自己的写法和幂等键（`revert:<变更集 id>`）撤回 Apply 记下的变更集（add 的条目退役，amend 的条目回到 Apply 之前那一版和它当时的 trust），尽管 owner 接受过这些 op；再把卡的重写写过的每一节恢复成那次重写留下的版本（§30.5），之后又被写过的节不动、在回答里点名（同 revert 点名之后变过的条目）。重写还没开始就把卡的节从排队的作业里拿掉（作业空了就取消）；正在跑的不再写卡上还没写的节，已写的恢复。卡上每个 op 都是 add 或 amend 才可撤——revert 能撤的就这两种：supersede、retire 结束了一条 lineage，什么都带不回来，reinforce、challenge 照常回答（challenge 在 Review 里 Re-confirm）——rewrite 卡按下后可撤。plan 卡（C17，owner 11-07 定）：一个事务里，先锁卡，再锁 space 行（FOR NO KEY UPDATE，同 plan 的每个写入；只锁在用的 wiki：锁卡之后 wiki 进了回收站，就回 404，什么都不写，`space.trash`）；plan 必须还停在这张卡按出的版本——最新、而且是确认版——之后存过别的版本（草稿或确认版都算）拒 `WIKI_REVISION_CONFLICT`，什么都不写；把卡起草时依据的那一版原样再存一次——大类、各篇、各节和它们的 key、新字段、目标篇数、闸的报告和仓库核对——作为 origin `owner` 的新版本（`plan.routes.edit` 的 storeIn）并确认它（`plan.routes.confirm` 的 confirmIn）；再把这张卡那一版的构建替换或拿掉的每一节（§30.1：原因 build、那一版）恢复到这些构建留下的第一版，经 §30.5 的恢复，不问模型：句子、脚注、`repoSha` 与 `materialSha256` 都回去，这节按原指纹算；恢复替换掉的文字也留一版（原因 `restore`）；之后被别的写过的节不动、在回答里点名。只有卡的那一版才有的节（拆出来的新篇）不在 Undo 确认的版本里，谁也不读。提交之后，照确认那样请求这一版的构建（`plan.jobs.request`）：恢复过的节都按指纹不变，不再写。卡那一版还在跑的构建不再写任何东西（它的版本已不在用，写入在文档之前 FOR SHARE 锁住所写的版本，§30.6），还没造出的构建造的是在用的那一版。plan 卡在已 Apply、plan 还停在它按出的版本时可撤；之后存过别的版本就不可撤，卡上写明（28.5），留 Open in Plan。卡读 `Undone` |
-| `retry` | `Try again`：已 Apply、重写失败的卡，把它的节再作为强制节排一次，同 apply 的排法；plan 卡则在它按下确认的那一版仍在用时，照 Plan 页的重建再请求一次那一版的构建（`plan.jobs.rebuild`），卡改记这次构建、结果重新算未看。别的卡回 409 |
+| `discard` | 只标记这张卡，别的什么都不写：不记 Not true，不写原因，不留反例——它从来不是条目。唯一带出的事：这场聊天里在等它的 rewrite 卡（它弃之前还是开着的草稿时）在同一事务里排上（28.5，D6） |
+| `undo` | 一个事务里：entry 卡经 `reviewModes.revert` 自己的写法和幂等键（`revert:<变更集 id>`）撤回 Apply 记下的变更集（add 的条目退役，amend 的条目回到 Apply 之前那一版和它当时的 trust），尽管 owner 接受过这些 op；再把卡的重写写过的每一节恢复成那次重写留下的版本（§30.5），之后又被写过的节不动、在回答里点名（同 revert 点名之后变过的条目）。重写还没开始就把卡的节从排队的作业里拿掉（作业空了就取消）；正在跑的不再写卡上还没写的节，已写的恢复。卡上每个 op 都是 add 或 amend 才可撤——revert 能撤的就这两种：supersede、retire 结束了一条 lineage，什么都带不回来，reinforce、challenge 照常回答（challenge 在 Review 里 Re-confirm）——rewrite 卡按下后、或没按就写了之后可撤：没按就写的卡照已 Apply 的 rewrite 卡撤，节恢复、事实从还没开始的作业里拿掉，它的节仍计入当天的数。plan 卡（C17，owner 11-07 定）：一个事务里，先锁卡，再锁 space 行（FOR NO KEY UPDATE，同 plan 的每个写入；只锁在用的 wiki：锁卡之后 wiki 进了回收站，就回 404，什么都不写，`space.trash`）；plan 必须还停在这张卡按出的版本——最新、而且是确认版——之后存过别的版本（草稿或确认版都算）拒 `WIKI_REVISION_CONFLICT`，什么都不写；把卡起草时依据的那一版原样再存一次——大类、各篇、各节和它们的 key、新字段、目标篇数、闸的报告和仓库核对——作为 origin `owner` 的新版本（`plan.routes.edit` 的 storeIn）并确认它（`plan.routes.confirm` 的 confirmIn）；再把这张卡那一版的构建替换或拿掉的每一节（§30.1：原因 build、那一版）恢复到这些构建留下的第一版，经 §30.5 的恢复，不问模型：句子、脚注、`repoSha` 与 `materialSha256` 都回去，这节按原指纹算；恢复替换掉的文字也留一版（原因 `restore`）；之后被别的写过的节不动、在回答里点名。只有卡的那一版才有的节（拆出来的新篇）不在 Undo 确认的版本里，谁也不读。提交之后，照确认那样请求这一版的构建（`plan.jobs.request`）：恢复过的节都按指纹不变，不再写。卡那一版还在跑的构建不再写任何东西（它的版本已不在用，写入在文档之前 FOR SHARE 锁住所写的版本，§30.6），还没造出的构建造的是在用的那一版。plan 卡在已 Apply、plan 还停在它按出的版本时可撤；之后存过别的版本就不可撤，卡上写明（28.5），留 Open in Plan。卡读 `Undone` |
+| `retry` | `Try again`：已 Apply 或没按就写了、重写失败的卡（没按就写的再排时事实仍标 `auto`），把它的节再作为强制节排一次，同 apply 的排法；plan 卡则在它按下确认的那一版仍在用时，照 Plan 页的重建再请求一次那一版的构建（`plan.jobs.rebuild`），卡改记这次构建、结果重新算未看。别的卡回 409 |
 | `seen` | owner 打开了这张卡已经出了结果的重写（面板显示了它、圆按钮滚到它、或 See changes 打开它）：记一次 `seen_at`；读起来一样或失败的重写从此不再等 owner（28.7）。别的都不写；还没结果的卡不写 |
 
-- Applied、Edited、Discarded、Undone 随 owner 的下一条消息作为 `<orbit_wiki_drafts>` 送达，不单独开回合。
+- Apply（entry、rewrite 卡）也把这场聊天里在等它的 rewrite 卡在同一事务里排上，并进同一个跟进作业（28.5，D6）。
+- Applied、Edited、Discarded、Undone、没按就写的 Rewritten，以及告诉过 agent 之后才结束的重写（settled），随 owner 的下一条消息作为
+  `<orbit_wiki_drafts>` 送达，不单独开回合：卡的 `told_at` 早于重写作业结束时，它再被告诉一次，所以 agent 能知道它听说「还在写」的那次重写的结果。
 - 安全底线不动：`decide` 仍只在 owner 门上，agent 没有接受、确认的工具（`agentSurface.notTools`）；一张卡本身从来不是确认（设计 §11）。
 
 ### 28.7 圆按钮与「等你」
@@ -3475,7 +3496,7 @@ C6（草稿与按压）、C8 与 C9（web）、C11（iOS）、C12（plan 卡）�
   之后 owner 在 Plan 页对同一版的重建不是这张卡的。按卡的节读，每节读它所在那篇的报告（一张卡可重建几篇，C17）：构建排队、已建且作业在跑或没被挡 → `rewriting`；构建被挂起（维护没指定 workspace）
   → `waiting · no_workspace`，作业被挡 → `waiting` 加 §29.6 的原因；结束后按作业报告逐节读：写了且句子变了（或第一次写）→ `updated`，写了读起来一样或没动
   → `same`，失败或没写到 → `failed`，已确认 plan 里没有了 → `gone`。从没请求到构建的 plan 卡读 `failed`，Try again 去请求。
-- 已 Apply 的卡的重写，是带着它这次按压的最新一个 `docs_follow` 作业（§29）：排队且没被挡、或在跑 → `rewriting`；被挡 → `waiting` 加原因（§29.6）；作业结束后各节按
+- 已 Apply 的卡、和没按就写的卡（`rewritten`）的重写，是带着它这次按压（或标 `auto` 的事实）的最新一个 `docs_follow` 作业（§29）：排队且没被挡、或在跑 → `rewriting`；被挡 → `waiting` 加原因（§29.6）；作业结束后各节按
   §29.7 读：`updated`（句子变了）、`same`（写了、读起来一样）、`failed`（没写成）、`gone`（已确认 plan 里没有这一节了），卡的结果取依次第一个出现的 failed、same、
   updated、gone。没有 Rewrites 的卡没有重写。
 - 那一行是 `wikiChatResultLine`：`Rewriting 3.1 §3 and 7.1 §2…`（作业拿到提交后写 `… from main@7f3e2a1…`）、`Rewrite waiting · Maintenance is running`、`Rewrite failed`，
@@ -3543,7 +3564,7 @@ JSON 里是 `docs.follow`；设计 `docs/wiki-chat-design.md` §8.1–§8.3、§
 
 | 触发 | 事实 | 优先级 |
 | --- | --- | --- |
-| 聊天按压 | 有 Rewrites 的卡被 Apply 或 Edit，以及它的 Try again：卡上列的节，强制 | 1，在按压自己的事务里建 |
+| 聊天按压 | 有 Rewrites 的卡被 Apply 或 Edit，以及它的 Try again：卡上列的节，强制。方案 A 边界内没按就写的 rewrite 卡是同一种事实、标 `auto`（§28.5） | 1，在按压自己的事务里建；`auto` 的在起草调用、或它等的那张卡的 Apply / Discard 的事务里建 |
 | 会话合并 | 会话合并到 main 的回执（`session_merge_receipt`：落地的结果，目标是仓库的 main） | 这场会话是聊天时 1，否则 0；回执提交后建 |
 | 落地线进 main | MAIN 线任务的落地、项目晋升记为 MERGED 的回执（`docs/project-integration-line-contract.md`） | 0；回执提交后建 |
 
@@ -3567,6 +3588,9 @@ JSON 里是 `docs.follow`；设计 `docs/wiki-chat-design.md` §8.1–§8.3、§
 
 - 每节的材料同生成（§22.10、§22.13）。强制的节多给两样（设计 §8.2），否则 `entriesPerSection` 可能挤掉 owner 刚 Apply 的条目、写回原样：这张卡写下的条目
   （Apply 之后的样子，各带 live 出处，至多 `sourcesPerEntry` 条），和这场聊天里 owner 的原话——作为写作者可以引的记录：turn 是一手出处，文档和其中的句子从来不是（§22.8）。
+- 标 `auto` 的事实不给这场聊天的原话（设计 §7.2）：没经按压就发布 owner 的话不对，它能被引成脚注、在开了 Footnotes 的分享链接上被访客读到。
+  只由 `auto` 事实要求的节没有聊天的 turn；同一节也有 owner 的按压时，给到最新那次按压为止的原话。另外（D11）：生成自己的记录搜索
+  （§22.10 `docs.material.search`）对任何节都不取 wiki 聊天的 turn——聊天里的话只经按压进入一节。
 - 合并的节另给这些提交改到的文件，按 §22.13 切一节来源的办法切，在作业的快照上读。
 - 句子照旧逐句引一手原文、逐字核对。
 
@@ -3576,6 +3600,7 @@ JSON 里是 `docs.follow`；设计 `docs/wiki-chat-design.md` §8.1–§8.3、§
 - 合并与落地要写的节（按压的不算）每个 space 每天（UTC）至多 40 节（`docs.follow.rules.sectionsPerDay`，设计里的 `followSectionsPerDay`），按这个 space 的跟进作业
   自零点起为合并与落地写下的节数（指纹没变、没写的不算）。会超过时按 plan 顺序写到剩余为止，其余原样留着——它们仍落后于 main，下一次维护运行会写（§27）——报告记下留了
   几节（`left`），Activity 写 `N sections left for the next maintenance run`（§30.4）。按压的节不计数，也从不留下。
+- 没按就写的节（`auto`）也是按压的节：不计 `sectionsPerDay`，起草时计入 `chat.rules.chatAutoSectionsPerDay`（§28.5）。
 - 这个上限是契约常量，不是设置：10-09 的设计说可以在 Wiki 设置里改，聊天设计只给了这个数。
 
 ### 29.5 怎么跑、和谁互斥

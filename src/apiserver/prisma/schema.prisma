@@ -10004,6 +10004,12 @@ model WikiChatDraft {
   /// `{ "<entry id>": "<trust>" }`: what each entry an amend of the card changed was trusted as before the press.
   trustBefore    Json?     @map("trust_before")
   undoneAt       DateTime? @map("undone_at") @db.Timestamptz(3)
+  /// When the server queued a rewrite card's sections without a press (migration 1574, design §7.2 option A).
+  autoQueuedAt   DateTime? @map("auto_queued_at") @db.Timestamptz(3)
+  /// `web` | `budget` | `draft`: why a rewrite card inside option A's other bounds was left for a press, as found when drafted.
+  held           String?
+  /// For held `draft`, the card it waits on. A history reference with no foreign key. Its partial index is the migration's.
+  heldById       String?   @map("held_by_id") @db.Uuid
   seenAt         DateTime? @map("seen_at") @db.Timestamptz(3)
   /// When the agent was last told of its press, with the owner's next message (`chat.notes.drafts`).
   toldAt         DateTime? @map("told_at") @db.Timestamptz(3)

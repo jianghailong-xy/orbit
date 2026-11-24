@@ -3471,7 +3471,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1573 restates owner_request's kind CHECK with PROJECT_REOPEN, restates 1273's payload CHECK under a kind-neutral
       // name admitting PROJECT_REOPEN, and adds one CHECK and one partial unique index on owner_request. Not a preserved
       // relation; no row is written, and no trigger, function or DONE fence changes.
-      '1573_owner_request_project_reopen'],
+      '1573_owner_request_project_reopen',
+      // 1574 adds three nullable columns to wiki_chat_draft (auto_queued_at, held, held_by_id), two checks, a partial index,
+      // and loosens its undone, seen and told checks; no preserved relation, row, trigger, function or DONE fence changes.
+      '1574_wiki_chat_draft_auto'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
