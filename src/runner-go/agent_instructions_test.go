@@ -302,7 +302,7 @@ var advertisedCapabilityFamilies = []struct {
 	{"wikiImportCLICapabilities", wikiImportCLICapabilities, false},
 	// Ungated, for the same reason: keeping and reading back your own files.
 	{"fileCLICapabilities", fileCLICapabilities, false},
-	{"documentsCLICapabilities", documentsCLICapabilities, false},
+	{"driveCLICapabilities", driveCLICapabilities, false},
 	// Ungated too: any session of the account reads the Orbit Cloud browser (Q3 = A), behind the browser switch.
 	{"browserCLICapabilities", browserCLICapabilities, false},
 	{"subagentCLICapabilities", subagentCLICapabilities, false},
@@ -515,9 +515,9 @@ func TestOrbitDriveGuidanceMatchesRunnerKind(t *testing.T) {
 	for _, mounted := range []bool{false, true} {
 		name := "self-registered"
 		// What the instructions say in brief, and the guide's files topic in full (docs/documents-drive-technical-design.md §4.6, §7.3).
-		brief := []string{"documents_put", "documents_get", "documents_list", "documents_move", "documents_delete", "orbit documents",
+		brief := []string{"drive_put", "drive_get", "drive_list", "drive_move", "drive_delete", "orbit drive",
 			"a Trash agents cannot see", "ORBIT_GUEST turns only read it"}
-		full := []string{"documents_put", "documents_get", "documents_list", "documents_move", "documents_delete", "orbit documents put|get|ls|mv|rm",
+		full := []string{"drive_put", "drive_get", "drive_list", "drive_move", "drive_delete", "orbit drive put|get|ls|mv|rm",
 			"owner's Trash, which agents cannot see", "no tool shares a drive file", "ORBIT_GUEST", "do not write it"}
 		if mounted {
 			name = "cloud"

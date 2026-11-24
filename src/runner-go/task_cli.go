@@ -3664,7 +3664,7 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	specs = append(specs, fileCLICapabilities...)
 	// Not listed in a session spawned with Documents off (documents_switch.go).
 	if documentsEnabledFromEnv() {
-		specs = append(specs, documentsCLICapabilities...)
+		specs = append(specs, driveCLICapabilities...)
 	}
 	specs = append(specs, subagentCLICapabilities...)
 	// Ungated too, and SessionOnly: a proposal is a card in the session's conversation (settings_tools.go).

@@ -160,9 +160,9 @@ func TestCatalogAnnotationsSayWhatTheCatalogueSays(t *testing.T) {
 // what to do. Outside Plan nothing is refused, and with no session to ask about there is no gate at all.
 func TestPlanGateRefusesWritesAndRunsEverythingElse(t *testing.T) {
 	refused := []string{"task_update", "task_create", "task_comment", "task_dependency_remove", "task_evidence_submit",
-		"session_create", "agent_delete", "project_update", "provider_create", "wiki_propose", "file_upload", "documents_put", "documents_move", "documents_delete", "bg_kill"}
+		"session_create", "agent_delete", "project_update", "provider_create", "wiki_propose", "file_upload", "drive_put", "drive_move", "drive_delete", "bg_kill"}
 	runs := []string{"task_get", "task_list", "project_get", "session_get", "task_await", "watch_create", "notify",
-		"ask_owner", "request_owner_action", "schedule_wakeup", "bg_run", "bg_output", "documents_get", "documents_list", "permission_prompt", "not_a_tool"}
+		"ask_owner", "request_owner_action", "schedule_wakeup", "bg_run", "bg_output", "drive_get", "drive_list", "permission_prompt", "not_a_tool"}
 	for _, tool := range refused {
 		refusal := mcpPlanRefusal(tool, map[string]interface{}{}, planModeIs("plan"))
 		if !strings.Contains(refusal, "this session is in Plan mode") || !strings.Contains(refusal, tool+" writes to Orbit") ||
