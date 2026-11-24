@@ -131,7 +131,7 @@ class FaultProxy {
       return;
     }
     if (this.mode === 'blackhole') return; // never answered
-    const isCommit = req.method === 'POST' && (req.url ?? '').startsWith('/api/runner/drive/commit');
+    const isCommit = req.method === 'POST' && /^\/api\/runner\/(documents|drive)\/commit/.test(req.url ?? '');
     if (isCommit) this.commits += 1;
     const up = http.request(
       { host: '127.0.0.1', port: this.target, method: req.method, path: req.url, headers: req.headers },
@@ -1149,7 +1149,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
   await row('36', `find $F/ | wc -l and grep -r over ${findFolders * 5} entries in ${findFolders} folders`, async (d) => {
     // Through the door, as a drive tool would write them, so every file has its own content; read cold on runner B.
     await ownerFolder('tree36');
-    const doorAs = (method: string, route: string, body?: unknown) => call(server, method, `/api/runner/drive${route}`, rb.token, body);
+    const doorAs = (method: string, route: string, body?: unknown) => call(server, method, `/api/runner/documents${route}`, rb.token, body);
     const work: Array<() => Promise<void>> = [];
     for (let i = 0; i < findFolders; i += 1) {
       work.push(async () => {
@@ -1162,7 +1162,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
           assert.equal(created.status, 201, created.text);
           const staging = await doorAs('POST', '/stagings', { entryId: created.json.id });
           const put = await new Promise<number>((resolve, reject) => {
-            const req = http.request({ host: '127.0.0.1', port: server.port, method: 'PUT', path: `/api/runner/drive/stagings/${staging.json.id}/chunks/0`, headers: { authorization: `Bearer ${rb.token}`, 'x-orbit-chunk-sha256': sha256(bytes), 'content-length': String(bytes.length) } }, (res) => { res.resume(); res.on('end', () => resolve(res.statusCode ?? 0)); });
+            const req = http.request({ host: '127.0.0.1', port: server.port, method: 'PUT', path: `/api/runner/documents/stagings/${staging.json.id}/chunks/0`, headers: { authorization: `Bearer ${rb.token}`, 'x-orbit-chunk-sha256': sha256(bytes), 'content-length': String(bytes.length) } }, (res) => { res.resume(); res.on('end', () => resolve(res.statusCode ?? 0)); });
             req.on('error', reject);
             req.end(bytes);
           });

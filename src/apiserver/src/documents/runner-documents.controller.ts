@@ -28,6 +28,7 @@ import { CurrentManagedRunnerInstance, CurrentRunner } from '../runner-api/curre
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { DocumentsChunksService } from './documents-chunks.service';
 import { AcceptsDriveMountCredential, CurrentDriveMount, fenceManagedInstance, type DriveMount } from './documents-mount-credential';
+import { RUNNER_DOCUMENTS_ROUTE_PREFIXES } from './documents-routes';
 import { drivePathSegments, DocumentsService, type DriveEntryRow, type DriveWriter } from './documents.service';
 import {
   RunnerDocumentsCommitDto,
@@ -95,10 +96,11 @@ function rangeOf(header: string | undefined, size: number): { start: number; end
  *   - A staging is the runner's that opened it. A managed runner's commit is fenced in its own transaction (§8.2).
  *
  * Every rule of a write is the name layer's (DocumentsService); this door only names entries by path and says who writes.
+ * It answers at /runner/documents, and at /runner/drive for runners and mount daemons already deployed (documents-routes.ts).
  */
 @UseGuards(RunnerAuthGuard)
 @AcceptsDriveMountCredential()
-@Controller('runner/drive')
+@Controller(RUNNER_DOCUMENTS_ROUTE_PREFIXES)
 export class RunnerDocumentsController {
   constructor(
     private readonly prisma: PrismaService,

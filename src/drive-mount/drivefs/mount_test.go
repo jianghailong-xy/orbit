@@ -565,7 +565,7 @@ func TestOneSlowAnswerDoesNotFailTheRestOfAnRmRf(t *testing.T) {
 		if r.URL.Query().Get("wait") != "" {
 			return 4 * time.Second // a long poll with nothing to say
 		}
-		route := strings.TrimPrefix(r.URL.Path, "/api/runner/drive")
+		route := strings.TrimPrefix(r.URL.Path, "/api/runner/documents")
 		if r.Method == http.MethodGet && (route == "/stat" || route == "/list") && slowed.CompareAndSwap(false, true) {
 			return meta * 12 / 9
 		}

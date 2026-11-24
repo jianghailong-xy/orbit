@@ -37,29 +37,29 @@ class NamesEntry extends WithWriter {
   @IsOptional() @IsPublicId() id?: string;
 }
 
-/** `POST /runner/drive/create`: a new file with an empty first version, bound to the handle that will fill it (§3.1). */
+/** `POST /runner/documents/create`: a new file with an empty first version, bound to the handle that will fill it (§3.1). */
 export class RunnerDocumentsCreateDto extends WithWriter {
   @IsString() @MaxLength(4096) path!: string;
   @IsOptional() @IsUUID() handleId?: string;
 }
 
-/** `POST /runner/drive/mkdir`: with `parents`, `mkdir -p`. */
+/** `POST /runner/documents/mkdir`: with `parents`, `mkdir -p`. */
 export class RunnerDocumentsMkdirDto extends WithWriter {
   @IsString() @MaxLength(4096) path!: string;
   @IsOptional() @IsBoolean() parents?: boolean;
 }
 
-/** `POST /runner/drive/stagings`: a staging for the write of one handle or one tool call. */
+/** `POST /runner/documents/stagings`: a staging for the write of one handle or one tool call. */
 export class RunnerDocumentsStagingDto {
   @IsPublicId() entryId!: string;
 }
 
-/** `POST /runner/drive/stagings/:id/keepalive`: the handle still holds bytes no commit has taken (§8.1). */
+/** `POST /runner/documents/stagings/:id/keepalive`: the handle still holds bytes no commit has taken (§8.1). */
 export class RunnerDocumentsKeepaliveDto {
   @IsOptional() @IsBoolean() dirty?: boolean;
 }
 
-/** `POST /runner/drive/commit` (§3.1): the chunk list is checked by the name layer itself. */
+/** `POST /runner/documents/commit` (§3.1): the chunk list is checked by the name layer itself. */
 export class RunnerDocumentsCommitDto extends WithWriter {
   @IsString() @MaxLength(200) commitId!: string;
   @IsPublicId() entryId!: string;
@@ -72,7 +72,7 @@ export class RunnerDocumentsCommitDto extends WithWriter {
   @IsOptional() @IsPublicId() stagingId?: string;
 }
 
-/** `POST /runner/drive/rename`: `from` (or `id`) to the path `to`; onto a file it makes a version of it, unless `noReplace`. */
+/** `POST /runner/documents/rename`: `from` (or `id`) to the path `to`; onto a file it makes a version of it, unless `noReplace`. */
 export class RunnerDocumentsRenameDto extends WithWriter {
   @IsOptional() @IsString() @MaxLength(4096) from?: string;
   @IsOptional() @IsPublicId() id?: string;
@@ -80,10 +80,10 @@ export class RunnerDocumentsRenameDto extends WithWriter {
   @IsOptional() @IsBoolean() noReplace?: boolean;
 }
 
-/** `POST /runner/drive/delete`: to the owner's Trash, which no agent sees (D11). */
+/** `POST /runner/documents/delete`: to the owner's Trash, which no agent sees (D11). */
 export class RunnerDocumentsDeleteDto extends NamesEntry {}
 
-/** `POST /runner/drive/utimens`. */
+/** `POST /runner/documents/utimens`. */
 export class RunnerDocumentsUtimensDto extends NamesEntry {
   @IsDateString() mtime!: string;
 }

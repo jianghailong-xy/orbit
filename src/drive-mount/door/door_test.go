@@ -17,7 +17,7 @@ func TestRequestsCarryTheCredentialAndTheInstance(t *testing.T) {
 	var seen http.Header
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seen = r.Header.Clone()
-		if r.URL.Path != "/api/runner/drive/stat" || r.URL.Query().Get("path") != "/Proj/r.md" {
+		if r.URL.Path != "/api/runner/documents/stat" || r.URL.Query().Get("path") != "/Proj/r.md" {
 			t.Errorf("route %s?%s", r.URL.Path, r.URL.RawQuery)
 		}
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{"id": "e1", "kind": "FILE", "name": "r.md", "sizeBytes": 3, "seq": 7, "parentId": "p1"})
@@ -171,10 +171,10 @@ func TestOneSlowAnswerOnItsOwnIsNotOffline(t *testing.T) {
 	var stats, probes atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/runner/drive/changes":
+		case "/api/runner/documents/changes":
 			probes.Add(1)
 			_, _ = w.Write([]byte(`{"changes":[],"cursor":"1:1","more":false,"resync":false}`))
-		case "/api/runner/drive/stat":
+		case "/api/runner/documents/stat":
 			if stats.Add(1) == 1 {
 				time.Sleep(meta * 12 / 9)
 			}
