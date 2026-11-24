@@ -80,13 +80,17 @@ func orbitCLIInstructionExecutable(exe string) string {
 // each value capped at 1,000 tokens, and codexAgentAdditionalContext sends these paragraphs packed
 // into values of at most codexContextValueMaxBytes.
 
-// orbitCLIPreferMCPInstructions closes Orbit's instructions with the CLI's resolved binary path, so an agent cannot
-// accidentally execute a project-local/PATH-shadowed `orbit` program, and with Orbit's tools spelled as the engine
-// shows them.
-const orbitCLIPreferMCPInstructions = "Prefer {{orbit_tools}} (schema-checked, no shell). Inside a session the CLI at `{{cli}}" +
-	"` takes the same approvals and attributes work to you: `{{cli}} guide [topic] --json` or `{{cli}}" +
-	" capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt " +
-	"its MCP tool answers with; `--json` prints the entity alone. Do not run `{{cli}} mcp` directly."
+// orbitCLIUseInstructions is the Orbit CLI in one paragraph: what it is for, the resolved binary path, so an agent cannot
+// accidentally execute a project-local/PATH-shadowed `orbit` program, and Orbit's tools spelled as the engine shows
+// them. It merges the primer's CLI paragraph (primer 1.6.0 and before) with the paragraph that closed the instructions
+// (design §6 step 5b). A refusal there is the same answer because the CLI reaches the same server under the same
+// approvals (§0 rule 8). It names `guide <topic> --json` and `--receipt` because those are what an agent whose MCP
+// server did not start reaches for (X1-mcp-missing-cli-fallback on Codex, 2026-11-24); `capabilities` is in the guide.
+const orbitCLIUseInstructions = "The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations " +
+	"with no MCP tool and commands that outlive this turn; otherwise prefer {{orbit_tools}}. Run it as `{{cli}}`: it " +
+	"reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a " +
+	"missing switch there is the same answer. `{{cli}} guide [topic] --json` gives a recipe's argv; `--receipt` prints " +
+	"a write's receipt. Never run `{{cli}} mcp`."
 
 // orbitReplyFileInstructions says which files a reply can really hand over. The runner uploads a linked
 // file only out of the session's own directories (reply_attachments.go), so an agent that leaves its

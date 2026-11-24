@@ -197,7 +197,7 @@ Every paragraph the runner tells an agent, the primer's included, is a unit of t
 (`instructionUnits` in `src/runner-go/instruction_units.go`, by id: `primer.lead` … `primer.rederive`,
 `files.reply-links`, `files.evidence`, `drive.tools`, `drive.mount`,
 `project.inside-recorded-work`, `project.propose`, `progress.report`, `wait.use-await`, `notify.when-asked`,
-`handoff.use-orbit`, `workflow.use-workflow`, `wiki.search-by-path`, `cli.prefer-mcp`, `help.ask`).
+`handoff.use-orbit`, `workflow.use-workflow`, `wiki.search-by-path`, `cli.orbit-cli`, `help.ask`).
 `--leave-out UNIT,UNIT` (`ORBIT_AGENT_EVAL_LEAVE_OUT`) plays the suite with those units dropped in `compose`, so they
 leave every carrier at once: the engine's own instructions and the MCP server's `initialize`. Only the eval's test
 binary sets the list (`instructionUnitsLeftOut`), so a production runner composes every unit and its text is byte

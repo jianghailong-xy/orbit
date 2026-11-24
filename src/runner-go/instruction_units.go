@@ -343,9 +343,6 @@ var instructionUnits = []instructionUnit{
 	{id: "primer.cards", owner: "primer: approvals", kind: kindRecovery,
 		appliesTo: orbitSession, channels: bothChannels, core: agentPrimerCards,
 		detail: "receipt approval notes", guardedBy: []string{"X2-approval-declined", "X3-approval-chat"}},
-	{id: "primer.cli", owner: "primer: the Orbit CLI", kind: kindDisposition,
-		appliesTo: orbitSession, channels: bothChannels, core: agentPrimerCLI,
-		detail: "capabilities --json", guardedBy: []string{"X1-mcp-missing-cli-fallback"}},
 	{id: "primer.receipts", owner: "primer: receipts, references", kind: kindRecovery,
 		appliesTo: orbitSession, channels: bothChannels, core: agentPrimerReceipts,
 		detail: "receipt error.retry", guardedBy: []string{"X4-lost-answer-retry"}},
@@ -406,9 +403,9 @@ var instructionUnits = []instructionUnit{
 	{id: "wiki.search-by-path", owner: "wiki: wiki_search", kind: kindSelection,
 		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.Wiki }, channels: []instructionChannel{channelSystem}, core: orbitWikiPathInstructions,
 		tools: []string{"wiki_search"}, detail: "wiki_search description", guardedBy: []string{"I7-wiki-path-search"}},
-	{id: "cli.prefer-mcp", owner: "the Orbit CLI: guide, capabilities", kind: kindEnvironment,
-		appliesTo: orbitSession, channels: []instructionChannel{channelSystem}, core: orbitCLIPreferMCPInstructions,
-		detail: "capabilities --json", guardedBy: []string{"X1-mcp-missing-cli-fallback"}},
+	{id: "cli.orbit-cli", owner: "the Orbit CLI: guide, --receipt", kind: kindEnvironment,
+		appliesTo: orbitSession, channels: []instructionChannel{channelSystem}, core: orbitCLIUseInstructions,
+		detail: "guide and capabilities --json", guardedBy: []string{"X1-mcp-missing-cli-fallback"}},
 }
 
 // composedInstructions is what compose gives a session on one engine.

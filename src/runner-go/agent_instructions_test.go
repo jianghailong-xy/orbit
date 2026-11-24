@@ -24,11 +24,10 @@ func TestWithOrbitCLIInstructions(t *testing.T) {
 		// Graded discovery: a command is found a topic or an id at a time, never by reading the whole
 		// catalogue, which no engine shows a model whole (operation_discovery.go).
 		"'/opt/orbit runner/bin/orbit' guide [topic] --json",
-		"'/opt/orbit runner/bin/orbit' capabilities --id <id> --json",
+		"Run it as `'/opt/orbit runner/bin/orbit'`",
 		"mcp__orbit__*",
-		"Pass `--receipt` to read the receipt its MCP tool answers with",
-		"`--json` prints the entity alone",
-		" mcp` directly",
+		"`--receipt` prints a write's receipt",
+		"Never run `'/opt/orbit runner/bin/orbit' mcp`",
 		"durable record",
 		"No returned id, no claim.",
 		"Most newly discovered work is one task",
@@ -174,7 +173,7 @@ func TestOrbitProjectInstructionsDifferInsideRecordedWork(t *testing.T) {
 	if open == inside {
 		t.Fatal("a session inside recorded work receives the same project paragraph as a free conversation")
 	}
-	for _, shared := range []string{"durable record", "No returned id, no claim.", "orbit-task:<id>", "capabilities --id <id> --json", "guide [topic] --json", "mcp__orbit__*"} {
+	for _, shared := range []string{"durable record", "No returned id, no claim.", "orbit-task:<id>", "--receipt", "guide [topic] --json", "mcp__orbit__*"} {
 		if !strings.Contains(open, shared) || !strings.Contains(inside, shared) {
 			t.Errorf("both forms must keep %q", shared)
 		}

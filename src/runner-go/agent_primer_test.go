@@ -64,6 +64,9 @@ var agentPrimerHashes = map[string]string{
 	// recorded, else record it) moved into the handoff unit, which merges it with the sub-agents and delegate
 	// paragraphs; the paragraph keeps the switch, `orbit session` and no claimed delegation. No rule changed.
 	"1.6.0": "815100a9b5f2ca99c0f71aa4c5954d386ee22202a8a4c1a910c78a1ed3b7a2c0",
+	// 1.7.0 (instruction-units step 5b): the CLI paragraph left the primer for the CLI unit, which merges it with the
+	// paragraph that closed the instructions and names the CLI by its path. No rule changed.
+	"1.7.0": "b04a890e4acdbed6cce17edeafd442882fed64f0cbef87ad246f40a4414af1db",
 }
 
 // The snapshots: the primer exactly as `initialize` sends it, and the four shapes of the instructions
@@ -222,6 +225,13 @@ func TestAgentPrimerSaysEveryRuleOfTheContract(t *testing.T) {
 			t.Errorf("§0 rule 6: a %s's receipt carries no link", kind)
 		}
 	}
+	// Since primer 1.7.0 (design step 5b) the CLI's rules (3, 8) are said by the CLI unit, which carries the CLI's path
+	// and so is not part of the primer: a rule is held to the primer and the units composed after it.
+	cores := []string{agentPrimer}
+	for _, unit := range instructionUnits {
+		cores = append(cores, unit.core)
+	}
+	alwaysOn := strings.Join(cores, "\n\n")
 	if len(rules) != len(said) {
 		t.Fatalf("§0 has %d rules and the primer is checked against %d: say the new rule in the primer, then here", len(rules), len(said))
 	}
@@ -231,8 +241,8 @@ func TestAgentPrimerSaysEveryRuleOfTheContract(t *testing.T) {
 			t.Errorf("§0 rule %s (%s) has no phrase the primer is held to", rule[1], rule[2])
 		}
 		for _, phrase := range phrases {
-			if !strings.Contains(agentPrimer, phrase) {
-				t.Errorf("§0 rule %s (%s): the primer does not say %q", rule[1], rule[2], phrase)
+			if !strings.Contains(alwaysOn, phrase) {
+				t.Errorf("§0 rule %s (%s): neither the primer nor an always-on unit says %q", rule[1], rule[2], phrase)
 			}
 		}
 	}
