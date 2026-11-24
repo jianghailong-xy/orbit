@@ -487,6 +487,10 @@ type wikiDraftAnswer struct {
 	Kind     string                   `json:"kind"`
 	Replayed bool                     `json:"replayed"`
 	Rewrites []map[string]interface{} `json:"rewrites"`
+	// State is "rewritten" for a rewrite card written without a press, "draft" otherwise; empty from an older server.
+	State string `json:"state,omitempty"`
+	// Held is why a rewrite card stayed a draft inside option A's other bounds: web, budget or draft.
+	Held *string `json:"held,omitempty"`
 }
 
 // wikiSessionNoteAnswer is `POST /api/runner/wiki/notes` (contract `agentSurface.note.answer`). challenged is passed
@@ -871,7 +875,16 @@ func describeWikiChatPropose(answer wikiProposeAnswer, names []string, dryRun bo
 	return out.String()
 }
 
-// describeWikiDraft says what wiki_draft made: a card, and nothing written.
+// wikiHeldReasons is the shared "Apply to write: …" copy (WIKI_CHAT_COPY.card.held*), by the server's held value.
+var wikiHeldReasons = map[string]string{
+	"web":    "Apply to write: this chat read web content",
+	"budget": "Apply to write: today's automatic rewrites are used up",
+	"draft":  "Written once you apply or discard the draft that rewrites the same section",
+}
+
+// describeWikiDraft says what wiki_draft made: a card, and whether anything was written. A rewrite card the server
+// wrote without a press says so; a held one says why it waits; every other card, and an older server's answer
+// without state, says nothing was written.
 func describeWikiDraft(answer wikiDraftAnswer) string {
 	var out strings.Builder
 	if answer.Replayed {
@@ -880,6 +893,13 @@ func describeWikiDraft(answer wikiDraftAnswer) string {
 		fmt.Fprintf(&out, "Drafted card %s (plan) for the owner of this wiki chat. Nothing was written: the owner presses the card, and "+
 			"only then is the plan changed, confirmed and its documents rebuilt. Never call it applied; pass replaces: %s when you revise it.",
 			answer.DraftID, answer.DraftID)
+	} else if answer.State == "rewritten" {
+		fmt.Fprintf(&out, "Drafted card %s (%s) for the owner of this wiki chat. It was written when drafted, without a press: its sections "+
+			"are being rewritten from main now, its card says Rewritten from main, and the owner can Undo it. Its result arrives with the "+
+			"owner's next message; until then do not say what it changed. Pass replaces: %s when you revise it.", answer.DraftID, answer.Kind, answer.DraftID)
+	} else if reason, ok := wikiHeldReasons[wikiHeldValue(answer)]; ok {
+		fmt.Fprintf(&out, "Drafted card %s (%s) for the owner of this wiki chat. Nothing was written yet: %s. It waits for the owner's Apply. "+
+			"Never call it applied; pass replaces: %s when you revise it.", answer.DraftID, answer.Kind, reason, answer.DraftID)
 	} else {
 		fmt.Fprintf(&out, "Drafted card %s (%s) for the owner of this wiki chat. Nothing was written: the owner presses the card, and "+
 			"only then are the sections rewritten. Never call it applied; pass replaces: %s when you revise it.", answer.DraftID, answer.Kind, answer.DraftID)
@@ -891,9 +911,20 @@ func describeWikiDraft(answer wikiDraftAnswer) string {
 			title, _ := section["title"].(string)
 			wheres = append(wheres, strings.TrimSpace(where+" "+title))
 		}
-		out.WriteString("\nIts press would rewrite: " + strings.Join(wheres, "; ") + ".")
+		if answer.State == "rewritten" && answer.Kind != "plan" {
+			out.WriteString("\nRewriting: " + strings.Join(wheres, "; ") + ".")
+		} else {
+			out.WriteString("\nIts press would rewrite: " + strings.Join(wheres, "; ") + ".")
+		}
 	}
 	return out.String()
+}
+
+func wikiHeldValue(answer wikiDraftAnswer) string {
+	if answer.Held == nil {
+		return ""
+	}
+	return *answer.Held
 }
 
 // wikiFloat is a JSON number, or -1.
