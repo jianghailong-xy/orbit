@@ -20,6 +20,7 @@ func TestTaskAcceptanceCommandProducesRawOutputAndExitCodeWithoutAModel(t *testi
 		"acceptance-turn",
 		nil,
 		shellTurnTimeout,
+		"",
 	)
 	if output != "raw output" || exitCode != 7 {
 		t.Fatalf("shell result = (%q, %d), want raw output and exit 7", output, exitCode)
@@ -44,6 +45,7 @@ func TestTaskAcceptanceCommandEnvironmentContract(t *testing.T) {
 			"ORBIT_RUNNER_CHILD": "",
 		},
 		shellTurnTimeout,
+		"",
 	)
 	want := strings.Join([]string{execDir, "runner", "agent", "agent", "unset", "1"}, "\n")
 	if exitCode != 0 || output != want {

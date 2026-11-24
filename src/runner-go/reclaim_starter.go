@@ -8,9 +8,11 @@ import (
 	"time"
 )
 
-// reclaimStartWorkers bounds how many reclaimed sessions start at once. Each start is a few git
+// reclaimStartWorkers bounds how many reclaimed cold sessions start at once. Each start is a few git
 // commands and a volume sync, and git takes its own locks in the repository the sessions share, so a
 // handful at once is enough to keep a restart's queue moving without piling them all onto one disk.
+// A session the reclaim starts active (RUNNING) is not theirs: it takes a turn permit and an engine, so
+// those start one at a time on a line of their own, each once its permit is free (run, admit).
 const reclaimStartWorkers = 4
 
 // reclaimStarter starts a reclaim's sessions in the background, in the order the reclaim handed them
@@ -40,6 +42,11 @@ const reclaimStartWorkers = 4
 type reclaimStarter struct {
 	pool  *sessionPool
 	start func(reclaimedStart)
+	// admit, if set before run, returns once a session the reclaim starts active may take its turn permit
+	// (sessionPool.waitReclaimPermit): a free slot, and memory for one more turn. The permit line calls it before
+	// each such start, one at a time; a claim's own start of a queued session (settle) does not, since the claim
+	// was already admitted.
+	admit func()
 	// onStarted, if set before run, is told each session whose start has ended, once the pool no longer
 	// counts it as being reclaimed. A session given up without a start is told too.
 	onStarted func(sessionID string)
@@ -60,6 +67,8 @@ type reclaimStarter struct {
 	// takeovers answer.
 	queue []*reclaimStartEntry
 	next  int
+	// nextActive is where the permit line looks for the next active entry in queue (takeNextActive).
+	nextActive int
 	// idle is the sessions whose takeovers are still to be made, in ascending id order.
 	idle []*reclaimStartEntry
 	byID map[string]*reclaimStartEntry
@@ -147,8 +156,11 @@ func newReclaimStarter(pool *sessionPool, pending []reclaimedStart, idle []*Clai
 	return r
 }
 
-// run starts the queue on up to workers goroutines and returns at once. onDone, if any, runs once
-// every entry has ended, and the idle phase with it, on a goroutine of its own.
+// run starts the queue and returns at once: the cold entries on up to workers goroutines, and the entries
+// started active on one more, the permit line, which starts one at a time, each once admit lets it take its
+// permit. On 2026-11-20 a managed runner that restarted with four RUNNING sessions started all four at once on
+// four workers, whatever its maximum, and was OOM-killed again. onDone, if any, runs once every entry has
+// ended, and the idle phase with it, on a goroutine of its own.
 func (r *reclaimStarter) run(workers int, onDone func()) {
 	if workers > len(r.byID) {
 		workers = len(r.byID)
@@ -156,6 +168,13 @@ func (r *reclaimStarter) run(workers int, onDone func()) {
 	for i := 0; i < workers; i++ {
 		go func() {
 			for e := r.takeNext(); e != nil; e = r.takeNext() {
+				r.startEntry(e)
+			}
+		}()
+	}
+	if len(r.byID) > 0 {
+		go func() {
+			for e := r.takeNextActive(); e != nil; e = r.takeNextActive() {
 				r.startEntry(e)
 			}
 		}()
@@ -168,7 +187,8 @@ func (r *reclaimStarter) run(workers int, onDone func()) {
 	}
 }
 
-// takeNext is a worker's next entry to start, waiting while idle takeovers may still hand one over.
+// takeNext is a worker's next cold entry to start, waiting while idle takeovers may still hand one over.
+// An entry started active is the permit line's (takeNextActive).
 func (r *reclaimStarter) takeNext() *reclaimStartEntry {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -176,7 +196,7 @@ func (r *reclaimStarter) takeNext() *reclaimStartEntry {
 		for r.next < len(r.queue) {
 			e := r.queue[r.next]
 			r.next++
-			if e.state == entryReady {
+			if e.state == entryReady && !e.pending.initiallyActive {
 				e.state = entryStarting
 				return e
 			}
@@ -185,6 +205,40 @@ func (r *reclaimStarter) takeNext() *reclaimStartEntry {
 			return nil
 		}
 		r.cond.Wait()
+	}
+}
+
+// takeNextActive is the permit line's next entry to start active, in queue order, waiting while idle takeovers may
+// still hand one over. It waits for admit with the entry still queued, so a claim for that session meanwhile starts
+// it itself (settle) rather than waiting on the permit, and the line moves on.
+func (r *reclaimStarter) takeNextActive() *reclaimStartEntry {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for {
+		var e *reclaimStartEntry
+		for ; r.nextActive < len(r.queue); r.nextActive++ {
+			if c := r.queue[r.nextActive]; c.state == entryReady && c.pending.initiallyActive {
+				e = c
+				break
+			}
+		}
+		if e == nil {
+			if r.unsettled == 0 {
+				return nil
+			}
+			r.cond.Wait()
+			continue
+		}
+		if r.admit != nil {
+			r.mu.Unlock()
+			r.admit()
+			r.mu.Lock()
+		}
+		if e.state == entryReady {
+			e.state = entryStarting
+			r.nextActive++
+			return e
+		}
 	}
 }
 

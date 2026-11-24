@@ -181,9 +181,11 @@ export interface ManagedInstance {
    *  Pod that has ended and that the manager's stop-report finalizer holds is not being removed: it
    *  waits for `removeInstance`.) */
   readonly removing: boolean;
-  /** How it ended, by its host's report: its runner's exit code (null when the host gives none) and
-   *  whether it was killed at its memory limit. Null while it has not ended, or when it never ran. */
-  readonly exit: { readonly code: number | null; readonly outOfMemory: boolean } | null;
+  /** How it ended, by its host's report: its runner's exit code (null when the host gives none),
+   *  whether it was killed at its memory limit, and whether its host evicted it for filling its
+   *  temporary storage (`storageFull`, Kubernetes: present only when true). Null while it has not
+   *  ended, or when it never ran. */
+  readonly exit: { readonly code: number | null; readonly outOfMemory: boolean; readonly storageFull?: boolean } | null;
   /** The image it was made from, when its host says and that is not the one this backend makes instances from
    *  now (Docker: the image ID against the profile's `runner.image`, which an upgrade moves on; Kubernetes: a Pod
    *  container's image against the profile's `runner.image`). Absent otherwise. */

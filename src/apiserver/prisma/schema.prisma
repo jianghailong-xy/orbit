@@ -1768,6 +1768,8 @@ model ManagedRunner {
   defaultWorkspace   Workspace?                   @relation("ManagedRunnerDefaultWorkspace", fields: [defaultWorkspaceId, ownerId], references: [id, ownerId], onDelete: Restrict, map: "managed_runner_default_workspace_fkey")
   desiredState       ManagedRunnerDesiredState    @default(RUNNING) @map("desired_state")
   managementState    ManagedRunnerManagementState @default(REQUESTED) @map("management_state")
+  /// Temporary ceiling after an out-of-memory stop, cleared once the replacement stays READY.
+  concurrencyCap     Int?                         @map("concurrency_cap")
   /// The execution incarnation the Pod is created for. Monotonic; only a proven stop or fencing
   /// receipt may advance it, which this version never does.
   generation         Int                          @default(1)

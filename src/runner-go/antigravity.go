@@ -365,7 +365,7 @@ func startAgyProcess(ctx context.Context, job *ClaimedSession, execDir, geminiDi
 		return nil, err
 	}
 	p.stdin = stdin
-	if err := startSessionProcess(cmd); err != nil {
+	if err := startSessionEngine(cmd, job.SessionID); err != nil {
 		_ = stdin.Close()
 		cancel()
 		return nil, err

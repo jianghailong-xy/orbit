@@ -36,8 +36,8 @@ const (
 func runnerCacheRoot() string { return filepath.Join(machineHome(), "caches") }
 
 // runnerCacheEnv is the environment that points a session's toolchains at the shared cache root,
-// each directory made on first use. An engine hands it to the process it starts — Codex adds it to
-// the session process environment, dsh to its launch environment — so every command the agent
+// each directory made on first use. An engine hands it to the process it starts — Codex and Claude add
+// it to the session process environment, dsh to its launch environment — so every command the agent
 // runs, sandboxed or escalated, reads and writes the same cache.
 func runnerCacheEnv() []string {
 	env := make([]string, 0, 3)

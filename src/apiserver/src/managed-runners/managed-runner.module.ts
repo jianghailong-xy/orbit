@@ -29,9 +29,11 @@ import { ManagedRunnerService } from './managed-runner.service';
  * guard are all there is.
  * The gate itself comes from the global ManagedRunnerGateModule.
  *
- * Global for two exports, so their callers' modules need no import of this one: the sign-in step
- * AuthService.completeLogin calls (MANAGED_RUNNER_SIGN_IN), and the demand hook the session paths
- * call where work for a runner is recorded (MANAGED_RUNNER_DEMAND, managed-runner-demand.ts).
+ * Global for three exports, so their callers' modules need no import of this one: the sign-in step
+ * AuthService.completeLogin calls (MANAGED_RUNNER_SIGN_IN), the demand hook the session paths
+ * call where work for a runner is recorded (MANAGED_RUNNER_DEMAND, managed-runner-demand.ts), and the
+ * runtime, whose profile a managed runner's concurrency ceiling is read from where its row is written
+ * and where its heartbeat is answered (MANAGED_RUNNER_RUNTIME, managed-runner-concurrency.ts).
  */
 @Global()
 @Module({
@@ -66,6 +68,6 @@ import { ManagedRunnerService } from './managed-runner.service';
     ManagedRunnerDemandService,
     { provide: MANAGED_RUNNER_DEMAND, useExisting: ManagedRunnerDemandService },
   ],
-  exports: [MANAGED_RUNNER_SIGN_IN, MANAGED_RUNNER_DEMAND],
+  exports: [MANAGED_RUNNER_SIGN_IN, MANAGED_RUNNER_DEMAND, MANAGED_RUNNER_RUNTIME],
 })
 export class ManagedRunnerModule {}
