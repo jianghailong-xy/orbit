@@ -19,6 +19,8 @@ import {
 } from '@nestjs/common';
 import { Prisma, Runner } from '@prisma/client';
 import { PublicIdPipe } from '../common/public-id';
+import { RequestProjectReopenDto } from '../owner-requests/dto';
+import { OwnerRequestsService } from '../owner-requests/owner-requests.service';
 import { type SessionLifecycleActor } from '../projects/attempt-budget';
 import {
   AbandonIntegrationJobDto,
@@ -119,6 +121,11 @@ export class RunnerProjectsController {
      * that exercise other routes here; absent, a create is answered as one with no request id.
      */
     @Optional() private readonly receipts?: CreateRequestReceipts,
+    /**
+     * Files a session's PROJECT_REOPEN (`requestReopen`). `@Optional()` for the hand-built specs that exercise other
+     * routes here; absent, that one route answers 503.
+     */
+    @Optional() private readonly ownerRequests?: OwnerRequestsService,
   ) {}
 
   /**
@@ -615,6 +622,28 @@ export class RunnerProjectsController {
     @Body() dto: RequestProjectDoneDto,
   ) {
     return this.openItems.requestDone(runner.ownerId, id, sessionId?.trim(), dto);
+  }
+
+  /**
+   * Any session asking the account owner to reopen a DONE or CANCELLED project (`project_request_reopen`,
+   * docs/project-reopen-request-design.md §4.1), after a write of its was refused PROJECT_REOPEN_REQUIRED.
+   *
+   * Filed and returned at once: the owner answers Reopen or declines on the card, and the ending reaches every session
+   * that asked as a turn. Not only a coordinator's — any session of the account may ask (D1), so X-Orbit-Session-Id names
+   * the asker and is required (400 without it), checked to be one this runner hosts. 409 PROJECT_ALREADY_OPEN on an OPEN
+   * project and 409 REOPEN_REQUEST_DECLINED after the owner declined this session's ask, both filing nothing; a session
+   * asking while a card waits joins it (`alreadyOpen: true`). No orchestration credential: the request reopens nothing;
+   * the owner's press does.
+   */
+  @Post('projects/:id/reopen-requests')
+  requestReopen(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') sessionHeader: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: RequestProjectReopenDto,
+  ) {
+    if (!this.ownerRequests) throw new HttpException('owner requests are not available on this server', 503);
+    return this.ownerRequests.fileProjectReopen(runner.ownerId, { runnerId: runner.id, sessionHeader }, id, dto);
   }
 
   /**

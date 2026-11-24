@@ -522,6 +522,7 @@ struct ProjectDetailView: View {
                     switch row {
                     case .header:
                         Section {
+                            projectReopenRows(document)
                             header(store, document, now: now)
                                 .onAppear { headerOnScreen = true }
                                 .onDisappear { headerOnScreen = false }
@@ -680,6 +681,17 @@ struct ProjectDetailView: View {
             }
         } message: { pick in
             Text(changeParagraphs(pick, store).joined(separator: "\n\n"))
+        }
+    }
+
+    /// Above the DONE header: one row for each agent request to reopen this project, with Reopen and Chat about this
+    /// (docs/project-reopen-request-design.md §6.2). The same card the conversation draws; it is not drawn twice here.
+    @ViewBuilder
+    private func projectReopenRows(_ document: ProjectDocument) -> some View {
+        if let requests = model.ownerRequests, document.status != .open {
+            ForEach(OwnerRequests.pendingReopens(requests.known, projectID: document.id)) { request in
+                ProjectReopenCardView(model: requests, request: request, onProjectPage: true)
+            }
         }
     }
 
