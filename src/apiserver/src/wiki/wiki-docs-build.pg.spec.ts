@@ -578,16 +578,21 @@ test('a call that reads the wiki, cited by a picked entry, is no record of the s
   // Cited by the entry the keyword finds (written by hand: no door takes a wiki read as a source any more).
   const entry = await h.prisma.wikiEntry.findUniqueOrThrow({ where: { id: s.entries.keyword }, select: { currentRevision: true } });
   const revision = await h.prisma.wikiEntryRevision.findFirstOrThrow({ where: { entryId: s.entries.keyword, revision: entry.currentRevision }, select: { id: true } });
-  for (const ref of [...reads, fine]) {
-    await h.prisma.wikiSource.create({ data: { revisionId: revision.id, ownerId: s.owner.id, kind: 'tool_call', ref, locator: {}, quote: null, state: 'live' } });
+  // An entry takes at most `sourcesPerEntry` records, so each read is cited on its own beside the one source it already has.
+  for (const read of reads) {
+    const added = [];
+    for (const ref of [read, fine]) {
+      added.push(await h.prisma.wikiSource.create({ data: { revisionId: revision.id, ownerId: s.owner.id, kind: 'tool_call', ref, locator: {}, quote: null, state: 'live' }, select: { id: true } }));
+    }
+    const material = await gathered(h, s, keys[2]);
+    const refs = material.records.map((record) => toUuid(record.ref));
+    assert.ok(!refs.includes(toUuid(read)), `a wiki read ${read} is not in the material`);
+    assert.ok(!JSON.stringify(material).includes('WIKI-READ-WORDS'), 'nor its words');
+    assert.ok(refs.includes(toUuid(fine)), 'a call of another tool is');
+    assert.ok(refs.includes(toUuid(s.r.long)), 'and so are the entry\'s other records');
+    assert.ok(material.unresolved.every((one) => toUuid(one.ref) !== toUuid(read)), 'a dropped record is not counted unresolved');
+    await h.prisma.wikiSource.deleteMany({ where: { id: { in: added.map((row) => row.id) } } });
   }
-  const material = await gathered(h, s, keys[2]);
-  const refs = material.records.map((record) => toUuid(record.ref));
-  for (const ref of reads) assert.ok(!refs.includes(toUuid(ref)), `a wiki read ${ref} is not in the material`);
-  assert.ok(!JSON.stringify(material).includes('WIKI-READ-WORDS'), 'nor its words');
-  assert.ok(refs.includes(toUuid(fine)), 'a call of another tool is');
-  assert.ok(refs.includes(toUuid(s.r.long)), 'and so are the entry\'s other records');
-  assert.ok(material.unresolved.every((one) => !reads.map(toUuid).includes(toUuid(one.ref))), 'a dropped record is not counted unresolved');
 });
 
 // ── 3. another tenant ───────────────────────────────────────────────────────────────────────────
