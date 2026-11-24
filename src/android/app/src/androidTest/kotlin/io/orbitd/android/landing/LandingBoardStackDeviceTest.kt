@@ -78,7 +78,8 @@ class LandingBoardStackDeviceTest {
             "e" to "Landed by pull request", "f" to "Opened a pull request instead", "closed" to "Pull request closed")
         // The project's landing card carries the in-flight pull request; the Landings window carries every state, a settled one opened.
         val sessions = manifest.getJSONObject("landingSessions")
-        if (only == null) for ((key, head) in heads) {
+        for ((key, head) in heads) {
+            if (only != null && only != "card:$key") continue
             if (key in listOf("a", "b", "d", "f")) {
                 link("orbit-project:${cards.getJSONObject(key).getString("projectId")}")
                 await(head); if (key == "b") await("Faster next time"); capture("project-$key")
@@ -92,7 +93,7 @@ class LandingBoardStackDeviceTest {
             capture("landings-$key")
         }
         // The links above started the app's activity again from the test; end it so the rule can close the scenario.
-        if (only == null) { runBlocking { app.session.logout() }; compose.activityRule.scenario.onActivity { it.finish() }; Thread.sleep(2_000); return }
+        if (only == null || only.startsWith("card:")) { runBlocking { app.session.logout() }; compose.activityRule.scenario.onActivity { it.finish() }; Thread.sleep(2_000); return }
         // The workspace's Landing section, as the settings page draws each of its states.
         val names = mapOf("pullRequest" to "opened-with-checks-running", "pushAsMe" to "push-as-me-on", "refused" to "push-refused",
             "notFromGithub" to "not-from-github", "permissionsPending" to "permissions-pending", "notConnected" to "github-not-connected")
