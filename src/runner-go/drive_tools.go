@@ -51,9 +51,9 @@ type driveWriter struct {
 
 func driveLink(id string) string { return "orbit-drive:" + id }
 
-// driveMountRelative recognizes the three spellings of a mounted drive path.
+// driveMountRelative recognizes the spellings (~/Files and /home/orbit/Files are the names before the rename) of a mounted drive path.
 func driveMountRelative(p string) (string, bool) {
-	for _, root := range []string{"~/Files", driveHomePath, driveMountPath} {
+	for _, root := range []string{"~/Documents", driveHomePath, driveMountPath, "~/Files", driveLegacyHomePath} {
 		if p == root || strings.HasPrefix(p, root+"/") {
 			return strings.TrimPrefix(p, root), true
 		}
@@ -74,7 +74,9 @@ func normalizeDrivePath(p string) (string, error) {
 func (s *mcpServer) callDriveTool(name string, args map[string]interface{}) (map[string]interface{}, bool) {
 	switch name {
 	case "drive_put", "drive_get", "drive_list", "drive_move", "drive_delete":
-		raw, err := runDriveTool(s.t, fileToolContext{sessionID: strings.TrimSpace(s.sessionID), callTimeout: s.callTimeout}, name, args)
+		progress := sessionDriveProgress(name, s.callToolUseID)
+		raw, err := runDriveTool(s.t, fileToolContext{sessionID: strings.TrimSpace(s.sessionID), callTimeout: s.callTimeout, progress: progress}, name, args)
+		progress.close()
 		if err != nil {
 			return toolResult(err.Error(), true), true
 		}
@@ -186,11 +188,14 @@ func putDriveFile(ctx context.Context, t *Transport, tool fileToolContext, local
 	if localPath == "" {
 		return nil, errors.New("localPath is required")
 	}
-	file, _, err := newSessionFileScope(sessionID).openRegular(absPath(localPath), false)
+	file, info, err := newSessionFileScope(sessionID).openRegular(absPath(localPath), false)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
+	if tool.progress != nil {
+		tool.progress.setSize(info.Size())
+	}
 
 	handleID, err := randomUUID()
 	if err != nil {
@@ -234,7 +239,7 @@ func putDriveFile(ctx context.Context, t *Transport, tool fileToolContext, local
 		digest := sha256.Sum256(buf[:n])
 		chunk := driveChunk{Index: len(chunks), Size: n, SHA256: hex.EncodeToString(digest[:])}
 		route := fmt.Sprintf("/stagings/%s/chunks/%d", url.PathEscape(staging.ID), chunk.Index)
-		if _, err := t.driveChunkCall(ctx, http.MethodPut, route, buf[:n], chunk.SHA256, 0); err != nil {
+		if _, err := t.driveChunkCall(ctx, http.MethodPut, route, buf[:n], chunk.SHA256, 0, tool.progress); err != nil {
 			return nil, err
 		}
 		chunks = append(chunks, chunk)
@@ -317,6 +322,9 @@ func getDriveFile(ctx context.Context, t *Transport, tool fileToolContext, p str
 		return nil, fmt.Errorf("drive entry %w", err)
 	}
 
+	if tool.progress != nil {
+		tool.progress.setSize(manifest.SizeBytes)
+	}
 	filename := uploadFileName(path.Base(p), manifest.EntryID)
 	dest, err := saveLocalFile(uploadsRootDir(), []string{decodeSessionID(sessionID), "drive", manifest.EntryID}, filename, func(w io.Writer) error {
 		var size int64
@@ -326,7 +334,7 @@ func getDriveFile(ctx context.Context, t *Transport, tool fileToolContext, p str
 				chunk.Index != i || chunk.Offset != size {
 				return fmt.Errorf("invalid drive manifest chunk %d", i)
 			}
-			data, err := t.driveChunkCall(ctx, http.MethodGet, "/chunks/"+chunk.SHA256, nil, "", chunk.Size)
+			data, err := t.driveChunkCall(ctx, http.MethodGet, "/chunks/"+chunk.SHA256, nil, "", chunk.Size, tool.progress)
 			if err != nil {
 				return err
 			}
@@ -353,17 +361,24 @@ func getDriveFile(ctx context.Context, t *Transport, tool fileToolContext, p str
 	}{dest, manifest.SizeBytes}, nil
 }
 
-// driveChunkCall uses the same runner authentication as the file tools' raw transfers.
-func (t *Transport) driveChunkCall(parent context.Context, method, route string, data []byte, digest string, size int) (_ []byte, err error) {
+// driveChunkCall uses the same runner authentication as the file tools' raw transfers. A non-nil progress counts
+// the bytes as they go up or come down.
+func (t *Transport) driveChunkCall(parent context.Context, method, route string, data []byte, digest string, size int, progress *driveProgress) (_ []byte, err error) {
 	noteTransportAttempt()
 	defer func() { noteTransportResult(method, err) }()
 	ctx, cancel := context.WithTimeout(parent, fileCallTimeout)
 	defer cancel()
 	route = driveRoute + route
-	req, err := http.NewRequestWithContext(ctx, method, t.baseURL+"/api"+route, bytes.NewReader(data))
+	var body io.Reader = bytes.NewReader(data)
+	if progress != nil && method == http.MethodPut {
+		body = countingReader{r: body, add: progress.add}
+	}
+	req, err := http.NewRequestWithContext(ctx, method, t.baseURL+"/api"+route, body)
 	if err != nil {
 		return nil, err
 	}
+	// A wrapped body hides its length from net/http; say it, so the chunk still goes up in one request.
+	req.ContentLength = int64(len(data))
 	if method == http.MethodPut {
 		req.Header.Set("Content-Type", "application/octet-stream")
 		req.Header.Set("X-Orbit-Chunk-Sha256", digest)
@@ -383,5 +398,9 @@ func (t *Transport) driveChunkCall(parent context.Context, method, route string,
 		_, err := io.Copy(io.Discard, resp.Body)
 		return nil, err
 	}
-	return io.ReadAll(io.LimitReader(resp.Body, int64(size)+1))
+	var got io.Reader = io.LimitReader(resp.Body, int64(size)+1)
+	if progress != nil {
+		got = countingReader{r: got, add: progress.add}
+	}
+	return io.ReadAll(got)
 }

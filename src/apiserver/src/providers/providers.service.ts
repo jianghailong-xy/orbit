@@ -1,3 +1,4 @@
+import { makeTrialDue } from './account-health.service';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
@@ -712,6 +713,9 @@ export class ProvidersService {
       await this.recordSessionEngines(current);
     }
     const row = await this.prisma.modelProvider.update({ where: { id }, data });
+    // A key saved again may be the fix for a block on it (docs/routing-account-health-design.md §6.3): its trial is due
+    // now; the ladder is kept. A key's health is its owner's, so a shared key has none to make due.
+    if (apiKeyEnc && row.ownerId) await makeTrialDue(this.prisma, row.ownerId, { providerId: row.id });
     // A key switched off, given a new secret or moved to another endpoint or protocol: the tokens Claude Code
     // sessions on it run with through the gateway stop at once (docs/claude-engine-openai-gateway-design.md
     // §4.2). The session's next claim mints a token on the key as it now is.

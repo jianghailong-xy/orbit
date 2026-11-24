@@ -93,7 +93,6 @@ import {
   type SidebarProject,
 } from '../lib/projectAttention';
 import { WIKI_PATH, wikiShown, wikiSpacePath, wikiWaitingOnYou, type WikiSpaceRow } from '../lib/wiki';
-import { WAITING_ON_YOU, useWaitingOnYouCount } from '../lib/ownerRequests';
 import { useScheduledNeedsCount } from '../lib/schedules';
 import { WIKI_SETTINGS_TITLE, WIKI_TRASH_OPEN, wikiSettingsPath } from '../lib/wikiReviewMode';
 import {
@@ -184,9 +183,6 @@ const TOP: TopNavItem[] = [
   // Scheduled tasks live here and only here: no workspace's session list carries them (owner ruling). Its count is
   // the failing and the held schedules, the page's Needs you.
   { key: 'scheduled', icon: <SidebarNavIcon name="scheduled" />, label: SCHEDULE_COPY.nav.scheduled },
-  // Every thing an agent has asked the owner to do, in one inbox. Its amber count follows the rule the
-  // Wiki's states below: a row carrying an amber number shows no shortcut.
-  { key: 'waiting', icon: <SidebarNavIcon name="waiting" />, label: WAITING_ON_YOU },
   // The Wiki sits under Projects because it is the other thing a codebase has: Projects is the work
   // in it, and the Wiki is what the work learned. Its amber count is the proposals waiting for the
   // owner, which is the same `needs-you` pill a workspace row shows — and the same rule applies with
@@ -196,7 +192,7 @@ const TOP: TopNavItem[] = [
   { key: 'wiki', icon: <SidebarNavIcon name="wiki" />, label: 'Wiki' },
   // Orbit Files, the account's drive, directly under the Wiki (docs/mocks/orbit-files/02-web, frame 1). No count and no
   // shortcut: nothing in Files waits on the owner. Its Trash and earlier versions are reached from inside it.
-  { key: 'files', icon: <SidebarNavIcon name="files" />, label: 'Files' },
+  { key: 'documents', icon: <SidebarNavIcon name="files" />, label: 'Documents' },
   // No Following here: its watches are the waits agents keep for their own sessions, already shown
   // in each session's header and Watching strip, and those are what link to /following.
   // No Machines & models either (docs/mocks/machines-and-models, 02): where agents run and whose quota
@@ -454,7 +450,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
 
   // The open projects, which close the rail the way they close the iPhone drawer (below).
   const projects = useQuery(openProjectsQuery());
-  const waitingOnYou = useWaitingOnYouCount();
   const scheduledNeeds = useScheduledNeedsCount();
   const openProjects = useMemo(() => sidebarProjects(projects.data ?? []), [projects.data]);
   // A project's own page lights its row in that group rather than the Projects entry, which stands
@@ -515,9 +510,9 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
           ? (projectRowKey ?? 'projects')
           : onWiki
             ? (wikiRowKey ?? 'wiki')
-            // The Files page and its Trash are Files.
-            : loc.pathname === '/files' || loc.pathname.startsWith('/files/')
-              ? 'files'
+            // The Documents page and its Trash are Documents.
+            : loc.pathname === '/documents' || loc.pathname.startsWith('/documents/')
+              ? 'documents'
             // Every task route — all tasks, one task, a list, the tasks in none — is the Tasks
             // page, whose title picks among them.
             : loc.pathname.startsWith('/tasks/') || loc.pathname.startsWith('/lists/')
@@ -969,15 +964,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
             title={`${t.label}${t.shortcut ? `  ${t.shortcut}` : ''}`}
           >
             <span className="tp-ico">{t.icon}</span>
-            {t.key === 'waiting' && waitingOnYou > 0 && (
-              <span
-                className="tp-rail-badge needs-you"
-                title={wikiWaitingOnYou(waitingOnYou)}
-                aria-label={wikiWaitingOnYou(waitingOnYou)}
-              >
-                {waitingOnYou}
-              </span>
-            )}
             {t.key === 'scheduled' && scheduledNeeds > 0 && (
               <span className="tp-rail-badge needs-you" data-scheduled-count="">
                 {scheduledNeeds}
@@ -1044,15 +1030,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
             >
               <span className="tp-ico">{t.icon}</span>
               <span className="tp-label">{t.label}</span>
-              {t.key === 'waiting' && waitingOnYou > 0 ? (
-                <span
-                  className="tp-count needs-you"
-                  title={wikiWaitingOnYou(waitingOnYou)}
-                  aria-label={wikiWaitingOnYou(waitingOnYou)}
-                >
-                  {waitingOnYou}
-                </span>
-              ) : t.key === 'scheduled' && scheduledNeeds > 0 ? (
+              {t.key === 'scheduled' && scheduledNeeds > 0 ? (
                 <span className="tp-count needs-you" data-scheduled-count="">
                   {scheduledNeeds}
                 </span>

@@ -6,14 +6,20 @@ import android.content.Intent
 import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.TestOrbitApplication
+import io.orbitd.android.cards.CardFocus
+import io.orbitd.android.cards.OwnerRequestLinks
 import io.orbitd.android.cards.OwnerRequestSnoozes
+import io.orbitd.android.core.cards.OwnerRequest
 import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitLinks
 import io.orbitd.android.navigation.OrbitNavigation
+import io.orbitd.android.navigation.OrbitRoute
+import io.orbitd.android.navigation.Origin
 import java.time.Instant
 import java.util.UUID
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Before
@@ -26,7 +32,7 @@ import org.robolectric.annotation.Config
 
 /**
  * An owner request's push (apiserver `notifyOwnerRequest`): its payload read, its channel, its two actions — the kind's own, opening
- * `orbit://owner-request/<id>` on the inbox with the card's input focused, and Later, which puts it off for an hour on this device and
+ * `orbit://owner-request/<id>`: the conversation that asked, on the request's card with its input focused — and Later, which puts it off for an hour on this device and
  * brings the notification back then. Neither ends the request; a SECRET has no inline reply.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -70,7 +76,7 @@ class OwnerRequestPushTest {
         assertNull("an id that is not one", PushMessage.parse(data { put("ownerRequestID", "not an id!") }))
     }
 
-    @Test fun theKindsActionOpensTheInboxOnTheCardAndLaterIsTheSecond() {
+    @Test fun theKindsActionOpensTheRequestsConversationAndLaterIsTheSecond() {
         mapOf("SECRET" to "Provide key", "DECISION" to "Answer", "MANUAL_STEP" to "Mark done", "CONFIRM" to "Review").forEach { (kind, label) ->
             app.push.notifications.clear()
             val data = data(kind)
@@ -85,10 +91,15 @@ class OwnerRequestPushTest {
             assertEquals(Intent.ACTION_VIEW, intent.action)
             assertEquals(MainActivity::class.java.name, intent.component!!.className)
             assertEquals("orbit://owner-request/$request", intent.dataString)
-            val route = OrbitLinks.parse(intent.dataString!!)!!
-            assertEquals(Destination.WAITING_ON_YOU, route.destination)
-            assertEquals(request, route.id)
-            assertEquals(route, OrbitNavigation().bindAccount("account-A").receive(route).current)
+            // The link names the request, never a page of its own: the shell reads it and opens the conversation that asked
+            // (OwnerRequestLinks; OwnerRequestCardTest drives that read on the wire).
+            assertEquals(request, OrbitLinks.ownerRequest(intent.dataString!!))
+            assertNull(OrbitLinks.parse(intent.dataString!!))
+            val opened = runBlocking { OwnerRequestLinks.open(OrbitLinks.ownerRequest(intent.dataString!!)!!) { asked(it) } }!!
+            assertEquals(OrbitRoute(Destination.SESSION, session, origin = Origin.EXTERNAL), opened)
+            assertEquals(CardFocus.ownerRequest(request), CardFocus.pending(session))
+            assertEquals(opened, OrbitNavigation().bindAccount("account-A").receive(opened).current)
+            CardFocus.spend(session)
             // The body's tap is still the session's.
             assertEquals("orbit-session:$session", shadowOf(notification.contentIntent).savedIntent.dataString)
             val later = shadowOf(notification.actions[1].actionIntent)
@@ -97,6 +108,10 @@ class OwnerRequestPushTest {
             assertEquals(OwnerRequestLaterReceiver::class.java.name, later.savedIntent.component!!.className)
         }
     }
+
+    /** The request as `GET /owner-requests/<id>` reads it: filed by [session]. */
+    private fun asked(id: String) = OwnerRequest(id = ObjectId.toPublic(id), kind = "SECRET", state = "PENDING", title = "t",
+        askedBySessionId = ObjectId.toPublic(session), createdAt = Instant.now().toString())
 
     @Test fun laterPutsTheRequestOffForAnHourAndBringsTheNotificationBackThen() {
         val data = data("MANUAL_STEP")
@@ -107,10 +122,7 @@ class OwnerRequestPushTest {
         val snoozes = OwnerRequestSnoozes.of(app)
         val until = snoozes.until(request)
         assertTrue("an hour from the press: $until", until in before + 3_600_000..System.currentTimeMillis() + 3_600_000)
-        // Out of the count, the notification gone, and nothing sent: the request is not ended.
-        val pending = io.orbitd.android.core.cards.OwnerRequest(id = ObjectId.toPublic(request), kind = "MANUAL_STEP", state = "PENDING", title = "t",
-            createdAt = Instant.now().toString())
-        assertEquals(0, OwnerRequests.waitingCount(listOf(pending), snoozes.state.value, Instant.now()))
+        // The notification gone, and nothing sent: the request is not ended.
         assertTrue(manager.activeNotifications.isEmpty())
         val alarm = shadowOf(app.getSystemService(AlarmManager::class.java)).scheduledAlarms.single()
         assertEquals(until, alarm.triggerAtTime)

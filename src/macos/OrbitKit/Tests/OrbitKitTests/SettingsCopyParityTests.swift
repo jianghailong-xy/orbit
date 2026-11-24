@@ -93,7 +93,9 @@ final class SettingsCopyParityTests: XCTestCase {
                    in: Self.settingsIndex)
         assertSays(index, "{ path: '/settings/access-tokens', label: '\(SettingsHome.title(.accessTokens))' },",
                    in: Self.settingsIndex)
-        for row in [SettingsHome.Row.general, .profile, .terminals] {
+        // Terminals has no row on the web or the Apple clients: an approved terminal lives on its
+        // machine's page (docs/mocks/terminals-on-machine-page).
+        for row in [SettingsHome.Row.general, .profile] {
             assertSays(index, "label: '\(SettingsHome.title(row))' },", in: Self.settingsIndex)
         }
         // Profile's Change password opens a dialog whose title is the page's name.
@@ -265,7 +267,7 @@ final class SettingsCopyParityTests: XCTestCase {
                    in: Self.accessTokenWords)
         assertSays(words, "}).concat(scopes.includes(NOTIFY_SCOPE) ? ['\(AccessTokensList.scopeSummary([AccessTokensList.notifyScope]))'] : []).join(' · ');",
                    in: Self.accessTokenWords)
-        XCTAssertEqual(AccessTokensList.scopeSummary(["tasks:read", "documents", "notify"]), "Tasks: read · Files: read & write · Notifications: send")
+        XCTAssertEqual(AccessTokensList.scopeSummary(["tasks:read", "documents", "notify"]), "Tasks: read · Documents: read & write · Notifications: send")
         assertSays(words, "export const NEVER_EXPIRES = '\(AccessTokensList.neverExpires)';", in: Self.accessTokenWords)
         assertSays(words, "return 'in less than an hour';", in: Self.accessTokenWords)
         assertSays(words, "hours === 1 ? 'in 1 hour' : `in ${hours} hours`", in: Self.accessTokenWords)

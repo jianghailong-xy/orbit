@@ -45,6 +45,7 @@ import type { OwnerConfirmationView } from '../components/OwnerConfirmationCard'
 import type { PendingCriteriaDecisionQueue } from '../components/CriteriaDecisionCard';
 import type { ProjectOpenItemsView } from '../components/CoordinatorQuestionCard';
 import type { ProjectCrossingRow, TaskAttribution } from './attribution';
+import type { TaskMoveBatch } from './crossingBatches';
 import type { EvidenceFileCitation, EvidenceFilePage } from './evidenceFiles';
 import type {
   WikiArticleDirectory,
@@ -231,6 +232,9 @@ export interface UserPreferences {
   translationBilingual?: boolean;
   /** The provider slugs no SubAgent of this account is routed onto (docs/subagent-design.md §7). Absent: none. */
   subagentBlockedProviders?: string[];
+  /** Whether a task pinned to an account that can't run now may run elsewhere (docs/routing-account-health-design.md
+   *  §7.5). Absent means OFF: the pinned task holds. */
+  relaxBlockedPins?: boolean;
 }
 
 /** How an account signs in (docs/google-sign-in-design.md §6): a password, and the Google account linked. */
@@ -1104,6 +1108,18 @@ export const projectCrossingsQuery = (projectId: string) =>
       api<ProjectCrossingRow[]>(`/projects/${encodeURIComponent(projectId)}/handoffs`),
   });
 
+/** The task-move batches one session draws as decision cards: those it asked for, and those into a
+ *  project it coordinates — every waiting one, then the latest answered (`lib/crossingBatches.ts`). */
+export const sessionTaskMovesQuery = (sessionId: string) =>
+  queryOptions({
+    queryKey: ['session-task-moves', sessionId] as const,
+    // A move asked or answered lights both of its sessions with a session.updated (publishOwnerSignalChanged), and a
+    // crossing decided moves its project.
+    meta: { entities: ['session', 'project'], sessionReach: { session: sessionId } satisfies SessionReach },
+    queryFn: () =>
+      api<TaskMoveBatch[]>(`/sessions/${encodeURIComponent(sessionId)}/task-moves`),
+  });
+
 /**
  * What one session is being asked to decide, re-derived by the server on every read.
  *
@@ -1903,7 +1919,7 @@ export const linkPreviewsQuery = (refs: readonly LinkPreviewRef[]) =>
   });
 
 /** What `GET /documents/usage` answers: the account's total split into the drive's share (Trash included) and the rest, each byte once. */
-export interface DriveUsage {
+export interface DocumentsUsage {
   totalBytes: number;
   driveBytes: number;
   trashBytes: number;
@@ -1913,8 +1929,8 @@ export interface DriveUsage {
   nearQuota?: boolean;
 }
 
-export const driveUsageQuery = () =>
+export const documentsUsageQuery = () =>
   queryOptions({
     queryKey: ['drive', 'usage'] as const,
-    queryFn: () => api<DriveUsage>('/documents/usage'),
+    queryFn: () => api<DocumentsUsage>('/documents/usage'),
   });

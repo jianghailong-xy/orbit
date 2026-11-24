@@ -1,8 +1,8 @@
 # orbit-files-mount
 
-The Orbit Files mount daemon (docs/orbit-files-drive-technical-design.md §5): the account's drive as a FUSE file
-system, at `/run/orbit-files/drive` on an Orbit Cloud runner, which the runner shows its agents as `~/Files`
-(`/home/orbit/Files`, a symlink `orbit run` makes). Go on go-fuse's raw protocol, speaking the runner drive door
+The Documents mount daemon (docs/orbit-files-drive-technical-design.md §5): the account's drive as a FUSE file
+system, at `/run/orbit-files/drive` on an Orbit Cloud runner, which the runner shows its agents as `~/Documents`
+(`/home/orbit/Documents`, a symlink `orbit run` makes). Go on go-fuse's raw protocol, speaking the runner drive door
 (`/api/runner/drive/*`, `src/apiserver/src/documents/runner-documents.controller.ts`).
 
 | Package | What it is |

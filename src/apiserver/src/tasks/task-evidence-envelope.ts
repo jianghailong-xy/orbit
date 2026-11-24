@@ -195,7 +195,7 @@ function refuseShape(why: string): never {
 export function namesDriveFile(ref: string): boolean {
   const text = ref.trim();
   return /^orbit-drive:/i.test(text)
-    || /^(?:~|\/home\/orbit)\/Files(?:\/|$)/.test(text)
+    || /^(?:~|\/home\/orbit)\/(?:Documents|Files)(?:\/|$)/.test(text)
     || /^\/run\/orbit-files\/drive(?:\/|$)/.test(text);
 }
 
@@ -629,7 +629,7 @@ export async function resolveEvidenceCitations(
     if (submitted.kind === 'FILE' && namesDriveFile(submitted.ref)) {
       refuseCitation(
         'EVIDENCE_FILE_IS_A_DRIVE_PATH',
-        `evidence.checks[${index}] names a file in the Orbit Files drive; nothing was written. A drive file can be `
+        `evidence.checks[${index}] names a file in the Documents drive; nothing was written. A drive file can be `
         + 'overwritten after it is cited, so evidence never cites one. Keep it with file_upload, which makes an evidence '
         + 'copy of it under the evidence rules, and cite the id that answers',
         'UPLOAD_THE_FILE_AND_CITE_ITS_ID',

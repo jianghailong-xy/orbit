@@ -72,6 +72,10 @@ type mcpServer struct {
 	// helpAsk: spawned with ORBIT_HELP_ASK=1 for the help center's Ask, it serves the four help reads and nothing else
 	// (mcp_help_ask.go).
 	helpAsk bool
+	// callToolUseID is the engine's id for the tool call being answered (Claude Code's `claudecode/toolUseId`), so a
+	// drive transfer's progress lands on its card; "" outside one, or when the engine names none. Calls are served
+	// one at a time (serve), as rec is.
+	callToolUseID string
 	// rec is what the tool call being answered did, for its receipt (tool_receipt.go); nil outside one.
 	rec *callRecord
 	// Reads the session's live permission mode for Orbit's Plan gate (plan_gate.go); nil reads it from the runner
@@ -279,6 +283,8 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 			// Its calls' events nest under this id, as a delegate call's do.
 			return s.ok(req.ID, s.callWorkflow(p.Arguments, asString(p.Meta["claudecode/toolUseId"]))), true
 		}
+		s.callToolUseID = asString(p.Meta["claudecode/toolUseId"])
+		defer func() { s.callToolUseID = "" }()
 		return s.ok(req.ID, s.invokeTool(p.Name, p.Arguments)), true
 	default:
 		if isNotification {
@@ -394,11 +400,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 }
 
 func driveToolDescriptors(obj func(map[string]interface{}, ...string) map[string]interface{}) []map[string]interface{} {
-	drivePath := map[string]interface{}{"type": "string", "description": "A drive path such as /Proj/r.md or ~/Files/Proj/r.md."}
+	drivePath := map[string]interface{}{"type": "string", "description": "A drive path such as /Proj/r.md or ~/Documents/Proj/r.md."}
 	return []map[string]interface{}{
 		{
 			"name": "drive_put",
-			"description": "Copy a local file into the owner's Orbit Files drive. Creates missing parent folders and " +
+			"description": "Copy a local file into the owner's Documents drive. Creates missing parent folders and " +
 				"keeps the previous version when overwriting a file. Returns an orbit-drive: link for replies. The file is " +
 				"sent in 8 MiB chunks and has no size limit: file_upload's 25 MiB cap does not apply here.",
 			"inputSchema": obj(map[string]interface{}{
@@ -430,7 +436,7 @@ func driveToolDescriptors(obj func(map[string]interface{}, ...string) map[string
 		},
 		{
 			"name":        "drive_delete",
-			"description": "Move a drive entry to the owner's Trash. The owner can restore it from the Files page. Agents cannot see Trash.",
+			"description": "Move a drive entry to the owner's Trash. The owner can restore it from the Documents page. Agents cannot see Trash.",
 			"inputSchema": obj(map[string]interface{}{"path": drivePath}, "path"),
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": true},
 		},
@@ -461,7 +467,7 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 	if result, handled := s.callFileTool(name, args); handled {
 		return result
 	}
-	// The Orbit Files drive's tools: `orbit drive` runs the same runDriveTool (drive_tools.go).
+	// The Documents drive's tools: `orbit drive` runs the same runDriveTool (drive_tools.go).
 	if result, handled := s.callDriveTool(name, args); handled {
 		return result
 	}

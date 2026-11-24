@@ -165,7 +165,7 @@ func (r *Reporter) Refusal(st fuse.Status, op, shownPath, detail, reason string)
 
 // Log appends one line to errors.log:
 //
-//	2026-11-20T10:00:00Z EOPNOTSUPP write /home/orbit/Files/Proj/app.db at offset 4096: the drive does not change a file in place; ...
+//	2026-11-20T10:00:00Z EOPNOTSUPP write /home/orbit/Documents/Proj/app.db at offset 4096: the drive does not change a file in place; ...
 //
 // The same line again within a second is not repeated.
 func (r *Reporter) Log(st fuse.Status, op, shownPath, detail, reason string) {

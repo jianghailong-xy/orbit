@@ -270,7 +270,7 @@ var guideTopics = []guideTopic{
 		Asks:   []string{"Keep this screenshot with the task."},
 		Intent: "Keep a screenshot, report or log in Orbit instead of the repository, or read one back.",
 		Steps: []guideStep{
-			{Op: "file_upload", Why: "Keep a file from this session's checkout, uploads directory or a mounted Orbit Files drive."},
+			{Op: "file_upload", Why: "Keep a file from this session's checkout, uploads directory or a mounted Documents drive."},
 			{Op: "file_list", Optional: true, Why: "What this task's sessions have uploaded."},
 			{Op: "file_fetch", Optional: true, Why: "Read a file back by id."},
 			{Op: "drive_put", Optional: true, Why: "Keep a local file on the owner's drive.", Example: map[string]interface{}{"localPath": "report.md", "path": "/reports/report.md"}},

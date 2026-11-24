@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// The entrypoint makes ~/Files the drive's link, at every start (§6.1, §5.9 row 61).
+// The entrypoint makes ~/Documents the drive's link, at every start (§6.1, §5.9 row 61).
 func TestEnsureDriveLink(t *testing.T) {
 	dir := t.TempDir()
 	oldMount, oldHome := driveMountPath, driveHomePath

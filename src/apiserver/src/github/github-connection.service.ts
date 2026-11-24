@@ -21,6 +21,20 @@ export const GITHUB_LIST_CACHE_MS = 60_000;
 export const GITHUB_REPO_PAGE = 30;
 /** A token this close to its expiry is refreshed first. */
 const REFRESH_MARGIN_MS = 60_000;
+/** What retiring a Push as me token came to (§16 Q1): the pair rotated, how many tokens GitHub revoked, and why not. */
+export interface OwnerTokenRetirement {
+  refreshed: boolean;
+  revoked: number;
+  failure: string | null;
+}
+
+/** A GitHub failure as a log line may say it: its status and GitHub's error code, never what was sent. */
+function describeGithubError(error: unknown): string {
+  return error instanceof GithubCallError ? `GitHub answered ${error.status}${error.githubError ? ` ${error.githubError}` : ''}` : 'GitHub could not be reached';
+}
+
+/** A Push as me push is handed a token with at least this long left, refreshed first otherwise (§5.2). */
+export const PUSH_TOKEN_MIN_VALIDITY_MS = 15 * 60_000;
 /** What an expiry GitHub did not give is stored as: a token that does not expire. */
 const NEVER = new Date('9999-12-31T00:00:00Z');
 const DEFAULT_RETURN = '/settings/integrations/github';
@@ -339,6 +353,19 @@ export class GithubConnectionService {
       return await use(accessToken);
     } catch (error) {
       if (error instanceof GithubCallError && error.status === 401) {
+        // A Push as me retirement (retireOwnerToken) may have rotated the pair and revoked this very token while the
+        // call was in flight: the connection is live, under its new token, so the call is made once more with it.
+        const current = await this.storedAccessToken(ownerId);
+        if (current !== null && current !== accessToken) {
+          try {
+            return await use(current);
+          } catch (again) {
+            if (!(again instanceof GithubCallError) || again.status !== 401) {
+              if (again instanceof GithubCallError) throw unavailable();
+              throw again;
+            }
+          }
+        }
         const now = new Date();
         await this.prisma.githubConnection.updateMany({ where: { ownerId }, data: { accessExpiresAt: now, refreshExpiresAt: now } });
         this.listings.delete(ownerId);
@@ -349,27 +376,108 @@ export class GithubConnectionService {
     }
   }
 
-  private async accessToken(ownerId: string, app: GithubAppCredentials): Promise<string> {
+  /**
+   * The owner's own user-to-server token for one Push as me push (docs/design/protected-branch-landing.md §5.2),
+   * refreshed first when less than PUSH_TOKEN_MIN_VALIDITY_MS of it is left, with when it expires. GitHub off answers
+   * GITHUB_NOT_CONFIGURED; no live connection, GITHUB_NOT_CONNECTED. Never cached outside the stored connection.
+   */
+  async ownerPushToken(ownerId: string): Promise<{ token: string; expiresAt: Date }> {
+    const app = await this.config.credentials();
+    if (!app) throw notConfigured();
+    const token = await this.accessToken(ownerId, app, PUSH_TOKEN_MIN_VALIDITY_MS);
+    const row = await this.prisma.githubConnection.findUnique({ where: { ownerId }, select: { accessExpiresAt: true } });
+    if (!row) throw notConnected();
+    return { token, expiresAt: row.accessExpiresAt };
+  }
+
+  /**
+   * docs/design/protected-branch-landing.md §5.3, §16 Q1: retire the token a Push as me push was handed, once the push
+   * has reported back. The connection is refreshed first (a new pair stored, the one any later call reads), then the
+   * token that was stored before the refresh is revoked with `DELETE /applications/{client_id}/token` — the token Push
+   * as me hands out is the stored one — and so is `handed`, when this process remembers a different one. Never the
+   * grant: the owner's connection stays live under its new token.
+   *
+   * Never throws. A refresh GitHub refuses leaves the connection as it is and revokes nothing that is stored (that
+   * would leave the connection with a dead token); a revoke GitHub refuses leaves that token to its expiry. Either is
+   * answered in `failure` for the caller to record. Nothing here can make a second handout possible: that is the
+   * attempt row's compare-and-set (push-as-me.service.ts).
+   */
+  async retireOwnerToken(ownerId: string, handed: string | null): Promise<OwnerTokenRetirement> {
+    const app = await this.config.credentials().catch(() => null);
+    if (!app) return { refreshed: false, revoked: 0, failure: 'GitHub is not set up on this Orbit' };
+    // One refresh per account at a time: GitHub retires a refresh token the first time it is used.
+    await this.refreshing.get(ownerId)?.catch(() => undefined);
+    const row = await this.prisma.githubConnection.findUnique({ where: { ownerId } });
+    if (!row) return { refreshed: false, revoked: 0, failure: 'the owner has no GitHub connection' };
+    const before = this.decrypt(row.accessTokenEnc);
+    let rotated: string | null = null;
+    let failure: string | null = null;
+    const refreshToken = this.decrypt(row.refreshTokenEnc);
+    if (refreshToken === null || row.refreshExpiresAt.getTime() <= Date.now()) {
+      failure = 'the connection has no refresh token to rotate with';
+    } else {
+      const rotation = this.github.refresh({ clientId: app.clientId, clientSecret: app.clientSecret, refreshToken })
+        .then(async (tokens) => {
+          await this.prisma.githubConnection.update({ where: { id: row.id }, data: this.stored(tokens) });
+          this.listings.delete(ownerId);
+          return tokens.accessToken;
+        });
+      // Held as the account's refresh, so a call that needs the token meanwhile waits for the new one — or, if the
+      // rotation fails, takes the one still stored.
+      const held = rotation.catch(() => before ?? '');
+      this.refreshing.set(ownerId, held);
+      try {
+        rotated = await rotation;
+      } catch (error) {
+        failure = `the refresh failed: ${describeGithubError(error)}`;
+      } finally {
+        if (this.refreshing.get(ownerId) === held) this.refreshing.delete(ownerId);
+      }
+    }
+    // Revoked: the token stored before the refresh, once it is stored no longer, and the one handed out.
+    const targets = new Set<string>();
+    if (rotated !== null && before) targets.add(before);
+    if (handed && handed !== before) targets.add(handed);
+    targets.delete(rotated ?? '');
+    let revoked = 0;
+    for (const accessToken of targets) {
+      try {
+        await this.github.revoke({ clientId: app.clientId, clientSecret: app.clientSecret, accessToken });
+        revoked += 1;
+      } catch (error) {
+        failure = [failure, `a revoke failed: ${describeGithubError(error)}`].filter(Boolean).join('; ');
+      }
+    }
+    return { refreshed: rotated !== null, revoked, failure };
+  }
+
+  /** The account's stored access token, or null. */
+  private async storedAccessToken(ownerId: string): Promise<string | null> {
+    const row = await this.prisma.githubConnection.findUnique({ where: { ownerId }, select: { accessTokenEnc: true } });
+    return row ? this.decrypt(row.accessTokenEnc) : null;
+  }
+
+  private async accessToken(ownerId: string, app: GithubAppCredentials, margin = REFRESH_MARGIN_MS): Promise<string> {
     const row = await this.prisma.githubConnection.findUnique({ where: { ownerId } });
     if (!row) throw notConnected();
-    if (row.accessExpiresAt.getTime() - REFRESH_MARGIN_MS > Date.now()) {
+    if (row.accessExpiresAt.getTime() - margin > Date.now()) {
       const plain = this.decrypt(row.accessTokenEnc);
       if (plain !== null) return plain;
     }
     // One refresh per account at a time: GitHub retires a refresh token the first time it is used.
     let pending = this.refreshing.get(ownerId);
     if (!pending) {
-      pending = this.refresh(row, app).finally(() => this.refreshing.delete(ownerId));
+      pending = this.refresh(row, app, margin).finally(() => this.refreshing.delete(ownerId));
       this.refreshing.set(ownerId, pending);
     }
     return pending;
   }
 
-  private async refresh(read: GithubConnection, app: GithubAppCredentials): Promise<string> {
+  private async refresh(read: GithubConnection, app: GithubAppCredentials, margin = REFRESH_MARGIN_MS): Promise<string> {
     // Read again: a refresh that ended between the first read and this one already stored a new pair.
     const row = await this.prisma.githubConnection.findUnique({ where: { id: read.id } });
     if (!row) throw notConnected();
-    if (row.accessExpiresAt.getTime() - REFRESH_MARGIN_MS > Date.now()) {
+    if (row.accessExpiresAt.getTime() - margin > Date.now()) {
       const plain = this.decrypt(row.accessTokenEnc);
       if (plain !== null) return plain;
     }

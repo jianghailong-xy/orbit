@@ -52,6 +52,8 @@ export const HUMAN_ONLY_WORKSPACE_FIELDS = [
   'subagentsEnabled',
   'subagentsMaxRunning',
   'workflowsEnabled',
+  // docs/design/protected-branch-landing.md §12: only the owner, in a client, lends a workspace their GitHub identity.
+  'landingMode',
 ] as const;
 
 export type OrchestratorWorkspaceInput = {

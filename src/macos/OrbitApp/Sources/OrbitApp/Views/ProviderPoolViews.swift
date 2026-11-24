@@ -83,6 +83,8 @@ struct CodexPoolPageView: View {
     let exit: () async -> String?
     var pause: ((PoolMember, Int?) async -> String?)? = nil
     var now: Date = Date()
+    /// A login or key an account refused: the provider's words, the next trial and Check again (contract §4).
+    var health = AccountHealthRows()
 
     @State private var sheet: CodexPoolSheet?
     @State private var signingOut: CodexLogin?
@@ -198,6 +200,8 @@ struct CodexPoolPageView: View {
                                 contributor: contributorName(login), now: now,
                                 signInAgain: { sheet = .signIn(login) },
                                 signOut: { signingOut = login })
+                health.row(AccountHealth.block(health.blocks, poolID: pool.id, account: login.fingerprint), now: now)
+                    .padding(.leading, 40)
                 pauseControls(member, canManage: canSignOut)
                     .padding(.leading, 40)
             }
@@ -224,6 +228,8 @@ struct CodexPoolPageView: View {
                 PoolKeyRow(key: key, pool: access, next: member.next, tagged: page.tagged) {
                     sheet = .replace(key)
                 }
+                health.row(AccountHealth.block(health.blocks, providerID: member.id), now: now)
+                    .padding(.leading, 40)
                 pauseControls(member, canManage: SharedPoolPage.canRemove(key, in: access))
                     .padding(.leading, 40)
             }
@@ -1613,6 +1619,8 @@ struct AccountPoolPageView: View {
     let pool: ProviderPool
     var pause: ((PoolMember, Int?) async -> String?)? = nil
     var now: Date = Date()
+    /// A member an account refused (a Claude pool member is a key): its line and Check again (contract §4).
+    var health = AccountHealthRows()
 
     var body: some View {
         Form {
@@ -1635,6 +1643,8 @@ struct AccountPoolPageView: View {
                 ForEach(pool.members) { member in
                     VStack(alignment: .leading, spacing: 10) {
                         AccountRow(member: member, now: now)
+                        health.row(AccountHealth.block(health.blocks, providerID: member.id), now: now)
+                            .padding(.leading, 40)
                         AccountPauseControls(name: member.label, pausedUntil: member.pausedUntil,
                                              scope: "Pool account · This pool", canManage: pause != nil) { minutes in
                             await pause?(member, minutes)

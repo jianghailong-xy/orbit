@@ -338,6 +338,9 @@ type fileToolContext struct {
 	// retry queues behind it and keeps everything a second time, so a call stops at the longest it may hold the engine
 	// and says what it got done.
 	callTimeout time.Duration
+	// progress counts a drive_put or drive_get call's bytes for the chat's transfer card (drive_progress.go); nil
+	// reports nothing.
+	progress *driveProgress
 }
 
 // callContext is the time this call has.
@@ -520,7 +523,7 @@ func uploadPath(t *Transport, tool fileToolContext, path, taskID, label, as stri
 	return out, nil
 }
 
-// newFileUploadScope also accepts the mounted drive. The ~/Files symlink and the mount point
+// newFileUploadScope also accepts the mounted drive. The ~/Documents symlink and the mount point
 // resolve to the same root, so access through either spelling is checked against the mount.
 func newFileUploadScope(sessionID string) localFileScope {
 	scope := newSessionFileScope(sessionID)
@@ -609,7 +612,7 @@ func fileScopeError(path, reason, sessionID string) error {
 	}
 	if driveMounted() {
 		return fmt.Errorf("file_upload: %s is outside the allowed paths: %s. Use this session's checkout, "+
-			"its uploads directory (%s), or the mounted Orbit Files drive. %s", path, reason, uploads, next)
+			"its uploads directory (%s), or the mounted Documents drive. %s", path, reason, uploads, next)
 	}
 	return fmt.Errorf("file_upload: %s is %s, so nothing was uploaded. file_upload reads only this session's checkout and "+
 		"its uploads directory, %s, the same rule a reply's links follow. %s", path, reason, uploads, next)

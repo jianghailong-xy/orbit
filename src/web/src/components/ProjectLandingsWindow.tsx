@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
+import { LandingPullRequest } from './LandingPullRequest';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -733,6 +734,7 @@ function LandingWindowRow({
         />
       ) : null}
       <LandingReply parts={sentence} open={expanded} onToggle={onToggle} />
+      {landing?.pullRequest ? <LandingPullRequest pullRequest={landing.pullRequest} main={row.promotion ? mainBranchName(row.promotion.upstreamRef) : 'main'} /> : null}
       {expanded ? (
         <div className="landings-window-record">
           {merge ? <LandingReceiptBlock receipt={landingMergeReceipt(row.promotion, landing)} /> : null}
@@ -1027,6 +1029,7 @@ function LandingWindowCard({
         </div>
       ) : null}
       <LandingReply parts={sentence} open={stepsOpen} onToggle={onToggle} />
+      {landing?.pullRequest ? <LandingPullRequest pullRequest={landing.pullRequest} main={main} /> : null}
       {/* What a landing in hand still carries — what stopped it, its clock, who decides and the doors — on the chat's own
           status card, under its steps. */}
       {running ? null : (

@@ -50,7 +50,7 @@ const (
 type Options struct {
 	// UID and GID are what every entry shows (10001, the runner's user).
 	UID, GID uint32
-	// DisplayRoot is the path agents know the drive by, for errors.log (/home/orbit/Files).
+	// DisplayRoot is the path agents know the drive by, for errors.log (/home/orbit/Documents).
 	DisplayRoot string
 	// SpoolDir holds the chunks of open writes and the chunk cache.
 	SpoolDir string
@@ -83,7 +83,7 @@ func (o *Options) defaults() {
 		o.GID = 10001
 	}
 	if o.DisplayRoot == "" {
-		o.DisplayRoot = "/home/orbit/Files"
+		o.DisplayRoot = "/home/orbit/Documents"
 	}
 	if o.SpoolLimit == 0 {
 		o.SpoolLimit = 4 << 30

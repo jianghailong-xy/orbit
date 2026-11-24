@@ -87,7 +87,9 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
     func testThePageHoldsTheMocksBlocksInOrder() throws {
         let page = try XCTUnwrap(try lists().first?.code)
         let body = try slice(page, from: "List(selection:", to: ".orbitRevealSurface()")
-        try assertInOrder(body, ["if lists.settled {", "if !attention.isEmpty {", "MachinesAndModelsNeedsYouSection(",
+        try assertInOrder(body, ["if !terminals.isEmpty || lists.settled {",
+                                 "if !attention.isEmpty || !terminals.isEmpty {",
+                                 "MachinesAndModelsNeedsYouSection(",
                                  "ForEach(movable)", "RunnerSectionHeader(MachinesAndModels.machines,",
                                  "Text(MachinesAndModels.machinesDetail)", "RunnerAddSection { addingRunner = true }",
                                  "MachinesAndModelsPoolsSection(memberPools: lists.memberPools, ownPools: lists.ownPools,",

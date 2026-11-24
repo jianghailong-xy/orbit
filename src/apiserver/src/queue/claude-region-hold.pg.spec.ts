@@ -63,7 +63,7 @@ import { recordRegionCheck, regionFlipConfirmed } from '../runners/runner-region
 import { RunnersService } from '../runners/runners.service';
 import { SESSION_MOVE_V1 } from '../sessions/session-move';
 import { SessionsService } from '../sessions/sessions.service';
-import { planTaskRunRoute, taskRouteReads } from '../tasks/task-route-decision';
+import { planTaskRunRoute, routeOfPlan, taskRouteReads } from '../tasks/task-route-decision';
 import { subagentRouteInput } from '../runner-api/subagent-route';
 import { subagentCandidateRefusal } from '../tasks/model-routing';
 import { QueueService } from './queue.service';
@@ -547,7 +547,7 @@ test('the region check holds Anthropic-bound Claude sessions, refuses them at cr
         creatorId: m.workspaceId, status: 'OPEN', completionCriterion: 'EVIDENCE_JUDGMENT', modelHint: 'M',
       } as never,
     });
-    const route = () => planTaskRunRoute(taskRouteReads(prisma, ownerId), { id: taskId, modelHint: 'M' }, { id: m.workspaceId, runnerId: m.runnerId }, 'the work');
+    const route = async () => routeOfPlan(await planTaskRunRoute(taskRouteReads(prisma, ownerId), { id: taskId, modelHint: 'M' }, { id: m.workspaceId, runnerId: m.runnerId }, 'the work'));
     // Why Claude's own sign-in leaves the pool, as the route reads that pool for the Agent's runner.
     const claudeRefusal = async () => subagentCandidateRefusal(await subagentRouteInput(db as unknown as Prisma.TransactionClient, {
       ownerId, workspaceId: m.workspaceId, runnerId: m.runnerId,

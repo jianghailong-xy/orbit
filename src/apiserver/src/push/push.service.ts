@@ -15,10 +15,13 @@ import { openFuseEpisodeId } from '../projects/project-fuse';
 import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
 import { Prisma, RunStatus, type DeviceToken } from '@prisma/client';
+import { accountSubjectNames } from '../providers/account-health-subject';
+import { accountNeedsActionBody } from '../providers/account-health-copy';
+import type { AccountNeedsAction } from '../providers/account-health.service';
 import { AgentProvider, ENGINE_CLI_NAMES, RUN_NOTICE_MESSAGE_MAX, TRANSLATION_TIMEOUT_MS, uuidToBase62, type LoginEngine } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
-import { readOwnerItemSessionIds } from '../projects/owner-decision-signal';
+import { readOwnerItemSessionIds, readOwnerRequestSessionIds } from '../projects/owner-decision-signal';
 import {
   SESSION_ENDING_SELECT,
   conversationIsOver,
@@ -122,6 +125,7 @@ export type OwnerNotificationResult =
  */
 const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
   'engine-signed-out': 'Engine signed out',
+  'account-needs-action': 'Account needs action',
   'claude-region-blocked': 'Claude is not available on this runner',
   'runner-updating': 'Runner updating',
   'confirmation-raised': 'Coordinator raised this for your decision',
@@ -510,6 +514,39 @@ export class PushService {
       await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`engine sign-out notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * An account refused runs and needs the owner (docs/routing-account-health-design.md §8). Sent once per state change
+   * by AccountHealthService.recordFailure, which decides when; this only says it. Title: the runner's name (or a key's
+   * provider label). Same shape as notifyEngineSignedOut: no badge, no session id, thread `runner-<id>`; a key has no
+   * runner, so its thread is `account-<subjectKey>`. The payload carries what a client needs to open the account row and
+   * to call `POST /account-health/:id/check` from it: `accountHealthID`, `subjectKey`, `failureKind`, `blockedUntil`.
+   */
+  async notifyAccountNeedsAction(ownerId: string, alert: AccountNeedsAction): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const subject = await accountSubjectNames(this.prisma, ownerId, alert.subjectKey);
+      const { tokens, feishu } = await this.channels(ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const text = {
+        title: subject.title,
+        body: accountNeedsActionBody({ product: subject.product, kind: alert.kind, said: alert.said, trips: alert.trips }),
+      };
+      const body = JSON.stringify({
+        aps: { alert: text, sound: 'default', 'thread-id': subject.runnerId ? `runner-${subject.runnerId}` : `account-${alert.subjectKey}` },
+        kind: 'account-needs-action',
+        ...(subject.runnerId ? { runnerID: subject.runnerId } : {}),
+        accountHealthID: alert.rowId,
+        subjectKey: alert.subjectKey,
+        failureKind: alert.kind,
+        ...(alert.blockedUntil ? { blockedUntil: alert.blockedUntil.toISOString() } : {}),
+      });
+      this.background(this.feishuOther(feishu, { kind: 'account-needs-action', ...text }));
+      await this.deliver(tokens, body, 'alert', '10');
+    } catch (err) {
+      this.log.warn(`account needs action notify failed: ${(err as Error).message}`);
     }
   }
 
@@ -1701,9 +1738,13 @@ export class PushService {
    *  The owner-item half does not carry the RUNNING gate: a coordinator conversation sits at
    *  AWAITING_INPUT precisely while it is waiting for the answer, which is the state this exists to
    *  make visible. It does carry the same gate a card does — a project with no coordinator bound,
-   *  or one whose conversation was filed away, is counted by neither (`readOwnerItemSessionIds`). */
+   *  or one whose conversation was filed away, is counted by neither (`readOwnerItemSessionIds`).
+   *
+   *  The open owner requests (`request_owner_action`) and the waiting task moves are counted the
+   *  same way and for the same reason: a card only the owner can answer, on the conversation that
+   *  asked (and, for a move, the target project's coordinator) — `readOwnerRequestSessionIds`. */
   async needsYouSessions(ownerId: string): Promise<string[]> {
-    const [rows, blockedOnOwner, withSubagents, outsideTurn] = await Promise.all([
+    const [rows, blockedOnOwner, withSubagents, outsideTurn, askedOfOwner] = await Promise.all([
       this.prisma.session.findMany({
         where: {
           ownerId,
@@ -1761,6 +1802,8 @@ export class PushService {
           },
         },
       }),
+      // The conversations an open owner request or a waiting task move is counted on (MOVE_REQUEST).
+      readOwnerRequestSessionIds(this.prisma, ownerId),
     ]);
     const visible = new Set((await visibleQuestions(this.prisma, rows.filter(r => r.taskId).flatMap(r => r.approvals))).map(a => a.id));
     // A running SubAgent's card is a question whatever its parent is doing (docs/subagent-design.md §5.3): a
@@ -1786,6 +1829,7 @@ export class PushService {
       ...subagentCards.map(card => card.sessionId),
       ...outsideTurnIds,
       ...blockedOnOwner,
+      ...askedOfOwner,
     ])];
   }
 
