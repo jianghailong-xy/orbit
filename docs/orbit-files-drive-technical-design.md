@@ -29,10 +29,10 @@ Line numbers refer to `58e176a1be`.
 | Bytes | Chunks of at most 8 MiB kept as ordinary `file_blob` rows through the existing `FileStore`; a file is an ordered chunk list | `src/apiserver/src/files/` gains a ranged read; nothing else in the store changes |
 | Owner routes | `/drive/*` under the owner's login, resumable chunked upload, ranged download | apiserver |
 | Runner drive door | `/runner/drive/*`, taking the runner credential (drive tools) or a mount credential bound to one runner generation (the mount daemon) | apiserver |
-| Mount daemon | `orbit-files-mount`, Go on go-fuse, one process per runner; handles bound to entry ids, idempotent commits, commit-on-close plus periodic commits, chunk cache, evict-and-refetch spool, change feed | new `src/drive-mount/` |
-| Kubernetes | CSI node plugin `files.orbit.dev` (privileged DaemonSet, namespace `orbit-files-system`), remounting its runners' drives on restart; the runner Pod gains one `csi:` volume | `deploy/managed-runner/files-csi/`, `managed-runner-resources.ts`, `managed-runner-admission.ts`, one cluster-wide admission policy |
+| Mount daemon | `orbit-documents-mount`, Go on go-fuse, one process per runner; handles bound to entry ids, idempotent commits, commit-on-close plus periodic commits, chunk cache, evict-and-refetch spool, change feed | new `src/documents-mount/` |
+| Kubernetes | CSI node plugin `documents.orbit.dev` (privileged DaemonSet, namespace `orbit-documents-system`), remounting its runners' drives on restart; the runner Pod gains one `csi:` volume | `deploy/managed-runner/documents-csi/`, `managed-runner-resources.ts`, `managed-runner-admission.ts`, one cluster-wide admission policy |
 | Docker (optional) | Per-runner `mrf-<uuid>` mounter container; the runner container gains one `rslave` bind. Production runs on Kubernetes; this is built only if a Docker deployment needs the drive | `deploy/managed-runner/docker-channel/channel.py` |
-| Engines | `/run/orbit-files` (the parent) and `/home/orbit/Files` are workspace roots for every engine in every write mode; Plan mode reads only | `src/runner-go/` |
+| Engines | `/run/orbit-documents` (the parent) and `/home/orbit/Files` are workspace roots for every engine in every write mode; Plan mode reads only | `src/runner-go/` |
 | Sleep, fencing | A drive write with uncommitted bytes is a reason not to sleep; a mount credential works only for the generation and instance it was issued for | apiserver `managed-runner-work.ts` |
 | Sharing | New share-link root kind `DRIVE_FILE`, **pinned to the version shared** | `src/apiserver/src/share-links/` |
 | Backup | Postgres first, then bytes, then the orphan lister; the RGW bucket needs an off-host mirror and a pool quota before "kept permanently" means anything | `scripts/pg-backup.sh`, runbook |
@@ -221,7 +221,7 @@ file, and uploads are capped at 25 MiB (`attachments.media.ts:9`). **Both stay**
    per-blob `storage` column work unchanged, so a deployment may move its target store (production moves to RGW,
    §12 decision 3) with older blobs still read from where they are.
 
-The default target is the deployment's `ORBIT_FILES_BACKEND`. Self-hosted keeps local disk or any S3 (D23).
+The default target is the deployment's `ORBIT_DOCUMENTS_BACKEND`. Self-hosted keeps local disk or any S3 (D23).
 
 ### 2.4 The retention sweep treats drive content as held
 
@@ -256,7 +256,7 @@ Changes, in the sweep's own terms:
 ### 2.5 Usage, without changing the attachment quota
 
 `storedTotals` (`files.service.ts:849`) and `assertWithinQuota` (`:866`–`:876`) **stay exactly as they are**, so
-`ORBIT_FILES_QUOTA_BYTES` keeps limiting attachment uploads by attachment bytes, and drive bytes can never make an
+`ORBIT_DOCUMENTS_QUOTA_BYTES` keeps limiting attachment uploads by attachment bytes, and drive bytes can never make an
 attachment upload fail. Drive writes are not limited (D12; quotas are the cleanup design's).
 
 Storage (D13) uses a **separate query**, `driveUsage(ownerId)`, that counts each distinct sha256 once across live
@@ -467,7 +467,7 @@ mounter.
 ### 4.5 Pointing at drive files (D21)
 
 - A reply may link a drive file by any of its spellings: `/home/orbit/Files/...`, `~/Files/...` or
-  `/run/orbit-files/drive/...` (what a tool that resolves symlinks prints). The runner's reply rewriting
+  `/run/orbit-documents/drive/...` (what a tool that resolves symlinks prints). The runner's reply rewriting
   (`codex_artifacts.go`, `session.go:865` reply roots) resolves the path through the door and rewrites it to
   `orbit-drive:<entryId>`, which clients render as that drive file (it follows renames and moves; an entry in Trash
   renders as "In Trash"). Released clients that do not know `orbit-drive:` show the link text, which is the path.
@@ -481,18 +481,18 @@ MCP `drive_put`, `drive_get`, `drive_list`, `drive_move`, `drive_delete`, and CL
 every runner, using the runner credential. `put` reads only from the session's checkout or uploads folder (the
 `file_upload` path rule, `file_tools.go:577`), chunks and streams with no size limit and no scan, overwrites with a
 version, and keys its commit by a `commitId` it keeps across its own retries. `get` writes into the uploads folder. On
-Orbit Cloud `file_upload` may also read from the drive (D20): `/home/orbit/Files` and `/run/orbit-files/drive` join its
+Orbit Cloud `file_upload` may also read from the drive (D20): `/home/orbit/Files` and `/run/orbit-documents/drive` join its
 path rule, and the evidence copy it makes is subject to today's 25 MiB limit and scan.
 
 ## 5. The mount daemon
 
-`orbit-files-mount`, Go on go-fuse (BSD-3), one process per runner, speaking the runner drive door with that runner's
-mount credential. It lives in `src/drive-mount/` with the CSI plugin (§6.1), built into one image.
+`orbit-documents-mount`, Go on go-fuse (BSD-3), one process per runner, speaking the runner drive door with that runner's
+mount credential. It lives in `src/documents-mount/` with the CSI plugin (§6.1), built into one image.
 
 ### 5.1 Process shape
 
 - The privileged parent (the CSI plugin, or the optional Docker mounter's entrypoint) opens `/dev/fuse`, mounts
-  `fuse.orbit-files` at `<runner dir>/drive` with `nosuid,nodev,noexec,default_permissions,allow_other` (so uid 10001
+  `fuse.orbit-documents` at `<runner dir>/drive` with `nosuid,nodev,noexec,default_permissions,allow_other` (so uid 10001
   may use a mount made by root), and starts the daemon with the FUSE descriptor inherited, as uid 65532 with no
   capabilities, `no_new_privs` and a seccomp filter, serving the descriptor through go-fuse's `/dev/fd/N` mountpoint
   (the libfuse3 convention for a mount made by a privileged helper; proven in the first commit of
@@ -538,7 +538,7 @@ Write modes of a handle:
 
 ### 5.3 Spool and chunk cache
 
-- **Spool**: on the node's disk (`/var/lib/orbit-files-spool/<runner>`), never the runner's data volume. It holds each
+- **Spool**: on the node's disk (`/var/lib/orbit-documents-spool/<runner>`), never the runner's data volume. It holds each
   handle's **dirty** chunks (written, not uploaded) and, as cache, clean ones. Limits: 4 GiB per runner, 32 GiB per
   node by default.
 - **Under pressure, evict and re-fetch.** When the spool is full, clean chunks (uploaded to the handle's staging) are
@@ -618,14 +618,14 @@ The review's sixth risk: every byte passes through the apiserver.
 that, the kernel grants them locally, so they would exclude sessions on one runner and nothing else, silently. The
 daemon negotiates both and refuses them with `ENOLCK`, so a program that relies on locks fails visibly, as rule 2 asks.
 
-An errno alone does not say why, so every refusal also appends a line to **`/run/orbit-files/errors.log`** (in the plain
+An errno alone does not say why, so every refusal also appends a line to **`/run/orbit-documents/errors.log`** (in the plain
 parent directory, outside the FUSE mount; root-owned, mode 0644, the last 1,000 lines):
 
 ```
 2026-11-20T10:00:00Z EOPNOTSUPP write /home/orbit/Files/Proj/app.db at offset 4096: the drive does not change a file in place; write a new file and rename it over the old one
 ```
 
-and **`/run/orbit-files/status.json`** says whether the drive is connected, since when not, and how many handles hold
+and **`/run/orbit-documents/status.json`** says whether the drive is connected, since when not, and how many handles hold
 uncommitted bytes. The guidance names both (§7.3).
 
 ### 5.7 When the server is unreachable
@@ -649,7 +649,7 @@ The product asks for a clear error, not a hang.
   answers nothing for 20 s makes a long writer's writes slow, not failed (the sleep/wake walk lost a writer that way).
   A write later in the outage fails at once, and `errors.log` says how long the server has been unreachable.
 - A handle that had uncommitted bytes when the daemon went offline fails its `close()` with `EIO` after waiting up to 30 s
-  for the server. Its bytes are kept as **`/run/orbit-files/unsent/<time>-<name>`** (readable by the agent, removed only
+  for the server. Its bytes are kept as **`/run/orbit-documents/unsent/<time>-<name>`** (readable by the agent, removed only
   by the mounter after 24 h, and **at most 1 GiB per runner**: past that the oldest go first, each removal logged), and
   `errors.log` names the file. When the server is back, the daemon asks `GET …/commits/:commitId` for each unsent file:
   one whose commit did apply (the answer was lost, not the commit) is removed and logged as committed. A failed close is
@@ -773,7 +773,7 @@ by the walks. "Trash" means the owner's Trash as the owner routes list it.
 | 57* | `umount`, `fusermount3 -u`, `mount -o remount,ro` from the agent | Refused (`must be superuser` / `Operation not permitted`), as D-5/K-3 measured. |
 | 58* | A superseded generation's daemon writes | `write` fails `Input/output error`; `errors.log` says the runner instance was replaced; nothing committed (§8.2). |
 | 59* | A Plan-mode session asks its engine to write `$F/x` | The engine refuses (§7); the drive is unchanged. |
-| 60 | A reply containing `/run/orbit-files/drive/Proj/r.md`, `~/Files/Proj/r.md` and `/home/orbit/Files/Proj/r.md` | All three render as the same drive file. Door task. |
+| 60 | A reply containing `/run/orbit-documents/drive/Proj/r.md`, `~/Files/Proj/r.md` and `/home/orbit/Files/Proj/r.md` | All three render as the same drive file. Door task. |
 | 61 | `rm ~/Files` (the symlink) and the runner restarts | The entrypoint makes the link again. |
 
 ## 6. Wiring
@@ -782,32 +782,32 @@ by the walks. "Trash" means the owner's Trash as the owner routes list it.
 
 What the report recommended and the owner chose at G0, made concrete.
 
-**The plugin.** `orbit-files-csi`, a node-only CSI plugin (Identity + Node services, no controller), driver name
-`files.orbit.dev`, in its own namespace `orbit-files-system` (Pod Security `privileged`):
+**The plugin.** `orbit-documents-csi`, a node-only CSI plugin (Identity + Node services, no controller), driver name
+`documents.orbit.dev`, in its own namespace `orbit-documents-system` (Pod Security `privileged`):
 
-- `CSIDriver files.orbit.dev`: `attachRequired: false`, `podInfoOnMount: true` (the kubelet passes the Pod's name,
+- `CSIDriver documents.orbit.dev`: `attachRequired: false`, `podInfoOnMount: true` (the kubelet passes the Pod's name,
   namespace and UID to `NodePublishVolume`), `volumeLifecycleModes: [Ephemeral]`, `fsGroupPolicy: None`.
 - DaemonSet, `updateStrategy: OnDelete` (an upgrade is rolled by an operator, §6.1 "Restart and upgrade"): the plugin
-  container `privileged: true`, `hostPID: true` (§5.8), with `/var/lib/kubelet` and `/var/lib/orbit-files` both
-  `mountPropagation: Bidirectional`, `/var/lib/orbit-files-spool` and `/var/lib/orbit-files-state` (node disk), and
+  container `privileged: true`, `hostPID: true` (§5.8), with `/var/lib/kubelet` and `/var/lib/orbit-documents` both
+  `mountPropagation: Bidirectional`, `/var/lib/orbit-documents-spool` and `/var/lib/orbit-documents-state` (node disk), and
   `/sys/fs/fuse` for the watchdog; beside it the stock `node-driver-registrar` and `livenessprobe` sidecars. Its
-  ServiceAccount may `get` Secrets in `orbit-files-system` and nothing else.
+  ServiceAccount may `get` Secrets in `orbit-documents-system` and nothing else.
 - `NodePublishVolume`:
   1. refuse unless the Pod's namespace (from the kubelet's pod info) is the configured managed-runner namespace and
      `volumeAttributes` is exactly `{ runnerId }`;
   2. read Secret `mrf-<runnerId>` (token and generation);
-  3. create `/var/lib/orbit-files/<runnerId>/` (root, 0755) and `drive/` (root, 0555) if missing, never while mounted;
+  3. create `/var/lib/orbit-documents/<runnerId>/` (root, 0755) and `drive/` (root, 0555) if missing, never while mounted;
   4. start that runner's daemon (§5.1) presenting token, generation and the Pod UID. The door decides whether that Pod may
      use the drive (§4.3). A `503 PENDING` (the manager has not yet recorded the Pod's UID) makes `NodePublishVolume`
      answer gRPC `UNAVAILABLE`, which the kubelet retries with backoff; a `403` answers `PERMISSION_DENIED`;
-  5. once the mount answers, bind-mount the **plain** directory `/var/lib/orbit-files/<runnerId>` (never `drive/`) onto
-     the kubelet's target, and write `/var/lib/orbit-files-state/<runnerId>.json` (Pod UID, generation, target path).
+  5. once the mount answers, bind-mount the **plain** directory `/var/lib/orbit-documents/<runnerId>` (never `drive/`) onto
+     the kubelet's target, and write `/var/lib/orbit-documents-state/<runnerId>.json` (Pod UID, generation, target path).
 - `NodeUnpublishVolume`: unmount the target; stop the daemon after its open commits finish (at most 60 s), then
   `umount -l` the drive and remove the state file. A runner's processes are dead by then, so every handle has flushed.
 
 **Restart and upgrade (review A8).** The daemons run in the plugin container's cgroup, so they die with it, and the
 kubelet does not call `NodePublishVolume` again for a Pod already running. So on start the plugin **remounts from its
-state files**: for each `/var/lib/orbit-files-state/*.json` whose target is still mounted, it re-reads the Secret,
+state files**: for each `/var/lib/orbit-documents-state/*.json` whose target is still mounted, it re-reads the Secret,
 moves the dead daemon's dirty spool chunks of each handle into that runner's `unsent/` (§5.7; the writers were told by
 `ENOTCONN`/`EIO`), lazily unmounts the dead `drive/`, starts a new daemon and mounts again. The parent-directory layout
 makes the new mount appear in the running runner (D-4 b2, K-2 b2), and the engines see it through the parent (§7.2).
@@ -818,20 +818,20 @@ by the operator when its runners are asleep or in a stated maintenance window, s
 
 ```yaml
 volumes:
-  - name: orbit-files
+  - name: orbit-documents
     csi:
-      driver: files.orbit.dev
+      driver: documents.orbit.dev
       volumeAttributes:
         runnerId: __RUNNER_UUID__
 containers:
   - name: runner
     volumeMounts:
-      - name: orbit-files
-        mountPath: /run/orbit-files
+      - name: orbit-documents
+        mountPath: /run/orbit-documents
         mountPropagation: HostToContainer
 ```
 
-The entrypoint (`orbit run`, as uid 10001) makes `/home/orbit/Files` a symlink to `/run/orbit-files/drive`; if
+The entrypoint (`orbit run`, as uid 10001) makes `/home/orbit/Files` a symlink to `/run/orbit-documents/drive`; if
 `/home/orbit/Files` already exists and is not that link, it is renamed `Files.local-<date>` first and the rename logged.
 Pod Security `restricted` admits `csi:` inline volumes; the walk
 [mount and Files page on Kubernetes](orbit-task:350KSOBcVlQNbArIDwG2Q) measures it, closing the report's gap.
@@ -839,11 +839,11 @@ Pod Security `restricted` admits `csi:` inline volumes; the walk
 **Who may name the driver (review B13).** Orbit's webhook today answers `NOT_MANAGED` (allowed) for any Pod outside
 the managed namespace (`managed-runner-admission.ts:176`–`180`), so it cannot be the only guard. Three layers:
 
-1. A cluster-wide **ValidatingAdmissionPolicy** (CEL; k3s v1.36 has it) `orbit-files-driver`: deny any Pod with a
-   volume whose `csi.driver` is `files.orbit.dev` unless its namespace is the managed-runner namespace.
+1. A cluster-wide **ValidatingAdmissionPolicy** (CEL; k3s v1.36 has it) `orbit-documents-driver`: deny any Pod with a
+   volume whose `csi.driver` is `documents.orbit.dev` unless its namespace is the managed-runner namespace.
 2. Orbit's webhook, inside the managed namespace: `templateProblem` (`:138`, volume check `:146`–`:152`) allows exactly
-   one volume of kind `csi` with `driver === 'files.orbit.dev'` and `volumeAttributes` exactly
-   `{ runnerId: mapping.runnerId }`, mounted only in the `runner` container, only at `/run/orbit-files`, only with
+   one volume of kind `csi` with `driver === 'documents.orbit.dev'` and `volumeAttributes` exactly
+   `{ runnerId: mapping.runnerId }`, mounted only in the `runner` container, only at `/run/orbit-documents`, only with
    `HostToContainer`, not read-only. A Pod there without a mapping is already denied. Everything else is unchanged:
    still no privileged container, still only the pinned image, still the volumes it allows today.
 3. The plugin's namespace check (above) and the door's Pod-UID check (§4.3).
@@ -852,9 +852,9 @@ the managed namespace (`managed-runner-admission.ts:176`–`180`), so it cannot 
 
 - `managed-runner-resources.ts` and `runner-pod.yaml.example`: the volume and mount above.
 - The manager: issue the generation's mount credential with its runner credential and write Secret `mrf-<runner uuid>`
-  in `orbit-files-system` before it creates the Pod; delete it when the generation is retired or the mapping deleted.
-  One new Role for the manager: `create`, `update`, `delete` on Secrets in `orbit-files-system`.
-- `deploy/managed-runner/files-csi/`: CSIDriver, DaemonSet, namespace, RBAC, the admission policy, README; image build
+  in `orbit-documents-system` before it creates the Pod; delete it when the generation is retired or the mapping deleted.
+  One new Role for the manager: `create`, `update`, `delete` on Secrets in `orbit-documents-system`.
+- `deploy/managed-runner/documents-csi/`: CSIDriver, DaemonSet, namespace, RBAC, the admission policy, README; image build
   next to the runner image's, with the same local-import caveat as the deployment record.
 
 **Ceph RGW** is not deployed on `.3` (`docs/managed-runner-k3s-xfs-deployment.md` lists Ceph without RGW). Provisioning
@@ -868,30 +868,30 @@ Production runs on Kubernetes. This section is built only if a Docker-backed dep
 feasibility report showed it can (D-4). If built:
 
 - `channel.py` gains the optional `filesRoot` (D-7's diff, tested 74/74): `container_spec()` adds to the runner one
-  bind `{"Type": "bind", "Source": "<filesRoot>/<runner uuid>", "Target": "/run/orbit-files", "ReadOnly": false,
+  bind `{"Type": "bind", "Source": "<filesRoot>/<runner uuid>", "Target": "/run/orbit-documents", "ReadOnly": false,
   "BindOptions": {"Propagation": "rslave"}}`, and `unsafe()`/`unsafe_container()` let that one bind through and nothing
   else.
 - A second template `files_mounter_spec()` creates **`mrf-<runner uuid>`** from the configured mounter image (the CSI
   plugin's image): user 0, `CapDrop: [ALL]`, `CapAdd: [SYS_ADMIN]`, `Devices: [/dev/fuse rwm]`,
-  `SecurityOpt: [no-new-privileges:true, apparmor=orbit-files-mounter]`, read-only root, its own bootstrap volume
+  `SecurityOpt: [no-new-privileges:true, apparmor=orbit-documents-mounter]`, read-only root, its own bootstrap volume
   `mrf-boot-<uuid>-g<gen>` holding the mount credential, a spool volume `mrf-spool-<uuid>`, one `rshared` bind of
-  `<filesRoot>/<runner uuid>` at `/run/orbit-files`, network `orbit-files` (egress to the apiserver only), its own pid
+  `<filesRoot>/<runner uuid>` at `/run/orbit-documents`, network `orbit-documents` (egress to the apiserver only), its own pid
   namespace. `unsafe_mounter()` refuses any other image or field.
 - The channel creates the host directory before any bind (D-3), starts `mrf` before the runner and stops it after (D-3
   c), and runs the watchdog (§5.7) from the host.
-- The AppArmor profile `orbit-files-mounter` (D-1): docker-default plus `mount fstype=fuse.orbit-files ->
-  /run/orbit-files/drive/,` and `umount /run/orbit-files/drive/,`, installed on every channel host by `host.sh`.
+- The AppArmor profile `orbit-documents-mounter` (D-1): docker-default plus `mount fstype=fuse.orbit-documents ->
+  /run/orbit-documents/drive/,` and `umount /run/orbit-documents/drive/,`, installed on every channel host by `host.sh`.
 - It needs its own walk (§11).
 
 ### 6.3 Exactly what changes in container hardening (gate G3)
 
 | | Before | After |
 |---|---|---|
-| Runner container, Kubernetes | `runAsUser 10001`, `runAsNonRoot`, `allowPrivilegeEscalation: false`, `readOnlyRootFilesystem`, `capabilities.drop [ALL]`, Pod `seccompProfile RuntimeDefault`, no host namespaces, no service-account token; volumes: data PVC, `/tmp` emptyDir, bootstrap Secret | **Security context unchanged.** One more volume: `csi` `files.orbit.dev` with `runnerId`, mounted at `/run/orbit-files`, `HostToContainer`. |
-| New, Kubernetes | — | DaemonSet `orbit-files-csi` in `orbit-files-system`: `privileged: true`, `hostPID: true`, `Bidirectional` on `/var/lib/kubelet` and `/var/lib/orbit-files`. Its per-runner daemons drop to uid 65532 with no capabilities. Not in any user's Pod or namespace. |
+| Runner container, Kubernetes | `runAsUser 10001`, `runAsNonRoot`, `allowPrivilegeEscalation: false`, `readOnlyRootFilesystem`, `capabilities.drop [ALL]`, Pod `seccompProfile RuntimeDefault`, no host namespaces, no service-account token; volumes: data PVC, `/tmp` emptyDir, bootstrap Secret | **Security context unchanged.** One more volume: `csi` `documents.orbit.dev` with `runnerId`, mounted at `/run/orbit-documents`, `HostToContainer`. |
+| New, Kubernetes | — | DaemonSet `orbit-documents-csi` in `orbit-documents-system`: `privileged: true`, `hostPID: true`, `Bidirectional` on `/var/lib/kubelet` and `/var/lib/orbit-documents`. Its per-runner daemons drop to uid 65532 with no capabilities. Not in any user's Pod or namespace. |
 | Admission, Kubernetes | `templateProblem` allows the data PVC, emptyDirs, the bootstrap Secret | Plus exactly the one `csi` volume above; plus the cluster-wide policy denying the driver outside the managed namespace. |
-| Runner container, Docker (optional) | `CapDrop ALL`, no `CapAdd`, not privileged, no devices, `no-new-privileges`, read-only root; mounts: data volume, bootstrap volume, `/tmp` | **Security options unchanged.** One more mount: bind of `<filesRoot>/<runner uuid>` at `/run/orbit-files`, writable, `rslave`. |
-| New, Docker (optional) | — | One `mrf-<runner uuid>` per runner: `SYS_ADMIN`, `/dev/fuse`, AppArmor `orbit-files-mounter`, `no-new-privileges`, read-only root, one `rshared` bind. |
+| Runner container, Docker (optional) | `CapDrop ALL`, no `CapAdd`, not privileged, no devices, `no-new-privileges`, read-only root; mounts: data volume, bootstrap volume, `/tmp` | **Security options unchanged.** One more mount: bind of `<filesRoot>/<runner uuid>` at `/run/orbit-documents`, writable, `rslave`. |
+| New, Docker (optional) | — | One `mrf-<runner uuid>` per runner: `SYS_ADMIN`, `/dev/fuse`, AppArmor `orbit-documents-mounter`, `no-new-privileges`, read-only root, one `rshared` bind. |
 
 What the agent can do with it is what the report measured (D-5, K-3 d): use the drive as files; not unmount, remount,
 reach `/dev/fuse`, see or signal the mounter, or `unshare`.
@@ -911,10 +911,10 @@ This design relaxes it, on purpose, for one thing. The replacement text, from th
 > Pod template drops every capability. So the runner container cannot mount anything, use FUSE or loop devices, or
 > load kernel modules. **One exception, decided for Orbit Files (docs/orbit-files-drive-design.md,
 > docs/orbit-files-drive-technical-design.md §6):** the runner container may *receive* exactly one mount made outside
-> it, `/run/orbit-files` (a plain per-runner directory with slave propagation; the drive's FUSE mount sits below it),
-> from an Orbit-owned mounter: on Kubernetes the `files.orbit.dev` CSI node driver; on Docker the per-runner
+> it, `/run/orbit-documents` (a plain per-runner directory with slave propagation; the drive's FUSE mount sits below it),
+> from an Orbit-owned mounter: on Kubernetes the `documents.orbit.dev` CSI node driver; on Docker the per-runner
 > `mrf-<uuid>` container, the only container the channel creates with `SYS_ADMIN`, `/dev/fuse` and the
-> `orbit-files-mounter` AppArmor profile. Nothing else in this design may relax the runner container's hardening.
+> `orbit-documents-mounter` AppArmor profile. Nothing else in this design may relax the runner container's hardening.
 
 The product's "Feasibility first" risk in `docs/orbit-files-drive-design.md` (around line 146), which quotes §3, then
 points at the new wording.
@@ -923,17 +923,17 @@ points at the new wording.
 
 ### 7.1 When
 
-The runner grants the drive only when `/run/orbit-files/drive` is a mount of type `fuse.orbit-files` (checked in
+The runner grants the drive only when `/run/orbit-documents/drive` is a mount of type `fuse.orbit-documents` (checked in
 `/proc/self/mountinfo` at each spawn). Self-registered runners never have it and nothing changes for them.
 
 ### 7.2 What is granted, and why the parent
 
 A sandbox that binds a path into its own mount namespace (Cursor's bwrap, `cursor_sandbox.go:53` resolves the root with
-`EvalSymlinks` to `/run/orbit-files/drive`) captures **the mount that is there at spawn**. After a daemon or plugin
+`EvalSymlinks` to `/run/orbit-documents/drive`) captures **the mount that is there at spawn**. After a daemon or plugin
 restart remounts `drive/` (§5.7, §6.1), such a sandbox would keep the dead mount and answer `ENOTCONN` for the rest of
-the session. A bind of the **parent** `/run/orbit-files`, a plain directory, receives later mounts below it, exactly as
+the session. A bind of the **parent** `/run/orbit-documents`, a plain directory, receives later mounts below it, exactly as
 the runner container does (the report's parent-directory finding). So every sandbox that binds paths is given
-`/run/orbit-files`, and every grant that matches paths names `/home/orbit/Files` and `/run/orbit-files/drive` as well.
+`/run/orbit-documents`, and every grant that matches paths names `/home/orbit/Files` and `/run/orbit-documents/drive` as well.
 Row 56 tests a remount inside each engine.
 
 The drive is a workspace root, like the uploads folder: writable in every write mode, readable in Plan mode, never a
@@ -941,12 +941,12 @@ reason for an "outside the workspace" card.
 
 | Engine | Where | Change |
 |---|---|---|
-| Claude | `claude_spawn.go:151` | `--add-dir` for `/home/orbit/Files` and `/run/orbit-files/drive` beside the uploads folder, in every mode. Plan mode (`--permission-mode plan`) does not refuse a write by itself: it asks its permission prompt about every Write, Edit and Bash call, so the runner refuses a drive write there (see below). |
-| Codex app-server | `codex_auto_policy.go:22` (`codexAutoApprovalContextFor`), `:31` (`codexRuntimeWorkspaceRoots`), `:48` (`codexSandboxPolicy`) | `/run/orbit-files` and both drive spellings join `workspaceRoots` (not `tempRoots`) and the Auto sandbox's `writableRoots`. Plan keeps its refusal of every write (`codex_appserver.go:1132`); the read-only subagent's `readOnly` sandbox still reads them. |
-| Codex exec | `codex.go:490` | `--add-dir` for `/run/orbit-files` beside the uploads folder. |
-| Cursor | `cursor_sandbox.go` (`detectCursorSandbox` roots) | `/run/orbit-files` (the parent, never the resolved `drive/`) joins the bwrap writable roots outside Plan; Plan's ACP mode refuses edits (`cursor_permissions.go:87`). |
+| Claude | `claude_spawn.go:151` | `--add-dir` for `/home/orbit/Files` and `/run/orbit-documents/drive` beside the uploads folder, in every mode. Plan mode (`--permission-mode plan`) does not refuse a write by itself: it asks its permission prompt about every Write, Edit and Bash call, so the runner refuses a drive write there (see below). |
+| Codex app-server | `codex_auto_policy.go:22` (`codexAutoApprovalContextFor`), `:31` (`codexRuntimeWorkspaceRoots`), `:48` (`codexSandboxPolicy`) | `/run/orbit-documents` and both drive spellings join `workspaceRoots` (not `tempRoots`) and the Auto sandbox's `writableRoots`. Plan keeps its refusal of every write (`codex_appserver.go:1132`); the read-only subagent's `readOnly` sandbox still reads them. |
+| Codex exec | `codex.go:490` | `--add-dir` for `/run/orbit-documents` beside the uploads folder. |
+| Cursor | `cursor_sandbox.go` (`detectCursorSandbox` roots) | `/run/orbit-documents` (the parent, never the resolved `drive/`) joins the bwrap writable roots outside Plan; Plan's ACP mode refuses edits (`cursor_permissions.go:87`). |
 | OpenCode | `opencode.go` permission map | The drive paths are allowed for external-directory access and edits outside Plan; Plan already denies `edit`, `write`, `patch` (`opencode.go:1083`). |
-| Antigravity | `antigravity_approval.go:597` | The approval policy gains a `Drive` root (`/run/orbit-files` and both spellings) beside `Uploads`, writable outside Plan. |
+| Antigravity | `antigravity_approval.go:597` | The approval policy gains a `Drive` root (`/run/orbit-documents` and both spellings) beside `Uploads`, writable outside Plan. |
 | Background jobs | `background_socket.go:463` | `extraDirs` gains the drive. |
 | `file_upload`, reply files | `file_tools.go:577`, `session.go:865` | The drive joins the path rules (D20, D21). |
 
@@ -954,7 +954,7 @@ How Plan keeps the drive read-only. No engine's Plan mode can be relied on to re
 Code's Plan asks its permission prompt about each Write, Edit and Bash call, and an Allow on that card wrote the drive
 (walk [permission modes and container hardening](orbit-task:350KSODTF8PzMHyZ3bSxP), round 3); Kimi's plan mode asks
 about every shell call the same way. So wherever the runner answers an engine's permission request, a Plan-mode call
-that would write under `/home/orbit/Files`, `/run/orbit-files` or `/run/orbit-files/drive`, by any spelling (`~`,
+that would write under `/home/orbit/Files`, `/run/orbit-documents` or `/run/orbit-documents/drive`, by any spelling (`~`,
 `$HOME`, a relative path or a link), is refused on the spot with "The Files drive is read-only in Plan mode", and no
 card is filed (`plan_drive.go`, `planDriveWrite`). The calls are Write, Edit, MultiEdit and NotebookEdit naming a path
 there, and a shell command that names a path there and is not a read-only command (a known reader such as `ls`, `cat`,
@@ -984,7 +984,7 @@ asks about leaving the workspace (§12 decision 2, as recommended). The walk
 - `~/Files` is a symlink: give `ls -l`, `find` and `du` the path with a trailing slash (`~/Files/`).
 - Copy into it with `cp -r` or `rsync -rt`: `cp -a`, `cp -p`, `rsync -a` and `tar x` report errors (and exit non-zero)
   for executable files, because the drive keeps no modes; the contents are still copied.
-- What is not supported (§5.6), and that `errors.log`, `status.json` and `unsent/` are in `/run/orbit-files/`.
+- What is not supported (§5.6), and that `errors.log`, `status.json` and `unsent/` are in `/run/orbit-documents/`.
 - Verification, judgment and guest-driven runs read and do not write (D9). A turn is guest-driven when its message
   carries the `ORBIT_GUEST` sender marker (`external_sender.go:46`), which the agent already sees, answering the
   product's question whether an agent can tell.
@@ -1077,7 +1077,7 @@ Before the drive opens to accounts on production:
    the daemon fails the `write` with `ENOSPC` ("No space left on device") and a line in `errors.log`.
 2. **An off-host mirror of the bucket**: a periodic one-way copy of new objects under `files/` to the backup target
    (`rclone copy` or equivalent, never `sync`), cheap because names are sha256 and never rewritten. The retention sweep
-   then sets `off_host_prune_at` for `s3` blobs too when the deployment declares the mirror (`ORBIT_FILES_S3_MIRROR=1`),
+   then sets `off_host_prune_at` for `s3` blobs too when the deployment declares the mirror (`ORBIT_DOCUMENTS_S3_MIRROR=1`),
    and the backup sidecar prunes the mirror by that column, as it prunes the local copy today. The sweep's comment
    "only the local store's bytes are in the off-host copy" (`file-retention-sweep.ts:234`) changes with it. The backup
    target's capacity must be sized for the drive, which has no limit.
@@ -1118,7 +1118,7 @@ the rows of Trash the owner emptied after that backup: those items reappear in T
 | [runner drive door and drive tools](orbit-task:350KSO5NhJYQ0axTV6vXE) | §4.2, §4.3, §4.5 runner side, §4.6, §8.2 door checks | `/runner/drive/*` (including staging read-back, commit status, keepalive), the mount credential and its checks, burst grouping, drive MCP tools and CLI, `file_upload` from the drive, `orbit-drive:` rewriting of all three path spellings (row 60), its tenant-isolation cases. |
 | [Cloud mount daemon](orbit-task:350KSO6FxenOl9slrBQ7i) | §5 | **On go-fuse** (owner, 2026-11-19). Entry-bound handles, commit-on-close and periodic commits, evict-and-refetch spool, caches, change feed with look-back, errors and `errors.log`, offline behaviour and `unsent/`, the attribution helper as a second step. Its finish line is §5.9 except rows 55, 56 and 60. |
 | [Kubernetes (and Docker if feasible) wiring for the mount](orbit-task:350KSO6qGQSFPHc4Pe0aB) | §6, §5.7 watchdog, §6.4 | CSI plugin and manifests, **the watchdog (it runs in the privileged parent)**, **restart re-adoption and the `OnDelete` upgrade procedure (row 55)**, the admission policy, webhook and resources changes, manager Secret and Role, the §3 edit after G3. Docker `filesRoot` and `mrf` only if a Docker deployment needs the drive. |
-| [engine grants and sleep hold](orbit-task:350KSO86tzR9l8gDbyFvX) | §7, §8.1 | Grants per engine (the parent `/run/orbit-files` for binding sandboxes), the remount test in each engine (row 56), guidance, the `DRIVE_WRITE` work reason. **Depends on the door task** (staging keepalive). |
+| [engine grants and sleep hold](orbit-task:350KSO86tzR9l8gDbyFvX) | §7, §8.1 | Grants per engine (the parent `/run/orbit-documents` for binding sandboxes), the remount test in each engine (row 56), guidance, the `DRIVE_WRITE` work reason. **Depends on the door task** (staging keepalive). |
 | [one-file share links](orbit-task:350KSO8zEpJwfrWaAcG7T) | §9 | Root kind, columns, pinning and "Share this version", bounded share-check, public door, tenant-isolation cases. |
 | [web Files page and menu entry](orbit-task:350KSO9ZWyHnFi2Y3MnzI) | §3.5, §4.1 (client) | Page, Trash and versions inside Files (board a–c), upload suffix (d), undo, following `drive.changed`. |
 | [Storage moves into Files (web)](orbit-task:350KSOA9nCBF7zqcWMh8Y) | §2.5 | **`driveUsage` and `GET /drive/usage`** (moved here from the upload task), Storage inside Files, attachment quota unchanged. |
@@ -1135,7 +1135,7 @@ the rows of Trash the owner emptied after that backup: those items reappear in T
 1. **Provision Ceph RGW on production** (§6.1, §10.2): the pool with its quota and 80 % alert, the bucket and its
    credentials, the apiserver's route to RGW with a measured bandwidth (§5.5), and the bucket's off-host mirror with the
    backup target sized for it. Owner-approved. **Blocks the Kubernetes walk** and production use.
-2. **Backup sidecar for S3** (§10.2): `off_host_prune_at` for `s3` blobs when `ORBIT_FILES_S3_MIRROR=1`, and the sidecar
+2. **Backup sidecar for S3** (§10.2): `off_host_prune_at` for `s3` blobs when `ORBIT_DOCUMENTS_S3_MIRROR=1`, and the sidecar
    pruning the bucket mirror by it.
 3. **`files orphans` and `files verify` for drive chunks and S3** (§10.3), with the weekly report-only scrub.
 4. **Native clients**: Files on iOS, macOS and Android (the product: "web first"), and, before that, the released clients
@@ -1143,7 +1143,7 @@ the rows of Trash the owner emptied after that backup: those items reappear in T
 5. **A Docker walk**, only if Docker wiring is built (§6.2).
 
 Items the review listed as unowned that this revision **places in existing tasks** instead: plugin restart and upgrade
-(wiring task), the `/run/orbit-files/drive` reply spelling (door task), the `drive.changed` event (name-layer task).
+(wiring task), the `/run/orbit-documents/drive` reply spelling (door task), the `drive.changed` event (name-layer task).
 
 ## 12. Decisions for the owner
 
@@ -1155,7 +1155,7 @@ Items the review listed as unowned that this revision **places in existing tasks
    would in the checkout, and nothing asks about leaving the workspace (§7.2). Alternative: allow drive edits without a
    card in every write mode, which would make the drive looser than the checkout.
 3. **Production store.** Recommended, provided the pool quota and the mirror of §10.2 are in place:
-   `ORBIT_FILES_BACKEND=s3` on RGW for all new bytes (drive and attachments alike), one store and one mirror; older local
+   `ORBIT_DOCUMENTS_BACKEND=s3` on RGW for all new bytes (drive and attachments alike), one store and one mirror; older local
    bytes stay readable where they are. Alternative: a separate target for drive chunks only, at the cost of a second
    store configuration.
 4. **Attribution on Docker.** Recommended: none, keeping the optional `mrf` without host pid access. Alternative:
@@ -1203,7 +1203,7 @@ Left out of v1 on the review's advice (its "overbuilt" list), each with what rep
 | B11 share links | Pinned to the version shared, now the recommendation; scan bounded to 25 MiB and 20 s. | §9, §12.1 |
 | B12 quota | `storedTotals` and `assertWithinQuota` unchanged; separate `driveUsage`. | §2.5 |
 | B13 driver on other Pods | Cluster-wide admission policy, webhook rule, plugin namespace check, door Pod-UID check; `UNAVAILABLE` retry on `503 PENDING`. | §6.1, §4.3 |
-| B14 bwrap and remounts | Sandboxes bind the parent `/run/orbit-files`; remount test per engine. | §7.2, row 56 |
+| B14 bwrap and remounts | Sandboxes bind the parent `/run/orbit-documents`; remount test per engine. | §7.2, row 56 |
 | B15 unbounded growth | `unsent/` capped at 1 GiB per runner; RGW pool quota with an 80 % alert and `ENOSPC`. | §5.7, §10.2, row 51 |
 | C16 orphans after restore | `files orphans`, with grace and a weekly scrub. | §10.3, §2.4, §11 item 3 |
 | C17 mmap errno | `ENODEV` for shared mappings of write handles, as the kernel answers. | §5.6, row 43 |
