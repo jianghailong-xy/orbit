@@ -230,26 +230,27 @@ binary the background service resolves on its PATH — the same check the runner
 after startup and every 30 min. Unlike the loop's own pass it can't see live sessions, so prefer
 running it when the machine is idle. Disable the periodic check with ORBIT_NO_ENGINE_UPDATE.
 `,
-	"task":      taskHelp,
-	"task-list": taskListHelp,
-	"project":   projectHelp,
-	"session":   sessionHelp,
-	"agent":     agentHelp,
-	"runner":    runnerHelp,
-	"provider":  providerHelp,
-	"notify":    notifyHelp,
-	"watch":     watchHelp,
-	"wiki":      wikiHelp,
-	"file":      fileHelp,
-	"drive":     driveHelp,
-	"subagent":  subagentHelp,
-	"settings":  settingsHelp,
-	"token":     tokenHelp,
-	"login":     loginHelp,
-	"logout":    logoutHelp,
-	"whoami":    whoamiHelp,
-	"api":       apiHelp,
-	"host":      hostHelp,
+	"task":          taskHelp,
+	"task-list":     taskListHelp,
+	"project":       projectHelp,
+	"session":       sessionHelp,
+	"agent":         agentHelp,
+	"runner":        runnerHelp,
+	"provider":      providerHelp,
+	"notify":        notifyHelp,
+	"owner-request": ownerRequestHelp,
+	"watch":         watchHelp,
+	"wiki":          wikiHelp,
+	"file":          fileHelp,
+	"drive":         driveHelp,
+	"subagent":      subagentHelp,
+	"settings":      settingsHelp,
+	"token":         tokenHelp,
+	"login":         loginHelp,
+	"logout":        logoutHelp,
+	"whoami":        whoamiHelp,
+	"api":           apiHelp,
+	"host":          hostHelp,
 	"capabilities": `orbit capabilities — show agent-safe Orbit CLI capabilities
 
 Usage:
@@ -471,6 +472,8 @@ func runOrbitCLI(args []string, in io.Reader, out, errW io.Writer) error {
 		return runCLICommand("orbit provider", args, false, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdProviderCLI(args[1:], in, out) })
 	case "notify":
 		return runCLICommand("orbit notify", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdNotifyCLI(args[1:], out) })
+	case "owner-request":
+		return runCLICommand("orbit owner-request", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdOwnerRequestCLI(args[1:], out) })
 	case "watch":
 		return runCLICommand("orbit watch", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdWatchCLI(args[1:], in, out) })
 	case "wiki":

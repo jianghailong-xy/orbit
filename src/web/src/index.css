@@ -3247,6 +3247,46 @@ button.toast--pill:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 1px;
 }
+.session-search-label {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* A folder's page names its tag filter under the search field, as a chip that clears it. */
+.session-tag-chips {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  margin: -2px 0 8px;
+}
+.session-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 2px 8px;
+  border: 1px solid var(--brand-border);
+  border-radius: 999px;
+  background: var(--brand-tint);
+  color: var(--brand);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.session-tag-chip:hover {
+  background: var(--brand-tint-hover);
+}
+.session-tag-chip-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.session-tag-chip .anticon {
+  color: var(--text-3);
+  font-size: 10px;
+}
 .session-search-kbd {
   margin-left: auto;
   padding: 1px 6px;
@@ -8424,6 +8464,16 @@ button.composer-usage:focus-visible {
   color: var(--text-3);
   font-size: 13px;
   padding: 10px 4px;
+}
+.chat-note-action {
+  display: block;
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  cursor: pointer;
 }
 /* What is above the loaded window: a page in flight, or the way back to the first message. Sticky
    inside the scroller — it has to stay reachable wherever the reader is, and the top of the content
@@ -20219,6 +20269,42 @@ button.chat-jump-start:hover {
   color: var(--text-3);
   font-size: 16px;
 }
+.ssearch-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  max-width: 45%;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid var(--brand-border);
+  border-radius: 999px;
+  background: var(--brand-tint);
+  color: var(--brand);
+  font-size: 12px;
+}
+.ssearch-scope-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ssearch-scope-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-3);
+  font-size: 10px;
+  cursor: pointer;
+}
+.ssearch-scope-remove:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
 .ssearch-input {
   flex: 1;
   min-width: 0;
@@ -20312,6 +20398,19 @@ button.chat-jump-start:hover {
   color: var(--text-3);
   font-size: 13px;
   text-align: center;
+}
+.ssearch-empty-widen {
+  display: block;
+  margin: 8px auto 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  cursor: pointer;
+}
+.ssearch-scope-hint {
+  margin-right: 8px;
 }
 .ssearch-foot {
   display: flex;

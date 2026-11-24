@@ -27,6 +27,8 @@ internal class OwnerRequestFixture {
     @Volatile var refuseUntranslated = false
     /** SETTINGS_CHANGE: Save changes is refused 409 SETTINGS_STALE, and `GET /users/me` as the account answers (with its `changedBy`). */
     @Volatile var staleApply = false
+    /** CHANGE: the apply door's reply, verbatim, when a test holds one from a real server. */
+    @Volatile var applyReply: String? = null
     @Volatile var me: JsonObject = buildJsonObject { put("id", "u"); put("email", "u@example.test"); put("name", "U") }
 
     private val server = MockWebServer().apply {
@@ -68,6 +70,8 @@ internal class OwnerRequestFixture {
                             "done" -> ended("DONE") { put("answer", body) }
                             "apply-settings" -> if (staleApply) return json(409, """{"code":"SETTINGS_STALE","message":"SETTINGS_STALE"}""")
                                 else ended("DONE") {}
+                            "apply" -> applyReply?.let { reply -> return json(200, reply).also { held[id] = Json.parseToJsonElement(reply).jsonObject } }
+                                ?: ended("DONE") { putJsonObject("answer") { put("applied", body["maxConcurrent"]!!); put("actualBefore", 4) } }
                             "decline" -> ended("DECLINED") { put("resolutionNote", body["reason"]!!) }
                             "secret" -> refuseSecret?.let { return json(400, buildJsonObject { put("message", it) }.toString()) }
                                 ?: JsonObject(row + buildJsonObject { putJsonObject("secretGrant") {
