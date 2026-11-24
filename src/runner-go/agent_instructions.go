@@ -108,8 +108,8 @@ const orbitCLIUseInstructions = "The Orbit CLI is for pipes, scripts, bulk input
 // turn's replyFileCorrection names the path that could not be attached and the directories that work.
 // The commit warning is gone with the paragraph: an agent that copies into the checkout is told by the uploads directory
 // being named first in the correction, and the evidence unit's file_upload keeps screenshots out of the repository.
-const orbitReplyFileInstructions = "Hand the user a file as `[name](path)`, an image as `![name](path)`, from your " +
-	"working directory or this session's uploads directory."
+const orbitReplyFileInstructions = "Hand the user a file as `[name](path)`, an image as `![name](path)`: copy it into " +
+	"your working directory or this session's uploads directory first, and link the copy, never /tmp."
 
 // orbitEvidenceFileInstructions is where the evidence of a piece of work goes, which is what the repository was for
 // until file_upload (docs/drive-design.md §2.3): 96% of its history was evidence and mocks. It follows

@@ -1,4 +1,4 @@
-=== antigravity (5438 bytes)
+=== antigravity (5483 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -17,7 +17,7 @@ When a person's problem is one of their own Settings, call settings_get, then se
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
 
-Hand the user a file as `[name](path)`, an image as `![name](path)`, from your working directory or this session's uploads directory.
+Hand the user a file as `[name](path)`, an image as `![name](path)`: copy it into your working directory or this session's uploads directory first, and link the copy, never /tmp.
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
@@ -36,7 +36,7 @@ Hand work to another agent through Orbit, never your engine's own sub-agents or 
 To fan out several SubAgents, in parallel or in phases, whose results you only need combined, use workflow: one script runs them all and wakes this session once with its return value; delegate stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's built-in Workflow tool. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__workflow.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the tools of the `orbit` MCP server (call_mcp_tool with ServerName "orbit"). Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
-=== claude (5126 bytes)
+=== claude (5171 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -53,7 +53,7 @@ Only a structured receipt counts: a write happened when it says ok: true and out
 
 When a person's problem is one of their own Settings, call settings_get, then settings_propose the change; for a key it refuses, link the row it returns instead of describing where it is.
 
-Hand the user a file as `[name](path)`, an image as `![name](path)`, from your working directory or this session's uploads directory.
+Hand the user a file as `[name](path)`, an image as `![name](path)`: copy it into your working directory or this session's uploads directory first, and link the copy, never /tmp.
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
@@ -73,7 +73,7 @@ To fan out several SubAgents, in parallel or in phases, whose results you only n
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the `mcp__orbit__*` tools. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
 === claude, resumed: same as claude
-=== codex 0.125-0.134 developer message (5930 bytes)
+=== codex 0.125-0.134 developer message (5975 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -92,7 +92,7 @@ When a person's problem is one of their own Settings, call settings_get, then se
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
 
-Hand the user a file as `[name](path)`, an image as `![name](path)`, from your working directory or this session's uploads directory.
+Hand the user a file as `[name](path)`, an image as `![name](path)`: copy it into your working directory or this session's uploads directory first, and link the copy, never /tmp.
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
@@ -113,7 +113,7 @@ To fan out several SubAgents, in parallel or in phases, whose results you only n
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the `mcp__orbit__*` tools. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
 
 After generating an image, preserve the original file. Do not regenerate it solely because Orbit could not attach or upload it. Only claim that the image is attached or delivered when Orbit explicitly confirms attachment delivery; successful generation alone is not delivery confirmation. If delivery fails, report that the image was generated but delivery failed, keep the original file available, and let Orbit retry delivery. If delivery status is unavailable, report only generation success without claiming delivery success or failure.
-=== codex < 0.125 turn input (5987 bytes)
+=== codex < 0.125 turn input (6032 bytes)
 <orbit_application_context>
 Owner instructions.
 
@@ -133,7 +133,7 @@ When a person's problem is one of their own Settings, call settings_get, then se
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
 
-Hand the user a file as `[name](path)`, an image as `![name](path)`, from your working directory or this session's uploads directory.
+Hand the user a file as `[name](path)`, an image as `![name](path)`: copy it into your working directory or this session's uploads directory first, and link the copy, never /tmp.
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
@@ -158,7 +158,7 @@ After generating an image, preserve the original file. Do not regenerate it sole
 === codex >= 0.135 additional context: same as codex 0.125-0.134 developer message
 === codex >= 0.135, after compaction: same as codex 0.125-0.134 developer message
 === codex >= 0.135, resumed thread: same as codex 0.125-0.134 developer message
-=== cursor (5222 bytes)
+=== cursor (5267 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -177,7 +177,7 @@ When a person's problem is one of their own Settings, call settings_get, then se
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
 
-Hand the user a file as `[name](path)`, an image as `![name](path)`, from your working directory or this session's uploads directory.
+Hand the user a file as `[name](path)`, an image as `![name](path)`: copy it into your working directory or this session's uploads directory first, and link the copy, never /tmp.
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
@@ -196,7 +196,7 @@ Hand work to another agent through Orbit, never your engine's own sub-agents or 
 To fan out several SubAgents, in parallel or in phases, whose results you only need combined, use workflow: one script runs them all and wakes this session once with its return value; delegate stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's built-in Workflow tool.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the tools of the `orbit` MCP server. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
-=== deepseek harness (5388 bytes)
+=== deepseek harness (5433 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -215,7 +215,7 @@ When a person's problem is one of their own Settings, call settings_get, then se
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
 
-Hand the user a file as `[name](path)`, an image as `![name](path)`, from your working directory or this session's uploads directory.
+Hand the user a file as `[name](path)`, an image as `![name](path)`: copy it into your working directory or this session's uploads directory first, and link the copy, never /tmp.
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
@@ -234,7 +234,7 @@ Hand work to another agent through Orbit, never your engine's own sub-agents or 
 To fan out several SubAgents, in parallel or in phases, whose results you only need combined, use workflow: one script runs them all and wakes this session once with its return value; delegate stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's built-in Workflow tool. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__workflow.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the `mcp__orbit__*` tools. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
-=== kimi (5469 bytes)
+=== kimi (5514 bytes)
 [map[text:<orbit-agent-instructions>
 Owner instructions.
 
@@ -254,7 +254,7 @@ When a person's problem is one of their own Settings, call settings_get, then se
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
 
-Hand the user a file as `[name](path)`, an image as `![name](path)`, from your working directory or this session's uploads directory.
+Hand the user a file as `[name](path)`, an image as `![name](path)`: copy it into your working directory or this session's uploads directory first, and link the copy, never /tmp.
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
@@ -276,7 +276,7 @@ The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few op
 </orbit-agent-instructions>
 
 hi type:text]]
-=== opencode (5382 bytes)
+=== opencode (5427 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -295,7 +295,7 @@ When a person's problem is one of their own Settings, call settings_get, then se
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
 
-Hand the user a file as `[name](path)`, an image as `![name](path)`, from your working directory or this session's uploads directory.
+Hand the user a file as `[name](path)`, an image as `![name](path)`: copy it into your working directory or this session's uploads directory first, and link the copy, never /tmp.
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 

@@ -179,10 +179,8 @@ func delegateToolDescriptor(obj func(map[string]interface{}, ...string) map[stri
 	}
 	return map[string]interface{}{
 		"name": delegateToolName,
-		// Claude Code defers MCP tools behind ToolSearch, so an engine saw only the name and reached for
-		// session_create (whose description it had) even for one piece of work on another workspace. This loads
-		// delegate up front, and only it; measured on Claude Code 2.1.325: about 692 o200k tokens per request.
-		"_meta": map[string]interface{}{"anthropic/alwaysLoad": true},
+		// Not alwaysLoad since design D2 (step 6): behind ToolSearch, delegate and its one-line rule passed I3 10/10 and 10/10
+		// without the mark (it had cost about 692 o200k tokens per request on Claude Code 2.1.325).
 		"description": "Hand a self-contained piece of work to a SubAgent: another coding engine that Orbit starts in this" +
 			" session's own working directory. Use it instead of your engine's built-in subagent or Agent tool whenever" +
 			" you would start a subagent or run work in the background: Orbit picks its model (or runs the one you name)," +
