@@ -326,8 +326,9 @@ No run had a harness ERROR. `scripts/agent-eval.sh compare` finds no regression 
   10/10 on both engines.
 
 Always-on bytes (`TestAgentPrimerBudgets`, `TestClaudeCodeAlwaysOnBytesPerShape`): the primer went from 3,388 to 3,060
-bytes, and the longest engine instructions (a task run with Watch on) from 7,711 to 7,185. The longest Claude Code
-shape (`task-watch-toplevel-workflows`), appended prompt plus initialize, went from 8,315 to 7,789 bytes.
+bytes, and the longest engine instructions (a task run with Watch on) from 7,711 to 7,185 (7,230 after the wiki
+citation moved onto the wiki line, below). The longest Claude Code shape (`task-watch-toplevel-workflows`), appended
+prompt plus initialize, went from 8,315 to 7,789 bytes (7,830 with the wiki citation).
 
 The wiki citation (`[title](orbit-wiki:<id>)`) left the receipts paragraph for the wiki line, which only sessions
 with the wiki on receive (`137cef95c7`). So `I7-wiki-path-search`, the case that guards that line, was played on that
