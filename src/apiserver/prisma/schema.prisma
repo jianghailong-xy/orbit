@@ -3724,8 +3724,8 @@ model Attachment {
 
 /// The bytes of Orbit Files (0462, docs/orbit-files-design.md §2.1): one row per distinct content,
 /// named by its sha256, however many attachment rows name it. The bytes themselves are in the store
-/// `storage` names — `local`, the files directory (ORBIT_FILES_DIR, `<sha256[0:2]>/<sha256>`), or `s3`
-/// (`files/<sha256[0:2]>/<sha256>` in ORBIT_FILES_S3_BUCKET) — and never in Postgres.
+/// `storage` names — `local`, the files directory (ORBIT_DOCUMENTS_DIR, `<sha256[0:2]>/<sha256>`), or `s3`
+/// (`files/<sha256[0:2]>/<sha256>` in ORBIT_DOCUMENTS_S3_BUCKET) — and never in Postgres.
 model FileBlob {
   sha256           String       @id
   sizeBytes        Int          @map("size_bytes")

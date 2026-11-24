@@ -6,7 +6,7 @@
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/files/attachment-migration.pg.spec.ts
  *
- *   local  the files directory, a directory of this run's (ORBIT_FILES_DIR);
+ *   local  the files directory, a directory of this run's (ORBIT_DOCUMENTS_DIR);
  *   s3     a real S3-compatible server (test-support/s3-test-server.ts) with a bucket of the run's.
  *
  * What is held, with each store, on a batch of rows written as an apiserver before Orbit Files wrote them:
@@ -178,7 +178,7 @@ type PreOrbitFilesClient = {
 
 /** A client generated from that schema, under build/ so that it finds @prisma/client: the older apiserver's reads, for real. */
 function preOrbitFilesClient(url: string): PreOrbitFilesClient {
-  const dir = path.join(__dirname, 'pre-orbit-files-client');
+  const dir = path.join(__dirname, 'pre-file-store-client');
   mkdirSync(dir, { recursive: true });
   const schema = path.join(dir, 'schema.prisma');
   writeFileSync(schema, PRE_ORBIT_FILES_SCHEMA(dir));
@@ -289,7 +289,7 @@ function storeCases(leg: Leg) {
 
     // The owner, a runner, a session on it, a task and a link to each.
     const ownerId = randomUUID();
-    const email = `migration-${leg.storage}-${RUN}@orbit-files.invalid`;
+    const email = `migration-${leg.storage}-${RUN}@orbit-documents.invalid`;
     await db.user.create({ data: { id: ownerId, email, name: `migration ${leg.storage}`, passwordHash: 'x' } });
     const bearer = await jwt.signAsync({ sub: ownerId, email });
     const runnerId = randomUUID();
@@ -1011,7 +1011,7 @@ test('moving old attachments out of Postgres, on the local files directory and o
     storage: 'local',
     dir: localDir,
     config: { dir: localDir, storage: 'local' },
-    env: { ORBIT_FILES_BACKEND: 'local', ORBIT_FILES_DIR: localDir },
+    env: { ORBIT_DOCUMENTS_BACKEND: 'local', ORBIT_DOCUMENTS_DIR: localDir },
     put: async (sha, bytes) => {
       mkdirSync(path.dirname(local.pathOf(sha)), { recursive: true });
       writeFileSync(local.pathOf(sha), bytes);
@@ -1026,13 +1026,13 @@ test('moving old attachments out of Postgres, on the local files directory and o
     dir: s3Dir,
     config: { dir: s3Dir, storage: 's3', s3 },
     env: {
-      ORBIT_FILES_BACKEND: 's3',
-      ORBIT_FILES_DIR: s3Dir,
-      ORBIT_FILES_S3_ENDPOINT: s3.endpoint,
-      ORBIT_FILES_S3_BUCKET: s3.bucket,
-      ORBIT_FILES_S3_ACCESS_KEY_ID: s3.accessKeyId,
-      ORBIT_FILES_S3_SECRET_ACCESS_KEY: s3.secretAccessKey,
-      ORBIT_FILES_S3_REGION: s3.region,
+      ORBIT_DOCUMENTS_BACKEND: 's3',
+      ORBIT_DOCUMENTS_DIR: s3Dir,
+      ORBIT_DOCUMENTS_S3_ENDPOINT: s3.endpoint,
+      ORBIT_DOCUMENTS_S3_BUCKET: s3.bucket,
+      ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID: s3.accessKeyId,
+      ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY: s3.secretAccessKey,
+      ORBIT_DOCUMENTS_S3_REGION: s3.region,
     },
     put: (sha, bytes) => s3Object(s3, 'PUT', bucket.keyOf(sha), bytes),
     drop: (sha) => s3Object(s3, 'DELETE', bucket.keyOf(sha)),

@@ -72,13 +72,13 @@ test('file_upload --as test-report', { skip: !URL, concurrency: 1, timeout: 600_
   server = await startApiserver(url, `test-report-${randomUUID()}`, {
     PROVIDER_SECRET_KEY,
     MODEL_CATALOG_URL: 'http://127.0.0.1:9/',
-    ORBIT_FILES_BACKEND: 'local',
-    ORBIT_FILES_DIR: dir,
+    ORBIT_DOCUMENTS_BACKEND: 'local',
+    ORBIT_DOCUMENTS_DIR: dir,
   });
   const api = server;
 
   const ownerId = randomUUID();
-  await db.user.create({ data: { id: ownerId, email: `test-report-${RUN}@orbit-files.invalid`, name: 'test report', passwordHash: 'x' } });
+  await db.user.create({ data: { id: ownerId, email: `test-report-${RUN}@orbit-documents.invalid`, name: 'test report', passwordHash: 'x' } });
   const runnerId = randomUUID();
   const token = `${runnerId}-${RUN}`;
   await db.runner.create({ data: { id: runnerId, ownerId, name: 'test-report', tokenHash: createHash('sha256').update(token).digest('hex') } });

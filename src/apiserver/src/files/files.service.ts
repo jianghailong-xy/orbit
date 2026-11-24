@@ -80,7 +80,7 @@ const FILE_LIST_LIMIT = 200;
 const STORE_FALLBACK_WARNING_MS = 60_000;
 const STORE_USAGE_CACHE_MS = 3 * 60_000;
 
-/** The code of an upload refused because the account has used its quota (ORBIT_FILES_QUOTA_BYTES). */
+/** The code of an upload refused because the account has used its quota (ORBIT_DOCUMENTS_QUOTA_BYTES). */
 export const FILE_QUOTA_EXCEEDED = 'FILE_QUOTA_EXCEEDED';
 
 /** How many projects and tasks the usage read names, largest first. */
@@ -94,7 +94,7 @@ export interface StorageUsage {
   /** What the account keeps now, each content once. */
   totalBytes: number;
   fileCount: number;
-  /** ORBIT_FILES_QUOTA_BYTES, when this deployment sets one. */
+  /** ORBIT_DOCUMENTS_QUOTA_BYTES, when this deployment sets one. */
   quotaBytes: number | null;
   /** Largest first. A file counts under its task, and its task's project. */
   projects: { projectId: string; title: string; bytes: number; fileCount: number }[];

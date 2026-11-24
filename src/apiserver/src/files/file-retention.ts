@@ -54,7 +54,7 @@ export function fileGraceMs(config: Pick<FilesConfig, 'backupRetentionMs'>): num
 /**
  * When the off-host copy of bytes just deleted from `storage` may follow them (`file_blob.off_host_prune_at`, which the backup
  * sidecar prunes by): one grace period on, for the local store always, and for the bucket only when the deployment declares
- * a mirror of it (ORBIT_FILES_S3_MIRROR=1). Null: nothing of those bytes is off host.
+ * a mirror of it (ORBIT_DOCUMENTS_S3_MIRROR=1). Null: nothing of those bytes is off host.
  */
 export function offHostPruneAtFor(
   storage: string,
