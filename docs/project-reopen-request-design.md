@@ -1,6 +1,6 @@
 # Asking to reopen a settled project: design (v1)
 
-Status: draft for the owner's review, 2026-11-23. Board: `docs/mocks/project-reopen-request/`.
+Status: approved by the owner 2026-11-24 (Q1 A, Q2 A). Board: `docs/mocks/project-reopen-request/`.
 
 An agent whose write lands on a project that is DONE or CANCELLED is refused today, and the refusal ends with
 "only the owner can reopen it". The agent has no way to ask. It can only tell the person in prose, and the person
@@ -33,9 +33,8 @@ press as `PATCH /projects/:id {status: OPEN}`, made from a card.
 | D1 | Who may ask | **Any session** of the account whose write was refused. The card names the session and says why. |
 | D2 | What the request carries, and what approval does | **The reason and the planned work, as text.** Approval only reopens. The agent then retries its own write. |
 | D3 | Process | Design doc and board first, then an Orbit project. |
-
-Still open, for the board (§10): Q1 where the request lives (owner request or project open item), Q2 one request
-per project or one per asking session.
+| Q1 | Where the request lives (2026-11-24) | **A: an owner request `PROJECT_REOPEN`**, as `SETTINGS_CHANGE`. |
+| Q2 | How many cards (2026-11-24) | **A: one per project**; later askers join it. |
 
 ## 3. Flow
 
@@ -86,7 +85,7 @@ The route:
 3. Refuses a re-file of something the owner already declined. If this session has a DECLINED `PROJECT_REOPEN` for this
    project since the project was last settled, the route answers `409 REOPEN_REQUEST_DECLINED` with the decline's date
    and reason. A declined card is a refusal (Agent Contract), so the agent asks the person instead of filing again.
-4. Keeps one pending card per project (Q2, recommended A). A second session asking while one is PENDING gets the
+4. Keeps one pending card per project (Q2 A). A second session asking while one is PENDING gets the
    PENDING request back with `alreadyOpen: true` and is added to its `askers`, so its ending reaches it too. The card
    shows "Also asked by …".
 5. Files `OwnerRequest{kind: 'PROJECT_REOPEN'}`. The server writes the title, "Reopen project “<title>”?". `why`
@@ -211,7 +210,7 @@ refused to a session and to a token.
 
 Steps 3–5 depend on 1; 2 depends on 1. Steps 3, 4 and 5 can run side by side.
 
-## 10. Open for the owner (board 3)
+## 10. Options the owner chose between (board 3; A and A chosen 2026-11-24)
 
 - **Q1: where the request lives.**
   - **A (recommended): an owner request `PROJECT_REOPEN`**, as `SETTINGS_CHANGE` is. Any session can ask, and the
