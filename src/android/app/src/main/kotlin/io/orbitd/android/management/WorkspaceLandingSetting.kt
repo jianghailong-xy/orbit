@@ -1,7 +1,14 @@
 package io.orbitd.android.management
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import io.orbitd.android.ui.LocalOrbitColors
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.selection.selectable
@@ -104,10 +111,18 @@ private fun Choice(value: String, name: String, badge: String, body: String, sel
     }
 }
 
+/** The amber notice box of the board (web `landing-setting-notice`): warning wash and border, warning ink, a bold lead where there is one,
+ * and the link inside the box. */
 @Composable
 private fun Notice(tag: String, text: String, lead: String?, action: String, onAction: () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp).testTag("landing-setting:$tag")) {
-        Text(buildString { if (lead != null) append(lead).append(' '); append(text) }, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
-        TextButton(onClick = onAction) { Text(action, fontWeight = FontWeight.SemiBold) }
+    val warning = LocalOrbitColors.current.needsYou
+    val shape = RoundedCornerShape(12.dp)
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp).background(warning.copy(alpha = 0.1f), shape).border(1.dp, warning.copy(alpha = 0.4f), shape)
+        .padding(horizontal = 12.dp, vertical = 8.dp).testTag("landing-setting:$tag")) {
+        Text(buildAnnotatedString {
+            if (lead != null) { withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(lead) }; append(' ') }
+            append(text)
+        }, style = MaterialTheme.typography.bodySmall, color = warning)
+        TextButton(onClick = onAction, modifier = Modifier.testTag("landing-setting:$tag:action")) { Text(action, fontWeight = FontWeight.SemiBold, color = warning) }
     }
 }
