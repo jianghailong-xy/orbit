@@ -103,14 +103,14 @@ describe('the Storage addresses', () => {
     expect(container.textContent).toContain('files storage rows');
   });
 
-  it('/documents renders the page', async () => {
+  it('/drive renders the page', async () => {
     await visit('/drive?folder=f1');
     expect(addressBar()).toBe('/drive?folder=f1');
     expect(container.textContent).toContain('documents page files');
   });
 });
 
-describe('the old /files addresses', () => {
+describe('the old /files and /documents addresses', () => {
   it.each([
     ['/files', '/drive'],
     ['/files?folder=f1&file=e1', '/drive?folder=f1&file=e1'],
@@ -118,6 +118,12 @@ describe('the old /files addresses', () => {
     ['/files/trash?x=1', '/drive/trash?x=1'],
     ['/files/storage', '/drive/storage'],
     ['/files/storage/projects/abc?order=size', '/drive/storage/projects/abc?order=size'],
+    ['/files/x', '/drive/x'],
+    ['/documents', '/drive'],
+    ['/documents/x', '/drive/x'],
+    ['/documents?folder=f1', '/drive?folder=f1'],
+    ['/documents/trash?x=1', '/drive/trash?x=1'],
+    ['/documents/storage/projects/abc', '/drive/storage/projects/abc'],
   ])('%s leads to %s', async (from, to) => {
     await visit(from);
     expect(addressBar()).toBe(to);
