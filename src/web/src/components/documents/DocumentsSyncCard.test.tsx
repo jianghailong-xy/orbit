@@ -90,7 +90,7 @@ describe('the sync card', () => {
 
   it('draws checking with no total yet', async () => {
     const text = await draw([sync({ status: 'CHECKING', filesTotal: null, bytesTotal: null, filesSeen: 12480, currentPath: null })]);
-    expect(text).toContain('Syncing to Documents');
+    expect(text).toContain('Syncing to Drive');
     expect(text).toContain('Checking files… 12,480 so far');
     expect(text).toContain('Background');
     expect(host.querySelector('.drive-xfer-bar.is-indeterminate')).not.toBeNull();
@@ -135,7 +135,7 @@ describe('the sync card', () => {
     act(() => root.unmount());
     resetDocumentsSyncs();
     root = createRoot(host);
-    const text = await draw([sync({ status: 'FAILED', error: '/书格 is a file in Documents, not a folder.', endedAt: '2026-11-24T06:57:05Z' })]);
+    const text = await draw([sync({ status: 'FAILED', error: '/书格 is a file in Drive, not a folder.', endedAt: '2026-11-24T06:57:05Z' })]);
     expect(text).toContain('Sync failed');
     expect(text).toContain('not a folder');
   });

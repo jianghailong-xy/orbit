@@ -27,7 +27,7 @@ import { DocumentsWriterName } from './DocumentsWriterName';
 export const ENDS_A_SHARE_LINK = 'This ends a share link.';
 
 /** "Orbit UI migration": the folder a group was deleted from, by its last name; the drive's root is "Documents". */
-const folderLabel = (path: string) => path.split('/').filter(Boolean).pop() ?? 'Documents';
+const folderLabel = (path: string) => path.split('/').filter(Boolean).pop() ?? 'Drive';
 
 const items = (n: number) => `${n} ${n === 1 ? 'item' : 'items'}`;
 
@@ -153,7 +153,7 @@ export function DocumentsTrash() {
         </h1>
         <div className="files-head-actions">
           <Button icon={<LeftOutlined />} onClick={() => navigate('/documents')}>
-            Documents
+            Drive
           </Button>
           <Button danger icon={<DeleteOutlined />} disabled={groups.length === 0} onClick={empty}>
             Empty Trash…

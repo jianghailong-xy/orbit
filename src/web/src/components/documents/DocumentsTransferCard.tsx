@@ -22,8 +22,8 @@ const ROWS_SHOWN = 8;
 const STALL_MS = 20_000;
 
 const WORDS = {
-  put: { going: 'Uploading', went: 'Uploaded', title: 'Uploading to Documents', arrow: '↑', couldnt: "Couldn't upload" },
-  get: { going: 'Downloading', went: 'Downloaded', title: 'Downloading from Documents', arrow: '↓', couldnt: "Couldn't download" },
+  put: { going: 'Uploading', went: 'Uploaded', title: 'Uploading to Drive', arrow: '↑', couldnt: "Couldn't upload" },
+  get: { going: 'Downloading', went: 'Downloaded', title: 'Downloading from Drive', arrow: '↓', couldnt: "Couldn't download" },
 } as const;
 
 const baseName = (p: string) => p.split('/').pop() || p;
@@ -240,7 +240,7 @@ export function DocumentsTransferCard({
         <span className="drive-xfer-folder">{summary.folder}</span>
         <span className="drive-xfer-actions">
           {summary.finished && kind === 'put' && firstLink && (
-            <DocumentsEntryLink link={firstLink}>Show in Documents</DocumentsEntryLink>
+            <DocumentsEntryLink link={firstLink}>Show in Drive</DocumentsEntryLink>
           )}
           <button type="button" aria-expanded={showFiles} onClick={() => setShowFiles((v) => !v)}>
             {showFiles ? 'Hide files' : 'Show files'}

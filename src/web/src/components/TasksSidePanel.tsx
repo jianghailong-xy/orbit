@@ -193,7 +193,7 @@ const TOP: TopNavItem[] = [
   { key: 'wiki', icon: <SidebarNavIcon name="wiki" />, label: 'Wiki' },
   // Documents, the account's drive, directly under the Wiki (docs/mocks/documents/02-web, frame 1). No count and no
   // shortcut: nothing in Files waits on the owner. Its Trash and earlier versions are reached from inside it.
-  { key: 'documents', icon: <SidebarNavIcon name="files" />, label: 'Documents' },
+  { key: 'documents', icon: <SidebarNavIcon name="files" />, label: 'Drive' },
   // No Following here: its watches are the waits agents keep for their own sessions, already shown
   // in each session's header and Watching strip, and those are what link to /following.
   // No Machines & models either (docs/mocks/machines-and-models, 02): where agents run and whose quota

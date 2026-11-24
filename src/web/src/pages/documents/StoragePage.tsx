@@ -48,7 +48,7 @@ export function StorageSettingsPage() {
     <div className="settings-page">
       <button type="button" className="settings-back storage-files-back" onClick={() => navigate('/documents')}>
         <LeftOutlined />
-        <span>Documents</span>
+        <span>Drive</span>
       </button>
       <SettingsHeader title="Storage" />
       <SettingsCard>
@@ -77,12 +77,12 @@ export function StorageSettingsPage() {
           <SettingsRow title="Total" control={<span className="settings-storage-size">{formatFileSize(drive.totalBytes)}</span>} />
           {drive.nearQuota && drive.storeUsedBytes !== undefined && drive.storeQuotaBytes !== undefined && (
             <SettingsRow
-              title="Documents storage"
+              title="Drive storage"
               description={
                 <span className="settings-storage-full" style={{ color: 'var(--warning)' }}>
                   {drive.storeUsedBytes >= drive.storeQuotaBytes
                     ? "The drive's storage is full. Ask the operator to raise the limit."
-                    : `Documents storage is ${Math.floor((drive.storeUsedBytes / drive.storeQuotaBytes) * 100)}% full. Uploads stop at 100%. Ask the operator to raise the limit.`}
+                    : `Drive storage is ${Math.floor((drive.storeUsedBytes / drive.storeQuotaBytes) * 100)}% full. Uploads stop at 100%. Ask the operator to raise the limit.`}
                 </span>
               }
             />

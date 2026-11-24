@@ -38,7 +38,7 @@ const upload = (over: Partial<DocumentsUpload> = {}): DocumentsUpload => ({
   size: 2000,
   lastModified: 0,
   parentId: null,
-  parentName: 'Documents',
+  parentName: 'Drive',
   relativePath: null,
   dropKey: null,
   uploadId: null,
