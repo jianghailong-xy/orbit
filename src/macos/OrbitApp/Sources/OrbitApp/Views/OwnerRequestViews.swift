@@ -775,7 +775,9 @@ struct OwnerRequestResolvedLine: View {
     @State private var busy = false
     @State private var failure: String?
 
-    private var runner: String { request.secretSpec.map { model.runnerName($0.runnerId) } ?? "this runner" }
+    private var runner: String {
+        (request.secretSpec?.runnerId ?? request.changeSpec?.runnerId).map(model.runnerName) ?? "this runner"
+    }
 
     private var icon: (String, Color) {
         switch request.state {

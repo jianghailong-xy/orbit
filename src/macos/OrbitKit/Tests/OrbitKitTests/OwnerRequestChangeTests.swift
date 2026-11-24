@@ -66,4 +66,59 @@ final class OwnerRequestChangeTests: XCTestCase {
         XCTAssertEqual(ChangeCopy.runningNow(2), "2 running now")
         XCTAssertEqual(ChangeCopy.wasWhenAsked(4), "Was 4 when asked.")
     }
+
+    // MARK: server-shaped payloads (Tests/Fixtures/owner-request-change, see its README)
+
+    private func fixture(_ name: String) throws -> Data {
+        var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        for _ in 0..<6 {
+            let candidate = dir.appendingPathComponent("Fixtures/owner-request-change/\(name)")
+            if let data = try? Data(contentsOf: candidate) { return data }
+            dir = dir.deletingLastPathComponent()
+        }
+        XCTFail("fixture \(name) not found"); throw CocoaError(.fileNoSuchFile)
+    }
+
+    func testThePendingListFromTheServerDecodes() throws {
+        let list = try JSONDecoder().decode(OwnerRequestList.self, from: try fixture("2-open-pending.json"))
+        let request = try XCTUnwrap(list.requests.first)
+        XCTAssertEqual(list.requests.count, 1)
+        XCTAssertEqual(request.kind, .change)
+        XCTAssertEqual(request.state, .pending)
+        XCTAssertEqual(request.changeSpec?.field, "maxConcurrent")
+        XCTAssertEqual(request.changeSpec?.requested, 4)
+        XCTAssertEqual(request.changeSpec?.before, 6)
+        XCTAssertEqual(request.changeSpec?.runnerId, "64k7HtPDIS1EnOM5W4p8ky")
+        XCTAssertNil(request.answer)
+        // The live value is above the request: the lowering line.
+        XCTAssertEqual(ChangeCopy.effect(value: 4, live: 6), "Nothing running stops. New sessions wait until fewer than 4 run.")
+    }
+
+    func testTheRunnerRowFromTheServerCarriesTheLiveValue() throws {
+        let runners = try JSONDecoder().decode([Runner].self, from: try fixture("3-runners.json"))
+        XCTAssertEqual(runners.first?.name, "HPC")
+        XCTAssertEqual(runners.first?.maxConcurrent, 6)
+        XCTAssertEqual(runners.first?.activeSessions, 1)
+        let patched = try JSONSerialization.jsonObject(with: try fixture("4-runner-patched-response.json")) as? [String: Any]
+        XCTAssertEqual(patched?["maxConcurrent"] as? Int, 5)
+    }
+
+    func testTheApplyBodyIsTheOneTheServerTook() throws {
+        let sent = try JSONEncoder().encode(OwnerRequestApplyBody(maxConcurrent: 3))
+        XCTAssertEqual(String(data: sent, encoding: .utf8), String(data: try fixture("6-apply-request.json"), encoding: .utf8))
+    }
+
+    func testTheAppliedAnswerFromTheServerReadsAsApplied() throws {
+        for name in ["6-applied-response.json"] {
+            let request = try JSONDecoder().decode(OwnerRequest.self, from: try fixture(name))
+            XCTAssertEqual(request.state, .done)
+            XCTAssertEqual(request.answer?.applied, 3)
+            XCTAssertEqual(request.answer?.actualBefore, 5)
+            XCTAssertEqual(OwnerRequests.outcomeLine(request, runner: "HPC"), "Applied: HPC Max Concurrent 5 \u{2192} 3 (asked for 4)")
+        }
+        let list = try JSONDecoder().decode(OwnerRequestList.self, from: try fixture("7-list-done.json"))
+        XCTAssertEqual(list.requests.first?.answer?.applied, 3)
+        XCTAssertEqual(list.requests.first?.answer?.actualBefore, 5)
+        XCTAssertEqual(list.requests.first?.changeSpec?.requested, 4)
+    }
 }
