@@ -117,14 +117,23 @@ struct WorkspaceLandingSection: View {
     @State private var detail: Agent?
     @State private var saving = false
     @State private var error: String?
+    /// The workspace's own read has been tried: until then the section holds its place, so the read has a view to run on.
+    @State private var loaded = false
 
     private var landing: WorkspaceLandingView? { (detail ?? agent).landing }
 
     var body: some View {
         Group {
-            if let landing { section(landing) }
+            if let landing {
+                section(landing)
+            } else if !loaded {
+                Section { ProgressView().frame(maxWidth: .infinity) } header: { Text(WorkspaceLandingCopy.section) }
+            }
         }
-        .task { detail = await app.workspaceDetail(agent.id) }
+        .task {
+            detail = await app.workspaceDetail(agent.id)
+            loaded = true
+        }
     }
 
     @ViewBuilder private func section(_ landing: WorkspaceLandingView) -> some View {
