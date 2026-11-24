@@ -65,8 +65,9 @@ func initializeInstructionsWithEnv(t *testing.T, env map[string]string) string {
 
 // A Claude Code session is given the primer once (design §4.3). Its appended system prompt carries the whole of it,
 // and `orbit mcp`, told by the runner's mcp.json that it serves Claude Code, answers initialize with the lead
-// paragraph only. The lead is the one paragraph sent on both channels, on purpose: it says what Orbit is for and
-// carries the primer's version. Every session shape the snapshots take is checked.
+// paragraph and the re-read paragraph the appended prompt skips (primerFor). The lead is the one paragraph sent on
+// both channels, on purpose: it says what Orbit is for and carries the primer's version. Every session shape the
+// snapshots take is checked.
 func TestClaudeCodeSessionIsGivenThePrimerOnce(t *testing.T) {
 	t.Setenv("ORBIT_HOME", t.TempDir())
 	for _, shape := range instructionSnapshotShapes() {
@@ -79,8 +80,8 @@ func TestClaudeCodeSessionIsGivenThePrimerOnce(t *testing.T) {
 			}
 		}
 		initialize := claudeSessionInitializeInstructions(t, job)
-		if initialize != agentPrimerLead {
-			t.Errorf("%s: initialize answers %q, want the primer's lead paragraph only", shape.name, initialize)
+		if want := primerFor("orbit mcp initialize, claude"); initialize != want {
+			t.Errorf("%s: initialize answers %q, want the primer's lead and the paragraph the appended prompt leaves out", shape.name, initialize)
 		}
 		both := appended + "\n\n" + initialize
 		primer := primerFor("claude")
@@ -90,7 +91,12 @@ func TestClaudeCodeSessionIsGivenThePrimerOnce(t *testing.T) {
 		if n := strings.Count(both, primer); n != 1 {
 			t.Errorf("%s: the primer appears %d times across the appended prompt and initialize, want 1", shape.name, n)
 		}
-		for _, paragraph := range strings.Split(primer, "\n\n") {
+		// Every paragraph of the whole primer reaches the session, the re-read one through initialize alone.
+		whole := agentPrimer
+		if shape.orchestration {
+			whole = strings.Replace(whole, agentPrimerOrchestration+"\n\n", "", 1)
+		}
+		for _, paragraph := range strings.Split(whole, "\n\n") {
 			want := 1
 			if paragraph == agentPrimerLead {
 				want = 2 // the safety unit, once in each

@@ -114,7 +114,8 @@ func TestEveryUnitRendersOnEveryEngine(t *testing.T) {
 }
 
 // initialize answers with the primer, and an Ask with the help reads' instructions, on every engine profile. On an
-// engine whose own carrier is confirmed, which has the rest, it answers with the primer's lead paragraph only.
+// engine whose own carrier is confirmed, which has the rest, it answers with the primer's lead paragraph and the
+// paragraphs that carrier skips.
 func TestComposedMCPInstructionsAreThePrimer(t *testing.T) {
 	for _, profile := range append(engineProfiles, unknownEngineProfile) {
 		for _, shape := range instructionTestShapes() {
@@ -124,6 +125,10 @@ func TestComposedMCPInstructionsAreThePrimer(t *testing.T) {
 			}
 			if profile.SystemCarrier == probeYes {
 				want = agentPrimerLead
+				// A paragraph the engine's carrier skips is not there, so initialize keeps it.
+				if profile.ResetNote && profile.Engine == providerClaude {
+					want += "\n\n" + agentPrimerRederive
+				}
 			}
 			if shape.Role == roleHelpAsk {
 				want = helpAskInstructions

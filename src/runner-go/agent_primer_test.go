@@ -441,10 +441,11 @@ func primerCarriers(t *testing.T, job *ClaimedSession) map[string]string {
 // primerFor is the primer as a carrier is given it: Claude Code is not told the re-read-after-compaction
 // paragraph up front (its next message after a reset carries the note, context_reset_note.go), so it is missing
 // from their own instructions, and Codex and every other carrier, and `orbit mcp` initialize, keeps it. Inside a
-// Claude Code session initialize answers with the lead paragraph only: the appended prompt has the rest.
+// Claude Code session initialize answers with the lead paragraph and the re-read paragraph: the appended prompt has
+// the rest, and not that one.
 func primerFor(carrier string) string {
 	if carrier == "orbit mcp initialize, claude" {
-		return agentPrimerLead
+		return agentPrimerLead + "\n\n" + agentPrimerRederive
 	}
 	if strings.HasPrefix(carrier, "claude") {
 		return strings.Replace(agentPrimer, "\n\n"+agentPrimerRederive, "", 1)

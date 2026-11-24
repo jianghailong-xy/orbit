@@ -444,11 +444,13 @@ func composeChannel(shape SessionShape, profile EngineProfile, channel instructi
 		if instructionUnitsLeftOut[unit.id] {
 			continue
 		}
-		if channel == channelSystem && unit.skipOnProfile != nil && unit.skipOnProfile(profile) {
+		skipped := unit.skipOnProfile != nil && unit.skipOnProfile(profile)
+		if channel == channelSystem && skipped {
 			continue
 		}
-		// An engine whose own carrier is confirmed already has the unit there: initialize does not repeat it.
-		if channel == channelMCP && profile.SystemCarrier == probeYes && unit.deliveredOn(channelSystem) && !unit.safety {
+		// An engine whose own carrier is confirmed already has the unit there: initialize does not repeat it. A unit
+		// the carrier skips on this profile is not there, so initialize keeps it.
+		if channel == channelMCP && profile.SystemCarrier == probeYes && unit.deliveredOn(channelSystem) && !skipped && !unit.safety {
 			continue
 		}
 		if unit.deliveredOn(channel) && unit.appliesTo(shape) && shape.serves(unit.tools) {
