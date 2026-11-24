@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"orbit/drive-mount/door"
+	"orbit/documents-mount/door"
 )
 
 // fakeDoor is the runner drive door's rules as far as these tests need them, in memory: create with an empty first

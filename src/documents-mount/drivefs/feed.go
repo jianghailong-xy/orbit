@@ -5,7 +5,7 @@ import (
 
 	"github.com/hanwen/go-fuse/v2/fuse"
 
-	"orbit/drive-mount/door"
+	"orbit/documents-mount/door"
 )
 
 // The change feed (§5.4). The door re-reads, besides every row after the cursor, every row of the 60 s before the

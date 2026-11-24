@@ -27,7 +27,7 @@ type cleanRef struct {
 
 func newSpool(dir string, limit int64) (*spool, error) {
 	if dir == "" {
-		d, err := os.MkdirTemp("", "orbit-files-spool-")
+		d, err := os.MkdirTemp("", "orbit-documents-spool-")
 		if err != nil {
 			return nil, err
 		}

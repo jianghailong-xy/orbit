@@ -21,7 +21,7 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"golang.org/x/sys/unix"
 
-	"orbit/drive-mount/door"
+	"orbit/documents-mount/door"
 )
 
 // These tests mount the file system for real, over go-fuse, in front of fakeDoor: they need /dev/fuse and root (they
@@ -52,7 +52,7 @@ func mountFakeDoor(t *testing.T, opts Options, cfg door.Config) (*fakeDoor, stri
 			t.Fatal(err)
 		}
 	}
-	rep := NewReporter(ReporterOptions{Dir: state, ShownDir: "/run/orbit-files"})
+	rep := NewReporter(ReporterOptions{Dir: state, ShownDir: "/run/orbit-documents"})
 	opts.SpoolDir = filepath.Join(dir, "spool")
 	opts.Reporter = rep
 	cfg.BaseURL, cfg.Token = f.srv.URL, "t"

@@ -6,7 +6,7 @@ import (
 
 	"github.com/hanwen/go-fuse/v2/fuse"
 
-	"orbit/drive-mount/door"
+	"orbit/documents-mount/door"
 )
 
 func TestAReopenBeforeReleaseCannotWriteInPlace(t *testing.T) {

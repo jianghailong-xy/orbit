@@ -19,7 +19,7 @@ import (
 
 	"github.com/hanwen/go-fuse/v2/fuse"
 
-	"orbit/drive-mount/door"
+	"orbit/documents-mount/door"
 )
 
 // Locks. FS.mu and wfile.mu never nest: a write state reports to the file system after letting go of its own lock,

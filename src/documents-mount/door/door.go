@@ -321,7 +321,7 @@ func (c *Config) defaults() {
 		c.ProbeInterval = 5 * time.Second
 	}
 	if c.UserAgent == "" {
-		c.UserAgent = "orbit-files-mount"
+		c.UserAgent = "orbit-documents-mount"
 	}
 }
 

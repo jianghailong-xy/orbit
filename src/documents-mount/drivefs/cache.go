@@ -9,7 +9,7 @@ import (
 	"sort"
 	"sync"
 
-	"orbit/drive-mount/door"
+	"orbit/documents-mount/door"
 )
 
 // chunkCache keeps chunks read from the store on the node's disk (§5.3): content-addressed by sha256, so it is never

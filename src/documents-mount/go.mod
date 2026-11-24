@@ -1,4 +1,4 @@
-module orbit/drive-mount
+module orbit/documents-mount
 
 go 1.26.0
 

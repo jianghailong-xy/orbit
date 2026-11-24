@@ -10,7 +10,7 @@ import (
 
 	"github.com/hanwen/go-fuse/v2/fuse"
 
-	"orbit/drive-mount/door"
+	"orbit/documents-mount/door"
 )
 
 // dirHandle is one open folder: its listing as far as it has been read, page by page (§5.4).
@@ -425,7 +425,7 @@ func (fs *FS) Rename(cancel <-chan struct{}, input *fuse.RenameIn, oldName strin
 // offline answers EIO at once for what needs the server while it cannot be reached (§5.7).
 func (fs *FS) offline(op, drivePath string) fuse.Status {
 	return fs.refuse(fuse.EIO, op, drivePath, "",
-		"the drive's server cannot be reached; reads of cached files and folders still work, and /run/orbit-files/status.json says since when")
+		"the drive's server cannot be reached; reads of cached files and folders still work, and /run/orbit-documents/status.json says since when")
 }
 
 // failed answers a door error, logging what an agent could not otherwise tell apart.

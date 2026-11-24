@@ -1,20 +1,20 @@
-// Command orbit-files-mount presents the account's Documents drive at /run/orbit-files/drive (docs/orbit-files-
+// Command orbit-documents-mount presents the account's Documents drive at /run/orbit-documents/drive (docs/orbit-files-
 // drive-technical-design.md §5), which the runner shows its agents as /home/orbit/Documents.
 //
-//	orbit-files-mount mount --root /run/orbit-files --spool /var/lib/orbit-files-spool/<runner> --server URL \
+//	orbit-documents-mount mount --root /run/orbit-documents --spool /var/lib/orbit-documents-spool/<runner> --server URL \
 //	    --token-file FILE --generation N --pod-uid UID [serve flags...]
 //
 // is the privileged parent (root): it mounts and starts the daemon as an unprivileged user, replaces it if it dies or
 // freezes, and answers attribution. The parent passes the daemon its FUSE descriptor and runs
 //
-//	orbit-files-mount serve --fuse-fd 3 ...
+//	orbit-documents-mount serve --fuse-fd 3 ...
 //
 // itself. For development, serve can also mount a directory on its own (--mountpoint), through fusermount.
 //
-//	orbit-files-mount csi --endpoint unix:///csi/csi.sock --node-id NODE --managed-namespace NS --server URL ...
+//	orbit-documents-mount csi --endpoint unix:///csi/csi.sock --node-id NODE --managed-namespace NS --server URL ...
 //
-// is files.orbit.dev, the CSI node plugin that runs the privileged parent of every runner Pod's drive on its node
-// (package csi; deploy/managed-runner/files-csi).
+// is documents.orbit.dev, the CSI node plugin that runs the privileged parent of every runner Pod's drive on its node
+// (package csi; deploy/managed-runner/documents-csi).
 package main
 
 import (
@@ -34,11 +34,11 @@ import (
 
 	"github.com/hanwen/go-fuse/v2/fuse"
 
-	"orbit/drive-mount/csi"
-	"orbit/drive-mount/door"
-	"orbit/drive-mount/drivefs"
-	"orbit/drive-mount/parent"
-	"orbit/drive-mount/sandbox"
+	"orbit/documents-mount/csi"
+	"orbit/documents-mount/door"
+	"orbit/documents-mount/drivefs"
+	"orbit/documents-mount/parent"
+	"orbit/documents-mount/sandbox"
 )
 
 func main() {
@@ -57,8 +57,17 @@ func main() {
 	}
 }
 
+// mountTokenFromEnv is $ORBIT_DOCUMENTS_MOUNT_TOKEN, or $ORBIT_FILES_MOUNT_TOKEN, its name before the drive was
+// renamed Documents, when the new one is unset.
+func mountTokenFromEnv() string {
+	if token := strings.TrimSpace(os.Getenv("ORBIT_DOCUMENTS_MOUNT_TOKEN")); token != "" {
+		return token
+	}
+	return strings.TrimSpace(os.Getenv("ORBIT_FILES_MOUNT_TOKEN"))
+}
+
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: orbit-files-mount mount|serve|csi [flags]")
+	fmt.Fprintln(os.Stderr, "usage: orbit-documents-mount mount|serve|csi [flags]")
 	os.Exit(2)
 }
 
@@ -79,11 +88,11 @@ func (f *serveFlags) register(fs *flag.FlagSet) {
 	fs.IntVar(&f.fuseFD, "fuse-fd", -1, "an open /dev/fuse descriptor, mounted by the privileged parent")
 	fs.StringVar(&f.mountpoint, "mountpoint", "", "for development: mount this directory itself instead")
 	fs.StringVar(&f.server, "server", "", "the Orbit server's root URL")
-	fs.IntVar(&f.tokenFD, "token-fd", -1, "a descriptor to read the mount credential from (else $ORBIT_FILES_MOUNT_TOKEN)")
+	fs.IntVar(&f.tokenFD, "token-fd", -1, "a descriptor to read the mount credential from (else $ORBIT_DOCUMENTS_MOUNT_TOKEN)")
 	fs.StringVar(&f.generation, "generation", "", "the managed-runner generation the credential was issued for")
 	fs.StringVar(&f.podUID, "pod-uid", "", "the runner instance's UID (the Pod UID on Kubernetes)")
 	fs.StringVar(&f.stateDir, "state-dir", "", "the plain parent directory holding errors.log, status.json and unsent/")
-	fs.StringVar(&f.shownStateDir, "shown-state-dir", "/run/orbit-files", "the parent directory as agents know it")
+	fs.StringVar(&f.shownStateDir, "shown-state-dir", "/run/orbit-documents", "the parent directory as agents know it")
 	fs.StringVar(&f.displayRoot, "display-root", "/home/orbit/Documents", "the drive's path as agents know it")
 	fs.IntVar(&f.errorsFD, "errors-fd", -1, "errors.log, opened by the parent")
 	fs.IntVar(&f.statusFD, "status-fd", -1, "status.json, opened by the parent")
@@ -122,9 +131,9 @@ func serve(args []string) int {
 	flags := flag.NewFlagSet("serve", flag.ExitOnError)
 	f.register(flags)
 	_ = flags.Parse(args)
-	logger := log.New(os.Stderr, "orbit-files-mount: ", log.LstdFlags)
+	logger := log.New(os.Stderr, "orbit-documents-mount: ", log.LstdFlags)
 
-	token := strings.TrimSpace(os.Getenv("ORBIT_FILES_MOUNT_TOKEN"))
+	token := mountTokenFromEnv()
 	if f.tokenFD >= 0 {
 		file := os.NewFile(uintptr(f.tokenFD), "token")
 		data, err := io.ReadAll(io.LimitReader(file, 4096))
@@ -239,20 +248,20 @@ func serve(args []string) int {
 func mount(args []string) int {
 	var f serveFlags
 	flags := flag.NewFlagSet("mount", flag.ExitOnError)
-	root := flags.String("root", "/run/orbit-files", "the plain per-runner directory; the drive is mounted at <root>/drive")
-	tokenFile := flags.String("token-file", "", "the mount credential (else $ORBIT_FILES_MOUNT_TOKEN)")
+	root := flags.String("root", "/run/orbit-documents", "the plain per-runner directory; the drive is mounted at <root>/drive")
+	tokenFile := flags.String("token-file", "", "the mount credential (else $ORBIT_DOCUMENTS_MOUNT_TOKEN)")
 	uid := flags.Int("daemon-uid", 65532, "the daemon's uid")
 	gid := flags.Int("daemon-gid", 65532, "the daemon's gid")
 	watchdog := flags.Duration("watchdog", 10*time.Second, "how often the mount is checked")
 	attributeIn := flags.String("attribute-cgroup", "", "attribute only processes whose cgroup names this (default: --pod-uid; - for any)")
 	f.register(flags)
 	_ = flags.Parse(args)
-	logger := log.New(os.Stderr, "orbit-files-mount: ", log.LstdFlags)
+	logger := log.New(os.Stderr, "orbit-documents-mount: ", log.LstdFlags)
 	if os.Geteuid() != 0 {
 		logger.Print("mount must run as root: it opens /dev/fuse and mounts")
 		return 2
 	}
-	token := strings.TrimSpace(os.Getenv("ORBIT_FILES_MOUNT_TOKEN"))
+	token := mountTokenFromEnv()
 	if *tokenFile != "" {
 		data, err := os.ReadFile(*tokenFile)
 		if err != nil {
@@ -298,14 +307,14 @@ func csiPlugin(args []string) int {
 	endpoint := flags.String("endpoint", "unix:///csi/csi.sock", "the CSI socket the kubelet and the sidecars use")
 	nodeID := flags.String("node-id", os.Getenv("NODE_NAME"), "this node's name")
 	managed := flags.String("managed-namespace", "", "the managed-runner namespace: the only one whose Pods may have the drive")
-	secrets := flags.String("secrets-namespace", "orbit-files-system", "where Secret mrf-<runner uuid> is")
+	secrets := flags.String("secrets-namespace", "orbit-documents-system", "where Secret mrf-<runner uuid> is")
 	server := flags.String("server", "", "the Orbit server's root URL")
-	root := flags.String("root", "/var/lib/orbit-files", "the per-runner directories each runner Pod receives as /run/orbit-files")
-	spool := flags.String("spool-root", "/var/lib/orbit-files-spool", "the per-runner spools, on the node's disk")
-	state := flags.String("state-dir", "/var/lib/orbit-files-state", "what the plugin keeps of each published drive")
+	root := flags.String("root", "/var/lib/orbit-documents", "the per-runner directories each runner Pod receives as /run/orbit-documents")
+	spool := flags.String("spool-root", "/var/lib/orbit-documents-spool", "the per-runner spools, on the node's disk")
+	state := flags.String("state-dir", "/var/lib/orbit-documents-state", "what the plugin keeps of each published drive")
 	uidBase := flags.Int("daemon-uid-base", 200000, "the first uid a runner's daemon runs as; each runner on the node gets its own")
 	_ = flags.Parse(args)
-	logger := log.New(os.Stderr, "orbit-files-csi: ", log.LstdFlags)
+	logger := log.New(os.Stderr, "orbit-documents-csi: ", log.LstdFlags)
 	if os.Geteuid() != 0 {
 		logger.Print("csi must run as root: it mounts")
 		return 2
