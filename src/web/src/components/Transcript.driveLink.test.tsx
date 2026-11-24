@@ -9,8 +9,8 @@ import { DriveFilePicker } from './drive/DriveFilePicker';
 import { materializeReferences } from '../lib/composerRefs';
 
 /**
- * A reply that links a drive file (`orbit-document:<id>`, which the runner writes for a path under /home/orbit/Drive, or
- * `orbit-drive:<id>`, its scheme before the Documents rename, which stored transcripts carry) draws that file — name, folder, size — and opens it on the Files page; one that is trashed or gone says so. The composer's
+ * A reply that links a drive file (`orbit-drive:<id>`, which the runner writes for a path under /home/orbit/Drive, or
+ * `orbit-document:<id>`, its scheme while Drive was called Documents, which stored transcripts carry) draws that file — name, folder, size — and opens it on the Files page; one that is trashed or gone says so. The composer's
  * Add from Files picker hands back the paths of the files picked (board docs/mocks/documents/02-web frame 8).
  */
 
@@ -59,7 +59,7 @@ const reply = (text: string) => {
 };
 
 describe('a reply linking a drive file', () => {
-  it.each(['orbit-document', 'orbit-drive'])('draws a %s: link as the file and links to it on the Drive page', async (scheme) => {
+  it.each(['orbit-drive', 'orbit-document'])('draws a %s: link as the file and links to it on the Drive page', async (scheme) => {
     apiMock.mockResolvedValue(FILE);
     await reply(`Saved [sign-in-copy.md](${scheme}:e1) for you.`);
     const card = container.querySelector<HTMLAnchorElement>('a.drive-file-card');
@@ -172,8 +172,8 @@ describe('the composer drive picker', () => {
     expect(materializeReferences('Check #brief.md too', refs)).toBe('Check /home/orbit/Drive/P/brief.md too');
   });
 
-  it('sends a chip without a path as an orbit-document: link', () => {
+  it('sends a chip without a path as an orbit-drive: link', () => {
     const refs = { 'brief.md': { kind: 'drive' as const, id: 'e1' } };
-    expect(materializeReferences('Check #brief.md too', refs)).toBe('Check [brief.md](orbit-document:e1) too');
+    expect(materializeReferences('Check #brief.md too', refs)).toBe('Check [brief.md](orbit-drive:e1) too');
   });
 });

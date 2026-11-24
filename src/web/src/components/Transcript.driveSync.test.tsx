@@ -13,8 +13,9 @@ import { type RunEvent, Transcript } from './Transcript';
 import { resetDriveSyncs } from '../lib/driveSyncs';
 
 /**
- * A documents_sync call is its sync's card, a row of its own rather than a step (board docs/mocks/documents-sync-card);
- * an answer that names no sync, from a runner before the card, stays a call in the steps line.
+ * A drive_sync call is its sync's card, a row of its own rather than a step (board docs/mocks/documents-sync-card), and
+ * so is a documents_sync call, its name while Drive was called Documents; an answer that names no sync, from a runner
+ * before the card, stays a call in the steps line.
  */
 
 const SYNC = {
@@ -24,8 +25,8 @@ const SYNC = {
   startedAt: '2026-11-24T10:00:00Z', updatedAt: '2026-11-24T10:00:10Z', endedAt: null,
 };
 
-const call = (answer: string): RunEvent[] => [
-  { seq: 1, type: 'tool_use', payload: { id: 't1', name: 'mcp__orbit__documents_sync', input: { localPath: 'out', path: '/Reports/out' } } },
+const call = (answer: string, tool = 'drive_sync'): RunEvent[] => [
+  { seq: 1, type: 'tool_use', payload: { id: 't1', name: `mcp__orbit__${tool}`, input: { localPath: 'out', path: '/Reports/out' } } },
   { seq: 2, type: 'tool_result', payload: { toolUseId: 't1', content: answer } },
   { seq: 3, type: 'assistant', payload: { text: 'The sync is running in the background.' } },
 ];
@@ -62,14 +63,15 @@ const mount = async (events: RunEvent[]) => {
   });
 };
 
-describe('a documents_sync call', () => {
+describe.each(['drive_sync', 'documents_sync'])('a %s call', (tool) => {
   it('draws as its sync card, live from the server, from the receipt a runner answers with', async () => {
     await mount(
       call(
         JSON.stringify({
-          receiptVersion: 1, ok: true, outcome: 'written', operation: 'documents_sync', action: 'documents_sync', entityType: 'file',
+          receiptVersion: 1, ok: true, outcome: 'written', operation: tool, action: tool, entityType: 'file',
           id: 'bgj_1', status: 'running', entity: { jobId: 'bgj_1', status: 'running', syncId: 's1' },
         }),
+        tool,
       ),
     );
     const card = container.querySelector('section.drive-sync');
@@ -79,7 +81,7 @@ describe('a documents_sync call', () => {
   });
 
   it('stays a call when its answer names no sync', async () => {
-    await mount(call('{"jobId":"bgj_1","status":"running"}'));
+    await mount(call('{"jobId":"bgj_1","status":"running"}', tool));
     expect(container.querySelector('section.drive-sync')).toBeNull();
   });
 });

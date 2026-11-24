@@ -165,7 +165,7 @@ function FileList({ files, kind, folder }: { files: DriveTransferFile[]; kind: D
 }
 
 /**
- * An agent's run of documents_put or documents_get calls as one card (board docs/mocks/agent-drive-transfer): a bar, the
+ * An agent's run of drive_put or drive_get calls as one card (board docs/mocks/agent-drive-transfer): a bar, the
  * speed and the time left while it goes, and a row per file. A finished run stays a card, with its green bar and its
  * totals: the owner read folding it to one line as the card going away.
  */

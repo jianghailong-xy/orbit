@@ -1,10 +1,10 @@
 /**
- * An agent's transfers to and from Documents (`documents_put` / `documents_get`, `drive_put` / `drive_get` before the
- * rename), as the chat's transfer card draws them
+ * An agent's transfers to and from Drive (`drive_put` / `drive_get`, `documents_put` / `documents_get` while Drive was
+ * called Documents), as the chat's transfer card draws them
  * (DriveTransferCard, board docs/mocks/agent-drive-transfer).
  *
  * While a call runs, the runner sends its bytes as the call's live `tool_output`, one sentence restating the whole
- * count: "Uploaded 3355443 of 11954323 bytes" (runner-go documents_progress.go, driveProgressLine). The durable
+ * count: "Uploaded 3355443 of 11954323 bytes" (runner-go drive_progress.go, driveProgressLine). The durable
  * tool_result replaces it when the call ends, so a finished card is drawn from results alone.
  */
 import { formatSize } from './drive';
@@ -12,11 +12,11 @@ import { formatSize } from './drive';
 export type DriveTransferKind = 'put' | 'get';
 
 const TOOLS: Record<string, DriveTransferKind> = {
-  mcp__orbit__documents_put: 'put',
-  mcp__orbit__documents_get: 'get',
-  // Their names before the Documents rename, which stored transcripts carry.
   mcp__orbit__drive_put: 'put',
   mcp__orbit__drive_get: 'get',
+  // Their names while Drive was called Documents, which stored transcripts carry.
+  mcp__orbit__documents_put: 'put',
+  mcp__orbit__documents_get: 'get',
 };
 
 export function driveTransferKind(toolName: string): DriveTransferKind | null {
@@ -58,7 +58,7 @@ export type DriveTransferFile = {
   sent: number;
   /** Null until the call has said how big the file is. */
   size: number | null;
-  /** `orbit-document:<id>` (`orbit-drive:<id>` before the rename) once an upload is in. */
+  /** `orbit-drive:<id>` (`orbit-document:<id>` while Drive was called Documents) once an upload is in. */
   link?: string;
   error?: string;
   startedAt?: number;
