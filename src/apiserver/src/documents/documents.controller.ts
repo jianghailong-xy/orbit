@@ -49,6 +49,13 @@ export class DocumentsController {
     return this.syncs.list(user.userId);
   }
 
+  /** One agent's sync, whatever its age: the conversation's sync card for the call that started it. */
+  @DOCUMENTS_PAT()
+  @Get('syncs/:id')
+  getSync(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string): Promise<DocumentsSyncView> {
+    return this.syncs.get(user.userId, id);
+  }
+
   // What Files → Storage shows: the drive's share and the rest, each content once (§2.5).
   @DOCUMENTS_PAT()
   @Get('usage')
