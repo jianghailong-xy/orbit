@@ -19,7 +19,7 @@ import { WatchDeliveryService } from '../watches/watch-delivery.service';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { WikiRefusalError, WikiService, normalizeRepoUrl } from '../wiki/wiki.service';
 import { isScheduleItemKind } from '../schedules/schedule-attention';
-import { OWNER_REQUEST_FIELDS, queueOwnerCardTranslation, translatedInto } from '../sessions/card-translation';
+import { OWNER_REQUEST_FIELDS, PROJECT_REOPEN_FIELDS, queueOwnerCardTranslation, translatedInto } from '../sessions/card-translation';
 import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
 import { ownerWordsForAgent } from '../sessions/reply-translation';
 import { isConditionItemKind } from '../conditions/condition-attention';
@@ -32,7 +32,27 @@ import {
   type OwnerRequestChangeAnswer,
   type OwnerRequestChangeFiling,
   type OwnerRequestChangeSpec,
+  PROJECT_ALREADY_OPEN,
+  PROJECT_REOPEN_NOTES,
+  REOPEN_OWNER_CHANNEL_ONLY,
+  REOPEN_REQUEST_DECLINED,
+  RunEventType,
+  projectReopenTitle,
+  type ProjectReopenAskerView,
+  type ProjectReopenSettledStatus,
 } from '@orbit/shared';
+import { NO_DONE_RECORD, reopenRecordOfPress } from '../projects/project-done-derived';
+import { tellCoordinatorProjectReopened } from '../projects/project-started';
+import { SessionsService } from '../sessions/sessions.service';
+import {
+  declinedSinceSettled,
+  newProjectReopenPayload,
+  projectReopenAskers,
+  projectReopenDeclinedMessage,
+  projectReopenText,
+  projectSettledAt,
+  settlePendingProjectReopens,
+} from './project-reopen';
 import { runnerSettingsData } from '../runners/runner-settings';
 import { endUndeliveredGrants, enqueueResolutions } from './owner-request-endings';
 import { OwnerSecretsService, type OwnerSecretGrantView } from './owner-secrets.service';
@@ -54,6 +74,7 @@ import {
   OWNER_REQUEST_NOT_ASKER,
   OWNER_REQUEST_NOT_PENDING,
   OwnerRequestNotFileable,
+  PROJECT_REOPEN,
   SETTINGS_ALREADY_SET,
   SETTINGS_CHANGE,
   SETTINGS_CHANGE_DECLINED,
@@ -161,8 +182,11 @@ export type OwnerRequestView = Prisma.OwnerRequestGetPayload<{ select: typeof VI
   secretGrant?: OwnerSecretGrantView | null;
   /** SECRET: what ends the key (§6.1) — its task (TASK_ENDED) or, for a session with no task, the session. */
   secretScope?: 'TASK' | 'SESSION';
-  /** BROWSER_SIGN_IN: the asking session's title, which the card names ("From session …"); null when it has none. */
+  /** BROWSER_SIGN_IN and PROJECT_REOPEN: the asking session's title, which the card names ("From session …"); null
+   *  when it has none. */
   askedBySessionTitle?: string | null;
+  /** PROJECT_REOPEN: every session that asked, oldest first, with its title ("Also asked by …"). */
+  askers?: ProjectReopenAskerView[];
 };
 
 /** What browser_request_sign_in files (POST /runner/browser/sign-in-requests). */
@@ -200,6 +224,8 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     @Optional() private readonly realtime?: RealtimeService,
     /** What the owner's Create wiki on a WIKI_CREATE card makes the wiki through (`createWiki`). */
     @Optional() private readonly wiki?: WikiService,
+    /** What tells a project's coordinator that the owner reopened it from a PROJECT_REOPEN card (`reopenProject`). */
+    @Optional() private readonly sessions?: SessionsService,
   ) {}
 
   onModuleInit(): void {
@@ -537,6 +563,272 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * A session asks the owner to reopen a DONE or CANCELLED project (docs/project-reopen-request-design.md §4.1), filed
+   * as a PROJECT_REOPEN card the owner answers Reopen or declines. Nothing here writes the project.
+   *
+   *   1. the project is read under the owner (404); an OPEN one is 409 PROJECT_ALREADY_OPEN, nothing filed;
+   *   2. `why` and `plannedWork` are each trimmed, non-empty and at most 2,000 characters (400);
+   *   3. a DECLINED PROJECT_REOPEN this session asked over the settlement the project still stands in is 409
+   *      REOPEN_REQUEST_DECLINED, with the decline's date and reason;
+   *   4. one card waits per project (`owner_request_project_reopen_pending_key`): a session asking while one is PENDING
+   *      joins its `askers`, so its ending reaches it too, and gets it back with `alreadyOpen: true`;
+   *   5. otherwise the card is filed with the server's title, "Reopen project “<title>”?", and
+   *      `{ projectId, statusAtAsk, settledAt, plannedWork, askers }` as its payload.
+   */
+  async fileProjectReopen(
+    ownerId: string,
+    caller: { runnerId: string; sessionHeader: string | undefined },
+    projectId: string,
+    filing: { why?: unknown; plannedWork?: unknown },
+  ): Promise<OwnerRequestView & { created: boolean; alreadyOpen: boolean }> {
+    const askingSessionId = await this.hostedSession(ownerId, caller.runnerId, caller.sessionHeader);
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, ownerId },
+      select: { id: true, title: true, status: true, doneAt: true, updatedAt: true },
+    });
+    if (!project) throw new NotFoundException('project not found');
+    if (project.status === 'OPEN') {
+      throw new ConflictException({
+        code: PROJECT_ALREADY_OPEN,
+        message: `Project “${project.title}” is OPEN; nothing was filed. Retry the write that was refused.`,
+        projectId,
+      });
+    }
+    const text = projectReopenText(filing);
+    if ('error' in text) throw new BadRequestException(text.error);
+    const declined = await this.prisma.ownerRequest.findMany({
+      where: { ownerId, projectId, kind: PROJECT_REOPEN, state: 'DECLINED' },
+      orderBy: { resolvedAt: 'desc' },
+      select: { id: true, askedBySessionId: true, payload: true, resolvedAt: true, resolutionNote: true },
+    });
+    const refused = declined.find((request) =>
+      (request.askedBySessionId === askingSessionId
+        || projectReopenAskers(request.payload).some((asker) => asker.sessionId === askingSessionId))
+      && declinedSinceSettled(request.payload, project));
+    if (refused) {
+      throw new ConflictException({
+        code: REOPEN_REQUEST_DECLINED,
+        message: projectReopenDeclinedMessage(refused.resolvedAt!, refused.resolutionNote),
+        requestId: refused.id,
+        projectId,
+        declinedAt: refused.resolvedAt!.toISOString(),
+        reason: refused.resolutionNote,
+      });
+    }
+
+    // Two sessions asking at once: the second's insert waits on the pending key and fails once the first commits.
+    // Filed again, it finds that card and joins it, as asking after it would have.
+    const fileOnce = () => withTransactionRetry(this.prisma, async (tx) => {
+      const now = new Date();
+      // The project row shared-locked, as every reopen locks it to write: a card is never filed beside a reopen that
+      // committed after the read above, which would leave it waiting on an OPEN project.
+      const [locked] = await tx.$queryRaw<Array<{ status: string }>>`
+        SELECT "status"::text AS "status" FROM "project"
+         WHERE "id" = ${projectId}::uuid AND "owner_id" = ${ownerId}::uuid
+           FOR SHARE`;
+      if (!locked) throw new NotFoundException('project not found');
+      if (locked.status === 'OPEN') {
+        throw new ConflictException({
+          code: PROJECT_ALREADY_OPEN,
+          message: `Project “${project.title}” was reopened just now; nothing was filed. Retry the write that was refused.`,
+          projectId,
+        });
+      }
+      const [pending] = await tx.$queryRaw<Array<{ id: string; askedBySessionId: string; payload: Prisma.JsonValue }>>`
+        SELECT "id", "asked_by_session_id" AS "askedBySessionId", "payload"
+          FROM "owner_request"
+         WHERE "owner_id" = ${ownerId}::uuid AND "project_id" = ${projectId}::uuid
+           AND "kind" = ${PROJECT_REOPEN} AND "state" = 'PENDING'
+           FOR UPDATE`;
+      if (pending) {
+        const askers = projectReopenAskers(pending.payload);
+        const asked = pending.askedBySessionId === askingSessionId || askers.some((a) => a.sessionId === askingSessionId);
+        if (!asked) {
+          const payload = { ...(pending.payload as object), askers: [...askers, { sessionId: askingSessionId, askedAt: now.toISOString() }] };
+          await tx.ownerRequest.update({
+            where: { id: pending.id },
+            data: { payload: payload as unknown as Prisma.InputJsonValue },
+            select: { id: true },
+          });
+        }
+        return { id: pending.id, created: false, joined: !asked };
+      }
+      const created = await tx.ownerRequest.create({
+        data: {
+          ownerId,
+          askedBySessionId: askingSessionId,
+          projectId,
+          kind: PROJECT_REOPEN,
+          state: 'PENDING',
+          title: projectReopenTitle(project.title),
+          why: text.why,
+          payload: newProjectReopenPayload({
+            projectId,
+            statusAtAsk: project.status as ProjectReopenSettledStatus,
+            settledAt: projectSettledAt(project),
+            plannedWork: text.plannedWork,
+            sessionId: askingSessionId,
+            now,
+          }) as unknown as Prisma.InputJsonValue,
+        },
+        select: { id: true },
+      });
+      return { id: created.id, created: true, joined: false };
+    }, loggedRetry(this.logger, 'ownerRequests.fileProjectReopen'));
+    let filed: Awaited<ReturnType<typeof fileOnce>>;
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        filed = await fileOnce();
+        break;
+      } catch (error) {
+        const pendingTaken = error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+        if (!pendingTaken || attempt >= 3) throw error;
+      }
+    }
+    const view = await this.get(ownerId, filed.id);
+    if (filed.created || filed.joined) {
+      // The asking session is now waiting on its owner: its row moves to the top of their list, as any filing's does.
+      await this.prisma.session.updateMany({ where: { id: askingSessionId }, data: { listedAt: new Date() } });
+      this.realtime?.publishOwnerSignalChanged(ownerId, [askingSessionId]);
+    }
+    if (filed.created) {
+      void this.push?.notifyOwnerRequest(view.id);
+      void translationLanguages(this.prisma, ownerId)
+        .then((langs) => { if (langs) this.queueTranslation(ownerId, view, langs); })
+        .catch((error: Error) => this.logger.warn(`translating request ${view.id} failed to queue: ${error.message}`));
+    }
+    return { ...view, created: filed.created, alreadyOpen: !filed.created };
+  }
+
+  /** The session a runner route names in X-Orbit-Session-Id, checked to be one this runner hosts. */
+  private async hostedSession(ownerId: string, runnerId: string, header: string | undefined): Promise<string> {
+    const named = header?.trim();
+    if (!named) {
+      throw new BadRequestException('missing session context: a reopen request is always some session’s, so this door needs X-Orbit-Session-Id');
+    }
+    let id: string;
+    try {
+      id = toUuid(named);
+    } catch {
+      throw new ForbiddenException('X-Orbit-Session-Id names no session this runner hosts');
+    }
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId, assignedRunnerId: runnerId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!session) throw new ForbiddenException('X-Orbit-Session-Id names no session this runner hosts');
+    return session.id;
+  }
+
+  /**
+   * The owner's Reopen on a PROJECT_REOPEN card (docs/project-reopen-request-design.md §4.2), in one transaction under
+   * the project row's lock: a project already OPEN (the owner pressed Reopen on the project page meanwhile) is left as
+   * it is and the card settles DONE "Already reopened"; otherwise the project is written OPEN with exactly the record
+   * the page's press writes (`reopenRecordOfPress`, migration 0469), so the projection leaves it standing. Either way
+   * every PENDING PROJECT_REOPEN of the project settles DONE, each with its delivery to every session that asked it.
+   * After the commit the project's coordinator is told, unless it asked (its ending says so). The owner's own login
+   * only: a request carrying an acting session is refused REOPEN_OWNER_CHANNEL_ONLY before anything is read, and a
+   * personal access token never reaches this door (@PatForbidden('OWNER_INTERACTIVE')).
+   */
+  async reopenProject(
+    ownerId: string,
+    id: string,
+    actingSessionId: string | null,
+    client: OwnerRequestClient | null = null,
+  ): Promise<OwnerRequestView> {
+    if (actingSessionId !== null) {
+      throw new ForbiddenException({
+        code: REOPEN_OWNER_CHANNEL_ONLY,
+        message: 'a project is reopened by the account owner, signed in, with no acting session: the owner presses Reopen on the card.',
+      });
+    }
+    const request = await this.get(ownerId, id);
+    if (request.kind !== PROJECT_REOPEN) throw new BadRequestException('only a PROJECT_REOPEN request reopens a project');
+    const notPending = (state: string) => new ConflictException({
+      code: OWNER_REQUEST_NOT_PENDING,
+      state,
+      message: `this request is already ${state}; an ended request is final and nothing was written`,
+    });
+    if (request.state !== 'PENDING') throw notPending(request.state);
+    const projectId = request.projectId!;
+    const answered = await withTransactionRetry(this.prisma, async (tx) => {
+      const now = new Date();
+      const [project] = await tx.$queryRaw<Array<{ status: string; doneAt: Date | null; updatedAt: Date; coordinatorSessionId: string | null }>>`
+        SELECT "status"::text AS "status", "done_at" AS "doneAt", "updated_at" AS "updatedAt",
+               "coordinator_session_id" AS "coordinatorSessionId"
+          FROM "project"
+         WHERE "id" = ${projectId}::uuid AND "owner_id" = ${ownerId}::uuid
+           FOR NO KEY UPDATE`;
+      if (!project) throw new NotFoundException('project not found');
+      const alreadyOpen = project.status === 'OPEN';
+      if (!alreadyOpen) {
+        const reopen = await reopenRecordOfPress(tx, ownerId, projectId);
+        await tx.project.update({
+          where: { id: projectId },
+          data: { status: 'OPEN', ...NO_DONE_RECORD, ...reopen },
+          select: { id: true },
+        });
+      }
+      const settled = await settlePendingProjectReopens(tx, ownerId, projectId, 'DONE', {
+        resolvedByUserId: ownerId,
+        resolvedClient: client,
+        resolutionNote: alreadyOpen ? PROJECT_REOPEN_NOTES.alreadyReopened : null,
+      }, now);
+      // The card this answer was pressed on ended meanwhile (declined, withdrawn, or the project deleted): the press
+      // rolls back whole.
+      if (!settled.some((row) => row.id === id)) throw notPending((await tx.ownerRequest.findUnique({ where: { id }, select: { state: true } }))?.state ?? 'gone');
+      return { settled, alreadyOpen, settledAt: projectSettledAt(project), coordinatorSessionId: project.coordinatorSessionId };
+    }, loggedRetry(this.logger, 'ownerRequests.reopenProject'));
+    this.delivery?.kick();
+    const askers = [...new Set(answered.settled.flatMap((row) => row.askers))];
+    this.realtime?.publishOwnerSignalChanged(ownerId, askers);
+    this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CHANGED, projectId);
+    if (!answered.alreadyOpen && this.sessions
+      && !(answered.coordinatorSessionId && askers.includes(answered.coordinatorSessionId))) {
+      const plannedWork = (request.payload as { plannedWork?: string } | null)?.plannedWork ?? '';
+      await tellCoordinatorProjectReopened(this.prisma, this.sessions, {
+        ownerId,
+        projectId,
+        doneAt: answered.settledAt,
+        reason: { kind: 'OWNER_REOPENED_ON_REQUEST', requestId: id, plannedWork },
+      }).catch((e) =>
+        this.logger.warn(`coordinator not told project ${projectId} was reopened: ${(e as { message?: string })?.message ?? String(e)}`));
+    }
+    return this.get(ownerId, id);
+  }
+
+  /**
+   * A session leaving a PROJECT_REOPEN card others asked too (design §5): it is taken off `askers`, and the card waits
+   * on for the rest; the asking session's place passes to the next asker when it was the first. Null when this session
+   * is its only asker — the card is withdrawn as any request is — or not an asker at all.
+   */
+  private async leaveProjectReopen(ownerId: string, sessionId: string, id: string): Promise<OwnerRequestView | null> {
+    const left = await withTransactionRetry(this.prisma, async (tx) => {
+      const [row] = await tx.$queryRaw<Array<{ askedBySessionId: string; payload: Prisma.JsonValue }>>`
+        SELECT "asked_by_session_id" AS "askedBySessionId", "payload"
+          FROM "owner_request"
+         WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid AND "state" = 'PENDING'
+           FOR UPDATE`;
+      if (!row) return false;
+      const askers = projectReopenAskers(row.payload);
+      const rest = askers.filter((a) => a.sessionId !== sessionId);
+      if (rest.length === askers.length || rest.length === 0) return false;
+      await tx.ownerRequest.update({
+        where: { id },
+        data: {
+          askedBySessionId: row.askedBySessionId === sessionId ? rest[0].sessionId : row.askedBySessionId,
+          payload: { ...(row.payload as object), askers: rest } as unknown as Prisma.InputJsonValue,
+        },
+        select: { id: true },
+      });
+      return true;
+    }, loggedRetry(this.logger, 'ownerRequests.leaveProjectReopen'));
+    if (!left) return null;
+    this.realtime?.publishOwnerSignalChanged(ownerId, [sessionId]);
+    return this.get(ownerId, id);
+  }
+
+  /**
    * What a WIKI_CREATE is for, or why it may not be filed (design §3.6): the asking session's workspace's repository,
    * which has no wiki in use and was never declined one. Asked before anything is written.
    */
@@ -617,13 +909,25 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     return this.filedBefore(ownerId, askingSessionId, clientRequestId ?? undefined);
   }
 
-  /** Each BROWSER_SIGN_IN request with its asking session's title, which its card names. */
+  /**
+   * Each BROWSER_SIGN_IN and PROJECT_REOPEN request with its asking session's title, which its card names, and each
+   * PROJECT_REOPEN with every session that asked it.
+   */
   private async withSessionTitles(ownerId: string, requests: OwnerRequestView[]): Promise<OwnerRequestView[]> {
-    const askers = [...new Set(requests.filter((r) => r.kind === BROWSER_SIGN_IN_KIND).map((r) => r.askedBySessionId))];
+    const named = (r: OwnerRequestView) => r.kind === BROWSER_SIGN_IN_KIND || r.kind === PROJECT_REOPEN;
+    const askers = [...new Set(requests.filter(named).flatMap((r) => [
+      r.askedBySessionId,
+      ...(r.kind === PROJECT_REOPEN ? projectReopenAskers(r.payload).map((a) => a.sessionId) : []),
+    ]))];
     if (askers.length === 0) return requests;
     const sessions = await this.prisma.session.findMany({ where: { id: { in: askers }, ownerId }, select: { id: true, title: true } });
     const titleOf = new Map(sessions.map((s) => [s.id, s.title]));
-    return requests.map((r) => (r.kind === BROWSER_SIGN_IN_KIND ? { ...r, askedBySessionTitle: titleOf.get(r.askedBySessionId) ?? null } : r));
+    return requests.map((r) => {
+      if (!named(r)) return r;
+      const view = { ...r, askedBySessionTitle: titleOf.get(r.askedBySessionId) ?? null };
+      if (r.kind !== PROJECT_REOPEN) return view;
+      return { ...view, askers: projectReopenAskers(r.payload).map((a) => ({ ...a, title: titleOf.get(a.sessionId) ?? null })) };
+    });
   }
 
   /** The owner's requests in one list (`open` unless named), newest first. */
@@ -662,9 +966,19 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       read: async () => {
         const row = await this.prisma.ownerRequest.findFirst({
           where: { id: request.id, ownerId, state: 'PENDING' },
-          select: { title: true, why: true, ifUnanswered: true, options: true, steps: true, verifyHint: true, translation: true },
+          select: {
+            kind: true, title: true, why: true, ifUnanswered: true, options: true, steps: true, verifyHint: true,
+            payload: true, translation: true,
+          },
         });
-        return row ? { source: row, fields: OWNER_REQUEST_FIELDS, translation: row.translation } : null;
+        if (!row) return null;
+        // A PROJECT_REOPEN's planned work is the agent's words too (design §4.1 step 6); its other payload fields are
+        // Orbit's.
+        if (row.kind === PROJECT_REOPEN) {
+          const plannedWork = (row.payload as { plannedWork?: unknown } | null)?.plannedWork;
+          return { source: { ...row, plannedWork }, fields: PROJECT_REOPEN_FIELDS, translation: row.translation };
+        }
+        return { source: row, fields: OWNER_REQUEST_FIELDS, translation: row.translation };
       },
       write: async (translation) => (await this.prisma.ownerRequest.updateMany({
         where: { id: request.id, ownerId, state: 'PENDING' },
@@ -755,6 +1069,9 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     }
     if (request.kind === SETTINGS_CHANGE) {
       throw new BadRequestException('a SETTINGS_CHANGE request is done when the owner saves its changes, which writes them; it is not marked done by hand');
+    }
+    if (request.kind === PROJECT_REOPEN) {
+      throw new BadRequestException('a PROJECT_REOPEN request is done when the owner reopens its project: POST /owner-requests/:id/reopen-project');
     }
     if (request.kind === 'CHANGE') {
       throw new BadRequestException('a CHANGE request is done when the owner applies it, which writes the setting: POST /owner-requests/:id/apply');
@@ -1019,6 +1336,10 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
   /** The asking session no longer needs it. Only the session that filed a request may withdraw it. */
   async withdraw(ownerId: string, sessionId: string, id: string, reason: string | undefined): Promise<OwnerRequestView> {
     const request = await this.get(ownerId, id);
+    if (request.kind === PROJECT_REOPEN && request.state === 'PENDING') {
+      const left = await this.leaveProjectReopen(ownerId, sessionId, id);
+      if (left) return left;
+    }
     if (request.askedBySessionId !== sessionId || isScheduleItemKind(request.kind) || isConditionItemKind(request.kind)) {
       throw new ForbiddenException({
         code: OWNER_REQUEST_NOT_ASKER,
@@ -1096,7 +1417,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     if (settled.count === 1) this.delivery?.kick();
     const request = await this.get(ownerId, id);
     if (settled.count === 1) {
-      this.realtime?.publishOwnerSignalChanged(ownerId, [request.askedBySessionId]);
+      this.realtime?.publishOwnerSignalChanged(ownerId, request.askers?.map((asker) => asker.sessionId) ?? [request.askedBySessionId]);
       return request;
     }
     if (request.state === 'PENDING') {

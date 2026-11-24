@@ -5,6 +5,7 @@ import {
   RecoveryResource,
   RecoveryRetryPolicy,
   RecoveryUserConfirmation,
+  PROJECT_REOPEN_TOOL,
   uuidToBase62,
 } from '@orbit/shared';
 
@@ -47,6 +48,8 @@ export interface RefusalRecoveryEntry {
   recovery: RefusalRecoveryStated;
   /** [resource type, body field path], in the order the next step reads them. */
   resources: Array<[string, string]>;
+  /** The agent tool the next step is, served on the body as `nextTool` beside the block. */
+  nextTool?: string;
 }
 
 const NONE = { effect: 'NONE', userConfirmation: 'NOT_REQUIRED' } as const;
@@ -128,6 +131,7 @@ export const REFUSAL_RECOVERY: readonly RefusalRecoveryEntry[] = [
     when: 'A settled (DONE or CANCELLED) project stands at an end of the write (R8).',
     recovery: { ...NONE, retryPolicy: 'AFTER_STATE_CHANGE', actionCode: 'AWAIT_OWNER_DECISION', actor: 'USER', disposition: 'HUMAN' },
     resources: [['PROJECT', 'target.projectId'], ['PROJECT', 'projectId'], ['PROJECT', 'scope.projectId'], ['TASK', 'taskId']],
+    nextTool: PROJECT_REOPEN_TOOL,
   },
   {
     code: 'MOVE_TASK_SERVES_SETTLED_CRITERION',
@@ -136,6 +140,7 @@ export const REFUSAL_RECOVERY: readonly RefusalRecoveryEntry[] = [
     when: 'The task to move serves an acceptance criterion of a settled project (R8B).',
     recovery: { ...NONE, retryPolicy: 'AFTER_STATE_CHANGE', actionCode: 'AWAIT_OWNER_DECISION', actor: 'USER', disposition: 'HUMAN' },
     resources: [['PROJECT', 'scope.projectId'], ['TASK', 'taskId']],
+    nextTool: PROJECT_REOPEN_TOOL,
   },
   {
     code: 'CROSS_PROJECT_APPROVAL_REQUIRED',
@@ -384,6 +389,10 @@ export function planFindingRecovery(code: string, requiredAction?: string): Refu
 export function attachRefusalRecovery(body: unknown): void {
   if (body === null || typeof body !== 'object' || Array.isArray(body)) return;
   const obj = body as Record<string, unknown>;
+  // The tool the next step is (a settled project's PROJECT_REOPEN_REQUIRED names project_request_reopen), beside a
+  // block the body stated or the table's.
+  const nextTool = typeof obj.code === 'string' ? entryFor(obj.code, obj.requiredAction)?.nextTool : undefined;
+  if (nextTool && !('nextTool' in obj)) obj.nextTool = nextTool;
   if ('recovery' in obj) return;
   const recovery = refusalRecoveryFor(obj);
   if (recovery) obj.recovery = recovery;
