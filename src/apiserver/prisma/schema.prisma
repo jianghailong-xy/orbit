@@ -2509,6 +2509,11 @@ model Session {
   /// foreign key: a deleted space leaves its chats as sessions. Its partial index over
   /// (wiki_chat_space_id, created_at) is the migration's alone, as schema.prisma cannot spell one.
   wikiChatSpaceId          String?   @map("wiki_chat_space_id") @db.Uuid
+  /// What this chat'"'"'s delivery last told its agent (migration 1561, wiki contract `chat.notes.chat` and `chat.notes.contents`):
+  /// the digest of the `<orbit_wiki_chat>` text, and the confirmed plan version `<orbit_wiki_contents>` named. Written in the
+  /// delivery'"'"'s own transaction, so a claim rolled back sends both again; NULL = never delivered.
+  wikiChatPromptDigest     String?   @map("wiki_chat_prompt_digest")
+  wikiChatContentsVersion  Int?      @map("wiki_chat_contents_version")
   /// The help center's Ask (migration 0850, @orbit/shared HelpAskMarker `{ page }`): a session is an Ask exactly
   /// when it is set. Written by the Ask door (help/help-ask.ts) in this row's own INSERT and never afterwards (a
   /// trigger refuses the UPDATE). An Ask belongs to no workspace, is in no session list, starts read-only on its

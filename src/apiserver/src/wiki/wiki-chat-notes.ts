@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import {
   toUuid,
@@ -40,10 +41,23 @@ export interface WikiChatDelivery {
   turn: { seq: number; kind: string; wikiContext: unknown };
 }
 
+/** The header of `<orbit_wiki_contents>`: what the note is, and what it is not. */
+export const WIKI_CONTENTS_HEADER = "This is a view of the wiki's structure, not a source: it names the pages and says which sections are written. "
+  + 'Read a page for its sentences, and never cite this list.';
+
+/** The most characters the contents note's body holds; a larger plan is listed by section key and written-or-not only. */
+export const WIKI_CHAT_CONTENTS_MAX_CHARS = 30_000;
+
+/** The digest a chat's delivery records of the `<orbit_wiki_chat>` text it handed out (session.wiki_chat_prompt_digest). */
+export const WIKI_CHAT_PROMPT_DIGEST = createHash('sha256').update(WIKI_CHAT_PROMPT).digest('hex');
+
 /**
  * The delivered text with the chat's blocks after the owner's words, or `content` as it was when the turn needs
- * none. `<orbit_wiki_chat>` rides on the chat's first message only (contract `chat.notes.chat.when`) — the one no
- * message or steer of the session precedes; the page and the selection on any message or steer that carried them.
+ * none. `<orbit_wiki_chat>` rides on the chat's first message (contract `chat.notes.chat.when`) — the one no message
+ * or steer of the session precedes — and on the first message after its text changed; `<orbit_wiki_contents>` on the
+ * first message and on the first after the confirmed plan's version changed (`chat.notes.contents.when`). Both markers
+ * are written in this transaction, so a claim rolled back sends both again. The page and the selection ride on any
+ * message or steer that carried them.
  */
 export async function appendWikiChatNotes(
   tx: Prisma.TransactionClient,
@@ -51,8 +65,23 @@ export async function appendWikiChatNotes(
   content: string | undefined,
 ): Promise<string | undefined> {
   const blocks: string[] = [];
-  if (delivery.turn.kind === 'message' && (await opensTheChat(tx, delivery.sessionId, delivery.turn.seq))) {
-    blocks.push(WIKI_CHAT_PROMPT);
+  if (delivery.turn.kind === 'message') {
+    const told = await tx.session.findUnique({
+      where: { id: delivery.sessionId },
+      select: { wikiChatPromptDigest: true, wikiChatContentsVersion: true },
+    });
+    const opens = await opensTheChat(tx, delivery.sessionId, delivery.turn.seq);
+    const marks: { wikiChatPromptDigest?: string; wikiChatContentsVersion?: number } = {};
+    if (opens || told?.wikiChatPromptDigest !== WIKI_CHAT_PROMPT_DIGEST) {
+      blocks.push(WIKI_CHAT_PROMPT);
+      marks.wikiChatPromptDigest = WIKI_CHAT_PROMPT_DIGEST;
+    }
+    const plan = await confirmedPlanLight(tx, delivery);
+    if (plan && (opens || told?.wikiChatContentsVersion !== plan.version)) {
+      blocks.push(await contentsNote(tx, delivery, plan));
+      marks.wikiChatContentsVersion = plan.version;
+    }
+    if (Object.keys(marks).length > 0) await tx.session.updateMany({ where: { id: delivery.sessionId }, data: marks });
   }
   const context = storedContext(delivery.turn.wikiContext);
   if (context?.page?.kind === 'doc') blocks.push(await docPageNote(tx, delivery, context.page));
@@ -149,6 +178,50 @@ async function confirmedPlan(tx: Prisma.TransactionClient, delivery: WikiChatDel
     where: { ownerId: delivery.ownerId, spaceId: delivery.spaceId, status: 'confirmed' },
     select: PLAN_NOTE_SELECT,
   });
+}
+
+/** The confirmed plan as the contents note needs it: documents and section titles, nothing that is written in them. */
+async function confirmedPlanLight(tx: Prisma.TransactionClient, delivery: WikiChatDelivery) {
+  return tx.wikiPlan.findFirst({
+    where: { ownerId: delivery.ownerId, spaceId: delivery.spaceId, status: 'confirmed' },
+    select: PLAN_SELECT,
+  });
+}
+
+/**
+ * `<orbit_wiki_contents>`: the wiki's structure as the confirmed plan holds it, with which sections are written — every
+ * document's number, slug, title and category, and each section's key, title, whether it is written and the repoSha it was
+ * written from. No covers and no sentences: it is a view of where things are, not a source (contract `chat.notes.contents`).
+ * One light read of the section rows (key and repoSha), never `writtenSections`, which loads every sentence.
+ */
+async function contentsNote(
+  tx: Prisma.TransactionClient,
+  delivery: WikiChatDelivery,
+  plan: NonNullable<Awaited<ReturnType<typeof confirmedPlanLight>>>,
+): Promise<string> {
+  const rows = await tx.wikiDoc.findMany({
+    where: { ownerId: delivery.ownerId, spaceId: delivery.spaceId },
+    select: { slug: true, sections: { select: { key: true, repoSha: true } } },
+  });
+  const written = new Map(rows.map((doc) => [doc.slug, new Map(doc.sections.map((section) => [section.key, section.repoSha]))]));
+  const places = numbering(plan);
+  const lines = (compact: boolean): string[] => {
+    const out = [WIKI_CONTENTS_HEADER];
+    for (const doc of plan.docs) {
+      const place = places.get(doc.slug)!;
+      out.push(`${place.number} ${doc.slug} · ${doc.title} · ${place.category.title}`);
+      doc.sections.forEach((section, index) => {
+        const sha = written.get(doc.slug)?.get(section.key);
+        const state = sha === undefined ? 'not written' : compact ? 'written' : `written, repoSha ${sha.slice(0, 12)}`;
+        out.push(`  §${index + 1} ${section.key} · ${compact ? '' : `${section.title} · `}${state}`);
+      });
+    }
+    return out;
+  };
+  // Past the cap a section is named by its key and whether it is written, which is all a page is found by.
+  let body = lines(false);
+  if (body.join('\n').length > WIKI_CHAT_CONTENTS_MAX_CHARS) body = lines(true);
+  return block(WIKI_CHAT_NOTE_TAGS.contents, [['planVersion', plan.version]], body);
 }
 
 /** A document's written sections, by key, with their sentences in order and each sentence's footnotes. */

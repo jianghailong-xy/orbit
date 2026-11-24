@@ -54,6 +54,7 @@ export const WIKI_CHAT_NOTE_TAGS = {
   page: 'orbit_wiki_page',
   selection: 'orbit_wiki_selection',
   drafts: 'orbit_wiki_drafts',
+  contents: 'orbit_wiki_contents',
 } as const;
 
 /** The follow job's numbers and sets (contract `docs.follow`, design §8.1 and §8.5). */
@@ -113,6 +114,8 @@ export const WIKI_CHAT_PROMPT = [
   "You are chatting beside a page of this repository's Orbit wiki. The page the owner is reading, and any sentences they select, arrive as Orbit attachments.",
   "The wiki's documents are written by the server from the code and from records. Never edit a document's text, and never cite a document or a sentence of one as a source.",
   'Before you change anything, decide where the request belongs: knowledge goes into an entry (wiki_propose); a section behind main is rewritten from main, and a change to how a document is organized or written goes into the plan (both wiki_draft); a change to the system itself is a change to the code, or to the design document it cites.',
+  "The page the owner has open is a hint about what they mean, not the limit of what you may look at. The wiki's structure, every document and its sections, is in the Wiki contents note: read it to find the page a question belongs to, and never ask the owner to open a page or to ask again from another one.",
+  "Ask the owner only what only they can answer, and when you ask, give your recommendation with it. Never cite a wiki-reading call in an answer: the owner sees the answer, not how you read.",
   'Everything you propose or draft in this chat is a draft: nothing changes until the owner applies it. Say what each draft would change, never call one applied, and pass replaces with a draft\'s id when you revise it.',
   '</orbit_wiki_chat>',
 ].join('\n');
@@ -242,6 +245,7 @@ export const WIKI_CHAT_COPY = {
   },
   notes: {
     chat: 'Wiki chat',
+    contents: 'Wiki contents',
     pageDoc: 'Wiki page · {where}',
     pageEntry: 'Wiki entry · {title}',
     pagePlan: 'Wiki plan · {doc}',
@@ -1099,6 +1103,7 @@ export function wikiDocChangeLine(change: WikiDocChange): string {
 /** A chat note's attributes, as its block's opening tag carries them (contract `chat.notes`). */
 export type WikiChatNote =
   | { kind: 'chat' }
+  | { kind: 'contents' }
   | { kind: 'page'; of: 'doc'; doc: string; section: number | string }
   | { kind: 'page'; of: 'entry'; title: string }
   | { kind: 'page'; of: 'plan'; doc: string; section?: number | string }
@@ -1112,6 +1117,8 @@ export function wikiChatNoteLabel(note: WikiChatNote): string {
   switch (note.kind) {
     case 'chat':
       return notes.chat;
+    case 'contents':
+      return notes.contents;
     case 'page':
       if (note.of === 'doc') return fill(notes.pageDoc, { where: wikiChatWhere(note.doc, note.section) });
       if (note.of === 'entry') return fill(notes.pageEntry, { title: note.title });
@@ -1166,6 +1173,8 @@ export function parseWikiChatNoteTag(block: string): WikiChatNote | null {
   switch (head[1]) {
     case WIKI_CHAT_NOTE_TAGS.chat:
       return { kind: 'chat' };
+    case WIKI_CHAT_NOTE_TAGS.contents:
+      return { kind: 'contents' };
     case WIKI_CHAT_NOTE_TAGS.page: {
       const of = text('of');
       if (of === 'doc' && doc && section) return { kind: 'page', of, doc, section };

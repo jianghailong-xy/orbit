@@ -329,6 +329,7 @@ public enum WikiChatLogic {
     /// A chat note's attributes, as its block's opening tag carries them.
     public enum Note: Equatable, Sendable {
         case chat
+        case contents
         case pageDoc(doc: String, section: String)
         case pageEntry(title: String)
         /// A plan page; `section` when it shows one of its document's sections (C12).
@@ -339,7 +340,7 @@ public enum WikiChatLogic {
 
     /// The four blocks a chat's delivery appends (contract `chat.notes.*.tag`).
     public static let noteTags: [String: String] = [
-        "chat": "orbit_wiki_chat", "page": "orbit_wiki_page", "selection": "orbit_wiki_selection", "drafts": "orbit_wiki_drafts",
+        "chat": "orbit_wiki_chat", "contents": "orbit_wiki_contents", "page": "orbit_wiki_page", "selection": "orbit_wiki_selection", "drafts": "orbit_wiki_drafts",
     ]
 
     /// What a chat note is named as where a note is named (`describeNote`; `wikiChatNoteLabel`, board 42 ②).
@@ -348,6 +349,8 @@ public enum WikiChatLogic {
         switch note {
         case .chat:
             return WikiChatCopy.noteChat
+        case .contents:
+            return WikiChatCopy.noteContents
         case .pageDoc(let doc, let section):
             return fill(WikiChatCopy.notePageDoc, ["where": place(doc: doc, section: section)])
         case .pageEntry(let title):
@@ -392,6 +395,8 @@ public enum WikiChatLogic {
         switch tag {
         case "orbit_wiki_chat":
             return .chat
+        case "orbit_wiki_contents":
+            return .contents
         case "orbit_wiki_page":
             switch value("of") {
             case "doc":

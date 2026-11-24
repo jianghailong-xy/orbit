@@ -147,7 +147,14 @@ describe('wiki chat contract', () => {
     expect(notes.how).toMatch(/conversation_turn\.content stays the owner's words alone/u);
     expect(notes.how).toMatch(/control-plane-note\.ts/u);
     // The four blocks are the four tags, and the first message's block is the prompt, word for word.
-    expect({ chat: notes.chat.tag, page: notes.page.tag, selection: notes.selection.tag, drafts: notes.drafts.tag }).toEqual({ ...WIKI_CHAT_NOTE_TAGS });
+    expect({ chat: notes.chat.tag, contents: notes.contents.tag, page: notes.page.tag, selection: notes.selection.tag, drafts: notes.drafts.tag }).toEqual({ ...WIKI_CHAT_NOTE_TAGS });
+    expect(notes.chat.when).toMatch(/first message after this text changed/u);
+    expect(notes.contents.when).toMatch(/confirmed plan version differs from the one the chat was last told/u);
+    expect(notes.contents.body).toMatch(/No covers and no sentences/u);
+    expect(notes.contents.cap).toContain("30000");
+    expect(notes.contents.label).toBe('copy.notes.contents');
+    expect(CONTRACT.chat.copy.notes.contents).toBe(WIKI_CHAT_COPY.notes.contents);
+    expect(WIKI_CHAT_COPY.notes.contents).toBe('Wiki contents');
     expect(notes.chat.text).toBe(WIKI_CHAT_PROMPT);
     expect(WIKI_CHAT_PROMPT.startsWith(`<${WIKI_CHAT_NOTE_TAGS.chat}>\n`)).toBe(true);
     expect(WIKI_CHAT_PROMPT.endsWith(`\n</${WIKI_CHAT_NOTE_TAGS.chat}>`)).toBe(true);

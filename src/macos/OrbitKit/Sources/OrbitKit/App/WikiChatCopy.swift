@@ -156,6 +156,7 @@ public enum WikiChatCopy {
     // MARK: the attachment lines (contract `chat.copy.notes`)
 
     public static let noteChat = "Wiki chat"
+    public static let noteContents = "Wiki contents"
     public static let notePageDoc = "Wiki page · {where}"
     public static let notePageEntry = "Wiki entry · {title}"
     public static let notePagePlan = "Wiki plan · {doc}"
@@ -304,7 +305,7 @@ public enum WikiChatCopy {
             "result.waiting": resultWaiting, "result.failed": resultFailed, "result.updatedLead": resultUpdatedLead,
             "result.sentenceOne": resultSentenceOne, "result.sentenceMany": resultSentenceMany,
             "result.same": resultSame, "result.gone": resultGone,
-            "notes.chat": noteChat, "notes.pageDoc": notePageDoc, "notes.pageEntry": notePageEntry,
+            "notes.chat": noteChat, "notes.contents": noteContents, "notes.pageDoc": notePageDoc, "notes.pageEntry": notePageEntry,
             "notes.pagePlan": notePagePlan, "notes.selection": noteSelection, "notes.sentenceOne": noteSentenceOne,
             "notes.sentenceMany": noteSentenceMany, "notes.sourceOne": noteSourceOne, "notes.sourceMany": noteSourceMany,
             "notes.drafts": noteDrafts, "notes.applied": noteApplied, "notes.edited": noteEdited,

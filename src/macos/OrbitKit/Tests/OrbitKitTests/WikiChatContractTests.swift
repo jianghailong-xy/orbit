@@ -364,6 +364,8 @@ final class WikiChatContractTests: XCTestCase {
         switch value["kind"]?.stringValue {
         case "chat":
             return .chat
+        case "contents":
+            return .contents
         case "page":
             switch value["of"]?.stringValue {
             case "doc":   return text(value["doc"]).flatMap { doc in text(value["section"]).map { .pageDoc(doc: doc, section: $0) } }

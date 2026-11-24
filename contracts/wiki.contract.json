@@ -2124,7 +2124,7 @@
     "tables": [
       "wiki_chat_draft"
     ],
-    "migrations": "Made by the tasks that need them — session.wiki_chat_space_id with the chat (C5, migration 0476, beside conversation_turn.wiki_context: the ids a message's page and selection notes are read from at delivery; 0479 validates 0476's SOURCE CHECKs and builds session_wiki_chat_space_idx CONCURRENTLY), wiki_chat_draft with the presses (C6) — each numbered after a scan of main, every origin/project/* and the pushed orbit/* branches, and entered in the censuses: db-write-inventory, public-id-coverage's CONTROLLERS, PUBLIC_ID_FIELDS, the migration ledger and the personal-access-token decorators.",
+    "migrations": "Made by the tasks that need them — session.wiki_chat_prompt_digest and wiki_chat_contents_version, what a chat's delivery last told its agent (migration 1561, written in the delivery's transaction), session.wiki_chat_space_id with the chat (C5, migration 0476, beside conversation_turn.wiki_context: the ids a message's page and selection notes are read from at delivery; 0479 validates 0476's SOURCE CHECKs and builds session_wiki_chat_space_idx CONCURRENTLY), wiki_chat_draft with the presses (C6) — each numbered after a scan of main, every origin/project/* and the pushed orbit/* branches, and entered in the censuses: db-write-inventory, public-id-coverage's CONTROLLERS, PUBLIC_ID_FIELDS, the migration ledger and the personal-access-token decorators.",
     "rules": {
       "selectionSentencesMax": 20,
       "rewritesMax": 5,
@@ -2180,9 +2180,17 @@
       "how": "Each block below is appended at delivery, after the owner's words, as every control-plane note is (src/apiserver/src/runner-api/control-plane-note.ts, recorded beside the echo as controlPlaneNote): conversation_turn.content stays the owner's words alone, and a client draws each block as an Orbit attachment whose line is wikiChatNoteLabel of its opening tag's attributes (board 42 ②: Orbit attached: Wiki selection · 3.1 §3 · 1 sentence · 2 sources), its body folded open on a press. A client that does not know a tag names it as any unknown block — generically, as context — so the Android client and every older one draw them and count nothing from them (design section 9).",
       "chat": {
         "tag": "orbit_wiki_chat",
-        "when": "the chat's first message, and no other",
-        "text": "<orbit_wiki_chat>\nYou are chatting beside a page of this repository's Orbit wiki. The page the owner is reading, and any sentences they select, arrive as Orbit attachments.\nThe wiki's documents are written by the server from the code and from records. Never edit a document's text, and never cite a document or a sentence of one as a source.\nBefore you change anything, decide where the request belongs: knowledge goes into an entry (wiki_propose); a section behind main is rewritten from main, and a change to how a document is organized or written goes into the plan (both wiki_draft); a change to the system itself is a change to the code, or to the design document it cites.\nEverything you propose or draft in this chat is a draft: nothing changes until the owner applies it. Say what each draft would change, never call one applied, and pass replaces with a draft's id when you revise it.\n</orbit_wiki_chat>",
+        "when": "the chat's first message, and the first message after this text changed: the chat records the digest (sha-256, hex) of the text last delivered to it (session.wiki_chat_prompt_digest, migration 1561), and a message whose current text digests differently carries it again, so a chat opened before a deploy gets new instructions once",
+        "text": "<orbit_wiki_chat>\nYou are chatting beside a page of this repository's Orbit wiki. The page the owner is reading, and any sentences they select, arrive as Orbit attachments.\nThe wiki's documents are written by the server from the code and from records. Never edit a document's text, and never cite a document or a sentence of one as a source.\nBefore you change anything, decide where the request belongs: knowledge goes into an entry (wiki_propose); a section behind main is rewritten from main, and a change to how a document is organized or written goes into the plan (both wiki_draft); a change to the system itself is a change to the code, or to the design document it cites.\nThe page the owner has open is a hint about what they mean, not the limit of what you may look at. The wiki's structure, every document and its sections, is in the Wiki contents note: read it to find the page a question belongs to, and never ask the owner to open a page or to ask again from another one.\nAsk the owner only what only they can answer, and when you ask, give your recommendation with it. Never cite a wiki-reading call in an answer: the owner sees the answer, not how you read.\nEverything you propose or draft in this chat is a draft: nothing changes until the owner applies it. Say what each draft would change, never call one applied, and pass replaces with a draft's id when you revise it.\n</orbit_wiki_chat>",
         "label": "copy.notes.chat"
+      },
+      "contents": {
+        "tag": "orbit_wiki_contents",
+        "when": "the chat's first message, and the first message after the space's confirmed plan version differs from the one the chat was last told (session.wiki_chat_contents_version, migration 1561), whatever page the message carries (design 4.2, decision D3). Both markers are written in the delivery's own transaction like wiki_chat_draft.told_at, so a claim rolled back sends the note again. A space with no confirmed plan has none to send.",
+        "attributes": "planVersion (the confirmed plan's version)",
+        "body": "A header saying the note is a view of the wiki's structure and not a source, then per document, in the plan's order, its number, slug, title and category, and per section its number, key, title, whether it is written, and the repoSha (first 12 characters) it was written from. No covers and no sentences, which a page or a selection brings. Built from the confirmed plan and one light read of the section rows (key and repoSha), never the sentences.",
+        "cap": "At most 30000 characters of body (WIKI_CHAT_CONTENTS_MAX_CHARS); a plan whose full listing is longer is listed by section number, key and written-or-not alone. Measured: a plan of 35 documents (rules.docsMax) with 8 sections each is 25942 characters in full form.",
+        "label": "copy.notes.contents"
       },
       "page": {
         "tag": "orbit_wiki_page",
@@ -2418,6 +2426,7 @@
       },
       "notes": {
         "chat": "Wiki chat",
+        "contents": "Wiki contents",
         "pageDoc": "Wiki page · {where}",
         "pageEntry": "Wiki entry · {title}",
         "pagePlan": "Wiki plan · {doc}",

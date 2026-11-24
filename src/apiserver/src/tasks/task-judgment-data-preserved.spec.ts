@@ -3464,7 +3464,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1551_documents_tables',
       // 1560 creates document_sync (docs/documents-directory-sync-design.md S4): a new table with two foreign-key keys and
       // two indexes. No existing row, trigger, function or DONE fence is touched.
-      '1560_document_sync'],
+      '1560_document_sync',
+      // 1561 adds two nullable columns to session (wiki_chat_prompt_digest, wiki_chat_contents_version) in short lock
+      // tries; `session` is not a preserved relation, no row is written, and no trigger, function or DONE fence changes.
+      '1561_wiki_chat_delivery_markers'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
