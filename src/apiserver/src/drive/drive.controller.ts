@@ -303,7 +303,7 @@ function send(content: DriveContent, res: Response): StreamableFile | undefined 
 }
 
 /**
- * The download URL a Files page minted (`POST /documents/entries/:id/download-link`), opened by a navigation that carries no
+ * The download URL a Files page minted (`POST /drive/entries/:id/download-link`), opened by a navigation that carries no
  * login: the signed token is the credential, bound to one owner, file and version, and expired, forged or stale it is the
  * one 404. Range, If-Range and If-None-Match work as on the owner's content route.
  */

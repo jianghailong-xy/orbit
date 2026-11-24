@@ -232,7 +232,7 @@ test('Documents drive: restore one item out of Trash, and the minted download UR
     const reply = await mint(owner, report);
     assert.equal(reply.status, 200, await reply.clone().text());
     const link = (await reply.json()) as { path: string; expiresAt: string };
-    assert.match(link.path, /^\/api\/documents\/dl\/[^/]+$/);
+    assert.match(link.path, /^\/api\/drive\/dl\/[^/]+$/);
     assert.ok(Date.parse(link.expiresAt) > Date.now() && Date.parse(link.expiresAt) <= Date.now() + 5 * 60_000 + 1000);
     const whole = await open(link.path);
     assert.equal(whole.status, 200);

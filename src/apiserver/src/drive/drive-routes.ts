@@ -1,23 +1,24 @@
 /**
- * Where the owner's Documents routes answer (drive.controller.ts): /documents, and /drive as an alias of the very same
- * handlers, because runners and web bundles already deployed call /drive. Callers in this tree use /documents.
+ * Where the owner's Drive routes answer (drive.controller.ts): /drive, and /documents as an alias of the very same
+ * handlers, because runners and web bundles deployed while Drive was called Documents call /documents. Callers in this
+ * tree use /drive.
  */
-export const DRIVE_ROUTE_PREFIXES = ['documents', 'drive'];
+export const DRIVE_ROUTE_PREFIXES = ['drive', 'documents'];
 
 /**
- * A route list's `METHOD /documents/…` key (anything may follow the path) as every prefix answers it, so a census that
- * names each route a controller mounts names the /drive alias too, and holds it to the same decision.
+ * A route list's `METHOD /drive/…` key (anything may follow the path) as every prefix answers it, so a census that
+ * names each route a controller mounts names the /documents alias too, and holds it to the same decision.
  */
 export const underEveryDrivePrefix = (route: string): string[] =>
-  DRIVE_ROUTE_PREFIXES.map((prefix) => route.replace(' /documents/', ` /${prefix}/`));
+  DRIVE_ROUTE_PREFIXES.map((prefix) => route.replace(' /drive/', ` /${prefix}/`));
 
 /**
- * Where the runner Documents door answers (runner-drive.controller.ts): /runner/documents, and /runner/drive as an
- * alias of the very same handlers, because runners and mount daemons already deployed call /runner/drive. Callers in this
- * tree use /runner/documents.
+ * Where the runner drive door answers (runner-drive.controller.ts): /runner/drive, and /runner/documents as an alias of
+ * the very same handlers, because runners and mount daemons deployed while Drive was called Documents call
+ * /runner/documents. Callers in this tree use /runner/drive.
  */
-export const RUNNER_DRIVE_ROUTE_PREFIXES = ['runner/documents', 'runner/drive'];
+export const RUNNER_DRIVE_ROUTE_PREFIXES = ['runner/drive', 'runner/documents'];
 
-/** A route list's `METHOD /runner/documents/…` key as every runner door prefix answers it (anything may follow the path). */
+/** A route list's `METHOD /runner/drive/…` key as every runner door prefix answers it (anything may follow the path). */
 export const underEveryRunnerDrivePrefix = (route: string): string[] =>
-  RUNNER_DRIVE_ROUTE_PREFIXES.map((prefix) => route.replace(' /runner/documents/', ` /${prefix}/`));
+  RUNNER_DRIVE_ROUTE_PREFIXES.map((prefix) => route.replace(' /runner/drive/', ` /${prefix}/`));

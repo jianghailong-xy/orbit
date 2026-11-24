@@ -216,20 +216,20 @@ export interface TenantCase {
 export const paramsOf = (route: string): string[] => [...route.matchAll(/:(\w+)/g)].map((m) => m[1]);
 
 /**
- * The /drive aliases of the Documents cases that spend a spare of A's: a delete or a restore that A's own request uses
- * up, so a second run of it under /drive finds nothing left to answer. Read by hand instead (TENANT_ISOLATION_BY_HAND).
+ * The /documents aliases of the Drive cases that spend a spare of A's: a delete or a restore that A's own request uses
+ * up, so a second run of it under /documents finds nothing left to answer. Read by hand instead (TENANT_ISOLATION_BY_HAND).
  */
 const DRIVE_SPARE_SPENDING_ALIASES: Readonly<Record<string, string>> = {
-  'DELETE /drive/entries/:id': 'drive/drive.service.ts:1097 (moveToTrash)',
-  'POST /drive/uploads/:id/complete': 'drive/drive-uploads.service.ts:92 (complete)',
-  'DELETE /drive/uploads/:id': 'drive/drive-uploads.service.ts:153 (abandon)',
-  'DELETE /drive/versions/:id': 'drive/drive.service.ts:1386 (deleteVersion)',
-  'POST /drive/trash/groups/:id/restore': 'drive/drive.service.ts:1203 (restoreGroup)',
-  'DELETE /drive/trash/groups/:id': 'drive/drive.service.ts:1364 (deleteGroup)',
-  'POST /drive/trash/groups/:id/items/:entryId/restore': 'drive/drive.service.ts:1278 (restoreItem)',
+  'DELETE /documents/entries/:id': 'drive/drive.service.ts:1097 (moveToTrash)',
+  'POST /documents/uploads/:id/complete': 'drive/drive-uploads.service.ts:92 (complete)',
+  'DELETE /documents/uploads/:id': 'drive/drive-uploads.service.ts:153 (abandon)',
+  'DELETE /documents/versions/:id': 'drive/drive.service.ts:1386 (deleteVersion)',
+  'POST /documents/trash/groups/:id/restore': 'drive/drive.service.ts:1203 (restoreGroup)',
+  'DELETE /documents/trash/groups/:id': 'drive/drive.service.ts:1364 (deleteGroup)',
+  'POST /documents/trash/groups/:id/items/:entryId/restore': 'drive/drive.service.ts:1278 (restoreItem)',
 };
 
-/** Cases keyed `METHOD /documents/…`, each held under /documents and under its /drive alias (drive/drive-routes.ts). */
+/** Cases keyed `METHOD /drive/…`, each held under /drive and under its /documents alias (drive/drive-routes.ts). */
 const driveUnderEveryPrefix = <T>(cases: Record<string, T>): Record<string, T> =>
   Object.fromEntries(Object.entries(cases).flatMap(([key, c]) => underEveryDrivePrefix(key).map((route) => [route, c])));
 
@@ -331,32 +331,32 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
 
   // ── Documents (docs/documents-drive-technical-design.md §4.1, §4.4): every read and write by (id, owner) ──────────
   ...driveUnderEveryPrefix({
-    'GET /documents/entries/:id': { request: (of) => ({ params: { id: of.driveFileId } }) },
-    'GET /documents/syncs/:id': { request: (of) => ({ params: { id: of.driveSyncId } }) },
-    'PATCH /documents/entries/:id': { request: (of) => ({ params: { id: of.driveFileId }, body: { name: 'renamed by the census.txt' } }) },
-    'POST /documents/entries/:id/share-check': { request: (of) => ({ params: { id: of.driveFileId } }) },
-    'GET /documents/entries/:id/versions': { request: (of) => ({ params: { id: of.driveFileId } }) },
-    'GET /documents/entries/:id/content': { request: (of) => ({ params: { id: of.driveFileId } }) },
-    'GET /documents/versions/:id/content': { request: (of) => ({ params: { id: of.driveVersionId } }) },
-    'GET /documents/uploads/:id': { request: (of) => ({ params: { id: of.driveUploadId } }) },
+    'GET /drive/entries/:id': { request: (of) => ({ params: { id: of.driveFileId } }) },
+    'GET /drive/syncs/:id': { request: (of) => ({ params: { id: of.driveSyncId } }) },
+    'PATCH /drive/entries/:id': { request: (of) => ({ params: { id: of.driveFileId }, body: { name: 'renamed by the census.txt' } }) },
+    'POST /drive/entries/:id/share-check': { request: (of) => ({ params: { id: of.driveFileId } }) },
+    'GET /drive/entries/:id/versions': { request: (of) => ({ params: { id: of.driveFileId } }) },
+    'GET /drive/entries/:id/content': { request: (of) => ({ params: { id: of.driveFileId } }) },
+    'GET /drive/versions/:id/content': { request: (of) => ({ params: { id: of.driveVersionId } }) },
+    'GET /drive/uploads/:id': { request: (of) => ({ params: { id: of.driveUploadId } }) },
     // An empty body is answered 400 for A (a chunk holds at least one byte): not a 404, and B is refused before anything else is read.
-    'PUT /documents/uploads/:id/chunks/:idx': {
+    'PUT /drive/uploads/:id/chunks/:idx': {
       request: (of) => ({ params: { id: of.driveUploadId, idx: 0 }, headers: { 'x-orbit-chunk-sha256': 'a'.repeat(64) } }),
     },
     // As a copy: the owner's own restore leaves the version in Trash for the cases after it.
-    'POST /documents/versions/:id/restore': { request: (of) => ({ params: { id: of.driveVersionId }, body: { as: 'COPY' } }) },
-    'GET /documents/trash/groups/:id': { request: (of) => ({ params: { id: of.driveTrashGroupId } }) },
-    'POST /documents/entries/:id/download-link': { request: (of) => ({ params: { id: of.driveFileId } }) },
+    'POST /drive/versions/:id/restore': { request: (of) => ({ params: { id: of.driveVersionId }, body: { as: 'COPY' } }) },
+    'GET /drive/trash/groups/:id': { request: (of) => ({ params: { id: of.driveTrashGroupId } }) },
+    'POST /drive/entries/:id/download-link': { request: (of) => ({ params: { id: of.driveFileId } }) },
   }),
-  // Each of these spends a spare of A's, so it is held under /documents alone; its /drive alias is read by hand
+  // Each of these spends a spare of A's, so it is held under /drive alone; its /documents alias is read by hand
   // (DRIVE_SPARE_SPENDING_ALIASES).
-  'DELETE /documents/entries/:id': { request: (of) => ({ params: { id: of.spare.driveEntryId } }) },
-  'POST /documents/uploads/:id/complete': { request: (of) => ({ params: { id: of.spare.driveCompleteUploadId } }) },
-  'DELETE /documents/uploads/:id': { request: (of) => ({ params: { id: of.spare.driveAbandonUploadId } }) },
-  'DELETE /documents/versions/:id': { request: (of) => ({ params: { id: of.spare.driveVersionId } }) },
-  'POST /documents/trash/groups/:id/restore': { request: (of) => ({ params: { id: of.spare.driveRestoreGroupId } }) },
-  'DELETE /documents/trash/groups/:id': { request: (of) => ({ params: { id: of.spare.driveTrashGroupId } }) },
-  'POST /documents/trash/groups/:id/items/:entryId/restore': {
+  'DELETE /drive/entries/:id': { request: (of) => ({ params: { id: of.spare.driveEntryId } }) },
+  'POST /drive/uploads/:id/complete': { request: (of) => ({ params: { id: of.spare.driveCompleteUploadId } }) },
+  'DELETE /drive/uploads/:id': { request: (of) => ({ params: { id: of.spare.driveAbandonUploadId } }) },
+  'DELETE /drive/versions/:id': { request: (of) => ({ params: { id: of.spare.driveVersionId } }) },
+  'POST /drive/trash/groups/:id/restore': { request: (of) => ({ params: { id: of.spare.driveRestoreGroupId } }) },
+  'DELETE /drive/trash/groups/:id': { request: (of) => ({ params: { id: of.spare.driveTrashGroupId } }) },
+  'POST /drive/trash/groups/:id/items/:entryId/restore': {
     request: (of) => ({ params: { id: of.spare.driveRestoreItemGroupId, entryId: of.spare.driveRestoreItemEntryId } }),
     nested: ['entryId'],
   },
@@ -988,12 +988,12 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
  * that shows the route finds its object only under the caller's own account. Kept as short as it can be.
  */
 export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
-  // ── Documents' /drive alias, where its case spends a spare (DRIVE_SPARE_SPENDING_ALIASES) ──────────────────────
+  // ── Drive's /documents alias, where its case spends a spare (DRIVE_SPARE_SPENDING_ALIASES) ─────────────────────
   ...Object.fromEntries(Object.entries(DRIVE_SPARE_SPENDING_ALIASES).map(([route, scoped]) => [route,
-    `the same handler as ${route.replace(' /drive/', ' /documents/')}, whose case above holds it across accounts: `
-    + 'DriveController is one class mounted under both prefixes (drive/drive.controller.ts:31, '
+    `the same handler as ${route.replace(' /documents/', ' /drive/')}, whose case above holds it across accounts: `
+    + 'DriveController is one class mounted under both prefixes (drive/drive.controller.ts:33, '
     + `@Controller(DRIVE_ROUTE_PREFIXES)), so the alias reaches the same lookup by (id, owner), ${scoped}; the case `
-    + "spends a spare of A's, which a second run under /drive would find already spent"])),
+    + "spends a spare of A's, which a second run under /documents would find already spent"])),
   // ── the owner's tier for a built-in engine's model (docs/subagent-design.md §7) ─────────────────────────
   'PATCH /providers/builtin/:engine/model-tier':
     'the path names an engine (claude, cursor, …), which every account shares, not an object of any account: the write '
@@ -1352,19 +1352,19 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
     request: (of) => ({ params: {}, body: { kind: 'DRIVE_FILE', driveEntryId: of.driveFileId } }),
   },
   ...driveUnderEveryPrefix({
-    'GET /documents/entries query parentId': { request: (of) => ({ params: {}, query: { parentId: of.driveFolderId } }) },
-    'GET /documents/trash/groups/:id query parentId': {
+    'GET /drive/entries query parentId': { request: (of) => ({ params: {}, query: { parentId: of.driveFolderId } }) },
+    'GET /drive/trash/groups/:id query parentId': {
       request: (of, mine) => ({ params: { id: mine.driveTrashGroupId }, query: { parentId: of.driveFolderId } }),
     },
-    'POST /documents/folders body parentId': { request: (of) => ({ params: {}, body: { parentId: of.driveFolderId, name: 'census folder' } }) },
-    'POST /documents/uploads body parentId': { request: (of) => ({ params: {}, body: { parentId: of.driveFolderId, name: 'census.bin', size: 1 } }) },
-    'POST /documents/uploads body dropRootId': {
+    'POST /drive/folders body parentId': { request: (of) => ({ params: {}, body: { parentId: of.driveFolderId, name: 'census folder' } }) },
+    'POST /drive/uploads body parentId': { request: (of) => ({ params: {}, body: { parentId: of.driveFolderId, name: 'census.bin', size: 1 } }) },
+    'POST /drive/uploads body dropRootId': {
       request: (of, mine) => ({ params: {}, body: { parentId: mine.driveFolderId, name: 'census.bin', size: 1, relativePath: 'Dir/census.bin', dropRootId: of.driveFolderId } }),
     },
-    'POST /documents/entries/:id/download-link body versionId': {
+    'POST /drive/entries/:id/download-link body versionId': {
       request: (of, mine) => ({ params: { id: mine.driveFileId }, body: { versionId: of.driveVersionId } }),
     },
-    'PATCH /documents/entries/:id body parentId': {
+    'PATCH /drive/entries/:id body parentId': {
       request: (of, mine) => ({ params: { id: mine.driveFileId }, body: { parentId: of.driveFolderId } }),
     },
   }),

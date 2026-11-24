@@ -36,7 +36,7 @@ export const PAT_SCOPES = [
   'wiki:read',
   'wiki:write',
   'events:read',
-  // The owner's Documents (/documents/*, and its /drive/* alias): one scope for reading and writing them, so it is not a `:read`
+  // The owner's Drive (/drive/*, and its /documents/* alias): one scope for reading and writing them, so it is not a `:read`
   // and the read-only preset leaves it out. It was called `files`; PAT_SCOPE_ALIASES keeps that name working.
   'documents',
   // POST /notify: a push to the account owner's Orbit apps, and nothing else — the narrow grant a monitoring system holds.

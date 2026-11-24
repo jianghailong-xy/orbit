@@ -97,7 +97,7 @@ function rangeOf(header: string | undefined, size: number): { start: number; end
  *   - A staging is the runner's that opened it. A managed runner's commit is fenced in its own transaction (§8.2).
  *
  * Every rule of a write is the name layer's (DriveService); this door only names entries by path and says who writes.
- * It answers at /runner/documents, and at /runner/drive for runners and mount daemons already deployed (drive-routes.ts).
+ * It answers at /runner/drive, and at /runner/documents for runners and mount daemons already deployed (drive-routes.ts).
  */
 @UseGuards(RunnerAuthGuard, DriveEnabledGuard)
 @AcceptsDriveMountCredential()
