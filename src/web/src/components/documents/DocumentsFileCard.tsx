@@ -1,5 +1,5 @@
 import '../../pages/DocumentsPage.css';
-import { FileOutlined } from '@ant-design/icons';
+import { FileOutlined, FolderOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { documentsEntryQuery, formatSize } from '../../lib/documents';
@@ -46,14 +46,18 @@ export function DocumentsFileCard({ id, label }: { id: string; label?: string })
       </span>
     );
   }
-  const to = `/documents?${new URLSearchParams({ ...(file.parentId ? { folder: file.parentId } : {}), file: file.id })}`;
+  // A folder (what drive_sync's summary links) opens itself and has no size of its own.
+  const folder = file.kind === 'FOLDER';
+  const to = folder
+    ? `/documents?${new URLSearchParams({ folder: file.id })}`
+    : `/documents?${new URLSearchParams({ ...(file.parentId ? { folder: file.parentId } : {}), file: file.id })}`;
   return (
     <Link className="drive-file-card" to={to}>
-      <FileOutlined aria-hidden="true" />
+      {folder ? <FolderOutlined aria-hidden="true" /> : <FileOutlined aria-hidden="true" />}
       <span className="drive-file-text">
         <span className="drive-file-name">{file.name}</span>
         <span className="drive-file-sub">
-          {folderTrail(file.path)} · {formatSize(file.sizeBytes)}
+          {folder ? folderTrail(file.path) : `${folderTrail(file.path)} · ${formatSize(file.sizeBytes)}`}
         </span>
       </span>
     </Link>

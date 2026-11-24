@@ -73,12 +73,12 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | Caller | Routes |
 | --- | --- |
 | `public` | 41 |
-| `user` | 562 |
+| `user` | 564 |
 | `admin` | 31 |
-| `runner` | 248 |
+| `runner` | 252 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **886** |
+| **Total** | **892** |
 
 ## Public routes
 
@@ -184,6 +184,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/documents/folders` | body `CreateDocumentsFolderDto` | `DocumentsController.createFolder` |
 | `GET` | `/api/documents/resolve` | query `path` | `DocumentsController.resolve` |
 | `GET` | `/api/documents/search` | query `cursor`, `limit`, `q` | `DocumentsController.search` |
+| `GET` | `/api/documents/syncs` | — | `DocumentsController.listSyncs` |
 | `DELETE` | `/api/documents/trash` | — | `DocumentsController.emptyTrash` |
 | `GET` | `/api/documents/trash` | query `cursor`, `limit` | `DocumentsController.trash` |
 | `DELETE` | `/api/documents/trash/groups/:id` | path `id` | `DocumentsController.deleteGroup` |
@@ -211,6 +212,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/drive/folders` | body `CreateDocumentsFolderDto` | `DocumentsController.createFolder` |
 | `GET` | `/api/drive/resolve` | query `path` | `DocumentsController.resolve` |
 | `GET` | `/api/drive/search` | query `cursor`, `limit`, `q` | `DocumentsController.search` |
+| `GET` | `/api/drive/syncs` | — | `DocumentsController.listSyncs` |
 | `DELETE` | `/api/drive/trash` | — | `DocumentsController.emptyTrash` |
 | `GET` | `/api/drive/trash` | query `cursor`, `limit` | `DocumentsController.trash` |
 | `DELETE` | `/api/drive/trash/groups/:id` | path `id` | `DocumentsController.deleteGroup` |
@@ -766,6 +768,8 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `PUT` | `/api/runner/documents/stagings/:id/chunks/:idx` | path `id`, `idx` | `RunnerDocumentsController.putChunk` |
 | `POST` | `/api/runner/documents/stagings/:id/keepalive` | body `RunnerDocumentsKeepaliveDto`; path `id` | `RunnerDocumentsController.keepalive` |
 | `GET` | `/api/runner/documents/stat` | query `id`, `path` | `RunnerDocumentsController.stat` |
+| `POST` | `/api/runner/documents/syncs` | body `RunnerDocumentsSyncOpenDto` | `RunnerDocumentsSyncsController.open` |
+| `PATCH` | `/api/runner/documents/syncs/:id` | body `RunnerDocumentsSyncReportDto`; path `id` | `RunnerDocumentsSyncsController.report` |
 | `GET` | `/api/runner/documents/usage` | — | `RunnerDocumentsController.usage` |
 | `POST` | `/api/runner/documents/utimens` | body `RunnerDocumentsUtimensDto` | `RunnerDocumentsController.utimens` |
 | `GET` | `/api/runner/drive/changes` | query `since`, `wait` | `RunnerDocumentsController.changes` |
@@ -783,6 +787,8 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `PUT` | `/api/runner/drive/stagings/:id/chunks/:idx` | path `id`, `idx` | `RunnerDocumentsController.putChunk` |
 | `POST` | `/api/runner/drive/stagings/:id/keepalive` | body `RunnerDocumentsKeepaliveDto`; path `id` | `RunnerDocumentsController.keepalive` |
 | `GET` | `/api/runner/drive/stat` | query `id`, `path` | `RunnerDocumentsController.stat` |
+| `POST` | `/api/runner/drive/syncs` | body `RunnerDocumentsSyncOpenDto` | `RunnerDocumentsSyncsController.open` |
+| `PATCH` | `/api/runner/drive/syncs/:id` | body `RunnerDocumentsSyncReportDto`; path `id` | `RunnerDocumentsSyncsController.report` |
 | `GET` | `/api/runner/drive/usage` | — | `RunnerDocumentsController.usage` |
 | `POST` | `/api/runner/drive/utimens` | body `RunnerDocumentsUtimensDto` | `RunnerDocumentsController.utimens` |
 | `GET` | `/api/runner/files` | query `evidenceId`, `sessionId`, `taskId` | `RunnerFilesController.list` |

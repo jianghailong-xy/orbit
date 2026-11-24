@@ -57,6 +57,7 @@ import {
   type DocumentsEntry,
   type DocumentsShareLink,
 } from '../lib/documents';
+import { useDocumentsSyncs } from '../lib/documentsSyncs';
 import { addUploads, useDocumentsUploads, type UploadRequest } from '../lib/documentsUploads';
 import { showToast } from '../lib/toastStore';
 import { useToast } from '../lib/toast';
@@ -493,6 +494,7 @@ function DocumentsBrowser() {
   const listing = useQuery(documentsFolderQuery(folderId));
   const links = useQuery(documentsShareLinksQuery());
   const { uploads, completed } = useDocumentsUploads();
+  const syncs = useDocumentsSyncs();
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -889,7 +891,7 @@ function DocumentsBrowser() {
               <span>Files or folders, any size</span>
             </div>
           )}
-          <DocumentsUploadTray uploads={uploads} />
+          <DocumentsUploadTray uploads={uploads} syncs={syncs} />
         </section>
         {selected && (
           <DetailsPane

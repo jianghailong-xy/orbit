@@ -441,6 +441,19 @@ func documentsToolDescriptors(obj func(map[string]interface{}, ...string) map[st
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
 		},
 		{
+			"name": "documents_sync",
+			"description": "Copy a local directory into a Documents folder, once, in the background. Answers at once with a " +
+				"background job id; you are woken when it ends, and its last output line is the summary (uploaded, unchanged, " +
+				"deleted, failed). Files already the same in Documents are skipped, so a second sync only sends what changed. " +
+				"One way: nothing comes down. The owner watches it in the Documents page's upload tray.",
+			"inputSchema": obj(map[string]interface{}{
+				"localPath": map[string]interface{}{"type": "string", "description": "A directory in this session's checkout or uploads directory."},
+				"path":      map[string]interface{}{"type": "string", "description": "The Documents folder to copy into, such as /Reports/out."},
+				"delete":    map[string]interface{}{"type": "boolean", "description": "Move Documents files under path that the directory no longer has to the owner's Trash."},
+			}, "localPath", "path"),
+			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
+		},
+		{
 			"name":        "documents_delete",
 			"description": "Move a drive entry to the owner's Trash. The owner can restore it from the Documents page. Agents cannot see Trash.",
 			"inputSchema": obj(map[string]interface{}{"path": drivePath}, "path"),

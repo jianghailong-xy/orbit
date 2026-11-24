@@ -3461,7 +3461,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // the drive_change sequence: catalog renames only, so no row is written or removed and nothing is created, and
       // no column, value or reference changes. None of them is a preserved relation, and no trigger, function or DONE
       // fence names them.
-      '1551_documents_tables'],
+      '1551_documents_tables',
+      // 1560 creates document_sync (docs/documents-directory-sync-design.md S4): a new table with two foreign-key keys and
+      // two indexes. No existing row, trigger, function or DONE fence is touched.
+      '1560_document_sync'],
+
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

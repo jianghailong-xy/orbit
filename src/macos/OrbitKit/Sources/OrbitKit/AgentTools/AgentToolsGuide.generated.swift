@@ -215,7 +215,8 @@ let agentToolsGuideJSON = #"""
         "documents_get",
         "documents_list",
         "documents_move",
-        "documents_delete"
+        "documents_delete",
+        "documents_sync"
       ],
       "topic": "files"
     },
@@ -746,6 +747,7 @@ let agentToolsGuideJSON = #"""
         "documents_list",
         "documents_move",
         "documents_put",
+        "documents_sync",
         "file_fetch",
         "file_list",
         "file_pin",

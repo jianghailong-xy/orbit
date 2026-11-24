@@ -169,9 +169,11 @@ func orbitDriveGuide() string {
 	}
 	const readOnly = "Verification, judgment and guest-driven turns (a message carrying the ORBIT_GUEST marker) read the drive and do not write it."
 	if !driveMounted() {
-		return "The owner's Documents drive is reached with documents_put, documents_get, documents_list, documents_move and " +
-			"documents_delete, or `orbit documents put|get|ls|mv|rm`, by drive path (/Proj/r.md). documents_put reads only this " +
-			"session's checkout or uploads directory and overwrites with a version; documents_get saves into the uploads directory. A delete moves the " +
+		return "The owner's Documents drive is reached with documents_put, documents_get, documents_list, documents_move, " +
+			"documents_delete and documents_sync, or `orbit documents put|get|ls|mv|rm|sync`, by drive path (/Proj/r.md). " +
+			"documents_put reads only this session's checkout or uploads directory and overwrites with a version; documents_sync " +
+			"copies a whole directory from there once, in the background, skipping files already the same; documents_get saves " +
+			"into the uploads directory. A delete moves the " +
 			"entry to the owner's Trash, which agents cannot see or restore, and no tool shares a drive file. " + readOnly
 	}
 	return "~/Documents (/home/orbit/Documents, mounted at " + driveMountPath + ") is the owner's permanent Documents drive, " +

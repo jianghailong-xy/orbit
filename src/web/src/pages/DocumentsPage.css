@@ -340,13 +340,14 @@
   flex-wrap: wrap;
 }
 
-/* The upload tray (frame 3). */
+/* The upload tray (frame 3): the window's bottom-right corner, whatever the folder's length. Below dialogs (2050). */
 .files-tray {
-  position: sticky;
-  float: right;
-  bottom: 12px;
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 100;
   width: 340px;
-  margin-top: 16px;
+  max-width: calc(100vw - 48px);
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--bg-raised);
@@ -433,6 +434,63 @@
 }
 .files-tray-done .files-tray-action {
   color: var(--success);
+}
+
+/* An agent's directory sync in the tray (board documents-sync-tray). */
+.files-tray-sync.clickable {
+  cursor: pointer;
+}
+.files-tray-chip {
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--fill-muted);
+  color: var(--text-3);
+}
+.files-tray-warn {
+  color: var(--warning-solid);
+}
+.files-tray-sync-stopped .files-tray-bar span {
+  background: var(--text-3);
+}
+.files-tray-sync-failed .files-tray-status {
+  color: var(--error);
+}
+.files-tray-bar.indeterminate span {
+  width: 30%;
+  animation: files-tray-sweep 1.4s ease-in-out infinite;
+}
+@keyframes files-tray-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+.files-tray-current {
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.files-sync-failed {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  max-height: 240px;
+  overflow: auto;
+}
+.files-sync-failed li {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+}
+.files-sync-failed code {
+  font-family: var(--font-mono, monospace);
+}
+.files-sync-failed span,
+.files-sync-more {
+  color: var(--text-3);
 }
 
 /* Share (frame 5). */

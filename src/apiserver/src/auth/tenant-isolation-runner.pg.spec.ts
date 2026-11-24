@@ -481,9 +481,10 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     const drive = new DocumentsService(db as never);
     const driveMoveFileId = (await drive.createFile(ownerId, { parentId: of.driveFolderId, name: 'census to move.txt' })).id;
     const driveDeleteFileId = (await drive.createFile(ownerId, { parentId: of.driveFolderId, name: 'census to delete.txt' })).id;
+    const driveSyncId = (await db.documentSync.create({ data: { ownerId, runnerId: of.runnerId, sourceName: 'census', destPath: '/census' } })).id;
 
     return {
-      driveStagingId, driveCommitStagingId, driveChunkSha256, driveCommitId, driveMoveFileId, driveDeleteFileId,
+      driveStagingId, driveCommitStagingId, driveChunkSha256, driveCommitId, driveMoveFileId, driveDeleteFileId, driveSyncId,
       callingSessionId, coordinatorSessionId, newCoordinatorSessionId, machineSessionId, runtimeSessionId, orphanSessionId,
       landingSessionId,
       takeoverSessionId, activateSessionId, leaseOwner, leaseGeneration, inboxSessionId, inboxLeaseGeneration, turnSessionId, shellTurnId,

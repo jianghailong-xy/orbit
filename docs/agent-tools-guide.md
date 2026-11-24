@@ -64,7 +64,7 @@ Each request goes to the object that answers its question; when two fit, the sma
 | R1.8 | What is the state of this project, task or session? | none | `project_get`, `task_get`, `task_list`, `session_get` |
 | R1.9 | Wait for it to finish | watch | `task_await`, `session_await`, `watch_create` |
 | R1.10 | Remember this lesson or pitfall about a file or a pattern | wiki | `wiki_search`, `wiki_propose`, `wiki_note` |
-| R1.11 | Keep this file, or read one back | file | `file_upload`, `file_fetch`, `file_list`, `documents_put`, `documents_get`, `documents_list`, `documents_move`, `documents_delete` |
+| R1.11 | Keep this file, or read one back | file | `file_upload`, `file_fetch`, `file_list`, `documents_put`, `documents_get`, `documents_list`, `documents_move`, `documents_delete`, `documents_sync` |
 | R1.12 | This class of work needs its own dispatch policy | task_list | `tasklist_create`, `tasklist_update` |
 | R1.13 | Which agent should run this, or change an agent's defaults | agent | `agent_list`, `agent_create`, `agent_update` |
 | R1.14 | Answer, explain, or edit code | none | nothing to record |
@@ -354,6 +354,7 @@ Try asking: *"Keep this screenshot with the task."*
 | 6? | `documents_list` | `orbit documents ls` | none | List a folder on the owner's drive. |
 | 7? | `documents_move` | `orbit documents mv` | none | Move a drive entry. |
 | 8? | `documents_delete` | `orbit documents rm` | none | Move a drive entry to the owner's Trash. |
+| 9? | `documents_sync` | `orbit documents sync` | none | Copy a whole directory to the owner's Documents in the background. |
 
 **Done when:** file_upload answers the file's id, sha256, sizeBytes and an orbit-attachment: link to put in a reply.
 
@@ -457,7 +458,7 @@ Agent tools on a session counts each family as that session's engine lists it. T
 | Task lists (6) | `tasklist_create`, `tasklist_delete`, `tasklist_get`, `tasklist_list`, `tasklist_propose_dag`, `tasklist_update` |
 | Schedules (12) | `condition_get`, `schedule_create`, `schedule_delete`, `schedule_end`, `schedule_get`, `schedule_list`, `schedule_pause`, `schedule_resume`, `schedule_run_now`, `schedule_run_report`, `schedule_run_stop`, `schedule_update` |
 | Waits (6) | `task_await`, `watch_cancel`, `watch_create`, `watch_get`, `watch_list`, `watch_update` |
-| Documents (9) | `documents_delete`, `documents_get`, `documents_list`, `documents_move`, `documents_put`, `file_fetch`, `file_list`, `file_pin`, `file_upload` |
+| Documents (10) | `documents_delete`, `documents_get`, `documents_list`, `documents_move`, `documents_put`, `documents_sync`, `file_fetch`, `file_list`, `file_pin`, `file_upload` |
 | SubAgents (1) | `subagent_rate` |
 | Background jobs (5) | `bg_kill`, `bg_list`, `bg_output`, `bg_run`, `schedule_wakeup` |
 | Questions for you (8) | `ask_owner`, `notify`, `open_item_hand_over`, `request_owner_action`, `settings_get`, `settings_propose`, `task_request_confirmation`, `withdraw_owner_request` |
