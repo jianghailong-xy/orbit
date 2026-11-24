@@ -57,7 +57,7 @@ func documentsOffMessage(what string) string {
 
 // driveToolNames is the set callDriveTool answers for.
 var driveToolNames = map[string]bool{
-	"drive_put": true, "drive_get": true, "drive_list": true, "drive_move": true, "drive_delete": true,
+	"documents_put": true, "documents_get": true, "documents_list": true, "documents_move": true, "documents_delete": true,
 }
 
 // withoutDriveTools is tools without the drive tools: what `orbit mcp` lists while Documents is off.

@@ -1654,6 +1654,9 @@ private struct TaskDetailContent: View {
                     Text(receipt).font(.orbitMeta).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                if let job = task.integration?.landTask, let pullRequest = job.pullRequest {
+                    LandingPullRequestBlock(pullRequest: pullRequest, main: TaskLandingLogic.branch(job.targetRef))
+                }
                 if !status.facts.isEmpty {
                     VStack(alignment: .leading, spacing: 2) {
                         ForEach(status.facts, id: \.label) { fact in
@@ -2996,16 +2999,7 @@ private struct TaskDetailContent: View {
     }
 
     private func sessionLabel(_ session: SessionRef) -> String {
-        switch session.resolvedRunState {
-        case .queued:        return "Queued"
-        case .running:       return "Running"
-        case .awaitingInput: return "Awaiting reply"
-        case .succeeded:     return "Finished"
-        case .failed:        return "Failed"
-        case .interrupted:   return "Interrupted"
-        case .ended:         return "Ended"
-        case .unknown, nil:  return "—"
-        }
+        ShareMarkdown.runLabel(session)
     }
 
     private func sessionColor(_ session: SessionRef) -> Color {

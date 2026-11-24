@@ -249,7 +249,7 @@ func cliWithheldReason(op *operation, facts cliOfferFacts) string {
 		return watchesOffMessage(command)
 	case op.CLIFamily == "wiki" && !facts.wiki:
 		return wikiOffMessage(command)
-	case op.CLIFamily == "drive" && facts.documentsOff:
+	case (op.CLIFamily == "documents" || op.CLIFamily == "drive") && facts.documentsOff:
 		return documentsOffMessage(command)
 	case cliOrchestrationGated(op) && facts.inSession && !facts.orchestration:
 		return orchestrationOffMsg

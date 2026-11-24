@@ -1459,7 +1459,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * The owner's drive changed (docs/orbit-files-drive-technical-design.md §5.4): a write committed rows to its change feed,
+   * The owner's drive changed (docs/documents-drive-technical-design.md §5.4): a write committed rows to its change feed,
    * the highest of them `seq`. THE PAYLOAD IS THE SEQ AND NOTHING ELSE: no name, path or size. An accelerant only: the Files
    * page reads `GET /drive/changes` for what changed, and re-reads it on focus and reconnect. Published after the write
    * commits, and only to the streams that declared `hints=drive_changed`.

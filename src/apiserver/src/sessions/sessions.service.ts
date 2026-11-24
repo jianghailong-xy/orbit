@@ -3597,18 +3597,21 @@ export class SessionsService {
    * Ordering is a score, not a tier ranking — see the `scored` CTE for why, and for the quota that
    * keeps the name tier from taking a page the palette has no way to scroll past. `total` reports
    * what the page left behind.
+   *
+   * `folderId` narrows every tier and the recents to the sessions filed in that folder: the palette
+   * opened from a folder's page searches that folder first.
    */
-  async search(ownerId: string, q: string | undefined, limit: number) {
+  async search(ownerId: string, q: string | undefined, limit: number, folderId?: string | null) {
     const take = Math.min(Math.max(limit || 20, 1), 50);
     // Both sides lose `*` and backticks, exactly as in-session find does: the corpus in SQL, the
     // query here. Stripping the query first also means a query of nothing but marks normalizes to
     // null and answers with recents, rather than matching every row.
     const norm = normalizeSearchQuery(stripEmphasis(q ?? ''));
     if (!norm) {
-      const recents = await this.searchRows(ownerId, null, take);
+      const recents = await this.searchRows(ownerId, null, take, folderId);
       return { q: '', contentSearched: false, total: recents.total, hits: recents.hits };
     }
-    const first = await this.searchRows(ownerId, norm, take);
+    const first = await this.searchRows(ownerId, norm, take, folderId);
     if (first.total > 0) {
       return { q: norm.raw, contentSearched: norm.searchContent, total: first.total, hits: first.hits };
     }
@@ -3619,7 +3622,7 @@ export class SessionsService {
     if (!wide) {
       return { q: norm.raw, contentSearched: norm.searchContent, total: 0, hits: [] };
     }
-    const { hits, total } = await this.searchRows(ownerId, wide, take);
+    const { hits, total } = await this.searchRows(ownerId, wide, take, folderId);
     return { q: norm.raw, contentSearched: wide.searchContent, total, hits };
   }
 
@@ -3634,7 +3637,11 @@ export class SessionsService {
     ownerId: string,
     norm: NormalizedSearchQuery | null,
     take: number,
+    folderId?: string | null,
   ): Promise<{ hits: SessionSearchHit[]; total: number }> {
+    // One folder's sessions only. Applied where the hits are scored (and to recents), so the count
+    // the palette reports is the folder's, not the whole account's.
+    const inFolder = folderId ? Prisma.sql`AND s.folder_id = ${folderId}::uuid` : Prisma.empty;
     type Row = {
       id: string;
       title: string;
@@ -3977,6 +3984,7 @@ export class SessionsService {
             JOIN session s ON s.id = h.session_id
             LEFT JOIN workspace a ON a.id = s.workspace_id
             LEFT JOIN task  t ON t.id = s.task_id
+            WHERE TRUE ${inFolder}
           ),
           ranked AS (
             SELECT
@@ -4028,6 +4036,7 @@ export class SessionsService {
           WHERE s.owner_id = ${ownerId}::uuid
             AND s.kind = 'CONVERSATION' AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')
             AND s.deleted_at IS NULL
+            ${inFolder}
           -- Recent is the list's own order (session.listed_at, session-listed-at.ts), not the liveness clock.
           ORDER BY COALESCE(s.listed_at, s.created_at) DESC, s.created_at DESC
           LIMIT ${take}::int
@@ -7625,7 +7634,7 @@ export class SessionsService {
     if (copyOf.size === 0) return ids;
     // In the database, so the bytes are not carried through this process under the session lock. The
     // copy names the same stored bytes (sha256) as the row it copies, or carries `data` for a row from
-    // before Orbit Files.
+    // before Documents.
     await tx.$executeRaw`
       INSERT INTO "attachment" (id, owner_id, session_id, mime_type, size_bytes, file_name, sha256, data)
       SELECT c.copy_id, a.owner_id, a.session_id, a.mime_type, a.size_bytes, a.file_name, a.sha256, a.data

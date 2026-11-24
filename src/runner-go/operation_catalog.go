@@ -32,7 +32,7 @@ import (
 // of the canonical catalogue and is emitted with `orbit capabilities --json`, so a client can tell
 // which catalogue answered it.
 
-const operationCatalogVersion = "1.10.0"
+const operationCatalogVersion = "1.11.0"
 
 // sessionStateFieldsNote is how an agent reads the session-state fields session_list and session_get
 // return beside `status` (Agent Contract 1.12.0). They are additive: `status` and its values are unchanged.
@@ -244,7 +244,6 @@ var catalogCLIExemptions = map[string]string{
 	"bg_list":                         "runner-hosted background jobs: a per-session socket call, not a control-plane API call",
 	"schedule_wakeup":                 "wakes the calling session: there is no session to wake at a terminal outside one",
 	"ask_owner":                       "asks as the project's coordinator session: a terminal outside one is refused by the server",
-	"request_owner_action":            "files as the calling session and answers it with a turn: a terminal outside one is refused by the server",
 	"withdraw_owner_request":          "withdraws as the calling session what it filed: a terminal outside one is refused by the server",
 	"schedule_create":                 "proposes a schedule in the calling session's workspace, on its engine: a terminal outside a session has neither",
 	"schedule_update":                 "changes a schedule as the calling session, which the envelope rule judges: a terminal outside one is refused by the server",
@@ -1719,14 +1718,18 @@ func buildOperationCatalog() []*operation {
 				"wiki, only from a workspace whose repository has no wiki, and only when the owner asked for " +
 				"one or this session has something worth a wiki. Never file WIKI_CREATE because a wiki_search " +
 				"found no wiki: carry on without it. For WIKI_CREATE Orbit fills in the title and the " +
-				"repository, so give only why and ifUnanswered. options and recommendedOption are " +
-				"only for DECISION, steps only for MANUAL_STEP and secretSpec only for SECRET; any other " +
-				"mix is refused. " +
+				"repository, so give only why and ifUnanswered. CHANGE to propose a setting of one of the " +
+				"owner's runners (change: its runnerId and the maxConcurrent you want); the owner applies it " +
+				"with one press, and you never write the setting yourself. When the outcome arrives, read " +
+				"`applied`, not `requested`: the owner may choose a different number. A DECLINED, EXPIRED or " +
+				"WITHDRAWN outcome has no `applied`, and the setting was not changed. options and " +
+				"recommendedOption are only for DECISION, steps only for MANUAL_STEP, secretSpec only for " +
+				"SECRET and change only for CHANGE; any other mix is refused. " +
 				"Do NOT file what you can read or do yourself: a request costs a person's attention.",
 			"inputSchema": obj(map[string]interface{}{
 				"kind": map[string]interface{}{
 					"type":        "string",
-					"enum":        []string{"DECISION", "SECRET", "MANUAL_STEP", "CONFIRM", "WIKI_CREATE"},
+					"enum":        []string{"DECISION", "SECRET", "MANUAL_STEP", "CONFIRM", "WIKI_CREATE", "CHANGE"},
 					"description": "What you need from the owner. Use SECRET for any credential.",
 				},
 				"title": map[string]interface{}{
@@ -1793,6 +1796,17 @@ func buildOperationCatalog() []*operation {
 				"recommendedOption": map[string]interface{}{
 					"type":        "integer",
 					"description": "DECISION only: index into options of the one you recommend.",
+				},
+				"change": map[string]interface{}{
+					"type": "object",
+					"description": "CHANGE only, and required there: the one setting you propose. maxConcurrent is " +
+						"how many sessions the runner may run at once. The runner must be the owner's, and the " +
+						"value must differ from the one it has now.",
+					"properties": map[string]interface{}{
+						"runnerId":      map[string]interface{}{"type": "string", "description": "The runner's id, from runner_list."},
+						"maxConcurrent": map[string]interface{}{"type": "integer", "minimum": 1, "description": "The Max Concurrent you propose (1 or more)."},
+					},
+					"required": []string{"runnerId", "maxConcurrent"},
 				},
 				"expiresIn": map[string]interface{}{
 					"type": "integer",
@@ -3185,7 +3199,7 @@ func buildOperationCatalog() []*operation {
 	// (wiki_tools.go; they are left out entirely when the wiki is off).
 	add(gateAlways, wikiToolDescriptors(obj)...)
 	add(gateAlways, fileToolDescriptors(obj)...)
-	add(gateAlways, driveToolDescriptors(obj)...)
+	add(gateAlways, documentsToolDescriptors(obj)...)
 	// The owner's own Settings (settings_tools.go): listed whether or not Session orchestration is on, since they fix
 	// ordinary settings and turning orchestration off is itself a proposal (docs/settings-from-conversation-design.md §7).
 	add(gateAlways, settingsToolDescriptors(obj)...)
@@ -3733,7 +3747,7 @@ func fileToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 					"type": "string",
 					"description": "The file or directory, absolute or relative to the working directory. Its real " +
 						"location, links resolved, has to be inside this session's checkout, its uploads directory, " +
-						"or the mounted Orbit Files drive on Orbit Cloud.",
+						"or the mounted Documents drive on Orbit Cloud.",
 				},
 				"taskId": map[string]interface{}{
 					"type": "string",
@@ -4145,6 +4159,20 @@ var notifyCLICapabilities = []cliCapabilitySpec{
 		Arguments:   []string{"--message <text> (required)", "--json"},
 		Description: "In a task run of an Automatic project this goes to the project's coordinator, not to the owner's devices. Read recipient in the result to see who got it: coordinator, or owner when Orbit fell back. Alert the human this runs for on their devices, with a line you write. For when you need something only they can give and are otherwise stuck, or the thing they were waiting for is done — not for progress updates. Inside a session they can reply from the notification. At most one per session per minute; read the result, which says whether anybody was actually alerted.",
 		Mutates:     true,
+	},
+}
+
+var ownerRequestCLICapabilities = []cliCapabilitySpec{
+	{
+		Tool:  "request_owner_action",
+		Argv:  []string{"orbit", "owner-request"},
+		Usage: "orbit owner-request --kind KIND --title TEXT --why TEXT [options] [--json]",
+		Arguments: []string{"--kind <DECISION|SECRET|MANUAL_STEP|CONFIRM|WIKI_CREATE|CHANGE> (required)", "--title <text> (required for every kind but WIKI_CREATE)", "--why <text> (required)",
+			"--runner <id|name> --max-concurrent <n> (CHANGE only: the runner's Max Concurrent you propose, n of 1 or more; a runner name is looked up in the runner list)",
+			"--blocks-task-id <id> (repeatable)", "--if-unanswered <text>", "--steps <json array>", "--secret-spec <json object>", "--options <json array>", "--recommended-option <n>", "--expires-in <seconds>", "--client-request-id <id>", "--json"},
+		Description: "Ask the account owner for something only they can do or provide; the same request as the request_owner_action tool, filed as the session it runs in. It returns once the request is filed, and the outcome arrives later as a turn in the conversation. kind CHANGE proposes a runner's Max Concurrent: the owner applies it with one press and you never write the setting yourself; read `applied` in the outcome, not `requested`, because the owner may choose a different number.",
+		Mutates:     true,
+		SessionOnly: true,
 	},
 }
 
@@ -4563,6 +4591,7 @@ func finishOperationCatalog(ops []*operation) []*operation {
 		{"provider", providerCLICapabilities},
 		{"project", projectCLICapabilities},
 		{"notify", notifyCLICapabilities},
+		{"owner-request", ownerRequestCLICapabilities},
 		{"session", sessionCLICapabilities},
 		{"merge", mergeReceiptCLICapabilities},
 		{"agent", agentCLICapabilities},
@@ -4571,7 +4600,7 @@ func finishOperationCatalog(ops []*operation) []*operation {
 		{"wiki", wikiCLICapabilities},
 		{"wiki", wikiImportCLICapabilities},
 		{"file", fileCLICapabilities},
-		{"drive", driveCLICapabilities},
+		{"documents", documentsCLICapabilities},
 		{"subagent", subagentCLICapabilities},
 		{"settings", settingsCLICapabilities},
 		{"browser", browserCLICapabilities},
@@ -5392,23 +5421,23 @@ var catalogMetadata = map[string]operationMeta{
 		Object: objectFile,
 		Intent: "See the files this session keeps.",
 	},
-	"drive_put": {
+	"documents_put": {
 		Object: objectFile,
-		Intent: "Copy a local file into the owner's Orbit Files drive.",
+		Intent: "Copy a local file into the owner's Documents drive.",
 	},
-	"drive_get": {
+	"documents_get": {
 		Object: objectFile,
 		Intent: "Download a drive file into this session's uploads directory.",
 	},
-	"drive_list": {
+	"documents_list": {
 		Object: objectFile,
 		Intent: "See the contents of a drive folder.",
 	},
-	"drive_move": {
+	"documents_move": {
 		Object: objectFile,
 		Intent: "Move or rename an entry on the drive.",
 	},
-	"drive_delete": {
+	"documents_delete": {
 		Object:      objectFile,
 		Intent:      "Move an entry to the owner's Trash.",
 		Destructive: true,

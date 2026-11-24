@@ -589,14 +589,17 @@ export const workspaceSessionCountsQuery = () =>
  * Cross-scope session search, backing the ⌘K palette. Keyed on the query itself so each distinct
  * search is its own cache entry — retyping a query the user just backspaced out of answers from
  * cache instead of re-hitting the server. An empty `q` is a real request, not a disabled one: the
- * server answers it with recents, which is what makes the palette a session switcher.
+ * server answers it with recents, which is what makes the palette a session switcher. With a
+ * `folderId` the search and the recents are that folder's alone.
  */
-export const sessionSearchQuery = (q: string) =>
+export const sessionSearchQuery = (q: string, folderId: string | null = null) =>
   queryOptions({
-    queryKey: ['session-search', q] as const,
+    queryKey: ['session-search', q, folderId] as const,
     meta: { entities: ['session', 'workspace', 'task'] },
     queryFn: () =>
-      api<SessionSearchResponse>(`/sessions/search?q=${encodeURIComponent(q)}&limit=20`),
+      api<SessionSearchResponse>(
+        `/sessions/search?q=${encodeURIComponent(q)}&limit=20${folderId ? `&folderId=${encodeURIComponent(folderId)}` : ''}`,
+      ),
     // A search result is a snapshot of a moving list; a minute of staleness is invisible inside
     // one palette session and keeps arrow-keying through results from refetching.
     staleTime: 60_000,
@@ -1918,8 +1921,8 @@ export const linkPreviewsQuery = (refs: readonly LinkPreviewRef[]) =>
     enabled: refs.length > 0,
   });
 
-/** What `GET /drive/usage` answers: the account's total split into the drive's share (Trash included) and the rest, each byte once. */
-export interface DriveUsage {
+/** What `GET /documents/usage` answers: the account's total split into the drive's share (Trash included) and the rest, each byte once. */
+export interface DocumentsUsage {
   totalBytes: number;
   driveBytes: number;
   trashBytes: number;
@@ -1929,8 +1932,8 @@ export interface DriveUsage {
   nearQuota?: boolean;
 }
 
-export const driveUsageQuery = () =>
+export const documentsUsageQuery = () =>
   queryOptions({
     queryKey: ['drive', 'usage'] as const,
-    queryFn: () => api<DriveUsage>('/drive/usage'),
+    queryFn: () => api<DocumentsUsage>('/documents/usage'),
   });

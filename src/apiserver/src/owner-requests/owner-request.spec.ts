@@ -11,6 +11,8 @@ import {
   normalizeOwnerRequest,
   ownerRequestAlert,
   ownerRequestPushCategory,
+  ownerRequestResolutionPayload,
+  ownerRequestResolutionTurn,
   wikiCreateDeclinedMessage,
   wikiCreateTitle,
 } from './owner-request';
@@ -75,7 +77,46 @@ test('each kind has its own push category, the one the clients register its acti
     'ORBIT_OWNER_REQUEST_CONFIRM',
     'ORBIT_OWNER_REQUEST_WIKI_CREATE',
     'ORBIT_OWNER_REQUEST_BROWSER_SIGN_IN',
+    'ORBIT_OWNER_REQUEST_CHANGE',
   ]);
+});
+
+test('a CHANGE carries exactly one runner setting, v1 Max Concurrent of at least 1, and its turn reads applied', () => {
+  const now = new Date('2026-11-24T00:00:00Z');
+  const base = { kind: 'CHANGE' as const, title: 'Lower wikova to 6', why: 'headroom' };
+  const filed = normalizeOwnerRequest({ ...base, change: { runnerId: ' r1 ', maxConcurrent: 6 } }, now);
+  assert.deepEqual(filed.change, { runnerId: 'r1', maxConcurrent: 6 });
+  for (const change of [undefined, {}, { runnerId: 'r1' }, { runnerId: 'r1', maxConcurrent: 0 }, { runnerId: 'r1', maxConcurrent: 1.5 }]) {
+    assert.throws(() => normalizeOwnerRequest({ ...base, change: change as never }, now), OwnerRequestNotFileable, JSON.stringify(change));
+  }
+  assert.throws(
+    () => normalizeOwnerRequest({ ...base, change: { runnerId: 'r1', maxConcurrent: 6, minFreeDiskMb: 1 } as never }, now),
+    /change\.minFreeDiskMb is not a setting/,
+  );
+  assert.throws(() => normalizeOwnerRequest({ kind: 'CONFIRM', title: 't', why: 'w', change: { runnerId: 'r1', maxConcurrent: 6 } }, now),
+    /change is only for a CHANGE request/);
+  assert.deepEqual(ownerRequestAlert('CHANGE', 'Lower wikova to 6'), { title: 'Setting change', body: 'Lower wikova to 6' });
+
+  const spec = { runnerId: 'r1', field: 'maxConcurrent', requested: 6, before: 12 };
+  const ended = {
+    id: 'req', kind: 'CHANGE', title: 't', options: null, secretSpec: null, changeSpec: spec, resolvedAt: now,
+  };
+  assert.deepEqual(
+    ownerRequestResolutionPayload({ ...ended, state: 'DONE', answer: { applied: 8, actualBefore: 9 }, resolutionNote: null }).change,
+    { ...spec, applied: 8, actualBefore: 9 },
+  );
+  assert.deepEqual(
+    ownerRequestResolutionPayload({ ...ended, state: 'DECLINED', answer: null, resolutionNote: 'no' }).change,
+    spec,
+  );
+  assert.match(
+    ownerRequestResolutionTurn({ ...ended, state: 'WITHDRAWN', answer: null, resolutionNote: 'Replaced by a newer request' }),
+    /ended WITHDRAWN\. A newer request for the same runner setting replaced it/,
+  );
+  assert.match(
+    ownerRequestResolutionTurn({ ...ended, state: 'WITHDRAWN', answer: null, resolutionNote: 'no longer needed' }),
+    /ended WITHDRAWN: this session withdrew it\./,
+  );
 });
 
 test('a BROWSER_SIGN_IN is filed only by browser_request_sign_in: request_owner_action\'s door refuses the kind', () => {

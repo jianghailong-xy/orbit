@@ -97,6 +97,8 @@ internal data class LandTaskView(
     val blockingCode: String? = null,
     /** The landing session of this generation (§2.9 LS6); absent on a server that predates the field. */
     val landingSessionId: String? = null,
+    /** The pull request this landing waits on or ended in (design §8); null without one and from a server that predates it. */
+    val pullRequest: JsonObject? = null,
 ) {
     companion object {
         fun of(integration: JsonObject): LandTaskView? {
@@ -116,6 +118,7 @@ internal data class LandTaskView(
                 blockingReason = job.obj("blockingReason")?.text("summary"),
                 blockingCode = job.obj("blockingReason")?.text("code"),
                 landingSessionId = job.text("landingSessionId")?.takeIf { it.isNotEmpty() },
+                pullRequest = job.obj("pullRequest"),
             )
         }
     }
@@ -143,6 +146,8 @@ internal data class TaskLandingStatus(
     val facts: List<Fact>,
     /** The landing session this task's newest generation belongs to, which `Open landing ›` opens. */
     val landingSessionId: String?,
+    val pullRequest: JsonObject? = null,
+    val targetRef: String? = null,
 ) {
     data class Badge(val label: String, val tone: String)
     data class Fact(val label: String, val value: String)
@@ -204,6 +209,8 @@ internal object TaskLandingLogic {
             receipt = receiptLine,
             facts = facts(job, zone),
             landingSessionId = job?.landingSessionId,
+            pullRequest = job?.pullRequest,
+            targetRef = job?.targetRef,
         )
     }
 

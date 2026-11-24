@@ -648,6 +648,9 @@ final class AppModel {
             return names[id] ?? names.first { PublicID.storageKey($0.key) == PublicID.storageKey(id) }?.value
                 ?? "this runner"
         }
+        ownerRequestsModel.runnerRow = { [weak self] id in
+            self?.agents?.runnerRows.first { PublicID.storageKey($0.id) == PublicID.storageKey(id) }
+        }
         #if os(iOS)
         // A terminal that has just started waiting is announced once, as a toast (the owner,
         // 2026-11-16). The Mac's session list keeps its resident "Needs you" line instead.
@@ -3375,6 +3378,23 @@ final class AppModel {
             }
             await agents?.load()
         }
+    }
+
+    // MARK: landing setting (docs/design/protected-branch-landing.md §7, §8)
+
+    /// The workspace's own read, which carries the `landing` block the list leaves out.
+    func workspaceDetail(_ workspaceID: String) async -> Agent? {
+        try? await api?.agent(workspaceID)
+    }
+
+    /// Choose how finished work reaches main; nil on success, else the server's reason. The workspace list is read
+    /// again so every card that reads the mode (the Faster tip) follows it.
+    func setLandingMode(_ mode: String, inWorkspace workspaceID: String) async -> String? {
+        guard let api else { return "Not signed in." }
+        do { _ = try await api.updateAgent(workspaceID, UpdateAgentRequest(landingMode: mode)) }
+        catch { return APIClient.failureReason(error) }
+        await agents?.load()
+        return nil
     }
 
     // MARK: main checkout Git (docs/main-checkout-git-contract.md)

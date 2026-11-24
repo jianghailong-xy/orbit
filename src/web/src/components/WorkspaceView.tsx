@@ -58,7 +58,6 @@ import {
   ThunderboltOutlined,
   UndoOutlined,
   UnorderedListOutlined,
-  UploadOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AgentToolsDrawer, agentToolsMenuStatus } from './AgentToolsDrawer';
@@ -165,7 +164,7 @@ import {
   watchesQuery,
   projectDependencyGraphQuery,
 } from '../lib/queries';
-import { SEARCH_HINT, openSessionSearch } from './SessionSearch';
+import { SEARCH_HINT, openSessionSearch, setSessionSearchScope } from './SessionSearch';
 import { SessionMoveModal, useSessionFolderFiling, type MoveDialogSession } from './SessionMoveModal';
 import {
   SESSION_DRAG_TYPE,
@@ -181,8 +180,10 @@ import {
   MOVE_COPY,
   folderDeleteFailure,
   folderNameDraft,
+  folderPageEmpty,
   folderNameFailure,
   listShowsFolders,
+  sessionsInFolder,
   SCHEDULED_RUNS_COPY,
   SCHEDULED_RUNS_FOLDER,
   type SessionFolderRow,
@@ -285,7 +286,7 @@ import { startHistoryImport } from '../lib/claudeHistoryImport';
 import { ManagedRunnerNotice } from './ManagedRunnerNotice';
 import { useNewAccount } from './WelcomeCard';
 import type { LoginEngine } from '@orbit/shared';
-import { useDocumentsEnabled } from '../lib/documents';
+import { useDocumentsEnabled } from '../lib/documentsSwitch';
 import { managedRowOf, managedRunnerStatusQuery, useManagedRunnerId, type ManagedRunner } from '../lib/managedRunner';
 import { MANAGED_RUNNER_COPY } from '@orbit/shared';
 import {
@@ -392,7 +393,7 @@ import {
 } from './RunNeverStartedCard';
 import { claudeRegionHeld, claudeRegionHeldWords, useClaudeRegionCheckAgain } from '../lib/claudeRegion';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
-import { DriveFilePicker } from './files/DriveFilePicker';
+import { DocumentsFilePicker } from './documents/DocumentsFilePicker';
 import { AntigravityRepairCard, antigravityRepair, AttachmentImage, TurnStatusFootCtx, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SandboxFixHelp, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
 import { PendingTray, type PendingTrayRow } from './PendingTray';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
@@ -3129,6 +3130,9 @@ export function WorkspaceView({
   // The workspace's Scheduled runs folder is open (`?folder=scheduled`): the list is its runs' sessions alone, which
   // every other list leaves out, with no folder or project rows of its own.
   const onScheduledRuns = !listProjectId && searchParams.get('folder') === SCHEDULED_RUNS_FOLDER;
+  // A folder's page, by its route alone: it reads the workspace's whole list as the folder rows do, and
+  // keeps doing so while a tag narrows it, which takes the folder rows off the workspace's own list.
+  const onFolderPage = !listProjectId && !onScheduledRuns && !!searchParams.get('folder');
   const foldersShown = !onScheduledRuns && listShowsFolders(effectiveView, listByTag) && workspaceFolders.length > 0;
   const projectScope = `${runner.id}:${scopeWorkspaceId}:${effectiveView}:${tagFilter ?? ''}`;
   const [membershipScope, setMembershipScope] = useState<string | null>(null);
@@ -3145,7 +3149,7 @@ export function WorkspaceView({
     workspaceId: scopeWorkspaceId,
     view: effectiveView,
     tagId: tagFilter,
-    limit: scopeWorkspaceId && (foldersShown || projectsShown || onScheduledRuns) ? null : sessionLimit,
+    limit: scopeWorkspaceId && (foldersShown || projectsShown || onScheduledRuns || onFolderPage) ? null : sessionLimit,
     scheduled: onScheduledRuns,
   });
   const sessionsKey = sessionsOpts.queryKey;
@@ -3710,10 +3714,28 @@ export function WorkspaceView({
   // survives a reload and Back leaves it. Only a folder of this workspace, and only where the list
   // shows folders at all.
   const folderParam = searchParams.get('folder');
+  // A tag filter or Group by Tag does not close the page: inside one folder they narrow and section its
+  // sessions, with no folder rows for a session to be in twice (owner 2026-11-22,
+  // docs/mocks/session-folder-page-filter). Trash still has no folders.
   const openFolder = useMemo(() => {
     const id = routeId(folderParam);
-    return !listProjectId && foldersShown && id ? (workspaceFolders.find((f) => f.id === id) ?? null) : null;
-  }, [folderParam, foldersShown, workspaceFolders, listProjectId]);
+    return !listProjectId && !onScheduledRuns && listShowsFolders(effectiveView, false) && id
+      ? (workspaceFolders.find((f) => f.id === id) ?? null) : null;
+  }, [folderParam, onScheduledRuns, effectiveView, workspaceFolders, listProjectId]);
+  // The tag filter and Group by Tag belong to the page they were set on: entering a folder's page starts
+  // with neither, and leaving it gives the workspace's list back its folders. Reset in the render that
+  // changes the page, so no frame reads the new page with the old page's tag.
+  const [tagScopePage, setTagScopePage] = useState(folderParam);
+  if (tagScopePage !== folderParam) {
+    setTagScopePage(folderParam);
+    setTagFilter(null);
+    setGroupByTag(false);
+  }
+  // ⌘K from a folder's page searches that folder first (SessionSearch's scope chip).
+  useEffect(() => {
+    setSessionSearchScope(openFolder ? { folderId: openFolder.id, name: openFolder.name } : null);
+    return () => setSessionSearchScope(null);
+  }, [openFolder]);
   // A folder page whose folder is gone — deleted here or on another client, or a link into another
   // workspace's — goes back to the list. Only once both the folders and the list's workspace are
   // known: before that a missing folder is one not loaded yet. Arriving from another workspace, the
@@ -3721,7 +3743,7 @@ export function WorkspaceView({
   useEffect(() => {
     if (listProjectId || !folderParam || openFolder || onScheduledRuns || !foldersQ.isSuccess || !scopeWorkspaceId) return;
     if (scopeWorkspaceId !== resolvedWorkspaceId) return;
-    if (!listShowsFolders(effectiveView, listByTag)) return;
+    if (!listShowsFolders(effectiveView, false)) return;
     setSearchParams(
       (current) => {
         const next = new URLSearchParams(current);
@@ -3730,7 +3752,7 @@ export function WorkspaceView({
       },
       { replace: true },
     );
-  }, [folderParam, openFolder, foldersQ.isSuccess, scopeWorkspaceId, resolvedWorkspaceId, effectiveView, listByTag,
+  }, [folderParam, openFolder, foldersQ.isSuccess, scopeWorkspaceId, resolvedWorkspaceId, effectiveView,
     setSearchParams, listProjectId, onScheduledRuns]);
   // The folder page is kept for the workspace whose list it is, so the sidebar opens the workspace on
   // it again after a trip to another one (lib/workspaceListFolder). A project's sessions page over
@@ -3743,7 +3765,15 @@ export function WorkspaceView({
   // The list split into its folder rows and the sessions in no folder — the ones the Pinned and
   // time sections below are made of. A folder's page lists the sessions filed in it instead.
   const folderListing = useMemo(
-    () => sessionProjectListing(visibleSessions, workspaceFolders, projectsQ.data ?? [], {
+    () => openFolder && listByTag
+      // Narrowed or grouped by a tag, a folder's page is its sessions flat, as the workspace's list is
+      // under a tag: no project rows, each session by the folder it is filed in.
+      ? (() => {
+          const inside = sessionsInFolder(visibleSessions, openFolder.id);
+          return { folders: [], projects: [], sessions: inside,
+            entries: inside.map((session): SessionProjectEntry<SessionListItem> => ({ ...session, kind: 'session' })) };
+        })()
+      : sessionProjectListing(visibleSessions, workspaceFolders, projectsQ.data ?? [], {
       view: effectiveView,
       byTag: listByTag,
       folderId: openFolder?.id,
@@ -3827,7 +3857,8 @@ export function WorkspaceView({
 
   // Paging. The server answered with a full page, so there is probably more behind it; a short
   // answer means this scope is exhausted.
-  const hasMoreSessions = !listProjectId && !foldersShown && !projectsShown && (sessionsQ.data?.length ?? 0) >= sessionLimit;
+  const hasMoreSessions = !listProjectId && !foldersShown && !projectsShown && !onFolderPage &&
+    (sessionsQ.data?.length ?? 0) >= sessionLimit;
   // The column has nothing to show yet for this scope (a switch to a workspace not in cache), or
   // is widening its window — `isPlaceholderData` is exactly that, since the guard above only
   // keeps rows within one scope. Neither is the ordinary background refresh, which must not
@@ -9220,9 +9251,15 @@ export function WorkspaceView({
   const switchView = (next: SessionView): void => {
     setMenuOpenId(null);
     setView(next);
-    if (!selectedId) return;
+    // A folder's page (or Scheduled runs) stays open across Open and Completed; Trash has no folders, so
+    // it is the workspace's Trash.
+    const keepPage = !!folderParam && next !== 'trash';
+    if (!selectedId) {
+      if (folderParam && !keepPage) leaveFolder();
+      return;
+    }
     const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
-    navigate(a ? `/workspaces/${encodeId(a)}` : `/settings/machines/${encodeId(runner.id)}`);
+    navigate(a ? `/workspaces/${encodeId(a)}${keepPage ? listSearch : ''}` : `/settings/machines/${encodeId(runner.id)}`);
   };
   const activeTag = tagFilter ? (sessionTags.find((t) => t.id === tagFilter) ?? null) : null;
   // ── The composer's model control ───────────────────────────────────────────────────────────
@@ -9956,7 +9993,7 @@ export function WorkspaceView({
       : []),
     // Where iOS keeps it, in the menu that scopes the list (§3.4). Only where folders show: a list
     // narrowed to or grouped by a tag, or Trash, would have nowhere to draw the new one.
-    ...(scopeWorkspaceId && listShowsFolders(shownView, listByTag)
+    ...(scopeWorkspaceId && !folderParam && listShowsFolders(shownView, listByTag)
       ? [
           { key: 'folder-divider', type: 'separator' as const },
           {
@@ -9967,6 +10004,27 @@ export function WorkspaceView({
         ]
       : []),
   ];
+  // The list's scope menu, at the head of the workspace's list and of a folder's page alike: the trigger
+  // names the view, so a page scoped to Completed or narrowed by a tag always explains itself.
+  const scopeMenu = (
+    <Menu
+      side="bottom"
+      align="end"
+      nativeButton={false}
+      popupClassName="session-scope-popup"
+      items={scopeItems}
+      trigger={
+        <span
+          ref={scopeTrigger}
+          className={`session-scope-menu${shownView !== 'open' || tagFilter || groupByTag ? ' on' : ''}`}
+          title="Switch view, filter and group"
+        >
+          {SESSION_VIEWS.find((v) => v.value === shownView)?.label}
+          <DownOutlined />
+        </span>
+      }
+    />
+  );
   // Header subtitle keeps run outcome and lifecycle location visibly separate, followed by
   // last activity. Task state remains on its own task affordance above the title.
   const headTime = selected
@@ -10555,6 +10613,7 @@ export function WorkspaceView({
               )}
               <span className="session-folder-workspace">{headWorkspaceName}</span>
             </span>
+            {scopeMenu}
             <Menu
               side="bottom"
               align="end"
@@ -10584,6 +10643,7 @@ export function WorkspaceView({
               <span className="session-folder-title">{SCHEDULED_RUNS_COPY.title}</span>
               <span className="session-folder-workspace">{headWorkspaceName}</span>
             </span>
+            {scopeMenu}
           </div>
         ) : (
           <div className="session-col-head">
@@ -10604,23 +10664,7 @@ export function WorkspaceView({
                 chip row — both read as clutter in a narrow column, and Open is nearly always
                 the answer. The trigger names the current view so a list scoped to
                 Completed/Trash always explains itself. (The native clients still tab.) */}
-            <Menu
-              side="bottom"
-              align="end"
-              nativeButton={false}
-              popupClassName="session-scope-popup"
-              items={scopeItems}
-              trigger={
-                <span
-                  ref={scopeTrigger}
-                  className={`session-scope-menu${shownView !== 'open' || tagFilter || groupByTag ? ' on' : ''}`}
-                  title="Switch view, filter and group"
-                >
-                  {SESSION_VIEWS.find((v) => v.value === shownView)?.label}
-                  <DownOutlined />
-                </span>
-              }
-            />
+            {scopeMenu}
           </div>
         )}
         {openFolder && folderEdit?.id === openFolder.id && folderEdit.error && (
@@ -10647,9 +10691,27 @@ export function WorkspaceView({
           }}
         >
           <SearchOutlined />
-          <span>Search sessions</span>
+          {/* On a folder's page the palette opens scoped to it, and the field says so. */}
+          <span className="session-search-label">{openFolder ? FOLDER_COPY.searchIn(openFolder.name) : 'Search sessions'}</span>
           {!isMobile && <kbd className="session-search-kbd">{SEARCH_HINT}</kbd>}
         </div>}
+        {/* A folder's page names its tag filter under the field too, with one click to clear it: the
+            page's narrow head has no room to spell the tag out in the trigger. */}
+        {(openFolder || onScheduledRuns) && activeTag && (
+          <div className="session-tag-chips">
+            <button
+              type="button"
+              className="session-tag-chip"
+              aria-label={FOLDER_COPY.clearTag(activeTag.name)}
+              title={FOLDER_COPY.clearTag(activeTag.name)}
+              onClick={() => setTagFilter(null)}
+            >
+              <span className="session-section-dot" style={{ background: activeTag.color }} />
+              <span className="session-tag-chip-name">{activeTag.name}</span>
+              <CloseOutlined />
+            </button>
+          </div>
+        )}
         <div
           className={`workspace-sessions session-col-list autohide-scrollbar${draggedSession ? ' dragging-session' : ''}`}
           ref={listRef}
@@ -10661,12 +10723,21 @@ export function WorkspaceView({
           {listProjectId && projectPageTop(listProjectId)}
           {listProjectId
             ? projectPageEmpty
-            : openFolder
+            : openFolder || onScheduledRuns
             ? listedSessions.length === 0 &&
-              !loadingSessions && <div className="chat-note">No sessions in this folder.</div>
-            : onScheduledRuns
-            ? listedSessions.length === 0 &&
-              !loadingSessions && <div className="chat-note">{SCHEDULED_RUNS_COPY.empty}</div>
+              !loadingSessions && (
+                <div className="chat-note">
+                  {openFolder
+                    ? folderPageEmpty(effectiveView, activeTag?.name ?? null)
+                    : activeTag ? folderPageEmpty(effectiveView, activeTag.name, SCHEDULED_RUNS_COPY.title)
+                      : SCHEDULED_RUNS_COPY.empty}
+                  {activeTag && (
+                    <button type="button" className="chat-note-action" onClick={() => setTagFilter(null)}>
+                      {FOLDER_COPY.clearFilter}
+                    </button>
+                  )}
+                </div>
+              )
             : visibleSessions.length === 0 &&
               !loadingSessions && (
                 <div className="chat-note">
@@ -12413,9 +12484,9 @@ export function SessionComposer({
   const lastComposerTap = useRef<{ at: number; x: number; y: number; held?: number } | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // The `+` menu's "From Files" picker (board docs/mocks/orbit-files, 02-web frame 8).
-  const [drivePickerOpen, setDrivePickerOpen] = useState(false);
-  // No From Files on a server without Documents (ORBIT_DOCUMENTS_ENABLED), nor until that is read.
+  // The `+` menu's Documents picker (board docs/mocks/documents, 02-web frame 8).
+  const [documentsPickerOpen, setDocumentsPickerOpen] = useState(false);
+  // No Documents item on a server without Documents (ORBIT_DOCUMENTS_ENABLED), nor until that is read.
   const documentsEnabled = useDocumentsEnabled().enabled;
   // Manual composer height (px). null = autoSize auto-grow (up to maxRows); once the user
   // drags the top handle, that height wins over autoSize until they double-click to reset.
@@ -12608,8 +12679,8 @@ export function SessionComposer({
   // The `+` menu "Shell" entry: prefix the draft with `!` so onSend routes it as a raw
   // shell command (run on the runner, bypassing claude). The user types the command after.
   // Files the drive picker returned go into the draft as chips (`#name`, like a `#` reference) that are sent as their
-  // `/home/orbit/Files/…` paths, so the box shows names and the agent gets paths (board 02-web frame 8).
-  const insertDriveFiles = (files: { id: string; name: string; path: string }[]): void => {
+  // `/home/orbit/Documents/…` paths, so the box shows names and the agent gets paths (board 02-web frame 8).
+  const insertDocumentsFiles = (files: { id: string; name: string; path: string }[]): void => {
     let refs = composerRefs;
     let chips = '';
     for (const file of files) {
@@ -12621,7 +12692,7 @@ export function SessionComposer({
     }
     setComposerRefs(refs);
     setText((t) => `${t}${t && !/\s$/.test(t) ? ' ' : ''}${chips}`);
-    setDrivePickerOpen(false);
+    setDocumentsPickerOpen(false);
     setTimeout(() => taRef.current?.focus(), 0);
   };
   const insertShell = (): void => {
@@ -13108,12 +13179,11 @@ export function SessionComposer({
           // WorkspaceView.composerMenu.test.tsx, drawn in
           // docs/mocks/composer-attach-menu-phone.html.
           items={[
-              // Each row says what it does and where the file comes from, with no heading to
-              // miss: "File" and "From Files" read alike (docs/mocks/composer-attach-labels).
+              // This device's File and Image, then the account's Documents.
               {
                 key: 'file',
-                icon: <UploadOutlined />,
-                label: 'Upload File',
+                icon: <PaperClipOutlined />,
+                label: 'File',
                 onSelect: () => fileInputRef.current?.click(),
               },
               {
@@ -13121,7 +13191,7 @@ export function SessionComposer({
                 icon: <PictureOutlined />,
                 // Offered unconditionally: a state the upload can't work in says so on pick,
                 // rather than greying the item out.
-                label: 'Upload Image',
+                label: 'Image',
                 onSelect: () => imageInputRef.current?.click(),
               },
               ...(documentsEnabled
@@ -13129,8 +13199,8 @@ export function SessionComposer({
                     {
                       key: 'drive',
                       icon: <FolderOpenOutlined />,
-                      label: 'Add from Orbit Files',
-                      onSelect: () => setTimeout(() => setDrivePickerOpen(true), 0),
+                      label: 'Documents',
+                      onSelect: () => setTimeout(() => setDocumentsPickerOpen(true), 0),
                     },
                   ]
                 : []),
@@ -13184,15 +13254,15 @@ export function SessionComposer({
             align="start"
             arrow={false}
             title={null}
-            open={drivePickerOpen}
-            onOpenChange={setDrivePickerOpen}
+            open={documentsPickerOpen}
+            onOpenChange={setDocumentsPickerOpen}
             disabled={composerDisabled}
             popupClassName="drive-picker-popover"
-            // No chip of its own: the picker opens from the `+` menu's From Files, and this
+            // No chip of its own: the picker opens from the `+` menu's Documents, and this
             // zero-width, unfocusable button only anchors it beside the `+`.
             trigger={<button type="button" className="composer-drive-anchor" tabIndex={-1} aria-hidden="true" />}
           >
-            <DriveFilePicker projectFolder={projectFolder} onClose={() => setDrivePickerOpen(false)} onPick={insertDriveFiles} />
+            <DocumentsFilePicker projectFolder={projectFolder} onClose={() => setDocumentsPickerOpen(false)} onPick={insertDocumentsFiles} />
           </Popover>
         )}
         {/* The workspace is only a Select when it can actually be picked (new, unlocked

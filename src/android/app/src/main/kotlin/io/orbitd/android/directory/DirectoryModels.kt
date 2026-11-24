@@ -19,12 +19,16 @@ import kotlinx.serialization.json.intOrNull
  * remote the workspace records, null with none and from a server that does not send it: what makes a wiki of it (mock 41). */
 @Serializable
 data class DirectoryWorkspace(val id: String, val name: String, val runnerId: String? = null,
-    val enabled: Boolean = true, val position: Int? = null, val createdAt: String? = null, val repoUrl: String? = null)
+    val enabled: Boolean = true, val position: Int? = null, val createdAt: String? = null, val repoUrl: String? = null,
+    /** `PULL_REQUEST` or `PUSH_AS_ME`; null with none chosen and from a server that does not send it. */
+    val landingMode: String? = null)
 @Serializable
 data class DirectoryRunner(val id: String, val name: String, val status: String? = null, val online: Boolean? = null,
     val displayName: String? = null, val lastHeartbeatAt: String? = null,
     /** True on the account's managed runner (Orbit Cloud); null from an older server (RunnerPage.isManaged). */
-    val managed: Boolean? = null)
+    val managed: Boolean? = null,
+    /** The runner's Max Concurrent and the sessions it runs now; null from an older server. */
+    val maxConcurrent: Int? = null, val activeSessions: Int? = null)
 @Serializable
 data class Folder(val id: String, val workspaceId: String, val name: String)
 @Serializable
@@ -207,7 +211,11 @@ internal const val NEEDS_YOU_GROUP = "section:needs-you"
 internal const val WORKING_GROUP = "section:working"
 
 /** Pending approvals, or a failure the server is not retrying. */
-internal fun DirectorySession.needsOwner() = pendingApprovals > 0 || (status == "FAILED" && retryAt == null)
+internal fun DirectorySession.needsOwner() = pendingApprovals > 0 || (failedForList() && retryAt == null)
+
+/** With the session facts, the state word's own reading ([displayRunState]); from an older server, the legacy status. */
+private fun DirectorySession.failedForList() = if (phase != null && released != null) displayRunState == RunState.FAILED else status == "FAILED"
+
 
 internal fun DirectorySession.isWorkingForList() = status == "RUNNING" || status == "PENDING" || (status == "FAILED" && retryAt != null)
 

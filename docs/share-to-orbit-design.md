@@ -12,7 +12,7 @@ sends it from the app. Nothing is sent on their behalf.
 Owner decisions (2026-11-16):
 
 - Destination: **choose a session; the items become attachments in its composer draft**. Not a one-shot send,
-  not Orbit Files, not a task.
+  not Documents, not a task.
 - Platforms: **iOS, Android, macOS**.
 
 ## 2. Today

@@ -222,22 +222,22 @@ describe('the composer + menu', { timeout: 60_000 }, () => {
   it('draws the native menu: command group under the thumb, media group above the rule', async () => {
     const menu = await openMenu();
 
-    expect(drawn(menu)).toEqual(['Upload File', 'Upload Image', 'Add from Orbit Files', '─', 'Shell', 'Skill', 'Command']);
+    expect(drawn(menu)).toEqual(['File', 'Image', 'Documents', '─', 'Shell', 'Skill', 'Command']);
     // …in the variant that sizes it like the native one on a phone (below).
     expect(menu.dataset.variant).toBe('attachment');
   });
 
-  it('offers Add from Orbit Files when the capability member is absent (a server from before the switch)', async () => {
+  it('offers Documents when the capability member is absent (a server from before the switch)', async () => {
     capabilities = { managedRunners: { enabled: false } };
     const menu = await openMenu();
-    expect(drawn(menu)).toContain('Add from Orbit Files');
+    expect(drawn(menu)).toContain('Documents');
   });
 
-  it('leaves out Add from Orbit Files, and asks nothing of /drive, when Documents is off', async () => {
+  it('leaves out Documents, and asks nothing of the drive, when Documents is off', async () => {
     capabilities = { managedRunners: { enabled: false }, documents: { enabled: false } };
     const menu = await openMenu();
-    expect(drawn(menu)).toEqual(['Upload File', 'Upload Image', '─', 'Shell', 'Skill', 'Command']);
-    expect(apiMock.mock.calls.filter(([path]) => String(path).startsWith('/drive'))).toEqual([]);
+    expect(drawn(menu)).toEqual(['File', 'Image', '─', 'Shell', 'Skill', 'Command']);
+    expect(apiMock.mock.calls.filter(([path]) => /^\/(drive|documents)/.test(String(path)))).toEqual([]);
   });
 
   it('gives Command and Shell the glyphs the native menu gives them', async () => {
