@@ -2682,7 +2682,7 @@ struct TranscriptItemView: View {
             // names no job, stays a call.
             JobCardView(card: c)
         case .toolCall(let c) where DriveSyncCard.drawsCard(c):
-            // A documents_sync call is its sync's card, live after the turn ends (board documents-sync-card); an
+            // A drive_sync call is its sync's card, live after the turn ends (board documents-sync-card); an
             // answer that names no sync, from an older runner, stays a call.
             DriveSyncCardView(syncID: DriveSyncCard.syncID(c.result) ?? "")
         case .toolCall(let c):

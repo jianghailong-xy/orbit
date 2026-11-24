@@ -186,6 +186,18 @@ export class FakeKubeCluster {
   }
 
   /**
+   * The kubelet evicts a stored Pod: its containers killed (137) and the Pod Failed with reason Evicted and the
+   * kubelet's sentence, e.g. "Usage of EmptyDir volume \"tmp\" exceeds the limit \"1Gi\"." for a full /tmp.
+   */
+  evictPod(name: string, message: string): void {
+    this.mutate<Pod>('pods', name, (pod) => {
+      reportStopped(pod, 137, 'Error');
+      pod.status = { ...pod.status, phase: 'Failed', reason: 'Evicted', message };
+    });
+    this.settleDeletion(name);
+  }
+
+  /**
    * A deletion through the API server, as an operator's `kubectl delete pod`, an eviction or a drain
    * sends it: a Pod with a finalizer stays, deletion stamped, and its kubelet reports it stopped (unless
    * `kubeletReportsDeletions` is off); one without goes at once.
@@ -532,8 +544,10 @@ function reportStopped(pod: Pod, exitCode: number, reason: string): void {
       name: c.name,
       state: { terminated: key === 'initContainers' ? { exitCode: 0, reason: 'Completed', finishedAt } : { exitCode, reason, finishedAt } },
     }));
+  // A stop is no eviction: an earlier one's reason and sentence (evictPod) are not carried over.
+  const { reason: _reason, message: _message, ...status } = pod.status ?? {};
   pod.status = {
-    ...pod.status,
+    ...status,
     phase: exitCode ? 'Failed' : 'Succeeded',
     initContainerStatuses: statuses('initContainers'),
     containerStatuses: statuses('containers'),

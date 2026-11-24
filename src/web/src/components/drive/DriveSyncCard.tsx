@@ -32,7 +32,7 @@ function took(sync: DriveSync): string {
 }
 
 /**
- * An agent's documents_sync call as its sync's card (board docs/mocks/documents-sync-card): the same live numbers as the
+ * An agent's drive_sync (or documents_sync) call as its sync's card (board docs/mocks/documents-sync-card): the same live numbers as the
  * Documents tray, kept current after the agent's turn ends, since the sync runs in the background. A sync that ends
  * cleanly folds to one line; failures, a stop and a failed sync stay open.
  */

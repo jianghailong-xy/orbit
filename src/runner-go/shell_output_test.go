@@ -75,6 +75,7 @@ func TestForegroundShellStreamsOutputBeforeItsAuthoritativeResult(t *testing.T) 
 			"turn-live",
 			nil,
 			shellTurnTimeout,
+			"",
 		)
 		close(done)
 	}()

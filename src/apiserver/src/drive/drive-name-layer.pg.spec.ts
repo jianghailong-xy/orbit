@@ -138,7 +138,7 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
   };
   /** A version's bytes, chunk after chunk from the store. */
   const bytesOf = async (versionId: string) => {
-    const rows = await db.documentVersionChunk.findMany({ where: { versionId }, orderBy: { idx: 'asc' } });
+    const rows = await db.driveVersionChunk.findMany({ where: { versionId }, orderBy: { idx: 'asc' } });
     const parts: Buffer[] = [];
     let offset = 0;
     for (const row of rows) {
@@ -149,7 +149,7 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
     }
     return Buffer.concat(parts).toString();
   };
-  const textOf = async (entryId: string) => bytesOf((await db.documentEntry.findUniqueOrThrow({ where: { id: entryId } })).currentVersionId!);
+  const textOf = async (entryId: string) => bytesOf((await db.driveEntry.findUniqueOrThrow({ where: { id: entryId } })).currentVersionId!);
   /** A file with content, as a writer makes one: created with an empty first version, then filled by its handle. */
   const fileWith = async (parentId: string | null, name: string, text: string, who = owner) => {
     const handleId = randomUUID();
@@ -157,7 +157,7 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
     await commit(who, { entryId: entry.id, handleId, mode: 'CONTINUE', baseVersionId: entry.currentVersionId, parts: [text] });
     return entry.id;
   };
-  const versionsOf = (entryId: string) => db.documentVersion.findMany({ where: { entryId }, orderBy: { createdAt: 'asc' } });
+  const versionsOf = (entryId: string) => db.driveVersion.findMany({ where: { entryId }, orderBy: { createdAt: 'asc' } });
   const names = async (parentId?: string) => (await drive.list(owner, { parentId })).entries.map((e) => e.name);
 
   const root = await drive.ensureRoot(owner);
@@ -181,7 +181,7 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
     assert.deepEqual({ ...again, replayed: false }, { ...once, replayed: false });
     assert.equal(await textOf(entry.id), 'hello world', 'and applied nothing');
     assert.equal((await versionsOf(entry.id)).length, 1);
-    assert.equal((await db.documentEntry.findUniqueOrThrow({ where: { id: entry.id } })).sizeBytes, 11n);
+    assert.equal((await db.driveEntry.findUniqueOrThrow({ where: { id: entry.id } })).sizeBytes, 11n);
 
     const foreign = Buffer.from(`stranger's own content ${RUN}`);
     await send(stranger, [foreign]);
@@ -194,7 +194,7 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
 
   await t.test('(1) an overwrite makes a version and puts the previous one in Trash, which the owner restores', async () => {
     const id = await fileWith(null, 'report.md', 'draft one');
-    const before = await db.documentEntry.findUniqueOrThrow({ where: { id } });
+    const before = await db.driveEntry.findUniqueOrThrow({ where: { id } });
     const answer = await commit(owner, { entryId: id, handleId: randomUUID(), mode: 'OVERWRITE', baseVersionId: before.currentVersionId, parts: ['draft two'] });
     assert.equal(answer.newVersion, true);
     assert.equal(answer.replacedVersionId, before.currentVersionId);
@@ -204,7 +204,7 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
     const replaced = versions.find((v) => v.id === before.currentVersionId)!;
     assert.notEqual(replaced.replacedAt, null);
     assert.equal(replaced.trashGroupId, answer.trashGroupId);
-    const group = await db.documentTrashGroup.findUniqueOrThrow({ where: { id: answer.trashGroupId! } });
+    const group = await db.driveTrashGroup.findUniqueOrThrow({ where: { id: answer.trashGroupId! } });
     assert.equal(group.kind, 'VERSION');
     assert.equal(group.folderPath, '/');
     assert.equal(group.itemCount, 1);
@@ -217,7 +217,7 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
     // The owner restores it from Trash: it is current again, and what replaced it is in Trash in its turn.
     await drive.restoreGroup(owner, group.id);
     assert.equal(await textOf(id), 'draft one');
-    assert.equal(await db.documentTrashGroup.findUnique({ where: { id: group.id } }), null, 'the group is gone from Trash');
+    assert.equal(await db.driveTrashGroup.findUnique({ where: { id: group.id } }), null, 'the group is gone from Trash');
     const after = await versionsOf(id);
     assert.equal(after.length, 2);
     const nowReplaced = after.find((v) => v.id === answer.versionId)!;
@@ -228,17 +228,17 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
     const copy = await drive.restoreVersion(owner, nowReplaced.id, 'COPY');
     assert.equal(copy.name, 'report (2).md');
     assert.equal(await textOf(copy.id), 'draft two');
-    assert.notEqual((await db.documentVersion.findUniqueOrThrow({ where: { id: nowReplaced.id } })).trashGroupId, null);
+    assert.notEqual((await db.driveVersion.findUniqueOrThrow({ where: { id: nowReplaced.id } })).trashGroupId, null);
   });
 
   await t.test('(2) an append makes no version; a moved tail is answered with the tail; an append onto an overwritten base is an overwrite', async () => {
     const id = await fileWith(null, 'build.log', 'line 1\n');
-    const entry = await db.documentEntry.findUniqueOrThrow({ where: { id } });
+    const entry = await db.driveEntry.findUniqueOrThrow({ where: { id } });
     const v = entry.currentVersionId!;
-    const groupsBefore = await db.documentTrashGroup.count({ where: { ownerId: owner } });
+    const groupsBefore = await db.driveTrashGroup.count({ where: { ownerId: owner } });
 
     // A small tail is replaced by itself plus the appended bytes, as the daemon builds it.
-    const tail = await db.documentVersionChunk.findFirstOrThrow({ where: { versionId: v }, orderBy: { idx: 'desc' } });
+    const tail = await db.driveVersionChunk.findFirstOrThrow({ where: { versionId: v }, orderBy: { idx: 'desc' } });
     const one = await commit(owner, {
       entryId: id, mode: 'APPEND', baseVersionId: v, replaceTail: { idx: tail.idx, oldSha256: tail.sha256 }, firstIdx: tail.idx, parts: ['line 1\nline 2\n'],
     });
@@ -249,8 +249,8 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
     assert.equal(two.newVersion, false);
     assert.equal(await textOf(id), 'line 1\nline 2\nline 3\nline 4\n');
     assert.equal((await versionsOf(id)).length, 1, 'no version for an append');
-    assert.equal(await db.documentTrashGroup.count({ where: { ownerId: owner } }), groupsBefore, 'and nothing in Trash');
-    const grown = await db.documentEntry.findUniqueOrThrow({ where: { id } });
+    assert.equal(await db.driveTrashGroup.count({ where: { ownerId: owner } }), groupsBefore, 'and nothing in Trash');
+    const grown = await db.driveEntry.findUniqueOrThrow({ where: { id } });
     assert.equal(grown.sizeBytes, 28n);
     assert.ok(grown.seq > entry.seq, 'seq moves on an append too: it is the cache key');
 
@@ -269,7 +269,7 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
     const late = await commit(owner, { entryId: id, mode: 'APPEND', baseVersionId: v, baseSize: 28, firstIdx: 3, parts: ['line 5\n'] });
     assert.equal(late.newVersion, true);
     assert.equal(await textOf(id), 'line 1\nline 2\nline 3\nline 4\nline 5\n', 'last write wins');
-    const kept = await db.documentVersion.findUniqueOrThrow({ where: { id: over.versionId } });
+    const kept = await db.driveVersion.findUniqueOrThrow({ where: { id: over.versionId } });
     assert.notEqual(kept.trashGroupId, null, 'and the content it replaced is in Trash: nothing is lost');
   });
 
@@ -288,11 +288,11 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
     const groupIds = new Set(answers.map((x) => x.trashGroupId));
     assert.equal(groupIds.size, 1, 'one group for the whole rm -rf');
     const groupId = answers[0].trashGroupId;
-    const group = await db.documentTrashGroup.findUniqueOrThrow({ where: { id: groupId } });
+    const group = await db.driveTrashGroup.findUniqueOrThrow({ where: { id: groupId } });
     assert.equal(group.itemCount, 5, 'out, deep and the three files');
     assert.equal(group.folderId, project.id, 'deleted from the folder out was in');
     assert.equal(group.folderPath, '/Project');
-    const tops = await db.documentEntry.findMany({ where: { trashGroupId: groupId, trashTop: true } });
+    const tops = await db.driveEntry.findMany({ where: { trashGroupId: groupId, trashTop: true } });
     assert.deepEqual(tops.map((e) => e.id), [out.id], 'the folder is the group\'s one top-level item');
     const listed = (await drive.trash(owner)).groups.find((g) => g.id === groupId)!;
     assert.deepEqual(listed.items.map((i) => i.name), ['out']);
@@ -302,7 +302,7 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
 
     // A delete with the same key after the window opens a group of its own.
     const later = await fileWith(project.id, 'later.txt', 'L');
-    await db.documentTrashGroup.update({ where: { id: groupId }, data: { lastAddedAt: new Date(Date.now() - 11_000) } });
+    await db.driveTrashGroup.update({ where: { id: groupId }, data: { lastAddedAt: new Date(Date.now() - 11_000) } });
     const separate = await drive.moveToTrash(owner, later, { writer: agent, burstKey });
     assert.notEqual(separate.trashGroupId, groupId);
 
@@ -314,8 +314,8 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
     assert.deepEqual(await names(deep.id), ['c.txt']);
     assert.equal(await textOf(c), 'C');
     assert.equal((await drive.resolve(owner, '/Project/out/deep/c.txt')).id, c);
-    assert.equal(await db.documentEntry.count({ where: { ownerId: owner, trashGroupId: groupId } }), 0);
-    assert.equal(await db.documentTrashGroup.findUnique({ where: { id: groupId } }), null);
+    assert.equal(await db.driveEntry.count({ where: { ownerId: owner, trashGroupId: groupId } }), 0);
+    assert.equal(await db.driveTrashGroup.findUnique({ where: { id: groupId } }), null);
   });
 
   await t.test('(5) the owner\'s delete of a folder is one group, closed at once, that restores whole', async () => {
@@ -325,13 +325,13 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
     await fileWith(trip.id, '2.jpg', 'two');
     await fileWith(photos.id, 'cover.jpg', 'cover');
     const { trashGroupId } = await drive.moveToTrash(owner, photos.id);
-    const group = await db.documentTrashGroup.findUniqueOrThrow({ where: { id: trashGroupId } });
+    const group = await db.driveTrashGroup.findUniqueOrThrow({ where: { id: trashGroupId } });
     assert.equal(group.kind, 'DELETE');
     assert.notEqual(group.closedAt, null);
     assert.equal(group.itemCount, 5);
     assert.equal(group.sizeBytes, 11n);
     assert.equal(group.actorKind, 'OWNER');
-    assert.equal(await db.documentEntry.count({ where: { trashGroupId } }), 5, 'every descendant carries the group');
+    assert.equal(await db.driveEntry.count({ where: { trashGroupId } }), 5, 'every descendant carries the group');
     await drive.restoreGroup(owner, trashGroupId);
     assert.deepEqual((await names(photos.id)).sort(), ['Trip', 'cover.jpg'].sort());
     assert.deepEqual(await names(trip.id), ['1.jpg', '2.jpg']);
@@ -344,7 +344,7 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
     const fresh = await fileWith(docs.id, 'a.txt', 'new');
     await drive.restoreGroup(owner, g1);
     assert.deepEqual(await names(docs.id), ['a (2).txt', 'a.txt']);
-    assert.equal((await db.documentEntry.findUniqueOrThrow({ where: { id: old } })).name, 'a (2).txt');
+    assert.equal((await db.driveEntry.findUniqueOrThrow({ where: { id: old } })).name, 'a (2).txt');
     assert.equal(await textOf(old), 'old');
     assert.equal(await textOf(fresh), 'new', 'the live file was not overwritten');
 
@@ -370,7 +370,7 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
     const remade = await drive.resolve(owner, '/Docs/inner');
     assert.notEqual(remade.id, inner.id, 'a new folder, the old one still in Trash');
     assert.equal((await drive.resolve(owner, '/Docs/inner/kept.txt')).id, kept);
-    assert.notEqual((await db.documentEntry.findUniqueOrThrow({ where: { id: inner.id } })).trashedAt, null);
+    assert.notEqual((await db.driveEntry.findUniqueOrThrow({ where: { id: inner.id } })).trashedAt, null);
     // Restoring the folder later finds its name taken by the one made again.
     await drive.restoreGroup(owner, gFolder);
     assert.ok((await names(docs.id)).includes('inner (2)'));
@@ -403,20 +403,20 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
       },
     });
     const id = await fileWith(null, 'attributed.txt', 'x');
-    const entry = await db.documentEntry.findUniqueOrThrow({ where: { id } });
+    const entry = await db.driveEntry.findUniqueOrThrow({ where: { id } });
     await commit(owner, { entryId: id, mode: 'OVERWRITE', baseVersionId: entry.currentVersionId, parts: ['y'], writer: { kind: 'AGENT', sessionId: session.id, runnerId } });
-    let row = await db.documentEntry.findUniqueOrThrow({ where: { id }, include: { currentVersion: true } });
+    let row = await db.driveEntry.findUniqueOrThrow({ where: { id }, include: { currentVersion: true } });
     assert.equal(row.lastWriterKind, 'AGENT');
     assert.equal(row.lastWriterSessionId, session.id);
     assert.equal(row.lastWriterRunnerId, runnerId);
     assert.equal(row.currentVersion!.writerSessionId, session.id, 'a commit sets them on the version too');
     // A session not on the runner the write came through is dropped: "an agent on Orbit Cloud".
     await commit(owner, { entryId: id, mode: 'OVERWRITE', baseVersionId: row.currentVersionId, parts: ['z'], writer: { kind: 'AGENT', sessionId: session.id, runnerId: randomUUID() } });
-    row = await db.documentEntry.findUniqueOrThrow({ where: { id }, include: { currentVersion: true } });
+    row = await db.driveEntry.findUniqueOrThrow({ where: { id }, include: { currentVersion: true } });
     assert.equal(row.lastWriterSessionId, null);
     // The owner's rename is the owner's.
     await drive.rename(owner, id, { name: 'renamed.txt' });
-    row = await db.documentEntry.findUniqueOrThrow({ where: { id }, include: { currentVersion: true } });
+    row = await db.driveEntry.findUniqueOrThrow({ where: { id }, include: { currentVersion: true } });
     assert.equal(row.lastWriterKind, 'OWNER');
     assert.equal(row.lastWriterSessionId, null);
     assert.ok(row.lastWrittenAt.getTime() >= row.createdAt.getTime());
@@ -435,17 +435,17 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
     // A save by write-then-replace (§3.2): the target keeps its id and takes the source's content as a version, its
     // previous one going to Trash; the source is removed outright.
     const tmp = await fileWith(top.id, '.y.txt.swp', 'y edited');
-    const yWas = (await db.documentEntry.findUniqueOrThrow({ where: { id: y } })).currentVersionId!;
+    const yWas = (await db.driveEntry.findUniqueOrThrow({ where: { id: y } })).currentVersionId!;
     const onto = await drive.rename(owner, tmp, { name: 'y.txt', replace: true, writer: { kind: 'AGENT' } });
     assert.equal(onto.id, y, 'the target keeps its id');
     assert.equal((await drive.resolve(owner, '/Top/y.txt')).id, y);
     assert.equal(await textOf(y), 'y edited');
-    const replaced = await db.documentVersion.findUniqueOrThrow({ where: { id: yWas } });
+    const replaced = await db.driveVersion.findUniqueOrThrow({ where: { id: yWas } });
     assert.equal(replaced.entryId, y);
     assert.notEqual(replaced.replacedAt, null);
-    assert.equal((await db.documentTrashGroup.findUniqueOrThrow({ where: { id: replaced.trashGroupId! } })).kind, 'VERSION', 'the previous version is in Trash');
+    assert.equal((await db.driveTrashGroup.findUniqueOrThrow({ where: { id: replaced.trashGroupId! } })).kind, 'VERSION', 'the previous version is in Trash');
     assert.equal(await bytesOf(yWas), 'y', 'with its content');
-    assert.equal(await db.documentEntry.findUnique({ where: { id: tmp } }), null, 'the source is gone');
+    assert.equal(await db.driveEntry.findUnique({ where: { id: tmp } }), null, 'the source is gone');
     // A folder in Trash takes no new entries.
     await drive.moveToTrash(owner, mid.id);
     await refusedWith(drive.createFolder(owner, { parentId: mid.id, name: 'late' }), 404, DRIVE_PARENT_GONE);
@@ -460,9 +460,9 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
 
     // mv new.txt b.txt, onto an existing b.txt.
     const b = await fileWith(work.id, 'b.txt', 'the old b');
-    const bWas = (await db.documentEntry.findUniqueOrThrow({ where: { id: b } })).currentVersionId!;
+    const bWas = (await db.driveEntry.findUniqueOrThrow({ where: { id: b } })).currentVersionId!;
     const otherHandle = randomUUID();
-    await db.documentVersion.update({ where: { id: bWas }, data: { handleId: otherHandle } });
+    await db.driveVersion.update({ where: { id: bWas }, data: { handleId: otherHandle } });
     const newHandle = randomUUID();
     const created = await drive.createFile(owner, { parentId: work.id, name: 'new.txt', handleId: newHandle, writer: { kind: 'AGENT' } });
     const newCommit = randomUUID();
@@ -471,7 +471,7 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
     assert.equal(renamed.id, b, 'b.txt keeps its entry id');
     assert.equal((await drive.resolve(owner, '/Editor/b.txt')).id, b);
     assert.equal(await textOf(b), 'the new text', "its current version has new.txt's content");
-    const previous = await db.documentVersion.findUniqueOrThrow({ where: { id: bWas } });
+    const previous = await db.driveVersion.findUniqueOrThrow({ where: { id: bWas } });
     assert.equal(previous.entryId, b);
     assert.notEqual(previous.replacedAt, null);
     const versionGroups = await inTrash(b);
@@ -480,7 +480,7 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
     assert.equal(versionGroups[0].version?.id, bWas);
     assert.equal(await bytesOf(bWas), 'the old b');
     await refusedWith(drive.resolve(owner, '/Editor/new.txt'), 404, DRIVE_ENTRY_NOT_FOUND);
-    assert.equal(await db.documentEntry.findUnique({ where: { id: created.id } }), null, 'new.txt is gone');
+    assert.equal(await db.driveEntry.findUnique({ where: { id: created.id } }), null, 'new.txt is gone');
     assert.equal(await namedInTrash('new.txt'), false, 'and is not in Trash');
     assert.deepEqual(await names(work.id), ['b.txt']);
     // new.txt's commit, retried after the rename (its answer was lost), is answered as before and applies nothing.
@@ -489,7 +489,7 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
     assert.equal(retried.replayed, true);
     assert.equal(retried.versionId, written.versionId);
     assert.equal((await versionsOf(b)).length, versionsBefore, 'no version made');
-    assert.equal(await db.documentEntry.count({ where: { ownerId: owner, name: 'new.txt' } }), 0, 'and no file');
+    assert.equal(await db.driveEntry.count({ where: { ownerId: owner, name: 'new.txt' } }), 0, 'and no file');
     // The owner can put the previous content back: it is b.txt's version.
     await drive.restoreVersion(owner, bWas, 'CURRENT');
     assert.equal(await textOf(b), 'the old b');
@@ -506,18 +506,18 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
     const staging = await chunks.openStaging(owner, { source: 'MOUNT', entryId: tmp.id });
     const part = Buffer.from('written while renamed');
     await chunks.putChunk(owner, staging.id, 0, sha256(part), Readable.from([part]));
-    const bBefore = (await db.documentEntry.findUniqueOrThrow({ where: { id: b } })).currentVersionId!;
+    const bBefore = (await db.driveEntry.findUniqueOrThrow({ where: { id: b } })).currentVersionId!;
     assert.equal((await drive.rename(owner, tmp.id, { name: 'b.txt', replace: true, writer: { kind: 'AGENT' } })).id, b);
     assert.equal(await textOf(b), '', 'b.txt has what a.tmp held when it was renamed');
     assert.equal(await bytesOf(bBefore), 'the old b, finished', 'and its previous version is in Trash');
-    const kept = await db.documentStaging.findUniqueOrThrow({ where: { id: staging.id } });
+    const kept = await db.driveStaging.findUniqueOrThrow({ where: { id: staging.id } });
     assert.equal(kept.entryId, null, 'the staging outlives the source, bound to no entry');
     const closed = await drive.commit(owner, {
       commitId: randomUUID(), entryId: tmp.id, handleId: handle, mode: 'CONTINUE', baseVersionId: tmp.currentVersionId,
       chunks: [{ idx: 0, sha256: sha256(part), size: part.length }], stagingId: staging.id, writer: { kind: 'AGENT' },
     });
     assert.notEqual(closed.entryId, tmp.id, 'a new file');
-    const landed = await db.documentEntry.findUniqueOrThrow({ where: { id: closed.entryId } });
+    const landed = await db.driveEntry.findUniqueOrThrow({ where: { id: closed.entryId } });
     assert.equal(landed.name, 'a.tmp', 'named after the source');
     assert.equal(landed.parentId, work.id);
     assert.notEqual(landed.trashedAt, null, 'in Trash');
@@ -532,24 +532,24 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
     assert.equal(again.entryId, landed.id);
     assert.equal(again.newVersion, false);
     assert.equal(await textOf(landed.id), 'written while renamed, and more');
-    assert.equal(await db.documentEntry.count({ where: { ownerId: owner, name: 'a.tmp' } }), 1);
+    assert.equal(await db.driveEntry.count({ where: { ownerId: owner, name: 'a.tmp' } }), 1);
 
     // OVERWRITE and APPEND from a source renamed while open land the same way; an append keeps the content it was built on.
     const appender = await fileWith(work.id, 'log.tmp', 'abc');
-    const appendBase = (await db.documentEntry.findUniqueOrThrow({ where: { id: appender } })).currentVersionId!;
+    const appendBase = (await db.driveEntry.findUniqueOrThrow({ where: { id: appender } })).currentVersionId!;
     await drive.rename(owner, appender, { name: 'b.txt', replace: true });
     assert.equal(await textOf(b), 'abc');
     const appended = await commit(owner, { entryId: appender, mode: 'APPEND', baseVersionId: appendBase, parts: ['def'], firstIdx: 1 });
     assert.notEqual(appended.entryId, b);
     assert.equal(await textOf(appended.entryId), 'abcdef', 'the base content plus the appended bytes');
-    assert.equal((await db.documentEntry.findUniqueOrThrow({ where: { id: appended.entryId } })).name, 'log.tmp');
+    assert.equal((await db.driveEntry.findUniqueOrThrow({ where: { id: appended.entryId } })).name, 'log.tmp');
     assert.equal(await textOf(b), 'abc', 'b.txt keeps the content renamed onto it');
     const overwriter = await fileWith(work.id, 'over.tmp', 'first');
-    const overBase = (await db.documentEntry.findUniqueOrThrow({ where: { id: overwriter } })).currentVersionId!;
+    const overBase = (await db.driveEntry.findUniqueOrThrow({ where: { id: overwriter } })).currentVersionId!;
     await drive.rename(owner, overwriter, { name: 'b.txt', replace: true });
     const over = await commit(owner, { entryId: overwriter, mode: 'OVERWRITE', baseVersionId: overBase, parts: ['second'] });
     assert.equal(await textOf(over.entryId), 'second');
-    assert.equal((await db.documentEntry.findUniqueOrThrow({ where: { id: over.entryId } })).trashedAt !== null, true);
+    assert.equal((await db.driveEntry.findUniqueOrThrow({ where: { id: over.entryId } })).trashedAt !== null, true);
     assert.deepEqual(await names(work.id), ['b.txt'], 'nothing came back into the folder');
     assert.equal((await drive.resolve(owner, '/Editor/b.txt')).id, b, 'and b.txt is the same entry throughout');
     // An id no entry ever had, or another account's removed file, is still not found.
@@ -562,10 +562,10 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
     const { trashGroupId } = await drive.moveToTrash(owner, doomed.id, { writer: { kind: 'AGENT' }, burstKey: `mount-${RUN}-14` });
     await commit(owner, { entryId: doomed.id, handleId: h, mode: 'CONTINUE', baseVersionId: doomed.currentVersionId, parts: ['written after unlink'] });
     assert.equal(await textOf(doomed.id), 'written after unlink');
-    const after = await db.documentEntry.findUniqueOrThrow({ where: { id: doomed.id } });
+    const after = await db.driveEntry.findUniqueOrThrow({ where: { id: doomed.id } });
     await commit(owner, { entryId: doomed.id, mode: 'OVERWRITE', baseVersionId: after.currentVersionId, parts: ['overwritten in Trash'] });
     assert.equal(await textOf(doomed.id), 'overwritten in Trash');
-    const finalRow = await db.documentEntry.findUniqueOrThrow({ where: { id: doomed.id } });
+    const finalRow = await db.driveEntry.findUniqueOrThrow({ where: { id: doomed.id } });
     assert.notEqual(finalRow.trashedAt, null, 'still in Trash');
     assert.equal(finalRow.trashGroupId, trashGroupId);
     assert.equal(finalRow.parentId, work.id, 'and still at its original place in Trash');
@@ -591,7 +591,7 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
     assert.ok(announced.length >= before + 4, 'each committed change was announced');
     assert.equal(announced.at(-1)!.seq, read.changes.at(-1)!.seq);
     assert.equal(announced.at(-1)!.ownerId, owner);
-    assert.equal((await db.documentEntry.findUniqueOrThrow({ where: { id: file } })).seq, BigInt(mine.at(-1)!.seq));
+    assert.equal((await db.driveEntry.findUniqueOrThrow({ where: { id: file } })).seq, BigInt(mine.at(-1)!.seq));
 
     // A transaction takes a seq and commits after a higher one has been read.
     const slow = new Client({ connectionString: url });
@@ -599,7 +599,7 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
     try {
       await slow.query('BEGIN');
       const late = await slow.query<{ seq: string }>(
-        `INSERT INTO "document_change" ("owner_id", "entry_id", "parent_id", "op") VALUES ($1, $2, $3, 'UPSERT') RETURNING "seq"::text`,
+        `INSERT INTO "drive_change" ("owner_id", "entry_id", "parent_id", "op") VALUES ($1, $2, $3, 'UPSERT') RETURNING "seq"::text`,
         [owner, folder.id, root.id],
       );
       await drive.createFolder(owner, { name: 'After' });
@@ -620,31 +620,31 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
   await t.test('(11) delete for good and Empty Trash remove the rows, chunk rows included', async () => {
     const tmp = await drive.createFolder(owner, { name: 'Tmp' });
     const f = await fileWith(tmp.id, 't.txt', 'tmp');
-    const fVersion = (await db.documentEntry.findUniqueOrThrow({ where: { id: f } })).currentVersionId!;
+    const fVersion = (await db.driveEntry.findUniqueOrThrow({ where: { id: f } })).currentVersionId!;
     const { trashGroupId } = await drive.moveToTrash(owner, tmp.id);
     await drive.deleteGroup(owner, trashGroupId);
-    assert.equal(await db.documentEntry.count({ where: { id: { in: [tmp.id, f] } } }), 0);
-    assert.equal(await db.documentVersionChunk.count({ where: { versionId: fVersion } }), 0);
-    assert.equal(await db.documentTrashGroup.findUnique({ where: { id: trashGroupId } }), null);
+    assert.equal(await db.driveEntry.count({ where: { id: { in: [tmp.id, f] } } }), 0);
+    assert.equal(await db.driveVersionChunk.count({ where: { versionId: fVersion } }), 0);
+    assert.equal(await db.driveTrashGroup.findUnique({ where: { id: trashGroupId } }), null);
 
     const one = await fileWith(null, 'one-version.txt', 'v1');
-    const e = await db.documentEntry.findUniqueOrThrow({ where: { id: one } });
+    const e = await db.driveEntry.findUniqueOrThrow({ where: { id: one } });
     await commit(owner, { entryId: one, mode: 'OVERWRITE', baseVersionId: e.currentVersionId, parts: ['v2'] });
     await drive.deleteVersion(owner, e.currentVersionId!);
-    assert.equal(await db.documentVersion.findUnique({ where: { id: e.currentVersionId! } }), null);
+    assert.equal(await db.driveVersion.findUnique({ where: { id: e.currentVersionId! } }), null);
     assert.equal((await versionsOf(one)).length, 1);
 
-    assert.ok(await db.documentTrashGroup.count({ where: { ownerId: owner } }) > 0, 'Trash holds things before it is emptied');
+    assert.ok(await db.driveTrashGroup.count({ where: { ownerId: owner } }) > 0, 'Trash holds things before it is emptied');
     await drive.emptyTrash(owner);
-    assert.equal(await db.documentTrashGroup.count({ where: { ownerId: owner } }), 0);
-    assert.equal(await db.documentEntry.count({ where: { ownerId: owner, trashedAt: { not: null } } }), 0);
-    assert.equal(await db.documentVersion.count({ where: { ownerId: owner, replacedAt: { not: null } } }), 0);
+    assert.equal(await db.driveTrashGroup.count({ where: { ownerId: owner } }), 0);
+    assert.equal(await db.driveEntry.count({ where: { ownerId: owner, trashedAt: { not: null } } }), 0);
+    assert.equal(await db.driveVersion.count({ where: { ownerId: owner, replacedAt: { not: null } } }), 0);
     assert.equal((await drive.trash(owner)).groups.length, 0);
   });
 
   await t.test('(12) another account\'s entry, version and group are not found', async () => {
     const id = await fileWith(null, 'private.txt', 'mine');
-    const e = await db.documentEntry.findUniqueOrThrow({ where: { id } });
+    const e = await db.driveEntry.findUniqueOrThrow({ where: { id } });
     await commit(owner, { entryId: id, mode: 'OVERWRITE', baseVersionId: e.currentVersionId, parts: ['mine 2'] });
     const { trashGroupId } = await drive.moveToTrash(owner, id);
     await refusedWith(drive.get(stranger, id), 404, DRIVE_ENTRY_NOT_FOUND);
@@ -663,19 +663,19 @@ test('Documents drive: the name layer — versions, append, Trash groups, restor
     }), 404, DRIVE_ENTRY_NOT_FOUND);
     assert.equal((await drive.trash(stranger)).groups.length, 0);
     assert.equal((await drive.changes(stranger, '0')).changes.length, 0, 'nor any of its changes');
-    assert.notEqual((await db.documentEntry.findUniqueOrThrow({ where: { id } })).trashGroupId, null, 'and nothing moved');
+    assert.notEqual((await db.driveEntry.findUniqueOrThrow({ where: { id } })).trashGroupId, null, 'and nothing moved');
   });
 
   await t.test('(13) the retention sweep prunes commit answers and feed rows older than a day', async () => {
     const id = await fileWith(null, 'sweep.txt', 's');
     const sweep = new FileRetentionSweep(db as never, files);
-    const commits = await db.documentCommit.count({ where: { ownerId: owner } });
-    const feed = await db.documentChange.count({ where: { ownerId: owner } });
+    const commits = await db.driveCommit.count({ where: { ownerId: owner } });
+    const feed = await db.driveChange.count({ where: { ownerId: owner } });
     assert.ok(commits > 0 && feed > 0);
     const done = await sweep.sweep(new Date(Date.now() + DAY + 60_000));
     assert.ok(done.feedRowsRemoved >= commits + feed, `removed ${done.feedRowsRemoved}`);
-    assert.equal(await db.documentCommit.count({ where: { ownerId: owner } }), 0);
-    assert.equal(await db.documentChange.count({ where: { ownerId: owner } }), 0);
+    assert.equal(await db.driveCommit.count({ where: { ownerId: owner } }), 0);
+    assert.equal(await db.driveChange.count({ where: { ownerId: owner } }), 0);
     assert.equal(await textOf(id), 's', 'the drive itself is untouched');
   });
 });

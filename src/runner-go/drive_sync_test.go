@@ -17,9 +17,9 @@ import (
 	"time"
 )
 
-// fakeSyncDocuments is an in-memory drive door, enough for one directory sync: entries by path, stagings, commits,
+// fakeSyncDrive is an in-memory drive door, enough for one directory sync: entries by path, stagings, commits,
 // utimens, delete, and the sync's progress reports.
-type fakeSyncDocuments struct {
+type fakeSyncDrive struct {
 	t  *testing.T
 	mu sync.Mutex
 
@@ -42,21 +42,21 @@ type fakeSyncEntry struct {
 	id, kind, path string
 	size           int64
 	mtime          *string
-	chunks         []documentsChunk
+	chunks         []driveChunk
 }
 
-func newFakeSyncDocuments(t *testing.T) (*fakeSyncDocuments, *Transport) {
-	d := &fakeSyncDocuments{t: t, entries: map[string]*fakeSyncEntry{"/": {id: "root", kind: "FOLDER", path: "/"}}, stagings: map[string]map[int]string{}}
+func newFakeSyncDrive(t *testing.T) (*fakeSyncDrive, *Transport) {
+	d := &fakeSyncDrive{t: t, entries: map[string]*fakeSyncEntry{"/": {id: "root", kind: "FOLDER", path: "/"}}, stagings: map[string]map[int]string{}}
 	srv := newDriveTestServer(t, d.serve)
 	return d, newCallerTransport(srv.URL, "runner-secret", runnerCallerMCP)
 }
 
-func (d *fakeSyncDocuments) id() string {
+func (d *fakeSyncDrive) id() string {
 	d.nextID++
 	return fmt.Sprintf("e%d", d.nextID)
 }
 
-func (d *fakeSyncDocuments) json(w http.ResponseWriter, v interface{}) {
+func (d *fakeSyncDrive) json(w http.ResponseWriter, v interface{}) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
@@ -64,7 +64,7 @@ func (e *fakeSyncEntry) view() map[string]interface{} {
 	return map[string]interface{}{"id": e.id, "kind": e.kind, "name": path.Base(e.path), "path": e.path, "sizeBytes": e.size, "mtime": e.mtime}
 }
 
-func (d *fakeSyncDocuments) mkdir(p string) {
+func (d *fakeSyncDrive) mkdir(p string) {
 	for p != "/" {
 		if _, ok := d.entries[p]; !ok {
 			d.entries[p] = &fakeSyncEntry{id: d.id(), kind: "FOLDER", path: p}
@@ -73,10 +73,10 @@ func (d *fakeSyncDocuments) mkdir(p string) {
 	}
 }
 
-func (d *fakeSyncDocuments) serve(w http.ResponseWriter, r *http.Request) {
+func (d *fakeSyncDrive) serve(w http.ResponseWriter, r *http.Request) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	route := strings.TrimPrefix(r.URL.Path, "/api/runner/documents")
+	route := strings.TrimPrefix(r.URL.Path, "/api/runner/drive")
 	q := r.URL.Query()
 	notFound := func() {
 		w.WriteHeader(404)
@@ -213,7 +213,7 @@ func syncTestTree(t *testing.T) string {
 	chdirForTest(t, checkout)
 	out := filepath.Join(checkout, "out")
 	writeTestFile(t, filepath.Join(out, "report.md"), "# Report\n")
-	writeTestFile(t, filepath.Join(out, "charts", "q3.png"), strings.Repeat("p", documentsChunkSize+10))
+	writeTestFile(t, filepath.Join(out, "charts", "q3.png"), strings.Repeat("p", driveChunkSize+10))
 	writeTestFile(t, filepath.Join(out, "data", "a.csv"), "a,b\n1,2\n")
 	if err := os.MkdirAll(filepath.Join(out, "empty"), 0o755); err != nil {
 		t.Fatal(err)
@@ -221,22 +221,22 @@ func syncTestTree(t *testing.T) string {
 	return out
 }
 
-func runSyncForTest(t *testing.T, tr *Transport, source, dest string, deleteExtra bool) documentsSyncSummary {
+func runSyncForTest(t *testing.T, tr *Transport, source, dest string, deleteExtra bool) driveSyncSummary {
 	t.Helper()
-	real, err := documentsSyncSource(fileTestSession, source)
+	real, err := driveSyncSource(fileTestSession, source)
 	if err != nil {
 		t.Fatal(err)
 	}
-	summary, err := runDocumentsSync(context.Background(), tr, documentsSyncOptions{sessionID: fileTestSession, source: real, dest: dest, deleteExtra: deleteExtra})
+	summary, err := runDriveSync(context.Background(), tr, driveSyncOptions{sessionID: fileTestSession, source: real, dest: dest, deleteExtra: deleteExtra})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return summary
 }
 
-func TestDocumentsSyncCopiesOnceThenOnlyWhatChanged(t *testing.T) {
+func TestDriveSyncCopiesOnceThenOnlyWhatChanged(t *testing.T) {
 	out := syncTestTree(t)
-	d, tr := newFakeSyncDocuments(t)
+	d, tr := newFakeSyncDrive(t)
 
 	first := runSyncForTest(t, tr, out, "/Reports/out", false)
 	if first.Uploaded != 3 || first.Unchanged != 0 || first.FailedCount != 0 || first.Link == "" {
@@ -287,9 +287,9 @@ func TestDocumentsSyncCopiesOnceThenOnlyWhatChanged(t *testing.T) {
 	}
 }
 
-func TestDocumentsSyncDeleteSendsOnlyWhatTheDirectoryLacksToTrash(t *testing.T) {
+func TestDriveSyncDeleteSendsOnlyWhatTheDirectoryLacksToTrash(t *testing.T) {
 	out := syncTestTree(t)
-	d, tr := newFakeSyncDocuments(t)
+	d, tr := newFakeSyncDrive(t)
 	runSyncForTest(t, tr, out, "/Site/build", false)
 	d.mkdir("/Site/other")
 	if err := os.RemoveAll(filepath.Join(out, "data")); err != nil {
@@ -311,22 +311,22 @@ func TestDocumentsSyncDeleteSendsOnlyWhatTheDirectoryLacksToTrash(t *testing.T) 
 	if _, ok := d.entries["/Site/other"]; !ok {
 		t.Error("a folder outside the destination was touched")
 	}
-	if _, err := documentsSyncDest("/", true); err == nil {
+	if _, err := driveSyncDest("/", true); err == nil {
 		t.Error("--delete into the root was accepted")
 	}
-	if dest, err := documentsSyncDest("~/Drive/Site", true); err != nil || dest != "/Site" {
-		t.Errorf("documentsSyncDest = %q, %v", dest, err)
+	if dest, err := driveSyncDest("~/Drive/Site", true); err != nil || dest != "/Site" {
+		t.Errorf("driveSyncDest = %q, %v", dest, err)
 	}
 }
 
-func TestDocumentsSyncSkipsLinksAndGitAndRefusesPathsOutsideTheSession(t *testing.T) {
+func TestDriveSyncSkipsLinksAndGitAndRefusesPathsOutsideTheSession(t *testing.T) {
 	out := syncTestTree(t)
 	writeTestFile(t, filepath.Join(out, ".git", "HEAD"), "ref: main\n")
 	outside := writeTestFile(t, filepath.Join(t.TempDir(), "secret.txt"), "secret")
 	if err := os.Symlink(outside, filepath.Join(out, "link.txt")); err != nil {
 		t.Fatal(err)
 	}
-	d, tr := newFakeSyncDocuments(t)
+	d, tr := newFakeSyncDrive(t)
 	summary := runSyncForTest(t, tr, out, "/R", true)
 	if summary.Uploaded != 3 || summary.Skipped != 2 {
 		t.Fatalf("summary = %+v", summary)
@@ -337,28 +337,28 @@ func TestDocumentsSyncSkipsLinksAndGitAndRefusesPathsOutsideTheSession(t *testin
 		}
 	}
 
-	if _, err := documentsSyncSource(fileTestSession, filepath.Dir(outside)); err == nil {
+	if _, err := driveSyncSource(fileTestSession, filepath.Dir(outside)); err == nil {
 		t.Error("a directory outside the session was accepted")
 	}
-	if _, err := documentsSyncSource(fileTestSession, filepath.Join(out, "report.md")); err == nil || !strings.Contains(err.Error(), "documents_put") {
+	if _, err := driveSyncSource(fileTestSession, filepath.Join(out, "report.md")); err == nil || !strings.Contains(err.Error(), "drive_put") {
 		t.Errorf("a file was accepted as a directory: %v", err)
 	}
 	fakeDriveMount(t, true)
-	if _, err := documentsSyncSource(fileTestSession, driveHomePath); err == nil || !strings.Contains(err.Error(), "inside Drive") {
+	if _, err := driveSyncSource(fileTestSession, driveHomePath); err == nil || !strings.Contains(err.Error(), "inside Drive") {
 		t.Errorf("the drive's own mount was accepted: %v", err)
 	}
 }
 
-func TestDocumentsSyncRetriesTransientFailuresAndGoesOnPastAFileThatFails(t *testing.T) {
+func TestDriveSyncRetriesTransientFailuresAndGoesOnPastAFileThatFails(t *testing.T) {
 	out := syncTestTree(t)
-	d, tr := newFakeSyncDocuments(t)
+	d, tr := newFakeSyncDrive(t)
 	d.failChunk, d.failChunkTimes = "a.csv", 2
 	summary := runSyncForTest(t, tr, out, "/R", false)
 	if summary.Uploaded != 3 || summary.FailedCount != 0 {
 		t.Fatalf("two transient failures were not retried: %+v", summary)
 	}
 
-	d2, tr2 := newFakeSyncDocuments(t)
+	d2, tr2 := newFakeSyncDrive(t)
 	d2.failChunk, d2.failChunkTimes = "a.csv", -1
 	summary = runSyncForTest(t, tr2, out, "/R", false)
 	if summary.Uploaded != 2 || summary.FailedCount != 1 || summary.Failed[0].Path != "data/a.csv" ||
@@ -371,29 +371,29 @@ func TestDocumentsSyncRetriesTransientFailuresAndGoesOnPastAFileThatFails(t *tes
 	}
 }
 
-func TestDocumentsSyncWithoutABackgroundServiceSaysHowToRunItInTheForeground(t *testing.T) {
+func TestDriveSyncWithoutABackgroundServiceSaysHowToRunItInTheForeground(t *testing.T) {
 	out := syncTestTree(t)
 	t.Setenv(envBgSocket, "")
 	t.Setenv(envBgToken, "")
-	_, err := startDocumentsSyncJob(nil, fileTestSession, out, "/R", false)
+	_, err := startDriveSyncJob(nil, fileTestSession, out, "/R", false)
 	if err == nil || !strings.Contains(err.Error(), bgTransportUnavailable) || !strings.Contains(err.Error(), "--wait") {
 		t.Fatalf("err = %v", err)
 	}
-	if _, err := startDocumentsSyncJob(nil, fileTestSession, out, "/", true); err == nil || !strings.Contains(err.Error(), "root") {
+	if _, err := startDriveSyncJob(nil, fileTestSession, out, "/", true); err == nil || !strings.Contains(err.Error(), "root") {
 		t.Fatalf("--delete into the root was not refused before the job: %v", err)
 	}
 }
 
-func TestDocumentsSyncStoppedMidwayListsNoFailuresAndReportsStopped(t *testing.T) {
+func TestDriveSyncStoppedMidwayListsNoFailuresAndReportsStopped(t *testing.T) {
 	out := syncTestTree(t)
-	d, tr := newFakeSyncDocuments(t)
+	d, tr := newFakeSyncDrive(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	d.onChunk = cancel
-	real, err := documentsSyncSource(fileTestSession, out)
+	real, err := driveSyncSource(fileTestSession, out)
 	if err != nil {
 		t.Fatal(err)
 	}
-	summary, err := runDocumentsSync(ctx, tr, documentsSyncOptions{sessionID: fileTestSession, source: real, dest: "/R"})
+	summary, err := runDriveSync(ctx, tr, driveSyncOptions{sessionID: fileTestSession, source: real, dest: "/R"})
 	if err == nil {
 		t.Fatal("a stopped sync answered no error")
 	}
@@ -406,15 +406,15 @@ func TestDocumentsSyncStoppedMidwayListsNoFailuresAndReportsStopped(t *testing.T
 	}
 }
 
-func TestDocumentsSyncIsUnlistedAndRefusedWhileDocumentsIsOff(t *testing.T) {
-	kept := withoutDriveTools([]map[string]interface{}{{"name": "documents_sync"}, {"name": "bg_run"}})
+func TestDriveSyncIsUnlistedAndRefusedWhileDriveIsOff(t *testing.T) {
+	kept := withoutDriveTools([]map[string]interface{}{{"name": "drive_sync"}, {"name": "bg_run"}})
 	if len(kept) != 1 || kept[0]["name"] != "bg_run" {
-		t.Errorf("documents_sync was listed with Drive off: %v", kept)
+		t.Errorf("drive_sync was listed with Drive off: %v", kept)
 	}
 	s := &mcpServer{sessionID: fileTestSession, documentsOff: true}
-	result, handled := s.callDocumentsTool("documents_sync", map[string]interface{}{"localPath": "out", "path": "/R"})
+	result, handled := s.callDriveTool("drive_sync", map[string]interface{}{"localPath": "out", "path": "/R"})
 	if !handled || result["isError"] != true {
-		t.Fatalf("documents_sync ran with Drive off: %v", result)
+		t.Fatalf("drive_sync ran with Drive off: %v", result)
 	}
 }
 
@@ -455,11 +455,11 @@ func fakeBgRun(t *testing.T, refuse string) (commands *[]string) {
 	return seen
 }
 
-func TestDocumentsSyncCallOpensTheRecordFirstAndNamesIt(t *testing.T) {
+func TestDriveSyncCallOpensTheRecordFirstAndNamesIt(t *testing.T) {
 	out := syncTestTree(t)
-	d, tr := newFakeSyncDocuments(t)
+	d, tr := newFakeSyncDrive(t)
 	commands := fakeBgRun(t, "")
-	raw, err := startDocumentsSyncJob(tr, fileTestSession, out, "/R", false)
+	raw, err := startDriveSyncJob(tr, fileTestSession, out, "/R", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -476,8 +476,8 @@ func TestDocumentsSyncCallOpensTheRecordFirstAndNamesIt(t *testing.T) {
 
 	// The job reports into the record it was handed, and opens no second one.
 	d.opened = nil
-	real, _ := documentsSyncSource(fileTestSession, out)
-	if _, err := runDocumentsSync(context.Background(), tr, documentsSyncOptions{sessionID: fileTestSession, source: real, dest: "/R", syncID: "sync-1"}); err != nil {
+	real, _ := driveSyncSource(fileTestSession, out)
+	if _, err := runDriveSync(context.Background(), tr, driveSyncOptions{sessionID: fileTestSession, source: real, dest: "/R", syncID: "sync-1"}); err != nil {
 		t.Fatal(err)
 	}
 	if d.opened != nil {
@@ -488,11 +488,11 @@ func TestDocumentsSyncCallOpensTheRecordFirstAndNamesIt(t *testing.T) {
 	}
 }
 
-func TestDocumentsSyncCallEndsTheRecordWhenTheJobDoesNotStart(t *testing.T) {
+func TestDriveSyncCallEndsTheRecordWhenTheJobDoesNotStart(t *testing.T) {
 	out := syncTestTree(t)
-	d, tr := newFakeSyncDocuments(t)
+	d, tr := newFakeSyncDrive(t)
 	fakeBgRun(t, "Not started. Plan mode.")
-	if _, err := startDocumentsSyncJob(tr, fileTestSession, out, "/R", false); err == nil {
+	if _, err := startDriveSyncJob(tr, fileTestSession, out, "/R", false); err == nil {
 		t.Fatal("a refused job answered no error")
 	}
 	if len(d.reports) != 1 || d.reports[0]["status"] != "FAILED" || !strings.Contains(d.reports[0]["error"].(string), "Plan mode") {

@@ -21,7 +21,7 @@ import { DRIVE_CHUNK_MAX } from './drive-chunks.service';
  *   - Folder trash, folder move, restore and delete for good take a per-account advisory lock; a write into a folder holds
  *     that folder FOR SHARE and re-checks it is live (§1.4). Every transaction is bounded: 10 s a statement, 20 s in all;
  *     one cut off by a bound answers 503 DRIVE_LIMIT_HIT, not a bare 500.
- *   - Every change writes one document_change row and moves the entry's `seq`; the feed re-reads 60 s back so a row whose
+ *   - Every change writes one drive_change row and moves the entry's `seq`; the feed re-reads 60 s back so a row whose
  *     transaction committed late is never skipped (§5.4). Each committed change is announced as `drive.changed`.
  *
  * The owner is always the caller's, from its credential; another account's entry, version or group is not found.
@@ -69,10 +69,10 @@ export const DRIVE_LIMIT_HIT = 'DRIVE_LIMIT_HIT';
 
 type Tx = Prisma.TransactionClient;
 export type DriveEntryRow = EntryRow;
-type EntryRow = NonNullable<Awaited<ReturnType<Tx['documentEntry']['findFirst']>>>;
-type VersionRow = NonNullable<Awaited<ReturnType<Tx['documentVersion']['findFirst']>>>;
-type GroupRow = NonNullable<Awaited<ReturnType<Tx['documentTrashGroup']['findFirst']>>>;
-type ChangeRecord = NonNullable<Awaited<ReturnType<Tx['documentChange']['findFirst']>>>;
+type EntryRow = NonNullable<Awaited<ReturnType<Tx['driveEntry']['findFirst']>>>;
+type VersionRow = NonNullable<Awaited<ReturnType<Tx['driveVersion']['findFirst']>>>;
+type GroupRow = NonNullable<Awaited<ReturnType<Tx['driveTrashGroup']['findFirst']>>>;
+type ChangeRecord = NonNullable<Awaited<ReturnType<Tx['driveChange']['findFirst']>>>;
 
 /** Who made a change (§3.6). An agent's session is kept only when it is the owner's and runs on the runner it came through. */
 export interface DriveWriter {
@@ -305,7 +305,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
 
   /** The account's root folder, made by the first drive call that needs it. */
   async ensureRoot(ownerId: string): Promise<EntryRow> {
-    const found = await this.prisma.documentEntry.findFirst({ where: { ownerId, parentId: null } });
+    const found = await this.prisma.driveEntry.findFirst({ where: { ownerId, parentId: null } });
     if (found) return found;
     return withTransactionRetry(this.prisma, async (tx) => {
       await bound(tx);
@@ -316,13 +316,13 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
   /** Children of a live folder (the root when none is named), live ones only, paged by name. */
   async list(ownerId: string, options: { parentId?: string; cursor?: string; limit?: number } = {}) {
     const folder = options.parentId
-      ? await this.prisma.documentEntry.findFirst({ where: { id: options.parentId, ownerId, trashedAt: null } })
+      ? await this.prisma.driveEntry.findFirst({ where: { id: options.parentId, ownerId, trashedAt: null } })
       : await this.ensureRoot(ownerId);
     if (!folder) throw notFound();
     if (folder.kind !== 'FOLDER') throw refusal(HttpStatus.CONFLICT, DRIVE_NOT_A_FOLDER, 'That is a file, not a folder.');
     const after = decodeCursor(options.cursor, (v): v is { name: string } => typeof (v as { name?: unknown })?.name === 'string');
     const take = pageSize(options.limit);
-    const rows = await this.prisma.documentEntry.findMany({
+    const rows = await this.prisma.driveEntry.findMany({
       where: { ownerId, parentId: folder.id, trashedAt: null, ...(after ? { name: { gt: after.name } } : {}) },
       orderBy: { name: 'asc' },
       take: take + 1,
@@ -348,7 +348,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
         typeof (v as { name?: unknown })?.name === 'string' && typeof (v as { id?: unknown })?.id === 'string',
     );
     const take = pageSize(options.limit);
-    const rows = await this.prisma.documentEntry.findMany({
+    const rows = await this.prisma.driveEntry.findMany({
       where: {
         ownerId,
         trashedAt: null,
@@ -372,7 +372,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
 
   /** One entry of the account's, live or in Trash, with its path. */
   async get(ownerId: string, id: string) {
-    const entry = await this.prisma.documentEntry.findFirst({ where: { id, ownerId } });
+    const entry = await this.prisma.driveEntry.findFirst({ where: { id, ownerId } });
     if (!entry) throw notFound();
     return { ...entryView(entry), path: await pathOf(this.prisma, ownerId, entry.id) };
   }
@@ -382,7 +382,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
     let current = await this.ensureRoot(ownerId);
     for (const segment of String(path ?? '').split('/').filter((s) => s !== '')) {
       if (current.kind !== 'FOLDER') throw notFound();
-      const next = await this.prisma.documentEntry.findFirst({
+      const next = await this.prisma.driveEntry.findFirst({
         where: { ownerId, parentId: current.id, name: segment, trashedAt: null },
       });
       if (!next) throw notFound();
@@ -393,7 +393,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
 
   /** The current version of a live file of the account's — what a share link pins — or the entry's own refusal. */
   async shareableVersion(ownerId: string, entryId: string): Promise<{ id: string; sizeBytes: number }> {
-    const entry = await this.prisma.documentEntry.findFirst({ where: { id: entryId, ownerId, trashedAt: null } });
+    const entry = await this.prisma.driveEntry.findFirst({ where: { id: entryId, ownerId, trashedAt: null } });
     if (!entry) throw notFound();
     if (entry.kind !== 'FILE' || !entry.currentVersionId) throw refusal(HttpStatus.CONFLICT, DRIVE_NOT_A_FILE, 'Only a file can be shared.');
     return { id: entry.currentVersionId, sizeBytes: Number(entry.sizeBytes) };
@@ -401,10 +401,10 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
 
   /** A file's current and replaced versions, newest first. */
   async versions(ownerId: string, entryId: string) {
-    const entry = await this.prisma.documentEntry.findFirst({ where: { id: entryId, ownerId } });
+    const entry = await this.prisma.driveEntry.findFirst({ where: { id: entryId, ownerId } });
     if (!entry) throw notFound();
     if (entry.kind !== 'FILE') throw refusal(HttpStatus.CONFLICT, DRIVE_NOT_A_FILE, 'A folder has no versions.');
-    const rows = await this.prisma.documentVersion.findMany({
+    const rows = await this.prisma.driveVersion.findMany({
       where: { ownerId, entryId },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
@@ -421,7 +421,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
       (v): v is { at: string; id: string } => typeof (v as { at?: unknown })?.at === 'string' && typeof (v as { id?: unknown })?.id === 'string',
     );
     const take = pageSize(options.limit);
-    const groups = await this.prisma.documentTrashGroup.findMany({
+    const groups = await this.prisma.driveTrashGroup.findMany({
       where: {
         ownerId,
         ...(after ? { OR: [{ createdAt: { lt: new Date(after.at) } }, { createdAt: new Date(after.at), id: { lt: after.id } }] } : {}),
@@ -444,14 +444,14 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
 
   /** One Trash group: its top-level items, or the children of one of its folders, paged by name. */
   async trashGroup(ownerId: string, groupId: string, options: { parentId?: string; cursor?: string; limit?: number } = {}) {
-    const group = await this.prisma.documentTrashGroup.findFirst({
+    const group = await this.prisma.driveTrashGroup.findFirst({
       where: { id: groupId, ownerId },
       include: { versions: { include: { entry: true }, take: 1 } },
     });
     if (!group) throw refusal(HttpStatus.NOT_FOUND, DRIVE_TRASH_GROUP_NOT_FOUND, 'No such group in Trash.');
     const after = decodeCursor(options.cursor, (v): v is { name: string } => typeof (v as { name?: unknown })?.name === 'string');
     const take = pageSize(options.limit);
-    const rows = await this.prisma.documentEntry.findMany({
+    const rows = await this.prisma.driveEntry.findMany({
       where: {
         ownerId,
         trashGroupId: group.id,
@@ -496,7 +496,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
    */
   async changes(ownerId: string, since?: string) {
     const clock = await this.prisma.$queryRaw<Array<{ now: Date; last: bigint }>>`
-      SELECT clock_timestamp() AS "now", (SELECT last_value FROM "document_change_seq_seq") AS "last"`;
+      SELECT clock_timestamp() AS "now", (SELECT last_value FROM "drive_change_seq_seq") AS "last"`;
     const startedAt = clock[0].now.getTime();
     const last = num(clock[0].last);
     const cursorOf = (seq: number) => `${seq}:${startedAt}`;
@@ -510,8 +510,8 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
     }
     const lookFrom = new Date(polledAt - DRIVE_FEED_LOOK_BACK_MS);
     const [after, back] = await Promise.all([
-      this.prisma.documentChange.findMany({ where: { ownerId, seq: { gt: BigInt(seq) } }, orderBy: { seq: 'asc' }, take: FEED_PAGE + 1 }),
-      this.prisma.documentChange.findMany({
+      this.prisma.driveChange.findMany({ where: { ownerId, seq: { gt: BigInt(seq) } }, orderBy: { seq: 'asc' }, take: FEED_PAGE + 1 }),
+      this.prisma.driveChange.findMany({
         where: { ownerId, seq: { lte: BigInt(seq) }, at: { gte: lookFrom } },
         orderBy: { seq: 'asc' },
         take: FEED_PAGE * 5,
@@ -537,7 +537,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
     let current = await this.ensureRoot(ownerId);
     for (const segment of drivePathSegments(path)) {
       if (current.kind !== 'FOLDER') throw notFound();
-      const next = await this.prisma.documentEntry.findFirst({
+      const next = await this.prisma.driveEntry.findFirst({
         where: { ownerId, parentId: current.id, name: segment, trashedAt: null },
       });
       if (!next) throw notFound();
@@ -548,7 +548,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
 
   /** A live entry by its id: one in Trash is not found, as no agent sees Trash (D11). */
   async liveById(ownerId: string, id: string): Promise<EntryRow> {
-    const entry = await this.prisma.documentEntry.findFirst({ where: { id, ownerId, trashedAt: null } });
+    const entry = await this.prisma.driveEntry.findFirst({ where: { id, ownerId, trashedAt: null } });
     if (!entry) throw notFound();
     return entry;
   }
@@ -564,7 +564,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
    */
   async listWithChunks(ownerId: string, folder: EntryRow, options: { cursor?: string; limit?: number } = {}) {
     const page = await this.list(ownerId, { parentId: folder.id, cursor: options.cursor, limit: options.limit });
-    const single = await this.prisma.documentVersion.findMany({
+    const single = await this.prisma.driveVersion.findMany({
       where: {
         ownerId,
         chunkCount: 1,
@@ -589,7 +589,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
   /** A live file's current version: its chunk list, each chunk with its offset (§4.2). */
   async manifest(ownerId: string, entry: EntryRow) {
     if (entry.kind !== 'FILE') throw refusal(HttpStatus.CONFLICT, DRIVE_NOT_A_FILE, 'A folder has no content.');
-    const version = await this.prisma.documentVersion.findFirstOrThrow({
+    const version = await this.prisma.driveVersion.findFirstOrThrow({
       where: { id: entry.currentVersionId!, ownerId },
       include: { chunks: { orderBy: { idx: 'asc' } } },
     });
@@ -608,8 +608,8 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
    */
   async namesChunk(ownerId: string, sha256: string): Promise<boolean> {
     const [version, staging] = await Promise.all([
-      this.prisma.documentVersionChunk.findFirst({ where: { ownerId, sha256 }, select: { sha256: true } }),
-      this.prisma.documentStagingChunk.findFirst({ where: { ownerId, sha256 }, select: { sha256: true } }),
+      this.prisma.driveVersionChunk.findFirst({ where: { ownerId, sha256 }, select: { sha256: true } }),
+      this.prisma.driveStagingChunk.findFirst({ where: { ownerId, sha256 }, select: { sha256: true } }),
     ]);
     return Boolean(version ?? staging);
   }
@@ -617,14 +617,14 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
   /** The bytes of the account's live files, their current versions: what the mount's `df` shows as used (§5.6). */
   async usage(ownerId: string): Promise<{ driveBytes: number }> {
     const rows = await this.prisma.$queryRaw<Array<{ bytes: bigint | null }>>`
-      SELECT coalesce(sum("size_bytes"), 0) AS "bytes" FROM "document_entry"
+      SELECT coalesce(sum("size_bytes"), 0) AS "bytes" FROM "drive_entry"
        WHERE "owner_id" = ${ownerId}::uuid AND "kind" = 'FILE' AND "trashed_at" IS NULL`;
     return { driveBytes: num(rows[0]?.bytes ?? 0n) };
   }
 
   /** The answer a commit got, by the writer's own commit id within its owner (§5.7): whether it applied. */
   async commitStatus(ownerId: string, commitId: string) {
-    const answered = await this.prisma.documentCommit.findUnique({ where: { ownerId_commitId: { ownerId, commitId } } });
+    const answered = await this.prisma.driveCommit.findUnique({ where: { ownerId_commitId: { ownerId, commitId } } });
     return answered ? { applied: true, result: answered.result as unknown as DriveCommitResult } : { applied: false, result: null };
   }
 
@@ -641,7 +641,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
     let folder = await this.ensureRoot(ownerId);
     for (const [index, segment] of segments.entries()) {
       const last = index === segments.length - 1;
-      const found = await this.prisma.documentEntry.findFirst({ where: { ownerId, parentId: folder.id, name: segment, trashedAt: null } });
+      const found = await this.prisma.driveEntry.findFirst({ where: { ownerId, parentId: folder.id, name: segment, trashedAt: null } });
       if (found) {
         if (found.kind !== 'FOLDER') throw refusal(HttpStatus.CONFLICT, DRIVE_NOT_A_FOLDER, `"${segment}" is a file, not a folder.`);
         if (last && !options.parents) throw nameTaken(segment);
@@ -655,12 +655,12 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
       } catch (error) {
         // Another writer made it meanwhile: with parents, theirs is used.
         if (!(options.parents && error instanceof HttpException && error.getStatus() === HttpStatus.CONFLICT)) throw error;
-        const raced = await this.prisma.documentEntry.findFirst({ where: { ownerId, parentId: folder.id, name: segment, trashedAt: null } });
+        const raced = await this.prisma.driveEntry.findFirst({ where: { ownerId, parentId: folder.id, name: segment, trashedAt: null } });
         if (!raced || raced.kind !== 'FOLDER') throw error;
         folder = raced;
         continue;
       }
-      folder = await this.prisma.documentEntry.findUniqueOrThrow({ where: { id: made.id } });
+      folder = await this.prisma.driveEntry.findUniqueOrThrow({ where: { id: made.id } });
     }
     return entryView(folder);
   }
@@ -671,12 +671,12 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
     const outcome = await withTransactionRetry(this.prisma, async (tx) => {
       await bound(tx);
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT "id" FROM "document_entry"
+        SELECT "id" FROM "drive_entry"
          WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid AND "trashed_at" IS NULL FOR UPDATE`;
       if (!locked.length) throw notFound();
       const checked = await checkedWriter(tx, ownerId, writer);
       const now = new Date();
-      const updated = await tx.documentEntry.update({
+      const updated = await tx.driveEntry.update({
         where: { id },
         data: { mtime, updatedAt: now, ...lastWriterFields(checked, now) },
       });
@@ -704,7 +704,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
           const writer = await checkedWriter(tx, ownerId, input.writer ?? OWNER_WRITER);
           const free = await freeName(tx, ownerId, parent.id, name, 'FOLDER', onClash);
           const now = new Date();
-          const created = await tx.documentEntry.create({
+          const created = await tx.driveEntry.create({
             data: {
               id: uuidv7(), ownerId, parentId: parent.id, kind: 'FOLDER', name: free, mtime: now, createdAt: now, updatedAt: now,
               ...lastWriterFields(writer, now),
@@ -730,18 +730,18 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
    */
   async ensureFolderPath(ownerId: string, parentId: string | null, segments: string[]): Promise<EntryRow> {
     let current: EntryRow | null = parentId
-      ? await this.prisma.documentEntry.findFirst({ where: { id: parentId, ownerId, kind: 'FOLDER', trashedAt: null } })
+      ? await this.prisma.driveEntry.findFirst({ where: { id: parentId, ownerId, kind: 'FOLDER', trashedAt: null } })
       : await this.ensureRoot(ownerId);
     if (!current) throw parentGone();
     for (const raw of segments) {
       const name = assertDriveName(raw);
       const find = () =>
-        this.prisma.documentEntry.findFirst({ where: { ownerId, parentId: current!.id, name, kind: 'FOLDER', trashedAt: null } });
+        this.prisma.driveEntry.findFirst({ where: { ownerId, parentId: current!.id, name, kind: 'FOLDER', trashedAt: null } });
       let next = await find();
       if (!next) {
         try {
           const made = await this.createFolder(ownerId, { parentId: current.id, name, onClash: 'REFUSE' });
-          next = await this.prisma.documentEntry.findFirst({ where: { id: made.id, ownerId } });
+          next = await this.prisma.driveEntry.findFirst({ where: { id: made.id, ownerId } });
         } catch (error) {
           // A concurrent file of the drop made it first.
           next = await find();
@@ -775,13 +775,13 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
           const entryId = uuidv7();
           const versionId = uuidv7();
           // The entry names its first version before the version exists: that foreign key is checked at commit.
-          const created = await tx.documentEntry.create({
+          const created = await tx.driveEntry.create({
             data: {
               id: entryId, ownerId, parentId: parent.id, kind: 'FILE', name: free, currentVersionId: versionId,
               mtime: now, createdAt: now, updatedAt: now, ...lastWriterFields(writer, now),
             },
           });
-          await tx.documentVersion.create({
+          await tx.driveVersion.create({
             data: { id: versionId, ownerId, entryId, createdAt: now, handleId: input.handleId ?? null, ...versionWriterFields(writer) },
           });
           const changed = await recordChanges(tx, ownerId, [{ entryId, parentId: parent.id, op: 'UPSERT' }]);
@@ -822,10 +822,10 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
       // A managed runner's commit re-checks its instance in this transaction (§8.2): one racing a generation change lands
       // before it or is refused.
       if (options.fence) await options.fence(tx);
-      const answered = await tx.documentCommit.findUnique({ where: { ownerId_commitId: { ownerId, commitId: input.commitId } } });
+      const answered = await tx.driveCommit.findUnique({ where: { ownerId_commitId: { ownerId, commitId: input.commitId } } });
       if (answered) return { result: answered.result as unknown as DriveCommitResult, replayed: true };
       const lockEntry = async (entryId: string) => (await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT "id" FROM "document_entry" WHERE "id" = ${entryId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`).length > 0;
+        SELECT "id" FROM "drive_entry" WHERE "id" = ${entryId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`).length > 0;
       const writer = await checkedWriter(tx, ownerId, input.writer);
       const now = new Date();
       let entryId = input.entryId;
@@ -833,7 +833,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
       let fresh: { groupId: string } | null = null;
       if (!(await lockEntry(entryId))) {
         const removed = await tx.$queryRaw<Array<{ parent_id: string; name: string; successor_id: string | null }>>`
-          SELECT "parent_id", "name", "successor_id" FROM "document_removed_entry"
+          SELECT "parent_id", "name", "successor_id" FROM "drive_removed_entry"
            WHERE "owner_id" = ${ownerId}::uuid AND "entry_id" = ${input.entryId}::uuid FOR UPDATE`;
         if (!removed.length) throw notFound();
         const { parent_id: parentId, name, successor_id: successor } = removed[0];
@@ -842,7 +842,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
         } else {
           await assertChunksHeld(tx, ownerId, input.chunks);
           const created = await createInTrash(tx, ownerId, parentId, name, input.handleId ?? null, writer, now);
-          await tx.documentRemovedEntry.update({
+          await tx.driveRemovedEntry.update({
             where: { ownerId_entryId: { ownerId, entryId: input.entryId } },
             data: { successorId: created.entryId },
           });
@@ -850,10 +850,10 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
           fresh = { groupId: created.groupId };
         }
       }
-      const entry = await tx.documentEntry.findUniqueOrThrow({ where: { id: entryId } });
+      const entry = await tx.driveEntry.findUniqueOrThrow({ where: { id: entryId } });
       if (entry.kind !== 'FILE') throw refusal(HttpStatus.CONFLICT, DRIVE_NOT_A_FILE, 'A folder has no content to commit.');
       if (!fresh) await assertChunksHeld(tx, ownerId, input.chunks);
-      const current = await tx.documentVersion.findUniqueOrThrow({ where: { id: entry.currentVersionId! } });
+      const current = await tx.driveVersion.findUniqueOrThrow({ where: { id: entry.currentVersionId! } });
 
       let mode = input.mode;
       if (mode === 'CONTINUE' && !(input.baseVersionId === current.id && current.handleId !== null && current.handleId === input.handleId)) {
@@ -863,7 +863,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
       if (mode === 'APPEND') {
         const sorted = [...input.chunks].sort((a, b) => a.idx - b.idx);
         if (input.baseVersionId === current.id) {
-          const tail = await tx.documentVersionChunk.findFirst({ where: { versionId: current.id }, orderBy: { idx: 'desc' } });
+          const tail = await tx.driveVersionChunk.findFirst({ where: { versionId: current.id }, orderBy: { idx: 'desc' } });
           const tailMoved = () => refusal(HttpStatus.CONFLICT, DRIVE_TAIL_MOVED, 'The file grew since this append was built.', {
             versionId: current.id,
             sizeBytes: num(current.sizeBytes),
@@ -881,16 +881,16 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
             firstOffset = num(current.sizeBytes);
           }
           assertContiguous(sorted, firstIdx);
-          if (input.replaceTail) await tx.documentVersionChunk.delete({ where: { versionId_idx: { versionId: current.id, idx: firstIdx } } });
+          if (input.replaceTail) await tx.driveVersionChunk.delete({ where: { versionId_idx: { versionId: current.id, idx: firstIdx } } });
           let offset = firstOffset;
-          await tx.documentVersionChunk.createMany({
+          await tx.driveVersionChunk.createMany({
             data: sorted.map((c) => {
               const row = { versionId: current.id, idx: c.idx, ownerId, offset: BigInt(offset), sizeBytes: c.size, sha256: c.sha256 };
               offset += c.size;
               return row;
             }),
           });
-          await tx.documentVersion.update({
+          await tx.driveVersion.update({
             where: { id: current.id },
             data: { sizeBytes: BigInt(offset), chunkCount: firstIdx + sorted.length, handleId: input.handleId ?? current.handleId, ...versionWriterFields(writer) },
           });
@@ -902,7 +902,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
         // Overwritten since the append was built: the base's content plus the appended bytes become a new version.
         // A new file in Trash appends to the version its removed source had, which the rename gave the target.
         const base = input.baseVersionId
-          ? await tx.documentVersion.findFirst({
+          ? await tx.driveVersion.findFirst({
             where: { id: input.baseVersionId, ownerId, ...(fresh ? {} : { entryId: entry.id }) },
             include: { chunks: { orderBy: { idx: 'asc' } } },
           })
@@ -924,20 +924,20 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
       const size = chunks.reduce((sum, c) => sum + c.size, 0);
       if (mode === 'CONTINUE' || fresh) {
         // A new file in Trash: whatever the mode, the commit's content fills its empty first version.
-        await tx.documentVersionChunk.deleteMany({ where: { versionId: current.id } });
+        await tx.driveVersionChunk.deleteMany({ where: { versionId: current.id } });
         await insertChunks(tx, ownerId, current.id, chunks);
-        await tx.documentVersion.update({
+        await tx.driveVersion.update({
           where: { id: current.id },
           data: { sizeBytes: BigInt(size), chunkCount: chunks.length, ...versionWriterFields(writer) },
         });
-        if (fresh) await tx.documentTrashGroup.update({ where: { id: fresh.groupId }, data: { itemCount: 1, sizeBytes: BigInt(size) } });
+        if (fresh) await tx.driveTrashGroup.update({ where: { id: fresh.groupId }, data: { itemCount: 1, sizeBytes: BigInt(size) } });
         return this.finishCommit(tx, ownerId, entry, writer, now, BigInt(size), input, {
           entryId: entry.id, versionId: current.id, newVersion: false, replacedVersionId: null, trashGroupId: null, sizeBytes: size,
         });
       }
       // OVERWRITE: a new current version; the previous one to Trash in a VERSION group of its own.
       const versionId = uuidv7();
-      await tx.documentVersion.create({
+      await tx.driveVersion.create({
         data: {
           id: versionId, ownerId, entryId: entry.id, sizeBytes: BigInt(size), chunkCount: chunks.length, createdAt: now,
           handleId: input.handleId ?? null, ...versionWriterFields(writer),
@@ -945,7 +945,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
       });
       await insertChunks(tx, ownerId, versionId, chunks);
       const groupId = await replaceVersion(tx, ownerId, entry, current, writer, now);
-      await tx.documentEntry.update({ where: { id: entry.id }, data: { currentVersionId: versionId } });
+      await tx.driveEntry.update({ where: { id: entry.id }, data: { currentVersionId: versionId } });
       return this.finishCommit(tx, ownerId, entry, writer, now, BigInt(size), input, {
         entryId: entry.id, versionId, newVersion: true, replacedVersionId: current.id, trashGroupId: groupId, sizeBytes: size,
       });
@@ -965,17 +965,17 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
     input: DriveCommitInput,
     result: Omit<DriveCommitResult, 'seq' | 'mtime'>,
   ): Promise<{ result: DriveCommitResult; replayed: boolean }> {
-    await tx.documentEntry.update({
+    await tx.driveEntry.update({
       where: { id: entry.id },
       data: { sizeBytes: size, mtime: now, updatedAt: now, ...lastWriterFields(writer, now) },
     });
     const seq = await recordChanges(tx, ownerId, [{ entryId: entry.id, parentId: entry.parentId, op: 'UPSERT' }]);
     if (input.stagingId) {
-      await tx.documentStagingChunk.deleteMany({ where: { stagingId: input.stagingId, ownerId } });
-      await tx.documentStaging.updateMany({ where: { id: input.stagingId, ownerId }, data: { touchedAt: now, dirty: false } });
+      await tx.driveStagingChunk.deleteMany({ where: { stagingId: input.stagingId, ownerId } });
+      await tx.driveStaging.updateMany({ where: { id: input.stagingId, ownerId }, data: { touchedAt: now, dirty: false } });
     }
     const answer = { ...result, seq, mtime: now.toISOString() };
-    await tx.documentCommit.create({
+    await tx.driveCommit.create({
       data: { ownerId, commitId: input.commitId, entryId: entry.id, result: answer as unknown as Prisma.InputJsonValue, createdAt: now },
     });
     return { result: answer, replayed: false };
@@ -998,11 +998,11 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
     for (;;) {
       const outcome = await withTransactionRetry(this.prisma, async (tx) => {
         await bound(tx);
-        const seen = await tx.documentEntry.findFirst({ where: { id, ownerId } });
+        const seen = await tx.driveEntry.findFirst({ where: { id, ownerId } });
         if (!seen || seen.trashedAt) throw notFound();
         if (seen.parentId === null) throw refusal(HttpStatus.CONFLICT, DRIVE_ROOT, 'The root folder cannot be renamed or moved.');
         const moving = input.parentId !== undefined && input.parentId !== seen.parentId;
-        const replacing = input.replace === true && seen.kind === 'FILE' && (lockFirst || await tx.documentEntry.count({
+        const replacing = input.replace === true && seen.kind === 'FILE' && (lockFirst || await tx.driveEntry.count({
           where: { ownerId, parentId: moving ? input.parentId! : seen.parentId, name: newName ?? seen.name, kind: 'FILE', trashedAt: null, NOT: { id } },
         }) > 0);
         const locked = (moving && seen.kind === 'FOLDER') || replacing;
@@ -1010,10 +1010,10 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
         // Folders before files: the destination first, as a folder trash locks its folders before it marks any file.
         const dest = await lockLiveFolder(tx, ownerId, moving ? input.parentId! : seen.parentId);
         const rows = await tx.$queryRaw<Array<{ id: string }>>`
-          SELECT "id" FROM "document_entry"
+          SELECT "id" FROM "drive_entry"
            WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid AND "trashed_at" IS NULL FOR UPDATE`;
         if (!rows.length) throw notFound();
-        const entry = await tx.documentEntry.findUniqueOrThrow({ where: { id } });
+        const entry = await tx.driveEntry.findUniqueOrThrow({ where: { id } });
         if (moving && entry.kind === 'FOLDER' && (await isWithin(tx, ownerId, dest.id, entry.id))) {
           throw refusal(HttpStatus.CONFLICT, DRIVE_MOVE_INTO_ITSELF, 'A folder cannot be moved into itself.');
         }
@@ -1021,13 +1021,13 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
         if (dest.id === entry.parentId && name === entry.name) return { entry, seq: null };
         const writer = await checkedWriter(tx, ownerId, input.writer ?? OWNER_WRITER);
         const now = new Date();
-        const target = await tx.documentEntry.findFirst({ where: { ownerId, parentId: dest.id, name, trashedAt: null, NOT: { id } } });
+        const target = await tx.driveEntry.findFirst({ where: { ownerId, parentId: dest.id, name, trashedAt: null, NOT: { id } } });
         if (target) {
           if (!input.replace || target.kind !== 'FILE' || entry.kind !== 'FILE') throw nameTaken(name);
           if (!locked) return { again: true as const };
           return this.renameOnto(tx, ownerId, entry, target, writer, now);
         }
-        const updated = await tx.documentEntry.update({
+        const updated = await tx.driveEntry.update({
           where: { id },
           data: { parentId: dest.id, name, updatedAt: now, ...lastWriterFields(writer, now) },
         });
@@ -1052,30 +1052,30 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
    * group, so a share link pinned to it still serves it. The source entry is removed outright, not put in Trash: its
    * content lives on as the target's version, and so do its replaced versions, which move to the target with it. What
    * still names the source moves to the target or lets go of it first: its commit answers (a retried commit is answered,
-   * never applied twice), its stagings (kept, bound to no entry). Its name and folder are kept in document_removed_entry, so
+   * never applied twice), its stagings (kept, bound to no entry). Its name and folder are kept in drive_removed_entry, so
    * a handle still writing the source commits as a new file in Trash named after it (§3.1, commit).
    */
   private async renameOnto(tx: Tx, ownerId: string, source: EntryRow, target: EntryRow, writer: DriveWriter, now: Date) {
-    await tx.$queryRaw`SELECT "id" FROM "document_entry" WHERE "id" = ${target.id}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
-    const replaced = await tx.documentVersion.findUniqueOrThrow({ where: { id: target.currentVersionId! } });
-    const content = await tx.documentVersion.findUniqueOrThrow({ where: { id: source.currentVersionId! } });
+    await tx.$queryRaw`SELECT "id" FROM "drive_entry" WHERE "id" = ${target.id}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
+    const replaced = await tx.driveVersion.findUniqueOrThrow({ where: { id: target.currentVersionId! } });
+    const content = await tx.driveVersion.findUniqueOrThrow({ where: { id: source.currentVersionId! } });
     await replaceVersion(tx, ownerId, target, replaced, writer, now);
-    await tx.documentVersion.updateMany({ where: { ownerId, entryId: source.id }, data: { entryId: target.id } });
-    await tx.documentVersion.update({ where: { id: content.id }, data: { handleId: null } });
-    const updated = await tx.documentEntry.update({
+    await tx.driveVersion.updateMany({ where: { ownerId, entryId: source.id }, data: { entryId: target.id } });
+    await tx.driveVersion.update({ where: { id: content.id }, data: { handleId: null } });
+    const updated = await tx.driveEntry.update({
       where: { id: target.id },
       data: {
         currentVersionId: content.id, sizeBytes: content.sizeBytes, mtime: source.mtime, updatedAt: now, ...lastWriterFields(writer, now),
       },
     });
-    await tx.documentCommit.updateMany({ where: { ownerId, entryId: source.id }, data: { entryId: target.id } });
-    await tx.documentStaging.updateMany({ where: { ownerId, entryId: source.id }, data: { entryId: null } });
-    await tx.documentRemovedEntry.upsert({
+    await tx.driveCommit.updateMany({ where: { ownerId, entryId: source.id }, data: { entryId: target.id } });
+    await tx.driveStaging.updateMany({ where: { ownerId, entryId: source.id }, data: { entryId: null } });
+    await tx.driveRemovedEntry.upsert({
       where: { ownerId_entryId: { ownerId, entryId: source.id } },
       create: { ownerId, entryId: source.id, parentId: source.parentId!, name: source.name, removedAt: now },
       update: { parentId: source.parentId!, name: source.name, removedAt: now, successorId: null },
     });
-    await tx.documentEntry.delete({ where: { id: source.id } });
+    await tx.driveEntry.delete({ where: { id: source.id } });
     const seq = await recordChanges(tx, ownerId, [
       { entryId: source.id, parentId: source.parentId, op: 'REMOVE' },
       { entryId: target.id, parentId: target.parentId, op: 'UPSERT' },
@@ -1101,30 +1101,30 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
   ) {
     const first = await withTransactionRetry(this.prisma, async (tx) => {
       await bound(tx);
-      const seen = await tx.documentEntry.findFirst({ where: { id, ownerId } });
+      const seen = await tx.driveEntry.findFirst({ where: { id, ownerId } });
       if (!seen) throw notFound();
       if (seen.trashedAt) {
         const stopped = seen.kind === 'FOLDER' && seen.trashTop
-          && (await tx.documentTrashGroup.count({ where: { id: seen.trashGroupId!, ownerId, marking: true } })) > 0;
+          && (await tx.driveTrashGroup.count({ where: { id: seen.trashGroupId!, ownerId, marking: true } })) > 0;
         if (!stopped) throw notFound();
         return { groupId: seen.trashGroupId!, seq: 0, open: null };
       }
       if (seen.parentId === null) throw refusal(HttpStatus.CONFLICT, DRIVE_ROOT, 'The root folder cannot be moved to Trash.');
       if (seen.kind === 'FOLDER') await lockAccount(tx, ownerId);
       // The entry FOR UPDATE: for a folder this waits out any create holding it FOR SHARE and stops new ones (§1.4).
-      await tx.$queryRaw`SELECT "id" FROM "document_entry" WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
-      const entry = await tx.documentEntry.findUniqueOrThrow({ where: { id } });
+      await tx.$queryRaw`SELECT "id" FROM "drive_entry" WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
+      const entry = await tx.driveEntry.findUniqueOrThrow({ where: { id } });
       if (entry.trashedAt) throw notFound();
       const writer = await checkedWriter(tx, ownerId, options.writer ?? OWNER_WRITER);
       const now = new Date();
       const groupId = await deleteGroupFor(tx, ownerId, entry, writer, now, options.burstKey ?? null, options.burstWindowMs);
       const top = await tx.$queryRaw<MarkedRow[]>`
-        UPDATE "document_entry"
+        UPDATE "drive_entry"
            SET "trashed_at" = ${now}, "trash_group_id" = ${groupId}::uuid, "trash_top" = true, "updated_at" = ${now}
          WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid AND "trashed_at" IS NULL
         RETURNING "id", "parent_id", "kind", "size_bytes"`;
       // Items of the same burst already in the group hang under this folder now: it is their top.
-      await tx.documentEntry.updateMany({
+      await tx.driveEntry.updateMany({
         where: { ownerId, trashGroupId: groupId, parentId: id, trashTop: true },
         data: { trashTop: false },
       });
@@ -1134,7 +1134,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
         ? await markUnder(tx, ownerId, groupId, [id], now, DRIVE_TRASH_BATCH)
         : { marked: [], open: [], verified: false };
       const marked = [...top, ...under.marked];
-      await tx.documentTrashGroup.update({
+      await tx.driveTrashGroup.update({
         where: { id: groupId },
         data: { lastAddedAt: now, ...countsOf(marked), ...(under.open.length ? { marking: true } : {}) },
       });
@@ -1158,12 +1158,12 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
       const step = await withTransactionRetry(this.prisma, async (tx) => {
         await bound(tx);
         await lockAccount(tx, ownerId);
-        const group = await tx.documentTrashGroup.findFirst({ where: { id: groupId, ownerId }, select: { marking: true } });
+        const group = await tx.driveTrashGroup.findFirst({ where: { id: groupId, ownerId }, select: { marking: true } });
         if (!group) return null;
         const now = new Date();
         const under = await markUnder(tx, ownerId, groupId, from, now, DRIVE_TRASH_BATCH);
         const done = under.verified || (!under.open.length && !group.marking);
-        await tx.documentTrashGroup.update({
+        await tx.driveTrashGroup.update({
           where: { id: groupId },
           data: { ...countsOf(under.marked), ...(under.verified ? { marking: false } : {}) },
         });
@@ -1182,7 +1182,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
    * the drive timer's run, and a spec's. Answers how many it took up.
    */
   async finishStoppedTrash(now: Date = new Date()): Promise<number> {
-    const stopped = await this.prisma.documentTrashGroup.findMany({
+    const stopped = await this.prisma.driveTrashGroup.findMany({
       where: { marking: true, lastAddedAt: { lt: new Date(now.getTime() - STOPPED_MARKING_MS) } },
       select: { id: true, ownerId: true },
       orderBy: { lastAddedAt: 'asc' },
@@ -1209,7 +1209,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
         await bound(tx);
         await lockAccount(tx, ownerId);
         const found = await tx.$queryRaw<Array<{ id: string; kind: string }>>`
-          SELECT "id", "kind" FROM "document_trash_group" WHERE "id" = ${groupId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
+          SELECT "id", "kind" FROM "drive_trash_group" WHERE "id" = ${groupId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
         if (!found.length) {
           if (first) throw refusal(HttpStatus.NOT_FOUND, DRIVE_TRASH_GROUP_NOT_FOUND, 'No such group in Trash.');
           return null;
@@ -1217,7 +1217,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
         const checked = await checkedWriter(tx, ownerId, writer);
         const now = new Date();
         if (found[0].kind === 'VERSION') {
-          const version = await tx.documentVersion.findFirst({ where: { ownerId, trashGroupId: groupId } });
+          const version = await tx.driveVersion.findFirst({ where: { ownerId, trashGroupId: groupId } });
           if (!version) throw refusal(HttpStatus.NOT_FOUND, DRIVE_TRASH_GROUP_NOT_FOUND, 'No such group in Trash.');
           const { entry, seq } = await restoreAsCurrent(tx, ownerId, version, checked, now);
           return { ids: [entry.id], seq, open: [] as string[], orphansLeft: false, done: true };
@@ -1227,7 +1227,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
         // Top-level items whose folder is not live: theirs is made again or reused (liveDestination), a few at a time.
         const orphans = orphansLeft
           ? await tx.$queryRaw<Array<{ id: string; parent_id: string; name: string; kind: string }>>`
-              SELECT e."id", e."parent_id", e."name", e."kind" FROM "document_entry" e JOIN "document_entry" p ON p."id" = e."parent_id"
+              SELECT e."id", e."parent_id", e."name", e."kind" FROM "drive_entry" e JOIN "drive_entry" p ON p."id" = e."parent_id"
                WHERE e."owner_id" = ${ownerId}::uuid AND e."trash_group_id" = ${groupId}::uuid AND e."trash_top"
                  AND p."trashed_at" IS NOT NULL
                ORDER BY e."trashed_at" ASC, e."id" ASC LIMIT ${ORPHAN_BATCH}`
@@ -1236,7 +1236,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
         for (const top of orphans) {
           const dest = await liveDestination(tx, ownerId, top.parent_id, checked, now, changes);
           const name = await freeName(tx, ownerId, dest, top.name, top.kind, 'SUFFIX');
-          await tx.documentEntry.update({
+          await tx.driveEntry.update({
             where: { id: top.id },
             data: { parentId: dest, name, trashedAt: null, trashGroupId: null, trashTop: false, updatedAt: now, ...lastWriterFields(checked, now) },
           });
@@ -1247,7 +1247,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
         // The rest come back folder by folder from the live folders they hang in: on the first pass every live folder
         // an item of the group is in, top-level items included.
         const from = open ?? (await tx.$queryRaw<Array<{ id: string }>>`
-          SELECT DISTINCT e."parent_id" AS "id" FROM "document_entry" e JOIN "document_entry" p ON p."id" = e."parent_id"
+          SELECT DISTINCT e."parent_id" AS "id" FROM "drive_entry" e JOIN "drive_entry" p ON p."id" = e."parent_id"
            WHERE e."owner_id" = ${ownerId}::uuid AND e."trash_group_id" = ${groupId}::uuid AND p."trashed_at" IS NULL`).map((r) => r.id);
         const next = await restoreUnder(tx, ownerId, groupId, [...from, ...reopened], checked, now, DRIVE_TRASH_BATCH - ids.length, changes, ids);
         const left = orphans.length === ORPHAN_BATCH;
@@ -1283,7 +1283,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
         await bound(tx);
         await lockAccount(tx, ownerId);
         const found = await tx.$queryRaw<Array<{ id: string; kind: string }>>`
-          SELECT "id", "kind" FROM "document_trash_group" WHERE "id" = ${groupId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
+          SELECT "id", "kind" FROM "drive_trash_group" WHERE "id" = ${groupId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
         if (!found.length) {
           if (open === null) throw refusal(HttpStatus.NOT_FOUND, DRIVE_TRASH_GROUP_NOT_FOUND, 'No such group in Trash.');
           return null;
@@ -1294,11 +1294,11 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
         const ids: string[] = [];
         let from = open;
         if (from === null) {
-          const item = await tx.documentEntry.findFirst({ where: { id: entryId, ownerId, trashGroupId: groupId } });
+          const item = await tx.driveEntry.findFirst({ where: { id: entryId, ownerId, trashGroupId: groupId } });
           if (!item) throw notFound();
           const dest = await liveDestination(tx, ownerId, item.parentId!, checked, now, changes);
           const name = await freeName(tx, ownerId, dest, item.name, item.kind, 'SUFFIX');
-          await tx.documentEntry.update({
+          await tx.driveEntry.update({
             where: { id: item.id },
             data: { parentId: dest, name, trashedAt: null, trashGroupId: null, trashTop: false, updatedAt: now, ...lastWriterFields(checked, now) },
           });
@@ -1328,31 +1328,31 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
   async restoreVersion(ownerId: string, versionId: string, as: 'CURRENT' | 'COPY', writer: DriveWriter = OWNER_WRITER) {
     const outcome = await withTransactionRetry(this.prisma, async (tx) => {
       await bound(tx);
-      const version = await tx.documentVersion.findFirst({ where: { id: versionId, ownerId } });
+      const version = await tx.driveVersion.findFirst({ where: { id: versionId, ownerId } });
       if (!version) throw refusal(HttpStatus.NOT_FOUND, DRIVE_VERSION_NOT_FOUND, 'No such version.');
       if (!version.replacedAt) throw refusal(HttpStatus.CONFLICT, DRIVE_VERSION_CURRENT, 'That is already the current version.');
       const checked = await checkedWriter(tx, ownerId, writer);
       const now = new Date();
       if (as === 'CURRENT') return restoreAsCurrent(tx, ownerId, version, checked, now);
-      const source = await tx.documentEntry.findUniqueOrThrow({ where: { id: version.entryId } });
+      const source = await tx.driveEntry.findUniqueOrThrow({ where: { id: version.entryId } });
       if (source.trashedAt) throw refusal(HttpStatus.CONFLICT, DRIVE_IN_TRASH, 'The file is in Trash; restore it first.');
       const parent = await lockLiveFolder(tx, ownerId, source.parentId!);
       const name = await freeName(tx, ownerId, parent.id, source.name, 'FILE', 'SUFFIX');
       const entryId = uuidv7();
       const copyId = uuidv7();
-      const created = await tx.documentEntry.create({
+      const created = await tx.driveEntry.create({
         data: {
           id: entryId, ownerId, parentId: parent.id, kind: 'FILE', name, currentVersionId: copyId, sizeBytes: version.sizeBytes,
           mtime: now, createdAt: now, updatedAt: now, ...lastWriterFields(checked, now),
         },
       });
-      await tx.documentVersion.create({
+      await tx.driveVersion.create({
         data: { id: copyId, ownerId, entryId, sizeBytes: version.sizeBytes, chunkCount: version.chunkCount, createdAt: now, ...versionWriterFields(checked) },
       });
       await tx.$executeRaw`
-        INSERT INTO "document_version_chunk" ("version_id", "idx", "owner_id", "offset", "size_bytes", "sha256")
+        INSERT INTO "drive_version_chunk" ("version_id", "idx", "owner_id", "offset", "size_bytes", "sha256")
         SELECT ${copyId}::uuid, "idx", "owner_id", "offset", "size_bytes", "sha256"
-          FROM "document_version_chunk" WHERE "version_id" = ${version.id}::uuid AND "owner_id" = ${ownerId}::uuid`;
+          FROM "drive_version_chunk" WHERE "version_id" = ${version.id}::uuid AND "owner_id" = ${ownerId}::uuid`;
       const seq = await recordChanges(tx, ownerId, [{ entryId, parentId: parent.id, op: 'UPSERT' }]);
       return { entry: { ...created, seq: BigInt(seq) }, seq };
     }, loggedRetry(this.logger, 'drive.restoreVersion', { transaction: TRANSACTION }));
@@ -1367,7 +1367,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
         await bound(tx);
         await lockAccount(tx, ownerId);
         const [group] = await tx.$queryRaw<Array<{ kind: string }>>`
-          SELECT "kind" FROM "document_trash_group" WHERE "id" = ${groupId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
+          SELECT "kind" FROM "drive_trash_group" WHERE "id" = ${groupId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
         if (!group) {
           if (first) throw refusal(HttpStatus.NOT_FOUND, DRIVE_TRASH_GROUP_NOT_FOUND, 'No such group in Trash.');
           return false;
@@ -1376,7 +1376,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
           ? await deleteTrashVersions(tx, ownerId, groupId)
           : await deleteTrashLeaves(tx, ownerId, groupId);
         if (!picked) await deleteEmptyGroups(tx, ownerId, [groupId]);
-        return picked && (await tx.documentTrashGroup.count({ where: { id: groupId, ownerId } })) > 0;
+        return picked && (await tx.driveTrashGroup.count({ where: { id: groupId, ownerId } })) > 0;
       }, loggedRetry(this.logger, 'drive.deleteGroup', { transaction: TRANSACTION })).catch(limitHit);
       if (!more) return { deleted: true };
     }
@@ -1387,10 +1387,10 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
     await withTransactionRetry(this.prisma, async (tx) => {
       await bound(tx);
       await lockAccount(tx, ownerId);
-      const version = await tx.documentVersion.findFirst({ where: { id: versionId, ownerId } });
+      const version = await tx.driveVersion.findFirst({ where: { id: versionId, ownerId } });
       if (!version) throw refusal(HttpStatus.NOT_FOUND, DRIVE_VERSION_NOT_FOUND, 'No such version.');
       if (!version.replacedAt) throw refusal(HttpStatus.CONFLICT, DRIVE_VERSION_CURRENT, 'The current version is not in Trash.');
-      await tx.documentVersion.delete({ where: { id: version.id } });
+      await tx.driveVersion.delete({ where: { id: version.id } });
       if (version.trashGroupId) await deleteEmptyGroups(tx, ownerId, [version.trashGroupId]);
     }, loggedRetry(this.logger, 'drive.deleteVersion', { transaction: TRANSACTION }));
     return { deleted: true };
@@ -1404,7 +1404,7 @@ export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
         await lockAccount(tx, ownerId);
         if (await deleteTrashLeaves(tx, ownerId)) return true;
         if (await deleteTrashVersions(tx, ownerId)) return true;
-        const empty = await tx.documentTrashGroup.deleteMany({
+        const empty = await tx.driveTrashGroup.deleteMany({
           where: { ownerId, entries: { none: {} }, versions: { none: {} } }, limit: DRIVE_TRASH_BATCH,
         });
         return empty.count > 0;
@@ -1432,15 +1432,15 @@ async function lockAccount(tx: Tx, ownerId: string): Promise<void> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${DRIVE_LOCK_NAMESPACE}::int, hashtext(${ownerId}))`;
 }
 
-/** The account's root, made here if it is not there yet (one per account, document_entry_root_key). */
+/** The account's root, made here if it is not there yet (one per account, drive_entry_root_key). */
 async function rootIn(tx: Tx, ownerId: string): Promise<EntryRow> {
-  const found = await tx.documentEntry.findFirst({ where: { ownerId, parentId: null } });
+  const found = await tx.driveEntry.findFirst({ where: { ownerId, parentId: null } });
   if (found) return found;
   await tx.$executeRaw`
-    INSERT INTO "document_entry" ("id", "owner_id", "parent_id", "kind", "name", "last_writer_kind")
+    INSERT INTO "drive_entry" ("id", "owner_id", "parent_id", "kind", "name", "last_writer_kind")
     VALUES (${uuidv7()}::uuid, ${ownerId}::uuid, NULL, 'FOLDER', '', 'OWNER')
     ON CONFLICT ("owner_id") WHERE "parent_id" IS NULL DO NOTHING`;
-  return tx.documentEntry.findFirstOrThrow({ where: { ownerId, parentId: null } });
+  return tx.driveEntry.findFirstOrThrow({ where: { ownerId, parentId: null } });
 }
 
 /**
@@ -1450,17 +1450,17 @@ async function rootIn(tx: Tx, ownerId: string): Promise<EntryRow> {
 async function lockLiveFolder(tx: Tx, ownerId: string, folderId: string | null): Promise<EntryRow> {
   if (folderId === null) return rootIn(tx, ownerId);
   const rows = await tx.$queryRaw<Array<{ id: string; kind: string; trashed_at: Date | null }>>`
-    SELECT "id", "kind", "trashed_at" FROM "document_entry"
+    SELECT "id", "kind", "trashed_at" FROM "drive_entry"
      WHERE "id" = ${folderId}::uuid AND "owner_id" = ${ownerId}::uuid FOR SHARE`;
   if (!rows.length || rows[0].trashed_at) throw parentGone();
   if (rows[0].kind !== 'FOLDER') throw refusal(HttpStatus.CONFLICT, DRIVE_NOT_A_FOLDER, 'That is a file, not a folder.');
-  return tx.documentEntry.findUniqueOrThrow({ where: { id: folderId } });
+  return tx.driveEntry.findUniqueOrThrow({ where: { id: folderId } });
 }
 
 /** `name` if no live entry of `parentId` has it; otherwise the first free suffixed name, or a refusal. */
 async function freeName(tx: Tx, ownerId: string, parentId: string, name: string, kind: string, onClash: DriveOnClash): Promise<string> {
   const taken = (candidate: string) =>
-    tx.documentEntry.findFirst({ where: { ownerId, parentId, name: candidate, trashedAt: null }, select: { id: true } });
+    tx.driveEntry.findFirst({ where: { ownerId, parentId, name: candidate, trashedAt: null }, select: { id: true } });
   if (!(await taken(name))) return name;
   if (onClash === 'REFUSE') throw nameTaken(name);
   for (let n = 2; ; n += 1) {
@@ -1473,9 +1473,9 @@ async function freeName(tx: Tx, ownerId: string, parentId: string, name: string,
 async function isWithin(tx: Tx, ownerId: string, folderId: string, ancestorId: string): Promise<boolean> {
   const rows = await tx.$queryRaw<Array<{ hit: boolean }>>`
     WITH RECURSIVE "up" AS (
-      SELECT "id", "parent_id" FROM "document_entry" WHERE "id" = ${folderId}::uuid AND "owner_id" = ${ownerId}::uuid
+      SELECT "id", "parent_id" FROM "drive_entry" WHERE "id" = ${folderId}::uuid AND "owner_id" = ${ownerId}::uuid
       UNION ALL
-      SELECT e."id", e."parent_id" FROM "document_entry" e JOIN "up" ON e."id" = "up"."parent_id" WHERE e."owner_id" = ${ownerId}::uuid
+      SELECT e."id", e."parent_id" FROM "drive_entry" e JOIN "up" ON e."id" = "up"."parent_id" WHERE e."owner_id" = ${ownerId}::uuid
     )
     SELECT EXISTS (SELECT 1 FROM "up" WHERE "id" = ${ancestorId}::uuid) AS "hit"`;
   return rows[0]?.hit === true;
@@ -1485,9 +1485,9 @@ async function isWithin(tx: Tx, ownerId: string, folderId: string, ancestorId: s
 async function pathOf(db: Tx | PrismaService, ownerId: string, entryId: string): Promise<string> {
   const rows = await db.$queryRaw<Array<{ name: string }>>`
     WITH RECURSIVE "up" AS (
-      SELECT "id", "parent_id", "name", 0 AS "depth" FROM "document_entry" WHERE "id" = ${entryId}::uuid AND "owner_id" = ${ownerId}::uuid
+      SELECT "id", "parent_id", "name", 0 AS "depth" FROM "drive_entry" WHERE "id" = ${entryId}::uuid AND "owner_id" = ${ownerId}::uuid
       UNION ALL
-      SELECT e."id", e."parent_id", e."name", "up"."depth" + 1 FROM "document_entry" e JOIN "up" ON e."id" = "up"."parent_id"
+      SELECT e."id", e."parent_id", e."name", "up"."depth" + 1 FROM "drive_entry" e JOIN "up" ON e."id" = "up"."parent_id"
        WHERE e."owner_id" = ${ownerId}::uuid
     )
     SELECT "name" FROM "up" WHERE "parent_id" IS NOT NULL ORDER BY "depth" DESC`;
@@ -1517,21 +1517,21 @@ function versionWriterFields(writer: DriveWriter) {
 }
 
 /**
- * One document_change row per change, and each entry's `seq` moved to its own last row, in one statement. Answers the
+ * One drive_change row per change, and each entry's `seq` moved to its own last row, in one statement. Answers the
  * highest seq written, what `drive.changed` announces.
  */
 async function recordChanges(tx: Tx, ownerId: string, rows: ChangeRow[]): Promise<number> {
   if (!rows.length) return 0;
   const written = await tx.$queryRaw<Array<{ seq: bigint | null }>>`
     WITH "ins" AS (
-      INSERT INTO "document_change" ("owner_id", "entry_id", "parent_id", "op")
+      INSERT INTO "drive_change" ("owner_id", "entry_id", "parent_id", "op")
       SELECT ${ownerId}::uuid, t."e", t."p", t."o"
         FROM unnest(${rows.map((r) => r.entryId)}::uuid[], ${rows.map((r) => r.parentId)}::uuid[], ${rows.map((r) => r.op)}::text[])
           WITH ORDINALITY AS t("e", "p", "o", "n")
        ORDER BY t."n"
       RETURNING "entry_id", "seq"
     ), "moved" AS (
-      UPDATE "document_entry" d SET "seq" = m."seq"
+      UPDATE "drive_entry" d SET "seq" = m."seq"
         FROM (SELECT "entry_id", max("seq") AS "seq" FROM "ins" GROUP BY "entry_id") m
        WHERE d."id" = m."entry_id" AND d."owner_id" = ${ownerId}::uuid
       RETURNING 1
@@ -1544,7 +1544,7 @@ async function recordChanges(tx: Tx, ownerId: string, rows: ChangeRow[]): Promis
 async function insertChunks(tx: Tx, ownerId: string, versionId: string, chunks: Array<{ sha256: string; size: number }>): Promise<void> {
   if (!chunks.length) return;
   let offset = 0;
-  await tx.documentVersionChunk.createMany({
+  await tx.driveVersionChunk.createMany({
     data: chunks.map((c, idx) => {
       const row = { versionId, idx, ownerId, offset: BigInt(offset), sizeBytes: c.size, sha256: c.sha256 };
       offset += c.size;
@@ -1555,7 +1555,7 @@ async function insertChunks(tx: Tx, ownerId: string, versionId: string, chunks: 
 
 /** A current version stops being current and goes to Trash in a VERSION group of its own, from the file's folder. */
 async function replaceVersion(tx: Tx, ownerId: string, entry: EntryRow, version: VersionRow, writer: DriveWriter, now: Date): Promise<string> {
-  const group = await tx.documentTrashGroup.create({
+  const group = await tx.driveTrashGroup.create({
     data: {
       id: uuidv7(), ownerId, kind: 'VERSION', folderId: entry.parentId,
       folderPath: entry.parentId ? await pathOf(tx, ownerId, entry.parentId) : '/',
@@ -1563,21 +1563,21 @@ async function replaceVersion(tx: Tx, ownerId: string, entry: EntryRow, version:
       actorRunnerId: writer.runnerId ?? null, itemCount: 1, sizeBytes: version.sizeBytes,
     },
   });
-  await tx.documentVersion.update({ where: { id: version.id }, data: { replacedAt: now, trashGroupId: group.id, handleId: null } });
+  await tx.driveVersion.update({ where: { id: version.id }, data: { replacedAt: now, trashGroupId: group.id, handleId: null } });
   return group.id;
 }
 
 /** A replaced version made current again; the current one goes to Trash in its place. The file must be live. */
 async function restoreAsCurrent(tx: Tx, ownerId: string, version: VersionRow, writer: DriveWriter, now: Date) {
-  await tx.$queryRaw`SELECT "id" FROM "document_entry" WHERE "id" = ${version.entryId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
-  const entry = await tx.documentEntry.findUniqueOrThrow({ where: { id: version.entryId } });
+  await tx.$queryRaw`SELECT "id" FROM "drive_entry" WHERE "id" = ${version.entryId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
+  const entry = await tx.driveEntry.findUniqueOrThrow({ where: { id: version.entryId } });
   if (entry.trashedAt) throw refusal(HttpStatus.CONFLICT, DRIVE_IN_TRASH, 'The file is in Trash; restore it first.');
-  const current = await tx.documentVersion.findUniqueOrThrow({ where: { id: entry.currentVersionId! } });
+  const current = await tx.driveVersion.findUniqueOrThrow({ where: { id: entry.currentVersionId! } });
   await replaceVersion(tx, ownerId, entry, current, writer, now);
   const oldGroup = version.trashGroupId;
-  await tx.documentVersion.update({ where: { id: version.id }, data: { replacedAt: null, trashGroupId: null, handleId: null } });
+  await tx.driveVersion.update({ where: { id: version.id }, data: { replacedAt: null, trashGroupId: null, handleId: null } });
   if (oldGroup) await deleteEmptyGroups(tx, ownerId, [oldGroup]);
-  const updated = await tx.documentEntry.update({
+  const updated = await tx.driveEntry.update({
     where: { id: entry.id },
     data: { currentVersionId: version.id, sizeBytes: version.sizeBytes, mtime: now, updatedAt: now, ...lastWriterFields(writer, now) },
   });
@@ -1599,9 +1599,9 @@ async function createInTrash(
   writer: DriveWriter,
   now: Date,
 ): Promise<{ entryId: string; groupId: string }> {
-  const folder = await tx.documentEntry.findFirst({ where: { id: parentId, ownerId, kind: 'FOLDER' }, select: { id: true } });
+  const folder = await tx.driveEntry.findFirst({ where: { id: parentId, ownerId, kind: 'FOLDER' }, select: { id: true } });
   const parent = folder?.id ?? (await rootIn(tx, ownerId)).id;
-  const group = await tx.documentTrashGroup.create({
+  const group = await tx.driveTrashGroup.create({
     data: {
       id: uuidv7(), ownerId, kind: 'DELETE', folderId: parent, folderPath: await pathOf(tx, ownerId, parent),
       createdAt: now, lastAddedAt: now, closedAt: now, actorKind: writer.kind, actorSessionId: writer.sessionId ?? null,
@@ -1610,13 +1610,13 @@ async function createInTrash(
   });
   const entryId = uuidv7();
   const versionId = uuidv7();
-  await tx.documentEntry.create({
+  await tx.driveEntry.create({
     data: {
       id: entryId, ownerId, parentId: parent, kind: 'FILE', name, currentVersionId: versionId, mtime: now, createdAt: now,
       updatedAt: now, trashedAt: now, trashGroupId: group.id, trashTop: true, ...lastWriterFields(writer, now),
     },
   });
-  await tx.documentVersion.create({ data: { id: versionId, ownerId, entryId, createdAt: now, handleId, ...versionWriterFields(writer) } });
+  await tx.driveVersion.create({ data: { id: versionId, ownerId, entryId, createdAt: now, handleId, ...versionWriterFields(writer) } });
   return { entryId, groupId: group.id };
 }
 
@@ -1637,13 +1637,13 @@ async function deleteGroupFor(
   if (burstKey) {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${DRIVE_BURST_LOCK_NAMESPACE}::int, hashtext(${ownerId} || ':' || ${burstKey}))`;
     const open = await tx.$queryRaw<Array<{ id: string; folder_id: string | null }>>`
-      SELECT "id", "folder_id" FROM "document_trash_group"
+      SELECT "id", "folder_id" FROM "drive_trash_group"
        WHERE "owner_id" = ${ownerId}::uuid AND "kind" = 'DELETE' AND "burst_key" = ${burstKey} AND "closed_at" IS NULL
          AND "last_added_at" > ${new Date(now.getTime() - windowMs)}
        ORDER BY "last_added_at" DESC LIMIT 1 FOR UPDATE`;
     if (open.length) {
       if (open[0].folder_id === entry.id) {
-        await tx.documentTrashGroup.update({
+        await tx.driveTrashGroup.update({
           where: { id: open[0].id },
           data: { folderId: entry.parentId, folderPath: await pathOf(tx, ownerId, entry.parentId!) },
         });
@@ -1651,7 +1651,7 @@ async function deleteGroupFor(
       return open[0].id;
     }
   }
-  const group = await tx.documentTrashGroup.create({
+  const group = await tx.driveTrashGroup.create({
     data: {
       id: uuidv7(), ownerId, kind: 'DELETE', folderId: entry.parentId, folderPath: await pathOf(tx, ownerId, entry.parentId!),
       createdAt: now, lastAddedAt: now, closedAt: burstKey ? null : now, burstKey, actorKind: writer.kind,
@@ -1668,9 +1668,9 @@ async function deleteGroupFor(
 async function liveDestination(tx: Tx, ownerId: string, parentId: string, writer: DriveWriter, now: Date, changes: ChangeRow[]): Promise<string> {
   const chain = await tx.$queryRaw<Array<{ id: string; name: string; trashed_at: Date | null }>>`
     WITH RECURSIVE "up" AS (
-      SELECT "id", "parent_id", "name", "trashed_at", 0 AS "depth" FROM "document_entry" WHERE "id" = ${parentId}::uuid AND "owner_id" = ${ownerId}::uuid
+      SELECT "id", "parent_id", "name", "trashed_at", 0 AS "depth" FROM "drive_entry" WHERE "id" = ${parentId}::uuid AND "owner_id" = ${ownerId}::uuid
       UNION ALL
-      SELECT e."id", e."parent_id", e."name", e."trashed_at", "up"."depth" + 1 FROM "document_entry" e JOIN "up" ON e."id" = "up"."parent_id"
+      SELECT e."id", e."parent_id", e."name", e."trashed_at", "up"."depth" + 1 FROM "drive_entry" e JOIN "up" ON e."id" = "up"."parent_id"
        WHERE e."owner_id" = ${ownerId}::uuid AND "up"."trashed_at" IS NOT NULL
     )
     SELECT "id", "name", "trashed_at" FROM "up" ORDER BY "depth" ASC`;
@@ -1678,13 +1678,13 @@ async function liveDestination(tx: Tx, ownerId: string, parentId: string, writer
   if (liveAt === 0) return (await lockLiveFolder(tx, ownerId, parentId)).id;
   let dest = liveAt > 0 ? (await lockLiveFolder(tx, ownerId, chain[liveAt].id)).id : (await rootIn(tx, ownerId)).id;
   for (const missing of chain.slice(0, liveAt < 0 ? chain.length : liveAt).reverse()) {
-    const existing = await tx.documentEntry.findFirst({ where: { ownerId, parentId: dest, name: missing.name, trashedAt: null } });
+    const existing = await tx.driveEntry.findFirst({ where: { ownerId, parentId: dest, name: missing.name, trashedAt: null } });
     if (existing?.kind === 'FOLDER') {
       dest = existing.id;
       continue;
     }
     const name = await freeName(tx, ownerId, dest, missing.name, 'FOLDER', 'SUFFIX');
-    const created = await tx.documentEntry.create({
+    const created = await tx.driveEntry.create({
       data: { id: uuidv7(), ownerId, parentId: dest, kind: 'FOLDER', name, mtime: now, createdAt: now, updatedAt: now, ...lastWriterFields(writer, now) },
     });
     changes.push({ entryId: created.id, parentId: dest, op: 'UPSERT' });
@@ -1697,17 +1697,17 @@ async function liveDestination(tx: Tx, ownerId: string, parentId: string, writer
 async function deleteEmptyGroups(tx: Tx, ownerId: string, ids: string[]): Promise<void> {
   const unique = [...new Set(ids)];
   if (!unique.length) return;
-  await tx.documentTrashGroup.deleteMany({ where: { ownerId, id: { in: unique }, entries: { none: {} }, versions: { none: {} } } });
+  await tx.driveTrashGroup.deleteMany({ where: { ownerId, id: { in: unique }, entries: { none: {} }, versions: { none: {} } } });
   await tx.$executeRaw`
-    UPDATE "document_trash_group" g
+    UPDATE "drive_trash_group" g
        SET "item_count" = c."items", "size_bytes" = c."bytes"
       FROM (
         SELECT g2."id",
-               (SELECT count(*) FROM "document_entry" e WHERE e."owner_id" = g2."owner_id" AND e."trash_group_id" = g2."id")
-             + (SELECT count(*) FROM "document_version" v WHERE v."owner_id" = g2."owner_id" AND v."trash_group_id" = g2."id") AS "items",
-               coalesce((SELECT sum(e."size_bytes") FROM "document_entry" e WHERE e."owner_id" = g2."owner_id" AND e."trash_group_id" = g2."id" AND e."kind" = 'FILE'), 0)
-             + coalesce((SELECT sum(v."size_bytes") FROM "document_version" v WHERE v."owner_id" = g2."owner_id" AND v."trash_group_id" = g2."id"), 0) AS "bytes"
-          FROM "document_trash_group" g2 WHERE g2."owner_id" = ${ownerId}::uuid AND g2."id" = ANY(${unique}::uuid[])
+               (SELECT count(*) FROM "drive_entry" e WHERE e."owner_id" = g2."owner_id" AND e."trash_group_id" = g2."id")
+             + (SELECT count(*) FROM "drive_version" v WHERE v."owner_id" = g2."owner_id" AND v."trash_group_id" = g2."id") AS "items",
+               coalesce((SELECT sum(e."size_bytes") FROM "drive_entry" e WHERE e."owner_id" = g2."owner_id" AND e."trash_group_id" = g2."id" AND e."kind" = 'FILE'), 0)
+             + coalesce((SELECT sum(v."size_bytes") FROM "drive_version" v WHERE v."owner_id" = g2."owner_id" AND v."trash_group_id" = g2."id"), 0) AS "bytes"
+          FROM "drive_trash_group" g2 WHERE g2."owner_id" = ${ownerId}::uuid AND g2."id" = ANY(${unique}::uuid[])
       ) c
      WHERE g."id" = c."id"`;
 }
@@ -1719,17 +1719,17 @@ async function deleteTrashLeaves(tx: Tx, ownerId: string, groupId?: string): Pro
   const scope = groupId ? Prisma.sql`e."trash_group_id" = ${groupId}::uuid` : Prisma.sql`e."trash_group_id" IS NOT NULL`;
   const picked = await tx.$queryRaw<Array<{ id: string; still_here: boolean }>>`
     WITH RECURSIVE "sub" AS (
-      SELECT e."id", e."parent_id" FROM "document_entry" e WHERE e."owner_id" = ${ownerId}::uuid AND ${scope}
+      SELECT e."id", e."parent_id" FROM "drive_entry" e WHERE e."owner_id" = ${ownerId}::uuid AND ${scope}
       UNION
-      SELECT e."id", e."parent_id" FROM "sub" JOIN "document_entry" e ON e."parent_id" = "sub"."id"
+      SELECT e."id", e."parent_id" FROM "sub" JOIN "drive_entry" e ON e."parent_id" = "sub"."id"
        WHERE e."owner_id" = ${ownerId}::uuid
     ), "leaves" AS (
       SELECT s."id", s."parent_id" FROM "sub" s
-       WHERE (SELECT 1 FROM "document_entry" c WHERE c."parent_id" = s."id" LIMIT 1) IS NULL
+       WHERE (SELECT 1 FROM "drive_entry" c WHERE c."parent_id" = s."id" LIMIT 1) IS NULL
        LIMIT ${DRIVE_TRASH_BATCH}
     )
     SELECT e."id", e."parent_id" = l."parent_id" AS "still_here"
-      FROM "leaves" l JOIN "document_entry" e ON e."id" = l."id"
+      FROM "leaves" l JOIN "drive_entry" e ON e."id" = l."id"
      ORDER BY e."kind" DESC, e."id" FOR UPDATE OF e`;
   const ids = picked.filter((e) => e.still_here).map((e) => e.id);
   if (!ids.length) return picked.length > 0;
@@ -1738,13 +1738,13 @@ async function deleteTrashLeaves(tx: Tx, ownerId: string, groupId?: string): Pro
   // stopped marking. The row locks also keep a mount commit from changing the versions we are about to cascade.
   const touched = await tx.$queryRaw<Array<{ group_id: string }>>`
     WITH "deleted" AS (
-      DELETE FROM "document_entry" e WHERE e."owner_id" = ${ownerId}::uuid AND e."id" = ANY(${ids}::uuid[])
-        AND NOT EXISTS (SELECT 1 FROM "document_entry" c WHERE c."parent_id" = e."id")
+      DELETE FROM "drive_entry" e WHERE e."owner_id" = ${ownerId}::uuid AND e."id" = ANY(${ids}::uuid[])
+        AND NOT EXISTS (SELECT 1 FROM "drive_entry" c WHERE c."parent_id" = e."id")
       RETURNING e."id", e."trash_group_id"
     )
     SELECT "trash_group_id" AS "group_id" FROM "deleted" WHERE "trash_group_id" IS NOT NULL
     UNION
-    SELECT v."trash_group_id" FROM "document_version" v JOIN "deleted" d ON d."id" = v."entry_id"
+    SELECT v."trash_group_id" FROM "drive_version" v JOIN "deleted" d ON d."id" = v."entry_id"
      WHERE v."owner_id" = ${ownerId}::uuid AND v."trash_group_id" IS NOT NULL`;
   await deleteEmptyGroups(tx, ownerId, touched.map((row) => row.group_id));
   return true;
@@ -1754,9 +1754,9 @@ async function deleteTrashLeaves(tx: Tx, ownerId: string, groupId?: string): Pro
 async function deleteTrashVersions(tx: Tx, ownerId: string, groupId?: string): Promise<boolean> {
   const scope = groupId ? Prisma.sql`"trash_group_id" = ${groupId}::uuid` : Prisma.sql`"trash_group_id" IS NOT NULL`;
   const deleted = await tx.$queryRaw<Array<{ trash_group_id: string }>>`
-    DELETE FROM "document_version" WHERE "owner_id" = ${ownerId}::uuid AND "replaced_at" IS NOT NULL AND ${scope}
+    DELETE FROM "drive_version" WHERE "owner_id" = ${ownerId}::uuid AND "replaced_at" IS NOT NULL AND ${scope}
       AND "id" IN (
-        SELECT "id" FROM "document_version" WHERE "owner_id" = ${ownerId}::uuid AND "replaced_at" IS NOT NULL AND ${scope}
+        SELECT "id" FROM "drive_version" WHERE "owner_id" = ${ownerId}::uuid AND "replaced_at" IS NOT NULL AND ${scope}
         LIMIT ${DRIVE_TRASH_BATCH} FOR UPDATE
       )
     RETURNING "trash_group_id"`;
@@ -1800,8 +1800,8 @@ async function markUnder(
   while (marked.length < limit) {
     if (open === null) {
       const holding = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT DISTINCT p."id" FROM "document_entry" p
-          JOIN "document_entry" c ON c."owner_id" = p."owner_id" AND c."parent_id" = p."id" AND c."trashed_at" IS NULL
+        SELECT DISTINCT p."id" FROM "drive_entry" p
+          JOIN "drive_entry" c ON c."owner_id" = p."owner_id" AND c."parent_id" = p."id" AND c."trashed_at" IS NULL
          WHERE p."owner_id" = ${ownerId}::uuid AND p."trash_group_id" = ${groupId}::uuid AND p."kind" = 'FOLDER'`;
       if (!holding.length) return { marked, open: [], verified: true };
       open = holding.map((h) => h.id);
@@ -1809,7 +1809,7 @@ async function markUnder(
     if (!open.length) break;
     const want = limit - marked.length;
     const picked = await tx.$queryRaw<Array<{ id: string; kind: string }>>`
-      SELECT c."id", c."kind" FROM "document_entry" c JOIN "document_entry" p ON p."id" = c."parent_id"
+      SELECT c."id", c."kind" FROM "drive_entry" c JOIN "drive_entry" p ON p."id" = c."parent_id"
        WHERE c."owner_id" = ${ownerId}::uuid AND c."parent_id" = ANY(${open}::uuid[]) AND c."trashed_at" IS NULL
          AND p."trash_group_id" = ${groupId}::uuid
        LIMIT ${want}`;
@@ -1818,7 +1818,7 @@ async function markUnder(
       const ids = picked.filter((p) => p.kind === kind).map((p) => p.id);
       if (!ids.length) continue;
       const rows = await tx.$queryRaw<MarkedRow[]>`
-        UPDATE "document_entry"
+        UPDATE "drive_entry"
            SET "trashed_at" = ${now}, "trash_group_id" = ${groupId}::uuid, "trash_top" = false, "updated_at" = ${now}
          WHERE "id" = ANY(${ids}::uuid[]) AND "owner_id" = ${ownerId}::uuid AND "trashed_at" IS NULL
         RETURNING "id", "parent_id", "kind", "size_bytes"`;
@@ -1854,10 +1854,10 @@ async function restoreUnder(
     const folder = open[0];
     const picked = await tx.$queryRaw<Array<{ id: string; name: string; kind: string; taken: boolean }>>`
       SELECT c."id", c."name", c."kind",
-             EXISTS (SELECT 1 FROM "document_entry" l
+             EXISTS (SELECT 1 FROM "drive_entry" l
                       WHERE l."owner_id" = c."owner_id" AND l."parent_id" = c."parent_id" AND l."name" = c."name"
                         AND l."trashed_at" IS NULL) AS "taken"
-        FROM "document_entry" c JOIN "document_entry" p ON p."id" = c."parent_id"
+        FROM "drive_entry" c JOIN "drive_entry" p ON p."id" = c."parent_id"
        WHERE c."owner_id" = ${ownerId}::uuid AND c."parent_id" = ${folder}::uuid AND c."trash_group_id" = ${groupId}::uuid
          AND p."trashed_at" IS NULL
        ORDER BY c."trashed_at" ASC, c."id" ASC LIMIT ${left}`;
@@ -1874,10 +1874,10 @@ async function restoreUnder(
       }
     }
     const back = { trashedAt: null, trashGroupId: null, trashTop: false, updatedAt: now, ...lastWriterFields(writer, now) };
-    if (plain.length) await tx.documentEntry.updateMany({ where: { ownerId, trashGroupId: groupId, id: { in: plain } }, data: back });
+    if (plain.length) await tx.driveEntry.updateMany({ where: { ownerId, trashGroupId: groupId, id: { in: plain } }, data: back });
     for (const c of clashing) {
       const name = await freeName(tx, ownerId, folder, c.name, c.kind, 'SUFFIX');
-      await tx.documentEntry.update({ where: { id: c.id }, data: { ...back, name } });
+      await tx.driveEntry.update({ where: { id: c.id }, data: { ...back, name } });
     }
     for (const r of picked) {
       changes.push({ entryId: r.id, parentId: folder, op: 'UPSERT' });
@@ -1895,8 +1895,8 @@ async function assertChunksHeld(tx: Tx, ownerId: string, chunks: DriveChunkRef[]
   const held = await tx.$queryRaw<Array<{ sha256: string; size_bytes: number }>>`
     SELECT b."sha256", b."size_bytes" FROM "file_blob" b
      WHERE b."sha256" = ANY(${wanted}::text[]) AND b."bytes_deleted_at" IS NULL
-       AND (EXISTS (SELECT 1 FROM "document_staging_chunk" s WHERE s."sha256" = b."sha256" AND s."owner_id" = ${ownerId}::uuid)
-         OR EXISTS (SELECT 1 FROM "document_version_chunk" v WHERE v."sha256" = b."sha256" AND v."owner_id" = ${ownerId}::uuid))`;
+       AND (EXISTS (SELECT 1 FROM "drive_staging_chunk" s WHERE s."sha256" = b."sha256" AND s."owner_id" = ${ownerId}::uuid)
+         OR EXISTS (SELECT 1 FROM "drive_version_chunk" v WHERE v."sha256" = b."sha256" AND v."owner_id" = ${ownerId}::uuid))`;
   const sizes = new Map(held.map((h) => [h.sha256, Number(h.size_bytes)]));
   for (const c of chunks) {
     if (sizes.get(c.sha256) !== c.size) {

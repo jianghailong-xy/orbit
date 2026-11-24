@@ -11,7 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
  */
 export const DRIVE_CHUNK_MAX = 8 * 1024 * 1024;
 
-/** Who opened a staging (document_staging_source_chk). */
+/** Who opened a staging (drive_staging_source_chk). */
 export type DriveStagingSource = 'OWNER_UPLOAD' | 'MOUNT' | 'TOOL';
 
 export const DRIVE_STAGING_NOT_FOUND = 'DRIVE_STAGING_NOT_FOUND';
@@ -54,7 +54,7 @@ export class DriveChunksService {
       declaredSize?: number | null;
     },
   ): Promise<{ id: string }> {
-    return this.prisma.documentStaging.create({
+    return this.prisma.driveStaging.create({
       data: {
         ownerId,
         source: staging.source,
@@ -92,7 +92,7 @@ export class DriveChunksService {
       body.resume();
       throw refusal(HttpStatus.BAD_REQUEST, DRIVE_CHUNK_INVALID, 'A chunk names its sha256 as 64 lowercase hex characters.');
     }
-    const staging = await this.prisma.documentStaging.findFirst({
+    const staging = await this.prisma.driveStaging.findFirst({
       where: { id: stagingId, ownerId, committedAt: null },
       select: { id: true },
     });
@@ -124,12 +124,12 @@ export class DriveChunksService {
       await removeTempFile(temp.path);
     }
     try {
-      await this.prisma.documentStagingChunk.upsert({
+      await this.prisma.driveStagingChunk.upsert({
         where: { stagingId_idx: { stagingId, idx } },
         create: { stagingId, idx, ownerId, sha256, sizeBytes: temp.size },
         update: { sha256, sizeBytes: temp.size },
       });
-      await this.prisma.documentStaging.update({ where: { id: stagingId }, data: { touchedAt: new Date() } });
+      await this.prisma.driveStaging.update({ where: { id: stagingId }, data: { touchedAt: new Date() } });
     } catch (error) {
       // The staging went (abandoned, or removed by the sweep) while the chunk was arriving.
       if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === 'P2003' || error.code === 'P2025')) {

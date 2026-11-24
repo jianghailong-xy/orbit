@@ -2417,7 +2417,7 @@ function groupToolRuns(nodes: Node[], chat = false): NodeListItem[] {
     run = [];
   };
   for (const node of nodes) {
-    // An agent's documents_put or documents_get calls (drive_put / drive_get before the rename) are one transfer card, which only thinking may sit inside: the thinking
+    // An agent's drive_put or drive_get calls (documents_put / documents_get while Drive was called Documents) are one transfer card, which only thinking may sit inside: the thinking
     // is drawn under the card, so the calls stay together.
     const transfer = node.kind === 'tool' && node.children.length === 0 ? driveTransferKind(node.name) : null;
     if (transfer) {
@@ -2481,7 +2481,7 @@ function isGroupableTool(node: Node, chat = false): node is ToolNode {
     node.name !== 'mcp__orbit__project_create' &&
     !isBackgroundTaskCall(node.name) &&
     node.name !== BG_RUN_TOOL &&
-    node.name !== DRIVE_SYNC_TOOL &&
+    !isDriveSyncTool(node.name) &&
     !ownerChatReplyOf(node)
   );
 }
@@ -4155,7 +4155,7 @@ function CodeBlock({ children }: any) {
 import { DriveFileCard, driveIdFromHref } from './drive/DriveFileCard';
 import { DriveTransferCard } from './drive/DriveTransferCard';
 import { DriveSyncCard } from './drive/DriveSyncCard';
-import { DRIVE_SYNC_TOOL, driveSyncIdOf } from '../lib/driveSyncs';
+import { driveSyncIdOf, isDriveSyncTool } from '../lib/driveSyncs';
 import { driveTransferFile, driveTransferKind, type DriveTransferKind } from '../lib/driveTransfer';
 import { useDriveSaidOff } from '../lib/driveSwitch';
 
@@ -4949,9 +4949,9 @@ function ToolView({ node, live, startOpen }: { node: ToolNode; live?: boolean; s
       return <JobCard seq={node.seq} input={input} jobId={receipt?.jobId ?? null} startedAt={receipt?.startedAt ?? null} live={live} />;
     }
   }
-  // A documents_sync call is its sync's card once its answer names the sync; an older runner's answer names none and
-  // stays a call (board docs/mocks/documents-sync-card).
-  if (node.name === DRIVE_SYNC_TOOL && node.result && !node.result.isError) {
+  // A drive_sync (or documents_sync) call is its sync's card once its answer names the sync; an older runner's answer
+  // names none and stays a call (board docs/mocks/documents-sync-card).
+  if (isDriveSyncTool(node.name) && node.result && !node.result.isError) {
     const syncId = driveSyncIdOf(resultText(resultContent));
     if (syncId) return <DriveSyncCard syncId={syncId} />;
   }

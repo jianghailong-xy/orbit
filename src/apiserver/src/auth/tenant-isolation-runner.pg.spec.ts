@@ -472,16 +472,16 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     const driveChunkSha256 = createHash('sha256').update(`census drive chunk of ${name} ${ownerId}`).digest('hex');
     await db.fileBlob.upsert({ where: { sha256: driveChunkSha256 }, create: { sha256: driveChunkSha256, sizeBytes: 6, storage: 'local' }, update: {} });
     const driveStagingOf = async () =>
-      (await db.documentStaging.create({ data: { ownerId, source: 'TOOL', entryId: of.driveFileId, runnerId: of.runnerId } })).id;
+      (await db.driveStaging.create({ data: { ownerId, source: 'TOOL', entryId: of.driveFileId, runnerId: of.runnerId } })).id;
     const driveStagingId = await driveStagingOf();
-    await db.documentStagingChunk.create({ data: { stagingId: driveStagingId, idx: 0, ownerId, sha256: driveChunkSha256, sizeBytes: 6 } });
+    await db.driveStagingChunk.create({ data: { stagingId: driveStagingId, idx: 0, ownerId, sha256: driveChunkSha256, sizeBytes: 6 } });
     const driveCommitStagingId = await driveStagingOf();
     const driveCommitId = `census-commit-${name}-${randomUUID()}`;
-    await db.documentCommit.create({ data: { ownerId, commitId: driveCommitId, entryId: of.driveFileId, result: { census: true } } });
+    await db.driveCommit.create({ data: { ownerId, commitId: driveCommitId, entryId: of.driveFileId, result: { census: true } } });
     const drive = new DriveService(db as never);
     const driveMoveFileId = (await drive.createFile(ownerId, { parentId: of.driveFolderId, name: 'census to move.txt' })).id;
     const driveDeleteFileId = (await drive.createFile(ownerId, { parentId: of.driveFolderId, name: 'census to delete.txt' })).id;
-    const driveSyncId = (await db.documentSync.create({ data: { ownerId, runnerId: of.runnerId, sourceName: 'census', destPath: '/census' } })).id;
+    const driveSyncId = (await db.driveSync.create({ data: { ownerId, runnerId: of.runnerId, sourceName: 'census', destPath: '/census' } })).id;
 
     return {
       driveStagingId, driveCommitStagingId, driveChunkSha256, driveCommitId, driveMoveFileId, driveDeleteFileId, driveSyncId,

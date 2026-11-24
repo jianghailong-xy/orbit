@@ -3465,6 +3465,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1560 creates document_sync (docs/documents-directory-sync-design.md S4): a new table with two foreign-key keys and
       // two indexes. No existing row, trigger, function or DONE fence is touched.
       '1560_document_sync',
+      // 1561 adds a nullable concurrency ceiling to managed_runner. It writes no rows and
+      // changes no preserved relation, trigger, function or DONE fence.
+      '1561_managed_runner_oom_recovery',
       // 1573 restates owner_request's kind CHECK with PROJECT_REOPEN, restates 1273's payload CHECK under a kind-neutral
       // name admitting PROJECT_REOPEN, and adds one CHECK and one partial unique index on owner_request. Not a preserved
       // relation; no row is written, and no trigger, function or DONE fence changes.
@@ -3472,7 +3475,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1590 rewrites the access token scopes `documents` and `files` to `drive` in personal_access_token.scopes and
       // pat_device_login.scopes: two UPDATEs of those tables only, none of the preserved relations, no row added or
       // removed, and no table, column, trigger, function or DONE fence changes.
-      '1590_pat_scope_drive'],
+      '1590_pat_scope_drive',
+      // 1592 renames the ten document_* tables back to drive_* and document_sync to drive_sync, with their
+      // constraints, indexes and the document_change sequence: catalog renames only, so no row is written or removed
+      // and nothing is created, and no column, value or reference changes. None of them is a preserved relation, and
+      // no trigger, function or DONE fence names them.
+      '1592_drive_tables'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

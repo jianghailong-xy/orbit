@@ -911,16 +911,16 @@ export class FilesService implements OnApplicationBootstrap {
       WITH held AS (
         SELECT c.sha256, MAX(c.size_bytes) AS size,
                BOOL_OR(v.trash_group_id IS NULL AND e.trashed_at IS NULL) AS live
-          FROM document_version_chunk c
-          JOIN document_version v ON v.id = c.version_id AND v.owner_id = c.owner_id
-          JOIN document_entry e ON e.id = v.entry_id AND e.owner_id = v.owner_id
+          FROM drive_version_chunk c
+          JOIN drive_version v ON v.id = c.version_id AND v.owner_id = c.owner_id
+          JOIN drive_entry e ON e.id = v.entry_id AND e.owner_id = v.owner_id
          WHERE c.owner_id = ${ownerId}::uuid
          GROUP BY c.sha256
         UNION ALL
         SELECT sc.sha256, MAX(sc.size_bytes), TRUE
-          FROM document_staging_chunk sc
+          FROM drive_staging_chunk sc
          WHERE sc.owner_id = ${ownerId}::uuid
-           AND NOT EXISTS (SELECT 1 FROM document_version_chunk c WHERE c.owner_id = sc.owner_id AND c.sha256 = sc.sha256)
+           AND NOT EXISTS (SELECT 1 FROM drive_version_chunk c WHERE c.owner_id = sc.owner_id AND c.sha256 = sc.sha256)
          GROUP BY sc.sha256
       ), other AS (
         SELECT MAX(size_bytes) AS size

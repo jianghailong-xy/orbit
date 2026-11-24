@@ -32,7 +32,7 @@ var (
 	driveMountPath  = filepath.Join(driveParentPath, "drive")
 	driveHomePath   = "/home/orbit/Drive"
 	// driveStaleHomePaths are where earlier runners linked the drive (as Documents, before that Files). They are no
-	// longer the drive: ensureDocumentsLink removes one that is a link to the mount.
+	// longer the drive: ensureDriveLink removes one that is a link to the mount.
 	driveStaleHomePaths = []string{"/home/orbit/Documents", "/home/orbit/Files"}
 )
 
@@ -285,7 +285,7 @@ func (s localFileScope) open(path string) (*os.File, os.FileInfo, error) {
 	return s.openRegular(path, true)
 }
 
-// openRegular enforces the path rule for both attachments and documents_put.
+// openRegular enforces the path rule for both attachments and drive_put.
 func (s localFileScope) openRegular(path string, scanSecrets bool) (*os.File, os.FileInfo, error) {
 	real, err := filepath.EvalSymlinks(path)
 	if err != nil {

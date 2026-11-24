@@ -28,8 +28,8 @@ function contentOf(parts: Buffer[]) {
     return chunk;
   });
   const prisma = {
-    documentVersion: { findFirst: async () => ({ sizeBytes: BigInt(offset) }) },
-    documentVersionChunk: { findMany: async () => chunks },
+    driveVersion: { findFirst: async () => ({ sizeBytes: BigInt(offset) }) },
+    driveVersionChunk: { findMany: async () => chunks },
     fileBlob: { findUnique: async () => ({ storage: 'local' }) },
   };
   const files = {

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { RunEvent } from '../../api';
 import { LiveToolOutputsCtx, Transcript } from '../Transcript';
 
-const put = (seq: number, id: string, path: string, name = 'mcp__orbit__documents_put'): RunEvent => ({
+const put = (seq: number, id: string, path: string, name = 'mcp__orbit__drive_put'): RunEvent => ({
   seq,
   type: 'tool_use',
   ts: `2026-11-24T10:00:${String(seq).padStart(2, '0')}Z`,
@@ -15,7 +15,7 @@ const putDone = (seq: number, id: string, size: number): RunEvent => ({
   seq,
   type: 'tool_result',
   ts: `2026-11-24T10:00:${String(seq).padStart(2, '0')}Z`,
-  payload: { toolUseId: id, content: JSON.stringify({ id: `e-${id}`, link: `orbit-document:e-${id}`, sizeBytes: size }) },
+  payload: { toolUseId: id, content: JSON.stringify({ id: `e-${id}`, link: `orbit-drive:e-${id}`, sizeBytes: size }) },
 });
 
 function render(events: RunEvent[], outputs: [string, string][] = [], live = true) {
@@ -37,8 +37,8 @@ describe('drive transfer card', () => {
     put(3, 'toolu_c', '/Shuge/2026-11-24/老地图/廣東至暹羅水陸道里圖.jpg'),
   ];
 
-  it('draws a stored transcript of drive_put calls, the name before the Documents rename, as the same card', () => {
-    const html = render([put(1, 'toolu_x', '/Shuge/a.jpg', 'mcp__orbit__drive_put'), put(2, 'toolu_y', '/Shuge/b.jpg', 'mcp__orbit__drive_put')], [], false);
+  it('draws a stored transcript of documents_put calls, the name while Drive was called Documents, as the same card', () => {
+    const html = render([put(1, 'toolu_x', '/Shuge/a.jpg', 'mcp__orbit__documents_put'), put(2, 'toolu_y', '/Shuge/b.jpg', 'mcp__orbit__documents_put')], [], false);
     expect(html.match(/class="drive-xfer"/g)).toHaveLength(1);
     expect(html).not.toContain('chat-steps-line');
   });
@@ -87,8 +87,8 @@ describe('drive transfer card', () => {
           receiptVersion: 1,
           ok: true,
           outcome: 'written',
-          operation: 'documents_put',
-          entity: { id: `e-${id}`, path: '/x', link: `orbit-document:e-${id}`, sizeBytes: size },
+          operation: 'drive_put',
+          entity: { id: `e-${id}`, path: '/x', link: `orbit-drive:e-${id}`, sizeBytes: size },
         }),
       },
     });

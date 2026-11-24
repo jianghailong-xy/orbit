@@ -52,14 +52,14 @@ export class DriveDownloadLinks {
 
   /** Mint a URL for `entryId`'s current version, or `versionId` of it: a live file of the owner's. */
   async mint(ownerId: string, entryId: string, versionId?: string): Promise<{ path: string; expiresAt: string }> {
-    const entry = await this.prisma.documentEntry.findFirst({ where: { id: entryId, ownerId, trashedAt: null } });
+    const entry = await this.prisma.driveEntry.findFirst({ where: { id: entryId, ownerId, trashedAt: null } });
     if (!entry) throw new HttpException({ code: DRIVE_ENTRY_NOT_FOUND, message: 'No such file or folder.' }, HttpStatus.NOT_FOUND);
     if (entry.kind !== 'FILE' || !entry.currentVersionId) {
       throw new HttpException({ code: DRIVE_NOT_A_FILE, message: 'A folder has no content to download.' }, HttpStatus.CONFLICT);
     }
     let version = entry.currentVersionId;
     if (versionId) {
-      const found = await this.prisma.documentVersion.findFirst({ where: { id: versionId, ownerId, entryId }, select: { id: true } });
+      const found = await this.prisma.driveVersion.findFirst({ where: { id: versionId, ownerId, entryId }, select: { id: true } });
       if (!found) throw new HttpException({ code: DRIVE_VERSION_NOT_FOUND, message: 'No such version.' }, HttpStatus.NOT_FOUND);
       version = found.id;
     }
@@ -80,7 +80,7 @@ export class DriveDownloadLinks {
       throw gone();
     }
     if (claims.k !== KIND || !claims.sub || !claims.e || !claims.v) throw gone();
-    const version = await this.prisma.documentVersion.findFirst({
+    const version = await this.prisma.driveVersion.findFirst({
       where: { id: claims.v, ownerId: claims.sub, entryId: claims.e },
       select: { id: true },
     });

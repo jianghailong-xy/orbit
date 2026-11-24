@@ -183,11 +183,11 @@ export class RunnerDriveController {
     let entryId: string | null = dto.entryId;
     await this.drive.liveById(runner.ownerId, dto.entryId).catch(async (error) => {
       // A handle bound to an entry in Trash still commits there (§3.1), so its staging opens too.
-      const inTrash = await this.prisma.documentEntry.findFirst({ where: { id: dto.entryId, ownerId: runner.ownerId }, select: { id: true } });
+      const inTrash = await this.prisma.driveEntry.findFirst({ where: { id: dto.entryId, ownerId: runner.ownerId }, select: { id: true } });
       if (inTrash) return;
       // So does one bound to a file a replacing rename removed (§3.2): its commit makes a new file in Trash, so the
       // staging is bound to no entry.
-      const removed = await this.prisma.documentRemovedEntry.findUnique({
+      const removed = await this.prisma.driveRemovedEntry.findUnique({
         where: { ownerId_entryId: { ownerId: runner.ownerId, entryId: dto.entryId } }, select: { entryId: true },
       });
       if (!removed) throw error;
@@ -229,7 +229,7 @@ export class RunnerDriveController {
     @Res({ passthrough: true }) res: Response,
   ) {
     await this.staging(runner, id);
-    const chunk = await this.prisma.documentStagingChunk.findFirst({ where: { stagingId: id, idx, ownerId: runner.ownerId } });
+    const chunk = await this.prisma.driveStagingChunk.findFirst({ where: { stagingId: id, idx, ownerId: runner.ownerId } });
     if (!chunk) throw refusal(HttpStatus.NOT_FOUND, 'DRIVE_CHUNK_NOT_FOUND', `This staging has no chunk ${idx}.`);
     return this.serveBlob(chunk.sha256, range, res);
   }
@@ -239,7 +239,7 @@ export class RunnerDriveController {
   @HttpCode(HttpStatus.OK)
   async keepalive(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string, @Body() dto: RunnerDriveKeepaliveDto) {
     await this.staging(runner, id);
-    await this.prisma.documentStaging.updateMany({
+    await this.prisma.driveStaging.updateMany({
       where: { id, ownerId: runner.ownerId, runnerId: runner.id, committedAt: null },
       data: { touchedAt: new Date(), dirty: dto.dirty === true },
     });
@@ -355,7 +355,7 @@ export class RunnerDriveController {
 
   /** A staging of this owner's that this runner opened and has not committed. */
   private async staging(runner: Runner, id: string) {
-    const staging = await this.prisma.documentStaging.findFirst({
+    const staging = await this.prisma.driveStaging.findFirst({
       where: { id, ownerId: runner.ownerId, runnerId: runner.id, committedAt: null },
       select: { id: true },
     });

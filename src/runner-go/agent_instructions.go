@@ -153,7 +153,7 @@ func orbitDriveInstructions() string {
 	}
 	const readOnly = "Verifying, judging and ORBIT_GUEST turns only read it."
 	if !driveMounted() {
-		return "The owner's Drive: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); " +
+		return "The owner's Drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); " +
 			"deletes go to a Trash agents cannot see. " + readOnly + "\n\n"
 	}
 	return "~/Drive is the owner's permanent Drive; link its files by path. Give ls, find, du ~/Drive/ (a " +
@@ -169,10 +169,10 @@ func orbitDriveGuide() string {
 	}
 	const readOnly = "Verification, judgment and guest-driven turns (a message carrying the ORBIT_GUEST marker) read the drive and do not write it."
 	if !driveMounted() {
-		return "The owner's Drive is reached with documents_put, documents_get, documents_list, documents_move, " +
-			"documents_delete and documents_sync, or `orbit documents put|get|ls|mv|rm|sync`, by drive path (/Proj/r.md). " +
-			"documents_put reads only this session's checkout or uploads directory and overwrites with a version; documents_sync " +
-			"copies a whole directory from there once, in the background, skipping files already the same; documents_get saves " +
+		return "The owner's Drive is reached with drive_put, drive_get, drive_list, drive_move, " +
+			"drive_delete and drive_sync, or `orbit drive put|get|ls|mv|rm|sync`, by drive path (/Proj/r.md). " +
+			"drive_put reads only this session's checkout or uploads directory and overwrites with a version; drive_sync " +
+			"copies a whole directory from there once, in the background, skipping files already the same; drive_get saves " +
 			"into the uploads directory. A delete moves the " +
 			"entry to the owner's Trash, which agents cannot see or restore, and no tool shares a drive file. " + readOnly
 	}

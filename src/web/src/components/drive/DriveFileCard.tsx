@@ -5,11 +5,11 @@ import { Link } from 'react-router-dom';
 import { driveEntryQuery, formatSize } from '../../lib/drive';
 import { ApiError } from '../../api';
 
-export const DRIVE_LINK_PREFIX = 'orbit-document:';
-/** The scheme before the Documents rename, which stored transcripts carry and which still draws the same card. */
-const LEGACY_DRIVE_LINK_PREFIX = 'orbit-drive:';
+export const DRIVE_LINK_PREFIX = 'orbit-drive:';
+/** The scheme while Drive was called Documents, which stored transcripts carry and which still draws the same card. */
+const LEGACY_DRIVE_LINK_PREFIX = 'orbit-document:';
 
-/** The entry id in an `orbit-document:<id>` or `orbit-drive:<id>` link (design §4.5), or null when `href` is not one. */
+/** The entry id in an `orbit-drive:<id>` or `orbit-document:<id>` link (design §4.5), or null when `href` is not one. */
 export function driveIdFromHref(href: unknown): string | null {
   if (typeof href !== 'string') return null;
   const trimmed = href.trim();
@@ -25,7 +25,7 @@ function folderTrail(path: string | undefined): string {
 }
 
 /**
- * A reply's `orbit-document:<id>` (or `orbit-drive:<id>`) link drawn as that drive file (board 02-web frame 8): name, folder and size, read live so a
+ * A reply's `orbit-drive:<id>` (or `orbit-document:<id>`) link drawn as that drive file (board 02-web frame 8): name, folder and size, read live so a
  * later overwrite shows, and a click opens it on the Files page. A file that went to Trash or is gone says so instead.
  */
 export function DriveFileCard({ id, label }: { id: string; label?: string }) {

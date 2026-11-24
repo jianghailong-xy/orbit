@@ -29,27 +29,27 @@ func TestDocumentsOffLeavesOutTheDriveTools(t *testing.T) {
 		}
 	}
 	srv := &mcpServer{documentsOff: true}
-	if hasMCPTool(srv.listedToolDescriptors(), "documents_put") {
-		t.Error("tools/list offers documents_put with Drive off")
+	if hasMCPTool(srv.listedToolDescriptors(), "drive_put") {
+		t.Error("tools/list offers drive_put with Drive off")
 	}
 	on := &mcpServer{}
-	if !hasMCPTool(on.listedToolDescriptors(), "documents_put") {
-		t.Error("tools/list leaves out documents_put with Drive on")
+	if !hasMCPTool(on.listedToolDescriptors(), "drive_put") {
+		t.Error("tools/list leaves out drive_put with Drive on")
 	}
 
 	// The CLI half: not offered, and the commands themselves refuse.
 	t.Setenv("ORBIT_HOME", t.TempDir())
 	t.Setenv("ORBIT_SESSION_ID", "caller-session")
-	if ids := capabilityIDs(buildCLICapabilities("/usr/local/bin/orbit")); contains(ids, "documents_put") {
-		t.Errorf("capabilities offer documents_put with Drive off: %v", ids)
+	if ids := capabilityIDs(buildCLICapabilities("/usr/local/bin/orbit")); contains(ids, "drive_put") {
+		t.Errorf("capabilities offer drive_put with Drive off: %v", ids)
 	}
-	err := cmdDocumentsCLI([]string{"ls"}, &strings.Builder{})
+	err := cmdDriveCLI([]string{"ls"}, &strings.Builder{})
 	if err == nil || !strings.Contains(err.Error(), "ORBIT_DOCUMENTS_ENABLED") {
 		t.Errorf("orbit drive ls with Drive off = %v, want the refusal that names ORBIT_DOCUMENTS_ENABLED", err)
 	}
 	t.Setenv(envDocuments, "on")
-	if ids := capabilityIDs(buildCLICapabilities("/usr/local/bin/orbit")); !contains(ids, "documents_put") {
-		t.Errorf("capabilities with Drive on do not offer documents_put: %v", ids)
+	if ids := capabilityIDs(buildCLICapabilities("/usr/local/bin/orbit")); !contains(ids, "drive_put") {
+		t.Errorf("capabilities with Drive on do not offer drive_put: %v", ids)
 	}
 }
 
@@ -80,9 +80,9 @@ func TestDocumentsDisabledAnswerFromTheServerReadsAsTheSwitch(t *testing.T) {
 	if documentsDisabledByServer(&transportHTTPError{statusCode: http.StatusNotFound, body: `{"code":"NOT_FOUND"}`}) {
 		t.Error("an ordinary 404 reads as the switch")
 	}
-	got := documentsToolError("documents_list", err)
-	if !strings.Contains(got.Error(), "ORBIT_DOCUMENTS_ENABLED") || !strings.Contains(got.Error(), "documents_list") {
-		t.Errorf("documentsToolError = %v", got)
+	got := driveToolError("drive_list", err)
+	if !strings.Contains(got.Error(), "ORBIT_DOCUMENTS_ENABLED") || !strings.Contains(got.Error(), "drive_list") {
+		t.Errorf("driveToolError = %v", got)
 	}
 }
 
@@ -120,7 +120,7 @@ func TestDocumentsSwitchReachesTheSpawnAndSurvivesReclaim(t *testing.T) {
 func TestDocumentsOffDropsTheDriveFromTheAgentsInstructions(t *testing.T) {
 	t.Cleanup(func() { noteDocumentsDisabled(false) })
 	noteDocumentsDisabled(false)
-	if !strings.Contains(orbitDriveInstructions(), "documents_put") {
+	if !strings.Contains(orbitDriveInstructions(), "drive_put") {
 		t.Fatal("the drive paragraph is missing with Drive on")
 	}
 	noteDocumentsDisabled(true)
@@ -131,11 +131,11 @@ func TestDocumentsOffDropsTheDriveFromTheAgentsInstructions(t *testing.T) {
 		t.Errorf("drive guide rule with Drive off = %q", got)
 	}
 	exe := "/opt/orbit/orbit"
-	if text := orbitCLIInstructions(exe, false, true, true, true); strings.Contains(text, "documents_put") || strings.Contains(text, "~/Files") {
+	if text := orbitCLIInstructions(exe, false, true, true, true); strings.Contains(text, "drive_put") || strings.Contains(text, "~/Files") {
 		t.Errorf("the instructions still advertise the drive with Drive off")
 	}
 	// The report names the switch as what withholds the tools.
-	op := &operation{Tool: "documents_put"}
+	op := &operation{Tool: "drive_put"}
 	if got := agentToolsWithheldBy(op, agentToolsSwitches{DocumentsOff: true}); got != "documents" {
 		t.Errorf("withheld by %q, want documents", got)
 	}

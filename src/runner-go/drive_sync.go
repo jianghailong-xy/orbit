@@ -21,68 +21,68 @@ import (
 	"time"
 )
 
-// documents_sync / `orbit documents sync`: one directory copied into the owner's drive once, in the background, local to drive
+// drive_sync / `orbit drive sync`: one directory copied into the owner's drive once, in the background, local to drive
 // only (docs/documents-directory-sync-design.md, S1-S4). The tool and the command without --wait start a runner-hosted
-// background job that runs `orbit documents sync --wait`, so the copy outlives the engine and the job's wake tells the agent
+// background job that runs `orbit drive sync --wait`, so the copy outlives the engine and the job's wake tells the agent
 // when it ends; --wait is the copy itself. While it runs it reports its counts to the server, which shows them in the
 // upload tray of the owner's Documents page.
 
 const (
-	documentsSyncWorkers       = 4
-	documentsSyncReportEvery   = 2 * time.Second
-	documentsSyncPrintEvery    = 5 * time.Second
-	documentsSyncFailedMax     = 100
-	documentsSyncFileAttempts  = 3
-	documentsSyncSyncsRoute    = documentsRoute + "/syncs"
-	documentsSyncChangedReason = "Changed while uploading. It was being written to."
+	driveSyncWorkers       = 4
+	driveSyncReportEvery   = 2 * time.Second
+	driveSyncPrintEvery    = 5 * time.Second
+	driveSyncFailedMax     = 100
+	driveSyncFileAttempts  = 3
+	driveSyncSyncsRoute    = driveRoute + "/syncs"
+	driveSyncChangedReason = "Changed while uploading. It was being written to."
 )
 
-type documentsSyncFailure struct {
+type driveSyncFailure struct {
 	Path  string `json:"path"`
 	Error string `json:"error"`
 }
 
-// documentsSyncSummary is the sync's answer, and the last line a background sync prints.
-type documentsSyncSummary struct {
-	Path        string                 `json:"path"`
-	Link        string                 `json:"link,omitempty"`
-	Uploaded    int                    `json:"uploaded"`
-	Unchanged   int                    `json:"unchanged"`
-	Deleted     int                    `json:"deleted"`
-	Bytes       int64                  `json:"bytes"`
-	Skipped     int                    `json:"skipped,omitempty"`
-	Failed      []documentsSyncFailure `json:"failed"`
-	FailedCount int                    `json:"failedCount"`
+// driveSyncSummary is the sync's answer, and the last line a background sync prints.
+type driveSyncSummary struct {
+	Path        string             `json:"path"`
+	Link        string             `json:"link,omitempty"`
+	Uploaded    int                `json:"uploaded"`
+	Unchanged   int                `json:"unchanged"`
+	Deleted     int                `json:"deleted"`
+	Bytes       int64              `json:"bytes"`
+	Skipped     int                `json:"skipped,omitempty"`
+	Failed      []driveSyncFailure `json:"failed"`
+	FailedCount int                `json:"failedCount"`
 }
 
-type documentsSyncOptions struct {
+type driveSyncOptions struct {
 	sessionID string
-	// The local directory, absolute with its links resolved, which documentsSyncSource checked.
+	// The local directory, absolute with its links resolved, which driveSyncSource checked.
 	source string
 	// The destination's drive path, normalized.
 	dest        string
 	deleteExtra bool
-	// The sync's record, when whoever started the job opened it already (documents_sync does, so that its answer
+	// The sync's record, when whoever started the job opened it already (drive_sync does, so that its answer
 	// names the sync for the conversation's card); empty, the sync opens its own.
 	syncID string
 	// Where progress lines go; nil prints none.
 	out io.Writer
 }
 
-// documentsSyncSource checks the local directory before anything starts, so a bad path is the call's error and not a
+// driveSyncSource checks the local directory before anything starts, so a bad path is the call's error and not a
 // failed job: a directory in this session's checkout or uploads directory, and not in the drive's own mount.
-func documentsSyncSource(sessionID, localPath string) (string, error) {
+func driveSyncSource(sessionID, localPath string) (string, error) {
 	if strings.TrimSpace(localPath) == "" {
-		return "", errors.New("documents_sync requires localPath")
+		return "", errors.New("drive_sync requires localPath")
 	}
 	abs := absPath(localPath)
 	real, err := filepath.EvalSymlinks(abs)
 	if err != nil {
-		return "", fmt.Errorf("documents_sync: %w", err)
+		return "", fmt.Errorf("drive_sync: %w", err)
 	}
 	for _, root := range []string{driveMountPath, driveHomePath} {
 		if pathInsideAny(real, realPath(root)) {
-			return "", fmt.Errorf("documents_sync: %s is inside Drive itself; sync a directory of this session's checkout or uploads directory", abs)
+			return "", fmt.Errorf("drive_sync: %s is inside Drive itself; sync a directory of this session's checkout or uploads directory", abs)
 		}
 	}
 	if reason := newSessionFileScope(sessionID).refuses(real); reason != "" {
@@ -90,40 +90,40 @@ func documentsSyncSource(sessionID, localPath string) (string, error) {
 	}
 	info, err := os.Stat(real)
 	if err != nil {
-		return "", fmt.Errorf("documents_sync: %w", err)
+		return "", fmt.Errorf("drive_sync: %w", err)
 	}
 	if !info.IsDir() {
-		return "", fmt.Errorf("documents_sync: %s is not a directory; use documents_put for one file", abs)
+		return "", fmt.Errorf("drive_sync: %s is not a directory; use drive_put for one file", abs)
 	}
 	return real, nil
 }
 
-// documentsSyncDest normalizes the destination. --delete into the drive's root is refused: one mistyped path must not send
+// driveSyncDest normalizes the destination. --delete into the drive's root is refused: one mistyped path must not send
 // the whole drive to Trash.
-func documentsSyncDest(p string, deleteExtra bool) (string, error) {
+func driveSyncDest(p string, deleteExtra bool) (string, error) {
 	if strings.TrimSpace(p) == "" {
-		return "", errors.New("documents_sync requires path")
+		return "", errors.New("drive_sync requires path")
 	}
-	dest, err := normalizeDocumentsPath(p)
+	dest, err := normalizeDrivePath(p)
 	if err != nil {
 		return "", err
 	}
 	if deleteExtra && dest == "/" {
-		return "", errors.New("documents_sync: --delete into the root of Drive is refused; name the folder to sync into")
+		return "", errors.New("drive_sync: --delete into the root of Drive is refused; name the folder to sync into")
 	}
 	return dest, nil
 }
 
-// documentsSyncLocal is one regular file of the directory as the walk saw it.
-type documentsSyncLocal struct {
+// driveSyncLocal is one regular file of the directory as the walk saw it.
+type driveSyncLocal struct {
 	rel   string
 	path  string
 	size  int64
 	mtime time.Time
 }
 
-// documentsSyncProgress is what the tray and the progress lines read, guarded by mu.
-type documentsSyncProgress struct {
+// driveSyncProgress is what the tray and the progress lines read, guarded by mu.
+type driveSyncProgress struct {
 	mu          sync.Mutex
 	status      string
 	seen        int
@@ -133,33 +133,33 @@ type documentsSyncProgress struct {
 	deleted     int
 	bytesTotal  *int64
 	bytesDone   int64
-	inFlight    map[string]*documentsProgress
+	inFlight    map[string]*driveProgress
 	current     string
-	failed      []documentsSyncFailure
+	failed      []driveSyncFailure
 	failedCount int
 	destEntryID string
 	err         string
 	version     int
 }
 
-func (p *documentsSyncProgress) update(f func(*documentsSyncProgress)) {
+func (p *driveSyncProgress) update(f func(*driveSyncProgress)) {
 	p.mu.Lock()
 	f(p)
 	p.version++
 	p.mu.Unlock()
 }
 
-func (p *documentsSyncProgress) fail(rel, reason string) {
-	p.update(func(p *documentsSyncProgress) {
+func (p *driveSyncProgress) fail(rel, reason string) {
+	p.update(func(p *driveSyncProgress) {
 		p.failedCount++
-		if len(p.failed) < documentsSyncFailedMax {
-			p.failed = append(p.failed, documentsSyncFailure{Path: rel, Error: reason})
+		if len(p.failed) < driveSyncFailedMax {
+			p.failed = append(p.failed, driveSyncFailure{Path: rel, Error: reason})
 		}
 	})
 }
 
 // sent is the bytes of finished files and of those going up now, each counted at most once.
-func (p *documentsSyncProgress) sentLocked() int64 {
+func (p *driveSyncProgress) sentLocked() int64 {
 	sent := p.bytesDone
 	for _, counter := range p.inFlight {
 		counter.mu.Lock()
@@ -174,12 +174,12 @@ func (p *documentsSyncProgress) sentLocked() int64 {
 }
 
 // report is the body of one PATCH: the counts as they are now, never a delta.
-func (p *documentsSyncProgress) report() (map[string]interface{}, int) {
+func (p *driveSyncProgress) report() (map[string]interface{}, int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	body := map[string]interface{}{
 		"status": p.status, "filesSeen": p.seen, "filesDone": p.done, "filesSame": p.same, "filesDeleted": p.deleted,
-		"bytesSent": p.sentLocked(), "failed": append([]documentsSyncFailure{}, p.failed...), "failedCount": p.failedCount,
+		"bytesSent": p.sentLocked(), "failed": append([]driveSyncFailure{}, p.failed...), "failedCount": p.failedCount,
 	}
 	if p.total != nil {
 		body["filesTotal"] = *p.total
@@ -199,7 +199,7 @@ func (p *documentsSyncProgress) report() (map[string]interface{}, int) {
 	return body, p.version
 }
 
-func (p *documentsSyncProgress) line() string {
+func (p *driveSyncProgress) line() string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.total == nil {
@@ -223,29 +223,29 @@ func humanBytes(n int64) string {
 	return fmt.Sprintf("%.1f %cB", value, suffix[i])
 }
 
-// documentsSyncReporter sends the progress to the server for the owner's tray. Best effort throughout: a sync whose
+// driveSyncReporter sends the progress to the server for the owner's tray. Best effort throughout: a sync whose
 // reports fail still syncs, and the next report carries the full counts.
-type documentsSyncReporter struct {
+type driveSyncReporter struct {
 	t        *Transport
 	id       string
-	progress *documentsSyncProgress
+	progress *driveSyncProgress
 	sent     int
 }
 
-func openDocumentsSyncReport(ctx context.Context, t *Transport, opts documentsSyncOptions, progress *documentsSyncProgress) *documentsSyncReporter {
+func openDriveSyncReport(ctx context.Context, t *Transport, opts driveSyncOptions, progress *driveSyncProgress) *driveSyncReporter {
 	if opts.syncID != "" {
-		return &documentsSyncReporter{t: t, id: opts.syncID, progress: progress, sent: -1}
+		return &driveSyncReporter{t: t, id: opts.syncID, progress: progress, sent: -1}
 	}
-	id, err := openDocumentsSync(ctx, t, opts.sessionID, opts.source, opts.dest)
+	id, err := openDriveSync(ctx, t, opts.sessionID, opts.source, opts.dest)
 	if err != nil {
-		logln("documents sync: could not open its progress report, the Drive page will not show it:", err)
+		logln("drive sync: could not open its progress report, the Drive page will not show it:", err)
 		return nil
 	}
-	return &documentsSyncReporter{t: t, id: id, progress: progress, sent: -1}
+	return &driveSyncReporter{t: t, id: id, progress: progress, sent: -1}
 }
 
-// openDocumentsSync makes the sync's record on the server, which the owner's tray and the conversation's card read.
-func openDocumentsSync(ctx context.Context, t *Transport, sessionID, source, dest string) (string, error) {
+// openDriveSync makes the sync's record on the server, which the owner's tray and the conversation's card read.
+func openDriveSync(ctx context.Context, t *Transport, sessionID, source, dest string) (string, error) {
 	body := map[string]interface{}{"sourceName": filepath.Base(source), "destPath": dest}
 	if sessionID != "" {
 		body["sessionId"] = decodeSessionID(sessionID)
@@ -253,7 +253,7 @@ func openDocumentsSync(ctx context.Context, t *Transport, sessionID, source, des
 	var opened struct {
 		ID string `json:"id"`
 	}
-	if err := t.do(ctx, http.MethodPost, documentsSyncSyncsRoute, body, &opened, documentsTimeout); err != nil {
+	if err := t.do(ctx, http.MethodPost, driveSyncSyncsRoute, body, &opened, driveTimeout); err != nil {
 		return "", err
 	}
 	if opened.ID == "" {
@@ -262,18 +262,18 @@ func openDocumentsSync(ctx context.Context, t *Transport, sessionID, source, des
 	return opened.ID, nil
 }
 
-// endDocumentsSync ends a sync whose job never started, so neither the tray nor the card waits on it.
-func endDocumentsSync(t *Transport, id, reason string) {
-	ctx, cancel := context.WithTimeout(context.Background(), documentsTimeout)
+// endDriveSync ends a sync whose job never started, so neither the tray nor the card waits on it.
+func endDriveSync(t *Transport, id, reason string) {
+	ctx, cancel := context.WithTimeout(context.Background(), driveTimeout)
 	defer cancel()
 	body := map[string]interface{}{"status": "FAILED", "error": reason}
-	if err := t.do(ctx, http.MethodPatch, documentsSyncSyncsRoute+"/"+url.PathEscape(id), body, nil, documentsTimeout); err != nil {
-		logln("documents sync: could not end the sync whose job did not start:", err)
+	if err := t.do(ctx, http.MethodPatch, driveSyncSyncsRoute+"/"+url.PathEscape(id), body, nil, driveTimeout); err != nil {
+		logln("drive sync: could not end the sync whose job did not start:", err)
 	}
 }
 
 // send reports when anything moved since the last report, or always when final.
-func (r *documentsSyncReporter) send(ctx context.Context, final bool) {
+func (r *driveSyncReporter) send(ctx context.Context, final bool) {
 	if r == nil {
 		return
 	}
@@ -281,25 +281,25 @@ func (r *documentsSyncReporter) send(ctx context.Context, final bool) {
 	if !final && version == r.sent {
 		return
 	}
-	if err := r.t.do(ctx, http.MethodPatch, documentsSyncSyncsRoute+"/"+url.PathEscape(r.id), body, nil, documentsTimeout); err != nil {
-		logln("documents sync: a progress report failed:", err)
+	if err := r.t.do(ctx, http.MethodPatch, driveSyncSyncsRoute+"/"+url.PathEscape(r.id), body, nil, driveTimeout); err != nil {
+		logln("drive sync: a progress report failed:", err)
 		return
 	}
 	r.sent = version
 }
 
-// runDocumentsSync is one pass: list the destination, walk the directory, decide each file, upload, delete with --delete.
+// runDriveSync is one pass: list the destination, walk the directory, decide each file, upload, delete with --delete.
 // The error is for a sync that could not finish at all; a file that failed is in the summary's failed.
-func runDocumentsSync(ctx context.Context, t *Transport, opts documentsSyncOptions) (documentsSyncSummary, error) {
-	summary := documentsSyncSummary{Path: opts.dest, Failed: []documentsSyncFailure{}}
-	progress := &documentsSyncProgress{status: "CHECKING", inFlight: map[string]*documentsProgress{}}
-	reporter := openDocumentsSyncReport(ctx, t, opts, progress)
+func runDriveSync(ctx context.Context, t *Transport, opts driveSyncOptions) (driveSyncSummary, error) {
+	summary := driveSyncSummary{Path: opts.dest, Failed: []driveSyncFailure{}}
+	progress := &driveSyncProgress{status: "CHECKING", inFlight: map[string]*driveProgress{}}
+	reporter := openDriveSyncReport(ctx, t, opts, progress)
 	stop := make(chan struct{})
 	ticking := sync.WaitGroup{}
 	ticking.Add(1)
 	go func() {
 		defer ticking.Done()
-		report, print := time.NewTicker(documentsSyncReportEvery), time.NewTicker(documentsSyncPrintEvery)
+		report, print := time.NewTicker(driveSyncReportEvery), time.NewTicker(driveSyncPrintEvery)
 		defer report.Stop()
 		defer print.Stop()
 		for {
@@ -318,7 +318,7 @@ func runDocumentsSync(ctx context.Context, t *Transport, opts documentsSyncOptio
 	finish := func(status string, cause error) {
 		close(stop)
 		ticking.Wait()
-		progress.update(func(p *documentsSyncProgress) {
+		progress.update(func(p *driveSyncProgress) {
 			p.status, p.current = status, ""
 			if cause != nil {
 				p.err = cause.Error()
@@ -330,8 +330,8 @@ func runDocumentsSync(ctx context.Context, t *Transport, opts documentsSyncOptio
 		reporter.send(final, true)
 	}
 
-	writer := documentsWriter{SessionID: opts.sessionID}
-	summary, err := documentsSyncPass(ctx, t, opts, writer, progress, summary)
+	writer := driveWriter{SessionID: opts.sessionID}
+	summary, err := driveSyncPass(ctx, t, opts, writer, progress, summary)
 	switch {
 	case ctx.Err() != nil:
 		finish("STOPPED", nil)
@@ -344,12 +344,12 @@ func runDocumentsSync(ctx context.Context, t *Transport, opts documentsSyncOptio
 	return summary, nil
 }
 
-func documentsSyncPass(ctx context.Context, t *Transport, opts documentsSyncOptions, writer documentsWriter, progress *documentsSyncProgress, summary documentsSyncSummary) (documentsSyncSummary, error) {
-	remote, err := listDocumentsTree(ctx, t, opts.dest)
+func driveSyncPass(ctx context.Context, t *Transport, opts driveSyncOptions, writer driveWriter, progress *driveSyncProgress, summary driveSyncSummary) (driveSyncSummary, error) {
+	remote, err := listDriveTree(ctx, t, opts.dest)
 	if err != nil {
 		return summary, err
 	}
-	files, dirs, skipped, err := walkDocumentsSyncSource(opts.source, newSessionFileScope(opts.sessionID), progress)
+	files, dirs, skipped, err := walkDriveSyncSource(opts.source, newSessionFileScope(opts.sessionID), progress)
 	if err != nil {
 		return summary, err
 	}
@@ -357,7 +357,7 @@ func documentsSyncPass(ctx context.Context, t *Transport, opts documentsSyncOpti
 
 	// Decide each file: missing, or another size, uploads; the same size and modification time is the same file; the
 	// same size and another time is compared chunk by chunk, so a touched file costs a utimens and not a version.
-	var uploads []documentsSyncLocal
+	var uploads []driveSyncLocal
 	var total int64
 	for _, local := range files {
 		if err := ctx.Err(); err != nil {
@@ -369,16 +369,16 @@ func documentsSyncPass(ctx context.Context, t *Transport, opts documentsSyncOpti
 		case entry.Kind == "FOLDER":
 			progress.fail(local.rel, "Drive has a folder with this name.")
 			continue
-		case entry.SizeBytes == local.size && sameDocumentsMtime(entry.Mtime, local.mtime):
-			progress.update(func(p *documentsSyncProgress) { p.same++ })
+		case entry.SizeBytes == local.size && sameDriveMtime(entry.Mtime, local.mtime):
+			progress.update(func(p *driveSyncProgress) { p.same++ })
 			summary.Unchanged++
 			continue
 		case entry.SizeBytes == local.size:
-			if same, err := sameDocumentsContent(ctx, t, path.Join(opts.dest, local.rel), local.path); err == nil && same {
-				if err := documentsWrite(ctx, t, "/utimens", map[string]interface{}{"path": path.Join(opts.dest, local.rel), "mtime": local.mtime.UTC().Format(time.RFC3339Nano), "writer": writer}, nil); err != nil {
-					logln("documents sync: could not set the modification time of", local.rel, err)
+			if same, err := sameDriveContent(ctx, t, path.Join(opts.dest, local.rel), local.path); err == nil && same {
+				if err := driveWrite(ctx, t, "/utimens", map[string]interface{}{"path": path.Join(opts.dest, local.rel), "mtime": local.mtime.UTC().Format(time.RFC3339Nano), "writer": writer}, nil); err != nil {
+					logln("drive sync: could not set the modification time of", local.rel, err)
 				}
-				progress.update(func(p *documentsSyncProgress) { p.same++ })
+				progress.update(func(p *driveSyncProgress) { p.same++ })
 				summary.Unchanged++
 				continue
 			}
@@ -393,32 +393,32 @@ func documentsSyncPass(ctx context.Context, t *Transport, opts documentsSyncOpti
 	}
 
 	// The destination and every local folder Documents lacks, so empty folders come across too.
-	if err := documentsWrite(ctx, t, "/mkdir", map[string]interface{}{"path": opts.dest, "parents": true, "writer": writer}, nil); err != nil {
+	if err := driveWrite(ctx, t, "/mkdir", map[string]interface{}{"path": opts.dest, "parents": true, "writer": writer}, nil); err != nil {
 		return summary, err
 	}
-	if folder, err := documentsStat(ctx, t, opts.dest); err == nil {
-		summary.Link = documentLink(folder.ID)
-		progress.update(func(p *documentsSyncProgress) { p.destEntryID = folder.ID })
+	if folder, err := driveStat(ctx, t, opts.dest); err == nil {
+		summary.Link = driveLink(folder.ID)
+		progress.update(func(p *driveSyncProgress) { p.destEntryID = folder.ID })
 	}
 	for _, rel := range dirs {
 		if _, found := remote[rel]; !found {
-			if err := documentsWrite(ctx, t, "/mkdir", map[string]interface{}{"path": path.Join(opts.dest, rel), "parents": true, "writer": writer}, nil); err != nil {
-				progress.fail(rel, documentsSyncReason(err))
+			if err := driveWrite(ctx, t, "/mkdir", map[string]interface{}{"path": path.Join(opts.dest, rel), "parents": true, "writer": writer}, nil); err != nil {
+				progress.fail(rel, driveSyncReason(err))
 			}
 		}
 	}
 
 	count := len(uploads)
-	progress.update(func(p *documentsSyncProgress) { p.status, p.total, p.bytesTotal = "UPLOADING", &count, &total })
-	queue := make(chan documentsSyncLocal)
+	progress.update(func(p *driveSyncProgress) { p.status, p.total, p.bytesTotal = "UPLOADING", &count, &total })
+	queue := make(chan driveSyncLocal)
 	var workers sync.WaitGroup
 	var mu sync.Mutex
-	for i := 0; i < documentsSyncWorkers; i++ {
+	for i := 0; i < driveSyncWorkers; i++ {
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
 			for local := range queue {
-				reason := uploadDocumentsSyncFile(ctx, t, opts, writer, progress, local)
+				reason := uploadDriveSyncFile(ctx, t, opts, writer, progress, local)
 				if reason != "" && ctx.Err() != nil {
 					// Stopped: a file cut off is not one that failed; the next sync sends it.
 					continue
@@ -443,7 +443,7 @@ func documentsSyncPass(ctx context.Context, t *Transport, opts documentsSyncOpti
 	close(queue)
 	workers.Wait()
 	if err := ctx.Err(); err != nil {
-		return documentsSyncFinish(summary, progress), err
+		return driveSyncFinish(summary, progress), err
 	}
 
 	if opts.deleteExtra {
@@ -454,29 +454,29 @@ func documentsSyncPass(ctx context.Context, t *Transport, opts documentsSyncOpti
 		for _, rel := range append(dirs, skipped...) {
 			keep[rel] = true
 		}
-		for _, rel := range documentsSyncExtras(remote, keep) {
-			if err := documentsWrite(ctx, t, "/delete", map[string]interface{}{"path": path.Join(opts.dest, rel), "writer": writer}, nil); err != nil {
-				progress.fail(rel, documentsSyncReason(err))
+		for _, rel := range driveSyncExtras(remote, keep) {
+			if err := driveWrite(ctx, t, "/delete", map[string]interface{}{"path": path.Join(opts.dest, rel), "writer": writer}, nil); err != nil {
+				progress.fail(rel, driveSyncReason(err))
 				continue
 			}
-			progress.update(func(p *documentsSyncProgress) { p.deleted++ })
+			progress.update(func(p *driveSyncProgress) { p.deleted++ })
 			summary.Deleted++
 		}
 	}
-	return documentsSyncFinish(summary, progress), nil
+	return driveSyncFinish(summary, progress), nil
 }
 
-func documentsSyncFinish(summary documentsSyncSummary, progress *documentsSyncProgress) documentsSyncSummary {
+func driveSyncFinish(summary driveSyncSummary, progress *driveSyncProgress) driveSyncSummary {
 	progress.mu.Lock()
 	defer progress.mu.Unlock()
-	summary.Failed = append([]documentsSyncFailure{}, progress.failed...)
+	summary.Failed = append([]driveSyncFailure{}, progress.failed...)
 	summary.FailedCount = progress.failedCount
 	return summary
 }
 
-// documentsSyncExtras is what the destination holds that the directory does not, topmost first: a folder the directory
+// driveSyncExtras is what the destination holds that the directory does not, topmost first: a folder the directory
 // lacks goes to Trash whole, as one group, and nothing under it is named on its own.
-func documentsSyncExtras(remote map[string]documentsEntry, keep map[string]bool) []string {
+func driveSyncExtras(remote map[string]driveEntry, keep map[string]bool) []string {
 	var rels []string
 	for rel := range remote {
 		if !keep[rel] {
@@ -500,36 +500,36 @@ func documentsSyncExtras(remote map[string]documentsEntry, keep map[string]bool)
 	return extras
 }
 
-// uploadDocumentsSyncFile sends one file, and answers "" or why it did not go up. A transient failure is tried again, and a
+// uploadDriveSyncFile sends one file, and answers "" or why it did not go up. A transient failure is tried again, and a
 // file that changes while it is read is read once more.
-func uploadDocumentsSyncFile(ctx context.Context, t *Transport, opts documentsSyncOptions, writer documentsWriter, progress *documentsSyncProgress, local documentsSyncLocal) string {
+func uploadDriveSyncFile(ctx context.Context, t *Transport, opts driveSyncOptions, writer driveWriter, progress *driveSyncProgress, local driveSyncLocal) string {
 	target := path.Join(opts.dest, local.rel)
 	scope := newSessionFileScope(opts.sessionID)
 	changedOnce := false
 	for attempt := 1; ; attempt++ {
-		counter := &documentsProgress{size: local.size}
-		progress.update(func(p *documentsSyncProgress) { p.inFlight[local.rel], p.current = counter, local.rel })
+		counter := &driveProgress{size: local.size}
+		progress.update(func(p *driveSyncProgress) { p.inFlight[local.rel], p.current = counter, local.rel })
 		reason, transient, changed := func() (string, bool, bool) {
 			file, info, err := scope.openRegular(local.path, false)
 			if err != nil {
-				return documentsSyncReason(err), false, false
+				return driveSyncReason(err), false, false
 			}
 			defer file.Close()
-			if _, _, err := sendDocumentsFile(ctx, t, file, target, writer, counter); err != nil {
-				return documentsSyncReason(err), documentsSyncTransient(err), false
+			if _, _, err := sendDriveFile(ctx, t, file, target, writer, counter); err != nil {
+				return driveSyncReason(err), driveSyncTransient(err), false
 			}
 			after, err := os.Stat(local.path)
 			if err != nil || after.Size() != info.Size() || !after.ModTime().Equal(info.ModTime()) {
-				return documentsSyncChangedReason, false, true
+				return driveSyncChangedReason, false, true
 			}
 			mtime := info.ModTime().UTC().Format(time.RFC3339Nano)
-			if err := documentsWrite(ctx, t, "/utimens", map[string]interface{}{"path": target, "mtime": mtime, "writer": writer}, nil); err != nil {
-				logln("documents sync: could not set the modification time of", local.rel, err)
+			if err := driveWrite(ctx, t, "/utimens", map[string]interface{}{"path": target, "mtime": mtime, "writer": writer}, nil); err != nil {
+				logln("drive sync: could not set the modification time of", local.rel, err)
 			}
 			local.size = info.Size()
 			return "", false, false
 		}()
-		progress.update(func(p *documentsSyncProgress) {
+		progress.update(func(p *driveSyncProgress) {
 			delete(p.inFlight, local.rel)
 			if reason == "" {
 				p.done++
@@ -544,7 +544,7 @@ func uploadDocumentsSyncFile(ctx context.Context, t *Transport, opts documentsSy
 		case changed && !changedOnce:
 			changedOnce = true
 			continue
-		case transient && attempt < documentsSyncFileAttempts:
+		case transient && attempt < driveSyncFileAttempts:
 			select {
 			case <-ctx.Done():
 				return "Stopped before it finished."
@@ -553,25 +553,25 @@ func uploadDocumentsSyncFile(ctx context.Context, t *Transport, opts documentsSy
 			continue
 		}
 		if transient {
-			return fmt.Sprintf("Couldn't reach Orbit after %d tries: %s", documentsSyncFileAttempts, reason)
+			return fmt.Sprintf("Couldn't reach Orbit after %d tries: %s", driveSyncFileAttempts, reason)
 		}
 		return reason
 	}
 }
 
-// documentsSyncTransient is a failure worth trying again: no answer, or the server's own error.
-func documentsSyncTransient(err error) bool {
+// driveSyncTransient is a failure worth trying again: no answer, or the server's own error.
+func driveSyncTransient(err error) bool {
 	var refusal *transportHTTPError
 	return !errors.As(err, &refusal) || refusal.statusCode >= http.StatusInternalServerError || refusal.statusCode == http.StatusTooManyRequests
 }
 
-// documentsSyncReason is a failure in the words the owner reads: the drive's own message when it gave one.
-func documentsSyncReason(err error) string {
+// driveSyncReason is a failure in the words the owner reads: the drive's own message when it gave one.
+func driveSyncReason(err error) string {
 	var refused *localFileRefused
 	if errors.As(err, &refused) {
 		return "The file is " + refused.reason + "."
 	}
-	if failure := documentsDoorFailure(err); failure.Message != "" {
+	if failure := driveDoorFailure(err); failure.Message != "" {
 		return failure.Message
 	}
 	reason := err.Error()
@@ -581,8 +581,8 @@ func documentsSyncReason(err error) string {
 	return reason
 }
 
-// sameDocumentsMtime compares at the millisecond the drive keeps.
-func sameDocumentsMtime(remote *string, local time.Time) bool {
+// sameDriveMtime compares at the millisecond the drive keeps.
+func sameDriveMtime(remote *string, local time.Time) bool {
 	if remote == nil {
 		return false
 	}
@@ -590,12 +590,12 @@ func sameDocumentsMtime(remote *string, local time.Time) bool {
 	return err == nil && at.UnixMilli() == local.UnixMilli()
 }
 
-// sameDocumentsContent compares a local file's 8 MiB chunks with the drive file's manifest, reading the file once.
-func sameDocumentsContent(ctx context.Context, t *Transport, drivePath, localPath string) (bool, error) {
+// sameDriveContent compares a local file's 8 MiB chunks with the drive file's manifest, reading the file once.
+func sameDriveContent(ctx context.Context, t *Transport, drivePath, localPath string) (bool, error) {
 	var manifest struct {
-		Chunks []documentsChunk `json:"chunks"`
+		Chunks []driveChunk `json:"chunks"`
 	}
-	if err := t.do(ctx, http.MethodGet, documentsPathQuery("/manifest", drivePath), nil, &manifest, documentsTimeout); err != nil {
+	if err := t.do(ctx, http.MethodGet, drivePathQuery("/manifest", drivePath), nil, &manifest, driveTimeout); err != nil {
 		return false, err
 	}
 	file, err := os.Open(localPath)
@@ -603,7 +603,7 @@ func sameDocumentsContent(ctx context.Context, t *Transport, drivePath, localPat
 		return false, err
 	}
 	defer file.Close()
-	buf := make([]byte, documentsChunkSize)
+	buf := make([]byte, driveChunkSize)
 	for i := 0; ; i++ {
 		n, err := io.ReadFull(file, buf)
 		if err == io.EOF {
@@ -623,11 +623,11 @@ func sameDocumentsContent(ctx context.Context, t *Transport, drivePath, localPat
 	}
 }
 
-// listDocumentsTree is every entry under a drive folder, by its path relative to the folder. A folder that does not exist
+// listDriveTree is every entry under a drive folder, by its path relative to the folder. A folder that does not exist
 // yet holds nothing; a file there is refused.
-func listDocumentsTree(ctx context.Context, t *Transport, dest string) (map[string]documentsEntry, error) {
-	tree := map[string]documentsEntry{}
-	root, err := documentsStat(ctx, t, dest)
+func listDriveTree(ctx context.Context, t *Transport, dest string) (map[string]driveEntry, error) {
+	tree := map[string]driveEntry{}
+	root, err := driveStat(ctx, t, dest)
 	if isTransportHTTPStatus(err, http.StatusNotFound) {
 		return tree, nil
 	}
@@ -648,10 +648,10 @@ func listDocumentsTree(ctx context.Context, t *Transport, dest string) (map[stri
 				query.Set("cursor", cursor)
 			}
 			var page struct {
-				Entries    []documentsEntry `json:"entries"`
-				NextCursor *string          `json:"nextCursor"`
+				Entries    []driveEntry `json:"entries"`
+				NextCursor *string      `json:"nextCursor"`
 			}
-			if err := t.do(ctx, http.MethodGet, documentsRoute+"/list?"+query.Encode(), nil, &page, documentsTimeout); err != nil {
+			if err := t.do(ctx, http.MethodGet, driveRoute+"/list?"+query.Encode(), nil, &page, driveTimeout); err != nil {
 				return nil, err
 			}
 			for _, entry := range page.Entries {
@@ -671,11 +671,11 @@ func listDocumentsTree(ctx context.Context, t *Transport, dest string) (map[stri
 	return tree, nil
 }
 
-// walkDocumentsSyncSource is the directory's regular files and folders, each by its path relative to it with / between
+// walkDriveSyncSource is the directory's regular files and folders, each by its path relative to it with / between
 // parts. It follows no link (a link in a directory can name anything on this machine), skips .git, and holds each entry
 // to the session's scope by itself. What it leaves out is returned too, so --delete keeps those names in Documents.
-func walkDocumentsSyncSource(root string, scope localFileScope, progress *documentsSyncProgress) ([]documentsSyncLocal, []string, []string, error) {
-	var files []documentsSyncLocal
+func walkDriveSyncSource(root string, scope localFileScope, progress *driveSyncProgress) ([]driveSyncLocal, []string, []string, error) {
+	var files []driveSyncLocal
 	var dirs, skipped []string
 	err := filepath.WalkDir(root, func(p string, entry fs.DirEntry, walkErr error) error {
 		if p == root {
@@ -713,31 +713,31 @@ func walkDocumentsSyncSource(root string, scope localFileScope, progress *docume
 				skipped = append(skipped, rel)
 				return nil
 			}
-			files = append(files, documentsSyncLocal{rel: rel, path: p, size: info.Size(), mtime: info.ModTime()})
-			progress.update(func(s *documentsSyncProgress) { s.seen++ })
+			files = append(files, driveSyncLocal{rel: rel, path: p, size: info.Size(), mtime: info.ModTime()})
+			progress.update(func(s *driveSyncProgress) { s.seen++ })
 		}
 		return nil
 	})
 	return files, dirs, skipped, err
 }
 
-// startDocumentsSyncJob starts `orbit documents sync --wait` as this session's runner-hosted background job, which wakes
+// startDriveSyncJob starts `orbit drive sync --wait` as this session's runner-hosted background job, which wakes
 // the agent when it ends. The checks run first, here, so a bad path is this call's error. The sync's record is opened
 // here too, before the job, so the answer names it (syncId) and the conversation draws the call as that sync's card; a
 // server that cannot open it leaves the job to open its own, and the call draws as a plain tool call.
-func startDocumentsSyncJob(t *Transport, sessionID, localPath, dest string, deleteExtra bool) (json.RawMessage, error) {
-	source, err := documentsSyncSource(sessionID, localPath)
+func startDriveSyncJob(t *Transport, sessionID, localPath, dest string, deleteExtra bool) (json.RawMessage, error) {
+	source, err := driveSyncSource(sessionID, localPath)
 	if err != nil {
 		return nil, err
 	}
-	dest, err = documentsSyncDest(dest, deleteExtra)
+	dest, err = driveSyncDest(dest, deleteExtra)
 	if err != nil {
 		return nil, err
 	}
 	socket, token := os.Getenv(envBgSocket), os.Getenv(envBgToken)
 	if socket == "" || token == "" {
-		return nil, fmt.Errorf("%s: this session has no runner-hosted background job service, so documents_sync cannot run in "+
-			"the background. Run `orbit documents sync --wait %s %s` in the foreground instead", bgTransportUnavailable, shellQuote(source), shellQuote(dest))
+		return nil, fmt.Errorf("%s: this session has no runner-hosted background job service, so drive_sync cannot run in "+
+			"the background. Run `orbit drive sync --wait %s %s` in the foreground instead", bgTransportUnavailable, shellQuote(source), shellQuote(dest))
 	}
 	exe, err := os.Executable()
 	if err != nil {
@@ -745,15 +745,15 @@ func startDocumentsSyncJob(t *Transport, sessionID, localPath, dest string, dele
 	}
 	syncID := ""
 	if t != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), documentsTimeout)
-		syncID, err = openDocumentsSync(ctx, t, sessionID, source, dest)
+		ctx, cancel := context.WithTimeout(context.Background(), driveTimeout)
+		syncID, err = openDriveSync(ctx, t, sessionID, source, dest)
 		cancel()
 		if err != nil {
-			logln("documents sync: could not open its record before the job; the job opens its own:", err)
+			logln("drive sync: could not open its record before the job; the job opens its own:", err)
 			syncID = ""
 		}
 	}
-	command := strings.Join([]string{shellQuote(exe), "documents", "sync", "--wait", shellQuote(source), shellQuote(dest)}, " ")
+	command := strings.Join([]string{shellQuote(exe), "drive", "sync", "--wait", shellQuote(source), shellQuote(dest)}, " ")
 	if deleteExtra {
 		command += " --delete"
 	}
@@ -766,9 +766,9 @@ func startDocumentsSyncJob(t *Transport, sessionID, localPath, dest string, dele
 	})
 	if err != nil {
 		if syncID != "" {
-			endDocumentsSync(t, syncID, "The background job did not start: "+err.Error())
+			endDriveSync(t, syncID, "The background job did not start: "+err.Error())
 		}
-		return nil, fmt.Errorf("documents_sync: %w", err)
+		return nil, fmt.Errorf("drive_sync: %w", err)
 	}
 	var job map[string]interface{}
 	if err := json.Unmarshal(raw, &job); err != nil {

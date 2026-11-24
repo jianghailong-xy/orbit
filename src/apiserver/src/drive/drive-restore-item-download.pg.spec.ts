@@ -119,10 +119,10 @@ test('Documents drive: restore one item out of Trash, and the minted download UR
     });
     return entry.id;
   };
-  const entryOf = (id: string) => db.documentEntry.findUniqueOrThrow({ where: { id } });
+  const entryOf = (id: string) => db.driveEntry.findUniqueOrThrow({ where: { id } });
   const liveNames = async (who: string, parentId: string) =>
-    (await db.documentEntry.findMany({ where: { ownerId: who, parentId, trashedAt: null }, orderBy: { name: 'asc' } })).map((e) => e.name);
-  const rowsOf = async (who: string) => (await sql.query('SELECT count(*)::int AS n FROM document_entry WHERE owner_id = $1', [who])).rows[0].n as number;
+    (await db.driveEntry.findMany({ where: { ownerId: who, parentId, trashedAt: null }, orderBy: { name: 'asc' } })).map((e) => e.name);
+  const rowsOf = async (who: string) => (await sql.query('SELECT count(*)::int AS n FROM drive_entry WHERE owner_id = $1', [who])).rows[0].n as number;
   const restoreItem = (who: string, groupId: string, entryId: string) => call(who, 'POST', `/trash/groups/${groupId}/items/${entryId}/restore`);
 
   const folder = await drive.createFolder(owner, { name: 'Orbit UI migration' });
@@ -133,7 +133,7 @@ test('Documents drive: restore one item out of Trash, and the minted download UR
     for (const name of ['keep-a.md', 'keep-b.md', 'wanted.png']) ids.push(await fileWith(owner, folder.id, name, Buffer.from(name)));
     let groupId = '';
     for (const id of ids) groupId = (await drive.moveToTrash(owner, id, { burstKey: `burst-${RUN}` })).trashGroupId;
-    const group = await db.documentTrashGroup.findUniqueOrThrow({ where: { id: groupId } });
+    const group = await db.driveTrashGroup.findUniqueOrThrow({ where: { id: groupId } });
     assert.equal(group.itemCount, 3);
 
     const reply = await restoreItem(owner, groupId, ids[2]);
@@ -144,7 +144,7 @@ test('Documents drive: restore one item out of Trash, and the minted download UR
     assert.equal(back.parentId, folder.id);
     assert.equal(back.name, 'wanted.png');
     assert.deepEqual(await liveNames(owner, folder.id), ['wanted.png']);
-    const left = await db.documentTrashGroup.findUniqueOrThrow({ where: { id: groupId } });
+    const left = await db.driveTrashGroup.findUniqueOrThrow({ where: { id: groupId } });
     assert.equal(left.itemCount, 2);
     assert.equal(Number(left.sizeBytes), 'keep-a.md'.length + 'keep-b.md'.length);
     for (const id of ids.slice(0, 2)) assert.equal((await entryOf(id)).trashGroupId, groupId);
@@ -175,7 +175,7 @@ test('Documents drive: restore one item out of Trash, and the minted download UR
     assert.equal((await entryOf(inSub)).trashedAt, null);
     assert.equal((await entryOf(inSub)).parentId, sub.id);
     assert.equal((await entryOf(screens.id)).trashGroupId, trashGroupId);
-    const left = await db.documentTrashGroup.findUniqueOrThrow({ where: { id: trashGroupId } });
+    const left = await db.driveTrashGroup.findUniqueOrThrow({ where: { id: trashGroupId } });
     assert.equal(left.itemCount, 2); // screens and other.png
     await drive.deleteGroup(owner, trashGroupId);
   });
@@ -193,7 +193,7 @@ test('Documents drive: restore one item out of Trash, and the minted download UR
     const only = await fileWith(owner, folder.id, 'alone.txt', Buffer.from('alone'));
     const { trashGroupId } = await drive.moveToTrash(owner, only);
     assert.equal((await restoreItem(owner, trashGroupId, only)).status, 200);
-    assert.equal(await db.documentTrashGroup.findUnique({ where: { id: trashGroupId } }), null);
+    assert.equal(await db.driveTrashGroup.findUnique({ where: { id: trashGroupId } }), null);
     const before = await rowsOf(owner);
     assert.equal((await restoreItem(owner, trashGroupId, only)).status, 404);
     assert.equal(await rowsOf(owner), before);

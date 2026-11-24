@@ -53,6 +53,13 @@ export const MANAGED_STOP_REPORT_FINALIZER = 'orbit.dev/managed-runner-stop-repo
 /** The Pod example's grace: beyond the 170-second supervisor/lease/event envelope. */
 export const MANAGED_POD_TERMINATION_GRACE_SECONDS = 240;
 export const BOOTSTRAP_MOUNT = '/run/orbit-bootstrap';
+/**
+ * The data volume's directory mounted at /tmp, on both backends (docker-channel/channel.py says the same).
+ * Filled, /tmp gives the writer ENOSPC like the rest of the volume: an emptyDir's sizeLimit was enforced by
+ * evicting the whole Pod. The image's init-volume makes it mode 1777; the runner empties it at start and
+ * after sessions (runner-go managed_tmp.go).
+ */
+export const TMP_SUBPATH = '.orbit-tmp';
 export const BOOTSTRAP_KEY = 'token';
 /** The bootstrap Secret's second key: the generation its credential was issued for. */
 export const BOOTSTRAP_GENERATION_KEY = 'generation';
@@ -195,7 +202,7 @@ export function buildManagedPod(identity: ManagedRunnerIdentity, pvcUid: string,
   const runner = profile.runner;
   const stateMounts = [
     { name: 'user-state', mountPath: '/home/orbit' },
-    { name: 'temporary', mountPath: '/tmp' },
+    { name: 'user-state', mountPath: '/tmp', subPath: TMP_SUBPATH },
   ];
   return {
     apiVersion: 'v1',
@@ -277,7 +284,6 @@ export function buildManagedPod(identity: ManagedRunnerIdentity, pvcUid: string,
       ],
       volumes: [
         { name: 'user-state', persistentVolumeClaim: { claimName: managedPvcName(identity.runnerId) } },
-        { name: 'temporary', emptyDir: { sizeLimit: runner.tmpSizeLimit } },
         {
           name: 'bootstrap',
           // Readable by the runner's UID without fsGroup, whose recursive mode changes could widen
