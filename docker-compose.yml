@@ -342,7 +342,7 @@ services:
       # runners keeps them off. The profile read here, the Docker channel's token and its socket are the files in
       # ORBIT_MANAGED_RUNNERS_DIR, mounted below.
       ORBIT_MANAGED_RUNNERS_ENABLED: "${ORBIT_MANAGED_RUNNERS_ENABLED:-false}"
-      # Documents, the drive (src/apiserver/src/documents/documents-switch.ts): off unless the host's .env says true. A
+      # Documents, the drive (src/apiserver/src/drive/drive-switch.ts): off unless the host's .env says true. A
       # fresh install writes false, and an upgrade never writes it.
       ORBIT_DOCUMENTS_ENABLED: "${ORBIT_DOCUMENTS_ENABLED:-false}"
       # Orbit Cloud browser, off unless the host's .env says true (docs/runner-browser-design.md §2).

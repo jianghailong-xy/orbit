@@ -4,7 +4,7 @@ import type { AuthUser } from '../common/current-user.decorator';
 import { filesConfigFrom } from '../files/file-store';
 import { FilesService } from '../files/files.service';
 import type { PrismaService } from '../prisma/prisma.service';
-import { DocumentsController } from './documents.controller';
+import { DriveController } from './drive.controller';
 
 const s3Env = {
   ORBIT_DOCUMENTS_BACKEND: 's3',
@@ -23,7 +23,7 @@ function usageRoute(quota?: string, storeBytes: number | null = null) {
     fileBlob: { aggregate },
   } as unknown as PrismaService;
   const files = new FilesService(prisma, filesConfigFrom({ ...s3Env, ORBIT_DOCUMENTS_STORE_QUOTA_BYTES: quota }));
-  const controller = new DocumentsController(null!, null!, null!, null!, null!, files, null!);
+  const controller = new DriveController(null!, null!, null!, null!, null!, files, null!);
   return { usage: () => controller.usage(user), aggregate };
 }
 

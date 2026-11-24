@@ -1,7 +1,7 @@
 /**
- * Drive search (GET /drive/search; migration 1439; documents/documents.service.ts `search`), over a real PostgreSQL:
+ * Drive search (GET /drive/search; migration 1439; drive/drive.service.ts `search`), over a real PostgreSQL:
  *
- *   bash scripts/run-pg-spec.sh src/apiserver/src/documents/documents-search.pg.spec.ts
+ *   bash scripts/run-pg-spec.sh src/apiserver/src/drive/drive-search.pg.spec.ts
  *
  *   (1) a file is found by part of its name, any case, in a nested folder, with its path and its folder's path;
  *   (2) nothing in Trash is found, and a file comes back when it is restored;
@@ -19,7 +19,7 @@ import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
-import { DocumentsService } from './documents.service';
+import { DriveService } from './drive.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -37,7 +37,7 @@ test('Documents drive: search finds live entries by part of a name, in any folde
     await db.$disconnect().catch(() => undefined);
     await sql.end().catch(() => undefined);
   });
-  const drive = new DocumentsService(db as never);
+  const drive = new DriveService(db as never);
   const accountOf = async (name: string) => {
     const id = randomUUID();
     await db.user.create({ data: { id, email: `${name}-${RUN}@orbit-drive.invalid`, name, passwordHash: 'x' } });

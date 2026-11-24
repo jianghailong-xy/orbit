@@ -1,7 +1,7 @@
 /** The pieces of the drive's upload and download routes that need no database: the Range header's reading. */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseRange } from './documents-content.service';
+import { parseRange } from './drive-content.service';
 
 test('parseRange reads one byte range against the content size', () => {
   assert.deepEqual(parseRange('bytes=0-9', 100), { start: 0, end: 9 });

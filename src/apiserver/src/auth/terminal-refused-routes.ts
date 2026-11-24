@@ -1,4 +1,4 @@
-import { underEveryDocumentsPrefix } from '../documents/documents-routes';
+import { underEveryDrivePrefix } from '../drive/drive-routes';
 
 /**
  * Every route behind JwtAuthGuard that refuses a TERMINAL credential 403 TERMINAL_ROUTE_NOT_ALLOWED
@@ -540,7 +540,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   // Conditions (conditions/conditions.controller.ts): the owner's read of one condition a task or a schedule waits on;
   // a terminal drives sessions, not the conditions that start work.
   'GET /conditions/:id',
-  // Documents (documents/documents.controller.ts), under /documents and its /drive alias: the owner's Documents page; a
+  // Documents (drive/drive.controller.ts), under /documents and its /drive alias: the owner's Documents page; a
   // terminal drives sessions, and an agent reaches Documents through its mount or the runner drive door, never these routes.
   ...[
     'GET /documents/entries',
@@ -572,5 +572,5 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
     'GET /documents/entries/:id/content',
     'GET /documents/versions/:id/content',
     'POST /documents/entries/:id/share-check',
-  ].flatMap(underEveryDocumentsPrefix),
+  ].flatMap(underEveryDrivePrefix),
 ];

@@ -1,9 +1,9 @@
 /**
- * A personal access token and Documents (docs/personal-access-token-design.md §4; documents/documents.controller.ts), through
+ * A personal access token and Documents (docs/personal-access-token-design.md §4; drive/drive.controller.ts), through
  * the production apiserver — `build/main.js`, the whole AppModule — against a real PostgreSQL that `scripts/run-pg-spec.sh`
  * migrates from empty:
  *
- *   bash scripts/run-pg-spec.sh src/apiserver/src/documents/documents-pat.pg.spec.ts
+ *   bash scripts/run-pg-spec.sh src/apiserver/src/drive/drive-pat.pg.spec.ts
  *
  *   (1) a token holding the `documents` scope lists and writes through /documents/*: it makes a folder, reads it back,
  *       lists, renames, moves to Trash and reads Trash;

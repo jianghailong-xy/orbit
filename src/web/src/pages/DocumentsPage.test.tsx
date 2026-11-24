@@ -10,7 +10,7 @@ import { clearToasts } from '../lib/toastStore';
 
 /**
  * The Files page (docs/mocks/documents/02-web) against a drive held in memory, answered the way the owner's routes
- * answer (apiserver documents/documents.controller.ts, share-links.controller.ts): what each press sends, and what the page
+ * answer (apiserver drive/drive.controller.ts, share-links.controller.ts): what each press sends, and what the page
  * shows of what comes back.
  */
 

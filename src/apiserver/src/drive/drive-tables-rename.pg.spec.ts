@@ -2,7 +2,7 @@
  * Migration 1551 (the drive_* tables become document_*), against a real PostgreSQL that `scripts/run-pg-spec.sh`
  * migrates from empty:
  *
- *   bash scripts/run-pg-spec.sh src/apiserver/src/documents/documents-tables-rename.pg.spec.ts
+ *   bash scripts/run-pg-spec.sh src/apiserver/src/drive/drive-tables-rename.pg.spec.ts
  *
  *   (1) the migrated database has no table, view, index, sequence or constraint whose name begins `drive_`, and the ten
  *       document_* tables are there;

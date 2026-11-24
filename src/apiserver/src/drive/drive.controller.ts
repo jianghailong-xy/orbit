@@ -7,19 +7,19 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
-import { DRIVE_CHUNK_MAX, DRIVE_CHUNK_TOO_LARGE, DocumentsChunksService } from './documents-chunks.service';
-import { DocumentsContentService, type DriveContent } from './documents-content.service';
-import { DocumentsUploadsService } from './documents-uploads.service';
+import { DRIVE_CHUNK_MAX, DRIVE_CHUNK_TOO_LARGE, DriveChunksService } from './drive-chunks.service';
+import { DriveContentService, type DriveContent } from './drive-content.service';
+import { DriveUploadsService } from './drive-uploads.service';
 import { FilesService, type DriveUsage } from '../files/files.service';
-import { DocumentsService } from './documents.service';
-import { DocumentsDownloadLinks } from './documents-download-links';
-import { DOCUMENTS_ROUTE_PREFIXES } from './documents-routes';
-import { DocumentsEnabledGuard } from './documents-switch';
-import { CreateDocumentsFolderDto, DocumentsDownloadLinkDto, OpenDocumentsUploadDto, RestoreDocumentsVersionDto, UpdateDocumentsEntryDto } from './dto';
-import { DocumentsSyncsService, type DocumentsSyncView } from './documents-syncs.service';
+import { DriveService } from './drive.service';
+import { DriveDownloadLinks } from './drive-download-links';
+import { DRIVE_ROUTE_PREFIXES } from './drive-routes';
+import { DriveEnabledGuard } from './drive-switch';
+import { CreateDriveFolderDto, DriveDownloadLinkDto, OpenDriveUploadDto, RestoreDriveVersionDto, UpdateDriveEntryDto } from './dto';
+import { DriveSyncsService, type DriveSyncView } from './drive-syncs.service';
 
 /** What every Documents route declares for a token: the documents scope; Documents hold no workspace, so a confined token is refused. */
-export const DOCUMENTS_PAT = () => PatScope('documents', { workspaceConfinable: false });
+export const DRIVE_PAT = () => PatScope('documents', { workspaceConfinable: false });
 
 const limitOf = (limit?: string) => (limit === undefined ? undefined : Number.parseInt(limit, 10));
 
@@ -27,43 +27,43 @@ const limitOf = (limit?: string) => (limit === undefined ? undefined : Number.pa
  * The owner's drive routes (docs/documents-drive-technical-design.md §4.1), under the owner's login: folders and files,
  * versions, Trash and the change feed. The owner is always the credential's; another account's entry, version or group
  * is not found. Usage and the share check are their own tasks' routes. A token reaches them with the
- * `documents` scope (DOCUMENTS_PAT), declared on each handler like every scope; without it the guard refuses with the scope's 403.
+ * `documents` scope (DRIVE_PAT), declared on each handler like every scope; without it the guard refuses with the scope's 403.
  */
-@UseGuards(JwtAuthGuard, DocumentsEnabledGuard)
-@Controller(DOCUMENTS_ROUTE_PREFIXES)
-export class DocumentsController {
+@UseGuards(JwtAuthGuard, DriveEnabledGuard)
+@Controller(DRIVE_ROUTE_PREFIXES)
+export class DriveController {
   constructor(
-    private readonly drive: DocumentsService,
-    private readonly uploads: DocumentsUploadsService,
-    private readonly chunks: DocumentsChunksService,
-    private readonly content: DocumentsContentService,
-    private readonly downloadLinks: DocumentsDownloadLinks,
+    private readonly drive: DriveService,
+    private readonly uploads: DriveUploadsService,
+    private readonly chunks: DriveChunksService,
+    private readonly content: DriveContentService,
+    private readonly downloadLinks: DriveDownloadLinks,
     private readonly files: FilesService,
-    private readonly syncs: DocumentsSyncsService,
+    private readonly syncs: DriveSyncsService,
   ) {}
 
   /** Agents' directory syncs for the upload tray: running ones and those ended in the last day (S4). */
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Get('syncs')
-  listSyncs(@CurrentUser() user: AuthUser): Promise<{ syncs: DocumentsSyncView[] }> {
+  listSyncs(@CurrentUser() user: AuthUser): Promise<{ syncs: DriveSyncView[] }> {
     return this.syncs.list(user.userId);
   }
 
   /** One agent's sync, whatever its age: the conversation's sync card for the call that started it. */
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Get('syncs/:id')
-  getSync(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string): Promise<DocumentsSyncView> {
+  getSync(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string): Promise<DriveSyncView> {
     return this.syncs.get(user.userId, id);
   }
 
   // What Files → Storage shows: the drive's share and the rest, each content once (§2.5).
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Get('usage')
   usage(@CurrentUser() user: AuthUser): Promise<DriveUsage> {
     return this.files.driveUsage(user.userId);
   }
 
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Get('entries')
   list(
     @CurrentUser() user: AuthUser,
@@ -75,69 +75,69 @@ export class DocumentsController {
   }
 
   /** Live entries whose name contains `q`, anywhere in the drive, each with its folder path. */
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Get('search')
   search(@CurrentUser() user: AuthUser, @Query('q') q?: string, @Query('cursor') cursor?: string, @Query('limit') limit?: string) {
     return this.drive.search(user.userId, { q, cursor, limit: limitOf(limit) });
   }
 
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Get('entries/:id')
   get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.drive.get(user.userId, id);
   }
 
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Get('resolve')
   resolve(@CurrentUser() user: AuthUser, @Query('path') path?: string) {
     return this.drive.resolve(user.userId, path ?? '');
   }
 
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Post('folders')
-  createFolder(@CurrentUser() user: AuthUser, @Body() dto: CreateDocumentsFolderDto) {
+  createFolder(@CurrentUser() user: AuthUser, @Body() dto: CreateDriveFolderDto) {
     return this.drive.createFolder(user.userId, { parentId: dto.parentId ?? null, name: dto.name, onClash: 'SUFFIX' });
   }
 
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Patch('entries/:id')
-  update(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateDocumentsEntryDto) {
+  update(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateDriveEntryDto) {
     return this.drive.rename(user.userId, id, { name: dto.name, parentId: dto.parentId, replace: false });
   }
 
   /** Move to Trash; answers the group, which the web's undo restores. */
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Delete('entries/:id')
   moveToTrash(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.drive.moveToTrash(user.userId, id);
   }
 
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Get('entries/:id/versions')
   versions(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.drive.versions(user.userId, id);
   }
 
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Post('versions/:id/restore')
   @HttpCode(HttpStatus.OK)
-  restoreVersion(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: RestoreDocumentsVersionDto) {
+  restoreVersion(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: RestoreDriveVersionDto) {
     return this.drive.restoreVersion(user.userId, id, dto.as);
   }
 
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Delete('versions/:id')
   deleteVersion(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.drive.deleteVersion(user.userId, id);
   }
 
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Get('trash')
   trash(@CurrentUser() user: AuthUser, @Query('cursor') cursor?: string, @Query('limit') limit?: string) {
     return this.drive.trash(user.userId, { cursor, limit: limitOf(limit) });
   }
 
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Get('trash/groups/:id')
   trashGroup(
     @CurrentUser() user: AuthUser,
@@ -149,7 +149,7 @@ export class DocumentsController {
     return this.drive.trashGroup(user.userId, id, { parentId, cursor, limit: limitOf(limit) });
   }
 
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Post('trash/groups/:id/restore')
   @HttpCode(HttpStatus.OK)
   restoreGroup(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
@@ -157,7 +157,7 @@ export class DocumentsController {
   }
 
   /** Restore one item of a group, and what hangs under it, leaving the rest in Trash (board frame 6, rule 3). */
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Post('trash/groups/:id/items/:entryId/restore')
   @HttpCode(HttpStatus.OK)
   restoreItem(
@@ -169,21 +169,21 @@ export class DocumentsController {
   }
 
   /** Delete a group for good. */
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Delete('trash/groups/:id')
   deleteGroup(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.drive.deleteGroup(user.userId, id);
   }
 
   /** Empty Trash. */
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Delete('trash')
   emptyTrash(@CurrentUser() user: AuthUser) {
     return this.drive.emptyTrash(user.userId);
   }
 
   /** The change feed (§5.4): `since` is the cursor the previous call answered. Also announced as `drive.changed`. */
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Get('changes')
   changes(@CurrentUser() user: AuthUser, @Query('since') since?: string) {
     return this.drive.changes(user.userId, since);
@@ -192,23 +192,23 @@ export class DocumentsController {
   // ── uploads and downloads (§4.1) ──────────────────────────────────────────────────────────────
 
   /** Open a resumable upload: answers the staging id and the chunk size every chunk but the last must have. */
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Post('uploads')
-  openUpload(@CurrentUser() user: AuthUser, @Body() dto: OpenDocumentsUploadDto) {
+  openUpload(@CurrentUser() user: AuthUser, @Body() dto: OpenDriveUploadDto) {
     return this.uploads.open(user.userId, {
       parentId: dto.parentId ?? null, name: dto.name, size: dto.size, relativePath: dto.relativePath, dropRootId: dto.dropRootId ?? null,
     });
   }
 
   /** Which chunks have arrived. */
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Get('uploads/:id')
   uploadStatus(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.uploads.status(user.userId, id);
   }
 
   /** One chunk, at most 8 MiB, as the raw request body, with its sha256 in `X-Orbit-Chunk-Sha256`. Sent again, it replaces. */
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Put('uploads/:id/chunks/:idx')
   async putChunk(
     @CurrentUser() user: AuthUser,
@@ -229,21 +229,21 @@ export class DocumentsController {
   }
 
   /** Create the file and commit it; sent again after it applied, it answers the same file. */
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Post('uploads/:id/complete')
   @HttpCode(HttpStatus.OK)
   completeUpload(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.uploads.complete(user.userId, id);
   }
 
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Delete('uploads/:id')
   abandonUpload(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.uploads.abandon(user.userId, id);
   }
 
   /** Download the current version, with `Range` (206) and an ETag of `"<versionId>.<seq>"`. */
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Get('entries/:id/content')
   async download(
     @CurrentUser() user: AuthUser,
@@ -260,15 +260,15 @@ export class DocumentsController {
    * A short-lived URL that downloads the current version (or `versionId`) without a login header, for the browser to
    * navigate to and stream to disk itself (D12: no size limit). Answers `{ path, expiresAt }`; `path` is under /api.
    */
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Post('entries/:id/download-link')
   @HttpCode(HttpStatus.OK)
-  downloadLink(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: DocumentsDownloadLinkDto) {
+  downloadLink(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: DriveDownloadLinkDto) {
     return this.downloadLinks.mint(user.userId, id, dto.versionId);
   }
 
   /** Download one version, current or replaced. */
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Get('versions/:id/content')
   async downloadVersion(
     @CurrentUser() user: AuthUser,
@@ -282,7 +282,7 @@ export class DocumentsController {
   }
 
   /** The secret scan before sharing a file (§9): warns, naming the shape and line, and never blocks. */
-  @DOCUMENTS_PAT()
+  @DRIVE_PAT()
   @Post('entries/:id/share-check')
   @HttpCode(HttpStatus.OK)
   async shareCheck(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
@@ -307,10 +307,10 @@ function send(content: DriveContent, res: Response): StreamableFile | undefined 
  * login: the signed token is the credential, bound to one owner, file and version, and expired, forged or stale it is the
  * one 404. Range, If-Range and If-None-Match work as on the owner's content route.
  */
-@UseGuards(DocumentsEnabledGuard)
-@Controller(DOCUMENTS_ROUTE_PREFIXES)
-export class DocumentsDownloadController {
-  constructor(private readonly downloadLinks: DocumentsDownloadLinks) {}
+@UseGuards(DriveEnabledGuard)
+@Controller(DRIVE_ROUTE_PREFIXES)
+export class DriveDownloadController {
+  constructor(private readonly downloadLinks: DriveDownloadLinks) {}
 
   @Get('dl/:token')
   async open(

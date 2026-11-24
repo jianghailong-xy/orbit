@@ -3,7 +3,7 @@ import { Readable } from 'node:stream';
 import { findCredentialInReads } from '../files/file-secret-scan';
 import { FilesService } from '../files/files.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { DRIVE_ENTRY_NOT_FOUND, DRIVE_NOT_A_FILE, DRIVE_VERSION_NOT_FOUND } from './documents.service';
+import { DRIVE_ENTRY_NOT_FOUND, DRIVE_NOT_A_FILE, DRIVE_VERSION_NOT_FOUND } from './drive.service';
 
 /** What the download route answers: the status, the headers and the bytes of the requested range. */
 export interface DriveContent {
@@ -57,7 +57,7 @@ export function parseRange(header: string | undefined, size: number): Span | nul
  * version, streamed chunk by chunk with `Range`, so no byte range is ever read whole into memory and no file whole to disk.
  */
 @Injectable()
-export class DocumentsContentService {
+export class DriveContentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly files: FilesService,

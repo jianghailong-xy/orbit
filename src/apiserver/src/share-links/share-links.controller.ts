@@ -16,9 +16,9 @@ import { PatForbidden } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import { listParam } from '../wiki/wiki-retrieval';
-import { DocumentsContentService } from '../documents/documents-content.service';
-import { DocumentsService } from '../documents/documents.service';
-import { documentsDisabledError, documentsEnabled } from '../documents/documents-switch';
+import { DriveContentService } from '../drive/drive-content.service';
+import { DriveService } from '../drive/drive.service';
+import { documentsDisabledError, documentsEnabled } from '../drive/drive-switch';
 import { PutShareLinkDto, ShareDriveFileDto, TurnOffShareLinksDto } from './dto';
 import { ShareLinksService } from './share-links.service';
 
@@ -34,8 +34,8 @@ import { ShareLinksService } from './share-links.service';
 export class ShareLinksController {
   constructor(
     private readonly links: ShareLinksService,
-    private readonly drive: DocumentsService,
-    private readonly driveContent: DocumentsContentService,
+    private readonly drive: DriveService,
+    private readonly driveContent: DriveContentService,
   ) {}
 
   @Get('sessions/:id/share')

@@ -18,7 +18,7 @@ import { HttpException } from '@nestjs/common';
 import { LocalFileStore, TempFileTooLargeError, writeHashedTempFile } from '../files/file-store';
 import type { FilesService } from '../files/files.service';
 import { S3FileStore } from '../files/s3-file-store';
-import { DRIVE_CHUNK_INVALID, DRIVE_CHUNK_MAX, DocumentsChunksService } from './documents-chunks.service';
+import { DRIVE_CHUNK_INVALID, DRIVE_CHUNK_MAX, DriveChunksService } from './drive-chunks.service';
 
 const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 
@@ -109,7 +109,7 @@ test('a temporary file with a byte cap takes exactly that many bytes and fails a
 });
 
 test('the chunk door refuses an index or a sha256 that is not one before it reads the body or asks the database', async () => {
-  const service = new DocumentsChunksService({} as never, { config: { dir: '/nonexistent' } } as unknown as FilesService);
+  const service = new DriveChunksService({} as never, { config: { dir: '/nonexistent' } } as unknown as FilesService);
   const body = () => Readable.from([Buffer.from('chunk')]);
   for (const [idx, hash] of [[-1, 'ab'.repeat(32)], [1.5, 'ab'.repeat(32)], [0, 'AB'.repeat(32)], [0, 'ab'.repeat(31)]] as const) {
     await assert.rejects(

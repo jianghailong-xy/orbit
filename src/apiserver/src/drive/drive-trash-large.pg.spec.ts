@@ -3,7 +3,7 @@
  * §1.4, §3.3, §3.5), over a real
  * PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty, through the owner's routes on the real controller:
  *
- *   bash scripts/run-pg-spec.sh src/apiserver/src/documents/documents-trash-large.pg.spec.ts
+ *   bash scripts/run-pg-spec.sh src/apiserver/src/drive/drive-trash-large.pg.spec.ts
  *
  *   (1) `DELETE /drive/entries/:id` of a folder with 100,000 descendants (10 folders, 990 under them, 99,000 files) puts
  *       all 100,001 entries in ONE Trash group, its top the folder, with nothing live left under it, and every drive
@@ -42,12 +42,12 @@ import { FilesService } from '../files/files.service';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
-import { DocumentsChunksService } from './documents-chunks.service';
-import { DocumentsContentService } from './documents-content.service';
-import { DocumentsDownloadLinks } from './documents-download-links';
-import { DocumentsUploadsService } from './documents-uploads.service';
-import { DocumentsController, DocumentsDownloadController } from './documents.controller';
-import { DocumentsService } from './documents.service';
+import { DriveChunksService } from './drive-chunks.service';
+import { DriveContentService } from './drive-content.service';
+import { DriveDownloadLinks } from './drive-download-links';
+import { DriveUploadsService } from './drive-uploads.service';
+import { DriveController, DriveDownloadController } from './drive.controller';
+import { DriveService } from './drive.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -111,7 +111,7 @@ test('Documents drive: bounded Trash operations on folders of 100,000 entries', 
   let caller: string = owner;
 
   @Module({
-    controllers: [DocumentsController, DocumentsDownloadController],
+    controllers: [DriveController, DriveDownloadController],
     providers: [
       JwtAuthGuard,
       Reflector,
@@ -119,7 +119,7 @@ test('Documents drive: bounded Trash operations on folders of 100,000 entries', 
       { provide: ConfigService, useValue: new ConfigService({ JWT_SECRET: `secret-${RUN}` }) },
       { provide: PrismaService, useValue: db },
       { provide: FilesService, useValue: files },
-      DocumentsService, DocumentsChunksService, DocumentsUploadsService, DocumentsContentService, DocumentsDownloadLinks,
+      DriveService, DriveChunksService, DriveUploadsService, DriveContentService, DriveDownloadLinks,
     ],
   })
   class DriveHarness {}
@@ -134,7 +134,7 @@ test('Documents drive: bounded Trash operations on folders of 100,000 entries', 
     await sql.end().catch(() => undefined);
     rmSync(dir, { recursive: true, force: true });
   });
-  const drive = app.get(DocumentsService);
+  const drive = app.get(DriveService);
 
   const call = (who: string, method: string, route: string) => {
     caller = who;

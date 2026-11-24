@@ -26,22 +26,22 @@ import type { ManagedRunnerInstance } from '../managed-runners/managed-runner-in
 import { PrismaService } from '../prisma/prisma.service';
 import { CurrentManagedRunnerInstance, CurrentRunner } from '../runner-api/current-runner.decorator';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
-import { DocumentsChunksService } from './documents-chunks.service';
-import { AcceptsDriveMountCredential, CurrentDriveMount, fenceManagedInstance, type DriveMount } from './documents-mount-credential';
-import { RUNNER_DOCUMENTS_ROUTE_PREFIXES } from './documents-routes';
-import { DocumentsEnabledGuard } from './documents-switch';
-import { drivePathSegments, DocumentsService, type DriveEntryRow, type DriveWriter } from './documents.service';
+import { DriveChunksService } from './drive-chunks.service';
+import { AcceptsDriveMountCredential, CurrentDriveMount, fenceManagedInstance, type DriveMount } from './drive-mount-credential';
+import { RUNNER_DRIVE_ROUTE_PREFIXES } from './drive-routes';
+import { DriveEnabledGuard } from './drive-switch';
+import { drivePathSegments, DriveService, type DriveEntryRow, type DriveWriter } from './drive.service';
 import {
-  RunnerDocumentsCommitDto,
-  RunnerDocumentsCreateDto,
-  RunnerDocumentsDeleteDto,
-  RunnerDocumentsKeepaliveDto,
-  RunnerDocumentsMkdirDto,
-  RunnerDocumentsRenameDto,
-  RunnerDocumentsStagingDto,
-  RunnerDocumentsUtimensDto,
-  type RunnerDocumentsWriterDto,
-} from './runner-documents.dto';
+  RunnerDriveCommitDto,
+  RunnerDriveCreateDto,
+  RunnerDriveDeleteDto,
+  RunnerDriveKeepaliveDto,
+  RunnerDriveMkdirDto,
+  RunnerDriveRenameDto,
+  RunnerDriveStagingDto,
+  RunnerDriveUtimensDto,
+  type RunnerDriveWriterDto,
+} from './runner-drive.dto';
 
 /** A mount's deletes with no burst key of their own join one group while they come less than this far apart (§3.4). */
 export const DRIVE_MOUNT_BURST_WINDOW_MS = 2_000;
@@ -96,17 +96,17 @@ function rangeOf(header: string | undefined, size: number): { start: number; end
  *     moves an entry to the owner's Trash, where only the owner's routes reach it.
  *   - A staging is the runner's that opened it. A managed runner's commit is fenced in its own transaction (§8.2).
  *
- * Every rule of a write is the name layer's (DocumentsService); this door only names entries by path and says who writes.
- * It answers at /runner/documents, and at /runner/drive for runners and mount daemons already deployed (documents-routes.ts).
+ * Every rule of a write is the name layer's (DriveService); this door only names entries by path and says who writes.
+ * It answers at /runner/documents, and at /runner/drive for runners and mount daemons already deployed (drive-routes.ts).
  */
-@UseGuards(RunnerAuthGuard, DocumentsEnabledGuard)
+@UseGuards(RunnerAuthGuard, DriveEnabledGuard)
 @AcceptsDriveMountCredential()
-@Controller(RUNNER_DOCUMENTS_ROUTE_PREFIXES)
-export class RunnerDocumentsController {
+@Controller(RUNNER_DRIVE_ROUTE_PREFIXES)
+export class RunnerDriveController {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly drive: DocumentsService,
-    private readonly chunks: DocumentsChunksService,
+    private readonly drive: DriveService,
+    private readonly chunks: DriveChunksService,
     private readonly files: FilesService,
   ) {}
 
@@ -156,7 +156,7 @@ export class RunnerDocumentsController {
 
   /** A new file at `path` in its live folder, with an empty first version the handle fills (§3.1). A taken name is 409. */
   @Post('create')
-  async create(@CurrentRunner() runner: Runner, @Body() dto: RunnerDocumentsCreateDto) {
+  async create(@CurrentRunner() runner: Runner, @Body() dto: RunnerDriveCreateDto) {
     const { parent, name } = splitDrivePath(dto.path);
     const folder = await this.drive.liveAt(runner.ownerId, parent);
     const created = await this.drive.createFile(runner.ownerId, {
@@ -167,7 +167,7 @@ export class RunnerDocumentsController {
 
   /** `mkdir`, or with `parents` `mkdir -p`. */
   @Post('mkdir')
-  async mkdir(@CurrentRunner() runner: Runner, @Body() dto: RunnerDocumentsMkdirDto) {
+  async mkdir(@CurrentRunner() runner: Runner, @Body() dto: RunnerDriveMkdirDto) {
     const made = await this.drive.mkdirPath(runner.ownerId, dto.path, { parents: dto.parents === true, writer: this.writer(runner, dto.writer) });
     return this.drive.stat(runner.ownerId, await this.drive.liveById(runner.ownerId, made.id));
   }
@@ -177,7 +177,7 @@ export class RunnerDocumentsController {
   async openStaging(
     @CurrentRunner() runner: Runner,
     @CurrentDriveMount() mount: DriveMount | undefined,
-    @Body() dto: RunnerDocumentsStagingDto,
+    @Body() dto: RunnerDriveStagingDto,
     @CurrentManagedRunnerInstance() instance?: ManagedRunnerInstance,
   ) {
     let entryId: string | null = dto.entryId;
@@ -237,7 +237,7 @@ export class RunnerDocumentsController {
   /** The handle is alive and, with `dirty`, holds bytes no commit has taken: what the sleep hold reads (§8.1). */
   @Post('stagings/:id/keepalive')
   @HttpCode(HttpStatus.OK)
-  async keepalive(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string, @Body() dto: RunnerDocumentsKeepaliveDto) {
+  async keepalive(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string, @Body() dto: RunnerDriveKeepaliveDto) {
     await this.staging(runner, id);
     await this.prisma.documentStaging.updateMany({
       where: { id, ownerId: runner.ownerId, runnerId: runner.id, committedAt: null },
@@ -251,7 +251,7 @@ export class RunnerDocumentsController {
   @HttpCode(HttpStatus.OK)
   async commit(
     @CurrentRunner() runner: Runner,
-    @Body() dto: RunnerDocumentsCommitDto,
+    @Body() dto: RunnerDriveCommitDto,
     @CurrentManagedRunnerInstance() instance?: ManagedRunnerInstance,
   ) {
     if (dto.stagingId) await this.staging(runner, dto.stagingId);
@@ -285,7 +285,7 @@ export class RunnerDocumentsController {
    */
   @Post('rename')
   @HttpCode(HttpStatus.OK)
-  async rename(@CurrentRunner() runner: Runner, @Body() dto: RunnerDocumentsRenameDto) {
+  async rename(@CurrentRunner() runner: Runner, @Body() dto: RunnerDriveRenameDto) {
     const source = await this.named(runner.ownerId, dto.from, dto.id);
     const { parent, name } = splitDrivePath(dto.to);
     const folder = await this.drive.liveAt(runner.ownerId, parent);
@@ -304,7 +304,7 @@ export class RunnerDocumentsController {
   async remove(
     @CurrentRunner() runner: Runner,
     @CurrentDriveMount() mount: DriveMount | undefined,
-    @Body() dto: RunnerDocumentsDeleteDto,
+    @Body() dto: RunnerDriveDeleteDto,
   ) {
     const entry = await this.named(runner.ownerId, dto.path, dto.id);
     const own = dto.writer?.burstKey?.trim();
@@ -318,7 +318,7 @@ export class RunnerDocumentsController {
   /** `utimens`: a live entry's mtime. */
   @Post('utimens')
   @HttpCode(HttpStatus.OK)
-  async utimens(@CurrentRunner() runner: Runner, @Body() dto: RunnerDocumentsUtimensDto) {
+  async utimens(@CurrentRunner() runner: Runner, @Body() dto: RunnerDriveUtimensDto) {
     const entry = await this.named(runner.ownerId, dto.path, dto.id);
     return this.drive.setMtime(runner.ownerId, entry.id, new Date(dto.mtime), this.writer(runner, dto.writer));
   }
@@ -364,7 +364,7 @@ export class RunnerDocumentsController {
   }
 
   /** An agent's write through this runner; the session is the name layer's to check (§3.6). */
-  private writer(runner: Runner, writer?: RunnerDocumentsWriterDto): DriveWriter {
+  private writer(runner: Runner, writer?: RunnerDriveWriterDto): DriveWriter {
     return { kind: 'AGENT', runnerId: runner.id, sessionId: writer?.sessionId ?? null };
   }
 

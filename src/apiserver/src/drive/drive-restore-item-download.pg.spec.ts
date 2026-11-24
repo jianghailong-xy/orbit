@@ -2,7 +2,7 @@
  * Two owner routes of the Files page (docs/documents-drive-technical-design.md §3.5, §4.1; board 02-web frame 6, D12),
  * over a real PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty, with chunks on a files directory of this run's:
  *
- *   bash scripts/run-pg-spec.sh src/apiserver/src/documents/documents-restore-item-download.pg.spec.ts
+ *   bash scripts/run-pg-spec.sh src/apiserver/src/drive/drive-restore-item-download.pg.spec.ts
  *
  *   (1) one item restored out of a Trash group comes back to its folder; the rest stay in the group, recounted;
  *   (2) an item under a deleted folder comes back in that folder made again, with what hangs under it; the group keeps
@@ -40,12 +40,12 @@ import { FilesService } from '../files/files.service';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
-import { DocumentsChunksService } from './documents-chunks.service';
-import { DocumentsContentService } from './documents-content.service';
-import { DRIVE_DOWNLOAD_LINK_NOT_FOUND, DocumentsDownloadLinks } from './documents-download-links';
-import { DocumentsUploadsService } from './documents-uploads.service';
-import { DocumentsController, DocumentsDownloadController } from './documents.controller';
-import { DocumentsService, OWNER_WRITER } from './documents.service';
+import { DriveChunksService } from './drive-chunks.service';
+import { DriveContentService } from './drive-content.service';
+import { DRIVE_DOWNLOAD_LINK_NOT_FOUND, DriveDownloadLinks } from './drive-download-links';
+import { DriveUploadsService } from './drive-uploads.service';
+import { DriveController, DriveDownloadController } from './drive.controller';
+import { DriveService, OWNER_WRITER } from './drive.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -70,7 +70,7 @@ test('Documents drive: restore one item out of Trash, and the minted download UR
   let caller: string = owner;
 
   @Module({
-    controllers: [DocumentsController, DocumentsDownloadController],
+    controllers: [DriveController, DriveDownloadController],
     providers: [
       JwtAuthGuard,
       Reflector,
@@ -78,7 +78,7 @@ test('Documents drive: restore one item out of Trash, and the minted download UR
       { provide: ConfigService, useValue: new ConfigService({ JWT_SECRET: `secret-${RUN}` }) },
       { provide: PrismaService, useValue: db },
       { provide: FilesService, useValue: files },
-      DocumentsService, DocumentsChunksService, DocumentsUploadsService, DocumentsContentService, DocumentsDownloadLinks,
+      DriveService, DriveChunksService, DriveUploadsService, DriveContentService, DriveDownloadLinks,
     ],
   })
   class DriveHarness {}
@@ -93,8 +93,8 @@ test('Documents drive: restore one item out of Trash, and the minted download UR
     await sql.end().catch(() => undefined);
     rmSync(dir, { recursive: true, force: true });
   });
-  const drive = app.get(DocumentsService);
-  const chunks = app.get(DocumentsChunksService);
+  const drive = app.get(DriveService);
+  const chunks = app.get(DriveChunksService);
 
   const call = (who: string, method: string, route: string, body?: unknown) => {
     caller = who;
@@ -260,7 +260,7 @@ test('Documents drive: restore one item out of Trash, and the minted download UR
     Date.now = () => realNow() - 10 * 60_000;
     let expired: { path: string };
     try {
-      expired = await app.get(DocumentsDownloadLinks).mint(owner, report);
+      expired = await app.get(DriveDownloadLinks).mint(owner, report);
     } finally {
       Date.now = realNow;
     }

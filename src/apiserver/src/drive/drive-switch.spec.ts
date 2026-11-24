@@ -12,11 +12,11 @@ import {
   DOCUMENTS_ENABLED_ENV,
   documentsClaimFields,
   documentsEnabled,
-  DocumentsEnabledGuard,
-  readDocumentsSwitch,
-} from './documents-switch';
-import { DocumentsController, DocumentsDownloadController } from './documents.controller';
-import { RunnerDocumentsController } from './runner-documents.controller';
+  DriveEnabledGuard,
+  readDriveSwitch,
+} from './drive-switch';
+import { DriveController, DriveDownloadController } from './drive.controller';
+import { RunnerDriveController } from './runner-drive.controller';
 
 /** Runs `fn` with the switch set to `value` (undefined: absent), and puts the environment back. */
 function withSwitch<T>(value: string | undefined, fn: () => T): T {
@@ -32,19 +32,19 @@ function withSwitch<T>(value: string | undefined, fn: () => T): T {
 }
 
 test('Documents is off unless the switch says true', () => {
-  assert.deepEqual(readDocumentsSwitch(undefined), { enabled: false, problem: null });
-  assert.deepEqual(readDocumentsSwitch(''), { enabled: false, problem: null });
-  assert.deepEqual(readDocumentsSwitch('false'), { enabled: false, problem: null });
-  assert.deepEqual(readDocumentsSwitch(' TRUE '), { enabled: true, problem: null });
+  assert.deepEqual(readDriveSwitch(undefined), { enabled: false, problem: null });
+  assert.deepEqual(readDriveSwitch(''), { enabled: false, problem: null });
+  assert.deepEqual(readDriveSwitch('false'), { enabled: false, problem: null });
+  assert.deepEqual(readDriveSwitch(' TRUE '), { enabled: true, problem: null });
   for (const value of ['1', 'yes', 'on']) {
-    const read = readDocumentsSwitch(value);
+    const read = readDriveSwitch(value);
     assert.equal(read.enabled, false, value);
     assert.match(read.problem ?? '', /neither true nor false/);
   }
 });
 
 test('off, every drive door refuses with the 404 DOCUMENTS_DISABLED; on, it lets the request through', () => {
-  const guard = new DocumentsEnabledGuard();
+  const guard = new DriveEnabledGuard();
   withSwitch(undefined, () => {
     assert.throws(() => guard.canActivate(), (err: unknown) => {
       assert.ok(err instanceof NotFoundException);
@@ -57,9 +57,9 @@ test('off, every drive door refuses with the 404 DOCUMENTS_DISABLED; on, it lets
 
 test('the guard is on each drive controller, after the credential guard', () => {
   const guards = (controller: object) => Reflect.getMetadata(GUARDS_METADATA, controller) as unknown[];
-  assert.deepEqual(guards(DocumentsController), [JwtAuthGuard, DocumentsEnabledGuard]);
-  assert.deepEqual(guards(DocumentsDownloadController), [DocumentsEnabledGuard]);
-  assert.deepEqual(guards(RunnerDocumentsController), [RunnerAuthGuard, DocumentsEnabledGuard]);
+  assert.deepEqual(guards(DriveController), [JwtAuthGuard, DriveEnabledGuard]);
+  assert.deepEqual(guards(DriveDownloadController), [DriveEnabledGuard]);
+  assert.deepEqual(guards(RunnerDriveController), [RunnerAuthGuard, DriveEnabledGuard]);
 });
 
 test('a claim says documentsDisabled only while Documents is off', () => {

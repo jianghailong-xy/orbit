@@ -25,7 +25,7 @@ import { Client } from 'pg';
 import { call, startApiserver, type Reply } from '../auth/pat-test-apiserver';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
-import { DOCUMENTS_SYNC_KEEP_MS, DOCUMENTS_SYNC_STALE_MS, DocumentsSyncsService } from './documents-syncs.service';
+import { DRIVE_SYNC_KEEP_MS, DRIVE_SYNC_STALE_MS, DriveSyncsService } from './drive-syncs.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -48,7 +48,7 @@ test('Documents: an agent directory sync reported for the upload tray', { skip: 
   }
   const db: PrismaClient = prismaClientFor(url);
   t.after(() => db.$disconnect().catch(() => undefined));
-  const syncs = new DocumentsSyncsService(db as never);
+  const syncs = new DriveSyncsService(db as never);
 
   const account = async (name: string) => {
     const id = randomUUID();
@@ -134,14 +134,14 @@ test('Documents: an agent directory sync reported for the upload tray', { skip: 
     assert.equal((await listed(alice, foreign))?.session, null, "another account's session is neither kept nor named");
 
     const stale = opened(await as(aliceRunner.token, 'POST', '', { sourceName: 'old', destPath: '/Old' }), 'open');
-    await db.documentSync.update({ where: { id: stale }, data: { updatedAt: new Date(Date.now() - DOCUMENTS_SYNC_STALE_MS - 1_000), currentPath: 'a.txt' } });
+    await db.documentSync.update({ where: { id: stale }, data: { updatedAt: new Date(Date.now() - DRIVE_SYNC_STALE_MS - 1_000), currentPath: 'a.txt' } });
     const staleView = await listed(alice, stale);
     assert.equal(staleView?.status, 'STOPPED');
     assert.equal(staleView?.currentPath, null);
     assert.ok(staleView?.endedAt);
 
     const dayOld = opened(await as(aliceRunner.token, 'POST', '', { sourceName: 'ancient', destPath: '/Ancient' }), 'open');
-    const longAgo = new Date(Date.now() - DOCUMENTS_SYNC_KEEP_MS - 60_000);
+    const longAgo = new Date(Date.now() - DRIVE_SYNC_KEEP_MS - 60_000);
     await db.documentSync.update({ where: { id: dayOld }, data: { status: 'DONE', endedAt: longAgo, updatedAt: longAgo } });
     assert.equal(await listed(alice, dayOld), undefined, 'not listed');
     ok(await as(aliceRunner.token, 'POST', '', { sourceName: 'next', destPath: '/Next' }), 'the next open prunes it');

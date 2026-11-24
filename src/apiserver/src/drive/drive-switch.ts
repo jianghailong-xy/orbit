@@ -12,7 +12,7 @@ import { CanActivate, Injectable, Logger, NotFoundException } from '@nestjs/comm
  *
  * Off, the server meets a client the way one without the drive would:
  *   - every route of the owner's door (`/api/drive/*`), the download links and the runner door (`/api/runner/drive/*`)
- *     answers 404 DOCUMENTS_DISABLED before it reads anything (`DocumentsEnabledGuard`);
+ *     answers 404 DOCUMENTS_DISABLED before it reads anything (`DriveEnabledGuard`);
  *   - a drive file cannot be shared, and a share link made while it was on reads as one naming nothing;
  *   - `GET /api/auth/capabilities` says `documents.enabled: false`, so the clients show no Documents entry;
  *   - sessions are claimed with `documentsDisabled`, which a runner that knows it spawns without the drive tools.
@@ -23,14 +23,14 @@ export const DOCUMENTS_ENABLED_ENV = 'ORBIT_DOCUMENTS_ENABLED';
 /** The refusal code of a Documents request while the switch is off: 404, as a server without the drive. */
 export const DOCUMENTS_DISABLED = 'DOCUMENTS_DISABLED';
 
-export interface DocumentsSwitch {
+export interface DriveSwitch {
   readonly enabled: boolean;
   /** What the environment said that could not be taken as written, or null. */
   readonly problem: string | null;
 }
 
 /** The table above, as a pure function of the variable's value. */
-export function readDocumentsSwitch(value: string | undefined): DocumentsSwitch {
+export function readDriveSwitch(value: string | undefined): DriveSwitch {
   const said = (value ?? '').trim().toLowerCase();
   if (said === 'true') return { enabled: true, problem: null };
   if (said === '' || said === 'false') return { enabled: false, problem: null };
@@ -45,7 +45,7 @@ let announced: string | undefined;
 
 /** Whether this process offers Documents, from its environment; a problem with the value is logged once. */
 export function documentsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  const read = readDocumentsSwitch(env[DOCUMENTS_ENABLED_ENV]);
+  const read = readDriveSwitch(env[DOCUMENTS_ENABLED_ENV]);
   if (read.problem && read.problem !== announced) {
     announced = read.problem;
     log.warn(read.problem);
@@ -76,7 +76,7 @@ export function documentsClaimFields(env: NodeJS.ProcessEnv = process.env): { do
  * every route the controller has, and every one added later, is behind it.
  */
 @Injectable()
-export class DocumentsEnabledGuard implements CanActivate {
+export class DriveEnabledGuard implements CanActivate {
   canActivate(): boolean {
     if (documentsEnabled()) return true;
     throw documentsDisabledError();

@@ -34,7 +34,7 @@ function refusal(status: HttpStatus, code: string, message: string): HttpExcepti
  * credential.
  */
 @Injectable()
-export class DocumentsChunksService {
+export class DriveChunksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly files: FilesService,

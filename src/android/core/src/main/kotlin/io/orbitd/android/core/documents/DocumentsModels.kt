@@ -3,7 +3,7 @@ package io.orbitd.android.core.documents
 import kotlinx.serialization.Serializable
 
 // Documents: the account's drive as the owner's routes answer it (docs/documents-drive-technical-design.md §4.1, apiserver
-// documents/documents.controller.ts, prefix `documents`). The twin of OrbitKit's Models/Documents.swift. Kinds and states are
+// drive/drive.controller.ts, prefix `documents`). The twin of OrbitKit's Models/Documents.swift. Kinds and states are
 // Strings where a newer server may add one, so an answer still decodes; the reading rules live in `DocumentsLogic`.
 
 /** Who last wrote an entry or a version (§3.6). An agent's session is kept only where the door could check it. */

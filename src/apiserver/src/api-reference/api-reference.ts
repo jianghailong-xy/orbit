@@ -65,7 +65,7 @@ const GUARD_CALLERS: Record<string, Caller> = {
   HelpReaderGuard: 'public',
   // The Documents switch admits nobody by itself: the drive door's credential guard says who, and the download link's
   // signed token, which no guard checks, keeps it public.
-  DocumentsEnabledGuard: 'public',
+  DriveEnabledGuard: 'public',
 };
 
 const REQUEST_METHODS: Record<number, string> = {
