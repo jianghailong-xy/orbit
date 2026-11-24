@@ -1584,6 +1584,16 @@ export async function recordIntegrationFailure(
     return item ? { itemId: item.id, projectId: failure.projectId, taskId: null, assignee: item.assignee } : null;
   }
   if (!created && failure.dedupeKey.startsWith('ICB:') && failure.taskId) {
+    // K5 follow-up: the task filed to fix this item is exempt from its hold, so it is not added to `heldTaskIds`;
+    // its red landing puts the item in front of the coordinator again under a new key instead.
+    const [fixed] = await tx.$queryRaw<Array<{ id: string; assignee: OpenItemAssignee }>>(Prisma.sql`
+      UPDATE "project_open_item" i
+         SET "assigned_at" = CASE WHEN i."assignee" = 'COORDINATOR' THEN now() ELSE i."assigned_at" END
+        FROM "task" t
+       WHERE i."project_id" = ${failure.projectId}::uuid AND i."dedupe_key" = ${failure.dedupeKey}
+         AND i."state" = 'OPEN' AND t."id" = ${failure.taskId}::uuid AND t."fixes_open_item_id" = i."id"
+       RETURNING i."id", i."assignee"`);
+    if (fixed) return { itemId: fixed.id, projectId: failure.projectId, taskId: failure.taskId, assignee: fixed.assignee };
     const [held] = await tx.$queryRaw<Array<{ id: string; assignee: OpenItemAssignee }>>(Prisma.sql`
       UPDATE "project_open_item"
          SET "payload" = jsonb_set("payload", '{heldTaskIds}',

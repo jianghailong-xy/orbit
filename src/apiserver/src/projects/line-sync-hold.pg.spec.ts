@@ -963,8 +963,8 @@ const BASELINE_RED: Failure = {
   }],
 } as Failure;
 
-test('§4.6 item 3, the K5 question: a baseline fix whose own landing is red again on the baseline is queued again and '
-  + 'claimed at once; a line-sync fix that conflicts again is not (the invariant this design keeps)',
+test('§4.6 item 3, the K5 question: a baseline fix whose own landing is red again on the baseline queues nothing and '
+  + 'is not claimable; a line-sync fix that conflicts again is not (the invariant this design keeps)',
 { skip, timeout: 300_000 }, async () => {
   const stack = await connect();
   try {
@@ -981,13 +981,16 @@ test('§4.6 item 3, the K5 question: a baseline fix whose own landing is red aga
     assert.equal(await taskOf(stack.db, fixLanding), fix.taskId);
     await report(stack, w, fixLanding!, BASELINE_RED);
     const fixJobs = await landings(stack.db, fix.taskId);
-    // Confirmed: the fix's next generation is queued BASELINE_HELD and the very next beat hands it out again, to run
-    // the same red check on the same source. Nothing stops this but a new commit on the fix's branch or the item
-    // closing. (Reported as a K5 follow-up; this design does not change K5.)
-    assert.deepEqual(fixJobs.map((job) => job.state), ['CHECK_FAILED', 'QUEUED']);
-    assert.equal(await enqueueCause(stack.db, fixJobs[1]!.id), 'BASELINE_HELD');
-    const [again] = await claim(stack, w, 'k5-fix-again');
-    assert.equal(again?.jobId, fixJobs[1]!.id, 'K5: the red fix is claimed again at once');
+    // The fix is exempt from its own baseline item, so a held generation would be claimed at once and run the same
+    // red check on the same source: none is queued, nothing is claimable, and the item is in front of the coordinator
+    // again under a new key.
+    assert.deepEqual(fixJobs.map((job) => job.state), ['CHECK_FAILED']);
+    assert.equal((await claim(stack, w, 'k5-fix-again')).length, 0, 'K5: the red fix is not claimed again');
+    const again = await stack.db.projectOpenItem.findFirstOrThrow({
+      where: { projectId: w.projectId, dedupeKey: { startsWith: 'ICB:' }, state: 'OPEN' },
+    });
+    assert.equal(again.id, baseline.id, 'the same baseline item');
+    assert.ok(again.assignedAt.getTime() > baseline.assignedAt.getTime(), 'delivered to the coordinator again');
 
     // The line-sync item keeps the invariant instead (§4.2's exception): its sync task's second conflict queues
     // nothing, so nothing is claimable.

@@ -2152,6 +2152,16 @@ function pullRequestEndRefusal(state: string, errorCode: string | null | undefin
   return `the pull request door does not end an attempt with ${errorCode ?? 'no error code'}`;
 }
 
+/** K5: whether the task was filed to fix the OPEN baseline item (`ICB:`) of this serial key. */
+async function taskFixesOpenBaselineItem(tx: Prisma.TransactionClient, taskId: string, serialKey: string): Promise<boolean> {
+  const task = await tx.task.findUnique({ where: { id: taskId }, select: { fixesOpenItemId: true } });
+  if (!task?.fixesOpenItemId) return false;
+  const item = await tx.projectOpenItem.findUnique({
+    where: { id: task.fixesOpenItemId }, select: { state: true, dedupeKey: true },
+  });
+  return item?.state === 'OPEN' && !!item.dedupeKey?.startsWith(`ICB:${serialKey}:`);
+}
+
 /**
  * Apply one finished job (J-T5, J-T6, J-T7).
  *
@@ -3323,7 +3333,13 @@ export async function applyIntegrationJobResult(
       // opened, in this transaction — the old card ends RETRIED and points at the new failure, which
       // is in front of somebody; nothing about it is closed quietly.
       if (opened) await supersedeHandledItems(tx, job.id, opened.itemId);
-      if (body.baselineRed === true && liveTaskId) await queueBaselineHeld(tx, {
+      // K5 follow-up: the task filed to fix the OPEN baseline item on this key is exempt from its hold
+      // (`baselineHoldSql`), so a held generation queued for it would be claimed at once and run the same red
+      // check on the same source. It gets none; the item, re-keyed above, is in front of the coordinator again.
+      const fixesOpenBaseline = body.baselineRed === true && liveTaskId
+        ? await taskFixesOpenBaselineItem(tx, liveTaskId, job.serialKey)
+        : false;
+      if (body.baselineRed === true && liveTaskId && !fixesOpenBaseline) await queueBaselineHeld(tx, {
         ownerId: job.ownerId, projectId: job.projectId, taskId: liveTaskId,
         sessionId: job.sessionId!, sourceRef: job.sourceRef, runnerId: job.runnerId,
       });
