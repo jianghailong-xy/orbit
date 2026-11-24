@@ -34,12 +34,12 @@ test('the seven-value status filter is unchanged on the tool and the CLI', () =>
   assert.ok(CATALOG.includes(`--status <${seven.join('|')}>`));
 });
 
-test('the contract version moved to 1.12.0 everywhere it is stated', () => {
+test('the contract version moved to 1.13.0 everywhere it is stated', () => {
   const json = JSON.parse(read('contracts/orbit-agent.contract.json')) as { contractVersion: string };
-  assert.equal(json.contractVersion, '1.12.0');
-  assert.match(read('src/runner-go/agent_primer.go'), /agentContractVersion = "1\.12\.0"/u);
-  assert.match(read('docs/orbit-agent-contract.md'), /frozen at v1\.12\.0/u);
+  assert.equal(json.contractVersion, '1.13.0');
+  assert.match(read('src/runner-go/agent_primer.go'), /agentContractVersion = "1\.13\.0"/u);
+  assert.match(read('docs/orbit-agent-contract.md'), /frozen at v1\.13\.0/u);
   const guide = read('docs/agent-tools-guide.md');
-  assert.match(guide, /Agent Contract 1\.12\.0/u);
+  assert.match(guide, /Agent Contract 1\.13\.0/u);
   for (const field of FIELDS) assert.ok(guide.includes(field), `docs/agent-tools-guide.md names ${field}`);
 });

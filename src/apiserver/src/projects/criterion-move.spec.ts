@@ -291,6 +291,12 @@ function delegate(store: Store, name: keyof Store) {
   };
 }
 
+/** `readDoneState`'s deferred-landing read (8d38abd6a8, `landingDeferredSql`): none here. */
+function readsDeferredLandings(query: unknown): boolean {
+  const sql = (query as { sql?: unknown } | null)?.sql;
+  return typeof sql === 'string' && sql.includes('"delivered_at" IS NULL');
+}
+
 function prismaOver(store: Store, options: { busy?: boolean } = {}) {
   const tx = {
     ...Object.fromEntries((Object.keys(store) as Array<keyof Store>).map((name) => [name, delegate(store, name)])),
@@ -459,7 +465,7 @@ function recordDoneOver(store: Store, written: Row[]) {
       findMany: async () => store.projectOpenItem.filter((item) => item.projectId === A && item.state === 'OPEN'),
       updateMany: async () => ({ count: 0 }),
     },
-    $queryRaw: async () => [{ status: projectA().status, non_code: true }],
+    $queryRaw: async (query: unknown) => (readsDeferredLandings(query) ? [] : [{ status: projectA().status, non_code: true }]),
   };
   return new ProjectAcceptanceService({
     ...client,
