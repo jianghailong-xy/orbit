@@ -3,7 +3,7 @@
 # runs as a uid of its own with no capabilities, no_new_privs and a seccomp filter (src/documents-mount/README.md).
 #
 # Replace:
-#   __FILES_CSI_IMAGE_AT_SHA256_DIGEST__  the image built from Dockerfile (README.md, "Image"), by digest
+#   __DOCUMENTS_CSI_IMAGE_AT_SHA256_DIGEST__  the image built from Dockerfile (README.md, "Image"), by digest
 #   __MANAGED_RUNNER_NAMESPACE__          the profile's kubernetes.namespace
 #   __ORBIT_HTTPS_URL__                   the Orbit server the daemons speak to (the profile's runner.serverUrl)
 #
@@ -35,7 +35,7 @@ spec:
       terminationGracePeriodSeconds: 90
       containers:
         - name: plugin
-          image: __FILES_CSI_IMAGE_AT_SHA256_DIGEST__
+          image: __DOCUMENTS_CSI_IMAGE_AT_SHA256_DIGEST__
           args:
             - csi
             - --endpoint=unix:///csi/csi.sock
