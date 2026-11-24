@@ -26,8 +26,8 @@ import { DriveWriterName } from './DriveWriterName';
 /** Said in the confirmation of a delete for good that ends a link (§9). */
 export const ENDS_A_SHARE_LINK = 'This ends a share link.';
 
-/** "Orbit UI migration": the folder a group was deleted from, by its last name; the drive's root is "Files". */
-const folderLabel = (path: string) => path.split('/').filter(Boolean).pop() ?? 'Files';
+/** "Orbit UI migration": the folder a group was deleted from, by its last name; the drive's root is "Documents". */
+const folderLabel = (path: string) => path.split('/').filter(Boolean).pop() ?? 'Documents';
 
 const items = (n: number) => `${n} ${n === 1 ? 'item' : 'items'}`;
 
@@ -153,7 +153,7 @@ export function FilesTrash() {
         </h1>
         <div className="files-head-actions">
           <Button icon={<LeftOutlined />} onClick={() => navigate('/files')}>
-            Files
+            Documents
           </Button>
           <Button danger icon={<DeleteOutlined />} disabled={groups.length === 0} onClick={empty}>
             Empty Trash…

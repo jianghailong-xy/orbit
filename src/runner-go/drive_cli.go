@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-const driveHelp = `orbit drive — work with the owner's Orbit Files drive
+const driveHelp = `orbit drive — work with the owner's Documents drive
 
 Usage:
   orbit drive put <local-path> <path> [--json]
@@ -25,7 +25,7 @@ var driveCLIHelp = map[string]string{
 	"get": "Download a drive file into this session's uploads directory and return its local path.",
 	"ls":  "List one page of a drive folder. With no path, list the root.",
 	"mv":  "Move or rename a drive entry. This overwrites an existing file at the destination.",
-	"rm":  "Move a drive entry to the owner's Trash. The owner can restore it from the Files page. Agents cannot see Trash.",
+	"rm":  "Move a drive entry to the owner's Trash. The owner can restore it from the Documents page. Agents cannot see Trash.",
 }
 
 var driveCLICapabilities = []cliCapabilitySpec{

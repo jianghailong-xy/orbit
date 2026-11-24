@@ -58,7 +58,6 @@ import {
   ThunderboltOutlined,
   UndoOutlined,
   UnorderedListOutlined,
-  UploadOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AgentToolsDrawer, agentToolsMenuStatus } from './AgentToolsDrawer';
@@ -12412,7 +12411,7 @@ export function SessionComposer({
   const lastComposerTap = useRef<{ at: number; x: number; y: number; held?: number } | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // The `+` menu's "From Files" picker (board docs/mocks/orbit-files, 02-web frame 8).
+  // The `+` menu's Documents picker (board docs/mocks/orbit-files, 02-web frame 8).
   const [drivePickerOpen, setDrivePickerOpen] = useState(false);
   // Manual composer height (px). null = autoSize auto-grow (up to maxRows); once the user
   // drags the top handle, that height wins over autoSize until they double-click to reset.
@@ -12605,7 +12604,7 @@ export function SessionComposer({
   // The `+` menu "Shell" entry: prefix the draft with `!` so onSend routes it as a raw
   // shell command (run on the runner, bypassing claude). The user types the command after.
   // Files the drive picker returned go into the draft as chips (`#name`, like a `#` reference) that are sent as their
-  // `/home/orbit/Files/…` paths, so the box shows names and the agent gets paths (board 02-web frame 8).
+  // `/home/orbit/Documents/…` paths, so the box shows names and the agent gets paths (board 02-web frame 8).
   const insertDriveFiles = (files: { id: string; name: string; path: string }[]): void => {
     let refs = composerRefs;
     let chips = '';
@@ -13105,12 +13104,11 @@ export function SessionComposer({
           // WorkspaceView.composerMenu.test.tsx, drawn in
           // docs/mocks/composer-attach-menu-phone.html.
           items={[
-              // Each row says what it does and where the file comes from, with no heading to
-              // miss: "File" and "From Files" read alike (docs/mocks/composer-attach-labels).
+              // This device's File and Image, then the account's Documents.
               {
                 key: 'file',
-                icon: <UploadOutlined />,
-                label: 'Upload File',
+                icon: <PaperClipOutlined />,
+                label: 'File',
                 onSelect: () => fileInputRef.current?.click(),
               },
               {
@@ -13118,13 +13116,13 @@ export function SessionComposer({
                 icon: <PictureOutlined />,
                 // Offered unconditionally: a state the upload can't work in says so on pick,
                 // rather than greying the item out.
-                label: 'Upload Image',
+                label: 'Image',
                 onSelect: () => imageInputRef.current?.click(),
               },
               {
                 key: 'drive',
                 icon: <FolderOpenOutlined />,
-                label: 'Add from Orbit Files',
+                label: 'Documents',
                 onSelect: () => setTimeout(() => setDrivePickerOpen(true), 0),
               },
               { key: 'divider', type: 'separator' },
@@ -13181,7 +13179,7 @@ export function SessionComposer({
             onOpenChange={setDrivePickerOpen}
             disabled={composerDisabled}
             popupClassName="drive-picker-popover"
-            // No chip of its own: the picker opens from the `+` menu's From Files, and this
+            // No chip of its own: the picker opens from the `+` menu's Documents, and this
             // zero-width, unfocusable button only anchors it beside the `+`.
             trigger={<button type="button" className="composer-drive-anchor" tabIndex={-1} aria-hidden="true" />}
           >

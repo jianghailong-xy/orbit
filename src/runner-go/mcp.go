@@ -400,11 +400,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 }
 
 func driveToolDescriptors(obj func(map[string]interface{}, ...string) map[string]interface{}) []map[string]interface{} {
-	drivePath := map[string]interface{}{"type": "string", "description": "A drive path such as /Proj/r.md or ~/Files/Proj/r.md."}
+	drivePath := map[string]interface{}{"type": "string", "description": "A drive path such as /Proj/r.md or ~/Documents/Proj/r.md."}
 	return []map[string]interface{}{
 		{
 			"name": "drive_put",
-			"description": "Copy a local file into the owner's Orbit Files drive. Creates missing parent folders and " +
+			"description": "Copy a local file into the owner's Documents drive. Creates missing parent folders and " +
 				"keeps the previous version when overwriting a file. Returns an orbit-drive: link for replies. The file is " +
 				"sent in 8 MiB chunks and has no size limit: file_upload's 25 MiB cap does not apply here.",
 			"inputSchema": obj(map[string]interface{}{
@@ -436,7 +436,7 @@ func driveToolDescriptors(obj func(map[string]interface{}, ...string) map[string
 		},
 		{
 			"name":        "drive_delete",
-			"description": "Move a drive entry to the owner's Trash. The owner can restore it from the Files page. Agents cannot see Trash.",
+			"description": "Move a drive entry to the owner's Trash. The owner can restore it from the Documents page. Agents cannot see Trash.",
 			"inputSchema": obj(map[string]interface{}{"path": drivePath}, "path"),
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": true},
 		},
@@ -467,7 +467,7 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 	if result, handled := s.callFileTool(name, args); handled {
 		return result
 	}
-	// The Orbit Files drive's tools: `orbit drive` runs the same runDriveTool (drive_tools.go).
+	// The Documents drive's tools: `orbit drive` runs the same runDriveTool (drive_tools.go).
 	if result, handled := s.callDriveTool(name, args); handled {
 		return result
 	}

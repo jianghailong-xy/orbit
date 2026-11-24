@@ -97,14 +97,14 @@ describe('Files → Storage', () => {
   it('shows the S3 quota warning from 80% and the drive storage full message from 100%', () => {
     const drive = { totalBytes: 300, driveBytes: 200, trashBytes: 20, otherBytes: 100 };
     const quota = { ...drive, storeQuotaBytes: 1000 };
-    expect(render(usage(), drive)).not.toContain('Orbit Files storage');
-    expect(render(usage(), { ...quota, storeUsedBytes: 799, nearQuota: false })).not.toContain('Orbit Files storage');
+    expect(render(usage(), drive)).not.toContain('Documents storage');
+    expect(render(usage(), { ...quota, storeUsedBytes: 799, nearQuota: false })).not.toContain('Documents storage');
     for (const percent of [80, 83]) {
       const html = render(usage(), { ...quota, storeUsedBytes: percent * 10, nearQuota: true });
-      expect(html).toContain(`Orbit Files storage is ${percent}% full. Uploads stop at 100%. Ask the operator to raise the limit.`);
+      expect(html).toContain(`Documents storage is ${percent}% full. Uploads stop at 100%. Ask the operator to raise the limit.`);
     }
     const full = render(usage(), { ...quota, storeUsedBytes: 1000, nearQuota: true });
     expect(full).toContain('The drive&#x27;s storage is full. Ask the operator to raise the limit.');
-    expect(full).not.toContain('Orbit Files storage is 100% full');
+    expect(full).not.toContain('Documents storage is 100% full');
   });
 });

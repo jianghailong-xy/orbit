@@ -10,9 +10,9 @@ import (
 // The Files drive is read-only in Plan mode (docs/orbit-files-drive-technical-design.md §7.2, test row 59*): where the
 // runner answers an engine's permission request, a Plan-mode write under the drive is refused with no card filed,
 // reads are not refused, and the other modes ask as before. Walk 350KSODTF8PzMHyZ3bSxP round 3 had a Claude Plan
-// session's Write and Bash calls into ~/Files filed as cards, and an Allow on one wrote the drive.
+// session's Write and Bash calls into ~/Documents filed as cards, and an Allow on one wrote the drive.
 
-// planDriveHome makes this process's home /home/orbit, the runner user's, so ~/Files is the drive's own spelling.
+// planDriveHome makes this process's home /home/orbit, the runner user's, so ~/Documents is the drive's own spelling.
 func planDriveHome(t *testing.T) {
 	t.Helper()
 	t.Setenv("HOME", "/home/orbit")
@@ -21,50 +21,52 @@ func planDriveHome(t *testing.T) {
 // planDriveWrites are a Claude session's calls that write under the drive, by each spelling of it.
 func planDriveWrites() map[string]map[string]interface{} {
 	return map[string]map[string]interface{}{
-		"Write ~/Files": {"tool_name": "Write", "input": map[string]interface{}{
+		"Write ~/Files (the name before the rename)": {"tool_name": "Write", "input": map[string]interface{}{
 			"file_path": "/home/orbit/Files/notes/x.md", "content": "x"}},
+		"Write ~/Documents": {"tool_name": "Write", "input": map[string]interface{}{
+			"file_path": "/home/orbit/Documents/notes/x.md", "content": "x"}},
 		"Write the drive root": {"tool_name": "Write", "input": map[string]interface{}{
-			"file_path": "/home/orbit/Files", "content": "x"}},
+			"file_path": "/home/orbit/Documents", "content": "x"}},
 		"Edit the mount": {"tool_name": "Edit", "input": map[string]interface{}{
 			"file_path": "/run/orbit-files/drive/a.txt", "old_string": "a", "new_string": "b"}},
 		"Edit the parent": {"tool_name": "Edit", "input": map[string]interface{}{
 			"file_path": "/run/orbit-files/status.json", "old_string": "a", "new_string": "b"}},
 		"MultiEdit": {"tool_name": "MultiEdit", "input": map[string]interface{}{
-			"file_path": "/home/orbit/Files/a.go", "edits": []interface{}{}}},
+			"file_path": "/home/orbit/Documents/a.go", "edits": []interface{}{}}},
 		"NotebookEdit": {"tool_name": "NotebookEdit", "input": map[string]interface{}{
-			"notebook_path": "/home/orbit/Files/n.ipynb", "new_source": "x"}},
-		"Bash redirect into ~/Files": {"tool_name": "Bash", "input": map[string]interface{}{
-			"command": "echo hello > ~/Files/x.txt"}},
+			"notebook_path": "/home/orbit/Documents/n.ipynb", "new_source": "x"}},
+		"Bash redirect into ~/Documents": {"tool_name": "Bash", "input": map[string]interface{}{
+			"command": "echo hello > ~/Documents/x.txt"}},
 		"Bash append into $HOME/Files": {"tool_name": "Bash", "input": map[string]interface{}{
 			"command": `printf 'a\n' >> "$HOME/Files/log.txt"`}},
 		"Bash touch on the mount": {"tool_name": "Bash", "input": map[string]interface{}{
 			"command": "touch /run/orbit-files/drive/new"}},
 		"Bash cd then rm": {"tool_name": "Bash", "input": map[string]interface{}{
-			"command": "cd /home/orbit/Files && rm -f old.txt"}},
+			"command": "cd /home/orbit/Documents && rm -f old.txt"}},
 		"Bash cp into the drive": {"tool_name": "Bash", "input": map[string]interface{}{
-			"command": "cp README.md /home/orbit/Files/"}},
+			"command": "cp README.md /home/orbit/Documents/"}},
 		"Bash tee": {"tool_name": "Bash", "input": map[string]interface{}{
-			"command": "git log | tee ~/Files/log.txt"}},
+			"command": "git log | tee ~/Documents/log.txt"}},
 		"Bash sed -i": {"tool_name": "Bash", "input": map[string]interface{}{
-			"command": "sed -i s/a/b/ /home/orbit/Files/a.txt"}},
+			"command": "sed -i s/a/b/ /home/orbit/Documents/a.txt"}},
 		"Bash find -delete": {"tool_name": "Bash", "input": map[string]interface{}{
-			"command": "find /home/orbit/Files -name '*.tmp' -delete"}},
+			"command": "find /home/orbit/Documents -name '*.tmp' -delete"}},
 		"Bash inline python": {"tool_name": "Bash", "input": map[string]interface{}{
-			"command": `python3 -c "open('/home/orbit/Files/x','w').write('x')"`}},
+			"command": `python3 -c "open('/home/orbit/Documents/x','w').write('x')"`}},
 	}
 }
 
 // planDriveReads are calls that only read the drive, or write somewhere else after reading it.
 func planDriveReads() map[string]map[string]interface{} {
 	return map[string]map[string]interface{}{
-		"Read":   {"tool_name": "Read", "input": map[string]interface{}{"file_path": "/home/orbit/Files/a.md"}},
-		"Grep":   {"tool_name": "Grep", "input": map[string]interface{}{"pattern": "x", "path": "/home/orbit/Files"}},
+		"Read":   {"tool_name": "Read", "input": map[string]interface{}{"file_path": "/home/orbit/Documents/a.md"}},
+		"Grep":   {"tool_name": "Grep", "input": map[string]interface{}{"pattern": "x", "path": "/home/orbit/Documents"}},
 		"Glob":   {"tool_name": "Glob", "input": map[string]interface{}{"pattern": "**/*.md", "path": "/run/orbit-files/drive"}},
-		"ls":     {"tool_name": "Bash", "input": map[string]interface{}{"command": "ls -la ~/Files"}},
-		"cat":    {"tool_name": "Bash", "input": map[string]interface{}{"command": "cat /home/orbit/Files/a.md | grep -n x 2>/dev/null"}},
+		"ls":     {"tool_name": "Bash", "input": map[string]interface{}{"command": "ls -la ~/Documents"}},
+		"cat":    {"tool_name": "Bash", "input": map[string]interface{}{"command": "cat /home/orbit/Documents/a.md | grep -n x 2>/dev/null"}},
 		"find":   {"tool_name": "Bash", "input": map[string]interface{}{"command": "find /run/orbit-files/drive -name '*.md' | wc -l"}},
-		"stat":   {"tool_name": "Bash", "input": map[string]interface{}{"command": "stat /home/orbit/Files/a.md 2>&1"}},
-		"to tmp": {"tool_name": "Bash", "input": map[string]interface{}{"command": "cat ~/Files/a.md > /tmp/a.md"}},
+		"stat":   {"tool_name": "Bash", "input": map[string]interface{}{"command": "stat /home/orbit/Documents/a.md 2>&1"}},
+		"to tmp": {"tool_name": "Bash", "input": map[string]interface{}{"command": "cat ~/Documents/a.md > /tmp/a.md"}},
 	}
 }
 
@@ -158,7 +160,7 @@ func TestClaudeDefaultModeDriveWritesStillAsk(t *testing.T) {
 	url, filed, _ := approvalDoor(t, 0, `{"status":"DENIED","message":"not now"}`)
 	srv := &mcpServer{allowPermissionPrompt: true, sessionID: "sess-default", t: NewTransport(url, "tok"),
 		permissionMode: planModeIs("default")}
-	if answer := promptAnswer(t, srv, planDriveWrites()["Write ~/Files"]); answer["behavior"] != "deny" ||
+	if answer := promptAnswer(t, srv, planDriveWrites()["Write ~/Documents"]); answer["behavior"] != "deny" ||
 		answer["message"] != "not now" || filed.Load() != 1 {
 		t.Fatalf("a denied Default-mode drive write was answered %v with %d cards", answer, filed.Load())
 	}
@@ -208,7 +210,7 @@ func TestPlanDriveWriteFollowsLinks(t *testing.T) {
 	t.Cleanup(func() { driveParentPath, driveMountPath, driveHomePath = oldParent, oldMount, oldHome })
 	driveParentPath = filepath.Join(dir, "run", "orbit-files")
 	driveMountPath = filepath.Join(driveParentPath, "drive")
-	driveHomePath = filepath.Join(dir, "home", "orbit", "Files")
+	driveHomePath = filepath.Join(dir, "home", "orbit", "Documents")
 	if err := os.MkdirAll(filepath.Join(driveMountPath, "Proj"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -230,8 +232,8 @@ func TestPlanDriveWriteFollowsLinks(t *testing.T) {
 	for _, path := range []string{
 		filepath.Join(elsewhere, "new.md"),
 		filepath.Join(elsewhere, "deeper", "new.md"),
-		"~/Files/Proj/a.md",
-		filepath.Join(dir, "work", "..", "home", "orbit", "Files", "a.md"),
+		"~/Documents/Proj/a.md",
+		filepath.Join(dir, "work", "..", "home", "orbit", "Documents", "a.md"),
 	} {
 		if !planDriveWrite("Write", map[string]interface{}{"file_path": path}) {
 			t.Errorf("Write %s is not a drive write", path)
@@ -255,22 +257,22 @@ func TestKimiPlanModeRefusesDriveWritesUnasked(t *testing.T) {
 	}
 	plan := &ClaimedSession{Agent: AgentExecConfig{PermissionMode: "plan", AllowedTools: []string{"Edit", "Write"}}}
 	for name, input := range map[string]map[string]interface{}{
-		"Bash":  {"command": "echo x > ~/Files/a.txt"},
+		"Bash":  {"command": "echo x > ~/Documents/a.txt"},
 		"Edit":  {"file_path": "/run/orbit-files/drive/a.txt"},
-		"Write": {"path": "/home/orbit/Files/b.txt"},
+		"Write": {"path": "/home/orbit/Documents/b.txt"},
 	} {
 		if got, decided := kimiAutomaticPermissionOption(plan, name, input, options, ""); got != "reject" || !decided {
 			t.Errorf("Plan %s into the drive = %q, %t; want reject, true", name, got, decided)
 		}
 	}
-	if got, decided := kimiAutomaticPermissionOption(plan, "Bash", map[string]interface{}{"command": "cat ~/Files/a.txt"}, options, ""); decided {
+	if got, decided := kimiAutomaticPermissionOption(plan, "Bash", map[string]interface{}{"command": "cat ~/Documents/a.txt"}, options, ""); decided {
 		t.Errorf("Plan read of the drive was decided %q, want it left to the user as before", got)
 	}
 	if got, decided := kimiAutomaticPermissionOption(plan, "Bash", map[string]interface{}{"command": "touch a.go"}, options, ""); decided {
 		t.Errorf("Plan write to the checkout was decided %q, want it left to the user as before", got)
 	}
 	def := &ClaimedSession{Agent: AgentExecConfig{PermissionMode: "default"}}
-	if got, decided := kimiAutomaticPermissionOption(def, "Bash", map[string]interface{}{"command": "echo x > ~/Files/a.txt"}, options, ""); decided {
+	if got, decided := kimiAutomaticPermissionOption(def, "Bash", map[string]interface{}{"command": "echo x > ~/Documents/a.txt"}, options, ""); decided {
 		t.Errorf("Default drive write was decided %q, want the card as before", got)
 	}
 }
@@ -294,7 +296,7 @@ func TestCursorPlanModeRefusesDriveWritesEvenUnderAnAllowRule(t *testing.T) {
 		return got, len(rig.cards)
 	}
 	for _, allowAll := range []bool{false, true} {
-		if got, cards := run("plan", "touch /home/orbit/Files/x", allowAll); !cursorJSONEqual(t, got, []string{cursorRejectOnce}) || cards != 0 {
+		if got, cards := run("plan", "touch /home/orbit/Documents/x", allowAll); !cursorJSONEqual(t, got, []string{cursorRejectOnce}) || cards != 0 {
 			t.Errorf("Plan drive write (allow rule %t) answered %q with %d cards, want reject and none", allowAll, got, cards)
 		}
 	}
@@ -303,7 +305,7 @@ func TestCursorPlanModeRefusesDriveWritesEvenUnderAnAllowRule(t *testing.T) {
 		t.Errorf("Plan write elsewhere under an allow rule answered %q, want it allowed as before", got)
 	}
 	// Accept Edits still asks a person about a drive command.
-	if got, cards := run("acceptEdits", "touch /home/orbit/Files/x", false); !cursorJSONEqual(t, got, []string{cursorAllowOnce}) || cards != 1 {
+	if got, cards := run("acceptEdits", "touch /home/orbit/Documents/x", false); !cursorJSONEqual(t, got, []string{cursorAllowOnce}) || cards != 1 {
 		t.Errorf("Accept Edits drive write answered %q with %d cards, want the card and its allow", got, cards)
 	}
 }

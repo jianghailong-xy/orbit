@@ -346,7 +346,7 @@ Try asking: *"Keep this screenshot with the task."*
 
 | Step | MCP | CLI | Approval | Why |
 | --- | --- | --- | --- | --- |
-| 1 | `file_upload` | `orbit file upload` | none | Keep a file from this session's checkout, uploads directory or a mounted Orbit Files drive. |
+| 1 | `file_upload` | `orbit file upload` | none | Keep a file from this session's checkout, uploads directory or a mounted Documents drive. |
 | 2? | `file_list` | `orbit file list` | none | What this task's sessions have uploaded. |
 | 3? | `file_fetch` | `orbit file fetch` | none | Read a file back by id. |
 | 4? | `drive_put` | `orbit drive put` | none | Keep a local file on the owner's drive. |
@@ -457,7 +457,7 @@ Agent tools on a session counts each family as that session's engine lists it. T
 | Task lists (6) | `tasklist_create`, `tasklist_delete`, `tasklist_get`, `tasklist_list`, `tasklist_propose_dag`, `tasklist_update` |
 | Schedules (12) | `condition_get`, `schedule_create`, `schedule_delete`, `schedule_end`, `schedule_get`, `schedule_list`, `schedule_pause`, `schedule_resume`, `schedule_run_now`, `schedule_run_report`, `schedule_run_stop`, `schedule_update` |
 | Waits (6) | `task_await`, `watch_cancel`, `watch_create`, `watch_get`, `watch_list`, `watch_update` |
-| Files (9) | `drive_delete`, `drive_get`, `drive_list`, `drive_move`, `drive_put`, `file_fetch`, `file_list`, `file_pin`, `file_upload` |
+| Documents (9) | `drive_delete`, `drive_get`, `drive_list`, `drive_move`, `drive_put`, `file_fetch`, `file_list`, `file_pin`, `file_upload` |
 | SubAgents (1) | `subagent_rate` |
 | Background jobs (5) | `bg_kill`, `bg_list`, `bg_output`, `bg_run`, `schedule_wakeup` |
 | Questions for you (8) | `ask_owner`, `notify`, `open_item_hand_over`, `request_owner_action`, `settings_get`, `settings_propose`, `task_request_confirmation`, `withdraw_owner_request` |

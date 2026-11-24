@@ -80,7 +80,7 @@ Usage:
   orbit watch <command>             Wait on Orbit tasks and sessions without polling
   orbit wiki <command>              Read the Orbit wiki and propose to it
   orbit file <command>              Keep files in Orbit instead of in the repository
-  orbit drive <command>             Work with the owner's Orbit Files drive
+  orbit drive <command>             Work with the owner's Documents drive
   orbit subagent <command>          Rate a SubAgent run this session started
   orbit secret exec NAME -- CMD     Run CMD with a secret the owner delivered to this runner
   orbit notify --message TEXT       Alert this account's devices with a line you write
@@ -968,7 +968,7 @@ func cmdRun() {
 		fmt.Fprintln(os.Stderr, "managed runner instance:", err)
 		os.Exit(1)
 	}
-	// A runner that receives the Orbit Files drive shows it to its agents as ~/Files (drive_link.go).
+	// A runner that receives the Documents drive shows it to its agents as ~/Documents (drive_link.go).
 	ensureDriveLink(func(format string, args ...interface{}) { fmt.Fprintf(os.Stderr, format+"\n", args...) })
 	// A managed runner's volume has to survive its node's power loss (volume_durability.go): before
 	// anything runs Git there, it looks at what the last stop left.

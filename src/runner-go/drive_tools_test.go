@@ -37,7 +37,7 @@ func fakeDriveMount(t *testing.T, mounted bool) {
 }
 
 func TestDrivePathNormalization(t *testing.T) {
-	for _, p := range []string{"/Proj/r.md", "Proj/r.md", "~/Files/Proj/r.md", "/home/orbit/Files/Proj/r.md", "/run/orbit-files/drive/Proj/r.md"} {
+	for _, p := range []string{"/Proj/r.md", "Proj/r.md", "~/Documents/Proj/r.md", "/home/orbit/Documents/Proj/r.md", "~/Files/Proj/r.md", "/home/orbit/Files/Proj/r.md", "/run/orbit-files/drive/Proj/r.md"} {
 		if got, err := normalizeDrivePath(p); err != nil || got != "/Proj/r.md" {
 			t.Errorf("normalize %q = %q, %v", p, got, err)
 		}

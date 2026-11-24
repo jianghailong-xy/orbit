@@ -13,7 +13,7 @@
  *     runner of the same account (an account has one Cloud runner, so B is self-registered and its daemon presents the
  *     runner credential, which the door also takes). Each daemon reaches the apiserver through a fault proxy that can
  *     refuse connections, hold them unanswered, or drop a commit's answer after the door applied it.
- *   - `$F` is `~/Files`, a symlink to `<root>/drive` as on a runner, so the rows give `$F/` where §5.9 does. The mounts
+ *   - `$F` is `~/Documents`, a symlink to `<root>/drive` as on a runner, so the rows give `$F/` where §5.9 does. The mounts
  *     sit outside /tmp, where vim's default backupskip would change row 20.
  *   - "Trash" is the owner's Trash as the owner routes list it (a personal access token holding `files`).
  *   - DRIVE_MOUNT_E2E_SCALE=full runs the sizes §5.9 names (5 GiB, 5 × 900 MiB with a 1 GiB spool, a 3 GiB zip member,
@@ -201,7 +201,7 @@ interface Runner {
   root: string; // /run/orbit-files
   drive: string; // /run/orbit-files/drive
   home: string; // /home/orbit
-  F: string; // ~/Files
+  F: string; // ~/Documents
   spool: string;
   tokenFile: string;
   proxy: FaultProxy;
@@ -430,10 +430,10 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
       }
     }
     const r: Runner = {
-      name, id, dir, root, drive: path.join(root, 'drive'), home, F: path.join(home, 'Files'), spool: path.join(dir, 'spool'),
+      name, id, dir, root, drive: path.join(root, 'drive'), home, F: path.join(home, 'Documents'), spool: path.join(dir, 'spool'),
       tokenFile, proxy, podUid: pod, cgroup, args: extra, log: '',
     };
-    // ~/Files is a symlink to the drive, as the runner's entrypoint makes it (§6.1).
+    // ~/Documents is a symlink to the drive, as the runner's entrypoint makes it (§6.1).
     spawnSync('ln', ['-sfn', r.drive, r.F]);
     lchownSync(r.F, AGENT_UID, AGENT_UID);
     return r;
@@ -1418,7 +1418,7 @@ except OSError as e:
     const saved = spawnSync('ls', [unsent], { encoding: 'utf8' }).stdout.trim().split('\n').filter((f) => f.endsWith('w49.txt'));
     assert.equal(saved.length, 1, 'unsent/ holds its bytes');
     assert.equal(readFileSync(path.join(unsent, saved[0]), 'utf8'), 'kept bytes\n');
-    assert.match(errorsLog(a), new RegExp(`EIO close /home/orbit/Files/w49\\.txt: .*kept in /run/orbit-files/unsent/${saved[0].replace(/[.]/g, '\\.')}`));
+    assert.match(errorsLog(a), new RegExp(`EIO close /home/orbit/Documents/w49\\.txt: .*kept in /run/orbit-files/unsent/${saved[0].replace(/[.]/g, '\\.')}`));
     a.proxy.set('pass');
     await waitFor('back online', () => status(a).connected === true, 30_000);
     ok(await sh(a, 'echo after > $F/after49.txt && cat $F/after49.txt'), 'reads and writes work without a remount');
@@ -1549,11 +1549,11 @@ f = open('$F/long52.log', 'w'); f.write('one line\\n'); f.flush(); time.sleep(70
   });
 
   // Row 56 (docs/orbit-files-drive-technical-design.md §5.9, §7.2): for each engine's own sandbox, a process started
-  // under it writes and reads ~/Files, the daemon is SIGKILLed, the parent remounts, and the SAME process writes and reads
+  // under it writes and reads ~/Documents, the daemon is SIGKILLed, the parent remounts, and the SAME process writes and reads
   // again. Cursor's is bwrap with the parent bound (cursor_sandbox.go wrap); Codex's is `codex sandbox`, whose writable
   // roots are the ones codexSandboxPolicy names. Claude Code, OpenCode, Antigravity, Kimi and DSH run no OS sandbox of
   // their own on Linux (their grants are launch arguments and permission rules), so their process is a plain one.
-  await row('56', 'each engine\'s sandbox keeps ~/Files across a remount', async (d) => {
+  await row('56', 'each engine\'s sandbox keeps ~/Documents across a remount', async (d) => {
     const probe = (name: string) => `n=${name}
       echo "before-$n" > "$F/e56-$n.txt" && echo "before write ok" && cat "$F/e56-$n.txt" && echo "before read ok" || echo "before FAILED"
       sleep 3

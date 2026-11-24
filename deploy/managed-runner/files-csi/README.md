@@ -3,7 +3,7 @@
 The node plugin that gives each managed runner Pod its Orbit Files drive (docs/orbit-files-drive-technical-design.md
 §6.1). The runner container receives one plain directory, `/run/orbit-files`, with HostToContainer propagation; the
 drive's FUSE mount sits below it at `drive/`, made by the plugin, never in the container. The runner makes
-`/home/orbit/Files` a link to it (`src/runner-go/drive_link.go`). Source: `src/drive-mount` (the `csi` command and
+`/home/orbit/Documents` a link to it (`src/runner-go/drive_link.go`). Source: `src/drive-mount` (the `csi` command and
 packages `csi` and `parent`).
 
 | File | What it is |

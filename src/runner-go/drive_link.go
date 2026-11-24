@@ -7,10 +7,10 @@ import (
 	"time"
 )
 
-// ensureDriveLink makes ~/Files the Orbit Files drive on a runner that receives it (docs/orbit-files-drive-technical-
-// design.md §6.1): /home/orbit/Files a symlink to /run/orbit-files/drive, the mount the CSI plugin keeps below the plain
+// ensureDriveLink makes ~/Documents the Documents drive on a runner that receives it (docs/orbit-files-drive-technical-
+// design.md §6.1): /home/orbit/Documents a symlink to /run/orbit-files/drive, the mount the CSI plugin keeps below the plain
 // /run/orbit-files directory. Made at every start, so a link an agent removed is back after the runner restarts
-// (§5.9 row 61). Whatever else is at that name is kept, as Files.local-<time>, and the move logged. A runner without
+// (§5.9 row 61). Whatever else is at that name is kept, as Documents.local-<time>, and the move logged. A runner without
 // /run/orbit-files (every self-registered one) is not touched.
 func ensureDriveLink(logf func(format string, args ...interface{})) {
 	if info, err := os.Stat(filepath.Dir(driveMountPath)); err != nil || !info.IsDir() {
@@ -28,16 +28,16 @@ func ensureDriveLink(logf func(format string, args ...interface{})) {
 			kept = fmt.Sprintf("%s.local-%s-%d", driveHomePath, time.Now().UTC().Format("20060102T150405Z"), n)
 		}
 		if err := os.Rename(driveHomePath, kept); err != nil {
-			logf("cannot make %s the Orbit Files drive: moving what is there aside failed: %v", driveHomePath, err)
+			logf("cannot make %s the Documents drive: moving what is there aside failed: %v", driveHomePath, err)
 			return
 		}
-		logf("moved what was at %s to %s: %s is the Orbit Files drive", driveHomePath, kept, driveHomePath)
+		logf("moved what was at %s to %s: %s is the Documents drive", driveHomePath, kept, driveHomePath)
 	}
 	if err := os.MkdirAll(filepath.Dir(driveHomePath), 0o755); err != nil {
-		logf("cannot make %s the Orbit Files drive: %v", driveHomePath, err)
+		logf("cannot make %s the Documents drive: %v", driveHomePath, err)
 		return
 	}
 	if err := os.Symlink(driveMountPath, driveHomePath); err != nil {
-		logf("cannot make %s the Orbit Files drive: %v", driveHomePath, err)
+		logf("cannot make %s the Documents drive: %v", driveHomePath, err)
 	}
 }
