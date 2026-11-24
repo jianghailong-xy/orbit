@@ -142,7 +142,7 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
   const as = at('runner/documents');
   const q = encodeURIComponent;
 
-  /** What `drive_put` does: mkdir -p of the folder, create or overwrite, one staging, its chunks, one commit. */
+  /** What `documents_put` does: mkdir -p of the folder, create or overwrite, one staging, its chunks, one commit. */
   const put = async (
     token: string, drivePath: string, bytes: Buffer, commitId = randomUUID(), headers: Record<string, string> = {}, prefix = 'runner/documents',
   ) => {
