@@ -21,6 +21,7 @@ import { PublicIdPipe } from '../common/public-id';
 import { PrismaService } from '../prisma/prisma.service';
 import { WikiProposeDto } from '../wiki/dto';
 import { WikiChatDrafts } from '../wiki/wiki-chat-drafts';
+import { readWikiChat } from '../wiki/wiki-chat-read';
 import { registerWikiNote, wikiImportPrincipal, WikiNoteDto, WikiSessionNoteDto, writeSessionNote } from '../wiki/wiki-import';
 import { createWikiImportJob, readWikiImportJob, wikiImportExecutor, WikiImportJobDto } from '../wiki/wiki-import-jobs';
 import { flagParam, listParam, unavailableSearch, WikiRetrieval } from '../wiki/wiki-retrieval';
@@ -201,6 +202,48 @@ export class RunnerWikiController {
   }
 
   /**
+   * `wiki_read` (contract `chat.read`): a wiki chat's read of its space — the contents, a search, a document or one section
+   * of it, or a card of this chat — opening with the header that says it is a view and not a source, and cut at
+   * `chat.rules.readMaxChars` with `more`. A chat's alone, as wiki_draft is: any other session is refused
+   * WIKI_SESSION_EXCLUDED, and so is a session that verifies, forems or judges work. The entries the answer's sentences came
+   * through are recorded as an exposure of channel get (`exposureRules.reads`).
+   */
+  @Get('read')
+  async read(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Query('q') q?: string,
+    @Query('doc') doc?: string,
+    @Query('section') section?: string,
+    @Query('draft') draft?: string,
+    @Query('more') more?: string,
+  ) {
+    const sessionId = await this.callingSession(runner, callingSessionId);
+    if (!sessionId) {
+      throw new BadRequestException(
+        'missing session context: wiki_read reads the wiki of the chat it is called in, so this door needs X-Orbit-Session-Id',
+      );
+    }
+    await this.assertNotExcluded(sessionId);
+    const spaceId = await this.wiki.resolveSpaceForCall(runner.ownerId, sessionId, null);
+    const chat = await this.chatOf(runner.ownerId, sessionId, spaceId);
+    if (!chat) {
+      throw new WikiRefusalError({
+        code: 'WIKI_SESSION_EXCLUDED',
+        message: 'wiki_read works only in a wiki chat: this session is no wiki chat. What the wiki knows is read with wiki_search '
+          + 'and wiki_get.',
+      });
+    }
+    const one = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined);
+    const read = await readWikiChat(this.prisma, {
+      ownerId: runner.ownerId, spaceId: chat.spaceId, sessionId,
+      q: one(q), doc: one(doc), section: one(section), draft: one(draft), more: one(more),
+    });
+    await this.recordExposure(runner.ownerId, sessionId, 'get', read.exposed);
+    return read.answer;
+  }
+
+  /**
    * The space a calling session is a wiki chat of (contract `chat.binding.is`), or null for a session that is no chat. A
    * chat writes its cards into its own space, which its workspace must still be in: the read boundary is a chat's too.
    */
@@ -211,7 +254,7 @@ export class RunnerWikiController {
     if (session.wikiChatSpaceId !== spaceId) {
       throw new WikiRefusalError({
         code: 'WIKI_SPACE_UNBOUND',
-        message: "This chat's workspace is no longer in the wiki space the chat belongs to, so nothing can be drafted for it: "
+        message: "This chat's workspace is no longer in the wiki space the chat belongs to, so nothing can be read or drafted for it: "
           + 'the owner chooses where the space\'s chats run again in Wiki settings.',
       });
     }
