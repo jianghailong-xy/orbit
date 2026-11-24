@@ -281,6 +281,7 @@ func spawnClaude(ctx context.Context, job *ClaimedSession, execDir string, args 
 	// Where `orbit mcp` (a child of this process) reaches the runner to start a
 	// background job the runner will own (bgJobEnvPairs).
 	cmd.Env = append(cmd.Env, bgJobEnvPairs(job.SessionID)...)
+	cmd.Env = memoryToolClaudeEnv(cmd.Env)
 	// On the Orbit Cloud runner with the browser on, a tool the agent runs opens its pages there (browser_opener.go).
 	cmd.Env = browserOpenerEnv(cmd.Env, job.BrowserEnabled)
 	// A claude that does not talk to Anthropic runs while the region check answers blocked, with its nonessential
