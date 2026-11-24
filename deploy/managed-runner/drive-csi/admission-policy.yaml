@@ -1,0 +1,41 @@
+# Who may name the driver (docs/drive-technical-design.md §6.1, review B13), layer 1 of 3: cluster-wide,
+# no Pod outside the managed-runner namespace may have a volume of drive.orbit.dev. Orbit's webhook answers only for
+# the managed namespace (../admission/pod-admission-webhook.template.json), so it cannot be this guard. Inside that
+# namespace the webhook allows exactly one such volume, naming the Pod's own runner (layer 2), and the plugin checks
+# the Pod's namespace again (layer 3).
+#
+# Replace __MANAGED_RUNNER_NAMESPACE__ with the profile's kubernetes.namespace. Needs Kubernetes 1.30 or later
+# (ValidatingAdmissionPolicy v1); k3s v1.36 has it.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: orbit-drive-driver
+  labels:
+    app.kubernetes.io/name: orbit-drive-csi
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+  validations:
+    - expression: >-
+        request.namespace == '__MANAGED_RUNNER_NAMESPACE__' ||
+        !has(object.spec.volumes) ||
+        object.spec.volumes.all(v, !has(v.csi) || v.csi.driver != 'drive.orbit.dev')
+      message: >-
+        orbit-drive-driver: only a managed runner Pod in namespace __MANAGED_RUNNER_NAMESPACE__ may have a
+        drive.orbit.dev volume
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: orbit-drive-driver
+  labels:
+    app.kubernetes.io/name: orbit-drive-csi
+spec:
+  policyName: orbit-drive-driver
+  validationActions: [Deny]

@@ -55,7 +55,7 @@ test('both dispatch paths copy the task inputs into the run', () => {
   // COPIES, never moves — the whole point. An implementation that reassigned `taskId` would empty
   // the task on its first run, so the template must never appear on the left of a write here.
   assert.doesNotMatch(TASKS_SERVICE, /data: \{ taskId: null \}/);
-  // And a copy is a ROW naming the template's stored bytes, never the bytes again (docs/documents-design.md
+  // And a copy is a ROW naming the template's stored bytes, never the bytes again (docs/drive-design.md
   // §2.1): the copy neither reads `data` nor writes it, and names what `referenceOf` answers.
   const copy = TASKS_SERVICE.slice(
     TASKS_SERVICE.indexOf('private async copyTaskAttachments('),
@@ -106,7 +106,7 @@ suite('a task keeps its inputs across runs, and a copy cannot also be a template
       creatorType: 'USER', creatorId: ownerId, completionCriterion: 'EVIDENCE_JUDGMENT',
     },
   });
-  // An input uploaded since Documents (0462): its bytes in the file store under their sha256, which the
+  // An input uploaded since Drive (0462): its bytes in the file store under their sha256, which the
   // row names, and none of them in the row.
   const sha256 = createHash('sha256').update(new Uint8Array([1, 2, 3])).digest('hex');
   await db.fileBlob.upsert({

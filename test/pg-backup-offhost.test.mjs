@@ -123,8 +123,8 @@ function fingerprint(dir) {
  * if `server.warns`. `locked`, given the directories, names a directory of the target and the mode it has for the length of each poll.
  */
 function round({ prepare, system = CLUSTER, due = [], database = 'up', interval = 86_400, rsyncFailsOn = null, cut = null, server = null, locked = null, mirror = false, bucketCopyFails = false, database_container = null, archiver = 'f|-|0', target = undefined, legacyNames = false }) {
-  // The settings' names, or their names from before the rename to Documents, which the script still reads.
-  const S = legacyNames ? 'ORBIT_FILES_' : 'ORBIT_DOCUMENTS_';
+  // The settings' names, or their older names (`legacyNames: 'documents'` for ORBIT_DOCUMENTS_*, true for ORBIT_FILES_*), which the script still reads.
+  const S = legacyNames === 'documents' ? 'ORBIT_DOCUMENTS_' : legacyNames ? 'ORBIT_FILES_' : 'ORBIT_DRIVE_';
   // The far side has to reach this directory as the unprivileged account when this runs as root, so not through a private TMPDIR.
   const scratch = mkdtempSync(path.join(AS_ROOT ? '/tmp' : tmpdir(), 'pg-backup-offhost-'));
   try {
@@ -1202,7 +1202,7 @@ test('a name that is not a sha256 is not a name: a database cannot aim this anyw
   assert.doesNotMatch(result.log, /pruned/);
 });
 
-// ── The bucket's mirror (ORBIT_DOCUMENTS_S3_MIRROR=1) ───────────────────────────────────────────────────────────────────
+// ── The bucket's mirror (ORBIT_DRIVE_S3_MIRROR=1) ───────────────────────────────────────────────────────────────────
 
 /** A mirror that takes this archive, and a bucket mirror holding these names; the local directory holds `local`. */
 function prepareBucket(names, local = [NAME('f')]) {
@@ -1223,9 +1223,16 @@ test('with the bucket mirrored, a name the database says is due leaves it, and t
   assert.match(result.log, /pruned 1 file\(s\) from .*-bucket/);
 });
 
-test('a host .env from before the rename to Documents (ORBIT_FILES_DIR, ORBIT_FILES_S3_*) mirrors and prunes the same', () => {
+test('a host .env from before the Documents rename (ORBIT_FILES_DIR, ORBIT_FILES_S3_*) mirrors and prunes the same', () => {
   const [gone, neighbour] = [`aa${'1'.repeat(62)}`, `aa${'2'.repeat(62)}`];
   const result = round({ mirror: true, legacyNames: true, due: [gone], prepare: prepareBucket([gone, neighbour]) });
+  assert.deepEqual(onBucket(result), [inCopy(neighbour)], result.log);
+  assert.match(result.log, /pruned 1 file\(s\) from .*-bucket/);
+});
+
+test('a host .env from the Documents days (ORBIT_DOCUMENTS_DIR, ORBIT_DOCUMENTS_S3_*) mirrors and prunes the same', () => {
+  const [gone, neighbour] = [`aa${'1'.repeat(62)}`, `aa${'2'.repeat(62)}`];
+  const result = round({ mirror: true, legacyNames: 'documents', due: [gone], prepare: prepareBucket([gone, neighbour]) });
   assert.deepEqual(onBucket(result), [inCopy(neighbour)], result.log);
   assert.match(result.log, /pruned 1 file\(s\) from .*-bucket/);
 });
@@ -1237,7 +1244,7 @@ test('a name not yet due is not in the due list, so the bucket mirror keeps it t
   assert.doesNotMatch(result.log, /pruned/);
 });
 
-test('without ORBIT_DOCUMENTS_S3_MIRROR=1 the bucket mirror is left alone, whatever is due', () => {
+test('without ORBIT_DRIVE_S3_MIRROR=1 the bucket mirror is left alone, whatever is due', () => {
   const gone = NAME('a');
   const result = round({ due: [gone], prepare: prepareBucket([gone]) });
   assert.deepEqual(onBucket(result), [inCopy(gone)], result.log);

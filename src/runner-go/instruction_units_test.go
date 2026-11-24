@@ -251,12 +251,12 @@ func TestEachShapeIsGivenOnlyTheUnitsThatApplyToIt(t *testing.T) {
 	}
 
 	sub := system(job(func(j *ClaimedSession) { j.Agent.Env[envSubagentRunID] = "run-1" }))
-	if has(sub, projects...) || has(sub, orbitNotifyInstructions, "Commit each logical step", orbitEvidenceFileInstructions, orbitProgressInstructions, orbitDelegateInstructions) {
+	if has(sub, projects...) || has(sub, orbitNotifyInstructions, "Commit each logical step", orbitEvidenceFileInstructions, orbitProgressInstructions, orbitHandoffInstructions) {
 		t.Errorf("a SubAgent is given project, notify, commit, evidence, progress or delegate text:\n%s", sub)
 	}
 
 	check := system(job(func(j *ClaimedSession) { j.Agent.ScheduledCheckOnly = true }))
-	if has(check, projects...) || has(check, "Commit each logical step", orbitEvidenceFileInstructions, orbitProgressInstructions, orbitDelegateInstructions) {
+	if has(check, projects...) || has(check, "Commit each logical step", orbitEvidenceFileInstructions, orbitProgressInstructions, orbitHandoffInstructions) {
 		t.Errorf("a check-only run is given a write instruction it cannot use:\n%s", check)
 	}
 

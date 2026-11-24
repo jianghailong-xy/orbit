@@ -434,7 +434,7 @@ func TestAttachLocalReplyFilesRewritesDrivePaths(t *testing.T) {
 	fakeDriveMount(t, true)
 	var stats int
 	srv := newDriveTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/api/runner/documents/stat" {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/runner/drive/stat" {
 			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 			http.NotFound(w, r)
 			return
@@ -451,9 +451,9 @@ func TestAttachLocalReplyFilesRewritesDrivePaths(t *testing.T) {
 			http.NotFound(w, r)
 		}
 	})
-	text := "[home](" + driveHomePath + "/Proj/r.md) [tilde](~/Documents/Proj/r.md) " +
-		"[resolved](" + driveMountPath + "/Proj/r.md) [missing](~/Documents/absent)"
-	want := "[home](orbit-document:e1) [tilde](orbit-document:e1) [resolved](orbit-document:e1) [missing](~/Documents/absent)"
+	text := "[home](" + driveHomePath + "/Proj/r.md) [tilde](~/Drive/Proj/r.md) " +
+		"[resolved](" + driveMountPath + "/Proj/r.md) [missing](~/Drive/absent)"
+	want := "[home](orbit-drive:e1) [tilde](orbit-drive:e1) [resolved](orbit-drive:e1) [missing](~/Drive/absent)"
 	out := []RunEvent{{Type: evAssistant, Payload: map[string]interface{}{"text": text}}}
 	transport := newCallerTransport(srv.URL, "runner-secret", runnerCallerMCP)
 	attachLocalReplyFiles(context.Background(), transport, fileTestSession, out, []string{t.TempDir()}, newReplyAttachmentIDs())

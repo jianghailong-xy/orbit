@@ -119,8 +119,8 @@ world the session sits in, how the owner answers each card, a fault), the person
 | `X5-plan-mode-write` | Plan | a write asked for in Plan | Orbit refuses it, the agent does not route around it and claims nothing |
 | `I1-wait-await` | unit `wait.use-await` | a coordinator; two tasks running, which end by themselves after 75 s | the wait goes to `task_await` (or `watch_create`) on both; no sleep, shell loop, scheduled wake-up or repeated read |
 | `I2-notify-when-done` | unit `notify.when-asked` | the same; "let me know once it's done", then the watch's wake as turn 2 | the person is told through `notify` after the wake, or by a watch made to notify them |
-| `I3-delegate-subagent` | unit `delegate.use-delegate` | orchestration off; "use a subagent to find out why…" | a SubAgent run is opened with `delegate`; the engine's own sub-agent tool is not used |
-| `I3-delegate-subagent/background` | unit `delegate.use-delegate` | "in the background, have someone look into…" | the same |
+| `I3-delegate-subagent` | unit `handoff.use-orbit` | orchestration off; "use a subagent to find out why…" | a SubAgent run is opened with `delegate`; the engine's own sub-agent tool is not used |
+| `I3-delegate-subagent/background` | unit `handoff.use-orbit` | "in the background, have someone look into…" | the same |
 | `I4-reply-file-link` | unit `files.reply-links` | a log in a directory of its own under `/tmp` | the reply links a copy inside the checkout or the uploads directory, never the file where it lies |
 | `I5-evidence-file-upload` | unit `files.evidence` | a task's run; a test report for its reviewer | the report is kept with `file_upload`, not added or committed to the repository |
 | `I6-progress-report` | unit `progress.report` | a task's run of three items, one at a time | its position is reported with `task_progress_report` |
@@ -195,9 +195,9 @@ words and the tools' answers, so it is a local diagnostic: it is never uploaded 
 
 Every paragraph the runner tells an agent, the primer's included, is a unit of the registry `compose` renders
 (`instructionUnits` in `src/runner-go/instruction_units.go`, by id: `primer.lead` … `primer.rederive`,
-`subagent.engine-private`, `files.reply-links`, `files.evidence`, `drive.tools`, `drive.mount`,
+`files.reply-links`, `files.evidence`, `drive.tools`, `drive.mount`,
 `project.inside-recorded-work`, `project.propose`, `progress.report`, `wait.use-await`, `notify.when-asked`,
-`delegate.use-delegate`, `workflow.use-workflow`, `wiki.search-by-path`, `cli.prefer-mcp`, `help.ask`).
+`handoff.use-orbit`, `workflow.use-workflow`, `wiki.search-by-path`, `cli.orbit-cli`, `help.ask`).
 `--leave-out UNIT,UNIT` (`ORBIT_AGENT_EVAL_LEAVE_OUT`) plays the suite with those units dropped in `compose`, so they
 leave every carrier at once: the engine's own instructions and the MCP server's `initialize`. Only the eval's test
 binary sets the list (`instructionUnitsLeftOut`), so a production runner composes every unit and its text is byte

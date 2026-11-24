@@ -80,24 +80,17 @@ func orbitCLIInstructionExecutable(exe string) string {
 // each value capped at 1,000 tokens, and codexAgentAdditionalContext sends these paragraphs packed
 // into values of at most codexContextValueMaxBytes.
 
-// orbitCLIPreferMCPInstructions closes Orbit's instructions with the CLI's resolved binary path, so an agent cannot
-// accidentally execute a project-local/PATH-shadowed `orbit` program, and with Orbit's tools spelled as the engine
-// shows them.
-const orbitCLIPreferMCPInstructions = "Prefer {{orbit_tools}} (schema-checked, no shell). Inside a session the CLI at `{{cli}}" +
-	"` takes the same approvals and attributes work to you: `{{cli}} guide [topic] --json` or `{{cli}}" +
-	" capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt " +
-	"its MCP tool answers with; `--json` prints the entity alone. Do not run `{{cli}} mcp` directly."
-
-// orbitSubAgentInstructions is §0 rule 1 for the engine's own sub-agents (Claude Code's Agent tool, a Codex sub-agent):
-// they run inside this session, so the person cannot see them and they end with it, as a todo list does. The
-// agent-contract eval measured the need on 2026-11-14 (E6/E7 on Claude Code 2.1.325, claude-sonnet-5-5): asked to
-// have another agent fix a test now, the agent launched its own background sub-agent and told the person the work
-// was handed off, with no Orbit record and no receipt. Measured again on 2026-11-16: told "task_start if task_list shows
-// it recorded, else task_create with startNow or session_create", claude-sonnet-5-5 called no task_list in six runs of
-// six and filed the recorded work a second time, so the paragraph says to look first.
-const orbitSubAgentInstructions = "Your engine's own sub-agents are as private as its plan, so work the person hands to " +
-	"another agent goes to Orbit: look it up with task_list and task_start it if recorded (never file it twice), else " +
-	"task_create with startNow or session_create."
+// orbitCLIUseInstructions is the Orbit CLI in one paragraph: what it is for, the resolved binary path, so an agent cannot
+// accidentally execute a project-local/PATH-shadowed `orbit` program, and Orbit's tools spelled as the engine shows
+// them. It merges the primer's CLI paragraph (primer 1.6.0 and before) with the paragraph that closed the instructions
+// (design §6 step 5b). A refusal there is the same answer because the CLI reaches the same server under the same
+// approvals (§0 rule 8). It names `guide <topic> --json` and `--receipt` because those are what an agent whose MCP
+// server did not start reaches for (X1-mcp-missing-cli-fallback on Codex, 2026-11-24); `capabilities` is in the guide.
+const orbitCLIUseInstructions = "The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations " +
+	"with no MCP tool and commands that outlive this turn; otherwise prefer {{orbit_tools}}. Run it as `{{cli}}`: it " +
+	"reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a " +
+	"missing switch there is the same answer. `{{cli}} guide [topic] --json` gives a recipe's argv; `--receipt` prints " +
+	"a write's receipt. Never run `{{cli}} mcp`."
 
 // orbitReplyFileInstructions says which files a reply can really hand over. The runner uploads a linked
 // file only out of the session's own directories (reply_attachments.go), so an agent that leaves its
@@ -115,7 +108,7 @@ const orbitReplyFileInstructions = "Hand the user a file as `[name](path)`, an i
 	"uploads directory or a git-ignored path."
 
 // orbitEvidenceFileInstructions is where the evidence of a piece of work goes, which is what the repository was for
-// until file_upload (docs/documents-design.md §2.3): 96% of its history was evidence and mocks. It follows
+// until file_upload (docs/drive-design.md §2.3): 96% of its history was evidence and mocks. It follows
 // orbitReplyFileInstructions and repeats its rule: file_upload reads from the same two directories a reply links from
 // (localFileScope), which is why this sentence can lean on the one before it. A log is named as well as the screenshot,
 // because the tool call that printed it is already stored. The FILE check is what spares the file a commit: it binds the
@@ -124,20 +117,20 @@ const orbitEvidenceFileInstructions = "Evidence: cite a command's output by its 
 	"keep screenshots and reports with file_upload rather than in the repository: it reads those same two " +
 	"directories and returns a reply link and the id a FILE check cites."
 
-// The drive paragraphs are the owner's Documents drive, per runner kind (docs/documents-drive-technical-design.md
-// §4.6, §7.3). On Orbit Cloud the drive is mounted at ~/Documents and is used with the shell, so the paragraph says what
+// The drive paragraphs are the owner's Drive, per runner kind (docs/drive-technical-design.md
+// §4.6, §7.3). On Orbit Cloud the drive is mounted at ~/Drive and is used with the shell, so the paragraph says what
 // the mount does not support and where it reports; on every other runner the drive is reached only through the drive
 // tools. Either way agents never see Trash (D11), and verification, judgment and guest-driven turns only read (D9). Kept
 // short: it is in every session's instructions, inside orbitInstructionsMaxBytes. orbitDriveToolInstructions is the
 // paragraph for a runner without the mount, orbitDriveMountInstructions the one for a runner with it (units drive.tools
-// and drive.mount), and neither is given while Documents is off (orbitDocumentsShown).
+// and drive.mount), and neither is given while the drive is off (orbitDocumentsShown).
 // The mount's paragraph names where it reports as {{drive_root}}, which compose renders from the machine
-// (driveParentPath: /run/orbit-documents, or /run/orbit-files of the old driver).
+// (driveParentPath: /run/orbit-drive).
 const (
 	orbitDriveReadOnly         = "Verifying, judging and ORBIT_GUEST turns only read it."
-	orbitDriveToolInstructions = "The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); " +
+	orbitDriveToolInstructions = "The owner's Drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); " +
 		"deletes go to a Trash agents cannot see. " + orbitDriveReadOnly
-	orbitDriveMountInstructions = "~/Documents is the owner's permanent Documents drive; link its files by path. Give ls, find, du ~/Documents/ (a " +
+	orbitDriveMountInstructions = "~/Drive is the owner's permanent Drive; link its files by path. Give ls, find, du ~/Drive/ (a " +
 		"symlink). Copy in with cp -r or rsync -rt (no modes: -a, -p fail on executables; tar x drops the x bit). No " +
 		"links, locks, in-place writes or exec; see {{drive_root}}/errors.log. " + orbitDriveReadOnly
 )
@@ -165,16 +158,16 @@ func orbitDriveGuide() string {
 	}
 	const readOnly = "Verification, judgment and guest-driven turns (a message carrying the ORBIT_GUEST marker) read the drive and do not write it."
 	if !driveMounted() {
-		return "The owner's Documents drive is reached with documents_put, documents_get, documents_list, documents_move, " +
-			"documents_delete and documents_sync, or `orbit documents put|get|ls|mv|rm|sync`, by drive path (/Proj/r.md). " +
-			"documents_put reads only this session's checkout or uploads directory and overwrites with a version; documents_sync " +
-			"copies a whole directory from there once, in the background, skipping files already the same; documents_get saves " +
+		return "The owner's Drive is reached with drive_put, drive_get, drive_list, drive_move, " +
+			"drive_delete and drive_sync, or `orbit drive put|get|ls|mv|rm|sync`, by drive path (/Proj/r.md). " +
+			"drive_put reads only this session's checkout or uploads directory and overwrites with a version; drive_sync " +
+			"copies a whole directory from there once, in the background, skipping files already the same; drive_get saves " +
 			"into the uploads directory. A delete moves the " +
 			"entry to the owner's Trash, which agents cannot see or restore, and no tool shares a drive file. " + readOnly
 	}
-	return "~/Documents (/home/orbit/Documents, mounted at " + driveMountPath + ") is the owner's permanent Documents drive, " +
-		"shared across sessions and runners; link a drive file in a reply by its path. ~/Documents is a symlink: give ls -l, " +
-		"find and du ~/Documents/ with the trailing slash. Copy in with cp -r or rsync -rt: the drive keeps no modes, so cp -a, " +
+	return "~/Drive (/home/orbit/Drive, mounted at " + driveMountPath + ") is the owner's permanent Drive, " +
+		"shared across sessions and runners; link a drive file in a reply by its path. ~/Drive is a symlink: give ls -l, " +
+		"find and du ~/Drive/ with the trailing slash. Copy in with cp -r or rsync -rt: the drive keeps no modes, so cp -a, " +
 		"cp -p and rsync -a report an error and exit non-zero for executables, though the contents are copied, and tar x " +
 		"extracts them without the executable bit. Not " +
 		"supported: hard and symbolic links, mode and owner changes, file locks, shared mmap of a file open for writing, " +
@@ -191,11 +184,12 @@ const orbitWikiPathInstructions = "Before changing a file, use wiki_search with 
 
 // orbitWaitInstructions routes a wait on Orbit's own work to a watch. An agent told to "wait for these
 // tasks" otherwise writes the loop it knows, sleep plus task_get or `orbit task get`, which holds its turn
-// open for the whole wait and dies with the engine. ASCII like the rest of the paragraph.
-const orbitWaitInstructions = "To wait for Orbit work -- tasks reaching a status, sessions finishing a turn -- do not " +
-	"poll with sleep, Bash loops, background jobs or schedule_wakeup: call task_await or session_await (watch_create for " +
-	"other conditions) and end your turn. Orbit holds the watch on its server and starts a turn in this session with a " +
-	"structured payload when the condition holds, even if this engine was recycled in the meantime."
+// open for the whole wait and dies with the engine. One line since design step 5e: what the watch does (Orbit holds it
+// on its server, wakes this session with a structured payload, survives the engine being recycled) is the await
+// tools' descriptions, and their receipt says to end the turn; I1-wait-await passed 10/10 on both engines with the
+// paragraph left out altogether (docs/agent-instructions-eval-baseline.md). ASCII like the rest of the paragraph.
+const orbitWaitInstructions = "To wait for Orbit work, call task_await or session_await (watch_create for other " +
+	"conditions) and end your turn; never poll or sleep for it."
 
 //
 // Only a session spawned with Watch on gets it (unit wait.use-await): one spawned with it off (watch_rollout.go) has
@@ -209,30 +203,29 @@ const orbitWaitInstructions = "To wait for Orbit work -- tasks reaching a status
 const orbitNotifyInstructions = "When the person asked to hear once something is done, tell them with notify when " +
 	"it is: an answer in this conversation reaches them only when they next look."
 
-// orbitDelegateInstructions says when to reach for the delegate tool (subagent.go). Its description says what it
-// does, but nothing said when: in Claude Code it is a deferred MCP tool, seen by name only until ToolSearch loads it,
-// while the engine's own Agent tool is always loaded and does a similar job without Orbit's routing, cost record or
-// runs on another machine, so agents called delegate only when a person asked for it. Measured 2026-11-15: 440 bytes,
-// 98 o200k tokens. ASCII like the rest of the paragraph.
+// orbitHandoffInstructions is how work goes to another agent: the engine's own sub-agents, task_start, task_create
+// and delegate in one paragraph (design §6 step 5). It was three: a sub-agents paragraph (task_start what task_list
+// shows recorded, else task_create or session_create), a delegate paragraph (delegate whenever you would start a
+// subagent) and the hand-off half of the orchestration-off paragraph. Each gave its own answer to "have another agent
+// do this", and on 2026-11-24 Claude Code answered E6 and E7 with delegate in every run, never starting the work
+// already recorded (docs/agent-instructions-eval-baseline.md). The paragraph puts the three in one order: look first,
+// start what is recorded, delegate a piece whose result comes back here, create and start new work of its own.
 //
-// Measured 2026-11-15 in three fresh sessions asked to read production data: each one thought of "the orbit-prod
-// agent", found it with agent_list and used session_create, never delegate. So the paragraph says that workspace
-// is another agent's name, and when delegate beats session_create.
-//
-// Measured 2026-11-19 with headless Claude Code on Opus, Sonnet and Haiku 5.5: when the paragraph only said to
-// prefer delegate "when Orbit should pick the model, record the cost or run the work elsewhere", a request to work
-// in the background or to "use a subagent" went to the engine's own Agent tool. So it now claims both outright.
-const orbitDelegateInstructions = "Use delegate whenever you would start a subagent or run an independent piece in " +
-	"the background, in place of your engine's built-in subagent or Agent tool: Orbit picks the model, records the " +
-	"cost and brings the result back even if this engine is recycled. Use it too to hand work to a cheaper or " +
-	"stronger model than yours, or to run it on another machine (needs: [\"os:darwin\"], or workspace: another " +
-	"agent's name from agent_list). Prefer it to session_create when you only need that piece's result back." +
-	"{{toolsearch:delegate}}"
-
-// The paragraph ends with its Claude Code sentence, {{toolsearch:delegate}}. Cursor, which never shows mcp__orbit__*
-// names, is given the paragraph without it (cursorProfile). Delegate is marked to load up front (subagent.go), so the
-// sentence only matters for a Claude Code that still defers it. Only a top-level session gets the paragraph (unit
-// delegate.use-delegate): a SubAgent is neither offered nor served delegate (mcp.go).
+// What each part was measured to need. The engine's own sub-agents run inside this session, so the person cannot see
+// them and they end with it (E6/E7 on Claude Code 2.1.325, 2026-11-14: the agent launched a background sub-agent and
+// said the work was handed off, with no record). Told "task_start if task_list shows it recorded", claude-sonnet-5-5
+// called no task_list in six runs of six (2026-11-16), so it says to look first. A request to work in the background
+// or to "use a subagent" went to the engine's Agent tool until the text claimed both for delegate (2026-11-19), and
+// agents asked to read another machine's data used session_create with that agent until the text named workspace
+// (2026-11-15). What delegate does (Orbit picks the model, records the cost, brings the result back) is its
+// description's. Only a session that writes to Orbit gets it (unit handoff.use-orbit): a SubAgent is served neither
+// delegate nor the task writes, and a check-only run's writes are refused. Its Claude Code sentence,
+// {{toolsearch:delegate}}, is left out for Cursor, which never shows mcp__orbit__* names (cursorProfile). ASCII.
+const orbitHandoffInstructions = "Hand work to another agent through Orbit, never your engine's own sub-agents or " +
+	"Agent tool, which are as private as its plan. Look with task_list first: task_start work already recorded, never " +
+	"file it twice. Otherwise use delegate for a piece whose result you need back, in the background, on a cheaper or " +
+	"stronger model or on another machine (needs: [\"os:darwin\"], or workspace: an agent's name from agent_list); new " +
+	"work of its own is task_create with startNow.{{toolsearch:delegate}}"
 
 // orbitWorkflowInstructions says when to reach for the workflow tool (subagent_workflow.go), next to delegate's.
 // Measured 2026-11-22: it shipped, a smoke run worked, and no agent ever chose it. Nothing named it, and in Claude Code
@@ -283,13 +276,11 @@ const orbitProgressInstructions = "When this task's position changes -- a new ph
 // of the same paragraph to both kinds of session is what made the proposal read as something to
 // do on every turn rather than something to do rarely, and that is still why the two differ.
 const (
-	orbitProjectInsideInstructions = "You are running one task Orbit has already recorded, so newly discovered work has somewhere to go: file it " +
-		"as a task, saying first what you are filing. It lands under the same project this one belongs to, without your naming it. " +
-		"Work that is a separate undertaking is the user's to start, and you may put it in front of them rather than " +
-		"starting it yourself: project_create raises a confirmation card and waits for the answer, and on a yes this " +
-		"conversation becomes that project's coordinator -- opening the project later comes back here rather than " +
-		"starting a stranger. Filing the task is still the default, and the cheaper one. Nothing is created without " +
-		"the user's yes, and the card is the only place that yes comes from: never create a project another way."
+	// One line since design step 5d: that the card is the only yes, that a yes binds the project to this conversation
+	// as its coordinator, and the bar a project has to clear are project_create's description.
+	orbitProjectInsideInstructions = "File work you discover in this task's run as a task, saying first what you are " +
+		"filing: it lands in this task's project. A separate undertaking is the user's to start, which project_create " +
+		"can propose to them on its card."
 	orbitProjectProposeInstructions = "Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and " +
 		"that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different " +
 		"parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then " +

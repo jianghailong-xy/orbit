@@ -5,8 +5,7 @@ import {
   DRIVE_CSI_DRIVER,
   DRIVE_MOUNT,
   GENERATION_ANNOTATION,
-  LEGACY_DRIVE_CSI_DRIVER,
-  LEGACY_DRIVE_MOUNT,
+  LEGACY_DRIVE_MOUNTS,
   OWNER_ANNOTATION,
   PVC_UID_ANNOTATION,
   RUNNER_ANNOTATION,
@@ -42,15 +41,16 @@ import {
  *   - its owner, runner, PVC UID and generation annotations are the mapping's, and that generation
  *     is reserved: the mapping is STARTING with no Pod recorded and a CREATE_POD pending;
  *   - every container runs the profile's pinned image, it has no ephemeral containers, and its
- *     volumes are only that claim, emptyDirs, its own bootstrap Secret and at most one Documents
- *     drive volume — no host namespaces, host paths or privileged containers. The drive volume
- *     (docs/documents-drive-technical-design.md §6.1, B13) is a `csi` volume of `documents.orbit.dev`
+ *     volumes are only that claim, emptyDirs, its own bootstrap Secret and at most one Drive
+ *     volume — no host namespaces, host paths or privileged containers. The drive volume
+ *     (docs/drive-technical-design.md §6.1, B13) is a `csi` volume of `drive.orbit.dev`
  *     whose attributes are exactly `{ runnerId }` of this mapping, mounted only by the `runner`
- *     container, only at /run/orbit-documents, only with HostToContainer, writable. While Pods from
- *     before the rename drain, the old driver `files.orbit.dev` mounted at /run/orbit-files is
- *     accepted the same way (each driver only at its own path). Outside this namespace the
- *     cluster-wide policy `orbit-documents-driver` refuses the driver
- *     (deploy/managed-runner/documents-csi/admission-policy.yaml), and the plugin checks the namespace too.
+ *     container, only at /run/orbit-drive, only with HostToContainer, writable. While Pods of the
+ *     older drivers drain, `documents.orbit.dev` mounted at /run/orbit-documents and
+ *     `files.orbit.dev` mounted at /run/orbit-files are accepted the same way (each driver only at
+ *     its own path). Outside this namespace the cluster-wide policy `orbit-drive-driver` refuses the
+ *     driver (deploy/managed-runner/drive-csi/admission-policy.yaml), and the plugin checks the
+ *     namespace too.
  *
  * Concurrent creates under the fixed name are left to the API server, which stores one object per
  * name; a create under any other name, or by anyone else, or for a generation that is not reserved,
@@ -147,13 +147,13 @@ export function podImages(pod: Pod | null | undefined): string[] {
   return [...containersOf(pod, 'initContainers'), ...containersOf(pod, 'containers')].map((c) => String(c.image ?? ''));
 }
 
-/** Where each driver the guard accepts is mounted: the Documents driver, and the one from before the rename. */
+/** Where each driver the guard accepts is mounted: the Drive driver, and the older ones while their Pods drain. */
 const DRIVE_MOUNT_OF_DRIVER: Readonly<Record<string, string>> = {
   [DRIVE_CSI_DRIVER]: DRIVE_MOUNT,
-  [LEGACY_DRIVE_CSI_DRIVER]: LEGACY_DRIVE_MOUNT,
+  ...LEGACY_DRIVE_MOUNTS,
 };
 
-/** The mount path of this mapping's Documents drive if `volume` is it (the one CSI volume, naming only its runner), else null. */
+/** The mount path of this mapping's drive if `volume` is it (the one CSI volume, naming only its runner), else null. */
 function driveVolumeMount(volume: PodVolume, mapping: PodAdmissionMapping): string | null {
   const csi = volume.csi as { driver?: unknown; volumeAttributes?: unknown; readOnly?: unknown; fsType?: unknown; nodePublishSecretRef?: unknown } | undefined;
   if (!csi || typeof csi !== 'object' || typeof csi.driver !== 'string' || !Object.hasOwn(DRIVE_MOUNT_OF_DRIVER, csi.driver)) return null;

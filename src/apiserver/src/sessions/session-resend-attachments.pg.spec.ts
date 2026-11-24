@@ -65,7 +65,7 @@ interface Fixture {
 }
 
 /**
- * `stored`: the screenshot as an upload has been kept since Documents (0462) — its bytes in the file
+ * `stored`: the screenshot as an upload has been kept since Drive (0462) — its bytes in the file
  * store, named by sha256, and none in the row. Otherwise a row from before it, its bytes in `data`.
  */
 async function fixture(db: PrismaClient, label: string, status: RunStatus, stored = false): Promise<Fixture> {

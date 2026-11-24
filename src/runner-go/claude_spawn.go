@@ -250,6 +250,9 @@ func spawnClaude(ctx context.Context, job *ClaimedSession, execDir string, args 
 	cmd.Dir = execDir
 	// Start from the runner's own env, then layer the agent's custom env vars on top.
 	cmd.Env = envWithAgent(job.Agent.Env)
+	// The session's Go and npm caches: the runner-owned root every engine's sessions share, as Codex and dsh
+	// sessions get it (cache_root.go), rather than whatever each build picks on its own under /tmp or $HOME.
+	cmd.Env = append(cmd.Env, runnerCacheEnv()...)
 	// Inject session context so the built-in `orbit mcp` server (a child of claude)
 	// knows where it is. The runner token is NOT passed here — `orbit mcp` reads it
 	// from config.json so it never lands in the claude process environment.
@@ -276,6 +279,7 @@ func spawnClaude(ctx context.Context, job *ClaimedSession, execDir string, args 
 	// Where `orbit mcp` (a child of this process) reaches the runner to start a
 	// background job the runner will own (bgJobEnvPairs).
 	cmd.Env = append(cmd.Env, bgJobEnvPairs(job.SessionID)...)
+	cmd.Env = memoryToolClaudeEnv(cmd.Env)
 	// On the Orbit Cloud runner with the browser on, a tool the agent runs opens its pages there (browser_opener.go).
 	cmd.Env = browserOpenerEnv(cmd.Env, job.BrowserEnabled)
 	// A claude that does not talk to Anthropic runs while the region check answers blocked, with its nonessential
@@ -292,7 +296,7 @@ func spawnClaude(ctx context.Context, job *ClaimedSession, execDir string, args 
 	if sp.stderr, err = cmd.StderrPipe(); err != nil {
 		return nil, err
 	}
-	if err := startSessionProcess(cmd); err != nil {
+	if err := startSessionEngine(cmd, job.SessionID); err != nil {
 		return nil, err
 	}
 	return sp, nil

@@ -124,7 +124,7 @@ describe('how a card looks in each state (design §7.3, board 42 ② ③ ④)', 
     ['discarded', { state: 'discarded' }, 'Discarded', 'grey', [], null, true],
     ['not applied', { state: 'not_applied' }, 'Not applied', 'grey', [], null, true],
     ['undone', { state: 'undone' }, 'Undone', 'grey', [], null, true],
-    ['a rewrite drafted', { kind: 'rewrite', label: 'Rewrite from main', state: 'draft' }, 'Draft · Rewrite from main', 'brand', ['rewrite', 'discard'], null, false],
+    ['a rewrite drafted', { kind: 'rewrite', label: 'Rewrite from main', state: 'draft' }, 'Draft · Rewrite from main', 'brand', ['apply', 'discard'], null, false],
     // Its Undo holds until main moves what the section draws on (design §8.4, owner 11-07, C15).
     [
       'a rewrite undone', { kind: 'rewrite', label: 'Rewrite from main', state: 'undone' }, 'Undone', 'grey', [],

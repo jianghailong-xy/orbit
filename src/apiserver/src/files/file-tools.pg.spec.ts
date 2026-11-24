@@ -1,5 +1,5 @@
 /**
- * The doors behind `file_upload`, `file_fetch` and `file_list` (docs/documents-design.md §2.2, §2.3; migration 0464),
+ * The doors behind `file_upload`, `file_fetch` and `file_list` (docs/drive-design.md §2.2, §2.3; migration 0464),
  * held against the production apiserver — `build/main.js`, multer and every guard and pipe in front of the routes — over
  * a real PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty:
  *
@@ -124,8 +124,8 @@ test('the doors behind file_upload, file_fetch and file_list', { skip: !URL, con
   server = await startApiserver(url, jwtSecret, {
     PROVIDER_SECRET_KEY,
     MODEL_CATALOG_URL: 'http://127.0.0.1:9/',
-    ORBIT_DOCUMENTS_BACKEND: 'local',
-    ORBIT_DOCUMENTS_DIR: dir,
+    ORBIT_DRIVE_BACKEND: 'local',
+    ORBIT_DRIVE_DIR: dir,
   });
   const api = server;
   const tempFiles = () => {

@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -244,6 +245,10 @@ type sessionPool struct {
 	// accountSwap is the Claude login swap in progress, nil when none is: every session on one of its
 	// two folders starts no turn until it ends (claude_account_swap_relay.go).
 	accountSwap *poolAccountSwap
+
+	// admissionHold is why this runner takes no new work now, or "" (managed_disk_reserve.go). Read
+	// without p.mu, so whoever sets it never measures anything under the pool's lock.
+	admissionHold atomic.Pointer[string]
 }
 
 func newSessionPool(max int) *sessionPool {
@@ -406,7 +411,7 @@ func (p *sessionPool) admissionOccupancy() (int, []string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	occupied, backgroundOnly := p.admissionOccupancyLocked()
-	if p.drainingForUpdate {
+	if p.drainingForUpdate || p.admissionHoldReason() != "" {
 		return 0, backgroundOnly
 	}
 	return max(0, p.max-occupied), backgroundOnly
@@ -443,7 +448,91 @@ func (p *sessionPool) canClaim() bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	occupied, _ := p.admissionOccupancyLocked()
-	return !p.drainingForUpdate && !p.closedForUpdate && occupied-p.max < p.burst
+	return !p.drainingForUpdate && !p.closedForUpdate && p.admissionHoldReason() == "" && occupied-p.max < p.burst
+}
+
+// idleForTmpSweep says whether nothing is running here that could be using /tmp: no session holds a turn, an
+// engine, a self-driven turn or a reclaim, and no background job runs (managed_tmp.go).
+func (p *sessionPool) idleForTmpSweep() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, s := range p.sessions {
+		if s.active || s.resident || s.selfDrivenTurn {
+			return false
+		}
+	}
+	for _, active := range p.reclaiming {
+		if active {
+			return false
+		}
+	}
+	for _, jobs := range p.bgJobs {
+		if len(jobs) > 0 {
+			return false
+		}
+	}
+	return len(p.hostless) == 0
+}
+
+// setAdmissionHold sets why this runner takes no new work ("" for none) and returns what it was before.
+func (p *sessionPool) setAdmissionHold(reason string) string {
+	if before := p.admissionHold.Swap(&reason); before != nil {
+		return *before
+	}
+	return ""
+}
+
+// admissionHoldReason is why this runner takes no new work now, or "" when it takes work: while it is set the
+// pool offers no capacity (admissionOccupancy) and no reclaimed RUNNING session starts (waitReclaimPermit).
+func (p *sessionPool) admissionHoldReason() string {
+	if reason := p.admissionHold.Load(); reason != nil {
+		return *reason
+	}
+	return ""
+}
+
+// waitReclaimPermit holds the start of a reclaimed RUNNING session until it can take a turn permit as a claim takes
+// one: fewer sessions hold a slot than max, counted as admissionOccupancy counts them but without the sessions still
+// being reclaimed, this one among them (a claim counts those as holding their slots, so none can take the slot meanwhile),
+// memory has room for one more turn (mem), and the data volume is above its free-space reserve (admissionHoldReason,
+// managed_disk_reserve.go). The reclaim's starts call it one at a time (reclaimStarter.run), so each one started is a
+// permit holder the next one counts. It returns when the permit is free, or when ctx ends: a start then still runs, and
+// detaches on the cancelled loop. Each reserve says in the log when it refuses and when it lifts, once per change.
+func (p *sessionPool) waitReclaimPermit(ctx context.Context, mem *turnMemoryGate) {
+	for {
+		p.mu.Lock()
+		free := p.reclaimSlotsTakenLocked() < p.max
+		changed := p.changed
+		p.mu.Unlock()
+		if free && p.admissionHoldReason() == "" && mem.admits() {
+			return
+		}
+		// A permit coming free signals the pool; memory coming back signals nothing, so it is read again.
+		recheck := time.NewTimer(mem.recheckEvery())
+		select {
+		case <-ctx.Done():
+			recheck.Stop()
+			return
+		case <-changed:
+		case <-recheck.C:
+		}
+		recheck.Stop()
+	}
+}
+
+// reclaimSlotsTakenLocked is how many sessions hold a slot for a reclaimed start: every turn permit holder, and every
+// session whose runner-hosted jobs still run.
+func (p *sessionPool) reclaimSlotsTakenLocked() int {
+	occupied := make(map[string]bool, len(p.sessions))
+	for id, s := range p.sessions {
+		if s.active {
+			occupied[id] = true
+		}
+	}
+	for id := range p.backgroundJobCountsLocked() {
+		occupied[id] = true
+	}
+	return len(occupied)
 }
 
 // holdWorktreeForBackgroundJob records one background shell as a live writer of

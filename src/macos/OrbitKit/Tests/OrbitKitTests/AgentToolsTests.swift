@@ -157,7 +157,7 @@ final class AgentToolsTests: XCTestCase {
         XCTAssertEqual(rows.count, 2, "every family but orchestration on one row, orchestration on its own")
         let others = guide.families.filter { $0.id != "orchestration" }
         XCTAssertEqual(rows[0].text, others.map { "\($0.label) \($0.tools?.count ?? 1)" }.joined(separator: " · "))
-        XCTAssertTrue(rows[0].text.hasPrefix("Tasks 21 · Projects 20 · Task lists 6"), rows[0].text)
+        XCTAssertTrue(rows[0].text.hasPrefix("Tasks 21 · Projects 21 · Task lists 6"), rows[0].text)
         XCTAssertEqual(rows[0].word, "Available")
         XCTAssertEqual(rows[0].tone, .ok)
         XCTAssertEqual(rows[1].text, "Sessions, agents and runners · 23")
@@ -173,7 +173,7 @@ final class AgentToolsTests: XCTestCase {
         let partial = AgentTools.toolsRows(try report(["families": #"""
             [{"id": "waits", "served": 1, "total": 6, "reason": "watches"}, {"id": "files", "served": 0, "total": 4}]
             """#]))
-        XCTAssertEqual(partial.map { "\($0.text)|\($0.word)" }, ["Waits 1 of 6|Available", "Files 4|Not listed"])
+        XCTAssertEqual(partial.map { "\($0.text)|\($0.word)" }, ["Waits 1 of 6|Available", "Drive 4|Not listed"])
     }
 
     // MARK: - Instructions

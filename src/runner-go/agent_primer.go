@@ -33,11 +33,11 @@ package main
 // a change to a word is a new agentPrimerVersion, reviewed as a diff.
 
 // agentPrimerVersion is the version of the primer's text. Any change to it is a new version.
-const agentPrimerVersion = "1.5.0"
+const agentPrimerVersion = "1.7.1"
 
 // agentContractVersion is the Agent Contract version the primer was written from: the header of
 // docs/orbit-agent-contract.md and contractVersion in contracts/orbit-agent.contract.json.
-const agentContractVersion = "1.13.0"
+const agentContractVersion = "1.14.0"
 
 // agentPrimerLeadMaxChars is the most the first paragraph may take. It is read on its own: by a
 // client that shows only the beginning of a server's instructions, and by a model skimming them.
@@ -86,21 +86,16 @@ const (
 		"and why. A refusal or a declined card is final on every surface; a chat or a card still waiting is not a no, " +
 		"and its receipt says what to do next."
 
-	agentPrimerCLI = "The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with " +
-		"no MCP tool and commands that outlive this turn, run by the absolute path Orbit gives you. It reaches " +
-		"the same server under the same approvals: a refusal, a declined card or a missing switch there is the same " +
-		"answer."
-
 	agentPrimerReceipts = "Only a structured receipt counts: a write happened when it says ok: true and outcome: written; " +
 		"read and dry_run wrote nothing. Any other outcome is ok: false; except on a chat, follow its error.retry " +
 		"(resend, reread_first, fix_input, do_not_retry, wait) and its notes. Key task_create and task_create_batch with " +
 		"an idempotencyKey derived from the work. Name an Orbit object to the user by its receipt's link, never a bare " +
 		"id: `[Fix login redirect](orbit-task:<id>)`."
 
+	// Its hand-off half (task_start what task_list shows recorded, else record it) is the handoff unit's since 1.6.0.
 	agentPrimerOrchestration = "Session, agent and runner tools exist only while the account's Session " +
-		"orchestration switch is on. Without session_* tools, do not try `orbit session`: task_start the work if " +
-		"task_list shows it recorded, else record it as a task, tell the user the switch is in Settings -> Session " +
-		"orchestration, and never claim a delegation."
+		"orchestration switch is on. Without session_* tools, do not try `orbit session` and never claim a delegation: " +
+		"tell the user the switch is in Settings -> Session orchestration."
 
 	agentPrimerSettings = "When a person's problem is one of their own Settings, call settings_get, then settings_propose " +
 		"the change; for a key it refuses, link the row it returns instead of describing where it is."
@@ -114,7 +109,6 @@ const agentPrimer = agentPrimerLead + "\n\n" +
 	agentPrimerObjects + "\n\n" +
 	agentPrimerStart + "\n\n" +
 	agentPrimerCards + "\n\n" +
-	agentPrimerCLI + "\n\n" +
 	agentPrimerReceipts + "\n\n" +
 	agentPrimerOrchestration + "\n\n" +
 	agentPrimerSettings + "\n\n" +

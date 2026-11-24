@@ -129,16 +129,16 @@ public enum NavNode: Hashable, Sendable {
     case wikiPlanDoc(slug: String, version: Int?)
     /// One of its sections — what it covers and where its material comes from (mock 22 ④⑤): 0-based.
     case wikiPlanSection(slug: String, index: Int, version: Int?)
-    /// A folder of Documents on a phone (docs/mocks/documents, 01-ios ③), pushed from its row; its name rides along
+    /// A folder of Drive on a phone (docs/mocks/drive, 01-ios ③), pushed from its row; its name rides along
     /// so the title is there before the folder's read.
-    case documentsFolder(entryID: String, name: String)
+    case driveFolder(entryID: String, name: String)
     /// A file's page: its preview, who last wrote it and what can be done with it (01-ios ④⑤).
-    case documentsFile(entryID: String)
+    case driveFile(entryID: String)
     /// A file's earlier versions, each kept in Trash (D17), pushed from its page's Earlier versions row.
-    case documentsVersions(entryID: String)
+    case driveVersions(entryID: String)
     /// Trash and Storage, the last rows of the drive's top level (01-ios ②, ⑪, ⑬).
-    case documentsTrash
-    case documentsStorage
+    case driveTrash
+    case driveStorage
     /// A session someone else owns and invited this account to reply in: the guest view
     /// (docs/session-guests-design.md §4). Its Shared with me row is its destination, so it leads like
     /// a list — the drawer's hamburger, not back — and a 404 from the owner's read of a session id

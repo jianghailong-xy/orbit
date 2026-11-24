@@ -56,10 +56,23 @@ var agentPrimerHashes = map[string]string{
 	// 1.4.6 is 1.4.5 with the first line naming Agent Contract 1.13.0 (the drive tools are documents_*, the CLI
 	// `orbit documents`, the link orbit-document:, the old names still served); no rule changed.
 	"1.4.6": "e0ec22b359cb36138e91b08ba216b9455a3d3a957df002d197e2f5722d883a60",
+	// 1.4.7 is 1.4.6 with the first line naming Agent Contract 1.14.0 (the drive tools are drive_* again, the CLI
+	// `orbit drive`, the link orbit-drive:, the documents_* names still served); no rule changed.
+	"1.4.7": "c36f8a00f568741b4c34a1390d82fc4b1f4b93885f8205717506a50bd5359032",
 	// 1.5.0 (instruction-units step 4): what a card's answer and a receipt's error mean moved into the receipt's notes,
 	// and a receipt carries its entity's link. The cards paragraph keeps one sentence that a refusal is final on every
 	// surface and points at the receipt; the receipts paragraph names the link and the notes. No rule changed.
 	"1.5.0": "bd5101be18ab11b7070a2f97dff2415b881cceb133daff2382fcc6dcf6e71fcb",
+	// 1.6.0 (instruction-units step 5a): the orchestration paragraph's hand-off half (task_start what task_list shows
+	// recorded, else record it) moved into the handoff unit, which merges it with the sub-agents and delegate
+	// paragraphs; the paragraph keeps the switch, `orbit session` and no claimed delegation. No rule changed.
+	"1.6.0": "815100a9b5f2ca99c0f71aa4c5954d386ee22202a8a4c1a910c78a1ed3b7a2c0",
+	// 1.7.0 (instruction-units step 5b): the CLI paragraph left the primer for the CLI unit, which merges it with the
+	// paragraph that closed the instructions and names the CLI by its path. No rule changed.
+	"1.7.0": "b04a890e4acdbed6cce17edeafd442882fed64f0cbef87ad246f40a4414af1db",
+	// 1.7.1 is 1.7.0 with the first line naming Agent Contract 1.14.0 (main's drive_* rename, primer 1.4.7 there); no
+	// rule changed.
+	"1.7.1": "fbb1b671dd76a2b34518fb2d2cb14c0ef63a1a0e65d94443101994050e3871d3",
 }
 
 // The snapshots: the primer exactly as `initialize` sends it, and the four shapes of the instructions
@@ -218,6 +231,13 @@ func TestAgentPrimerSaysEveryRuleOfTheContract(t *testing.T) {
 			t.Errorf("§0 rule 6: a %s's receipt carries no link", kind)
 		}
 	}
+	// Since primer 1.7.0 (design step 5b) the CLI's rules (3, 8) are said by the CLI unit, which carries the CLI's path
+	// and so is not part of the primer: a rule is held to the primer and the units composed after it.
+	cores := []string{agentPrimer}
+	for _, unit := range instructionUnits {
+		cores = append(cores, unit.core)
+	}
+	alwaysOn := strings.Join(cores, "\n\n")
 	if len(rules) != len(said) {
 		t.Fatalf("§0 has %d rules and the primer is checked against %d: say the new rule in the primer, then here", len(rules), len(said))
 	}
@@ -227,8 +247,8 @@ func TestAgentPrimerSaysEveryRuleOfTheContract(t *testing.T) {
 			t.Errorf("§0 rule %s (%s) has no phrase the primer is held to", rule[1], rule[2])
 		}
 		for _, phrase := range phrases {
-			if !strings.Contains(agentPrimer, phrase) {
-				t.Errorf("§0 rule %s (%s): the primer does not say %q", rule[1], rule[2], phrase)
+			if !strings.Contains(alwaysOn, phrase) {
+				t.Errorf("§0 rule %s (%s): neither the primer nor an always-on unit says %q", rule[1], rule[2], phrase)
 			}
 		}
 	}

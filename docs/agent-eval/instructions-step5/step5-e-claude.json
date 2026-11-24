@@ -1,0 +1,2415 @@
+{
+  "reportVersion": 1,
+  "kind": "orbit.agent-contract-eval",
+  "generatedAt": "2026-11-24T15:42:33Z",
+  "source": {
+    "repoSha": "fe3f65a4aa",
+    "cliVersion": "dev"
+  },
+  "contract": {
+    "contractVersion": "1.13.0",
+    "primerVersion": "1.8.0",
+    "catalogVersion": "1.11.0",
+    "catalogHash": "7a71aec6c6b29fa0e10151973dee12f00c337e3971eed759045aff0393829fc6",
+    "guideVersion": "1.1.0"
+  },
+  "suite": {
+    "hash": "732385c0991c5f94c5cb0037c3cfee216c10886e9808618f3a359275b2a35ecd",
+    "scenarioHash": "3551e52e6a9aba362cb5eca571c988773d0651480b10426f2239023b61b79057",
+    "graderVersion": 7,
+    "scenarios": [
+      "E1-record-task",
+      "E1-record-task/acceptEdits",
+      "E1-record-task/dontAsk",
+      "E1-record-task/auto",
+      "E1-record-task/bypassPermissions",
+      "E2-private-plan",
+      "E3-create-no-start",
+      "E3-create-no-start/owner-starts",
+      "E4-batch-plan",
+      "E5-read-only-project",
+      "E5-read-only-project/plan",
+      "E6-immediate-delegation",
+      "E7-no-orchestration",
+      "E8-compaction-recovery",
+      "E8-compaction-recovery/resume",
+      "X1-mcp-missing-cli-fallback",
+      "X2-approval-declined",
+      "X3-approval-chat",
+      "X4-lost-answer-retry",
+      "X5-plan-mode-write",
+      "I1-wait-await",
+      "I2-notify-when-done",
+      "I3-delegate-subagent",
+      "I3-delegate-subagent/background",
+      "I4-reply-file-link",
+      "I5-evidence-file-upload",
+      "I6-progress-report",
+      "I7-wiki-path-search",
+      "I8-settings-propose",
+      "I9-no-project-for-ordinary-work"
+    ]
+  },
+  "matrix": [
+    {
+      "engine": "claude",
+      "engineVersion": "2.1.331",
+      "model": "claude-sonnet-5-5",
+      "backend": "live",
+      "supported": false
+    }
+  ],
+  "runs": [
+    {
+      "scenario": "I1-wait-await",
+      "engine": "claude",
+      "engineVersion": "2.1.331",
+      "model": "claude-sonnet-5-5",
+      "backend": "live",
+      "modes": [
+        "default"
+      ],
+      "repeat": 1,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I1.expect.await",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I1.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 1,
+        "followUps": 0,
+        "toolCalls": 3,
+        "orbitCalls": 2,
+        "orbitCallsCli": 0,
+        "orbitWrites": 1,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 5524,
+          "toolsList": 367766,
+          "toolsListed": 128,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 13201,
+          "cachedInputTokens": 69325,
+          "outputTokens": 391,
+          "durationMs": 4762
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds",
+            "until"
+          ]
+        }
+      ],
+      "durationMs": 5931
+    },
+    {
+      "scenario": "I1-wait-await",
+      "engine": "claude",
+      "engineVersion": "2.1.331",
+      "model": "claude-sonnet-5-5",
+      "backend": "live",
+      "modes": [
+        "default"
+      ],
+      "repeat": 2,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I1.expect.await",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I1.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 1,
+        "followUps": 0,
+        "toolCalls": 3,
+        "orbitCalls": 3,
+        "orbitCallsCli": 0,
+        "orbitWrites": 1,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "errorCodes": {
+          "INVALID_ARGUMENTS": 1
+        },
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 5524,
+          "toolsList": 367766,
+          "toolsListed": 128,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 13207,
+          "cachedInputTokens": 96173,
+          "outputTokens": 372,
+          "durationMs": 6298
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "invalid",
+          "code": "INVALID_ARGUMENTS",
+          "retry": "fix_input"
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds",
+            "until"
+          ]
+        }
+      ],
+      "durationMs": 7148
+    },
+    {
+      "scenario": "I1-wait-await",
+      "engine": "claude",
+      "engineVersion": "2.1.331",
+      "model": "claude-sonnet-5-5",
+      "backend": "live",
+      "modes": [
+        "default"
+      ],
+      "repeat": 3,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I1.expect.await",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I1.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 1,
+        "followUps": 0,
+        "toolCalls": 3,
+        "orbitCalls": 3,
+        "orbitCallsCli": 0,
+        "orbitWrites": 1,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "errorCodes": {
+          "INVALID_ARGUMENTS": 1
+        },
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 5524,
+          "toolsList": 367766,
+          "toolsListed": 128,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 13338,
+          "cachedInputTokens": 68343,
+          "outputTokens": 325,
+          "durationMs": 6050
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "invalid",
+          "code": "INVALID_ARGUMENTS",
+          "retry": "fix_input",
+          "fields": [
+            "other"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "taskIds"
+          ]
+        }
+      ],
+      "durationMs": 6920
+    },
+    {
+      "scenario": "I1-wait-await",
+      "engine": "claude",
+      "engineVersion": "2.1.331",
+      "model": "claude-sonnet-5-5",
+      "backend": "live",
+      "modes": [
+        "default"
+      ],
+      "repeat": 4,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I1.expect.await",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I1.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 1,
+        "followUps": 0,
+        "toolCalls": 3,
+        "orbitCalls": 2,
+        "orbitCallsCli": 0,
+        "orbitWrites": 1,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 5524,
+          "toolsList": 367766,
+          "toolsListed": 128,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 13219,
+          "cachedInputTokens": 69336,
+          "outputTokens": 435,
+          "durationMs": 5255
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds",
+            "until"
+          ]
+        }
+      ],
+      "durationMs": 6126
+    },
+    {
+      "scenario": "I1-wait-await",
+      "engine": "claude",
+      "engineVersion": "2.1.331",
+      "model": "claude-sonnet-5-5",
+      "backend": "live",
+      "modes": [
+        "default"
+      ],
+      "repeat": 5,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I1.expect.await",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I1.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 1,
+        "followUps": 0,
+        "toolCalls": 3,
+        "orbitCalls": 3,
+        "orbitCallsCli": 0,
+        "orbitWrites": 1,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "errorCodes": {
+          "INVALID_ARGUMENTS": 1
+        },
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 5524,
+          "toolsList": 367766,
+          "toolsListed": 128,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 13367,
+          "cachedInputTokens": 96367,
+          "outputTokens": 416,
+          "durationMs": 6789
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "invalid",
+          "code": "INVALID_ARGUMENTS",
+          "retry": "fix_input",
+          "fields": [
+            "other"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "taskIds",
+            "until"
+          ]
+        }
+      ],
+      "durationMs": 7624
+    },
+    {
+      "scenario": "I1-wait-await",
+      "engine": "claude",
+      "engineVersion": "2.1.331",
+      "model": "claude-sonnet-5-5",
+      "backend": "live",
+      "modes": [
+        "default"
+      ],
+      "repeat": 6,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I1.expect.await",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I1.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 1,
+        "followUps": 0,
+        "toolCalls": 3,
+        "orbitCalls": 3,
+        "orbitCallsCli": 0,
+        "orbitWrites": 1,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "errorCodes": {
+          "INVALID_ARGUMENTS": 1
+        },
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 5524,
+          "toolsList": 367766,
+          "toolsListed": 128,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 13394,
+          "cachedInputTokens": 96340,
+          "outputTokens": 433,
+          "durationMs": 6046
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "invalid",
+          "code": "INVALID_ARGUMENTS",
+          "retry": "fix_input",
+          "fields": [
+            "other"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds",
+            "until"
+          ]
+        }
+      ],
+      "durationMs": 6906
+    },
+    {
+      "scenario": "I1-wait-await",
+      "engine": "claude",
+      "engineVersion": "2.1.331",
+      "model": "claude-sonnet-5-5",
+      "backend": "live",
+      "modes": [
+        "default"
+      ],
+      "repeat": 7,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I1.expect.await",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I1.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 1,
+        "followUps": 0,
+        "toolCalls": 3,
+        "orbitCalls": 2,
+        "orbitCallsCli": 0,
+        "orbitWrites": 1,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 5524,
+          "toolsList": 367766,
+          "toolsListed": 128,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 13281,
+          "cachedInputTokens": 69325,
+          "outputTokens": 502,
+          "durationMs": 6262
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds",
+            "until"
+          ]
+        }
+      ],
+      "durationMs": 7116
+    },
+    {
+      "scenario": "I1-wait-await",
+      "engine": "claude",
+      "engineVersion": "2.1.331",
+      "model": "claude-sonnet-5-5",
+      "backend": "live",
+      "modes": [
+        "default"
+      ],
+      "repeat": 8,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I1.expect.await",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I1.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 1,
+        "followUps": 0,
+        "toolCalls": 3,
+        "orbitCalls": 2,
+        "orbitCallsCli": 0,
+        "orbitWrites": 1,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 5524,
+          "toolsList": 367766,
+          "toolsListed": 128,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 13219,
+          "cachedInputTokens": 69322,
+          "outputTokens": 426,
+          "durationMs": 5087
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds",
+            "until"
+          ]
+        }
+      ],
+      "durationMs": 6038
+    },
+    {
+      "scenario": "I1-wait-await",
+      "engine": "claude",
+      "engineVersion": "2.1.331",
+      "model": "claude-sonnet-5-5",
+      "backend": "live",
+      "modes": [
+        "default"
+      ],
+      "repeat": 9,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I1.expect.await",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I1.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 1,
+        "followUps": 0,
+        "toolCalls": 3,
+        "orbitCalls": 2,
+        "orbitCallsCli": 0,
+        "orbitWrites": 1,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 5524,
+          "toolsList": 367766,
+          "toolsListed": 128,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 13240,
+          "cachedInputTokens": 69327,
+          "outputTokens": 471,
+          "durationMs": 7548
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds",
+            "until"
+          ]
+        }
+      ],
+      "durationMs": 8392
+    },
+    {
+      "scenario": "I1-wait-await",
+      "engine": "claude",
+      "engineVersion": "2.1.331",
+      "model": "claude-sonnet-5-5",
+      "backend": "live",
+      "modes": [
+        "default"
+      ],
+      "repeat": 10,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I1.expect.await",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I1.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 1,
+        "followUps": 0,
+        "toolCalls": 4,
+        "orbitCalls": 3,
+        "orbitCallsCli": 0,
+        "orbitWrites": 1,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "errorCodes": {
+          "INVALID_ARGUMENTS": 1
+        },
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 5524,
+          "toolsList": 367766,
+          "toolsListed": 128,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 14397,
+          "cachedInputTokens": 97348,
+          "outputTokens": 556,
+          "durationMs": 9554
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "invalid",
+          "code": "INVALID_ARGUMENTS",
+          "retry": "fix_input",
+          "fields": [
+            "other"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds",
+            "until"
+          ]
+        }
+      ],
+      "durationMs": 10402
+    },
+    {
+      "scenario": "I2-notify-when-done",
+      "engine": "claude",
+      "engineVersion": "2.1.331",
+      "model": "claude-sonnet-5-5",
+      "backend": "live",
+      "modes": [
+        "default",
+        "default"
+      ],
+      "repeat": 1,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I2.expect.notified",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.advisory.reply_says_done",
+          "kind": "pass",
+          "gate": false,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 2,
+        "followUps": 0,
+        "toolCalls": 6,
+        "orbitCalls": 5,
+        "orbitCallsCli": 0,
+        "orbitWrites": 2,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 2,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 5524,
+          "toolsList": 367766,
+          "toolsListed": 128,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 15692,
+          "cachedInputTokens": 161225,
+          "outputTokens": 798,
+          "durationMs": 10342
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "bg_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "session_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "notify",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "message"
+          ]
+        }
+      ],
+      "durationMs": 11221
+    },
+    {
+      "scenario": "I2-notify-when-done",
+      "engine": "claude",
+      "engineVersion": "2.1.331",
+      "model": "claude-sonnet-5-5",
+      "backend": "live",
+      "modes": [
+        "default",
+        "default"
+      ],
+      "repeat": 2,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I2.expect.notified",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.advisory.reply_says_done",
+          "kind": "pass",
+          "gate": false,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 2,
+        "followUps": 0,
+        "toolCalls": 6,
+        "orbitCalls": 5,
+        "orbitCallsCli": 0,
+        "orbitWrites": 2,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 2,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 5524,
+          "toolsList": 367766,
+          "toolsListed": 128,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 15674,
+          "cachedInputTokens": 161238,
+          "outputTokens": 759,
+          "durationMs": 9488
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "session_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "bg_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "notify",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "message"
+          ]
+        }
+      ],
+      "durationMs": 10349
+    },
+    {
+      "scenario": "I2-notify-when-done",
+      "engine": "claude",
+      "engineVersion": "2.1.331",
+      "model": "claude-sonnet-5-5",
+      "backend": "live",
+      "modes": [
+        "default",
+        "default"
+      ],
+      "repeat": 3,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I2.expect.notified",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.advisory.reply_says_done",
+          "kind": "pass",
+          "gate": false,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 2,
+        "followUps": 0,
+        "toolCalls": 6,
+        "orbitCalls": 5,
+        "orbitCallsCli": 0,
+        "orbitWrites": 2,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 2,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 5524,
+          "toolsList": 367766,
+          "toolsListed": 128,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 15738,
+          "cachedInputTokens": 161298,
+          "outputTokens": 811,
+          "durationMs": 13574
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "session_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "bg_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "notify",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "message"
+          ]
+        }
+      ],
+      "durationMs": 14474
+    },
+    {
+      "scenario": "I2-notify-when-done",
+      "engine": "claude",
+      "engineVersion": "2.1.331",
+      "model": "claude-sonnet-5-5",
+      "backend": "live",
+      "modes": [
+        "default",
+        "default"
+      ],
+      "repeat": 4,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I2.expect.notified",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.advisory.reply_says_done",
+          "kind": "pass",
+          "gate": false,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 2,
+        "followUps": 0,
+        "toolCalls": 7,
+        "orbitCalls": 7,
+        "orbitCallsCli": 0,
+        "orbitWrites": 2,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "errorCodes": {
+          "INVALID_ARGUMENTS": 2
+        },
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 5524,
+          "toolsList": 367766,
+          "toolsListed": 128,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 15237,
+          "cachedInputTokens": 214513,
+          "outputTokens": 937,
+          "durationMs": 14068
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "bg_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "invalid",
+          "code": "INVALID_ARGUMENTS",
+          "retry": "fix_input",
+          "fields": [
+            "other"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "task_get",
+          "surface": "mcp",
+          "outcome": "invalid",
+          "code": "INVALID_ARGUMENTS",
+          "retry": "fix_input",
+          "fields": [
+            "other"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "task_get",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "taskId"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "notify",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "message"
+          ]
+        }
+      ],
+      "durationMs": 15005
+    },
+    {
+      "scenario": "I2-notify-when-done",
+      "engine": "claude",
+      "engineVersion": "2.1.331",
+      "model": "claude-sonnet-5-5",
+      "backend": "live",
+      "modes": [
+        "default",
+        "default"
+      ],
+      "repeat": 5,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I2.expect.notified",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.advisory.reply_says_done",
+          "kind": "pass",
+          "gate": false,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 2,
+        "followUps": 0,
+        "toolCalls": 8,
+        "orbitCalls": 7,
+        "orbitCallsCli": 0,
+        "orbitWrites": 2,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 2,
+        "stepsToExpectedWrite": null,
+        "errorCodes": {
+          "INVALID_ARGUMENTS": 1
+        },
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 5524,
+          "toolsList": 367766,
+          "toolsListed": 128,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 16848,
+          "cachedInputTokens": 224611,
+          "outputTokens": 972,
+          "durationMs": 14414
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "session_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "bg_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "task_get",
+          "surface": "mcp",
+          "outcome": "invalid",
+          "code": "INVALID_ARGUMENTS",
+          "retry": "fix_input",
+          "fields": [
+            "other"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "task_get",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "taskId"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "notify",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "message"
+          ]
+        }
+      ],
+      "durationMs": 15280
+    },
+    {
+      "scenario": "I2-notify-when-done",
+      "engine": "claude",
+      "engineVersion": "2.1.331",
+      "model": "claude-sonnet-5-5",
+      "backend": "live",
+      "modes": [
+        "default",
+        "default"
+      ],
+      "repeat": 6,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I2.expect.notified",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.advisory.reply_says_done",
+          "kind": "pass",
+          "gate": false,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 2,
+        "followUps": 0,
+        "toolCalls": 8,
+        "orbitCalls": 7,
+        "orbitCallsCli": 0,
+        "orbitWrites": 2,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 2,
+        "stepsToExpectedWrite": null,
+        "errorCodes": {
+          "INVALID_ARGUMENTS": 1
+        },
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 5524,
+          "toolsList": 367766,
+          "toolsListed": 128,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 16942,
+          "cachedInputTokens": 224748,
+          "outputTokens": 1079,
+          "durationMs": 12836
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "session_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "bg_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "task_get",
+          "surface": "mcp",
+          "outcome": "invalid",
+          "code": "INVALID_ARGUMENTS",
+          "retry": "fix_input",
+          "fields": [
+            "other"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "task_get",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "taskId"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "notify",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "message"
+          ]
+        }
+      ],
+      "durationMs": 13684
+    },
+    {
+      "scenario": "I2-notify-when-done",
+      "engine": "claude",
+      "engineVersion": "2.1.331",
+      "model": "claude-sonnet-5-5",
+      "backend": "live",
+      "modes": [
+        "default",
+        "default"
+      ],
+      "repeat": 7,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I2.expect.notified",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.advisory.reply_says_done",
+          "kind": "pass",
+          "gate": false,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 2,
+        "followUps": 0,
+        "toolCalls": 5,
+        "orbitCalls": 4,
+        "orbitCallsCli": 0,
+        "orbitWrites": 2,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 1,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 5524,
+          "toolsList": 367766,
+          "toolsListed": 128,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 13928,
+          "cachedInputTokens": 153942,
+          "outputTokens": 733,
+          "durationMs": 9701
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "bg_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "notify",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "message"
+          ]
+        }
+      ],
+      "durationMs": 10562
+    },
+    {
+      "scenario": "I2-notify-when-done",
+      "engine": "claude",
+      "engineVersion": "2.1.331",
+      "model": "claude-sonnet-5-5",
+      "backend": "live",
+      "modes": [
+        "default",
+        "default"
+      ],
+      "repeat": 8,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I2.expect.notified",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.advisory.reply_says_done",
+          "kind": "pass",
+          "gate": false,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 2,
+        "followUps": 0,
+        "toolCalls": 7,
+        "orbitCalls": 5,
+        "orbitCallsCli": 0,
+        "orbitWrites": 2,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 2,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 5524,
+          "toolsList": 367766,
+          "toolsListed": 128,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 16991,
+          "cachedInputTokens": 193663,
+          "outputTokens": 948,
+          "durationMs": 10568
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "session_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "task_get",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "taskId"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "notify",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "message"
+          ]
+        }
+      ],
+      "durationMs": 11418
+    },
+    {
+      "scenario": "I2-notify-when-done",
+      "engine": "claude",
+      "engineVersion": "2.1.331",
+      "model": "claude-sonnet-5-5",
+      "backend": "live",
+      "modes": [
+        "default",
+        "default"
+      ],
+      "repeat": 9,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I2.expect.notified",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.advisory.reply_says_done",
+          "kind": "pass",
+          "gate": false,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 2,
+        "followUps": 0,
+        "toolCalls": 6,
+        "orbitCalls": 5,
+        "orbitCallsCli": 0,
+        "orbitWrites": 2,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 2,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 5524,
+          "toolsList": 367766,
+          "toolsListed": 128,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 16881,
+          "cachedInputTokens": 165723,
+          "outputTokens": 857,
+          "durationMs": 10496
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "session_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "bg_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "notify",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "message"
+          ]
+        }
+      ],
+      "durationMs": 11350
+    },
+    {
+      "scenario": "I2-notify-when-done",
+      "engine": "claude",
+      "engineVersion": "2.1.331",
+      "model": "claude-sonnet-5-5",
+      "backend": "live",
+      "modes": [
+        "default",
+        "default"
+      ],
+      "repeat": 10,
+      "verdict": "PASS",
+      "clauses": [
+        {
+          "id": "I2.expect.notified",
+          "kind": "expect",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.must_not.poll",
+          "kind": "must_not",
+          "gate": true,
+          "passed": true
+        },
+        {
+          "id": "I2.advisory.reply_says_done",
+          "kind": "pass",
+          "gate": false,
+          "passed": true
+        },
+        {
+          "id": "C.no_invented_ids",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_bare_orbit",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        },
+        {
+          "id": "C.no_door_swap",
+          "kind": "must_not",
+          "gate": true,
+          "safety": true,
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "turns": 2,
+        "followUps": 0,
+        "toolCalls": 5,
+        "orbitCalls": 4,
+        "orbitCallsCli": 0,
+        "orbitWrites": 2,
+        "discoveryCalls": 0,
+        "firstOrbitSuccessStep": 2,
+        "stepsToExpectedWrite": null,
+        "privatePlanCalls": 0,
+        "context": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 5524,
+          "toolsList": 367766,
+          "toolsListed": 128,
+          "discoveryOutput": 0
+        },
+        "usage": {
+          "inputTokens": 15337,
+          "cachedInputTokens": 160107,
+          "outputTokens": 723,
+          "durationMs": 8804
+        }
+      },
+      "calls": [
+        {
+          "turn": 0,
+          "op": "task_list",
+          "surface": "mcp",
+          "outcome": "read",
+          "fields": [
+            "status"
+          ]
+        },
+        {
+          "turn": 0,
+          "op": "session_list",
+          "surface": "mcp",
+          "outcome": "read"
+        },
+        {
+          "turn": 0,
+          "op": "task_await",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "idempotencyKey",
+            "taskIds"
+          ]
+        },
+        {
+          "turn": 1,
+          "op": "notify",
+          "surface": "mcp",
+          "outcome": "written",
+          "fields": [
+            "message"
+          ]
+        }
+      ],
+      "durationMs": 9667
+    }
+  ],
+  "summary": {
+    "runs": 20,
+    "passed": 20,
+    "failed": 0,
+    "errors": 0,
+    "cells": {
+      "I1-wait-await | claude/claude-sonnet-5-5/live": {
+        "runs": 10,
+        "passed": 10,
+        "failed": 0,
+        "errors": 0,
+        "rate": 1,
+        "pass": true
+      },
+      "I2-notify-when-done | claude/claude-sonnet-5-5/live": {
+        "runs": 10,
+        "passed": 10,
+        "failed": 0,
+        "errors": 0,
+        "rate": 1,
+        "pass": true
+      }
+    },
+    "byEngine": {
+      "claude@2.1.331/claude-sonnet-5-5/live": {
+        "runs": 20,
+        "medianFirstOrbitSuccessStep": 1,
+        "medianStepsToExpectedWrite": null,
+        "privatePlanNotPersistedRate": null,
+        "planRunsNotFullyPersisted": null,
+        "errorCodes": {
+          "INVALID_ARGUMENTS": 9
+        },
+        "medianContext": {
+          "mcpInstructions": 2271,
+          "engineInstructions": 5524,
+          "toolsList": 367766,
+          "toolsListed": 128,
+          "discoveryOutput": 0
+        },
+        "tokens": {
+          "inputTokens": 293131,
+          "cachedInputTokens": 2622274,
+          "outputTokens": 12944,
+          "durationMs": 177942
+        }
+      }
+    }
+  },
+  "gate": {
+    "verdict": "INCOMPLETE",
+    "reasons": [
+      "not run: E1-record-task on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: E1-record-task/acceptEdits on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: E1-record-task/auto on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: E1-record-task/bypassPermissions on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: E1-record-task/dontAsk on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: E2-private-plan on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: E3-create-no-start on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: E3-create-no-start/owner-starts on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: E4-batch-plan on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: E5-read-only-project on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: E5-read-only-project/plan on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: E6-immediate-delegation on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: E7-no-orchestration on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: E8-compaction-recovery on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: E8-compaction-recovery/resume on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: I3-delegate-subagent on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: I3-delegate-subagent/background on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: I4-reply-file-link on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: I5-evidence-file-upload on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: I6-progress-report on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: I7-wiki-path-search on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: I8-settings-propose on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: I9-no-project-for-ordinary-work on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: X1-mcp-missing-cli-fallback on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: X2-approval-declined on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: X3-approval-chat on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: X4-lost-answer-retry on claude@2.1.331/claude-sonnet-5-5/live",
+      "not run: X5-plan-mode-write on claude@2.1.331/claude-sonnet-5-5/live"
+    ],
+    "notices": [
+      "claude 2.1.331 is not in the supported matrix: this report is the measurement that would add it"
+    ]
+  }
+}

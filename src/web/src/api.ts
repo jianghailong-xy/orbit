@@ -1785,7 +1785,7 @@ export type SharedRoot =
   | { kind: 'WIKI'; include: ShareInclude; sharedAt: string; root: SharedWiki }
   | { kind: 'DRIVE_FILE'; include: ShareInclude; sharedAt: string; root: SharedDriveFile };
 
-/** A Documents file a link shares, pinned to the version shared: its bytes are at `sharedDriveFileUrl`.
+/** A Drive file a link shares, pinned to the version shared: its bytes are at `sharedDriveFileUrl`.
  *  `preview` says the browser can show it as it is (a PDF or a picture). */
 export interface SharedDriveFile {
   name: string;

@@ -7590,7 +7590,7 @@ export class SessionsService {
     if (copyOf.size === 0) return ids;
     // In the database, so the bytes are not carried through this process under the session lock. The
     // copy names the same stored bytes (sha256) as the row it copies, or carries `data` for a row from
-    // before Documents.
+    // before Drive.
     await tx.$executeRaw`
       INSERT INTO "attachment" (id, owner_id, session_id, mime_type, size_bytes, file_name, sha256, data)
       SELECT c.copy_id, a.owner_id, a.session_id, a.mime_type, a.size_bytes, a.file_name, a.sha256, a.data

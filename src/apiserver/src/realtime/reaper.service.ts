@@ -19,9 +19,10 @@ import {
   HELD_SESSION_STATUSES,
 } from '../common/session-release';
 import { isSessionExecuting } from '../common/session-working';
+import { wasOutOfMemoryStop } from '../managed-runners/managed-runner-fencing';
 import { fileSubagentWake, fileWorkflowWake } from '../runner-api/subagent-wake';
 import { SessionsService } from '../sessions/sessions.service';
-import { fileLostJobWake, settleLostRunnerWork } from './lost-runner-work';
+import { fileLostJobWake, RUNNER_LIVENESS, settleLostRunnerWork, type RunnerLiveness } from './lost-runner-work';
 import { retireSessionInboxGeneration } from '../common/session-inbox-fence';
 import { PrismaService } from '../prisma/prisma.service';
 import { returnWaitingSessionsToOpen } from '../sessions/return-to-open';
@@ -50,7 +51,6 @@ import { CompletionInputRouter } from '../projects/completion-input-router.servi
 import { settleUnrunWakeTurns, signalDrainedWakeups } from '../runner-api/wake-turn-withdraw';
 import {
   APISERVER_PROCESS_QUIET_AFTER_MS,
-  RUNNER_BEATS,
   RUNNER_SILENT_AFTER_MS,
   RunnerPresenceService,
   runnerLastBeatAt,
@@ -224,8 +224,11 @@ const SWEPT: RunStatus[] = [RunStatus.PENDING, ...LIVE];
  * copies that can drift, and the whole point of the second ask is that it is the first one's
  * predicate re-run, not a similar one.
  *
- * `status` is not a second opinion: nothing in this control plane ever writes OFFLINE, which only
- * a runner reports about itself on its way out (`runner-api.controller.ts` heartbeat). A crashed
+ * `status` is not a second opinion: OFFLINE is what a runner reports about itself on its way out
+ * (`runner-api.controller.ts` heartbeat). The one other writer is a managed runner's manager, which marks
+ * it OFFLINE when it records a proven stop of its instance (managed-runner-manager.ts `terminated`) and
+ * then starts the next generation on the same volume, which reclaims its RUNNING sessions: for a
+ * managed runner OFFLINE is no sign-off, and its heartbeat's age is read as for a crash. A crashed
  * machine leaves ONLINE behind, so the heartbeat's age is the whole of the signal. It is read against
  * RUNNER_REAP_AFTER_MS, not the shorter RUNNER_OFFLINE_AFTER_MS the runner list calls a machine
  * offline by: this verdict destroys work in flight, and a runner whose own network blipped while its
@@ -244,13 +247,13 @@ const SWEPT: RunStatus[] = [RunStatus.PENDING, ...LIVE];
  * of it, selected with RUNNER_BEATS, the later winning.
  */
 function runnerLooksOffline(
-  runner: ({ status: string } & RunnerBeats) | null | undefined,
+  runner: RunnerLiveness | null | undefined,
   now: number,
   claimedAt?: Date | null,
 ): boolean {
   if (!runner) return true;
   if (claimedAt && now - claimedAt.getTime() <= RUNNER_REAP_AFTER_MS) return false;
-  if (runner.status === 'OFFLINE') return true;
+  if (signedOff(runner)) return true;
   return now - (runnerLastBeatAt(runner)?.getTime() ?? 0) > RUNNER_REAP_AFTER_MS;
 }
 
@@ -260,8 +263,13 @@ function runnerLooksOffline(
  * (reported by a runner about itself as it leaves, or a runner's row before it ever beat), or no
  * runner at all — and `silenceHold`, which is about silence, does not hold them.
  */
-function offlineFromSilence(runner: { status: string } | null | undefined): boolean {
-  return !!runner && runner.status !== 'OFFLINE';
+function offlineFromSilence(runner: RunnerLiveness | null | undefined): boolean {
+  return !!runner && !signedOff(runner);
+}
+
+/** OFFLINE, said by the runner itself: a managed runner's OFFLINE is its manager's record of a stop (see above). */
+function signedOff(runner: RunnerLiveness): boolean {
+  return runner.status === 'OFFLINE' && !runner.managedRunner;
 }
 
 /** `runnerLooksOffline`'s claim clause as the finalizing write's WHERE: not claimed inside the window. */
@@ -413,7 +421,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
    * path that actually removes session data — soft-delete just hides it.
    *
    * A session holding a file somebody pinned or evidence cites waits in Trash until that stops, with everything else in it
-   * (docs/documents-design.md §2.8): the row would go with the session, and nobody asked for that. A person who empties
+   * (docs/drive-design.md §2.8): the row would go with the session, and nobody asked for that. A person who empties
    * Trash by hand (`SessionsService.purge`) is asking for exactly that, and gets it.
    */
   private async purgeTrash(): Promise<void> {
@@ -489,7 +497,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         // auto-run candidate scan requires, so it is the column that says whether the retry
         // this reaper stands aside for exists at all.
         task: { select: { status: true, autoRunWhenReady: true } },
-        assignedRunner: { select: { status: true, ...RUNNER_BEATS } },
+        assignedRunner: { select: RUNNER_LIVENESS },
         // What is executing outside a turn, for an idle-looking session whose runner is lost (settleLostWork).
         engineTurnActive: true,
         runningSubagents: true,
@@ -1034,11 +1042,27 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         const runner = runnerId
           ? await tx.runner.findUnique({
               where: { id: runnerId },
-              select: { status: true, ...RUNNER_BEATS },
+              select: {
+                ...RUNNER_LIVENESS,
+                managedRunner: {
+                  select: { id: true, desiredState: true, managementState: true, concurrencyCap: true, fencingReceipt: true, nextAttemptAt: true },
+                },
+              },
             })
           : null;
         if (!runnerLooksOffline(runner, Date.now())) {
           return { ok: false, taskReclaimed: false, currentWorkTerminalized: 0, recanted: true };
+        }
+        // A proven OOM stop may leave turns for the replacement to reclaim. During that
+        // restart, even expired heartbeat evidence must leave those turns for reclaim.
+        const mapping = runner?.managedRunner;
+        if (mapping?.desiredState === 'RUNNING' && mapping.concurrencyCap !== null && wasOutOfMemoryStop(mapping.fencingReceipt)
+          && (
+            mapping.managementState === 'REQUESTED' || mapping.managementState === 'WAITING_CAPACITY'
+            || mapping.managementState === 'PROVISIONING' || mapping.managementState === 'STARTING'
+            || (mapping.managementState === 'FAILED' && mapping.nextAttemptAt !== null)
+          )) {
+          return { ok: false, taskReclaimed: false, currentWorkTerminalized: 0 };
         }
       }
       const carrying = opts.carryingTurn;

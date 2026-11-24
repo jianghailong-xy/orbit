@@ -73,8 +73,10 @@ export interface ManagedRunnerDisplay {
   signIn: boolean;
   /**
    * Messages and turns sent now are accepted and wait for the runner: the states the server's own
-   * demand hook answers as coming back by themselves (managed-runner-demand.ts). Work sent while it
-   * is FAILED, FENCING or being removed would wait for an owner or an operator, so it is not offered;
+   * demand hook answers as coming back by themselves (managed-runner-demand.ts), FAILED with its slow
+   * retry scheduled (a retryable reason and `nextAttemptAt`) among them: work sent to it waits, and is
+   * what lets that retry be taken. Work sent while it is FAILED with no next try, FENCING or being
+   * removed would wait for an owner or an operator, so it is not offered;
    * nor while the server reports MANAGED_RUNNER_UNAVAILABLE, when no manager runs to start it; nor to
    * a runner asleep or going to sleep that the server offers no wake for (`canWake`), as for a
    * disabled account, whose demand it no longer records.
@@ -271,7 +273,7 @@ export function managedSetupState(
   status: ManagedRunnerStatus | null | undefined,
 ): ManagedSetupState | null {
   const row = managedRunnerRow(runnerId, status);
-  if (!row || !row.acceptsWork || row.kind === 'available' || row.kind === 'unresponsive') return null;
+  if (!row || !row.acceptsWork || row.kind === 'available' || row.kind === 'unresponsive' || row.kind === 'failed') return null;
   return status?.initialProvider ? 'asleep' : 'preparing';
 }
 
@@ -288,6 +290,49 @@ const SLEEP_STATES: ReadonlySet<ManagedRunnerReadState> = new Set<ManagedRunnerR
 const MOVING: ReadonlySet<ManagedRunnerDisplayKind> = new Set<ManagedRunnerDisplayKind>([
   'preparing', 'waking', 'modelUnavailable', 'waitingCapacity', 'unresponsive', 'stopping', 'removing',
 ]);
+
+/** FAILED, retryable, with its next automatic try recorded (managed-runner-demand.ts `slowRetryScheduled`). */
+function slowRetryScheduled(status: ManagedRunnerStatus): boolean {
+  return status.managementState === 'FAILED' && !!status.nextAttemptAt && status.reason?.retryable === true;
+}
+
+/** The causes a stopped instance is restarted or failed for: `managedRunnerNextTry` speaks for these alone. */
+const STOPPED_CAUSES: ReadonlySet<string> = new Set([
+  'POD_RESTARTING', 'POD_RESTARTING_OUT_OF_MEMORY', 'POD_RESTARTING_STORAGE_FULL',
+  'POD_TERMINATED', 'POD_OUT_OF_MEMORY', 'POD_STORAGE_FULL',
+]);
+
+/**
+ * The words under the cause of a runner restarting or failed with a next automatic try (`managedRunnerNextTry`). The
+ * web draws them; OrbitKit and Android do not yet, so they are not in the fixture's shared copy.
+ */
+export const MANAGED_RUNNER_NEXT_TRY_COPY = {
+  attempt: (attempt: number) => `Attempt ${attempt}`,
+  at: (time: string) => `next automatic try at ${time}`,
+  due: 'next automatic try as soon as work is waiting',
+  /** Retry's label while an automatic try is scheduled anyway. */
+  retryNow: 'Retry now',
+} as const;
+
+export interface ManagedRunnerNextTry {
+  /** The try in a row it is on. */
+  attempt: number;
+  /** When it is tried again by itself; null once that time has passed (it is taken as soon as work is waiting). */
+  at: Date | null;
+}
+
+/**
+ * For a managed runner whose instance stopped and is restarting, or failed with its slow retry scheduled: the attempt
+ * it is on and its next automatic try, which a client shows under the cause (the display's `detail`). Null otherwise.
+ */
+export function managedRunnerNextTry(status: ManagedRunnerStatus | null | undefined, now: Date = new Date()): ManagedRunnerNextTry | null {
+  if (!status?.nextAttemptAt || !status.reason || !STOPPED_CAUSES.has(status.reason.code)) return null;
+  const restarting = status.managementState === 'REQUESTED' || status.managementState === 'WAITING_CAPACITY';
+  if (!restarting && !slowRetryScheduled(status)) return null;
+  const at = new Date(status.nextAttemptAt);
+  if (Number.isNaN(at.getTime())) return null;
+  return { attempt: Math.max(1, status.attempt ?? 1), at: at > now ? at : null };
+}
 
 function displayKind(status: ManagedRunnerStatus): ManagedRunnerDisplayKind | null {
   switch (status.managementState) {
@@ -333,7 +378,7 @@ export function managedRunnerDisplay(status: ManagedRunnerStatus | null | undefi
   const frozen = reason?.code === MANAGED_RUNNER_UNAVAILABLE;
   // Asleep, or going to sleep, it comes back only on a wake the server would perform.
   const wakeable = !SLEEP_STATES.has(status.managementState) || status.actions.canWake;
-  const acceptsWork = !frozen && wakeable && COMING_BACK.has(status.managementState);
+  const acceptsWork = !frozen && wakeable && (COMING_BACK.has(status.managementState) || slowRetryScheduled(status));
   return {
     kind,
     title: MANAGED_RUNNER_COPY.title[kind],

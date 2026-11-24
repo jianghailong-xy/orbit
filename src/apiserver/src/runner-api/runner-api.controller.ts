@@ -300,7 +300,7 @@ import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout'
 import { followWikiDocsAfterSessionMerge } from '../wiki/wiki-docs-follow';
 import { deliverIntegrationAftermath } from './integration-aftermath';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
-import { documentsClaimFields } from '../documents/documents-switch';
+import { documentsClaimFields } from '../drive/drive-switch';
 import { appendWikiChatNotes } from '../wiki/wiki-chat-notes';
 import { appendScheduleChangeNote } from '../schedules/schedule-change-conversation';
 import {
@@ -598,6 +598,8 @@ import { carryingTurnOf, recordCarryingTurnOutcome } from '../common/carrying-tu
 import { declaresSessionRelease, readRelease, sessionReleaseOffered } from './run-release';
 import { authorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
+import { clampManagedConcurrency, managedConcurrencyCeiling } from '../managed-runners/managed-runner-concurrency';
+import { MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from '../managed-runners/managed-runner-runtime';
 import { browserClaimFields, MANAGED_RUNNER_BROWSER_GATE, type ManagedRunnerBrowserGate } from '../managed-runners/managed-runner-browser-gate';
 import {
   managedRunnerHeartbeat,
@@ -1813,11 +1815,15 @@ export class RunnerApiController {
     @Optional() private readonly coordinatorFacts?: CoordinatorFactQueueService,
     /** Account health (docs/routing-account-health-design.md §6.3): told of every run's end; absent in hand-built specs. */
     @Optional() private readonly accountHealth?: AccountHealthService,
-    /** docs/design/protected-branch-landing.md §4: the pull request door a landing waiting on GitHub is handed to.
-     *  Last, so a spec that builds this controller with fewer arguments is unchanged. */
+    /** docs/design/protected-branch-landing.md §4: the pull request door a landing waiting on GitHub is handed to. */
     @Optional() private readonly pullRequestDoor?: PullRequestDoorService,
     /** Push as me's outcomes on the workspace (docs/design/protected-branch-landing.md §5.5). */
     @Optional() private readonly pushAsMe?: PushAsMeService,
+    /**
+     * The managed runner runtime, for the profile a managed runner's concurrency ceiling is read from
+     * (managed-runners/managed-runner-concurrency.ts). `@Optional()` like the rest: without it no ceiling is applied.
+     */
+    @Optional() @Inject(MANAGED_RUNNER_RUNTIME) private readonly managedRuntime?: ManagedRunnerRuntime | null,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -2535,6 +2541,8 @@ export class RunnerApiController {
       try {
         managedBeat = await managedRunnerHeartbeat(this.prisma, managedInstance!, managedWorkload, beatAt);
       } catch (error) {
+        // Until the mapping can be read again, keep the safe startup concurrency.
+        managedBeat.concurrencyCap = 1;
         this.logger.warn(`runner ${runner.id}: managed sleep state not read this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
       }
     }
@@ -3062,14 +3070,24 @@ export class RunnerApiController {
     // syncs its self-gate to a UI/API change without needing a restart. The free-space floor
     // rides along for the same reason: the runner reclaims its own session checkouts under disk
     // pressure, and that has to be the floor the owner set here, not a second number. A managed
-    // runner's floor is the owner's too when set; otherwise its storage answer's default.
+    // runner's floor is the owner's too when set; otherwise its storage answer's default. A managed runner's
+    // max-concurrent is at most what its memory allows (managed-runners/managed-runner-concurrency.ts), whatever the
+    // row says: a row stored before the ceiling, or above it, is not what its daemon runs. Only while the switch is on,
+    // as for its storage.
+    const memoryCeiling = managedSleepOn ? managedConcurrencyCeiling(this.managedRuntime) : null;
+    const managedCeiling = managedBeat.concurrencyCap === undefined
+      ? memoryCeiling?.ceiling
+      : Math.min(managedBeat.concurrencyCap, memoryCeiling?.ceiling ?? Infinity);
+    const maxConcurrent = Math.min(clampManagedConcurrency(updated.maxConcurrent, memoryCeiling), managedCeiling ?? Infinity);
+    // Run now can use spare permits within the managed memory or recovery ceiling.
     const answer: RunnerHeartbeatResponse & { linkHints?: RunnerLinkHints } = {
       cancelSessionIds,
       ...(keepWorkSessionIds.length > 0 ? { keepWorkSessionIds } : {}),
       leaseLostSessionIds: ownershipLostSessionIds,
-      maxConcurrent: updated.maxConcurrent,
-      // Run now's headroom past it (ClaimedSession.overCapacity), adopted the same way.
-      burstConcurrent: updated.burstConcurrent,
+      maxConcurrent,
+      burstConcurrent: managedCeiling === undefined
+        ? updated.burstConcurrent
+        : Math.min(updated.burstConcurrent, Math.max(0, managedCeiling - maxConcurrent)),
       minFreeDiskMb: managedStorage ? managedStorage.minFreeDiskMb : updated.minFreeDiskMb,
       mergeRequests,
       commitRequests,
@@ -4918,7 +4936,7 @@ export class RunnerApiController {
         ...watchClaimFields(watchRollout, s.ownerId),
         // And the wiki, on the same rule (wiki/wiki-rollout.ts).
         ...wikiClaimFields(wikiRollout, s.ownerId),
-        // And Documents (documents/documents-switch.ts), which may have been switched since the session was first claimed.
+        // And Drive (drive/drive-switch.ts), which may have been switched since the session was first claimed.
         ...documentsClaimFields(),
         // And the browser switch (managed-runner-browser-gate.ts), read as the claim path reads it.
         ...browserClaimFields(this.browserGate),
@@ -5795,7 +5813,7 @@ export class RunnerApiController {
   }
 
   /**
-   * A file an agent keeps with `file_upload` (docs/documents-design.md §2.3). A route of its own rather than fields on
+   * A file an agent keeps with `file_upload` (docs/drive-design.md §2.3). A route of its own rather than fields on
    * the one above: an older server takes those fields, ignores them and answers 200, while this path answers it 404,
    * which the runner reports. It streams and cleans up exactly as the one above does, and FilesService.uploadFile says
    * what `taskId` may be. A remote SubAgent keeps its file under its parent's session by naming its run

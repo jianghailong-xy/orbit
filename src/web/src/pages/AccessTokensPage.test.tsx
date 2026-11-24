@@ -360,8 +360,8 @@ describe('Settings → Access tokens', { timeout: 60_000 }, () => {
     }
     // Files is its own row, one grant for reading and changing the drive, and not part of read-only.
     expect(form.querySelectorAll('.access-token-scope-row')).toHaveLength(9);
-    expect(row('Documents')).toBeTruthy();
-    expect(isChecked(choice(row('Documents'), 'checkbox', 'Read & write')!)).toBe(false);
+    expect(row('Drive')).toBeTruthy();
+    expect(isChecked(choice(row('Drive'), 'checkbox', 'Read & write')!)).toBe(false);
     // Notifications too: sending a push to your own apps is not a read.
     expect(isChecked(choice(row('Notifications'), 'checkbox', 'Send')!)).toBe(false);
     expect(isChecked(box('Tasks', 'Write'))).toBe(false);
@@ -369,7 +369,7 @@ describe('Settings → Access tokens', { timeout: 60_000 }, () => {
     // Untick every read but the wiki's, then write the wiki, then untick the projects' read again.
     for (const resource of ['Tasks', 'Projects', 'Sessions', 'Workspaces', 'Runners', 'Events']) await click(box(resource, 'Read'), resource);
     await click(box('Wiki', 'Write'), 'Wiki write');
-    await click(choice(row('Documents'), 'checkbox', 'Read & write'), 'Files');
+    await click(choice(row('Drive'), 'checkbox', 'Read & write'), 'Files');
     await click(choice(row('Notifications'), 'checkbox', 'Send'), 'Notifications');
     // Writing sessions brings reading them along.
     await click(box('Sessions', 'Write'), 'Sessions write');
@@ -382,7 +382,7 @@ describe('Settings → Access tokens', { timeout: 60_000 }, () => {
     await vi.waitFor(() => expect(issueAccessToken).toHaveBeenCalledTimes(1));
     expect(issueAccessToken).toHaveBeenCalledWith({
       name: 'Wiki bot',
-      scopes: ['wiki:read', 'wiki:write', 'documents', 'notify'],
+      scopes: ['wiki:read', 'wiki:write', 'drive', 'notify'],
       workspaceIds: [],
       expiresInDays: 90,
     });

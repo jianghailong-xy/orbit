@@ -1,5 +1,5 @@
 /**
- * `file_upload --as test-report` at its door (docs/documents-design.md §2.5; migration 0465), held against the
+ * `file_upload --as test-report` at its door (docs/drive-design.md §2.5; migration 0465), held against the
  * production apiserver — `build/main.js`, multer and every guard and pipe in front of the route — over a real PostgreSQL
  * that `scripts/run-pg-spec.sh` migrates from empty:
  *
@@ -72,8 +72,8 @@ test('file_upload --as test-report', { skip: !URL, concurrency: 1, timeout: 600_
   server = await startApiserver(url, `test-report-${randomUUID()}`, {
     PROVIDER_SECRET_KEY,
     MODEL_CATALOG_URL: 'http://127.0.0.1:9/',
-    ORBIT_DOCUMENTS_BACKEND: 'local',
-    ORBIT_DOCUMENTS_DIR: dir,
+    ORBIT_DRIVE_BACKEND: 'local',
+    ORBIT_DRIVE_DIR: dir,
   });
   const api = server;
 

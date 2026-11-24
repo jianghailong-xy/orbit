@@ -54,7 +54,7 @@ class ImageFileLinkTest {
         assertEquals("before \"pause\".png", refs("[Screenshot](orbit-attachment:$shot \"before \\\"pause\\\".png\")").single().fileName)
     }
 
-    @Test fun documentsLegacyLinksAndWhatLoadsBeforeATap() {
+    @Test fun driveLegacyLinksAndWhatLoadsBeforeATap() {
         assertEquals(listOf("report.pdf", "notes.md"), refs("[preview.png](orbit-attachment:$shot \"report.pdf\") [notes](orbit-attachment:$other \"notes.md\")").map { it.fileName })
         val legacy = refs("[查看截图](/tmp/card.png) [photo.jpg](orbit-attachment:$shot) [查看附件](orbit-attachment:$other)")
         assertEquals(listOf("card.png", "photo.jpg", "查看附件"), legacy.map { it.fileName })

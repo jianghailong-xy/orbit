@@ -24,11 +24,10 @@ func TestWithOrbitCLIInstructions(t *testing.T) {
 		// Graded discovery: a command is found a topic or an id at a time, never by reading the whole
 		// catalogue, which no engine shows a model whole (operation_discovery.go).
 		"'/opt/orbit runner/bin/orbit' guide [topic] --json",
-		"'/opt/orbit runner/bin/orbit' capabilities --id <id> --json",
+		"Run it as `'/opt/orbit runner/bin/orbit'`",
 		"mcp__orbit__*",
-		"Pass `--receipt` to read the receipt its MCP tool answers with",
-		"`--json` prints the entity alone",
-		" mcp` directly",
+		"`--receipt` prints a write's receipt",
+		"Never run `'/opt/orbit runner/bin/orbit' mcp`",
 		"durable record",
 		"No returned id, no claim.",
 		"Most newly discovered work is one task",
@@ -174,7 +173,7 @@ func TestOrbitProjectInstructionsDifferInsideRecordedWork(t *testing.T) {
 	if open == inside {
 		t.Fatal("a session inside recorded work receives the same project paragraph as a free conversation")
 	}
-	for _, shared := range []string{"durable record", "No returned id, no claim.", "orbit-task:<id>", "capabilities --id <id> --json", "guide [topic] --json", "mcp__orbit__*"} {
+	for _, shared := range []string{"durable record", "No returned id, no claim.", "orbit-task:<id>", "--receipt", "guide [topic] --json", "mcp__orbit__*"} {
 		if !strings.Contains(open, shared) || !strings.Contains(inside, shared) {
 			t.Errorf("both forms must keep %q", shared)
 		}
@@ -190,20 +189,26 @@ func TestOrbitProjectInstructionsDifferInsideRecordedWork(t *testing.T) {
 			t.Errorf("a session inside recorded work is still offered %q", want)
 		}
 	}
-	for _, want := range []string{
-		"file it as a task",
-		"lands under the same project this one belongs to",
-		// The proposal is not withheld from a task session any more; what the form carries is the
-		// default it trades away and the thing agreeing costs — this conversation becomes the new
-		// project's coordinator.
-		"you may put it in front of them",
-		"this conversation becomes that project's coordinator",
-	} {
+	for _, want := range []string{"as a task, saying first what you are filing", "it lands in this task's project",
+		"A separate undertaking is the user's to start", "project_create"} {
 		if !strings.Contains(inside, want) {
 			t.Errorf("task form does not contain %q", want)
 		}
-		if strings.Contains(open, want) {
+		if strings.Contains(open, want) && want != "project_create" {
 			t.Errorf("free conversation is told %q", want)
+		}
+	}
+	// Since design step 5d what the task form said at length is project_create's description.
+	var create string
+	for _, tool := range catalogToolDescriptors(false, false) {
+		if tool["name"] == "project_create" {
+			create, _ = tool["description"].(string)
+		}
+	}
+	for _, want := range []string{"The card is the only yes", "never create a project another way", "from this same session",
+		"Inside a task's run, work you discover is a task of that task's project", "bound to THIS session as its coordinator"} {
+		if !strings.Contains(create, want) {
+			t.Errorf("project_create's description does not say %q", want)
 		}
 	}
 	// The one clause neither form may drop: nothing is created without the user's yes, in either shape.
@@ -306,7 +311,7 @@ var advertisedCapabilityFamilies = []struct {
 	{"wikiImportCLICapabilities", wikiImportCLICapabilities, false},
 	// Ungated, for the same reason: keeping and reading back your own files.
 	{"fileCLICapabilities", fileCLICapabilities, false},
-	{"documentsCLICapabilities", documentsCLICapabilities, false},
+	{"driveCLICapabilities", driveCLICapabilities, false},
 	// Ungated too: any session of the account reads the Orbit Cloud browser (Q3 = A), behind the browser switch.
 	{"browserCLICapabilities", browserCLICapabilities, false},
 	{"subagentCLICapabilities", subagentCLICapabilities, false},
@@ -449,7 +454,7 @@ func TestClaudeInstructionArgsFollowTheSessionShape(t *testing.T) {
 	if got := appendPromptFor(&ClaimedSession{}); !strings.Contains(got, "you may propose recording it") {
 		t.Errorf("free conversation did not get the open form: %q", got)
 	}
-	if got := appendPromptFor(&ClaimedSession{TaskID: "task-1"}); !strings.Contains(got, "file it as a task") {
+	if got := appendPromptFor(&ClaimedSession{TaskID: "task-1"}); !strings.Contains(got, "as a task, saying first what you are filing") {
 		t.Errorf("task session did not get the task form: %q", got)
 	}
 }
@@ -493,7 +498,7 @@ func TestOnlyATopLevelSessionIsToldWhenToDelegate(t *testing.T) {
 			return string(raw)
 		},
 	}
-	whenToDelegate := strings.TrimSuffix(orbitDelegateInstructions, "{{toolsearch:delegate}}")
+	whenToDelegate := strings.TrimSuffix(orbitHandoffInstructions, "{{toolsearch:delegate}}")
 	for name, build := range builders {
 		top := build(parent)
 		if !strings.Contains(top, whenToDelegate) {
@@ -502,15 +507,18 @@ func TestOnlyATopLevelSessionIsToldWhenToDelegate(t *testing.T) {
 		if loads := strings.Contains(top, orbitDelegateClaudeCodeLoad); loads == (name == "cursor") {
 			t.Errorf("%s: says how to load delegate in Claude Code = %v", name, loads)
 		}
-		if sub := build(child); strings.Contains(sub, "Use delegate") || strings.Contains(sub, "select:mcp__orbit__delegate") ||
+		if sub := build(child); strings.Contains(sub, "use delegate") || strings.Contains(sub, "select:mcp__orbit__delegate") ||
 			!strings.Contains(sub, "Orbit primer") {
 			t.Errorf("%s: a SubAgent is told to use delegate, or is not given Orbit's instructions:\n%s", name, sub)
 		}
 	}
-	for _, want := range []string{"cheaper or stronger model", "another machine", `needs: ["os:darwin"]`, "workspace",
-		"in the background", "built-in subagent or Agent tool", "records the cost", "ToolSearch select:mcp__orbit__delegate"} {
-		if !strings.Contains(renderInstructionUnit(orbitDelegateInstructions, SessionShape{}, claudeCodeProfile), want) {
-			t.Errorf("the delegate paragraph lacks %q", want)
+	// One paragraph, in one order: look, start what is recorded, delegate a piece whose result comes back, create new work.
+	for _, want := range []string{"never your engine's own sub-agents or Agent tool", "Look with task_list first",
+		"task_start work already recorded", "never file it twice", "use delegate for a piece whose result you need back",
+		"in the background", "cheaper or stronger model", "another machine", `needs: ["os:darwin"]`, "workspace",
+		"task_create with startNow", "ToolSearch select:mcp__orbit__delegate"} {
+		if !strings.Contains(renderInstructionUnit(orbitHandoffInstructions, SessionShape{}, claudeCodeProfile), want) {
+			t.Errorf("the handoff paragraph lacks %q", want)
 		}
 	}
 }
@@ -518,23 +526,23 @@ func TestOnlyATopLevelSessionIsToldWhenToDelegate(t *testing.T) {
 func TestOrbitDriveGuidanceMatchesRunnerKind(t *testing.T) {
 	for _, mounted := range []bool{false, true} {
 		name := "self-registered"
-		// What the instructions say in brief, and the guide's files topic in full (docs/documents-drive-technical-design.md §4.6, §7.3).
-		brief := []string{"documents_put", "documents_get", "documents_list", "documents_move", "documents_delete", "orbit documents",
+		// What the instructions say in brief, and the guide's files topic in full (docs/drive-technical-design.md §4.6, §7.3).
+		brief := []string{"drive_put", "drive_get", "drive_list", "drive_move", "drive_delete", "orbit drive",
 			"a Trash agents cannot see", "ORBIT_GUEST turns only read it"}
-		full := []string{"documents_put", "documents_get", "documents_list", "documents_move", "documents_delete", "orbit documents put|get|ls|mv|rm",
+		full := []string{"drive_put", "drive_get", "drive_list", "drive_move", "drive_delete", "orbit drive put|get|ls|mv|rm",
 			"owner's Trash, which agents cannot see", "no tool shares a drive file", "ORBIT_GUEST", "do not write it"}
 		if mounted {
 			name = "cloud"
-			brief = []string{"~/Documents", "permanent Documents drive", "link its files by path", "~/Documents/ (a symlink)", "cp -r",
+			brief = []string{"~/Drive", "permanent Drive", "link its files by path", "~/Drive/ (a symlink)", "cp -r",
 				"rsync -rt", "tar x", "locks", "in-place writes", "ORBIT_GUEST turns only read it"}
-			full = []string{"/home/orbit/Documents", "shared across sessions", "trailing slash", "cp -a",
+			full = []string{"/home/orbit/Drive", "shared across sessions", "trailing slash", "cp -a",
 				"cp -p", "rsync -a", "tar x", "file locks", "writing inside an existing file", "executing a file", "errors.log",
 				"status.json", "unsent/", "ORBIT_GUEST", "do not write it"}
 		}
 		t.Run(name, func(t *testing.T) {
 			fakeDriveMount(t, mounted)
 			if mounted {
-				// Whichever root the Pod has (/run/orbit-documents, or /run/orbit-files of the old driver) is the one named.
+				// Whichever root the Pod has (/run/orbit-drive, or /run/orbit-documents or /run/orbit-files of an older driver) is the one named.
 				brief = append(brief, driveParentPath+"/errors.log")
 				full = append(full, "mounted at "+driveMountPath+")", driveParentPath+"/errors.log")
 			}
@@ -564,7 +572,7 @@ func TestOrbitDriveGuidanceMatchesRunnerKind(t *testing.T) {
 					t.Errorf("the files guide omits %q", phrase)
 				}
 			}
-			if got := strings.Contains(instructions, "~/Documents is the owner's"); got != mounted {
+			if got := strings.Contains(instructions, "~/Drive is the owner's"); got != mounted {
 				t.Errorf("shell mount instructions present = %t, mounted = %t", got, mounted)
 			}
 		})

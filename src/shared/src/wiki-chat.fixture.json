@@ -62,8 +62,88 @@
       "state": "draft",
       "label": "Rewrite from main",
       "title": "Draft · Rewrite from main",
-      "actions": ["rewrite", "discard"],
+      "actions": ["apply", "discard"],
       "needsYou": true
+    },
+    {
+      "name": "a rewrite held for a press: the chat read web content (design §7.2, option A)",
+      "facts": { "decision": null, "undone": false, "replaced": false, "chatOpen": true, "baseMoved": false },
+      "kind": "rewrite",
+      "ops": [],
+      "undoable": false,
+      "state": "draft",
+      "label": "Rewrite from main",
+      "title": "Draft · Rewrite from main",
+      "actions": ["apply", "discard"],
+      "needsYou": true,
+      "held": "web",
+      "heldLine": "Apply to write: this chat read web content"
+    },
+    {
+      "name": "a rewrite held for a press: the space's automatic rewrites for the day are used up",
+      "facts": { "decision": null, "undone": false, "replaced": false, "chatOpen": true, "baseMoved": false },
+      "kind": "rewrite",
+      "ops": [],
+      "undoable": false,
+      "state": "draft",
+      "label": "Rewrite from main",
+      "title": "Draft · Rewrite from main",
+      "actions": ["apply", "discard"],
+      "needsYou": true,
+      "held": "budget",
+      "heldLine": "Apply to write: today's automatic rewrites are used up"
+    },
+    {
+      "name": "a rewrite waiting for another draft of the chat that rewrites the same section",
+      "facts": { "decision": null, "undone": false, "replaced": false, "chatOpen": true, "baseMoved": false },
+      "kind": "rewrite",
+      "ops": [],
+      "undoable": false,
+      "state": "draft",
+      "label": "Rewrite from main",
+      "title": "Draft · Rewrite from main",
+      "actions": ["apply", "discard"],
+      "needsYou": true,
+      "held": "draft",
+      "heldLine": "Written once you apply or discard the draft that rewrites the same section"
+    },
+    {
+      "name": "a rewrite written from main when drafted, with no press: never Confirmed by you",
+      "facts": { "decision": null, "undone": false, "replaced": false, "chatOpen": true, "baseMoved": false, "autoQueued": true },
+      "kind": "rewrite",
+      "ops": [],
+      "undoable": true,
+      "state": "rewritten",
+      "label": "Rewrite from main",
+      "title": "Rewritten from main",
+      "actions": ["undo"],
+      "needsYou": false,
+      "held": null,
+      "heldLine": null
+    },
+    {
+      "name": "a rewrite written without a press, in a chat that has ended and whose sections were written since: still rewritten",
+      "facts": { "decision": null, "undone": false, "replaced": false, "chatOpen": false, "baseMoved": true, "autoQueued": true },
+      "kind": "rewrite",
+      "ops": [],
+      "undoable": true,
+      "state": "rewritten",
+      "label": "Rewrite from main",
+      "title": "Rewritten from main",
+      "actions": ["undo"],
+      "needsYou": false
+    },
+    {
+      "name": "a rewrite written without a press, then undone",
+      "facts": { "decision": null, "undone": true, "replaced": false, "chatOpen": true, "baseMoved": false, "autoQueued": true },
+      "kind": "rewrite",
+      "ops": [],
+      "undoable": false,
+      "state": "undone",
+      "label": "Rewrite from main",
+      "title": "Undone",
+      "actions": [],
+      "needsYou": false
     },
     {
       "name": "a plan change",
@@ -274,6 +354,33 @@
     }
   ],
   "results": [
+    {
+      "name": "a rewrite written without a press, still running: Undo alone",
+      "card": { "kind": "rewrite", "state": "rewritten", "undoable": true,
+        "rewrite": { "result": "rewriting", "reason": null, "sha": null, "seen": false, "sections": [{ "where": "3.1 §3", "result": null }] } },
+      "line": "Rewriting 3.1 §3…",
+      "actions": ["undo"],
+      "waits": false,
+      "needsYou": false
+    },
+    {
+      "name": "a rewrite written without a press, settled: Undo and See changes",
+      "card": { "kind": "rewrite", "state": "rewritten", "undoable": true,
+        "rewrite": { "result": "updated", "reason": null, "sha": null, "seen": false, "sections": [{ "where": "3.1 §3", "result": "updated", "changed": 2 }] } },
+      "line": "Wiki updated · 3.1 §3 — 2 sentences",
+      "actions": ["undo", "see_changes"],
+      "waits": false,
+      "needsYou": false
+    },
+    {
+      "name": "a rewrite written without a press that failed: it waits on the owner as an applied one does",
+      "card": { "kind": "rewrite", "state": "rewritten", "undoable": true,
+        "rewrite": { "result": "failed", "reason": null, "sha": null, "seen": false, "sections": [{ "where": "3.1 §3", "result": "failed" }] } },
+      "line": "Rewrite failed",
+      "actions": ["undo", "try_again"],
+      "waits": true,
+      "needsYou": true
+    },
     {
       "name": "a plan card's rebuild that failed: Try again asks for the build again, beside Undo and Open in Plan (C12, C17)",
       "card": { "kind": "plan", "state": "applied", "undoable": true,
@@ -744,6 +851,7 @@
   ],
   "notes": [
     { "name": "the chat's rules", "note": { "kind": "chat" }, "label": "Wiki chat" },
+    { "name": "the wiki's contents", "note": { "kind": "contents" }, "label": "Wiki contents" },
     { "name": "the page, a document's section", "note": { "kind": "page", "of": "doc", "doc": "3.1", "section": 3 }, "label": "Wiki page · 3.1 §3" },
     { "name": "the page, an entry", "note": { "kind": "page", "of": "entry", "title": "Runner offline detection keeps three missed heartbeats" }, "label": "Wiki entry · Runner offline detection keeps three missed heartbeats" },
     { "name": "the page, the plan's document", "note": { "kind": "page", "of": "plan", "doc": "3.1" }, "label": "Wiki plan · 3.1" },
@@ -751,7 +859,8 @@
     { "name": "a selection (board 42 ②)", "note": { "kind": "selection", "doc": "3.1", "section": 3, "sentences": 1, "sources": 2 }, "label": "Wiki selection · 3.1 §3 · 1 sentence · 2 sources" },
     { "name": "a selection running into the next section", "note": { "kind": "selection", "doc": "3.1", "section": 3, "toSection": 4, "sentences": 3, "sources": 1 }, "label": "Wiki selection · 3.1 §3–§4 · 3 sentences · 1 source" },
     { "name": "what the owner pressed since the agent's last turn", "note": { "kind": "drafts", "applied": 1, "edited": 0, "discarded": 1, "undone": 0 }, "label": "Wiki drafts · 1 applied, 1 discarded" },
-    { "name": "an edit and an undo", "note": { "kind": "drafts", "applied": 0, "edited": 2, "discarded": 0, "undone": 1 }, "label": "Wiki drafts · 2 edited, 1 undone" }
+    { "name": "an edit and an undo", "note": { "kind": "drafts", "applied": 0, "edited": 2, "discarded": 0, "undone": 1 }, "label": "Wiki drafts · 2 edited, 1 undone" },
+    { "name": "a rewrite written without a press, and an earlier card's rewrite that finished since", "note": { "kind": "drafts", "applied": 0, "edited": 0, "discarded": 0, "undone": 0, "rewritten": 1, "settled": 1 }, "label": "Wiki drafts · 1 rewritten, 1 finished" }
   ],
   "contexts": [
     { "name": "the page and a one-sentence selection", "value": { "page": { "kind": "doc", "docSlug": "sessions-runtime", "sectionKey": "turn-delivery" }, "selection": { "docSlug": "sessions-runtime", "sectionKey": "turn-delivery", "sentenceIds": ["34sentenceA0000000000"] } }, "errors": [] },

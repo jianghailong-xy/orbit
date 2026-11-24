@@ -74,7 +74,7 @@ const doorCases = (sql: Client, scratch: string, storage: 'local' | 's3', env: R
   const api = await bootScrubbedApiserver(scratch, storage, {
     DATABASE_URL: url,
     JWT_SECRET: randomBytes(32).toString('hex'),
-    ORBIT_DOCUMENTS_DIR: path.join(scratch, `${storage}-files`),
+    ORBIT_DRIVE_DIR: path.join(scratch, `${storage}-files`),
     ...env,
   });
   server = api;
@@ -239,14 +239,14 @@ test('every door that answers with a user file holds it to the rule', { skip: !U
     await sql.end().catch(() => undefined);
     rmSync(scratch, { recursive: true, force: true });
   });
-  await t.test('local', doorCases(sql, scratch, 'local', { ORBIT_DOCUMENTS_BACKEND: 'local' }));
+  await t.test('local', doorCases(sql, scratch, 'local', { ORBIT_DRIVE_BACKEND: 'local' }));
   const s3 = await startS3((fn) => t.after(fn));
   await t.test('s3', doorCases(sql, scratch, 's3', {
-    ORBIT_DOCUMENTS_BACKEND: 's3',
-    ORBIT_DOCUMENTS_S3_ENDPOINT: s3.endpoint,
-    ORBIT_DOCUMENTS_S3_BUCKET: s3.bucket,
-    ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID: s3.accessKeyId,
-    ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY: s3.secretAccessKey,
-    ORBIT_DOCUMENTS_S3_REGION: s3.region,
+    ORBIT_DRIVE_BACKEND: 's3',
+    ORBIT_DRIVE_S3_ENDPOINT: s3.endpoint,
+    ORBIT_DRIVE_S3_BUCKET: s3.bucket,
+    ORBIT_DRIVE_S3_ACCESS_KEY_ID: s3.accessKeyId,
+    ORBIT_DRIVE_S3_SECRET_ACCESS_KEY: s3.secretAccessKey,
+    ORBIT_DRIVE_S3_REGION: s3.region,
   }));
 });

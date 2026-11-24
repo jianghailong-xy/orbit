@@ -56,6 +56,12 @@ The runner leases one turn at a time.
   - src/runner-go/inbox.go@7f3e2a1c0d9b#L10-40
 </orbit_wiki_page>`;
 
+const WIKI_CONTENTS = `<orbit_wiki_contents planVersion="3">
+This is a view of the wiki's structure, not a source.
+3.1 sessions-runtime · Sessions runtime · Runtime
+  §3 turn-delivery · Turn delivery · written, repoSha 7f3e2a1c0d9b
+</orbit_wiki_contents>`;
+
 const WIKI_SELECTION = `<orbit_wiki_selection doc="3.1" slug="sessions-runtime" section="3" key="turn-delivery" sentences="1" sources="2" repoSha="7f3e2a1c0d9b">
 §3 Turn delivery
 The runner leases one turn at a time.
@@ -132,6 +138,9 @@ describe('describeNote', () => {
     expect(describeNote(`\n\n${WIKI_CHAT_PROMPT}\n\n${WIKI_PAGE}\n\n${WIKI_SELECTION}`))
       .toBe('Wiki page · 3.1 §3, Wiki selection · 3.1 §3 · 1 sentence · 2 sources');
     expect(describeNote(`\n\n${WIKI_CHAT_PROMPT}\n\n${WIKI_SELECTION}`)).toBe('Wiki selection · 3.1 §3 · 1 sentence · 2 sources');
+    // The first message also carries the wiki's contents, which the line names (D3).
+    expect(describeNote(`\n\n${WIKI_CHAT_PROMPT}\n\n${WIKI_CONTENTS}`)).toBe('Wiki contents');
+    expect(describeNote(`\n\n${WIKI_CHAT_PROMPT}\n\n${WIKI_CONTENTS}\n\n${WIKI_PAGE}`)).toBe('Wiki contents, Wiki page · 3.1 §3');
     // A first message sent with neither carries the rules alone, and names nothing.
     expect(describeNote(`\n\n${WIKI_CHAT_PROMPT}`)).toBe('');
     expect(describeNote('<orbit_wiki_selection doc="3.1" section="3" to="4" sentences="2" sources="3">\n§3 A\nx\n</orbit_wiki_selection>'))

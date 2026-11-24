@@ -1,5 +1,7 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { WIKI_CHAT_COPY, WIKI_CHAT_RULES, wikiChatContextErrors } from '@orbit/shared';
+import { WIKI_CHAT_COPY, WIKI_CHAT_RULES, wikiChatContextErrors, wikiChatWaiting, type WikiChatDraftView } from '@orbit/shared';
 import {
   WIKI_CHAT_ASK,
   WIKI_CHAT_CHOOSE_WORKSPACE,
@@ -12,6 +14,8 @@ import {
   WIKI_CHAT_PLACEHOLDER,
   WIKI_CHAT_RUNS_IN,
   wikiChatAttach,
+  wikiChatCardLook,
+  wikiChatCardOf,
   wikiChatContext,
   wikiChatDocks,
   wikiChatFab,
@@ -383,5 +387,41 @@ describe('the history and the panel shown by default (board 45, owner 11-11)', (
     } finally {
       Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: real });
     }
+  });
+});
+
+/** The round button over the cards the apiserver served (wiki-chat-views.fixture.json, written by wiki-chat-drafts.pg.spec.ts). */
+describe('the round button counts the auto rewrites that wait on the owner (contract `chat.waiting`)', () => {
+  const served = JSON.parse(
+    readFileSync(
+      [resolve(process.cwd(), '../shared/src/wiki-chat-views.fixture.json'), resolve(process.cwd(), 'src/shared/src/wiki-chat-views.fixture.json')].find((path) => existsSync(path))!,
+      'utf8',
+    ),
+  ) as { views: Record<'heldWeb' | 'heldBudget' | 'autoRewriting' | 'autoUpdated', WikiChatDraftView> };
+  const button = (views: WikiChatDraftView[]) => {
+    const needsYou = wikiChatWaiting(views.map(wikiChatCardOf));
+    return wikiChatFab({ needsYou, working: false, updated: 0 });
+  };
+  const withResult = (view: WikiChatDraftView, result: 'same' | 'failed', seen = false): WikiChatDraftView => ({
+    ...view,
+    rewrite: { ...view.rewrite!, result, seen },
+  });
+
+  it('counts a waiting one, and a same or failed one not yet seen', () => {
+    expect(button([served.views.autoRewriting])).toMatchObject({ state: 'needs_you', count: 1 });
+    expect(button([withResult(served.views.autoUpdated, 'same')])).toMatchObject({ state: 'needs_you', count: 1 });
+    expect(button([withResult(served.views.autoUpdated, 'failed')])).toMatchObject({ state: 'needs_you', count: 1 });
+    expect(button([served.views.autoRewriting, withResult(served.views.autoUpdated, 'failed')]).count).toBe(2);
+  });
+
+  it('does not count one that updated, or a same or failed one the owner has seen', () => {
+    expect(button([served.views.autoUpdated]).state).toBe('idle');
+    expect(button([withResult(served.views.autoUpdated, 'same', true), withResult(served.views.autoUpdated, 'failed', true)]).state).toBe('idle');
+  });
+
+  it('holds the cards held for a press as open drafts the owner decides, with the reason on the look', () => {
+    expect(wikiChatCardLook(served.views.heldWeb).held).toBe(WIKI_CHAT_COPY.card.heldWeb);
+    expect(wikiChatCardLook(served.views.heldBudget).held).toBe(WIKI_CHAT_COPY.card.heldBudget);
+    expect(wikiChatCardLook(served.views.autoUpdated).held).toBeNull();
   });
 });
