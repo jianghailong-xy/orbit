@@ -4,7 +4,7 @@ import OrbitKit
 /// A reply's `orbit-document:<id>` link drawn as the drive file it names (docs/mocks/documents, 01-ios ⑮, D21): its
 /// icon, name, folder and size, read live so a later overwrite shows, and a tap opens it in Documents. A file that has
 /// since moved to Trash or gone says so instead of breaking. Not evidence: an agent still cites a file by file_upload.
-struct DocumentsLinkCard: View {
+struct DriveLinkCard: View {
     @Environment(AppModel.self) private var app: AppModel?
     let entryID: String
     let label: String
@@ -12,7 +12,7 @@ struct DocumentsLinkCard: View {
 
     private enum Read: Equatable {
         case loading
-        case found(DocumentsEntry)
+        case found(DriveEntry)
         case gone(trashed: Bool)
     }
 
@@ -20,29 +20,29 @@ struct DocumentsLinkCard: View {
         Group {
             switch read {
             case .found(let entry) where entry.trashedAt == nil:
-                Button { app?.openDocumentsEntry(entry) } label: {
-                    card(icon: DocumentsLogic.systemImage(entry), name: entry.name, line: DocumentsLogic.cardLine(entry),
+                Button { app?.openDriveEntry(entry) } label: {
+                    card(icon: DriveLogic.systemImage(entry), name: entry.name, line: DriveLogic.cardLine(entry),
                          live: true)
                 }
                 .buttonStyle(.plain)
             case .found:
-                card(icon: "doc", name: label, line: DocumentsLogic.cardGone(trashed: true), live: false)
+                card(icon: "doc", name: label, line: DriveLogic.cardGone(trashed: true), live: false)
             case .gone(let trashed):
-                card(icon: "doc", name: label.isEmpty ? "File" : label, line: DocumentsLogic.cardGone(trashed: trashed),
+                card(icon: "doc", name: label.isEmpty ? "File" : label, line: DriveLogic.cardGone(trashed: trashed),
                      live: false)
             case .loading:
                 card(icon: "doc", name: label.isEmpty ? "File" : label, line: " ", live: false).redacted(reason: .placeholder)
             }
         }
         .task(id: entryID) {
-            guard let documents = app?.documents else { return }
-            if let entry = await documents.entry(entryID) {
+            guard let drive = app?.drive else { return }
+            if let entry = await drive.entry(entryID) {
                 read = .found(entry)
             } else {
                 read = .gone(trashed: false)
             }
         }
-        .accessibilityIdentifier("documents-link-card")
+        .accessibilityIdentifier("drive-link-card")
     }
 
     private func card(icon: String, name: String, line: String, live: Bool) -> some View {

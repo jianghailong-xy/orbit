@@ -2,10 +2,10 @@ import Foundation
 
 /// How the Documents page reads (board docs/mocks/documents, 03-mac with 01-ios for what the Mac board does not draw):
 /// the switch, sizes and dates, who wrote a file, which preview a file gets, Trash's groups, Storage's rows, and the
-/// uploads popover's lines. Mirrors the web's src/web/src/lib/documents.ts, documentsSwitch.ts, the upload tray and
-/// Trash (src/web/src/components/documents). Shared by the Mac and the phone; every sentence is here so both say it
+/// uploads popover's lines. Mirrors the web's src/web/src/lib/drive.ts, driveSwitch.ts, the upload tray and
+/// Trash (src/web/src/components/drive). Shared by the Mac and the phone; every sentence is here so both say it
 /// the same way.
-public enum DocumentsLogic {
+public enum DriveLogic {
 
     // MARK: the switch
 
@@ -128,7 +128,7 @@ public enum DocumentsLogic {
     // MARK: a folder
 
     /// Folders first, then files, each by name as Finder orders them ("file2" before "file10").
-    public static func sorted(_ entries: [DocumentsEntry]) -> [DocumentsEntry] {
+    public static func sorted(_ entries: [DriveEntry]) -> [DriveEntry] {
         entries.sorted { a, b in
             if a.isFolder != b.isFolder { return a.isFolder }
             let order = a.name.localizedStandardCompare(b.name)
@@ -137,7 +137,7 @@ public enum DocumentsLogic {
     }
 
     /// A folder's name in the window's title: the drive's root is "Documents".
-    public static func folderTitle(_ folder: DocumentsEntry?) -> String {
+    public static func folderTitle(_ folder: DriveEntry?) -> String {
         guard let folder, folder.parentId != nil else { return title }
         return folder.name
     }
@@ -160,7 +160,7 @@ public enum DocumentsLogic {
     }
 
     /// The Size column: a file's size, and a folder's count once it is known (the board's "9 items"), else "—".
-    public static func sizeColumn(_ entry: DocumentsEntry, folderCount: Int? = nil) -> String {
+    public static func sizeColumn(_ entry: DriveEntry, folderCount: Int? = nil) -> String {
         if entry.isFile { return formatSize(entry.sizeBytes) }
         return folderCount.map(items) ?? "—"
     }
@@ -169,7 +169,7 @@ public enum DocumentsLogic {
 
     /// Who last wrote a file: "You"; "Agent in <session title>" where the session was checked (the row links to it);
     /// otherwise "An agent on Orbit Cloud". `sessionTitle` is the session's title once read, nil before.
-    public static func writerText(_ writer: DocumentsWriter, sessionTitle: String? = nil) -> String {
+    public static func writerText(_ writer: DriveWriter, sessionTitle: String? = nil) -> String {
         if writer.isOwner { return you }
         guard writer.sessionId != nil else { return uncheckedAgent }
         let title = sessionTitle.flatMap(firstLine)
@@ -177,7 +177,7 @@ public enum DocumentsLogic {
     }
 
     /// The session a writer's name opens, or nil where there is none to follow.
-    public static func writerSession(_ writer: DocumentsWriter) -> String? {
+    public static func writerSession(_ writer: DriveWriter) -> String? {
         writer.isOwner ? nil : writer.sessionId
     }
 
@@ -234,7 +234,7 @@ public enum DocumentsLogic {
     }
 
     /// The SF Symbol a row draws for an entry.
-    public static func systemImage(_ entry: DocumentsEntry) -> String {
+    public static func systemImage(_ entry: DriveEntry) -> String {
         if entry.isFolder { return "folder.fill" }
         switch preview(name: entry.name, size: 0) {
         case .picture: return "photo"
@@ -252,7 +252,7 @@ public enum DocumentsLogic {
     // MARK: inspector
 
     /// "PNG · 1.2 MB", "Folder".
-    public static func kindLine(_ entry: DocumentsEntry) -> String {
+    public static func kindLine(_ entry: DriveEntry) -> String {
         if entry.isFolder { return "Folder" }
         let e = ext(entry.name)
         return e.isEmpty ? formatSize(entry.sizeBytes) : "\(e.uppercased()) · \(formatSize(entry.sizeBytes))"
@@ -264,7 +264,7 @@ public enum DocumentsLogic {
     }
 
     /// The Shared row: the link pins this version, or an earlier one.
-    public static func sharedLine(_ link: DocumentsShareLink) -> String {
+    public static func sharedLine(_ link: DriveShareLink) -> String {
         link.root.pinnedIsCurrent ? "This version" : "An earlier version"
     }
 
@@ -286,7 +286,7 @@ public enum DocumentsLogic {
 
     /// Whether `entry` may go into `folderID`: not into itself, not where it already is, and not into a folder under
     /// it (`ancestorsOfTarget` are the target's folders from the root down, as ids).
-    public static func canMove(_ entry: DocumentsEntry, into folderID: String, ancestorsOfTarget: [String]) -> Bool {
+    public static func canMove(_ entry: DriveEntry, into folderID: String, ancestorsOfTarget: [String]) -> Bool {
         if entry.id == folderID || entry.parentId == folderID { return false }
         if entry.isFolder && ancestorsOfTarget.contains(entry.id) { return false }
         return true
@@ -324,18 +324,18 @@ public enum DocumentsLogic {
     }
 
     /// `<baseURL>/s/<token>`, the address a visitor opens.
-    public static func publicURL(_ link: DocumentsShareLink, base: URL) -> URL {
+    public static func publicURL(_ link: DriveShareLink, base: URL) -> URL {
         base.appendingPathComponent("s").appendingPathComponent(link.token)
     }
 
     // MARK: Trash (D6, D11, D17, rule 3)
 
     /// A group's heading: the folder it was deleted from.
-    public static func groupTitle(_ group: DocumentsTrashGroup) -> String { folderLabel(group.folderPath) }
+    public static func groupTitle(_ group: DriveTrashGroup) -> String { folderLabel(group.folderPath) }
 
     /// The line under a group's heading: "Today 14:20 · an agent on Orbit Cloud · 18 items", "Today 09:12 · earlier
     /// version". `writer` is the actor's name as `writerText` says it.
-    public static func groupSubtitle(_ group: DocumentsTrashGroup, writer: String, now: Date = Date(),
+    public static func groupSubtitle(_ group: DriveTrashGroup, writer: String, now: Date = Date(),
                                      calendar: Calendar = .current) -> String {
         let when = formatWhenLong(group.createdAt, now: now, calendar: calendar)
         if group.version != nil { return "\(when) · earlier version" }
@@ -344,7 +344,7 @@ public enum DocumentsLogic {
     }
 
     /// The Trash header: "23 items · 2.6 GB".
-    public static func trashSummary(_ groups: [DocumentsTrashGroup]) -> String {
+    public static func trashSummary(_ groups: [DriveTrashGroup]) -> String {
         let count = groups.reduce(0) { $0 + $1.itemCount }
         let bytes = groups.reduce(0) { $0 + $1.sizeBytes }
         return "\(items(count)) · \(formatSize(bytes))"
@@ -356,27 +356,27 @@ public enum DocumentsLogic {
     public static let endsAShareLink = "This ends a share link."
 
     /// The question before deleting a group for good.
-    public static func deleteForGoodMessage(_ group: DocumentsTrashGroup) -> String {
+    public static func deleteForGoodMessage(_ group: DriveTrashGroup) -> String {
         let what = group.version.map { "This earlier version of \($0.entry.name) is deleted for good." }
             ?? "\(items(group.itemCount)) from \(folderLabel(group.folderPath)) are deleted for good."
         return "\(what) This can't be undone."
     }
 
     /// The question before Empty Trash.
-    public static func emptyTrashMessage(_ groups: [DocumentsTrashGroup]) -> String {
+    public static func emptyTrashMessage(_ groups: [DriveTrashGroup]) -> String {
         let count = groups.reduce(0) { $0 + $1.itemCount }
         let bytes = groups.reduce(0) { $0 + $1.sizeBytes }
         return "\(items(count)) (\(formatSize(bytes))) are deleted for good. This can't be undone."
     }
 
     /// The toast after a restore: "Restored 18 items" / "Restored brief.md", with where to.
-    public static func restored(_ what: String, group: DocumentsTrashGroup) -> String {
+    public static func restored(_ what: String, group: DriveTrashGroup) -> String {
         "Restored \(what) to \(folderLabel(group.folderPath))"
     }
 
     /// Whether deleting a group for good ends a file's link (§9). A shared file in Trash has a paused link;
     /// `trashGroupOf` says which group each such file went in.
-    public static func groupEndsALink(_ group: DocumentsTrashGroup, links: [DocumentsShareLink],
+    public static func groupEndsALink(_ group: DriveTrashGroup, links: [DriveShareLink],
                                       trashGroupOf: [String: String]) -> Bool {
         if let version = group.version {
             return links.contains { $0.root.id == version.entryId && !$0.root.pinnedIsCurrent }
@@ -390,16 +390,16 @@ public enum DocumentsLogic {
 
     /// One bar of the Storage total, by what it holds.
     public struct StorageBar: Equatable, Sendable {
-        public let documents: Double
+        public let drive: Double
         public let trash: Double
         public let other: Double
     }
 
     /// The total's bar: the drive's live files, its Trash, and everything else, as fractions of the account's total.
-    public static func storageBar(_ usage: DocumentsUsage) -> StorageBar {
+    public static func storageBar(_ usage: DriveUsage) -> StorageBar {
         let total = Double(max(usage.totalBytes, 1))
         let trash = Double(min(usage.trashBytes, usage.driveBytes))
-        return StorageBar(documents: Double(usage.driveBytes) / total - trash / total,
+        return StorageBar(drive: Double(usage.driveBytes) / total - trash / total,
                           trash: trash / total, other: Double(usage.otherBytes) / total)
     }
 
@@ -407,14 +407,14 @@ public enum DocumentsLogic {
     public static func storageSize(_ bytes: Int) -> String { EvidenceFiles.fileSize(bytes) }
 
     /// The legend under the bar: "Documents 10.9 GB", "Trash 1.3 GB", "Other 6.2 GB".
-    public static func storageLegend(_ usage: DocumentsUsage) -> [String] {
+    public static func storageLegend(_ usage: DriveUsage) -> [String] {
         ["Drive \(storageSize(max(0, usage.driveBytes - usage.trashBytes)))",
          "Trash \(storageSize(usage.trashBytes))",
          "Other \(storageSize(usage.otherBytes))"]
     }
 
     /// What the drive's store says when it is nearly full, or nil.
-    public static func storeWarning(_ usage: DocumentsUsage) -> String? {
+    public static func storeWarning(_ usage: DriveUsage) -> String? {
         guard usage.nearQuota == true, let used = usage.storeUsedBytes, let quota = usage.storeQuotaBytes, quota > 0 else {
             return nil
         }
@@ -462,7 +462,7 @@ public enum DocumentsLogic {
         public var allFinished: Bool { finished == count }
     }
 
-    public static func trayTotals(_ uploads: [DocumentsUploadItem], _ syncs: [DocumentsSync]) -> TrayTotals {
+    public static func trayTotals(_ uploads: [DriveUploadItem], _ syncs: [DriveSync]) -> TrayTotals {
         TrayTotals(
             count: uploads.count + syncs.count,
             finished: uploads.filter { $0.state == .done }.count + syncs.filter { !$0.running }.count,
@@ -472,7 +472,7 @@ public enum DocumentsLogic {
 
     /// The popover's heading: "Uploading 2 of 3 · 410 MB of 1.7 GB", or once all are in "Uploaded 3 files",
     /// "Synced 1 folder", "Finished 3 of 3".
-    public static func trayTitle(_ uploads: [DocumentsUploadItem], _ syncs: [DocumentsSync]) -> String {
+    public static func trayTitle(_ uploads: [DriveUploadItem], _ syncs: [DriveSync]) -> String {
         let totals = trayTotals(uploads, syncs)
         if totals.allFinished {
             if uploads.isEmpty { return "Synced \(plural(syncs.count, "folder", "folders"))" }
@@ -487,7 +487,7 @@ public enum DocumentsLogic {
     public static let clearFinished = "Clear Finished"
 
     /// Where an upload goes, after its arrow: the folder of a dropped folder's file, else the folder it was dropped on.
-    public static func uploadDestination(_ upload: DocumentsUploadItem) -> String {
+    public static func uploadDestination(_ upload: DriveUploadItem) -> String {
         if let relative = upload.relativePath, relative.contains("/") {
             return relative.split(separator: "/").dropLast().joined(separator: "/")
         }
@@ -495,7 +495,7 @@ public enum DocumentsLogic {
     }
 
     /// The line under an upload's bar: what it is doing.
-    public static func uploadStatus(_ upload: DocumentsUploadItem) -> String {
+    public static func uploadStatus(_ upload: DriveUploadItem) -> String {
         let sent = "\(formatSize(upload.sentBytes)) of \(formatSize(upload.size))"
         switch upload.state {
         case .queued:
@@ -514,27 +514,27 @@ public enum DocumentsLogic {
     }
 
     /// A sync's row: "out/ → Reports/out".
-    public static func syncTitle(_ sync: DocumentsSync) -> (source: String, destination: String) {
+    public static func syncTitle(_ sync: DriveSync) -> (source: String, destination: String) {
         ("\(sync.sourceName)/", String(sync.destPath.drop { $0 == "/" }))
     }
 
     public static let agentSync = "Agent sync"
 
     /// A sync's bar, 0…1; nil while it is still counting files.
-    public static func syncFraction(_ sync: DocumentsSync) -> Double? {
+    public static func syncFraction(_ sync: DriveSync) -> Double? {
         if sync.status == "CHECKING" { return nil }
         guard let total = sync.bytesTotal, total > 0 else { return 0 }
         return min(1, Double(sync.bytesSent) / Double(total))
     }
 
     /// Whether a sync ended with files it could not send, which its row marks and Details lists.
-    public static func syncHasFailures(_ sync: DocumentsSync) -> Bool {
+    public static func syncHasFailures(_ sync: DriveSync) -> Bool {
         sync.status == "FAILED" || (sync.status == "DONE" && sync.failedCount > 0)
     }
 
     /// The line under a sync's bar, or its whole outcome once it ended. `rate` is the bytes a second between the last
     /// two reads. A sync with failures ends in "Details…", which the row draws as a link after this text.
-    public static func syncStatus(_ sync: DocumentsSync, rate: Double? = nil) -> String {
+    public static func syncStatus(_ sync: DriveSync, rate: Double? = nil) -> String {
         switch sync.status {
         case "CHECKING":
             return "Checking files… \(sync.filesSeen.formatted()) so far"
@@ -560,7 +560,7 @@ public enum DocumentsLogic {
     }
 
     /// The bytes a second between two reads of the same sync; between two reads that moved nothing the last rate stands.
-    public static func syncRate(previous: DocumentsSync?, previousRate: Double?, now: DocumentsSync) -> Double? {
+    public static func syncRate(previous: DriveSync?, previousRate: Double?, now: DriveSync) -> Double? {
         guard now.running, let previous, let was = date(previous.updatedAt), let at = date(now.updatedAt) else { return nil }
         let seconds = at.timeIntervalSince(was)
         if seconds > 0 && now.bytesSent > previous.bytesSent { return Double(now.bytesSent - previous.bytesSent) / seconds }
@@ -568,9 +568,9 @@ public enum DocumentsLogic {
     }
 
     /// The Details sheet's heading and summary for a sync's failures.
-    public static func syncDetailsTitle(_ sync: DocumentsSync) -> String { "\(sync.sourceName)/ → \(sync.destPath)" }
+    public static func syncDetailsTitle(_ sync: DriveSync) -> String { "\(sync.sourceName)/ → \(sync.destPath)" }
 
-    public static func syncDetailsSummary(_ sync: DocumentsSync, now: Date = Date(), calendar: Calendar = .current) -> String {
+    public static func syncDetailsSummary(_ sync: DriveSync, now: Date = Date(), calendar: Calendar = .current) -> String {
         let at = formatter("HH:mm", calendar).string(from: date(sync.endedAt ?? sync.updatedAt) ?? now)
         var text = "Synced \(files(sync.filesDone))"
         if let session = sync.session { text += " from \(session.title)" }
@@ -580,11 +580,11 @@ public enum DocumentsLogic {
     }
 
     /// "and 12 more", when the server listed fewer failures than it counted.
-    public static func syncMoreFailures(_ sync: DocumentsSync) -> String? {
+    public static func syncMoreFailures(_ sync: DriveSync) -> String? {
         let more = sync.failedCount - sync.failed.count
         return more > 0 ? "and \(more.formatted()) more" : nil
     }
 
     /// "Open Datasets": the button that opens the folder a sync wrote to.
-    public static func openFolder(_ sync: DocumentsSync) -> String { "Open \(folderLabel(sync.destPath))" }
+    public static func openFolder(_ sync: DriveSync) -> String { "Open \(folderLabel(sync.destPath))" }
 }

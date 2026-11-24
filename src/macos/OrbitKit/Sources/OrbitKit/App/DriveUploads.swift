@@ -7,15 +7,15 @@ import CryptoKit
 // 4). Each file is opened with `POST /documents/uploads`, sent as chunks of at most the size the server answers
 // (8 MiB) and completed. What has arrived is asked of the server, never assumed, so an upload goes on from where it
 // stopped: after a lost connection on its own, and after the app quits, from the file still on disk (unlike the web,
-// a Mac app keeps the file's path). The web's twin is src/web/src/lib/documentsUploads.ts.
+// a Mac app keeps the file's path). The web's twin is src/web/src/lib/driveUploads.ts.
 
 /// Where an upload stands.
-public enum DocumentsUploadState: String, Codable, Sendable {
+public enum DriveUploadState: String, Codable, Sendable {
     case queued, uploading, paused, failed, done
 }
 
 /// One file going up, and what is kept of it across a relaunch.
-public struct DocumentsUploadItem: Codable, Equatable, Sendable, Identifiable {
+public struct DriveUploadItem: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let name: String
     public let size: Int
@@ -31,7 +31,7 @@ public struct DocumentsUploadItem: Codable, Equatable, Sendable, Identifiable {
     public let dropKey: String?
     public var uploadID: String?
     public var sentBytes: Int
-    public var state: DocumentsUploadState
+    public var state: DriveUploadState
     /// Why it stopped, in the server's words or "Connection lost."
     public var error: String?
     /// Bytes a second over this run, while uploading.
@@ -40,7 +40,7 @@ public struct DocumentsUploadItem: Codable, Equatable, Sendable, Identifiable {
 
     public init(id: String, name: String, size: Int, modifiedAt: Double, filePath: String, parentID: String?,
                 parentName: String, relativePath: String? = nil, dropKey: String? = nil, uploadID: String? = nil,
-                sentBytes: Int = 0, state: DocumentsUploadState = .queued, error: String? = nil, rate: Double? = nil,
+                sentBytes: Int = 0, state: DriveUploadState = .queued, error: String? = nil, rate: Double? = nil,
                 entryID: String? = nil) {
         self.id = id
         self.name = name
@@ -67,7 +67,7 @@ public struct DocumentsUploadItem: Codable, Equatable, Sendable, Identifiable {
 }
 
 /// One file to send: a file picked or dropped, with where it goes.
-public struct DocumentsUploadRequest: Equatable, Sendable {
+public struct DriveUploadRequest: Equatable, Sendable {
     public let fileURL: URL
     public let parentID: String?
     public let parentName: String
@@ -86,22 +86,22 @@ public struct DocumentsUploadRequest: Equatable, Sendable {
     /// path inside the folder (`Dir/sub/name`) and one drop key, so the whole folder lands under one top folder.
     /// Hidden files (`.DS_Store`) and packages' insides stay behind.
     public static func expand(_ urls: [URL], parentID: String?, parentName: String,
-                              fileManager: FileManager = .default) -> [DocumentsUploadRequest] {
-        urls.flatMap { url -> [DocumentsUploadRequest] in
+                              fileManager: FileManager = .default) -> [DriveUploadRequest] {
+        urls.flatMap { url -> [DriveUploadRequest] in
             var isDirectory: ObjCBool = false
             guard fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory) else { return [] }
             guard isDirectory.boolValue else {
-                return [DocumentsUploadRequest(fileURL: url, parentID: parentID, parentName: parentName)]
+                return [DriveUploadRequest(fileURL: url, parentID: parentID, parentName: parentName)]
             }
             let root = url.standardizedFileURL
             let dropKey = "drop-\(UUID().uuidString)"
             guard let walker = fileManager.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey],
                                                       options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return [] }
-            var files: [DocumentsUploadRequest] = []
+            var files: [DriveUploadRequest] = []
             for case let file as URL in walker {
                 guard (try? file.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { continue }
                 let inside = file.standardizedFileURL.pathComponents.dropFirst(root.pathComponents.count)
-                files.append(DocumentsUploadRequest(
+                files.append(DriveUploadRequest(
                     fileURL: file, parentID: parentID, parentName: parentName,
                     relativePath: ([root.lastPathComponent] + inside).joined(separator: "/"), dropKey: dropKey))
             }
@@ -111,27 +111,27 @@ public struct DocumentsUploadRequest: Equatable, Sendable {
 }
 
 /// The calls an upload makes. `APIClient` is the real one; tests answer with a fake.
-public protocol DocumentsUploadTransport: AnyObject, Sendable {
-    func documentsOpenUpload(parentID: String?, name: String, size: Int, relativePath: String?,
-                             dropRootID: String?) async throws -> DocumentsUploadOpened
-    func documentsUploadStatus(_ uploadID: String) async throws -> DocumentsUploadStatus
-    func documentsPutChunk(uploadID: String, index: Int, bytes: Data, sha256: String) async throws
-    func documentsCompleteUpload(_ uploadID: String) async throws -> DocumentsEntry
-    func documentsAbandonUpload(_ uploadID: String) async throws
+public protocol DriveUploadTransport: AnyObject, Sendable {
+    func driveOpenUpload(parentID: String?, name: String, size: Int, relativePath: String?,
+                             dropRootID: String?) async throws -> DriveUploadOpened
+    func driveUploadStatus(_ uploadID: String) async throws -> DriveUploadStatus
+    func drivePutChunk(uploadID: String, index: Int, bytes: Data, sha256: String) async throws
+    func driveCompleteUpload(_ uploadID: String) async throws -> DriveEntry
+    func driveAbandonUpload(_ uploadID: String) async throws
 }
 
-extension APIClient: DocumentsUploadTransport {}
+extension APIClient: DriveUploadTransport {}
 
 /// Where the queue keeps its uploads across a relaunch.
-public protocol DocumentsUploadStore: AnyObject {
-    func load() -> (uploads: [DocumentsUploadItem], drops: [String: String])
-    func save(uploads: [DocumentsUploadItem], drops: [String: String])
+public protocol DriveUploadStore: AnyObject {
+    func load() -> (uploads: [DriveUploadItem], drops: [String: String])
+    func save(uploads: [DriveUploadItem], drops: [String: String])
 }
 
 /// The uploads in UserDefaults, one key per server.
-public final class DocumentsUploadDefaultsStore: DocumentsUploadStore {
+public final class DriveUploadDefaultsStore: DriveUploadStore {
     private struct Kept: Codable {
-        let uploads: [DocumentsUploadItem]
+        let uploads: [DriveUploadItem]
         let drops: [String: String]
     }
 
@@ -143,20 +143,20 @@ public final class DocumentsUploadDefaultsStore: DocumentsUploadStore {
         self.key = "documents.uploads.\(baseURL.absoluteString)"
     }
 
-    public func load() -> (uploads: [DocumentsUploadItem], drops: [String: String]) {
+    public func load() -> (uploads: [DriveUploadItem], drops: [String: String]) {
         guard let data = defaults.data(forKey: key), let kept = try? JSONDecoder().decode(Kept.self, from: data) else {
             return ([], [:])
         }
         return (kept.uploads, kept.drops)
     }
 
-    public func save(uploads: [DocumentsUploadItem], drops: [String: String]) {
+    public func save(uploads: [DriveUploadItem], drops: [String: String]) {
         if let data = try? JSONEncoder().encode(Kept(uploads: uploads, drops: drops)) { defaults.set(data, forKey: key) }
     }
 }
 
 /// Which chunks a file still needs, given the chunks the server already has.
-public enum DocumentsChunkPlan {
+public enum DriveChunkPlan {
     public struct Chunk: Equatable, Sendable {
         public let index: Int
         public let offset: Int
@@ -186,28 +186,28 @@ public enum DocumentsChunkPlan {
 /// The owner's uploads, one file at a time, in the order they were added. Lives as long as the app, not the page:
 /// leaving Documents does not stop it, and the popover shows it again on return.
 @MainActor
-public final class DocumentsUploadQueue {
-    public private(set) var items: [DocumentsUploadItem] = []
+public final class DriveUploadQueue {
+    public private(set) var items: [DriveUploadItem] = []
     /// How many uploads completed since launch: what the page re-reads its folder on.
     public private(set) var completedCount = 0
     /// Called after every change to `items`.
     public var onChange: (() -> Void)?
     /// Called when an upload completes, with the file it made.
-    public var onCompleted: ((DocumentsUploadItem) -> Void)?
+    public var onCompleted: ((DriveUploadItem) -> Void)?
 
     /// A chunk that fails for want of a connection is tried this many more times, waiting longer each time, before
     /// the upload pauses itself.
     public static let retries = 3
     public static let connectionLost = "Connection lost."
 
-    private let transport: DocumentsUploadTransport
-    private let store: DocumentsUploadStore?
+    private let transport: DriveUploadTransport
+    private let store: DriveUploadStore?
     private let retryDelay: TimeInterval
     private let fileManager: FileManager
     private var drops: [String: String] = [:]
     private var running: (id: String, task: Task<Void, Never>)?
 
-    public init(transport: DocumentsUploadTransport, store: DocumentsUploadStore? = nil, retryDelay: TimeInterval = 1,
+    public init(transport: DriveUploadTransport, store: DriveUploadStore? = nil, retryDelay: TimeInterval = 1,
                 fileManager: FileManager = .default) {
         self.transport = transport
         self.store = store
@@ -239,7 +239,7 @@ public final class DocumentsUploadQueue {
     public func start() { pump() }
 
     /// Queue files. A file already waiting (same path, size and time, same place) is not added twice.
-    public func add(_ requests: [DocumentsUploadRequest]) {
+    public func add(_ requests: [DriveUploadRequest]) {
         for request in requests {
             guard let attributes = try? fileManager.attributesOfItem(atPath: request.fileURL.path) else { continue }
             let size = (attributes[.size] as? NSNumber)?.intValue ?? 0
@@ -248,7 +248,7 @@ public final class DocumentsUploadQueue {
                 $0.modifiedAt == modifiedAt && $0.parentID == request.parentID && $0.relativePath == request.relativePath }) {
                 continue
             }
-            items.append(DocumentsUploadItem(
+            items.append(DriveUploadItem(
                 id: UUID().uuidString, name: request.fileURL.lastPathComponent, size: size, modifiedAt: modifiedAt,
                 filePath: request.fileURL.path, parentID: request.parentID, parentName: request.parentName,
                 relativePath: request.relativePath, dropKey: request.dropKey))
@@ -283,7 +283,7 @@ public final class DocumentsUploadQueue {
         changed()
         if let uploadID = item.uploadID {
             let transport = transport
-            Task { try? await transport.documentsAbandonUpload(uploadID) }
+            Task { try? await transport.driveAbandonUpload(uploadID) }
         }
     }
 
@@ -316,9 +316,9 @@ public final class DocumentsUploadQueue {
 
     // MARK: the run
 
-    private func find(_ id: String) -> DocumentsUploadItem? { items.first { $0.id == id } }
+    private func find(_ id: String) -> DriveUploadItem? { items.first { $0.id == id } }
 
-    private func patch(_ id: String, quiet: Bool = false, _ change: (inout DocumentsUploadItem) -> Void) {
+    private func patch(_ id: String, quiet: Bool = false, _ change: (inout DriveUploadItem) -> Void) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         change(&items[index])
         if !quiet { changed() }
@@ -410,7 +410,7 @@ public final class DocumentsUploadQueue {
         var arrived: [Int: Int] = [:]
         if let uploadID = item.uploadID {
             do {
-                let status = try await transport.documentsUploadStatus(uploadID)
+                let status = try await transport.driveUploadStatus(uploadID)
                 if status.completed, let entryID = status.entryId { return entryID }
                 chunkSize = status.chunkSize
                 arrived = Dictionary(status.chunks.map { ($0.idx, $0.sizeBytes) }, uniquingKeysWith: { $1 })
@@ -422,7 +422,7 @@ public final class DocumentsUploadQueue {
         try check(id)
         if find(id)?.uploadID == nil {
             let dropRootID = item.dropKey.flatMap { drops[$0] }
-            let opened = try await transport.documentsOpenUpload(
+            let opened = try await transport.driveOpenUpload(
                 parentID: item.parentID, name: item.name, size: item.size, relativePath: item.relativePath,
                 dropRootID: dropRootID)
             if let key = item.dropKey, let root = opened.dropRootId, drops[key] == nil { drops[key] = root }
@@ -432,19 +432,19 @@ public final class DocumentsUploadQueue {
         }
         guard let uploadID = find(id)?.uploadID else { throw Stopped() }
 
-        var sent = DocumentsChunkPlan.arrivedBytes(size: item.size, chunkSize: chunkSize, arrived: arrived)
+        var sent = DriveChunkPlan.arrivedBytes(size: item.size, chunkSize: chunkSize, arrived: arrived)
         patch(id) { $0.sentBytes = sent }
         let started = Date()
         var sentThisRun = 0
         let path = item.filePath
-        for chunk in DocumentsChunkPlan.missing(size: item.size, chunkSize: chunkSize, arrived: arrived) {
+        for chunk in DriveChunkPlan.missing(size: item.size, chunkSize: chunkSize, arrived: arrived) {
             try check(id)
             let (bytes, sha) = try await Task.detached(priority: .utility) {
                 let handle = try FileHandle(forReadingFrom: URL(fileURLWithPath: path))
                 defer { try? handle.close() }
                 try handle.seek(toOffset: UInt64(chunk.offset))
                 let bytes = try handle.read(upToCount: chunk.length) ?? Data()
-                return (bytes, DocumentsUploadQueue.sha256(bytes))
+                return (bytes, DriveUploadQueue.sha256(bytes))
             }.value
             guard bytes.count == chunk.length else {
                 throw Refused(message: "\(item.name) changed since it was picked. Upload it again.")
@@ -453,7 +453,7 @@ public final class DocumentsUploadQueue {
             while true {
                 try check(id)
                 do {
-                    try await transport.documentsPutChunk(uploadID: uploadID, index: chunk.index, bytes: bytes, sha256: sha)
+                    try await transport.drivePutChunk(uploadID: uploadID, index: chunk.index, bytes: bytes, sha256: sha)
                     break
                 } catch {
                     if Task.isCancelled || !Self.transient(error) || attempt >= Self.retries { throw error }
@@ -472,7 +472,7 @@ public final class DocumentsUploadQueue {
             }
         }
         try check(id)
-        return try await transport.documentsCompleteUpload(uploadID).id
+        return try await transport.driveCompleteUpload(uploadID).id
     }
 
     /// Stop here if the upload was paused or cancelled meanwhile.

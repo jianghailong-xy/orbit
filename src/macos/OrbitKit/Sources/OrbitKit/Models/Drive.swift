@@ -1,12 +1,12 @@
 import Foundation
 
 // Documents: the account's drive as the owner's routes answer it (docs/documents-drive-technical-design.md §4.1,
-// apiserver documents/documents.controller.ts, prefix `documents`). Mirrors the web's src/web/src/lib/documents.ts,
-// documentsSyncs.ts and documentsUploads.ts. Kinds and states are Strings where a newer server may add one, so an
-// answer still decodes; the reading rules live in `DocumentsLogic`.
+// apiserver documents/documents.controller.ts, prefix `documents`). Mirrors the web's src/web/src/lib/drive.ts,
+// driveSyncs.ts and driveUploads.ts. Kinds and states are Strings where a newer server may add one, so an
+// answer still decodes; the reading rules live in `DriveLogic`.
 
 /// `GET /auth/capabilities` → `documents`. A server from before the switch omits it.
-public struct DocumentsCapability: Decodable, Equatable, Sendable {
+public struct DriveCapability: Decodable, Equatable, Sendable {
     public let enabled: Bool?
 
     public init(enabled: Bool?) { self.enabled = enabled }
@@ -20,7 +20,7 @@ public struct DocumentsCapability: Decodable, Equatable, Sendable {
 }
 
 /// Who last wrote an entry or a version (§3.6). An agent's session is kept only where the door could check it.
-public struct DocumentsWriter: Codable, Equatable, Hashable, Sendable {
+public struct DriveWriter: Codable, Equatable, Hashable, Sendable {
     /// `OWNER` or `AGENT`.
     public let kind: String
     public let sessionId: String?
@@ -39,7 +39,7 @@ public struct DocumentsWriter: Codable, Equatable, Hashable, Sendable {
 }
 
 /// A file or a folder in the drive.
-public struct DocumentsEntry: Codable, Equatable, Hashable, Sendable, Identifiable {
+public struct DriveEntry: Codable, Equatable, Hashable, Sendable, Identifiable {
     public let id: String
     public let parentId: String?
     /// `FILE` or `FOLDER`.
@@ -51,7 +51,7 @@ public struct DocumentsEntry: Codable, Equatable, Hashable, Sendable, Identifiab
     public let seq: Int
     public let createdAt: String
     public let updatedAt: String
-    public let lastWriter: DocumentsWriter
+    public let lastWriter: DriveWriter
     public let trashedAt: String?
     public let trashGroupId: String?
     /// On a read of one entry: `/a/b/name` under the drive's root.
@@ -61,7 +61,7 @@ public struct DocumentsEntry: Codable, Equatable, Hashable, Sendable, Identifiab
 
     public init(id: String, parentId: String?, kind: String, name: String, sizeBytes: Int = 0,
                 mtime: String = "", currentVersionId: String? = nil, seq: Int = 0, createdAt: String = "",
-                updatedAt: String = "", lastWriter: DocumentsWriter = DocumentsWriter(kind: "OWNER"),
+                updatedAt: String = "", lastWriter: DriveWriter = DriveWriter(kind: "OWNER"),
                 trashedAt: String? = nil, trashGroupId: String? = nil, path: String? = nil,
                 folderPath: String? = nil) {
         self.id = id
@@ -101,7 +101,7 @@ public struct DocumentsEntry: Codable, Equatable, Hashable, Sendable, Identifiab
         seq = (try? c.decode(Int.self, forKey: .seq)) ?? 0
         createdAt = (try? c.decode(String.self, forKey: .createdAt)) ?? ""
         updatedAt = (try? c.decode(String.self, forKey: .updatedAt)) ?? ""
-        lastWriter = (try? c.decode(DocumentsWriter.self, forKey: .lastWriter)) ?? DocumentsWriter(kind: "OWNER")
+        lastWriter = (try? c.decode(DriveWriter.self, forKey: .lastWriter)) ?? DriveWriter(kind: "OWNER")
         trashedAt = try? c.decodeIfPresent(String.self, forKey: .trashedAt)
         trashGroupId = try? c.decodeIfPresent(String.self, forKey: .trashGroupId)
         path = try? c.decodeIfPresent(String.self, forKey: .path)
@@ -110,12 +110,12 @@ public struct DocumentsEntry: Codable, Equatable, Hashable, Sendable, Identifiab
 }
 
 /// `GET /documents/entries`: one page of a folder (the root when no `parentId`).
-public struct DocumentsListing: Codable, Equatable, Sendable {
-    public let folder: DocumentsEntry
-    public let entries: [DocumentsEntry]
+public struct DriveListing: Codable, Equatable, Sendable {
+    public let folder: DriveEntry
+    public let entries: [DriveEntry]
     public let nextCursor: String?
 
-    public init(folder: DocumentsEntry, entries: [DocumentsEntry], nextCursor: String? = nil) {
+    public init(folder: DriveEntry, entries: [DriveEntry], nextCursor: String? = nil) {
         self.folder = folder
         self.entries = entries
         self.nextCursor = nextCursor
@@ -123,24 +123,24 @@ public struct DocumentsListing: Codable, Equatable, Sendable {
 }
 
 /// `GET /documents/search`: the first page of live entries whose name contains the words.
-public struct DocumentsSearchResult: Codable, Equatable, Sendable {
-    public let entries: [DocumentsEntry]
+public struct DriveSearchResult: Codable, Equatable, Sendable {
+    public let entries: [DriveEntry]
     public let nextCursor: String?
 }
 
 /// One version of a file, current or replaced.
-public struct DocumentsVersion: Codable, Equatable, Hashable, Sendable, Identifiable {
+public struct DriveVersion: Codable, Equatable, Hashable, Sendable, Identifiable {
     public let id: String
     public let entryId: String
     public let sizeBytes: Int
     public let createdAt: String
     public let current: Bool
-    public let writer: DocumentsWriter
+    public let writer: DriveWriter
     public let replacedAt: String?
     public let trashGroupId: String?
 
     public init(id: String, entryId: String, sizeBytes: Int, createdAt: String, current: Bool,
-                writer: DocumentsWriter, replacedAt: String? = nil, trashGroupId: String? = nil) {
+                writer: DriveWriter, replacedAt: String? = nil, trashGroupId: String? = nil) {
         self.id = id
         self.entryId = entryId
         self.sizeBytes = sizeBytes
@@ -153,22 +153,22 @@ public struct DocumentsVersion: Codable, Equatable, Hashable, Sendable, Identifi
 }
 
 /// `GET /documents/entries/:id/versions`.
-public struct DocumentsVersions: Codable, Equatable, Sendable {
-    public let entry: DocumentsEntry
-    public let versions: [DocumentsVersion]
+public struct DriveVersions: Codable, Equatable, Sendable {
+    public let entry: DriveEntry
+    public let versions: [DriveVersion]
 }
 
 /// A trash group's replaced version, with the file it belongs to.
-public struct DocumentsTrashVersion: Codable, Equatable, Hashable, Sendable {
+public struct DriveTrashVersion: Codable, Equatable, Hashable, Sendable {
     public let id: String
     public let entryId: String
     public let sizeBytes: Int
     public let createdAt: String
-    public let writer: DocumentsWriter
-    public let entry: DocumentsEntry
+    public let writer: DriveWriter
+    public let entry: DriveEntry
 
-    public init(id: String, entryId: String, sizeBytes: Int, createdAt: String, writer: DocumentsWriter,
-                entry: DocumentsEntry) {
+    public init(id: String, entryId: String, sizeBytes: Int, createdAt: String, writer: DriveWriter,
+                entry: DriveEntry) {
         self.id = id
         self.entryId = entryId
         self.sizeBytes = sizeBytes
@@ -179,7 +179,7 @@ public struct DocumentsTrashVersion: Codable, Equatable, Hashable, Sendable {
 }
 
 /// What one delete (or one replace) put in Trash (rule 3): the folder it came from and when.
-public struct DocumentsTrashGroup: Codable, Equatable, Hashable, Sendable, Identifiable {
+public struct DriveTrashGroup: Codable, Equatable, Hashable, Sendable, Identifiable {
     public let id: String
     /// `DELETE` or `VERSION`.
     public let kind: String
@@ -188,13 +188,13 @@ public struct DocumentsTrashGroup: Codable, Equatable, Hashable, Sendable, Ident
     public let createdAt: String
     public let itemCount: Int
     public let sizeBytes: Int
-    public let actor: DocumentsWriter
-    public let items: [DocumentsEntry]
-    public let version: DocumentsTrashVersion?
+    public let actor: DriveWriter
+    public let items: [DriveEntry]
+    public let version: DriveTrashVersion?
 
     public init(id: String, kind: String, folderId: String? = nil, folderPath: String, createdAt: String,
-                itemCount: Int, sizeBytes: Int, actor: DocumentsWriter, items: [DocumentsEntry] = [],
-                version: DocumentsTrashVersion? = nil) {
+                itemCount: Int, sizeBytes: Int, actor: DriveWriter, items: [DriveEntry] = [],
+                version: DriveTrashVersion? = nil) {
         self.id = id
         self.kind = kind
         self.folderId = folderId
@@ -209,23 +209,23 @@ public struct DocumentsTrashGroup: Codable, Equatable, Hashable, Sendable, Ident
 }
 
 /// `GET /documents/trash`: one page of groups, newest first.
-public struct DocumentsTrashPage: Codable, Equatable, Sendable {
-    public let groups: [DocumentsTrashGroup]
+public struct DriveTrashPage: Codable, Equatable, Sendable {
+    public let groups: [DriveTrashGroup]
     public let nextCursor: String?
 }
 
 /// What a restore brought back.
-public struct DocumentsRestored: Codable, Equatable, Sendable {
+public struct DriveRestored: Codable, Equatable, Sendable {
     public let entryIds: [String]
 }
 
 /// `DELETE /documents/entries/:id`: the group the entry went in, which Undo restores.
-public struct DocumentsTrashed: Codable, Equatable, Sendable {
+public struct DriveTrashed: Codable, Equatable, Sendable {
     public let trashGroupId: String
 }
 
 /// What the share check found (§9): the shape and line of a credential, never the credential itself.
-public struct DocumentsShareWarning: Codable, Equatable, Hashable, Sendable {
+public struct DriveShareWarning: Codable, Equatable, Hashable, Sendable {
     public let kind: String
     public let line: Int
 
@@ -236,14 +236,14 @@ public struct DocumentsShareWarning: Codable, Equatable, Hashable, Sendable {
 }
 
 /// `POST /documents/entries/:id/share-check`.
-public struct DocumentsShareCheck: Codable, Equatable, Sendable {
+public struct DriveShareCheck: Codable, Equatable, Sendable {
     public let versionId: String?
-    public let warnings: [DocumentsShareWarning]
+    public let warnings: [DriveShareWarning]
     public let checkedBytes: Int
     /// Only the start of the file was read: the scan stops at 25 MiB or 20 s.
     public let partial: Bool
 
-    public init(versionId: String? = nil, warnings: [DocumentsShareWarning], checkedBytes: Int, partial: Bool) {
+    public init(versionId: String? = nil, warnings: [DriveShareWarning], checkedBytes: Int, partial: Bool) {
         self.versionId = versionId
         self.warnings = warnings
         self.checkedBytes = checkedBytes
@@ -254,7 +254,7 @@ public struct DocumentsShareCheck: Codable, Equatable, Sendable {
 /// A drive file's link, as `GET /share-links?kind=DRIVE_FILE` lists it and `POST /share-links` answers it.
 /// `root.pinnedIsCurrent` is false once the file moved on. Its own type: `ShareRootKind` is the closed set
 /// Settings → Shared links asks for, and a drive file is not among them.
-public struct DocumentsShareLink: Codable, Equatable, Sendable, Identifiable {
+public struct DriveShareLink: Codable, Equatable, Sendable, Identifiable {
     public struct Root: Codable, Equatable, Sendable {
         public let id: String
         public let title: String?
@@ -293,16 +293,16 @@ public struct DocumentsShareLink: Codable, Equatable, Sendable, Identifiable {
 }
 
 /// `GET /share-links?kind=DRIVE_FILE`; a row of another kind or that fails to decode is skipped.
-public struct DocumentsShareLinkList: Decodable, Equatable, Sendable {
-    public let links: [DocumentsShareLink]
+public struct DriveShareLinkList: Decodable, Equatable, Sendable {
+    public let links: [DriveShareLink]
 
     private enum CodingKeys: String, CodingKey { case links }
     private struct Row: Decodable {
-        let link: DocumentsShareLink?
-        init(from decoder: Decoder) throws { link = try? DocumentsShareLink(from: decoder) }
+        let link: DriveShareLink?
+        init(from decoder: Decoder) throws { link = try? DriveShareLink(from: decoder) }
     }
 
-    public init(links: [DocumentsShareLink]) { self.links = links }
+    public init(links: [DriveShareLink]) { self.links = links }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -311,15 +311,15 @@ public struct DocumentsShareLinkList: Decodable, Equatable, Sendable {
 }
 
 /// `POST /share-links` with a drive file: the link, and what the scan found on the version it pins.
-public struct DocumentsShareAnswer: Decodable, Equatable, Sendable {
-    public let link: DocumentsShareLink
-    public let warnings: [DocumentsShareWarning]
+public struct DriveShareAnswer: Decodable, Equatable, Sendable {
+    public let link: DriveShareLink
+    public let warnings: [DriveShareWarning]
     public let checkedBytes: Int
     public let partial: Bool
 }
 
 /// `GET /documents/usage`: the drive's share of the account and the rest, each content once (§2.5).
-public struct DocumentsUsage: Codable, Equatable, Sendable {
+public struct DriveUsage: Codable, Equatable, Sendable {
     public let totalBytes: Int
     public let driveBytes: Int
     public let trashBytes: Int
@@ -397,7 +397,7 @@ public struct StorageUsage: Codable, Equatable, Sendable {
 }
 
 /// An agent's directory sync into Documents (docs/documents-directory-sync-design.md, S4).
-public struct DocumentsSync: Codable, Equatable, Sendable, Identifiable {
+public struct DriveSync: Codable, Equatable, Sendable, Identifiable {
     public struct Session: Codable, Equatable, Sendable {
         public let id: String
         public let title: String
@@ -469,12 +469,12 @@ public struct DocumentsSync: Codable, Equatable, Sendable, Identifiable {
 }
 
 /// `GET /documents/syncs`.
-public struct DocumentsSyncList: Codable, Equatable, Sendable {
-    public let syncs: [DocumentsSync]
+public struct DriveSyncList: Codable, Equatable, Sendable {
+    public let syncs: [DriveSync]
 }
 
 /// `POST /documents/uploads`: the staging id, and the size every chunk but the last must have.
-public struct DocumentsUploadOpened: Codable, Equatable, Sendable {
+public struct DriveUploadOpened: Codable, Equatable, Sendable {
     public let id: String
     public let chunkSize: Int
     /// The top folder a dropped folder's files share; later files of the same drop pass it back.
@@ -488,7 +488,7 @@ public struct DocumentsUploadOpened: Codable, Equatable, Sendable {
 }
 
 /// `GET /documents/uploads/:id`: which chunks have arrived, so an upload goes on from where it stopped.
-public struct DocumentsUploadStatus: Codable, Equatable, Sendable {
+public struct DriveUploadStatus: Codable, Equatable, Sendable {
     public struct Chunk: Codable, Equatable, Sendable {
         public let idx: Int
         public let sizeBytes: Int
@@ -522,7 +522,7 @@ public struct DocumentsUploadStatus: Codable, Equatable, Sendable {
 }
 
 /// `POST /documents/entries/:id/download-link`: a URL under /api that downloads without a login header.
-public struct DocumentsDownloadLink: Codable, Equatable, Sendable {
+public struct DriveDownloadLink: Codable, Equatable, Sendable {
     public let path: String
     public let expiresAt: String
 }

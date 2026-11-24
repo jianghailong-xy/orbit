@@ -2,9 +2,9 @@ import Foundation
 
 // How the phone's Documents pages read (board docs/mocks/documents/01-ios.png, frames 1-18): the second line of a
 // row, the preview's heading, Trash's rows, the share sheet's outcome, the uploads sheet's notes, the composer's
-// From Documents picker and a reply's link to a drive file. The rules shared with the Mac stay in `DocumentsLogic`;
+// From Documents picker and a reply's link to a drive file. The rules shared with the Mac stay in `DriveLogic`;
 // what only the phone's layout says is here, so the iOS views hold no sentence of their own.
-extension DocumentsLogic {
+extension DriveLogic {
 
     // MARK: a row's second line (frames 2-3)
 
@@ -43,7 +43,7 @@ extension DocumentsLogic {
 
     /// The line under a file's name: "PNG · 1.2 MB · 1179 × 2556 · Orbit UI migration" (a picture, once drawn, and the
     /// folder it is in), "Markdown · 18 KB".
-    public static func fileFacts(_ entry: DocumentsEntry, pixels: (width: Int, height: Int)? = nil,
+    public static func fileFacts(_ entry: DriveEntry, pixels: (width: Int, height: Int)? = nil,
                                  folder: String? = nil) -> String {
         var parts = [kindName(entry.name), formatSize(entry.sizeBytes)]
         if let pixels { parts.append("\(pixels.width) × \(pixels.height)") }
@@ -65,7 +65,7 @@ extension DocumentsLogic {
     public static func earlierVersionsCount(_ count: Int) -> String? { count == 0 ? nil : "\(count.formatted()) in Trash" }
 
     /// One earlier version in the list: "Nov 18 · 1.1 MB · You".
-    public static func versionLine(_ version: DocumentsVersion, writer: String, now: Date = Date(),
+    public static func versionLine(_ version: DriveVersion, writer: String, now: Date = Date(),
                                    calendar: Calendar = .current) -> String {
         "\(formatWhenLong(version.createdAt, now: now, calendar: calendar)) · \(formatSize(version.sizeBytes)) · \(writer)"
     }
@@ -114,18 +114,18 @@ extension DocumentsLogic {
     public static let sharedLinksFoot = "Links you have made are listed in Settings → Shared links, as File."
 
     /// A warning's place: "line 14".
-    public static func warningLine(_ warning: DocumentsShareWarning) -> String { "line \(warning.line)" }
+    public static func warningLine(_ warning: DriveShareWarning) -> String { "line \(warning.line)" }
 
     // MARK: Trash (frames 11-12)
 
     /// A group's heading: "Orbit UI migration · Today 14:20" (the phone draws it in capitals).
-    public static func trashHeading(_ group: DocumentsTrashGroup, now: Date = Date(), calendar: Calendar = .current) -> String {
+    public static func trashHeading(_ group: DriveTrashGroup, now: Date = Date(), calendar: Calendar = .current) -> String {
         "\(groupTitle(group)) · \(formatWhenLong(group.createdAt, now: now, calendar: calendar))"
     }
 
     /// An item's second line in Trash: a folder "Folder · 18 items · 46 MB · by an agent on Orbit Cloud", a file
     /// "Deleted by you", an earlier version "Earlier version · replaced 09:12 by Agent in Redesign".
-    public static func trashLine(_ item: DocumentsEntry, in group: DocumentsTrashGroup, writer: String,
+    public static func trashLine(_ item: DriveEntry, in group: DriveTrashGroup, writer: String,
                                  folderCount: Int? = nil) -> String {
         let who = writer == you || writer == uncheckedAgent ? writer.prefix(1).lowercased() + writer.dropFirst() : writer
         if item.isFolder {
@@ -135,7 +135,7 @@ extension DocumentsLogic {
         return "Deleted by \(who)"
     }
 
-    public static func trashVersionLine(_ group: DocumentsTrashGroup, writer: String, now: Date = Date(),
+    public static func trashVersionLine(_ group: DriveTrashGroup, writer: String, now: Date = Date(),
                                         calendar: Calendar = .current) -> String {
         let when = formatWhen(group.createdAt, now: now, calendar: calendar)
         let who = writer == you || writer == uncheckedAgent ? writer.prefix(1).lowercased() + writer.dropFirst() : writer
@@ -177,7 +177,7 @@ extension DocumentsLogic {
     public static let pickerTitle = "Add from Drive"
     public static let pickerFoot = "The file is not uploaded again: its path goes into your message, and the agent reads it " +
         "from ~/Documents."
-    public static let fromDocuments = "Drive"
+    public static let fromDrive = "Drive"
 
     /// "Add", "Add 1", "Add 3".
     public static func pickerAdd(_ count: Int) -> String { count == 0 ? "Add" : "Add \(count)" }
@@ -201,7 +201,7 @@ extension DocumentsLogic {
 
     /// The session's project folder among the drive's top folders: its name, or its name with the short id suffix a
     /// clash adds; nil when there is none, and the picker opens on the root.
-    public static func projectFolder(_ entries: [DocumentsEntry], projectID: String, title: String) -> DocumentsEntry? {
+    public static func projectFolder(_ entries: [DriveEntry], projectID: String, title: String) -> DriveEntry? {
         let wanted = projectFolderName(title)
         let folders = entries.filter(\.isFolder)
         if let exact = folders.first(where: { $0.name == wanted }) { return exact }
@@ -213,7 +213,7 @@ extension DocumentsLogic {
     // MARK: a reply's link to a drive file (frame 15, D21)
 
     /// The entry id in an `orbit-document:<id>` link, or the `orbit-drive:<id>` stored transcripts still carry; nil for
-    /// any other link (the web's `documentsIdFromHref`).
+    /// any other link (the web's `driveIdFromHref`).
     public static func linkedEntryID(_ href: String) -> String? {
         let trimmed = href.trimmingCharacters(in: .whitespaces)
         for prefix in ["orbit-document:", "orbit-drive:"] where trimmed.lowercased().hasPrefix(prefix) {
@@ -254,7 +254,7 @@ extension DocumentsLogic {
     }
 
     /// A linked file's second line: "Documents › Orbit UI migration · 1.2 MB"; a folder's trail alone.
-    public static func cardLine(_ entry: DocumentsEntry) -> String {
+    public static func cardLine(_ entry: DriveEntry) -> String {
         entry.isFolder ? cardTrail(entry.path) : "\(cardTrail(entry.path)) · \(formatSize(entry.sizeBytes))"
     }
 

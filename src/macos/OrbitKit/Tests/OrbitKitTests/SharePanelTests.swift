@@ -106,7 +106,7 @@ final class SharePanelTests: XCTestCase {
 
     /// A wiki (share-links §10): its documents, always, and Footnotes — off until it is turned on, and
     /// its risk said in amber only then.
-    func testAWikiOffersItsDocumentsAndFootnotesAndWarnsOnlyOnceFootnotesIsOn() {
+    func testAWikiOffersItsDriveAndFootnotesAndWarnsOnlyOnceFootnotesIsOn() {
         let counts = ShareCounts(documents: 12, footnotes: 486)
         var panel = panel(.wiki, link(.wiki, include: ShareInclude(footnotes: false)), counts: counts)
         var rows = panel.layers

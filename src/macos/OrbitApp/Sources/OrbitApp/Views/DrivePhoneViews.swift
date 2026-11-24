@@ -9,20 +9,20 @@ import OrbitKit
 // top level with Trash and Storage as its last rows, a page per folder pushed on the section's stack, a file's page
 // with its preview and who last wrote it, the Move sheet, the share-link sheet with the secret warning, Trash with
 // earlier versions, Storage, and the uploads sheet with the agents' directory syncs. The words are OrbitKit's
-// (`DocumentsLogic`); the reads and writes are `DocumentsModel`'s, shared with the Mac.
+// (`DriveLogic`); the reads and writes are `DriveModel`'s, shared with the Mac.
 
 /// The pages Documents pushes on its section's stack (`NavNode`), one switch for the phone's shell and the iPad's
 /// column.
-struct DocumentsDestination: View {
+struct DriveDestination: View {
     let node: NavNode
 
     var body: some View {
         switch node {
-        case .documentsFolder(let id, let name): DocumentsFolderPage(folderID: id, name: name)
-        case .documentsFile(let id): DocumentsFilePage(entryID: id)
-        case .documentsVersions(let id): DocumentsVersionsPage(entryID: id)
-        case .documentsTrash: DocumentsTrashPage()
-        case .documentsStorage: DocumentsStoragePage()
+        case .driveFolder(let id, let name): DriveFolderPage(folderID: id, name: name)
+        case .driveFile(let id): DriveFilePage(entryID: id)
+        case .driveVersions(let id): DriveVersionsPage(entryID: id)
+        case .driveTrash: DriveTrashPage()
+        case .driveStorage: DriveStoragePage()
         case .taskDetail(let taskID): TaskDetailPage(taskID: taskID)
         case .projectDetail(let projectID, _): ProjectDetailView(projectID: projectID)
         default: EmptyView()
@@ -33,91 +33,91 @@ struct DocumentsDestination: View {
 // MARK: - a folder (frames 2-3, 6, 8)
 
 /// The drive's top level (`folderID == nil`) or one folder pushed over it.
-struct DocumentsFolderPage: View {
+struct DriveFolderPage: View {
     @Environment(AppModel.self) private var app
     let folderID: String?
     let name: String
 
-    @State private var listing: DocumentsListing?
+    @State private var listing: DriveListing?
     @State private var loadError: String?
     @State private var counts: [String: Int] = [:]
     @State private var searchText = ""
-    @State private var found: [DocumentsEntry]?
-    @State private var actions = DocumentsRowActions()
+    @State private var found: [DriveEntry]?
+    @State private var actions = DriveRowActions()
 
     private var isRoot: Bool { folderID == nil }
-    private var model: DocumentsModel? { app.documents }
+    private var model: DriveModel? { app.drive }
 
     var body: some View {
         if let model {
             list(model)
         } else {
-            ContentUnavailableView(DocumentsLogic.title, systemImage: AppSection.documents.systemImage)
+            ContentUnavailableView(DriveLogic.title, systemImage: AppSection.drive.systemImage)
         }
     }
 
-    private func list(_ model: DocumentsModel) -> some View {
+    private func list(_ model: DriveModel) -> some View {
         let searching = !searchText.trimmingCharacters(in: .whitespaces).isEmpty
-        let rows = searching ? (found ?? []) : DocumentsLogic.sorted(listing?.entries ?? [])
+        let rows = searching ? (found ?? []) : DriveLogic.sorted(listing?.entries ?? [])
         return List {
             if model.trayShown {
-                Section { DocumentsUploadsBanner(model: model) }
+                Section { DriveUploadsBanner(model: model) }
             }
             Section {
                 ForEach(rows) { entry in
-                    DocumentsEntryRow(model: model, entry: entry, count: counts[entry.id],
-                                      folderTrail: searching ? DocumentsLogic.searchFolder(entry.folderPath) : nil) {
+                    DriveEntryRow(model: model, entry: entry, count: counts[entry.id],
+                                      folderTrail: searching ? DriveLogic.searchFolder(entry.folderPath) : nil) {
                         open(entry)
                     }
-                    .documentsRowActions(entry, model: model, actions: $actions)
+                    .driveRowActions(entry, model: model, actions: $actions)
                 }
             }
             if isRoot && !searching {
                 Section {
-                    placeRow(.trash, trailing: model.trash.map { DocumentsLogic.items($0.reduce(0) { $0 + $1.itemCount }) })
-                    placeRow(.storage, trailing: model.usage.map { DocumentsLogic.storageSize($0.totalBytes) })
+                    placeRow(.trash, trailing: model.trash.map { DriveLogic.items($0.reduce(0) { $0 + $1.itemCount }) })
+                    placeRow(.storage, trailing: model.usage.map { DriveLogic.storageSize($0.totalBytes) })
                 } header: {
-                    Text(DocumentsLogic.moreHeading)
+                    Text(DriveLogic.moreHeading)
                 } footer: {
-                    Text(DocumentsLogic.driveFoot)
+                    Text(DriveLogic.driveFoot)
                 }
             }
         }
         .listStyle(.insetGrouped)
         .overlay { overlay(model, rows: rows, searching: searching) }
-        .navigationTitle(isRoot ? DocumentsLogic.title : (listing.map { DocumentsLogic.folderTitle($0.folder) } ?? name))
+        .navigationTitle(isRoot ? DriveLogic.title : (listing.map { DriveLogic.folderTitle($0.folder) } ?? name))
         .navigationBarTitleDisplayMode(.large)
-        .modifier(DocumentsSearchable(enabled: isRoot, text: $searchText))
+        .modifier(DriveSearchable(enabled: isRoot, text: $searchText))
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                DocumentsAddMenu(model: model, folder: listing?.folder, actions: $actions)
-                DocumentsMoreMenu(model: model, actions: $actions)
+                DriveAddMenu(model: model, folder: listing?.folder, actions: $actions)
+                DriveMoreMenu(model: model, actions: $actions)
             }
         }
         .task(id: model.changes) { await load(model) }
         .task(id: searchText) { await search(model) }
         .refreshable { await load(model) }
-        .documentsActionSheets(model: model, actions: $actions, here: listing?.folder)
+        .driveActionSheets(model: model, actions: $actions, here: listing?.folder)
     }
 
     @ViewBuilder
-    private func overlay(_ model: DocumentsModel, rows: [DocumentsEntry], searching: Bool) -> some View {
+    private func overlay(_ model: DriveModel, rows: [DriveEntry], searching: Bool) -> some View {
         if let loadError, listing == nil {
             ContentUnavailableView("Couldn't read this folder", systemImage: "exclamationmark.triangle",
                                    description: Text(loadError))
         } else if listing == nil && !searching {
             ProgressView()
         } else if rows.isEmpty && !searching && !isRoot {
-            ContentUnavailableView(DocumentsLogic.emptyFolder, systemImage: "folder",
-                                   description: Text(DocumentsLogic.emptyFolderNote))
+            ContentUnavailableView(DriveLogic.emptyFolder, systemImage: "folder",
+                                   description: Text(DriveLogic.emptyFolderNote))
         } else if searching && found?.isEmpty == true {
             ContentUnavailableView.search(text: searchText)
         }
     }
 
-    private func placeRow(_ place: DocumentsPlace, trailing: String?) -> some View {
+    private func placeRow(_ place: DrivePlace, trailing: String?) -> some View {
         Button {
-            app.push(place == .trash ? .documentsTrash : .documentsStorage)
+            app.push(place == .trash ? .driveTrash : .driveStorage)
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: place.systemImage).foregroundStyle(.secondary).frame(width: 24)
@@ -129,18 +129,18 @@ struct DocumentsFolderPage: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier("documents-\(place.rawValue)")
+        .accessibilityIdentifier("drive-\(place.rawValue)")
     }
 
-    private func open(_ entry: DocumentsEntry) {
+    private func open(_ entry: DriveEntry) {
         if entry.isFolder {
-            app.push(.documentsFolder(entryID: entry.id, name: entry.name))
+            app.push(.driveFolder(entryID: entry.id, name: entry.name))
         } else {
-            app.push(.documentsFile(entryID: entry.id))
+            app.push(.driveFile(entryID: entry.id))
         }
     }
 
-    private func load(_ model: DocumentsModel) async {
+    private func load(_ model: DriveModel) async {
         do {
             let read = try await model.read(folder: folderID)
             listing = read
@@ -158,7 +158,7 @@ struct DocumentsFolderPage: View {
         }
     }
 
-    private func search(_ model: DocumentsModel) async {
+    private func search(_ model: DriveModel) async {
         let words = searchText.trimmingCharacters(in: .whitespaces)
         guard !words.isEmpty else {
             found = nil
@@ -171,14 +171,14 @@ struct DocumentsFolderPage: View {
 }
 
 /// The drive's search field, on the top level only.
-private struct DocumentsSearchable: ViewModifier {
+private struct DriveSearchable: ViewModifier {
     let enabled: Bool
     @Binding var text: String
 
     func body(content: Content) -> some View {
         if enabled {
             content.searchable(text: $text, placement: .navigationBarDrawer(displayMode: .always),
-                               prompt: DocumentsLogic.searchPrompt)
+                               prompt: DriveLogic.searchPrompt)
         } else {
             content
         }
@@ -187,9 +187,9 @@ private struct DocumentsSearchable: ViewModifier {
 
 /// One row: the icon, the name, and its second line — a folder's count and time, a file's writer and time (rule 6)
 /// with its size on the right.
-struct DocumentsEntryRow: View {
-    let model: DocumentsModel
-    let entry: DocumentsEntry
+struct DriveEntryRow: View {
+    let model: DriveModel
+    let entry: DriveEntry
     var count: Int?
     /// A search result's folder, which replaces the writer line.
     var folderTrail: String?
@@ -198,7 +198,7 @@ struct DocumentsEntryRow: View {
     var body: some View {
         Button(action: open) {
             HStack(spacing: 12) {
-                DocumentsEntryIcon(entry: entry)
+                DriveEntryIcon(entry: entry)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 4) {
                         Text(entry.name).lineLimit(1).truncationMode(.middle).foregroundStyle(.primary)
@@ -211,7 +211,7 @@ struct DocumentsEntryRow: View {
                 }
                 Spacer(minLength: 8)
                 if entry.isFile {
-                    Text(DocumentsLogic.formatSize(entry.sizeBytes)).font(.orbitSubtext).foregroundStyle(.secondary)
+                    Text(DriveLogic.formatSize(entry.sizeBytes)).font(.orbitSubtext).foregroundStyle(.secondary)
                         .monospacedDigit()
                 } else {
                     Image(systemName: "chevron.right").font(.orbitLabel.weight(.semibold)).foregroundStyle(.tertiary)
@@ -220,26 +220,26 @@ struct DocumentsEntryRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier("documents-row-\(entry.name)")
+        .accessibilityIdentifier("drive-row-\(entry.name)")
     }
 
     private var secondLine: Text {
         if let folderTrail { return Text(folderTrail).foregroundStyle(.secondary) }
         if entry.isFolder {
-            return Text(DocumentsLogic.folderLine(count: count, mtime: entry.mtime)).foregroundStyle(.secondary)
+            return Text(DriveLogic.folderLine(count: count, mtime: entry.mtime)).foregroundStyle(.secondary)
         }
-        return DocumentsWriterText.of(model, entry.lastWriter) + Text(DocumentsLogic.fileLineWhen(entry.mtime))
+        return DriveWriterText.of(model, entry.lastWriter) + Text(DriveLogic.fileLineWhen(entry.mtime))
             .foregroundStyle(.secondary)
     }
 }
 
 /// "You", "An agent on Orbit Cloud", or "Agent in" with the session's title in the accent colour (rule 6).
 @MainActor
-enum DocumentsWriterText {
-    static func of(_ model: DocumentsModel, _ writer: DocumentsWriter) -> Text {
+enum DriveWriterText {
+    static func of(_ model: DriveModel, _ writer: DriveWriter) -> Text {
         let name = model.writerName(writer)
         let lead = "Agent in "
-        guard DocumentsLogic.writerSession(writer) != nil, name.hasPrefix(lead) else {
+        guard DriveLogic.writerSession(writer) != nil, name.hasPrefix(lead) else {
             return Text(name).foregroundStyle(.secondary)
         }
         return Text(lead).foregroundStyle(.secondary) + Text(String(name.dropFirst(lead.count))).foregroundStyle(Color.accentColor)
@@ -247,12 +247,12 @@ enum DocumentsWriterText {
 }
 
 /// A row's icon: a blue folder, a picture's own thumbnail-coloured tile, or the file kind's symbol.
-struct DocumentsEntryIcon: View {
-    let entry: DocumentsEntry
+struct DriveEntryIcon: View {
+    let entry: DriveEntry
     var size: CGFloat = 30
 
     var body: some View {
-        Image(systemName: DocumentsLogic.systemImage(entry))
+        Image(systemName: DriveLogic.systemImage(entry))
             .font(.orbitGlyph)
             .imageScale(.large)
             .foregroundStyle(entry.isFolder ? Color.accentColor : .secondary)
@@ -263,103 +263,103 @@ struct DocumentsEntryIcon: View {
 // MARK: - the + and ⋯ menus, and what a row's long press offers (frame 6)
 
 /// What a row action asked for, held by the page so its sheets and alerts can answer it.
-struct DocumentsRowActions {
-    var renaming: DocumentsEntry?
+struct DriveRowActions {
+    var renaming: DriveEntry?
     var renameText = ""
-    var moving: [DocumentsEntry]?
-    var sharing: DocumentsEntry?
+    var moving: [DriveEntry]?
+    var sharing: DriveEntry?
     var newFolder = false
     var newFolderText = ""
-    var importing: DocumentsImport?
+    var importing: DriveImport?
     var pickingPhotos = false
     var photos: [PhotosPickerItem] = []
     var uploadsShown = false
-    var shareFile: DocumentsSharedFile?
+    var shareFile: DriveSharedFile?
 }
 
 /// Which system picker the + menu opened.
-enum DocumentsImport: Identifiable {
+enum DriveImport: Identifiable {
     case files, folder
     var id: Self { self }
     var types: [UTType] { self == .files ? [.item] : [.folder] }
 }
 
 /// A downloaded file handed to the share sheet.
-struct DocumentsSharedFile: Identifiable {
+struct DriveSharedFile: Identifiable {
     let url: URL
     var id: String { url.path }
 }
 
 /// The title bar's +: Upload files, Upload photos, Upload a folder (D3), and New folder.
-struct DocumentsAddMenu: View {
-    let model: DocumentsModel
-    let folder: DocumentsEntry?
-    @Binding var actions: DocumentsRowActions
+struct DriveAddMenu: View {
+    let model: DriveModel
+    let folder: DriveEntry?
+    @Binding var actions: DriveRowActions
 
     var body: some View {
         Menu {
             Button { actions.importing = .files } label: {
-                Label(DocumentsLogic.uploadFiles, systemImage: "square.and.arrow.up")
+                Label(DriveLogic.uploadFiles, systemImage: "square.and.arrow.up")
             }
             Button { actions.pickingPhotos = true } label: {
-                Label(DocumentsLogic.uploadPhotos, systemImage: "photo")
+                Label(DriveLogic.uploadPhotos, systemImage: "photo")
             }
             Button { actions.importing = .folder } label: {
-                Label(DocumentsLogic.uploadFolder, systemImage: "folder")
+                Label(DriveLogic.uploadFolder, systemImage: "folder")
             }
             Divider()
             Button {
-                actions.newFolderText = DocumentsLogic.newFolderName
+                actions.newFolderText = DriveLogic.newFolderName
                 actions.newFolder = true
             } label: {
-                Label(DocumentsLogic.newFolderTitle, systemImage: "folder.badge.plus")
+                Label(DriveLogic.newFolderTitle, systemImage: "folder.badge.plus")
             }
         } label: {
             Image(systemName: "plus")
         }
         .accessibilityLabel("Add")
-        .accessibilityIdentifier("documents-add")
+        .accessibilityIdentifier("drive-add")
         .disabled(folder == nil)
     }
 }
 
 /// The title bar's ⋯: the uploads sheet, Trash and Storage.
-struct DocumentsMoreMenu: View {
+struct DriveMoreMenu: View {
     @Environment(AppModel.self) private var app
-    let model: DocumentsModel
-    @Binding var actions: DocumentsRowActions
+    let model: DriveModel
+    @Binding var actions: DriveRowActions
 
     var body: some View {
         Menu {
             if model.trayShown {
-                Button { actions.uploadsShown = true } label: { Label(DocumentsLogic.uploadsTitle, systemImage: "arrow.up.circle") }
+                Button { actions.uploadsShown = true } label: { Label(DriveLogic.uploadsTitle, systemImage: "arrow.up.circle") }
             }
-            Button { app.push(.documentsTrash) } label: { Label(DocumentsLogic.trash, systemImage: "trash") }
-            Button { app.push(.documentsStorage) } label: { Label(DocumentsLogic.storage, systemImage: "chart.bar") }
+            Button { app.push(.driveTrash) } label: { Label(DriveLogic.trash, systemImage: "trash") }
+            Button { app.push(.driveStorage) } label: { Label(DriveLogic.storage, systemImage: "chart.bar") }
         } label: {
             Image(systemName: "ellipsis")
         }
         .accessibilityLabel("More")
-        .accessibilityIdentifier("documents-more")
+        .accessibilityIdentifier("drive-more")
     }
 }
 
 extension View {
     /// A row's long-press menu and its swipe to Trash. A folder has the same menu without Download and Share link.
-    func documentsRowActions(_ entry: DocumentsEntry, model: DocumentsModel,
-                             actions: Binding<DocumentsRowActions>) -> some View {
+    func driveRowActions(_ entry: DriveEntry, model: DriveModel,
+                             actions: Binding<DriveRowActions>) -> some View {
         self
             .contextMenu {
                 Button {
                     actions.wrappedValue.renameText = entry.name
                     actions.wrappedValue.renaming = entry
-                } label: { Label(DocumentsLogic.renameTitle, systemImage: "pencil") }
+                } label: { Label(DriveLogic.renameTitle, systemImage: "pencil") }
                 Button { actions.wrappedValue.moving = [entry] } label: { Label("Move…", systemImage: "folder") }
                 if entry.isFile {
                     Button {
                         Task {
                             if let url = await model.downloadForSharing(entry) {
-                                actions.wrappedValue.shareFile = DocumentsSharedFile(url: url)
+                                actions.wrappedValue.shareFile = DriveSharedFile(url: url)
                             }
                         }
                     } label: { Label("Download", systemImage: "arrow.down.circle") }
@@ -378,20 +378,20 @@ extension View {
     }
 
     /// The sheets and alerts a page's row actions and + menu open. `here` is the folder new things go into.
-    func documentsActionSheets(model: DocumentsModel, actions: Binding<DocumentsRowActions>,
-                               here: DocumentsEntry?) -> some View {
-        modifier(DocumentsActionSheets(model: model, actions: actions, here: here))
+    func driveActionSheets(model: DriveModel, actions: Binding<DriveRowActions>,
+                               here: DriveEntry?) -> some View {
+        modifier(DriveActionSheets(model: model, actions: actions, here: here))
     }
 }
 
-private struct DocumentsActionSheets: ViewModifier {
-    let model: DocumentsModel
-    @Binding var actions: DocumentsRowActions
-    let here: DocumentsEntry?
+private struct DriveActionSheets: ViewModifier {
+    let model: DriveModel
+    @Binding var actions: DriveRowActions
+    let here: DriveEntry?
 
     func body(content: Content) -> some View {
         content
-            .alert(DocumentsLogic.renameTitle, isPresented: Binding(get: { actions.renaming != nil },
+            .alert(DriveLogic.renameTitle, isPresented: Binding(get: { actions.renaming != nil },
                                                                      set: { if !$0 { actions.renaming = nil } })) {
                 TextField("Name", text: $actions.renameText)
                     .textInputAutocapitalization(.never)
@@ -405,7 +405,7 @@ private struct DocumentsActionSheets: ViewModifier {
                     actions.renaming = nil
                 }
             }
-            .alert(DocumentsLogic.newFolderTitle, isPresented: $actions.newFolder) {
+            .alert(DriveLogic.newFolderTitle, isPresented: $actions.newFolder) {
                 TextField("Name", text: $actions.newFolderText)
                 Button("Cancel", role: .cancel) {}
                 Button("Create") {
@@ -413,18 +413,18 @@ private struct DocumentsActionSheets: ViewModifier {
                     Task { _ = await model.createFolder(named: name, in: here) }
                 }
             }
-            .sheet(item: Binding(get: { actions.moving.map(DocumentsMoveRequest.init) },
+            .sheet(item: Binding(get: { actions.moving.map(DriveMoveRequest.init) },
                                  set: { actions.moving = $0?.entries })) { request in
-                DocumentsPhoneMoveSheet(model: model, entries: request.entries)
+                DrivePhoneMoveSheet(model: model, entries: request.entries)
             }
             .sheet(item: $actions.sharing) { entry in
-                DocumentsPhoneShareSheet(model: model, entry: entry)
+                DrivePhoneShareSheet(model: model, entry: entry)
             }
             .sheet(isPresented: $actions.uploadsShown) {
-                DocumentsUploadsSheet(model: model)
+                DriveUploadsSheet(model: model)
             }
             .sheet(item: $actions.shareFile) { file in
-                DocumentsActivityView(items: [file.url]).ignoresSafeArea()
+                DriveActivityView(items: [file.url]).ignoresSafeArea()
             }
             .fileImporter(isPresented: Binding(get: { actions.importing != nil },
                                                set: { if !$0 { actions.importing = nil } }),
@@ -443,7 +443,7 @@ private struct DocumentsActionSheets: ViewModifier {
                 Task {
                     var staged: [URL] = []
                     for item in items {
-                        if let media = try? await item.loadTransferable(type: DocumentsStagedMedia.self) {
+                        if let media = try? await item.loadTransferable(type: DriveStagedMedia.self) {
                             staged.append(media.url)
                         }
                     }
@@ -455,13 +455,13 @@ private struct DocumentsActionSheets: ViewModifier {
     }
 }
 
-private struct DocumentsMoveRequest: Identifiable {
-    let entries: [DocumentsEntry]
+private struct DriveMoveRequest: Identifiable {
+    let entries: [DriveEntry]
     var id: String { entries.map(\.id).joined(separator: ",") }
 }
 
 /// A picture or video from Photos, copied into the uploads' staging folder under the name Photos gave it.
-struct DocumentsStagedMedia: Transferable {
+struct DriveStagedMedia: Transferable {
     let url: URL
 
     static var transferRepresentation: some TransferRepresentation {
@@ -469,15 +469,15 @@ struct DocumentsStagedMedia: Transferable {
         FileRepresentation(importedContentType: .image) { received in try stage(received.file) }
     }
 
-    private static func stage(_ file: URL) throws -> DocumentsStagedMedia {
-        let copy = try DocumentsModel.stagingSlot().appendingPathComponent(file.lastPathComponent)
+    private static func stage(_ file: URL) throws -> DriveStagedMedia {
+        let copy = try DriveModel.stagingSlot().appendingPathComponent(file.lastPathComponent)
         try FileManager.default.copyItem(at: file, to: copy)
-        return DocumentsStagedMedia(url: copy)
+        return DriveStagedMedia(url: copy)
     }
 }
 
 /// The system share sheet over a downloaded file: Save to Files, AirDrop, another app.
-struct DocumentsActivityView: UIViewControllerRepresentable {
+struct DriveActivityView: UIViewControllerRepresentable {
     let items: [Any]
 
     func makeUIViewController(context: Context) -> UIActivityViewController {
@@ -490,37 +490,37 @@ struct DocumentsActivityView: UIViewControllerRepresentable {
 // MARK: - the uploads banner and sheet (frames 8, 16-18)
 
 /// "Uploading 2 of 3 · 6.1 GB of 14.3 GB   Show" over a folder while anything is going up or an agent syncs.
-struct DocumentsUploadsBanner: View {
-    let model: DocumentsModel
+struct DriveUploadsBanner: View {
+    let model: DriveModel
     @State private var shown = false
 
     var body: some View {
         Button { shown = true } label: {
             HStack(spacing: 10) {
-                Image(systemName: DocumentsLogic.trayTotals(model.uploads, model.syncs).allFinished ? "checkmark" : "arrow.up")
+                Image(systemName: DriveLogic.trayTotals(model.uploads, model.syncs).allFinished ? "checkmark" : "arrow.up")
                     .foregroundStyle(Color.accentColor)
-                Text(DocumentsLogic.trayTitle(model.uploads, model.syncs))
+                Text(DriveLogic.trayTitle(model.uploads, model.syncs))
                     .font(.orbitSubtext.weight(.medium))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                 Spacer(minLength: 8)
-                Text(DocumentsLogic.showUploads).font(.orbitSubtext.weight(.semibold)).foregroundStyle(Color.accentColor)
+                Text(DriveLogic.showUploads).font(.orbitSubtext.weight(.semibold)).foregroundStyle(Color.accentColor)
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .listRowBackground(Color.accentColor.opacity(0.08))
-        .sheet(isPresented: $shown) { DocumentsUploadsSheet(model: model) }
-        .accessibilityIdentifier("documents-uploads-banner")
+        .sheet(isPresented: $shown) { DriveUploadsSheet(model: model) }
+        .accessibilityIdentifier("drive-uploads-banner")
     }
 }
 
 /// The phone's form of the web's upload tray: the owner's uploads and the agents' syncs, one row each.
-struct DocumentsUploadsSheet: View {
+struct DriveUploadsSheet: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
-    let model: DocumentsModel
-    @State private var details: DocumentsSync?
+    let model: DriveModel
+    @State private var details: DriveSync?
 
     var body: some View {
         NavigationStack {
@@ -529,48 +529,48 @@ struct DocumentsUploadsSheet: View {
                     Section {
                         ForEach(model.uploads) { upload in uploadRow(upload) }
                     } footer: {
-                        Text(DocumentsLogic.uploadsFoot)
+                        Text(DriveLogic.uploadsFoot)
                     }
                 }
                 if !model.syncs.isEmpty {
                     Section {
                         ForEach(model.syncs) { sync in syncRow(sync) }
                     } footer: {
-                        Text(DocumentsLogic.syncFoot)
+                        Text(DriveLogic.syncFoot)
                     }
                 }
             }
             .listStyle(.insetGrouped)
             .overlay {
                 if !model.trayShown {
-                    ContentUnavailableView(DocumentsLogic.uploadsTitle, systemImage: "arrow.up.circle")
+                    ContentUnavailableView(DriveLogic.uploadsTitle, systemImage: "arrow.up.circle")
                 }
             }
-            .navigationTitle(DocumentsLogic.uploadsTitle)
+            .navigationTitle(DriveLogic.uploadsTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    if DocumentsLogic.trayTotals(model.uploads, model.syncs).finished > 0 {
-                        Button(DocumentsLogic.clearFinishedPhone) { model.clearFinished() }
+                    if DriveLogic.trayTotals(model.uploads, model.syncs).finished > 0 {
+                        Button(DriveLogic.clearFinishedPhone) { model.clearFinished() }
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
-            .sheet(item: $details) { sync in DocumentsSyncDetailsSheet(model: model, sync: sync) }
+            .sheet(item: $details) { sync in DriveSyncDetailsSheet(model: model, sync: sync) }
         }
         .presentationDetents([.medium, .large])
         .task { await model.loadSyncs() }
     }
 
-    private func uploadRow(_ upload: DocumentsUploadItem) -> some View {
+    private func uploadRow(_ upload: DriveUploadItem) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: DocumentsLogic.systemImage(DocumentsEntry(id: upload.id, parentId: nil, kind: "FILE",
+            Image(systemName: DriveLogic.systemImage(DriveEntry(id: upload.id, parentId: nil, kind: "FILE",
                                                                         name: upload.name)))
                 .foregroundStyle(.secondary).frame(width: 28)
             VStack(alignment: .leading, spacing: 4) {
-                Text("\(upload.name) → \(DocumentsLogic.uploadDestination(upload))")
+                Text("\(upload.name) → \(DriveLogic.uploadDestination(upload))")
                     .font(.orbitSubtext.weight(.semibold)).lineLimit(1).truncationMode(.middle)
-                Text(DocumentsLogic.uploadStatus(upload)).font(.orbitListSubtitle)
+                Text(DriveLogic.uploadStatus(upload)).font(.orbitListSubtitle)
                     .foregroundStyle(upload.state == .failed ? Color.red : .secondary)
                 if upload.state != .done && upload.state != .failed {
                     ProgressView(value: Double(upload.percent), total: 100)
@@ -597,8 +597,8 @@ struct DocumentsUploadsSheet: View {
         }
     }
 
-    private func syncRow(_ sync: DocumentsSync) -> some View {
-        let title = DocumentsLogic.syncTitle(sync)
+    private func syncRow(_ sync: DriveSync) -> some View {
+        let title = DriveLogic.syncTitle(sync)
         return HStack(alignment: .top, spacing: 12) {
             Image(systemName: "folder.fill").foregroundStyle(Color.accentColor).frame(width: 28)
             VStack(alignment: .leading, spacing: 4) {
@@ -606,14 +606,14 @@ struct DocumentsUploadsSheet: View {
                     Text("\(title.source) → \(title.destination)").font(.orbitSubtext.weight(.semibold)).lineLimit(1)
                     Spacer(minLength: 4)
                     if sync.running {
-                        Label(DocumentsLogic.agentSync, systemImage: "cloud")
+                        Label(DriveLogic.agentSync, systemImage: "cloud")
                             .font(.orbitMeta)
                             .padding(.horizontal, 6).padding(.vertical, 2)
                             .background(Color.accentColor.opacity(0.12), in: Capsule())
                             .foregroundStyle(Color.accentColor)
                     } else if sync.status == "STOPPED" {
                         Text("Stopped").font(.orbitMeta).foregroundStyle(.secondary)
-                    } else if DocumentsLogic.syncHasFailures(sync) {
+                    } else if DriveLogic.syncHasFailures(sync) {
                         Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                             .accessibilityLabel("Synced with failures")
                     } else {
@@ -621,15 +621,15 @@ struct DocumentsUploadsSheet: View {
                     }
                 }
                 HStack(spacing: 4) {
-                    Text(DocumentsLogic.syncStatus(sync, rate: model.syncRates[sync.id]))
-                        .foregroundStyle(DocumentsLogic.syncHasFailures(sync) ? Color.red : .secondary)
-                    if DocumentsLogic.syncHasFailures(sync) {
+                    Text(DriveLogic.syncStatus(sync, rate: model.syncRates[sync.id]))
+                        .foregroundStyle(DriveLogic.syncHasFailures(sync) ? Color.red : .secondary)
+                    if DriveLogic.syncHasFailures(sync) {
                         Button("Details") { details = sync }.buttonStyle(.borderless)
                     }
                 }
                 .font(.orbitListSubtitle)
                 if sync.running || sync.status == "STOPPED" {
-                    if let fraction = DocumentsLogic.syncFraction(sync) {
+                    if let fraction = DriveLogic.syncFraction(sync) {
                         ProgressView(value: fraction).tint(sync.running ? .accentColor : .gray)
                     } else {
                         ProgressView().progressViewStyle(.linear)
@@ -656,23 +656,23 @@ struct DocumentsUploadsSheet: View {
         .onTapGesture {
             guard !sync.running, let id = sync.destEntryId else { return }
             dismiss()
-            app.push(.documentsFolder(entryID: id, name: DocumentsLogic.folderLabel(sync.destPath)))
+            app.push(.driveFolder(entryID: id, name: DriveLogic.folderLabel(sync.destPath)))
         }
     }
 }
 
 /// What an agent's sync could not send: each path with its error, and the way to the folder it wrote (frame 18).
-struct DocumentsSyncDetailsSheet: View {
+struct DriveSyncDetailsSheet: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
-    let model: DocumentsModel
-    let sync: DocumentsSync
+    let model: DriveModel
+    let sync: DriveSync
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    Text(DocumentsLogic.syncDetailsSummary(sync)).font(.orbitSubtext)
+                    Text(DriveLogic.syncDetailsSummary(sync)).font(.orbitSubtext)
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets())
                 }
@@ -683,24 +683,24 @@ struct DocumentsSyncDetailsSheet: View {
                             Text(failure.error).font(.orbitListSubtitle).foregroundStyle(.red)
                         }
                     }
-                    if let more = DocumentsLogic.syncMoreFailures(sync) {
+                    if let more = DriveLogic.syncMoreFailures(sync) {
                         Text(more).font(.orbitListSubtitle).foregroundStyle(.secondary)
                     }
                 } header: {
-                    Text(DocumentsLogic.didntUpload)
+                    Text(DriveLogic.didntUpload)
                 }
                 if let id = sync.destEntryId {
                     Section {
-                        Button(DocumentsLogic.openFolder(sync)) {
+                        Button(DriveLogic.openFolder(sync)) {
                             dismiss()
-                            app.push(.documentsFolder(entryID: id, name: DocumentsLogic.folderLabel(sync.destPath)))
+                            app.push(.driveFolder(entryID: id, name: DriveLogic.folderLabel(sync.destPath)))
                         }
                         .frame(maxWidth: .infinity)
                     }
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle(DocumentsLogic.syncDetailsTitle(sync))
+            .navigationTitle(DriveLogic.syncDetailsTitle(sync))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
@@ -711,28 +711,28 @@ struct DocumentsSyncDetailsSheet: View {
 
 // MARK: - a file's page (frames 4-5)
 
-struct DocumentsFilePage: View {
+struct DriveFilePage: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     let entryID: String
-    @State private var actions = DocumentsRowActions()
+    @State private var actions = DriveRowActions()
     @State private var gone = false
 
     var body: some View {
-        if let model = app.documents, let entry = model.known[entryID] {
+        if let model = app.drive, let entry = model.known[entryID] {
             page(model, entry)
         } else if gone {
-            ContentUnavailableView(DocumentsLogic.cardGone(trashed: false), systemImage: "doc")
+            ContentUnavailableView(DriveLogic.cardGone(trashed: false), systemImage: "doc")
         } else {
-            ProgressView().task { if await app.documents?.entry(entryID) == nil { gone = true } }
+            ProgressView().task { if await app.drive?.entry(entryID) == nil { gone = true } }
         }
     }
 
-    private func page(_ model: DocumentsModel, _ entry: DocumentsEntry) -> some View {
-        let kind = DocumentsLogic.preview(name: entry.name, size: entry.sizeBytes)
+    private func page(_ model: DriveModel, _ entry: DriveEntry) -> some View {
+        let kind = DriveLogic.preview(name: entry.name, size: entry.sizeBytes)
         return ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                DocumentsPreview(model: model, entry: entry)
+                DrivePreview(model: model, entry: entry)
                     .padding(.horizontal, kind == .picture ? 0 : 16)
                 VStack(alignment: .leading, spacing: 14) {
                     VStack(alignment: .leading, spacing: 4) {
@@ -748,7 +748,7 @@ struct DocumentsFilePage: View {
                     }
                     .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
                     if let link = model.link(of: entry) {
-                        Label(DocumentsLogic.sharedLine(link), systemImage: "link")
+                        Label(DriveLogic.sharedLine(link), systemImage: "link")
                             .font(.orbitListSubtitle).foregroundStyle(.secondary)
                     }
                     HStack(spacing: 10) {
@@ -756,12 +756,12 @@ struct DocumentsFilePage: View {
                             Text("Download").frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered)
-                        .accessibilityIdentifier("documents-download")
+                        .accessibilityIdentifier("drive-download")
                         Button { actions.sharing = entry } label: {
                             Text("Share link…").frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
-                        .accessibilityIdentifier("documents-share-link")
+                        .accessibilityIdentifier("drive-share-link")
                     }
                     .controlSize(.large)
                 }
@@ -780,7 +780,7 @@ struct DocumentsFilePage: View {
                     Button {
                         actions.renameText = entry.name
                         actions.renaming = entry
-                    } label: { Label(DocumentsLogic.renameTitle, systemImage: "pencil") }
+                    } label: { Label(DriveLogic.renameTitle, systemImage: "pencil") }
                     Button { actions.moving = [entry] } label: { Label("Move…", systemImage: "folder") }
                     Divider()
                     Button(role: .destructive) {
@@ -791,30 +791,30 @@ struct DocumentsFilePage: View {
                     } label: { Label("Move to Trash", systemImage: "trash") }
                 } label: { Image(systemName: "ellipsis") }
                 .accessibilityLabel("More")
-                .accessibilityIdentifier("documents-file-more")
+                .accessibilityIdentifier("drive-file-more")
             }
         }
         .task(id: "\(model.changes):\(entry.currentVersionId ?? "")") {
             if let fresh = await model.entry(entryID) { await model.inspect(fresh) } else { gone = true }
         }
-        .documentsActionSheets(model: model, actions: $actions, here: nil)
+        .driveActionSheets(model: model, actions: $actions, here: nil)
     }
 
-    private func facts(_ model: DocumentsModel, _ entry: DocumentsEntry) -> String {
+    private func facts(_ model: DriveModel, _ entry: DriveEntry) -> String {
         var pixels: (Int, Int)?
         if case .data(let data)? = model.preview(for: entry),
-           DocumentsLogic.preview(name: entry.name, size: entry.sizeBytes) == .picture,
+           DriveLogic.preview(name: entry.name, size: entry.sizeBytes) == .picture,
            let image = UIImage(data: data)?.cgImage {
             pixels = (image.width, image.height)
         }
-        let folder = model.entryDetails[entry.id]?.path.map { DocumentsLogic.cardTrail($0) }
+        let folder = model.entryDetails[entry.id]?.path.map { DriveLogic.cardTrail($0) }
             .flatMap { $0.split(separator: "›").last.map { $0.trimmingCharacters(in: .whitespaces) } }
-        return DocumentsLogic.fileFacts(entry, pixels: pixels, folder: folder)
+        return DriveLogic.fileFacts(entry, pixels: pixels, folder: folder)
     }
 
     @ViewBuilder
-    private func writerCard(_ model: DocumentsModel, _ entry: DocumentsEntry) -> some View {
-        let session = DocumentsLogic.writerSession(entry.lastWriter)
+    private func writerCard(_ model: DriveModel, _ entry: DriveEntry) -> some View {
+        let session = DriveLogic.writerSession(entry.lastWriter)
         let card = HStack(spacing: 12) {
             Image(systemName: entry.lastWriter.isOwner ? "person.crop.circle.fill"
                   : (session != nil ? "c.circle.fill" : "cloud.circle.fill"))
@@ -822,7 +822,7 @@ struct DocumentsFilePage: View {
                 .foregroundStyle(session != nil ? Color.primary : .secondary)
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 2) {
-                Text(DocumentsLogic.lastWrittenBy(entry.lastWriter.at ?? entry.mtime))
+                Text(DriveLogic.lastWrittenBy(entry.lastWriter.at ?? entry.mtime))
                     .font(.orbitListSubtitle).foregroundStyle(.secondary)
                 Text(model.writerName(entry.lastWriter)).font(.body.weight(.semibold)).foregroundStyle(.primary)
             }
@@ -840,13 +840,13 @@ struct DocumentsFilePage: View {
         }
     }
 
-    private func earlierRow(_ model: DocumentsModel, _ entry: DocumentsEntry) -> some View {
-        Button { app.push(.documentsVersions(entryID: entry.id)) } label: {
+    private func earlierRow(_ model: DriveModel, _ entry: DriveEntry) -> some View {
+        Button { app.push(.driveVersions(entryID: entry.id)) } label: {
             HStack(spacing: 12) {
                 Image(systemName: "clock.arrow.circlepath").foregroundStyle(.secondary).frame(width: 28)
-                Text(DocumentsLogic.earlierVersionsTitle).foregroundStyle(.primary)
+                Text(DriveLogic.earlierVersionsTitle).foregroundStyle(.primary)
                 Spacer(minLength: 8)
-                if let count = DocumentsLogic.earlierVersionsCount(model.earlierVersions(of: entry).count) {
+                if let count = DriveLogic.earlierVersionsCount(model.earlierVersions(of: entry).count) {
                     Text(count).foregroundStyle(.secondary)
                 }
                 Image(systemName: "chevron.right").font(.orbitLabel.weight(.semibold)).foregroundStyle(.tertiary)
@@ -855,24 +855,24 @@ struct DocumentsFilePage: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier("documents-earlier-versions")
+        .accessibilityIdentifier("drive-earlier-versions")
     }
 
-    private func download(_ model: DocumentsModel, _ entry: DocumentsEntry) {
+    private func download(_ model: DriveModel, _ entry: DriveEntry) {
         Task {
-            if let url = await model.downloadForSharing(entry) { actions.shareFile = DocumentsSharedFile(url: url) }
+            if let url = await model.downloadForSharing(entry) { actions.shareFile = DriveSharedFile(url: url) }
         }
     }
 }
 
 /// A picture drawn on black edge to edge, Markdown rendered as the Wiki renders it (read-only), text as written, and
 /// any other file its icon (frames 4-5).
-struct DocumentsPreview: View {
-    let model: DocumentsModel
-    let entry: DocumentsEntry
+struct DrivePreview: View {
+    let model: DriveModel
+    let entry: DriveEntry
 
     var body: some View {
-        let kind = DocumentsLogic.preview(name: entry.name, size: entry.sizeBytes)
+        let kind = DriveLogic.preview(name: entry.name, size: entry.sizeBytes)
         Group {
             switch model.preview(for: entry) {
             case .data(let data)?:
@@ -885,11 +885,11 @@ struct DocumentsPreview: View {
                 if kind == .none { icon(note: nil) } else { ProgressView().frame(maxWidth: .infinity, minHeight: 200) }
             }
         }
-        .accessibilityIdentifier("documents-preview")
+        .accessibilityIdentifier("drive-preview")
     }
 
     @ViewBuilder
-    private func content(_ kind: DocumentsLogic.Preview, _ data: Data) -> some View {
+    private func content(_ kind: DriveLogic.Preview, _ data: Data) -> some View {
         switch kind {
         case .picture:
             if let image = UIImage(data: data) {
@@ -923,7 +923,7 @@ struct DocumentsPreview: View {
 
     private func icon(note: String?) -> some View {
         VStack(spacing: 8) {
-            Image(systemName: DocumentsLogic.systemImage(entry)).font(.orbitHeroGlyph).foregroundStyle(.secondary)
+            Image(systemName: DriveLogic.systemImage(entry)).font(.orbitHeroGlyph).foregroundStyle(.secondary)
             if let note { Text(note).font(.orbitLabel).foregroundStyle(.secondary) }
         }
         .frame(maxWidth: .infinity, minHeight: 160)
@@ -933,61 +933,61 @@ struct DocumentsPreview: View {
 
 // MARK: - earlier versions (frame 12, D17)
 
-struct DocumentsVersionsPage: View {
+struct DriveVersionsPage: View {
     @Environment(AppModel.self) private var app
     let entryID: String
-    @State private var shareFile: DocumentsSharedFile?
+    @State private var shareFile: DriveSharedFile?
 
     var body: some View {
-        let model = app.documents
+        let model = app.drive
         let entry = model?.known[entryID]
         List {
             if let model, let entry {
                 Section {
                     ForEach(model.earlierVersions(of: entry)) { version in
-                        DocumentsVersionRow(model: model, entry: entry, version: version,
+                        DriveVersionRow(model: model, entry: entry, version: version,
                                             folder: folder(model, entry), shareFile: $shareFile)
                     }
                 } footer: {
-                    Text(DocumentsLogic.trashFoot)
+                    Text(DriveLogic.trashFoot)
                 }
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle(DocumentsLogic.earlierVersionsTitle)
+        .navigationTitle(DriveLogic.earlierVersionsTitle)
         .navigationBarTitleDisplayMode(.inline)
         .task(id: model?.changes) {
             if let model, let fresh = await model.entry(entryID) { await model.inspect(fresh) }
         }
-        .sheet(item: $shareFile) { file in DocumentsActivityView(items: [file.url]).ignoresSafeArea() }
+        .sheet(item: $shareFile) { file in DriveActivityView(items: [file.url]).ignoresSafeArea() }
     }
 
-    private func folder(_ model: DocumentsModel, _ entry: DocumentsEntry) -> String {
-        DocumentsLogic.cardTrail(model.entryDetails[entry.id]?.path).split(separator: "›").last
-            .map { $0.trimmingCharacters(in: .whitespaces) } ?? DocumentsLogic.title
+    private func folder(_ model: DriveModel, _ entry: DriveEntry) -> String {
+        DriveLogic.cardTrail(model.entryDetails[entry.id]?.path).split(separator: "›").last
+            .map { $0.trimmingCharacters(in: .whitespaces) } ?? DriveLogic.title
     }
 }
 
 /// One earlier version; a tap offers frame 12's choices.
-private struct DocumentsVersionRow: View {
-    let model: DocumentsModel
-    let entry: DocumentsEntry
-    let version: DocumentsVersion
+private struct DriveVersionRow: View {
+    let model: DriveModel
+    let entry: DriveEntry
+    let version: DriveVersion
     let folder: String
-    @Binding var shareFile: DocumentsSharedFile?
+    @Binding var shareFile: DriveSharedFile?
 
     var body: some View {
         Menu {
-            Text(DocumentsLogic.versionWhereNow(entry.name, folder: folder))
-            Button(DocumentsLogic.restoreAsCurrent) { Task { await model.restoreVersion(version, asCopy: false) } }
-            Button(DocumentsLogic.restoreAsCopy) { Task { await model.restoreVersion(version, asCopy: true) } }
+            Text(DriveLogic.versionWhereNow(entry.name, folder: folder))
+            Button(DriveLogic.restoreAsCurrent) { Task { await model.restoreVersion(version, asCopy: false) } }
+            Button(DriveLogic.restoreAsCopy) { Task { await model.restoreVersion(version, asCopy: true) } }
             Button("Download") { Task { await download() } }
         } label: {
             HStack(spacing: 12) {
-                DocumentsEntryIcon(entry: entry)
+                DriveEntryIcon(entry: entry)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(entry.name).foregroundStyle(.primary)
-                    Text(DocumentsLogic.versionLine(version, writer: model.writerName(version.writer)))
+                    Text(DriveLogic.versionLine(version, writer: model.writerName(version.writer)))
                         .font(.orbitListSubtitle).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
@@ -999,26 +999,26 @@ private struct DocumentsVersionRow: View {
 
     private func download() async {
         guard let url = await model.downloadForSharing(entry, version: version) else { return }
-        shareFile = DocumentsSharedFile(url: url)
+        shareFile = DriveSharedFile(url: url)
     }
 }
 
 // MARK: - Move (frame 7)
 
-struct DocumentsPhoneMoveSheet: View {
-    let model: DocumentsModel
-    let entries: [DocumentsEntry]
+struct DrivePhoneMoveSheet: View {
+    let model: DriveModel
+    let entries: [DriveEntry]
     @Environment(\.dismiss) private var dismiss
     /// The folders opened in the sheet, the root first.
-    @State private var trail: [DocumentsEntry] = []
-    @State private var children: [DocumentsEntry] = []
+    @State private var trail: [DriveEntry] = []
+    @State private var children: [DriveEntry] = []
     @State private var loading = true
     /// A folder made from the sheet's New folder row: selected straight away.
-    @State private var made: DocumentsEntry?
+    @State private var made: DriveEntry?
     @State private var naming = false
-    @State private var newName = DocumentsLogic.newFolderName
+    @State private var newName = DriveLogic.newFolderName
 
-    private var target: DocumentsEntry? { made ?? trail.last }
+    private var target: DriveEntry? { made ?? trail.last }
 
     var body: some View {
         NavigationStack {
@@ -1026,27 +1026,27 @@ struct DocumentsPhoneMoveSheet: View {
                 Section {
                     if trail.count > 1 {
                         Button { Task { await open(trail[trail.count - 2].id, back: true) } } label: {
-                            Label(DocumentsLogic.folderTitle(trail[trail.count - 2]), systemImage: "chevron.left")
+                            Label(DriveLogic.folderTitle(trail[trail.count - 2]), systemImage: "chevron.left")
                         }
                     }
                     ForEach(children) { folder in
-                        DocumentsMoveFolderRow(folder: folder, made: made?.id == folder.id,
+                        DriveMoveFolderRow(folder: folder, made: made?.id == folder.id,
                                                moving: entries.contains { $0.id == folder.id }) {
                             made = nil
                             Task { await open(folder.id, back: false) }
                         }
                     }
                     Button {
-                        newName = DocumentsLogic.newFolderName
+                        newName = DriveLogic.newFolderName
                         naming = true
                     } label: {
-                        Label(DocumentsLogic.newFolderTitle, systemImage: "folder.badge.plus")
+                        Label(DriveLogic.newFolderTitle, systemImage: "folder.badge.plus")
                     }
-                    .accessibilityIdentifier("documents-move-new-folder")
+                    .accessibilityIdentifier("drive-move-new-folder")
                 } header: {
-                    Text(DocumentsLogic.trail(trail.map { DocumentsLogic.folderTitle($0) })).textCase(nil)
+                    Text(DriveLogic.trail(trail.map { DriveLogic.folderTitle($0) })).textCase(nil)
                 } footer: {
-                    Text(DocumentsLogic.moveFoot)
+                    Text(DriveLogic.moveFoot)
                 }
             }
             .listStyle(.insetGrouped)
@@ -1057,7 +1057,7 @@ struct DocumentsPhoneMoveSheet: View {
                     dismiss()
                     Task { await model.move(entries: entries, to: to?.parentId == nil ? nil : to) }
                 } label: {
-                    Text(DocumentsLogic.moveHere(target.map { DocumentsLogic.folderTitle($0) } ?? DocumentsLogic.title))
+                    Text(DriveLogic.moveHere(target.map { DriveLogic.folderTitle($0) } ?? DriveLogic.title))
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
@@ -1065,14 +1065,14 @@ struct DocumentsPhoneMoveSheet: View {
                 .disabled(!canMoveHere)
                 .padding(16)
                 .background(.bar)
-                .accessibilityIdentifier("documents-move-here")
+                .accessibilityIdentifier("drive-move-here")
             }
-            .navigationTitle(DocumentsLogic.moveTitle(entries.map(\.name)))
+            .navigationTitle(DriveLogic.moveTitle(entries.map(\.name)))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             }
-            .alert(DocumentsLogic.newFolderTitle, isPresented: $naming) {
+            .alert(DriveLogic.newFolderTitle, isPresented: $naming) {
                 TextField("Name", text: $newName)
                 Button("Cancel", role: .cancel) {}
                 Button("Create") {
@@ -1091,7 +1091,7 @@ struct DocumentsPhoneMoveSheet: View {
     private var canMoveHere: Bool {
         guard let here = target else { return false }
         let ancestors = trail.map(\.id) + (made.map { [$0.id] } ?? [])
-        return entries.contains { DocumentsLogic.canMove($0, into: here.id, ancestorsOfTarget: ancestors) }
+        return entries.contains { DriveLogic.canMove($0, into: here.id, ancestorsOfTarget: ancestors) }
     }
 
     private func open(_ id: String?, back: Bool) async {
@@ -1108,8 +1108,8 @@ struct DocumentsPhoneMoveSheet: View {
 }
 
 /// A folder in the Move sheet: a tap opens it; the one just made from the sheet is drawn selected (frame 7 ①).
-private struct DocumentsMoveFolderRow: View {
-    let folder: DocumentsEntry
+private struct DriveMoveFolderRow: View {
+    let folder: DriveEntry
     let made: Bool
     let moving: Bool
     let open: () -> Void
@@ -1121,7 +1121,7 @@ private struct DocumentsMoveFolderRow: View {
                     .foregroundStyle(made ? Color.green : Color.accentColor).frame(width: 28)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(folder.name).foregroundStyle(.primary)
-                    Text(made ? DocumentsLogic.newFolderTitle : "").font(.orbitListSubtitle).foregroundStyle(.secondary)
+                    Text(made ? DriveLogic.newFolderTitle : "").font(.orbitListSubtitle).foregroundStyle(.secondary)
                         .opacity(made ? 1 : 0)
                         .frame(height: made ? nil : 0)
                 }
@@ -1140,17 +1140,17 @@ private struct DocumentsMoveFolderRow: View {
 
 // MARK: - share link (frames 9-10, D18)
 
-struct DocumentsPhoneShareSheet: View {
-    let model: DocumentsModel
-    let entry: DocumentsEntry
+struct DrivePhoneShareSheet: View {
+    let model: DriveModel
+    let entry: DriveEntry
     @Environment(\.dismiss) private var dismiss
     @State private var phase: Phase = .checking
 
     enum Phase {
         case checking
-        case warn(DocumentsShareCheck)
+        case warn(DriveShareCheck)
         case sharing
-        case shared(DocumentsShareLink, clean: Bool, partialBytes: Int?)
+        case shared(DriveShareLink, clean: Bool, partialBytes: Int?)
         case failed(String)
     }
 
@@ -1158,10 +1158,10 @@ struct DocumentsPhoneShareSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 12) {
-                    DocumentsEntryIcon(entry: entry, size: 36)
+                    DriveEntryIcon(entry: entry, size: 36)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(entry.name).font(.headline)
-                        Text(DocumentsLogic.formatSize(entry.sizeBytes)).font(.orbitListSubtitle).foregroundStyle(.secondary)
+                        Text(DriveLogic.formatSize(entry.sizeBytes)).font(.orbitListSubtitle).foregroundStyle(.secondary)
                     }
                 }
                 content
@@ -1177,10 +1177,10 @@ struct DocumentsPhoneShareSheet: View {
     private var content: some View {
         switch phase {
         case .checking, .sharing:
-            Text(DocumentsLogic.shareDescriptionLong).font(.body)
+            Text(DriveLogic.shareDescriptionLong).font(.body)
             HStack(spacing: 8) {
                 ProgressView()
-                Text(phaseIsChecking ? DocumentsLogic.checking : DocumentsLogic.making)
+                Text(phaseIsChecking ? DriveLogic.checking : DriveLogic.making)
             }
             .font(.orbitSubtext).foregroundStyle(.secondary)
             Button("Cancel") { dismiss() }.frame(maxWidth: .infinity).buttonStyle(.bordered).controlSize(.large)
@@ -1199,33 +1199,33 @@ struct DocumentsPhoneShareSheet: View {
         return false
     }
 
-    private func warning(_ check: DocumentsShareCheck) -> some View {
+    private func warning(_ check: DriveShareCheck) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 8) {
-                Label(DocumentsLogic.secretsHeading, systemImage: "exclamationmark.triangle.fill")
+                Label(DriveLogic.secretsHeading, systemImage: "exclamationmark.triangle.fill")
                     .font(.orbitSubtext.weight(.semibold))
                     .foregroundStyle(Color.orange)
-                Text(DocumentsLogic.shareSecretsLead).font(.orbitSubtext)
+                Text(DriveLogic.shareSecretsLead).font(.orbitSubtext)
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(check.warnings, id: \.self) { warning in
                         HStack {
-                            Text(DocumentsLogic.shapeLabel(warning.kind)).font(.orbitSubtext)
+                            Text(DriveLogic.shapeLabel(warning.kind)).font(.orbitSubtext)
                             Spacer(minLength: 8)
-                            Text(DocumentsLogic.warningLine(warning)).font(.orbitMono).foregroundStyle(.secondary)
+                            Text(DriveLogic.warningLine(warning)).font(.orbitMono).foregroundStyle(.secondary)
                         }
                     }
                 }
                 .padding(12)
                 .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 8))
                 if check.partial {
-                    Text(DocumentsLogic.partialNote(check.checkedBytes)).font(.orbitListSubtitle).foregroundStyle(.secondary)
+                    Text(DriveLogic.partialNote(check.checkedBytes)).font(.orbitListSubtitle).foregroundStyle(.secondary)
                 }
             }
             .padding(14)
             .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
             .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("documents-share-warning")
-            Text(DocumentsLogic.shareSecretsFoot).font(.orbitListSubtitle).foregroundStyle(.secondary)
+            .accessibilityIdentifier("drive-share-warning")
+            Text(DriveLogic.shareSecretsFoot).font(.orbitListSubtitle).foregroundStyle(.secondary)
             HStack(spacing: 10) {
                 Button { dismiss() } label: { Text("Cancel").frame(maxWidth: .infinity) }
                     .buttonStyle(.bordered)
@@ -1234,18 +1234,18 @@ struct DocumentsPhoneShareSheet: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.orange)
-                .accessibilityIdentifier("documents-share-anyway")
+                .accessibilityIdentifier("drive-share-anyway")
             }
             .controlSize(.large)
         }
     }
 
-    private func shared(_ link: DocumentsShareLink, clean: Bool, partial: Int?) -> some View {
+    private func shared(_ link: DriveShareLink, clean: Bool, partial: Int?) -> some View {
         let url = model.publicURL(link).absoluteString
         return VStack(alignment: .leading, spacing: 12) {
-            Text(DocumentsLogic.shareDescriptionLong).font(.body)
+            Text(DriveLogic.shareDescriptionLong).font(.body)
             if clean {
-                Label(DocumentsLogic.nothingFound, systemImage: "checkmark")
+                Label(DriveLogic.nothingFound, systemImage: "checkmark")
                     .font(.orbitSubtext)
                     .foregroundStyle(Color.green)
                     .padding(12)
@@ -1253,16 +1253,16 @@ struct DocumentsPhoneShareSheet: View {
                     .background(Color.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
             }
             if let partial {
-                Text(DocumentsLogic.partialNote(partial)).font(.orbitListSubtitle).foregroundStyle(.secondary)
+                Text(DriveLogic.partialNote(partial)).font(.orbitListSubtitle).foregroundStyle(.secondary)
             }
             HStack(spacing: 8) {
                 Image(systemName: "link").foregroundStyle(Color.accentColor)
                 Text(url).font(.orbitMono).lineLimit(1).truncationMode(.tail).textSelection(.enabled)
-                    .accessibilityIdentifier("documents-share-url")
+                    .accessibilityIdentifier("drive-share-url")
                 Spacer(minLength: 8)
-                Button(DocumentsLogic.copyLink) {
+                Button(DriveLogic.copyLink) {
                     UIPasteboard.general.string = url
-                    model.onToast?(DocumentsLogic.linkCopied, entry.name, .success, nil)
+                    model.onToast?(DriveLogic.linkCopied, entry.name, .success, nil)
                 }
                 .font(.body.weight(.semibold))
             }
@@ -1280,7 +1280,7 @@ struct DocumentsPhoneShareSheet: View {
                     .buttonStyle(.borderedProminent)
             }
             .controlSize(.large)
-            Text(DocumentsLogic.sharedLinksFoot).font(.orbitListSubtitle).foregroundStyle(.secondary)
+            Text(DriveLogic.sharedLinksFoot).font(.orbitListSubtitle).foregroundStyle(.secondary)
         }
     }
 
@@ -1301,7 +1301,7 @@ struct DocumentsPhoneShareSheet: View {
         }
     }
 
-    private func share(after check: DocumentsShareCheck) async {
+    private func share(after check: DriveShareCheck) async {
         phase = .sharing
         do {
             let answer = try await model.share(entry)
@@ -1315,27 +1315,27 @@ struct DocumentsPhoneShareSheet: View {
 
 // MARK: - Trash (frames 11-12, D6, D11, D17, rule 3)
 
-struct DocumentsTrashPage: View {
+struct DriveTrashPage: View {
     @Environment(AppModel.self) private var app
-    @State private var deleting: DocumentsTrashGroup?
+    @State private var deleting: DriveTrashGroup?
     @State private var emptying = false
 
     var body: some View {
-        if let model = app.documents { page(model) }
+        if let model = app.drive { page(model) }
     }
 
-    private func page(_ model: DocumentsModel) -> some View {
+    private func page(_ model: DriveModel) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if let groups = model.trash, !groups.isEmpty {
-                    Text(DocumentsLogic.trashSummary(groups)).font(.orbitSubtext).foregroundStyle(.secondary)
+                    Text(DriveLogic.trashSummary(groups)).font(.orbitSubtext).foregroundStyle(.secondary)
                         .padding(.horizontal, 20).padding(.bottom, 6)
                 }
                 ForEach(model.trash ?? []) { group in
-                    DocumentsTrashGroupCard(model: model, group: group, deleting: $deleting)
+                    DriveTrashGroupCard(model: model, group: group, deleting: $deleting)
                 }
                 if model.trash?.isEmpty == false {
-                    Text(DocumentsLogic.trashFoot).font(.orbitListSubtitle).foregroundStyle(.secondary)
+                    Text(DriveLogic.trashFoot).font(.orbitListSubtitle).foregroundStyle(.secondary)
                         .padding(.horizontal, 20).padding(.top, 10)
                 }
                 // What stands in for the groups, in the scroll itself: an overlay on an emptied scroll was not drawn.
@@ -1346,8 +1346,8 @@ struct DocumentsTrashPage: View {
                     } else if model.trash == nil {
                         ProgressView()
                     } else if model.trash?.isEmpty == true {
-                        ContentUnavailableView(DocumentsLogic.trashEmpty, systemImage: "trash",
-                                               description: Text(DocumentsLogic.trashFoot))
+                        ContentUnavailableView(DriveLogic.trashEmpty, systemImage: "trash",
+                                               description: Text(DriveLogic.trashFoot))
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -1356,11 +1356,11 @@ struct DocumentsTrashPage: View {
             .padding(.vertical, 8)
         }
         .background(Color(.systemGroupedBackground))
-        .navigationTitle(DocumentsLogic.trash)
+        .navigationTitle(DriveLogic.trash)
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button(DocumentsLogic.emptyTrash, role: .destructive) { emptying = true }
+                Button(DriveLogic.emptyTrash, role: .destructive) { emptying = true }
                     .foregroundStyle(.red)
                     .disabled(model.trash?.isEmpty ?? true)
             }
@@ -1369,36 +1369,36 @@ struct DocumentsTrashPage: View {
         .refreshable { await model.loadTrash() }
         .orbitConfirmation({ _ in "Delete for good?" }, isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
                            presenting: deleting) { group in
-            Button(DocumentsLogic.deleteForGood, role: .destructive) { Task { await model.deleteForGood(group) } }
+            Button(DriveLogic.deleteForGood, role: .destructive) { Task { await model.deleteForGood(group) } }
             Button("Cancel", role: .cancel) {}
         } message: { group in
-            Text(DocumentsLogic.deleteForGoodMessage(group) + (model.endsALink(group) ? " " + DocumentsLogic.endsAShareLink : ""))
+            Text(DriveLogic.deleteForGoodMessage(group) + (model.endsALink(group) ? " " + DriveLogic.endsAShareLink : ""))
         }
         .orbitConfirmation("Empty Trash?", isPresented: $emptying) {
             Button("Empty Trash", role: .destructive) { Task { await model.emptyTrash() } }
             Button("Cancel", role: .cancel) {}
         } message: {
             let groups = model.trash ?? []
-            Text(DocumentsLogic.emptyTrashMessage(groups)
-                 + (groups.contains(where: model.endsALink) ? " " + DocumentsLogic.endsAShareLink : ""))
+            Text(DriveLogic.emptyTrashMessage(groups)
+                 + (groups.contains(where: model.endsALink) ? " " + DriveLogic.endsAShareLink : ""))
         }
     }
 }
 
 /// One Trash group: the folder it was deleted from and when, Restore all, and its rows (rule 3); tapping a row offers
 /// what can be done with it (frame 12's three choices).
-private struct DocumentsTrashGroupCard: View {
-    let model: DocumentsModel
-    let group: DocumentsTrashGroup
-    @Binding var deleting: DocumentsTrashGroup?
+private struct DriveTrashGroupCard: View {
+    let model: DriveModel
+    let group: DriveTrashGroup
+    @Binding var deleting: DriveTrashGroup?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(DocumentsLogic.trashHeading(group).uppercased())
+                Text(DriveLogic.trashHeading(group).uppercased())
                     .font(.orbitListSubtitle).foregroundStyle(.secondary)
                 Spacer(minLength: 8)
-                Button(DocumentsLogic.restoreAll) {
+                Button(DriveLogic.restoreAll) {
                     Task {
                         if group.version != nil {
                             await model.restoreVersion(of: group, asCopy: false)
@@ -1408,7 +1408,7 @@ private struct DocumentsTrashGroupCard: View {
                     }
                 }
                 .font(.orbitSubtext)
-                .accessibilityIdentifier("documents-restore-all")
+                .accessibilityIdentifier("drive-restore-all")
             }
             .padding(.horizontal, 20)
             VStack(spacing: 0) {
@@ -1424,7 +1424,7 @@ private struct DocumentsTrashGroupCard: View {
     }
 
     private struct Row {
-        let entry: DocumentsEntry
+        let entry: DriveEntry
         let version: Bool
     }
 
@@ -1435,32 +1435,32 @@ private struct DocumentsTrashGroupCard: View {
     private func menu(_ row: Row) -> some View {
         Menu {
             if row.version {
-                Text(DocumentsLogic.versionWhereNow(row.entry.name, folder: DocumentsLogic.groupTitle(group)))
-                Button(DocumentsLogic.restoreAsCurrent) { Task { await model.restoreVersion(of: group, asCopy: false) } }
-                Button(DocumentsLogic.restoreAsCopy) { Task { await model.restoreVersion(of: group, asCopy: true) } }
+                Text(DriveLogic.versionWhereNow(row.entry.name, folder: DriveLogic.groupTitle(group)))
+                Button(DriveLogic.restoreAsCurrent) { Task { await model.restoreVersion(of: group, asCopy: false) } }
+                Button(DriveLogic.restoreAsCopy) { Task { await model.restoreVersion(of: group, asCopy: true) } }
             } else {
                 Button("Restore") { Task { await model.restore(row.entry, of: group) } }
             }
             Divider()
-            Button(DocumentsLogic.deleteForGood, role: .destructive) { deleting = group }
+            Button(DriveLogic.deleteForGood, role: .destructive) { deleting = group }
         } label: {
             label(row)
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier("documents-trash-row-\(row.entry.name)")
+        .accessibilityIdentifier("drive-trash-row-\(row.entry.name)")
     }
 
     private func label(_ row: Row) -> some View {
         let writer = model.writerName(group.actor)
         let line = row.version
-            ? DocumentsLogic.trashVersionLine(group, writer: writer)
-            : DocumentsLogic.trashLine(row.entry, in: group, writer: writer,
+            ? DriveLogic.trashVersionLine(group, writer: writer)
+            : DriveLogic.trashLine(row.entry, in: group, writer: writer,
                                        // A group's count includes the folder itself (rm -rf is one row).
                                        folderCount: row.entry.isFolder && group.items.count == 1 ? max(0, group.itemCount - 1) : nil)
-        let size = row.version ? DocumentsLogic.formatSize(group.version?.sizeBytes ?? 0)
-            : (row.entry.isFile ? DocumentsLogic.formatSize(row.entry.sizeBytes) : "")
+        let size = row.version ? DriveLogic.formatSize(group.version?.sizeBytes ?? 0)
+            : (row.entry.isFile ? DriveLogic.formatSize(row.entry.sizeBytes) : "")
         return HStack(spacing: 12) {
-            DocumentsEntryIcon(entry: row.entry)
+            DriveEntryIcon(entry: row.entry)
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.entry.name).foregroundStyle(.primary).lineLimit(1).truncationMode(.middle)
                 Text(line).font(.orbitListSubtitle).foregroundStyle(.secondary).multilineTextAlignment(.leading)
@@ -1476,48 +1476,48 @@ private struct DocumentsTrashGroupCard: View {
 
 // MARK: - Storage (frame 13, D13, D19)
 
-struct DocumentsStoragePage: View {
+struct DriveStoragePage: View {
     @Environment(AppModel.self) private var app
 
     var body: some View {
-        if let model = app.documents { page(model) }
+        if let model = app.drive { page(model) }
     }
 
-    private func page(_ model: DocumentsModel) -> some View {
+    private func page(_ model: DriveModel) -> some View {
         List {
             if let usage = model.usage {
                 Section { total(usage) }
             }
             if let storage = model.storage {
                 Section {
-                    valueRow(DocumentsLogic.everythingElse, detail: DocumentsLogic.everythingElseNote,
-                             value: model.usage.map { DocumentsLogic.storageSize($0.otherBytes) } ?? "")
-                    valueRow(DocumentsLogic.storedFiles,
-                             detail: DocumentsLogic.storageFull(storage) ? DocumentsLogic.storageFullNote : nil,
-                             value: DocumentsLogic.storedValue(storage))
+                    valueRow(DriveLogic.everythingElse, detail: DriveLogic.everythingElseNote,
+                             value: model.usage.map { DriveLogic.storageSize($0.otherBytes) } ?? "")
+                    valueRow(DriveLogic.storedFiles,
+                             detail: DriveLogic.storageFull(storage) ? DriveLogic.storageFullNote : nil,
+                             value: DriveLogic.storedValue(storage))
                 } header: {
-                    Text(DocumentsLogic.otherStorage)
+                    Text(DriveLogic.otherStorage)
                 } footer: {
-                    Text(DocumentsLogic.storageFoot)
+                    Text(DriveLogic.storageFoot)
                 }
                 if !storage.projects.isEmpty {
-                    Section(DocumentsLogic.largestProjects) {
+                    Section(DriveLogic.largestProjects) {
                         ForEach(storage.projects) { project in
                             rankRow(project.title, bytes: project.bytes) { app.openProjectSessions(project.id, inColumn: false) }
                         }
                     }
                 }
                 if !storage.tasks.isEmpty {
-                    Section(DocumentsLogic.largestTasks) {
+                    Section(DriveLogic.largestTasks) {
                         ForEach(storage.tasks) { task in
                             rankRow(task.title, bytes: task.bytes) { app.route(to: .task(task.id)) }
                         }
                     }
                 }
                 if !storage.weeks.isEmpty {
-                    Section(DocumentsLogic.addedEachWeek) {
+                    Section(DriveLogic.addedEachWeek) {
                         ForEach(storage.weeks.reversed()) { week in
-                            rankRow(DocumentsLogic.weekLabel(week.weekStart), bytes: week.bytes, open: nil)
+                            rankRow(DriveLogic.weekLabel(week.weekStart), bytes: week.bytes, open: nil)
                         }
                     }
                 }
@@ -1527,24 +1527,24 @@ struct DocumentsStoragePage: View {
         }
         .listStyle(.insetGrouped)
         .overlay { if model.usage == nil && model.storageError == nil { ProgressView() } }
-        .navigationTitle(DocumentsLogic.storage)
+        .navigationTitle(DriveLogic.storage)
         .navigationBarTitleDisplayMode(.large)
         .task(id: model.changes) { await model.loadStorage() }
         .refreshable { await model.loadStorage() }
     }
 
-    private func total(_ usage: DocumentsUsage) -> some View {
-        let bar = DocumentsLogic.storageBar(usage)
-        let legend = DocumentsLogic.storageLegend(usage)
+    private func total(_ usage: DriveUsage) -> some View {
+        let bar = DriveLogic.storageBar(usage)
+        let legend = DriveLogic.storageLegend(usage)
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Text(DocumentsLogic.storageSize(usage.totalBytes)).font(.orbitFigure)
+                Text(DriveLogic.storageSize(usage.totalBytes)).font(.orbitFigure)
                 Spacer(minLength: 8)
-                Text(DocumentsLogic.inThisAccount).font(.orbitSubtext).foregroundStyle(.secondary)
+                Text(DriveLogic.inThisAccount).font(.orbitSubtext).foregroundStyle(.secondary)
             }
             GeometryReader { proxy in
                 HStack(spacing: 0) {
-                    Rectangle().fill(Color.accentColor).frame(width: proxy.size.width * bar.documents)
+                    Rectangle().fill(Color.accentColor).frame(width: proxy.size.width * bar.drive)
                     Rectangle().fill(Color.accentColor.opacity(0.45)).frame(width: proxy.size.width * bar.trash)
                     Rectangle().fill(Color.secondary.opacity(0.45)).frame(width: proxy.size.width * bar.other)
                     Spacer(minLength: 0)
@@ -1558,7 +1558,7 @@ struct DocumentsStoragePage: View {
                 legendItem(legend[1], Color.accentColor.opacity(0.45))
                 legendItem(legend[2], Color.secondary.opacity(0.45))
             }
-            if let warning = DocumentsLogic.storeWarning(usage) {
+            if let warning = DriveLogic.storeWarning(usage) {
                 Text(warning).font(.orbitListSubtitle).foregroundStyle(.orange)
             }
         }
@@ -1588,7 +1588,7 @@ struct DocumentsStoragePage: View {
         let line = HStack {
             Text(name).lineLimit(1).foregroundStyle(.primary)
             Spacer(minLength: 8)
-            Text(DocumentsLogic.storageSize(bytes)).foregroundStyle(.secondary).monospacedDigit()
+            Text(DriveLogic.storageSize(bytes)).foregroundStyle(.secondary).monospacedDigit()
             if open != nil {
                 Image(systemName: "chevron.right").font(.orbitLabel.weight(.semibold)).foregroundStyle(.tertiary)
             }
@@ -1606,7 +1606,7 @@ struct DocumentsStoragePage: View {
 
 /// Add from Documents: browse the drive (opening on the session's project folder when there is one) and pick files;
 /// what goes into the message is each file's path on the agent's mount.
-struct DocumentsPickerSheet: View {
+struct DrivePickerSheet: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     /// The session's project, whose folder the picker opens on.
@@ -1614,12 +1614,12 @@ struct DocumentsPickerSheet: View {
     let pick: ([String]) -> Void
 
     /// The folders opened, the root first.
-    @State private var trail: [DocumentsEntry] = []
-    @State private var entries: [DocumentsEntry] = []
+    @State private var trail: [DriveEntry] = []
+    @State private var entries: [DriveEntry] = []
     @State private var picked: [String: String] = [:]
     @State private var order: [String] = []
     @State private var searchText = ""
-    @State private var found: [DocumentsEntry]?
+    @State private var found: [DriveEntry]?
     @State private var loading = true
 
     var body: some View {
@@ -1628,33 +1628,33 @@ struct DocumentsPickerSheet: View {
                 Section {
                     if trail.count > 1 && !searching {
                         Button { Task { await open(trail[trail.count - 2], back: true) } } label: {
-                            Label(DocumentsLogic.folderTitle(trail[trail.count - 2]), systemImage: "chevron.left")
+                            Label(DriveLogic.folderTitle(trail[trail.count - 2]), systemImage: "chevron.left")
                         }
                     }
                     ForEach(rows) { entry in row(entry) }
                 } header: {
                     if !searching {
-                        Text(DocumentsLogic.trail(trail.map { DocumentsLogic.folderTitle($0) })).textCase(nil)
+                        Text(DriveLogic.trail(trail.map { DriveLogic.folderTitle($0) })).textCase(nil)
                     }
                 } footer: {
-                    Text(DocumentsLogic.pickerFoot)
+                    Text(DriveLogic.pickerFoot)
                 }
             }
             .listStyle(.insetGrouped)
             .overlay { if loading { ProgressView() } }
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always),
-                        prompt: DocumentsLogic.searchPrompt)
-            .navigationTitle(DocumentsLogic.pickerTitle)
+                        prompt: DriveLogic.searchPrompt)
+            .navigationTitle(DriveLogic.pickerTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(DocumentsLogic.pickerAdd(order.count)) {
+                    Button(DriveLogic.pickerAdd(order.count)) {
                         pick(order.compactMap { picked[$0] })
                         dismiss()
                     }
                     .disabled(order.isEmpty)
-                    .accessibilityIdentifier("documents-picker-add")
+                    .accessibilityIdentifier("drive-picker-add")
                 }
             }
             .task { await start() }
@@ -1664,11 +1664,11 @@ struct DocumentsPickerSheet: View {
 
     private var searching: Bool { !searchText.trimmingCharacters(in: .whitespaces).isEmpty }
 
-    private var rows: [DocumentsEntry] { searching ? (found ?? []).filter(\.isFile) : entries }
+    private var rows: [DriveEntry] { searching ? (found ?? []).filter(\.isFile) : entries }
 
     @ViewBuilder
-    private func row(_ entry: DocumentsEntry) -> some View {
-        if let model = app.documents {
+    private func row(_ entry: DriveEntry) -> some View {
+        if let model = app.drive {
             let chosen = picked[entry.id] != nil
             Button {
                 if entry.isFolder {
@@ -1678,18 +1678,18 @@ struct DocumentsPickerSheet: View {
                     order.removeAll { $0 == entry.id }
                 } else {
                     picked[entry.id] = searching
-                        ? DocumentsLogic.agentPath(entryPath: entry.path, name: entry.name)
-                        : DocumentsLogic.agentPath(folders: trail.dropFirst().map(\.name), name: entry.name)
+                        ? DriveLogic.agentPath(entryPath: entry.path, name: entry.name)
+                        : DriveLogic.agentPath(folders: trail.dropFirst().map(\.name), name: entry.name)
                     order.append(entry.id)
                 }
             } label: {
                 HStack(spacing: 12) {
-                    DocumentsEntryIcon(entry: entry)
+                    DriveEntryIcon(entry: entry)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(entry.name).foregroundStyle(.primary).lineLimit(1).truncationMode(.middle)
                         if entry.isFile {
-                            (searching ? Text(DocumentsLogic.searchFolder(entry.folderPath)).foregroundStyle(.secondary)
-                             : DocumentsWriterText.of(model, entry.lastWriter) + Text(DocumentsLogic.fileLineWhen(entry.mtime))
+                            (searching ? Text(DriveLogic.searchFolder(entry.folderPath)).foregroundStyle(.secondary)
+                             : DriveWriterText.of(model, entry.lastWriter) + Text(DriveLogic.fileLineWhen(entry.mtime))
                                 .foregroundStyle(.secondary))
                                 .font(.orbitListSubtitle).lineLimit(1)
                         }
@@ -1709,20 +1709,20 @@ struct DocumentsPickerSheet: View {
     }
 
     private func start() async {
-        guard let model = app.documents, let root = try? await model.read(folder: nil) else {
+        guard let model = app.drive, let root = try? await model.read(folder: nil) else {
             loading = false
             return
         }
         trail = [root.folder]
-        entries = DocumentsLogic.sorted(root.entries)
+        entries = DriveLogic.sorted(root.entries)
         loading = false
-        if let project, let folder = DocumentsLogic.projectFolder(root.entries, projectID: project.id, title: project.title) {
+        if let project, let folder = DriveLogic.projectFolder(root.entries, projectID: project.id, title: project.title) {
             await open(folder, back: false)
         }
     }
 
-    private func open(_ folder: DocumentsEntry, back: Bool) async {
-        guard let model = app.documents else { return }
+    private func open(_ folder: DriveEntry, back: Bool) async {
+        guard let model = app.drive else { return }
         loading = true
         defer { loading = false }
         guard let read = try? await model.read(folder: folder.parentId == nil ? nil : folder.id) else { return }
@@ -1732,12 +1732,12 @@ struct DocumentsPickerSheet: View {
             searchText = ""
             trail.append(read.folder)
         }
-        entries = DocumentsLogic.sorted(read.entries)
+        entries = DriveLogic.sorted(read.entries)
     }
 
     private func search() async {
         let words = searchText.trimmingCharacters(in: .whitespaces)
-        guard !words.isEmpty, let model = app.documents else {
+        guard !words.isEmpty, let model = app.drive else {
             found = nil
             return
         }
