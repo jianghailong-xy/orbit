@@ -1,10 +1,10 @@
 <!-- DESIGN MOCK (2026-11-24). An agent's directory sync in the Documents page's upload tray (web), from
      docs/documents-directory-sync-design.md (S1-S4, "Progress on the Documents page"). Reuses the Orbit Files board's
      styles, icons and marks. File names, sessions, sizes and times are demo data.
-     Render: node docs/mocks/orbit-files/render.mjs $PWD/docs/mocks/documents-sync-tray/board.html $PWD/docs/mocks/documents-sync-tray/board.png -->
+     Render: node docs/mocks/documents/render.mjs $PWD/docs/mocks/documents-sync-tray/board.html $PWD/docs/mocks/documents-sync-tray/board.png -->
 <!doctype html><html lang="en"><meta charset="utf-8">
 <title>Documents - agent sync in the upload tray</title>
-<link rel="stylesheet" href="../orbit-files/board.css">
+<link rel="stylesheet" href="../documents/board.css">
 <style>
   .tray .tr .top b { font-weight:600; }
   .tray .tr .agent { display:inline-flex; gap:4px; align-items:center; color:#2546b8; background:var(--brand-bg); border-radius:5px;
@@ -211,9 +211,9 @@ const SB = (on) => `
   <div class="me"><span class="av">M</span>Mia Chen</div>`;
 for (const el of document.querySelectorAll('.sb[data-on]')) el.innerHTML = SB(el.dataset.on);
 </script>
-<script src="../orbit-files/icons.js"></script>
+<script src="../documents/icons.js"></script>
 <script>
-// Numbered marks (as ../orbit-files/marks.js), with two changes for this board: a frame can be any .frame, and a mark on
+// Numbered marks (as ../documents/marks.js), with two changes for this board: a frame can be any .frame, and a mark on
 // something inside a tray sits just outside the tray's left edge, so it never covers the row's text.
 for (const el of document.querySelectorAll('[data-mk]')) {
   const f = el.closest('.win, .frame');
