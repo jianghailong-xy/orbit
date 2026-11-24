@@ -72,10 +72,13 @@ func canonicalToolName(name string) string {
 }
 
 // documentsMountRelative recognizes the spellings of a mounted drive path: ~/Drive, /home/orbit/Drive and the mount; ~/Documents and ~/Files are
-// ordinary local paths. Either root's drive/ is the drive whichever one this Pod has.
+// ordinary local paths. Every root's drive/ is the drive whichever one this Pod has.
 func documentsMountRelative(p string) (string, bool) {
-	for _, root := range []string{"~/Drive", driveHomePath, driveMountPath,
-		driveRootPath + "/drive", driveLegacyRootPath + "/drive"} {
+	roots := []string{"~/Drive", driveHomePath, driveMountPath, driveRootPath + "/drive"}
+	for _, legacy := range driveLegacyRootPaths {
+		roots = append(roots, legacy+"/drive")
+	}
+	for _, root := range roots {
 		if p == root || strings.HasPrefix(p, root+"/") {
 			return strings.TrimPrefix(p, root), true
 		}

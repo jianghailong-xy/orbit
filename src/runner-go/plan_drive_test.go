@@ -26,9 +26,9 @@ func planDriveWrites() map[string]map[string]interface{} {
 		"Write the drive root": {"tool_name": "Write", "input": map[string]interface{}{
 			"file_path": "/home/orbit/Drive", "content": "x"}},
 		"Edit the mount": {"tool_name": "Edit", "input": map[string]interface{}{
-			"file_path": "/run/orbit-documents/drive/a.txt", "old_string": "a", "new_string": "b"}},
+			"file_path": "/run/orbit-drive/drive/a.txt", "old_string": "a", "new_string": "b"}},
 		"Edit the parent": {"tool_name": "Edit", "input": map[string]interface{}{
-			"file_path": "/run/orbit-documents/status.json", "old_string": "a", "new_string": "b"}},
+			"file_path": "/run/orbit-drive/status.json", "old_string": "a", "new_string": "b"}},
 		"MultiEdit": {"tool_name": "MultiEdit", "input": map[string]interface{}{
 			"file_path": "/home/orbit/Drive/a.go", "edits": []interface{}{}}},
 		"NotebookEdit": {"tool_name": "NotebookEdit", "input": map[string]interface{}{
@@ -38,7 +38,7 @@ func planDriveWrites() map[string]map[string]interface{} {
 		"Bash append into $HOME/Drive": {"tool_name": "Bash", "input": map[string]interface{}{
 			"command": `printf 'a\n' >> "$HOME/Drive/log.txt"`}},
 		"Bash touch on the mount": {"tool_name": "Bash", "input": map[string]interface{}{
-			"command": "touch /run/orbit-documents/drive/new"}},
+			"command": "touch /run/orbit-drive/drive/new"}},
 		"Bash cd then rm": {"tool_name": "Bash", "input": map[string]interface{}{
 			"command": "cd /home/orbit/Drive && rm -f old.txt"}},
 		"Bash cp into the drive": {"tool_name": "Bash", "input": map[string]interface{}{
@@ -59,10 +59,10 @@ func planDriveReads() map[string]map[string]interface{} {
 	return map[string]map[string]interface{}{
 		"Read":   {"tool_name": "Read", "input": map[string]interface{}{"file_path": "/home/orbit/Drive/a.md"}},
 		"Grep":   {"tool_name": "Grep", "input": map[string]interface{}{"pattern": "x", "path": "/home/orbit/Drive"}},
-		"Glob":   {"tool_name": "Glob", "input": map[string]interface{}{"pattern": "**/*.md", "path": "/run/orbit-documents/drive"}},
+		"Glob":   {"tool_name": "Glob", "input": map[string]interface{}{"pattern": "**/*.md", "path": "/run/orbit-drive/drive"}},
 		"ls":     {"tool_name": "Bash", "input": map[string]interface{}{"command": "ls -la ~/Drive"}},
 		"cat":    {"tool_name": "Bash", "input": map[string]interface{}{"command": "cat /home/orbit/Drive/a.md | grep -n x 2>/dev/null"}},
-		"find":   {"tool_name": "Bash", "input": map[string]interface{}{"command": "find /run/orbit-documents/drive -name '*.md' | wc -l"}},
+		"find":   {"tool_name": "Bash", "input": map[string]interface{}{"command": "find /run/orbit-drive/drive -name '*.md' | wc -l"}},
 		"stat":   {"tool_name": "Bash", "input": map[string]interface{}{"command": "stat /home/orbit/Drive/a.md 2>&1"}},
 		"to tmp": {"tool_name": "Bash", "input": map[string]interface{}{"command": "cat ~/Drive/a.md > /tmp/a.md"}},
 	}
@@ -206,7 +206,7 @@ func TestPlanDriveWriteFollowsLinks(t *testing.T) {
 	dir := t.TempDir()
 	oldParent, oldMount, oldHome := driveParentPath, driveMountPath, driveHomePath
 	t.Cleanup(func() { driveParentPath, driveMountPath, driveHomePath = oldParent, oldMount, oldHome })
-	driveParentPath = filepath.Join(dir, "run", "orbit-documents")
+	driveParentPath = filepath.Join(dir, "run", "orbit-drive")
 	driveMountPath = filepath.Join(driveParentPath, "drive")
 	driveHomePath = filepath.Join(dir, "home", "orbit", "Drive")
 	if err := os.MkdirAll(filepath.Join(driveMountPath, "Proj"), 0o755); err != nil {
@@ -256,7 +256,7 @@ func TestKimiPlanModeRefusesDriveWritesUnasked(t *testing.T) {
 	plan := &ClaimedSession{Agent: AgentExecConfig{PermissionMode: "plan", AllowedTools: []string{"Edit", "Write"}}}
 	for name, input := range map[string]map[string]interface{}{
 		"Bash":  {"command": "echo x > ~/Drive/a.txt"},
-		"Edit":  {"file_path": "/run/orbit-documents/drive/a.txt"},
+		"Edit":  {"file_path": "/run/orbit-drive/drive/a.txt"},
 		"Write": {"path": "/home/orbit/Drive/b.txt"},
 	} {
 		if got, decided := kimiAutomaticPermissionOption(plan, name, input, options, ""); got != "reject" || !decided {
