@@ -430,7 +430,7 @@ test('Documents drive: the mount daemon passes the shell-operation list (§5.9)'
       }
     }
     const r: Runner = {
-      name, id, dir, root, drive: path.join(root, 'drive'), home, F: path.join(home, 'Documents'), spool: path.join(dir, 'spool'),
+      name, id, dir, root, drive: path.join(root, 'drive'), home, F: path.join(home, 'Drive'), spool: path.join(dir, 'spool'),
       tokenFile, proxy, podUid: pod, cgroup, args: extra, log: '',
     };
     // ~/Drive is a symlink to the drive, as the runner's entrypoint makes it (§6.1).
