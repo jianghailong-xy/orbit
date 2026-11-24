@@ -14,7 +14,7 @@ func startMemoryWatchdog(context.Context, bool) func()                      { re
 func trackMemoryRoots(string, bool, ...int)                                 {}
 func memoryWatchdogChildEnv(env []string) []string                          { return env }
 func restoreOrbitOOMScore()                                                 {}
-func watchMemoryTool(string) func(int)                                      { return func(int) {} }
+func watchMemoryTool(context.Context, string) func(int)                     { return func(int) {} }
 func memoryToolClaudeEnv(env []string) []string                             { return env }
 func runMemoryToolShell([]string) int                                       { return 126 }
 func (*bgJobService) reportMemoryToolExit(net.Conn, map[string]interface{}) {}

@@ -494,7 +494,7 @@ func (b *bgTailer) prepareJob(spec bgJobSpec) (*bgPreparedJob, error) {
 func (b *bgTailer) launchJob(p *bgPreparedJob) (bgJobStatus, error) {
 	job, cmd, f, cancel, spec := p.job, p.cmd, p.output, p.cancel, p.spec
 	jobID, outputPath := job.id, job.outputPath
-	checkOOM := watchMemoryTool(spec.SessionID)
+	checkOOM := watchMemoryTool(p.ctx, spec.SessionID)
 	if err := cmd.Start(); err != nil {
 		cancel()
 		f.Close()
