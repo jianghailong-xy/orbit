@@ -1,6 +1,9 @@
 package io.orbitd.android.management
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.*
@@ -15,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import io.orbitd.android.core.cards.WorkspaceLandingWords as Words
 import io.orbitd.android.core.cards.obj
 import io.orbitd.android.core.cards.text
+import io.orbitd.android.cards.LocalSettingsAnchor
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.OrbitRoute
 import kotlinx.coroutines.CancellationException
@@ -28,6 +32,7 @@ import kotlinx.serialization.json.put
  * choices as full-width rows, so "faster" and "needs the right to push" sit side by side. [workspace] is `GET /workspaces/:id`; a
  * choice is saved at once with `PATCH { landingMode }` and read back, as the web's section does.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun WorkspaceLandingSetting(api: ManagementApi, workspaceId: String, workspace: JsonObject, open: (OrbitRoute) -> Unit,
     changed: () -> Unit, onFailure: (Throwable) -> Unit) {
@@ -56,7 +61,11 @@ internal fun WorkspaceLandingSetting(api: ManagementApi, workspaceId: String, wo
             finally { saving = false }
         }
     }
-    FormSection(Words.SECTION) {
+    // A link to the Landing section (`recordId == "landing"`, the web's #landing) opens the page scrolled to it.
+    val requester = remember { BringIntoViewRequester() }
+    val anchored = LocalSettingsAnchor.current == "landing"
+    LaunchedEffect(anchored) { if (anchored) { kotlinx.coroutines.delay(100); requester.bringIntoView() } }
+    Box(Modifier.bringIntoViewRequester(requester)) { FormSection(Words.SECTION) {
         Text(Words.LEAD, Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.bodyMedium, color = Ink.muted)
         Column(Modifier.selectableGroup().testTag("landing-setting")) {
             Choice("PULL_REQUEST", Words.PULL_REQUEST, Words.DEFAULT, Words.PULL_REQUEST_BODY, mode == "PULL_REQUEST", !saving) { choose("PULL_REQUEST") }
@@ -75,7 +84,7 @@ internal fun WorkspaceLandingSetting(api: ManagementApi, workspaceId: String, wo
             Notice("refused", Words.refusalText(it.text("branch").orEmpty(), Words.repoSlug(workspace.text("repoUrl")), it.text("message").orEmpty()),
                 Words.REFUSED, Words.CONNECT_AGAIN, { open(OrbitRoute(Destination.SETTINGS, "github")) })
         }
-    }
+    } }
 }
 
 @Composable

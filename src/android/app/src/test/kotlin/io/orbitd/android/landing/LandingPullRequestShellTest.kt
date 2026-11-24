@@ -164,13 +164,13 @@ class LandingPullRequestShellTest {
         }
     }
 
-    private fun openSettings(block: JsonObject) {
+    private fun openSettings(block: JsonObject, record: String? = null) {
         val session = (compose.activity.application as OrbitApplication).session
         compose.waitUntil(60_000) { session.state.value is AuthState.SignedOut }
         runBlocking { session.login(ServerAddress.parse("https://fixture.test"), "owner@example.test", "fixture-password") }
         val api = ManagementApi(stub(block), (session.state.value as AuthState.SignedIn).handle)
         compose.activityRule.scenario.onActivity { activity -> activity.setContent { OrbitTheme {
-            SettingsScreen(api, OrbitRoute(Destination.SETTINGS, "workspace", "w1"), 0, { opened += it }, {}, logout = {}, changed = {},
+            SettingsScreen(api, OrbitRoute(Destination.SETTINGS, "workspace", "w1", recordId = record), 0, { opened += it }, {}, logout = {}, changed = {},
                 workspaceDeleted = {}, deviceAlerts = { true }, notifications = {}, about = {})
         } } }
         compose.waitUntil(60_000) { compose.onAllNodesWithTag("landing-setting").fetchSemanticsNodes().isNotEmpty() ||
@@ -188,6 +188,20 @@ class LandingPullRequestShellTest {
         compose.onNodeWithTag("landing-setting:PUSH_AS_ME").assertIsNotSelected().assertIsEnabled()
         assertTrue(WorkspaceLandingWords.PUSH_AS_ME_BODY.contains("doesn't wait for a pull request"))
         assertTrue(WorkspaceLandingWords.PUSH_AS_ME_BODY.contains("Needs the right to push to main"))
+    }
+
+    @Config(qualifiers = "w411dp-h420dp-xxhdpi")
+    @Test fun withoutTheLinkTheNoticeUnderTheChoicesIsBelowTheFirstScreen() {
+        openSettings(settings("permissionsPending"))
+        compose.onNodeWithTag("landing-setting:permissions-pending").assertIsNotDisplayed()
+    }
+
+    @Config(qualifiers = "w411dp-h420dp-xxhdpi")
+    @Test fun theTipsLinkOpensTheSettingsScrolledToTheLandingSection() {
+        val route = io.orbitd.android.reader.landingSettingsRoute("w1")
+        assertEquals("landing", route.recordId)
+        openSettings(settings("permissionsPending"), route.recordId)
+        compose.waitUntil(30_000) { runCatching { compose.onNodeWithTag("landing-setting:permissions-pending").assertIsDisplayed() }.isSuccess }
     }
 
     @Test fun choosingPushAsMeIsWrittenAlone() {
