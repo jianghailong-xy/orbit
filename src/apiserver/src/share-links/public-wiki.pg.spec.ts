@@ -36,8 +36,8 @@ import { CreatorType, PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrig
 import { uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
-import { DocumentsContentService } from '../documents/documents-content.service';
-import { DocumentsService } from '../documents/documents.service';
+import { DriveContentService } from '../drive/drive-content.service';
+import { DriveService } from '../drive/drive.service';
 import { AttachmentsService } from '../attachments/attachments.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { publicIdHeaders } from '../common/public-id-headers';
@@ -294,8 +294,8 @@ test('wiki links: a space\'s written documents, read-only, with Footnotes the on
       // SharedController's streams, which nothing here opens.
       { provide: ViewerStreamService, useValue: {} },
       // Drive file links, which nothing here shares or opens (share-links-drive-file.pg.spec.ts holds them).
-      { provide: DocumentsService, useValue: {} },
-      { provide: DocumentsContentService, useValue: {} },
+      { provide: DriveService, useValue: {} },
+      { provide: DriveContentService, useValue: {} },
       { provide: SessionsService, useValue: {} },
       { provide: AttachmentsService, useValue: {} },
       { provide: SharedRateLimiter, useValue: new SharedRateLimiter({ max: 100_000, windowMs: 60_000 }) },

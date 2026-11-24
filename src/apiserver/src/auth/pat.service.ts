@@ -36,20 +36,21 @@ export const PAT_SCOPES = [
   'wiki:read',
   'wiki:write',
   'events:read',
-  // The owner's Documents (/documents/*, and its /drive/* alias): one scope for reading and writing them, so it is not a `:read`
-  // and the read-only preset leaves it out. It was called `files`; PAT_SCOPE_ALIASES keeps that name working.
-  'documents',
+  // The owner's Drive (/drive/*, and its /documents/* alias): one scope for reading and writing them, so it is not a `:read`
+  // and the read-only preset leaves it out. It was called `files`, then `documents`; PAT_SCOPE_ALIASES keeps both names working.
+  'drive',
   // POST /notify: a push to the account owner's Orbit apps, and nothing else — the narrow grant a monitoring system holds.
   'notify',
 ] as const;
 export type PatScopeName = (typeof PAT_SCOPES)[number];
 
 /**
- * Scope names a scope was once called, each with what it is called now. Migration 1550 rewrote the stored tokens, and a
- * name here is still read as its scope wherever a scope arrives: a token row an older apiserver wrote during a rolling
- * deploy, and a client built before the rename asking for it. A token is always minted and shown with the current name.
+ * Scope names a scope was once called, each with what it is called now. Migrations 1550 (`files` → `documents`) and 1590
+ * (`files` and `documents` → `drive`) rewrote the stored tokens, and a name here is still read as its scope wherever a
+ * scope arrives: a token row an older apiserver wrote during a rolling deploy, and a client built before the rename asking
+ * for it. A token is always minted and shown with the current name.
  */
-export const PAT_SCOPE_ALIASES: Readonly<Record<string, PatScopeName>> = { files: 'documents' };
+export const PAT_SCOPE_ALIASES: Readonly<Record<string, PatScopeName>> = { files: 'drive', documents: 'drive' };
 
 /** `scopes` with every old name read as the scope it names now, each once. */
 export function currentScopeNames(scopes: readonly string[]): string[] {

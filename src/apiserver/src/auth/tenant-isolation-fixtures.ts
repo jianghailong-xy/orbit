@@ -22,8 +22,8 @@ import { CRITERIA_WEAKENING_EFFECT_CLASS } from '../projects/criteria-weakening-
 import { DONE_REQUEST_DEDUPE_KEY, DONE_REQUEST_KIND, DONE_REQUEST_TITLE } from '../projects/project-done-request';
 import { handoffCrossingKey } from '../projects/project-handoff';
 import { SessionAttemptService } from '../projects/session-attempt.service';
-import { DocumentsChunksService } from '../documents/documents-chunks.service';
-import { DocumentsService, OWNER_WRITER } from '../documents/documents.service';
+import { DriveChunksService } from '../drive/drive-chunks.service';
+import { DriveService, OWNER_WRITER } from '../drive/drive.service';
 import { encryptSecret } from '../providers/provider-crypto';
 import { PatService } from './pat.service';
 import { call, type Apiserver, type Reply } from './pat-test-apiserver';
@@ -672,7 +672,7 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
     };
 
     // The drive: a folder, a file in it with two replaced versions (an empty overwrite each), and files deleted to Trash.
-    const drive = new DocumentsService(db as never);
+    const drive = new DriveService(db as never);
     const driveFolder = await drive.createFolder(ownerId, { name: `${name} census folder` });
     const driveFile = await drive.createFile(ownerId, { parentId: driveFolder.id, name: 'census.txt' });
     const driveOverwrite = async () => (await drive.commit(ownerId, {
@@ -688,12 +688,12 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
     const spareDriveRestoreItemEntryId = (await drive.createFile(ownerId, { parentId: driveFolder.id, name: 'restored-alone.txt' })).id;
     const spareDriveRestoreItemGroupId = (await drive.moveToTrash(ownerId, spareDriveRestoreItemEntryId)).trashGroupId;
     const driveUpload = async (declaredSize: number) =>
-      (await new DocumentsChunksService(db as never, undefined as never).openStaging(ownerId, {
+      (await new DriveChunksService(db as never, undefined as never).openStaging(ownerId, {
         source: 'OWNER_UPLOAD', parentId: driveFolder.id, name: 'upload.bin', declaredSize,
       })).id;
     const driveUploadId = await driveUpload(10);
-    // An agent's directory sync of this account's runner (docs/documents-directory-sync-design.md S4).
-    const driveSyncId = (await db.documentSync.create({ data: { ownerId, runnerId, sourceName: 'census', destPath: '/census' } })).id;
+    // An agent's directory sync of this account's runner (docs/drive-directory-sync-design.md S4).
+    const driveSyncId = (await db.driveSync.create({ data: { ownerId, runnerId, sourceName: 'census', destPath: '/census' } })).id;
     const spareDriveCompleteUploadId = await driveUpload(0);
     const spareDriveAbandonUploadId = await driveUpload(10);
     const spareDriveEntryId = (await drive.createFile(ownerId, { parentId: driveFolder.id, name: 'spare.txt' })).id;

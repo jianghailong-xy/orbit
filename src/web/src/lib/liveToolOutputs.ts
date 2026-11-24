@@ -1,4 +1,4 @@
-import { parseDocumentsProgress } from './documentsTransfer';
+import { parseDriveProgress } from './driveTransfer';
 
 /**
  * Broadcast-only output snapshots for foreground user shells, and the byte counts of drive transfers.
@@ -29,14 +29,14 @@ type ToolOutputEvent = {
 };
 
 /**
- * A foreground shell's id, or the id of a drive transfer whose snapshot is its byte count (lib/documentsTransfer.ts). A
+ * A foreground shell's id, or the id of a drive transfer whose snapshot is its byte count (lib/driveTransfer.ts). A
  * drive call's tool_result clears its entry as a shell's does.
  */
 function toolUseId(payload: Record<string, unknown>, eventType: string): string | undefined {
   const value = payload.toolUseId ?? payload.tool_use_id;
   if (typeof value !== 'string' || !value) return undefined;
   if (value.startsWith('shell-')) return value;
-  if (eventType !== 'tool_output' || parseDocumentsProgress(payload.content)) return value;
+  if (eventType !== 'tool_output' || parseDriveProgress(payload.content)) return value;
   return undefined;
 }
 

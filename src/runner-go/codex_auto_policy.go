@@ -30,10 +30,10 @@ func codexAutoApprovalContextFor(execDir, upDir string, readOnlyRoots ...string)
 func codexRuntimeWorkspaceRoots(permissionMode string, job *ClaimedSession, execDir, upDir string) []string {
 	roots := []string{execDir, upDir}
 	if permissionMode == "auto" {
-		// Only the drive's own path, never the /run/orbit-documents parent or the ~/Documents link: Codex's command sandbox
+		// Only the drive's own path, never the /run/orbit-drive parent or the ~/Drive link: Codex's command sandbox
 		// (bwrap) is built per command, so it needs no parent to follow a remount, and it fails the command outright
 		// on a parent the agent cannot write ("Can't create file .../.git") or on a root that is a symlink ("crosses
-		// writable symlink"). Measured live in documents-mount.pg.e2e.ts row 56. The approval classifier below still knows
+		// writable symlink"). Measured live in drive-mount.pg.e2e.ts row 56. The approval classifier below still knows
 		// the other spellings.
 		if driveMounted() {
 			roots = append(roots, driveMountPath)

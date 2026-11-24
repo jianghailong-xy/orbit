@@ -17,11 +17,11 @@ export const SCOPE_GROUPS: readonly { resource: string; read: string; write?: st
 ];
 
 /**
- * The one scope that is not read/write by resource: Files (the Documents drive) is a single grant that
+ * The one scope that is not read/write by resource: Files (the Drive) is a single grant that
  * reads and changes it, so the Read-only preset leaves it out and Read & write includes it.
  */
-export const FILES_SCOPE = 'documents';
-const FILES_GROUP = { resource: 'Documents', read: FILES_SCOPE, write: FILES_SCOPE };
+export const FILES_SCOPE = 'drive';
+const FILES_GROUP = { resource: 'Drive', read: FILES_SCOPE, write: FILES_SCOPE };
 
 /**
  * Notifications (POST /api/notify): sends a push to your own Orbit apps and reaches nothing else, the one grant a

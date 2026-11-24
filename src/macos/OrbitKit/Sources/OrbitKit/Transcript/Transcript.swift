@@ -543,7 +543,7 @@ public struct ToolCard: Equatable, Sendable, Codable {
     /// `AssistantBubble.ts` is kept: a receipt arrives from a read rather than from the stream and
     /// is placed by comparing clocks.
     public var ts: String?
-    /// The runner's clock on the `tool_result`: with `ts`, how long a Documents transfer took (`DocumentsTransfer`).
+    /// The runner's clock on the `tool_result`: with `ts`, how long a Drive transfer took (`DriveTransfer`).
     public var resultTs: String?
 
     public init(id: String, name: String, input: JSONValue, result: String?,

@@ -23,7 +23,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The evidence card's files on a device (docs/documents-design.md §2.6, board docs/mocks/documents/4-card.png): a coordinator
+ * The evidence card's files on a device (docs/drive-design.md §2.6, board docs/mocks/drive/4-card.png): a coordinator
  * conversation served by the test's own fixture, T6's route in its own shape, and real PNG bytes to decode. Its screenshots are the five
  * scenes the board draws — today, the default state, the Evidence files page, the viewer, and expired — and what the board does not
  * draw: failed cases, a report opened, and the doors of a file that can only be saved or shared.

@@ -89,7 +89,7 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 
 /*
- * What a version of evidence cites, on its card (docs/documents-design.md §2.6; the web's `EvidenceFiles.tsx`): the file area under
+ * What a version of evidence cites, on its card (docs/drive-design.md §2.6; the web's `EvidenceFiles.tsx`): the file area under
  * the criterion, the Evidence files page it opens, and the viewer a thumbnail opens.
  *
  * ONLY A RASTER IMAGE IS EVER DRAWN. Every byte here was written by whoever submitted the evidence. `EvidenceFiles.isPicture` is the one

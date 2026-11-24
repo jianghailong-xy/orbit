@@ -32,7 +32,7 @@ import (
 // of the canonical catalogue and is emitted with `orbit capabilities --json`, so a client can tell
 // which catalogue answered it.
 
-const operationCatalogVersion = "1.11.0"
+const operationCatalogVersion = "1.12.0"
 
 // sessionStateFieldsNote is how an agent reads the session-state fields session_list and session_get
 // return beside `status` (Agent Contract 1.12.0). They are additive: `status` and its values are unchanged.
@@ -3217,7 +3217,7 @@ func buildOperationCatalog() []*operation {
 	// (wiki_tools.go; they are left out entirely when the wiki is off).
 	add(gateAlways, wikiToolDescriptors(obj)...)
 	add(gateAlways, fileToolDescriptors(obj)...)
-	add(gateAlways, documentsToolDescriptors(obj)...)
+	add(gateAlways, driveToolDescriptors(obj)...)
 	// The owner's own Settings (settings_tools.go): listed whether or not Session orchestration is on, since they fix
 	// ordinary settings and turning orchestration off is itself a proposal (docs/settings-from-conversation-design.md §7).
 	add(gateAlways, settingsToolDescriptors(obj)...)
@@ -3793,7 +3793,7 @@ func fileToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 					"type": "string",
 					"description": "The file or directory, absolute or relative to the working directory. Its real " +
 						"location, links resolved, has to be inside this session's checkout, its uploads directory, " +
-						"or the mounted Documents drive on Orbit Cloud.",
+						"or the mounted Drive on Orbit Cloud.",
 				},
 				"taskId": map[string]interface{}{
 					"type": "string",
@@ -4661,7 +4661,7 @@ func finishOperationCatalog(ops []*operation) []*operation {
 		{"wiki", wikiCLICapabilities},
 		{"wiki", wikiImportCLICapabilities},
 		{"file", fileCLICapabilities},
-		{"documents", documentsCLICapabilities},
+		{"drive", driveCLICapabilities},
 		{"subagent", subagentCLICapabilities},
 		{"settings", settingsCLICapabilities},
 		{"browser", browserCLICapabilities},
@@ -5491,34 +5491,30 @@ var catalogMetadata = map[string]operationMeta{
 		Object: objectFile,
 		Intent: "See the files this session keeps.",
 	},
-	"documents_put": {
+	"drive_put": {
 		Object: objectFile,
-		Intent: "Copy a local file into the owner's Documents drive.",
+		Intent: "Copy a local file into the owner's Drive.",
 	},
-	"documents_get": {
+	"drive_get": {
 		Object: objectFile,
 		Intent: "Download a drive file into this session's uploads directory.",
 	},
-	"documents_list": {
+	"drive_list": {
 		Object: objectFile,
 		Intent: "See the contents of a drive folder.",
 	},
-	"documents_move": {
+	"drive_move": {
 		Object: objectFile,
 		Intent: "Move or rename an entry on the drive.",
 	},
-	"documents_delete": {
+	"drive_delete": {
 		Object:      objectFile,
 		Intent:      "Move an entry to the owner's Trash.",
 		Destructive: true,
 	},
-	"documents_sync": {
-		Object: objectFile,
-		Intent: "Copy a local directory into a Documents folder in the background.",
-	},
 	"drive_sync": {
 		Object: objectFile,
-		Intent: "Copy a local directory into a drive folder in the background.",
+		Intent: "Copy a local directory into a Drive folder in the background.",
 	},
 	"bg_run": {
 		Object: objectBackgroundJob,

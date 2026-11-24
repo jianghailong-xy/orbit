@@ -2625,7 +2625,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored runner reads
       // NULL in both.
       '0461_runner_region',
-      // Documents' storage layer (0462, docs/documents-design.md §2.1; files/files.service.ts): a new table
+      // Drive' storage layer (0462, docs/drive-design.md §2.1; files/files.service.ts): a new table
       // `file_blob` (sha256 primary key, size_bytes, storage, last_referenced_at, with three CHECKs) holds one row per
       // stored content; `attachment` gains seven nullable columns (sha256 with a foreign key to file_blob ON DELETE
       // RESTRICT and an index, retention, expires_at, expired_at, pinned_at, file_bundle_id, evidence_id), `data` drops
@@ -2640,16 +2640,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // trigger, type, index or constraint is created, replaced or dropped, so it is not another writer of the DONE
       // fence. No INSERT, UPDATE or DELETE: every binding stays in its space.
       '0463_wiki_workspace_left_out',
-      // Documents' label (0464, docs/documents-design.md §2.3): one nullable column on `attachment`, which is not a
+      // Drive' label (0464, docs/drive-design.md §2.3): one nullable column on `attachment`, which is not a
       // preserved relation. No `task`, `session`, `project` or `project_acceptance_*` object nor any of the six preserved
       // triggers/functions is named, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
       '0464_attachment_label',
-      // Documents' test report summary (0465, docs/documents-design.md §2.5): one nullable JSONB column on
+      // Drive' test report summary (0465, docs/drive-design.md §2.5): one nullable JSONB column on
       // `attachment`, which is not a preserved relation. No `task`, `session`, `project` or `project_acceptance_*` object
       // nor any of the six preserved triggers/functions is named, so it is not another writer of the DONE fence. No
       // INSERT, UPDATE or DELETE.
       '0465_attachment_test_report_summary',
-      // 0466 is Documents' retention (docs/documents-design.md §2.8): three nullable columns on `file_blob`, two
+      // 0466 is Drive' retention (docs/drive-design.md §2.8): three nullable columns on `file_blob`, two
       // partial indexes on `attachment`, and one UPDATE that gives the rows `file_upload` wrote before it, cited by a version
       // already let go of, the `expires_at` they would have had, reading the ledger's revisions and decisions and writing
       // neither. No ledger table is written,
@@ -3238,7 +3238,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // stored row passes and a partial unique index; no row is written, and no preserved relation, trigger, function
       // or DONE fence changes.
       '1273_owner_request_settings_change',
-      // 1283 creates drive_staging, drive_staging_chunk and drive_version_chunk (Documents drive); no existing row is
+      // 1283 creates drive_staging, drive_staging_chunk and drive_version_chunk (drive); no existing row is
       // written, and no preserved relation, trigger, function or DONE fence changes.
       '1283_drive_chunk_store',
       // 1290 adds nullable managed_runner.update_requested_at, update_requested_by and update_completed_at (no
@@ -3253,11 +3253,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // session and time of the last write), and marks OWNER the bindings whose landing check was already
       // set; project_codebase is not a preserved relation, and no trigger, function or DONE fence changes.
       '1310_project_landing_check_set_by',
-      // 1327 creates drive_entry, drive_version, drive_trash_group, drive_commit and drive_change (Documents drive name
+      // 1327 creates drive_entry, drive_version, drive_trash_group, drive_commit and drive_change (drive name
       // layer) and adds foreign keys from 1283's drive tables to them; no existing row is written, and no preserved
       // relation, trigger, function or DONE fence changes.
       '1327_drive_name_layer',
-      // 1339 creates drive_mount_credential (Documents drive, the mount daemon's credential); no existing row is
+      // 1339 creates drive_mount_credential (drive, the mount daemon's credential); no existing row is
       // written, and no preserved relation, trigger, function or DONE fence changes.
       '1339_drive_mount_credential',
       // 1340 adds drive_entry_id and drive_version_id to share_link, replaces its one-root CHECK and adds two foreign keys
@@ -3348,7 +3348,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1434 rewrites runner.repos_root from /var/lib/orbit/home to /home/orbit for managed runners only (6a7106f95b): an
       // UPDATE of runner rows, none of the preserved relations, and no trigger, function or DONE fence changes.
       '1434_managed_runner_repos_root_home_orbit',
-      // 1438 creates drive_removed_entry (Documents drive: the file a replacing rename removed, §3.2) and its index; no
+      // 1438 creates drive_removed_entry (drive: the file a replacing rename removed, §3.2) and its index; no
       // existing row is written, and no preserved relation, trigger, function or DONE fence changes. Numbered past every
       // migration on main and the project and task branches (1437 the highest) when it was written.
       '1438_drive_removed_entry',
@@ -3462,7 +3462,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // no column, value or reference changes. None of them is a preserved relation, and no trigger, function or DONE
       // fence names them.
       '1551_documents_tables',
-      // 1560 creates document_sync (docs/documents-directory-sync-design.md S4): a new table with two foreign-key keys and
+      // 1560 creates document_sync (docs/drive-directory-sync-design.md S4): a new table with two foreign-key keys and
       // two indexes. No existing row, trigger, function or DONE fence is touched.
       '1560_document_sync',
       // 1561 adds a nullable concurrency ceiling to managed_runner. It writes no rows and
@@ -3477,7 +3477,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1573_owner_request_project_reopen',
       // 1574 adds three nullable columns to wiki_chat_draft (auto_queued_at, held, held_by_id), two checks, a partial index,
       // and loosens its undone, seen and told checks; no preserved relation, row, trigger, function or DONE fence changes.
-      '1574_wiki_chat_draft_auto'],
+      '1574_wiki_chat_draft_auto',
+      // 1590 rewrites the access token scopes `documents` and `files` to `drive` in personal_access_token.scopes and
+      // pat_device_login.scopes: two UPDATEs of those tables only, none of the preserved relations, no row added or
+      // removed, and no table, column, trigger, function or DONE fence changes.
+      '1590_pat_scope_drive',
+      // 1592 renames the ten document_* tables back to drive_* and document_sync to drive_sync, with their
+      // constraints, indexes and the document_change sequence: catalog renames only, so no row is written or removed
+      // and nothing is created, and no column, value or reference changes. None of them is a preserved relation, and
+      // no trigger, function or DONE fence names them.
+      '1592_drive_tables'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

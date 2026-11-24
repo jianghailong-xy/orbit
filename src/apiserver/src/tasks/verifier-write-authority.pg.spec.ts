@@ -1,5 +1,5 @@
 /**
- * Who may write the verification relation (docs/documents-design.md §2.7), held against the production apiserver —
+ * Who may write the verification relation (docs/drive-design.md §2.7), held against the production apiserver —
  * `build/main.js` and every guard and pipe in front of the routes — over a real PostgreSQL that `scripts/run-pg-spec.sh`
  * migrates from empty:
  *
@@ -72,8 +72,8 @@ test('who may write the verification relation', { skip: !URL, concurrency: 1, ti
   server = await startApiserver(url, jwtSecret, {
     PROVIDER_SECRET_KEY,
     MODEL_CATALOG_URL: 'http://127.0.0.1:9/',
-    ORBIT_DOCUMENTS_BACKEND: 'local',
-    ORBIT_DOCUMENTS_DIR: dir,
+    ORBIT_DRIVE_BACKEND: 'local',
+    ORBIT_DRIVE_DIR: dir,
   });
   const api = server;
 

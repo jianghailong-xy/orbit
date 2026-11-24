@@ -28,9 +28,9 @@ class ApiRequest(
     val onUploadProgress: ((Long, Long) -> Unit)? = null,
     /** How long to wait for the answer once the request is sent, where OkHttp's 10 s default is too short (a DeepSeek call). */
     val readTimeoutSeconds: Long? = null,
-    /** The whole call's limit where the 30 s default is too short: an 8 MiB Documents chunk on a slow connection. */
+    /** The whole call's limit where the 30 s default is too short: an 8 MiB Drive chunk on a slow connection. */
     val callTimeoutSeconds: Long? = null,
-    /** More request headers, such as a Documents chunk's `X-Orbit-Chunk-Sha256` or a preview's `Range`. */
+    /** More request headers, such as a Drive chunk's `X-Orbit-Chunk-Sha256` or a preview's `Range`. */
     headers: List<Pair<String, String>> = emptyList(),
 ) {
     val headers = headers.toList()

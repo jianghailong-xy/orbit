@@ -213,7 +213,7 @@ const cases = [
     replace('    command: ["--config", "/etc/orbit-nats/nats.conf"]\n', '    command: ["--config", "/etc/orbit-nats/nats.conf", "-V"]\n')],
   ['NATS on another listener', "the runner link's NATS configuration is exactly the one task B4 added",
     replaceConf('port: 4222\n', 'port: 4222\nwebsocket { port: 8080, no_tls: true }\n')],
-  // Documents' off-host copy of 2026-11-02 (task T10): the sidecar may read the files directory and nothing more, and
+  // Drive' off-host copy of 2026-11-02 (task T10): the sidecar may read the files directory and nothing more, and
   // its copy stays out of the archive mirror's --delete, keeps every byte, and costs the rest of the loop nothing.
   ['a writable files directory in pgbackup', 'nothing beyond the approved configuration was added',
     replace('./data/files:/var/lib/orbit/files:ro', './data/files:/var/lib/orbit/files')],
@@ -237,12 +237,12 @@ const cases = [
     replaceScript('  if [ -d "$FILES_DIR" ] && [ -z "$(ls -A "$FILES_DIR" | grep -vx tmp)" ]; then\n    return 0\n  fi\n', '')],
   ['a missing files directory taken for an empty one', 'a files directory that is not there is still tried',
     replaceScript('if [ -d "$FILES_DIR" ] && [ -z', 'if [ -z')],
-  // Documents' quota and grace period of 2026-11-03 (task T9): pgbackup's two retention values with pgbackup's own
+  // Drive' quota and grace period of 2026-11-03 (task T9): pgbackup's two retention values with pgbackup's own
   // defaults, so that the grace period and the backups read one number, and no other line beside them.
   ['the grace period reading another default than pgbackup', 'nothing beyond the approved configuration was added',
     replace('      ORBIT_BASE_BACKUP_KEEP: "${ORBIT_BASE_BACKUP_KEEP:-2}"\n      # Optional: managed runners', '      ORBIT_BASE_BACKUP_KEEP: "${ORBIT_BASE_BACKUP_KEEP:-1}"\n      # Optional: managed runners')],
   ['a quota set for every deployment', 'nothing beyond the approved configuration was added',
-    replace('ORBIT_DOCUMENTS_QUOTA_BYTES: "${ORBIT_DOCUMENTS_QUOTA_BYTES:-${ORBIT_FILES_QUOTA_BYTES:-}}"', 'ORBIT_DOCUMENTS_QUOTA_BYTES: "${ORBIT_DOCUMENTS_QUOTA_BYTES:-${ORBIT_FILES_QUOTA_BYTES:-1073741824}}"')],
+    replace('ORBIT_DRIVE_QUOTA_BYTES: "${ORBIT_DRIVE_QUOTA_BYTES:-${ORBIT_DOCUMENTS_QUOTA_BYTES:-${ORBIT_FILES_QUOTA_BYTES:-}}}"', 'ORBIT_DRIVE_QUOTA_BYTES: "${ORBIT_DRIVE_QUOTA_BYTES:-${ORBIT_DOCUMENTS_QUOTA_BYTES:-${ORBIT_FILES_QUOTA_BYTES:-1073741824}}}"')],
   // Claude Code on an OpenAI key of 2026-11-11 (project 34vZPMzFs7c8OTMPJYYHn): both flags off and no upstream host
   // listed, unless the host's .env says otherwise.
   ['Claude Code on OpenAI keys on by default', 'nothing beyond the approved configuration was added',

@@ -56,6 +56,9 @@ var agentPrimerHashes = map[string]string{
 	// 1.4.6 is 1.4.5 with the first line naming Agent Contract 1.13.0 (the drive tools are documents_*, the CLI
 	// `orbit documents`, the link orbit-document:, the old names still served); no rule changed.
 	"1.4.6": "e0ec22b359cb36138e91b08ba216b9455a3d3a957df002d197e2f5722d883a60",
+	// 1.4.7 is 1.4.6 with the first line naming Agent Contract 1.14.0 (the drive tools are drive_* again, the CLI
+	// `orbit drive`, the link orbit-drive:, the documents_* names still served); no rule changed.
+	"1.4.7": "c36f8a00f568741b4c34a1390d82fc4b1f4b93885f8205717506a50bd5359032",
 }
 
 // The snapshots: the primer exactly as `initialize` sends it, and the four shapes of the instructions

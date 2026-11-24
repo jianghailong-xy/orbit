@@ -96,7 +96,7 @@ done
 for spec in "${SPECS[@]}"; do
   case "$spec" in
     "$API/src/"*.pg.spec.ts) ;;
-    # A spec that needs more than PostgreSQL (root and /dev/fuse: documents/documents-mount.pg.e2e.ts), run here by hand. CI's
+    # A spec that needs more than PostgreSQL (root and /dev/fuse: drive/drive-mount.pg.e2e.ts), run here by hand. CI's
     # roster (scripts/project-pg-matrix.sh) takes *.pg.spec only, so it never meets one it cannot run.
     "$API/src/"*.pg.e2e.ts) ;;
     *) die "not an apiserver pg spec: $spec" ;;

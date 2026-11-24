@@ -34,7 +34,7 @@ type DshAgentOverlay struct {
 	// Uploads is the session's uploads directory, a writable root of its shell sandbox beside the shared cache
 	// root (dshSandboxCacheRootPlugin). Empty leaves the cache root alone.
 	Uploads string
-	// Drive is the Documents drive's roots (the parent included), writable beside Uploads; empty when none is mounted.
+	// Drive is the drive's roots (the parent included), writable beside Uploads; empty when none is mounted.
 	Drive []string
 }
 
