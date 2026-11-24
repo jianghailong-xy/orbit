@@ -557,7 +557,7 @@ private struct DocumentsPreviewBox: View {
 
 // MARK: - Move
 
-private struct DocumentsMoveSheet: View {
+struct DocumentsMoveSheet: View {
     let model: DocumentsModel
     let ids: [String]
     @Environment(\.dismiss) private var dismiss
@@ -633,7 +633,7 @@ private struct DocumentsMoveSheet: View {
 
 // MARK: - Share Link (D18, §9)
 
-private struct DocumentsShareSheet: View {
+struct DocumentsShareSheet: View {
     let model: DocumentsModel
     let entry: DocumentsEntry
     let moveToCurrent: Bool
@@ -1167,13 +1167,14 @@ private struct DocumentsStorageRankings: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 if let storage = model.storage {
-                    section("Largest projects", storage.projects.map { ($0.id, $0.title, $0.bytes) }) { id in
+                    section("Largest projects", storage.projects.map { RankRow(id: $0.id, name: $0.title, bytes: $0.bytes) }) { id in
                         app.openProjectSessions(id, inColumn: true)
                     }
-                    section("Largest tasks", storage.tasks.map { ($0.id, $0.title, $0.bytes) }) { id in
+                    section("Largest tasks", storage.tasks.map { RankRow(id: $0.id, name: $0.title, bytes: $0.bytes) }) { id in
                         app.route(to: .task(id))
                     }
-                    section("Added each week", storage.weeks.reversed().map { ($0.id, DocumentsLogic.weekLabel($0.weekStart), $0.bytes) },
+                    section("Added each week",
+                            storage.weeks.reversed().map { RankRow(id: $0.id, name: DocumentsLogic.weekLabel($0.weekStart), bytes: $0.bytes) },
                             open: nil)
                 }
             }
@@ -1181,14 +1182,20 @@ private struct DocumentsStorageRankings: View {
         }
     }
 
+    private struct RankRow: Identifiable {
+        let id: String
+        let name: String
+        let bytes: Int
+    }
+
     @ViewBuilder
-    private func section(_ title: String, _ rows: [(id: String, name: String, bytes: Int)],
+    private func section(_ title: String, _ rows: [RankRow],
                          open: ((String) -> Void)?) -> some View {
         if !rows.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
                 Text(title).font(.orbitLabel.weight(.semibold)).padding(10)
                 Divider()
-                ForEach(rows, id: \.id) { row in
+                ForEach(rows) { row in
                     Button { open?(row.id) } label: {
                         HStack {
                             Text(row.name).lineLimit(1)
