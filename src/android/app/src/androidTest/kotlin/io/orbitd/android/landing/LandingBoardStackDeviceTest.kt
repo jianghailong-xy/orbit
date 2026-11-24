@@ -60,8 +60,12 @@ class LandingBoardStackDeviceTest {
             dir.resolve("$label.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }; bitmap.recycle()
         }
     }
+    /** Hands the app a link as its running activity receives one, without starting another instance of it. */
     private fun link(uri: String) {
-        compose.activityRule.scenario.onActivity { it.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri)).setPackage(it.packageName).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)) }
+        compose.activityRule.scenario.onActivity {
+            val deliver = MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java).apply { isAccessible = true }
+            deliver.invoke(it, Intent(Intent.ACTION_VIEW, Uri.parse(uri)).setPackage(it.packageName))
+        }
         compose.waitForIdle()
     }
     private fun shownAfter(text: String): Boolean { try { await(text, 8_000) } catch (_: AssertionError) { return false }; return true }
@@ -92,9 +96,6 @@ class LandingBoardStackDeviceTest {
             await(head); scrollTo(head)
             capture("landings-$key")
         }
-        // The links above started the app's activity again from the test; end it so the rule can close the scenario.
-        if (only == null || only.startsWith("card:")) { runBlocking { app.session.logout() }; compose.activityRule.scenario.onActivity { it.finish() }; Thread.sleep(2_000); return }
-        // The workspace's Landing section, as the settings page draws each of its states.
         val names = mapOf("pullRequest" to "opened-with-checks-running", "pushAsMe" to "push-as-me-on", "refused" to "push-refused",
             "notFromGithub" to "not-from-github", "permissionsPending" to "permissions-pending", "notConnected" to "github-not-connected")
         for ((key, name) in names) {
