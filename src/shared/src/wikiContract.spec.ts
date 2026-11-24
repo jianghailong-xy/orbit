@@ -800,13 +800,15 @@ describe('wiki contract', () => {
       expect(event('tool_result', call(tool)), tool).toBe('agent_words');
     }
     // A read of the wiki is not observed, under any engine's name or through the CLI.
-    for (const tool of ['mcp__orbit__wiki_search', 'mcp__orbit__wiki_get', 'orbit__wiki_search', 'orbit__wiki_get', 'wiki_search', 'wiki_get']) {
+    for (const tool of ['mcp__orbit__wiki_search', 'mcp__orbit__wiki_get', 'mcp__orbit__wiki_read', 'orbit__wiki_search', 'orbit__wiki_get', 'orbit__wiki_read', 'wiki_search', 'wiki_get', 'wiki_read']) {
       expect(wikiCallReadsWiki(tool, null), tool).toBe(true);
       expect(of({ kind: 'tool_call', ...call(tool) }), tool).toBe('agent_words');
     }
     for (const command of [
       'orbit wiki search release',
       'orbit wiki get 34abc --json',
+      'orbit wiki read 34abc',
+      "'/usr/local/bin/orbit' wiki read 34abc | head",
       "'/usr/local/bin/orbit' wiki search release | head",
       '/root/.orbit/bin/orbit wiki get 34abc',
       'cd src && orbit wiki search "a phrase"',
@@ -898,6 +900,8 @@ describe('wiki contract', () => {
     }
     // The dossier and the import say so too.
     expect(CONTRACT.maintenance.dossier.wikiReads).toMatch(/wikiCallReadsWiki/u);
+    expect(CONTRACT.maintenance.dossier.wikiReads).toMatch(/wiki_read/u);
+    expect(CONTRACT.sourceRules.wikiReads).toMatch(/background_task/u);
     expect(CONTRACT.effectPolicy.taintedRule).toMatch(/originSessionId/u);
     expect(CONTRACT.effectPolicy.taintedRule).toMatch(/runtime_session_id/u);
     expect(CONTRACT.import.source).toMatch(/evidence\.secondHand/u);

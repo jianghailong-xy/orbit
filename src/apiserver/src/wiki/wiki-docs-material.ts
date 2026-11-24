@@ -502,6 +502,8 @@ async function placeRecords(
       if (item.via) unresolved.push({ kind: item.kind, ref: item.ref, entryId: item.via.entryId });
       continue;
     }
+    // A call that reads the wiki holds the wiki's own words: no material for a document to be written from.
+    if (record.readsWiki) continue;
     const key = `${item.kind}:${record.ref}`;
     if (seen.has(key)) continue;
     seen.add(key);

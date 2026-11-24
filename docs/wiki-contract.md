@@ -819,7 +819,7 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
 | `WIKI_SPACE_UNBOUND` | 409 | 请求 | 调用会话的 workspace 不在任何 space 里、也没能自动绑上，或者被 owner 留在了外面 |
 | `WIKI_SCHEMA` | 400 | op | 形状不对：字段、限制、阶段 3 的 kind、amend 一条 decision、该带或不该带 baseRevision、该是行 id 的出处 ref 解不出 id（`sourceInput.rowIdKinds`）；`errors[]` 列出每个出错字段 |
 | `WIKI_KIND_OWNER_ONLY` | 403 | op | 非 owner 对只有 owner 能写的类型 add / amend / supersede |
-| `WIKI_SOURCE_UNRESOLVED` | 422 | op | 出处在本 owner 内解析不到（`errors[]` 按 path 点名那条）、引用了 wiki 条目或视图，或该带出处却没带 |
+| `WIKI_SOURCE_UNRESOLVED` | 422 | op | 出处在本 owner 内解析不到（`errors[]` 按 path 点名那条）、引用了 wiki 条目或视图、引用了读 wiki 的调用（§5、§22.8），或该带出处却没带 |
 | `WIKI_QUOTE_NOT_FOUND` | 422 | op | 引文空白归一化后不是原文子串 |
 | `WIKI_REVISION_CONFLICT` | 409 | op | baseRevision 不是当前版；回答里带当前版和 diff |
 | `WIKI_QUOTA` | 429 | op | 超过每个变更集 30 个；或这个 op 要等 owner、且超过每轮或每会话的待审配额；或审阅模式会直接应用它、但变更集会越过熔断线 |
@@ -1154,8 +1154,8 @@ JSON 里是 `space.settings.maintenance` 与 `maintenance`；实现在 `src/apis
   owner 的消息和 steer、打断；AskUserQuestion 问答、ExitPlanMode、带理由的 DENIED；agent 的回复、thinking 里命中信号的句子、
   压缩的工具时间线（命令首行 + 结果首尾行，连续的读 / 改折成一行）；已结算任务最新 3 条 agent 评论和 owner 评论；merge receipt 的 sha；
   owner 解决 blocker 时写的说明。读写记忆文件的工具调用连同结果剔除，指向记忆库的句子剔除：案卷里没有 memory 说的话，抽取既不读它也不知道它。读 wiki 的调用也连同结果剔除，否则 wiki 的内容可以绕一圈
-  回来当证据：各引擎的 `wiki_search`、`wiki_get`（`mcp__orbit__wiki_get`、`orbit__wiki_get`、不带前缀的 `wiki_get`），以及命令里跑 `orbit wiki search`、
-  `orbit wiki get` 的工具调用和后台任务（`wikiCallReadsWiki()`）。记 note 的调用同样连同结果剔除（`maintenance.dossier.noteCalls`，`wikiCallWritesNote()`）：各引擎的 `wiki_note`，以及命令里跑 `orbit wiki note` 的工具调用和后台任务。
+  回来当证据：各引擎的 `wiki_search`、`wiki_get`、`wiki_read`（`mcp__orbit__wiki_get`、`orbit__wiki_get`、不带前缀的 `wiki_get`），以及命令里跑 `orbit wiki search`、
+  `orbit wiki get`、`orbit wiki read` 的工具调用和后台任务（`wikiCallReadsWiki()`）。记 note 的调用同样连同结果剔除（`maintenance.dossier.noteCalls`，`wikiCallWritesNote()`）：各引擎的 `wiki_note`，以及命令里跑 `orbit wiki note` 的工具调用和后台任务。
   否则 note 的原话会变成它自己的出处。这种调用也不算 `observed`。记 note 不产生案卷行，所以会话有 note 时，案卷的 hash 也算上这些 note 的 id：多一条 note 就是案卷有变化。
 - 打分与装箱照演示的打包器 v2；每行以 `L12` 开头，`sources` 把每个行名对到一手记录（turn / event / tool_call / task_comment /
   approval / merge_receipt / owner_decision），维护作业提议条目时引用这些记录，不引用案卷。服务端的出处解析因此补了
@@ -2230,6 +2230,10 @@ P11（2026-10-19）起这条 runner 门路由没有了：写入是 `WikiDocs.wri
 - 不进 `<orbit_wiki_context>`：推送只读 `wiki_entry`。
 - 不能当出处：没有任何出处种类指向文档、节、句子或脚注，引用它们一律 `WIKI_SOURCE_UNRESOLVED`；脚注的种类（`design_doc` 等）本身
   也不是出处种类，写进条目的出处是 `WIKI_SCHEMA`。
+- 读 wiki 的调用也不能当出处，也不进材料（`sourceRules.wikiReads`，`docs.material.wikiReads`）：`wiki_search`、`wiki_get`、`wiki_read`、命令里的 `orbit wiki search|get|read`，
+  无论引的是 tool_call，还是这个调用的 tool_use / tool_result 事件，或命令是它们的 `background_task` 事件（决定：覆盖 background_task，案卷本来就跳过它），一律 `WIKI_SOURCE_UNRESOLVED`。
+  所有会话一样，不只聊天；待结算的 op 若已引了它，结算时同样被拒，不留旧账；runner 还没送达的调用只能在结算时拒。已记下的条目的出处不变。
+  构建一节材料时，这样的记录直接丢掉（不进 `unresolved`）。
 - agent 的 `wiki_search` / `wiki_get` 只返回条目。没有读写文档的 MCP 工具。
 
 ### 22.9 处置留痕：每条材料最后怎样了（迁移 0337）
