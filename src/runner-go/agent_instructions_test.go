@@ -262,7 +262,7 @@ func TestOrbitInstructionsKeepEvidenceOutOfTheRepository(t *testing.T) {
 			}
 		}
 		reply, evidence := strings.Index(got, orbitReplyFileInstructions), strings.Index(got, orbitEvidenceFileInstructions)
-		if reply < 0 || evidence != reply+len(orbitReplyFileInstructions) {
+		if reply < 0 || evidence != reply+len(orbitReplyFileInstructions+"\n\n") {
 			t.Errorf("the evidence paragraph must follow the reply paragraph it leans on: reply at %d, evidence at %d", reply, evidence)
 		}
 	}
@@ -489,7 +489,7 @@ func TestOnlyATopLevelSessionIsToldWhenToDelegate(t *testing.T) {
 			return string(raw)
 		},
 	}
-	whenToDelegate := strings.TrimSuffix(strings.TrimSuffix(orbitDelegateInstructions, "\n\n"), orbitDelegateClaudeCodeLoad)
+	whenToDelegate := strings.TrimSuffix(orbitDelegateInstructions, "{{toolsearch:delegate}}")
 	for name, build := range builders {
 		top := build(parent)
 		if !strings.Contains(top, whenToDelegate) {
@@ -505,7 +505,7 @@ func TestOnlyATopLevelSessionIsToldWhenToDelegate(t *testing.T) {
 	}
 	for _, want := range []string{"cheaper or stronger model", "another machine", `needs: ["os:darwin"]`, "workspace",
 		"in the background", "built-in subagent or Agent tool", "records the cost", "ToolSearch select:mcp__orbit__delegate"} {
-		if !strings.Contains(orbitDelegateInstructions, want) {
+		if !strings.Contains(renderInstructionUnit(orbitDelegateInstructions, SessionShape{}, claudeCodeProfile), want) {
 			t.Errorf("the delegate paragraph lacks %q", want)
 		}
 	}

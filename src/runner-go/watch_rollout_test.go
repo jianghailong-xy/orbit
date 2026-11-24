@@ -217,7 +217,7 @@ func TestInstructionsLeaveTheWaitParagraphOutWithWatchesOff(t *testing.T) {
 	if !strings.Contains(on, orbitWaitInstructions) {
 		t.Fatalf("the instructions with Watch on do not route waits to task_await: %q", on)
 	}
-	if strings.Replace(on, orbitWaitInstructions, "", 1) != off {
+	if strings.Replace(on, orbitWaitInstructions+"\n\n", "", 1) != off {
 		t.Fatalf("Watch off changed more than the wait paragraph:\n on: %q\noff: %q", on, off)
 	}
 	// Every provider that renders the instructions carries the claim's flag through to them.
