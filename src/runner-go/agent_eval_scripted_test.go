@@ -177,6 +177,9 @@ func (e *scriptedEngine) start(s *evalSession) error {
 }
 
 func (e *scriptedEngine) turn(s *evalSession, log *evalTurnLog) error {
+	if log.Wake {
+		return nil
+	}
 	agent := e.agents[log.Spec]
 	if log.FollowUp {
 		agent = e.follow[log.Spec]

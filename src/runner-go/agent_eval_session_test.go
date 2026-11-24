@@ -66,6 +66,7 @@ type evalSession struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 	bg       *bgTailer
+	wakes    *evalWakeBox
 	stopJobs func()
 	tools    []string
 	context  evalContextBytes
@@ -193,6 +194,9 @@ func newEvalSession(sc *evalScenario, provider string) (*evalSession, error) {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.cleanup = append(s.cleanup, s.cancel)
 	s.bg = newBgTailer(s.ctx, func(string, map[string]interface{}) {}, nil)
+	// The wakes its jobs owe the session, which the control plane would file as turns (agent_eval_wake_test.go).
+	s.wakes = &evalWakeBox{}
+	s.bg.wakeSessionVia(s.wakes.file)
 	s.cleanup = append(s.cleanup, s.bg.stopAll)
 	stop, err := startSessionBgJobService(s.ctx, NewTransport(s.plane.srv.URL, "eval-runner-token"), s.bg, s.job, s.work, s.scratch)
 	if err != nil {
@@ -302,7 +306,8 @@ func evalReplyAsks(reply string) bool {
 	return strings.Contains(reply, "?")
 }
 
-// play runs every turn of the scenario through engine and returns the run, graded or not.
+// play runs every turn of the scenario through engine and returns the run, graded or not. After each turn it plays the
+// wake turns of the owner waits that turn handed off (playOwnerWaitWakes).
 func (s *evalSession) play(engine evalEngine, repeat int, turnTimeout time.Duration) *evalRun {
 	started := time.Now()
 	run := &evalRun{Scenario: s.sc, Repeat: repeat, Exe: s.exe, World: s.world}
@@ -343,14 +348,14 @@ func (s *evalSession) play(engine evalEngine, repeat int, turnTimeout time.Durat
 			}
 			log.ResetDone = done
 		}
-		if !s.runTurn(engine, &log, turnTimeout, run) {
+		if !s.runTurn(engine, &log, turnTimeout, run) || !s.playOwnerWaitWakes(engine, spec, turn.Mode, turnTimeout, run) {
 			return run
 		}
 		if turn.FollowUp == "" || !evalReplyAsks(s.lastReply()) || s.wroteAny(spec, turn.Expect) {
 			continue
 		}
 		follow := evalTurnLog{Index: len(s.logs), Spec: spec, Prompt: turn.FollowUp, Mode: turn.Mode, FollowUp: true}
-		if !s.runTurn(engine, &follow, turnTimeout, run) {
+		if !s.runTurn(engine, &follow, turnTimeout, run) || !s.playOwnerWaitWakes(engine, spec, turn.Mode, turnTimeout, run) {
 			return run
 		}
 	}
