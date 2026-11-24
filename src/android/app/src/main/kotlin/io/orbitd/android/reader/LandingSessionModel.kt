@@ -58,6 +58,8 @@ object LandingSessionCopy {
     const val NOT_LANDED = "Not landed"
     const val NOT_MERGED = "Not merged"
     const val READY = "Ready"
+    /** An attempt held on its pull request: it stopped nothing, it waits for GitHub (design §4.2). */
+    const val WAITING_FOR_GITHUB = "Waiting for GitHub"
     const val PASSED_CHECK = "Passed the check · waiting for the owner"
     const val PASSED_ON_THE_TREE = "✓ Passed on the combined tree"
     const val LANDED_EXACTLY = "Landed exactly the tested tree"
@@ -215,7 +217,9 @@ data class LandingFact(val kind: String, val text: String)
 data class LandingTimeline(val sections: List<LandingSection>, val facts: List<LandingFact>, val truncated: Boolean)
 
 /** One finished check's result, as the runner reports it (`LandingCheckResult`). */
-data class LandingCheckResult(val name: String?, val exitCode: Int?, val expectedExitCode: Int?, val timedOut: Boolean, val durationMs: Int?, val scope: String? = null) {
+data class LandingCheckResult(val name: String?, val exitCode: Int?, val expectedExitCode: Int?, val timedOut: Boolean, val durationMs: Int?, val scope: String? = null,
+    /** GitHub's name for a required check that failed on the pull request (`name == "GITHUB_CHECK"`). */
+    val command: String? = null) {
     /** No timeout, and the exit code the command declared (or none reported). */
     val passed: Boolean get() = !timedOut && (exitCode == null || exitCode == expectedExitCode)
 }
@@ -353,7 +357,7 @@ object LandingSessionModel {
             episode = json.number("episode") ?: 1, openedAt = json.text("openedAt").orEmpty(), settledAt = json.text("settledAt"),
             settledAs = json.text("settledAs"),
             checks = json.objects("checks").map {
-                LandingCheckResult(it.text("name"), it.number("exitCode"), it.number("expectedExitCode"), it.flag("timedOut"), it.number("durationMs"), it.text("scope"))
+                LandingCheckResult(it.text("name"), it.number("exitCode"), it.number("expectedExitCode"), it.flag("timedOut"), it.number("durationMs"), it.text("scope"), it.text("command"))
             },
             currentAttempt = attempt, timeline = timeline, pullRequest = json.obj("pullRequest"),
         )
@@ -587,8 +591,12 @@ object LandingSessionModel {
     private fun terminalCard(view: LandingView, attempt: LandingAttempt, word: String, unavailable: Boolean): LandingAttemptCard {
         val mergeJob = attempt.kind != "LAND_TASK"
         val failed = view.checks.firstOrNull { it.timedOut || (it.exitCode != null && it.exitCode != it.expectedExitCode) }
+        // A GITHUB_CHECK is a required check that failed on the pull request; its `command` is GitHub's name for it.
+        val githubCheck = failed?.takeIf { it.name == "GITHUB_CHECK" }?.let { "Check failed: ${it.command ?: "Required check"}" }
+        val onPullRequest = attempt.state == "PULL_REQUEST"
         val label = checkLabel(failed?.name)
         val clause = when {
+            githubCheck != null -> githubCheck
             failed?.timedOut == true -> "${LandingSessionCopy.CHECKS_FAILED} · ${LandingSessionCopy.CHECKS_TIMED_OUT.replaceFirstChar { it.lowercase() }}"
             failed != null -> "${LandingSessionCopy.CHECKS_FAILED} · ${LandingSessionCopy.EXIT} ${failed.exitCode ?: "—"} " +
                 "${LandingSessionCopy.AFTER} ${duration(failed.durationMs)}"
@@ -597,6 +605,9 @@ object LandingSessionModel {
             else -> LandingSessionCopy.STOPPED_NOT_LANDED
         }
         val failure = when {
+            // Held on its pull request: nothing stopped it, and the pull request block under the card says where it stands.
+            onPullRequest -> null
+            githubCheck != null -> "$githubCheck · ${LandingSessionCopy.NOTHING_PUSHED_CLAUSE}"
             failed != null -> (if (failed.timedOut) "$label ${LandingSessionCopy.TIMED_OUT.replaceFirstChar { it.lowercase() }} ${LandingSessionCopy.ON_THE_COMBINED_TREE}"
                 else LandingSessionCopy.taskAcceptanceExited(failed.exitCode?.toString() ?: "—", (failed.expectedExitCode ?: 0).toString())) +
                 " · ${LandingSessionCopy.NOTHING_PUSHED_CLAUSE}"
@@ -607,9 +618,10 @@ object LandingSessionModel {
             else -> LandingSessionCopy.STOPPED_NOT_LANDED
         }
         val ready = attempt.state == "READY"
-        return LandingAttemptCard(word, if (ready) LandingSessionCopy.READY else clause,
-            if (ready) LandingSessionCopy.READY else if (mergeJob) LandingSessionCopy.NOT_MERGED else LandingSessionCopy.NOT_LANDED,
-            false, if (ready) LandingSessionCopy.PASSED_CHECK else clause, null, null, null, false, null,
+        val waiting = if (ready) LandingSessionCopy.READY else if (onPullRequest) LandingSessionCopy.WAITING_FOR_GITHUB else clause
+        return LandingAttemptCard(word, waiting,
+            if (ready) LandingSessionCopy.READY else if (onPullRequest) LandingSessionCopy.WAITING_FOR_GITHUB else if (mergeJob) LandingSessionCopy.NOT_MERGED else LandingSessionCopy.NOT_LANDED,
+            false, if (ready) LandingSessionCopy.PASSED_CHECK else if (onPullRequest) LandingSessionCopy.WAITING_FOR_GITHUB else clause, null, null, null, false, null,
             if (unavailable) null else failure, false, false, stoppedOnFailure = attempt.state in FAILURE_STATES)
     }
 

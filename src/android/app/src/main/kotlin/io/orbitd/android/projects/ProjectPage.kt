@@ -240,7 +240,7 @@ object ProjectPage {
         return liveLine(word, what, running, inFlight.text("phase"), inFlight.text("startedAt"), inFlight.text("heartbeatAt"), now, updatedAt, unavailable, main,
             silent, wait, inFlight.text("runner"), inFlight.text("kind"), inFlight.number("claim"), inFlight.number("round"), inFlight.obj("check"),
             inFlight.text("stepStartedAt"), inFlight.text("outputMovedAt"), inFlight.number("typicalMs"), inFlight.text("liveness"),
-            firstStartedAt(view, inFlight.text("jobId")), inFlight.obj("blockingReason"))
+            firstStartedAt(view, inFlight.text("jobId")), inFlight.obj("blockingReason"), inFlight.text("state") == "PULL_REQUEST")
     }
 
     /** When the attempt behind a job FIRST started: the `landTask` row's own `startedAt` is the column a claim leaves alone across
@@ -313,7 +313,7 @@ object ProjectPage {
                     job.text("heartbeatAt"), now, updatedAt, unavailable, main, runner = job.text("runnerName"), kind = job.text("kind"),
                     claim = job.number("claim"), round = job.number("round"), check = job.obj("check"), stepStartedAt = job.text("stepStartedAt"),
                     outputMovedAt = job.text("outputMovedAt"), typicalMs = job.number("typicalMs"), livenessWord = job.text("liveness"),
-                    firstStartedAt = firstStartedAt(view, job.text("jobId")), blockingReason = job.obj("blockingReason"))
+                    firstStartedAt = firstStartedAt(view, job.text("jobId")), blockingReason = job.obj("blockingReason"), onPullRequest = job.text("state") == "PULL_REQUEST")
             LandingJobLine(job.text("jobId").orEmpty(), job.text("taskId"), line, landingJobDetail(job, zone, main), job.flag("retryable"),
                 job.text("landingSessionId")?.takeIf { it.isNotEmpty() }, mergeJob, job.flag("skippable"), job.text("skipCheck"))
         }
@@ -391,7 +391,7 @@ object ProjectPage {
     private fun liveLine(word: String, what: String?, running: Boolean, phase: String?, startedAt: String?, heartbeatAt: String?, now: Instant,
         updatedAt: Instant?, unavailable: Boolean, main: String, silent: Boolean = false, wait: String? = null, runner: String? = null,
         kind: String? = null, claim: Int? = null, round: Int? = null, check: JsonObject? = null, stepStartedAt: String? = null, outputMovedAt: String? = null,
-        typicalMs: Int? = null, livenessWord: String? = null, firstStartedAt: String? = null, blockingReason: JsonObject? = null): LandingLine {
+        typicalMs: Int? = null, livenessWord: String? = null, firstStartedAt: String? = null, blockingReason: JsonObject? = null, onPullRequest: Boolean = false): LandingLine {
         val lockWait = localLockWait(running, livenessWord, blockingReason)
         // A queued job's heartbeat and phase can be an earlier claim's: only a running job's count.
         val reported = heartbeatAt?.let(ProjectTime::parse)
@@ -402,7 +402,9 @@ object ProjectPage {
         val report = if (silent) (if (reported != null) age?.let { landingNoReportFor(it) } else null) ?: landingNoReportYet
             else age?.let { if (it == 0) "Updated just now" else "Updated ${it}m ago" }
         val state = when { unavailable -> "Update unavailable"; silent -> landingNoReport; running && lockWait != null -> landingWaiting
-            running -> phaseWords(main)[phase] ?: "running"; else -> "queued" }
+            running -> phaseWords(main)[phase] ?: "running"
+            // Held on its pull request, not queued: GitHub is what it waits for (design §4.2).
+            onPullRequest -> "waiting for GitHub"; else -> "queued" }
         val v6 = if (unavailable) null else landingLiveness(livenessWord, running, startedAt, heartbeatAt, kind, claim, round, check, stepStartedAt,
             outputMovedAt, typicalMs, runner, firstStartedAt, now, updatedAt, lockWait)
         // A legacy claim's runner reports only between steps, so its quiet is not a stall: the ring keeps turning and the line says
