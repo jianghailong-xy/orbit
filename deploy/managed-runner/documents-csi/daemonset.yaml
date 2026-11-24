@@ -1,6 +1,6 @@
-# orbit-files-csi: the files.orbit.dev node plugin on every node that runs managed runner Pods (§6.1). The only
+# orbit-documents-csi: the documents.orbit.dev node plugin on every node that runs managed runner Pods (§6.1). The only
 # privileged part of the drive: it opens /dev/fuse and mounts. Each runner's daemon, which parses what agents write,
-# runs as a uid of its own with no capabilities, no_new_privs and a seccomp filter (src/drive-mount/README.md).
+# runs as a uid of its own with no capabilities, no_new_privs and a seccomp filter (src/documents-mount/README.md).
 #
 # Replace:
 #   __FILES_CSI_IMAGE_AT_SHA256_DIGEST__  the image built from Dockerfile (README.md, "Image"), by digest
@@ -12,22 +12,22 @@
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: orbit-files-csi
-  namespace: orbit-files-system
+  name: orbit-documents-csi
+  namespace: orbit-documents-system
   labels:
-    app.kubernetes.io/name: orbit-files-csi
+    app.kubernetes.io/name: orbit-documents-csi
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/name: orbit-files-csi
+      app.kubernetes.io/name: orbit-documents-csi
   updateStrategy:
     type: OnDelete
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: orbit-files-csi
+        app.kubernetes.io/name: orbit-documents-csi
     spec:
-      serviceAccountName: orbit-files-csi
+      serviceAccountName: orbit-documents-csi
       priorityClassName: system-node-critical
       # Attribution (§5.8): a FUSE request carries the caller's pid in the mounter's pid namespace.
       hostPID: true
@@ -40,7 +40,7 @@ spec:
             - csi
             - --endpoint=unix:///csi/csi.sock
             - --managed-namespace=__MANAGED_RUNNER_NAMESPACE__
-            - --secrets-namespace=orbit-files-system
+            - --secrets-namespace=orbit-documents-system
             - --server=__ORBIT_HTTPS_URL__
           env:
             - name: NODE_NAME
@@ -73,12 +73,12 @@ spec:
               mountPropagation: Bidirectional
             # Each runner's plain directory; the FUSE mount at <runner>/drive must reach every Pod's bind of it.
             - name: files
-              mountPath: /var/lib/orbit-files
+              mountPath: /var/lib/orbit-documents
               mountPropagation: Bidirectional
             - name: spool
-              mountPath: /var/lib/orbit-files-spool
+              mountPath: /var/lib/orbit-documents-spool
             - name: state
-              mountPath: /var/lib/orbit-files-state
+              mountPath: /var/lib/orbit-documents-state
             # The watchdog aborts a frozen daemon's connection (§5.7).
             - name: fusectl
               mountPath: /sys/fs/fuse
@@ -86,7 +86,7 @@ spec:
           image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.18.0@sha256:b7fefd08651f00ac4df1a196ed4c621c2451fbb899297fe9fad9e36c667af0c0
           args:
             - --csi-address=/csi/csi.sock
-            - --kubelet-registration-path=/var/lib/kubelet/plugins/files.orbit.dev/csi.sock
+            - --kubelet-registration-path=/var/lib/kubelet/plugins/documents.orbit.dev/csi.sock
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -121,7 +121,7 @@ spec:
       volumes:
         - name: socket-dir
           hostPath:
-            path: /var/lib/kubelet/plugins/files.orbit.dev
+            path: /var/lib/kubelet/plugins/documents.orbit.dev
             type: DirectoryOrCreate
         - name: registration-dir
           hostPath:
@@ -133,15 +133,15 @@ spec:
             type: Directory
         - name: files
           hostPath:
-            path: /var/lib/orbit-files
+            path: /var/lib/orbit-documents
             type: DirectoryOrCreate
         - name: spool
           hostPath:
-            path: /var/lib/orbit-files-spool
+            path: /var/lib/orbit-documents-spool
             type: DirectoryOrCreate
         - name: state
           hostPath:
-            path: /var/lib/orbit-files-state
+            path: /var/lib/orbit-documents-state
             type: DirectoryOrCreate
         - name: fusectl
           hostPath:

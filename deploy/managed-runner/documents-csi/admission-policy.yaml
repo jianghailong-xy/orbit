@@ -1,5 +1,5 @@
 # Who may name the driver (docs/orbit-files-drive-technical-design.md §6.1, review B13), layer 1 of 3: cluster-wide,
-# no Pod outside the managed-runner namespace may have a volume of files.orbit.dev. Orbit's webhook answers only for
+# no Pod outside the managed-runner namespace may have a volume of documents.orbit.dev. Orbit's webhook answers only for
 # the managed namespace (../admission/pod-admission-webhook.template.json), so it cannot be this guard. Inside that
 # namespace the webhook allows exactly one such volume, naming the Pod's own runner (layer 2), and the plugin checks
 # the Pod's namespace again (layer 3).
@@ -9,9 +9,9 @@
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
-  name: orbit-files-driver
+  name: orbit-documents-driver
   labels:
-    app.kubernetes.io/name: orbit-files-csi
+    app.kubernetes.io/name: orbit-documents-csi
 spec:
   failurePolicy: Fail
   matchConstraints:
@@ -24,18 +24,18 @@ spec:
     - expression: >-
         request.namespace == '__MANAGED_RUNNER_NAMESPACE__' ||
         !has(object.spec.volumes) ||
-        object.spec.volumes.all(v, !has(v.csi) || v.csi.driver != 'files.orbit.dev')
+        object.spec.volumes.all(v, !has(v.csi) || v.csi.driver != 'documents.orbit.dev')
       message: >-
-        orbit-files-driver: only a managed runner Pod in namespace __MANAGED_RUNNER_NAMESPACE__ may have a
-        files.orbit.dev volume
+        orbit-documents-driver: only a managed runner Pod in namespace __MANAGED_RUNNER_NAMESPACE__ may have a
+        documents.orbit.dev volume
       reason: Forbidden
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
 metadata:
-  name: orbit-files-driver
+  name: orbit-documents-driver
   labels:
-    app.kubernetes.io/name: orbit-files-csi
+    app.kubernetes.io/name: orbit-documents-csi
 spec:
-  policyName: orbit-files-driver
+  policyName: orbit-documents-driver
   validationActions: [Deny]

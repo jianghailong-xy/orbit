@@ -1,11 +1,11 @@
-# files.orbit.dev: node only, inline (ephemeral) volumes only, with the Pod's name, namespace and UID passed to
+# documents.orbit.dev: node only, inline (ephemeral) volumes only, with the Pod's name, namespace and UID passed to
 # NodePublishVolume so the plugin can check them (§6.1).
 apiVersion: storage.k8s.io/v1
 kind: CSIDriver
 metadata:
-  name: files.orbit.dev
+  name: documents.orbit.dev
   labels:
-    app.kubernetes.io/name: orbit-files-csi
+    app.kubernetes.io/name: orbit-documents-csi
 spec:
   attachRequired: false
   podInfoOnMount: true
