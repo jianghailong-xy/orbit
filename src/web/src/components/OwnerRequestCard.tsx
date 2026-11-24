@@ -67,6 +67,7 @@ import { WikiCreateDialog, sameId, useWikiWorkspaceChoices } from './WikiSetUpDi
 import { ScheduleWaitingCard, isScheduleWaitingKind } from './ScheduleWaitingCard';
 import { ConditionWaitingCard, isConditionWaitingKind } from './ConditionWaitingCard';
 import { SettingsChangeCard, SettingsChangeFolded } from './SettingsChangeCard';
+import { ProjectReopenCard, ProjectReopenFolded } from './ProjectReopenCard';
 import './OwnerRequest.css';
 import { useMachineName } from '../lib/managedRunner';
 
@@ -113,6 +114,7 @@ const PRIMARY: Readonly<Record<AgentRequestKind, string>> = {
   CONFIRM: 'Confirm',
   WIKI_CREATE: 'Create wiki',
   SETTINGS_CHANGE: 'Save changes',
+  PROJECT_REOPEN: 'Reopen',
   BROWSER_SIGN_IN: BROWSER_SIGN_IN_COPY.openBrowser,
   CHANGE: CHANGE_COPY.primary,
 };
@@ -454,6 +456,8 @@ export function OwnerRequestCard(props: {
   request: OwnerRequest;
   now?: number;
   onChat?: ChatAbout;
+  /** The conversation drawing the card, so a PROJECT_REOPEN names its askers only outside the asking session. */
+  viewedFromSessionId?: string | null;
 }): JSX.Element {
   // A scheduled task's items (failed, held, a run's approval, a run's wider envelope) are answered through the door of
   // what they point at, so they draw their own body in the same frame.
@@ -462,6 +466,10 @@ export function OwnerRequestCard(props: {
   if (props.request.kind === 'SETTINGS_CHANGE') {
     if (props.request.state === 'PENDING') return <SettingsChangeCard request={props.request} />;
     if (props.request.state === 'DONE' || props.request.state === 'DECLINED') return <SettingsChangeFolded request={props.request} />;
+  }
+  if (props.request.kind === 'PROJECT_REOPEN') {
+    if (props.request.state === 'PENDING') return <ProjectReopenCard request={props.request} viewedFromSessionId={props.viewedFromSessionId} />;
+    if (props.request.state === 'DONE' || props.request.state === 'DECLINED') return <ProjectReopenFolded request={props.request} now={props.now} />;
   }
   if (props.request.state === 'PENDING' && isConditionWaitingKind(props.request.kind)) {
     return <ConditionWaitingCard request={props.request} now={props.now} />;
@@ -834,6 +842,9 @@ export function OwnerRequestResolved({ request, now = Date.now() }: { request: O
   if (request.kind === 'SETTINGS_CHANGE' && (request.state === 'DONE' || request.state === 'DECLINED')) {
     return <SettingsChangeFolded request={request} />;
   }
+  if (request.kind === 'PROJECT_REOPEN' && (request.state === 'DONE' || request.state === 'DECLINED')) {
+    return <ProjectReopenFolded request={request} now={now} />;
+  }
   return <AgentRequestResolved request={request} now={now} />;
 }
 
@@ -884,12 +895,13 @@ function SnoozedRequest({ request, until, now }: { request: OwnerRequest; until:
 
 /** One request where a conversation draws it: whole, folded for later, or as its summary. */
 function ConversationRequest({ request, onChat }: { request: OwnerRequest; onChat?: ChatAbout }): JSX.Element {
+  // A transcript only draws the requests its own session filed, so the card never names that session as the asker.
   const snoozes = useSnoozes();
   const now = Date.now();
   if (request.state !== 'PENDING') return <OwnerRequestResolved request={request} now={now} />;
   const until = snoozes[request.id] ?? 0;
   if (until > now) return <SnoozedRequest request={request} until={until} now={now} />;
-  return <OwnerRequestCard request={request} now={now} onChat={onChat} />;
+  return <OwnerRequestCard request={request} now={now} onChat={onChat} viewedFromSessionId={request.askedBySessionId} />;
 }
 
 /**

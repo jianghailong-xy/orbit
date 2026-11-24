@@ -90,6 +90,7 @@ import { type TaskDependencyGraphResponse } from '../lib/taskDependencyGraph';
 import { scheduledStart } from '../lib/taskSchedule';
 import { ProjectTasksGraph } from '../components/ProjectTasksGraph';
 import { ProjectTaskLink } from '../components/ProjectTaskLink';
+import { ProjectReopenRow } from '../components/ProjectReopenCard';
 import { Alert } from '../components/ui/Alert';
 import { Badge, type BadgeProps } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -1153,6 +1154,7 @@ export function ProjectDetailPage() {
               card beside two lines of title metadata, creating a large dead rectangle under the
               title. A balanced command centre now leads with changing work state and the way to
               act on it, followed by the stable goal they are working toward. */}
+          {p.status === 'DONE' || p.status === 'CANCELLED' ? <ProjectReopenRow projectId={id!} /> : null}
           <header className="project-detail-identity" data-project-block="header">
             <h2 className="page-title orbit-typography">
               {p.title}
