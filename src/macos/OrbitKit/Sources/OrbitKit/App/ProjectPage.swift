@@ -814,6 +814,9 @@ public enum ProjectPage {
         /// says no "Nothing to do" (board v4 04 draws no body under that head). Read off
         /// `inFlight`, so a server that lists no jobs says it too.
         public let mergeJob: Bool
+        /// The pull request the landing waits on or ended in (design §8), read off `inFlight` while the card
+        /// holds one job; nil from a server that predates it.
+        public var pullRequest: LandingPullRequestView? = nil
 
         /// The head's two slots (`landingHead`) — the card's head is the landing row's: the same
         /// word, the same clock, the same state and freshness, in the merged row's anatomy.
@@ -866,7 +869,8 @@ public enum ProjectPage {
             skipNote: several ? nil
                 : lead?.skipCheck == "STOPPING" ? landingSkipCheckStopping
                 : lead?.skipCheck == "SKIPPED" ? landingSkipCheckSkipped : nil,
-            mergeJob: !several && ProjectMergeCard.isMergeJob(view.inFlight))
+            mergeJob: !several && ProjectMergeCard.isMergeJob(view.inFlight),
+            pullRequest: several ? nil : view.inFlight?.pullRequest)
     }
 
     /// The branch a job lands on, short, from the project's own landings — the field the task page's

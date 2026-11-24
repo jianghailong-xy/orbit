@@ -3377,6 +3377,23 @@ final class AppModel {
         }
     }
 
+    // MARK: landing setting (docs/design/protected-branch-landing.md §7, §8)
+
+    /// The workspace's own read, which carries the `landing` block the list leaves out.
+    func workspaceDetail(_ workspaceID: String) async -> Agent? {
+        try? await api?.agent(workspaceID)
+    }
+
+    /// Choose how finished work reaches main; nil on success, else the server's reason. The workspace list is read
+    /// again so every card that reads the mode (the Faster tip) follows it.
+    func setLandingMode(_ mode: String, inWorkspace workspaceID: String) async -> String? {
+        guard let api else { return "Not signed in." }
+        do { _ = try await api.updateAgent(workspaceID, UpdateAgentRequest(landingMode: mode)) }
+        catch { return APIClient.failureReason(error) }
+        await agents?.load()
+        return nil
+    }
+
     // MARK: main checkout Git (docs/main-checkout-git-contract.md)
 
     /// A review model with no console behind it: the worktree isolation dialog's Review files, opened

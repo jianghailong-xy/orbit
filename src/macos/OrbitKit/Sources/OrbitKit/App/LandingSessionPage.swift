@@ -69,6 +69,8 @@ public enum LandingPageCopy {
     public static let couldNotMerge = "Could not merge"
     public static let conflict = "conflict"
     public static let stoppedNotLanded = "Stopped · not landed"
+    /// An attempt held on its pull request: it stopped nothing, it waits for GitHub (design §4.2).
+    public static let waitingForGithub = "Waiting for GitHub"
     public static func taskAcceptanceExited(_ code: String, expected: String) -> String {
         "Task acceptance exited \(code) (expected \(expected)) on the combined tree"
     }
@@ -560,8 +562,12 @@ public extension LandingPageCopy {
         } else {
             clause = LandingPageCopy.stoppedNotLanded
         }
+        // Held on its pull request: nothing stopped it, and the pull request block under the card says where it stands.
+        let onPullRequest = attempt.state == "PULL_REQUEST"
         let failure: String?
-        if let failed {
+        if onPullRequest {
+            failure = nil
+        } else if let failed {
             let head = failed.timedOut == true
                 ? "\(label) \(LandingPageCopy.timedOut.lowercasedFirst()) \(LandingPageCopy.onTheCombinedTree)"
                 : taskAcceptanceExited(failed.exitCode.map(String.init) ?? "—",
@@ -580,11 +586,12 @@ public extension LandingPageCopy {
         let ready = attempt.state == "READY"
         return LandingAttemptCard(
             word: word,
-            state: ready ? LandingPageCopy.ready : clause,
+            state: ready ? LandingPageCopy.ready : onPullRequest ? LandingPageCopy.waitingForGithub : clause,
             right: ready ? LandingPageCopy.ready
+                : onPullRequest ? LandingPageCopy.waitingForGithub
                 : mergeJob ? LandingPageCopy.notMerged : LandingPageCopy.notLanded,
             rightIsClock: false,
-            detail: ready ? LandingPageCopy.passedCheck : clause,
+            detail: ready ? LandingPageCopy.passedCheck : onPullRequest ? LandingPageCopy.waitingForGithub : clause,
             budget: nil, progress: nil, live: nil, fresh: false, usualProgress: nil,
             failure: unavailable ? nil : failure, running: false, timedOut: false,
             stoppedOnFailure: LandingPageCopy.failureStates.contains(attempt.state))
