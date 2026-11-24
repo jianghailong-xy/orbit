@@ -60,6 +60,11 @@ for arg in "$@"; do
  esac
 done
 if [[ " $* " == *" --print=/usage "* ]]; then
+ if [[ -f "$GOOGLE_REPLAY_DIR/usage-first" ]]; then
+  cat "$GOOGLE_REPLAY_DIR/usage-first"
+  rm "$GOOGLE_REPLAY_DIR/usage-first"
+  exit 1
+ fi
  cat "$GOOGLE_REPLAY_DIR/usage"
  exit "${GOOGLE_REPLAY_PROBE_EXIT:-0}"
 fi
@@ -421,8 +426,32 @@ func TestAntigravityGoogleLoginReplayExitSeenBeforeLastOutput(t *testing.T) {
 	h.wait(t, loginFailed)
 }
 
+func shortGoogleVerifyWindow(t *testing.T) {
+	window := antigravityGoogleVerifyWindow
+	antigravityGoogleVerifyWindow = 3 * time.Second
+	t.Cleanup(func() { antigravityGoogleVerifyWindow = window })
+}
+
+// A fresh sign-in whose first /usage answers unclearly (a slow first start, a network blip) is
+// asked again rather than failed: the user had signed in.
+func TestAntigravityGoogleLoginReplayRetriesUnclearUsage(t *testing.T) {
+	h := newGoogleLoginHarness(t, "success")
+	shortGoogleVerifyWindow(t)
+	if err := os.WriteFile(filepath.Join(h.dir, "usage-first"), []byte(`{"event":"result","result":{"status":"ERROR","error":"network failure"}}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	h.start()
+	h.wait(t, loginAwaitingCode)
+	h.code()
+	h.wait(t, loginDone)
+	if _, err := os.Stat(filepath.Join(h.dir, "usage-first")); !os.IsNotExist(err) {
+		t.Fatal("the first /usage was never asked")
+	}
+}
+
 func TestAntigravityGoogleLoginReplayFailedUsageIsNotSuccess(t *testing.T) {
 	h := newGoogleLoginHarness(t, "success")
+	shortGoogleVerifyWindow(t)
 	t.Setenv("GOOGLE_REPLAY_PROBE_EXIT", "1")
 	if err := os.WriteFile(filepath.Join(h.dir, "usage"), []byte(`{"event":"result","result":{"status":"ERROR","error":"network failure"}}`+"\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -430,7 +459,9 @@ func TestAntigravityGoogleLoginReplayFailedUsageIsNotSuccess(t *testing.T) {
 	h.start()
 	h.wait(t, loginAwaitingCode)
 	h.code()
-	h.wait(t, loginFailed)
+	if res := h.wait(t, loginFailed); !strings.Contains(res.Message, "network failure") {
+		t.Fatalf("agy's own reason was not passed on: %q", res.Message)
+	}
 }
 
 func TestAntigravityGoogleLoginReplayTimeout(t *testing.T) {
