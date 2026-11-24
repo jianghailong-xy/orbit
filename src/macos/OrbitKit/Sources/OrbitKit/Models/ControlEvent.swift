@@ -56,6 +56,12 @@ public enum ControlEventType: String, Codable, Sendable {
     /// docs/ux/translation-failure-policy.html frame 6). USER-scoped: a nudge to re-read `GET /users/me`
     /// for `translationUnavailableUntil`. Not sent when the skip simply runs out: the client times that.
     case translationStatusChanged = "translation.status_changed"
+    /// One write to the owner's Documents committed (docs/documents-drive-technical-design.md §5.4). USER-scoped: a
+    /// nudge to re-read what the Documents page shows.
+    case driveChanged = "drive.changed"
+    /// An agent's directory sync into Documents started, moved or ended (docs/documents-directory-sync-design.md):
+    /// a nudge to re-read `GET /documents/syncs` for the uploads popover.
+    case driveSync = "drive.sync"
     case notification = "notification"
     case unknown
 

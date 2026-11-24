@@ -2665,6 +2665,182 @@ public final class APIClient: @unchecked Sendable {
         return object["code"] as? String == taskRunRequestInProgress
     }
 
+    // MARK: Documents (docs/documents-drive-technical-design.md §4.1, apiserver documents.controller.ts)
+
+    /// Every page of a folder (the root when `parentID` is nil): a folder is read whole, a thousand names a page.
+    public func documentsFolder(_ parentID: String?) async throws -> DocumentsListing {
+        var cursor: String?
+        var listing: DocumentsListing?
+        repeat {
+            var query = [URLQueryItem(name: "limit", value: "1000")]
+            if let parentID { query.append(URLQueryItem(name: "parentId", value: parentID)) }
+            if let cursor { query.append(URLQueryItem(name: "cursor", value: cursor)) }
+            let page: DocumentsListing = try await get("documents/entries", query: query)
+            listing = listing.map { DocumentsListing(folder: page.folder, entries: $0.entries + page.entries,
+                                                     nextCursor: page.nextCursor) } ?? page
+            cursor = page.nextCursor
+        } while cursor != nil
+        return listing!
+    }
+
+    /// Live entries anywhere in the drive whose name contains `q`, each with its folder (the first page, by name).
+    public func documentsSearch(_ q: String) async throws -> DocumentsSearchResult {
+        try await getCancellable("documents/search", query: [URLQueryItem(name: "q", value: q),
+                                                             URLQueryItem(name: "limit", value: "100")])
+    }
+
+    /// One entry, with its `path`.
+    public func documentsEntry(_ id: String) async throws -> DocumentsEntry { try await get("documents/entries/\(id)") }
+
+    public func documentsVersions(_ fileID: String) async throws -> DocumentsVersions {
+        try await get("documents/entries/\(fileID)/versions")
+    }
+
+    /// A new folder; a name already taken gets a suffix.
+    public func documentsCreateFolder(parentID: String?, name: String) async throws -> DocumentsEntry {
+        try await post("documents/folders", body: DocumentsFolderBody(parentId: parentID, name: name))
+    }
+
+    /// Rename; a taken name is refused, never overwritten.
+    public func documentsRename(_ id: String, to name: String) async throws -> DocumentsEntry {
+        try await patch("documents/entries/\(id)", body: DocumentsEntryPatch(name: name, parentId: nil))
+    }
+
+    public func documentsMove(_ id: String, to parentID: String) async throws -> DocumentsEntry {
+        try await patch("documents/entries/\(id)", body: DocumentsEntryPatch(name: nil, parentId: parentID))
+    }
+
+    /// Move to Trash; answers the group, which Undo restores.
+    public func documentsMoveToTrash(_ id: String) async throws -> DocumentsTrashed {
+        try await delete("documents/entries/\(id)")
+    }
+
+    /// Every group in Trash, newest first.
+    public func documentsTrash() async throws -> [DocumentsTrashGroup] {
+        var cursor: String?
+        var groups: [DocumentsTrashGroup] = []
+        repeat {
+            var query = [URLQueryItem(name: "limit", value: "200")]
+            if let cursor { query.append(URLQueryItem(name: "cursor", value: cursor)) }
+            let page: DocumentsTrashPage = try await get("documents/trash", query: query)
+            groups += page.groups
+            cursor = page.nextCursor
+        } while cursor != nil
+        return groups
+    }
+
+    @discardableResult
+    public func documentsRestoreGroup(_ groupID: String) async throws -> DocumentsRestored {
+        try await postEmpty("documents/trash/groups/\(groupID)/restore")
+    }
+
+    /// One item of a group back, and what hangs under it, leaving the rest in Trash (rule 3).
+    @discardableResult
+    public func documentsRestoreItem(groupID: String, entryID: String) async throws -> DocumentsRestored {
+        try await postEmpty("documents/trash/groups/\(groupID)/items/\(entryID)/restore")
+    }
+
+    /// Delete a group for good.
+    public func documentsDeleteGroup(_ groupID: String) async throws {
+        try await deleteRaw("documents/trash/groups/\(groupID)")
+    }
+
+    public func documentsEmptyTrash() async throws { try await deleteRaw("documents/trash") }
+
+    /// A replaced version back as the file's current one, or as a copy beside it.
+    public func documentsRestoreVersion(_ versionID: String, asCopy: Bool) async throws -> DocumentsEntry {
+        try await post("documents/versions/\(versionID)/restore", body: ["as": asCopy ? "COPY" : "CURRENT"])
+    }
+
+    /// The secret scan before sharing (§9): warns, never blocks.
+    public func documentsShareCheck(_ fileID: String) async throws -> DocumentsShareCheck {
+        try await postEmpty("documents/entries/\(fileID)/share-check")
+    }
+
+    /// Share the file's current version, or move its link there. Only the owner's login reaches it.
+    public func documentsShare(_ fileID: String) async throws -> DocumentsShareAnswer {
+        try await post("share-links", body: ["kind": "DRIVE_FILE", "driveEntryId": fileID])
+    }
+
+    /// The drive files' links that have not ended, asked for by name.
+    public func documentsShareLinks() async throws -> [DocumentsShareLink] {
+        let list: DocumentsShareLinkList = try await get("share-links", query: [URLQueryItem(name: "kind", value: "DRIVE_FILE")])
+        return list.links.filter { $0.kind == "DRIVE_FILE" && $0.state != "ENDED" }
+    }
+
+    public func documentsStopSharing(_ linkID: String) async throws { try await deleteRaw("share-links/\(linkID)") }
+
+    /// The drive's share of the account and the rest (Storage).
+    public func documentsUsage() async throws -> DocumentsUsage { try await get("documents/usage") }
+
+    /// What the account keeps besides, by project, task and week (Storage's other lists).
+    public func storageUsage() async throws -> StorageUsage { try await get("attachments/usage") }
+
+    /// Agents' directory syncs: running ones and those ended in the last day.
+    public func documentsSyncs() async throws -> [DocumentsSync] {
+        let list: DocumentsSyncList = try await get("documents/syncs")
+        return list.syncs
+    }
+
+    /// The first `maxBytes` of a file (or one version) for a preview, or all of it when nil. Never a download.
+    public func documentsContent(_ id: String, version: Bool = false, maxBytes: Int? = nil) async throws -> Data {
+        var req = try makeRequest("documents/\(version ? "versions" : "entries")/\(id)/content", method: "GET",
+                                  body: Optional<Empty>.none)
+        if let maxBytes { req.setValue("bytes=0-\(maxBytes - 1)", forHTTPHeaderField: "Range") }
+        return try await send(req)
+    }
+
+    /// A short-lived URL that downloads the current version (or `versionID`) with no login header, so a download
+    /// streams to disk however large the file is (D12).
+    public func documentsDownloadURL(_ fileID: String, versionID: String? = nil) async throws -> URL {
+        let link: DocumentsDownloadLink = try await post("documents/entries/\(fileID)/download-link",
+                                                         body: DocumentsDownloadBody(versionId: versionID))
+        let base = baseURL.absoluteString.hasSuffix("/") ? String(baseURL.absoluteString.dropLast()) : baseURL.absoluteString
+        guard let url = URL(string: base + (link.path.hasPrefix("/") ? link.path : "/" + link.path)) else {
+            throw URLError(.badURL)
+        }
+        return url
+    }
+
+    // Resumable uploads: open, send chunks of at most `chunkSize`, complete.
+
+    public func documentsOpenUpload(parentID: String?, name: String, size: Int, relativePath: String?,
+                                    dropRootID: String?) async throws -> DocumentsUploadOpened {
+        try await post("documents/uploads", body: DocumentsUploadBody(parentId: parentID, name: name, size: size,
+                                                                       relativePath: relativePath, dropRootId: dropRootID))
+    }
+
+    public func documentsUploadStatus(_ uploadID: String) async throws -> DocumentsUploadStatus {
+        try await get("documents/uploads/\(uploadID)")
+    }
+
+    /// One chunk as the raw body, with its sha256; sent again, it replaces.
+    public func documentsPutChunk(uploadID: String, index: Int, bytes: Data, sha256: String) async throws {
+        var req = try makeRequest("documents/uploads/\(uploadID)/chunks/\(index)", method: "PUT", body: Optional<Empty>.none)
+        req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        req.setValue(sha256, forHTTPHeaderField: "X-Orbit-Chunk-Sha256")
+        req.httpBody = bytes
+        _ = try await send(req, cancellationAware: true)
+    }
+
+    /// Create the file; sent again after it applied, it answers the same file.
+    public func documentsCompleteUpload(_ uploadID: String) async throws -> DocumentsEntry {
+        try await postEmpty("documents/uploads/\(uploadID)/complete")
+    }
+
+    public func documentsAbandonUpload(_ uploadID: String) async throws { try await deleteRaw("documents/uploads/\(uploadID)") }
+
+    private struct DocumentsFolderBody: Encodable { let parentId: String?; let name: String }
+    private struct DocumentsEntryPatch: Encodable { let name: String?; let parentId: String? }
+    private struct DocumentsDownloadBody: Encodable { let versionId: String? }
+    private struct DocumentsUploadBody: Encodable {
+        let parentId: String?
+        let name: String
+        let size: Int
+        let relativePath: String?
+        let dropRootId: String?
+    }
+
     private struct Empty: Codable {}
     private struct RunnerReleaseManifest: Decodable { let version: String? }
 
