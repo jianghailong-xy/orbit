@@ -100,7 +100,7 @@ case "$*" in
   "exec pgbackup-0 cat /usr/local/bin/pg-backup.sh") cat scripts/pg-backup.sh ;;
   "compose up "*--force-recreate*apiserver*) apiserver_recreated ;;
   "compose up "*apiserver*) [ -n "${FAKE_APISERVER_IMAGE_CHANGED:-}" ] && apiserver_recreated ;;
-  "compose logs apiserver") echo "[ManagedRunners] managed runners are enabled in orbit-fixture (Docker instance orbit-fixture)" ;;
+  "compose logs apiserver") echo 'orbit-apiserver  | {"level":"log","pid":1,"timestamp":1795427813490,"message":"managed runners are enabled in orbit-fixture (Docker instance orbit-fixture)","context":"ManagedRunners"}' ;;
   "image inspect -f {{.Id}} "*) echo "$FAKE_IMAGE_ID" ;;
   "info --format {{json .SecurityOptions}}") echo "${FAKE_SECURITY:-[\"name=seccomp,profile=builtin\",\"name=cgroupns\"]}" ;;
   "info --format {{with .FirewallBackend}}{{.Driver}}{{end}}") echo "${FAKE_FIREWALL_DRIVER-iptables}" ;;
@@ -361,6 +361,8 @@ class NewDeploymentTest(unittest.TestCase):
         self.assertIn("compose up -d --wait --wait-timeout 300 --no-deps docker-channel apiserver", calls)
         # The apiserver is recreated from the image it runs: switching managed runners on deploys nothing else.
         self.assertFalse([c for c in calls if c.startswith(("compose up -d --build", "compose build apiserver"))], calls)
+        # Its line saying so is read from its log, which is JSON under Compose (src/apiserver/src/common/request-log.ts).
+        self.assertIn('"message":"managed runners are enabled in orbit-fixture (Docker instance orbit-fixture)"', run.stdout)
 
     def test_switching_on_adds_to_the_compose_profiles_the_deployment_already_lists(self):
         # A deployment that runs another Compose profile (runner-link, say): its line is kept and the managed
@@ -424,7 +426,7 @@ class NewDeploymentTest(unittest.TestCase):
 
     # What each copy of /upgrade asked of Docker for a deployment without managed runners before it kept their
     # image current (both copies at c16d115b3, run exactly as below): that path is unchanged, call for call, but for
-    # where the deployment runs from, asked first, and pgbackup, after the other services (2026-11-02, Orbit Files' T10),
+    # where the deployment runs from, asked first, and pgbackup, after the other services (2026-11-02, Documents' T10),
     # and the apiserver's managed runners' directory, read for a profile whose channel hosts are all on other machines
     # (2026-11-13, docs/self-hosting.md "Managed runners on another host"), which without one is /dev/null.
     DEPLOYMENT_PREFLIGHT = [

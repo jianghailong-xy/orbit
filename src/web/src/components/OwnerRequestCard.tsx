@@ -19,7 +19,9 @@ import { decisionReceiptAnchor } from '../lib/decisionReceipt';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import {
   BROWSER_SIGN_IN_COPY,
+  CHANGE_COPY,
   KIND_TAGS,
+  changeNumber,
   WAITING_ON_YOU,
   deviceLabel,
   expiryText,
@@ -79,7 +81,9 @@ type Ending =
   | { to: 'done'; body: { option?: number; text?: string; sendAsWritten?: true } }
   | { to: 'decline'; body: { reason: string; sendAsWritten?: true } }
   // WIKI_CREATE's Create wiki: the owner's door that makes the wiki and settles the card (design §3.6).
-  | { to: 'create-wiki'; body: Record<string, never> };
+  | { to: 'create-wiki'; body: Record<string, never> }
+  // CHANGE's Apply: the owner's door that writes the runner setting and settles the card.
+  | { to: 'apply'; body: { maxConcurrent: number } };
 
 /**
  * A request's agent-written words as the card draws them: translated while it is shown translated
@@ -110,6 +114,7 @@ const PRIMARY: Readonly<Record<AgentRequestKind, string>> = {
   WIKI_CREATE: 'Create wiki',
   SETTINGS_CHANGE: 'Save changes',
   BROWSER_SIGN_IN: BROWSER_SIGN_IN_COPY.openBrowser,
+  CHANGE: CHANGE_COPY.primary,
 };
 
 /** The runner a secret goes to, by the name the owner knows it by. */
@@ -118,6 +123,52 @@ function useRunnerName(runnerId: string | undefined): string {
   const runner = runners.data?.find((row) => runnerId && sameResourceId(row.id, runnerId));
   const machineNameOf = useMachineName();
   return (runner ? machineNameOf(runner) : '') || 'this runner';
+}
+
+/** The runner row a CHANGE names: its live Max Concurrent, how many sessions run now, and its name. */
+function useChangeRunner(runnerId: string | undefined): { name: string; live: number | null; running: number | null } {
+  const runners = useQuery({ ...runnersQuery(), enabled: Boolean(runnerId) });
+  const row = runners.data?.find((r) => runnerId && sameResourceId(r.id, runnerId));
+  const machineNameOf = useMachineName();
+  return {
+    name: (row ? machineNameOf(row) : '') || 'this runner',
+    live: typeof row?.maxConcurrent === 'number' ? row.maxConcurrent : null,
+    running: typeof row?.activeSessions === 'number' ? row.activeSessions : null,
+  };
+}
+
+/** A CHANGE card's setting block: live value → editable number, what is running, and what the number would do. */
+function ChangeSetting({ spec, value, onValue }: {
+  spec: NonNullable<OwnerRequest['changeSpec']>;
+  value: string;
+  onValue: (value: string) => void;
+}): JSX.Element {
+  const { name, live, running } = useChangeRunner(spec.runnerId);
+  const current = live ?? spec.before;
+  const n = changeNumber(value);
+  return (
+    <div className="owner-request-change">
+      <div className="owner-request-change-setting">{CHANGE_COPY.setting(name)}</div>
+      <div className="owner-request-change-row">
+        <span className="owner-request-change-live">{current}</span>
+        <span aria-hidden="true">→</span>
+        <Input
+          type="number"
+          min={1}
+          step={1}
+          className="owner-request-change-input"
+          aria-label={CHANGE_COPY.numberLabel}
+          value={value}
+          invalid={n === null}
+          onChange={(event) => onValue(event.target.value)}
+        />
+        {running !== null ? <span className="owner-request-change-running">{CHANGE_COPY.runningNow(running)}</span> : null}
+      </div>
+      {current !== spec.before ? <p className="owner-request-change-was">{CHANGE_COPY.wasWhenAsked(spec.before)}</p> : null}
+      {n !== null && n < current ? <p className="owner-request-change-effect">{CHANGE_COPY.lowering(n)}</p> : null}
+      {n !== null && n > current ? <p className="owner-request-change-effect">{CHANGE_COPY.raising(n)}</p> : null}
+    </div>
+  );
 }
 
 /** The tasks a request holds up, linked by title. A task that cannot be read keeps a link with no name. */
@@ -435,6 +486,7 @@ function AgentRequestCard({ request: given, now = Date.now(), onChat }: {
   const [declining, setDeclining] = useState(false);
   const [reason, setReason] = useState('');
   const [changing, setChanging] = useState(false);
+  const [maxValue, setMaxValue] = useState(String(request.changeSpec?.requested ?? ''));
   const runner = useRunnerName(request.secretSpec?.runnerId);
   const end = useMutation({
     mutationFn: ({ to, body }: Ending) =>
@@ -460,7 +512,9 @@ function AgentRequestCard({ request: given, now = Date.now(), onChat }: {
     ? draft.savedId !== null || (draft.value.trim() !== '' && (!draft.save || draft.saveAs.trim() !== ''))
     : request.kind === 'DECISION'
       ? chosenOption !== null || trimmed !== ''
-      : true;
+      : request.kind === 'CHANGE'
+        ? changeNumber(maxValue) !== null
+        : true;
   const expiry = expiryText(request, now);
   const pressPrimary = () => {
     if (request.kind === 'SECRET') {
@@ -469,6 +523,10 @@ function AgentRequestCard({ request: given, now = Date.now(), onChat }: {
         : { value: draft.value, ...(draft.save ? { saveAs: draft.saveAs.trim() } : {}) };
       setDraft(emptyDraft(request.secretSpec));
       void door.post('secret', body);
+      return;
+    }
+    if (request.kind === 'CHANGE') {
+      end.mutate({ to: 'apply', body: { maxConcurrent: changeNumber(maxValue)! } });
       return;
     }
     const body = request.kind === 'DECISION'
@@ -513,6 +571,9 @@ function AgentRequestCard({ request: given, now = Date.now(), onChat }: {
             </Markdown>
           </div>
         )}
+        {request.kind === 'CHANGE' && request.changeSpec ? (
+          <ChangeSetting spec={request.changeSpec} value={maxValue} onValue={setMaxValue} />
+        ) : null}
         {request.blocksTaskIds.length > 0 || request.secretSpec ? (
           <dl className="owner-request-facts">
             {request.blocksTaskIds.length > 0 ? (
@@ -575,7 +636,7 @@ function AgentRequestCard({ request: given, now = Date.now(), onChat }: {
         {failed ? (
           <Alert type="error" title={`The key did not reach ${runner}`} description={grant.removalNote ?? 'Enter it again.'} />
         ) : null}
-        {end.isError && answerRefusedUntranslated(end.error) && end.variables && end.variables.to !== 'create-wiki' ? (
+        {end.isError && answerRefusedUntranslated(end.error) && end.variables && end.variables.to !== 'create-wiki' && end.variables.to !== 'apply' ? (
           <RefusedAnswerFoot
             error={end.error}
             resend={(sendAsWritten) => {
@@ -703,6 +764,11 @@ function outcomeLine(request: OwnerRequest, runner: string): string {
     if (label) return said ? `${label}: “${said}”` : label;
     return said ? `“${said}”` : 'Answered';
   }
+  if (request.kind === 'CHANGE' && request.changeSpec) {
+    const { applied, actualBefore } = request.answer ?? {};
+    const spec = request.changeSpec;
+    return CHANGE_COPY.applied(runner, actualBefore ?? spec.before, applied ?? spec.requested, spec.requested);
+  }
   if (request.kind === 'BROWSER_SIGN_IN') return BROWSER_SIGN_IN_COPY.signedIn(request.browserSite ?? '');
   if (request.kind === 'WIKI_CREATE') return request.answer?.name ? `Created the wiki ${request.answer.name}` : 'Wiki created';
   return request.kind === 'CONFIRM' ? 'Confirmed' : 'Marked done';
@@ -778,7 +844,7 @@ function AgentRequestResolved({ request: given, now }: { request: OwnerRequest; 
   // pending, or never to be confirmed (§2, §6.1, §6.4) — so the card never implies gone while a copy may remain.
   const held = request.kind === 'SECRET' ? request.secretGrant : null;
   const grant = held && (request.state === 'DONE' || removalToTell(held)) ? held : null;
-  const runner = useRunnerName(request.kind === 'SECRET' ? request.secretSpec?.runnerId : undefined);
+  const runner = useRunnerName(request.kind === 'SECRET' ? request.secretSpec?.runnerId : request.kind === 'CHANGE' ? request.changeSpec?.runnerId : undefined);
   const when = request.resolvedAt ? decisionReceiptTime(request.resolvedAt, new Date(now)) : null;
   const by = [endedBy(request), when].filter(Boolean).join(' · ');
   const device = deviceLabel(request.resolvedClient);
@@ -857,6 +923,39 @@ export function useSessionOwnerRequestInserts(
           }];
     });
   }, [sessionId, events, open.data, all.data, onChat]);
+}
+
+/** One of this session's requests still waiting on its card, for the pinned strip to point at. */
+export interface OwnerRequestPointer {
+  id: string;
+  /** The card's own title. */
+  title: string;
+  ageSeconds: number | null;
+}
+
+/**
+ * The pending requests whose full card this conversation draws (`useSessionOwnerRequestInserts`),
+ * oldest first: a snoozed one is drawn as a line and an ended one as its summary, so neither is a
+ * card to go to (docs/mocks/owner-request-strip-jump). Same reads, so the strip and the cards agree.
+ */
+export function useSessionOwnerRequestPointers(sessionId: string | null | undefined): OwnerRequestPointer[] {
+  const open = useQuery({ ...ownerRequestsQuery('open'), enabled: Boolean(sessionId) });
+  const snoozes = useSnoozes();
+  return useMemo(() => {
+    if (!sessionId) return [];
+    const now = Date.now();
+    return (open.data?.requests ?? [])
+      .filter((request) => sameResourceId(request.askedBySessionId, sessionId)
+        && request.state === 'PENDING'
+        && !((snoozes[request.id] ?? 0) > now)
+        && Number.isFinite(Date.parse(request.createdAt)))
+      .sort((x, y) => Date.parse(x.createdAt) - Date.parse(y.createdAt))
+      .map((request) => ({
+        id: request.id,
+        title: request.title,
+        ageSeconds: Math.max(0, Math.floor((now - Date.parse(request.createdAt)) / 1000)),
+      }));
+  }, [sessionId, open.data, snoozes]);
 }
 
 /** On a task a pending request holds up, wherever a task is listed or opened. */

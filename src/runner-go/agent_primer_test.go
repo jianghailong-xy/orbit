@@ -50,6 +50,12 @@ var agentPrimerHashes = map[string]string{
 	// settings_get, then settings_propose, and link the row a refused key returns. The primer's budget went from 3,200
 	// to 3,456 bytes and the engine instructions' from 7,424 to 7,680 to hold it (owner, 2026-11-20).
 	"1.4.4": "a96eda93645d97fa5b8b8cea9508b86dc3d57bd3bdb59246c1b20b1cb1174df9",
+	// 1.4.5 is 1.4.4 with the first line naming Agent Contract 1.12.0 (session_get and session_list return
+	// phase, released, lastTurnOutcome and waitingOn); no rule changed.
+	"1.4.5": "1abfd5498316f51090af0a544f29db121dc1987f256494a13902d0f45c0d5940",
+	// 1.4.6 is 1.4.5 with the first line naming Agent Contract 1.13.0 (the drive tools are documents_*, the CLI
+	// `orbit documents`, the link orbit-document:, the old names still served); no rule changed.
+	"1.4.6": "e0ec22b359cb36138e91b08ba216b9455a3d3a957df002d197e2f5722d883a60",
 }
 
 // The snapshots: the primer exactly as `initialize` sends it, and the four shapes of the instructions

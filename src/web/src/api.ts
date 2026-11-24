@@ -38,6 +38,9 @@ import type {
   OwnerAnswerCard,
   ProjectStartedCard,
   SessionCapabilities,
+  SessionPhase,
+  SessionTurnOutcome,
+  SessionWaitingOn,
   SessionLandingView,
   SessionMessageCard,
   SessionMessageFrom,
@@ -1779,7 +1782,20 @@ export type SharedRoot =
   | (SharedSession & { kind?: 'SESSION' })
   | { kind: 'TASK'; include: ShareInclude; sharedAt: string; root: SharedTask }
   | { kind: 'PROJECT'; include: ShareInclude; sharedAt: string; root: SharedProject; scope: SharedScope }
-  | { kind: 'WIKI'; include: ShareInclude; sharedAt: string; root: SharedWiki };
+  | { kind: 'WIKI'; include: ShareInclude; sharedAt: string; root: SharedWiki }
+  | { kind: 'DRIVE_FILE'; include: ShareInclude; sharedAt: string; root: SharedDriveFile };
+
+/** A Documents file a link shares, pinned to the version shared: its bytes are at `sharedDriveFileUrl`.
+ *  `preview` says the browser can show it as it is (a PDF or a picture). */
+export interface SharedDriveFile {
+  name: string;
+  sizeBytes: number;
+  mimeType: string;
+  preview: boolean;
+}
+
+/** Where a file link's bytes are served (with `Range`), no login needed. */
+export const sharedDriveFileUrl = (token: string): string => `/api/shared/${encodeURIComponent(token)}/content`;
 
 /** One of a project link's tasks (`/s/<token>/t/<id>`): the task as a task link shows its task,
  *  with the link's layers and what it opens. */
@@ -1961,6 +1977,8 @@ export interface SessionChangedFile {
  * existing row fields remain open. */
 export type SessionListItem = Record<string, any> & {
   id: string;
+  /** The list's order key: moves only when the session changes for its owner. Absent from older servers (createdAt then). */
+  listedAt?: string | null;
   /** The engine the session runs on, recorded at its creation and never changed (null only when an
    *  older replica wrote it and nobody can tell). `provider` is the credential it spends. */
   engine?: string | null;
@@ -2038,6 +2056,8 @@ export interface TaskRunRoute {
   escalated: boolean;
   /** The router's own sentences, shown as they are. */
   reasons: string[];
+  /** The §7.5 sentence when the run went elsewhere because its pin could not run; else null. */
+  relaxedRun?: string | null;
   policyVersion: number;
   decidedAt: string;
 }
@@ -2066,6 +2086,12 @@ export interface SessionDetail {
   /** Explicit runner/process state. `status` is its legacy alias. */
   runStatus?: string;
   status?: string;
+  /** The three-state field and the facts beside it (contracts/session-state.contract.json). Absent from an
+   *  older control plane; read through lib/sessionState (sessionPhaseOf, sessionReleasedOf). */
+  phase?: SessionPhase;
+  released?: boolean;
+  lastTurnOutcome?: SessionTurnOutcome | null;
+  waitingOn?: SessionWaitingOn | null;
   title?: string;
   /** The Project this Session coordinates. Null for ordinary Sessions. */
   projectId?: string | null;

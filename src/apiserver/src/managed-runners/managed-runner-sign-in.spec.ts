@@ -141,7 +141,7 @@ test('refresh, logout and a password change never take the sign-in step', async 
 test('the capability read never takes the sign-in step', () => {
   const w = authWorld();
   const controller = new AuthController(w.auth, {} as SignInProvidersService, { enabled: true, problem: null });
-  assert.deepEqual(controller.capabilities(), { managedRunners: { enabled: true, contractVersion: 1 } });
+  assert.deepEqual(controller.capabilities(), { managedRunners: { enabled: true, contractVersion: 1 }, documents: { enabled: false } });
   assert.deepEqual(w.calls, []);
 });
 

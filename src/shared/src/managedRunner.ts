@@ -98,7 +98,7 @@ export interface ManagedRunnerWorkload {
   operations: number;
   /** Events buffered for the control plane and not yet acknowledged by it. */
   unflushedEvents: number;
-  /** Orbit Files drive handles holding bytes no commit has taken yet; absent from a runner that has no drive. */
+  /** Documents drive handles holding bytes no commit has taken yet; absent from a runner that has no drive. */
   driveWrites?: number;
   /** How long, in whole seconds, all four have been zero; 0 while any is not. */
   idleSeconds: number;
@@ -165,8 +165,16 @@ export interface ManagedRunnerCapability {
   contractVersion: number;
 }
 
+/** `GET /api/auth/capabilities` → `documents`: whether this server offers the Documents drive (ORBIT_DOCUMENTS_ENABLED,
+ *  off by default). A server that predates the field always had it on. */
+export interface DocumentsCapability {
+  enabled: boolean;
+}
+
 export interface ServerCapabilities {
   managedRunners: ManagedRunnerCapability;
+  /** Absent on a server that predates the switch: read that as on. */
+  documents?: DocumentsCapability;
 }
 
 /** A safe, structured cause. Never a raw infrastructure error, endpoint or credential. */
@@ -228,7 +236,12 @@ export interface ManagedRunnerStatus {
 
 /** One build of the managed runner image: the source commit it was built from, and when, if known. */
 export interface ManagedRunnerBuild {
+  /** The source commit. Empty on `running` when the runner reports a release version, whose commit the server is not
+   *  told. */
   sha: string;
+  /** The release it was published for, as its runner reports it (`0.1.261-beta.83`). Absent for an image built from a
+   *  checkout, whose runner reports `managed-<sha>`, and from an older server. */
+  version?: string;
   builtAt?: string;
 }
 
@@ -241,8 +254,8 @@ export interface ManagedRunnerUpdate {
   running: ManagedRunnerBuild;
   current: ManagedRunnerBuild;
   phase: 'available' | 'updating';
-  /** `updating` on a busy runner whose backend cannot stop it (Kubernetes): the owner's Update Now waits for the
-   *  runner to be idle and interrupts nothing. Absent otherwise. */
+  /** `updating` on a busy runner whose backend cannot stop it (neither Docker nor Kubernetes, which both can): the
+   *  owner's Update Now waits for the runner to be idle and interrupts nothing. Absent otherwise. */
   waitsForIdle?: true;
 }
 

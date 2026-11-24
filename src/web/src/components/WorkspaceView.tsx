@@ -1,5 +1,6 @@
 import {
   COORDINATOR_HANDOFF_COPY,
+  ownerRequestRowWord,
   managedSetupState,
   firstSessionProvider,
   type CoordinatorHandoffSuccessor,
@@ -57,7 +58,6 @@ import {
   ThunderboltOutlined,
   UndoOutlined,
   UnorderedListOutlined,
-  UploadOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AgentToolsDrawer, agentToolsMenuStatus } from './AgentToolsDrawer';
@@ -67,7 +67,6 @@ import {
   referenceToken,
   type ReferenceMap,
 } from '../lib/composerRefs';
-import { WAITING_ON_YOU } from '../lib/ownerRequests';
 import {
   ContextActions,
   CoordinatorHandedOverBanner,
@@ -165,7 +164,7 @@ import {
   watchesQuery,
   projectDependencyGraphQuery,
 } from '../lib/queries';
-import { SEARCH_HINT, openSessionSearch } from './SessionSearch';
+import { SEARCH_HINT, openSessionSearch, setSessionSearchScope } from './SessionSearch';
 import { SessionMoveModal, useSessionFolderFiling, type MoveDialogSession } from './SessionMoveModal';
 import {
   SESSION_DRAG_TYPE,
@@ -181,8 +180,10 @@ import {
   MOVE_COPY,
   folderDeleteFailure,
   folderNameDraft,
+  folderPageEmpty,
   folderNameFailure,
   listShowsFolders,
+  sessionsInFolder,
   SCHEDULED_RUNS_COPY,
   SCHEDULED_RUNS_FOLDER,
   type SessionFolderRow,
@@ -206,6 +207,7 @@ import { moveProject } from './ProjectRunSettings';
 import { SidebarNavIcon } from './SidebarNavIcon';
 import {
   type SessionTagRef,
+  compareListed,
   sessionTagSections,
   sessionTimeSections,
   sessionsWithTag,
@@ -217,6 +219,7 @@ import {
   permissionModeSupported,
   contextWindowFor,
   DEFAULT_MODEL,
+  DEFAULT_PERMISSION_MODE,
   defaultEngineOf,
   defaultModelFor,
   effectiveSessionEffort,
@@ -275,7 +278,6 @@ import {
   type ContextSeedState,
 } from '../lib/contextSeed';
 import { InitializeGitSteps, SessionOutputs } from './SessionOutputs';
-import { SessionBrowserChip } from './SessionBrowserChip';
 import { mergeRepairLoopLive } from './MergeRecoveryPanel';
 import { BrandMark, NewSessionProviderHero } from './NewSessionProviderHero';
 import { CreatedWorkspaceLine } from './CreatedWorkspaceLine';
@@ -284,6 +286,7 @@ import { startHistoryImport } from '../lib/claudeHistoryImport';
 import { ManagedRunnerNotice } from './ManagedRunnerNotice';
 import { useNewAccount } from './WelcomeCard';
 import type { LoginEngine } from '@orbit/shared';
+import { useDocumentsEnabled } from '../lib/documentsSwitch';
 import { managedRowOf, managedRunnerStatusQuery, useManagedRunnerId, type ManagedRunner } from '../lib/managedRunner';
 import { MANAGED_RUNNER_COPY } from '@orbit/shared';
 import {
@@ -390,7 +393,7 @@ import {
 } from './RunNeverStartedCard';
 import { claudeRegionHeld, claudeRegionHeldWords, useClaudeRegionCheckAgain } from '../lib/claudeRegion';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
-import { DriveFilePicker } from './files/DriveFilePicker';
+import { DocumentsFilePicker } from './documents/DocumentsFilePicker';
 import { AntigravityRepairCard, antigravityRepair, AttachmentImage, TurnStatusFootCtx, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SandboxFixHelp, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
 import { PendingTray, type PendingTrayRow } from './PendingTray';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
@@ -413,7 +416,7 @@ import {
   type CriteriaDecisionReply,
 } from './CriteriaDecisionCard';
 import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows, coordinatorQuestions } from './CoordinatorQuestionCard';
-import { useSessionOwnerRequestInserts } from './OwnerRequestCard';
+import { useSessionOwnerRequestInserts, useSessionOwnerRequestPointers } from './OwnerRequestCard';
 import { useScheduleRunOfSession, useSessionScheduleCards, useSessionScheduleInserts } from './ScheduleCards';
 import {
   OWNER_REQUEST_CHAT_PLACEHOLDER,
@@ -421,7 +424,7 @@ import {
   ownerRequestChatContext,
   type OwnerRequest,
 } from '../lib/ownerRequests';
-import { useCrossingDecisionCards } from './CrossingDecisionCard';
+import { taskMoveSignal, useCrossingDecisionCards } from './CrossingDecisionCard';
 import { AnsweredQuestionsCtx } from './OwnerAnswerLine';
 import { answeredItemKey, answersHandedOver } from '../lib/ownerAnswer';
 import {
@@ -448,7 +451,10 @@ import { Glyph, landingCard } from './ProjectPanoramaHeader';
 import { SessionRecapCard, readHiddenRecap, recapHideKey, rememberHiddenRecap } from './SessionRecapCard';
 import { LandingJobsSheet } from './LandingJobsSheet';
 import { LandingLink } from './LandingLink';
+import { LandingFixAgainLine, SessionProjectLandingFixes } from './LandingFixCard';
+import { LANDING_FIX_COPY, heldByItsSession } from '../lib/landingFix';
 import { SessionProjectLandings } from './SessionProjectLandings';
+import { TerminalsNeedsYouRow } from './TerminalRequests';
 import { ProjectLandingsWindow } from './ProjectLandingsWindow';
 import { ProjectLandingCard } from './ProjectLandingCard';
 import { ProjectStartDialog } from './StartProjectCard';
@@ -587,6 +593,7 @@ import {
   isSessionTerminal,
   SESSION_ACTIVITY_WORD,
   sessionActivityOf,
+  sessionWaitingOnOf,
   sessionEndedBanner,
   sessionIsStarting,
   sessionLifecycleLabel,
@@ -1249,6 +1256,12 @@ const parkedWorkLabel = (s: any): ParkedWork | null => {
     : { text: bgRunningLabel(s.runningBgCount), kind, active: backgroundWorkIsActive(s) };
 };
 
+// A queued turn the server says is on hold (`waitingOn` HOLD: the dispatch pause, a paused account, an
+// unavailable provider) where the queue would otherwise say only "Queued": no gate of a runner names it.
+const holdWord = (s: any): string | null =>
+  sessionWaitingOnOf(s) === 'HOLD' && s.queuedReason === null ? ON_HOLD_LABEL : null;
+const ON_HOLD_LABEL = 'On hold';
+
 // The line shown under a session title. For a LIVE (openable) session that's working we
 // surface its current state — the tool in flight, that it's blocked on you, or a bare
 // "Running…" — so the row never collapses to just a title with no sign of progress.
@@ -1369,9 +1382,9 @@ const waitingLabel = (s: any): string => {
   if (s.waitingKind === 'START_REQUEST') return READY_TO_START;
   if (s.waitingKind === 'DONE_REQUEST') return PROJECT_DONE_COPY.readyToClose;
   if (s.waitingKind === 'RECORD_AS_DONE') return PROJECT_DONE_COPY.recordAsDoneRow;
-  // An owner request this session filed (a step, a decision, a key, a confirmation): its card's words.
-  if (s.waitingKind === 'OWNER_REQUEST') return WAITING_ON_YOU;
-  return 'Waiting for approval';
+  // What a session asked of you (`request_owner_action`), all of one kind, in that kind's word, and
+  // task moves waiting on you: "Approve task move" / "Approve N task moves".
+  return ownerRequestRowWord(s) ?? 'Waiting for approval';
 };
 
 // `watching` is this session as an observer — what its row says about the live watches that will
@@ -1440,7 +1453,7 @@ export const sessionLine = (
     // Held by its clone, the row says git's percentage once this tab has heard one (board clone-progress-wait-card ④).
     const cloned = !held && s.queuedReason === 'WORKSPACE_CLONING' ? cloneHeardOf(s.workspace?.id) : null;
     if (cloned?.state === 'CLONING' && cloned.progress !== null) return { text: cloneRowLabel(cloned.progress), tone: 'queued' };
-    return { text: held ?? queuedLabel(s), tone: !held && isRunnerUpdating(s) ? 'warning' : 'queued' };
+    return { text: held ?? holdWord(s) ?? queuedLabel(s), tone: !held && isRunnerUpdating(s) ? 'warning' : 'queued' };
   }
   // Parked (AWAITING_INPUT) but still doing background work — a sub-workspace and/or background
   // shells that outlive the turn — so it doesn't read as idle. A spawned sub-workspace parks the
@@ -1515,9 +1528,16 @@ export function CoordinatorBadge({ projectId }: { projectId?: string | null }) {
 
 /** Where and how the agent runs a guest's message, for the Share dialog's People who can reply: the session's own
  *  runner and permission mode, or the workspace's machine when the session names none. */
-const guestContextOf = (s: any, fallbackRunner: string, managedRunnerId: string | null) => ({
+const guestContextOf = (
+  s: any,
+  fallbackRunner: string,
+  managedRunnerId: string | null,
+  accountPermissionMode: string | undefined,
+) => ({
   runnerName: (s.assignedRunner ? machineName(s.assignedRunner, managedRunnerId) : '') || fallbackRunner,
-  permissionMode: typeof s.permissionMode === 'string' ? s.permissionMode : 'default',
+  // A session that stored no mode runs in the account's, else Auto, as the server resolves it.
+  permissionMode:
+    typeof s.permissionMode === 'string' ? s.permissionMode : (accountPermissionMode ?? DEFAULT_PERMISSION_MODE),
 });
 
 /** What the two-person icon beside a row's time says: people the owner invited can reply here. */
@@ -1555,7 +1575,7 @@ export function SessionTitleRow({
           <TeamOutlined />
         </span>
       )}
-      <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
+      <span className="session-time">{fmtTime(s.listedAt ?? s.createdAt)}</span>
       <CoordinatorBadge projectId={s.projectId} />
     </div>
   );
@@ -1695,6 +1715,8 @@ function SessionProjectLanding({ projectId, onOpen }: { projectId: string; onOpe
         <ProjectLandingCard projectId={projectId} card={card} dialog={listed}
           onPress={listed ? () => setJobsOpen(true) : onOpen} />
       ) : null}
+      {/* A landing that stopped and went to its own task's session, or came back from it (revision 42, §12.7). */}
+      <SessionProjectLandingFixes projectId={projectId} now={live ? now : Date.now()} />
       {/* Portalled out of the card, and kept while open even if the card goes, so a list being read
           does not vanish under the reader when its last job lands. */}
       {listed || jobsOpen ? (
@@ -1729,7 +1751,7 @@ export function SessionProjectRowContent({ project }: { project: SessionProjectR
       <div className="session-main">
         <div className="session-title-row">
           <div className="session-title">{project.title}</div>
-          <span className="session-time">{fmtTime(project.lastTurnAt ?? project.createdAt ?? undefined)}</span>
+          <span className="session-time">{fmtTime(project.listedAt ?? project.createdAt ?? undefined)}</span>
         </div>
         <div className="session-sub">
           <span
@@ -1828,7 +1850,7 @@ export function statusLabel(session: any, watching?: string | null, machine?: st
   if ((session.pendingApprovals ?? 0) > 0) return waitingLabel(session);
   // Where `Waiting for your confirmation` would be, while the report is with its reviewer (§5 N3).
   if (session.confirmationUnderReview) return UNDER_REVIEW;
-  if (state === 'SUCCEEDED') return 'Succeeded';
+  if (state === 'SUCCEEDED') return 'Finished';
   if (waitingNoticeFor(session)) return startingLabel(session);
   if (isGenerating(session, state)) return 'Running';
   if (state === 'AWAITING_INPUT') {
@@ -1846,7 +1868,7 @@ export function statusLabel(session: any, watching?: string | null, machine?: st
   }
   if (state === 'INTERRUPTED') return 'Interrupted';
   if (state === 'ENDED') return 'Ended';
-  return claudeRegionHeldWords(session, machine) ?? queuedLabel(session); // PENDING
+  return claudeRegionHeldWords(session, machine) ?? holdWord(session) ?? queuedLabel(session); // PENDING
 }
 
 // What a failed session's glyph says — StatusIcon's FAILED tooltips, word for word: the error
@@ -1934,7 +1956,7 @@ export function StatusIcon({ session, watching, machine }: { session: any; watch
     );
   if (state === 'SUCCEEDED')
     return (
-      <Tooltip content="Succeeded">
+      <Tooltip content="Finished">
         <CheckCircleFilled style={{ color: 'var(--success-solid)', fontSize }} />
       </Tooltip>
     );
@@ -2030,7 +2052,7 @@ export function StatusIcon({ session, watching, machine }: { session: any; watch
     );
   // PENDING — waiting for an active turn slot, or held for the Claude region, as the row says.
   return (
-    <Tooltip content={claudeRegionHeldWords(session, machine) ?? queuedTitle(session)}>
+    <Tooltip content={claudeRegionHeldWords(session, machine) ?? holdWord(session) ?? queuedTitle(session)}>
       <ClockCircleOutlined style={{ color: 'var(--scrollbar-hover)', fontSize }} />
     </Tooltip>
   );
@@ -2957,8 +2979,9 @@ export function WorkspaceView({
   >(null);
   // The bar while it is drawn: its height is how far its own coming and going moves the transcript.
   const stuckBarRef = useRef<HTMLButtonElement>(null);
-  // The exception cards scrolled wholly above the viewport, by item id and space-joined so an
-  // unchanged answer is no re-render: which way the pinned line's press goes to reach one.
+  // The exception cards scrolled wholly above the viewport, by item id, and the owner request cards,
+  // by their element id (`owner-request-<id>`), space-joined so an unchanged answer is no re-render:
+  // which way the pinned line's press goes to reach one.
   const [openItemsAbove, setOpenItemsAbove] = useState('');
   // Smart auto-scroll: only keep pinned to the bottom when the user is already there, so
   // reading history (or jumping to the sticky prompt) isn't yanked back by streaming updates.
@@ -3107,6 +3130,9 @@ export function WorkspaceView({
   // The workspace's Scheduled runs folder is open (`?folder=scheduled`): the list is its runs' sessions alone, which
   // every other list leaves out, with no folder or project rows of its own.
   const onScheduledRuns = !listProjectId && searchParams.get('folder') === SCHEDULED_RUNS_FOLDER;
+  // A folder's page, by its route alone: it reads the workspace's whole list as the folder rows do, and
+  // keeps doing so while a tag narrows it, which takes the folder rows off the workspace's own list.
+  const onFolderPage = !listProjectId && !onScheduledRuns && !!searchParams.get('folder');
   const foldersShown = !onScheduledRuns && listShowsFolders(effectiveView, listByTag) && workspaceFolders.length > 0;
   const projectScope = `${runner.id}:${scopeWorkspaceId}:${effectiveView}:${tagFilter ?? ''}`;
   const [membershipScope, setMembershipScope] = useState<string | null>(null);
@@ -3123,7 +3149,7 @@ export function WorkspaceView({
     workspaceId: scopeWorkspaceId,
     view: effectiveView,
     tagId: tagFilter,
-    limit: scopeWorkspaceId && (foldersShown || projectsShown || onScheduledRuns) ? null : sessionLimit,
+    limit: scopeWorkspaceId && (foldersShown || projectsShown || onScheduledRuns || onFolderPage) ? null : sessionLimit,
     scheduled: onScheduledRuns,
   });
   const sessionsKey = sessionsOpts.queryKey;
@@ -3200,9 +3226,8 @@ export function WorkspaceView({
     return rows.sort((a, b) => {
       // Pinned sessions float to the top; among themselves they keep time order.
       if (!!a.pinnedAt !== !!b.pinnedAt) return a.pinnedAt ? -1 : 1;
-      const ta = a.lastTurnAt ?? a.createdAt;
-      const tb = b.lastTurnAt ?? b.createdAt;
-      return ta < tb ? 1 : -1;
+      // listedAt, never lastTurnAt: streamed activity must not move a row (contracts/session-list-order.fixtures.json).
+      return compareListed(a, b);
     });
   }, [sessionsQ.data, effectiveView, onScheduledRuns]);
   const selectedFromList = useMemo(
@@ -3586,8 +3611,8 @@ export function WorkspaceView({
   const pageMerges = useMemo(() => (Array.isArray(pageMergesQ.data) ? pageMergesQ.data : []), [pageMergesQ.data]);
   const allProjectMembers = useMemo(() => [...new Map(
     [...(projectSessionsQ.data ?? []), ...(completedProjectSessionsQ.data ?? [])].map((s) => [s.id, s]),
-  ).values()].sort((a, b) => (Date.parse(b.lastTurnAt ?? b.createdAt ?? '') || 0) -
-    (Date.parse(a.lastTurnAt ?? a.createdAt ?? '') || 0)), [projectSessionsQ.data, completedProjectSessionsQ.data]);
+  ).values()].sort((a, b) => (Date.parse(b.listedAt ?? b.createdAt ?? '') || 0) -
+    (Date.parse(a.listedAt ?? a.createdAt ?? '') || 0)), [projectSessionsQ.data, completedProjectSessionsQ.data]);
   // A project's LANDING sessions are its subject's, not conversations: they are counted nowhere on
   // this page — not in "Project · N sessions", not in the running count, not among the status dots,
   // not in the timeline — and are summed up once, in the Landings row below the coordinator.
@@ -3667,6 +3692,12 @@ export function WorkspaceView({
   const pageStart = pageNotStarted
     ? startPageRow(pageStarted, pageOpenItemsQ.isError ? undefined : pageOpenItemsQ.data)
     : null;
+  // The task sessions fixing their own failed landing (revision 42, §12.7; web a ③): their rows say so.
+  const pageFixingSessions = useMemo(() => new Set(
+    (pageOpenItemsQ.data?.withWorkSession ?? [])
+      .filter((row) => heldByItsSession(row) && row.handling == null)
+      .map((row) => routeId(row.workSession!.sessionId)),
+  ), [pageOpenItemsQ.data]);
   // The Landings row (owner 2026-10-27, board 01 b): the mark of the most urgent landing and the
   // day's counts, over the project's landing sessions and its merges into main.
   // No Landings row while the project's line has not started (revision 42 §12.16, ruling D2): the
@@ -3683,10 +3714,28 @@ export function WorkspaceView({
   // survives a reload and Back leaves it. Only a folder of this workspace, and only where the list
   // shows folders at all.
   const folderParam = searchParams.get('folder');
+  // A tag filter or Group by Tag does not close the page: inside one folder they narrow and section its
+  // sessions, with no folder rows for a session to be in twice (owner 2026-11-22,
+  // docs/mocks/session-folder-page-filter). Trash still has no folders.
   const openFolder = useMemo(() => {
     const id = routeId(folderParam);
-    return !listProjectId && foldersShown && id ? (workspaceFolders.find((f) => f.id === id) ?? null) : null;
-  }, [folderParam, foldersShown, workspaceFolders, listProjectId]);
+    return !listProjectId && !onScheduledRuns && listShowsFolders(effectiveView, false) && id
+      ? (workspaceFolders.find((f) => f.id === id) ?? null) : null;
+  }, [folderParam, onScheduledRuns, effectiveView, workspaceFolders, listProjectId]);
+  // The tag filter and Group by Tag belong to the page they were set on: entering a folder's page starts
+  // with neither, and leaving it gives the workspace's list back its folders. Reset in the render that
+  // changes the page, so no frame reads the new page with the old page's tag.
+  const [tagScopePage, setTagScopePage] = useState(folderParam);
+  if (tagScopePage !== folderParam) {
+    setTagScopePage(folderParam);
+    setTagFilter(null);
+    setGroupByTag(false);
+  }
+  // ⌘K from a folder's page searches that folder first (SessionSearch's scope chip).
+  useEffect(() => {
+    setSessionSearchScope(openFolder ? { folderId: openFolder.id, name: openFolder.name } : null);
+    return () => setSessionSearchScope(null);
+  }, [openFolder]);
   // A folder page whose folder is gone — deleted here or on another client, or a link into another
   // workspace's — goes back to the list. Only once both the folders and the list's workspace are
   // known: before that a missing folder is one not loaded yet. Arriving from another workspace, the
@@ -3694,7 +3743,7 @@ export function WorkspaceView({
   useEffect(() => {
     if (listProjectId || !folderParam || openFolder || onScheduledRuns || !foldersQ.isSuccess || !scopeWorkspaceId) return;
     if (scopeWorkspaceId !== resolvedWorkspaceId) return;
-    if (!listShowsFolders(effectiveView, listByTag)) return;
+    if (!listShowsFolders(effectiveView, false)) return;
     setSearchParams(
       (current) => {
         const next = new URLSearchParams(current);
@@ -3703,7 +3752,7 @@ export function WorkspaceView({
       },
       { replace: true },
     );
-  }, [folderParam, openFolder, foldersQ.isSuccess, scopeWorkspaceId, resolvedWorkspaceId, effectiveView, listByTag,
+  }, [folderParam, openFolder, foldersQ.isSuccess, scopeWorkspaceId, resolvedWorkspaceId, effectiveView,
     setSearchParams, listProjectId, onScheduledRuns]);
   // The folder page is kept for the workspace whose list it is, so the sidebar opens the workspace on
   // it again after a trip to another one (lib/workspaceListFolder). A project's sessions page over
@@ -3716,7 +3765,15 @@ export function WorkspaceView({
   // The list split into its folder rows and the sessions in no folder — the ones the Pinned and
   // time sections below are made of. A folder's page lists the sessions filed in it instead.
   const folderListing = useMemo(
-    () => sessionProjectListing(visibleSessions, workspaceFolders, projectsQ.data ?? [], {
+    () => openFolder && listByTag
+      // Narrowed or grouped by a tag, a folder's page is its sessions flat, as the workspace's list is
+      // under a tag: no project rows, each session by the folder it is filed in.
+      ? (() => {
+          const inside = sessionsInFolder(visibleSessions, openFolder.id);
+          return { folders: [], projects: [], sessions: inside,
+            entries: inside.map((session): SessionProjectEntry<SessionListItem> => ({ ...session, kind: 'session' })) };
+        })()
+      : sessionProjectListing(visibleSessions, workspaceFolders, projectsQ.data ?? [], {
       view: effectiveView,
       byTag: listByTag,
       folderId: openFolder?.id,
@@ -3800,7 +3857,8 @@ export function WorkspaceView({
 
   // Paging. The server answered with a full page, so there is probably more behind it; a short
   // answer means this scope is exhausted.
-  const hasMoreSessions = !listProjectId && !foldersShown && !projectsShown && (sessionsQ.data?.length ?? 0) >= sessionLimit;
+  const hasMoreSessions = !listProjectId && !foldersShown && !projectsShown && !onFolderPage &&
+    (sessionsQ.data?.length ?? 0) >= sessionLimit;
   // The column has nothing to show yet for this scope (a switch to a workspace not in cache), or
   // is widening its window — `isPlaceholderData` is exactly that, since the guard above only
   // keeps rows within one scope. Neither is the ordinary background refresh, which must not
@@ -3851,6 +3909,7 @@ export function WorkspaceView({
         }))
       : sessionTimeSections(folderListing.entries, {
           pinnedFirst: view === 'open' && !tagFilter,
+          attention: view === 'open',
         }).map((s) => ({
           key: s.title,
           tag: null as SessionTagRef | null,
@@ -3867,7 +3926,7 @@ export function WorkspaceView({
       if (!openProjectId) return [];
       const coordinator = pageCoordinator ? [{ key: 'Coordinator', title: SESSION_PROJECT_COPY.coordinatorSection, tag: null,
         sessions: [{ ...pageCoordinator, kind: 'session' as const }] }] : [];
-      const timeline = sessionTimeSections(projectMembers.filter((s) => s.id !== pageCoordinator?.id), { pinnedFirst: false })
+      const timeline = sessionTimeSections(projectMembers.filter((s) => s.id !== pageCoordinator?.id), { pinnedFirst: false, attention: true })
         .map((s) => ({ key: s.title, title: s.title, tag: null,
           sessions: s.sessions.map((session) => ({ ...session, kind: 'session' as const })) }));
       // The Landings row sits below the coordinator and above the timeline, for a project that has
@@ -4540,7 +4599,18 @@ export function WorkspaceView({
   // Model and Mode have independent dirty guards. If an untouched model is refined by a late
   // Runtime heartbeat after the user explicitly chose Auto, correctness still wins: never keep
   // an invalid pair merely because Mode is dirty.
+  //
+  // Not in the commit a new context arrives in: that commit still holds the previous context's
+  // model and mode, the seeds above having only queued this one's. Judged on those, a stopped Claude
+  // session opened after a Codex one read Codex's model, lost Auto, and its Continue stored Default
+  // (seen on orbitd.io, 2026-11-23). The seeds are clamped already, and the next commit runs this
+  // check again on this context's own values.
+  const clampContextKey = useRef<string | null>(null);
   useEffect(() => {
+    if (clampContextKey.current !== modelContextKey) {
+      clampContextKey.current = modelContextKey;
+      return;
+    }
     if (
       !live &&
       shownProviderCapabilitiesResolved &&
@@ -4555,6 +4625,7 @@ export function WorkspaceView({
     live,
     mode,
     model,
+    modelContextKey,
     runner.modelCatalog,
     shownEngine,
     shownProvider,
@@ -4886,9 +4957,9 @@ export function WorkspaceView({
     if (top < LOAD_OLDER_AT) loadOlder();
     const topY = el.getBoundingClientRect().top;
     setOpenItemsAbove(
-      Array.from(el.querySelectorAll<HTMLElement>('[data-open-item]'))
+      Array.from(el.querySelectorAll<HTMLElement>('[data-open-item], .owner-request-card'))
         .filter((card) => card.getBoundingClientRect().bottom <= topY + 1)
-        .map((card) => card.getAttribute('data-open-item'))
+        .map((card) => card.getAttribute('data-open-item') ?? card.id)
         .join(' '),
     );
     // A turn the control plane queued is scanned too — it is where the answer under it starts, so the
@@ -5788,6 +5859,8 @@ export function WorkspaceView({
     transcriptEvents,
     startOwnerRequestChat,
   );
+  // The same requests still waiting on their cards, for the pinned strip to point at.
+  const ownerRequestPointers = useSessionOwnerRequestPointers(selectedTrashed ? null : selectedId);
 
   // A scheduled task's run: its schedule and run (crumb, strip, report), and the cards and change lines a session put
   // up, each where it happened (docs/mocks/scheduled-tasks/web/02-board.png).
@@ -5809,7 +5882,12 @@ export function WorkspaceView({
   // Cross-project requests into the project this conversation coordinates, one decision card per
   // batch, drawn where the batch was first asked (board docs/mocks/handoff-in-chat). The batches
   // still waiting are counted by the pinned strip beside the criteria proposals.
-  const crossingCards = useCrossingDecisionCards(selectedTrashed ? null : coordinatedProjectId, transcriptEvents);
+  const crossingCards = useCrossingDecisionCards(
+    selectedTrashed ? null : selectedId,
+    selectedTrashed ? null : coordinatedProjectId,
+    transcriptEvents,
+    taskMoveSignal(selectedSession as { taskMoves?: Array<{ handoffIds?: string[] }> } | null),
+  );
 
   // One array for the transcript, memoized: a fresh array on every render would rebuild the whole
   // conversation with it (`Transcript` memoizes on this prop).
@@ -9173,9 +9251,15 @@ export function WorkspaceView({
   const switchView = (next: SessionView): void => {
     setMenuOpenId(null);
     setView(next);
-    if (!selectedId) return;
+    // A folder's page (or Scheduled runs) stays open across Open and Completed; Trash has no folders, so
+    // it is the workspace's Trash.
+    const keepPage = !!folderParam && next !== 'trash';
+    if (!selectedId) {
+      if (folderParam && !keepPage) leaveFolder();
+      return;
+    }
     const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
-    navigate(a ? `/workspaces/${encodeId(a)}` : `/settings/machines/${encodeId(runner.id)}`);
+    navigate(a ? `/workspaces/${encodeId(a)}${keepPage ? listSearch : ''}` : `/settings/machines/${encodeId(runner.id)}`);
   };
   const activeTag = tagFilter ? (sessionTags.find((t) => t.id === tagFilter) ?? null) : null;
   // ── The composer's model control ───────────────────────────────────────────────────────────
@@ -9909,7 +9993,7 @@ export function WorkspaceView({
       : []),
     // Where iOS keeps it, in the menu that scopes the list (§3.4). Only where folders show: a list
     // narrowed to or grouped by a tag, or Trash, would have nowhere to draw the new one.
-    ...(scopeWorkspaceId && listShowsFolders(shownView, listByTag)
+    ...(scopeWorkspaceId && !folderParam && listShowsFolders(shownView, listByTag)
       ? [
           { key: 'folder-divider', type: 'separator' as const },
           {
@@ -9920,6 +10004,27 @@ export function WorkspaceView({
         ]
       : []),
   ];
+  // The list's scope menu, at the head of the workspace's list and of a folder's page alike: the trigger
+  // names the view, so a page scoped to Completed or narrowed by a tag always explains itself.
+  const scopeMenu = (
+    <Menu
+      side="bottom"
+      align="end"
+      nativeButton={false}
+      popupClassName="session-scope-popup"
+      items={scopeItems}
+      trigger={
+        <span
+          ref={scopeTrigger}
+          className={`session-scope-menu${shownView !== 'open' || tagFilter || groupByTag ? ' on' : ''}`}
+          title="Switch view, filter and group"
+        >
+          {SESSION_VIEWS.find((v) => v.value === shownView)?.label}
+          <DownOutlined />
+        </span>
+      }
+    />
+  );
   // Header subtitle keeps run outcome and lifecycle location visibly separate, followed by
   // last activity. Task state remains on its own task affordance above the title.
   const headTime = selected
@@ -10312,7 +10417,11 @@ export function WorkspaceView({
         // merged row for both status surfaces so the banner and its list warning point at
         // the same canonical obligation during that refresh gap.
         const watching = sessionWatching(watchingBySession, s.id);
-        const line = sessionLine(actionSession, openable, watching, recapsEnabled, runnerShownName);
+        const ownLine = sessionLine(actionSession, openable, watching, recapsEnabled, runnerShownName);
+        // A task session fixing its own failed landing says so on the project's page (web a ③).
+        const line = pageProjectId && pageFixingSessions.has(s.id)
+          ? { ...ownLine, text: LANDING_FIX_COPY.SESSION_ROW_LINE, tone: 'preview' as const, hint: LANDING_FIX_COPY.SESSION_ROW_LINE }
+          : ownLine;
         // As on iOS, a full swipe runs the leading edge's first action only when it can run.
         const canFullSwipe = memberView === 'open' ? canCompleteRow : canRestoreRow;
         const swipeButtons = {
@@ -10504,6 +10613,7 @@ export function WorkspaceView({
               )}
               <span className="session-folder-workspace">{headWorkspaceName}</span>
             </span>
+            {scopeMenu}
             <Menu
               side="bottom"
               align="end"
@@ -10533,6 +10643,7 @@ export function WorkspaceView({
               <span className="session-folder-title">{SCHEDULED_RUNS_COPY.title}</span>
               <span className="session-folder-workspace">{headWorkspaceName}</span>
             </span>
+            {scopeMenu}
           </div>
         ) : (
           <div className="session-col-head">
@@ -10553,23 +10664,7 @@ export function WorkspaceView({
                 chip row — both read as clutter in a narrow column, and Open is nearly always
                 the answer. The trigger names the current view so a list scoped to
                 Completed/Trash always explains itself. (The native clients still tab.) */}
-            <Menu
-              side="bottom"
-              align="end"
-              nativeButton={false}
-              popupClassName="session-scope-popup"
-              items={scopeItems}
-              trigger={
-                <span
-                  ref={scopeTrigger}
-                  className={`session-scope-menu${shownView !== 'open' || tagFilter || groupByTag ? ' on' : ''}`}
-                  title="Switch view, filter and group"
-                >
-                  {SESSION_VIEWS.find((v) => v.value === shownView)?.label}
-                  <DownOutlined />
-                </span>
-              }
-            />
+            {scopeMenu}
           </div>
         )}
         {openFolder && folderEdit?.id === openFolder.id && folderEdit.error && (
@@ -10596,24 +10691,53 @@ export function WorkspaceView({
           }}
         >
           <SearchOutlined />
-          <span>Search sessions</span>
+          {/* On a folder's page the palette opens scoped to it, and the field says so. */}
+          <span className="session-search-label">{openFolder ? FOLDER_COPY.searchIn(openFolder.name) : 'Search sessions'}</span>
           {!isMobile && <kbd className="session-search-kbd">{SEARCH_HINT}</kbd>}
         </div>}
+        {/* A folder's page names its tag filter under the field too, with one click to clear it: the
+            page's narrow head has no room to spell the tag out in the trigger. */}
+        {(openFolder || onScheduledRuns) && activeTag && (
+          <div className="session-tag-chips">
+            <button
+              type="button"
+              className="session-tag-chip"
+              aria-label={FOLDER_COPY.clearTag(activeTag.name)}
+              title={FOLDER_COPY.clearTag(activeTag.name)}
+              onClick={() => setTagFilter(null)}
+            >
+              <span className="session-section-dot" style={{ background: activeTag.color }} />
+              <span className="session-tag-chip-name">{activeTag.name}</span>
+              <CloseOutlined />
+            </button>
+          </div>
+        )}
         <div
           className={`workspace-sessions session-col-list autohide-scrollbar${draggedSession ? ' dragging-session' : ''}`}
           ref={listRef}
           onScroll={onSessionListScroll}
           {...listDragProps}
         >
+          {/* A terminal asking to be approved: one Needs you row over the list, to its machine's page (board 02 ③). */}
+          {!listProjectId && <TerminalsNeedsYouRow />}
           {listProjectId && projectPageTop(listProjectId)}
           {listProjectId
             ? projectPageEmpty
-            : openFolder
+            : openFolder || onScheduledRuns
             ? listedSessions.length === 0 &&
-              !loadingSessions && <div className="chat-note">No sessions in this folder.</div>
-            : onScheduledRuns
-            ? listedSessions.length === 0 &&
-              !loadingSessions && <div className="chat-note">{SCHEDULED_RUNS_COPY.empty}</div>
+              !loadingSessions && (
+                <div className="chat-note">
+                  {openFolder
+                    ? folderPageEmpty(effectiveView, activeTag?.name ?? null)
+                    : activeTag ? folderPageEmpty(effectiveView, activeTag.name, SCHEDULED_RUNS_COPY.title)
+                      : SCHEDULED_RUNS_COPY.empty}
+                  {activeTag && (
+                    <button type="button" className="chat-note-action" onClick={() => setTagFilter(null)}>
+                      {FOLDER_COPY.clearFilter}
+                    </button>
+                  )}
+                </div>
+              )
             : visibleSessions.length === 0 &&
               !loadingSessions && (
                 <div className="chat-note">
@@ -11092,7 +11216,7 @@ export function WorkspaceView({
             onClose={() => setShareOpen(false)}
             kind="SESSION"
             rootId={selected.id}
-            guests={guestContextOf(selected, runnerShownName, managedRunnerId)}
+            guests={guestContextOf(selected, runnerShownName, managedRunnerId, accountDefaultPermissionMode)}
           />
         )}
         {selected && !selectedTrashed && !composing && (
@@ -11120,7 +11244,7 @@ export function WorkspaceView({
             onClose={() => setShareRow(null)}
             kind="SESSION"
             rootId={shareRow.id}
-            guests={guestContextOf(shareRow, runnerShownName, managedRunnerId)}
+            guests={guestContextOf(shareRow, runnerShownName, managedRunnerId, accountDefaultPermissionMode)}
           />
         )}
         <SessionMoveModal
@@ -11189,6 +11313,10 @@ export function WorkspaceView({
                 return Number.isFinite(at) ? Math.max(0, Math.floor((Date.now() - at) / 1000)) : null;
               })(),
             })) : []}
+            ownerRequests={ownerRequestPointers.map((request) => ({
+              ...request,
+              above: openItemsAbove.split(' ').includes(`owner-request-${request.id}`),
+            }))}
           />
         )}
 
@@ -11480,19 +11608,26 @@ export function WorkspaceView({
                   the work, the platform lands it, and the label opens the landing session where
                   every attempt is read. Absent from a session that produced no landing work, and
                   from a server that predates the field. */}
-              {selected && !selectedTrashed && sourceLanding ? (
-                <div className="session-source-landing">
-                  <LandingLink className={`session-source-landing-chip is-${sourceLanding.tone}`}
-                    sessionId={sourceLanding.id}>
-                    {/* The ring the board draws on the pill (06 e): work in hand, the same mark the
-                        landing rows carry — and the words beside it say the same thing without it. */}
-                    {sourceLanding.tone === 'run'
-                      ? <Glyph shape="spinner" color="currentColor" size={11} />
-                      : null}
-                    {`${sourceLanding.text} ›`}
-                  </LandingLink>
-                </div>
-              ) : null}
+              {selected && !selectedTrashed && sourceLanding ? (() => {
+                const chip = (
+                  <div className="session-source-landing">
+                    <LandingLink className={`session-source-landing-chip is-${sourceLanding.tone}`}
+                      sessionId={sourceLanding.id}>
+                      {/* The ring the board draws on the pill (06 e): work in hand, the same mark the
+                          landing rows carry — and the words beside it say the same thing without it. */}
+                      {sourceLanding.tone === 'run'
+                        ? <Glyph shape="spinner" color="currentColor" size={11} />
+                        : null}
+                      {`${sourceLanding.text} ›`}
+                    </LandingLink>
+                  </div>
+                );
+                // A fix this session made to its own failed landing, landing again (revision 42, web a ③): the
+                // landing's own record says which commit; only while that attempt is in hand.
+                return sourceLanding.tone === 'run'
+                  ? <LandingFixAgainLine landingSessionId={sourceLanding.id} sessionId={selected.id} fallback={chip} />
+                  : chip;
+              })() : null}
               {/* A conversation that has talked, whose next message waits on something only the
                   reader or the machine can change (P9 §8.1): the card, in place of the queued
                   note, which would read as an ordinary wait for a slot. */}
@@ -11781,10 +11916,6 @@ export function WorkspaceView({
             kinds of output next to each other. Hidden until it has created one. */}
         {selectedId && !selectedTrashed && (
           <SessionCreatedTasksStrip sessionId={selectedId} tasks={createdTasks.data} openRequest={createdTasksOpenRequest} />
-        )}
-        {/* The Orbit Cloud runner's browser, while it runs: opens the live view (docs/runner-browser-design.md §5). */}
-        {selectedId && !selectedTrashed && (
-          <SessionBrowserChip managedRunnerId={managedHeadRow ? runner.id : null} sessionId={selectedId} />
         )}
         {/* Every Agent this session started, beside the branch below as iOS draws it: one line that opens
             their list. Hidden until it has started one. */}
@@ -12353,8 +12484,10 @@ export function SessionComposer({
   const lastComposerTap = useRef<{ at: number; x: number; y: number; held?: number } | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // The `+` menu's "From Files" picker (board docs/mocks/orbit-files, 02-web frame 8).
-  const [drivePickerOpen, setDrivePickerOpen] = useState(false);
+  // The `+` menu's Documents picker (board docs/mocks/documents, 02-web frame 8).
+  const [documentsPickerOpen, setDocumentsPickerOpen] = useState(false);
+  // No Documents item on a server without Documents (ORBIT_DOCUMENTS_ENABLED), nor until that is read.
+  const documentsEnabled = useDocumentsEnabled().enabled;
   // Manual composer height (px). null = autoSize auto-grow (up to maxRows); once the user
   // drags the top handle, that height wins over autoSize until they double-click to reset.
   const [composerHeight, setComposerHeight] = useState<number | null>(null);
@@ -12546,8 +12679,8 @@ export function SessionComposer({
   // The `+` menu "Shell" entry: prefix the draft with `!` so onSend routes it as a raw
   // shell command (run on the runner, bypassing claude). The user types the command after.
   // Files the drive picker returned go into the draft as chips (`#name`, like a `#` reference) that are sent as their
-  // `/home/orbit/Files/…` paths, so the box shows names and the agent gets paths (board 02-web frame 8).
-  const insertDriveFiles = (files: { id: string; name: string; path: string }[]): void => {
+  // `/home/orbit/Documents/…` paths, so the box shows names and the agent gets paths (board 02-web frame 8).
+  const insertDocumentsFiles = (files: { id: string; name: string; path: string }[]): void => {
     let refs = composerRefs;
     let chips = '';
     for (const file of files) {
@@ -12559,7 +12692,7 @@ export function SessionComposer({
     }
     setComposerRefs(refs);
     setText((t) => `${t}${t && !/\s$/.test(t) ? ' ' : ''}${chips}`);
-    setDrivePickerOpen(false);
+    setDocumentsPickerOpen(false);
     setTimeout(() => taRef.current?.focus(), 0);
   };
   const insertShell = (): void => {
@@ -13046,12 +13179,11 @@ export function SessionComposer({
           // WorkspaceView.composerMenu.test.tsx, drawn in
           // docs/mocks/composer-attach-menu-phone.html.
           items={[
-              // Each row says what it does and where the file comes from, with no heading to
-              // miss: "File" and "From Files" read alike (docs/mocks/composer-attach-labels).
+              // This device's File and Image, then the account's Documents.
               {
                 key: 'file',
-                icon: <UploadOutlined />,
-                label: 'Upload File',
+                icon: <PaperClipOutlined />,
+                label: 'File',
                 onSelect: () => fileInputRef.current?.click(),
               },
               {
@@ -13059,15 +13191,19 @@ export function SessionComposer({
                 icon: <PictureOutlined />,
                 // Offered unconditionally: a state the upload can't work in says so on pick,
                 // rather than greying the item out.
-                label: 'Upload Image',
+                label: 'Image',
                 onSelect: () => imageInputRef.current?.click(),
               },
-              {
-                key: 'drive',
-                icon: <FolderOpenOutlined />,
-                label: 'Add from Orbit Files',
-                onSelect: () => setTimeout(() => setDrivePickerOpen(true), 0),
-              },
+              ...(documentsEnabled
+                ? [
+                    {
+                      key: 'drive',
+                      icon: <FolderOpenOutlined />,
+                      label: 'Documents',
+                      onSelect: () => setTimeout(() => setDocumentsPickerOpen(true), 0),
+                    },
+                  ]
+                : []),
               { key: 'divider', type: 'separator' },
               {
                 key: 'shell',
@@ -13112,21 +13248,21 @@ export function SessionComposer({
           }
         />
         )}
-        {!shellMode && (
+        {!shellMode && documentsEnabled && (
           <Popover
             side="top"
             align="start"
             arrow={false}
             title={null}
-            open={drivePickerOpen}
-            onOpenChange={setDrivePickerOpen}
+            open={documentsPickerOpen}
+            onOpenChange={setDocumentsPickerOpen}
             disabled={composerDisabled}
             popupClassName="drive-picker-popover"
-            // No chip of its own: the picker opens from the `+` menu's From Files, and this
+            // No chip of its own: the picker opens from the `+` menu's Documents, and this
             // zero-width, unfocusable button only anchors it beside the `+`.
             trigger={<button type="button" className="composer-drive-anchor" tabIndex={-1} aria-hidden="true" />}
           >
-            <DriveFilePicker projectFolder={projectFolder} onClose={() => setDrivePickerOpen(false)} onPick={insertDriveFiles} />
+            <DocumentsFilePicker projectFolder={projectFolder} onClose={() => setDocumentsPickerOpen(false)} onPick={insertDocumentsFiles} />
           </Popover>
         )}
         {/* The workspace is only a Select when it can actually be picked (new, unlocked

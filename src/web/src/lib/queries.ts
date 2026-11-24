@@ -45,6 +45,7 @@ import type { OwnerConfirmationView } from '../components/OwnerConfirmationCard'
 import type { PendingCriteriaDecisionQueue } from '../components/CriteriaDecisionCard';
 import type { ProjectOpenItemsView } from '../components/CoordinatorQuestionCard';
 import type { ProjectCrossingRow, TaskAttribution } from './attribution';
+import type { TaskMoveBatch } from './crossingBatches';
 import type { EvidenceFileCitation, EvidenceFilePage } from './evidenceFiles';
 import type {
   WikiArticleDirectory,
@@ -231,6 +232,9 @@ export interface UserPreferences {
   translationBilingual?: boolean;
   /** The provider slugs no SubAgent of this account is routed onto (docs/subagent-design.md §7). Absent: none. */
   subagentBlockedProviders?: string[];
+  /** Whether a task pinned to an account that can't run now may run elsewhere (docs/routing-account-health-design.md
+   *  §7.5). Absent means OFF: the pinned task holds. */
+  relaxBlockedPins?: boolean;
 }
 
 /** How an account signs in (docs/google-sign-in-design.md §6): a password, and the Google account linked. */
@@ -585,14 +589,17 @@ export const workspaceSessionCountsQuery = () =>
  * Cross-scope session search, backing the ⌘K palette. Keyed on the query itself so each distinct
  * search is its own cache entry — retyping a query the user just backspaced out of answers from
  * cache instead of re-hitting the server. An empty `q` is a real request, not a disabled one: the
- * server answers it with recents, which is what makes the palette a session switcher.
+ * server answers it with recents, which is what makes the palette a session switcher. With a
+ * `folderId` the search and the recents are that folder's alone.
  */
-export const sessionSearchQuery = (q: string) =>
+export const sessionSearchQuery = (q: string, folderId: string | null = null) =>
   queryOptions({
-    queryKey: ['session-search', q] as const,
+    queryKey: ['session-search', q, folderId] as const,
     meta: { entities: ['session', 'workspace', 'task'] },
     queryFn: () =>
-      api<SessionSearchResponse>(`/sessions/search?q=${encodeURIComponent(q)}&limit=20`),
+      api<SessionSearchResponse>(
+        `/sessions/search?q=${encodeURIComponent(q)}&limit=20${folderId ? `&folderId=${encodeURIComponent(folderId)}` : ''}`,
+      ),
     // A search result is a snapshot of a moving list; a minute of staleness is invisible inside
     // one palette session and keeps arrow-keying through results from refetching.
     staleTime: 60_000,
@@ -1102,6 +1109,18 @@ export const projectCrossingsQuery = (projectId: string) =>
     meta: { entities: ['project', 'task'] },
     queryFn: () =>
       api<ProjectCrossingRow[]>(`/projects/${encodeURIComponent(projectId)}/handoffs`),
+  });
+
+/** The task-move batches one session draws as decision cards: those it asked for, and those into a
+ *  project it coordinates — every waiting one, then the latest answered (`lib/crossingBatches.ts`). */
+export const sessionTaskMovesQuery = (sessionId: string) =>
+  queryOptions({
+    queryKey: ['session-task-moves', sessionId] as const,
+    // A move asked or answered lights both of its sessions with a session.updated (publishOwnerSignalChanged), and a
+    // crossing decided moves its project.
+    meta: { entities: ['session', 'project'], sessionReach: { session: sessionId } satisfies SessionReach },
+    queryFn: () =>
+      api<TaskMoveBatch[]>(`/sessions/${encodeURIComponent(sessionId)}/task-moves`),
   });
 
 /**
@@ -1902,8 +1921,8 @@ export const linkPreviewsQuery = (refs: readonly LinkPreviewRef[]) =>
     enabled: refs.length > 0,
   });
 
-/** What `GET /drive/usage` answers: the account's total split into the drive's share (Trash included) and the rest, each byte once. */
-export interface DriveUsage {
+/** What `GET /documents/usage` answers: the account's total split into the drive's share (Trash included) and the rest, each byte once. */
+export interface DocumentsUsage {
   totalBytes: number;
   driveBytes: number;
   trashBytes: number;
@@ -1913,8 +1932,8 @@ export interface DriveUsage {
   nearQuota?: boolean;
 }
 
-export const driveUsageQuery = () =>
+export const documentsUsageQuery = () =>
   queryOptions({
     queryKey: ['drive', 'usage'] as const,
-    queryFn: () => api<DriveUsage>('/drive/usage'),
+    queryFn: () => api<DocumentsUsage>('/documents/usage'),
   });

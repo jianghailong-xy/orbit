@@ -19,7 +19,6 @@ import io.orbitd.android.MainActivity
 import io.orbitd.android.TestOrbitApplication
 import io.orbitd.android.cards.BusinessCard
 import io.orbitd.android.cards.OwnerRequestStore
-import io.orbitd.android.cards.WaitingOnYouScreen
 import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.cards.CardCatalog
 import io.orbitd.android.core.net.OkHttpTransport
@@ -201,17 +200,20 @@ class ConditionShotsTest {
         shot("frame-5-run-header")
     }
 
-    /** Frame 6 ①: Waiting on you with the can't-read card (Pause, Look into it) and the 30-day question (Keep waiting, Stop). */
-    @Test fun frame6WaitingOnYou() {
+    /** Frame 6 ①: the can't-read card (Pause, Look into it) and the 30-day question (Keep waiting, Stop), at the head of the
+     * Scheduled page: there is no Waiting on you page (docs/mocks/waiting-on-you-removal). */
+    @Test fun frame6ConditionCardsOnTheScheduledPage() {
         val owner = OwnerRequestStore(fixture.auth, handle, scope)
         runBlocking { store.loadNow() }
-        show { WaitingOnYouScreen(owner, emptyList(), null, 0, {}, scheduled = store) }
+        owner.load(OwnerRequestStore.OPEN)
+        compose.waitUntil(10_000) { owner.state.value.conditionItems.size == 2 }
+        val conditionItems = owner.state.value.conditionItems
+        show { ScheduledPage(store, listOf("a1" to "HPC"), "a1", null, {}, {}, {}, conditionWaiting = conditionItems) }
         waitFor("Can't read: Root disk below 5%")
         waitFor("Pause")
         listOf("Condition", "The check timed out 3 times in a row.", "Look into it", "Still waiting for 3 or more OSDs are in. Keep waiting?",
             "Keep waiting", "Stop").forEach(::says)
-        compose.onNodeWithTag("waiting-on-you:count", useUnmergedTree = true).assertTextEquals("2")
-        shot("frame-6a-waiting-on-you")
+        shot("frame-6a-scheduled-condition-cards")
     }
 
     /** Frame 6 ② ③: the inspector's Condition and How it checks blocks, and its Fired / Ready again history lines. */

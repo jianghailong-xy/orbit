@@ -36,7 +36,7 @@ public enum EngineAuth {
     public static func antigravityLoginHint(_ login: AntigravityGoogleLogin?) -> String? {
         switch login {
         case .available: return nil
-        case .unsupportedPlatform: return "Google sign-in is not supported on macOS runners yet. Use a Gemini API key."
+        case .unsupportedPlatform: return "Google sign-in is not supported on this runner's operating system. Use a Gemini API key."
         default: return "Update this runner to sign in with Google."
         }
     }

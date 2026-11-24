@@ -102,6 +102,7 @@ func orbitMCPDeclaredEnv(job *ClaimedSession, callTimeout time.Duration) []map[s
 		envMCPOrchestration + "=" + orchestrationEnv(job.AllowOrchestration),
 		envWatches + "=" + watchesEnv(job.WatchesDisabled),
 		envWiki + "=" + wikiEnv(job.WikiDisabled),
+		envDocuments + "=" + documentsEnv(job.DocumentsDisabled),
 		envBrowser + "=" + browserEnv(job.BrowserEnabled),
 		envWorkflows + "=" + workflowsEnv(job.WorkflowsDisabled),
 		envScheduleRun + "=" + scheduleRunEnv(job.ScheduleRun),

@@ -48,7 +48,7 @@ fun TaskStatusPill(pill: TaskPill, modifier: Modifier = Modifier) {
 
 /** The compact Session row's rhythm: title and time, then the pill, one phrase and the first label. */
 @Composable
-fun TaskRowView(task: JsonObject, modifier: Modifier = Modifier) {
+fun TaskRowView(task: JsonObject, modifier: Modifier = Modifier, open: (io.orbitd.android.navigation.OrbitRoute) -> Unit = {}) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -56,6 +56,8 @@ fun TaskRowView(task: JsonObject, modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.bodyLarge)
             TaskListLogic.rowTime(task)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(start = 8.dp)) }
         }
+        // No account that could run it can run now: one quiet line under the title, never a chip in it.
+        if (TaskAccountHold.showsOnRow(task)) TaskAccountHoldLine(task, open)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             TaskStatusPill(TaskListLogic.pill(task))
             val phrase = TaskListLogic.rowPhrase(task)

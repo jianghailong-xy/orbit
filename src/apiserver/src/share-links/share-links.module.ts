@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { DriveModule } from '../drive/drive.module';
+import { DocumentsModule } from '../documents/documents.module';
 import { WikiModule } from '../wiki/wiki.module';
 import { ShareLinksController } from './share-links.controller';
 import { ShareLinksService } from './share-links.service';
@@ -8,7 +8,7 @@ import { ShareLinksService } from './share-links.service';
 // module for the one service both halves resolve links through. A wiki link's pages are read through
 // the wiki's own document reads, which WikiModule exports (WikiDocs).
 @Module({
-  imports: [WikiModule, DriveModule],
+  imports: [WikiModule, DocumentsModule],
   controllers: [ShareLinksController],
   providers: [ShareLinksService],
   exports: [ShareLinksService],

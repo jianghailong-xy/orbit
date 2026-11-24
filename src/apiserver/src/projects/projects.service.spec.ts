@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { ProjectStatus, uuidToBase62 } from '@orbit/shared';
 import { everyPrerequisiteDoneOrRetiredSql } from '../tasks/task-dependencies';
 import { criterionKeyOf } from './project-acceptance';
+import { IN_FLIGHT_JOB_STATES } from './in-flight-job-states';
 import { ProjectsService } from './projects.service';
 
 const { PrismaClientKnownRequestError } = Prisma;
@@ -359,10 +360,11 @@ test('the sidebar reads queued and running integration work once for the whole p
       findMany: async (args: any) => {
         bindingReads += 1;
         assert.deepEqual(args.where, { projectId: { in: ids }, slot: 'primary' });
-        // An observation is not an integration attempt (§10.6, A-Q23): it is not counted as in flight.
+        // An observation is not an integration attempt (§10.6, A-Q23): it is not counted as in flight. A landing
+        // waiting on its pull request is (docs/design/protected-branch-landing.md §4.2).
         assert.deepEqual(args.select._count, {
           select: { integrationJobs: {
-            where: { state: { in: ['QUEUED', 'RUNNING'] }, kind: { not: 'OBSERVE_LANDING' } },
+            where: { state: { in: [...IN_FLIGHT_JOB_STATES] }, kind: { not: 'OBSERVE_LANDING' } },
           } },
         });
         return [{ projectId: ids[0], upstreamRef: 'main', integrationRef: 'refs/heads/project/bg',

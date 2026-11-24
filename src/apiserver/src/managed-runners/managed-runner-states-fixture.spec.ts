@@ -147,7 +147,7 @@ test('the fixture covers every state a client renders, and no operator detail re
 
 test('the switch answers in the fixture are what the capability route says', () => {
   const route = (enabled: boolean) =>
-    new AuthController({} as never, {} as never, { enabled } as never).capabilities();
+    ({ managedRunners: new AuthController({} as never, {} as never, { enabled } as never).capabilities().managedRunners });
   const answers = new Map(fixture.capabilities.map(({ name, body }) => [name, body]));
   assert.deepEqual(answers.get('switched off'), route(false));
   assert.deepEqual(answers.get('switched on'), route(true));

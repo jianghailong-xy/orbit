@@ -354,10 +354,11 @@ export function RunnerSignIn({
     showRunnerBrowser();
     runnerBrowserSignIn.mutate();
   };
-  // Claude Code's code comes back from the runner's browser by itself, so its paste field steps aside once the page is
-  // open there, a press away for when it does not.
+  // Claude Code's and Antigravity's codes come back from the runner's browser by themselves, so the paste field steps
+  // aside once the page is open there, a press away for when it does not.
   const [pasteInstead, setPasteInstead] = useState(false);
-  const codeFromBrowser = engine === 'claude' && s?.browser === 'opened' && !s?.message && !pasteInstead;
+  const codeFromBrowser =
+    (engine === 'claude' || engine === 'antigravity') && s?.browser === 'opened' && !s?.message && !pasteInstead;
   // Option A of the sign-in card (owner, 2026-11-23): where the runner's browser is offered, the card asks where to sign
   // in and puts both ways in one row, this browser the main one; the line under the row says what the runner's way
   // means, and a divider keeps that choice apart from the paste.

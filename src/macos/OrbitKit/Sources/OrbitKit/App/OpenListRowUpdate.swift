@@ -20,13 +20,12 @@ public enum OpenRowChange: Equatable, Sendable {
     ///   • the row isn't loaded — a session created elsewhere can't be built from the slim summary
     ///     (no preview line, tags, runner or background count), and prepending a half-populated row
     ///     would render worse than the ~½s wait for the real snapshot;
-    ///   • the run just reached a terminal status — whether that is an outcome or a failure the
-    ///     server is about to retry is decided by `retryAt`, which the summary doesn't carry, so
-    ///     folding the status in alone would announce a failure that undoes itself a minute later.
-    ///     Once per session ended, against a per-turn event: the refetch costs nothing here.
+    ///   • the run was released, or the last turn was interrupted — the full snapshot supplies
+    ///     the end reason needed to distinguish a requested end from a run outcome.
     public static func merging(_ summary: ControlSessionSummary, into sessions: [Session]) -> OpenRowChange {
         if let lifecycle = summary.effectiveLifecycleState, lifecycle != .open { return .needsSnapshot }
-        if summary.effectiveRunStatus.isTerminal { return .needsSnapshot }
+        if summary.released ?? summary.effectiveRunStatus.isTerminal { return .needsSnapshot }
+        if summary.lastTurnOutcome == .interrupted && summary.endReason == nil { return .needsSnapshot }
         guard let index = sessions.firstIndex(where: { $0.id == summary.id }) else { return .needsSnapshot }
         return change(at: index, to: sessions[index].applying(summary), in: sessions)
     }
@@ -146,7 +145,9 @@ public struct OpenListDerived: Equatable, Sendable {
     /// Leaves every value exactly as `init(list)` would derive it.
     public mutating func replace(_ old: Session, with new: Session, in list: [Session]) {
         let bucket = SessionGrouping.bucket(new)
-        if SessionGrouping.bucket(old) != bucket {
+        let countChangedWhileWaiting = bucket == .needsYou
+            && (old.phase == .running) != (new.phase == .running)
+        if SessionGrouping.bucket(old) != bucket || countChangedWhileWaiting {
             // Membership moved: the counts, the badge and which rows the menu lists all can.
             needsYou = SessionGrouping.group(list).needsYou
             menu = MenuBar.summary(from: list)

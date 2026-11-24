@@ -25,6 +25,8 @@ import { ProjectBlockersCard, type ProjectBlockers } from '../components/Project
 import { CoordinatorQuestions } from '../components/CoordinatorQuestionCard';
 import { WaitingOnYouTaskBadge } from '../components/OwnerRequestCard';
 import { TaskSignInHoldNote } from '../components/TaskSignInHold';
+import { TaskAccountHoldLine } from '../components/TaskAccountHold';
+import type { TaskAccountHold } from '../lib/accountHealth';
 import { LazyBoundary } from '../components/ErrorBoundary';
 import { ProjectPromotion } from '../components/ProjectPromotionCard';
 import { ProjectReadyToRun } from '../components/ProjectReadyToRun';
@@ -59,6 +61,7 @@ import {
   type OpenProjectView,
 } from '../components/ProjectsToolbar';
 import { encodeId, routeId } from '../lib/idCodec';
+import { LANDING_FIX_COPY } from '../lib/landingFix';
 import { NOT_STARTED, START_PROJECT_INTENT, projectStarted } from '../lib/projectStart';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { markdownToPlainText } from '../lib/markdownText';
@@ -1828,6 +1831,8 @@ export interface ProjectTask {
   title: string;
   /** Why the auto-run sweep holds this task although it reads Ready (server-computed); null or absent otherwise. */
   hold?: TaskSignInHold | null;
+  /** Why its next automatic start stands down: no account that could run it can run now (§7.5); null or absent otherwise. */
+  accountHold?: TaskAccountHold | null;
   // Keep this tied to the server's enum. A hand-written subset once omitted FAILED, so a failed
   // task reached the status-mark lookup at runtime even though TypeScript claimed it could not.
   status: TaskStatus;
@@ -2056,7 +2061,7 @@ export function TaskStatusMark({ status }: { status: ProjectTask['status'] }) {
  * on its line (§10.9) has no receipt yet either, so it waits in the same lane.
  */
 const INTEGRATING_STATES: ReadonlySet<TaskIntegrationView['state']> = new Set([
-  'QUEUED', 'RUNNING', 'CONFLICT', 'CHECK_FAILED', 'ERROR', 'AWAITING_OWNER', 'AWAITING_OBSERVATION',
+  'QUEUED', 'RUNNING', 'CONFLICT', 'CHECK_FAILED', 'ERROR', 'FIXING', 'AWAITING_OWNER', 'AWAITING_OBSERVATION',
 ]);
 const LANDED_STATES: ReadonlySet<TaskIntegrationView['state']> = new Set([
   'ON_INTEGRATION_LINE', 'ON_UPSTREAM',
@@ -2133,6 +2138,9 @@ export function projectTaskIntegrationTag(
       return { text: `Conflict · ${who}`, color: 'red' };
     case 'CHECK_FAILED':
       return { text: `Checks failed · ${who}`, color: 'red' };
+    case 'FIXING':
+      // Revision 42 (§12.7, web e ②): the task's own session is fixing its failed landing; the tag opens that session.
+      return { text: LANDING_FIX_COPY.TASK_ROW, color: 'purple' };
     case 'ERROR':
       return { text: `Integration error · ${who}`, color: 'red' };
     case 'AWAITING_OWNER':
@@ -2506,7 +2514,15 @@ function ProjectTaskRow({
                       behind (§7.3 V10). Beside the work lane rather than replacing it: "DONE" is
                       still true of a task whose checks are running, and the two tags together are
                       the sentence — finished, not there yet. */}
-                  {integrationTag ? (
+                  {integrationTag && task.integration?.state === 'FIXING' && task.integration.workSessionId ? (
+                    // Pressed, it goes into the task's own session, which is fixing its landing (web e ②).
+                    <Link className="project-task-integration-press" to={`/sessions/${encodeURIComponent(encodeId(task.integration.workSessionId))}`}
+                      onClick={(e) => e.stopPropagation()}>
+                      <Badge data-testid="project-task-integration" tone={tagTone(integrationTag.color)}>
+                        {integrationTag.text}
+                      </Badge>
+                    </Link>
+                  ) : integrationTag ? (
                     <Badge data-testid="project-task-integration" tone={tagTone(integrationTag.color)}>
                       {integrationTag.text}
                     </Badge>
@@ -2537,6 +2553,8 @@ function ProjectTaskRow({
                   ) : null}
                 </span>
               </h4>
+              {/* No account that could run it can run now (§7.5): one quiet line under the title, never a chip in it. */}
+              {task.accountHold && !task.hold ? <TaskAccountHoldLine hold={task.accountHold} /> : null}
               <div className="orbit-list-item-meta-description">
                 <span className="project-task-row-description">
                   {excerpt(task.acceptanceCriteria, 'No acceptance criteria set')}

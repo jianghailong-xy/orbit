@@ -30,7 +30,7 @@ class SessionProjectsTest {
             pendingApprovals = approvals, waitingKind = waitingKind,
             ownerItems = JsonArray(since.mapIndexed { index, at -> buildJsonObject { put("itemId", "$id-$index"); put("kind", "COORDINATOR_QUESTION"); put("title", "Question"); put("since", at) } }),
             lastAssistantText = reply, lastToolUse = tool, lastUserText = userText, runningBgCount = bg, runningBgJobCount = jobs,
-            runningSubagentCount = subagents, pinnedAt = pinnedAt, createdAt = createdAt, lastTurnAt = lastTurnAt, folderId = folder,
+            runningSubagentCount = subagents, pinnedAt = pinnedAt, createdAt = createdAt, lastTurnAt = lastTurnAt, listedAt = lastTurnAt, folderId = folder,
             confirmationUnderReview = review, projectMembership = role?.let { SessionProjectMembership(projectId, "Project one", projectStatus, it) })
 
     private fun coordinator(folder: String? = null, approvals: Int = 0, pinnedAt: String? = null, lastTurnAt: String? = "2026-10-04T09:40:00Z") =

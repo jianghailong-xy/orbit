@@ -744,6 +744,7 @@ func claimedSessionFromReclaim(r ReclaimSession) *ClaimedSession {
 		AllowOrchestration: r.AllowOrchestration,
 		WatchesDisabled:    r.WatchesDisabled,
 		WikiDisabled:       r.WikiDisabled,
+		DocumentsDisabled:  r.DocumentsDisabled,
 		BrowserEnabled:     r.BrowserEnabled,
 		WorkflowsDisabled:  r.WorkflowsDisabled,
 		ScheduleRun:        r.ScheduleRun,
@@ -1742,6 +1743,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// Which engines are installed and signed in here (started below). Made before the quota probes,
 	// since they read by it while idle.
 	engineHealth := &engineHealthProbe{}
+	// Default sign-outs in flight, one per engine (default_sign_out.go).
+	var signOuts defaultSignOuts
 	// Set as default for Claude Code (claude_account_swap_relay.go): once a swap has ended either way the
 	// Claude engine is probed again and the runner beats at once, as after a removal, so the page shows
 	// the exchanged accounts now.
@@ -2075,6 +2078,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			beatTaken = true
 			// Whether the control plane takes a claim scoped to named sessions (drainClaimScope).
 			drainScopedClaims.Store(resp.DrainScopedClaims)
+			// Whether this runner reports a failed turn and the release separately (session_release.go): this answer's word.
+			t.noteSessionReleaseOffer(resp)
 			// Idle sleep: accept the manager's request while there is still nothing to do here, and stop
 			// once the control plane confirms that acceptance — never on the request alone, which the
 			// manager may still withdraw. A process already draining for another reason accepts nothing.
@@ -2332,6 +2337,11 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 						RebaseBaseSha: res.RebaseBase, Conflicts: res.Conflicts,
 						AlreadyMerged: res.AlreadyMerged,
 						Recovery:      res.Recovery,
+						PushedSha:     res.PushedSha,
+						PushRefusal:   res.PushRefusal,
+						LandVia:       res.LandVia,
+						PushedAs:      res.PushedAs,
+						BypassedRules: res.BypassedRules,
 					}); err != nil {
 						logln("merge-result POST failed for", req.SessionID+":", err)
 						if !isRetryableTransportError(err) {
@@ -2629,7 +2639,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			// codex-named one is what a control plane older than accounts-per-engine sends. A
 			// runner that answered a Claude request on the codex field would remove a path that
 			// never existed and report "done".
-			if rr := resp.AccountRemoveRequest; rr != nil {
+			//
+			// A sign-out of Default (default_sign_out.go) rides on the engine-named field and runs
+			// off this goroutine: it may wait on a `codex logout` or a Keychain dialog.
+			if rr := resp.AccountRemoveRequest; rr != nil && rr.Action == accountRemoveActionSignOut {
+				signOuts.handle(*rr, &heartbeatOps, pool.sessionIDs, t.accountRemoveResult, engineHealth.refreshEngine, beatNow)
+			} else if rr := resp.AccountRemoveRequest; rr != nil {
 				kind, ok := accountSlotKindFor(rr.Engine)
 				if !ok {
 					logln("account-remove: unknown engine", rr.Engine)
@@ -2715,6 +2730,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// A supervisor that was silently engine-evicted remains registered cold; its
 	// next claim wakes it without creating a duplicate supervisor.
 	startSession := func(job *ClaimedSession, initiallyActive bool) {
+		noteDocumentsDisabled(job.DocumentsDisabled)
 		// §6.3 steps 2–3, and the only place they can go: BEFORE anything is staged, before a
 		// worktree exists and before an engine could be spawned. SR33 makes engine start a
 		// conjunction — the SOURCE is PINNED *and* the checkout stands on that commit — so a run

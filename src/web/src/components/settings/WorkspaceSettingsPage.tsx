@@ -15,7 +15,7 @@ import { machineName, newWorkspaceOf, type PickedFolder } from '../../lib/machin
 import { startHistoryImport, useClaudeHistory } from '../../lib/claudeHistoryImport';
 import { managedRowOf, useManagedRunner, useManagedRunnerId } from '../../lib/managedRunner';
 import type { SessionReach } from '../../lib/sessionReach';
-import { type MainCheckoutRepoHealth, type RunnerRepoHealth } from '@orbit/shared';
+import { type MainCheckoutRepoHealth, type RunnerRepoHealth, type WorkspaceLandingMode, type WorkspaceLandingView } from '@orbit/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
@@ -65,9 +65,16 @@ import {
   worktreeIsolationDialogFor,
   type WorktreeIsolationDialogKind,
 } from '../WorktreeIsolationDialog';
+import { WorkspaceLandingSetting } from './WorkspaceLandingSetting';
 import { SettingsCard, SettingsHeader, SettingsRow, SettingsSection } from './SettingsBlocks';
 import { AgentToolsDrawer } from '../AgentToolsDrawer';
 import './Settings.css';
+
+/** `owner/repo` of a GitHub URL, for words that name the repository. */
+function repoSlug(url: string | null | undefined): string | null {
+  const match = /github\.com[/:]([^/]+\/[^/.]+?)(?:\.git)?\/?$/.exec(url ?? '');
+  return match ? match[1] : null;
+}
 
 export interface SettingsWorkspace {
   id: string;
@@ -113,6 +120,10 @@ export interface SettingsWorkspace {
   lastActiveAt?: string | null;
   /** Its conversations, read on GET /workspaces/:id only. */
   sessionCount?: number;
+  /** What the owner chose; written by PATCH, read back as `landing.mode`. */
+  landingMode?: WorkspaceLandingMode;
+  /** The landing setting, on GET /workspaces/:id only (docs/design/protected-branch-landing.md §8). */
+  landing?: WorkspaceLandingView;
   createdAt?: string;
 }
 
@@ -123,6 +134,7 @@ type WorkspacePatch = Partial<
     | 'name'
     | 'workDir'
     | 'repoUrl'
+    | 'landingMode'
     | 'enableWorktree'
     | 'subagentsEnabled'
     | 'subagentsMaxRunning'
@@ -469,6 +481,15 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
           />
         </SettingsCard>
       </SettingsSection>
+
+      {detail.data?.landing ? (
+        <WorkspaceLandingSetting
+          landing={detail.data.landing}
+          repo={repoSlug(workspace.repoUrl)}
+          saving={patch.isPending}
+          onChoose={(landingMode) => save({ landingMode })}
+        />
+      ) : null}
 
       <SettingsSection title="Sessions" className="workspace-section-sessions">
         <SettingsCard>

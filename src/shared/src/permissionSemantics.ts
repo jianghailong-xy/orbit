@@ -110,9 +110,12 @@ const ALLOW_MODES: ReadonlySet<string> = new Set([PermissionMode.AUTO, Permissio
 export const AUTO_CAPABLE_CLAUDE_MODELS: ReadonlySet<string> = new Set([
   'claude-opus-5-5',
   'claude-opus-5',
+  'claude-fable-5-2',
   'claude-fable-5-1',
   'claude-fable-5',
+  'claude-sonnet-5-5',
   'claude-sonnet-5',
+  'claude-haiku-5-5',
 ]);
 
 /**

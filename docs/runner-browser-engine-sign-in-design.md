@@ -1,6 +1,6 @@
 # Engine sign-in in the Orbit Cloud browser: design (v1)
 
-**Status:** **decided** (owner, 2026-11-23); phases 1–3 built for Claude Code and the device flows, Antigravity's capture and the lab walk to come. Q1 B, Q2 A, Q3 A, Q4 A (§7). Builds on `docs/runner-browser-design.md`.
+**Status:** **decided** (owner, 2026-11-23); phases 1–3 built, Antigravity's capture included (2026-11-23); the lab walk per engine to come. Q1 B, Q2 A, Q3 A, Q4 A (§7). Builds on `docs/runner-browser-design.md`.
 
 Today an engine's sign-in on a runner (Settings → the runner → Engines → **Sign in**) hands the owner a link to open
 in their own browser and, for Claude Code and Antigravity, a code to paste back. On the Orbit Cloud runner there is
@@ -88,16 +88,20 @@ account (billing, settings, other products) within their reach. The owner chose 
 
 ## 4. Taking the code (Claude Code, Antigravity)
 
-- The runner knows the authorize URL it scraped: its `redirect_uri` and `state`. It reads Chrome's pages
-  (`/json/list` on its DevTools, every half second) until the attempt ends (`login_runner_browser.go`).
+- The runner knows the authorize URL it scraped: its `redirect_uri` and `state`. It follows the sign-in tab's
+  navigations over DevTools (`Page.frameNavigated`, each with the address it was loaded at) and, as a fallback, reads
+  every page's current address (`/json/list`, every half second) until the attempt ends (`login_runner_browser.go`).
+  The navigations are what matter for Antigravity: its callback page strips the code and state from its address as it
+  loads, so its address bar, and `/json/list`, show only `antigravity.google/oauth-callback` (seen live, 2026-11-23).
 - When a page is at the `redirect_uri` (scheme, host and path equal) with a `code` and a `state`
   equal to the one in the authorize URL (which only this attempt's page can carry), the runner builds what the page would show (Claude Code: `code#state`) and
   hands it to the CLI exactly as `submitCode` hands a pasted one. Any other address is ignored.
 - One capture per attempt, reported as `code-taken` (the card shows it signing in); a code the CLI rejects falls back
   to the paste field with today's message.
 - The URL, the code and the state are never logged or reported: only "code taken from the browser".
-- Antigravity keeps the paste for now: its callback must first be confirmed against a live `agy` sign-in; if it is a
-  page with the code in its address, it is captured the same way.
+- Antigravity's callback, seen on a live `agy` sign-in (2026-11-23), is `https://antigravity.google/oauth-callback`,
+  with the code and the state in its address, and its page says to paste the code alone. The runner captures it the
+  same way and hands `agy` that code (`codeCallback`, login_runner_browser.go).
 
 The device flows need none of this: the CLI sees the approval itself.
 

@@ -139,7 +139,8 @@ final class ProjectMainBranchSitesCopyParityTests: XCTestCase {
         XCTAssertEqual(web.components(separatedBy: "const main = mainBranchName(view.upstreamRef);").count, 3,
                        "the landing row and its job list each take the branch off the view")
         for call in ["jobWords(main)[inFlight.kind]", "jobWords(main)[job.kind]",
-                     "running ? (job.phase ? jobPhases(main)[job.phase] ?? 'running' : 'running') : 'queued'",
+                     "running ? (job.phase ? jobPhases(main)[job.phase] ?? 'running' : 'running')",
+                     "job.state === 'PULL_REQUEST' ? 'waiting for GitHub' : 'queued'",
                      "const stoppedAt = job.phase ? jobPhases(main)[job.phase] ?? 'running' : 'running';"] {
             assertSays(web, call, in: Self.panorama)
         }

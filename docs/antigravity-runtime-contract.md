@@ -916,7 +916,7 @@ oauth2: "invalid_grant" "Malformed auth code."
 
 菜单、首次主题/数据选项/目录信任可能挡在正常 prompt 前，也可能在 OAuth 保存 token 后出现（现有登录完成录制即为后一种）。runner 在私有 Linux PTY 中设非空 `SSH_CONNECTION`、`TERM=xterm-256color`、4096 列，取 OSC 8 的完整目标（支持 BEL 和 ST 终止），等授权码提示后才上报链接。主题按 Enter；Terms 页仅在 `[x]` 时取消勾选，再 Tab、Tab、Enter 选 Done；信任的仅为空私有 cwd。写码前永久关闭这次 PTY 的公开输出，拒码重试也不重新打开；只在私有内存中识别固定页面/拒码标记。
 
-当前 runner 的成功条件是：本次 token 文件出现、完成首次设置并看到普通输入框、独立 `--print=/usage --output-format stream-json` 返回 `result.status=SUCCESS`。退出 0 不算成功。换号时旧 token 暂存在同目录的 0600 私有备份，失败或取消恢复，确认成功后删除；新尝试等待旧尝试清理完毕再启动。取消仅 SIGKILL 本次记录 PID 的进程组，不搜索其他 agy 进程。非 Linux 直接返回「Signing Antigravity in with Google works only on a Linux runner for now.」。
+当前 runner 的成功条件是：本次 token 文件出现、完成首次设置并看到普通输入框、独立 `--print=/usage --output-format stream-json` 返回 `result.status=SUCCESS`。退出 0 不算成功。换号时旧 token 暂存在同目录的 0600 私有备份，失败或取消恢复，确认成功后删除；新尝试等待旧尝试清理完毕再启动。取消仅 SIGKILL 本次记录 PID 的进程组，不搜索其他 agy 进程。既不是 Linux 也不是 macOS 的 runner 直接返回「Signing Antigravity in with Google works only on a Linux or macOS runner for now.」（macOS 见 §16.12）。
 现有 `login.go` 的 pipe relay 不能原样复用；需要 PTY、菜单/提示符识别、ANSI/OSC 8 解析、受保护回填、取消及成功后独立 probe。退出 0 不能当登录成功。与[官方 headless 说明](https://antigravity.google/docs/cli/headless/)要求先交互登录再使用缓存凭据一致。
 
 ### 16.2 凭据存储与隔离
@@ -1053,6 +1053,28 @@ Free 与个人 Pro/Ultra 同受 §3/§5 的交互数据收集、人工审阅和�
 - **上报。** `engines[antigravity].accounts` 与 Claude/Codex 同形（id、name、home、auth）。Default 的 `auth` 只说 Google 登录：靠 key 跑的 runner 上引擎是 `yes / env_key`，Default 账号是 `no`。各账号额度同一次 `/usage` 读出，放在 `engines[antigravity].planUsage.accounts.<id>`（Default 的仍是 `buckets`），控制面按账号挑选、预检时用 `withEnginePlanUsage` 并进来比较，bucket 的剩余比例换算成已用比例。
 - **能力。** `antigravity-account-login/v1`、`antigravity-account-remove/v1`。旧 runner 不声明，控制面不给它派加账号/删账号。
 - **条款。** §16.8 的风险不因多账号消失，反而更显眼：Google 的条款限制第三方工具使用个人账号登录，§16.9 也不建议用多账号轮换规避限额。页面把 Google 条款放在每次登录的入口旁；是否开启自动换号由使用者决定。
+
+### 16.12 macOS runner（agy 1.5.16，2026-11-24）
+
+macOS runner 也能用 Google 登录 Antigravity，凭据模型和 Linux 相同：每个账号一个 Gemini 目录里的 token 文件，会话 spawn 时复制一份（§16.10、§16.11）。
+
+**实测（Mac mini，macOS 27.2，darwin/arm64，官方安装脚本 `--dir` 装到临时目录的 agy 1.5.16，没有登录任何 Google 账号）：**
+
+- 钥匙串库是 zalando/go-keyring，macOS 后端调用 `/usr/bin/security`（二进制里有 `keyring.macOSXKeychain.{Get,Set,Delete}`、`find-generic-password`、`add-generic-password -U -s %s -a %s -w %s`）。agy 自己那层仍是 composite token storage（`compositeTokenStorage`、`fileTokenStorage`、`KeyringTokenStorage`）。
+- 设了非空 `SSH_CONNECTION` 时，日志是 `Using file-based token storage because SSH session detected`，钥匙串完全不碰；不设时 agy 先查钥匙串，没有条目才回落到 `<gemini_dir>/antigravity-cli/antigravity-oauth-token`（放一份形状正确的过期占位凭据，两种情况都读到它并去刷新，Google 回 `invalid_grant`）。
+- `security` 按 HOME 找默认/搜索列表钥匙串：临时 HOME 下 `default-keychain -d user` 是 `A default keychain could not be found.`，所以 §16.5 那套临时 HOME 的探测本来就够不到登录钥匙串；但会话的 agy 用的是 runner 用户真实的 HOME，够得到。
+- `<appDataDir>/cache/antigravity-keyring-unavailable` 之类的空标记文件不会让它切到文件模式。
+- 1.5.16 的 token 文件是 `{"token":{…},"auth_method":…}`（1.2.16 的扁平形状会被静默读成空凭据）。runner 只整份复制，不解析，不受影响。
+- 全程 `security find-generic-password -s gemini -a antigravity` 都是 44（没有条目），实验前后没有变化。
+- **终端身份查询（2026-11-24 补测）**：macOS 上 agy 1.5.16 的 TUI 启动时先发 `ESC[>c`（secondary Device Attributes）等一串终端能力查询，**在收到合法的 DA2 回答之前什么都不画**：runner 的 PTY 里 25 秒只输出这 4 个字节，登录卡一直停在「Starting sign-in on the runner…」，直到 relay 的 10 分钟超时。回 `ESC[>0;95;0c`（任何合法的 `CSI > Ps;Pv;Pc c` 都行）后立即画出菜单和带 OSC 8 链接的授权页；回 DA1、回车或别的字节都不行。窗口 200 列和 4096 列没有区别；`TERM=dumb` 虽然不等，但不再输出 OSC 8 链接，所以不能用。runner 在登录输出里看到 `ESC[>c` 就回答一次（`antigravityGoogleDA2Reply`），Linux 上同样回答，行为与真实终端一致。
+- 登录界面（PTY + `SSH_CONNECTION`）：`Select login method:` / `> 1. Google OAuth` / `2. Use a Google Cloud project`，回车后是与 Linux 相同的 `Open the URL below in your browser:` 和授权码提示；1.5.16 在新目录上没有出现主题/条款/信任页。
+
+**runner 的做法：**
+
+- 登录 PTY 在 macOS 上用 `/dev/ptmx` + `TIOCPTYGRANT`/`TIOCPTYUNLK`/`TIOCPTYGNAME` 打开（`antigravity_google_pty_darwin.go`），其余（agy 做会话首进程、4096 列、取消时杀进程组）与 Linux 共用（`antigravity_google_pty_unix.go`）。
+- macOS 上每个 Google 模式的 agy——登录、`/usage` 探测、模型目录、审批闸门检查和会话本身——都带 `SSH_CONNECTION=127.0.0.1 1 127.0.0.1 2`（`antigravityTokenFileOnlyEnv`），只用自己 Gemini 目录里的 token 文件。否则 Mac 用户自己手动登录过的 agy（钥匙串条目 `gemini`/`antigravity`，整台机器一份）会顶替会话所在账号，刷新也会写回钥匙串。代价和 Linux 的不可达 D-Bus 一样：agent 在 Google 模式会话里跑的命令也继承这个变量。Linux 不加，行为不变。
+- 所以 Default 和「+ Account」加的账号在 macOS 上的做法与 Linux 完全相同，没有只能用一个账号的限制。
+- 能力：`antigravity-google-login-macos/v1`。macOS runner 不声明它（旧 runner），控制面报 `needs_update`（「Update this runner to sign in with Google.」），不再说 macOS 不支持；`unsupported_platform` 只剩 Linux、macOS 以外的系统。
 
 ## 17. agy 1.4.3（2026-10-20）
 
