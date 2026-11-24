@@ -1,4 +1,4 @@
--- 1561 — what a wiki chat's delivery last told its agent (contracts/wiki.contract.json `chat.notes.chat` and
+-- 1562 — what a wiki chat's delivery last told its agent (contracts/wiki.contract.json `chat.notes.chat` and
 -- `chat.notes.contents`; docs/wiki-contract.md §28.4; docs/wiki-chat-design.md §4.2).
 --
 --   session.wiki_chat_prompt_digest    the digest of the `<orbit_wiki_chat>` text last delivered in this chat
@@ -24,7 +24,7 @@ BEGIN
     EXCEPTION WHEN lock_not_available OR deadlock_detected THEN
       tries := tries + 1;
       IF tries >= 45 THEN
-        RAISE EXCEPTION '1561: "session" was not free in 45 tries of 2 s each. Once what holds it has ended, mark the migration rolled back (prisma migrate resolve --rolled-back 1561_wiki_chat_delivery_markers) and deploy again: it is safe to run twice.'
+        RAISE EXCEPTION '1562: "session" was not free in 45 tries of 2 s each. Once what holds it has ended, mark the migration rolled back (prisma migrate resolve --rolled-back 1562_wiki_chat_delivery_markers) and deploy again: it is safe to run twice.'
           USING ERRCODE = 'lock_not_available';
       END IF;
       PERFORM pg_sleep(0.1);
