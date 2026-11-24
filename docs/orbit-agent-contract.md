@@ -1,6 +1,6 @@
 # Orbit Agent Contract v1
 
-> **Status:** frozen at v1.14.0, 2026-11-24 (v1.0.0 review record in §11; the 1.1.0 to 1.14.0 changes
+> **Status:** frozen at v1.15.0, 2026-11-25 (v1.0.0 review record in §11; the 1.1.0 to 1.15.0 changes
 > are in §10). v1.1.0 adds the operation catalogue and changes no routing rule; v1.2.0 closes the
 > card-free task-write door on the runner's machine credential; v1.3.0 makes tool input strict and every
 > write's answer a structured receipt (§5.3, §6.3); v1.4.0 gives the owner's "Chat about this" on a card
@@ -336,44 +336,48 @@ against current state again; a capability snapshot is discovery, not a grant tha
 An unknown write outcome keeps its original key. A committed child with a failed wait is read back,
 not created again. A declined card stops at the owner, and a CLI call cannot override that boundary.
 
-### 2.6 The always-on primer
+### 2.6 The always-on instructions
 
-§0 is also the first thing every agent Orbit runs reads, as one short text: the **agent primer**
-(`src/runner-go/agent_primer.go`; primer `1.4.0`, written from contract `1.10.0`, which changed only the contract
-version its first line names, as 1.2.0, from contract 1.8.0, and 1.0.1, from contract 1.6.0, did; 1.3.0, from contract
-1.9.0, also made its orchestration paragraph send work `task_list` shows recorded to `task_start` before recording
-anything, and stopped its start paragraph repeating the first's `autoRunWhenReady` default, both measured by the eval,
-§12). Its first line names both versions. It says the
-ten rules in eight paragraphs, names tools by their MCP names, and carries
-no engine's spelling of them and no path, so the same words are true in every client. Since primer
-`1.1.0` its objects paragraph ends by sending an agent unsure which operation fits, or how to call it,
-to the guide (§2.5); the two parentheticals the guide's topics now carry (a list's settings, what
-"ready" means) gave it the room. The same text travels by two kinds of carrier:
+§0 is also the first thing every agent Orbit runs reads. The text is not one constant: it is a registry of **units**
+composed per **session shape** and **engine profile** (`src/runner-go/instruction_units.go`; design:
+[`agent-instructions-design.md`](./agent-instructions-design.md), §8 is how to extend it). The first unit is the
+**agent primer** (`agent_primer.go`; primer `1.8.1`, written from contract `1.15.0`): its first line names both versions, it
+says the rules of §0 in short paragraphs, names tools by their MCP names and carries no engine's spelling of them and
+no path. The units after it are the paragraphs only some sessions need, each with its owner, its kind, the sessions it
+applies to, the Orbit tools it names and the eval scenarios that fail without it.
+
+**Composition.** `compose(shape, profile)` renders each unit that applies to the session's shape and names a tool the
+session is served, on each channel the unit is delivered on:
+
+- A **session shape** is the role (top-level, task run, coordinator, SubAgent, scheduled check-only, help-ask), the
+  switches (watch, browser, orchestration, wiki, workflows, the Files drive) and the set of Orbit tools served, which is
+  the set `tools/list` filters by. A SubAgent is not given the project, notify, commit, evidence, progress or
+  hand-off text; a check-only run is given no write instruction; a session with the wiki off has no wiki line.
+- An **engine profile** is what is measured of one engine: how much of the MCP instructions it shows, how it carries
+  system text, whether that text reaches the model and survives a compaction, the cap on one value, and how it
+  spells Orbit's tools. A value not measured keeps today's behaviour. Seven engines have a profile; `orbit mcp` outside a
+  session has none and repeats everything.
+- **Each unit reaches an engine once.** Where an engine's own carrier is measured to deliver the text (Claude Code), MCP
+  `initialize` answers with the primer's lead paragraph only; elsewhere both channels carry the text, because the
+  runner cannot see which reached the model. The lead paragraph is the one deliberate repeat.
+
+The text travels by one carrier per engine, always from `compose`:
 
 | Carrier | Engine | When it is there |
 | --- | --- | --- |
-| MCP `initialize` → `instructions` | every engine, through `orbit mcp`; inside a Claude Code session, the first paragraph only, since its appended system prompt carries the whole primer | whenever the engine starts the server; Claude Code 2.1.325 shows the whole of it under "MCP Server Instructions" and attaches it again after a compaction (measured 2026-11-14: after a manual `/compact` it still quoted the primer's first line) |
+| MCP `initialize` → `instructions` | every engine, through `orbit mcp`; inside a Claude Code session, the lead paragraph only | whenever the engine starts the server; Claude Code 2.1.325 shows the whole of it and attaches it again after a compaction |
 | `--append-system-prompt` | Claude Code | every spawn, `--resume` included; a compaction does not touch the system prompt |
-| application context (`additionalContext`), whole paragraphs in values of at most 900 bytes | Codex ≥ 0.135 | every turn, under keys whose generation advances after a compaction, so Codex adds them again |
-| one developer message (`thread/inject_items`) | Codex 0.125–0.134 | at thread start, and again before the first turn after a compaction |
+| application context (`additionalContext`), whole paragraphs in values of at most 900 bytes | Codex >= 0.135 | every turn, under keys whose generation advances after a compaction |
+| one developer message (`thread/inject_items`) | Codex 0.125-0.134 | at thread start, and again before the first turn after a compaction |
 | the turn's own input, in `<orbit_application_context>` | Codex < 0.125 | every turn |
 | the prompt, in `<orbit-agent-instructions>` | Kimi Code; Cursor CLI | Kimi: every prompt; Cursor: the conversation's first |
-| global rules (`GEMINI.md` in the runner's own Gemini directory); appended system prompt; instructions file | Antigravity; DeepSeek Harness; OpenCode | every process the runner starts |
+| global rules (`GEMINI.md`); appended system prompt; instructions file | Antigravity; DeepSeek Harness; OpenCode | every process the runner starts |
 
-The engine-side carriers open with the primer and go on with what only the runner knows: that the
-engine's own sub-agents are as private as its plan (since v1.9.0), how this engine spells Orbit's tools, the CLI's
-absolute path, which files a reply can hand over, where
-evidence goes, the project paragraph for the session's shape, progress, waits and the wiki. They are
-sent whether or not the MCP instructions arrived, because the runner cannot see which reached the
-model: on 2026-11-14 Codex 0.167.2 showed only the first **250 characters** of a server's
-instructions, as that server's line in its list of deferred tools (`codex debug prompt-input` with a
-probe server), and a session whose MCP server did not start has none at all. Claude Code therefore
-reads the primer twice, about 3 KB, which is the price of a fallback that does not depend on the
-carrier it backs up. Measured since v1.9.0 (`X1-mcp-missing-cli-fallback`, §12): on Codex the fallback holds,
-and with Orbit's MCP server down the agent files through the CLI on the same card; Claude Code 2.1.325 runs no turn
-at all without that server, because the session's `--permission-prompt-tool` is Orbit's `permission_prompt`, so on
-Claude a missing server is a failed turn the person sees, not a CLI fallback. Nothing in either carrier is read from the checkout: a repository's `CLAUDE.md`
-or `AGENTS.md` neither adds to the primer nor changes it.
+Codex 0.167.2 showed only the first 250 characters of a server's instructions (measured 2026-11-14), and a session whose
+MCP server did not start has none, so the engine-side carrier is sent whether or not the MCP instructions arrived.
+Measured (`X1-mcp-missing-cli-fallback`, §12): on Codex the fallback holds and the agent files through the CLI; Claude
+Code runs no turn without that server, because its `--permission-prompt-tool` is Orbit's `permission_prompt`. Nothing is
+read from the checkout: a repository's `CLAUDE.md` or `AGENTS.md` neither adds to the instructions nor changes them.
 
 **The message after a compaction or a resume** (since v1.9.0) carries one more sentence, on Claude Code and on Codex
 alike (`src/runner-go/context_reset_note.go`). The runner puts it in front of what the engine reads, not in the `user`
@@ -384,25 +388,29 @@ The carriers above hold the rule (§0 rule 10); the note says, on the one messag
 It is set by Claude Code's `compact_boundary` and by every spawn with `--resume`, and on Codex by `thread/compacted`
 and `thread/resume`; a steer into a running turn does not carry it.
 
-What the text is held to (`src/runner-go/agent_primer_test.go`):
+What the text is held to (`agent_primer_test.go`, `instruction_units_test.go`, `primer_once_test.go`):
 
-- **The first paragraph stands alone, in at most 512 characters**: what is a record and what is
-  scratch, which create answers which intent, MCP before the CLI, create versus start
-  (`autoRunWhenReady` defaults to true), and that only a returned id is a success. A client may show
-  no more than that, and Codex shows less, so it opens with what Orbit is for.
-- **Budgets**: the primer at most 3,456 bytes (3,200 until 2026-11-20, raised for primer 1.4.4's settings
-  paragraph, [`settings-from-conversation-design.md`](./settings-from-conversation-design.md) §7); Orbit's own
-  instructions to an engine (the primer and
-  the paragraphs after it, without the agent's own prompt) at most 8,192 bytes (6,400 until
-  2026-11-15, raised to 7,000 on main for the delegate paragraph a top-level session gets and to 6,656 on the
-  project line by v1.9.0 for the paragraph on the engine's own sub-agents; v1.10.0 carries both, 7,178 bytes in the
-  longest shape, within 7,424; raised to 7,680 with primer 1.4.4, and to 8,192 on 2026-11-23 for the workflow paragraph); no paragraph longer
-  than one Codex context value (900 bytes, under Codex's 1,000-token cap whatever the tokenizer);
-  ASCII.
-- **Versioned and snapshotted**: the exact text of the primer and of the four shapes of the engine
-  instructions are snapshots (`src/runner-go/testdata/agent-primer/`), and the primer's hash is
-  recorded per version, so a changed word is a new primer version and a reviewed diff.
-- **Every §0 rule is said**: a rule added to §0 fails the test until the primer says it too.
+- **The first paragraph stands alone, in at most 512 characters**: what is a record and what is scratch, which create
+  answers which intent, MCP before the CLI, and that only a returned id is a success. A client may show no more than
+  that, and Codex shows less.
+- **Admission.** A unit may be always-on only if it is kind A (a disposition: choosing Orbit over an engine built-in) or F
+  (a fact only the runner knows) and names existing eval scenarios that fail without it. Everything else lives in a tool
+  description, a receipt note or a guide topic. A fix climbs the ladder from a mechanism, the tool's name or schema, a
+  receipt note and the description before it earns a line (design §4.4).
+- **Sunset.** When the supported engine matrix changes, each unit's scenario is run without the unit's text
+  (`--leave-out`); a unit whose case still passes is demoted. Step 6 dropped `alwaysLoad` for `notify` and `delegate` this
+  way, and step 7a demoted five units that had no case.
+- **Budgets.** The primer is at most 3,456 bytes, Orbit's instructions to an engine at most 8,192, and no paragraph is
+  longer than one Codex value (900 bytes); ASCII. Each shape also has a cap on bytes and on rules equal to what it
+  reached, so a shape cannot grow without a reviewed change. The longest Claude Code shape is 5,499 bytes in 17 rules
+  (7,580 bytes before the project); a SubAgent's is 3,868 to 4,009. Per-shape sizes are in the design doc, §8.7.
+- **Versioned and snapshotted**: the text of the primer and of every canonical shape is a snapshot
+  (`testdata/agent-primer/`, `testdata/agent-instructions/`), and the primer's hash is recorded per version, so a
+  changed word is a new primer version and a reviewed diff.
+- **Every §0 rule is said**: a rule added to §0 fails the test until a unit or a mechanism covers it.
+- **Recorded.** Every turn's `agent_contract_telemetry` summary carries the instruction bytes, the ids of the units the
+  session was given and a composite hash of their ids and text hashes (the manifest), so a change in behaviour can be
+  tied to a change in what the agent read.
 
 `orbit mcp help` (also `orbit mcp --help`, `orbit help mcp`) names the runtimes the runner starts the
 server on and the objects its tools act on, read from the runner's runtime table and from the
@@ -1220,6 +1228,7 @@ Code, 6.5 KB on Codex) and a `tools/list` of 253 KB for 80 or 81 tools; Codex re
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.15.0 | 2026-11-25 | §2.6 is rewritten to describe the always-on instructions as built: a registry of units composed per session shape and engine profile, delivered once per engine, each unit guarded by an eval case, with the admission and sunset rules and the manifest hash in `agent_contract_telemetry` (design: [`agent-instructions-design.md`](./agent-instructions-design.md) §8). The rules read as in 1.14.0 except the two step 6 reworded: rule 4's `autoRunWhenReady` is required on a create from an agent session (the runner refuses one without it), and rule 7's idempotency key is derived by `orbit mcp` when the caller gives none. Primer 1.8.1: its first line names this version. |
 | 1.14.0 | 2026-11-24 | Documents is renamed back to Drive. The six drive tools are `drive_put`, `drive_get`, `drive_list`, `drive_move`, `drive_delete` and `drive_sync`, and `tools/list` names only these; `documents_put`, `documents_get`, `documents_list`, `documents_move`, `documents_delete` and `documents_sync` are still served as the same tools, never listed, so an engine, a saved prompt or an `ORBIT_MCP_TOOLS` list that names them keeps working. The CLI is `orbit drive put\|get\|ls\|mv\|rm\|sync`; `orbit documents` runs the same command and is not listed. `drive_put` answers with an `orbit-drive:<id>` link, and a reply's local Drive path is rewritten to one; every client still reads the `orbit-document:<id>` links stored transcripts carry. The runner reaches Drive at `/runner/drive`, and the server answers `/runner/documents` for runners already deployed; the `DOCUMENTS_DISABLED` code and the claim's `documentsDisabled` field keep their names. The catalogue moves to 1.12.0; the primer to 1.4.7, its first line naming this version; no rule changed. |
 | 1.13.0 | 2026-11-24 | The drive is renamed Documents. The five drive tools are `documents_put`, `documents_get`, `documents_list`, `documents_move` and `documents_delete`, and `tools/list` names only these; `drive_put`, `drive_get`, `drive_list`, `drive_move` and `drive_delete` are still served as the same tools, never listed, so an engine, a saved prompt or an `ORBIT_MCP_TOOLS` list that names them keeps working. The CLI is `orbit documents put\|get\|ls\|mv\|rm`; `orbit drive` runs the same command and is no longer listed. `documents_put` answers with an `orbit-document:<id>` link, and a reply's local Documents path is rewritten to one; every client still reads the `orbit-drive:<id>` links stored transcripts carry. The runner reaches Documents at `/runner/documents`, and the server answers `/runner/drive` for runners already deployed. The catalogue moves to 1.11.0; the primer to 1.4.6, its first line naming this version; no rule changed. |
 | 1.12.0 | 2026-11-22 | Session state, plan step 5.5 ([`session-three-state-design.md`](./session-three-state-design.md) §11.5). `session_get` and `session_list` return the server's session-state fields beside `status`: `phase` (PENDING, RUNNING, IDLE), `released`, `lastTurnOutcome` (ANSWERED, FAILED, INTERRUPTED, CANCELLED or null) and `waitingOn` (PERSON, HOLD, WAKE or null). Added, never redefined: the seven-value `status` enum of `session_list` and `orbit session list --status` are unchanged, and a server that does not send the fields leaves them out. A session is over when `released`; it failed when released with `lastTurnOutcome` FAILED and no `endReason`; it is working when `phase` is RUNNING. The bounded `session_get` view clips only its named free-text fields, so the new ones always come through. The catalogue moves to 1.10.0; the primer to 1.4.5, its first line naming this version. |

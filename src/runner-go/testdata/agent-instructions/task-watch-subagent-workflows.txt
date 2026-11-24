@@ -1,7 +1,7 @@
 === antigravity (3517 bytes)
 Owner instructions.
 
-Orbit primer 1.8.0 (Agent Contract 1.14.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. No returned id, no claim.
+Orbit primer 1.8.1 (Agent Contract 1.15.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -27,7 +27,7 @@ The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few op
 === claude (3289 bytes)
 Owner instructions.
 
-Orbit primer 1.8.0 (Agent Contract 1.14.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. No returned id, no claim.
+Orbit primer 1.8.1 (Agent Contract 1.15.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -52,7 +52,7 @@ The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few op
 === codex 0.125-0.134 developer message (4009 bytes)
 Owner instructions.
 
-Orbit primer 1.8.0 (Agent Contract 1.14.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. No returned id, no claim.
+Orbit primer 1.8.1 (Agent Contract 1.15.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -81,7 +81,7 @@ After generating an image, preserve the original file. Do not regenerate it sole
 <orbit_application_context>
 Owner instructions.
 
-Orbit primer 1.8.0 (Agent Contract 1.14.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. No returned id, no claim.
+Orbit primer 1.8.1 (Agent Contract 1.15.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -113,7 +113,7 @@ After generating an image, preserve the original file. Do not regenerate it sole
 === cursor (3477 bytes)
 Owner instructions.
 
-Orbit primer 1.8.0 (Agent Contract 1.14.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. No returned id, no claim.
+Orbit primer 1.8.1 (Agent Contract 1.15.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -139,7 +139,7 @@ The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few op
 === deepseek harness (3467 bytes)
 Owner instructions.
 
-Orbit primer 1.8.0 (Agent Contract 1.14.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. No returned id, no claim.
+Orbit primer 1.8.1 (Agent Contract 1.15.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -166,7 +166,7 @@ The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few op
 [map[text:<orbit-agent-instructions>
 Owner instructions.
 
-Orbit primer 1.8.0 (Agent Contract 1.14.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. No returned id, no claim.
+Orbit primer 1.8.1 (Agent Contract 1.15.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -195,7 +195,7 @@ hi type:text]]
 === opencode (3461 bytes)
 Owner instructions.
 
-Orbit primer 1.8.0 (Agent Contract 1.14.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. No returned id, no claim.
+Orbit primer 1.8.1 (Agent Contract 1.15.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -219,7 +219,7 @@ Before changing a file, use wiki_search with its path to look up known pitfalls.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the `orbit_*` tools. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
 === orbit mcp initialize (every other engine) (2498 bytes)
-Orbit primer 1.8.0 (Agent Contract 1.14.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. No returned id, no claim.
+Orbit primer 1.8.1 (Agent Contract 1.15.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -235,7 +235,7 @@ When a person's problem is one of their own Settings, call settings_get, then se
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
 === orbit mcp initialize, claude (597 bytes)
-Orbit primer 1.8.0 (Agent Contract 1.14.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. No returned id, no claim.
+Orbit primer 1.8.1 (Agent Contract 1.15.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. No returned id, no claim.
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
 === orbit mcp initialize, help ask (0 bytes)

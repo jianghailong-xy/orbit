@@ -78,6 +78,9 @@ var agentPrimerHashes = map[string]string{
 	// the lead lost its "Create is not start, but autoRunWhenReady defaults to true" sentence and the receipts paragraph its
 	// "Key task_create ..." sentence.
 	"1.8.0": "6a1f80d73ff927be738c996e943279dbb4c220f428a557ddc1e017f8fd328733",
+	// 1.8.1 is 1.8.0 with the first line naming Agent Contract 1.15.0 (§2.6 describes the composed instructions as
+	// built); no rule changed.
+	"1.8.1": "ca11204551170378fc5fd69693b66e2c49176c94bdb2ee6c7314f230f04cce39",
 }
 
 // The snapshots: the primer exactly as `initialize` sends it, and the four shapes of the instructions
