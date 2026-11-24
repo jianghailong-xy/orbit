@@ -5,10 +5,10 @@ import OrbitKit
 @testable import OrbitApp
 
 /// Frames of the real transfer card on the Mac, built the way the conversation builds it: events through
-/// `TranscriptReducer`, rows through `TranscriptRows.build`, each transfer row drawn by `DocumentsTransferCardView`.
+/// `TranscriptReducer`, rows through `TranscriptRows.build`, each transfer row drawn by `DriveTransferCardView`.
 /// PNGs land in `src/macos/build/evidence/documents-transfer-macos/`.
 @MainActor
-final class DocumentsTransferShotsTests: XCTestCase {
+final class DriveTransferShotsTests: XCTestCase {
     private static let names = ["十二月月令图/十二月月令轴.09.九月.台北故宫博物院藏.jpg", "鸟谱选页/鸟谱选页_img1_12.jpg",
                                 "老地图/廣東至暹羅水陸道里圖.jpg", "缂丝刺绣/谢安赌墅图.宋.缂丝.jpg", "单幅/万寿宫香.jpg",
                                 "单幅/魁星图.jpg", "单幅/乾隆款掐丝珐琅太平有象.jpg", "单幅/Canton Pagoda 2300 years old.jpg",
@@ -74,7 +74,7 @@ final class DocumentsTransferShotsTests: XCTestCase {
                 ForEach(rows) { row in
                     switch row {
                     case .transfer(let kind, let cards):
-                        DocumentsTransferCardView(kind: kind, cards: cards, live: live, showInDocuments: { _ in })
+                        DriveTransferCardView(kind: kind, cards: cards, live: live, showInDrive: { _ in })
                     case .item(.assistant(let bubble)):
                         Text(bubble.text).font(.orbitProse)
                     default:

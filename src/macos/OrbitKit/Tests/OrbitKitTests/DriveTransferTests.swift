@@ -1,10 +1,10 @@
 import XCTest
 @testable import OrbitKit
 
-/// The transfer card's words and rules (`DocumentsTransfer`), the reducer keeping a transfer's live byte count, and
+/// The transfer card's words and rules (`DriveTransfer`), the reducer keeping a transfer's live byte count, and
 /// the rows that put a run of transfers in one card. Event shapes are a real session's (11-24): DeepSeek-style call
 /// ids, results that are receipts with the answer under `entity`, one test upload, then a burst.
-final class DocumentsTransferTests: XCTestCase {
+final class DriveTransferTests: XCTestCase {
     private func put(_ seq: Int, _ id: String, _ path: String, at second: Int) -> RunEvent {
         RunEvent(seq: seq, type: .toolUse, ts: "2026-11-24T05:39:\(String(format: "%02d", second))Z", payload: .object([
             "toolUseId": .string(id), "name": .string("mcp__orbit__documents_put"),
@@ -31,30 +31,30 @@ final class DocumentsTransferTests: XCTestCase {
     // MARK: words
 
     func testReadsTheRunnersLineAndNothingElse() {
-        XCTAssertEqual(DocumentsTransfer.progress("Uploaded 3355443 of 11954323 bytes")?.sent, 3_355_443)
-        XCTAssertEqual(DocumentsTransfer.progress("Downloaded 5 of 5 bytes")?.size, 5)
-        XCTAssertNil(DocumentsTransfer.progress("Uploaded 5 of 0 bytes"))
-        XCTAssertNil(DocumentsTransfer.progress("npm test"))
-        XCTAssertNil(DocumentsTransfer.progress(nil))
+        XCTAssertEqual(DriveTransfer.progress("Uploaded 3355443 of 11954323 bytes")?.sent, 3_355_443)
+        XCTAssertEqual(DriveTransfer.progress("Downloaded 5 of 5 bytes")?.size, 5)
+        XCTAssertNil(DriveTransfer.progress("Uploaded 5 of 0 bytes"))
+        XCTAssertNil(DriveTransfer.progress("npm test"))
+        XCTAssertNil(DriveTransfer.progress(nil))
     }
 
-    func testShowsPathsAsDocumentsDoes() {
-        XCTAssertEqual(DocumentsTransfer.displayPath("~/Documents/书格/a.jpg"), "/书格/a.jpg")
-        XCTAssertEqual(DocumentsTransfer.displayPath("/home/orbit/Documents/书格/a.jpg"), "/书格/a.jpg")
-        XCTAssertEqual(DocumentsTransfer.displayPath("~/Files/书格/a.jpg"), "/书格/a.jpg")
-        XCTAssertEqual(DocumentsTransfer.displayPath("/run/orbit-documents/drive/书格/a.jpg"), "/书格/a.jpg")
-        XCTAssertEqual(DocumentsTransfer.displayPath("书格//a.jpg"), "/书格/a.jpg")
-        XCTAssertEqual(DocumentsTransfer.commonFolder(["/S/d/单幅/a.jpg", "/S/d/老地图/b.jpg"]), "/S/d/")
-        XCTAssertEqual(DocumentsTransfer.commonFolder(["/a.jpg", "/b/c.jpg"]), "/")
+    func testShowsPathsAsDriveDoes() {
+        XCTAssertEqual(DriveTransfer.displayPath("~/Documents/书格/a.jpg"), "/书格/a.jpg")
+        XCTAssertEqual(DriveTransfer.displayPath("/home/orbit/Documents/书格/a.jpg"), "/书格/a.jpg")
+        XCTAssertEqual(DriveTransfer.displayPath("~/Files/书格/a.jpg"), "/书格/a.jpg")
+        XCTAssertEqual(DriveTransfer.displayPath("/run/orbit-documents/drive/书格/a.jpg"), "/书格/a.jpg")
+        XCTAssertEqual(DriveTransfer.displayPath("书格//a.jpg"), "/书格/a.jpg")
+        XCTAssertEqual(DriveTransfer.commonFolder(["/S/d/单幅/a.jpg", "/S/d/老地图/b.jpg"]), "/S/d/")
+        XCTAssertEqual(DriveTransfer.commonFolder(["/a.jpg", "/b/c.jpg"]), "/")
     }
 
     func testSpeedAndTimeLeftAsTheUploadTraySaysThem() {
         let t0 = Date(timeIntervalSince1970: 0)
-        XCTAssertNil(DocumentsTransfer.rate([(t0, 0)]))
-        XCTAssertEqual(DocumentsTransfer.rate([(t0, 0), (t0 + 5, 1_000_000), (t0 + 6, 6_000_000), (t0 + 8, 16_000_000)]),
+        XCTAssertNil(DriveTransfer.rate([(t0, 0)]))
+        XCTAssertEqual(DriveTransfer.rate([(t0, 0), (t0 + 5, 1_000_000), (t0 + 6, 6_000_000), (t0 + 8, 16_000_000)]),
                        5_000_000)
-        XCTAssertEqual(DocumentsTransfer.duration(8), "8 s")
-        XCTAssertEqual(DocumentsTransfer.duration(125), "2 min 5 s")
+        XCTAssertEqual(DriveTransfer.duration(8), "8 s")
+        XCTAssertEqual(DriveTransfer.duration(125), "2 min 5 s")
     }
 
     // MARK: the reducer and the rows
@@ -79,16 +79,16 @@ final class DocumentsTransferTests: XCTestCase {
         XCTAssertFalse(running.contains { if case .steps = $0 { return true } else { return false } },
                        "no transfer call folds into a steps line")
 
-        let files = cards.map { DocumentsTransfer.file($0, live: true) }
+        let files = cards.map { DriveTransfer.file($0, live: true) }
         XCTAssertEqual(files.map(\.status), [.done, .running, .waiting])
         XCTAssertEqual(files[0].size, 2_400_000, "a receipt's size is read under entity")
         XCTAssertEqual(files[0].entryID, "Ecall_00_a")
         XCTAssertEqual(files[1].sent, 1_200_000)
-        let summary = DocumentsTransfer.summarize(.put, files)
+        let summary = DriveTransfer.summarize(.put, files)
         XCTAssertEqual(summary.folder, "/书格/古图/")
-        XCTAssertEqual(DocumentsTransfer.counting(summary), "Uploading 2 of 3")
-        XCTAssertEqual(DocumentsTransfer.bytes(summary), "3.6 MB so far")
-        XCTAssertEqual(DocumentsTransfer.title(summary), "Uploading to Documents")
+        XCTAssertEqual(DriveTransfer.counting(summary), "Uploading 2 of 3")
+        XCTAssertEqual(DriveTransfer.bytes(summary), "3.6 MB so far")
+        XCTAssertEqual(DriveTransfer.title(summary), "Uploading to Drive")
         XCTAssertEqual(summary.fraction, 0.5, accuracy: 0.001)
 
         r.apply(receipt(6, "call_01_b", size: 2_400_000, at: 5))
@@ -97,12 +97,12 @@ final class DocumentsTransferTests: XCTestCase {
         r.apply(output("call_01_b", "Uploaded 1300000 of 2400000 bytes", 9))
         guard case .transfer(_, let done)? = rows(r).first(where: { if case .transfer = $0 { return true } else { return false } })
         else { return XCTFail("the finished run lost its card") }
-        let finished = DocumentsTransfer.summarize(.put, done.map { DocumentsTransfer.file($0, live: true) })
+        let finished = DriveTransfer.summarize(.put, done.map { DriveTransfer.file($0, live: true) })
         XCTAssertTrue(finished.clean)
-        XCTAssertEqual(DocumentsTransfer.title(finished), "Uploaded 3 files")
-        XCTAssertEqual(DocumentsTransfer.counting(finished), "3 uploaded")
-        XCTAssertEqual(DocumentsTransfer.bytes(finished), "7.8 MB in 8 s")
-        XCTAssertEqual(DocumentsTransfer.pace(finished, rate: nil, stalledFor: nil), "average 975 KB/s")
+        XCTAssertEqual(DriveTransfer.title(finished), "Uploaded 3 files")
+        XCTAssertEqual(DriveTransfer.counting(finished), "3 uploaded")
+        XCTAssertEqual(DriveTransfer.bytes(finished), "7.8 MB in 8 s")
+        XCTAssertEqual(DriveTransfer.pace(finished, rate: nil, stalledFor: nil), "average 975 KB/s")
     }
 
     func testThinkingBetweenCallsStaysUnderTheCardAndASentenceStartsANewOne() {
@@ -132,13 +132,13 @@ final class DocumentsTransferTests: XCTestCase {
                                input: .object(["path": .string("/S/x.jpg")]),
                                result: #"{"receiptVersion":1,"ok":false,"error":{"message":"Documents quota reached."}}"#,
                                status: .ok)
-        XCTAssertEqual(DocumentsTransfer.file(refused, live: true).status, .failed)
-        XCTAssertEqual(DocumentsTransfer.file(refused, live: true).error, "Documents quota reached.")
+        XCTAssertEqual(DriveTransfer.file(refused, live: true).status, .failed)
+        XCTAssertEqual(DriveTransfer.file(refused, live: true).error, "Documents quota reached.")
 
         let cut = ToolCard(id: "y", name: "mcp__orbit__drive_put", input: .object(["path": .string("/S/y.jpg")]),
                            result: "Uploaded 5 of 10 bytes", status: .running)
-        XCTAssertEqual(DocumentsTransfer.file(cut, live: false).status, .stopped)
-        XCTAssertEqual(DocumentsTransfer.kind("mcp__orbit__drive_get"), .get, "a stored call from before the rename")
+        XCTAssertEqual(DriveTransfer.file(cut, live: false).status, .stopped)
+        XCTAssertEqual(DriveTransfer.kind("mcp__orbit__drive_get"), .get, "a stored call from before the rename")
     }
 
     func testTheBoundaryClearsATransfersLiveCount() {

@@ -2,17 +2,17 @@ import SwiftUI
 import OrbitKit
 
 /// An agent's run of Documents transfers as one card (board docs/mocks/agent-drive-transfer; web parity:
-/// `components/documents/DocumentsTransferCard.tsx`): while it goes, a bar, the bytes, the speed and the time left, and
+/// `components/documents/DriveTransferCard.tsx`): while it goes, a bar, the bytes, the speed and the time left, and
 /// a row per file grouped by folder; a stall after 20 s with no new byte turns the bar amber. A finished run stays a
 /// card, its bar green, with its totals and its files. One file is a line, not a card. The words are OrbitKit's
-/// `DocumentsTransfer`.
-struct DocumentsTransferCardView: View {
-    let kind: DocumentsTransfer.Kind
+/// `DriveTransfer`.
+struct DriveTransferCardView: View {
+    let kind: DriveTransfer.Kind
     let cards: [ToolCard]
     /// Whether the session's turn is at work: a call with no answer in one that is not was cut off.
     let live: Bool
     /// Opens a file an upload made where it lives in Documents; nil where there is no Documents page to open.
-    var showInDocuments: ((String) -> Void)? = nil
+    var showInDrive: ((String) -> Void)? = nil
 
     private struct Sample: Equatable {
         let at: Date
@@ -25,8 +25,8 @@ struct DocumentsTransferCardView: View {
     @State private var allRows = false
 
     var body: some View {
-        let files = cards.map { DocumentsTransfer.file($0, live: live) }
-        let summary = DocumentsTransfer.summarize(kind, files)
+        let files = cards.map { DriveTransfer.file($0, live: live) }
+        let summary = DriveTransfer.summarize(kind, files)
         let moving = live && !summary.finished
         Group {
             if moving {
@@ -51,16 +51,16 @@ struct DocumentsTransferCardView: View {
     /// The speed now: a quiet second counts as no bytes, so it falls when the transfer slows.
     private func rate(bytes: Int, now: Date) -> Double? {
         let points = samples.filter { $0.at < now }.map { (at: $0.at, bytes: $0.bytes) } + [(at: now, bytes: bytes)]
-        return DocumentsTransfer.rate(points)
+        return DriveTransfer.rate(points)
     }
 
     @ViewBuilder
-    private func content(_ files: [DocumentsTransfer.File], _ summary: DocumentsTransfer.Summary, now: Date,
+    private func content(_ files: [DriveTransfer.File], _ summary: DriveTransfer.Summary, now: Date,
                          moving: Bool) -> some View {
         let rate = moving ? rate(bytes: summary.sentBytes, now: now) : nil
         let quiet = now.timeIntervalSince(changedAt)
         let stalled = moving && summary.sentBytes > 0 && samples.last?.bytes == summary.sentBytes
-            && quiet >= DocumentsTransfer.stallAfter
+            && quiet >= DriveTransfer.stallAfter
         if files.count == 1 {
             line(files[0], rate: rate)
         } else {
@@ -70,9 +70,9 @@ struct DocumentsTransferCardView: View {
 
     // MARK: the card
 
-    private func card(_ files: [DocumentsTransfer.File], _ summary: DocumentsTransfer.Summary, rate: Double?,
+    private func card(_ files: [DriveTransfer.File], _ summary: DriveTransfer.Summary, rate: Double?,
                       stalledFor: TimeInterval?) -> some View {
-        let words = DocumentsTransfer.words(kind)
+        let words = DriveTransfer.words(kind)
         let firstEntry = files.first { $0.entryID != nil }?.entryID
         // A run that ended with a failure shows the share that went, green; one cut off is grey.
         let tint: Color = summary.finished ? (summary.clean || summary.failed > 0 ? .green : .secondary)
@@ -87,11 +87,11 @@ struct DocumentsTransferCardView: View {
                     .background((summary.finished ? (summary.clean ? Color.green : Color.red)
                                  : kind == .get ? Color.green : Color.accentColor).opacity(0.14),
                                 in: RoundedRectangle(cornerRadius: 5))
-                Text(DocumentsTransfer.title(summary)).font(.orbitLabel.weight(.semibold))
+                Text(DriveTransfer.title(summary)).font(.orbitLabel.weight(.semibold))
                 Text(summary.folder).font(.orbitMono).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                 Spacer(minLength: 8)
-                if summary.finished, kind == .put, let firstEntry, let showInDocuments {
-                    Button("Show in Documents") { showInDocuments(firstEntry) }
+                if summary.finished, kind == .put, let firstEntry, let showInDrive {
+                    Button("Show in Drive") { showInDrive(firstEntry) }
                         .transferLinkStyle().font(.orbitLabel)
                 }
                 Button(showFiles ? "Hide files" : "Show files") { showFiles.toggle() }
@@ -101,10 +101,10 @@ struct DocumentsTransferCardView: View {
                 TransferBar(fraction: summary.finished && summary.clean ? 1 : summary.fraction, tint: tint, height: 6)
                     .accessibilityLabel(words.title)
                 HStack(spacing: 6) {
-                    Text(DocumentsTransfer.counting(summary)).fontWeight(.semibold)
-                        + Text(" · \(DocumentsTransfer.bytes(summary))").foregroundColor(.secondary)
+                    Text(DriveTransfer.counting(summary)).fontWeight(.semibold)
+                        + Text(" · \(DriveTransfer.bytes(summary))").foregroundColor(.secondary)
                     Spacer(minLength: 8)
-                    if let pace = DocumentsTransfer.pace(summary, rate: rate, stalledFor: stalledFor) {
+                    if let pace = DriveTransfer.pace(summary, rate: rate, stalledFor: stalledFor) {
                         Text(pace).foregroundStyle(stalledFor != nil ? Color.orange : Color.secondary)
                     }
                 }
@@ -127,8 +127,8 @@ struct DocumentsTransferCardView: View {
         .accessibilityElement(children: .contain)
     }
 
-    private func fileList(_ files: [DocumentsTransfer.File], folder: String) -> some View {
-        let rows = DocumentsTransfer.shownRows(files, all: allRows)
+    private func fileList(_ files: [DriveTransfer.File], folder: String) -> some View {
+        let rows = DriveTransfer.shownRows(files, all: allRows)
         return VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(rows.enumerated()), id: \.element.id) { i, file in
                 let dir = Self.dir(of: file, under: folder)
@@ -147,29 +147,29 @@ struct DocumentsTransferCardView: View {
     }
 
     /// A file's folder under the run's own, as "单幅/"; "" when it sits right in it.
-    private static func dir(of file: DocumentsTransfer.File, under folder: String) -> String {
+    private static func dir(of file: DriveTransfer.File, under folder: String) -> String {
         guard file.path.hasPrefix(folder) else { return "" }
         let rest = file.path.dropFirst(folder.count)
         guard let slash = rest.lastIndex(of: "/") else { return "" }
         return String(rest[...slash])
     }
 
-    private func row(_ file: DocumentsTransfer.File) -> some View {
+    private func row(_ file: DriveTransfer.File) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 8) {
                 Self.mark(file.status, kind: kind)
                     .frame(width: 16)
-                if file.status == .done, let entry = file.entryID, let showInDocuments {
-                    Button(file.name) { showInDocuments(entry) }
+                if file.status == .done, let entry = file.entryID, let showInDrive {
+                    Button(file.name) { showInDrive(entry) }
                         .buttonStyle(.plain)
                         .lineLimit(1).truncationMode(.middle)
-                        .help("Show in Documents")
+                        .help("Show in Drive")
                 } else {
                     Text(file.name).lineLimit(1).truncationMode(.middle)
                         .foregroundStyle(file.status == .waiting || file.status == .stopped ? Color.secondary : Color.primary)
                 }
                 Spacer(minLength: 8)
-                Text(DocumentsTransfer.rowSize(file))
+                Text(DriveTransfer.rowSize(file))
                     .font(.orbitMeta).monospacedDigit()
                     .foregroundStyle(file.status == .failed ? Color.red : Color.secondary)
             }
@@ -189,11 +189,11 @@ struct DocumentsTransferCardView: View {
     }
 
     @ViewBuilder
-    private static func mark(_ status: DocumentsTransfer.Status, kind: DocumentsTransfer.Kind) -> some View {
+    private static func mark(_ status: DriveTransfer.Status, kind: DriveTransfer.Kind) -> some View {
         switch status {
         case .done: Image(systemName: "checkmark").foregroundStyle(.green).font(.orbitMeta.weight(.bold))
         case .failed: Image(systemName: "xmark").foregroundStyle(.red).font(.orbitMeta.weight(.bold))
-        case .running: Image(systemName: DocumentsTransfer.words(kind).symbol).foregroundStyle(Color.accentColor)
+        case .running: Image(systemName: DriveTransfer.words(kind).symbol).foregroundStyle(Color.accentColor)
             .font(.orbitMeta.weight(.bold))
         case .waiting: Text("·").foregroundStyle(.secondary)
         case .stopped: Text("–").foregroundStyle(.secondary)
@@ -203,8 +203,8 @@ struct DocumentsTransferCardView: View {
     // MARK: one file
 
     @ViewBuilder
-    private func line(_ file: DocumentsTransfer.File, rate: Double?) -> some View {
-        let words = DocumentsTransfer.words(kind)
+    private func line(_ file: DriveTransfer.File, rate: Double?) -> some View {
+        let words = DriveTransfer.words(kind)
         HStack(spacing: 6) {
             switch file.status {
             case .failed:
@@ -213,22 +213,22 @@ struct DocumentsTransferCardView: View {
             case .done:
                 Image(systemName: "checkmark").foregroundStyle(.green)
                 Text(words.went)
-                if let entry = file.entryID, let showInDocuments {
-                    Button(file.name) { showInDocuments(entry) }.transferLinkStyle()
+                if let entry = file.entryID, let showInDrive {
+                    Button(file.name) { showInDrive(entry) }.transferLinkStyle()
                 } else {
                     Text(file.name)
                 }
                 Text(Self.doneTail(file)).foregroundStyle(.secondary)
             case .stopped:
                 Text("\(words.going) \(file.name) stopped"
-                     + (file.size.map { " at \(DocumentsLogic.formatSize(file.sent)) of \(DocumentsLogic.formatSize($0))" } ?? ""))
+                     + (file.size.map { " at \(DriveLogic.formatSize(file.sent)) of \(DriveLogic.formatSize($0))" } ?? ""))
                     .foregroundStyle(.secondary)
             case .running, .waiting:
                 Image(systemName: words.symbol).foregroundStyle(Color.accentColor)
                 Text("\(words.going) \(file.name)")
                 if let size = file.size {
-                    Text("· \(DocumentsLogic.formatSize(file.sent)) of \(DocumentsLogic.formatSize(size))"
-                         + (rate.flatMap { $0 > 0 ? " · \(DocumentsLogic.rate($0))" : nil } ?? ""))
+                    Text("· \(DriveLogic.formatSize(file.sent)) of \(DriveLogic.formatSize(size))"
+                         + (rate.flatMap { $0 > 0 ? " · \(DriveLogic.rate($0))" : nil } ?? ""))
                         .foregroundStyle(.secondary)
                     TransferBar(fraction: Double(file.sent) / Double(max(size, 1)), tint: .accentColor, height: 4)
                         .frame(width: 96)
@@ -242,11 +242,11 @@ struct DocumentsTransferCardView: View {
     }
 
     /// "· 4.1 MB · 1 s" after a finished file's name.
-    private static func doneTail(_ file: DocumentsTransfer.File) -> String {
+    private static func doneTail(_ file: DriveTransfer.File) -> String {
         var parts: [String] = []
-        if let size = file.size { parts.append(DocumentsLogic.formatSize(size)) }
+        if let size = file.size { parts.append(DriveLogic.formatSize(size)) }
         if let start = file.startedAt, let end = file.endedAt, end >= start {
-            parts.append(DocumentsTransfer.duration(end.timeIntervalSince(start)))
+            parts.append(DriveTransfer.duration(end.timeIntervalSince(start)))
         }
         return parts.isEmpty ? "" : "· " + parts.joined(separator: " · ")
     }

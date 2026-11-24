@@ -3,38 +3,38 @@ import OrbitKit
 
 /// An agent's `documents_sync` call as its sync's card (board docs/mocks/documents-sync-card): the same live numbers as
 /// the Documents popover, kept current after the agent's turn ends, since the sync runs in the background. A sync that
-/// ends cleanly folds to one line; failures, a stop and a failed sync stay open. The words are `DocumentsSyncCard`'s.
+/// ends cleanly folds to one line; failures, a stop and a failed sync stay open. The words are `DriveSyncCard`'s.
 ///
-/// Web parity: `src/web/src/components/documents/DocumentsSyncCard.tsx`.
-struct DocumentsSyncCardView: View {
+/// Web parity: `src/web/src/components/documents/DriveSyncCard.tsx`.
+struct DriveSyncCardView: View {
     let syncID: String
     @Environment(AppModel.self) private var app
     @State private var open: Bool?
     @State private var allFailed = false
 
-    private var documents: DocumentsModel? { app.documents }
-    private var sync: DocumentsSync? { documents?.syncsByID[syncID] }
+    private var drive: DriveModel? { app.drive }
+    private var sync: DriveSync? { drive?.syncsByID[syncID] }
 
     var body: some View {
         Group {
             if let sync {
-                if DocumentsSyncCard.folds(sync) && !(open ?? false) {
+                if DriveSyncCard.folds(sync) && !(open ?? false) {
                     folded(sync)
                 } else {
                     card(sync)
                 }
             } else {
-                Text(DocumentsSyncCard.pending).font(.orbitLabel).foregroundStyle(.secondary)
+                Text(DriveSyncCard.pending).font(.orbitLabel).foregroundStyle(.secondary)
             }
         }
-        .task(id: syncID) { await documents?.watchSync(syncID) }
-        .accessibilityIdentifier("documents-sync-card")
+        .task(id: syncID) { await drive?.watchSync(syncID) }
+        .accessibilityIdentifier("drive-sync-card")
     }
 
     // MARK: folded
 
-    private func folded(_ sync: DocumentsSync) -> some View {
-        let line = DocumentsSyncCard.foldLine(sync)
+    private func folded(_ sync: DriveSync) -> some View {
+        let line = DriveSyncCard.foldLine(sync)
         return HStack(spacing: 6) {
             Image(systemName: "checkmark").font(.orbitMeta.weight(.bold)).foregroundStyle(.green)
             Button(line.lead) { open = true }.buttonStyle(.plain).font(.orbitLabel)
@@ -45,7 +45,7 @@ struct DocumentsSyncCardView: View {
 
     // MARK: open
 
-    private func card(_ sync: DocumentsSync) -> some View {
+    private func card(_ sync: DriveSync) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             head(sync)
             if sync.status == "FAILED", let error = sync.error {
@@ -63,31 +63,31 @@ struct DocumentsSyncCardView: View {
         .orbitCardWidth()
     }
 
-    private func head(_ sync: DocumentsSync) -> some View {
+    private func head(_ sync: DriveSync) -> some View {
         HStack(spacing: 8) {
-            icon(DocumentsSyncCard.icon(sync))
-            Text(DocumentsSyncCard.title(sync)).font(.orbitLabel.weight(.semibold)).lineLimit(1)
+            icon(DriveSyncCard.icon(sync))
+            Text(DriveSyncCard.title(sync)).font(.orbitLabel.weight(.semibold)).lineLimit(1)
             Text(sync.destPath)
                 .font(.system(.caption, design: .monospaced)).foregroundStyle(Color.accentColor)
                 .padding(.horizontal, 6).padding(.vertical, 1)
                 .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 4))
             if sync.running {
-                Text(DocumentsSyncCard.background)
+                Text(DriveSyncCard.background)
                     .font(.orbitMeta.weight(.semibold)).foregroundStyle(Color.accentColor)
                     .padding(.horizontal, 6).padding(.vertical, 1)
                     .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 5))
             }
             Spacer(minLength: 8)
             if sync.destEntryId != nil {
-                Button(DocumentsSyncCard.openFolder) { openFolder(sync) }.linkButtonStyle().font(.orbitMeta)
+                Button(DriveSyncCard.openFolder) { openFolder(sync) }.linkButtonStyle().font(.orbitMeta)
             }
-            if DocumentsSyncCard.folds(sync) {
-                Button(DocumentsSyncCard.hide) { open = false }.linkButtonStyle().font(.orbitMeta)
+            if DriveSyncCard.folds(sync) {
+                Button(DriveSyncCard.hide) { open = false }.linkButtonStyle().font(.orbitMeta)
             }
         }
     }
 
-    private func icon(_ kind: DocumentsSyncCard.Icon) -> some View {
+    private func icon(_ kind: DriveSyncCard.Icon) -> some View {
         let (symbol, tint): (String, Color) = switch kind {
         case .running: ("arrow.triangle.2.circlepath", .accentColor)
         case .ok: ("checkmark", .green)
@@ -100,8 +100,8 @@ struct DocumentsSyncCardView: View {
             .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 6))
     }
 
-    private func summary(_ sync: DocumentsSync) -> some View {
-        let stats = DocumentsSyncCard.stats(sync, rate: documents?.syncRates[sync.id])
+    private func summary(_ sync: DriveSync) -> some View {
+        let stats = DriveSyncCard.stats(sync, rate: drive?.syncRates[sync.id])
         return VStack(alignment: .leading, spacing: 5) {
             if sync.status == "CHECKING" {
                 SyncBar(fraction: nil, tint: .accentColor)
@@ -116,25 +116,25 @@ struct DocumentsSyncCardView: View {
                 if let right = stats.right { Text(right).foregroundStyle(.secondary) }
             }
             .font(.orbitMeta).monospacedDigit().lineLimit(1)
-            if let current = DocumentsSyncCard.current(sync) {
+            if let current = DriveSyncCard.current(sync) {
                 Text(current)
                     .font(.system(.caption2, design: .monospaced)).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.middle)
             }
-            let meta = DocumentsSyncCard.meta(sync)
+            let meta = DriveSyncCard.meta(sync)
             if !meta.isEmpty {
                 Text(meta.joined(separator: "   ")).font(.orbitMeta).foregroundStyle(.tertiary)
             }
         }
     }
 
-    private func barValue(_ sync: DocumentsSync) -> Double {
-        if DocumentsSyncCard.folds(sync) || (!sync.running && sync.status != "STOPPED") { return 1 }
-        return DocumentsLogic.syncFraction(sync) ?? 0
+    private func barValue(_ sync: DriveSync) -> Double {
+        if DriveSyncCard.folds(sync) || (!sync.running && sync.status != "STOPPED") { return 1 }
+        return DriveLogic.syncFraction(sync) ?? 0
     }
 
-    private func failures(_ sync: DocumentsSync) -> some View {
-        let shown = allFailed ? sync.failed : Array(sync.failed.prefix(DocumentsSyncCard.failedShown))
+    private func failures(_ sync: DriveSync) -> some View {
+        let shown = allFailed ? sync.failed : Array(sync.failed.prefix(DriveSyncCard.failedShown))
         return VStack(alignment: .leading, spacing: 4) {
             Divider()
             ForEach(shown, id: \.self) { failure in
@@ -147,24 +147,24 @@ struct DocumentsSyncCardView: View {
                 .font(.orbitMeta)
             }
             if !allFailed && sync.failed.count > shown.count {
-                Button(DocumentsSyncCard.showAll(sync)) { allFailed = true }.linkButtonStyle().font(.orbitMeta)
-            } else if let more = DocumentsLogic.syncMoreFailures(sync) {
+                Button(DriveSyncCard.showAll(sync)) { allFailed = true }.linkButtonStyle().font(.orbitMeta)
+            } else if let more = DriveLogic.syncMoreFailures(sync) {
                 Text(more).font(.orbitMeta).foregroundStyle(.secondary)
             }
         }
     }
 
-    private func folderLink(_ sync: DocumentsSync) -> some View {
+    private func folderLink(_ sync: DriveSync) -> some View {
         Button(sync.destPath) { openFolder(sync) }
             .linkButtonStyle().font(.orbitLabel)
             .disabled(sync.destEntryId == nil)
     }
 
     /// The destination in Documents, from wherever the conversation is.
-    private func openFolder(_ sync: DocumentsSync) {
-        guard let id = sync.destEntryId, let documents else { return }
-        documents.open(folder: id)
-        app.selectedSection = .documents
+    private func openFolder(_ sync: DriveSync) {
+        guard let id = sync.destEntryId, let drive else { return }
+        drive.open(folder: id)
+        app.selectedSection = .drive
     }
 }
 

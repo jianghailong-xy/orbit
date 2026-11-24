@@ -2,13 +2,13 @@ import Foundation
 
 /// An agent's transfers to and from Documents (`documents_put` / `documents_get`, `drive_put` / `drive_get` before the
 /// rename), as one transfer card in the conversation (board docs/mocks/agent-drive-transfer). Web parity:
-/// `src/web/src/lib/documentsTransfer.ts` and `components/documents/DocumentsTransferCard.tsx`.
+/// `src/web/src/lib/driveTransfer.ts` and `components/documents/DriveTransferCard.tsx`.
 ///
 /// While a call runs, the runner sends its bytes as the call's live `tool_output`, one sentence restating the whole
 /// count: "Uploaded 3355443 of 11954323 bytes" (runner-go documents_progress.go). The reducer keeps that line in the
 /// running card's `result`, as it keeps a shell's output; the durable tool_result replaces it when the call ends, so a
 /// finished card is drawn from results alone.
-public enum DocumentsTransfer {
+public enum DriveTransfer {
     public enum Kind: String, Equatable, Sendable { case put, get }
 
     /// The kind of transfer a call is, or nil when it is no transfer.
@@ -75,8 +75,8 @@ public enum DocumentsTransfer {
     /// work: a call with no answer in one that is not was cut off.
     public static func file(_ card: ToolCard, live: Bool) -> File {
         let path = displayPath(card.input["path"]?.stringValue)
-        let started = card.ts.flatMap(DocumentsLogic.date)
-        let ended = card.resultTs.flatMap(DocumentsLogic.date)
+        let started = card.ts.flatMap(DriveLogic.date)
+        let ended = card.resultTs.flatMap(DriveLogic.date)
         func make(_ status: Status, sent: Int = 0, size: Int? = nil, entryID: String? = nil, error: String? = nil) -> File {
             File(id: card.id, path: path, status: status, sent: sent, size: size, entryID: entryID, error: error,
                  startedAt: started, endedAt: ended)
@@ -202,9 +202,9 @@ public enum DocumentsTransfer {
 
     public static func words(_ kind: Kind) -> Words {
         switch kind {
-        case .put: return Words(going: "Uploading", went: "Uploaded", title: "Uploading to Documents", past: "uploaded",
+        case .put: return Words(going: "Uploading", went: "Uploaded", title: "Uploading to Drive", past: "uploaded",
                                 couldnt: "Couldn't upload", symbol: "arrow.up")
-        case .get: return Words(going: "Downloading", went: "Downloaded", title: "Downloading from Documents",
+        case .get: return Words(going: "Downloading", went: "Downloaded", title: "Downloading from Drive",
                                 past: "downloaded", couldnt: "Couldn't download", symbol: "arrow.down")
         }
     }
@@ -219,8 +219,8 @@ public enum DocumentsTransfer {
     public static func title(_ summary: Summary) -> String {
         let words = words(summary.kind)
         if !summary.finished { return words.title }
-        if summary.clean { return "\(words.went) \(DocumentsLogic.files(summary.done))" }
-        return "\(words.went) \(summary.done) of \(DocumentsLogic.files(summary.total))"
+        if summary.clean { return "\(words.went) \(DriveLogic.files(summary.done))" }
+        return "\(words.went) \(summary.done) of \(DriveLogic.files(summary.total))"
     }
 
     /// The bold part of the line under the bar: "Uploading 7 of 15", "Uploading file 7", "14 uploaded, 1 failed".
@@ -240,10 +240,10 @@ public enum DocumentsTransfer {
 
     /// The bytes after it: "58 MB of 131 MB", "58 MB so far", "131 MB in 26 s".
     public static func bytes(_ summary: Summary) -> String {
-        let sent = DocumentsLogic.formatSize(summary.sentBytes)
+        let sent = DriveLogic.formatSize(summary.sentBytes)
         if summary.finished { return sent + (summary.elapsed.map { " in \(duration($0))" } ?? "") }
         if let left = summary.leftBytes, summary.waiting == 0 {
-            return "\(sent) of \(DocumentsLogic.formatSize(summary.sentBytes + left))"
+            return "\(sent) of \(DriveLogic.formatSize(summary.sentBytes + left))"
         }
         return "\(sent) so far"
     }
@@ -253,21 +253,21 @@ public enum DocumentsTransfer {
     public static func pace(_ summary: Summary, rate: Double?, stalledFor: TimeInterval?) -> String? {
         if summary.finished {
             guard let elapsed = summary.elapsed, elapsed >= 1 else { return nil }
-            return "average \(DocumentsLogic.rate(Double(summary.sentBytes) / elapsed))"
+            return "average \(DriveLogic.rate(Double(summary.sentBytes) / elapsed))"
         }
         if let stalledFor { return "No progress for \(Int(stalledFor)) s" }
         guard let rate, rate > 0 else { return nil }
-        let left = summary.waiting == 0 ? summary.leftBytes.flatMap { DocumentsLogic.timeLeft(bytesLeft: $0, rate: rate) } : nil
-        return [DocumentsLogic.rate(rate), left].compactMap { $0 }.joined(separator: " · ")
+        let left = summary.waiting == 0 ? summary.leftBytes.flatMap { DriveLogic.timeLeft(bytesLeft: $0, rate: rate) } : nil
+        return [DriveLogic.rate(rate), left].compactMap { $0 }.joined(separator: " · ")
     }
 
     /// A row's size column: "2.6 MB", "3.2 MB of 11 MB", "Waiting", "Stopped", "Failed".
     public static func rowSize(_ file: File) -> String {
         switch file.status {
-        case .done: return file.size.map(DocumentsLogic.formatSize) ?? ""
+        case .done: return file.size.map(DriveLogic.formatSize) ?? ""
         case .running:
             guard let size = file.size else { return "" }
-            return "\(DocumentsLogic.formatSize(file.sent)) of \(DocumentsLogic.formatSize(size))"
+            return "\(DriveLogic.formatSize(file.sent)) of \(DriveLogic.formatSize(size))"
         case .waiting: return "Waiting"
         case .stopped: return "Stopped"
         case .failed: return "Failed"

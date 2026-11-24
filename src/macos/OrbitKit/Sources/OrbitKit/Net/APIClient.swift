@@ -2789,7 +2789,7 @@ public final class APIClient: @unchecked Sendable {
     }
 
     /// One agent's sync, whatever its age: the conversation's card for the call that started it.
-    public func documentsSync(_ id: String) async throws -> DocumentsSync {
+    public func driveSync(_ id: String) async throws -> DriveSync {
         try await get("documents/syncs/\(id)")
     }
 

@@ -4,10 +4,10 @@ import XCTest
 import OrbitKit
 @testable import OrbitApp
 
-/// The real `DocumentsSyncCardView` in each state, fed made-up syncs through `AppModel.documents`.
+/// The real `DriveSyncCardView` in each state, fed made-up syncs through `AppModel.documents`.
 /// PNGs land in `docs/evidence/documents-sync-card-mac/`.
 @MainActor
-final class DocumentsSyncCardShotsTests: XCTestCase {
+final class DriveSyncCardShotsTests: XCTestCase {
 
     private var evidenceDir: URL {
         var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
@@ -22,31 +22,31 @@ final class DocumentsSyncCardShotsTests: XCTestCase {
         return URL(fileURLWithPath: NSTemporaryDirectory())
     }
 
-    private func fixtures() -> [(label: String, sync: DocumentsSync)] {
+    private func fixtures() -> [(label: String, sync: DriveSync)] {
         let iso = ISO8601DateFormatter()
         let start = Date().addingTimeInterval(-3600)
         func at(_ s: TimeInterval) -> String { iso.string(from: start.addingTimeInterval(s)) }
         return [
-            ("checking", DocumentsSync(id: "s_checking", status: "CHECKING", sourceName: "out", destPath: "/Reports/Q3",
+            ("checking", DriveSync(id: "s_checking", status: "CHECKING", sourceName: "out", destPath: "/Reports/Q3",
                                        destEntryId: "e1", filesSeen: 1284, startedAt: at(0), updatedAt: at(5))),
-            ("uploading", DocumentsSync(id: "s_uploading", status: "UPLOADING", sourceName: "out", destPath: "/Reports/Q3",
+            ("uploading", DriveSync(id: "s_uploading", status: "UPLOADING", sourceName: "out", destPath: "/Reports/Q3",
                                         destEntryId: "e1", filesSeen: 412, filesTotal: 412, filesDone: 187, filesSame: 4,
                                         bytesTotal: 640_000_000, bytesSent: 212_000_000,
                                         currentPath: "charts/q3/revenue-by-region.png", startedAt: at(0), updatedAt: at(40))),
-            ("done", DocumentsSync(id: "s_done", status: "DONE", sourceName: "out", destPath: "/Reports/Q3", destEntryId: "e1",
+            ("done", DriveSync(id: "s_done", status: "DONE", sourceName: "out", destPath: "/Reports/Q3", destEntryId: "e1",
                                    filesSeen: 412, filesTotal: 412, filesDone: 412, filesSame: 3, bytesTotal: 52_000_000,
                                    bytesSent: 52_000_000, startedAt: at(0), updatedAt: at(194), endedAt: at(194))),
-            ("done-failures", DocumentsSync(id: "s_fail", status: "DONE", sourceName: "out", destPath: "/Reports/Q3",
+            ("done-failures", DriveSync(id: "s_fail", status: "DONE", sourceName: "out", destPath: "/Reports/Q3",
                                             destEntryId: "e1", filesSeen: 412, filesTotal: 412, filesDone: 410,
                                             bytesTotal: 52_000_000, bytesSent: 51_000_000,
                                             failed: [.init(path: "raw/big.mov", error: "File too large"),
                                                      .init(path: "raw/locked.db", error: "Permission denied")],
                                             failedCount: 2, startedAt: at(0), updatedAt: at(194), endedAt: at(194))),
-            ("stopped", DocumentsSync(id: "s_stopped", status: "STOPPED", sourceName: "out", destPath: "/Reports/Q3",
+            ("stopped", DriveSync(id: "s_stopped", status: "STOPPED", sourceName: "out", destPath: "/Reports/Q3",
                                       destEntryId: "e1", filesSeen: 412, filesTotal: 412, filesDone: 187,
                                       bytesTotal: 640_000_000, bytesSent: 212_000_000,
                                       startedAt: at(0), updatedAt: at(60), endedAt: at(60))),
-            ("failed", DocumentsSync(id: "s_failed", status: "FAILED", sourceName: "out", destPath: "/Reports/Q3",
+            ("failed", DriveSync(id: "s_failed", status: "FAILED", sourceName: "out", destPath: "/Reports/Q3",
                                      destEntryId: "e1", error: "The runner lost its connection to Documents before the sync finished.",
                                      startedAt: at(0), updatedAt: at(12), endedAt: at(12))),
         ]
@@ -54,17 +54,17 @@ final class DocumentsSyncCardShotsTests: XCTestCase {
 
     private func write(dark: Bool) throws {
         let app = AppModel()
-        let model = DocumentsModel(baseURL: URL(string: "http://127.0.0.1:9")!, tokenStore: InMemoryTokenStore())
+        let model = DriveModel(baseURL: URL(string: "http://127.0.0.1:9")!, tokenStore: InMemoryTokenStore())
         let all = fixtures()
         model.seedSyncsForTesting(all.map(\.sync), rates: ["s_uploading": 8_400_000])
-        app.seedDocumentsForTesting(model)
+        app.seedDriveForTesting(model)
 
         let size = CGSize(width: 820, height: 820)
         let root = VStack(alignment: .leading, spacing: 14) {
             ForEach(all, id: \.label) { item in
                 VStack(alignment: .leading, spacing: 4) {
                     Text(item.label.uppercased()).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    DocumentsSyncCardView(syncID: item.sync.id)
+                    DriveSyncCardView(syncID: item.sync.id)
                 }
             }
         }

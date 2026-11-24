@@ -82,8 +82,8 @@ final class DriveModel {
     /// Bytes a second between the last two reads of each running sync.
     private(set) var syncRates: [String: Double] = [:]
     /// Every sync read, whether or not this Mac cleared it from the popover, by id: what the conversation's sync
-    /// cards read (`DocumentsSyncCardView`), which stay live after a sync leaves the popover.
-    private(set) var syncsByID: [String: DocumentsSync] = [:]
+    /// cards read (`DriveSyncCardView`), which stay live after a sync leaves the popover.
+    private(set) var syncsByID: [String: DriveSync] = [:]
 
     /// A toast for the app's one host: the message, a line under it, its tone and an Undo.
     @ObservationIgnored var onToast: ((String, String?, ToastTone, (@MainActor () -> Void)?) -> Void)?
@@ -254,7 +254,7 @@ final class DriveModel {
     /// Open a file where it lives, selected, from its id alone (a file an agent's transfer card names). One no longer
     /// there opens the drive's root.
     func reveal(entryID: String) async {
-        guard let entry = try? await api.documentsEntry(entryID) else {
+        guard let entry = try? await api.driveEntry(entryID) else {
             open(folder: nil)
             return
         }
@@ -823,13 +823,13 @@ final class DriveModel {
     func watchSync(_ id: String) async {
         guard syncsByID[id] == nil else { return }
         await loadSyncs()
-        guard syncsByID[id] == nil, let sync = try? await api.documentsSync(id) else { return }
+        guard syncsByID[id] == nil, let sync = try? await api.driveSync(id) else { return }
         syncsByID[sync.id] = sync
     }
 
 #if DEBUG
-    /// Test-only: what a screenshot gallery seeds for `DocumentsSyncCardView` to read.
-    func seedSyncsForTesting(_ syncs: [DocumentsSync], rates: [String: Double] = [:]) {
+    /// Test-only: what a screenshot gallery seeds for `DriveSyncCardView` to read.
+    func seedSyncsForTesting(_ syncs: [DriveSync], rates: [String: Double] = [:]) {
         for sync in syncs { syncsByID[sync.id] = sync }
         syncRates = rates
     }
