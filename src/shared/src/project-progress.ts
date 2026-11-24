@@ -48,6 +48,14 @@ export interface ProjectIntegrationSettings<Instant = string> {
   lineAbsentReason: 'NOT_DECIDED' | null;
   /** The integration line's branch, spelled as a merge receipt spells it (no `refs/heads/`). */
   ref: string | null;
+  /**
+   * The branch a project branch line is on, short (no `refs/heads/`): the line's own once it is
+   * decided on one, and otherwise the default the server would choose for a project branch nobody
+   * named, `project/<title slug>-<8 characters of the project id>`. Clients show it rather than
+   * building a name themselves. Absent on servers that predate it, which named the branch
+   * `project/<project id>`.
+   */
+  defaultProjectBranch?: string;
   /** The project's main branch, short (no `refs/heads/`); null while it has no binding. */
   upstreamRef: string | null;
   /**

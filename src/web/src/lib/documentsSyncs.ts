@@ -192,10 +192,18 @@ export function useDocumentsSync(id: string): DocumentsSync | null {
 /** The MCP name of the tool an agent starts a sync with. */
 export const DOCUMENTS_SYNC_TOOL = 'mcp__orbit__documents_sync';
 
-/** The sync a documents_sync call's answer names, or null for one that names none (a runner from before the card). */
+/**
+ * The sync a documents_sync call's answer names, or null for one that names none (a runner from before the card). A
+ * runner that answers with a receipt puts the call's own answer under `entity`, and a refused receipt names nothing.
+ */
 export function documentsSyncIdOf(text: string): string | null {
   try {
-    const answer = JSON.parse(text) as { syncId?: unknown };
+    const parsed = JSON.parse(text) as Record<string, unknown>;
+    if (parsed.receiptVersion !== undefined && parsed.ok === false) return null;
+    const answer =
+      parsed.receiptVersion !== undefined && parsed.entity && typeof parsed.entity === 'object'
+        ? (parsed.entity as Record<string, unknown>)
+        : parsed;
     return typeof answer.syncId === 'string' && answer.syncId ? answer.syncId : null;
   } catch {
     return null;

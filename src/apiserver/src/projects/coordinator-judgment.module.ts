@@ -19,6 +19,8 @@ import { PROJECT_OPEN_ITEM_DELIVERY } from './project-open-item';
 import { ProjectSettledUnmergedProducer } from './project-settled-unmerged.producer';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskDispatchRefusalProducer } from './task-dispatch-refusal.producer';
+import { TaskRunIdleService } from './task-run-idle.service';
+import { ProjectLineBlockedService } from './project-line-blocked.service';
 import { TaskRunStoppedProducer } from './task-run-stopped.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
@@ -96,6 +98,8 @@ import { WakeDispositionService } from './wake-disposition.service';
     TaskDispatchRefusalProducer,
     DependentReadyProducer,
     TaskRunStoppedProducer,
+    TaskRunIdleService,
+    ProjectLineBlockedService,
     CompletionEvidenceProducer,
     CoordinatorEvidenceQueueService,
     CoordinatorFactQueueService,
@@ -117,6 +121,8 @@ import { WakeDispositionService } from './wake-disposition.service';
     TaskDispatchRefusalProducer,
     DependentReadyProducer,
     TaskRunStoppedProducer,
+    TaskRunIdleService,
+    ProjectLineBlockedService,
     CompletionEvidenceProducer,
     CoordinatorEvidenceQueueService,
     CoordinatorFactQueueService,

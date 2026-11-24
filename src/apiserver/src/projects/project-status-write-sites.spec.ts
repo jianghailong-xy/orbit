@@ -81,8 +81,20 @@ const SRC = path.resolve(__dirname, '../../src');
  * row (`readDerivedProjectStatusWrite`) is to store DONE. It takes no `status` from any caller and
  * runs only at the server's start, so no request can reach it. A fifth entry still has to be
  * explained before it is added.
+ *
+ * THE FIFTH ENTRY, AND THE DECISION THAT PUT IT THERE
+ * ===================================================
+ * `owner-requests/owner-requests.service.ts#reopenProject` is the owner's Reopen press on a
+ * PROJECT_REOPEN card, `POST /owner-requests/:id/reopen-project` (docs/project-reopen-request-design.md
+ * §4.2, migration 1573). An agent refused on a DONE or CANCELLED project may only ASK, by filing the
+ * card; the write is the account owner's, signed in: a request carrying an acting session is
+ * refused REOPEN_OWNER_CHANNEL_ONLY before anything is read, and a personal access token never
+ * reaches the door. It writes one fixed value, OPEN, with exactly the record the project page's
+ * own Reopen press writes (`reopenRecordOfPress`), so it is that press made from a card rather
+ * than a new way for a status to change. A sixth entry still has to be explained before it is
+ * added.
  */
-const FROZEN_WRITE_SITES: readonly string[] = ['projects/landing-regression-repair.ts#storeDoneOverOpen', 'projects/project-acceptance.service.ts#recordProjectDone', 'projects/project-done-derived.ts#storeDerivedProjectStatus', 'projects/projects.service.ts#update'];
+const FROZEN_WRITE_SITES: readonly string[] = ['owner-requests/owner-requests.service.ts#reopenProject', 'projects/landing-regression-repair.ts#storeDoneOverOpen', 'projects/project-acceptance.service.ts#recordProjectDone', 'projects/project-done-derived.ts#storeDerivedProjectStatus', 'projects/projects.service.ts#update'];
 
 /** The Prisma model writes whose input can carry a `status`. Reads are absent on purpose. */
 const PRISMA_PROJECT_WRITE =

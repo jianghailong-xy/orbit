@@ -153,6 +153,15 @@ export class SecretGrantRemovedDto {
  * values are checked against the tier table and `UpdatePreferencesDto` by `validateSettingsChanges`, not here, so a
  * key that is not a setting is refused by name rather than stripped.
  */
+/**
+ * `POST /runner/projects/:id/reopen-requests` (`@orbit/shared` ProjectReopenFiling). Each is trimmed, non-empty and at
+ * most MAX_PROJECT_REOPEN_TEXT characters, which the service checks after trimming (owner-requests/project-reopen.ts).
+ */
+export class RequestProjectReopenDto {
+  @IsString() why!: string;
+  @IsString() plannedWork!: string;
+}
+
 export class ProposeSettingsDto {
   @IsObject() changes!: Record<string, unknown>;
   @IsString() @MinLength(1) @MaxLength(MAX_OWNER_REQUEST_WHY) why!: string;

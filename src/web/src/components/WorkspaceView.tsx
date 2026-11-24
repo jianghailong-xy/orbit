@@ -54,6 +54,7 @@ import {
   PushpinOutlined,
   RightOutlined,
   SearchOutlined,
+  TagOutlined,
   TeamOutlined,
   ThunderboltOutlined,
   UndoOutlined,
@@ -586,7 +587,8 @@ import { CloneWaitNotice, useCloneWait } from './CloneWaitNotice';
 import { bindingPlanUsageRow, currentPlanUsageRows, modelPlanUsage } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { showToast } from '../lib/toastStore';
-import { setSessionTags } from '../lib/sessionTags';
+import { rememberSessionTag, setSessionTags } from '../lib/sessionTags';
+import { SessionTagChips, useSessionTagLevel } from './SessionTagPicker';
 import {
   isSessionBusy,
   isSessionLive,
@@ -2807,6 +2809,8 @@ export function WorkspaceView({
   const scopeTrigger = useRef<HTMLSpanElement>(null);
   // Controlled because the tag items stay open after a choice; ordinary actions close it explicitly.
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  // The header ⋯'s Tags level, opened by itself when a tag chip in the subtitle is pressed.
+  const [headerTagsOpen, setHeaderTagsOpen] = useState(false);
   // The header's ⋯, where focus goes back to when a confirmation its menu opened closes.
   const headerMore = useRef<HTMLButtonElement>(null);
   // React Query publishes isPending through a batched render; this synchronous lock closes the
@@ -7136,6 +7140,22 @@ export function WorkspaceView({
       void qc.invalidateQueries({ queryKey: ['session', id], exact: true });
     },
   });
+  // The header ⋯'s Tags level (docs/mocks/session-header-menu). `toggleTag` is declared further down;
+  // the level only calls it on a press, after this render.
+  const headerTagIds = ((selected?.tags ?? []) as SessionTagRef[]).map((t) => t.id);
+  const headerTagLevel = useSessionTagLevel({
+    library: sessionTags,
+    selectedIds: headerTagIds,
+    saving: setTagsMut.isPending,
+    onToggle: (id) => toggleTag(id),
+    onCreated: (tag) => {
+      void qc.invalidateQueries({ queryKey: ['session-tags'] });
+      if (!selected || tagSaveInFlight.current) return;
+      tagSaveInFlight.current = true;
+      rememberSessionTag(tag.id);
+      setTagsMut.mutate({ id: selected.id, tagIds: [...headerTagIds, tag.id] });
+    },
+  });
   // Initialize git… on a folder that is not a repository: flip autoInitGit so the runner `git
   // init`s the workDir when the workspace's next session starts. Refetching workspaces settles
   // the notice: every session of the workspace has had its answer.
@@ -9907,13 +9927,15 @@ export function WorkspaceView({
     });
   };
   // A tag item adds its tag or takes it off; the whole selection is then written in one go.
-  const toggleTag = (key: string): void =>
+  const toggleTag = (key: string): void => {
+    if (!selectedSessionTagIds.includes(key)) rememberSessionTag(key);
     setTagsFromMenu({
       key,
       selectedKeys: selectedSessionTagIds.includes(key)
         ? selectedSessionTagIds.filter((id) => id !== key)
         : [...selectedSessionTagIds, key],
     });
+  };
   // One menu for everything that scopes the list: which slice (exclusive), then — below a
   // divider — the tag narrowing and sectioning. Tag entries only appear once the owner has
   // tags; the view entries always do, so Trash is reachable without ever having made one.
@@ -10046,11 +10068,17 @@ export function WorkspaceView({
   const sourceLanding = sourceLandingLabelView && selectedSourceLanding
     ? { ...sourceLandingLabelView, id: selectedSourceLanding.landingSessionId }
     : null;
+  // The agent tools' connection, for the ⋯ row and — when it has failed — a pill by the title.
+  const selectedAgentToolsStatus = agentToolsMenuStatus(
+    detailForSelected?.agentTools,
+    detailForSelected?.engine ?? selectedSession?.engine,
+  );
   const headLifecycleWord = selectedLifecycleState
     ? sessionLifecycleLabel(selectedLifecycleState)
     : null;
+  // A new session's subtitle says where it will run — workspace, then folder — not its title again.
   const headSub = composing
-    ? [headWorkspaceName, openFolder?.name, 'New session'].filter(Boolean).join(' · ')
+    ? [headWorkspaceName, openFolder?.name].filter(Boolean).join(' › ')
     : selected
       ? [
           headRunWord,
@@ -10942,8 +10970,33 @@ export function WorkspaceView({
               {!composing && selectedId && !selectedTrashed && !selectedMissing && (
                 <SessionWatchBadges sessionId={selectedId} />
               )}
+              {/* Only a failed connection is said here; Connected, Starting and Not reported stay on the ⋯ row. */}
+              {!composing && selected && !selectedTrashed && selectedAgentToolsStatus.tone === 'bad' && (
+                <button
+                  type="button"
+                  className="session-agent-tools-pill"
+                  title="The agent here cannot reach Orbit's tools — open Agent tools"
+                  onClick={() => setAgentToolsOpen(true)}
+                >
+                  <span className="session-agent-tools-pill-dot" aria-hidden />
+                  Agent tools {selectedAgentToolsStatus.word.toLowerCase()}
+                </button>
+              )}
             </div>
-            <div className="workspace-sub">{headSub}</div>
+            <div className="workspace-sub">
+              {headSub}
+              {/* The session's tags, seen without opening anything; a press opens ⋯ at its Tags level. */}
+              {!composing && selected && !selectedTrashed && (
+                <SessionTagChips
+                  tags={(selected.tags ?? []) as SessionTagRef[]}
+                  compact={isMobile}
+                  onOpen={() => {
+                    setHeaderMenuOpen(true);
+                    setHeaderTagsOpen(true);
+                  }}
+                />
+              )}
+            </div>
             {/* A run of a task forked from a session says where its checkout came from, in the
                 server's own words (docs/task-fork-from-session-design.md §2.3). */}
             {!composing && detailForSelected?.forkSource && (
@@ -10970,7 +11023,10 @@ export function WorkspaceView({
                 align="end"
                 popupClassName="workspace-header-menu"
                 open={headerMenuOpen}
-                onOpenChange={setHeaderMenuOpen}
+                onOpenChange={(open) => {
+                  setHeaderMenuOpen(open);
+                  if (!open) setHeaderTagsOpen(false);
+                }}
                 items={
                   selectedTrashed
                     ? [
@@ -10997,83 +11053,35 @@ export function WorkspaceView({
                         },
                       ]
                     : [
-                        // Keyboard-only would leave the feature undiscoverable, and unreachable
-                        // for anyone on a trackpad-and-touch device.
-                        {
-                          key: 'find',
-                          icon: <SearchOutlined />,
-                          label: `Find in session · ${FIND_HINT}`,
-                          onSelect: () => {
-                            setHeaderMenuOpen(false);
-                            afterMenu(headerMore.current, openSessionFind);
-                          },
-                        },
-                        // What the agent here can reach in Orbit and what it was told (AgentToolsDrawer), with the
-                        // connection's word on the row so it is seen without opening it.
-                        {
-                          key: 'agent-tools',
-                          icon: <ApiOutlined />,
-                          label: (() => {
-                            const status = agentToolsMenuStatus(
-                              detailForSelected?.agentTools,
-                              detailForSelected?.engine ?? selectedSession?.engine,
-                            );
-                            return (
-                              <span className="scope-menu-row">
-                                Agent tools
-                                <span className={`scope-menu-value agent-tools-menu-status is-${status.tone}`}>{status.word}</span>
-                              </span>
-                            );
-                          })(),
-                          onSelect: () => {
-                            setHeaderMenuOpen(false);
-                            setAgentToolsOpen(true);
-                          },
-                        },
-                        ...(sessionTags.length > 0
-                          ? [
-                              {
-                                key: 'tags',
-                                type: 'group' as const,
-                                label: 'Tags',
-                                children: sessionTags.map((t) => ({
-                                  key: t.id,
-                                  disabled: setTagsMut.isPending,
-                                  // A tag is added or taken off, and the menu stays open for the next one.
-                                  selected: selectedSessionTagIds.includes(t.id),
-                                  closeOnSelect: false,
-                                  onSelect: () => toggleTag(t.id),
-                                  label: (
-                                    <span className="scope-menu-row">
-                                      <span className="scope-tag-label">
-                                        <span
-                                          className="session-section-dot"
-                                          style={{ background: t.color }}
-                                        />
-                                        {t.name}
-                                      </span>
-                                      {checkSlot(selectedSessionTagIds.includes(t.id))}
-                                    </span>
-                                  ),
-                                })),
-                              },
-                            ]
-                          : []),
-                        { key: 'divider-2', type: 'separator' as const },
-                        // A Completed session is retained, not gone — offer the same move
-                        // its row has in Completed, so it can return to Open in place.
+                        // docs/mocks/session-header-menu: organize, share, inspect, delete — a menu as tall
+                        // however many tags the owner has. The lifecycle move leads, in one place either way.
                         ...(selectedCompleted
-                          ? [
-                              {
-                                key: 'restore',
-                                icon: <UndoOutlined />,
-                                label: 'Move to Open',
-                                disabled: !selectedCanRestore,
+                          ? [{
+                              key: 'restore',
+                              icon: <UndoOutlined />,
+                              label: 'Move to Open',
+                              disabled: !selectedCanRestore,
+                              onSelect: () => {
+                                setHeaderMenuOpen(false);
+                                requestRestore(selected);
+                              },
+                            }]
+                          : selectedLifecycleState === 'OPEN'
+                            ? [{
+                                key: 'complete',
+                                icon: <CheckOutlined />,
+                                label: 'Complete',
+                                disabled: !selectedCanComplete,
                                 onSelect: () => {
                                   setHeaderMenuOpen(false);
-                                  requestRestore(selected);
+                                  requestComplete(selected);
                                 },
-                              },
+                              }]
+                            : []),
+                        // The same editor a double-click on the title opens, which nothing on screen announces;
+                        // then filing it, beside the other move it can make (§2). Only where the lifecycle lets it move.
+                        ...(selectedCompleted || selectedLifecycleState === 'OPEN'
+                          ? [
                               {
                                 key: 'rename',
                                 icon: <EditOutlined />,
@@ -11090,60 +11098,29 @@ export function WorkspaceView({
                                 label: MOVE_COPY.action,
                                 onSelect: () => openMove(selectedSession ?? selected),
                               },
-                              {
-                                key: 'settings',
-                                icon: <SettingOutlined />,
-                                label: 'Settings…',
-                                onSelect: () => {
-                                  setHeaderMenuOpen(false);
-                                  setSettingsOpen(true);
-                                },
-                              },
-                              { key: 'divider-3', type: 'separator' as const },
                             ]
-                          : selectedLifecycleState === 'OPEN'
-                            ? [
-                                {
-                                  key: 'complete',
-                                  icon: <CheckOutlined />,
-                                  label: 'Complete',
-                                  disabled: !selectedCanComplete,
-                                  onSelect: () => {
-                                    setHeaderMenuOpen(false);
-                                    requestComplete(selected);
-                                  },
-                                },
-                                // The same editor a double-click on the title opens, which nothing
-                                // on screen announces.
-                                {
-                                  key: 'rename',
-                                  icon: <EditOutlined />,
-                                  label: 'Rename…',
-                                  onSelect: () => {
-                                    setHeaderMenuOpen(false);
-                                    setTitleDraft(selected.title);
-                                    afterMenu(headerMore.current, () => setEditingTitle(true));
-                                  },
-                                },
-                                // Filing it, beside the other move it can make (§2).
-                                {
-                                  key: 'move',
-                                  icon: <FolderOutlined />,
-                                  label: MOVE_COPY.action,
-                                  onSelect: () => openMove(selectedSession ?? selected),
-                                },
-                                {
-                                  key: 'settings',
-                                  icon: <SettingOutlined />,
-                                  label: 'Settings…',
-                                  onSelect: () => {
-                                    setHeaderMenuOpen(false);
-                                    setSettingsOpen(true);
-                                  },
-                                },
-                                { key: 'divider-4', type: 'separator' as const },
-                              ]
-                            : []),
+                          : []),
+                        // A level of its own with a search, so the library's size never sets the menu's height.
+                        {
+                          key: 'tags',
+                          icon: <TagOutlined />,
+                          textValue: 'Tags',
+                          label: (
+                            <span className="scope-menu-row">
+                              Tags
+                              {selectedSessionTagIds.length > 0 && (
+                                <span className="scope-menu-value">{selectedSessionTagIds.length}</span>
+                              )}
+                            </span>
+                          ),
+                          open: headerTagsOpen,
+                          onOpenChange: setHeaderTagsOpen,
+                          popupClassName: 'session-tags-level',
+                          children: headerTagLevel.children,
+                          levelHeader: headerTagLevel.levelHeader,
+                          levelFooter: headerTagLevel.levelFooter,
+                        },
+                        { key: 'divider-share', type: 'separator' as const },
                         // Two words for two links (docs/share-links-design.md §8): Copy link is
                         // the signed-in address, for yourself; Share… is the public one. Keeping a
                         // copy needs neither: Download HTML reads the transcript as its owner.
@@ -11181,7 +11158,52 @@ export function WorkspaceView({
                             void downloadHtml(selectedSession ?? selected);
                           },
                         },
-                        { key: 'divider-5', type: 'separator' },
+                        { key: 'divider-inspect', type: 'separator' as const },
+                        // Keyboard-only would leave the feature undiscoverable, and unreachable
+                        // for anyone on a trackpad-and-touch device.
+                        {
+                          key: 'find',
+                          icon: <SearchOutlined />,
+                          textValue: 'Find in session',
+                          label: (
+                            <span className="scope-menu-row">
+                              Find in session
+                              <span className="scope-menu-value">{FIND_HINT}</span>
+                            </span>
+                          ),
+                          onSelect: () => {
+                            setHeaderMenuOpen(false);
+                            afterMenu(headerMore.current, openSessionFind);
+                          },
+                        },
+                        // What the agent here can reach in Orbit and what it was told (AgentToolsDrawer), with the
+                        // connection's word on the row so it is seen without opening it.
+                        {
+                          key: 'agent-tools',
+                          icon: <ApiOutlined />,
+                          label: (
+                            <span className="scope-menu-row">
+                              Agent tools
+                              <span className={`scope-menu-value agent-tools-menu-status is-${selectedAgentToolsStatus.tone}`}>{selectedAgentToolsStatus.word}</span>
+                            </span>
+                          ),
+                          onSelect: () => {
+                            setHeaderMenuOpen(false);
+                            setAgentToolsOpen(true);
+                          },
+                        },
+                        ...(selectedCompleted || selectedLifecycleState === 'OPEN'
+                          ? [{
+                              key: 'settings',
+                              icon: <SettingOutlined />,
+                              label: 'Session settings…',
+                              onSelect: () => {
+                                setHeaderMenuOpen(false);
+                                setSettingsOpen(true);
+                              },
+                            }]
+                          : []),
+                        { key: 'divider-delete', type: 'separator' },
                         {
                           key: 'delete',
                           icon: <DeleteOutlined />,
