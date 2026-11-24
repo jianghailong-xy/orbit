@@ -31,7 +31,7 @@ function withSwitch<T>(value: string | undefined, fn: () => T): T {
   }
 }
 
-test('Documents is off unless the switch says true', () => {
+test('Drive is off unless the switch says true', () => {
   assert.deepEqual(readDriveSwitch(undefined), { enabled: false, problem: null });
   assert.deepEqual(readDriveSwitch(''), { enabled: false, problem: null });
   assert.deepEqual(readDriveSwitch('false'), { enabled: false, problem: null });
@@ -62,7 +62,7 @@ test('the guard is on each drive controller, after the credential guard', () => 
   assert.deepEqual(guards(RunnerDriveController), [RunnerAuthGuard, DriveEnabledGuard]);
 });
 
-test('a claim says documentsDisabled only while Documents is off', () => {
+test('a claim says documentsDisabled only while Drive is off', () => {
   assert.deepEqual(withSwitch(undefined, () => documentsClaimFields()), { documentsDisabled: true });
   assert.deepEqual(withSwitch('true', () => documentsClaimFields()), {});
 });

@@ -92,7 +92,7 @@ async function visit(path: string): Promise<void> {
 const driveCalls = () => apiMock.mock.calls.filter(([path]) => /^\/(drive|documents)/.test(String(path)));
 const OFF = { managedRunners: { enabled: false }, documents: { enabled: false } };
 
-describe('Documents switch on the routes', () => {
+describe('Drive switch on the routes', () => {
   it.each(['/documents', '/documents/trash', '/documents/storage', '/documents/storage/projects/abc', '/settings/storage', '/files'])(
     'off: %s is the not-found page and asks nothing of /drive',
     async (path) => {

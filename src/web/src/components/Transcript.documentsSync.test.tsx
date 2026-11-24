@@ -73,7 +73,7 @@ describe('a documents_sync call', () => {
       ),
     );
     const card = container.querySelector('section.drive-sync');
-    expect(card?.textContent).toContain('Syncing to Documents');
+    expect(card?.textContent).toContain('Syncing to Drive');
     expect(card?.textContent).toContain('12 of 42 files');
     expect(container.querySelector('.chat-steps-line')).toBeNull();
   });

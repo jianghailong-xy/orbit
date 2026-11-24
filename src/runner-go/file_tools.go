@@ -612,7 +612,7 @@ func fileScopeError(path, reason, sessionID string) error {
 	}
 	if driveMounted() {
 		return fmt.Errorf("file_upload: %s is outside the allowed paths: %s. Use this session's checkout, "+
-			"its uploads directory (%s), or the mounted Documents drive. %s", path, reason, uploads, next)
+			"its uploads directory (%s), or the mounted Drive. %s", path, reason, uploads, next)
 	}
 	return fmt.Errorf("file_upload: %s is %s, so nothing was uploaded. file_upload reads only this session's checkout and "+
 		"its uploads directory, %s, the same rule a reply's links follow. %s", path, reason, uploads, next)

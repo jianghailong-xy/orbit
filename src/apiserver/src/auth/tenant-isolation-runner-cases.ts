@@ -638,6 +638,16 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
       body: { line: 'MAIN', automatic: false, maxConcurrentTasks: 1, why: 'the census' },
     }),
   },
+  // Any session may ask (design D1): the caller's own session asks about A's project, which the door reads under the
+  // runner's owner and answers 404 before anything is filed.
+  'POST /runner/projects/:id/reopen-requests': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: of.projectId },
+      headers: calling(mine.runner.coordinatorSessionId),
+      body: { why: 'the census', plannedWork: 'the census' },
+    }),
+  },
   'POST /runner/projects/:id/done-requests': {
     as: RUNNER,
     request: (of, mine) => ({ params: { id: of.projectId }, headers: calling(mine.runner.coordinatorSessionId), body: { judgment: 'Done.', gaps: [] } }),
@@ -1699,6 +1709,8 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'counted among the runner owner\'s own projects before anything is written; one that is not answers 404 (owner-requests/owner-requests.service.ts:132); owner-requests.pg.spec.ts (f) sends another account\'s',
   'POST /runner/owner-requests header x-orbit-session-id':
     'must be a session of the runner\'s owner that this runner hosts, else 403 (runner-api/runner-owner-requests.controller.ts:100); owner-requests.pg.spec.ts (f) sends another account\'s',
+  'POST /runner/projects/:id/reopen-requests header x-orbit-session-id':
+    'must be a session of the runner\'s owner that this runner hosts, else 403 before the project is read or anything is written (owner-requests/owner-requests.service.ts:719); the project is then read under that owner only, 404 for another account\'s (owner-requests/owner-requests.service.ts:586), and the card is filed under that owner',
   'POST /runner/settings-proposals header x-orbit-session-id':
     'must be a session of the runner\'s owner that this runner hosts, else 403 before anything is read or written (runner-api/runner-owner-requests.controller.ts:100); the proposal acts on that owner\'s own preferences only, and settings-proposals.pg.spec.ts (t) sends another account\'s session',
   'GET /runner/settings header x-orbit-session-id':

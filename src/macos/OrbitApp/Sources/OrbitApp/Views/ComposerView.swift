@@ -1404,7 +1404,7 @@ struct ComposerView: View {
             // A drive file by its path (D21): offered while the server has Documents on, as the web's `drive` item.
             if app.documents?.shown == true {
                 Button { showDocumentsPicker = true } label: {
-                    Label("Documents", systemImage: "folder")
+                    Label("Drive", systemImage: "folder")
                 }
             }
             // Paste an image from the clipboard (macOS does this via the ⌘V monitor above). Only

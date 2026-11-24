@@ -59,12 +59,12 @@ const reply = (text: string) => {
 };
 
 describe('a reply linking a drive file', () => {
-  it.each(['orbit-document', 'orbit-drive'])('draws a %s: link as the file and links to it on the Documents page', async (scheme) => {
+  it.each(['orbit-document', 'orbit-drive'])('draws a %s: link as the file and links to it on the Drive page', async (scheme) => {
     apiMock.mockResolvedValue(FILE);
     await reply(`Saved [sign-in-copy.md](${scheme}:e1) for you.`);
     const card = container.querySelector<HTMLAnchorElement>('a.drive-file-card');
     expect(card?.textContent).toContain('sign-in-copy.md');
-    expect(card?.textContent).toContain('Documents › Orbit UI migration · 4.1 KB');
+    expect(card?.textContent).toContain('Drive › Orbit UI migration · 4.1 KB');
     expect(card?.getAttribute('href')).toBe('/documents?folder=f1&file=e1');
     expect(apiMock).toHaveBeenCalledWith(expect.stringContaining('e1'));
   });
@@ -73,7 +73,7 @@ describe('a reply linking a drive file', () => {
     apiMock.mockResolvedValue({ id: 'd1', parentId: 'r1', kind: 'FOLDER', name: 'out', sizeBytes: 0, path: '/Reports/out', trashedAt: null });
     await reply('305 files uploaded to [out](orbit-drive:d1), 0 failed.');
     const card = container.querySelector<HTMLAnchorElement>('a.drive-file-card');
-    expect(card?.textContent).toContain('Documents › Reports');
+    expect(card?.textContent).toContain('Drive › Reports');
     expect(card?.textContent).not.toContain('0 B');
     expect(card?.getAttribute('href')).toBe('/documents?folder=d1');
   });
@@ -161,7 +161,7 @@ describe('the composer drive picker', () => {
       await new Promise((r) => setTimeout(r, 50));
     });
     expect(searches[0]).toContain('q=budg');
-    expect(option('budget.xlsx')?.textContent).toContain('Documents/Finance/2026');
+    expect(option('budget.xlsx')?.textContent).toContain('Drive/Finance/2026');
     await click(option('budget.xlsx'));
     await click([...document.body.querySelectorAll('button')].find((b) => b.textContent === 'Add 1'));
     expect(onPick).toHaveBeenCalledWith([{ id: 'e7', name: 'budget.xlsx', path: '/home/orbit/Documents/Finance/2026/budget.xlsx' }]);

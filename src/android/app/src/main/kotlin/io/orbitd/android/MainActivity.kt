@@ -643,8 +643,8 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     // The page draws its own "Change {title}" once the opening has been read (board 03-change ③).
     Destination.SCHEDULE_CHANGE -> ""
     Destination.GUEST_SESSION -> io.orbitd.android.core.guests.GuestCopy.SHARED_WITH_ME
-    Destination.DOCUMENTS -> route.id?.let { route.recordId } ?: "Documents"
-    Destination.DOCUMENTS_FILE -> route.recordId ?: "Documents"
+    Destination.DOCUMENTS -> route.id?.let { route.recordId } ?: "Drive"
+    Destination.DOCUMENTS_FILE -> route.recordId ?: "Drive"
     Destination.DOCUMENTS_TRASH -> "Trash"
     Destination.DOCUMENTS_STORAGE -> "Storage"
     Destination.SETTINGS -> if (route.id == "workspace") data.workspaces.firstOrNull { ObjectId.same(it.id, route.workspaceId) }?.name

@@ -82,7 +82,7 @@ func documentsSyncSource(sessionID, localPath string) (string, error) {
 	}
 	for _, root := range []string{driveMountPath, driveHomePath, driveLegacyHomePath} {
 		if pathInsideAny(real, realPath(root)) {
-			return "", fmt.Errorf("documents_sync: %s is inside Documents itself; sync a directory of this session's checkout or uploads directory", abs)
+			return "", fmt.Errorf("documents_sync: %s is inside Drive itself; sync a directory of this session's checkout or uploads directory", abs)
 		}
 	}
 	if reason := newSessionFileScope(sessionID).refuses(real); reason != "" {
@@ -109,7 +109,7 @@ func documentsSyncDest(p string, deleteExtra bool) (string, error) {
 		return "", err
 	}
 	if deleteExtra && dest == "/" {
-		return "", errors.New("documents_sync: --delete into the root of Documents is refused; name the folder to sync into")
+		return "", errors.New("documents_sync: --delete into the root of Drive is refused; name the folder to sync into")
 	}
 	return dest, nil
 }
@@ -238,7 +238,7 @@ func openDocumentsSyncReport(ctx context.Context, t *Transport, opts documentsSy
 	}
 	id, err := openDocumentsSync(ctx, t, opts.sessionID, opts.source, opts.dest)
 	if err != nil {
-		logln("documents sync: could not open its progress report, the Documents page will not show it:", err)
+		logln("documents sync: could not open its progress report, the Drive page will not show it:", err)
 		return nil
 	}
 	return &documentsSyncReporter{t: t, id: id, progress: progress, sent: -1}
@@ -367,7 +367,7 @@ func documentsSyncPass(ctx context.Context, t *Transport, opts documentsSyncOpti
 		switch {
 		case !found:
 		case entry.Kind == "FOLDER":
-			progress.fail(local.rel, "Documents has a folder with this name.")
+			progress.fail(local.rel, "Drive has a folder with this name.")
 			continue
 		case entry.SizeBytes == local.size && sameDocumentsMtime(entry.Mtime, local.mtime):
 			progress.update(func(p *documentsSyncProgress) { p.same++ })
@@ -388,7 +388,7 @@ func documentsSyncPass(ctx context.Context, t *Transport, opts documentsSyncOpti
 	}
 	for _, rel := range dirs {
 		if entry, found := remote[rel]; found && entry.Kind != "FOLDER" {
-			progress.fail(rel, "Documents has a file with this folder's name.")
+			progress.fail(rel, "Drive has a file with this folder's name.")
 		}
 	}
 
@@ -635,7 +635,7 @@ func listDocumentsTree(ctx context.Context, t *Transport, dest string) (map[stri
 		return nil, err
 	}
 	if root.Kind != "FOLDER" {
-		return nil, fmt.Errorf("%s is a file in Documents, not a folder", dest)
+		return nil, fmt.Errorf("%s is a file in Drive, not a folder", dest)
 	}
 	folders := []string{dest}
 	for len(folders) > 0 {
@@ -762,7 +762,7 @@ func startDocumentsSyncJob(t *Transport, sessionID, localPath, dest string, dele
 	}
 	raw, err := bgSocketCall(socket, token, "run", map[string]interface{}{
 		"command": command, "kind": "job", "wakeOnExit": true,
-		"description": fmt.Sprintf("Sync %s/ to Documents %s", filepath.Base(source), dest),
+		"description": fmt.Sprintf("Sync %s/ to Drive %s", filepath.Base(source), dest),
 	})
 	if err != nil {
 		if syncID != "" {
@@ -777,7 +777,7 @@ func startDocumentsSyncJob(t *Transport, sessionID, localPath, dest string, dele
 	if syncID != "" {
 		job["syncId"] = syncID
 	}
-	job["note"] = "The sync runs in the background; the owner sees it in this conversation and in the Documents page's " +
+	job["note"] = "The sync runs in the background; the owner sees it in this conversation and in the Drive page's " +
 		"upload tray. You are woken when it ends; its last output line is the summary. bg_output shows its progress and " +
 		"bg_kill stops it."
 	return json.Marshal(job)

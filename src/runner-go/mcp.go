@@ -410,7 +410,7 @@ func documentsToolDescriptors(obj func(map[string]interface{}, ...string) map[st
 	return []map[string]interface{}{
 		{
 			"name": "documents_put",
-			"description": "Copy a local file into the owner's Documents drive. Creates missing parent folders and " +
+			"description": "Copy a local file into the owner's Drive. Creates missing parent folders and " +
 				"keeps the previous version when overwriting a file. Returns an orbit-document: link for replies. The file is " +
 				"sent in 8 MiB chunks and has no size limit: file_upload's 25 MiB cap does not apply here.",
 			"inputSchema": obj(map[string]interface{}{
@@ -442,20 +442,20 @@ func documentsToolDescriptors(obj func(map[string]interface{}, ...string) map[st
 		},
 		{
 			"name": "documents_sync",
-			"description": "Copy a local directory into a Documents folder, once, in the background. Answers at once with a " +
+			"description": "Copy a local directory into a Drive folder, once, in the background. Answers at once with a " +
 				"background job id; you are woken when it ends, and its last output line is the summary (uploaded, unchanged, " +
-				"deleted, failed). Files already the same in Documents are skipped, so a second sync only sends what changed. " +
-				"One way: nothing comes down. The owner watches it in the Documents page's upload tray.",
+				"deleted, failed). Files already the same in Drive are skipped, so a second sync only sends what changed. " +
+				"One way: nothing comes down. The owner watches it in the Drive page's upload tray.",
 			"inputSchema": obj(map[string]interface{}{
 				"localPath": map[string]interface{}{"type": "string", "description": "A directory in this session's checkout or uploads directory."},
-				"path":      map[string]interface{}{"type": "string", "description": "The Documents folder to copy into, such as /Reports/out."},
-				"delete":    map[string]interface{}{"type": "boolean", "description": "Move Documents files under path that the directory no longer has to the owner's Trash."},
+				"path":      map[string]interface{}{"type": "string", "description": "The Drive folder to copy into, such as /Reports/out."},
+				"delete":    map[string]interface{}{"type": "boolean", "description": "Move Drive files under path that the directory no longer has to the owner's Trash."},
 			}, "localPath", "path"),
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
 		},
 		{
 			"name":        "documents_delete",
-			"description": "Move a drive entry to the owner's Trash. The owner can restore it from the Documents page. Agents cannot see Trash.",
+			"description": "Move a drive entry to the owner's Trash. The owner can restore it from the Drive page. Agents cannot see Trash.",
 			"inputSchema": obj(map[string]interface{}{"path": drivePath}, "path"),
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": true},
 		},
@@ -1004,6 +1004,22 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 			return toolResult(projectDoneRequestRefusal(err), true)
 		}
 		return toolResult(projectDoneRequestFiled(raw), false)
+
+	case "project_request_reopen":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		body, err := projectReopenRequestBody(args)
+		if err != nil {
+			return toolResult(err.Error(), true)
+		}
+		// Any session may ask: the session header names the asker, and the server files or joins the card.
+		raw, err := s.t.requestProjectReopen(s.sessionID, id, body)
+		if err != nil {
+			return toolResult("request reopen failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
 
 	case "criterion_confirm", "criterion_confirmation_withdraw", "criterion_check_start":
 		id := getString(args, "projectId")

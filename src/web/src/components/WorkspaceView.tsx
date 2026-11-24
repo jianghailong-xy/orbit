@@ -13221,7 +13221,7 @@ export function SessionComposer({
                     {
                       key: 'drive',
                       icon: <FolderOpenOutlined />,
-                      label: 'Documents',
+                      label: 'Drive',
                       onSelect: () => setTimeout(() => setDocumentsPickerOpen(true), 0),
                     },
                   ]

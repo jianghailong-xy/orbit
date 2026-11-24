@@ -346,7 +346,7 @@ Try asking: *"Keep this screenshot with the task."*
 
 | Step | MCP | CLI | Approval | Why |
 | --- | --- | --- | --- | --- |
-| 1 | `file_upload` | `orbit file upload` | none | Keep a file from this session's checkout, uploads directory or a mounted Documents drive. |
+| 1 | `file_upload` | `orbit file upload` | none | Keep a file from this session's checkout, uploads directory or a mounted Drive. |
 | 2? | `file_list` | `orbit file list` | none | What this task's sessions have uploaded. |
 | 3? | `file_fetch` | `orbit file fetch` | none | Read a file back by id. |
 | 4? | `documents_put` | `orbit documents put` | none | Keep a local file on the owner's drive. |
@@ -354,7 +354,7 @@ Try asking: *"Keep this screenshot with the task."*
 | 6? | `documents_list` | `orbit documents ls` | none | List a folder on the owner's drive. |
 | 7? | `documents_move` | `orbit documents mv` | none | Move a drive entry. |
 | 8? | `documents_delete` | `orbit documents rm` | none | Move a drive entry to the owner's Trash. |
-| 9? | `documents_sync` | `orbit documents sync` | none | Copy a whole directory to the owner's Documents in the background. |
+| 9? | `documents_sync` | `orbit documents sync` | none | Copy a whole directory to the owner's Drive in the background. |
 
 **Done when:** file_upload answers the file's id, sha256, sizeBytes and an orbit-attachment: link to put in a reply.
 
@@ -454,11 +454,11 @@ Agent tools on a session counts each family as that session's engine lists it. T
 | Family | Tools |
 | --- | --- |
 | Tasks (21) | `task_attribution`, `task_batch_pin`, `task_comment`, `task_confirmation_return`, `task_confirmation_review`, `task_create`, `task_create_batch`, `task_delete`, `task_dependency_add`, `task_dependency_graph`, `task_dependency_remove`, `task_evidence_decide`, `task_evidence_list`, `task_evidence_submit`, `task_get`, `task_labels`, `task_list`, `task_progress_report`, `task_reopen`, `task_start`, `task_update` |
-| Projects (20) | `criterion_check_report`, `criterion_check_start`, `criterion_confirm`, `criterion_confirmation_withdraw`, `integration_abandon`, `integration_observe`, `integration_request_promotion`, `integration_retry`, `integration_skip_merge_check`, `open_item_resolve`, `project_blocker_resolve`, `project_create`, `project_crossings`, `project_delete`, `project_get`, `project_integration_get`, `project_request_done`, `project_request_start`, `project_ruling_record`, `project_update` |
+| Projects (21) | `criterion_check_report`, `criterion_check_start`, `criterion_confirm`, `criterion_confirmation_withdraw`, `integration_abandon`, `integration_observe`, `integration_request_promotion`, `integration_retry`, `integration_skip_merge_check`, `open_item_resolve`, `project_blocker_resolve`, `project_create`, `project_crossings`, `project_delete`, `project_get`, `project_integration_get`, `project_request_done`, `project_request_reopen`, `project_request_start`, `project_ruling_record`, `project_update` |
 | Task lists (6) | `tasklist_create`, `tasklist_delete`, `tasklist_get`, `tasklist_list`, `tasklist_propose_dag`, `tasklist_update` |
 | Schedules (12) | `condition_get`, `schedule_create`, `schedule_delete`, `schedule_end`, `schedule_get`, `schedule_list`, `schedule_pause`, `schedule_resume`, `schedule_run_now`, `schedule_run_report`, `schedule_run_stop`, `schedule_update` |
 | Waits (6) | `task_await`, `watch_cancel`, `watch_create`, `watch_get`, `watch_list`, `watch_update` |
-| Documents (10) | `documents_delete`, `documents_get`, `documents_list`, `documents_move`, `documents_put`, `documents_sync`, `file_fetch`, `file_list`, `file_pin`, `file_upload` |
+| Drive (10) | `documents_delete`, `documents_get`, `documents_list`, `documents_move`, `documents_put`, `documents_sync`, `file_fetch`, `file_list`, `file_pin`, `file_upload` |
 | SubAgents (1) | `subagent_rate` |
 | Background jobs (5) | `bg_kill`, `bg_list`, `bg_output`, `bg_run`, `schedule_wakeup` |
 | Questions for you (8) | `ask_owner`, `notify`, `open_item_hand_over`, `request_owner_action`, `settings_get`, `settings_propose`, `task_request_confirmation`, `withdraw_owner_request` |

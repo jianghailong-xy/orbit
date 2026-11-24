@@ -49,7 +49,7 @@ final class DocumentsLogicTests: XCTestCase {
         let off = AgentListLogic.sidebarSections(AppSection.workSections, wiki: true, projectsWaiting: 0,
                                                  wikiWaiting: 0, documents: false)
         XCTAssertFalse(off.map(\.section).contains(.documents))
-        XCTAssertEqual(AppSection.documents.title, "Documents")
+        XCTAssertEqual(AppSection.documents.title, "Drive")
         XCTAssertEqual(AppSection.documents.systemImage, "folder")
     }
 
@@ -120,13 +120,13 @@ final class DocumentsLogicTests: XCTestCase {
     }
 
     func testFolderNamesAndPaths() {
-        XCTAssertEqual(DocumentsLogic.folderLabel("/"), "Documents")
+        XCTAssertEqual(DocumentsLogic.folderLabel("/"), "Drive")
         XCTAssertEqual(DocumentsLogic.folderLabel("/Projects/Orbit UI migration"), "Orbit UI migration")
         XCTAssertEqual(DocumentsLogic.displayPath("/a/b.png"), "/Documents/a/b.png")
-        XCTAssertEqual(DocumentsLogic.searchFolder("/"), "Documents")
-        XCTAssertEqual(DocumentsLogic.searchFolder("/a/b"), "Documents/a/b")
+        XCTAssertEqual(DocumentsLogic.searchFolder("/"), "Drive")
+        XCTAssertEqual(DocumentsLogic.searchFolder("/a/b"), "Drive/a/b")
         let root = DocumentsEntry(id: "r", parentId: nil, kind: "FOLDER", name: "")
-        XCTAssertEqual(DocumentsLogic.folderTitle(root), "Documents")
+        XCTAssertEqual(DocumentsLogic.folderTitle(root), "Drive")
         XCTAssertEqual(DocumentsLogic.folderTitle(DocumentsEntry(id: "f", parentId: "r", kind: "FOLDER", name: "out")), "out")
         let folder = DocumentsEntry(id: "f", parentId: "r", kind: "FOLDER", name: "screens")
         XCTAssertEqual(DocumentsLogic.sizeColumn(folder), "—")
@@ -320,12 +320,12 @@ final class DocumentsLogicTests: XCTestCase {
         XCTAssertEqual(bar.documents, 11.0 / 18.0, accuracy: 0.0001)
         XCTAssertEqual(bar.trash, 1.0 / 18.0, accuracy: 0.0001)
         XCTAssertEqual(bar.other, 6.0 / 18.0, accuracy: 0.0001)
-        XCTAssertEqual(DocumentsLogic.storageLegend(usage), ["Documents 11.0 GB", "Trash 1.0 GB", "Other 6.0 GB"])
+        XCTAssertEqual(DocumentsLogic.storageLegend(usage), ["Drive 11.0 GB", "Trash 1.0 GB", "Other 6.0 GB"])
         XCTAssertNil(DocumentsLogic.storeWarning(usage))
         let near = DocumentsUsage(totalBytes: 1, driveBytes: 1, trashBytes: 0, otherBytes: 0, storeUsedBytes: 85,
                                   storeQuotaBytes: 100, nearQuota: true)
         XCTAssertEqual(DocumentsLogic.storeWarning(near),
-                       "Documents storage is 85% full. Uploads stop at 100%. Ask the operator to raise the limit.")
+                       "Drive storage is 85% full. Uploads stop at 100%. Ask the operator to raise the limit.")
         let full = DocumentsUsage(totalBytes: 1, driveBytes: 1, trashBytes: 0, otherBytes: 0, storeUsedBytes: 100,
                                   storeQuotaBytes: 100, nearQuota: true)
         XCTAssertEqual(DocumentsLogic.storeWarning(full), "The drive's storage is full. Ask the operator to raise the limit.")

@@ -74,7 +74,7 @@ async function mount() {
 
 const download = () => container.querySelector<HTMLAnchorElement>('a[download]');
 
-describe('a shared Documents file', () => {
+describe('a shared Drive file', () => {
   it('shows a PDF in a frame from a blob: URL, with its name, size and a Download', async () => {
     file = { name: '蠶織圖.F1954-20.注释.pdf', sizeBytes: 653_269, mimeType: 'application/pdf', preview: true };
     await mount();

@@ -23,7 +23,7 @@ public enum DocumentsLogic {
 
     // MARK: words
 
-    public static let title = "Documents"
+    public static let title = "Drive"
     public static let trash = "Trash"
     public static let storage = "Storage"
     /// Rule 6: an agent wrote it and its session could not be checked — no link, since there is none to follow.
@@ -156,7 +156,7 @@ public enum DocumentsLogic {
     /// A search result's folder: "Documents", "Documents/a/b".
     public static func searchFolder(_ folderPath: String?) -> String {
         guard let folderPath, folderPath != "/", !folderPath.isEmpty else { return title }
-        return "Documents" + (folderPath.hasPrefix("/") ? folderPath : "/" + folderPath)
+        return "Drive" + (folderPath.hasPrefix("/") ? folderPath : "/" + folderPath)
     }
 
     /// The Size column: a file's size, and a folder's count once it is known (the board's "9 items"), else "—".
@@ -408,7 +408,7 @@ public enum DocumentsLogic {
 
     /// The legend under the bar: "Documents 10.9 GB", "Trash 1.3 GB", "Other 6.2 GB".
     public static func storageLegend(_ usage: DocumentsUsage) -> [String] {
-        ["Documents \(storageSize(max(0, usage.driveBytes - usage.trashBytes)))",
+        ["Drive \(storageSize(max(0, usage.driveBytes - usage.trashBytes)))",
          "Trash \(storageSize(usage.trashBytes))",
          "Other \(storageSize(usage.otherBytes))"]
     }
@@ -419,7 +419,7 @@ public enum DocumentsLogic {
             return nil
         }
         if used >= quota { return "The drive's storage is full. Ask the operator to raise the limit." }
-        return "Documents storage is \(used * 100 / quota)% full. Uploads stop at 100%. Ask the operator to raise the limit."
+        return "Drive storage is \(used * 100 / quota)% full. Uploads stop at 100%. Ask the operator to raise the limit."
     }
 
     /// Everything kept besides the drive: "1.8 GB · 1,204 files", or with the quota "1.8 GB of 5 GB · 1,204 files".

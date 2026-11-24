@@ -326,6 +326,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'POST /owner-requests/:id/create-wiki',
   'POST /owner-requests/:id/decline',
   'POST /owner-requests/:id/done',
+  'POST /owner-requests/:id/reopen-project',
   'POST /owner-requests/:id/secret',
   'POST /owner-requests/:id/secret/cancel',
   'POST /owner-requests/:id/secret/revoke',

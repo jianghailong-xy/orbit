@@ -691,6 +691,7 @@ let agentToolsGuideJSON = #"""
         "project_get",
         "project_integration_get",
         "project_request_done",
+        "project_request_reopen",
         "project_request_start",
         "project_ruling_record",
         "project_update"
@@ -740,7 +741,7 @@ let agentToolsGuideJSON = #"""
     },
     {
       "id": "files",
-      "label": "Documents",
+      "label": "Drive",
       "tools": [
         "documents_delete",
         "documents_get",

@@ -100,7 +100,7 @@ final class ComposerMenuCopyParityTests: XCTestCase {
 
     /// Items both ends offer only while a server switch is on, so they sit outside the five: the drive picker,
     /// offered while Documents is on (docs/mocks/documents, 01-ios ⑭) — the web's `drive` item. Native label → web key.
-    private static let switchedLabels = ["Documents": "drive"]
+    private static let switchedLabels = ["Drive": "drive"]
 
     /// The labels the native menu offers, in order.
     private func nativeLabels() throws -> [String] {

@@ -13,6 +13,8 @@ export type OwnerRequestKind =
   | 'DECISION' | 'SECRET' | 'MANUAL_STEP' | 'CONFIRM' | 'WIKI_CREATE'
   // A change to the owner's own Settings, proposed by a session (docs/settings-from-conversation-design.md §5.1).
   | 'SETTINGS_CHANGE'
+  // A session asking the owner to reopen a DONE or CANCELLED project (docs/project-reopen-request-design.md).
+  | 'PROJECT_REOPEN'
   // An agent on the Orbit Cloud runner asking the owner to sign in to a site in its browser (browser_request_sign_in).
   | 'BROWSER_SIGN_IN'
   // An agent proposing one setting of a runner, which the owner applies with one press (docs/design/owner-request-change.md).
@@ -127,6 +129,7 @@ export const KIND_TAGS: Readonly<Record<OwnerRequestKind, string>> = {
   CONFIRM: 'CONFIRM',
   WIKI_CREATE: 'WIKI',
   SETTINGS_CHANGE: 'SETTINGS',
+  PROJECT_REOPEN: 'REOPEN',
   BROWSER_SIGN_IN: 'SIGN IN',
   CHANGE: 'SETTING',
   SCHEDULE_FAILED: SCHEDULE_COPY.waiting.kinds.schedule,

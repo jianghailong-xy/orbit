@@ -91,13 +91,13 @@ async function visit(path: string): Promise<void> {
 const addressBar = (): string => window.location.pathname + window.location.search + window.location.hash;
 
 describe('the Storage addresses', () => {
-  it('/settings/storage leads to Documents → Storage', async () => {
+  it('/settings/storage leads to Drive → Storage', async () => {
     await visit('/settings/storage');
     expect(addressBar()).toBe('/documents/storage');
     expect(container.textContent).toContain('files storage');
   });
 
-  it('/settings/storage/projects/:id leads to the same rows under Documents', async () => {
+  it('/settings/storage/projects/:id leads to the same rows under Drive', async () => {
     await visit('/settings/storage/projects/abc');
     expect(addressBar()).toBe('/documents/storage/projects/abc');
     expect(container.textContent).toContain('files storage rows');

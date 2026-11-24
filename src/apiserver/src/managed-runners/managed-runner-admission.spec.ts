@@ -157,7 +157,7 @@ test('the manager itself is refused for anything but the reserved generation’s
   tampered((pod) => void (pod.spec.ephemeralContainers = [{ name: 'debug', image: profile.runner.image }]), 'an ephemeral container');
 });
 
-test('the Documents drive is the one addition: exactly its CSI volume, mounted only by the runner as designed', () => {
+test('the Drive is the one addition: exactly its CSI volume, mounted only by the runner as designed', () => {
   // docs/documents-drive-technical-design.md §6.1 (B13): the Pod of a profile with the drive.
   const drivePod = (generation = 3) =>
     buildManagedPod({ ownerId: OWNER, runnerId: RUNNER, generation, namespace: NS }, PVC_UID, testManagedRunnerProfile({ files: true }));
