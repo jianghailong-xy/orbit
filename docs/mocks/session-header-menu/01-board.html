@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Session header &amp; ⋯ menu — board 01</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e9eaee; font-family: -apple-system, BlinkMacSystemFont, Inter, 'PingFang SC', 'Noto Sans SC', sans-serif; color: #1d1f24; }
+  .board { width: 2200px; padding: 48px 56px 64px; background: #f4f5f7; }
+  h1 { font-size: 34px; margin: 0 0 6px; }
+  .lede { font-size: 17px; color: #5b6070; margin: 0 0 36px; line-height: 1.6; }
+  h2 { font-size: 22px; margin: 0 0 14px; display: flex; align-items: center; gap: 10px; }
+  h2 .no { display: inline-flex; width: 30px; height: 30px; border-radius: 50%; background: #1d1f24; color: #fff; font-size: 16px; align-items: center; justify-content: center; }
+  h2.new .no { background: #2f6fec; }
+  .row { display: flex; gap: 40px; align-items: flex-start; margin-bottom: 48px; }
+  .card { background: #fff; border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 24px 28px; }
+  .cap { font-size: 14px; color: #6b7080; margin: 10px 0 0; line-height: 1.6; }
+  .note { font-size: 15px; line-height: 1.65; color: #343844; }
+  .note b { color: #1d1f24; }
+  .note li { margin-bottom: 8px; }
+  .bad { color: #c93a2f; font-weight: 600; }
+  .good { color: #1f8a46; font-weight: 600; }
+
+  /* ---- console pieces ---- */
+  .m-pane { position: relative; background: #fff; border: 1px solid #e3e5ea; border-radius: 12px; overflow: hidden; }
+  .m-head { display: flex; align-items: flex-start; gap: 12px; padding: 18px 22px 16px; border-bottom: 1px solid #eceef2; }
+  .m-head-main { flex: 1; min-width: 0; }
+  .m-title-line { display: flex; align-items: center; gap: 8px; }
+  .m-title { font-size: 21px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .m-sub { font-size: 13.5px; color: #7b808d; margin-top: 5px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .m-sub .sep { color: #b6bac4; }
+  .m-chip { display: inline-flex; align-items: center; gap: 5px; height: 21px; padding: 0 8px; border-radius: 11px; background: #f1f2f5; color: #4d5260; font-size: 12.5px; }
+  .m-chip i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .m-chip.more { color: #7b808d; }
+  .m-pill { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border-radius: 11px; font-size: 12.5px; font-weight: 550; }
+  .m-pill.warn { background: #fff3e6; color: #b45c0a; border: 1px solid #f6d3ab; }
+  .m-pill.warn i { width: 7px; height: 7px; border-radius: 50%; background: #e8890c; display: inline-block; }
+  .m-pill.share { background: #eaf2ff; color: #2f6fec; }
+  .m-iconbtn { width: 32px; height: 32px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; color: #555b68; font-size: 20px; font-weight: 700; }
+  .m-iconbtn.on { background: #eef0f4; }
+  .m-body { padding: 18px 22px; color: #9aa0ad; font-size: 14px; line-height: 2; }
+  .m-body .ln { height: 11px; border-radius: 6px; background: #eef0f3; margin: 10px 0; }
+
+  .m-menu { position: absolute; background: #fff; border-radius: 12px; box-shadow: 0 10px 34px rgba(20,25,40,.18), 0 0 0 1px rgba(20,25,40,.06); padding: 6px; width: 300px; font-size: 15px; }
+  .m-item { display: flex; align-items: center; gap: 12px; height: 38px; padding: 0 12px; border-radius: 8px; color: #1d1f24; white-space: nowrap; }
+  .m-item .ic { width: 18px; text-align: center; color: #50566a; font-size: 15px; }
+  .m-item .val { margin-left: auto; font-size: 13.5px; color: #7b808d; }
+  .m-item .val.ok { color: #2e9b4f; }
+  .m-item .val.ok::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #2e9b4f; margin-right: 6px; vertical-align: 1px; }
+  .m-item .val.warn { color: #b45c0a; }
+  .m-item .val.warn::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #e8890c; margin-right: 6px; vertical-align: 1px; }
+  .m-item .kbd { margin-left: auto; font-size: 12.5px; color: #9aa0ad; }
+  .m-item .chev { margin-left: auto; color: #9aa0ad; }
+  .m-item.hover { background: #f1f2f5; }
+  .m-item.sel { background: #eef4ff; color: #2f6fec; }
+  .m-item.sel .check { margin-left: auto; color: #2f6fec; }
+  .m-item.danger, .m-item.danger .ic { color: #d1382b; }
+  .m-item.dim { color: #b4b8c2; }
+  .m-item .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin: 0 4px 0 4px; }
+  .m-group { font-size: 13px; color: #9aa0ad; padding: 8px 12px 4px; }
+  .m-sep { height: 1px; background: #eceef2; margin: 5px 8px; }
+  .m-search { margin: 4px 6px 6px; height: 34px; border: 1px solid #2f6fec; border-radius: 8px; display: flex; align-items: center; gap: 8px; padding: 0 10px; color: #9aa0ad; font-size: 14px; box-shadow: 0 0 0 3px rgba(47,111,236,.15); }
+  .m-search .caret { width: 1px; height: 16px; background: #1d1f24; margin-left: -6px; }
+  .m-foot { font-size: 12.5px; color: #9aa0ad; padding: 6px 12px 4px; }
+  .m-swatches { display: flex; gap: 7px; padding: 4px 12px 8px; }
+  .m-swatches i { width: 16px; height: 16px; border-radius: 50%; display: inline-block; box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); }
+  .m-swatches i.on { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #2f6fec; }
+  .fade { position: absolute; left: 0; right: 0; bottom: 0; height: 70px; background: linear-gradient(transparent, #fff); border-radius: 0 0 12px 12px; }
+
+  .mark { position: absolute; width: 26px; height: 26px; border-radius: 50%; background: #e5484d; color: #fff; font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 3px #fff; z-index: 5; }
+  .mark.b { background: #2f6fec; }
+  .bracket { position: absolute; border: 2px dashed #e5484d; border-radius: 10px; z-index: 4; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid #eceef2; vertical-align: top; line-height: 1.5; }
+  th { color: #6b7080; font-weight: 600; font-size: 13.5px; background: #fafbfc; }
+  code { font-family: 'JetBrains Mono', monospace; font-size: 13px; background: #f1f2f5; padding: 1px 5px; border-radius: 4px; }
+  .decide { border: 2px solid #f0b429; background: #fffbea; }
+  .decide h2 .no { background: #d69e0b; }
+  .opt { display: flex; gap: 10px; margin: 8px 0; }
+  .opt .tag { flex: none; font-weight: 700; color: #2f6fec; }
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>Session 头部与 ⋯ 菜单 · 功能设计</h1>
+  <p class="lede">Web 控制台 · 2026-11-24 · 基于 <code>src/web/src/components/WorkspaceView.tsx</code> 现状（约 10860–11160 行）。中文为批注，界面文字为英文。<br>
+    核心问题：自动打标签让标签库无限增长，菜单被 37 行标签撑满，Complete / Rename / Share / Delete 全被挤到屏幕外。</p>
+
+  <!-- ===================== ① TODAY ===================== -->
+  <div class="row">
+    <div>
+      <h2><span class="no">①</span>现状 · 一个 Open 会话打开 ⋯（37 个标签）</h2>
+      <div class="m-pane" style="width:920px;height:1010px">
+        <div class="m-head">
+          <div class="m-head-main">
+            <div class="m-title-line"><div class="m-title">Refine session dropdown and header design</div></div>
+            <div class="m-sub">Working <span class="sep">·</span> Open <span class="sep">·</span> 14:32</div>
+          </div>
+          <span class="m-iconbtn">▦</span>
+          <span class="m-iconbtn on">⋮</span>
+        </div>
+        <div class="m-body"><div class="ln" style="width:70%"></div><div class="ln" style="width:52%"></div><div class="ln" style="width:64%"></div><div class="ln" style="width:40%"></div></div>
+        <div class="m-menu" id="todayMenu" style="right:16px;top:62px;height:930px;overflow:hidden"></div>
+        <div class="fade" style="right:16px;left:auto;width:300px;bottom:18px"></div>
+        <div class="mark" style="right:330px;top:74px">1</div>
+        <div class="mark" style="right:330px;top:112px">2</div>
+        <div class="bracket" style="right:10px;top:146px;width:312px;height:850px"></div>
+        <div class="mark" style="right:330px;top:560px">3</div>
+        <div class="mark" style="right:330px;top:950px">4</div>
+      </div>
+      <p class="cap">真实菜单在此之后还有 26 行：Complete、Rename…、Move…、Settings…、Copy link、Share…、Download HTML、Delete。</p>
+    </div>
+    <div class="card note" style="width:1100px">
+      <h2 style="font-size:19px">问题</h2>
+      <ol style="padding-left:20px;margin:0">
+        <li><b>① Find in session 排第一。</b>它有 ⌘F 快捷键，菜单里需要保留（触屏/触控板可发现），但不该占最显眼的位置。</li>
+        <li><b>② Agent tools 是一个状态，却藏在菜单里。</b>"Connected" 时无需关注；断开时用户只有打开菜单才可能发现。</li>
+        <li><b>③ 标签库无限增长并整块内联。</b>会话创建时 DeepSeek 会自动打标签，没有合适的就<span class="bad">新建</span>（<code>session-tags.service.ts</code>）。库从 7 个颜色标签长到 37 个，且只增不减。菜单高度随库线性增长。
+          <br>· 自动新建的标签按位置循环取色，圆点颜色<span class="bad">不携带任何信息</span>；Red…Gray 七个系统标签与主题标签混排，看起来是同一种东西。
+          <br>· Settings… 抽屉里已有完整的标签编辑（chip + × + Add），菜单这里是<span class="bad">第二个入口</span>。</li>
+        <li><b>④ 最常用的动作被挤出屏幕。</b>Complete（或 Move to Open）、Rename…、Share…、Delete 全在标签之后。生命周期动作位置还随状态变化：Open 时是 Complete，Completed 时是 Move to Open，且都在菜单中段。</li>
+      </ol>
+      <h2 style="font-size:19px;margin-top:22px">现在的菜单分组（按代码顺序）</h2>
+      <table>
+        <tr><th style="width:200px">组</th><th>项</th><th style="width:300px">性质</th></tr>
+        <tr><td>查看</td><td>Find in session · Agent tools</td><td>查看 / 状态</td></tr>
+        <tr><td>Tags</td><td>标签库全部（N 行，可多选，菜单不关闭）</td><td>整理 · <span class="bad">高度 = N</span></td></tr>
+        <tr><td>生命周期 + 整理</td><td>Complete 或 Move to Open · Rename… · Move… · Settings…</td><td>整理（最常用）</td></tr>
+        <tr><td>分享</td><td>Copy link · Share… · Download HTML</td><td>分享</td></tr>
+        <tr><td>危险</td><td>Delete</td><td>破坏性</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ===================== ② PROPOSAL ===================== -->
+  <div class="row">
+    <div>
+      <h2 class="new"><span class="no">②</span>方案 · 固定高度的菜单，Tags 改为带搜索的子菜单</h2>
+      <div class="m-pane" style="width:920px;height:720px">
+        <div class="m-head">
+          <div class="m-head-main">
+            <div class="m-title-line"><div class="m-title">Refine session dropdown and header design</div></div>
+            <div class="m-sub">Working <span class="sep">·</span> Open <span class="sep">·</span> 14:32
+              <span class="m-chip"><i style="background:#f2c230"></i>样式调整</span>
+              <span class="m-chip"><i style="background:#f2c230"></i>交互设计</span>
+            </div>
+          </div>
+          <span class="m-iconbtn">▦</span>
+          <span class="m-iconbtn on">⋮</span>
+        </div>
+        <div class="m-body"><div class="ln" style="width:70%"></div><div class="ln" style="width:52%"></div></div>
+        <div class="m-menu" style="right:16px;top:62px">
+          <div class="m-item"><span class="ic">✓</span>Complete</div>
+          <div class="m-item"><span class="ic">✎</span>Rename…</div>
+          <div class="m-item"><span class="ic">▭</span>Move…</div>
+          <div class="m-item hover"><span class="ic">#</span>Tags<span class="val" style="margin-left:auto">2</span><span class="chev" style="margin-left:8px">›</span></div>
+          <div class="m-sep"></div>
+          <div class="m-item"><span class="ic">🔗</span>Copy link</div>
+          <div class="m-item"><span class="ic">◍</span>Share…</div>
+          <div class="m-item"><span class="ic">⤓</span>Download HTML</div>
+          <div class="m-sep"></div>
+          <div class="m-item"><span class="ic">⌕</span>Find in session<span class="kbd">⌘F</span></div>
+          <div class="m-item"><span class="ic">⚇</span>Agent tools<span class="val ok">Connected</span></div>
+          <div class="m-item"><span class="ic">⚙</span>Session settings…</div>
+          <div class="m-sep"></div>
+          <div class="m-item danger"><span class="ic">🗑</span>Delete</div>
+        </div>
+        <!-- submenu -->
+        <div class="m-menu" style="right:322px;top:176px;width:280px">
+          <div class="m-search">⌕ <span class="caret"></span>Search or create a tag</div>
+          <div class="m-group">On this session</div>
+          <div class="m-item sel"><span class="dot" style="background:#f2c230"></span>样式调整<span class="check">✓</span></div>
+          <div class="m-item sel"><span class="dot" style="background:#f2c230"></span>交互设计<span class="check">✓</span></div>
+          <div class="m-group">Recent</div>
+          <div class="m-item"><span class="dot" style="background:#e5484d"></span>会话调试</div>
+          <div class="m-item"><span class="dot" style="background:#e8890c"></span>前端问题</div>
+          <div class="m-item"><span class="dot" style="background:#2e9b4f"></span>功能扩展</div>
+          <div class="m-item"><span class="dot" style="background:#2f6fec"></span>功能缺陷</div>
+          <div class="m-item"><span class="dot" style="background:#e5484d"></span>数据库</div>
+          <div class="m-group">Colors</div>
+          <div class="m-swatches"><i style="background:#e5484d"></i><i style="background:#e8890c"></i><i style="background:#f2c230"></i><i style="background:#2e9b4f"></i><i style="background:#2f6fec"></i><i style="background:#9b51e0"></i><i style="background:#8e929b"></i></div>
+          <div class="m-sep"></div>
+          <div class="m-item" style="color:#5b6070"><span class="ic">⋯</span>All 37 tags…</div>
+        </div>
+        <div class="mark b" style="left:250px;top:58px">A</div>
+        <div class="mark b" style="right:330px;top:66px;left:auto">B</div>
+        <div class="mark b" style="right:300px;top:160px">C</div>
+        <div class="mark b" style="right:330px;top:470px">D</div>
+      </div>
+      <p class="cap">菜单 13 行，高度与标签库大小无关；Tags 子菜单悬停/点击 › 打开，勾选不关闭。</p>
+    </div>
+    <div class="card note" style="width:1100px">
+      <h2 style="font-size:19px">改了什么</h2>
+      <ol type="A" style="padding-left:22px;margin:0">
+        <li><b>A · 标签上头部。</b>副标题末尾显示本会话的标签 chip（最多 3 个，多出显示 <span class="m-chip more">+2</span>）。点 chip 直接打开 Tags 子菜单。不打开任何菜单就能看到会话被归到哪。</li>
+        <li><b>B · 生命周期动作固定在第一行。</b>Open → <b>Complete</b>；Completed → <b>Move to Open</b>。永远在同一个位置，肌肉记忆可用。紧跟 Rename… / Move… / Tags ›，即"整理"组。</li>
+        <li><b>C · Tags 变成子菜单。</b>
+          <br>· 顶部搜索框，输入即过滤；无匹配时出现 <i>Create "xxx"</i> 一行（与现在 Settings 抽屉的 Add 合一）。
+          <br>· 分三段：<b>On this session</b>（已勾选）/ <b>Recent</b>（最近 5 个用过的）/ <b>Colors</b>（7 个系统颜色标签收成一排色块，不再各占一行）。
+          <br>· 末行 <i>All 37 tags…</i> 进入完整可滚动列表。子菜单自身最高 ~440px，超出内部滚动。</li>
+        <li><b>D · "查看"组下沉。</b>Find in session（附 ⌘F）、Agent tools（附状态词）、Session settings… 移到分享组之后；它们是偶尔用的。Settings… 改名 <i>Session settings…</i>，与账号 Settings 区分。</li>
+      </ol>
+      <h2 style="font-size:19px;margin-top:22px">菜单顺序规则</h2>
+      <table>
+        <tr><th style="width:170px">组</th><th>Open</th><th>Completed</th><th style="width:250px">Trash</th></tr>
+        <tr><td>整理</td><td>Complete · Rename… · Move… · Tags ›</td><td>Move to Open · Rename… · Move… · Tags ›</td><td rowspan="4">Restore to Open<br>───<br>Delete permanently<br><span style="color:#9aa0ad">（不变）</span></td></tr>
+        <tr><td>分享</td><td colspan="2">Copy link · Share…（Live link） · Download HTML</td></tr>
+        <tr><td>查看</td><td colspan="2">Find in session ⌘F · Agent tools（状态） · Session settings…</td></tr>
+        <tr><td>危险</td><td colspan="2">Delete</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ===================== ③ HEADER STATES ===================== -->
+  <div class="row">
+    <div style="width:920px">
+      <h2 class="new"><span class="no">③</span>头部的几种状态</h2>
+      <div class="m-pane" style="margin-bottom:16px">
+        <div class="m-head" style="border-bottom:none">
+          <div class="m-head-main">
+            <div class="m-title-line"><div class="m-title">New session</div></div>
+            <div class="m-sub">orbit-ws01 <span class="sep">·</span> Orbit Session <span class="sep">·</span> <span class="bad" style="font-weight:500">New session</span></div>
+          </div>
+        </div>
+      </div>
+      <p class="cap" style="margin:-8px 0 14px">③-a 现状 · 新会话：副标题末尾重复标题；"Orbit Session" 是文件夹名，读起来像产品名。</p>
+      <div class="m-pane" style="margin-bottom:16px">
+        <div class="m-head" style="border-bottom:none">
+          <div class="m-head-main">
+            <div class="m-title-line"><div class="m-title">New session</div></div>
+            <div class="m-sub">▣ orbit-ws01 <span class="sep">›</span> ▭ Orbit Session</div>
+          </div>
+        </div>
+      </div>
+      <p class="cap" style="margin:-8px 0 14px">③-b 方案 · 新会话：只说"会在哪跑"——工作区 › 文件夹，带图标表明层级；去掉重复的 New session。无文件夹时只显示工作区。</p>
+      <div class="m-pane" style="margin-bottom:16px">
+        <div class="m-head" style="border-bottom:none">
+          <div class="m-head-main">
+            <div class="m-title-line"><div class="m-title">Refine session dropdown and header design</div>
+              <span class="m-pill warn"><i></i>Agent tools disconnected</span></div>
+            <div class="m-sub">Idle <span class="sep">·</span> Open <span class="sep">·</span> 14:32 <span class="m-chip"><i style="background:#f2c230"></i>样式调整</span></div>
+          </div>
+          <span class="m-iconbtn">⋮</span>
+        </div>
+      </div>
+      <p class="cap" style="margin:-8px 0 14px">③-c 方案 · Agent tools 非 Connected 时：标题旁出现橙色 pill，点击打开 Agent tools 抽屉。Connected 时什么都不显示（与 Shared · Live pill 同一排、同一套样式）。</p>
+      <div class="m-pane">
+        <div class="m-head" style="border-bottom:none">
+          <div class="m-head-main">
+            <div class="m-title-line"><div class="m-title">Refine session dropdown and header design</div><span class="m-pill share">◍ Shared · Live</span></div>
+            <div class="m-sub">Completed <span class="sep">·</span> Nov 22 <span class="m-chip"><i style="background:#e5484d"></i>会话调试</span><span class="m-chip"><i style="background:#e8890c"></i>前端问题</span><span class="m-chip"><i style="background:#2e9b4f"></i>功能扩展</span><span class="m-chip more">+2</span></div>
+          </div>
+          <span class="m-iconbtn">⋮</span>
+        </div>
+      </div>
+      <p class="cap">③-d 方案 · Completed 且有 5 个标签：显示 3 个 + "+2"。窄屏（&lt;600px）副标题里的 chip 收成一个 "# 5"。</p>
+    </div>
+
+    <div style="width:1100px">
+      <div class="card note decide" style="margin-bottom:28px">
+        <h2 style="font-size:19px"><span class="no">?</span>待你定</h2>
+        <p style="margin:0 0 6px"><b>Q1 · 标签放哪？</b></p>
+        <div class="opt"><span class="tag">A（推荐）</span><span>⋯ 里保留 Tags › 子菜单 + 头部 chip，两处都能改。</span></div>
+        <div class="opt"><span class="tag">B</span><span>⋯ 里去掉 Tags，只在头部 chip（点 chip 或空白处的 "+ Tag"）和 Session settings… 里改。菜单再短一行，但没有标签时入口不明显。</span></div>
+        <p style="margin:14px 0 6px"><b>Q2 · 自动打标签还能不能新建标签？</b></p>
+        <div class="opt"><span class="tag">A（推荐）</span><span>只能从已有标签里选，不再新建；新标签由你或你让 agent 建。标签库从此不会被自动撑大。已存在的 30 个自动标签保留不动（另议是否清理）。</span></div>
+        <div class="opt"><span class="tag">B</span><span>照旧新建，靠子菜单的 Recent + 搜索来扛。库会继续长，"All N tags…" 会越来越长。</span></div>
+        <p style="margin:14px 0 6px"><b>Q3 · Agent tools 断开时头部是否提示（③-c）？</b></p>
+        <div class="opt"><span class="tag">A（推荐）</span><span>提示，橙色 pill，可点。</span></div>
+        <div class="opt"><span class="tag">B</span><span>不提示，保持只在菜单里显示状态词。</span></div>
+        <p style="margin:14px 0 6px"><b>Q4 · 范围</b>：先做 Web；iOS / macOS / Android 的会话菜单随后按同一顺序对齐（iOS 现有菜单是否也被标签撑满，我会在出 iOS 板时一并截图确认）。</p>
+      </div>
+
+      <div class="card note">
+        <h2 style="font-size:19px">会动到的文件（确认后）</h2>
+        <table>
+          <tr><th style="width:430px">文件</th><th>改动</th></tr>
+          <tr><td><code>src/web/src/components/WorkspaceView.tsx</code></td><td>⋯ 菜单重排；Tags 改子菜单；副标题加 chip；新会话副标题；Agent tools pill</td></tr>
+          <tr><td><code>src/web/src/components/SessionTagPicker.tsx</code>（新）</td><td>搜索 + On this session / Recent / Colors / All 的子菜单，菜单与头部 chip 共用</td></tr>
+          <tr><td><code>src/web/src/components/SessionSettingsDrawer.tsx</code></td><td>标签区的 Add 改用同一个 picker</td></tr>
+          <tr><td><code>src/web/src/index.css</code></td><td>chip、pill、子菜单样式</td></tr>
+          <tr><td><code>src/apiserver/src/session-tags/…</code>（仅 Q2=A）</td><td>自动打标签只匹配已有标签，不 create</td></tr>
+          <tr><td>Recent 的来源</td><td>先用前端本地（最近勾选的 tagId 列表，localStorage），不加接口</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ① today's menu, drawn from the real order and the owner's library.
+  const sys = [['Red','#e5484d'],['Orange','#e8890c'],['Yellow','#f2c230'],['Green','#2e9b4f'],['Blue','#2f6fec'],['Purple','#9b51e0'],['Gray','#8e929b']];
+  const topics = ['会话调试','前端问题','命令行工具','功能扩展','硬件诊断','性能问题','项目文档','品牌建设','项目架构','样式调整','项目部署','功能缺陷','项目配置','版本控制','模型更新','代码审查','交互设计','iOS','日志分析','功能咨询','算法','数据库','行业调研','产品分析','网络共享','安全审计','测试用例','依赖升级','文案翻译','发布流程'];
+  const checked = new Set(['样式调整','交互设计']);
+  let h = `<div class="m-item"><span class="ic">⌕</span>Find in session · ⌘F</div>
+    <div class="m-item"><span class="ic">⚇</span>Agent tools<span class="val ok">Connected</span></div>
+    <div class="m-group">Tags</div>`;
+  const row = (n, c) => checked.has(n)
+    ? `<div class="m-item sel"><span class="dot" style="background:${c}"></span>${n}<span class="check">✓</span></div>`
+    : `<div class="m-item${n==='Orange'?' hover':''}"><span class="dot" style="background:${c}"></span>${n}</div>`;
+  sys.forEach(([n,c]) => h += row(n,c));
+  topics.forEach((n,i) => h += row(n, sys[i % 7][1]));
+  document.getElementById('todayMenu').innerHTML = h;
+</script>
+</body>
+</html>

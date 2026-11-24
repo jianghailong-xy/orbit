@@ -214,6 +214,10 @@ func TestARefusalWithNoCodeIsLeftExactlyAsItWas(t *testing.T) {
 // the original incident with one more actor in it.
 func TestNoMachineDoorAnswersACrossingOrReopensAProject(t *testing.T) {
 	for _, spec := range projectCLICapabilities {
+		// project_request_reopen only asks the owner to reopen; the owner's press does it.
+		if spec.Tool == "project_request_reopen" {
+			continue
+		}
 		if spec.Mutates && (strings.Contains(spec.Tool, "crossing") || strings.Contains(spec.Tool, "reopen")) {
 			t.Fatalf("%s is advertised as a write", spec.Tool)
 		}

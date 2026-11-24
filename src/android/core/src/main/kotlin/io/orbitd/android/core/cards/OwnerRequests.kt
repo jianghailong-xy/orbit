@@ -109,7 +109,9 @@ object OwnerRequests {
     const val SETTINGS_CHANGE = "SETTINGS_CHANGE"
     /** An agent proposing a runner's Max Concurrent, which the owner applies with one press (docs/design/owner-request-change.md). */
     const val CHANGE = "CHANGE"
-    val kinds = setOf(DECISION, SECRET, MANUAL_STEP, CONFIRM, WIKI_CREATE, SETTINGS_CHANGE, BROWSER_SIGN_IN, CHANGE)
+    /** An agent asking the owner to reopen a settled project (docs/project-reopen-request-design.md §6). */
+    const val PROJECT_REOPEN = "PROJECT_REOPEN"
+    val kinds = setOf(DECISION, SECRET, MANUAL_STEP, CONFIRM, WIKI_CREATE, SETTINGS_CHANGE, BROWSER_SIGN_IN, CHANGE, PROJECT_REOPEN)
     /** An agent asking the owner to sign in to a site in the Orbit Cloud runner's browser. Signed in is answered from the browser tab. */
     const val BROWSER_SIGN_IN = "BROWSER_SIGN_IN"
 
@@ -152,12 +154,12 @@ object OwnerRequests {
     const val later = "Later"
 
     /** The tag beside a card's title. */
-    fun kindTag(kind: String) = when (kind) { MANUAL_STEP -> "STEPS"; WIKI_CREATE -> "WIKI"; SETTINGS_CHANGE -> "SETTINGS"; CHANGE -> ChangeCopy.tag; BROWSER_SIGN_IN -> "SIGN IN"; else -> kind }
+    fun kindTag(kind: String) = when (kind) { MANUAL_STEP -> "STEPS"; WIKI_CREATE -> "WIKI"; SETTINGS_CHANGE -> "SETTINGS"; CHANGE -> ChangeCopy.tag; BROWSER_SIGN_IN -> "SIGN IN"; PROJECT_REOPEN -> "REOPEN"; else -> kind }
     /** The card's primary button. */
-    fun primary(kind: String) = when (kind) { DECISION -> "Send answer"; SECRET -> "Provide key"; MANUAL_STEP -> "Mark done"; WIKI_CREATE -> "Create wiki"; SETTINGS_CHANGE -> SettingsChangeCopy.save; CHANGE -> ChangeCopy.primary; BROWSER_SIGN_IN -> "Open browser"; else -> "Confirm" }
+    fun primary(kind: String) = when (kind) { DECISION -> "Send answer"; SECRET -> "Provide key"; MANUAL_STEP -> "Mark done"; WIKI_CREATE -> "Create wiki"; SETTINGS_CHANGE -> SettingsChangeCopy.save; CHANGE -> ChangeCopy.primary; BROWSER_SIGN_IN -> "Open browser"; PROJECT_REOPEN -> ProjectReopenCopy.reopen; else -> "Confirm" }
     /** A push's primary action, which opens the card on its input. */
     fun pushAction(kind: String): String? = when (kind) {
-        SECRET -> "Provide key"; DECISION -> "Answer"; MANUAL_STEP -> "Mark done"; CONFIRM, WIKI_CREATE, SETTINGS_CHANGE, CHANGE -> "Review"; BROWSER_SIGN_IN -> "Sign in"; else -> null
+        SECRET -> "Provide key"; DECISION -> "Answer"; MANUAL_STEP -> "Mark done"; CONFIRM, WIKI_CREATE, SETTINGS_CHANGE, CHANGE, PROJECT_REOPEN -> "Review"; BROWSER_SIGN_IN -> "Sign in"; else -> null
     }
     fun declineLabel(kind: String) = if (kind == MANUAL_STEP) "Can’t do this…" else "Decline…"
 
@@ -238,6 +240,7 @@ object OwnerRequests {
 
     /** The summary's second line: what came of it. */
     fun outcomeLine(request: OwnerRequest, runner: String): String {
+        if (request.kind == PROJECT_REOPEN) return ProjectReopenCopy.outcomeLine(request)
         val note = request.resolutionNote?.trim()?.takeIf { it.isNotEmpty() }
         return when (request.state) {
             "DECLINED" -> if (request.kind == BROWSER_SIGN_IN) notNow else note?.let { "Declined: “$it”" } ?: "Declined"
@@ -432,6 +435,10 @@ class OwnerRequestsApi(private val api: OrbitApi, private val handle: SessionHan
     /** SETTINGS_CHANGE's Save changes (design §5.2): writes the proposed values and settles the card DONE. A value that moved since is
      * refused 409 SETTINGS_STALE and nothing is written. */
     suspend fun applySettings(id: String): OwnerRequest = post(id, listOf("apply-settings"), buildJsonObject { })
+
+    /** PROJECT_REOPEN's Reopen (docs/project-reopen-request-design.md §4.2): reopens the project as the project page's press does and
+     * settles every pending reopen request of it DONE. Answers with this card. */
+    suspend fun reopenProject(id: String): OwnerRequest = post(id, listOf("reopen-project"), null)
 
     /** CHANGE's Apply (design §3): writes the runner's Max Concurrent with [maxConcurrent] and settles the card DONE. */
     suspend fun applyChange(id: String, maxConcurrent: Int): OwnerRequest =

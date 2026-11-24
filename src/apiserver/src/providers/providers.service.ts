@@ -26,7 +26,7 @@ import { PublicIdPipe } from '../common/public-id';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { codexLoginView, codexPoolUnavailableReason, maskedAccount, POOL_LOGIN_SELECT } from './codex-login';
-import { engineTableOptions, revokeKeyGatewayTokens } from './key-gateway';
+import { engineTableOptions, gatewayKeyDialect, revokeKeyGatewayTokens } from './key-gateway';
 import { claudeCodexLoginEnabled, poolTableOptions } from './codex-login-claude';
 import { CreateModelProviderDto, CreateProviderPoolDto, UpdateModelProviderDto } from './dto';
 import { decryptSecret, encryptSecret } from './provider-crypto';
@@ -719,8 +719,8 @@ export class ProvidersService {
     // A key switched off, given a new secret or moved to another endpoint or protocol: the tokens Claude Code
     // sessions on it run with through the gateway stop at once (docs/claude-engine-openai-gateway-design.md
     // §4.2). The session's next claim mints a token on the key as it now is.
-    // Only an OpenAI key ever has such tokens.
-    if (keyDialect(current.runtime) === 'openai' && (dto.enabled === false || apiKeyEnc || protocolMoves || endpointMoves)) {
+    // Only an OpenAI or OpenAI-compatible key ever has such tokens.
+    if (gatewayKeyDialect(current.runtime) && (dto.enabled === false || apiKeyEnc || protocolMoves || endpointMoves)) {
       await revokeKeyGatewayTokens(this.prisma, row.id);
     }
     this.publishChanged(ownerId, row.id);

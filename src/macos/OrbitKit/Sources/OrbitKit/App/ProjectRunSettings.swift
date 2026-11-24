@@ -149,7 +149,7 @@ extension RunSettings {
                                maxConcurrentTasks: Int?, nonCode: Bool) -> Summary {
         let title = "\(automatic) \(on ? switchOn : switchOff)"
         let branch = view.line == .projectBranch && !(view.ref ?? "").isEmpty
-            ? (view.ref ?? "") : "project/\(projectID)"
+            ? (view.ref ?? "") : (view.defaultProjectBranch ?? "project/\(projectID)")
         let settings = ProjectStartSettings(line: view.line ?? .projectBranch, projectBranchName: branch,
                                             upstreamRef: storedMainBranch(view) ?? defaultMainBranch,
                                             automatic: on, maxConcurrentTasks: maxConcurrentTasks ?? 0)

@@ -46,7 +46,9 @@ test('no route path on either project controller still addresses acceptance judg
       if (typeof routePath !== 'string') continue;
       assert.doesNotMatch(routePath, /acceptance\/(pending|runs)/,
         `${controller.name}.${name} still serves ${routePath}`);
-      assert.doesNotMatch(routePath, /reopen/,
+      // `reopen-requests` is not the removed reopen: it files a PROJECT_REOPEN owner request
+      // (a card the owner answers) and reads no acceptance epoch.
+      assert.doesNotMatch(routePath, /reopen(?!-requests$)/,
         `${controller.name}.${name} still serves ${routePath}`);
       assert.doesNotMatch(routePath, /verdict/,
         `${controller.name}.${name} still serves ${routePath}`);

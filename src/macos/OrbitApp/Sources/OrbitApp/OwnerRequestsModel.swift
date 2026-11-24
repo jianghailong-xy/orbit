@@ -157,6 +157,12 @@ final class OwnerRequestsModel {
         adopt(try await api.applyOwnerRequestChange(request.id, OwnerRequestApplyBody(maxConcurrent: maxConcurrent)))
     }
 
+    /// A PROJECT_REOPEN card's Reopen: the server reopens the project as the project page's press does, settles every
+    /// pending reopen request of it, and answers with this card, DONE.
+    func reopenProject(_ request: OwnerRequest) async throws {
+        adopt(try await api.reopenProjectFromOwnerRequest(request.id))
+    }
+
     func decline(_ request: OwnerRequest, reason: String, sendAsWritten: Bool = false) async throws {
         adopt(try await api.declineOwnerRequest(request.id, reason: reason, sendAsWritten: sendAsWritten))
     }

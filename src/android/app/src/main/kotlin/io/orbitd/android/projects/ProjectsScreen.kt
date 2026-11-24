@@ -42,6 +42,9 @@ import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.auth.SessionHandle
+import io.orbitd.android.cards.OwnerRequestStore
+import io.orbitd.android.cards.ProjectReopenCard
+import io.orbitd.android.core.cards.ProjectReopenFacts
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.navigation.*
@@ -483,7 +486,20 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
             else -> openCoordinator(card)
         }
     }
+    // Agents' requests to reopen this project (docs/project-reopen-request-design.md §6.2), above the header while it is settled.
+    val ownerRequests = remember(handle) { OwnerRequestStore.of(app.session, handle, app.processScope) }
+    val asked by ownerRequests.state.collectAsState()
+    LaunchedEffect(ownerRequests, id) { ownerRequests.load(OwnerRequestStore.OPEN) }
+    val reopenAsks = if (status == "OPEN") emptyList() else ProjectReopenFacts.pending(asked.open, id)
+    // A row that arrives above the header would leave the page scrolled past it (the list keeps the header where it was): a reader at
+    // the top is taken back to the top, where the row is.
+    LaunchedEffect(reopenAsks.size) {
+        if (reopenAsks.isNotEmpty() && listState.firstVisibleItemIndex == reopenAsks.size && listState.firstVisibleItemScrollOffset == 0) listState.scrollToItem(0)
+    }
     LazyColumn(Modifier.fillMaxSize().testTag("project-detail"), state = listState, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp)) {
+        items(reopenAsks, key = { "reopen:${it.id}" }) { ask ->
+            Box(Modifier.padding(top = 8.dp)) { ProjectReopenCard(ask, ownerRequests, onProjectPage = true, reopened = { scope.launch { load() } }) }
+        }
         item(key = "header") { Header(state, doc, now, connected, menu = {
             OpenItemsEntry(ProjectPage.openItemsSummary(doc, state.openItems), state.openItemsUnread) { dialog = ProjectDialog.OpenItems }
             Box {

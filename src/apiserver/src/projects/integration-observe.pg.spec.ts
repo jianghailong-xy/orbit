@@ -773,7 +773,7 @@ test('(9) §10.6 A-Q23: with only a queued OBSERVE_LANDING, inFlightJobs is empt
       const asked = await observeAsOwner(stack, w, { reason: 'look at the line' });
       assert.equal(asked.queued, true, 'CONTROL: an observation is queued');
       const view = async () => readProjectIntegrationView(stack.prisma, w.projectId,
-        projectIntegrationView(await readProjectCodebase(stack.prisma, w.projectId), 7200));
+        projectIntegrationView(await readProjectCodebase(stack.prisma, w.projectId), 7200, { id: w.projectId, title: 'observed' }));
       const listed = async () => (await readProjectListBindings(stack.prisma, [w.projectId])).get(w.projectId)?.integration;
 
       // GET /projects/:id/integration and project_get: no landing is in flight.

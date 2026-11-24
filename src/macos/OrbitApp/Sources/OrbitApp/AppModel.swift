@@ -498,6 +498,11 @@ final class AppModel {
     /// first agent in the list. Read in `loadAgentsThenLand`, written by `selectedAgentID`'s didSet.
     private static let lastAgentKey = "orbit.lastAgent"
 
+#if DEBUG
+    /// Test-only: a screenshot gallery's Documents model.
+    func seedDocumentsForTesting(_ model: DocumentsModel) { documents = model }
+#endif
+
     init() {
         #if canImport(Security)
         tokenStore = KeychainTokenStore()
@@ -1188,6 +1193,16 @@ final class AppModel {
 
     /// One schedule's detail panel, over the Scheduled page, from anywhere: a change line's Open, a scheduled
     /// task's card, a push that names the schedule.
+    #if os(macOS)
+    /// A file an agent put in Documents, opened where it lives with it selected (a transfer card's "Show in
+    /// Documents", `DocumentsTransferCardView`).
+    func revealDocument(_ entryID: String) {
+        guard let documents else { return }
+        selectedSection = .documents
+        Task { await documents.reveal(entryID: entryID) }
+    }
+    #endif
+
     func openSchedule(_ id: String) {
         settingsPresented = false
         selectedSection = .scheduled
@@ -4185,6 +4200,17 @@ final class AppModel {
         }
         selectedSection = .wiki
         nav.path = [.wikiEntry(entryID: id)]
+    }
+
+    /// A drive file (or folder) a reply links, opened in Documents (docs/mocks/documents, 01-ios ⑮): on the phone and
+    /// the iPad its page on the section's stack, on the Mac its folder with it selected.
+    func openDocumentsEntry(_ entry: DocumentsEntry) {
+        selectedSection = .documents
+        #if os(macOS)
+        if entry.isFolder { documents?.open(folder: entry.id) } else { documents?.reveal(entry) }
+        #else
+        nav.path = [entry.isFolder ? .documentsFolder(entryID: entry.id, name: entry.name) : .documentsFile(entryID: entry.id)]
+        #endif
     }
 
     /// The project's page on the web — a signed-in address, for the project menu's Copy Link.
