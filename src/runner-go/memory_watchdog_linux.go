@@ -104,7 +104,7 @@ func startMemoryWatchdog(ctx context.Context, managed bool) func() {
 		for {
 			select {
 			case <-ticker.C:
-				w.sample(time.Now())
+				w.sample(time.Now)
 			case <-ctx.Done():
 				return
 			}
@@ -185,8 +185,8 @@ func (w *memoryWatchdog) memoryPressure(now time.Time) (limit, available uint64,
 	return limit, available, ok && available <= limit/10 && settled
 }
 
-func (w *memoryWatchdog) sample(now time.Time) {
-	limit, _, canKill := w.memoryPressure(now)
+func (w *memoryWatchdog) sample(now func() time.Time) {
+	limit, _, canKill := w.memoryPressure(now())
 	if limit == 0 {
 		return
 	}
@@ -293,7 +293,7 @@ func (w *memoryWatchdog) sample(now time.Time) {
 		description = "the " + strconv.QuoteToGraphic(leader.name) + " tool process group"
 	}
 	// A kernel OOM or reclaim can happen while we walk the tools' mappings.
-	limit, available, canKill := w.memoryPressure(now)
+	limit, available, canKill := w.memoryPressure(now())
 	if !canKill {
 		return
 	}
@@ -305,7 +305,7 @@ func (w *memoryWatchdog) sample(now time.Time) {
 		}
 	}
 	if killed {
-		w.settleUntil = now.Add(memoryWatchdogSettleWindow)
+		w.settleUntil = now().Add(memoryWatchdogSettleWindow)
 		w.notify(victim.session, fmt.Sprintf(
 			"The runner stopped %s (PID %d) because the container was using %d MiB of its %d MiB memory limit.",
 			description, victim.leader.pid, (limit-available)>>20, limit>>20))
