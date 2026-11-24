@@ -137,16 +137,24 @@ export function defaultIntegrationLine(
     : 'MAIN';
 }
 
+/** Latin letters that Unicode does not split into a base letter and a mark, as they are spelled in ASCII. */
+const LATIN_WITHOUT_DECOMPOSITION: Readonly<Record<string, string>> = {
+  ß: 'ss', æ: 'ae', œ: 'oe', ø: 'o', đ: 'd', ł: 'l', þ: 'th', ı: 'i',
+};
+
 /** How long a branch's title part may be, in characters: it is cut back to a word boundary. */
 const PROJECT_BRANCH_SLUG_MAX = 40;
 
 /**
  * A project title as a branch name part: lowercase ASCII letters and digits, every other run of
- * characters one `-`, capped at {@link PROJECT_BRANCH_SLUG_MAX} on a word boundary. Empty for a
- * title with no ASCII letter or digit in it, such as a Chinese one.
+ * characters one `-`, capped at {@link PROJECT_BRANCH_SLUG_MAX} on a word boundary. An accented
+ * letter keeps its base letter (`Café` is `cafe`). Empty for a title with no ASCII letter or digit
+ * in it, such as a Chinese one.
  */
 export function projectBranchSlug(title: string): string {
-  const slug = title.toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/^-+|-+$/gu, '');
+  const slug = title.normalize('NFKD').replace(/\p{M}+/gu, '').toLowerCase()
+    .replace(/[ßæœøđłþı]/gu, (letter) => LATIN_WITHOUT_DECOMPOSITION[letter] ?? letter)
+    .replace(/[^a-z0-9]+/gu, '-').replace(/^-+|-+$/gu, '');
   if (slug.length <= PROJECT_BRANCH_SLUG_MAX) return slug;
   const cut = slug.slice(0, PROJECT_BRANCH_SLUG_MAX + 1);
   const boundary = cut.lastIndexOf('-');

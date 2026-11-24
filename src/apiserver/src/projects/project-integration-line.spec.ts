@@ -37,6 +37,15 @@ test('a project branch is named after its title and the first 8 characters of it
     `refs/heads/project/orbit-files-rename-${SHORT_ID}`);
 });
 
+test('an accented letter keeps its base letter in the branch name', () => {
+  assert.equal(projectBranchSlug('Ünïcödé Café v2'), 'unicode-cafe-v2');
+  assert.equal(projectBranchSlug('Crème brûlée façade'), 'creme-brulee-facade');
+  assert.equal(projectBranchSlug('Ｆｕｌｌｗｉｄｔｈ ①'), 'fullwidth-1');
+  // Latin letters Unicode does not decompose are spelled out.
+  assert.equal(projectBranchSlug('Straße Ørsted Łódź Æsir'), 'strasse-orsted-lodz-aesir');
+  assert.equal(projectBranchRef(PROJECT_ID, 'Café'), `refs/heads/project/cafe-${SHORT_ID}`);
+});
+
 test('a title with no ASCII letter or digit names the branch by the short id alone', () => {
   for (const title of ['项目分支命名优化', '?!… — ...', '', '   ', '..', '@{', '/']) {
     assert.equal(projectBranchRef(PROJECT_ID, title), `refs/heads/project/${SHORT_ID}`, title);
