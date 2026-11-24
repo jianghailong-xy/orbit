@@ -817,6 +817,14 @@ final class DocumentsModel {
         syncsByID[sync.id] = sync
     }
 
+#if DEBUG
+    /// Test-only: what a screenshot gallery seeds for `DocumentsSyncCardView` to read.
+    func seedSyncsForTesting(_ syncs: [DocumentsSync], rates: [String: Double] = [:]) {
+        for sync in syncs { syncsByID[sync.id] = sync }
+        syncRates = rates
+    }
+#endif
+
     /// Open the folder a sync wrote to.
     func openSyncFolder(_ sync: DocumentsSync) {
         guard let id = sync.destEntryId else { return }

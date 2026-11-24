@@ -104,11 +104,10 @@ struct DocumentsSyncCardView: View {
         let stats = DocumentsSyncCard.stats(sync, rate: documents?.syncRates[sync.id])
         return VStack(alignment: .leading, spacing: 5) {
             if sync.status == "CHECKING" {
-                ProgressView().progressViewStyle(.linear)
+                SyncBar(fraction: nil, tint: .accentColor)
             } else {
-                ProgressView(value: barValue(sync))
-                    .progressViewStyle(.linear)
-                    .tint(sync.status == "STOPPED" ? .gray : sync.running ? .accentColor : .green)
+                SyncBar(fraction: barValue(sync),
+                        tint: sync.status == "STOPPED" ? .gray : sync.running ? .accentColor : .green)
             }
             HStack(spacing: 0) {
                 Text(stats.lead).fontWeight(.semibold)
@@ -166,5 +165,36 @@ struct DocumentsSyncCardView: View {
         guard let id = sync.destEntryId, let documents else { return }
         documents.open(folder: id)
         app.selectedSection = .documents
+    }
+}
+
+/// The card's bar, drawn rather than a `ProgressView`, whose linear style goes grey in a window that is not key: the
+/// accent while it runs, green once it ended, grey when stopped (the web card's `drive-xfer-bar`). With no fraction it
+/// is the sweeping segment of a sync still counting files.
+private struct SyncBar: View {
+    let fraction: Double?
+    let tint: Color
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.primary.opacity(0.08))
+                if let fraction {
+                    Capsule().fill(tint).frame(width: geometry.size.width * min(1, max(0, fraction)))
+                } else {
+                    TimelineView(.animation) { context in
+                        let phase = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.4) / 1.4
+                        Capsule().fill(tint.opacity(0.8))
+                            .frame(width: geometry.size.width * 0.3)
+                            .offset(x: geometry.size.width * (phase * 1.3 - 0.3))
+                    }
+                }
+            }
+            .clipShape(Capsule())
+        }
+        .frame(height: 5)
+        .accessibilityElement()
+        .accessibilityLabel(fraction == nil ? "Checking files" : "Synced")
+        .accessibilityValue(fraction.map { "\(Int(($0 * 100).rounded())) percent" } ?? "")
     }
 }
