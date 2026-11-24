@@ -3472,6 +3472,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // name admitting PROJECT_REOPEN, and adds one CHECK and one partial unique index on owner_request. Not a preserved
       // relation; no row is written, and no trigger, function or DONE fence changes.
       '1573_owner_request_project_reopen'],
+
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

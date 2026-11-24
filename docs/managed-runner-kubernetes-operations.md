@@ -677,7 +677,7 @@ Every node that runs managed runners needs it. On k3s:
    (`KillMode=process`), but the API server and the kubelet are away until k3s is back (9 s on .3), so every Pod on
    the node is briefly unmanaged and no runner Pod can be created. Before the restart, check that no runner is running a turn: read each runner Pod's log (`kubectl logs
    --since=20m`), and list the processes in its container cgroup from the host. An idle runner has only `tini`,
-   `orbit-container run` and `orbit run`.
+   `orbit-container run`, `orbit run` and its memory reserve, `orbit orbit-headroom`.
 4. Verify. `kubectl get --raw /api/v1/nodes/<node>/proxy/configz` must show `"singleProcessOOMKill": true`, and the
    file must be in the kubelet's drop-in directory: k3s v1.37.2 copies a `config=` kubelet-arg file to
    `/var/lib/rancher/k3s/agent/etc/kubelet.conf.d/10-cli-config.conf` and still passes only `--config-dir`, so the
@@ -691,6 +691,55 @@ Every node that runs managed runners needs it. On k3s:
 
 To undo it, remove `95-orbit-kubelet.yaml` and restart k3s. The .3 deployment's run of this procedure is in
 [its record](managed-runner-k3s-xfs-deployment.md#memory-one-process-not-the-container-2026-11-22).
+
+### A second kill while a shared-memory victim drains: a kernel limit, and the reserve
+
+The kernel frees a killed process's memory in two steps. Private anonymous memory, which builds mostly use, goes while
+the victim unmaps it. Shared memory (`MAP_SHARED|MAP_ANONYMOUS`, memfd, tmpfs such as `/dev/shm`) goes only when the last
+reference to its file is dropped, later in the victim's exit. The OOM killer stops waiting for its victim much sooner:
+by the time the victim has unmapped its memory (`MMF_OOM_SKIP`) at the latest, and in the lab sometimes 2 ms after the
+kill. Until the shared memory is gone the container stays at its limit, and an allocation in it then makes the kernel
+kill again: the next process by badness, usually another session's tool at `oom_score_adj` 1000. **No runner-side
+change can close this window entirely**: a process woken by the kill cannot free memory within 2 ms.
+
+Measured in the lab (2026-11-24; guest kernel 7.0 under k3s; a 2 CPU / 4 GiB runner; one session's tool fills 3.6 GiB of
+`MAP_SHARED|MAP_ANONYMOUS` memory while another session's tool runs `sleep 210`; all times on CLOCK_MONOTONIC from the
+kernel's `oom/mark_victim`):
+
+- The victim finished unmapping 85 to 96 ms after the kill (360 ms once, when the whole guest stalled for about a
+  second), and its shared memory was gone 386 to 437 ms after it (700 ms in that trial). The OOM was the Pod cgroup's:
+  the Pod's 4 GiB includes the `pause` container, so it meets the limit just before the runner container does.
+- Before the reserve below, the kernel killed the other session's tool shell 93 or 115 ms after the first kill, in 2 of
+  4 trials.
+- With the reserve, in 10 trials the runner's watchdog stopped the allocator below the limit 5 times (no kernel kill)
+  and the kernel killed it 5 times. In 3 of those 5 the reserve was woken 0.4 to 3.2 ms and freed 5.3 to 14.7 ms after
+  the kill. From then until the shared memory was gone the container stayed 45 to 68 MiB below its limit and never met
+  it again (`memory.events` `max` unchanged); anon and kernel memory did not grow, and only page cache came back (32 to
+  134 MiB). The kernel killed only the allocator. In the other 2 the kernel killed again 2.1 and 53.0 ms after the first
+  kill, before the reserve was freed, and took the reserve itself. The other session's tool finished in all 10 trials.
+- On orbit-ws01's 7.2 kernel (a 1 GiB, 2 CPU scope), a second kill came 0.3 to 0.5 ms after the first in 2 of 5 runs
+  without the reserve, while the victim was still unmapping; with it, 8 of 8 runs had one kill.
+
+**The reserve.** On a managed runner the memory watchdog starts `orbit orbit-headroom`, a child of `orbit run`. It holds
+64 MiB of touched private memory, counted against the container like any other, and frees it (`madvise(MADV_DONTNEED)`)
+as soon as the container's `memory.events` `oom_kill` rises, so the container's other processes have that room while
+the victim's shared memory drains. It waits on `memory.events` with `poll`, which the kernel wakes on a change of that
+file as it signals inotify's `IN_MODIFY` (at most once in 10 ms, rounded up to whole jiffies), with a 100 ms timeout as
+the fallback. It arms again once no kill has followed for 4 s and arming leaves the watchdog's tenth of the limit free.
+
+- It is a process of its own because a daemon thread that faults at the limit holds up Go's stop-the-world, and every
+  goroutine with it, until memory is freed. An earlier attempt that freed a reserve from a daemon goroutine freed it 1 to
+  2.7 s after the kill, after the second kill (with heavy kernel tracing on).
+- Its `oom_score_adj` is 1000 and it holds about 80 MiB resident, so when the kernel kills again before the reserve is
+  freed it takes the reserve before a smaller tool (a shell, a `sleep`), as in the 2 trials above. A tool larger than the
+  reserve still goes first, and so does one when more than 64 MiB of memory that cannot be reclaimed is allocated
+  before the victim's shared memory is gone. The memory watchdog never stops the reserve; the daemon starts it again
+  4 s after a signal ends it.
+- Runner log lines: `Armed the emergency memory reserve of 64 MiB; the container's oom_kill is N`; `Freed the emergency
+  memory reserve of 64 MiB: the container's oom_kill rose from N to M (woken at monotonic … ns, freed at … ns)`, on the
+  clock of ftrace's `mono` trace clock, so the times compare with `oom/mark_victim`; `The emergency memory reserve was
+  stopped: signal: killed - it starts again in 4s` after the kernel took it; and `The emergency memory reserve is not
+  running: …` if it could not start.
 
 ## Names from before orbit-cloud (2026-11-20)
 

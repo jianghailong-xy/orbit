@@ -364,6 +364,10 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == memoryToolShellComm {
 		os.Exit(runMemoryToolShell(os.Args[2:]))
 	}
+	// A managed runner's emergency memory reserve (memory_oom_reserve_linux.go), a child of the daemon.
+	if len(os.Args) > 1 && os.Args[1] == memoryReserveCommand {
+		os.Exit(runMemoryReserve())
+	}
 	// A session process's keeper (session_scope.go), ahead of everything below: the environment it was
 	// started with is the session process's, and goes to it untouched.
 	if len(os.Args) > 1 && os.Args[1] == sessionScopeCommand {
