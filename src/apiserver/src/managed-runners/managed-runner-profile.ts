@@ -94,7 +94,10 @@ export interface ManagedRunnerProfile {
       cpu: string;
       /** Memory requests, likewise. */
       memory: string;
-      /** Ephemeral storage: each Pod reserves its `/tmp` bound (`runner.tmpSizeLimit`). */
+      /**
+       * Ephemeral storage: each Pod reserves `runner.tmpSizeLimit` of it. Its /tmp is no longer ephemeral storage but a
+       * directory of its data volume (managed-runner-resources.ts TMP_SUBPATH), so this is a reservation, not a bound.
+       */
       ephemeralStorage: string;
       /** Runner Pods admitted at once. */
       pods: number;
@@ -162,7 +165,10 @@ export interface DockerRunnerProfile {
     /** The Orbit server the runner reports to: HTTPS, or HTTP to a loopback or private address of the host's container network. */
     serverUrl: string;
     maxConcurrent: number;
-    /** `/tmp`, a tmpfs counted in the container's memory. */
+    /**
+     * Each runner's share of the pool's ephemeral-storage budget. It bounds nothing in the container: /tmp is a
+     * directory of the runner's data volume (channel.py TMP_SUBPATH), within that volume's disk limit.
+     */
     tmpSizeLimit: string;
     /** The container's limits, which are also its compute share: Docker reserves nothing below them. */
     resources: { cpu: string; memory: string; pids: number };
@@ -608,7 +614,10 @@ function parseDockerRunnerProfile(value: Record<string, unknown>): ManagedRunner
   return problems.length ? { ok: false, problems } : { ok: true, profile };
 }
 
-/** The Docker profile's amounts: countable, and one runner's /tmp held within its memory. */
+/**
+ * The Docker profile's amounts: countable. `runner.tmpSizeLimit` is no longer held against `runner.resources.memory`:
+ * /tmp is on the data volume, not a tmpfs in the container's memory.
+ */
 function dockerAmountProblems(profile: DockerRunnerProfile): string[] {
   const problems: string[] = [];
   const quantities: Array<[string, string | undefined, 'unit' | 'milli']> = [
@@ -634,10 +643,6 @@ function dockerAmountProblems(profile: DockerRunnerProfile): string[] {
   });
   for (const [path, quantity, scale] of quantities) {
     if (quantity !== undefined && !quantityUnits(quantity, scale)) problems.push(`${path} must be a positive quantity small enough to count exactly`);
-  }
-  if (problems.length) return problems;
-  if (quantityUnits(profile.runner.tmpSizeLimit)! > quantityUnits(profile.runner.resources.memory)!) {
-    problems.push('runner.tmpSizeLimit is a tmpfs held in memory and cannot exceed runner.resources.memory');
   }
   return problems;
 }

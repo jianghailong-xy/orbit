@@ -199,6 +199,11 @@ func (s *bgJobService) serveConn(conn net.Conn) {
 		s.serveSecretLease(conn, req.Args)
 		return
 	}
+	if req.Op == memoryToolExitOp {
+		s.reportMemoryToolExit(conn, req.Args)
+		writeBgResponse(conn, bgSocketResponse{OK: true})
+		return
+	}
 	writeBgResponse(conn, s.handle(req))
 }
 

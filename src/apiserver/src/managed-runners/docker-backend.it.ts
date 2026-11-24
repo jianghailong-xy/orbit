@@ -528,9 +528,10 @@ test('the Docker backend on real Docker', { skip: !CONFIG || !PG_URL, concurrenc
     assert.deepEqual({ cpu: host.NanoCpus, memory: host.Memory, swap: host.MemorySwap, pids: host.PidsLimit }, { cpu: 500_000_000, memory: 512 * MiB, swap: 512 * MiB, pids: 512 });
     assert.ok(host.SecurityOpt.includes('no-new-privileges:true'));
     assert.deepEqual(inspected.Mounts.map((m: { Type: string; Name?: string; Destination: string }) => `${m.Type}:${m.Destination}`).sort(),
-      ['tmpfs:/tmp', 'volume:/run/orbit-bootstrap', 'volume:/home/orbit']);
-    const tmp = host.Mounts.find((m: { Type: string; Target: string }) => m.Type === 'tmpfs' && m.Target === '/tmp');
-    assert.deepEqual(tmp?.TmpfsOptions, { SizeBytes: 64 * MiB, Mode: 0o1777, Options: [['exec']] }, '/tmp executable, sized, nosuid and nodev by Docker');
+      ['volume:/home/orbit', 'volume:/run/orbit-bootstrap', 'volume:/tmp']);
+    const tmp = host.Mounts.find((m: { Type: string; Target: string }) => m.Target === '/tmp');
+    assert.deepEqual(tmp, { Type: 'volume', Source: inspected.Mounts.find((m: { Destination: string }) => m.Destination === '/home/orbit').Name,
+      Target: '/tmp', VolumeOptions: { NoCopy: true, Subpath: '.orbit-tmp' } }, '/tmp is the data volume\'s .orbit-tmp: full, it is ENOSPC, never memory');
     assert.ok(!JSON.stringify(inspected).includes('docker.sock'), 'no Docker socket anywhere in it');
     const env: string[] = inspected.Config.Env;
     assert.ok(!env.some((e) => /GENERATION|POD_UID|TOKEN=/.test(e)), `no credential or generation in its environment: ${env.join(' ')}`);
