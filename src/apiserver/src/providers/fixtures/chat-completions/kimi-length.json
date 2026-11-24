@@ -1,0 +1,29 @@
+{
+  "source": "api.kimi.ai/coding/v1 (kimi-for-coding)",
+  "recordedAt": "2026-11-23",
+  "recipe": "POST https://api.kimi.ai/coding/v1/chat/completions (Moonshot's Kimi coding endpoint, an OpenAI-compatible server that serves only Chat Completions), with a Kimi Code sign-in's bearer token (not recorded), the request below sent as is, the answer's body kept byte for byte.",
+  "scenario": "max_tokens 12: the answer is cut, finish_reason length.",
+  "request": {
+    "model": "kimi-for-coding",
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "max_tokens": 12,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a coding agent. Use tools when asked."
+      },
+      {
+        "role": "user",
+        "content": "Count from 1 to 50."
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "contentType": "text/event-stream;charset=utf-8",
+    "body": "data: {\"id\":\"chatcmpl-E1AF6XuxUYTuXbhUBsbleXuL\",\"object\":\"chat.completion.chunk\",\"created\":1795417588,\"model\":\"kimi-for-coding\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_072d4409\"}\n\ndata: {\"id\":\"chatcmpl-E1AF6XuxUYTuXbhUBsbleXuL\",\"object\":\"chat.completion.chunk\",\"created\":1795417588,\"model\":\"kimi-for-coding\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"Simple\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_072d4409\"}\n\ndata: {\"id\":\"chatcmpl-E1AF6XuxUYTuXbhUBsbleXuL\",\"object\":\"chat.completion.chunk\",\"created\":1795417588,\"model\":\"kimi-for-coding\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\" counting\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_072d4409\"}\n\ndata: {\"id\":\"chatcmpl-E1AF6XuxUYTuXbhUBsbleXuL\",\"object\":\"chat.completion.chunk\",\"created\":1795417588,\"model\":\"kimi-for-coding\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\" request\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_072d4409\"}\n\ndata: {\"id\":\"chatcmpl-E1AF6XuxUYTuXbhUBsbleXuL\",\"object\":\"chat.completion.chunk\",\"created\":1795417588,\"model\":\"kimi-for-coding\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\",\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_072d4409\"}\n\ndata: {\"id\":\"chatcmpl-E1AF6XuxUYTuXbhUBsbleXuL\",\"object\":\"chat.completion.chunk\",\"created\":1795417588,\"model\":\"kimi-for-coding\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\" no\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_072d4409\"}\n\ndata: {\"id\":\"chatcmpl-E1AF6XuxUYTuXbhUBsbleXuL\",\"object\":\"chat.completion.chunk\",\"created\":1795417588,\"model\":\"kimi-for-coding\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\" tools\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_072d4409\"}\n\ndata: {\"id\":\"chatcmpl-E1AF6XuxUYTuXbhUBsbleXuL\",\"object\":\"chat.completion.chunk\",\"created\":1795417588,\"model\":\"kimi-for-coding\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\" needed\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_072d4409\"}\n\ndata: {\"id\":\"chatcmpl-E1AF6XuxUYTuXbhUBsbleXuL\",\"object\":\"chat.completion.chunk\",\"created\":1795417588,\"model\":\"kimi-for-coding\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\".\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_072d4409\"}\n\ndata: {\"id\":\"chatcmpl-E1AF6XuxUYTuXbhUBsbleXuL\",\"object\":\"chat.completion.chunk\",\"created\":1795417588,\"model\":\"kimi-for-coding\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"length\",\"usage\":{\"prompt_tokens\":116,\"completion_tokens\":12,\"total_tokens\":128,\"completion_tokens_details\":{\"reasoning_tokens\":8}}}],\"system_fingerprint\":\"fpv0_072d4409\"}\n\ndata: {\"id\":\"chatcmpl-E1AF6XuxUYTuXbhUBsbleXuL\",\"object\":\"chat.completion.chunk\",\"created\":1795417588,\"model\":\"kimi-for-coding\",\"choices\":[],\"usage\":{\"prompt_tokens\":116,\"completion_tokens\":12,\"total_tokens\":128,\"completion_tokens_details\":{\"reasoning_tokens\":8}}}\n\ndata: [DONE]\n\n"
+  }
+}

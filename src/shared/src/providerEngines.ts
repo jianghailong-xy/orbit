@@ -98,8 +98,9 @@ export function isDeepSeekKey(row: { presetSlug: string | null; baseUrl: string 
  * caller that passes nothing gets the table as it is with every switch off.
  */
 export interface EngineTableOptions {
-  /** Orbit's /api/gw/anthropic gateway is on (docs/claude-engine-openai-gateway-design.md §4.2, D6):
-   *  an OpenAI key also runs on Claude Code, after its default engine Codex (D7). */
+  /** Orbit's /api/gw/anthropic gateway is on, and may call the key's endpoint
+   *  (docs/claude-engine-openai-gateway-design.md §4.2, §10, D6): an OpenAI key also runs on Claude Code,
+   *  after its default engine Codex (D7), and so does an OpenAI-compatible (Chat Completions) key, after Kimi. */
   anthropicGateway?: boolean;
   /** Claude Code on the account owner's own Codex login pool is on (ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY;
    *  docs/claude-engine-openai-gateway-design.md §9): such a pool also runs on Claude Code, after its
@@ -136,8 +137,9 @@ function keyEngines(key: Extract<EngineCredential, { kind: 'key' }>, options: En
   const native = legacyDsh ? AgentProvider.DSH : NATIVE_ENGINE[dialect];
   const runs = new Set<AgentProvider>([NATIVE_ENGINE[dialect], AgentProvider.OPENCODE]);
   if (dialect === 'anthropic' && (legacyDsh || isDeepSeekKey(key))) runs.add(AgentProvider.DSH);
-  // Claude Code on an OpenAI key through Orbit's own gateway, which holds the key (design §4.2).
-  if (dialect === 'openai' && options.anthropicGateway) runs.add(AgentProvider.CLAUDE);
+  // Claude Code on an OpenAI or OpenAI-compatible key through Orbit's own gateway, which holds the key
+  // (design §4.2, §10).
+  if ((dialect === 'openai' || dialect === 'openai-compatible') && options.anthropicGateway) runs.add(AgentProvider.CLAUDE);
   return [native, ...ALL_ENGINES.filter((engine) => engine !== native && runs.has(engine))];
 }
 

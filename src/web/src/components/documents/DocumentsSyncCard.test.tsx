@@ -78,6 +78,12 @@ async function draw(list: DocumentsSyncView[], byId?: DocumentsSyncView) {
 describe('the sync card', () => {
   it('names the sync from a documents_sync answer, and nothing from an older one', () => {
     expect(documentsSyncIdOf('{"jobId":"bgj_1","syncId":"s1"}')).toBe('s1');
+    // What a runner sends today: its answer as a receipt, the call's own answer under `entity`.
+    const receipt = (entity: object, ok = true) =>
+      JSON.stringify({ receiptVersion: 1, ok, outcome: ok ? 'written' : 'refused', operation: 'documents_sync', id: 'bgj_1', entity });
+    expect(documentsSyncIdOf(receipt({ jobId: 'bgj_1', status: 'running', syncId: '35344yWPof4phuXdrUNez' }))).toBe('35344yWPof4phuXdrUNez');
+    expect(documentsSyncIdOf(receipt({ jobId: 'bgj_1', status: 'running' }))).toBeNull();
+    expect(documentsSyncIdOf(receipt({ syncId: 's1' }, false))).toBeNull();
     expect(documentsSyncIdOf('{"jobId":"bgj_1","status":"running"}')).toBeNull();
     expect(documentsSyncIdOf('not json')).toBeNull();
   });

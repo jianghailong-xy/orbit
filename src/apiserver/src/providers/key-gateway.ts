@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client';
-import { AgentProvider, keyDialect, providerPreset, type EngineTableOptions } from '@orbit/shared';
+import { AgentProvider, keyDialect, providerPreset, type EngineTableOptions, type KeyDialect } from '@orbit/shared';
 import { generateToken, sha256 } from '../common/crypto.util';
 import type { PrismaService } from '../prisma/prisma.service';
 import { upstreamUrlRefusal } from './gateway-upstream';
@@ -43,9 +43,19 @@ export function anthropicGatewayUrl(): string {
   return `${origin}${ANTHROPIC_GATEWAY_PATH}`;
 }
 
-/** Whether a session on `engine` spends `row` through the gateway: Claude Code on an OpenAI-dialect key. */
+/**
+ * The dialect of a key Claude Code can run on through the gateway, or null: an OpenAI key, sent on as OpenAI
+ * Responses, or an OpenAI-compatible one, sent on as Chat Completions (design §10). Only such a key ever has
+ * gateway tokens.
+ */
+export function gatewayKeyDialect(runtime: string | null | undefined): Extract<KeyDialect, 'openai' | 'openai-compatible'> | null {
+  const dialect = keyDialect(runtime);
+  return dialect === 'openai' || dialect === 'openai-compatible' ? dialect : null;
+}
+
+/** Whether a session on `engine` spends `row` through the gateway: Claude Code on a key gatewayKeyDialect names. */
 export function runsThroughAnthropicGateway(engine: AgentProvider | null | undefined, row: { runtime: string }): boolean {
-  return engine === AgentProvider.CLAUDE && keyDialect(row.runtime) === 'openai';
+  return engine === AgentProvider.CLAUDE && gatewayKeyDialect(row.runtime) !== null;
 }
 
 /**
@@ -110,7 +120,7 @@ export async function revokeKeyGatewayTokens(
 
 /**
  * The row dispatch builds a session's environment from: `row` itself, unless the session runs Claude Code on an
- * OpenAI key with the gateway on — then a copy whose credential is a token minted for this build
+ * OpenAI or OpenAI-compatible key with the gateway on — then a copy whose credential is a token minted for this build
  * (`sessionToken`, which injectedEnv's Claude branch hands the engine in the key's place).
  */
 export async function withKeyGatewayToken<T extends { id: string; runtime: string; enabled: boolean }>(

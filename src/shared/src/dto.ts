@@ -4377,6 +4377,8 @@ export interface RunFinalizeRequest {
   /** The worktree's actual HEAD branch at completion (see SessionLiveState.worktreeBranch); lets
    *  the server flag / offer "Adopt" for a session that finished on an in-worktree checkout -b branch. */
   worktreeBranch?: string;
+  /** The runner verified that HEAD was detached at completion. */
+  worktreeDetached?: boolean;
   /** The tip of that branch once finalization has committed what the session left, the finalize
    *  commit included: what a finished task's work is frozen as (contract §10.5 O-L4). Absent on a
    *  park checkpoint, which the next resume undoes, and from older runners — the tip the last live
