@@ -853,7 +853,9 @@ public enum TranscriptRows {
         // SubAgent (`mcp__orbit__delegate`), which draws the child's steps under the same block
         // (docs/subagent-design.md §6.4), and an Orbit workflow, whose block counts its calls.
         case "AskUserQuestion", "ExitPlanMode", "mcp__orbit__session_create", "Task", "Agent", "Workflow",
-             SubagentBlock.toolName, WorkflowBlock.toolName, BgJobCard.toolName:
+             SubagentBlock.toolName, WorkflowBlock.toolName, BgJobCard.toolName,
+             // An agent's directory sync is its sync's card, live after the turn ends (DocumentsSyncCard).
+             DocumentsSyncCard.toolName:
             return false
         default:
             // A Documents transfer is its run's card (`groupTransfers`).

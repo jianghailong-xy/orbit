@@ -81,6 +81,9 @@ final class DocumentsModel {
     private(set) var syncs: [DocumentsSync] = []
     /// Bytes a second between the last two reads of each running sync.
     private(set) var syncRates: [String: Double] = [:]
+    /// Every sync read, whether or not this Mac cleared it from the popover, by id: what the conversation's sync
+    /// cards read (`DocumentsSyncCardView`), which stay live after a sync leaves the popover.
+    private(set) var syncsByID: [String: DocumentsSync] = [:]
 
     /// A toast for the app's one host: the message, a line under it, its tone and an Undo.
     @ObservationIgnored var onToast: ((String, String?, ToastTone, (@MainActor () -> Void)?) -> Void)?
@@ -794,6 +797,7 @@ final class DocumentsModel {
         }
         syncRates = rates
         allSyncs = read
+        for sync in read { syncsByID[sync.id] = sync }
         publishSyncs()
         if read.contains(where: \.running) && syncPoll == nil {
             syncPoll = Task { [weak self] in
@@ -813,6 +817,23 @@ final class DocumentsModel {
     private func publishSyncs() {
         syncs = allSyncs.filter { $0.running || !dismissedSyncs.contains($0.id) }
     }
+
+    /// A conversation's sync card asks for its sync: from the list if it is there, else read once by id (a sync
+    /// ended over a day ago is not in the list). `drive.sync` keeps it current after that (`nudge`).
+    func watchSync(_ id: String) async {
+        guard syncsByID[id] == nil else { return }
+        await loadSyncs()
+        guard syncsByID[id] == nil, let sync = try? await api.documentsSync(id) else { return }
+        syncsByID[sync.id] = sync
+    }
+
+#if DEBUG
+    /// Test-only: what a screenshot gallery seeds for `DocumentsSyncCardView` to read.
+    func seedSyncsForTesting(_ syncs: [DocumentsSync], rates: [String: Double] = [:]) {
+        for sync in syncs { syncsByID[sync.id] = sync }
+        syncRates = rates
+    }
+#endif
 
     /// Open the folder a sync wrote to.
     func openSyncFolder(_ sync: DocumentsSync) {
