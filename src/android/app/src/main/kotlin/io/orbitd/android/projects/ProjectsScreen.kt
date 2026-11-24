@@ -491,6 +491,11 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
     val asked by ownerRequests.state.collectAsState()
     LaunchedEffect(ownerRequests, id) { ownerRequests.load(OwnerRequestStore.OPEN) }
     val reopenAsks = if (status == "OPEN") emptyList() else ProjectReopenFacts.pending(asked.open, id)
+    // A row that arrives above the header would leave the page scrolled past it (the list keeps the header where it was): a reader at
+    // the top is taken back to the top, where the row is.
+    LaunchedEffect(reopenAsks.size) {
+        if (reopenAsks.isNotEmpty() && listState.firstVisibleItemIndex == reopenAsks.size && listState.firstVisibleItemScrollOffset == 0) listState.scrollToItem(0)
+    }
     LazyColumn(Modifier.fillMaxSize().testTag("project-detail"), state = listState, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp)) {
         items(reopenAsks, key = { "reopen:${it.id}" }) { ask ->
             Box(Modifier.padding(top = 8.dp)) { ProjectReopenCard(ask, ownerRequests, onProjectPage = true, reopened = { scope.launch { load() } }) }

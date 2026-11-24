@@ -68,7 +68,8 @@ fun ProjectReopenCard(request: OwnerRequest, store: OwnerRequestStore, discuss: 
                 }, Modifier.testTag("$tag:decline-send"), enabled = reason.isNotBlank() && !busy) { Text(ProjectReopenCopy.decline) }
                 TextButton(onClick = { declining = false }, Modifier.testTag("$tag:keep")) { Text(ProjectReopenCopy.keep) }
             }
-        } else FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        } else Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Two full-width buttons, stacked, as iOS draws them.
             Button(onClick = {
                 busy = true; failure = null
                 scope.launch {
@@ -76,9 +77,9 @@ fun ProjectReopenCard(request: OwnerRequest, store: OwnerRequestStore, discuss: 
                     if (failure == null) reopened()
                     busy = false
                 }
-            }, Modifier.testTag("$tag:primary"), enabled = !busy) { Text(ProjectReopenCopy.reopen, fontWeight = FontWeight.Bold) }
+            }, Modifier.fillMaxWidth().testTag("$tag:primary"), enabled = !busy) { Text(ProjectReopenCopy.reopen, fontWeight = FontWeight.Bold) }
             OutlinedButton(onClick = { if (discuss != null) discuss(OwnerRequests.chatContext(request) + "\n\n") else declining = true },
-                Modifier.testTag("$tag:chat"), enabled = !busy) { Text(ProjectReopenCopy.chat) }
+                Modifier.fillMaxWidth().testTag("$tag:chat"), enabled = !busy) { Text(ProjectReopenCopy.chat) }
         }
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
     }
