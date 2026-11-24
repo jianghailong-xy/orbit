@@ -447,7 +447,8 @@ public enum ProjectPage {
                         outputMovedAt: inFlight.outputMovedAt, typicalMs: inFlight.typicalMs,
                         livenessWord: inFlight.liveness,
                         firstStartedAt: firstStartedAt(view, jobId: inFlight.jobId),
-                        blockingReason: inFlight.blockingReason)
+                        blockingReason: inFlight.blockingReason,
+                        heldOnPullRequest: inFlight.state == "PULL_REQUEST")
     }
 
     /// When the attempt behind a job FIRST started: the `landTask` row's own `startedAt` is the
@@ -529,7 +530,8 @@ public enum ProjectPage {
                            check: job.check, stepStartedAt: job.stepStartedAt, outputMovedAt: job.outputMovedAt,
                            typicalMs: job.typicalMs, livenessWord: job.liveness,
                            firstStartedAt: firstStartedAt(view, jobId: job.jobId),
-                           blockingReason: job.blockingReason)
+                           blockingReason: job.blockingReason,
+                           heldOnPullRequest: job.state == "PULL_REQUEST")
             return LandingJobLine(
                 jobId: job.jobId, taskId: job.taskId, line: line,
                 detail: landingJobDetail(job, main: main), retryable: job.retryable,
@@ -637,7 +639,8 @@ public enum ProjectPage {
                                  stepStartedAt: String? = nil, outputMovedAt: String? = nil,
                                  typicalMs: Int? = nil, livenessWord: String? = nil,
                                  firstStartedAt: String? = nil,
-                                 blockingReason: LandTaskBlockingReason? = nil) -> LandingLine {
+                                 blockingReason: LandTaskBlockingReason? = nil,
+                                 heldOnPullRequest: Bool = false) -> LandingLine {
         let lockWait = localLockWait(running: running, liveness: livenessWord, blockingReason: blockingReason)
         // A queued job's heartbeat and phase can be an earlier claim's: only a running job's count.
         let reported = heartbeatAt.flatMap(RelativeTime.parse)
@@ -669,7 +672,9 @@ public enum ProjectPage {
                            state: unavailable ? "Update unavailable"
                                : silent ? landingNoReport
                                    : running && lockWait != nil ? landingWaiting
-                                       : running ? (integrationPhaseWords(main)[phase ?? ""] ?? "running") : "queued",
+                                       : running ? (integrationPhaseWords(main)[phase ?? ""] ?? "running")
+                                           // Held on its pull request, not queued: GitHub is what it waits for (design §4.2).
+                                           : heldOnPullRequest ? "waiting for GitHub" : "queued",
                            clock: v6?.clock ?? landingClock(elapsed), word: word,
                            clockLabel: running ? "Elapsed" : "Queued for",
                            updated: report, wait: wait, liveness: v6)
