@@ -43,6 +43,7 @@
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { appendFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 import { toUuid, uuidToBase62, WIKI_CHAT_COPY, WIKI_CHAT_RULES, WIKI_DOCS_FOLLOW, WIKI_DOCS_FOLLOW_WAITING } from '@orbit/shared';
@@ -61,6 +62,13 @@ import { wikiDocsFollowSectionsToday } from './wiki-docs-follow';
 import { WikiDocs, wikiDocsBuildJobPrincipal } from './wiki-docs';
 import { WikiService } from './wiki.service';
 import '../test-support/daemon-routes-over-http';
+
+/** When WIKI_CHAT_PAYLOADS names a file, each server answer a client draws is appended to it as one JSON line (src/shared/src/wiki-chat.server-payloads.json is built from it). */
+const capture = (name: string, value: unknown): void => {
+  const out = process.env.WIKI_CHAT_PAYLOADS;
+  if (out) appendFileSync(out, `${JSON.stringify({ name, value })}\n`);
+};
+
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -662,6 +670,7 @@ test('a wiki chat drafts cards, and only the owner presses them', { skip: !URL_,
     assert.deepEqual((await followJobs()).filter((one) => one.input.facts.some((fact) => fact.draftId === id)), [], 'held: nothing queued');
     const heldRead = await card(id);
     assert.deepEqual([heldRead.json.state, heldRead.json.held, heldRead.json.autoQueuedAt, heldRead.json.tainted], ['draft', 'web', null, true]);
+    capture('drafts.held.web', heldRead.json);
     assert.deepEqual([(await draftRow(id)).held, (await draftRow(id)).auto_queued_at], ['web', null], 'why it was held is stored');
     const replay = await draft(chat, body);
     assert.deepEqual([replay.json.replayed, toUuid(replay.json.draftId), replay.json.state, replay.json.held], [true, id, 'draft', 'web']);
@@ -751,6 +760,7 @@ test('a wiki chat drafts cards, and only the owner presses them', { skip: !URL_,
     const read = await card(id);
     assert.deepEqual([read.json.state, read.json.decision, read.json.held, read.json.undoable, read.json.autoQueuedAt !== null], ['rewritten', null, null, true, true]);
     assert.ok(['rewriting', 'waiting'].includes(read.json.rewrite.result), read.text);
+    capture('drafts.rewritten.rewriting', read.json);
     const replay = await draft(chat, { kind: 'rewrite', sections: leases, reason: 'The lease is two minutes on main.', idempotencyKey: `auto-${RUN}` });
     assert.deepEqual([replay.json.replayed, replay.json.state, toUuid(replay.json.draftId)], [true, 'rewritten', id]);
     assert.equal((await press(id, 'apply')).status, 409, 'nothing to press: it is written already');
@@ -770,6 +780,7 @@ test('a wiki chat drafts cards, and only the owner presses them', { skip: !URL_,
     await sql.query(`UPDATE "wiki_job" SET "state" = 'succeeded', "ended_at" = now(), "report" = $2::jsonb WHERE "id" = $1::uuid`, [job.id, JSON.stringify(report)]);
     const settled = await card(id);
     assert.deepEqual([settled.json.state, settled.json.rewrite.result], ['rewritten', 'updated']);
+    capture('drafts.rewritten.settled', settled.json);
     const later = await told(chat);
     assert.match(later ?? '', /<orbit_wiki_drafts applied="0" edited="0" discarded="0" undone="0" rewritten="0" settled="1">/u);
     assert.match(later ?? '', new RegExp(`- ${pub(id)} Rewrite from main: its rewrite has finished since you were told of it\\. Rewrite: Wiki updated · 1\\.1 §3 — 1 sentence\\.`, 'u'));
@@ -800,6 +811,7 @@ test('a wiki chat drafts cards, and only the owner presses them', { skip: !URL_,
       assert.deepEqual([held.status, held.json.state, held.json.held], [200, 'draft', 'draft'], held.text);
       const heldId = toUuid(held.json.draftId);
       assert.deepEqual([(await draftRow(heldId)).held_by_id, (await card(heldId)).json.held], [entryId, 'draft']);
+      if (label === 'apply') capture('drafts.held.draft', (await card(heldId)).json);
       assert.deepEqual((await followJobs()).filter((one) => one.input.facts.some((f) => f.draftId === heldId)), [], 'nothing queued while it waits');
       return { chat: c, entryId, heldId };
     };
@@ -964,6 +976,7 @@ test('a wiki chat drafts cards, and only the owner presses them', { skip: !URL_,
     const heldId = toUuid(answers.find((one) => one.json.held === 'budget')!.json.draftId);
     const held = await card(heldId);
     assert.deepEqual([held.json.state, held.json.held, (await draftRow(heldId)).held], ['draft', 'budget', 'budget']);
+    capture('drafts.held.budget', held.json);
     // The owner applies it as any card: a press, which no day's count holds back.
     const applied = await press(heldId, 'apply');
     assert.deepEqual([applied.status, applied.json.draft.state], [200, 'applied'], applied.text);

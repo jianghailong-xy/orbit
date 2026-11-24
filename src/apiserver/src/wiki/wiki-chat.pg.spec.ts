@@ -46,7 +46,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -64,6 +64,13 @@ import { controlPlaneNoteOf } from '../runner-api/control-plane-note';
 import { SessionsService } from '../sessions/sessions.service';
 import { isOwnerTurn } from './wiki.service';
 import '../test-support/daemon-routes-over-http';
+
+/** When WIKI_CHAT_PAYLOADS names a file, each server answer a client draws is appended to it as one JSON line (src/shared/src/wiki-chat.server-payloads.json is built from it). */
+const capture = (name: string, value: unknown): void => {
+  const out = process.env.WIKI_CHAT_PAYLOADS;
+  if (out) appendFileSync(out, `${JSON.stringify({ name, value })}\n`);
+};
+
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -587,6 +594,7 @@ test('the wiki chat is an ordinary session of the workspace the space chose, sta
     assert.equal(handed.turnId, turn.id);
     assert.equal(handed.content, `${WORDS}\n\n${WIKI_CHAT_PROMPT}\n\n${CONTENTS}\n\n${PAGE}\n\n${SELECTION}`, 'the words, then the four blocks');
     assert.equal(turn.content, WORDS, "the turn's content is the owner's words alone");
+    capture('chat.delivered.contents', handed.content);
     assert.equal(controlPlaneNoteOf(handed.content, turn.content), `\n\n${WIKI_CHAT_PROMPT}\n\n${CONTENTS}\n\n${PAGE}\n\n${SELECTION}`,
       'and the note recorded beside the echo is exactly what delivery appended');
   });
