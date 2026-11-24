@@ -74,7 +74,7 @@ func startMemoryWatchdog(ctx context.Context, managed bool) func() {
 	if !managed {
 		return func() {}
 	}
-	read := func() (uint64, uint64, bool) { return cgroupMemory(cgroupRoot, nil) }
+	read := func() (uint64, uint64, bool) { return watchdogCgroupMemory(cgroupRoot) }
 	if limit, _, ok := read(); !ok || limit == 0 {
 		return func() {}
 	}
@@ -115,6 +115,39 @@ func startMemoryWatchdog(ctx context.Context, managed bool) func() {
 		cancel()
 		<-done
 	}
+}
+
+func watchdogCgroupMemory(dir string) (limit, available uint64, ok bool) {
+	maxBytes, err := os.ReadFile(filepath.Join(dir, "memory.max"))
+	if err != nil {
+		return 0, 0, false
+	}
+	limit, ok = parseCgroupBytes(string(maxBytes))
+	if !ok || limit == 0 {
+		return 0, 0, false
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "memory.stat"))
+	if err != nil {
+		return 0, 0, false
+	}
+	stat := string(data)
+	anon, hasAnon := statField(stat, "anon")
+	shmem, hasShmem := statField(stat, "shmem")
+	if !hasAnon || !hasShmem {
+		return 0, 0, false
+	}
+	// shmem is reported separately from anon and includes tmpfs and memfd.
+	// Disk-backed file pages on either LRU can be reclaimed under pressure.
+	available = limit - min(limit, anon)
+	available -= min(available, shmem)
+	// Older kernels may lack the kernel total. Count it only when we can
+	// subtract reclaimable slab, which is included in that total.
+	kernel, hasKernel := statField(stat, "kernel")
+	reclaimable, hasReclaimable := statField(stat, "slab_reclaimable")
+	if hasKernel && hasReclaimable {
+		available -= min(available, kernel-min(kernel, reclaimable))
+	}
+	return limit, available, true
 }
 
 func readOOMScore(dir string) string {
@@ -307,7 +340,7 @@ func (w *memoryWatchdog) sample(now func() time.Time) {
 	if killed {
 		w.settleUntil = now().Add(memoryWatchdogSettleWindow)
 		w.notify(victim.session, fmt.Sprintf(
-			"The runner stopped %s (PID %d) because the container was using %d MiB of its %d MiB memory limit.",
+			"The runner stopped %s (PID %d) because memory excluding reclaimable cache reached %d MiB of the container's %d MiB limit.",
 			description, victim.leader.pid, (limit-available)>>20, limit>>20))
 	}
 }
