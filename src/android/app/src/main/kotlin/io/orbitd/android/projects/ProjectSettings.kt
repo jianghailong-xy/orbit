@@ -110,7 +110,7 @@ private fun Note(text: String, color: androidx.compose.ui.graphics.Color = Mater
 @Composable
 private fun LineSetting(view: JsonObject, doc: JsonObject, now: Instant, enabled: Boolean, hasMainBranch: Boolean, main: String, write: (JsonObject?) -> Unit) {
     val id = doc.text("id").orEmpty()
-    val branch = if (view.text("line") == "PROJECT_BRANCH") view.text("ref") ?: "project/$id" else "project/$id"
+    val branch = if (view.text("line") == "PROJECT_BRANCH") view.text("ref") ?: (view.text("defaultProjectBranch") ?: "project/$id") else view.text("defaultProjectBranch") ?: "project/$id"
     if (view.flag("locked")) Column(Modifier.testTag("project-line-locked"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(RunSettings.tasksLandOn); Spacer(Modifier.weight(1f).widthIn(min = 8.dp))
@@ -203,7 +203,7 @@ private fun DeliverySetting(view: JsonObject, enabled: Boolean, main: String, wr
 private fun DeliversSetting(doc: JsonObject, view: JsonObject, enabled: Boolean, main: String, write: (Boolean) -> Unit) {
     val marked = doc.flag("nonCode")
     var asking by remember { mutableStateOf<Boolean?>(null) }
-    val branch = view.text("ref")?.takeIf { view.text("line") == "PROJECT_BRANCH" } ?: "project/${doc.text("id").orEmpty()}"
+    val branch = view.text("ref")?.takeIf { view.text("line") == "PROJECT_BRANCH" } ?: view.text("defaultProjectBranch") ?: "project/${doc.text("id").orEmpty()}"
     Column(Modifier.testTag("project-delivers"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(DoneCopy.RUN_DELIVERS)
         DeliveryOption(!marked, DoneCopy.RUN_DELIVERS_CODE, DoneCopy.RUN_DELIVERS_CODE_HINT, enabled, offered = true,
@@ -418,7 +418,7 @@ private fun OwnerStartCard(doc: JsonObject, digest: String, state: ProjectPageSt
     viewTasks: () -> Unit, start: suspend (JsonObject) -> String?, close: () -> Unit, cancel: @Composable () -> Unit) {
     val graph = state.graph?.let(DependencyGraph::of)
     val settings = StartProjectCopy.defaultSettings(state.integration, doc.number("maxConcurrentTasks"), graph)
-    val request = StartProjectCopy.ownerRequest(settings, digest)
+    val request = StartProjectCopy.ownerRequest(settings, digest, state.integration?.text("defaultProjectBranch")?.let { "refs/heads/$it" })
     // The owner's edits live and die with this sheet; until there are any, the default rule's settings as the reads resolve them —
     // the main branch among them, by the start's order (`StartProjectCopy.startMainBranch`).
     var edited by remember(digest) { mutableStateOf<StartProjectCopy.Draft?>(null) }
