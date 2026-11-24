@@ -108,6 +108,7 @@ func TestInstructionUnitsLeaveOutOnlyTheirParagraph(t *testing.T) {
 		{Role: roleTaskRun, InsideRecordedWork: true, Watches: true, Wiki: true, Workflows: true, CLI: exe},
 		{Role: roleTopLevel, Watches: true, Wiki: true, Workflows: true, CLI: exe},
 		{Role: roleTopLevel, Watches: true, Wiki: true, Workflows: true, DriveMounted: true, CLI: exe},
+		{Role: roleSubAgent, InsideRecordedWork: true, Watches: true, Wiki: true, CLI: exe},
 		{Role: roleHelpAsk, CLI: exe},
 	}
 	seen := map[string]bool{}

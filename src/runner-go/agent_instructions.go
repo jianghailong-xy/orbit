@@ -92,7 +92,9 @@ const orbitCLIUseInstructions = "The Orbit CLI is for pipes, scripts, bulk input
 	"missing switch there is the same answer. `{{cli}} guide [topic] --json` gives a recipe's argv; `--receipt` prints " +
 	"a write's receipt. Never run `{{cli}} mcp`."
 
-// orbitReplyFileInstructions says which files a reply can really hand over. The runner uploads a linked
+// orbitReplyFileInstructions says which files a reply can really hand over. Since design step 5f only a session that
+// does not write to Orbit (a SubAgent, a check-only run) is given it alone; every other one is given it inside
+// orbitEvidenceFileInstructions. The runner uploads a linked
 // file only out of the session's own directories (reply_attachments.go), so an agent that leaves its
 // screenshot in /tmp and links it there has given the user a label nothing can open: a session on
 // 2026-10-29 did that with a copy of the same file already in its checkout. The last sentence is the
@@ -107,15 +109,20 @@ const orbitReplyFileInstructions = "Hand the user a file as `[name](path)`, an i
 	"copy the file there first and link the copy. Unignored files there can end up in a commit; keep others in the " +
 	"uploads directory or a git-ignored path."
 
-// orbitEvidenceFileInstructions is where the evidence of a piece of work goes, which is what the repository was for
-// until file_upload (docs/documents-design.md §2.3): 96% of its history was evidence and mocks. It follows
-// orbitReplyFileInstructions and repeats its rule: file_upload reads from the same two directories a reply links from
-// (localFileScope), which is why this sentence can lean on the one before it. A log is named as well as the screenshot,
-// because the tool call that printed it is already stored. The FILE check is what spares the file a commit: it binds the
-// bytes into the evidence the way a commit would, and it is how whoever judges the work gets to read it. ASCII like the rest.
-const orbitEvidenceFileInstructions = "Evidence: cite a command's output by its tool call rather than saving a log; " +
-	"keep screenshots and reports with file_upload rather than in the repository: it reads those same two " +
-	"directories and returns a reply link and the id a FILE check cites."
+// orbitEvidenceFileInstructions is how a session that writes to Orbit hands a file over, to the person in a reply and to
+// whoever judges the work as evidence: orbitReplyFileInstructions and the evidence paragraph in one (design §6 step 5f).
+// They had to be read together -- file_upload reads from the same two directories a reply links from (localFileScope),
+// and without the file_upload sentence Claude Code passed I4-reply-file-link 2 of 30 against 15 of 30 with it (task
+// 3533QfA5iugjF5kefEZGZ). Evidence is what the repository was for until file_upload (docs/documents-design.md §2.3):
+// 96% of its history was evidence and mocks. A log is named as well as the screenshot, because the tool call that
+// printed it is already stored. The FILE check is what spares the file a commit: it binds the bytes into the evidence
+// the way a commit would. "Into uploads" because a copy left in the checkout ships with the work unless git ignores it
+// (commitWorktree stages with `git add -A`). ASCII like the rest.
+const orbitEvidenceFileInstructions = "Hand the user a file as `[name](path)`, an image as `![name](path)`, only from " +
+	"your working directory or this session's uploads directory: copy one from elsewhere, /tmp included, into uploads " +
+	"first and link the copy, or keep it with file_upload, which reads those two directories and returns a reply link. " +
+	"Evidence: cite a command's output by its tool call rather than saving a log, and keep screenshots and reports with " +
+	"file_upload rather than in the repository; its id is what a FILE check cites."
 
 // The drive paragraphs are the owner's Documents drive, per runner kind (docs/documents-drive-technical-design.md
 // §4.6, §7.3). On Orbit Cloud the drive is mounted at ~/Documents and is used with the shell, so the paragraph says what

@@ -1,4 +1,4 @@
-=== antigravity (5618 bytes)
+=== antigravity (5530 bytes)
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
 
 Orbit primer 1.8.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
@@ -17,9 +17,7 @@ When a person's problem is one of their own Settings, call settings_get, then se
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
 
-Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one inside your working directory or this session's uploads directory reaches them: from elsewhere, /tmp included, copy the file there first and link the copy. Unignored files there can end up in a commit; keep others in the uploads directory or a git-ignored path.
-
-Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
+Hand the user a file as `[name](path)`, an image as `![name](path)`, only from your working directory or this session's uploads directory: copy one from elsewhere, /tmp included, into uploads first and link the copy, or keep it with file_upload, which reads those two directories and returns a reply link. Evidence: cite a command's output by its tool call rather than saving a log, and keep screenshots and reports with file_upload rather than in the repository; its id is what a FILE check cites.
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
@@ -34,7 +32,7 @@ To fan out several SubAgents, in parallel or in phases, whose results you only n
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the tools of the `orbit` MCP server (call_mcp_tool with ServerName "orbit"). Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
-=== claude (5390 bytes)
+=== claude (5302 bytes)
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
 
 Orbit primer 1.8.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
@@ -51,9 +49,7 @@ Session, agent and runner tools exist only while the account's Session orchestra
 
 When a person's problem is one of their own Settings, call settings_get, then settings_propose the change; for a key it refuses, link the row it returns instead of describing where it is.
 
-Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one inside your working directory or this session's uploads directory reaches them: from elsewhere, /tmp included, copy the file there first and link the copy. Unignored files there can end up in a commit; keep others in the uploads directory or a git-ignored path.
-
-Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
+Hand the user a file as `[name](path)`, an image as `![name](path)`, only from your working directory or this session's uploads directory: copy one from elsewhere, /tmp included, into uploads first and link the copy, or keep it with file_upload, which reads those two directories and returns a reply link. Evidence: cite a command's output by its tool call rather than saving a log, and keep screenshots and reports with file_upload rather than in the repository; its id is what a FILE check cites.
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
@@ -69,7 +65,7 @@ Before changing a file, use wiki_search with its path to look up known pitfalls.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the `mcp__orbit__*` tools. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
 === claude, resumed: same as claude
-=== codex 0.125-0.134 developer message (6110 bytes)
+=== codex 0.125-0.134 developer message (6022 bytes)
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
 
 Orbit primer 1.8.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
@@ -88,9 +84,7 @@ When a person's problem is one of their own Settings, call settings_get, then se
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
 
-Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one inside your working directory or this session's uploads directory reaches them: from elsewhere, /tmp included, copy the file there first and link the copy. Unignored files there can end up in a commit; keep others in the uploads directory or a git-ignored path.
-
-Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
+Hand the user a file as `[name](path)`, an image as `![name](path)`, only from your working directory or this session's uploads directory: copy one from elsewhere, /tmp included, into uploads first and link the copy, or keep it with file_upload, which reads those two directories and returns a reply link. Evidence: cite a command's output by its tool call rather than saving a log, and keep screenshots and reports with file_upload rather than in the repository; its id is what a FILE check cites.
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
@@ -107,7 +101,7 @@ Before changing a file, use wiki_search with its path to look up known pitfalls.
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the `mcp__orbit__*` tools. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
 
 After generating an image, preserve the original file. Do not regenerate it solely because Orbit could not attach or upload it. Only claim that the image is attached or delivered when Orbit explicitly confirms attachment delivery; successful generation alone is not delivery confirmation. If delivery fails, report that the image was generated but delivery failed, keep the original file available, and let Orbit retry delivery. If delivery status is unavailable, report only generation success without claiming delivery success or failure.
-=== codex < 0.125 turn input (6167 bytes)
+=== codex < 0.125 turn input (6079 bytes)
 <orbit_application_context>
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
 
@@ -127,9 +121,7 @@ When a person's problem is one of their own Settings, call settings_get, then se
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
 
-Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one inside your working directory or this session's uploads directory reaches them: from elsewhere, /tmp included, copy the file there first and link the copy. Unignored files there can end up in a commit; keep others in the uploads directory or a git-ignored path.
-
-Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
+Hand the user a file as `[name](path)`, an image as `![name](path)`, only from your working directory or this session's uploads directory: copy one from elsewhere, /tmp included, into uploads first and link the copy, or keep it with file_upload, which reads those two directories and returns a reply link. Evidence: cite a command's output by its tool call rather than saving a log, and keep screenshots and reports with file_upload rather than in the repository; its id is what a FILE check cites.
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
@@ -150,7 +142,7 @@ After generating an image, preserve the original file. Do not regenerate it sole
 === codex >= 0.135 additional context: same as codex 0.125-0.134 developer message
 === codex >= 0.135, after compaction: same as codex 0.125-0.134 developer message
 === codex >= 0.135, resumed thread: same as codex 0.125-0.134 developer message
-=== cursor (5402 bytes)
+=== cursor (5314 bytes)
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
 
 Orbit primer 1.8.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
@@ -169,9 +161,7 @@ When a person's problem is one of their own Settings, call settings_get, then se
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
 
-Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one inside your working directory or this session's uploads directory reaches them: from elsewhere, /tmp included, copy the file there first and link the copy. Unignored files there can end up in a commit; keep others in the uploads directory or a git-ignored path.
-
-Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
+Hand the user a file as `[name](path)`, an image as `![name](path)`, only from your working directory or this session's uploads directory: copy one from elsewhere, /tmp included, into uploads first and link the copy, or keep it with file_upload, which reads those two directories and returns a reply link. Evidence: cite a command's output by its tool call rather than saving a log, and keep screenshots and reports with file_upload rather than in the repository; its id is what a FILE check cites.
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
@@ -186,7 +176,7 @@ To fan out several SubAgents, in parallel or in phases, whose results you only n
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the tools of the `orbit` MCP server. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
-=== deepseek harness (5568 bytes)
+=== deepseek harness (5480 bytes)
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
 
 Orbit primer 1.8.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
@@ -205,9 +195,7 @@ When a person's problem is one of their own Settings, call settings_get, then se
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
 
-Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one inside your working directory or this session's uploads directory reaches them: from elsewhere, /tmp included, copy the file there first and link the copy. Unignored files there can end up in a commit; keep others in the uploads directory or a git-ignored path.
-
-Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
+Hand the user a file as `[name](path)`, an image as `![name](path)`, only from your working directory or this session's uploads directory: copy one from elsewhere, /tmp included, into uploads first and link the copy, or keep it with file_upload, which reads those two directories and returns a reply link. Evidence: cite a command's output by its tool call rather than saving a log, and keep screenshots and reports with file_upload rather than in the repository; its id is what a FILE check cites.
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
@@ -222,7 +210,7 @@ To fan out several SubAgents, in parallel or in phases, whose results you only n
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the `mcp__orbit__*` tools. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
-=== kimi (5649 bytes)
+=== kimi (5561 bytes)
 [map[text:<orbit-agent-instructions>
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
 
@@ -242,9 +230,7 @@ When a person's problem is one of their own Settings, call settings_get, then se
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
 
-Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one inside your working directory or this session's uploads directory reaches them: from elsewhere, /tmp included, copy the file there first and link the copy. Unignored files there can end up in a commit; keep others in the uploads directory or a git-ignored path.
-
-Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
+Hand the user a file as `[name](path)`, an image as `![name](path)`, only from your working directory or this session's uploads directory: copy one from elsewhere, /tmp included, into uploads first and link the copy, or keep it with file_upload, which reads those two directories and returns a reply link. Evidence: cite a command's output by its tool call rather than saving a log, and keep screenshots and reports with file_upload rather than in the repository; its id is what a FILE check cites.
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
@@ -262,7 +248,7 @@ The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few op
 </orbit-agent-instructions>
 
 hi type:text]]
-=== opencode (5562 bytes)
+=== opencode (5474 bytes)
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
 
 Orbit primer 1.8.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
@@ -281,9 +267,7 @@ When a person's problem is one of their own Settings, call settings_get, then se
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
 
-Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one inside your working directory or this session's uploads directory reaches them: from elsewhere, /tmp included, copy the file there first and link the copy. Unignored files there can end up in a commit; keep others in the uploads directory or a git-ignored path.
-
-Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
+Hand the user a file as `[name](path)`, an image as `![name](path)`, only from your working directory or this session's uploads directory: copy one from elsewhere, /tmp included, into uploads first and link the copy, or keep it with file_upload, which reads those two directories and returns a reply link. Evidence: cite a command's output by its tool call rather than saving a log, and keep screenshots and reports with file_upload rather than in the repository; its id is what a FILE check cites.
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 

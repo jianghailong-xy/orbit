@@ -322,6 +322,11 @@ var (
 // engineProfiles is every engine's profile, one per engine carrier.
 var engineProfiles = []EngineProfile{claudeCodeProfile, codexProfile, kimiProfile, cursorProfile, antigravityProfile, dshProfile, openCodeProfile}
 
+// handsOverFiles is a session given files.evidence: one that writes to Orbit and is served file_upload.
+func handsOverFiles(s SessionShape) bool {
+	return orbitSession(s) && s.writesOrbit() && s.serves([]string{"file_upload"})
+}
+
 // orbitSession is every shape but a help-center Ask's, which is served the help reads and nothing else.
 func orbitSession(s SessionShape) bool { return s.Role != roleHelpAsk }
 
@@ -363,15 +368,18 @@ var instructionUnits = []instructionUnit{
 		appliesTo: func(s SessionShape) bool { return s.Role == roleHelpAsk }, channels: []instructionChannel{channelMCP},
 		core: helpAskInstructions, detail: "help tool descriptions"},
 
+	// A session that writes to Orbit is given the reply rule inside files.evidence, which says how file_upload hands a file
+	// over as well; one that does not (a SubAgent, a check-only run) is given it alone.
 	{id: "files.reply-links", owner: "reply attachments", kind: kindEnvironment,
-		appliesTo: orbitSession, channels: []instructionChannel{channelSystem}, core: orbitReplyFileInstructions,
-		detail: "guide topic files", guardedBy: []string{"I4-reply-file-link"}},
-	// Every session that can hand the person a file is given it, not only a task's run: its file_upload sentence is half
-	// of how a reply hands a file over, and without it Claude Code passed I4-reply-file-link 2 of 30, against 15 of 30
-	// with it (task 3533QfA5iugjF5kefEZGZ).
-	{id: "files.evidence", owner: "evidence files: file_upload", kind: kindDisposition,
-		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.writesOrbit() }, channels: []instructionChannel{channelSystem}, core: orbitEvidenceFileInstructions,
-		tools: []string{"file_upload"}, detail: "file_upload description", guardedBy: []string{"I5-evidence-file-upload"}},
+		appliesTo: func(s SessionShape) bool { return orbitSession(s) && !handsOverFiles(s) }, channels: []instructionChannel{channelSystem},
+		core: orbitReplyFileInstructions, detail: "guide topic files", conflicts: []string{"files.evidence"}},
+	// Every session that writes to Orbit is given it, not only a task's run: a reply in any of them hands files over, and
+	// without its file_upload sentence Claude Code passed I4-reply-file-link 2 of 30, against 15 of 30 with it (task
+	// 3533QfA5iugjF5kefEZGZ). Since step 5f it is the reply paragraph and the evidence paragraph in one.
+	{id: "files.evidence", owner: "reply attachments and evidence files: file_upload", kind: kindDisposition,
+		appliesTo: handsOverFiles, channels: []instructionChannel{channelSystem}, core: orbitEvidenceFileInstructions,
+		tools: []string{"file_upload"}, detail: "file_upload description", guardedBy: []string{"I4-reply-file-link", "I5-evidence-file-upload"},
+		conflicts: []string{"files.reply-links"}},
 	{id: "drive.tools", owner: "Documents drive: documents_*", kind: kindEnvironment,
 		appliesTo: func(s SessionShape) bool { return orbitSession(s) && orbitDocumentsShown() && !s.DriveMounted }, channels: []instructionChannel{channelSystem},
 		core: orbitDriveToolInstructions, detail: "guide topic files (orbitDriveGuide)", conflicts: []string{"drive.mount"}},
