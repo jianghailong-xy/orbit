@@ -65,7 +65,7 @@ export class DriveContentService {
 
   /** The current version of a live file of `ownerId`'s. The ETag is `"<versionId>.<seq>"`, which changes on an append too. */
   async ofEntry(ownerId: string, entryId: string, request: { range?: string; ifRange?: string; ifNoneMatch?: string }) {
-    const entry = await this.prisma.documentEntry.findFirst({ where: { id: entryId, ownerId, trashedAt: null } });
+    const entry = await this.prisma.driveEntry.findFirst({ where: { id: entryId, ownerId, trashedAt: null } });
     if (!entry) throw new HttpException({ code: DRIVE_ENTRY_NOT_FOUND, message: 'No such file or folder.' }, HttpStatus.NOT_FOUND);
     if (entry.kind !== 'FILE' || !entry.currentVersionId) {
       throw new HttpException({ code: DRIVE_NOT_A_FILE, message: 'A folder has no content to download.' }, HttpStatus.CONFLICT);
@@ -75,7 +75,7 @@ export class DriveContentService {
 
   /** One version of `ownerId`'s, current or replaced. */
   async ofVersion(ownerId: string, versionId: string, request: { range?: string; ifRange?: string; ifNoneMatch?: string }) {
-    const version = await this.prisma.documentVersion.findFirst({ where: { id: versionId, ownerId }, include: { entry: { select: { name: true } } } });
+    const version = await this.prisma.driveVersion.findFirst({ where: { id: versionId, ownerId }, include: { entry: { select: { name: true } } } });
     if (!version) throw new HttpException({ code: DRIVE_VERSION_NOT_FOUND, message: 'No such version.' }, HttpStatus.NOT_FOUND);
     return this.serve(ownerId, version.id, `"${version.id}"`, version.entry.name, request, version);
   }
@@ -88,7 +88,7 @@ export class DriveContentService {
     request: { range?: string; ifRange?: string; ifNoneMatch?: string },
     loaded?: { sizeBytes: bigint },
   ): Promise<DriveContent> {
-    const version = loaded ?? (await this.prisma.documentVersion.findFirstOrThrow({ where: { id: versionId, ownerId } }));
+    const version = loaded ?? (await this.prisma.driveVersion.findFirstOrThrow({ where: { id: versionId, ownerId } }));
     const size = Number(version.sizeBytes);
     const base = {
       'Accept-Ranges': 'bytes',
@@ -113,7 +113,7 @@ export class DriveContentService {
 
   /** The bytes of `span` of a version of `size` bytes, chunk by chunk: the one path the owner's download and a share link read through. */
   private async streamOf(ownerId: string, versionId: string, size: number, span: Span): Promise<Readable> {
-    const rows = size === 0 ? [] : await this.prisma.documentVersionChunk.findMany({
+    const rows = size === 0 ? [] : await this.prisma.driveVersionChunk.findMany({
       where: { versionId, ownerId, offset: { lte: BigInt(span.end) } },
       orderBy: { idx: 'asc' },
     });
@@ -126,7 +126,7 @@ export class DriveContentService {
    * version may be read (a share link pinned to it, the share check). Another account's version is not found.
    */
   async open(ownerId: string, versionId: string, span?: Span): Promise<{ content: Readable; sizeBytes: number }> {
-    const version = await this.prisma.documentVersion.findFirst({ where: { id: versionId, ownerId }, select: { sizeBytes: true } });
+    const version = await this.prisma.driveVersion.findFirst({ where: { id: versionId, ownerId }, select: { sizeBytes: true } });
     if (!version) throw new HttpException({ code: DRIVE_VERSION_NOT_FOUND, message: 'No such version.' }, HttpStatus.NOT_FOUND);
     const sizeBytes = Number(version.sizeBytes);
     return { content: await this.streamOf(ownerId, versionId, sizeBytes, span ?? { start: 0, end: sizeBytes - 1 }), sizeBytes };

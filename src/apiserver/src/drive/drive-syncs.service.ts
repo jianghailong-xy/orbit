@@ -1,5 +1,5 @@
 import { HttpException, HttpStatus, Injectable, Optional } from '@nestjs/common';
-import type { DocumentSync, Prisma } from '@prisma/client';
+import type { DriveSync, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 
@@ -87,14 +87,14 @@ export class DriveSyncsService {
 
   /** A runner starts a sync. The owner's syncs that ended more than a day ago go first, so the table stays small. */
   async open(runner: { id: string; ownerId: string }, input: DriveSyncOpen, now = new Date()): Promise<{ id: string }> {
-    await this.prisma.documentSync.deleteMany({
+    await this.prisma.driveSync.deleteMany({
       where: { ownerId: runner.ownerId, endedAt: { lt: new Date(now.getTime() - DRIVE_SYNC_KEEP_MS) } },
     });
     // The session is shown to the owner by title, so only one of the owner's own is kept.
     const session = input.sessionId
       ? await this.prisma.session.findFirst({ where: { id: input.sessionId, ownerId: runner.ownerId }, select: { id: true } })
       : null;
-    const row = await this.prisma.documentSync.create({
+    const row = await this.prisma.driveSync.create({
       data: {
         ownerId: runner.ownerId,
         runnerId: runner.id,
@@ -117,7 +117,7 @@ export class DriveSyncsService {
   async report(runner: { id: string; ownerId: string }, id: string, input: DriveSyncReport, now = new Date()): Promise<{ ok: true }> {
     const ending = !RUNNING.includes(input.status);
     const failed = input.failed?.slice(0, DRIVE_SYNC_FAILED_MAX);
-    const data: Prisma.DocumentSyncUpdateManyMutationInput = {
+    const data: Prisma.DriveSyncUpdateManyMutationInput = {
       status: input.status,
       updatedAt: now,
       ...(ending ? { endedAt: now, currentPath: null } : {}),
@@ -136,12 +136,12 @@ export class DriveSyncsService {
         : {}),
       ...(input.error !== undefined ? { error: input.error } : {}),
     };
-    const { count } = await this.prisma.documentSync.updateMany({
+    const { count } = await this.prisma.driveSync.updateMany({
       where: { id, ownerId: runner.ownerId, runnerId: runner.id, endedAt: null },
       data,
     });
     if (count === 0) {
-      const row = await this.prisma.documentSync.findFirst({
+      const row = await this.prisma.driveSync.findFirst({
         where: { id, ownerId: runner.ownerId, runnerId: runner.id },
         select: { endedAt: true },
       });
@@ -157,7 +157,7 @@ export class DriveSyncsService {
    * account's sync is not found, as a sync that never was.
    */
   async get(ownerId: string, id: string, now = new Date()): Promise<DriveSyncView> {
-    const row = await this.prisma.documentSync.findFirst({ where: { id, ownerId } });
+    const row = await this.prisma.driveSync.findFirst({ where: { id, ownerId } });
     if (!row) throw refusal(HttpStatus.NOT_FOUND, 'DOCUMENTS_SYNC_NOT_FOUND', 'No such sync.');
     const session = row.sessionId
       ? await this.prisma.session.findFirst({ where: { id: row.sessionId, ownerId }, select: { id: true, title: true } })
@@ -167,7 +167,7 @@ export class DriveSyncsService {
 
   /** What the tray shows: running syncs and those that ended in the last day, newest first. */
   async list(ownerId: string, now = new Date()): Promise<{ syncs: DriveSyncView[] }> {
-    const rows = await this.prisma.documentSync.findMany({
+    const rows = await this.prisma.driveSync.findMany({
       where: { ownerId, OR: [{ endedAt: null }, { endedAt: { gte: new Date(now.getTime() - DRIVE_SYNC_KEEP_MS) } }] },
       orderBy: { startedAt: 'desc' },
       take: DRIVE_SYNC_LIST_MAX,
@@ -182,7 +182,7 @@ export class DriveSyncsService {
 }
 
 /** A row as the tray reads it. A running row nothing reported into for DRIVE_SYNC_STALE_MS reads as STOPPED. */
-export function viewOf(row: DocumentSync, titles: Map<string, string>, now: Date): DriveSyncView {
+export function viewOf(row: DriveSync, titles: Map<string, string>, now: Date): DriveSyncView {
   const stale = row.endedAt === null && now.getTime() - row.updatedAt.getTime() > DRIVE_SYNC_STALE_MS;
   const title = row.sessionId ? titles.get(row.sessionId) : undefined;
   return {

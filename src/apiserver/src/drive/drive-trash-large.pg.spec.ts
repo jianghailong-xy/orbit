@@ -163,32 +163,32 @@ test('Documents drive: bounded Trash operations on folders of 100,000 entries', 
     // 10 folders, 99 folders in each, 100 empty files in each of those: 10 + 990 + 99,000 = 100,000 below the folder.
     await sql.query('BEGIN');
     await sql.query(
-      `INSERT INTO document_entry (id, owner_id, parent_id, kind, name, last_writer_kind)
+      `INSERT INTO drive_entry (id, owner_id, parent_id, kind, name, last_writer_kind)
        SELECT gen_random_uuid(), $1, $2, 'FOLDER', 'a' || i, 'OWNER' FROM generate_series(0, 9) i`,
       [owner, big.id],
     );
     await sql.query(
-      `INSERT INTO document_entry (id, owner_id, parent_id, kind, name, last_writer_kind)
+      `INSERT INTO drive_entry (id, owner_id, parent_id, kind, name, last_writer_kind)
        SELECT gen_random_uuid(), $1, a.id, 'FOLDER', 'b' || j, 'OWNER'
-         FROM document_entry a, generate_series(0, 98) j WHERE a.owner_id = $1 AND a.parent_id = $2`,
+         FROM drive_entry a, generate_series(0, 98) j WHERE a.owner_id = $1 AND a.parent_id = $2`,
       [owner, big.id],
     );
     await sql.query(
-      `INSERT INTO document_entry (id, owner_id, parent_id, kind, name, current_version_id, last_writer_kind)
+      `INSERT INTO drive_entry (id, owner_id, parent_id, kind, name, current_version_id, last_writer_kind)
        SELECT gen_random_uuid(), $1, b.id, 'FILE', 'f' || k || '.txt', gen_random_uuid(), 'OWNER'
-         FROM document_entry b JOIN document_entry a ON a.id = b.parent_id, generate_series(0, 99) k
+         FROM drive_entry b JOIN drive_entry a ON a.id = b.parent_id, generate_series(0, 99) k
         WHERE b.owner_id = $1 AND a.parent_id = $2`,
       [owner, big.id],
     );
     await sql.query(
-      `INSERT INTO document_version (id, owner_id, entry_id, writer_kind)
-       SELECT current_version_id, owner_id, id, 'OWNER' FROM document_entry WHERE owner_id = $1 AND kind = 'FILE'`,
+      `INSERT INTO drive_version (id, owner_id, entry_id, writer_kind)
+       SELECT current_version_id, owner_id, id, 'OWNER' FROM drive_entry WHERE owner_id = $1 AND kind = 'FILE'`,
       [owner],
     );
     await sql.query('COMMIT');
-    await sql.query('ANALYZE document_entry');
-    await sql.query('ANALYZE document_version');
-    assert.equal(Number((await one('SELECT count(*) AS n FROM document_entry WHERE owner_id = $1 AND parent_id IS NOT NULL', owner)).n), DESCENDANTS + 1);
+    await sql.query('ANALYZE drive_entry');
+    await sql.query('ANALYZE drive_version');
+    assert.equal(Number((await one('SELECT count(*) AS n FROM drive_entry WHERE owner_id = $1 AND parent_id IS NOT NULL', owner)).n), DESCENDANTS + 1);
 
     const before = seen.length;
     const started = Date.now();
@@ -203,22 +203,22 @@ test('Documents drive: bounded Trash operations on folders of 100,000 entries', 
     const marked = await one(
       `SELECT count(*) AS n, count(DISTINCT trash_group_id) AS groups, min(trash_group_id::text) AS group_id,
               count(*) FILTER (WHERE trash_top) AS tops, bool_or(trash_top AND id = $2) AS folder_top
-         FROM document_entry WHERE owner_id = $1 AND trashed_at IS NOT NULL`,
+         FROM drive_entry WHERE owner_id = $1 AND trashed_at IS NOT NULL`,
       owner, big.id,
     );
     assert.deepEqual(
       { n: Number(marked.n), groups: Number(marked.groups), group: marked.group_id, tops: Number(marked.tops), folderTop: marked.folder_top },
       { n: DESCENDANTS + 1, groups: 1, group: trashGroupId, tops: 1, folderTop: true },
     );
-    assert.equal(Number((await one('SELECT count(*) AS n FROM document_entry WHERE owner_id = $1 AND parent_id IS NOT NULL AND trashed_at IS NULL', owner)).n), 0);
-    const group = await db.documentTrashGroup.findUniqueOrThrow({ where: { id: trashGroupId } });
+    assert.equal(Number((await one('SELECT count(*) AS n FROM drive_entry WHERE owner_id = $1 AND parent_id IS NOT NULL AND trashed_at IS NULL', owner)).n), 0);
+    const group = await db.driveTrashGroup.findUniqueOrThrow({ where: { id: trashGroupId } });
     assert.deepEqual({ kind: group.kind, items: group.itemCount, marking: group.marking, folderId: group.folderId }, { kind: 'DELETE', items: DESCENDANTS + 1, marking: false, folderId: rootId });
     // Each entry went once, and the feed says so once per entry.
-    const removed = await one(`SELECT count(*) AS n, count(DISTINCT entry_id) AS entries FROM document_change WHERE owner_id = $1 AND op = 'REMOVE'`, owner);
+    const removed = await one(`SELECT count(*) AS n, count(DISTINCT entry_id) AS entries FROM drive_change WHERE owner_id = $1 AND op = 'REMOVE'`, owner);
     assert.deepEqual({ n: Number(removed.n), entries: Number(removed.entries) }, { n: DESCENDANTS + 1, entries: DESCENDANTS + 1 });
     // No transaction marked more than a batch: each marks with its own time.
     const perTransaction = await one(
-      'SELECT max(n) AS most, count(*) AS batches FROM (SELECT count(*) AS n FROM document_entry WHERE owner_id = $1 AND trash_group_id = $2 GROUP BY trashed_at) b',
+      'SELECT max(n) AS most, count(*) AS batches FROM (SELECT count(*) AS n FROM drive_entry WHERE owner_id = $1 AND trash_group_id = $2 GROUP BY trashed_at) b',
       owner, trashGroupId,
     );
     assert.ok(Number(perTransaction.most) <= PER_TRANSACTION + 1, `one transaction marked ${perTransaction.most} entries`);
@@ -244,24 +244,24 @@ test('Documents drive: bounded Trash operations on folders of 100,000 entries', 
     const live = await one(
       `SELECT count(*) AS n, count(*) FILTER (WHERE trashed_at IS NOT NULL OR trash_group_id IS NOT NULL OR trash_top) AS still,
               count(*) FILTER (WHERE name LIKE '% (%)%') AS suffixed
-         FROM document_entry WHERE owner_id = $1 AND parent_id IS NOT NULL`,
+         FROM drive_entry WHERE owner_id = $1 AND parent_id IS NOT NULL`,
       owner,
     );
     assert.deepEqual({ n: Number(live.n), still: Number(live.still), suffixed: Number(live.suffixed) }, { n: DESCENDANTS + 1, still: 0, suffixed: 0 });
-    assert.equal((await db.documentEntry.findUniqueOrThrow({ where: { id: big.id } })).parentId, rootId);
-    assert.equal(await db.documentTrashGroup.count({ where: { id: trashGroupId } }), 0);
+    assert.equal((await db.driveEntry.findUniqueOrThrow({ where: { id: big.id } })).parentId, rootId);
+    assert.equal(await db.driveTrashGroup.count({ where: { id: trashGroupId } }), 0);
     const tree = await one(
       `SELECT count(*) FILTER (WHERE kind = 'FOLDER') AS folders, count(*) FILTER (WHERE kind = 'FILE') AS files
-         FROM document_entry WHERE owner_id = $1 AND parent_id IS NOT NULL AND id <> $2`,
+         FROM drive_entry WHERE owner_id = $1 AND parent_id IS NOT NULL AND id <> $2`,
       owner, big.id,
     );
     assert.deepEqual({ folders: Number(tree.folders), files: Number(tree.files) }, { folders: 1_000, files: 99_000 });
     const restoredPer = await one(
-      'SELECT max(n) AS most FROM (SELECT count(*) AS n FROM document_entry WHERE owner_id = $1 AND parent_id IS NOT NULL GROUP BY updated_at) b',
+      'SELECT max(n) AS most FROM (SELECT count(*) AS n FROM drive_entry WHERE owner_id = $1 AND parent_id IS NOT NULL GROUP BY updated_at) b',
       owner,
     );
     assert.ok(Number(restoredPer.most) <= PER_TRANSACTION, `one transaction restored ${restoredPer.most} entries`);
-    const upserted = await one(`SELECT count(DISTINCT entry_id) AS entries FROM document_change WHERE owner_id = $1 AND op = 'UPSERT'`, owner);
+    const upserted = await one(`SELECT count(DISTINCT entry_id) AS entries FROM drive_change WHERE owner_id = $1 AND op = 'UPSERT'`, owner);
     assert.ok(Number(upserted.entries) >= DESCENDANTS + 1);
   });
 
@@ -273,7 +273,7 @@ test('Documents drive: bounded Trash operations on folders of 100,000 entries', 
     await holder.connect();
     try {
       await holder.query('BEGIN');
-      await holder.query('SELECT id FROM document_entry WHERE id = $1 FOR UPDATE', [held.id]);
+      await holder.query('SELECT id FROM drive_entry WHERE id = $1 FOR UPDATE', [held.id]);
       const started = Date.now();
       const reply = await call(owner, 'DELETE', `/entries/${held.id}`);
       t.diagnostic(`answered ${reply.status} after ${Date.now() - started} ms`);
@@ -285,11 +285,11 @@ test('Documents drive: bounded Trash operations on folders of 100,000 entries', 
       await holder.query('ROLLBACK').catch(() => undefined);
       await holder.end().catch(() => undefined);
     }
-    assert.equal((await db.documentEntry.findUniqueOrThrow({ where: { id: held.id } })).trashedAt, null);
+    assert.equal((await db.driveEntry.findUniqueOrThrow({ where: { id: held.id } })).trashedAt, null);
     const again = await call(owner, 'DELETE', `/entries/${held.id}`);
     assert.equal(again.status, 200, await again.clone().text());
     const { trashGroupId } = (await again.json()) as { trashGroupId: string };
-    assert.equal(await db.documentEntry.count({ where: { ownerId: owner, trashGroupId } }), 2);
+    assert.equal(await db.driveEntry.count({ where: { ownerId: owner, trashGroupId } }), 2);
   });
 
   await t.test('(3) a marking that stopped part-way is finished by deleting again, or by the timer', async () => {
@@ -301,20 +301,20 @@ test('Documents drive: bounded Trash operations on folders of 100,000 entries', 
       await drive.createFile(owner, { parentId: folder.id, name: 'c.txt' });
       const groupId = randomUUID();
       const long = new Date(Date.now() - 60 * 60 * 1000);
-      await db.documentTrashGroup.create({
+      await db.driveTrashGroup.create({
         data: {
           id: groupId, ownerId: owner, kind: 'DELETE', folderId: folder.parentId, folderPath: '/', createdAt: long,
           lastAddedAt: long, closedAt: long, actorKind: 'OWNER', itemCount: 1, marking: true,
         },
       });
-      await db.documentEntry.update({ where: { id: folder.id }, data: { trashedAt: long, trashGroupId: groupId, trashTop: true } });
+      await db.driveEntry.update({ where: { id: folder.id }, data: { trashedAt: long, trashGroupId: groupId, trashTop: true } });
       return { folder, groupId };
     };
-    const inGroup = (groupId: string) => db.documentEntry.count({ where: { ownerId: owner, trashGroupId: groupId } });
+    const inGroup = (groupId: string) => db.driveEntry.count({ where: { ownerId: owner, trashGroupId: groupId } });
     const liveUnder = async (folderId: string) =>
       Number((await one(
-        `WITH RECURSIVE sub AS (SELECT id FROM document_entry WHERE parent_id = $1 UNION ALL SELECT e.id FROM document_entry e JOIN sub ON e.parent_id = sub.id)
-         SELECT count(*) AS n FROM document_entry e JOIN sub ON sub.id = e.id WHERE e.trashed_at IS NULL`,
+        `WITH RECURSIVE sub AS (SELECT id FROM drive_entry WHERE parent_id = $1 UNION ALL SELECT e.id FROM drive_entry e JOIN sub ON e.parent_id = sub.id)
+         SELECT count(*) AS n FROM drive_entry e JOIN sub ON sub.id = e.id WHERE e.trashed_at IS NULL`,
         folderId,
       )).n);
 
@@ -325,7 +325,7 @@ test('Documents drive: bounded Trash operations on folders of 100,000 entries', 
     assert.deepEqual(await again.json(), { trashGroupId: first.groupId });
     assert.equal(await liveUnder(first.folder.id), 0);
     assert.equal(await inGroup(first.groupId), 5);
-    const finished = await db.documentTrashGroup.findUniqueOrThrow({ where: { id: first.groupId } });
+    const finished = await db.driveTrashGroup.findUniqueOrThrow({ where: { id: first.groupId } });
     assert.deepEqual({ marking: finished.marking, items: finished.itemCount }, { marking: false, items: 5 });
     // Finished, it is in Trash like any other: deleting it again is not found.
     assert.equal((await call(owner, 'DELETE', `/entries/${first.folder.id}`)).status, 404);
@@ -334,7 +334,7 @@ test('Documents drive: bounded Trash operations on folders of 100,000 entries', 
     assert.ok((await drive.finishStoppedTrash()) >= 1);
     assert.equal(await liveUnder(second.folder.id), 0);
     assert.equal(await inGroup(second.groupId), 5);
-    assert.equal((await db.documentTrashGroup.findUniqueOrThrow({ where: { id: second.groupId } })).marking, false);
+    assert.equal((await db.driveTrashGroup.findUniqueOrThrow({ where: { id: second.groupId } })).marking, false);
     assert.equal(await drive.finishStoppedTrash(), 0);
   });
 
@@ -347,7 +347,7 @@ test('Documents drive: bounded Trash operations on folders of 100,000 entries', 
       RETURN NULL;
     END $$;
   `);
-  for (const table of ['document_entry', 'document_version', 'document_version_chunk', 'document_trash_group']) {
+  for (const table of ['drive_entry', 'drive_version', 'drive_version_chunk', 'drive_trash_group']) {
     await sql.query(`CREATE TRIGGER audit_trash_delete AFTER DELETE ON ${table}
                      REFERENCING OLD TABLE AS removed FOR EACH STATEMENT EXECUTE FUNCTION audit_trash_delete()`);
   }
@@ -361,36 +361,36 @@ test('Documents drive: bounded Trash operations on folders of 100,000 entries', 
     await sql.query('BEGIN');
     await sql.query(`INSERT INTO file_blob (sha256, size_bytes, storage) VALUES ($1, 1, 'local')`, [sha]);
     await sql.query(
-      `INSERT INTO document_trash_group (id, owner_id, kind, folder_id, folder_path, actor_kind, item_count, size_bytes, closed_at)
+      `INSERT INTO drive_trash_group (id, owner_id, kind, folder_id, folder_path, actor_kind, item_count, size_bytes, closed_at)
        VALUES ($1, $2, 'DELETE', $3, '/', 'OWNER', $4, $5, now())`,
       [groupId, account, folder.parentId, entries, versions],
     );
-    await sql.query('UPDATE document_entry SET trashed_at = now(), trash_group_id = $1, trash_top = true WHERE id = $2', [groupId, folder.id]);
+    await sql.query('UPDATE drive_entry SET trashed_at = now(), trash_group_id = $1, trash_top = true WHERE id = $2', [groupId, folder.id]);
     await sql.query(
-      `INSERT INTO document_entry (id, owner_id, parent_id, kind, name, last_writer_kind, trashed_at, trash_group_id)
+      `INSERT INTO drive_entry (id, owner_id, parent_id, kind, name, last_writer_kind, trashed_at, trash_group_id)
        SELECT gen_random_uuid(), $1, $2, 'FOLDER', 'a' || i, 'OWNER', now(), $3 FROM generate_series(1, $4) i`,
       [account, folder.id, groupId, branches],
     );
     await sql.query(
-      `INSERT INTO document_entry (id, owner_id, parent_id, kind, name, last_writer_kind, trashed_at, trash_group_id)
+      `INSERT INTO drive_entry (id, owner_id, parent_id, kind, name, last_writer_kind, trashed_at, trash_group_id)
        SELECT gen_random_uuid(), $1, a.id, 'FOLDER', 'b' || j, 'OWNER', now(), $3
-         FROM document_entry a, generate_series(1, $4) j WHERE a.parent_id = $2`,
+         FROM drive_entry a, generate_series(1, $4) j WHERE a.parent_id = $2`,
       [account, folder.id, groupId, fans],
     );
     await sql.query(
-      `INSERT INTO document_entry (id, owner_id, parent_id, kind, name, last_writer_kind, trashed_at, trash_group_id, current_version_id, size_bytes)
+      `INSERT INTO drive_entry (id, owner_id, parent_id, kind, name, last_writer_kind, trashed_at, trash_group_id, current_version_id, size_bytes)
        SELECT gen_random_uuid(), $1, b.id, 'FILE', 'f' || k || '.txt', 'OWNER', now(), $3, gen_random_uuid(), 1
-         FROM document_entry b JOIN document_entry a ON a.id = b.parent_id, generate_series(1, $4) k WHERE a.parent_id = $2`,
+         FROM drive_entry b JOIN drive_entry a ON a.id = b.parent_id, generate_series(1, $4) k WHERE a.parent_id = $2`,
       [account, folder.id, groupId, filesPerFolder],
     );
     await sql.query(
-      `INSERT INTO document_version (id, owner_id, entry_id, writer_kind, size_bytes, chunk_count)
-       SELECT current_version_id, owner_id, id, 'OWNER', 1, 1 FROM document_entry WHERE owner_id = $1 AND trash_group_id = $2 AND kind = 'FILE'`,
+      `INSERT INTO drive_version (id, owner_id, entry_id, writer_kind, size_bytes, chunk_count)
+       SELECT current_version_id, owner_id, id, 'OWNER', 1, 1 FROM drive_entry WHERE owner_id = $1 AND trash_group_id = $2 AND kind = 'FILE'`,
       [account, groupId],
     );
     await sql.query(
-      `INSERT INTO document_version_chunk (version_id, idx, owner_id, "offset", size_bytes, sha256)
-       SELECT id, 0, owner_id, 0, 1, $2 FROM document_version WHERE owner_id = $1`,
+      `INSERT INTO drive_version_chunk (version_id, idx, owner_id, "offset", size_bytes, sha256)
+       SELECT id, 0, owner_id, 0, 1, $2 FROM drive_version WHERE owner_id = $1`,
       [account, sha],
     );
     await sql.query('COMMIT');
@@ -398,10 +398,10 @@ test('Documents drive: bounded Trash operations on folders of 100,000 entries', 
   };
 
   const purgeCounts = async (account: string) => ({
-    entries: await db.documentEntry.count({ where: { ownerId: account, parentId: { not: null } } }),
-    versions: await db.documentVersion.count({ where: { ownerId: account } }),
-    chunks: await db.documentVersionChunk.count({ where: { ownerId: account } }),
-    groups: await db.documentTrashGroup.count({ where: { ownerId: account } }),
+    entries: await db.driveEntry.count({ where: { ownerId: account, parentId: { not: null } } }),
+    versions: await db.driveVersion.count({ where: { ownerId: account } }),
+    chunks: await db.driveVersionChunk.count({ where: { ownerId: account } }),
+    groups: await db.driveTrashGroup.count({ where: { ownerId: account } }),
   });
 
   for (const [label, empty] of [['(4) Delete for good', false], ['(5) Empty Trash', true]] as const) {
@@ -411,7 +411,7 @@ test('Documents drive: bounded Trash operations on folders of 100,000 entries', 
       assert.equal(entries, DESCENDANTS + 1);
       assert.deepEqual(await purgeCounts(account), { entries, versions, chunks: versions, groups: 1 });
       await sql.query('TRUNCATE trash_delete_audit');
-      await sql.query('ANALYZE document_entry, document_version, document_version_chunk');
+      await sql.query('ANALYZE drive_entry, drive_version, drive_version_chunk');
 
       const route = empty ? '/trash' : `/trash/groups/${groupId}`;
       const from = seen.length;
@@ -420,7 +420,7 @@ test('Documents drive: bounded Trash operations on folders of 100,000 entries', 
       assert.deepEqual(await reply.json(), { deleted: true });
       const transactions = assertBounded(from, label, true);
       assert.deepEqual(await purgeCounts(account), { entries: 0, versions: 0, chunks: 0, groups: 0 });
-      assert.equal(await db.documentEntry.count({ where: { ownerId: account, id: folder.parentId! } }), 1);
+      assert.equal(await db.driveEntry.count({ where: { ownerId: account, id: folder.parentId! } }), 1);
 
       const audit = await sql.query<{ table_name: string; total: number; maximum: number; batches: number }>(`
         SELECT table_name, sum(n)::int AS total, max(n)::int AS maximum, count(*)::int AS batches
@@ -428,7 +428,7 @@ test('Documents drive: bounded Trash operations on folders of 100,000 entries', 
          GROUP BY table_name ORDER BY table_name
       `);
       assert.deepEqual(audit.rows.map(({ table_name, total }) => [table_name, total]), [
-        ['document_entry', entries], ['document_trash_group', 1], ['document_version', versions], ['document_version_chunk', versions],
+        ['drive_entry', entries], ['drive_trash_group', 1], ['drive_version', versions], ['drive_version_chunk', versions],
       ]);
       for (const { table_name, maximum, batches } of audit.rows) {
         assert.ok(maximum <= PER_TRANSACTION, `${label} deleted ${maximum} ${table_name} rows in one transaction`);
@@ -449,7 +449,7 @@ test('Documents drive: bounded Trash operations on folders of 100,000 entries', 
     await holder.connect();
     try {
       await holder.query('BEGIN');
-      await holder.query('SELECT id FROM document_entry WHERE id = $1 FOR UPDATE', [folder.id]);
+      await holder.query('SELECT id FROM drive_entry WHERE id = $1 FOR UPDATE', [folder.id]);
       const reply = await call(account, 'DELETE', route);
       assert.equal(reply.status, 503, await reply.clone().text());
       const { code, retryable } = await reply.json() as { code: string; retryable: boolean };
@@ -484,21 +484,21 @@ test('Documents drive: bounded Trash operations on folders of 100,000 entries', 
 
     const reply = await call(account, 'DELETE', `/trash/groups/${addedLater.trashGroupId}`);
     assert.equal(reply.status, 200, await reply.clone().text());
-    const groups = await db.documentTrashGroup.findMany({ where: { ownerId: account }, select: { id: true, itemCount: true } });
+    const groups = await db.driveTrashGroup.findMany({ where: { ownerId: account }, select: { id: true, itemCount: true } });
     assert.deepEqual(new Map(groups.map(({ id, itemCount }) => [id, itemCount])), new Map([
       [older.trashGroupId, 1], [replacedLive.trashGroupId, 1],
     ]));
-    assert.equal(await db.documentEntry.count({ where: { ownerId: account, id: outside.id, trashGroupId: older.trashGroupId } }), 1);
+    assert.equal(await db.driveEntry.count({ where: { ownerId: account, id: outside.id, trashGroupId: older.trashGroupId } }), 1);
 
     const replacedAgain = await overwrite(live.id, replacedLive.versionId);
     const versionDeleted = await call(account, 'DELETE', `/trash/groups/${replacedLive.trashGroupId}`);
     assert.equal(versionDeleted.status, 200, await versionDeleted.clone().text());
-    assert.equal(await db.documentTrashGroup.count({ where: { id: replacedLive.trashGroupId } }), 0);
-    assert.equal(await db.documentVersion.count({ where: { id: live.currentVersionId! } }), 0);
+    assert.equal(await db.driveTrashGroup.count({ where: { id: replacedLive.trashGroupId } }), 0);
+    assert.equal(await db.driveVersion.count({ where: { id: live.currentVersionId! } }), 0);
 
     const emptied = await call(account, 'DELETE', '/trash');
     assert.equal(emptied.status, 200, await emptied.clone().text());
     assert.deepEqual(await purgeCounts(account), { entries: 1, versions: 1, chunks: 0, groups: 0 });
-    assert.equal(await db.documentVersion.count({ where: { ownerId: account, id: replacedAgain.versionId, entryId: live.id } }), 1);
+    assert.equal(await db.driveVersion.count({ where: { ownerId: account, id: replacedAgain.versionId, entryId: live.id } }), 1);
   });
 });

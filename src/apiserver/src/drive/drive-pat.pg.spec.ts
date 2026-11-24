@@ -90,11 +90,11 @@ test('the drive scope opens /drive/* and its /documents/* alias to a token, and 
   assert.equal(refusedRead.status, 403);
   assert.equal(refusedRead.json.code, 'PAT_SCOPE_MISSING');
   assert.equal(refusedRead.json.scope, 'drive');
-  const before = await db.documentEntry.count({ where: { ownerId } });
+  const before = await db.driveEntry.count({ where: { ownerId } });
   const refusedWrite = await api('POST', '/drive/folders', without, { name: `never ${RUN}` });
   assert.equal(refusedWrite.status, 403);
   assert.equal(refusedWrite.json.code, 'PAT_SCOPE_MISSING');
-  assert.equal(await db.documentEntry.count({ where: { ownerId } }), before, 'a refused write wrote nothing');
+  assert.equal(await db.driveEntry.count({ where: { ownerId } }), before, 'a refused write wrote nothing');
 
   // (3)
   assert.equal((await api('GET', `/drive/entries/${folderId}`, others)).status, 404);

@@ -134,7 +134,7 @@ test('Documents: an agent directory sync reported for the upload tray', { skip: 
     assert.equal((await listed(alice, foreign))?.session, null, "another account's session is neither kept nor named");
 
     const stale = opened(await as(aliceRunner.token, 'POST', '', { sourceName: 'old', destPath: '/Old' }), 'open');
-    await db.documentSync.update({ where: { id: stale }, data: { updatedAt: new Date(Date.now() - DRIVE_SYNC_STALE_MS - 1_000), currentPath: 'a.txt' } });
+    await db.driveSync.update({ where: { id: stale }, data: { updatedAt: new Date(Date.now() - DRIVE_SYNC_STALE_MS - 1_000), currentPath: 'a.txt' } });
     const staleView = await listed(alice, stale);
     assert.equal(staleView?.status, 'STOPPED');
     assert.equal(staleView?.currentPath, null);
@@ -142,11 +142,11 @@ test('Documents: an agent directory sync reported for the upload tray', { skip: 
 
     const dayOld = opened(await as(aliceRunner.token, 'POST', '', { sourceName: 'ancient', destPath: '/Ancient' }), 'open');
     const longAgo = new Date(Date.now() - DRIVE_SYNC_KEEP_MS - 60_000);
-    await db.documentSync.update({ where: { id: dayOld }, data: { status: 'DONE', endedAt: longAgo, updatedAt: longAgo } });
+    await db.driveSync.update({ where: { id: dayOld }, data: { status: 'DONE', endedAt: longAgo, updatedAt: longAgo } });
     assert.equal(await listed(alice, dayOld), undefined, 'not listed');
     ok(await as(aliceRunner.token, 'POST', '', { sourceName: 'next', destPath: '/Next' }), 'the next open prunes it');
-    assert.equal(await db.documentSync.count({ where: { id: dayOld } }), 0);
-    assert.equal(await db.documentSync.count({ where: { id: bobs } }), 1, "another account's rows are not pruned");
+    assert.equal(await db.driveSync.count({ where: { id: dayOld } }), 0);
+    assert.equal(await db.driveSync.count({ where: { id: bobs } }), 1, "another account's rows are not pruned");
   });
 
   await t.test('(4) the body is held to its shape', async () => {
