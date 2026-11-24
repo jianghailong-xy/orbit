@@ -22,7 +22,7 @@ File work you discover in this task's run as a task, saying first what you are f
 
 When this task's position changes -- a new phase, or another item of a known total done -- report it with task_progress_report: Orbit reads progress from that report alone, not from your output or replies.
 
-To wait for Orbit work -- tasks reaching a status, sessions finishing a turn -- do not poll with sleep, Bash loops, background jobs or schedule_wakeup: call task_await or session_await (watch_create for other conditions) and end your turn. Orbit holds the watch on its server and starts a turn in this session with a structured payload when the condition holds, even if this engine was recycled in the meantime.
+To wait for Orbit work, call task_await or session_await (watch_create for other conditions) and end your turn; never poll or sleep for it.
 
 When the person asked to hear once something is done, tell them with notify when it is: an answer in this conversation reaches them only when they next look.
 

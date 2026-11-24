@@ -184,11 +184,12 @@ const orbitWikiPathInstructions = "Before changing a file, use wiki_search with 
 
 // orbitWaitInstructions routes a wait on Orbit's own work to a watch. An agent told to "wait for these
 // tasks" otherwise writes the loop it knows, sleep plus task_get or `orbit task get`, which holds its turn
-// open for the whole wait and dies with the engine. ASCII like the rest of the paragraph.
-const orbitWaitInstructions = "To wait for Orbit work -- tasks reaching a status, sessions finishing a turn -- do not " +
-	"poll with sleep, Bash loops, background jobs or schedule_wakeup: call task_await or session_await (watch_create for " +
-	"other conditions) and end your turn. Orbit holds the watch on its server and starts a turn in this session with a " +
-	"structured payload when the condition holds, even if this engine was recycled in the meantime."
+// open for the whole wait and dies with the engine. One line since design step 5e: what the watch does (Orbit holds it
+// on its server, wakes this session with a structured payload, survives the engine being recycled) is the await
+// tools' descriptions, and their receipt says to end the turn; I1-wait-await passed 10/10 on both engines with the
+// paragraph left out altogether (docs/agent-instructions-eval-baseline.md). ASCII like the rest of the paragraph.
+const orbitWaitInstructions = "To wait for Orbit work, call task_await or session_await (watch_create for other " +
+	"conditions) and end your turn; never poll or sleep for it."
 
 //
 // Only a session spawned with Watch on gets it (unit wait.use-await): one spawned with it off (watch_rollout.go) has

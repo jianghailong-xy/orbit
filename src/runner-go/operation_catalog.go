@@ -3358,7 +3358,9 @@ func watchToolDescriptors(obj func(map[string]interface{}, ...string) map[string
 				"DONE, CANCELLED or FAILED, or as soon as any of them fails\": it asks Orbit's server to watch exactly these " +
 				"tasks for this session and returns at once, so end your turn then. When the condition holds, Orbit starts a " +
 				"turn here saying which tasks changed, with a snapshot of all of them; if the watch expires first, one turn " +
-				"says so. Use it instead of polling task_get or task_list, sleeping, or looping in Bash. The result names the " +
+				"says so. Use it instead of polling task_get or task_list, sleeping, looping in Bash, a background job or " +
+				"schedule_wakeup: Orbit holds the watch on its server, so it wakes this session even if this engine was " +
+				"recycled in the meantime. The result names the " +
 				"watch: watch_get reads it and watch_cancel stops it.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskIds": map[string]interface{}{
@@ -3395,7 +3397,8 @@ func sessionAwaitDescriptor(obj func(map[string]interface{}, ...string) map[stri
 			"background job or subagent is not reported finished. It asks Orbit's server to watch exactly these sessions for this " +
 			"session and returns at once, so end your turn then. When the condition holds, Orbit starts a turn here with " +
 			"each session's state; if the watch expires first, one turn says so. Use it instead of polling session_get, " +
-			"sleeping, or looping in Bash. A session cannot await itself.",
+			"sleeping, looping in Bash, a background job or schedule_wakeup: Orbit holds the watch on its server, so it " +
+			"wakes this session even if this engine was recycled in the meantime. A session cannot await itself.",
 		"inputSchema": obj(map[string]interface{}{
 			"sessionIds": map[string]interface{}{
 				"type":        "array",

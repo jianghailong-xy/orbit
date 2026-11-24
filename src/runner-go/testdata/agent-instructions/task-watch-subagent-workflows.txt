@@ -1,4 +1,4 @@
-=== antigravity (4191 bytes)
+=== antigravity (3919 bytes)
 Owner instructions.
 
 Orbit primer 1.8.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
@@ -21,12 +21,12 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one in
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
-To wait for Orbit work -- tasks reaching a status, sessions finishing a turn -- do not poll with sleep, Bash loops, background jobs or schedule_wakeup: call task_await or session_await (watch_create for other conditions) and end your turn. Orbit holds the watch on its server and starts a turn in this session with a structured payload when the condition holds, even if this engine was recycled in the meantime.
+To wait for Orbit work, call task_await or session_await (watch_create for other conditions) and end your turn; never poll or sleep for it.
 
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the tools of the `orbit` MCP server (call_mcp_tool with ServerName "orbit"). Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
-=== claude (3963 bytes)
+=== claude (3691 bytes)
 Owner instructions.
 
 Orbit primer 1.8.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
@@ -47,13 +47,13 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one in
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
-To wait for Orbit work -- tasks reaching a status, sessions finishing a turn -- do not poll with sleep, Bash loops, background jobs or schedule_wakeup: call task_await or session_await (watch_create for other conditions) and end your turn. Orbit holds the watch on its server and starts a turn in this session with a structured payload when the condition holds, even if this engine was recycled in the meantime.
+To wait for Orbit work, call task_await or session_await (watch_create for other conditions) and end your turn; never poll or sleep for it.
 
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the `mcp__orbit__*` tools. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
 === claude, resumed: same as claude
-=== codex 0.125-0.134 developer message (4683 bytes)
+=== codex 0.125-0.134 developer message (4411 bytes)
 Owner instructions.
 
 Orbit primer 1.8.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
@@ -76,14 +76,14 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one in
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
-To wait for Orbit work -- tasks reaching a status, sessions finishing a turn -- do not poll with sleep, Bash loops, background jobs or schedule_wakeup: call task_await or session_await (watch_create for other conditions) and end your turn. Orbit holds the watch on its server and starts a turn in this session with a structured payload when the condition holds, even if this engine was recycled in the meantime.
+To wait for Orbit work, call task_await or session_await (watch_create for other conditions) and end your turn; never poll or sleep for it.
 
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the `mcp__orbit__*` tools. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
 
 After generating an image, preserve the original file. Do not regenerate it solely because Orbit could not attach or upload it. Only claim that the image is attached or delivered when Orbit explicitly confirms attachment delivery; successful generation alone is not delivery confirmation. If delivery fails, report that the image was generated but delivery failed, keep the original file available, and let Orbit retry delivery. If delivery status is unavailable, report only generation success without claiming delivery success or failure.
-=== codex < 0.125 turn input (4740 bytes)
+=== codex < 0.125 turn input (4468 bytes)
 <orbit_application_context>
 Owner instructions.
 
@@ -107,7 +107,7 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one in
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
-To wait for Orbit work -- tasks reaching a status, sessions finishing a turn -- do not poll with sleep, Bash loops, background jobs or schedule_wakeup: call task_await or session_await (watch_create for other conditions) and end your turn. Orbit holds the watch on its server and starts a turn in this session with a structured payload when the condition holds, even if this engine was recycled in the meantime.
+To wait for Orbit work, call task_await or session_await (watch_create for other conditions) and end your turn; never poll or sleep for it.
 
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
@@ -118,7 +118,7 @@ After generating an image, preserve the original file. Do not regenerate it sole
 === codex >= 0.135 additional context: same as codex 0.125-0.134 developer message
 === codex >= 0.135, after compaction: same as codex 0.125-0.134 developer message
 === codex >= 0.135, resumed thread: same as codex 0.125-0.134 developer message
-=== cursor (4151 bytes)
+=== cursor (3879 bytes)
 Owner instructions.
 
 Orbit primer 1.8.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
@@ -141,12 +141,12 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one in
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
-To wait for Orbit work -- tasks reaching a status, sessions finishing a turn -- do not poll with sleep, Bash loops, background jobs or schedule_wakeup: call task_await or session_await (watch_create for other conditions) and end your turn. Orbit holds the watch on its server and starts a turn in this session with a structured payload when the condition holds, even if this engine was recycled in the meantime.
+To wait for Orbit work, call task_await or session_await (watch_create for other conditions) and end your turn; never poll or sleep for it.
 
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the tools of the `orbit` MCP server. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
-=== deepseek harness (4141 bytes)
+=== deepseek harness (3869 bytes)
 Owner instructions.
 
 Orbit primer 1.8.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
@@ -169,12 +169,12 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one in
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
-To wait for Orbit work -- tasks reaching a status, sessions finishing a turn -- do not poll with sleep, Bash loops, background jobs or schedule_wakeup: call task_await or session_await (watch_create for other conditions) and end your turn. Orbit holds the watch on its server and starts a turn in this session with a structured payload when the condition holds, even if this engine was recycled in the meantime.
+To wait for Orbit work, call task_await or session_await (watch_create for other conditions) and end your turn; never poll or sleep for it.
 
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the `mcp__orbit__*` tools. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
-=== kimi (4222 bytes)
+=== kimi (3950 bytes)
 [map[text:<orbit-agent-instructions>
 Owner instructions.
 
@@ -198,7 +198,7 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one in
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
-To wait for Orbit work -- tasks reaching a status, sessions finishing a turn -- do not poll with sleep, Bash loops, background jobs or schedule_wakeup: call task_await or session_await (watch_create for other conditions) and end your turn. Orbit holds the watch on its server and starts a turn in this session with a structured payload when the condition holds, even if this engine was recycled in the meantime.
+To wait for Orbit work, call task_await or session_await (watch_create for other conditions) and end your turn; never poll or sleep for it.
 
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
@@ -206,7 +206,7 @@ The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few op
 </orbit-agent-instructions>
 
 hi type:text]]
-=== opencode (4135 bytes)
+=== opencode (3863 bytes)
 Owner instructions.
 
 Orbit primer 1.8.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
@@ -229,7 +229,7 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one in
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
-To wait for Orbit work -- tasks reaching a status, sessions finishing a turn -- do not poll with sleep, Bash loops, background jobs or schedule_wakeup: call task_await or session_await (watch_create for other conditions) and end your turn. Orbit holds the watch on its server and starts a turn in this session with a structured payload when the condition holds, even if this engine was recycled in the meantime.
+To wait for Orbit work, call task_await or session_await (watch_create for other conditions) and end your turn; never poll or sleep for it.
 
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
