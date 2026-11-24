@@ -172,6 +172,10 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public var mainCheckoutActions: Bool? = nil
     /// The repository its directory is a checkout of, as the runner reported it; nil for a workspace on none.
     public let repoUrl: String?
+    /// What the owner chose for landing on GitHub: `PULL_REQUEST` or `PUSH_AS_ME`. Nil from an older server.
+    public var landingMode: String? = nil
+    /// The landing setting, on the workspace's own read (`GET /agents/:id`) only.
+    public var landing: WorkspaceLandingView? = nil
 
     private enum CodingKeys: String, CodingKey {
         case id, name, lastProvider, lastEngine, lastModel, provider, model, permissionMode, effort, workDir, repoUrl
@@ -182,6 +186,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         case enableWorktree, subagentsEnabled, subagentsMaxRunning, workflowsEnabled
         case workDirExists, workDirIsGit
         case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup, mainCheckoutActions
+        case landingMode, landing
     }
 
     public init(from decoder: Decoder) throws {
@@ -228,6 +233,8 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         repoCleanup = try c.decodeIfPresent(RunnerRepoCleanup.self, forKey: .repoCleanup)
         mainCheckoutActions = try? c.decodeIfPresent(Bool.self, forKey: .mainCheckoutActions)
         repoUrl = try c.decodeIfPresent(String.self, forKey: .repoUrl)
+        landingMode = try? c.decodeIfPresent(String.self, forKey: .landingMode)
+        landing = try? c.decodeIfPresent(WorkspaceLandingView.self, forKey: .landing)
     }
 }
 

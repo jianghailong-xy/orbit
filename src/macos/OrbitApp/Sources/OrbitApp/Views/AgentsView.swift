@@ -2147,6 +2147,8 @@ struct AgentFormContent: View {
                 WorktreeIsolationSwitch(workspace: agent)
             }
 
+            WorkspaceLandingSection(agent: agent)
+
             Section("Instructions") {
                 TextEditor(text: $instructions)
                     .frame(minHeight: 90)
