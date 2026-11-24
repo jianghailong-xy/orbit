@@ -372,8 +372,11 @@ var instructionUnits = []instructionUnit{
 	{id: "files.reply-links", owner: "reply attachments", kind: kindEnvironment,
 		appliesTo: orbitSession, channels: []instructionChannel{channelSystem}, core: orbitReplyFileInstructions,
 		detail: "guide topic files", guardedBy: []string{"I4-reply-file-link"}},
+	// Every session that can hand the person a file is given it, not only a task's run: its file_upload sentence is half
+	// of how a reply hands a file over, and without it Claude Code passed I4-reply-file-link 2 of 30, against 15 of 30
+	// with it (task 3533QfA5iugjF5kefEZGZ).
 	{id: "files.evidence", owner: "evidence files: file_upload", kind: kindDisposition,
-		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.Role == roleTaskRun }, channels: []instructionChannel{channelSystem}, core: orbitEvidenceFileInstructions,
+		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.writesOrbit() }, channels: []instructionChannel{channelSystem}, core: orbitEvidenceFileInstructions,
 		tools: []string{"file_upload"}, detail: "file_upload description", guardedBy: []string{"I5-evidence-file-upload"}},
 	{id: "drive.tools", owner: "Documents drive: documents_*", kind: kindEnvironment,
 		appliesTo: func(s SessionShape) bool { return orbitSession(s) && orbitDocumentsShown() && !s.DriveMounted }, channels: []instructionChannel{channelSystem},

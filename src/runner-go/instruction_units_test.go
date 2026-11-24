@@ -256,8 +256,12 @@ func TestEachShapeIsGivenOnlyTheUnitsThatApplyToIt(t *testing.T) {
 	}
 
 	free := system(job(func(j *ClaimedSession) { j.TaskID = "" }))
-	if has(free, orbitEvidenceFileInstructions, orbitProgressInstructions) {
-		t.Error("a session that runs no task is given the evidence or progress text")
+	if has(free, orbitProgressInstructions) {
+		t.Error("a session that runs no task is given the progress text")
+	}
+	// The evidence paragraph also says how file_upload hands a file over, which a reply in any session needs (I4).
+	if !has(free, orbitEvidenceFileInstructions) {
+		t.Error("a session that runs no task is not given the evidence paragraph")
 	}
 
 	orch := system(job(func(j *ClaimedSession) { j.AllowOrchestration = true }))
