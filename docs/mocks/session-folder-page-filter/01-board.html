@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Folder page: scope, filter, search — board 01</title>
+<style>
+  :root {
+    --brand: #3b6cf6; --brand-tint: #eef2fe; --brand-border: #c7d4fb;
+    --text-1: #1d1f24; --text-2: #4b5160; --text-3: #8a90a0; --border: #e4e6eb; --border-subtle: #eceef2;
+    --bg-sunken: #f5f6f8; --danger: #d64545; --note: #b25e00; --note-bg: #fff6e8;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 32px; background: #eef0f3; font: 14px/1.4 -apple-system, "SF Pro Text", "Inter", "Segoe UI", sans-serif; color: var(--text-1); width: 1900px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .lede { color: var(--text-2); margin: 0 0 24px; max-width: 1100px; }
+  .row { display: flex; gap: 28px; align-items: flex-start; }
+  .frame { width: 340px; flex: none; }
+  .frame-label { font-weight: 600; margin-bottom: 4px; }
+  .frame-label .tag { display: inline-block; line-height: 16px; white-space: nowrap; font-size: 11px; padding: 1px 6px; border-radius: 4px; margin-right: 6px; vertical-align: 1px; }
+  .tag.now { background: #fde8e8; color: var(--danger); }
+  .tag.prop { background: #e3f4e8; color: #1f8a3d; }
+  .frame-sub { color: var(--text-3); font-size: 12px; margin-bottom: 8px; min-height: 32px; }
+  .col { position: relative; background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 14px 12px; height: 560px; overflow: hidden; }
+  .head { display: flex; align-items: center; gap: 4px; margin-bottom: 10px; min-height: 40px; }
+  .back { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: var(--text-2); margin-left: -6px; font-size: 18px; }
+  .titles { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+  .title { font-weight: 700; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ws { color: var(--text-3); font-size: 12px; }
+  .scope { display: flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 6px; color: var(--text-3); font-size: 13px; flex: none; }
+  .scope.on { color: var(--brand); background: var(--brand-tint); }
+  .scope .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .kebab { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: var(--text-3); border-radius: 6px; flex: none; font-size: 18px; }
+  .kebab.focus { outline: 2px solid var(--brand); }
+  .dotst { width: 8px; height: 8px; border-radius: 50%; background: #2fb35b; flex: none; margin-right: 4px; }
+  .new { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 8px; border: 1px solid var(--brand-border); border-radius: 8px; background: var(--brand-tint); color: var(--brand); margin-bottom: 8px; }
+  .search { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 8px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-sunken); color: var(--text-3); margin-bottom: 8px; }
+  .search kbd { margin-left: auto; font: 11px inherit; border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; background: #fff; }
+  .chipbar { display: flex; gap: 6px; margin: -2px 0 8px; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--brand-tint); color: var(--brand); border: 1px solid var(--brand-border); }
+  .chip .x { color: var(--text-3); }
+  .section { color: var(--text-3); font-size: 12px; font-weight: 600; margin: 10px 4px 4px; display: flex; align-items: center; gap: 6px; }
+  .section .sdot { width: 8px; height: 8px; border-radius: 50%; }
+  .item { display: flex; align-items: center; gap: 8px; padding: 7px 6px; border-radius: 7px; }
+  .item.sel { background: var(--bg-sunken); }
+  .item .t { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .when { color: var(--text-3); font-size: 12px; }
+  .item .tdot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .item.folder .ico { color: var(--text-3); }
+  .item.folder .n { color: var(--text-3); font-size: 12px; }
+  .empty { color: var(--text-3); text-align: center; margin-top: 40px; font-size: 13px; }
+  .empty a { color: var(--brand); text-decoration: none; display: block; margin-top: 6px; }
+  .menu { position: absolute; background: #fff; border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 30px rgba(20,30,60,.15); padding: 5px; font-size: 13px; z-index: 5; }
+  .mi { display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 6px; white-space: nowrap; }
+  .mi.hl { background: var(--bg-sunken); }
+  .mi .r { margin-left: auto; color: var(--text-3); display: flex; align-items: center; gap: 5px; }
+  .mi .chk { color: var(--brand); width: 14px; text-align: right; }
+  .mi .hint { color: var(--text-3); font-size: 11px; }
+  .mi.danger { color: var(--danger); }
+  .sep { height: 1px; background: var(--border-subtle); margin: 4px 2px; }
+  .mdot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .palette { position: absolute; left: 10px; right: 10px; top: 70px; background: #fff; border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 16px 40px rgba(20,30,60,.2); z-index: 6; }
+  .pin { display: flex; align-items: center; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); }
+  .pin .caret { width: 1px; height: 16px; background: var(--text-1); }
+  .pgroup { color: var(--text-3); font-size: 11px; font-weight: 600; padding: 8px 12px 2px; }
+  .pres { padding: 6px 12px; display: flex; gap: 8px; }
+  .pres.hl { background: var(--bg-sunken); }
+  .pres .meta { color: var(--text-3); font-size: 12px; margin-left: auto; }
+  .pfoot { color: var(--text-3); font-size: 11px; padding: 8px 12px; border-top: 1px solid var(--border-subtle); }
+  .scrim { position: absolute; inset: 0; background: rgba(20,25,35,.18); z-index: 4; }
+  .notes { margin-top: 10px; font-size: 12px; color: var(--text-2); }
+  .notes li { margin-bottom: 4px; }
+  .callout { position: absolute; background: var(--note-bg); color: var(--note); border: 1px dashed #e2a64b; border-radius: 6px; font-size: 11px; padding: 3px 6px; z-index: 8; }
+  .x-red { color: var(--danger); font-weight: 700; }
+  .flow { display: flex; align-items: center; gap: 10px; margin: 36px 0 14px; }
+  .flow h2 { font-size: 17px; margin: 0; }
+  .rules { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; margin-top: 28px; }
+  .rules table { border-collapse: collapse; font-size: 13px; }
+  .rules td, .rules th { border-bottom: 1px solid var(--border-subtle); padding: 6px 14px 6px 0; text-align: left; vertical-align: top; }
+  .rules th { color: var(--text-3); font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>Folder page: scope, filter and search</h1>
+<p class="lede">The idea: a folder page is the workspace's list scoped to one folder. Every control that narrows the list keeps working there.
+Only folder rows drop out, and a folder has no sub-folders anyway. Web console sidebar, 340 px column.</p>
+
+<div class="row">
+
+  <!-- A. Today -->
+  <div class="frame">
+    <div class="frame-label"><span class="tag now">TODAY</span>A · Folder page</div>
+    <div class="frame-sub">The scope menu is replaced by ⋯ (Rename, Delete). Nothing says which view this is, and nothing narrows the list.</div>
+    <div class="col">
+      <div class="head">
+        <span class="back">‹</span>
+        <span class="titles"><span class="title">Orbit Session</span><span class="ws">orbit-ws01</span></span>
+        <span class="kebab focus">⋮</span>
+      </div>
+      <div class="new">＋ New session</div>
+      <div class="search">⌕ Search sessions <kbd>⌘K</kbd></div>
+      <div class="section">Pinned</div>
+      <div class="item"><span class="t">Session state: three activity states…</span><span class="when">just now</span></div>
+      <div class="section">Today</div>
+      <div class="item"><span class="t">Folder page loses its filters</span><span class="when">2h</span></div>
+      <div class="item"><span class="t">Recap line on idle sessions</span><span class="when">5h</span></div>
+      <div class="section">Yesterday</div>
+      <div class="item"><span class="t">Status dot for queued runs</span><span class="when">Tue</span></div>
+      <div class="item"><span class="t">Watching word on the row</span><span class="when">Tue</span></div>
+      <div class="callout" style="top:58px; right:14px"><span class="x-red">✕</span> no Open / Completed, no tag</div>
+      <div class="callout" style="top:142px; right:14px"><span class="x-red">✕</span> searches every workspace</div>
+    </div>
+    <ul class="notes">
+      <li>Open vs Completed is fixed by where you came from. To switch: Back → switch view → open the folder again.</li>
+      <li>Outside the folder a tag filter hides every folder, so "folder + tag" can't be reached from either side.</li>
+    </ul>
+  </div>
+
+  <!-- B. Proposed default -->
+  <div class="frame">
+    <div class="frame-label"><span class="tag prop">PROPOSED</span>B · Folder page, at rest</div>
+    <div class="frame-sub">Same scope trigger as the workspace list, placed before ⋯. It names the current view.</div>
+    <div class="col">
+      <div class="head">
+        <span class="back">‹</span>
+        <span class="titles"><span class="title">Orbit Session</span><span class="ws">orbit-ws01</span></span>
+        <span class="scope">Open ▾</span>
+        <span class="kebab">⋮</span>
+      </div>
+      <div class="new">＋ New session</div>
+      <div class="search">⌕ Search in Orbit Session <kbd>⌘K</kbd></div>
+      <div class="section">Pinned</div>
+      <div class="item sel"><span class="tdot" style="background:#7c5cff"></span><span class="t">Session state: three activity states…</span><span class="when">just now</span></div>
+      <div class="section">Today</div>
+      <div class="item"><span class="tdot" style="background:#e8892b"></span><span class="t">Folder page loses its filters</span><span class="when">2h</span></div>
+      <div class="item"><span class="tdot" style="background:#7c5cff"></span><span class="t">Recap line on idle sessions</span><span class="when">5h</span></div>
+      <div class="section">Yesterday</div>
+      <div class="item"><span class="tdot" style="background:#e8892b"></span><span class="t">Status dot for queued runs</span><span class="when">Tue</span></div>
+      <div class="item"><span class="tdot" style="background:#7c5cff"></span><span class="t">Watching word on the row</span><span class="when">Tue</span></div>
+    </div>
+    <ul class="notes">
+      <li>⋯ keeps Rename… and Delete Folder… only.</li>
+      <li>The search field names its scope: "Search in &lt;folder&gt;".</li>
+    </ul>
+  </div>
+
+  <!-- C. Scope menu open -->
+  <div class="frame">
+    <div class="frame-label"><span class="tag prop">PROPOSED</span>C · Scope menu, inside a folder</div>
+    <div class="frame-sub">The same menu as the workspace list. New Folder… is left out (no sub-folders). Trash takes you out to the workspace's Trash.</div>
+    <div class="col">
+      <div class="head">
+        <span class="back">‹</span>
+        <span class="titles"><span class="title">Orbit Session</span><span class="ws">orbit-ws01</span></span>
+        <span class="scope on">Open ▾</span>
+        <span class="kebab">⋮</span>
+      </div>
+      <div class="new">＋ New session</div>
+      <div class="search">⌕ Search in Orbit Session <kbd>⌘K</kbd></div>
+      <div class="section">Pinned</div>
+      <div class="item"><span class="t">Session state: three activity states…</span><span class="when">just now</span></div>
+      <div class="section">Today</div>
+      <div class="item"><span class="t">Folder page loses its filters</span><span class="when">2h</span></div>
+      <div class="menu" style="top:52px; right:40px; width:230px">
+        <div class="mi">Open <span class="r chk">✓</span></div>
+        <div class="mi">Completed <span class="r"><span class="hint">3</span></span></div>
+        <div class="mi">Trash <span class="r"><span class="hint">leaves folder ↗</span></span></div>
+        <div class="sep"></div>
+        <div class="mi hl">Filter by Tag <span class="r">▸</span></div>
+        <div class="mi">Group by Tag <span class="r chk"></span></div>
+      </div>
+      <div class="menu" style="top:150px; right:-2px; width:150px">
+        <div class="mi"><span class="mdot" style="border:1px solid var(--border)"></span>All <span class="r chk">✓</span></div>
+        <div class="mi hl"><span class="mdot" style="background:#e8892b"></span>frontend <span class="r hint">2</span></div>
+        <div class="mi"><span class="mdot" style="background:#7c5cff"></span>design <span class="r hint">3</span></div>
+        <div class="mi"><span class="mdot" style="background:#2fb3a6"></span>runner <span class="r hint">0</span></div>
+      </div>
+    </div>
+    <ul class="notes">
+      <li>The counts are for this folder in this view. Completed shows "3" so you know before switching.</li>
+      <li>Switching to Completed stays on the folder page; the URL stays <code>?folder=…</code>.</li>
+    </ul>
+  </div>
+
+  <!-- D. Filter applied -->
+  <div class="frame">
+    <div class="frame-label"><span class="tag prop">PROPOSED</span>D · Tag filter applied</div>
+    <div class="frame-sub">The trigger turns blue and names the tag. A chip under the search field clears it in one click.</div>
+    <div class="col">
+      <div class="head">
+        <span class="back">‹</span>
+        <span class="titles"><span class="title">Orbit Session</span><span class="ws">orbit-ws01</span></span>
+        <span class="scope on">Open · <span class="dot" style="background:#e8892b"></span>frontend ▾</span>
+        <span class="kebab">⋮</span>
+      </div>
+      <div class="new">＋ New session</div>
+      <div class="search">⌕ Search in Orbit Session <kbd>⌘K</kbd></div>
+      <div class="chipbar"><span class="chip"><span class="mdot" style="background:#e8892b"></span>frontend <span class="x">✕</span></span></div>
+      <div class="section">Today</div>
+      <div class="item"><span class="tdot" style="background:#e8892b"></span><span class="t">Folder page loses its filters</span><span class="when">2h</span></div>
+      <div class="section">Yesterday</div>
+      <div class="item"><span class="tdot" style="background:#e8892b"></span><span class="t">Status dot for queued runs</span><span class="when">Tue</span></div>
+      <div style="height:22px"></div>
+      <div class="frame-label" style="font-size:12px; color:var(--text-3)">Empty state, same page, Completed + "runner":</div>
+      <div class="empty" style="margin-top:8px">No completed sessions with “runner” in this folder.
+        <a>Clear filter</a></div>
+    </div>
+    <ul class="notes">
+      <li>Pinned is hidden while a tag filters, as it is outside.</li>
+      <li>The empty state names the view, the tag and the folder.</li>
+    </ul>
+  </div>
+
+  <!-- E. Search scoped -->
+  <div class="frame">
+    <div class="frame-label"><span class="tag prop">PROPOSED</span>E · ⌘K on a folder page</div>
+    <div class="frame-sub">The palette opens with an "In Orbit Session" chip. Backspace on an empty query removes it and searches everywhere.</div>
+    <div class="col">
+      <div class="head">
+        <span class="back">‹</span>
+        <span class="titles"><span class="title">Orbit Session</span><span class="ws">orbit-ws01</span></span>
+        <span class="scope">Open ▾</span>
+        <span class="kebab">⋮</span>
+      </div>
+      <div class="new">＋ New session</div>
+      <div class="search">⌕ Search in Orbit Session <kbd>⌘K</kbd></div>
+      <div class="scrim"></div>
+      <div class="palette">
+        <div class="pin"><span class="chip">▣ In Orbit Session <span class="x">✕</span></span> <span>status</span><span class="caret"></span></div>
+        <div class="pgroup">IN THIS FOLDER · OPEN AND COMPLETED</div>
+        <div class="pres hl">Status dot for queued runs <span class="meta">Tue</span></div>
+        <div class="pres">Session state: three activity states… <span class="meta">now</span></div>
+        <div class="pres">Old status copy pass <span class="meta">Completed</span></div>
+        <div class="pgroup">ELSEWHERE</div>
+        <div class="pres" style="color:var(--text-3)">Search all workspaces for “status” ↵</div>
+        <div class="pfoot">⌫ removes the folder scope · ↑↓ to move · ↵ to open</div>
+      </div>
+    </div>
+    <ul class="notes">
+      <li>Scoped results cover Open and Completed of the folder, so search finds what the view hides.</li>
+      <li>On the workspace list the palette opens unscoped, as today.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="flow"><h2>Going back: what carries over</h2></div>
+<div class="row">
+  <div class="frame">
+    <div class="frame-label"><span class="tag prop">PROPOSED</span>F · Back from a filtered folder</div>
+    <div class="frame-sub">The view carries back (Completed). The tag filter belongs to the folder page and is dropped, so folders stay visible.</div>
+    <div class="col" style="height:330px">
+      <div class="head">
+        <span class="dotst"></span>
+        <span class="titles"><span class="title">orbit-ws01</span></span>
+        <span class="scope on">Completed ▾</span>
+      </div>
+      <div class="new">＋ New session</div>
+      <div class="search">⌕ Search sessions <kbd>⌘K</kbd></div>
+      <div class="item folder"><span class="ico">▣</span><span class="t">Orbit Session</span><span class="n">3</span></div>
+      <div class="item folder"><span class="ico">▣</span><span class="t">Android parity</span><span class="n">5</span></div>
+      <div class="section">This week</div>
+      <div class="item"><span class="t">Release v4.12 notes</span><span class="when">Mon</span></div>
+      <div class="item"><span class="t">Heavy lock cleanup</span><span class="when">Sun</span></div>
+    </div>
+  </div>
+
+  <div class="rules" style="flex:1">
+    <table>
+      <tr><th>Control</th><th>Workspace list</th><th>Folder page</th><th>Back / forward between them</th></tr>
+      <tr><td>Open / Completed</td><td>✓</td><td>✓ (new)</td><td>Shared: carries both ways</td></tr>
+      <tr><td>Trash</td><td>✓ flat, no folders</td><td>Menu entry leaves to workspace Trash</td><td>—</td></tr>
+      <tr><td>Filter by Tag</td><td>✓, hides folder rows (unchanged)</td><td>✓ (new), narrows the folder's sessions</td><td>Folder page's own: dropped on Back; entering a folder starts unfiltered</td></tr>
+      <tr><td>Group by Tag</td><td>✓, hides folder rows (unchanged)</td><td>✓ (new), sections inside the folder</td><td>Same as Filter by Tag</td></tr>
+      <tr><td>New Folder…</td><td>✓</td><td>— (no sub-folders)</td><td>—</td></tr>
+      <tr><td>Rename… / Delete Folder…</td><td>Folder row ⋯</td><td>Head ⋯</td><td>—</td></tr>
+      <tr><td>⌘K search</td><td>All workspaces</td><td>Scoped to folder, ⌫ widens</td><td>—</td></tr>
+      <tr><td>New session</td><td>Lands in no folder</td><td>Lands in this folder (unchanged)</td><td>—</td></tr>
+      <tr><td>Scheduled runs page</td><td>—</td><td>Same head: view + tag; no ⋯</td><td>Same rules</td></tr>
+    </table>
+  </div>
+</div>
+</body>
+</html>
