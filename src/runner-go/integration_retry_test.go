@@ -34,13 +34,13 @@ func TestMCPIntegrationRetryIsPartOfTheBaseTools(t *testing.T) {
 		}
 	}
 	// What a model has to know before it reaches for the door: which failures it answers, that
-	// task_start is NOT the way, that a conflict is refused here — and that one at MAIN_SYNC is
-	// resolved by absorbing the upstream into the source branch, which then lands by MERGE (§3.1
-	// M3) — that a blocked merge into main is rerun with the candidate's id and stays the owner's or
+	// task_start is NOT the way, that a conflict is refused here — and that one at MAIN_SYNC is the
+	// line's: it opens a task-less line-sync item, no DONE task is reopened, and one sync task filed
+	// against the item resolves it (contract revision 45) — that a blocked merge into main is rerun with the candidate's id and stays the owner's or
 	// Automatic's to merge, and that the items stay open, being handled, until the job reports.
 	desc := mcpToolDescription(toolDescriptors(false, false), "integration_retry")
 	for _, want := range []string{"CHECK_FAILED", "CHECK_TIMED_OUT", "ERROR", "task_start", "CONFLICT", "task_reopen",
-		"MAIN_SYNC", "absorb the upstream on the project line first", "its next landing lands by MERGE",
+		"MAIN_SYNC", "line-sync item", "every DONE task stays DONE", "fixesOpenItemId",
 		"promotionId", "the account owner's card, or the Automatic setting", "being handled", "superseded",
 		// §2.9 LS6: the answer addresses the landing session the new generation belongs to.
 		"landingSessionId", "session_get"} {
