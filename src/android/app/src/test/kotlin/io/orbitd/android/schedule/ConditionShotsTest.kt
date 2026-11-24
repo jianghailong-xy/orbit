@@ -207,7 +207,8 @@ class ConditionShotsTest {
         runBlocking { store.loadNow() }
         owner.load(OwnerRequestStore.OPEN)
         compose.waitUntil(10_000) { owner.state.value.conditionItems.size == 2 }
-        show { ScheduledPage(store, listOf("a1" to "HPC"), "a1", null, {}, {}, {}, conditionWaiting = owner.state.value.conditionItems) }
+        val conditionItems = owner.state.value.conditionItems
+        show { ScheduledPage(store, listOf("a1" to "HPC"), "a1", null, {}, {}, {}, conditionWaiting = conditionItems) }
         waitFor("Can't read: Root disk below 5%")
         waitFor("Pause")
         listOf("Condition", "The check timed out 3 times in a row.", "Look into it", "Still waiting for 3 or more OSDs are in. Keep waiting?",

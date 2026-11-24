@@ -248,6 +248,36 @@
   border: 1px solid var(--border-subtle);
   padding: 2px 8px;
 }
+.files-preview-text {
+  max-height: 360px;
+  overflow: auto;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  font: 12px/1.5 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  white-space: pre;
+  tab-size: 2;
+}
+.files-preview-page,
+.files-preview-pdf {
+  display: block;
+  width: 100%;
+  height: 360px;
+  margin: 0 0 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+/* A page that sets no background of its own is white in a browser tab, so it is white here in dark mode too. */
+.files-preview-page {
+  background: #fff;
+}
+.files-preview-note {
+  margin: -6px 0 12px;
+  color: var(--text-3);
+  font-size: 12px;
+}
 .files-preview-loading,
 .files-preview-none {
   padding: 24px 0;
