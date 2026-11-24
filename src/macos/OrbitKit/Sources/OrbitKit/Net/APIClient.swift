@@ -1085,6 +1085,11 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("owner-requests/\(id)/create-wiki")
     }
 
+    /// A CHANGE card's Apply: writes the runner's Max Concurrent and settles the card DONE.
+    public func applyOwnerRequestChange(_ id: String, _ body: OwnerRequestApplyBody) async throws -> OwnerRequest {
+        try await post("owner-requests/\(id)/apply", body: body)
+    }
+
     /// A SETTINGS_CHANGE card's Save changes (design §5.2): writes the proposed values and settles the card DONE. A value
     /// that moved since is refused 409 SETTINGS_STALE and nothing is written.
     public func applyOwnerRequestSettings(_ id: String) async throws -> OwnerRequest {

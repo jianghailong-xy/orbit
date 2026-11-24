@@ -3724,8 +3724,8 @@ model Attachment {
 
 /// The bytes of Orbit Files (0462, docs/orbit-files-design.md §2.1): one row per distinct content,
 /// named by its sha256, however many attachment rows name it. The bytes themselves are in the store
-/// `storage` names — `local`, the files directory (ORBIT_FILES_DIR, `<sha256[0:2]>/<sha256>`), or `s3`
-/// (`files/<sha256[0:2]>/<sha256>` in ORBIT_FILES_S3_BUCKET) — and never in Postgres.
+/// `storage` names — `local`, the files directory (ORBIT_DOCUMENTS_DIR, `<sha256[0:2]>/<sha256>`), or `s3`
+/// (`files/<sha256[0:2]>/<sha256>` in ORBIT_DOCUMENTS_S3_BUCKET) — and never in Postgres.
 model FileBlob {
   sha256           String       @id
   sizeBytes        Int          @map("size_bytes")
@@ -8702,6 +8702,10 @@ model OwnerRequest {
   /// whose browser they sign in on. Nothing else of the browser is stored. History, no FK.
   browserSite             String?   @map("browser_site")
   browserRunnerId         String?   @map("browser_runner_id") @db.Uuid
+  /// CHANGE (migration 1538): `{ runnerId, field, requested, before }`, written by the server; v1's one field is
+  /// `maxConcurrent`. NULL otherwise. Its partial unique `owner_request_change_pending_key` holds an owner to one PENDING
+  /// CHANGE per (runner, field). The runner is history, not a foreign key.
+  changeSpec              Json?     @map("change_spec")
   expiresAt           DateTime? @map("expires_at") @db.Timestamptz(3)
   clientRequestId     String?   @map("client_request_id")
   resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(3)

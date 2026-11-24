@@ -1,7 +1,7 @@
 # Orbit operation catalogue v1.10.0
 
 > Generated from `src/runner-go/operation_catalog.go` — do not edit by hand.
-> Content hash: `05de316d674e2767715e4a5b469ab7b8a1c53de321e81a2d0827897297b73df8`.
+> Content hash: `b8a428dd79397f7f57a3bfe87bf3e7c58e70fdeca666cf8fac64d63aee107fd7`.
 
 Every operation an Orbit agent can call is declared once in the operation catalogue. This table is that catalogue rendered for a person: `orbit capabilities --json` and the MCP `tools/list` payload are its two machine surfaces, and the leaf `--help` texts are held to it by tests. `MCP` and `CLI` say how each surface reaches the operation — `always`, an `orchestration` grant, an engine `permission_prompt` bridge, `session`-only, `headless`-only, or a `watch_switch`/`wiki_switch` — and `absent` when that surface deliberately has no door. Gates that must hold together are joined with `+` (for example `orchestration+watch_switch`). `Idempotency` is `read` (safe to repeat), `caller_key` (retry with the same key), `server_key` (a redelivered turn deduplicates) or `none` (re-read before retrying). `Plan` is what a session in Plan mode gets: the call `runs`, is `refused` with what to do instead, or its `own_gate` decides; the per-engine matrix is docs/permission-matrix.md.
 
@@ -86,7 +86,7 @@ Every operation an Orbit agent can call is declared once in the operation catalo
 | `provider_delete` | provider | high | yes | card (`orbit_provider_delete`) | yes | none | refused | always | always — `orbit provider delete` | Delete a credential provider. |
 | `provider_list` | provider | low | no | none | no | read | runs | always | always — `orbit provider list` | See the credential providers and the engines each can run. |
 | `provider_update` | provider | high | yes | card (`orbit_provider_update`) | no | none | refused | always | always — `orbit provider update` | Change a credential provider. |
-| `request_owner_action` | owner | high | yes | owner | no | none | runs | always | absent | Ask the account owner to perform a consequential action. |
+| `request_owner_action` | owner | high | yes | owner | no | none | runs | always | session — `orbit owner-request` | Ask the account owner to perform a consequential action. |
 | `runner_delete` | runner | high | yes | card (`orbit_runner_delete`) | yes | none | refused | orchestration | orchestration — `orbit runner delete` | Delete a runner and the agents bound to it. |
 | `runner_engine_install` | runner | high | yes | none | no | none | refused | orchestration | orchestration — `orbit runner install` | Install or update an engine CLI on one of this account's runners. |
 | `runner_engine_install_status` | runner | low | no | none | no | read | runs | orchestration | orchestration — `orbit runner install-status` | Read where an engine install or update stands. |
@@ -212,7 +212,6 @@ An operation missing from one surface is a declared decision, not drift: the cat
 | `open_item_resolve` | CLI | closes an item as the project's coordinator session: a terminal outside one is refused by the server |
 | `permission_prompt` | CLI | runtime approval bridge, called by the engine mid-turn |
 | `project_ruling_record` | CLI | records as the project's coordinator session, from one of its turns: a terminal outside one is refused by the server |
-| `request_owner_action` | CLI | files as the calling session and answers it with a turn: a terminal outside one is refused by the server |
 | `schedule_create` | CLI | proposes a schedule in the calling session's workspace, on its engine: a terminal outside a session has neither |
 | `schedule_delete` | CLI | controls a schedule as the calling session: a terminal outside one is refused by the server |
 | `schedule_end` | CLI | controls a schedule as the calling session: a terminal outside one is refused by the server |

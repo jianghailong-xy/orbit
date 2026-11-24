@@ -293,6 +293,7 @@ var advertisedCapabilityFamilies = []struct {
 	{"providerCLICapabilities", providerCLICapabilities, false},
 	{"projectCLICapabilities", projectCLICapabilities, false},
 	{"notifyCLICapabilities", notifyCLICapabilities, false},
+	{"ownerRequestCLICapabilities", ownerRequestCLICapabilities, false},
 	{"mergeReceiptCLICapabilities", mergeReceiptCLICapabilities, false},
 	{"watchCLICapabilities", watchCLICapabilities, false},
 	// Ungated like the watch commands and SessionOnly for the same kind of reason: a wiki command
@@ -521,13 +522,18 @@ func TestOrbitDriveGuidanceMatchesRunnerKind(t *testing.T) {
 		if mounted {
 			name = "cloud"
 			brief = []string{"~/Documents", "permanent Documents drive", "link its files by path", "~/Documents/ (a symlink)", "cp -r",
-				"rsync -rt", "tar x", "locks", "in-place writes", "/run/orbit-files/errors.log", "ORBIT_GUEST turns only read it"}
-			full = []string{"/home/orbit/Documents", "/run/orbit-files/drive", "shared across sessions", "trailing slash", "cp -a",
+				"rsync -rt", "tar x", "locks", "in-place writes", "ORBIT_GUEST turns only read it"}
+			full = []string{"/home/orbit/Documents", "shared across sessions", "trailing slash", "cp -a",
 				"cp -p", "rsync -a", "tar x", "file locks", "writing inside an existing file", "executing a file", "errors.log",
 				"status.json", "unsent/", "ORBIT_GUEST", "do not write it"}
 		}
 		t.Run(name, func(t *testing.T) {
 			fakeDriveMount(t, mounted)
+			if mounted {
+				// Whichever root the Pod has (/run/orbit-documents, or /run/orbit-files of the old driver) is the one named.
+				brief = append(brief, driveParentPath+"/errors.log")
+				full = append(full, "mounted at "+driveMountPath+")", driveParentPath+"/errors.log")
+			}
 			long := "/home/a-long-account-name/.orbit/bin/versions/0.1.999/orbit"
 			instructions := orbitCLIInstructions(long, true, true, true, true)
 			t.Logf("%s: the longest instructions shape is %d of %d bytes", name, len(instructions), orbitInstructionsMaxBytes)

@@ -51,9 +51,11 @@ type driveWriter struct {
 
 func driveLink(id string) string { return "orbit-drive:" + id }
 
-// driveMountRelative recognizes the spellings (~/Files and /home/orbit/Files are the names before the rename) of a mounted drive path.
+// driveMountRelative recognizes the spellings of a mounted drive path: ~/Files, /home/orbit/Files and /run/orbit-files/drive
+// are the names before the rename, and either root's drive/ is the drive whichever one this Pod has.
 func driveMountRelative(p string) (string, bool) {
-	for _, root := range []string{"~/Documents", driveHomePath, driveMountPath, "~/Files", driveLegacyHomePath} {
+	for _, root := range []string{"~/Documents", driveHomePath, driveMountPath, "~/Files", driveLegacyHomePath,
+		driveRootPath + "/drive", driveLegacyRootPath + "/drive"} {
 		if p == root || strings.HasPrefix(p, root+"/") {
 			return strings.TrimPrefix(p, root), true
 		}

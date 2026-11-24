@@ -1,5 +1,5 @@
 /**
- * A runner with Orbit Files drive handles holding bytes no commit has taken is not idle, so it is neither drained nor
+ * A runner with Documents drive handles holding bytes no commit has taken is not idle, so it is neither drained nor
  * confirmed into a sleep (docs/orbit-files-drive-technical-design.md §8.1).
  */
 import assert from 'node:assert/strict';
