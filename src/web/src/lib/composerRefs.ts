@@ -117,7 +117,7 @@ export function materializeReferences(text: string, refs: ReferenceMap): string 
     // expands it (it matches on the URI), but the user's own bubble renders the markdown, so the
     // broken link puts a raw uuid in front of the person who never typed one.
     const label = token.replace(/[[\]]/g, '\\$&');
-    return `[${label}](orbit-${ref.kind}:${ref.id})`;
+    return `[${label}](orbit-${ref.kind === 'drive' ? 'document' : ref.kind}:${ref.id})`;
   });
 }
 

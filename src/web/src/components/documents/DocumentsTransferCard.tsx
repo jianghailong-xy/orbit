@@ -163,7 +163,7 @@ function FileList({ files, kind, folder }: { files: DocumentsTransferFile[]; kin
 }
 
 /**
- * An agent's run of drive_put or drive_get calls as one card (board docs/mocks/agent-drive-transfer): a bar, the
+ * An agent's run of documents_put or documents_get calls as one card (board docs/mocks/agent-drive-transfer): a bar, the
  * speed and the time left while it goes, a row per file, and one line once every file is in.
  */
 export function DocumentsTransferCard({

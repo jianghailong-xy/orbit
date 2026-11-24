@@ -668,7 +668,7 @@
   text-decoration: none;
 }
 
-/* An agent's drive_put / drive_get calls in the chat (DocumentsTransferCard; board docs/mocks/agent-drive-transfer). The
+/* An agent's documents_put / documents_get calls in the chat (DocumentsTransferCard; board docs/mocks/agent-drive-transfer). The
    bar is the upload tray's, a little taller. */
 .drive-xfer {
   margin: 6px 12px 10px;

@@ -30,13 +30,13 @@ describe('drive transfer progress', () => {
     const done = documentsTransferFile({
       id: 't1',
       toolInput: { path: '/S/a.jpg' },
-      result: { text: '{"id":"e1","link":"orbit-drive:e1","sizeBytes":400}' },
+      result: { text: '{"id":"e1","link":"orbit-document:e1","sizeBytes":400}' },
       progress: undefined,
       live: true,
       ts: '2026-11-24T10:00:00Z',
       resultTs: '2026-11-24T10:00:02Z',
     });
-    expect(done).toMatchObject({ status: 'done', sent: 400, size: 400, link: 'orbit-drive:e1' });
+    expect(done).toMatchObject({ status: 'done', sent: 400, size: 400, link: 'orbit-document:e1' });
 
     const failed = documentsTransferFile({
       id: 't2',
