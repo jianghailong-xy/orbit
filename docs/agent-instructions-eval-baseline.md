@@ -415,6 +415,50 @@ Cutting every unit that has no case or showed no drop without it (`workflow.use-
 without them, or a mechanism from step 6 (design §7: D1 removes the hand-off unit's reason to exist, D5 shortens the
 reply-files unit).
 
+## Step 6: the owner's decisions D1-D8 as mechanisms
+
+Design §7 records each answer and where its mechanism lives. Claude Code 2.1.331 (`claude-sonnet-5-5`) and Codex 0.172.0, 10 runs
+of each cell, 2026-11-24/25. Reports: [`agent-eval/instructions-step6/`](agent-eval/instructions-step6/): `A-*` is the commit with D1,
+D3, D4 and D5 (first one-sentence reply-files text), `B-claude` is `A` without `alwaysLoad` (D2), `D-*` is the final commit.
+
+| Cell | Step 0 (Claude / Codex) | A | B (no alwaysLoad) | D, final |
+| --- | --- | --- | --- | --- |
+| E1 | 5/5 / 5/5 | 10/10 / 10/10 | n/p | 10/10 / 10/10 |
+| E3, E3 owner-starts | 5/5, 4/5 / 3/3, 3/3 | 10/10, 10/10 / 10/10, 10/10 | n/p | 10/10, 10/10 / 10/10, 10/10 |
+| E4 | 5/5 / 4/4 | 10/10 / 10/10 | n/p | 10/10 / 10/10 |
+| E6 | 0/5 / 5/5 | 0/10 / 10/10 | 0/10 | 0/10 / 9/10 |
+| E7 | 0/5 / 5/5 | 0/10 / 10/10 | 0/10 | 0/10 / 10/10 |
+| I2 (notify) | 10/10 / 10/10 | 10/10 / 10/10 | 10/10 | 10/10 / 10/10 |
+| I3, I3 background | 5/10, 10/10 / 10/10, 10/10 | 10/10, 10/10 / 10/10, 9/10 | 10/10, 10/10 | 10/10, 10/10 / 10/10, 8/10 |
+| I4 (reply file) | 4/10 / 10/10 | 1/10 / 8/10 | n/p | 3/10 / 10/10 |
+| X4 | 5/5 / 5/5 | 10/10 / 10/10 | n/p | 10/10 / 10/10 |
+
+- **D1**: Claude's `Agent` and `Task` are disallowed where delegate is served. I3 on Claude Code went from 5/10 to 10/10. E6 and E7 stay at
+  step 0's 0/10: Claude calls delegate at once for "have another agent fix the flaky test right now", with or without the clause, and
+  the disallow does not change that. Codex keeps the clause (no switch) and E6/E7 hold, bar one E6 run (9/10) and two I3-background runs (8/10)
+  where it called task_list and guide and never delegated, the miss step 5 saw on that cell (9/10).
+- **D2**: dropped. I2, I3 and I3 background are 10/10 on Claude Code without `alwaysLoad` (B), the same as with it.
+- **D3, D4**: E1, E3, E4 and X4 are 10/10 on both engines with the primer's two sentences gone. E3 owner-starts and E4, the cells
+  step 5 lost by shortening the start paragraph, held.
+- **D5**: the first one-sentence text ("from your working directory or this session's uploads directory") took I4 on Claude Code to 1/10 and Codex to 8/10.
+  Naming /tmp ("copy it into ... first, and link the copy, never /tmp") gives 3/10 on Claude Code (step 0: 4/10, step 5's controls 3/10 to 6/10) and 10/10 on Codex.
+  The eval plays one turn and feeds the agent through its own harness, so it cannot play the correction note's second turn: the note is covered by unit tests
+  (`reply_file_correction_test.go`: it fires for a /tmp link and a missing file, not for a valid one, once) and not by a live run.
+
+### Always-on bytes, longest Claude Code shape (`free-watch-toplevel-workflows`)
+
+6,612 bytes before (step 5, primer 1.7.1), 6,109 after (primer 1.8.0); 19 rules both times. `TestAlwaysOnBudgetPerShape` caps every shape at what it reached.
+
+| Unit | Before | After | Change |
+| --- | --- | --- | --- |
+| `primer.lead` (appended and initialize, each) | 506 | 419 | D3: autoRunWhenReady sentence |
+| `primer.receipts` | 466 | 382 | D4: the key sentence |
+| `files.reply-links` | 339 | 178 | D5: one sentence |
+| `handoff.use-orbit` | 551 | 467 | D1: the sub-agents clause (Claude Code only) |
+| every other unit | | | unchanged (objects 453, start 269, cards 352, orchestration 246, settings 187, evidence 245, drive 190, project 613, wait 139, notify 157, workflow 416, wiki 125, CLI 642, rederive 176) |
+
+3,500 bytes is not reached: what remains is mostly units whose guarding case fails without them (step 5's table).
+
 ## How it was run
 
 ```bash
