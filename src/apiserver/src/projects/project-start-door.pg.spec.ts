@@ -794,8 +794,8 @@ test('the owner starts a project in one write, once', {
       [{ settings, differsFromRequest: [] }]);
     const told = await startedTurns(byRule.sessionId);
     assert.equal(told.length, 1, 'and its coordinator was told, once');
-    assert.ok(told[0].content.includes(`It runs with: tasks land on the project branch project/${
-      uuidToBase62(byRule.id)} first · Automatic on · at most 7 tasks at a time · no merge check.`),
+    assert.ok(told[0].content.includes(`It runs with: tasks land on the project branch ${
+      branch.slice('refs/heads/'.length)} first · Automatic on · at most 7 tasks at a time · no merge check.`),
     told[0].content);
     assert.deepEqual((await queuedCard(byRule.sessionId))?.settings, settings);
 
