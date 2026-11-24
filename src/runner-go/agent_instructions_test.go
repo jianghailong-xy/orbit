@@ -454,7 +454,7 @@ func TestClaudeInstructionArgsFollowTheSessionShape(t *testing.T) {
 	if got := appendPromptFor(&ClaimedSession{}); !strings.Contains(got, "you may propose recording it") {
 		t.Errorf("free conversation did not get the open form: %q", got)
 	}
-	if got := appendPromptFor(&ClaimedSession{TaskID: "task-1"}); !strings.Contains(got, "file it as a task") {
+	if got := appendPromptFor(&ClaimedSession{TaskID: "task-1"}); !strings.Contains(got, "as a task, saying first what you are filing") {
 		t.Errorf("task session did not get the task form: %q", got)
 	}
 }
