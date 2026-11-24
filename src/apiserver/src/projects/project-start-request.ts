@@ -16,7 +16,6 @@ import {
 import { branchName } from './project-criterion-landing';
 import {
   DEFAULT_UPSTREAM_REF,
-  projectBranchRef,
   projectRepository,
 } from './project-integration-line';
 
@@ -270,12 +269,16 @@ export function startReadiness(
 }
 
 /** The line under the item's title: the settings the coordinator suggests, in the card's words —
- *  "main" being the main branch it suggests, by its name, or main when it suggests none. */
-export function startRequestDetailLine(projectId: string, request: ProjectStartRequest): string {
+ *  "main" being the main branch it suggests, by its name, or main when it suggests none, and the
+ *  project branch the one it names, or the project's default (`defaultProjectBranchOf`). */
+export function startRequestDetailLine(
+  request: ProjectStartRequest,
+  defaultProjectBranchName: string,
+): string {
   const { settings } = request;
   const line = settings.line === 'MAIN'
     ? `Directly into ${branchName(settings.upstreamRef ?? DEFAULT_UPSTREAM_REF)}`
-    : branchName(settings.projectBranchName ?? projectBranchRef(projectId));
+    : branchName(settings.projectBranchName ?? defaultProjectBranchName);
   return [
     line,
     `Automatic ${settings.automatic ? 'on' : 'off'}`,

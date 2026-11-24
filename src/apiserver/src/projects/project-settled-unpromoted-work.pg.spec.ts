@@ -297,7 +297,7 @@ async function settledProject(
 
   // The line, decided explicitly and started: the incident's project had been integrating into its
   // own branch for hours when the commit below arrived.
-  const line = projectBranchRef(projectId);
+  const line = projectBranchRef(projectId, `${label} project`);
   await db.$transaction((tx) => configureProjectIntegration(tx, {
     ownerId,
     projectId,

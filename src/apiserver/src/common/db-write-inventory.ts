@@ -217,6 +217,39 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 after retry exhaustion, with nothing written; the owner presses Apply again.',
   },
   {
+    at: 'owner-requests/owner-requests.service.ts#fileProjectReopen',
+    shape: 'TX_RETRIED',
+    locks: "The project row by (id, owner) FOR SHARE, which every reopen's FOR NO KEY UPDATE waits on; then the project's PENDING PROJECT_REOPEN owner_request row FOR UPDATE (at most one: owner_request_project_reopen_pending_key) and one UPDATE of its payload when this session joins it, or else one owner_request INSERT, whose user foreign key takes the user row FOR KEY SHARE. Project, then request. No trigger, and no other row. The project's status, the session and its declined cards are read before the transaction, never locked.",
+    identity: "The project's one PENDING card: a session already among its askers writes nothing, and a later asker is appended once. Two filings at once cannot both insert: the second's INSERT waits for the first and is refused on the pending key once it commits, and the method files it again (at most three times), when it finds that card and joins it.",
+    isolation: '',
+    attempts: 4,
+    replay: "Re-run against the committed rows: the project status and the pending card are read again under their locks, and a rollback discards the join or the INSERT. The title, why and payload are computed before the closure and are the same in every attempt.",
+    effects: "After commit only: the asking session's list row and owner signal, and for a new card the owner's push and the card's translation queued.",
+    answer: 'Typed 503 after retry exhaustion; the session asks again, which joins or files the card once.',
+  },
+  {
+    at: 'owner-requests/owner-requests.service.ts#reopenProject',
+    shape: 'TX_RETRIED',
+    locks: "The project row by (id, owner) FOR NO KEY UPDATE (rank 40), the lock the project page's Reopen press takes; then, unless it is OPEN already, the facts of the work serving its criteria read without a lock (projects/project-done-derived.ts#reopenRecordOfPress) and one UPDATE of the project to OPEN with that record; then every PENDING PROJECT_REOPEN owner_request of the project to DONE in one UPDATE, with one watch_delivery INSERT each (owner-requests/project-reopen.ts#settlePendingProjectReopens). Project, then requests. No other row.",
+    identity: "The request id and its PENDING state: the settle is a compare-and-set on PENDING, and when it did not end the card this press was made on (declined, withdrawn or the project deleted meanwhile) the press rolls back whole and is refused OWNER_REQUEST_NOT_PENDING. A second press, or a re-run after a commit, finds the card ended. `watch_delivery_owner_request_key` holds each request to one delivery.",
+    isolation: '',
+    attempts: 4,
+    replay: "Re-run from the locked reads: the project's status and the reopen record are read again under the project lock in every attempt, and a rollback discards the status write, the endings and their deliveries together.",
+    effects: "After commit only: a kick of the Watch delivery worker, the askers' owner signals and project.changed, and the coordinator's one turn (projects/project-started.ts#tellCoordinatorProjectReopened) unless it asked. The read that answers the caller follows the commit.",
+    answer: 'Typed 503 after retry exhaustion, with nothing written; the owner presses Reopen again.',
+  },
+  {
+    at: 'owner-requests/owner-requests.service.ts#leaveProjectReopen',
+    shape: 'TX_RETRIED',
+    locks: "The PENDING PROJECT_REOPEN owner_request row by (id, owner) FOR UPDATE; then one UPDATE of the same row taking the withdrawing session off its askers (and passing asked_by_session_id to the next asker when it was the first). No trigger, and no other row.",
+    identity: "The session's place on the card's askers, read under the row lock: a session no longer on it writes nothing, and the last asker is not taken off here — its withdrawal ends the card through #settle.",
+    isolation: '',
+    attempts: 4,
+    replay: 'Re-run from the locked read of the askers; a rollback discards the UPDATE.',
+    effects: "After commit only: the withdrawing session's owner signal.",
+    answer: 'Typed 503 after retry exhaustion; the session withdraws again.',
+  },
+  {
     at: 'owner-requests/owner-secrets.service.ts#submit',
     shape: 'TX_RETRIED',
     locks: "The owner_request row by id and owner, FOR UPDATE; then the asking session read; then the request's owner_request_secret row (unique on request_id), deleted when it still waits for delivery; with savedSecretId, the saved account_secret row by (id, owner), its last_used_at UPDATEd (its row lock, as #deleteSaved takes it); the runner's name read; one INSERT of the new grant; then, with saveAs, the owner's account_secret row by (owner, label), updated or inserted. No trigger.",
@@ -680,7 +713,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'projects/projects.service.ts#update',
     shape: 'TX_RETRIED',
-    locks: 'For a title write with a bound coordinator: that Session FOR UPDATE first (rank 30), then project FOR NO KEY UPDATE (rank 40). A write carrying integration settings then takes this project’s binding FOR UPDATE (rank 55), through projects/project-integration-line.ts#configureProjectIntegration — which records `upstream_ref_chosen_at` when they name an upstream (0422), `delivery_mode_chosen_at` when they name a delivery mode (0453), and who wrote the landing check when they name it (1310); a cardless landing-check write from the coordinator (§12.15 P-C1) is refused before it when the project row this write holds names another coordinator. Every path then takes project_acceptance_criterion_definition children (rank 60) as needed and writes only rows it already holds. A pointer that changed between the rank-30 pre-read and rank-40 validation aborts and retries with the new Session.',
+    locks: 'For a title write with a bound coordinator: that Session FOR UPDATE first (rank 30), then project FOR NO KEY UPDATE (rank 40). A write carrying integration settings then takes this project’s binding FOR UPDATE (rank 55), through projects/project-integration-line.ts#configureProjectIntegration — which records `upstream_ref_chosen_at` when they name an upstream (0422), `delivery_mode_chosen_at` when they name a delivery mode (0453), and who wrote the landing check when they name it (1310); a cardless landing-check write from the coordinator (§12.15 P-C1) is refused before it when the project row this write holds names another coordinator. Every path then takes project_acceptance_criterion_definition children (rank 60) as needed and writes only rows it already holds. A status write taking the project from DONE or CANCELLED to OPEN also settles every PENDING PROJECT_REOPEN owner_request of the project DONE, under the project lock, with one watch_delivery INSERT each (owner-requests/project-reopen.ts#settlePendingProjectReopens). A pointer that changed between the rank-30 pre-read and rank-40 validation aborts and retries with the new Session.',
     identity: 'The project id and the DTO, both outside the closure.',
     isolation: '',
     attempts: 4,
@@ -812,7 +845,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'projects/projects.service.ts#remove',
     shape: 'TX_RETRIED',
-    locks: 'project FOR UPDATE (rank 40), then the DELETE and its cascades (rank 40/60).',
+    locks: 'project FOR UPDATE (rank 40), then every PENDING PROJECT_REOPEN owner_request of the project to WITHDRAWN with one watch_delivery INSERT each (owner-requests/project-reopen.ts#settlePendingProjectReopens), then the DELETE and its cascades (rank 40/60).',
     identity: 'The project id.',
     isolation: '',
     attempts: 4,
@@ -3450,6 +3483,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'email/email-outbox.ts#enqueueSessionInvite', under: 'session-guests/session-guests.service.ts#invite (a new live invitation)' },
   { at: 'sessions/run-notify.ts#recordRunNotify', under: 'sessions.createTurn onTurnWritten, under the recipient Session lock (rank 30). One session_request INSERT (rank 60), whose recipient foreign key names that locked row. The request id and clientTurnId are minted before the retried transaction; a replay of a committed turn never reaches the hook. Turn and request roll back together, with no external effects. A refused or exhausted createTurn is caught by notifyAgentMessage and falls back to the owner after rollback.' },
   // An owner request's ending delivered to the session that asked (migration 0504): its watch_delivery row.
+  { at: 'owner-requests/project-reopen.ts#settlePendingProjectReopens', under: "owner-requests/owner-requests.service.ts#reopenProject, projects/projects.service.ts#update (a status write to OPEN) and #remove: one UPDATE of every PENDING PROJECT_REOPEN owner_request of the project, under the caller's project lock, then enqueueResolutions for the rows it ended" },
   { at: 'owner-requests/owner-request-endings.ts#enqueueResolutions', under: 'owner-requests/owner-requests.service.ts#settle, #settleMadeWikis, #expireDue, #insertChange and #applyChange, and owner-requests/owner-secrets.service.ts#ack' },
   // A SECRET request's key that was never delivered, ended with the request (migration 0506): its grant row.
   // "Save to my account secrets" on a submit: the owner's account_secret row by (owner, label), updated or inserted.
@@ -4360,7 +4394,6 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "sessions/sessions.service.ts#queueCheckoutAction", class: "ONE_ROW_CAS", statements: 1, note: "The commit relay's one queued attempt, commit or discard (commitWorktree and discardCheckout both come through here): a single UPDATE of the session by its primary key, guarded on the status, the worktree flag and the commit status the read saw, plus the action so a discard cannot be mistaken for a commit already queued." },
   { at: "sessions/sessions.service.ts#continueMergeRepair", class: "ONE_ROW_BY_KEY", statements: 1, note: "Not a write: after createTurn or resume refused a merge repair's continue message (S2), one autocommit SELECT … FOR SHARE of that repair session's row by id. It waits only for a transaction holding the row FOR UPDATE — another tap's revive or turn — and ends with the statement, so the read after it sees what that transaction committed. It holds no other lock while it waits and takes none after; the message itself is written by createTurn and resume, each its own unit." },
   { at: "sessions/sessions.service.ts#create", class: "INSERT", statements: 2, note: "Two statements: the session INSERT, then the attachment adoption. An attachment left unadopted is orphaned rather than wrongly attached, which is why this has never needed to be atomic. A session created in a folder (0348) takes that folder FOR KEY SHARE through its foreign key, like every other parent the INSERT names; a folder deleted between the check and the INSERT fails that key, and is answered with the same 400 as naming one that was never there. A session that makes its workspace (`newWorkspace`, migration 0457) runs the same INSERT (`insertSession`) inside createInNewWorkspace's transaction instead, and neither statement runs here; a wiki chat runs both inside writeChat's, which links the uploads to its first turn as it adopts them." },
-  { at: "sessions/sessions.service.ts#createAutoTags", class: "INSERT", statements: 1 },
   { at: "runner-api/runner-workspace-approval.ts#requireWorkspaceWriteApproval", class: "ONE_ROW_CAS", statements: 1, note: "Spends the owner's yes for one workspace write: one UPDATE of one approval by its primary key, guarded on its status and on the input as it was read, so two copies of a write cannot both spend it. The write that follows is its own statement on purpose: a write that fails after this asks again, refused twice and never written twice." },
   { at: "sessions/sessions.service.ts#enqueueLegacyArtifactRequest", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "sessions/sessions.service.ts#readWorktreeArtifact", class: "ONE_ROW_CAS", statements: 2 },

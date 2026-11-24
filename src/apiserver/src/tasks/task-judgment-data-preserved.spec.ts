@@ -3464,7 +3464,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1551_documents_tables',
       // 1560 creates document_sync (docs/documents-directory-sync-design.md S4): a new table with two foreign-key keys and
       // two indexes. No existing row, trigger, function or DONE fence is touched.
-      '1560_document_sync'],
+      '1560_document_sync',
+      // 1573 restates owner_request's kind CHECK with PROJECT_REOPEN, restates 1273's payload CHECK under a kind-neutral
+      // name admitting PROJECT_REOPEN, and adds one CHECK and one partial unique index on owner_request. Not a preserved
+      // relation; no row is written, and no trigger, function or DONE fence changes.
+      '1573_owner_request_project_reopen'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

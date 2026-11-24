@@ -16,6 +16,8 @@ public enum OwnerRequestKind: String, Codable, Sendable, CaseIterable {
     case browserSignIn = "BROWSER_SIGN_IN"
     /// An agent proposing one setting of a runner (its Max Concurrent), which the owner applies with one press.
     case change = "CHANGE"
+    /// An agent asking the owner to reopen a settled project (docs/project-reopen-request-design.md §6).
+    case projectReopen = "PROJECT_REOPEN"
 }
 
 public enum OwnerRequestState: String, Codable, Sendable, CaseIterable {

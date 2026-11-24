@@ -6251,6 +6251,103 @@ button.toast--pill:focus-visible {
 .session-share-icon-live {
   color: var(--success);
 }
+/* The conversation header's "Agent tools not connected": shown only when the connection failed; opens the drawer. */
+.session-agent-tools-pill {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--warning-border);
+  border-radius: 999px;
+  background: var(--warning-bg);
+  color: var(--warning);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.session-agent-tools-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warning-solid);
+}
+/* The session's tags at the end of the header subtitle (SessionTagChips); one button, opening ⋯ at Tags. */
+.session-head-tags {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  vertical-align: 1px;
+  cursor: pointer;
+}
+.session-head-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--fill-muted);
+  color: var(--text-2);
+  font-size: 11.5px;
+  line-height: 1;
+}
+.session-head-tag .session-section-dot { width: 6px; height: 6px; }
+.session-head-tag.is-more { color: var(--text-3); }
+.session-head-tags:hover .session-head-tag { box-shadow: inset 0 0 0 1px var(--border); }
+/* The ⋯ menu's Tags level (SessionTagPicker): search on top, swatches under the tags, at most ~440px tall. */
+.orbit-menu.session-tags-level { width: 260px; max-height: min(440px, var(--available-height)); }
+.orbit-menu.session-tags-all { max-height: min(440px, var(--available-height)); }
+.session-tags-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 6px 0;
+  padding: 0 10px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-3);
+}
+.session-tags-search:focus-within { border-color: var(--brand); }
+.session-tags-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  font: inherit;
+  color: var(--text-1);
+}
+.session-tags-colours {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--border);
+}
+.session-tags-colours-label { margin-right: auto; font-size: 12px; color: var(--text-3); }
+.session-tags-swatch {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+.session-tags-swatch[aria-pressed='true'] { box-shadow: 0 0 0 2px var(--orbit-bg-elevated), 0 0 0 4px var(--brand); }
+.session-tags-swatch:disabled { cursor: default; opacity: 0.6; }
+.session-tags-error { padding: 6px 12px; font-size: 12px; color: var(--error); }
 /* Merge failed/conflicted on this session's branch — a red nudge so it's noticed even
    when the session isn't open (its status bar, where the reason lives, is then unseen). */
 .session-merge-badge {

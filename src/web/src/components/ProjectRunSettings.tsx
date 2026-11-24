@@ -429,7 +429,11 @@ export function ProjectRunSettings({
   const complete = draft.maxConcurrentTasks !== null
     && (draft.landingCheckTimeoutSeconds === null || (Number.isInteger(draft.landingCheckTimeoutSeconds) && draft.landingCheckTimeoutSeconds > 0));
   const missingCheck = draft.line !== null && runMergeCheckMissing({ ...draft, line: draft.line });
-  const branch = view.line === 'PROJECT_BRANCH' && view.ref ? view.ref : `project/${projectId}`;
+  // The server names the project branch, the line's own or the default it would choose; a server
+  // that predates `defaultProjectBranch` named it `project/<id>`.
+  const branch = view.line === 'PROJECT_BRANCH' && view.ref
+    ? view.ref
+    : view.defaultProjectBranch ?? `project/${projectId}`;
   const now = Date.now();
   const landingCheckSetBy = view.landingCheck?.setBy ?? null;
   // The branch the sentences about where work goes name: the one being chosen, or main for a project
