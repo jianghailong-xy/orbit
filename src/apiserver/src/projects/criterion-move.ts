@@ -1,5 +1,5 @@
 import { Prisma, TaskStatus } from '@prisma/client';
-import { uuidToBase62, type MoveCriterionRefusal } from '@orbit/shared';
+import { PROJECT_REOPEN_TOOL, uuidToBase62, type MoveCriterionRefusal } from '@orbit/shared';
 
 import type { AuthCredential } from '../common/current-user.decorator';
 import { IN_FLIGHT_JOB_STATES, LANDING_JOB_KINDS } from './criterion-landing-reason';
@@ -142,12 +142,14 @@ export function planCriterionMove(
 
   if (facts.source.status !== 'OPEN') {
     return refuse('CRITERION_MOVE_SOURCE_NOT_OPEN',
-      `project ${b62(facts.source.id)} is ${facts.source.status}; reopen it before moving its criteria`);
+      `project ${b62(facts.source.id)} is ${facts.source.status}; reopen it before moving its criteria. An agent `
+        + `asks the account owner for that with ${PROJECT_REOPEN_TOOL}`);
   }
   if (facts.target && facts.target.status !== 'OPEN') {
     return refuse('CRITERION_MOVE_TARGET_NOT_OPEN',
       `project ${b62(facts.target.id)} is ${facts.target.status}, and a settled project takes no `
-        + 'work until it is reopened; choose an open project or create a new one');
+        + 'work until it is reopened; choose an open project or create a new one. An agent asks the account '
+        + `owner to reopen it with ${PROJECT_REOPEN_TOOL}`);
   }
   if (facts.criterion.satisfied) {
     return refuse('CRITERION_MOVE_CRITERION_MET',

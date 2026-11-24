@@ -1,7 +1,7 @@
 # Orbit operation catalogue v1.11.0
 
 > Generated from `src/runner-go/operation_catalog.go` — do not edit by hand.
-> Content hash: `3b39b18bb0848a27aded744564ba17990e02b2dd3dab74bbc1197bd8a8c1e449`.
+> Content hash: `e8163561eb3085b534956cc89c98e84559acae72433c4fd11f3e175601d62927`.
 
 Every operation an Orbit agent can call is declared once in the operation catalogue. This table is that catalogue rendered for a person: `orbit capabilities --json` and the MCP `tools/list` payload are its two machine surfaces, and the leaf `--help` texts are held to it by tests. `MCP` and `CLI` say how each surface reaches the operation — `always`, an `orchestration` grant, an engine `permission_prompt` bridge, `session`-only, `headless`-only, or a `watch_switch`/`wiki_switch` — and `absent` when that surface deliberately has no door. Gates that must hold together are joined with `+` (for example `orchestration+watch_switch`). `Idempotency` is `read` (safe to repeat), `caller_key` (retry with the same key), `server_key` (a redelivered turn deduplicates) or `none` (re-read before retrying). `Plan` is what a session in Plan mode gets: the call `runs`, is `refused` with what to do instead, or its `own_gate` decides; the per-engine matrix is docs/permission-matrix.md.
 
@@ -79,6 +79,7 @@ Every operation an Orbit agent can call is declared once in the operation catalo
 | `project_integration_get` | project | low | no | none | no | read | runs | always | always — `orbit project integration` | Read a project's landing and merge-check integration settings. |
 | `project_merge_evidence` | merge_receipt | medium | yes | none | no | none | refused | always | always — `orbit project merge-evidence` | Record what a target branch was observed to contain, as a project's merge evidence. |
 | `project_request_done` | project | high | yes | owner | no | none | refused | always | session — `orbit project request-done` | Ask the account owner to settle a project as done. |
+| `project_request_reopen` | project | high | yes | owner | no | none | refused | always | session — `orbit project request-reopen` | Ask the account owner to reopen a settled project. |
 | `project_request_start` | project | high | yes | owner | no | none | refused | always | session — `orbit project request-start` | Ask the account owner to start a project. |
 | `project_ruling_record` | project | medium | yes | none | no | none | runs | always | absent | Record an owner ruling given in this conversation as a project record. |
 | `project_send` | project | medium | yes | none | no | caller_key | refused | orchestration | orchestration — `orbit project send` | Send one message to a project's coordinator. |

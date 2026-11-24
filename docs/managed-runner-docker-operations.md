@@ -599,6 +599,11 @@ HPC host with a 512 MiB limit: the allocating process was killed at the limit (`
   waiting for it, 15 minutes later, then after a doubling delay up to 6 hours. Its owner can press Retry to start it
   at once, and runners can be given more memory (below).
 
+A tool that holds gigabytes of shared memory (`MAP_SHARED|MAP_ANONYMOUS`, memfd, tmpfs) keeps the container at its
+limit for a few hundred milliseconds after the kernel kills it, and the kernel may kill a second process meanwhile. The
+runner's emergency memory reserve covers that window on this backend too; the Kubernetes runbook describes it and its
+limits ([a second kill while a shared-memory victim drains](managed-runner-kubernetes-operations.md#a-second-kill-while-a-shared-memory-victim-drains-a-kernel-limit-and-the-reserve)).
+
 Docker keeps a container's OOM mark once any process in it was killed for memory. The manager says "out of memory"
 only for a runner that itself ended killed (exit 137), so a container whose session process was killed earlier and
 that stops at a host restart (exit 0 or 255) is not reported as out of memory; one killed (137) for another reason after

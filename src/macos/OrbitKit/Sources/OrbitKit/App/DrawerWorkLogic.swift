@@ -37,12 +37,16 @@ public enum DrawerWorkLogic {
     /// put it in, so it lives in the Wiki's head picker.
     ///
     /// Scheduled (`scheduled`) goes right under Tasks: the phone's drawer is where it lives (board 01 ①).
-    public static func rows(_ sections: [AppSection], wiki: Bool, scheduled: Bool = false) -> [DrawerWorkRow] {
-        let work: [DrawerWorkRow] = sections.filter { $0 != .wiki || wiki }.flatMap { section -> [DrawerWorkRow] in
+    ///
+    /// Documents (`documents`) goes right under the Wiki, with no count (docs/mocks/documents, 01-ios ①): the Wiki is
+    /// what the work learned, Documents what it produced. It stays in that place when the Wiki is off.
+    public static func rows(_ sections: [AppSection], wiki: Bool, scheduled: Bool = false,
+                            documents: Bool = false) -> [DrawerWorkRow] {
+        let work: [DrawerWorkRow] = sections.flatMap { section -> [DrawerWorkRow] in
             switch section {
             case .projects: [.projects]
             case .tasks: scheduled ? [.section(.tasks), .scheduled] : [.section(.tasks)]
-            case .wiki: [.wiki]
+            case .wiki: (wiki ? [.wiki] : []) + (documents ? [.section(.documents)] : [])
             default: [.section(section)]
             }
         }

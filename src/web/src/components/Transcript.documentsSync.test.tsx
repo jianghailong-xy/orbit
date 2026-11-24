@@ -63,8 +63,15 @@ const mount = async (events: RunEvent[]) => {
 };
 
 describe('a documents_sync call', () => {
-  it('draws as its sync card, live from the server', async () => {
-    await mount(call('{"jobId":"bgj_1","status":"running","syncId":"s1"}'));
+  it('draws as its sync card, live from the server, from the receipt a runner answers with', async () => {
+    await mount(
+      call(
+        JSON.stringify({
+          receiptVersion: 1, ok: true, outcome: 'written', operation: 'documents_sync', action: 'documents_sync', entityType: 'file',
+          id: 'bgj_1', status: 'running', entity: { jobId: 'bgj_1', status: 'running', syncId: 's1' },
+        }),
+      ),
+    );
     const card = container.querySelector('section.drive-sync');
     expect(card?.textContent).toContain('Syncing to Documents');
     expect(card?.textContent).toContain('12 of 42 files');

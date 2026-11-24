@@ -119,8 +119,7 @@ type RunReleaseRequest struct {
 }
 
 func (r RunReleaseRequest) MarshalJSON() ([]byte, error) {
-	type plain RunFinalizeRequest
-	raw, err := json.Marshal(plain(r.RunFinalizeRequest))
+	raw, err := json.Marshal(r.RunFinalizeRequest)
 	if err != nil {
 		return nil, err
 	}

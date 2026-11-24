@@ -93,6 +93,7 @@ func startMemoryWatchdog(ctx context.Context, managed bool) func() {
 	}
 	activeMemoryWatchdog.Store(w)
 	ctx, cancel := context.WithCancel(ctx)
+	reserveDone := keepMemoryReserve(ctx, orbitCLIExecutable(), memoryReserveCommand)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -111,6 +112,7 @@ func startMemoryWatchdog(ctx context.Context, managed bool) func() {
 		activeMemoryWatchdog.CompareAndSwap(w, nil)
 		cancel()
 		<-done
+		<-reserveDone
 	}
 }
 

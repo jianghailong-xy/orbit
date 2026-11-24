@@ -3,6 +3,7 @@ import {
   type ConfirmedCriterionReading,
   type CriteriaChangesSinceConfirmed,
   type CriteriaChangesSinceConfirmedAbsentReason,
+  PROJECT_REOPEN_TOOL,
   type ProjectStartRecord,
   uuidToBase62,
 } from '@orbit/shared';
@@ -28,6 +29,12 @@ import { classifyCriteriaEdit } from './criteria-edit-classification';
 export const ACCEPTANCE_FINDING_ROUTING =
   'A new finding belongs to this project only if it changes an acceptance criterion: edit that ' +
   'criterion. If it changes no criterion, create a separate project.';
+
+/** The next step every settled-project refusal names (docs/project-reopen-request-design.md §4.4): asking the account
+ *  owner to reopen it with project_request_reopen, then retrying the refused write once the request is answered. */
+export const REQUEST_REOPEN_NEXT_STEP =
+  `To ask them, call ${PROJECT_REOPEN_TOOL} with the project id, why, and the work you plan to add, then retry ` +
+  'this write once the request is answered.';
 
 export function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
