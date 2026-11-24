@@ -1,6 +1,11 @@
 package main
 
-import "strings"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"strings"
+)
 
 // Orbit's agent instructions as a registry of units, composed per session shape and engine
 // (docs/agent-instructions-design.md §4.1-4.3). Every carrier -- Claude Code's --append-system-prompt, Codex's
@@ -422,6 +427,21 @@ var instructionUnitsLeftOut map[string]bool
 
 func composeChannel(shape SessionShape, profile EngineProfile, channel instructionChannel) string {
 	var paragraphs []string
+	for _, u := range composeUnits(shape, profile, channel) {
+		paragraphs = append(paragraphs, u.text)
+	}
+	return strings.Join(paragraphs, "\n\n")
+}
+
+// renderedUnit is one unit as a channel carries it.
+type renderedUnit struct {
+	id   string
+	text string
+}
+
+// composeUnits is the units one channel carries for a shape on a profile, in order, each rendered.
+func composeUnits(shape SessionShape, profile EngineProfile, channel instructionChannel) []renderedUnit {
+	var units []renderedUnit
 	for _, unit := range instructionUnits {
 		if instructionUnitsLeftOut[unit.id] {
 			continue
@@ -436,10 +456,42 @@ func composeChannel(shape SessionShape, profile EngineProfile, channel instructi
 			continue
 		}
 		if unit.deliveredOn(channel) && unit.appliesTo(shape) && shape.serves(unit.tools) {
-			paragraphs = append(paragraphs, renderInstructionUnit(unit.core, shape, profile))
+			units = append(units, renderedUnit{id: unit.id, text: renderInstructionUnit(unit.core, shape, profile)})
 		}
 	}
-	return strings.Join(paragraphs, "\n\n")
+	return units
+}
+
+// instructionManifest names what a session's engine was given: each unit's id with a hash of its rendered text, and
+// one hash over all of them, so two sessions were given the same instructions exactly when the hashes match.
+type instructionManifest struct {
+	// Hash is the composite: the SHA-256 of the "id:hash" lines in order, first 16 hex digits.
+	Hash string
+	// UnitIDs are the units sent, in order.
+	UnitIDs []string
+	// UnitHashes are the first 16 hex digits of each unit's SHA-256, in the order of UnitIDs.
+	UnitHashes []string
+}
+
+// composeManifest is the manifest of compose(shape, profile).System, the carrier text InstructionBytes measures. A
+// shape with no safe CLI path gets no system text and so an empty manifest.
+func composeManifest(shape SessionShape, profile EngineProfile) instructionManifest {
+	var m instructionManifest
+	if shape.CLI = orbitCLIInstructionExecutable(shape.CLI); shape.CLI == "" {
+		return m
+	}
+	composite := sha256.New()
+	for _, u := range composeUnits(shape, profile, channelSystem) {
+		sum := sha256.Sum256([]byte(u.text))
+		h := hex.EncodeToString(sum[:8])
+		m.UnitIDs = append(m.UnitIDs, u.id)
+		m.UnitHashes = append(m.UnitHashes, h)
+		fmt.Fprintf(composite, "%s:%s\n", u.id, h)
+	}
+	if len(m.UnitIDs) > 0 {
+		m.Hash = hex.EncodeToString(composite.Sum(nil)[:8])
+	}
+	return m
 }
 
 func (u instructionUnit) deliveredOn(channel instructionChannel) bool {
