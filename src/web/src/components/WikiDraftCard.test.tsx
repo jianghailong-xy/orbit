@@ -661,81 +661,43 @@ describe('the line under an applied card, for every result (design §8.3)', () =
 });
 
 /**
- * The cards written without a press and the cards held for one (design §7.2–§7.3, option A), drawn from the shared
- * `wiki-chat.fixture.json` the server's derivations produce — its states, titles, held lines and buttons — not from
- * a fixture made here. Each card is the view the server would read with those states and a rewrite as the fixture has it.
+ * The cards written without a press and the cards held for one (design §7.2–§7.3, option A), drawn from the views the
+ * apiserver served — `wiki-chat-views.fixture.json`, written by wiki-chat-drafts.pg.spec.ts from the drafts read route
+ * over a real PostgreSQL, not edited by hand.
  */
-interface FixtureCard {
-  name: string;
-  kind: WikiChatDraftView['kind'];
-  state: WikiChatDraftView['state'];
-  undoable: boolean;
-  title: string;
-  actions: string[];
-  held?: WikiChatDraftView['held'];
-  heldLine?: string | null;
-  facts: { autoQueued?: boolean };
-}
-interface FixtureResult {
-  name: string;
-  card: { kind: WikiChatDraftView['kind']; state: WikiChatDraftView['state']; undoable: boolean; rewrite: { result: string; reason: string | null; sha: string | null; seen: boolean; sections: Array<{ where: string; result: string | null; changed?: number }> } };
-  line: string;
-  actions: string[];
-}
-const CHAT_FIXTURE = JSON.parse(
+const SERVED = JSON.parse(
   readFileSync(
-    [resolve(process.cwd(), '../shared/src/wiki-chat.fixture.json'), resolve(process.cwd(), 'src/shared/src/wiki-chat.fixture.json')].find((path) => existsSync(path))!,
+    [resolve(process.cwd(), '../shared/src/wiki-chat-views.fixture.json'), resolve(process.cwd(), 'src/shared/src/wiki-chat-views.fixture.json')].find((path) => existsSync(path))!,
     'utf8',
   ),
-) as { cards: FixtureCard[]; results: FixtureResult[] };
+) as { views: Record<'heldWeb' | 'heldBudget' | 'autoRewriting' | 'autoUpdated', WikiChatDraftView> };
 
-describe('a rewrite card written when drafted, and one held for a press (shared fixture)', () => {
-  const autoCards = CHAT_FIXTURE.cards.filter((one) => one.kind === 'rewrite' && one.state === 'rewritten' && one.facts.autoQueued);
-  const heldCards = CHAT_FIXTURE.cards.filter((one) => one.kind === 'rewrite' && one.state === 'draft' && one.held);
-  const autoResults = CHAT_FIXTURE.results.filter((one) => one.card.state === 'rewritten');
-
-  it('has the cases to draw', () => {
-    expect(autoCards.length).toBeGreaterThan(0);
-    expect(heldCards.map((one) => one.held)).toEqual(['web', 'budget', 'draft']);
-    expect(autoResults.length).toBeGreaterThan(2);
-  });
-
-  it.each(heldCards.map((one) => [one.name, one] as const))('held: %s', async (_name, fixture) => {
-    await show(
-      draft({ kind: 'rewrite', state: 'draft', label: 'Rewrite from main', ops: [], undoable: false, held: fixture.held ?? null, autoQueuedAt: null } as Partial<WikiChatDraftView>),
-    );
-    expect(text('.wk-draft-k')).toBe(fixture.title);
-    expect(text('.wk-draft-note')).toBe(fixture.heldLine);
-    expect(buttons()).toEqual(fixture.actions.map((action) => wikiChatActionLabel(action as never)));
+describe('a rewrite card written when drafted, and one held for a press (views served by the apiserver)', () => {
+  it.each([
+    ['heldWeb', 'Apply to write: this chat read web content'],
+    ['heldBudget', "Apply to write: today's automatic rewrites are used up"],
+  ] as const)('held (%s): its reason line, with Apply and Discard', async (name, line) => {
+    await show(SERVED.views[name]);
+    expect(text('.wk-draft-k')).toBe('Draft · Rewrite from main');
+    expect(text('.wk-draft-note[data-held]')).toBe(line);
     expect(buttons()).toEqual(['Apply', 'Discard']);
   });
 
-  it.each(autoCards.map((one) => [one.name, one] as const))('auto: %s', async (_name, fixture) => {
-    await show(
-      draft({
-        kind: 'rewrite', state: 'rewritten', label: 'Rewrite from main', ops: [], undoable: fixture.undoable, held: null,
-        autoQueuedAt: '2026-11-06T10:00:00.000Z',
-      } as Partial<WikiChatDraftView>),
-    );
-    expect(text('.wk-draft-k')).toBe(fixture.title);
+  it('auto, rewrite not yet written: Rewritten from main, its waiting line, Undo', async () => {
+    const view = SERVED.views.autoRewriting;
+    await show(view);
+    expect(text('.wk-draft-k')).toBe('Rewritten from main');
     expect(document.querySelector('.wk-draft-k')!.className).toContain('ok');
-    expect(buttons()).toEqual(fixture.actions.map((action) => wikiChatActionLabel(action as never)));
+    expect(document.querySelector('.wk-draft-result')!.getAttribute('data-result')).toBe(view.rewrite!.result);
+    expect(document.querySelector('.wk-draft-result')!.getAttribute('data-waits')).toBe('true');
+    expect(buttons()).toEqual(['Undo']);
   });
 
-  it.each(autoResults.map((one) => [one.name, one] as const))('auto result: %s', async (_name, fixture) => {
-    const source = fixture.card.rewrite;
-    await show(
-      draft({
-        kind: 'rewrite', state: 'rewritten', label: 'Rewrite from main', ops: [], undoable: fixture.card.undoable, held: null,
-        autoQueuedAt: '2026-11-06T10:00:00.000Z',
-        rewrite: {
-          jobId: 'J1', result: source.result, reason: source.reason, sha: source.sha, seen: true, settledAt: null,
-          sections: source.sections.map((one) => ({ doc: 'sessions-runtime', key: 'turn-delivery', where: one.where, result: one.result, changed: one.changed ?? null, versionId: null })),
-        },
-      } as unknown as Partial<WikiChatDraftView>),
-    );
+  it('auto, settled: Rewritten from main, the result line, Undo and See changes', async () => {
+    await show(SERVED.views.autoUpdated);
     expect(text('.wk-draft-k')).toBe('Rewritten from main');
-    expect(text('.wk-draft-result .t')).toBe(fixture.line);
-    expect(buttons('.wk-draft-acts').concat(buttons('.wk-draft-result'))).toEqual(fixture.actions.map((action) => wikiChatActionLabel(action as never)));
+    expect(text('.wk-draft-result .t')).toMatch(/^Wiki updated · /u);
+    expect(buttons()).toEqual(['Undo']);
+    expect(buttons('.wk-draft-result')).toEqual(['See changes']);
   });
 });
