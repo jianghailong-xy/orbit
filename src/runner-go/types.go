@@ -1664,6 +1664,10 @@ type ClaimedSession struct {
 	// ORBIT_WIKI=off, which leaves the wiki tools out of the MCP server and the wiki commands out of
 	// `orbit capabilities` (wiki_tools.go). Absent means on.
 	WikiDisabled bool `json:"wikiDisabled,omitempty"`
+	// DocumentsDisabled is the same statement about Documents, the Orbit Files drive (the apiserver's
+	// ORBIT_DOCUMENTS_ENABLED); injected as ORBIT_DOCUMENTS=off, which leaves the drive tools and `orbit drive` out
+	// (documents_switch.go). Absent means on, which is also what a server that predates the switch means.
+	DocumentsDisabled bool `json:"documentsDisabled,omitempty"`
 	// BrowserEnabled is set while the Orbit Cloud browser is switched on on the server (its
 	// ORBIT_MANAGED_RUNNER_BROWSER_ENABLED with managed runners on); injected as ORBIT_BROWSER=on, which is what puts the
 	// browser tools in the MCP server and `orbit browser` in the CLI (browser_tools.go). Absent means off: absent tools.
@@ -1929,6 +1933,8 @@ type ReclaimSession struct {
 	// may have moved since the session was first claimed.
 	WatchesDisabled bool `json:"watchesDisabled,omitempty"`
 	WikiDisabled    bool `json:"wikiDisabled,omitempty"`
+	// DocumentsDisabled, cf. ClaimedSession.
+	DocumentsDisabled bool `json:"documentsDisabled,omitempty"`
 	// BrowserEnabled, cf. ClaimedSession.BrowserEnabled, said on reclaim for the same reason.
 	BrowserEnabled bool `json:"browserEnabled,omitempty"`
 	// WorkflowsDisabled, cf. ClaimedSession: the Agent's switch may have moved since the session was first claimed.

@@ -1,0 +1,158 @@
+import { useSyncExternalStore } from 'react';
+import { api } from '../api';
+
+/**
+ * An agent's directory syncs into Documents (docs/documents-directory-sync-design.md, S4): `GET /drive/syncs` is the
+ * running ones and those that ended in the last 24 h. The store reads it when the page opens, when the control plane hears
+ * `drive.sync`, on focus and after a reconnect, and every 5 s while one is running and the page is visible. "Clear finished"
+ * only hides ended syncs on this browser (their ids are kept in localStorage).
+ */
+
+export type DocumentsSyncStatus = 'CHECKING' | 'UPLOADING' | 'DONE' | 'FAILED' | 'STOPPED';
+
+export interface DocumentsSyncView {
+  id: string;
+  status: DocumentsSyncStatus;
+  sourceName: string;
+  destPath: string;
+  destEntryId: string | null;
+  session: { id: string; title: string } | null;
+  filesSeen: number;
+  filesTotal: number | null;
+  filesDone: number;
+  filesSame: number;
+  filesDeleted: number;
+  bytesTotal: number | null;
+  bytesSent: number;
+  currentPath: string | null;
+  failed: { path: string; error: string }[];
+  failedCount: number;
+  error: string | null;
+  startedAt: string;
+  updatedAt: string;
+  endedAt: string | null;
+}
+
+/** A sync as the tray draws it: the server's view and the bytes a second between the last two reads. */
+export interface DocumentsSync extends DocumentsSyncView {
+  rate: number | null;
+}
+
+export const syncRunning = (sync: Pick<DocumentsSyncView, 'status'>): boolean =>
+  sync.status === 'CHECKING' || sync.status === 'UPLOADING';
+
+const DISMISSED_KEY = 'orbit:documents-syncs-dismissed';
+const POLL_MS = 5000;
+
+let syncs: DocumentsSync[] = [];
+let dismissed = new Set<string>();
+let loadedDismissed = false;
+const listeners = new Set<() => void>();
+let snapshot: DocumentsSync[] = [];
+let timer: ReturnType<typeof setInterval> | null = null;
+let reading = false;
+let readAgain = false;
+
+function readDismissed(): void {
+  if (loadedDismissed) return;
+  loadedDismissed = true;
+  try {
+    dismissed = new Set(JSON.parse(localStorage.getItem(DISMISSED_KEY) ?? '[]') as string[]);
+  } catch {
+    dismissed = new Set();
+  }
+}
+
+function publish(): void {
+  readDismissed();
+  snapshot = syncs.filter((sync) => syncRunning(sync) || !dismissed.has(sync.id));
+  for (const listener of listeners) listener();
+}
+
+/**
+ * Read the syncs again. A call while a read is in flight is not dropped: it asks for one more read when that one ends,
+ * so the event announcing a sync's end is never answered by the read that started before it.
+ */
+export async function refreshDocumentsSyncs(): Promise<void> {
+  if (reading) {
+    readAgain = true;
+    return;
+  }
+  reading = true;
+  try {
+    const { syncs: read } = await api<{ syncs: DocumentsSyncView[] }>('/documents/syncs');
+    const before = new Map(syncs.map((sync) => [sync.id, sync]));
+    syncs = read.map((sync) => {
+      const was = before.get(sync.id);
+      const seconds = was ? (Date.parse(sync.updatedAt) - Date.parse(was.updatedAt)) / 1000 : 0;
+      const rate = was && seconds > 0 && sync.bytesSent > was.bytesSent ? (sync.bytesSent - was.bytesSent) / seconds : null;
+      // Between two reads that moved nothing, the last rate still stands.
+      return { ...sync, rate: syncRunning(sync) ? (rate ?? (was && seconds <= 0 ? was.rate : null)) : null };
+    });
+    publish();
+  } catch {
+    // The next event, focus or poll reads again.
+  } finally {
+    reading = false;
+    if (readAgain) {
+      readAgain = false;
+      void refreshDocumentsSyncs();
+    }
+  }
+}
+
+/** Hide the ended syncs from the tray. */
+export function clearFinishedSyncs(): void {
+  readDismissed();
+  for (const sync of syncs) if (!syncRunning(sync)) dismissed.add(sync.id);
+  try {
+    localStorage.setItem(DISMISSED_KEY, JSON.stringify([...dismissed]));
+  } catch {
+    // Not kept across a reload.
+  }
+  publish();
+}
+
+const onFocus = (): void => {
+  if (document.visibilityState !== 'hidden') void refreshDocumentsSyncs();
+};
+
+function start(): void {
+  void refreshDocumentsSyncs();
+  window.addEventListener('focus', onFocus);
+  document.addEventListener('visibilitychange', onFocus);
+  timer = setInterval(() => {
+    if (document.visibilityState !== 'hidden' && syncs.some(syncRunning)) void refreshDocumentsSyncs();
+  }, POLL_MS);
+}
+
+function stop(): void {
+  window.removeEventListener('focus', onFocus);
+  document.removeEventListener('visibilitychange', onFocus);
+  if (timer) clearInterval(timer);
+  timer = null;
+}
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  if (listeners.size === 1) start();
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0) stop();
+  };
+}
+
+export function useDocumentsSyncs(): DocumentsSync[] {
+  return useSyncExternalStore(subscribe, () => snapshot);
+}
+
+/** For tests: forget everything held in memory. */
+export function resetDocumentsSyncs(): void {
+  stop();
+  syncs = [];
+  snapshot = [];
+  dismissed = new Set();
+  loadedDismissed = false;
+  reading = false;
+  readAgain = false;
+}

@@ -68,7 +68,7 @@ private fun SettingsPages(api: ManagementApi, route: OrbitRoute, revision: Long,
         "machines" -> MachinesAndModelsPage(api, revision, open, MachinesAndModelsPart.MACHINES)
         "providers" -> MachinesAndModelsPage(api, revision, open, MachinesAndModelsPart.PROVIDERS)
         "sessions" -> SessionSettingsPage(api, revision)
-        "workspace" -> WorkspaceSettings(api, route.workspaceId, revision, back, workspaceDeleted, changed)
+        "workspace" -> WorkspaceSettings(api, route.workspaceId, revision, back, workspaceDeleted, changed, open)
         "sharing" -> SharingSettings(api, revision, open)
         "github" -> GithubSettingsPage(remember(api) { ManagementGithub(api) }, revision)
         "access-tokens" -> AccessTokensSettings(api, revision)

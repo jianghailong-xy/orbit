@@ -88,7 +88,7 @@ test('managed runners off: the production server starts without Kubernetes or Ce
     assert.equal((await call(server, 'GET', '/api/auth/capabilities')).status, 401);
     const capabilities = await call(server, 'GET', '/api/auth/capabilities', access);
     assert.equal(capabilities.status, 200, capabilities.text);
-    assert.deepEqual(capabilities.json, { managedRunners: { enabled, contractVersion: 1 } });
+    assert.deepEqual(capabilities.json, { managedRunners: { enabled, contractVersion: 1 }, documents: { enabled: false } });
     const status = await call(server, 'GET', '/api/managed-runner', access);
     assert.equal(status.status, 200, status.text);
     assert.equal(status.json.enabled, enabled);

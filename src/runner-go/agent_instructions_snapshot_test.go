@@ -93,6 +93,9 @@ func (shape instructionSnapshotShape) job(t *testing.T) *ClaimedSession {
 func instructionSnapshotCarriers(t *testing.T, shape instructionSnapshotShape) map[string]string {
 	t.Helper()
 	fakeDriveMount(t, shape.drive)
+	// The mount's paragraph names the root it reports in; the fake mount's is a temporary directory, so the snapshot
+	// names the root a Pod has (fakeDriveMount puts the real one back).
+	driveParentPath = driveRootPath
 	job := shape.job(t)
 	carriers := primerCarriers(t, job)
 	helpAsk, _ := (&mcpServer{helpAsk: true}).handle(&rpcRequest{JSONRPC: "2.0", ID: json.RawMessage("1"), Method: "initialize"})

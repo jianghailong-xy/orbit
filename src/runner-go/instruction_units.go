@@ -330,11 +330,11 @@ var instructionUnits = []instructionUnit{
 	{id: "files.evidence", owner: "evidence files: file_upload", kind: kindDisposition,
 		appliesTo: orbitSession, channels: []instructionChannel{channelSystem}, core: orbitEvidenceFileInstructions,
 		tools: []string{"file_upload"}, detail: "file_upload description", guardedBy: []string{"I5-evidence-file-upload"}},
-	{id: "drive.tools", owner: "Orbit Files drive: drive_*", kind: kindEnvironment,
-		appliesTo: func(s SessionShape) bool { return orbitSession(s) && !s.DriveMounted }, channels: []instructionChannel{channelSystem},
+	{id: "drive.tools", owner: "Documents drive: documents_*", kind: kindEnvironment,
+		appliesTo: func(s SessionShape) bool { return orbitSession(s) && orbitDocumentsShown() && !s.DriveMounted }, channels: []instructionChannel{channelSystem},
 		core: orbitDriveToolInstructions, detail: "guide topic files (orbitDriveGuide)", conflicts: []string{"drive.mount"}},
-	{id: "drive.mount", owner: "Orbit Files drive: ~/Files", kind: kindEnvironment,
-		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.DriveMounted }, channels: []instructionChannel{channelSystem},
+	{id: "drive.mount", owner: "Documents drive: ~/Documents", kind: kindEnvironment,
+		appliesTo: func(s SessionShape) bool { return orbitSession(s) && orbitDocumentsShown() && s.DriveMounted }, channels: []instructionChannel{channelSystem},
 		core: orbitDriveMountInstructions, detail: "guide topic files (orbitDriveGuide)", conflicts: []string{"drive.tools"}},
 	{id: "project.inside-recorded-work", owner: "projects: task_create, project_create", kind: kindSelection,
 		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.InsideRecordedWork }, channels: []instructionChannel{channelSystem},
@@ -417,6 +417,7 @@ func (u instructionUnit) deliveredOn(channel instructionChannel) bool {
 //	{{cli}}              the shell-quoted path of the Orbit CLI
 //	{{orbit_tools}}      Orbit's MCP tools as a family (EngineProfile.OrbitTools)
 //	{{toolsearch:<tool>}} the sentence on loading a deferred tool with ToolSearch, or nothing (EngineProfile.ToolSearchNotes)
+//	{{drive_root}}       the Documents mount's directory on this machine (driveParentPath)
 //
 // A placeholder it does not know is left as it is, which TestEveryUnitRendersOnEveryEngine catches.
 func renderInstructionUnit(core string, shape SessionShape, profile EngineProfile) string {
@@ -437,6 +438,8 @@ func renderInstructionUnit(core string, shape SessionShape, profile EngineProfil
 			b.WriteString(shellQuote(shape.CLI))
 		case name == "orbit_tools":
 			b.WriteString(profile.OrbitTools)
+		case name == "drive_root":
+			b.WriteString(driveParentPath)
 		case strings.HasPrefix(name, "toolsearch:"):
 			if profile.ToolSearchNotes {
 				b.WriteString(" In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__" +

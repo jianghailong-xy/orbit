@@ -744,6 +744,7 @@ func claimedSessionFromReclaim(r ReclaimSession) *ClaimedSession {
 		AllowOrchestration: r.AllowOrchestration,
 		WatchesDisabled:    r.WatchesDisabled,
 		WikiDisabled:       r.WikiDisabled,
+		DocumentsDisabled:  r.DocumentsDisabled,
 		BrowserEnabled:     r.BrowserEnabled,
 		WorkflowsDisabled:  r.WorkflowsDisabled,
 		ScheduleRun:        r.ScheduleRun,
@@ -2729,6 +2730,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// A supervisor that was silently engine-evicted remains registered cold; its
 	// next claim wakes it without creating a duplicate supervisor.
 	startSession := func(job *ClaimedSession, initiallyActive bool) {
+		noteDocumentsDisabled(job.DocumentsDisabled)
 		// §6.3 steps 2–3, and the only place they can go: BEFORE anything is staged, before a
 		// worktree exists and before an engine could be spawned. SR33 makes engine start a
 		// conjunction — the SOURCE is PINNED *and* the checkout stands on that commit — so a run
