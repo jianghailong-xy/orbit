@@ -53,7 +53,7 @@ export function DocumentsSyncCard({ syncId }: { syncId: string }) {
   if (!sync) {
     return (
       <div className="drive-xfer-fold">
-        <span className="drive-xfer-muted">Syncing to Documents…</span>
+        <span className="drive-xfer-muted">Syncing to Drive…</span>
       </div>
     );
   }
@@ -90,7 +90,7 @@ export function DocumentsSyncCard({ syncId }: { syncId: string }) {
   const failed = sync.status === 'FAILED';
   const stopped = sync.status === 'STOPPED';
   const title = running
-    ? 'Syncing to Documents'
+    ? 'Syncing to Drive'
     : failed
       ? 'Sync failed'
       : stopped
@@ -105,7 +105,7 @@ export function DocumentsSyncCard({ syncId }: { syncId: string }) {
   const more = sync.failedCount - shown.length;
 
   return (
-    <section className={`drive-xfer drive-sync${sync.failedCount || failed ? ' has-failed' : ''}`} aria-label="Sync to Documents">
+    <section className={`drive-xfer drive-sync${sync.failedCount || failed ? ' has-failed' : ''}`} aria-label="Sync to Drive">
       <header className="drive-xfer-head">
         <span className={`drive-xfer-icon${iconTone}`} aria-hidden="true">
           {icon}

@@ -45,7 +45,7 @@ class DocumentsLogicTest {
         val agent = DocumentsWriter(kind = "AGENT", sessionId = "s1", at = "2026-11-24T14:02:00Z")
         assertEquals("Agent in Redesign the sign-in page · 14:02",
             DocumentsLogic.fileLine(DocumentsLogic.writerText(agent, "Redesign the sign-in page\nmore"), entry("a.png", writer = agent), now, utc))
-        assertEquals("Documents › Orbit UI migration", DocumentsLogic.crumb(listOf("Orbit UI migration")))
+        assertEquals("Drive › Orbit UI migration", DocumentsLogic.crumb(listOf("Orbit UI migration")))
     }
 
     @Test fun whoWroteItFollowsRuleSix() {
@@ -97,7 +97,7 @@ class DocumentsLogicTest {
         assertEquals("Deleted by you", DocumentsLogic.trashLine(entry("eval.zip"), group, DocumentsLogic.YOU))
         assertEquals("18 items · 46 MB · kept until you empty it", DocumentsLogic.trashSummary(listOf(group)))
         assertEquals("18 items from Orbit UI migration are deleted for good. This can't be undone.", DocumentsLogic.deleteForGoodMessage(group))
-        assertEquals("Documents", DocumentsLogic.folderLabel("/"))
+        assertEquals("Drive", DocumentsLogic.folderLabel("/"))
     }
 
     @Test fun storageSplitsTheTotal() {
@@ -106,7 +106,7 @@ class DocumentsLogicTest {
         assertEquals(0.59, bar.documents, 1e-9)
         assertEquals(0.07, bar.trash, 1e-9)
         assertEquals(0.34, bar.other, 1e-9)
-        assertEquals(listOf("Documents 590 B", "Trash 70 B", "Other 340 B"), DocumentsLogic.storageLegend(usage))
+        assertEquals(listOf("Drive 590 B", "Trash 70 B", "Other 340 B"), DocumentsLogic.storageLegend(usage))
         assertEquals("Week of Nov 16", DocumentsLogic.weekLabel("2026-11-16"))
         assertEquals("1.8 GB · 1,204 files", DocumentsLogic.storedValue(StorageUsage(totalBytes = 1_932_735_283, fileCount = 1204)))
     }
@@ -161,7 +161,7 @@ class DocumentsLogicTest {
              "lastWriter":{"kind":"AGENT","sessionId":null,"runnerId":"x","at":"2026-10-31T00:00:00Z"},"newField":1}],"nextCursor":null}"""
             .encodeToByteArray(), DocumentsListing.serializer())
         assertEquals(9_600_000_000, listing.entries.single().sizeBytes)
-        assertEquals("Documents", DocumentsLogic.folderTitle(listing.folder))
+        assertEquals("Drive", DocumentsLogic.folderTitle(listing.folder))
         val sync = Wire.decode("""{"syncs":[{"id":"s","status":"CHECKING","sourceName":"out","destPath":"/out","filesSeen":3,"failed":[]}]}"""
             .encodeToByteArray(), DocumentsSyncList.serializer())
         assertNull(DocumentsLogic.syncFraction(sync.syncs.single()))

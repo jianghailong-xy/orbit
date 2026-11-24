@@ -103,12 +103,12 @@ class DocumentsUploadQueueTest {
     @Test fun aRefusalFailsWithTheServersWords() = runTest {
         val server = Server()
         server.failNext = 1
-        server.failWith = ApiError.parse(413, """{"message":"Documents storage is full."}""".encodeToByteArray())
+        server.failWith = ApiError.parse(413, """{"message":"Drive storage is full."}""".encodeToByteArray())
         val q = queue(server, Files(mutableMapOf("a.csv" to "0123".encodeToByteArray())))
         q.add(listOf(request("a.csv", 4)))
         advanceUntilIdle(); q.idle()
         assertEquals(DocumentsUploadState.FAILED, q.items.value.single().state)
-        assertEquals("Documents storage is full.", q.items.value.single().error)
+        assertEquals("Drive storage is full.", q.items.value.single().error)
     }
 
     @Test fun aFileChangedSincePickedIsRefused() = runTest {

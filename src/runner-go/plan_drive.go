@@ -14,7 +14,7 @@ import (
 // refused on the spot with planDriveRefusal, and no card is filed. Reads, and every call about any other path, take
 // the path they took before.
 
-const planDriveRefusal = "The Documents drive is read-only in Plan mode: nothing was written to ~/Documents. Do not retry " +
+const planDriveRefusal = "The Drive is read-only in Plan mode: nothing was written to ~/Documents. Do not retry " +
 	"it or make the same write another way. Put the change in your plan; it can be made once the owner approves the " +
 	"plan or switches this session out of Plan mode."
 

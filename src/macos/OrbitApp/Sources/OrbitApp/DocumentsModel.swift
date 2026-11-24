@@ -732,7 +732,7 @@ final class DocumentsModel {
     private func holdTheAppAwake() {
         let busy = uploads.contains { $0.state == .uploading || $0.state == .queued }
         if busy, backgroundTask == .invalid {
-            backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Documents uploads") { [weak self] in
+            backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Drive uploads") { [weak self] in
                 MainActor.assumeIsolated { self?.letTheAppSleep() }
             }
         } else if !busy {

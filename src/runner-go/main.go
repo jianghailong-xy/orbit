@@ -80,7 +80,7 @@ Usage:
   orbit watch <command>             Wait on Orbit tasks and sessions without polling
   orbit wiki <command>              Read the Orbit wiki and propose to it
   orbit file <command>              Keep files in Orbit instead of in the repository
-  orbit documents <command>         Work with the owner's Documents
+  orbit documents <command>         Work with the owner's Drive
   orbit subagent <command>          Rate a SubAgent run this session started
   orbit secret exec NAME -- CMD     Run CMD with a secret the owner delivered to this runner
   orbit notify --message TEXT       Alert this account's devices with a line you write

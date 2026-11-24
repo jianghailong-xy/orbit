@@ -47,7 +47,7 @@ class DocumentsDeviceTest {
     @Test fun screens() = journey("screens") {
         login(); openDocuments()
         capture("02-root")
-        openDrawer(); capture("01-drawer"); compose.onNode(drawerRow("Documents")).performClick()
+        openDrawer(); capture("01-drawer"); compose.onNode(drawerRow("Drive")).performClick()
         await { exists("documents-entry:Orbit UI migration") }
         compose.onNodeWithTag("documents-entry:Orbit UI migration").performClick()
         await { exists("documents-entry:sign-in-v3.png") }
@@ -272,9 +272,9 @@ class DocumentsDeviceTest {
         openDrawer()
         await { compose.onAllNodes(drawerRow("Tasks")).fetchSemanticsNodes().isNotEmpty() }
         SystemClock.sleep(3000)
-        compose.onAllNodes(drawerRow("Documents")).assertCountEquals(0)
+        compose.onAllNodes(drawerRow("Drive")).assertCountEquals(0)
         capture("01b-drawer-documents-off")
-        note("off: no Documents row in the drawer")
+        note("off: no Drive row in the drawer")
     }
 
     private fun note(text: String) = File(evidence, "documents-$suffix-checks.txt").appendText("$text\n")
@@ -285,8 +285,8 @@ class DocumentsDeviceTest {
     private fun openDrawer() { compose.onNodeWithContentDescription("Open navigation").performClick(); compose.waitForIdle(); SystemClock.sleep(600) }
     private fun openDocuments() {
         openDrawer()
-        await { compose.onAllNodes(drawerRow("Documents")).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(drawerRow("Documents")).performClick()
+        await { compose.onAllNodes(drawerRow("Drive")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(drawerRow("Drive")).performClick()
         await { exists("documents-entry:Orbit UI migration") && exists("documents-storage-row") }
         SystemClock.sleep(1500)
     }

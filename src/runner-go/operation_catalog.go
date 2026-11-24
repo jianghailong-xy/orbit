@@ -3765,7 +3765,7 @@ func fileToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 					"type": "string",
 					"description": "The file or directory, absolute or relative to the working directory. Its real " +
 						"location, links resolved, has to be inside this session's checkout, its uploads directory, " +
-						"or the mounted Documents drive on Orbit Cloud.",
+						"or the mounted Drive on Orbit Cloud.",
 				},
 				"taskId": map[string]interface{}{
 					"type": "string",
@@ -5447,7 +5447,7 @@ var catalogMetadata = map[string]operationMeta{
 	},
 	"documents_put": {
 		Object: objectFile,
-		Intent: "Copy a local file into the owner's Documents drive.",
+		Intent: "Copy a local file into the owner's Drive.",
 	},
 	"documents_get": {
 		Object: objectFile,
@@ -5468,7 +5468,7 @@ var catalogMetadata = map[string]operationMeta{
 	},
 	"documents_sync": {
 		Object: objectFile,
-		Intent: "Copy a local directory into a Documents folder in the background.",
+		Intent: "Copy a local directory into a Drive folder in the background.",
 	},
 	"drive_sync": {
 		Object: objectFile,

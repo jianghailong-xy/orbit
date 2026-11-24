@@ -49,7 +49,7 @@ export function DocumentsFilePicker({
         root.data.entries.find((e) => e.kind === 'FOLDER' && e.name.startsWith(`${wanted}-`) && projectFolder!.id.startsWith(e.name.slice(wanted.length + 1))) ??
         null)
       : null;
-  const trail: Crumb[] = moved ?? [{ id: null, name: 'Documents' }, ...(projectCrumb ? [{ id: projectCrumb.id, name: projectCrumb.name }] : [])];
+  const trail: Crumb[] = moved ?? [{ id: null, name: 'Drive' }, ...(projectCrumb ? [{ id: projectCrumb.id, name: projectCrumb.name }] : [])];
   const here = trail[trail.length - 1]!;
   const listing = useQuery({ ...documentsFolderQuery(here.id), enabled: root.isSuccess || root.isError });
   const folderPath = [DOCUMENTS_MOUNT, ...trail.slice(1).map((c) => c.name)].join('/');
@@ -90,7 +90,7 @@ export function DocumentsFilePicker({
           </button>
         ))}
       </nav>
-      <div className="drive-picker-list" role="listbox" aria-label="Documents" aria-multiselectable="true">
+      <div className="drive-picker-list" role="listbox" aria-label="Drive" aria-multiselectable="true">
         {source.isError && <div role="alert">{messageOf(source.error)}</div>}
         {(searching ? needle !== search.trim() || found.isPending : listing.isPending) && <div>Loading…</div>}
         {source.data && !(searching && needle !== search.trim()) && entries.length === 0 && (
@@ -123,7 +123,7 @@ export function DocumentsFilePicker({
               {picked.has(entry.id) ? <CheckOutlined aria-hidden="true" /> : <FileOutlined aria-hidden="true" />}
               <span className="drive-picker-name">
                 {entry.name}
-                {searching && <span className="drive-picker-folder"> · {entry.folderPath === '/' ? 'Documents' : `Documents${entry.folderPath}`}</span>}
+                {searching && <span className="drive-picker-folder"> · {entry.folderPath === '/' ? 'Drive' : `Drive${entry.folderPath}`}</span>}
               </span>
               <span className="drive-picker-size">{formatSize(entry.sizeBytes)}</span>
             </div>

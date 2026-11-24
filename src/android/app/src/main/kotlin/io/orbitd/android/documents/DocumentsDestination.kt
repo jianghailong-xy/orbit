@@ -9,7 +9,7 @@ import io.orbitd.android.navigation.Origin
 import io.orbitd.android.navigation.OrbitRoute
 
 /** The drawer's key for the Documents destination, and the link the upload notification's Show opens. */
-const val DOCUMENTS_SECTION = "Documents"
+const val DOCUMENTS_SECTION = "Drive"
 const val DOCUMENTS_UPLOADS_RECORD = "uploads"
 
 val OrbitRoute.isDocuments get() = destination.name.startsWith("DOCUMENTS")

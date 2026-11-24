@@ -4850,7 +4850,7 @@ export const EXCLUDED_SOURCES: readonly ExcludedSource[] = [
   },
   {
     path: 'documents/documents-mount.pg.e2e.ts',
-    why: 'The Documents mount daemon\'s end-to-end test (§5.9), run only by hand as root through scripts/run-pg-spec.sh against the disposable database that script clones and migrates; `coordinator-pg-test-safety` refuses any other. Its writes seed the account, its two runners, the managed-runner mapping and the sessions the rows run in, and for row 58 move that mapping to a new generation as the controller would, as a PostgreSQL spec\'s fixtures do; the product writes it exercises (the mount credential, the drive door) are the apiserver\'s own, inventoried where they live. Nothing imports it.',
+    why: 'The Drive mount daemon\'s end-to-end test (§5.9), run only by hand as root through scripts/run-pg-spec.sh against the disposable database that script clones and migrates; `coordinator-pg-test-safety` refuses any other. Its writes seed the account, its two runners, the managed-runner mapping and the sessions the rows run in, and for row 58 move that mapping to a new generation as the controller would, as a PostgreSQL spec\'s fixtures do; the product writes it exercises (the mount credential, the drive door) are the apiserver\'s own, inventoried where they live. Nothing imports it.',
   },
   {
     path: 'providers/anthropic-gateway-chat-cli.pg.e2e.ts',

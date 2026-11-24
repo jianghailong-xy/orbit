@@ -741,7 +741,7 @@ let agentToolsGuideJSON = #"""
     },
     {
       "id": "files",
-      "label": "Documents",
+      "label": "Drive",
       "tools": [
         "documents_delete",
         "documents_get",

@@ -51,7 +51,7 @@ func documentsDisabledByServer(err error) bool {
 
 // documentsOffMessage is what a drive tool or command answers while Documents is off.
 func documentsOffMessage(what string) string {
-	return what + ": Documents is not enabled on this Orbit server (ORBIT_DOCUMENTS_ENABLED), so there is no " +
+	return what + ": Drive is not enabled on this Orbit server (ORBIT_DOCUMENTS_ENABLED), so there is no " +
 		"Orbit Files drive. Nothing was read or written; carry on without it, or tell the user"
 }
 

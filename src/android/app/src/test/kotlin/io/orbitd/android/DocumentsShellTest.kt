@@ -151,15 +151,15 @@ class DocumentsShellTest {
     @Test fun theDrawerHasDocumentsInItsFirstGroupAndItsRootListsTheDriveWithTrashAndStorage() {
         signIn()
         openDrawer()
-        await { compose.onAllNodes(drawerRow("Documents")).fetchSemanticsNodes().isNotEmpty() }
+        await { compose.onAllNodes(drawerRow("Drive")).fetchSemanticsNodes().isNotEmpty() }
         // This server has the Wiki off, so its row is away: Documents is the first group's last row, under Tasks and above Workspaces.
         val tasks = compose.onNode(drawerRow("Tasks")).fetchSemanticsNode().boundsInRoot
-        val documents = compose.onNode(drawerRow("Documents")).fetchSemanticsNode().boundsInRoot
+        val documents = compose.onNode(drawerRow("Drive")).fetchSemanticsNode().boundsInRoot
         val workspaces = compose.onNodeWithText("Workspaces").fetchSemanticsNode().boundsInRoot
-        assertTrue("Documents ends the first group", documents.top > tasks.top && documents.bottom <= workspaces.top)
-        compose.onNode(drawerRow("Documents")).performClick()
+        assertTrue("Drive ends the first group", documents.top > tasks.top && documents.bottom <= workspaces.top)
+        compose.onNode(drawerRow("Drive")).performClick()
         await { exists("documents-entry:Orbit UI migration") }
-        compose.onNodeWithText("Search Documents").assertExists()
+        compose.onNodeWithText("Search Drive").assertExists()
         listOf("Drive service", "Datasets", "reading-list.md").forEach { compose.onNodeWithTag("documents-entry:$it").assertExists() }
         compose.onNodeWithTag("documents-trash-row").assertExists()
         compose.onNodeWithTag("documents-storage-row").assertExists()
@@ -179,7 +179,7 @@ class DocumentsShellTest {
         await { DocumentsStore.of(app(), (app().session.state.value as AuthState.SignedIn).handle).shown != null }
         compose.waitForIdle()
         assertTrue(DriveFake.calls.isEmpty() || DriveFake.calls.none { it.startsWith("GET entries") })
-        compose.onAllNodes(drawerRow("Documents")).assertCountEquals(0)
+        compose.onAllNodes(drawerRow("Drive")).assertCountEquals(0)
         assertEquals(false, DocumentsStore.of(app(), (app().session.state.value as AuthState.SignedIn).handle).shown)
     }
 
@@ -187,7 +187,7 @@ class DocumentsShellTest {
         openDocuments()
         compose.onNodeWithTag("documents-entry:Orbit UI migration").performClick()
         await { exists("documents-entry:sign-in-v3.png") }
-        compose.onNodeWithText("Documents › Orbit UI migration").assertExists()
+        compose.onNodeWithText("Drive › Orbit UI migration").assertExists()
         await { compose.onAllNodesWithText("Agent in Review navigation", substring = true).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("An agent on Orbit Cloud", substring = true).assertExists()
         compose.onNodeWithText("1.2 MB").assertExists()
@@ -266,7 +266,7 @@ class DocumentsShellTest {
         compose.onNodeWithTag("documents-storage-row").performClick()
         await { exists("documents-storage-total") }
         compose.onNodeWithText("18.4 GB").assertExists()
-        compose.onNodeWithText("Documents 10.9 GB").assertExists()
+        compose.onNodeWithText("Drive 10.9 GB").assertExists()
         compose.onNodeWithText("Week of Nov 16").assertExists()
     }
 
@@ -328,8 +328,8 @@ class DocumentsShellTest {
     private fun openDocuments() {
         signIn()
         openDrawer()
-        await { compose.onAllNodes(drawerRow("Documents")).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(drawerRow("Documents")).performClick()
+        await { compose.onAllNodes(drawerRow("Drive")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(drawerRow("Drive")).performClick()
         await { exists("documents-entry:reading-list.md") }
     }
     private fun app() = compose.activity.application as OrbitApplication

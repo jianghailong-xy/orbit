@@ -136,7 +136,7 @@ final class DocumentsUploadsTests: XCTestCase {
         store.uploads = [DocumentsUploadItem(
             id: "k", name: "walkthrough.mov", size: 10,
             modifiedAt: (attributes[.modificationDate] as! Date).timeIntervalSince1970, filePath: url.path,
-            parentID: nil, parentName: "Documents", uploadID: "up7", sentBytes: 4, state: .uploading)]
+            parentID: nil, parentName: "Drive", uploadID: "up7", sentBytes: 4, state: .uploading)]
         server.arrived["up7"] = [0: Data("0123".utf8)]
 
         let queue = DocumentsUploadQueue(transport: server, store: store, retryDelay: 0)
@@ -159,7 +159,7 @@ final class DocumentsUploadsTests: XCTestCase {
         let store = MemoryStore()
         store.uploads = [DocumentsUploadItem(
             id: "k", name: "a.txt", size: 5, modifiedAt: (attributes[.modificationDate] as! Date).timeIntervalSince1970,
-            filePath: url.path, parentID: nil, parentName: "Documents", uploadID: "gone", state: .queued)]
+            filePath: url.path, parentID: nil, parentName: "Drive", uploadID: "gone", state: .queued)]
         let queue = DocumentsUploadQueue(transport: server, store: store, retryDelay: 0)
         queue.start()
         await queue.idle()
@@ -174,14 +174,14 @@ final class DocumentsUploadsTests: XCTestCase {
         let server = FakeServer()
         server.failPuts = 2
         let queue = DocumentsUploadQueue(transport: server, retryDelay: 0)
-        queue.add([DocumentsUploadRequest(fileURL: try file("a.txt", "0123456789"), parentID: nil, parentName: "Documents")])
+        queue.add([DocumentsUploadRequest(fileURL: try file("a.txt", "0123456789"), parentID: nil, parentName: "Drive")])
         await queue.idle()
         XCTAssertEqual(queue.items.first?.state, .done, "two failures are within the retries")
 
         let flaky = FakeServer()
         flaky.failPuts = DocumentsUploadQueue.retries + 2
         let paused = DocumentsUploadQueue(transport: flaky, retryDelay: 0)
-        paused.add([DocumentsUploadRequest(fileURL: try file("b.txt", "0123456789"), parentID: nil, parentName: "Documents")])
+        paused.add([DocumentsUploadRequest(fileURL: try file("b.txt", "0123456789"), parentID: nil, parentName: "Drive")])
         await paused.idle()
         XCTAssertEqual(paused.items.first?.state, .paused)
         XCTAssertEqual(paused.items.first?.error, DocumentsUploadQueue.connectionLost)
@@ -200,7 +200,7 @@ final class DocumentsUploadsTests: XCTestCase {
         let server = FakeServer()
         server.openFailure = APIError.http(status: 413, body: #"{"message":"Your storage is full, so new uploads are refused."}"#)
         let queue = DocumentsUploadQueue(transport: server, retryDelay: 0)
-        queue.add([DocumentsUploadRequest(fileURL: try file("a.txt", "x"), parentID: nil, parentName: "Documents")])
+        queue.add([DocumentsUploadRequest(fileURL: try file("a.txt", "x"), parentID: nil, parentName: "Drive")])
         await queue.idle()
         XCTAssertEqual(queue.items.first?.state, .failed)
         XCTAssertEqual(queue.items.first?.error, "Your storage is full, so new uploads are refused.")
@@ -212,7 +212,7 @@ final class DocumentsUploadsTests: XCTestCase {
         let url = try file("a.txt", "0123")
         let store = MemoryStore()
         store.uploads = [DocumentsUploadItem(id: "k", name: "a.txt", size: 4, modifiedAt: 1, filePath: url.path,
-                                             parentID: nil, parentName: "Documents", uploadID: "up9", state: .queued)]
+                                             parentID: nil, parentName: "Drive", uploadID: "up9", state: .queued)]
         let queue = DocumentsUploadQueue(transport: server, store: store, retryDelay: 0)
         queue.start()
         await queue.idle()
@@ -251,8 +251,8 @@ final class DocumentsUploadsTests: XCTestCase {
         let queue = DocumentsUploadQueue(transport: server, retryDelay: 0)
         let first = try file("a.txt", "0123456789")
         let second = try file("b.txt", "abc")
-        queue.add([DocumentsUploadRequest(fileURL: first, parentID: nil, parentName: "Documents"),
-                   DocumentsUploadRequest(fileURL: second, parentID: nil, parentName: "Documents")])
+        queue.add([DocumentsUploadRequest(fileURL: first, parentID: nil, parentName: "Drive"),
+                   DocumentsUploadRequest(fileURL: second, parentID: nil, parentName: "Drive")])
         let waiting = queue.items[1].id
         queue.pause(waiting)
         await queue.idle()
@@ -262,7 +262,7 @@ final class DocumentsUploadsTests: XCTestCase {
         await queue.idle()
         XCTAssertEqual(queue.items[1].state, .done)
 
-        queue.add([DocumentsUploadRequest(fileURL: try file("c.txt", "c"), parentID: nil, parentName: "Documents")])
+        queue.add([DocumentsUploadRequest(fileURL: try file("c.txt", "c"), parentID: nil, parentName: "Drive")])
         let third = queue.items[2].id
         queue.pause(third)
         await queue.idle()
@@ -276,8 +276,8 @@ final class DocumentsUploadsTests: XCTestCase {
         server.failPuts = 100
         let queue = DocumentsUploadQueue(transport: server, retryDelay: 0)
         let url = try file("a.txt", "x")
-        queue.add([DocumentsUploadRequest(fileURL: url, parentID: nil, parentName: "Documents")])
-        queue.add([DocumentsUploadRequest(fileURL: url, parentID: nil, parentName: "Documents")])
+        queue.add([DocumentsUploadRequest(fileURL: url, parentID: nil, parentName: "Drive")])
+        queue.add([DocumentsUploadRequest(fileURL: url, parentID: nil, parentName: "Drive")])
         XCTAssertEqual(queue.items.count, 1)
         queue.add([DocumentsUploadRequest(fileURL: url, parentID: "other", parentName: "Other")])
         XCTAssertEqual(queue.items.count, 2)
