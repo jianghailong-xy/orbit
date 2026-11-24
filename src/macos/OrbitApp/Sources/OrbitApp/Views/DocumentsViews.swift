@@ -101,7 +101,7 @@ private struct DocumentsListColumn: View {
     private var table: some View {
         Table(of: DocumentsEntry.self, selection: $model.selection) {
             TableColumn("Name") { entry in nameCell(entry) }
-                .width(min: 180, ideal: 280)
+                .width(min: 160, ideal: 240)
             TableColumn(model.searching ? "Folder" : "Last written by") { entry in
                 if model.searching {
                     Text(DocumentsLogic.searchFolder(entry.folderPath)).foregroundStyle(.secondary)
@@ -111,17 +111,17 @@ private struct DocumentsListColumn: View {
                     DocumentsWriterLabel(model: model, writer: entry.lastWriter)
                 }
             }
-            .width(min: 120, ideal: 200)
+            .width(min: 110, ideal: 170)
             TableColumn("Size") { entry in
                 Text(DocumentsLogic.sizeColumn(entry, folderCount: model.folderCounts[entry.id]))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
-            .width(min: 60, ideal: 80)
+            .width(min: 56, ideal: 70)
             TableColumn("Modified") { entry in
                 Text(DocumentsLogic.formatWhen(entry.mtime)).foregroundStyle(.secondary)
             }
-            .width(min: 70, ideal: 90)
+            .width(min: 64, ideal: 80)
         } rows: {
             ForEach(model.rows) { entry in
                 TableRow(entry)
@@ -527,12 +527,13 @@ private struct DocumentsPreviewBox: View {
             .background(.background, in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator))
         case .text:
-            ScrollView([.vertical, .horizontal]) {
+            ScrollView {
                 Text(String(decoding: data, as: UTF8.self))
                     .font(.orbitMono)
                     .textSelection(.enabled)
+                    .multilineTextAlignment(.leading)
                     .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
             }
             .frame(maxHeight: 320)
             .background(.background, in: RoundedRectangle(cornerRadius: 8))
@@ -653,6 +654,7 @@ struct DocumentsShareSheet: View {
             Text(moveToCurrent ? DocumentsLogic.shareThisVersionTitle(entry.name) : DocumentsLogic.shareTitle(entry.name))
                 .font(.headline)
             Text(DocumentsLogic.shareDescription).font(.orbitLabel).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             content
             HStack {
                 Spacer()
@@ -694,6 +696,7 @@ struct DocumentsShareSheet: View {
                     Text(DocumentsLogic.partialNote(check.checkedBytes)).font(.orbitLabel).foregroundStyle(.secondary)
                 }
                 Text(DocumentsLogic.secretsFoot).font(.orbitLabel).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(12)
             .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
@@ -709,6 +712,7 @@ struct DocumentsShareSheet: View {
                     }
                 }
                 Text(DocumentsLogic.shareVersionNote).font(.orbitLabel).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let partial {
                     Text(DocumentsLogic.partialNote(partial)).font(.orbitLabel).foregroundStyle(.secondary)
                 }
@@ -802,7 +806,7 @@ struct DocumentsUploadsPopover: View {
                     }
                 }
             }
-            .frame(maxHeight: 380)
+            .frame(height: min(380, CGFloat(model.syncs.count + model.uploads.count) * 78))
         }
         .frame(width: 320)
         .sheet(item: $details) { sync in DocumentsSyncDetailsSheet(model: model, sync: sync) }
@@ -903,6 +907,7 @@ private struct DocumentsSyncDetailsSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(DocumentsLogic.syncDetailsTitle(sync)).font(.headline)
             Text(DocumentsLogic.syncDetailsSummary(sync)).font(.orbitLabel).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             List {
                 ForEach(sync.failed, id: \.self) { failure in
                     VStack(alignment: .leading, spacing: 2) {
@@ -1196,20 +1201,21 @@ private struct DocumentsStorageRankings: View {
                 Text(title).font(.orbitLabel.weight(.semibold)).padding(10)
                 Divider()
                 ForEach(rows) { row in
-                    Button { open?(row.id) } label: {
-                        HStack {
-                            Text(row.name).lineLimit(1)
-                            Spacer()
-                            Text(DocumentsLogic.storageSize(row.bytes)).foregroundStyle(.secondary).monospacedDigit()
-                            if open != nil { Image(systemName: "chevron.right").foregroundStyle(.tertiary) }
-                        }
-                        .font(.orbitLabel)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .contentShape(Rectangle())
+                    let line = HStack {
+                        Text(row.name).lineLimit(1)
+                        Spacer()
+                        Text(DocumentsLogic.storageSize(row.bytes)).foregroundStyle(.secondary).monospacedDigit()
+                        if open != nil { Image(systemName: "chevron.right").foregroundStyle(.tertiary) }
                     }
-                    .buttonStyle(.plain)
-                    .disabled(open == nil)
+                    .font(.orbitLabel)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .contentShape(Rectangle())
+                    if let open {
+                        Button { open(row.id) } label: { line }.buttonStyle(.plain)
+                    } else {
+                        line
+                    }
                 }
             }
             .background(.background, in: RoundedRectangle(cornerRadius: 8))

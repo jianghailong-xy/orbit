@@ -116,7 +116,7 @@ struct MainView: View {
     private static func contentWidth(_ section: AppSection) -> (min: CGFloat, ideal: CGFloat, max: CGFloat) {
         switch section {
         case .scheduled: return (400, 520, 760)
-        case .documents: return (460, 640, 980)
+        case .documents: return (600, 700, 1000)
         default: return (240, 300, 420)
         }
     }
