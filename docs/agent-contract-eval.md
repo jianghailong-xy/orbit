@@ -126,7 +126,7 @@ world the session sits in, how the owner answers each card, a fault), the person
 | `I6-progress-report` | unit `progress.report` | a task's run of three items, one at a time | its position is reported with `task_progress_report` |
 | `I7-wiki-path-search` | unit `wiki.search-by-path` | a change to `uploader/upload.go`, with a pitfall on it in the wiki | `wiki_search` names the path before the file is changed |
 | `I8-settings-propose` | unit `primer.settings` | the person finds a notification setting too noisy | `settings_propose` turns `notifySessionFinished` off |
-| `I9-no-project-for-ordinary-work` | unit `project.propose` | three ordinary follow-ups to record | they are recorded as tasks, and no project is proposed |
+| `I9-no-project-for-ordinary-work` | unit `primer.lead` ("when two fit, the smaller wins"; `project.propose` until step 5d) | three ordinary follow-ups to record | they are recorded as tasks, and no project is proposed |
 
 The I scenarios guard one paragraph of the runner's instructions each (`Guards`, by the unit ids of
 `instructionUnits` in `src/runner-go/instruction_units.go`). Each plays the failure that paragraph's code comment records, so that a run
@@ -196,7 +196,7 @@ words and the tools' answers, so it is a local diagnostic: it is never uploaded 
 Every paragraph the runner tells an agent, the primer's included, is a unit of the registry `compose` renders
 (`instructionUnits` in `src/runner-go/instruction_units.go`, by id: `primer.lead` … `primer.rederive`,
 `files.reply-links`, `files.evidence`, `drive.tools`, `drive.mount`,
-`project.inside-recorded-work`, `project.propose`, `progress.report`, `wait.use-await`, `notify.when-asked`,
+`project.inside-recorded-work`, `progress.report`, `wait.use-await`, `notify.when-asked`,
 `handoff.use-orbit`, `workflow.use-workflow`, `wiki.search-by-path`, `cli.orbit-cli`, `help.ask`).
 `--leave-out UNIT,UNIT` (`ORBIT_AGENT_EVAL_LEAVE_OUT`) plays the suite with those units dropped in `compose`, so they
 leave every carrier at once: the engine's own instructions and the MCP server's `initialize`. Only the eval's test

@@ -837,7 +837,7 @@ func instructionUnitScenarios() []*evalScenario {
 			},
 		},
 		{
-			ID: "I9-no-project-for-ordinary-work", Guards: []string{"project.propose"},
+			ID: "I9-no-project-for-ordinary-work", Guards: []string{"primer.lead"},
 			Summary: "Three ordinary follow-ups are recorded as tasks, and no project is proposed for them.",
 			Setup:   evalSetup{Owner: evalOwnerApproveAll},
 			Turns: []evalTurnSpec{{Mode: "default", Expect: []string{"task_create", "task_create_batch"},

@@ -261,34 +261,18 @@ func agentDelegates(agent AgentExecConfig) bool {
 const orbitProgressInstructions = "When this task's position changes -- a new phase, or another item of a known total done -- report it " +
 	"with task_progress_report: Orbit reads progress from that report alone, not from your output or replies."
 
-// orbitProjectInsideInstructions and orbitProjectProposeInstructions are the paragraph about what deserves an Orbit
-// Project, in the two forms a session can be in (units project.inside-recorded-work and project.propose).
-//
-// A session already running inside recorded work -- the task it was dispatched for, or a project
-// it coordinates -- gets the second form. It used to withhold the proposal altogether: work such
-// a session turns up either belongs to the body of work it is in (and `task_create` files it
-// there by itself, since the server derives the project from the session's scope) or is a
-// separate undertaking that is the user's to start. What that reasoning priced was the wrong
-// thing. The card is the ask, so a proposal costs the user one keystroke; and the write binds the
-// project to THIS conversation, so the coordinator knows the work firsthand. What the form says
-// instead is the default it would be trading away, and what agreeing costs. Offering both forms
-// of the same paragraph to both kinds of session is what made the proposal read as something to
-// do on every turn rather than something to do rarely, and that is still why the two differ.
-const (
-	orbitProjectInsideInstructions = "You are running one task Orbit has already recorded, so newly discovered work has somewhere to go: file it " +
-		"as a task, saying first what you are filing. It lands under the same project this one belongs to, without your naming it. " +
-		"Work that is a separate undertaking is the user's to start, and you may put it in front of them rather than " +
-		"starting it yourself: project_create raises a confirmation card and waits for the answer, and on a yes this " +
-		"conversation becomes that project's coordinator -- opening the project later comes back here rather than " +
-		"starting a stranger. Filing the task is still the default, and the cheaper one. Nothing is created without " +
-		"the user's yes, and the card is the only place that yes comes from: never create a project another way."
-	orbitProjectProposeInstructions = "Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and " +
-		"that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different " +
-		"parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then " +
-		"call project_create from this same session so the conversation becomes its coordinator; do not switch or open a " +
-		"session for it. Its confirmation card is the user's answer: if they decline, a task is the right record, and do not " +
-		"propose the same body of work twice."
-)
+// orbitProjectInsideInstructions is the project line a task's run is given (unit project.inside-recorded-work): work
+// it turns up is a task, which the server files under the project the task belongs to, and a separate undertaking is
+// the user's to start, which project_create can put to them. Since design step 5d it is one line, and what it used to
+// say at length -- the card is the ask and the only yes, a yes binds the project to this conversation as its
+// coordinator, the bar a project has to clear -- is project_create's description. A session outside recorded work
+// gets no project text at all: its paragraph (4 or more dependent steps, or several agents over days; propose once)
+// was measured to make no difference (I9-no-project-for-ordinary-work, 10/10 with and without it on Claude Code and
+// Codex, docs/agent-instructions-eval-baseline.md), and project_create's description states the same bar. The
+// primer's "when two fit, the smaller wins" is what I9 leans on.
+const orbitProjectInsideInstructions = "File work you discover in this task's run as a task, saying first what you are " +
+	"filing: it lands in this task's project. A separate undertaking is the user's to start, which project_create can " +
+	"propose to them on its card."
 
 // insideRecordedWork reports whether this session is already executing something Orbit has
 // recorded. Today that is exactly "was dispatched for a task" -- which covers a conversation
