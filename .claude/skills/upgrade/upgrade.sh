@@ -297,24 +297,6 @@ monitoring_enable() {
   echo "==> Wrote GRAFANA_ADMIN_PASSWORD to .env (not shown)"
 }
 
-# Documents (docs/self-hosting.md, "Documents"). Off unless .env says ORBIT_DOCUMENTS_ENABLED=true, and a fresh install
-# writes false. A deployment that predates the switch had Documents on, so the first time this script runs on a .env
-# without the name it writes the line once: true where the drive already holds a file or folder, or where postgres
-# cannot be asked (nobody loses what they keep there), false otherwise. Once the name is in .env, an upgrade never
-# changes it: the operator's own value stays.
-documents_enable() {
-  local held value stamp
-  [ -f .env ] || return 0
-  [ -z "$(link_env ORBIT_DOCUMENTS_ENABLED)" ] || return 0
-  held="$($DC exec -T postgres psql -U orbit -d orbit -tAc 'SELECT EXISTS (SELECT 1 FROM drive_entry)' 2>/dev/null | tr -d '[:space:]' || true)"
-  if [ "$held" = f ]; then value=false; else value=true; fi
-  stamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  if [ -n "$(tail -c 1 .env)" ]; then printf '\n' >>.env || return 0; fi
-  printf '# Documents: written by the upgrade script at %s (docs/self-hosting.md, "Documents"). An upgrade never changes it.\nORBIT_DOCUMENTS_ENABLED=%s\n' \
-    "$stamp" "$value" >>.env || { echo "!!  warning: could not write ORBIT_DOCUMENTS_ENABLED to .env; Documents is off" >&2; return 0; }
-  echo "==> Documents: wrote ORBIT_DOCUMENTS_ENABLED=$value to .env"
-}
-
 # After the stack is up: the monitoring services, where the profile is on. They are not in SERVICES, which is only what
 # an upgrade rebuilds, so `up` is told them by name; pg-monitor-role runs first, as a dependency. Loki refuses every write
 # once the data disk passes 90% (-ingester.wal-disk-full-threshold 0.9), so a host over that gets a warning, and Alloy
@@ -852,7 +834,6 @@ fi
 # Once what can stop this run before anything is built has had its say.
 if [ "$LINK_EARLY" -eq 0 ]; then link_prepare; fi
 monitoring_enable
-documents_enable
 # The other apiservers a deployment adds in docker-compose.override.yml, apiserver-2 and on (docs/self-hosting.md,
 # "Several apiservers"). They run the apiserver's image and build nothing; they are recreated after it, below.
 # Where Compose lists none, nothing is added.

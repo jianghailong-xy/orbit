@@ -925,10 +925,8 @@ then `docker compose up -d apiserver`. Turning it off again hides it: the drive'
 sessions are started without the drive tools. What the drive holds stays on disk and in the database, and is all
 there again when you turn it back on.
 
-A fresh install writes `ORBIT_DOCUMENTS_ENABLED=false`. A deployment that predates the switch had Documents on, so
-the first upgrade that knows the switch writes the line once: `true` if the drive already holds a file or folder
-(or if the upgrade cannot ask postgres), `false` otherwise. After that an upgrade never changes the value you set.
-A two-stage release (`ORBIT_REGISTRY`) does not write it: set it in the deployment host's `.env` yourself.
+A fresh install writes `ORBIT_DOCUMENTS_ENABLED=false`, and an upgrade never writes the line: a deployment that
+predates the switch has Documents off after its upgrade, with what its drive held kept, until you set it to `true`.
 
 ## Wiki System model
 
