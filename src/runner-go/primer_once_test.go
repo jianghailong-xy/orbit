@@ -130,21 +130,102 @@ func TestBareOrbitMCPAnswersWithTheWholePrimer(t *testing.T) {
 	}
 }
 
-// What Orbit's always-on text costs a Claude Code session in each shape: the appended prompt's Orbit part (without the
-// agent's own prompt and the checkout notes) plus the initialize instructions. Logged for the budget the project holds
-// it to (3,500 bytes for the longest shape, a cap per shape enforced in step 7); the longest shape is named last.
-func TestClaudeCodeAlwaysOnBytesPerShape(t *testing.T) {
+// alwaysOnBudget is what Orbit's always-on text may cost one session shape (design §4.5): its bytes, and its rules,
+// counted as the paragraphs composed (each unit is one paragraph and states one or two rules). Claude Code's figure is
+// its appended prompt's Orbit part (without the agent's own prompt and the checkout notes) plus the initialize
+// instructions; Codex's is its application context's Orbit part, the text it is given again every turn.
+type alwaysOnBudget struct {
+	claudeBytes, claudeRules, codexBytes, codexRules int
+}
+
+// alwaysOnBudgets caps each canonical shape (instructionSnapshotShapes) at what it took after design step 5, measured
+// with alwaysOnBudgetCLI. A change that needs more raises the cap here, in review, with the unit it adds and the eval
+// case that guards it; a change that saves bytes lowers it. The project's goal for the longest Claude Code shape is
+// claudeCodeAlwaysOnGoalBytes.
+var alwaysOnBudgets = map[string]alwaysOnBudget{
+	"free-watch-toplevel-workflows":                              {claudeBytes: 6025, claudeRules: 18, codexBytes: 5519, codexRules: 17},
+	"free-watch-toplevel-noworkflows":                            {claudeBytes: 5607, claudeRules: 17, codexBytes: 5101, codexRules: 16},
+	"free-watch-subagent-workflows":                              {claudeBytes: 4648, claudeRules: 14, codexBytes: 4142, codexRules: 13},
+	"free-nowatch-toplevel-workflows":                            {claudeBytes: 5884, claudeRules: 17, codexBytes: 5378, codexRules: 16},
+	"free-nowatch-toplevel-noworkflows":                          {claudeBytes: 5466, claudeRules: 16, codexBytes: 4960, codexRules: 15},
+	"free-nowatch-subagent-workflows":                            {claudeBytes: 4507, claudeRules: 13, codexBytes: 4001, codexRules: 12},
+	"task-watch-toplevel-workflows":                              {claudeBytes: 6454, claudeRules: 20, codexBytes: 5948, codexRules: 19},
+	"task-watch-toplevel-noworkflows":                            {claudeBytes: 6036, claudeRules: 19, codexBytes: 5530, codexRules: 18},
+	"task-watch-subagent-workflows":                              {claudeBytes: 4648, claudeRules: 14, codexBytes: 4142, codexRules: 13},
+	"task-nowatch-toplevel-workflows":                            {claudeBytes: 6313, claudeRules: 19, codexBytes: 5807, codexRules: 18},
+	"task-nowatch-toplevel-noworkflows":                          {claudeBytes: 5895, claudeRules: 18, codexBytes: 5389, codexRules: 17},
+	"task-nowatch-subagent-workflows":                            {claudeBytes: 4507, claudeRules: 13, codexBytes: 4001, codexRules: 12},
+	"task-watch-toplevel-workflows-drive":                        {claudeBytes: 6586, claudeRules: 20, codexBytes: 6080, codexRules: 19},
+	"free-watch-toplevel-workflows-systemprompt":                 {claudeBytes: 6025, claudeRules: 18, codexBytes: 5519, codexRules: 17},
+	"task-watch-subagent-workflows-systemprompt":                 {claudeBytes: 4648, claudeRules: 14, codexBytes: 4142, codexRules: 13},
+	"free-watch-toplevel-workflows-bare":                         {claudeBytes: 6025, claudeRules: 18, codexBytes: 5519, codexRules: 17},
+	"task-watch-toplevel-workflows-orchestration-nowiki-browser": {claudeBytes: 6079, claudeRules: 18, codexBytes: 5573, codexRules: 17},
+	"task-watch-toplevel-workflows-checkonly":                    {claudeBytes: 4807, claudeRules: 15, codexBytes: 4301, codexRules: 14},
+}
+
+// claudeCodeAlwaysOnGoalBytes is the instruction-units project's goal for the longest Claude Code shape (criterion
+// 5CM9pGWkpF2H9phd7Np21g). It is logged against, not enforced: the caps above are what the measured steps reached.
+const claudeCodeAlwaysOnGoalBytes = 3500
+
+// alwaysOnBudgetCLI is a CLI path longer than any runner's, so a shape measured with it fits its cap on every runner.
+const alwaysOnBudgetCLI = "/home/a-long-account-name/.orbit/bin/versions/0.1.999/orbit"
+
+// alwaysOnCost is one shape's always-on text on Claude Code and Codex, by bytes and by paragraphs.
+func alwaysOnCost(t *testing.T, shape instructionSnapshotShape) alwaysOnBudget {
+	t.Helper()
+	fakeDriveMount(t, shape.drive)
+	driveParentPath = driveRootPath // the root a Pod has, as the snapshots name it
+	job := shape.job(t)
+	session := job.sessionShape(alwaysOnBudgetCLI)
+	claude := claudeOrbitInstructions(session)
+	initialize := claudeSessionInitializeInstructions(t, job)
+	codex := compose(session, codexProfile).System
+	paragraphs := func(texts ...string) int {
+		n := 0
+		for _, text := range texts {
+			if text != "" {
+				n += len(strings.Split(text, "\n\n"))
+			}
+		}
+		return n
+	}
+	return alwaysOnBudget{claudeBytes: len(claude) + len(initialize), claudeRules: paragraphs(claude, initialize),
+		codexBytes: len(codex), codexRules: paragraphs(codex)}
+}
+
+// Every shape's always-on text, logged, and held to its caps: a shape over its byte cap or its rule cap fails.
+func TestAlwaysOnBudgetPerShape(t *testing.T) {
 	t.Setenv("ORBIT_HOME", t.TempDir())
 	longest, longestName := 0, ""
 	for _, shape := range instructionSnapshotShapes() {
-		job := shape.job(t)
-		orbitText := claudeOrbitInstructions(job.sessionShape(orbitCLIExecutable()))
-		initialize := claudeSessionInitializeInstructions(t, job)
-		total := len(orbitText) + len(initialize)
-		t.Logf("%s: Claude Code always-on %d bytes (appended %d + initialize %d)", shape.name, total, len(orbitText), len(initialize))
-		if total > longest {
-			longest, longestName = total, shape.name
+		cost := alwaysOnCost(t, shape)
+		cap, ok := alwaysOnBudgets[shape.name]
+		t.Logf("%s: Claude Code %d bytes, %d rules (cap %d, %d); Codex %d bytes, %d rules (cap %d, %d)", shape.name,
+			cost.claudeBytes, cost.claudeRules, cap.claudeBytes, cap.claudeRules, cost.codexBytes, cost.codexRules, cap.codexBytes, cap.codexRules)
+		if cost.claudeBytes > longest {
+			longest, longestName = cost.claudeBytes, shape.name
+		}
+		if !ok {
+			t.Errorf("%s has no always-on budget in alwaysOnBudgets", shape.name)
+			continue
+		}
+		if cost.claudeBytes > cap.claudeBytes || cost.claudeRules > cap.claudeRules {
+			t.Errorf("%s on Claude Code: %d bytes and %d rules, over its cap of %d bytes and %d rules", shape.name,
+				cost.claudeBytes, cost.claudeRules, cap.claudeBytes, cap.claudeRules)
+		}
+		if cost.codexBytes > cap.codexBytes || cost.codexRules > cap.codexRules {
+			t.Errorf("%s on Codex: %d bytes and %d rules, over its cap of %d bytes and %d rules", shape.name,
+				cost.codexBytes, cost.codexRules, cap.codexBytes, cap.codexRules)
 		}
 	}
-	t.Logf("longest Claude Code shape: %s, %d bytes", longestName, longest)
+	for name := range alwaysOnBudgets {
+		found := false
+		for _, shape := range instructionSnapshotShapes() {
+			found = found || shape.name == name
+		}
+		if !found {
+			t.Errorf("alwaysOnBudgets caps %s, which is no shape", name)
+		}
+	}
+	t.Logf("longest Claude Code shape: %s, %d bytes (the project's goal is %d)", longestName, longest, claudeCodeAlwaysOnGoalBytes)
 }
