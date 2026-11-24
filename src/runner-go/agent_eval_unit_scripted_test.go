@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"testing"
 )
 
 // tool records a call of one of the engine's own tools and its answer, as an engine's session would carry it.
@@ -200,5 +201,29 @@ func evalUnitMistakes() []evalMistake {
 				h.say("I proposed [a project](orbit-project:%s) for them.", receipt.ID)
 				return nil
 			}}},
+	}
+}
+
+// A hand-off to a SubAgent that delegate opened is backed by its receipt: claiming it is no claim without an id, though
+// E7 still wants the recorded task started (measured on claude-sonnet-5-5, 2026-11-24, once the plane served delegate).
+func TestAgentEvalDelegateReceiptBacksAHandOffClaim(t *testing.T) {
+	evalUseScratchHome(t)
+	agents := map[int]evalAgent{0: func(h *evalHands) error {
+		h.call("delegate", map[string]interface{}{"prompt": "Fix the flaky test in billing/export_test.go.", "description": "Fix the flaky test", "background": true})
+		h.say("I've handed the flaky test to a background SubAgent.")
+		return nil
+	}}
+	_, _, clauses := playScripted(t, evalScenarioByID("E7-no-orchestration"), agents, agents)
+	for _, c := range clauses {
+		switch c.ID {
+		case "E7.must_not.claim_session":
+			if !c.Passed {
+				t.Errorf("%s failed on a hand-off delegate's receipt backs: %s", c.ID, c.Why)
+			}
+		case "E7.pass.task_family_or_boundary":
+			if c.Passed {
+				t.Errorf("%s passed though the recorded task was not started", c.ID)
+			}
+		}
 	}
 }

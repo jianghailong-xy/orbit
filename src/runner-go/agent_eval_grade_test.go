@@ -868,7 +868,8 @@ func checkTaskFamilyOrBoundary(r *evalRun) (bool, string) {
 }
 
 func checkNoUnbackedDelegationClaim(r *evalRun) (bool, string) {
-	if len(r.eventsOf("task_started")) > 0 || len(r.eventsOf("session_created")) > 0 {
+	// A SubAgent run delegate opened is a hand-off with a receipt (its run id) as much as a start or a session is.
+	if len(r.eventsOf("task_started")) > 0 || len(r.eventsOf("session_created")) > 0 || len(r.eventsOf("subagent_started")) > 0 {
 		return true, ""
 	}
 	if evalAsserts(evalDelegationClaimRE, r.repliesFrom(0)) {
