@@ -230,11 +230,15 @@ func runShellTurn(ctx context.Context, execDir, command string, emit emitFn, tur
 	var combined shellOutputBuffer
 	cmd.Stdout = &combined
 	cmd.Stderr = &combined
+	checkOOM := watchMemoryTool(sessionID)
 	err := cmd.Start()
 	if err == nil {
 		trackMemoryRoots(sessionID, true, cmd.Process.Pid)
 		err = waitWithForegroundShellOutput(
-			func() error { return waitSessionProcessTree(cmd) }, &combined, emit, toolUseID,
+			func() error {
+				checkOOM(cmd.Process.Pid)
+				return waitSessionProcessTree(cmd)
+			}, &combined, emit, toolUseID,
 		)
 	}
 	out := combined.output()

@@ -58,8 +58,9 @@ type memoryWatchdog struct {
 	baseline     string
 	smallRunner  bool
 
-	mu    sync.Mutex
-	roots map[memoryProcessID]memoryRoot
+	mu              sync.Mutex
+	roots           map[memoryProcessID]memoryRoot
+	watchdogVictims map[memoryProcessID]bool
 
 	// Only the sampling goroutine uses these. Remember observed tools across reparenting.
 	tools         map[memoryProcessID]memoryGroup
@@ -80,16 +81,9 @@ func startMemoryWatchdog(ctx context.Context, managed bool) func() {
 	if !ok || limit == 0 {
 		return func() {}
 	}
-	readOOMKills := func() (uint64, bool) {
-		data, err := os.ReadFile(filepath.Join(cgroupRoot, "memory.events"))
-		if err != nil {
-			return 0, false
-		}
-		return statField(string(data), "oom_kill")
-	}
-	oomKills, _ := readOOMKills()
+	oomKills, _ := cgroupOOMKills(cgroupRoot)
 	w := &memoryWatchdog{
-		readMemory: read, readOOMKills: readOOMKills, oomKills: oomKills,
+		readMemory: read, readOOMKills: func() (uint64, bool) { return cgroupOOMKills(cgroupRoot) }, oomKills: oomKills,
 		processes: readMemoryProcesses, processSize: memoryProcessSize,
 		raiseScore: raiseToolOOMScore, kill: killMemoryProcess, notify: notifyMemoryWatchdogKill,
 		baseline:    readOOMScore("/proc/self"),
@@ -237,6 +231,13 @@ func (w *memoryWatchdog) sample(now func() time.Time) {
 
 	w.mu.Lock()
 	processes := w.processes()
+	for id := range w.watchdogVictims {
+		// Keep a killed process marked until its parent reaps it.
+		p, _, _ := readMemoryProcessStat("/proc/"+strconv.Itoa(id.pid), id.pid)
+		if p.memoryProcessID != id {
+			delete(w.watchdogVictims, id)
+		}
+	}
 	roots := make(map[int]memoryRoot, len(w.roots))
 	for id, root := range w.roots {
 		if processes[id.pid].memoryProcessID == id {
@@ -256,6 +257,10 @@ func (w *memoryWatchdog) sample(now func() time.Time) {
 		}
 		visited[p.pid] = true
 		parent := processes[p.ppid]
+		if parent.protected && parent.name == memoryToolShellComm {
+			// Attribute the shell through its protected wait-status helper.
+			parent = processes[parent.ppid]
+		}
 		var group memoryGroup
 		if p.protected {
 			// A helper may have the same PGID as a tool, or have exec'd
@@ -267,7 +272,7 @@ func (w *memoryWatchdog) sample(now func() time.Time) {
 			}
 		} else if previous, ok := w.tools[p.memoryProcessID]; ok {
 			group = previous
-		} else if root, ok := roots[p.ppid]; ok && !root.tool && parent.start <= p.start {
+		} else if root, ok := roots[parent.pid]; ok && !root.tool && parent.start <= p.start {
 			// Descendants can share the engine's PGID. In that case each direct
 			// child and its subtree form a separate tool, without the engine.
 			leader := p
@@ -343,11 +348,17 @@ func (w *memoryWatchdog) sample(now func() time.Time) {
 	}
 	w.settleUntil = time.Time{}
 	killed := false
+	w.mu.Lock()
 	for _, id := range groups[victim].members {
 		if w.kill(id) {
+			if w.watchdogVictims == nil {
+				w.watchdogVictims = make(map[memoryProcessID]bool)
+			}
+			w.watchdogVictims[id] = true
 			killed = true
 		}
 	}
+	w.mu.Unlock()
 	if killed {
 		w.settleUntil = now().Add(memoryWatchdogSettleWindow)
 		w.notify(victim.session, fmt.Sprintf(
@@ -400,30 +411,43 @@ func readMemoryProcesses() map[int]memoryProcess {
 }
 
 func readMemoryProcess(dir string, pid int) (memoryProcess, bool) {
+	p, _, alive := readMemoryProcessStat(dir, pid)
+	return p, alive
+}
+
+// readMemoryProcessStat also returns the identity and wait status of a zombie
+// while its parent still owns the PID.
+func readMemoryProcessStat(dir string, pid int) (memoryProcess, unix.WaitStatus, bool) {
 	data, err := os.ReadFile(filepath.Join(dir, "stat"))
 	if err != nil {
-		return memoryProcess{}, false
+		return memoryProcess{}, 0, false
 	}
 	stat := string(data)
 	begin, end := strings.IndexByte(stat, '('), strings.LastIndex(stat, ") ")
 	if begin < 0 || end <= begin {
-		return memoryProcess{}, false
+		return memoryProcess{}, 0, false
 	}
 	fields := strings.Fields(stat[end+2:])
-	if len(fields) < 22 || fields[0] == "Z" || fields[0] == "X" {
-		return memoryProcess{}, false
+	if len(fields) < 22 || fields[0] == "X" {
+		return memoryProcess{}, 0, false
 	}
 	ppid, parentErr := strconv.Atoi(fields[1])
 	pgid, groupErr := strconv.Atoi(fields[2])
 	start, startErr := strconv.ParseUint(fields[19], 10, 64)
 	pages, rssErr := strconv.ParseUint(fields[21], 10, 64)
 	if parentErr != nil || groupErr != nil || startErr != nil || rssErr != nil {
-		return memoryProcess{}, false
+		return memoryProcess{}, 0, false
+	}
+	var status unix.WaitStatus
+	if fields[0] == "Z" && len(fields) >= 50 {
+		// exit_code is field 52, after the two fields that precede fields.
+		code, _ := strconv.ParseUint(fields[49], 10, 32)
+		status = unix.WaitStatus(code)
 	}
 	return memoryProcess{
 		memoryProcessID: memoryProcessID{pid, start}, ppid: ppid, pgid: pgid,
 		rss: pages * uint64(os.Getpagesize()), name: stat[begin+1 : end],
-	}, true
+	}, status, fields[0] != "Z"
 }
 
 func protectedMemoryExecutable(dir string) bool {

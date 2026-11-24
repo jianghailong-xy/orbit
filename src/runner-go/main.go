@@ -361,6 +361,9 @@ func helpFor(cmd string) string {
 
 func main() {
 	restoreOrbitOOMScore()
+	if len(os.Args) > 1 && os.Args[1] == memoryToolShellComm {
+		os.Exit(runMemoryToolShell(os.Args[2:]))
+	}
 	// A session process's keeper (session_scope.go), ahead of everything below: the environment it was
 	// started with is the session process's, and goes to it untouched.
 	if len(os.Args) > 1 && os.Args[1] == sessionScopeCommand {
