@@ -34,7 +34,7 @@ const RUNNER = '0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b';
 const OWNER = '0199a1b2-0000-7000-8000-000000000001';
 const PVC_UID = '9b1f3c2e-1111-4222-8333-444455556666';
 const profile = testManagedRunnerProfile();
-/** The profile with the Orbit Files drive: the example shows the Pod with it. */
+/** The profile with the Documents drive: the example shows the Pod with it. */
 const filesProfile = testManagedRunnerProfile({ files: true });
 const identity = { ownerId: OWNER, runnerId: RUNNER, generation: 1, namespace: profile.kubernetes.namespace };
 
@@ -216,8 +216,8 @@ test('the drive adds one CSI volume and one mount to the runner, and changes not
   type Container = { name: string; securityContext: unknown; volumeMounts: Array<Record<string, unknown>> };
   const withDrive = buildManagedPod(identity, PVC_UID, filesProfile);
   const without = buildManagedPod(identity, PVC_UID, profile);
-  const volume = { name: 'orbit-files', csi: { driver: 'files.orbit.dev', volumeAttributes: { runnerId: RUNNER } } };
-  const mount = { name: 'orbit-files', mountPath: '/run/orbit-files', mountPropagation: 'HostToContainer' };
+  const volume = { name: 'orbit-documents', csi: { driver: 'documents.orbit.dev', volumeAttributes: { runnerId: RUNNER } } };
+  const mount = { name: 'orbit-documents', mountPath: '/run/orbit-documents', mountPropagation: 'HostToContainer' };
   assert.deepEqual(withDrive.spec.volumes, [...without.spec.volumes!, volume]);
   const runner = (pod: typeof withDrive) => (pod.spec.containers as Container[])[0];
   assert.deepEqual(runner(withDrive).volumeMounts, [...runner(without).volumeMounts, mount]);
@@ -243,10 +243,10 @@ test('the drive adds one CSI volume and one mount to the runner, and changes not
 });
 
 test("the mount Secret carries the generation's mount credential, in the files namespace", () => {
-  const secret = buildDriveMountSecret({ ...identity, generation: 3 }, 'orbit-files-test', 'orbit_drive_mount_x');
+  const secret = buildDriveMountSecret({ ...identity, generation: 3 }, 'orbit-documents-test', 'orbit_drive_mount_x');
   assert.equal(secret.metadata.name, driveMountSecretName(RUNNER));
   assert.equal(secret.metadata.name, `mrf-${RUNNER}`);
-  assert.equal(secret.metadata.namespace, 'orbit-files-test');
+  assert.equal(secret.metadata.namespace, 'orbit-documents-test');
   assert.equal(secret.immutable, true);
   assert.equal(bootstrapCredentialOf(secret), 'orbit_drive_mount_x');
   assert.equal(Buffer.from(secret.data!.generation, 'base64').toString('utf8'), '3');

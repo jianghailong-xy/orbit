@@ -173,7 +173,7 @@ function bar(done, run, fail) {
 const ROWS = {
   session: { t: 'Session state: three activity states an…', tm: 'just now', pill: [bar(25,8,0), '10/33'], st: 'Checks failed · 5h', blue: true },
   feishu: { t: 'Feishu bot integration', tm: 'just now', pill: [bar(80,10,0), '38/43'], st: "Yes, it's doable. Before I outline it, I'm checki…" },
-  files: { t: 'Orbit Files drive', tm: 'just now', pill: [bar(5,5,0), '1/19'], st: 'Watching Orbit Files drive: can Orbit Cloud ru…' },
+  files: { t: 'Documents drive', tm: 'just now', pill: [bar(5,5,0), '1/19'], st: 'Watching Documents drive: can Orbit Cloud ru…' },
   claude: { t: 'Set as default for Claude accounts', tm: '15m ago', done: true, pill: ['', 'Done'], st: 'Landed 13/13 · merged into main' },
   cloud: { t: 'Orbit Cloud: new version available and Up…', tm: '8m ago', pill: [bar(30,0,10), '3/10'], st: 'Checks failed · 1d', blue: true },
   browser: { t: 'Orbit Cloud browser: watch and take over t…', tm: '2h ago', done: true, pill: ['', 'Done'], st: "Removed prod's docker-compose.override.yml an…" },
@@ -223,7 +223,7 @@ IC.grid = '<rect x="4" y="4" width="7" height="7"/><rect x="13" y="4" width="7" 
 C.orange = '#ff9f0a';
 const PG = '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
 
-ROWS.notstarted = { t: 'Orbit Files drive', tm: 'just now', pill: [bar(0,0,0), '0/19'], st: 'Ready to start', amber: true };
+ROWS.notstarted = { t: 'Documents drive', tm: 'just now', pill: [bar(0,0,0), '0/19'], st: 'Ready to start', amber: true };
 ROWS.running = { t: 'Session state: three activity states an…', tm: 'just now', pill: [bar(25,8,0), '10/33'], st: 'Running · coordinator', blue: true };
 ROWS.pausedYou = { t: 'Feishu bot integration', tm: '2h ago', paused: true, pill: [bar(80,10,0), '38/43'], st: `<span class="pg">${PG}Paused · 2 runs finishing</span>`, grey: true };
 ROWS.pausedYou2 = { t: 'Feishu bot integration', tm: '2h ago', paused: true, pill: [bar(80,0,0), '38/43'], st: `<span class="pg">${PG}Paused · 2h</span>`, grey: true };

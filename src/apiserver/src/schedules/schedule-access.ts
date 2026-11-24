@@ -83,7 +83,7 @@ function claudeCheckOnly(level: AccessLevel | null | undefined, provider: string
  *     schedule the run serves and to its envelope (§8.3), and read the condition a WHEN rule's run was started by
  *     (`condition_get`, docs/condition-triggers-design.md §8);
  *   * `notify`, a line in front of the owner;
- *   * reads: tasks, sessions, projects, the wiki and Orbit Files;
+ *   * reads: tasks, sessions, projects, the wiki and Documents;
  *   * the guide, which reads the operation catalogue and asks the server nothing.
  *
  * Absent on purpose: `bg_run` (a shell outside Claude's check), `session_merge`, `task_start`, `task_update`,
@@ -123,8 +123,8 @@ export const CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS: readonly string[] = [
   'mcp__orbit__agent_create', 'mcp__orbit__agent_delete', 'mcp__orbit__agent_list', 'mcp__orbit__agent_update',
   'mcp__orbit__browser_clear_logins',
   'mcp__orbit__ask_owner', 'mcp__orbit__bg_kill', 'mcp__orbit__bg_list', 'mcp__orbit__bg_output',
-  'mcp__orbit__drive_delete', 'mcp__orbit__drive_get', 'mcp__orbit__drive_list', 'mcp__orbit__drive_move',
-  'mcp__orbit__drive_put',
+  'mcp__orbit__documents_delete', 'mcp__orbit__documents_get', 'mcp__orbit__documents_list', 'mcp__orbit__documents_move',
+  'mcp__orbit__documents_put', 'mcp__orbit__documents_sync',
   'mcp__orbit__bg_run', 'mcp__orbit__browser_open', 'mcp__orbit__criterion_check_report', 'mcp__orbit__criterion_check_start',
   'mcp__orbit__criterion_confirm', 'mcp__orbit__criterion_confirmation_withdraw', 'mcp__orbit__file_pin',
   'mcp__orbit__file_upload', 'mcp__orbit__integration_abandon', 'mcp__orbit__integration_observe',

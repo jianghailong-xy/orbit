@@ -507,6 +507,12 @@ func TestEveryOrbitCommandIsPreApprovedOrExcludedWithAReason(t *testing.T) {
 			if !strings.Contains(rules, "Bash("+capabilityTestExe+" capabilities --json)") {
 				t.Error("capabilities --json is not pre-approved")
 			}
+		case word == "drive":
+			// `orbit documents` under its name before the rename (documents_cli.go), still served for prompts that name
+			// it: the catalogue and the allowlist carry the commands under their current name only.
+			if !catalogWords["documents"] || strings.Contains(rules, "Bash("+capabilityTestExe+" drive ") {
+				t.Error("`orbit drive` is the unlisted alias of the catalogued `orbit documents`, never pre-approved itself")
+			}
 		case catalogWords[word]:
 			if excluded {
 				t.Errorf("%s carries catalogue commands and is also excluded", word)

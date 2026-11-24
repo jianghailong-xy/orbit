@@ -3,7 +3,9 @@ import { Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-r
 import { useQuery } from '@tanstack/react-query';
 import { getToken } from './api';
 import { encodeId, routeId } from './lib/idCodec';
+import type { ReactNode } from 'react';
 import { useManagedRunner } from './lib/managedRunner';
+import { useDocumentsEnabled } from './lib/documentsSwitch';
 import { workspacesQuery, runnersQuery } from './lib/queries';
 import { machineDraftPath } from './lib/machineSetup';
 import { firstOpenableWorkspace } from './lib/workspaceOrder';
@@ -25,9 +27,9 @@ import { RunnerBrowserPage } from './pages/RunnerBrowserPage';
 import { GeneralSettingsPage } from './pages/settings/GeneralPage';
 import { NotificationsSettingsPage } from './pages/settings/NotificationsPage';
 import { AppearanceSettingsPage } from './pages/settings/AppearancePage';
-import { StorageSettingsPage } from './pages/files/StoragePage';
+import { StorageSettingsPage } from './pages/documents/StoragePage';
 import { ModelRoutingPage } from './pages/settings/ModelRoutingPage';
-import { StorageFilesPage } from './pages/files/StorageFilesPage';
+import { StorageFilesPage } from './pages/documents/StorageFilesPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AdminSignInPage } from './pages/AdminSignInPage';
 import { AdminEmailPage } from './pages/AdminEmailPage';
@@ -56,7 +58,7 @@ import { SharedWikiDocRoute } from './pages/SharedWikiPage';
 import { TaskRoute } from './pages/TaskRoute';
 import { FollowingPage } from './pages/FollowingPage';
 import { OwnerRequestRedirect } from './pages/OwnerRequestRedirect';
-import { FilesPage } from './pages/FilesPage';
+import { DocumentsPage } from './pages/DocumentsPage';
 import { ScheduleChangePage } from './pages/ScheduleChangePage';
 import { ScheduledPage } from './pages/ScheduledPage';
 import { WikiPage } from './pages/WikiPage';
@@ -82,10 +84,32 @@ function LegacySessionRedirect() {
 // `/runners` lands on /infrastructure with the query it carried, which opens a machine's Settings page:
 // older macOS/iOS clients open `/runners` and `/providers` with `?runner=<id>&engine=<engine>` to sign an
 // engine in, and that machine's page still opens on that engine.
-/** The old /settings/storage/:kind/:id addresses of one Storage row's files, now under Files. */
+/** The old /settings/storage/:kind/:id addresses of one Storage row's files, now under Documents. */
 function StorageSettingsRedirect() {
   const { kind, id } = useParams();
-  return <Navigate to={`/files/storage/${kind}/${id}`} replace />;
+  return <Navigate to={`/documents/storage/${kind}/${id}`} replace />;
+}
+
+/** The old /files/* addresses (the drive was renamed Documents) lead to /documents/* with the query kept. */
+function FilesRedirect() {
+  const { '*': rest } = useParams();
+  const { search } = useLocation();
+  return <Navigate to={{ pathname: rest ? `/documents/${rest}` : '/documents', search }} replace />;
+}
+
+/** Documents' routes: the page once the server has Documents, the not-found page without them, a spinner while that is read. */
+function DocumentsGate({ children, notFound }: { children: ReactNode; notFound: ReactNode }) {
+  const documents = useDocumentsEnabled();
+  if (!documents.settled) {
+    return (
+      <main className="app-main">
+        <div className="app-view app-view--doc" style={{ padding: 48, textAlign: 'center' }}>
+          <Spinner aria-busy="true" />
+        </div>
+      </main>
+    );
+  }
+  return documents.enabled ? <>{children}</> : <>{notFound}</>;
 }
 
 function InfrastructureRedirect() {
@@ -320,9 +344,9 @@ export function App() {
             <Route path="general" element={<GeneralSettingsPage />} />
             <Route path="notifications" element={<NotificationsSettingsPage />} />
             <Route path="appearance" element={<AppearanceSettingsPage />} />
-            {/* Storage moved into Files (docs/mocks/orbit-files, board choice a): the old addresses lead there. */}
-            <Route path="storage" element={<Navigate to="/files/storage" replace />} />
-            <Route path="storage/:kind/:id" element={<StorageSettingsRedirect />} />
+            {/* Storage moved into Documents (docs/mocks/documents, board choice a): the old addresses lead there. */}
+            <Route path="storage" element={<DocumentsGate notFound={notFound}><Navigate to="/documents/storage" replace /></DocumentsGate>} />
+            <Route path="storage/:kind/:id" element={<DocumentsGate notFound={notFound}><StorageSettingsRedirect /></DocumentsGate>} />
             <Route path="profile" element={<ProfilePage />} />
             {/* Old account-settings link, now Profile. Keep the redirect so existing
                 bookmarks/deep links don't 404. */}
@@ -394,26 +418,33 @@ export function App() {
                 </FlushView>
               }
             />
-            {/* Orbit Files, the account's drive (docs/mocks/orbit-files/02-web): `?folder=` opens a folder and `?file=`
+            {/* Documents, the account's drive (docs/mocks/documents/02-web): `?folder=` opens a folder and `?file=`
                 picks a file in it; its Trash is reached from inside it. */}
             <Route
-              path="files"
+              path="documents"
               element={
-                <FlushView>
-                  <FilesPage />
-                </FlushView>
+                <DocumentsGate notFound={notFound}>
+                  <FlushView>
+                    <DocumentsPage />
+                  </FlushView>
+                </DocumentsGate>
               }
             />
-            <Route path="files/storage" element={<FlushView><StorageSettingsPage /></FlushView>} />
-            <Route path="files/storage/:kind/:id" element={<FlushView><StorageFilesPage /></FlushView>} />
+            <Route path="documents/storage" element={<DocumentsGate notFound={notFound}><FlushView><StorageSettingsPage /></FlushView></DocumentsGate>} />
+            <Route path="documents/storage/:kind/:id" element={<DocumentsGate notFound={notFound}><FlushView><StorageFilesPage /></FlushView></DocumentsGate>} />
             <Route
-              path="files/trash"
+              path="documents/trash"
               element={
-                <FlushView>
-                  <FilesPage view="trash" />
-                </FlushView>
+                <DocumentsGate notFound={notFound}>
+                  <FlushView>
+                    <DocumentsPage view="trash" />
+                  </FlushView>
+                </DocumentsGate>
               }
             />
+            {/* The drive was renamed Documents: every old /files address keeps working, query string included. */}
+            <Route path="files" element={<FilesRedirect />} />
+            <Route path="files/*" element={<FilesRedirect />} />
             {/* The Waiting on you inbox is gone; its old address opens the session that filed the request. */}
             <Route path="waiting" element={<OwnerRequestRedirect />} />
             {/* Everything this account follows: watches, filed Active / Needs attention / Triggered

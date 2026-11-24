@@ -2772,7 +2772,7 @@ P-M1 不加列：它读的 `delivered_sha` 与 `delivered_base_sha` 是修订 29
 
 **已收口的缺口**：此前 `non_code` 只被 `project-done-request.ts` 与 `ProjectsService` 读，`enqueueForDoneTask` 不读它，贴了 `nonCode` 的项目照样入队落地；现在没有任何落地路径读它（P-M3）。
 
-**P-M4（提交就是交付）**：分支上的提交都是要落的；没有「提交了但别落」的声明。不想落地的东西不提交到任务分支上（放 Orbit Files，或别的仓库：O-L7 对别的仓库已有规则）。
+**P-M4（提交就是交付）**：分支上的提交都是要落的；没有「提交了但别落」的声明。不想落地的东西不提交到任务分支上（放 Documents，或别的仓库：O-L7 对别的仓库已有规则）。
 
 **P-C1（项目分支上的落地检查归协调者）**：线是 `PROJECT_BRANCH` 时，`landingCheckCommand` 与 `landingCheckTimeoutSeconds` 由项目当前的协调会话直接写，不出卡（L5-b 对这两个字段在这条线上放开），写入记来源与时刻（实现见 §12.19：`landing_check_set_by` 四值）。前提是这条线配了合并检查（`merge_check_command` 非空）：没有 M-S3 这道门时，落地检查是唯一的检查，改它仍要卡。`MAIN` 线不放开。写 `null` 的含义不变：回落到合并检查（K1）。要明说「不跑」，增一个显式值 `landingCheck: 'NONE'`：J-S5 这时只跑任务验收。
 

@@ -254,8 +254,18 @@ internal object OwnerRequestRowWords {
 /** OrbitKit `SessionRunState`: what the run is doing or how it ended, apart from where the session is filed. */
 internal enum class RunState { QUEUED, RUNNING, AWAITING_INPUT, INTERRUPTED, SUCCEEDED, FAILED, ENDED, UNKNOWN }
 
+private val KNOWN_RUN_STATUSES = setOf("PENDING", "RUNNING", "AWAITING_INPUT", "SUCCEEDED", "FAILED", "INTERRUPTED", "CANCELLED")
+
 /** `SessionRunState.resolve`: the server's `runState` first, then its raw run status and end reason. */
 internal val DirectorySession.effectiveRunState: RunState get() {
+    // A held session whose status word this build does not know reads the phase, as web does (a release is worded by [displayRunState]).
+    // A known status keeps its reading: a parked turn with a background job says so, which the phase alone cannot.
+    if (released == false && (runStatus ?: status) !in KNOWN_RUN_STATUSES && RunState.entries.none { it != RunState.UNKNOWN && it.name == runState }) when (phase) {
+        "PENDING" -> return RunState.QUEUED
+        // `activity` is TURN on every queued or running row; only another one (a background job, a wait) is a parked session.
+        "RUNNING" -> return if (activity.isNullOrEmpty() || activity == "TURN") RunState.RUNNING else RunState.AWAITING_INPUT
+        "IDLE" -> return if (lastTurnOutcome == "INTERRUPTED") RunState.INTERRUPTED else RunState.AWAITING_INPUT
+    }
     RunState.entries.firstOrNull { it != RunState.UNKNOWN && it.name == runState }?.let { return it }
     return when (runStatus ?: status) {
         "PENDING" -> RunState.QUEUED

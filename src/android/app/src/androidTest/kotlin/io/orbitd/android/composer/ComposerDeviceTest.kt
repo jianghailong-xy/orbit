@@ -220,7 +220,7 @@ class ComposerDeviceTest {
         try {
             control("""{"uploadFailures":1,"uploadDelay":0.3}""")
             fun pick(shots: Boolean) {
-                compose.onNodeWithTag("composer-plus").performClick(); compose.onNodeWithText("Upload File",useUnmergedTree=true).performClick()
+                compose.onNodeWithTag("composer-plus").performClick(); compose.onNodeWithText("File",useUnmergedTree=true).performClick()
                 selectFilesRoot("Downloads")
                 if (systemNode("List view") != null) systemClick("List view")
                 compose.waitUntil(10000) { systemNode(fileName) != null }
@@ -333,7 +333,7 @@ class ComposerDeviceTest {
         android.media.MediaScannerConnection.scanFile(app,arrayOf(path),arrayOf("image/jpeg")) { _,_ -> scanned.countDown() }
         assertTrue(scanned.await(10,java.util.concurrent.TimeUnit.SECONDS))
         try {
-            compose.onNodeWithTag("composer-plus").performClick();compose.onNodeWithText("Upload Image",useUnmergedTree=true).performClick()
+            compose.onNodeWithTag("composer-plus").performClick();compose.onNodeWithText("Image",useUnmergedTree=true).performClick()
             if (Build.VERSION.SDK_INT < 33) {
                 selectFilesRoot("Images")
                 if (systemNode("List view") != null) systemClick("List view")
