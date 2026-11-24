@@ -189,20 +189,26 @@ func TestOrbitProjectInstructionsDifferInsideRecordedWork(t *testing.T) {
 			t.Errorf("a session inside recorded work is still offered %q", want)
 		}
 	}
-	for _, want := range []string{
-		"file it as a task",
-		"lands under the same project this one belongs to",
-		// The proposal is not withheld from a task session any more; what the form carries is the
-		// default it trades away and the thing agreeing costs — this conversation becomes the new
-		// project's coordinator.
-		"you may put it in front of them",
-		"this conversation becomes that project's coordinator",
-	} {
+	for _, want := range []string{"as a task, saying first what you are filing", "it lands in this task's project",
+		"A separate undertaking is the user's to start", "project_create"} {
 		if !strings.Contains(inside, want) {
 			t.Errorf("task form does not contain %q", want)
 		}
-		if strings.Contains(open, want) {
+		if strings.Contains(open, want) && want != "project_create" {
 			t.Errorf("free conversation is told %q", want)
+		}
+	}
+	// Since design step 5d what the task form said at length is project_create's description.
+	var create string
+	for _, tool := range catalogToolDescriptors(false, false) {
+		if tool["name"] == "project_create" {
+			create, _ = tool["description"].(string)
+		}
+	}
+	for _, want := range []string{"The card is the only yes", "never create a project another way", "from this same session",
+		"Inside a task's run, work you discover is a task of that task's project", "bound to THIS session as its coordinator"} {
+		if !strings.Contains(create, want) {
+			t.Errorf("project_create's description does not say %q", want)
 		}
 	}
 	// The one clause neither form may drop: nothing is created without the user's yes, in either shape.

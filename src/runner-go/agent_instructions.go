@@ -276,13 +276,11 @@ const orbitProgressInstructions = "When this task's position changes -- a new ph
 // of the same paragraph to both kinds of session is what made the proposal read as something to
 // do on every turn rather than something to do rarely, and that is still why the two differ.
 const (
-	orbitProjectInsideInstructions = "You are running one task Orbit has already recorded, so newly discovered work has somewhere to go: file it " +
-		"as a task, saying first what you are filing. It lands under the same project this one belongs to, without your naming it. " +
-		"Work that is a separate undertaking is the user's to start, and you may put it in front of them rather than " +
-		"starting it yourself: project_create raises a confirmation card and waits for the answer, and on a yes this " +
-		"conversation becomes that project's coordinator -- opening the project later comes back here rather than " +
-		"starting a stranger. Filing the task is still the default, and the cheaper one. Nothing is created without " +
-		"the user's yes, and the card is the only place that yes comes from: never create a project another way."
+	// One line since design step 5d: that the card is the only yes, that a yes binds the project to this conversation
+	// as its coordinator, and the bar a project has to clear are project_create's description.
+	orbitProjectInsideInstructions = "File work you discover in this task's run as a task, saying first what you are " +
+		"filing: it lands in this task's project. A separate undertaking is the user's to start, which project_create " +
+		"can propose to them on its card."
 	orbitProjectProposeInstructions = "Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and " +
 		"that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different " +
 		"parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then " +
