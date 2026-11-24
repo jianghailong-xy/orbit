@@ -91,9 +91,9 @@ class DocumentsLogicTest {
         val group = DocumentsTrashGroup(id = "g", folderPath = "/Orbit UI migration", createdAt = "2026-11-24T14:20:00Z", itemCount = 18,
             sizeBytes = 46_000_000, actor = DocumentsWriter("AGENT"))
         assertEquals("Orbit UI migration · today 14:20", DocumentsLogic.groupHeading(group, now, utc))
-        val folder = DocumentsEntry(id = "x", kind = "FOLDER", name = "old-screens", sizeBytes = 46_000_000)
-        assertEquals("Folder · 18 items · 46 MB · by an agent on Orbit Cloud",
-            DocumentsLogic.trashLine(folder, group, DocumentsLogic.UNCHECKED_AGENT, 18))
+        val folder = DocumentsEntry(id = "x", kind = "FOLDER", name = "old-screens")
+        assertEquals("the folder and the 18 under it", "Folder · 18 items · 46 MB · by an agent on Orbit Cloud",
+            DocumentsLogic.trashLine(folder, group.copy(itemCount = 19, items = listOf(folder)), DocumentsLogic.UNCHECKED_AGENT))
         assertEquals("Deleted by you", DocumentsLogic.trashLine(entry("eval.zip"), group, DocumentsLogic.YOU))
         assertEquals("18 items · 46 MB · kept until you empty it", DocumentsLogic.trashSummary(listOf(group)))
         assertEquals("18 items from Orbit UI migration are deleted for good. This can't be undone.", DocumentsLogic.deleteForGoodMessage(group))

@@ -352,12 +352,15 @@ object DocumentsLogic {
 
     private fun lowerWho(writer: String) = if (writer == YOU) "you" else if (writer == UNCHECKED_AGENT) "an agent on Orbit Cloud" else writer
 
-    /** A Trash row's line: "Folder · 18 items · 46 MB · by an agent on Orbit Cloud", "Deleted by you", "Earlier version · replaced 09:12
-     * by Agent in Redesign…". [writer] is the actor's name as [writerText] says it; [itemCount] a folder's count once known. */
-    fun trashLine(entry: DocumentsEntry, group: DocumentsTrashGroup, writer: String, itemCount: Int? = null): String =
-        if (entry.isFolder) listOfNotNull("Folder", itemCount?.let(::items), formatSize(entry.sizeBytes).takeIf { entry.sizeBytes > 0 },
-            "by ${lowerWho(writer)}").joinToString(" · ")
-        else "Deleted by ${lowerWho(writer)}"
+    /** A Trash row's line: "Folder · 18 items · 46 MB · by an agent on Orbit Cloud", "Deleted by you". [writer] is the actor's name as
+     * [writerText] says it. A group's counts take in everything it marked, the folder itself too: a folder deleted alone reads them as
+     * its own. */
+    fun trashLine(entry: DocumentsEntry, group: DocumentsTrashGroup, writer: String): String {
+        if (!entry.isFolder) return "Deleted by ${lowerWho(writer)}"
+        val alone = group.items.size == 1
+        return listOfNotNull("Folder", if (alone) items(maxOf(0, group.itemCount - 1)) else null,
+            if (alone && group.sizeBytes > 0) formatSize(group.sizeBytes) else null, "by ${lowerWho(writer)}").joinToString(" · ")
+    }
 
     fun versionLine(group: DocumentsTrashGroup, writer: String, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String =
         "Earlier version · replaced ${formatWhen(group.createdAt, now, zone)} by ${lowerWho(writer)}"
