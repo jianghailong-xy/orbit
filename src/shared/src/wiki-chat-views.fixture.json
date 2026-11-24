@@ -1,0 +1,223 @@
+{
+  "about": "Served by wiki-chat-drafts.pg.spec.ts: the drafts read route, as the web fetches it. Not edited by hand.",
+  "views": {
+    "heldWeb": {
+      "id": "3539LzYtz3JII9wXsWyjB",
+      "sessionId": "3539LzU1oYKn3PXzuwHKK",
+      "kind": "rewrite",
+      "state": "draft",
+      "label": "Rewrite from main",
+      "rationale": "The lease moved to two minutes on main.",
+      "ops": [],
+      "sections": [
+        {
+          "doc": "sessions-runtime",
+          "key": "leases",
+          "where": "1.1 §3",
+          "title": "Leases"
+        }
+      ],
+      "rewrites": [
+        {
+          "doc": "sessions-runtime",
+          "key": "leases",
+          "where": "1.1 §3",
+          "title": "Leases"
+        }
+      ],
+      "similar": [],
+      "tainted": true,
+      "replaces": null,
+      "replacedBy": null,
+      "decision": null,
+      "decidedAt": null,
+      "autoQueuedAt": null,
+      "held": "web",
+      "undoneAt": null,
+      "undoable": false,
+      "changesetId": null,
+      "rewrite": null,
+      "change": null,
+      "createdAt": "2026-11-24T12:49:40.571Z",
+      "publicId": "3539LzYtz3JII9wXsWyjB",
+      "sessionPublicId": "3539LzU1oYKn3PXzuwHKK",
+      "changesetPublicId": null
+    },
+    "autoRewriting": {
+      "id": "3539Lzot9V2rnyXULKJ2w",
+      "sessionId": "3539LzmwPAheiCBbc2XYP",
+      "kind": "rewrite",
+      "state": "rewritten",
+      "label": "Rewrite from main",
+      "rationale": "The lease is two minutes on main.",
+      "ops": [],
+      "sections": [
+        {
+          "doc": "sessions-runtime",
+          "key": "leases",
+          "where": "1.1 §3",
+          "title": "Leases"
+        }
+      ],
+      "rewrites": [
+        {
+          "doc": "sessions-runtime",
+          "key": "leases",
+          "where": "1.1 §3",
+          "title": "Leases"
+        }
+      ],
+      "similar": [],
+      "tainted": false,
+      "replaces": null,
+      "replacedBy": null,
+      "decision": null,
+      "decidedAt": null,
+      "autoQueuedAt": "2026-11-24T12:49:40.738Z",
+      "held": null,
+      "undoneAt": null,
+      "undoable": true,
+      "changesetId": null,
+      "rewrite": {
+        "jobId": "gYLHfIOhKsFxvEBcVWTwi",
+        "result": "waiting",
+        "reason": "worker_not_running",
+        "sha": null,
+        "sections": [
+          {
+            "doc": "sessions-runtime",
+            "key": "leases",
+            "where": "1.1 §3",
+            "result": null,
+            "changed": null,
+            "versionId": null,
+            "versionPublicId": null
+          }
+        ],
+        "seen": false,
+        "settledAt": null,
+        "jobPublicId": "gYLHfIOhKsFxvEBcVWTwi"
+      },
+      "change": null,
+      "createdAt": "2026-11-24T12:49:40.734Z",
+      "publicId": "3539Lzot9V2rnyXULKJ2w",
+      "sessionPublicId": "3539LzmwPAheiCBbc2XYP",
+      "changesetPublicId": null
+    },
+    "autoUpdated": {
+      "id": "3539Lzot9V2rnyXULKJ2w",
+      "sessionId": "3539LzmwPAheiCBbc2XYP",
+      "kind": "rewrite",
+      "state": "rewritten",
+      "label": "Rewrite from main",
+      "rationale": "The lease is two minutes on main.",
+      "ops": [],
+      "sections": [
+        {
+          "doc": "sessions-runtime",
+          "key": "leases",
+          "where": "1.1 §3",
+          "title": "Leases"
+        }
+      ],
+      "rewrites": [
+        {
+          "doc": "sessions-runtime",
+          "key": "leases",
+          "where": "1.1 §3",
+          "title": "Leases"
+        }
+      ],
+      "similar": [],
+      "tainted": false,
+      "replaces": null,
+      "replacedBy": null,
+      "decision": null,
+      "decidedAt": null,
+      "autoQueuedAt": "2026-11-24T12:49:40.738Z",
+      "held": null,
+      "undoneAt": null,
+      "undoable": true,
+      "changesetId": null,
+      "rewrite": {
+        "jobId": "gYLHfIOhKsFxvEBcVWTwi",
+        "result": "updated",
+        "reason": null,
+        "sha": "1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f",
+        "sections": [
+          {
+            "doc": "sessions-runtime",
+            "key": "leases",
+            "where": "1.1 §3",
+            "result": "updated",
+            "changed": 1,
+            "versionId": "3539LzuvtIdkHB1ZSGsiz",
+            "versionPublicId": "3539LzuvtIdkHB1ZSGsiz"
+          }
+        ],
+        "seen": false,
+        "settledAt": "2026-11-24T12:49:40.804Z",
+        "jobPublicId": "gYLHfIOhKsFxvEBcVWTwi"
+      },
+      "change": null,
+      "createdAt": "2026-11-24T12:49:40.734Z",
+      "publicId": "3539Lzot9V2rnyXULKJ2w",
+      "sessionPublicId": "3539LzmwPAheiCBbc2XYP",
+      "changesetPublicId": null
+    },
+    "heldBudget": {
+      "id": "3539M0z1dFsMMtez0YwCE",
+      "sessionId": "3539M0xMmMTFT048OC1Fk",
+      "kind": "rewrite",
+      "state": "draft",
+      "label": "Rewrite from main",
+      "rationale": "Both lag behind main.",
+      "ops": [],
+      "sections": [
+        {
+          "doc": "sessions-runtime",
+          "key": "leases",
+          "where": "1.1 §3",
+          "title": "Leases"
+        },
+        {
+          "doc": "sessions-runtime",
+          "key": "turn-delivery",
+          "where": "1.1 §2",
+          "title": "Turn delivery"
+        }
+      ],
+      "rewrites": [
+        {
+          "doc": "sessions-runtime",
+          "key": "leases",
+          "where": "1.1 §3",
+          "title": "Leases"
+        },
+        {
+          "doc": "sessions-runtime",
+          "key": "turn-delivery",
+          "where": "1.1 §2",
+          "title": "Turn delivery"
+        }
+      ],
+      "similar": [],
+      "tainted": false,
+      "replaces": null,
+      "replacedBy": null,
+      "decision": null,
+      "decidedAt": null,
+      "autoQueuedAt": null,
+      "held": "budget",
+      "undoneAt": null,
+      "undoable": false,
+      "changesetId": null,
+      "rewrite": null,
+      "change": null,
+      "createdAt": "2026-11-24T12:49:41.474Z",
+      "publicId": "3539M0z1dFsMMtez0YwCE",
+      "sessionPublicId": "3539M0xMmMTFT048OC1Fk",
+      "changesetPublicId": null
+    }
+  }
+}

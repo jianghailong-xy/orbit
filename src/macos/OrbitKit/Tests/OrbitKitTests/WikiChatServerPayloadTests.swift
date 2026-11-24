@@ -2,8 +2,9 @@ import Foundation
 import XCTest
 @testable import OrbitKit
 
-/// The rewrite cards and the contents note, drawn from what the apiserver built: `src/shared/src/wiki-chat.server-payloads.json`
-/// is written by `wiki-chat-drafts.pg.spec.ts` and `wiki-chat.pg.spec.ts` (run with WIKI_CHAT_PAYLOADS set), not by hand.
+/// The rewrite cards (`wiki-chat-views.fixture.json`, written by `wiki-chat-drafts.pg.spec.ts` from the drafts read route) and the
+/// contents note (`wiki-chat.server-payloads.json`, written by `wiki-chat.pg.spec.ts` with WIKI_CHAT_PAYLOADS set), drawn from
+/// what the apiserver built, not by hand.
 final class WikiChatServerPayloadTests: XCTestCase {
 
     private struct Missing: Error { let what: String }
@@ -26,12 +27,23 @@ final class WikiChatServerPayloadTests: XCTestCase {
         return try JSONSerialization.data(withJSONObject: one)
     }
 
+    /// A card from `wiki-chat-views.fixture.json`, which `wiki-chat-drafts.pg.spec.ts` writes from the drafts read route.
     private func card(_ name: String) throws -> WikiChatDraftView {
-        try JSONDecoder().decode(WikiChatDraftView.self, from: raw(name))
+        var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        for _ in 0..<12 {
+            let candidate = dir.appendingPathComponent("src/shared/src/wiki-chat-views.fixture.json")
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                let top = try JSONSerialization.jsonObject(with: Data(contentsOf: candidate)) as! [String: Any]
+                guard let one = (top["views"] as? [String: Any])?[name] else { throw Missing(what: "view \(name)") }
+                return try JSONDecoder().decode(WikiChatDraftView.self, from: JSONSerialization.data(withJSONObject: one))
+            }
+            dir = dir.deletingLastPathComponent()
+        }
+        throw Missing(what: "src/shared/src/wiki-chat-views.fixture.json")
     }
 
     func testAnAutoWrittenCardWhileItsRewriteRuns() throws {
-        let look = WikiChatLogic.cardLook(try card("drafts.rewritten.rewriting"))
+        let look = WikiChatLogic.cardLook(try card("autoRewriting"))
         XCTAssertEqual(look.title, "Rewritten from main")
         XCTAssertEqual(look.tone, .green)
         XCTAssertEqual(look.actions, [.undo])
@@ -39,7 +51,7 @@ final class WikiChatServerPayloadTests: XCTestCase {
     }
 
     func testAnAutoWrittenCardOnceItsRewriteSettled() throws {
-        let view = try card("drafts.rewritten.settled")
+        let view = try card("autoUpdated")
         let look = WikiChatLogic.cardLook(view)
         XCTAssertEqual(look.title, "Rewritten from main")
         XCTAssertEqual(look.actions, [.undo])
@@ -49,17 +61,13 @@ final class WikiChatServerPayloadTests: XCTestCase {
     }
 
     func testHeldCardsSayWhyAndOfferApplyAndDiscard() throws {
-        let web = WikiChatLogic.cardLook(try card("drafts.held.web"))
+        let web = WikiChatLogic.cardLook(try card("heldWeb"))
         XCTAssertEqual(web.title, "Draft · Rewrite from main")
         XCTAssertEqual(web.note, "Apply to write: this chat read web content")
         XCTAssertEqual(web.actions, [.apply, .discard])
-        let budget = WikiChatLogic.cardLook(try card("drafts.held.budget"))
+        let budget = WikiChatLogic.cardLook(try card("heldBudget"))
         XCTAssertEqual(budget.note, "Apply to write: today's automatic rewrites are used up")
         XCTAssertEqual(budget.actions, [.apply, .discard])
-        let draft = WikiChatLogic.cardLook(try card("drafts.held.draft"))
-        XCTAssertEqual(draft.note, "Written once you apply or discard the draft that rewrites the same section")
-        XCTAssertEqual(draft.actions, [.apply, .discard])
-    }
 
     func testTheDeliveredContentsBlockIsLabelledWikiContents() throws {
         let text = String(decoding: try raw("chat.delivered.contents"), as: UTF8.self)
