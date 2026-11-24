@@ -391,7 +391,8 @@ func newAgentContractTelemetry(engine, exe string, mode func() string, orchestra
 // newSessionAgentContractTelemetry is newAgentContractTelemetry for a session the runner is running.
 func newSessionAgentContractTelemetry(job *ClaimedSession) *agentContractTelemetry {
 	exe := orbitCLIExecutable()
-	instructions := len(withOrbitCLIInstructions("", exe, job.insideRecordedWork(), job.watchesOn(), agentDelegates(job.Agent), job.workflowsOn()))
+	// Measured in Claude Code's spelling whatever the engine, as it always has been.
+	instructions := len(compose(job.sessionShape(exe), claudeCodeProfile).System)
 	return newAgentContractTelemetry(runtimeProvider(job), exe, func() string {
 		if job.liveMode != nil {
 			if mode := job.liveMode.current(); mode != "" {

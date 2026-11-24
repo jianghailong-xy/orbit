@@ -54,16 +54,7 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 	// The Orbit CLI discovery instructions are platform instructions and therefore
 	// always join the append prompt rather than replacing the provider's defaults.
 	orbitExe := orbitCLIExecutable()
-	args = appendClaudeAgentInstructionArgs(
-		args,
-		job.instructionAgent(),
-		orbitExe,
-		job.AllowOrchestration,
-		job.insideRecordedWork(),
-		job.watchesOn(),
-		job.BrowserEnabled,
-		job.workflowsOn(),
-	)
+	args = appendClaudeAgentInstructionArgs(args, job.instructionAgent(), job.sessionShape(orbitExe))
 	// Orbit ships its own task tools via the `orbit` MCP server (mcp__orbit__task_*).
 	// Claude's built-in Task* tools collide by intent: an agent told to "create tasks"
 	// reaches for them, but those entries are session-local todos that never reach

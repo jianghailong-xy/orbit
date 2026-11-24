@@ -171,6 +171,32 @@ func mcpOrchestrationEnabled() bool {
 // orchestrationEnabled requires the account's switch and an exact session context.
 // The credential is read (or, if absent/invalid, refreshed) lazily by Transport,
 // so a long-lived MCP process never depends on its startup environment snapshot.
+// sessionShape is the shape of the session this server serves, as its spawn environment says it. It does not know
+// the engine it serves, so it composes for unknownEngineProfile.
+func (s *mcpServer) sessionShape() SessionShape {
+	role := roleTopLevel
+	switch {
+	case s.helpAsk:
+		role = roleHelpAsk
+	case os.Getenv(envSubagentRunID) != "":
+		role = roleSubAgent
+	case scheduledCheckOnlyFromEnv():
+		role = roleCheckOnly
+	case s.taskID != "":
+		role = roleTaskRun
+	}
+	return SessionShape{
+		Role:               role,
+		InsideRecordedWork: s.taskID != "",
+		Watches:            !s.watchesOff,
+		Browser:            s.browserOn,
+		Orchestration:      s.orchestrationEnabled(),
+		Wiki:               !s.wikiOff,
+		Workflows:          !s.workflowsOff,
+		DriveMounted:       driveMounted(),
+	}
+}
+
 func (s *mcpServer) orchestrationEnabled() bool {
 	return s.allowOrchestration &&
 		strings.TrimSpace(s.sessionID) != ""
@@ -239,11 +265,9 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 			pv = p.ProtocolVersion
 		}
 		// The agent primer, versioned in its first line, is the one set of instructions every engine's
-		// MCP client is handed; each engine's own instructions carry it too (agent_primer.go).
-		instructions := agentPrimer
-		if s.helpAsk {
-			instructions = helpAskInstructions
-		}
+		// MCP client is handed; each engine's own instructions carry it too (agent_primer.go). An Ask is
+		// given the help reads' instructions instead (unit help.ask).
+		instructions := compose(s.sessionShape(), unknownEngineProfile).MCP
 		return s.ok(req.ID, map[string]interface{}{
 			"protocolVersion": pv,
 			"capabilities":    map[string]interface{}{"tools": map[string]interface{}{}},

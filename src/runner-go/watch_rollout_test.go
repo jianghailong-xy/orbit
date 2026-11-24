@@ -223,13 +223,13 @@ func TestInstructionsLeaveTheWaitParagraphOutWithWatchesOff(t *testing.T) {
 	// Every provider that renders the instructions carries the claim's flag through to them.
 	job := &ClaimedSession{TaskID: "t1", WatchesDisabled: true}
 	rendered := map[string]string{
-		"claude":           strings.Join(appendClaudeAgentInstructionArgs(nil, AgentExecConfig{}, exe, false, job.insideRecordedWork(), job.watchesOn(), false, true), "\n"),
-		"codex items":      fmt.Sprint(codexInjectedAgentItems(AgentExecConfig{}, exe, job.insideRecordedWork(), job.watchesOn(), true)),
-		"codex context":    fmt.Sprint(codexAgentAdditionalContext(AgentExecConfig{}, exe, 1, job.insideRecordedWork(), job.watchesOn(), true)),
-		"codex legacy":     codexLegacyAgentContext(AgentExecConfig{}, exe, job.insideRecordedWork(), job.watchesOn(), true),
-		"kimi":             kimiPromptText(AgentExecConfig{}, exe, "hello", job.insideRecordedWork(), job.watchesOn(), true),
+		"claude":           strings.Join(claudeInstructionArgs(nil, AgentExecConfig{}, exe, false, job.insideRecordedWork(), job.watchesOn(), false, true), "\n"),
+		"codex items":      fmt.Sprint(codexInjectedAgentItemsOf(AgentExecConfig{}, exe, job.insideRecordedWork(), job.watchesOn(), true)),
+		"codex context":    fmt.Sprint(codexAgentAdditionalContextOf(AgentExecConfig{}, exe, 1, job.insideRecordedWork(), job.watchesOn(), true)),
+		"codex legacy":     codexLegacyAgentContextOf(AgentExecConfig{}, exe, job.insideRecordedWork(), job.watchesOn(), true),
+		"kimi":             kimiPromptTextOf(AgentExecConfig{}, exe, "hello", job.insideRecordedWork(), job.watchesOn(), true),
 		"opencode":         openCodeOrbitCLIInstructions(exe, job.insideRecordedWork(), job.watchesOn(), true, true),
-		"claude, Watch on": strings.Join(appendClaudeAgentInstructionArgs(nil, AgentExecConfig{}, exe, false, true, true, false, true), "\n"),
+		"claude, Watch on": strings.Join(claudeInstructionArgs(nil, AgentExecConfig{}, exe, false, true, true, false, true), "\n"),
 	}
 	for provider, text := range rendered {
 		wantParagraph := provider == "claude, Watch on"

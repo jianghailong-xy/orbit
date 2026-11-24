@@ -348,7 +348,7 @@ func TestTaskProgressAgentTextSaysWhatProgressIs(t *testing.T) {
 	if strings.Contains(orbitCLIInstructions(exe, false, true, true, true), "task_progress_report") {
 		t.Error("a session running no task is told to report a task's progress")
 	}
-	paragraph := orbitProgressInstructions(true)
+	paragraph := orbitProgressInstructions
 	for i := 0; i < len(paragraph); i++ {
 		if paragraph[i] > 127 {
 			t.Fatalf("the progress paragraph must stay ASCII for codex's context value; byte %d is %q", i, paragraph[i])
