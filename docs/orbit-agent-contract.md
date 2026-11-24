@@ -370,7 +370,7 @@ The text travels by one carrier per engine, always from `compose`:
 | application context (`additionalContext`), whole paragraphs in values of at most 900 bytes | Codex >= 0.135 | every turn, under keys whose generation advances after a compaction |
 | one developer message (`thread/inject_items`) | Codex 0.125-0.134 | at thread start, and again before the first turn after a compaction |
 | the turn's own input, in `<orbit_application_context>` | Codex < 0.125 | every turn |
-| the prompt, in `<orbit-agent-instructions>` | Kimi Code; Cursor CLI | Kimi: every prompt; Cursor: the conversation's first |
+| the prompt, in `<orbit-agent-instructions>` | Kimi Code; Cursor CLI | Kimi: the conversation's first prompt, and the first after a compaction or a resume whose history no longer holds it (read from Kimi's own wire); Cursor: the conversation's first |
 | global rules (`GEMINI.md`); appended system prompt; instructions file | Antigravity; DeepSeek Harness; OpenCode | every process the runner starts |
 
 Codex 0.167.2 showed only the first 250 characters of a server's instructions (measured 2026-11-14), and a session whose

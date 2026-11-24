@@ -234,6 +234,8 @@ The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few op
 </orbit-agent-instructions>
 
 hi type:text]]
+=== kimi, a later prompt (24 bytes)
+[map[text:hi type:text]]
 === opencode (4595 bytes)
 Owner instructions.
 

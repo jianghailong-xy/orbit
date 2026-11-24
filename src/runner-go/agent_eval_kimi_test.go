@@ -12,13 +12,14 @@ import (
 // kimiEvalEngine drives Kimi Code as runKimiSessionProcess does: the session's private Kimi home with Orbit's MCP
 // server in it (prepareKimiHomeOverlay, kimiMCPConfigRecord), `kimi acp` with the session's environment
 // (startKimiACP), its handshake and configuration, each prompt as prepareKimiPrompt builds it, and its stream read by
-// handleKimiNotification. Kimi's permission requests go to the eval's control plane (bridgeKimiPermission), which
+// handleKimiNotification, with the session's kimiInstructionLedger deciding which prompts carry the instructions. Kimi's permission requests go to the eval's control plane (bridgeKimiPermission), which
 // answers them as the scenario's owner. It has no reset: a compaction or a resume is not played (reset answers false).
 type kimiEvalEngine struct {
 	model, version string
 	app            *kimiACPClient
 	sessionID      string
 	overlay        string
+	instructions   *kimiInstructionLedger
 	activeMu       sync.Mutex
 	active         *kimiActiveTurn
 	gauge          kimiUsageGauge
@@ -101,6 +102,7 @@ func (e *kimiEvalEngine) start(s *evalSession) error {
 	}
 	sessionID <- id
 	e.sessionID = id
+	e.instructions = newKimiInstructionLedger(realHome, id)
 	s.job.RuntimeSessionID = id
 	if err := app.configureSession(s.ctx, id, s.job.Agent); err != nil {
 		return fmt.Errorf("configure: %w", err)
@@ -124,7 +126,7 @@ func (e *kimiEvalEngine) turn(s *evalSession, log *evalTurnLog) error {
 	}
 	e.active = turn
 	e.activeMu.Unlock()
-	prepared := prepareKimiPrompt(s.ctx, nil, s.job, &RunInboxResponse{Content: log.Prompt}, nil)
+	prepared := prepareKimiPrompt(s.ctx, nil, s.job, &RunInboxResponse{Content: log.Prompt}, nil, e.instructions)
 	s.rec.emit(evUser, map[string]interface{}{"text": log.Prompt})
 	e.app.beginPermissionTurn()
 	result, err := e.app.request(s.ctx, "session/prompt", map[string]interface{}{"sessionId": e.sessionID, "prompt": prepared.blocks})

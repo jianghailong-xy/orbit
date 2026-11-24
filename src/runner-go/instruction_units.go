@@ -263,12 +263,16 @@ var (
 		OrbitTools:         "the `mcp__orbit__*` tools",
 		ToolSearchNotes:    true,
 	}
+	// Kimi is given its instructions on the conversation's first prompt and on the first after a compaction, or a
+	// resume whose history no longer holds them (kimiInstructionLedger). The smoke run of E1, E3 and X2 passed on the
+	// every-prompt carrier and on this one (docs/agent-instructions-eval-baseline.md, "Kimi Code smoke run with the
+	// wake turn").
 	kimiProfile = EngineProfile{
 		Engine:             providerKimi,
 		MCPInstructions:    mcpInstructionsUnknown,
 		ToolDescriptions:   toolDescriptionsUnknown,
 		AlwaysLoad:         probeUnknown,
-		Carrier:            carrierEveryPrompt, // kimiPromptText
+		Carrier:            carrierFirstPrompt, // kimiPromptText
 		SurvivesCompaction: probeUnknown,
 		OrbitTools:         "the `mcp__orbit__*` tools",
 		ToolSearchNotes:    true,

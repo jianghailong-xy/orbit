@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -100,6 +101,15 @@ func instructionSnapshotCarriers(t *testing.T, shape instructionSnapshotShape) m
 	carriers := primerCarriers(t, job)
 	helpAsk, _ := (&mcpServer{helpAsk: true}).handle(&rpcRequest{JSONRPC: "2.0", ID: json.RawMessage("1"), Method: "initialize"})
 	carriers["orbit mcp initialize, help ask"] = helpAsk.Result.(map[string]interface{})["instructions"].(string)
+	// A later prompt of a Kimi conversation whose history holds the instructions (kimiInstructionLedger).
+	wire := filepath.Join(t.TempDir(), "wire.jsonl")
+	held, _ := json.Marshal(map[string]interface{}{"type": "turn.prompt", "agentId": "main",
+		"input": []map[string]interface{}{{"type": "text", "text": kimiInstructionsOpen}}})
+	if err := os.WriteFile(wire, append(held, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	carriers["kimi, a later prompt"] = fmt.Sprint(prepareKimiPrompt(context.Background(), nil, job, &RunInboxResponse{Content: "hi"}, nil,
+		&kimiInstructionLedger{wire: wire}).blocks)
 	replacer := strings.NewReplacer(orbitCLIExecutable(), "<orbit-cli>", job.WT.Path, "<checkout>", job.WT.RepoDir, "<repo>")
 	for name, text := range carriers {
 		carriers[name] = replacer.Replace(text)

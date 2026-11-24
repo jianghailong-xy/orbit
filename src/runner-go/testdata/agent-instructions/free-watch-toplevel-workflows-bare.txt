@@ -248,6 +248,8 @@ The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few op
 </orbit-agent-instructions>
 
 hi type:text]]
+=== kimi, a later prompt (24 bytes)
+[map[text:hi type:text]]
 === opencode (5357 bytes)
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
 

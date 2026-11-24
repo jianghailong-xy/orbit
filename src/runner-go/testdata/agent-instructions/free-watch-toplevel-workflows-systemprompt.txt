@@ -274,6 +274,8 @@ Do not use these tools: WebFetch.
 </orbit-agent-instructions>
 
 hi type:text]]
+=== kimi, a later prompt (24 bytes)
+[map[text:hi type:text]]
 === opencode (5378 bytes)
 Owner instructions.
 

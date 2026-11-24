@@ -472,7 +472,7 @@ func primerCarriers(t *testing.T, job *ClaimedSession) map[string]string {
 		"codex >= 0.135, after compaction":    codexContext(job, 1),
 		"codex 0.125-0.134 developer message": developerMessage(),
 		"codex < 0.125 turn input":            turnInput(),
-		"kimi":                                fmt.Sprint(prepareKimiPrompt(context.Background(), nil, job, &RunInboxResponse{Content: "hi"}, nil).blocks),
+		"kimi":                                fmt.Sprint(prepareKimiPrompt(context.Background(), nil, job, &RunInboxResponse{Content: "hi"}, nil, nil).blocks),
 		"cursor":                              cursorAgentInstructions(job),
 		"antigravity":                         antigravityInstructions(job, exe),
 		"deepseek harness":                    dshSessionAgentOverlay(job).AppendSystemPrompt,
