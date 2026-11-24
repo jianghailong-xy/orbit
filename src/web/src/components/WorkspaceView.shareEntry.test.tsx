@@ -165,7 +165,7 @@ async function openHeaderMenu(): Promise<HTMLElement> {
   return document.querySelector<HTMLElement>('[role="menu"]:not([data-closed])')!;
 }
 
-/** The menu's rows below the tags, top to bottom; a divider is a row of its own. */
+/** The menu's rows, top to bottom; a divider is a row of its own. */
 const drawn = (menu: HTMLElement): string[] =>
   [...menu.querySelectorAll(':scope > [role="menuitem"], :scope > [role="separator"]')].map((el) =>
     el.getAttribute('role') === 'separator' ? '─' : (el.textContent ?? '').trim(),
@@ -287,7 +287,7 @@ describe('a shared session in the session list and its conversation', { timeout:
     expect(mounted().querySelector('.workspace-header .session-shared-pill')).toBeNull();
   });
 
-  it('offers Copy link, Share… · Live link and Download HTML, in that order, above Delete', async () => {
+  it('offers Copy link, Share… · Live link and Download HTML, in that order, after the organize group', async () => {
     await mount(SHARED_PUBLIC);
     await act(async () => {
       await vi.waitFor(() => expect(mounted().querySelector('.workspace-header .session-shared-pill')).not.toBeNull());
@@ -295,15 +295,20 @@ describe('a shared session in the session list and its conversation', { timeout:
     const menu = await openHeaderMenu();
 
     const rows = drawn(menu);
-    expect(rows.slice(rows.indexOf('Complete'))).toEqual([
+    // docs/mocks/session-header-menu: organize, share, inspect, then Delete on its own.
+    expect(rows.map((row) => (row.startsWith('Tags') ? 'Tags' : row.startsWith('Find in session') ? 'Find in session' : row.startsWith('Agent tools') ? 'Agent tools' : row))).toEqual([
       'Complete',
       'Rename…',
       'Move…',
-      'Settings…',
+      'Tags',
       '─',
       'Copy link',
       'Share…Live link',
       'Download HTML',
+      '─',
+      'Find in session',
+      'Agent tools',
+      'Session settings…',
       '─',
       'Delete',
     ]);

@@ -255,7 +255,6 @@ import { MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
 import { trashHoldOf } from '../files/file-retention';
 import { FilesService } from '../files/files.service';
 import { attachmentDisposition } from '../files/user-file-response';
-import { SESSION_TAG_PALETTE } from '../session-tags/session-tags.service';
 import {
   CreateSessionDto,
   MoveSessionDto,
@@ -2679,7 +2678,7 @@ export class SessionsService {
         });
         changed = res.count > 0;
       }
-      if (tags.length > 0 && (await this.applyAutoTags(ownerId, sessionId, tags, known))) {
+      if (tags.length > 0 && (await this.applyAutoTags(sessionId, tags, known))) {
         changed = true;
       }
       if (changed) this.realtime.publishSessionUpdated(sessionId);
@@ -2707,16 +2706,16 @@ export class SessionsService {
   }
 
   /**
-   * File a freshly created session under the model's labels, minting the ones this owner doesn't
-   * have yet. Returns whether anything was linked.
+   * File a freshly created session under the model's labels, only among the tags this owner
+   * already has: auto-tagging never adds to the library, which only a person (or an agent they
+   * ask) grows — an auto-grown library became a wall of one-session tags that buried the session
+   * menu. Returns whether anything was linked.
    *
    * `known` is the candidate list from before the call, so a name the model echoed back maps to
    * the row it came from — matched case-insensitively, because "Login" and "login" are one tag to
-   * a person but two rows under the (owner, name) unique, and a filter split across both finds
-   * neither half.
+   * a person but two rows under the (owner, name) unique.
    */
   private async applyAutoTags(
-    ownerId: string,
     sessionId: string,
     names: string[],
     known: { id: string; name: string }[],
@@ -2725,56 +2724,13 @@ export class SessionsService {
     // this is a guess. Same compare-and-set spirit as the title swap above.
     if ((await this.prisma.sessionTagLink.count({ where: { sessionId } })) > 0) return false;
     const byName = new Map(known.map((t) => [t.name.toLowerCase(), t.id]));
-    const tagIds = names.map((name) => byName.get(name.toLowerCase())).filter((id): id is string => !!id);
-    const fresh = names.filter((name) => !byName.has(name.toLowerCase()));
-    // `known` was itself capped at MAX_KNOWN_TAGS_PROMPTED, so a short list *is* the proof that
-    // the library is still under the ceiling — no second count. At the ceiling the session still
-    // gets tagged, just only with labels that already exist: an unbounded auto-grown library is a
-    // wall of one-session tags, which is no filter at all.
-    const room = MAX_KNOWN_TAGS_PROMPTED - known.length;
-    if (fresh.length > 0 && room > 0) {
-      tagIds.push(...(await this.createAutoTags(ownerId, fresh.slice(0, room))));
-    }
+    const tagIds = [...new Set(names.map((name) => byName.get(name.toLowerCase())).filter((id): id is string => !!id))];
     if (tagIds.length === 0) return false;
     await this.prisma.sessionTagLink.createMany({
       data: tagIds.map((tagId) => ({ sessionId, tagId })),
       skipDuplicates: true,
     });
     return true;
-  }
-
-  /**
-   * Create tags for this owner and return their ids. Positions continue after the system block
-   * (which may not be seeded yet — it is written lazily on first list) and pick a palette color by
-   * position. Two sessions naming the same new tag at once is a race the (owner, name) unique
-   * settles: `skipDuplicates` lets the loser adopt the winner's row instead of failing the pass,
-   * which is why the ids are read back by name rather than taken from the create.
-   */
-  private async createAutoTags(ownerId: string, names: string[]): Promise<string[]> {
-    const agg = await this.prisma.sessionTag.aggregate({
-      where: { ownerId },
-      _max: { position: true },
-    });
-    const start = (agg._max.position ?? SESSION_TAG_PALETTE.length - 1) + 1;
-    await this.prisma.sessionTag.createMany({
-      data: names.map((name, i) => ({
-        name,
-        ownerId,
-        isSystem: false,
-        color: SESSION_TAG_PALETTE[(start + i) % SESSION_TAG_PALETTE.length],
-        position: start + i,
-      })),
-      skipDuplicates: true,
-    });
-    const rows = await this.prisma.sessionTag.findMany({
-      where: { ownerId, name: { in: names } },
-      select: { id: true },
-    });
-    // The tag library is user-scoped and nothing polls it: without this push the new tag exists
-    // but is missing from every open filter and picker until a reload. Clients refetch the whole
-    // library on any tag event, so one publish covers the batch.
-    if (rows.length > 0) this.realtime.publishForUser(ownerId, RunEventType.TAG_CHANGED, rows[0].id);
-    return rows.map((r) => r.id);
   }
 
   // ── L3 orchestration: an in-session workspace spawning/managing OTHER sessions ──
