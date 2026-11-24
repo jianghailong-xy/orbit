@@ -198,23 +198,20 @@ func TestOrbitProjectInstructionsDifferInsideRecordedWork(t *testing.T) {
 
 // A reply hands a file over by linking it, and only out of the session's own directories: the facts
 // TestAttachLocalReplyFiles* hold the runner to. Every engine reads this text, so it is asserted in
-// every form of it. A session that writes to Orbit is told to copy into uploads, where the next `git add -A`
-// (commitWorktree, finalizeWorktree) cannot stage it; one that does not (a SubAgent) keeps the reply paragraph, with
-// its commit clause.
+// every form of it. The commit clause is the price of the copy the paragraph asks for, which the next
+// `git add -A` stages (commitWorktree, finalizeWorktree), so it may not be dropped on its own.
 func TestOrbitInstructionsSayWhichLinkedFilesReachTheUser(t *testing.T) {
 	exe := "/usr/local/bin/orbit"
-	if sub := orbitCLIInstructions(exe, true, true, false, true); !strings.Contains(sub, "can end up in a commit") ||
-		!strings.Contains(sub, "the uploads directory or a git-ignored path") {
-		t.Errorf("a SubAgent is not told which files a reply reaches:\n%s", sub)
-	}
 	for _, form := range []struct{ inside, watches bool }{{false, true}, {true, true}, {false, false}, {true, false}} {
 		got := orbitCLIInstructions(exe, form.inside, form.watches, true, true)
 		for _, phrase := range []string{
 			"`[name](path)`",
 			"`![name](path)`",
-			"your working directory or this session's uploads directory",
+			"inside your working directory or this session's uploads directory",
 			"/tmp included",
-			"into uploads first and link the copy",
+			"copy the file there first and link the copy",
+			"can end up in a commit",
+			"the uploads directory or a git-ignored path",
 		} {
 			if !strings.Contains(got, phrase) {
 				t.Errorf("instructions (inside=%v, watches=%v) do not say %q", form.inside, form.watches, phrase)
@@ -228,34 +225,32 @@ func TestOrbitInstructionsSayWhichLinkedFilesReachTheUser(t *testing.T) {
 	}
 }
 
-// The files paragraph says how a reply hands a file over and where evidence goes, in one paragraph since design step
-// 5f: a path in a reply has to be under the session's own directories, file_upload reads those same two and returns a
-// reply link, and a report or screenshot is kept with it rather than in the repository. Each form carries it, because
-// an agent in no project and one in a task both hand files over; a SubAgent is given only the reply rule.
+// The evidence paragraph says the three things it is there for, and it is read after the reply paragraph, whose rule
+// stands: a path in a reply still has to be under the session's own directories, and the link file_upload returns is
+// not a path. Each form carries it, because an agent in no project and one in a task both produce evidence.
 func TestOrbitInstructionsKeepEvidenceOutOfTheRepository(t *testing.T) {
 	exe := "/usr/local/bin/orbit"
 	for _, form := range []struct{ inside, watches bool }{{false, true}, {true, true}, {false, false}, {true, false}} {
 		got := orbitCLIInstructions(exe, form.inside, form.watches, true, true)
 		for _, phrase := range []string{
-			"only from your working directory or this session's uploads directory",
-			"/tmp included, into uploads first and link the copy",
-			"file_upload, which reads those two directories and returns a reply link",
-			"cite a command's output by its tool call rather than saving a log",
+			"cite a command's output by its tool call",
+			"rather than saving a log",
 			"keep screenshots and reports with file_upload rather than in the repository",
-			"its id is what a FILE check cites",
+			"it reads those same two directories",
+			"returns a reply link and the id a FILE check cites",
 		} {
 			if !strings.Contains(got, phrase) {
 				t.Errorf("instructions (inside=%v, watches=%v) do not say %q", form.inside, form.watches, phrase)
 			}
 		}
-		if strings.Contains(got, orbitReplyFileInstructions) {
-			t.Errorf("instructions (inside=%v, watches=%v) carry the reply paragraph beside the files paragraph", form.inside, form.watches)
+		reply, evidence := strings.Index(got, orbitReplyFileInstructions), strings.Index(got, orbitEvidenceFileInstructions)
+		if reply < 0 || evidence != reply+len(orbitReplyFileInstructions+"\n\n") {
+			t.Errorf("the evidence paragraph must follow the reply paragraph it leans on: reply at %d, evidence at %d", reply, evidence)
 		}
 	}
-	// A SubAgent hands nothing to the person, so it is not told where evidence goes, only which files a reply reaches.
-	sub := orbitCLIInstructions(exe, true, true, false, true)
-	if strings.Contains(sub, orbitEvidenceFileInstructions) || !strings.Contains(sub, orbitReplyFileInstructions) {
-		t.Error("a SubAgent is given the evidence paragraph, or not the reply paragraph")
+	// A SubAgent hands nothing to the person, so it is not told where evidence goes.
+	if strings.Contains(orbitCLIInstructions(exe, true, true, false, true), orbitEvidenceFileInstructions) {
+		t.Error("a SubAgent is given the evidence paragraph")
 	}
 	if strings.Contains(orbitEvidenceFileInstructions, "artifact") {
 		t.Error("file_* is the name: artifact already means three other things here")

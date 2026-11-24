@@ -121,7 +121,7 @@ world the session sits in, how the owner answers each card, a fault), the person
 | `I2-notify-when-done` | unit `notify.when-asked` | the same; "let me know once it's done", then the watch's wake as turn 2 | the person is told through `notify` after the wake, or by a watch made to notify them |
 | `I3-delegate-subagent` | unit `handoff.use-orbit` | orchestration off; "use a subagent to find out why…" | a SubAgent run is opened with `delegate`; the engine's own sub-agent tool is not used |
 | `I3-delegate-subagent/background` | unit `handoff.use-orbit` | "in the background, have someone look into…" | the same |
-| `I4-reply-file-link` | unit `files.evidence` (`files.reply-links` until step 5f) | a log in a directory of its own under `/tmp` | the reply links a copy inside the checkout or the uploads directory, never the file where it lies |
+| `I4-reply-file-link` | unit `files.reply-links` | a log in a directory of its own under `/tmp` | the reply links a copy inside the checkout or the uploads directory, never the file where it lies |
 | `I5-evidence-file-upload` | unit `files.evidence` | a task's run; a test report for its reviewer | the report is kept with `file_upload`, not added or committed to the repository |
 | `I6-progress-report` | unit `progress.report` | a task's run of three items, one at a time | its position is reported with `task_progress_report` |
 | `I7-wiki-path-search` | unit `wiki.search-by-path` | a change to `uploader/upload.go`, with a pitfall on it in the wiki | `wiki_search` names the path before the file is changed |

@@ -764,7 +764,7 @@ func instructionUnitScenarios() []*evalScenario {
 			"In the background, have someone look into why TestBillingExportRetries in billing/export_test.go is flaky. "+
 				"Meanwhile, tell me in two sentences what billing/export.go does.", true),
 		{
-			ID: "I4-reply-file-link", Guards: []string{"files.evidence"},
+			ID: "I4-reply-file-link", Guards: []string{"files.reply-links"},
 			Summary: "Asked for a file that lies in /tmp, the agent copies it where a reply can hand it over and links the copy.",
 			Setup:   evalSetup{Owner: evalOwnerApproveWork, Outside: map[string]string{evalExportLog: evalExportLogText}},
 			Turns: []evalTurnSpec{{Mode: "default", FollowUp: goAhead, Expect: []string{"reply_file"},
