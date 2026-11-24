@@ -966,18 +966,6 @@
   font-size: 13px;
   color: var(--text-2);
 }
-.drive-xfer-fold-open {
-  border: 0;
-  background: none;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  padding: 0;
-}
-.drive-xfer-fold-open:hover {
-  color: var(--text-1);
-  text-decoration: underline;
-}
 .drive-xfer-tick {
   color: var(--success);
   font-weight: 700;

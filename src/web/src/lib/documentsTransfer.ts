@@ -86,8 +86,17 @@ export function documentsTransferFile(input: {
     endedAt: timeOf(input.resultTs),
   };
   if (input.result) {
-    if (input.result.isError) return { ...file, status: 'failed', error: firstLine(input.result.text) };
-    const answer = parseAnswer(input.result.text);
+    const parsed = parseAnswer(input.result.text);
+    // A runner that answers with a receipt puts the call's own answer under `entity`, and says a refusal in `error`.
+    const refused = parsed.receiptVersion !== undefined && parsed.ok === false;
+    if (input.result.isError || refused) {
+      const said = (parsed.error as { message?: unknown } | undefined)?.message;
+      return { ...file, status: 'failed', error: typeof said === 'string' && said ? said : firstLine(input.result.text) };
+    }
+    const answer =
+      parsed.receiptVersion !== undefined && parsed.entity && typeof parsed.entity === 'object'
+        ? (parsed.entity as Record<string, unknown>)
+        : parsed;
     const size = typeof answer.sizeBytes === 'number' ? answer.sizeBytes : null;
     return {
       ...file,
