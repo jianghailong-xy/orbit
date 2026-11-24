@@ -73,12 +73,12 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | Caller | Routes |
 | --- | --- |
 | `public` | 41 |
-| `user` | 564 |
+| `user` | 566 |
 | `admin` | 31 |
 | `runner` | 252 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **892** |
+| **Total** | **894** |
 
 ## Public routes
 
@@ -185,6 +185,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/documents/resolve` | query `path` | `DocumentsController.resolve` |
 | `GET` | `/api/documents/search` | query `cursor`, `limit`, `q` | `DocumentsController.search` |
 | `GET` | `/api/documents/syncs` | — | `DocumentsController.listSyncs` |
+| `GET` | `/api/documents/syncs/:id` | path `id` | `DocumentsController.getSync` |
 | `DELETE` | `/api/documents/trash` | — | `DocumentsController.emptyTrash` |
 | `GET` | `/api/documents/trash` | query `cursor`, `limit` | `DocumentsController.trash` |
 | `DELETE` | `/api/documents/trash/groups/:id` | path `id` | `DocumentsController.deleteGroup` |
@@ -213,6 +214,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/drive/resolve` | query `path` | `DocumentsController.resolve` |
 | `GET` | `/api/drive/search` | query `cursor`, `limit`, `q` | `DocumentsController.search` |
 | `GET` | `/api/drive/syncs` | — | `DocumentsController.listSyncs` |
+| `GET` | `/api/drive/syncs/:id` | path `id` | `DocumentsController.getSync` |
 | `DELETE` | `/api/drive/trash` | — | `DocumentsController.emptyTrash` |
 | `GET` | `/api/drive/trash` | query `cursor`, `limit` | `DocumentsController.trash` |
 | `DELETE` | `/api/drive/trash/groups/:id` | path `id` | `DocumentsController.deleteGroup` |

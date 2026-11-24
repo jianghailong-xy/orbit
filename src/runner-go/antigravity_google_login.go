@@ -19,6 +19,15 @@ var antigravityGoogleURLRe = regexp.MustCompile(`\x1b\]8;[^;\x07\x1b]*;(https://
 // Observed with a deliberately malformed code on official agy 1.2.16, Linux.
 const antigravityGoogleInvalidCodeMarker = `oauth2: "invalid_grant" "Malformed auth code."`
 
+// agy's TUI asks the terminal who it is (secondary Device Attributes, CSI > c) before it draws, and
+// on macOS (agy 1.5.16) draws nothing until a terminal answers: no login menu, no link, an agy that
+// waits out the relay's timeout. The relay answers it once, as a VT220-class terminal would
+// (contract §16.12).
+const (
+	antigravityGoogleDA2Query = "\x1b[>c"
+	antigravityGoogleDA2Reply = "\x1b[>0;95;0c"
+)
+
 // A fresh OAuth flow must not reuse the old token. Preserve it privately so a cancelled or failed
 // replacement leaves the previous login intact; commit only after the new token passes /usage. dir is
 // the Gemini directory the sign-in writes: Default's, or an added account's.
@@ -69,6 +78,7 @@ type antigravityGoogleLoginOutput struct {
 	submitted bool
 	rejected  bool
 	ready     bool
+	answered  bool // the terminal identity query (antigravityGoogleDA2Query)
 	actions   []string
 	seen      map[string]bool
 }
@@ -83,6 +93,10 @@ func (o *antigravityGoogleLoginOutput) Write(p []byte) (int, error) {
 		}
 	}
 	o.tail += string(p)
+	if !o.answered && strings.Contains(o.tail, antigravityGoogleDA2Query) {
+		o.answered = true
+		o.actions = append(o.actions, antigravityGoogleDA2Reply)
+	}
 	text := stripANSI(o.tail)
 	if o.protected && strings.Contains(text, "? for shortcuts") {
 		o.ready = true

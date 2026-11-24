@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path"
@@ -374,11 +375,11 @@ func TestDocumentsSyncWithoutABackgroundServiceSaysHowToRunItInTheForeground(t *
 	out := syncTestTree(t)
 	t.Setenv(envBgSocket, "")
 	t.Setenv(envBgToken, "")
-	_, err := startDocumentsSyncJob(fileTestSession, out, "/R", false)
+	_, err := startDocumentsSyncJob(nil, fileTestSession, out, "/R", false)
 	if err == nil || !strings.Contains(err.Error(), bgTransportUnavailable) || !strings.Contains(err.Error(), "--wait") {
 		t.Fatalf("err = %v", err)
 	}
-	if _, err := startDocumentsSyncJob(fileTestSession, out, "/", true); err == nil || !strings.Contains(err.Error(), "root") {
+	if _, err := startDocumentsSyncJob(nil, fileTestSession, out, "/", true); err == nil || !strings.Contains(err.Error(), "root") {
 		t.Fatalf("--delete into the root was not refused before the job: %v", err)
 	}
 }
@@ -414,5 +415,87 @@ func TestDocumentsSyncIsUnlistedAndRefusedWhileDocumentsIsOff(t *testing.T) {
 	result, handled := s.callDocumentsTool("documents_sync", map[string]interface{}{"localPath": "out", "path": "/R"})
 	if !handled || result["isError"] != true {
 		t.Fatalf("documents_sync ran with Documents off: %v", result)
+	}
+}
+
+// fakeBgRun answers the session socket's "run" with refuse, or with a job, recording the command it was asked to run.
+func fakeBgRun(t *testing.T, refuse string) (commands *[]string) {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "bgsock")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	path := filepath.Join(dir, "s")
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ln.Close() })
+	seen := &[]string{}
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			var req bgSocketRequest
+			_ = json.NewDecoder(conn).Decode(&req)
+			*seen = append(*seen, getString(req.Args, "command"))
+			if refuse != "" {
+				_ = json.NewEncoder(conn).Encode(map[string]interface{}{"ok": false, "error": refuse})
+			} else {
+				_ = json.NewEncoder(conn).Encode(map[string]interface{}{"ok": true, "result": map[string]string{"jobId": "bgj_1", "status": "running"}})
+			}
+			conn.Close()
+		}
+	}()
+	t.Setenv(envBgSocket, path)
+	t.Setenv(envBgToken, "tok")
+	return seen
+}
+
+func TestDocumentsSyncCallOpensTheRecordFirstAndNamesIt(t *testing.T) {
+	out := syncTestTree(t)
+	d, tr := newFakeSyncDocuments(t)
+	commands := fakeBgRun(t, "")
+	raw, err := startDocumentsSyncJob(tr, fileTestSession, out, "/R", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var answer map[string]interface{}
+	if err := json.Unmarshal(raw, &answer); err != nil || answer["syncId"] != "sync-1" || answer["jobId"] != "bgj_1" {
+		t.Fatalf("answer = %s, %v", raw, err)
+	}
+	if d.opened["destPath"] != "/R" || d.opened["sourceName"] != "out" {
+		t.Errorf("opened = %v", d.opened)
+	}
+	if len(*commands) != 1 || !strings.Contains((*commands)[0], "--sync-id 'sync-1'") {
+		t.Errorf("job command = %v", *commands)
+	}
+
+	// The job reports into the record it was handed, and opens no second one.
+	d.opened = nil
+	real, _ := documentsSyncSource(fileTestSession, out)
+	if _, err := runDocumentsSync(context.Background(), tr, documentsSyncOptions{sessionID: fileTestSession, source: real, dest: "/R", syncID: "sync-1"}); err != nil {
+		t.Fatal(err)
+	}
+	if d.opened != nil {
+		t.Errorf("the job opened a second record: %v", d.opened)
+	}
+	if last := d.reports[len(d.reports)-1]; last["status"] != "DONE" {
+		t.Errorf("last report = %v", last)
+	}
+}
+
+func TestDocumentsSyncCallEndsTheRecordWhenTheJobDoesNotStart(t *testing.T) {
+	out := syncTestTree(t)
+	d, tr := newFakeSyncDocuments(t)
+	fakeBgRun(t, "Not started. Plan mode.")
+	if _, err := startDocumentsSyncJob(tr, fileTestSession, out, "/R", false); err == nil {
+		t.Fatal("a refused job answered no error")
+	}
+	if len(d.reports) != 1 || d.reports[0]["status"] != "FAILED" || !strings.Contains(d.reports[0]["error"].(string), "Plan mode") {
+		t.Errorf("reports = %v", d.reports)
 	}
 }

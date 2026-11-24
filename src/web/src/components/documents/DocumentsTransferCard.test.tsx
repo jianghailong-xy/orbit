@@ -47,7 +47,7 @@ describe('drive transfer card', () => {
     const html = render([...calls, putDone(4, 'toolu_a', 2_600_000)], [['toolu_b', 'Uploaded 3200000 of 11400000 bytes']]);
 
     expect(html.match(/class="drive-xfer"/g)).toHaveLength(1);
-    expect(html).toContain('Uploading to Files');
+    expect(html).toContain('Uploading to Documents');
     expect(html).toContain('/Shuge/2026-11-24/');
     expect(html).toContain('Uploading 2 of 3');
     expect(html).toContain('5.8 MB so far');
@@ -69,7 +69,7 @@ describe('drive transfer card', () => {
     expect(html).toContain('Uploaded 3 files');
     expect(html).toContain('3 uploaded');
     expect(html).toContain('27 MB in 8 s');
-    expect(html).toContain('Show in Files');
+    expect(html).toContain('Show in Documents');
     expect(html).toContain('Hide files');
     expect(html).toContain('魁星图.jpg');
     expect(html).not.toContain('class="drive-xfer-fold"');
@@ -96,7 +96,7 @@ describe('drive transfer card', () => {
 
     expect(html).toContain('14 MB in 3 s');
     expect(html).toContain('2.6 MB');
-    expect(html).toContain('Show in Files');
+    expect(html).toContain('Show in Documents');
   });
 
   it('keeps a batch with a failed file open, with the error on its row', () => {

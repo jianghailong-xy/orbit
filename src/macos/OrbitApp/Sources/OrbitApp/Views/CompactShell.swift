@@ -415,6 +415,13 @@ private struct CompactSections: View {
             // and the line a rewrite floats (docs/wiki-chat-design.md §9).
             .wikiChatHost()
 
+        // DOCUMENTS — the phone's pages come with the iOS task; nothing in the drawer opens this section yet.
+        case .documents:
+            NavigationStack {
+                ContentUnavailableView(AppSection.documents.title, systemImage: AppSection.documents.systemImage)
+                    .drawerToggle(open: openDrawer)
+            }
+
         // SCHEDULED — the timeline and its bottom panel.
         case .scheduled:
             NavigationStack {

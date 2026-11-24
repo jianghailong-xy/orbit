@@ -22,13 +22,13 @@ const ROWS_SHOWN = 8;
 const STALL_MS = 20_000;
 
 const WORDS = {
-  put: { going: 'Uploading', went: 'Uploaded', title: 'Uploading to Files', arrow: '↑', couldnt: "Couldn't upload" },
-  get: { going: 'Downloading', went: 'Downloaded', title: 'Downloading from Files', arrow: '↓', couldnt: "Couldn't download" },
+  put: { going: 'Uploading', went: 'Uploaded', title: 'Uploading to Documents', arrow: '↑', couldnt: "Couldn't upload" },
+  get: { going: 'Downloading', went: 'Downloaded', title: 'Downloading from Documents', arrow: '↓', couldnt: "Couldn't download" },
 } as const;
 
 const baseName = (p: string) => p.split('/').pop() || p;
 
-/** A link to a file the transfer put in Files: its folder opens with it selected. */
+/** A link to a file the transfer put in Documents: its folder opens with it selected. */
 function DocumentsEntryLink({ link, children }: { link?: string; children: ReactNode }) {
   const client = useQueryClient();
   const navigate = useNavigate();
@@ -240,7 +240,7 @@ export function DocumentsTransferCard({
         <span className="drive-xfer-folder">{summary.folder}</span>
         <span className="drive-xfer-actions">
           {summary.finished && kind === 'put' && firstLink && (
-            <DocumentsEntryLink link={firstLink}>Show in Files</DocumentsEntryLink>
+            <DocumentsEntryLink link={firstLink}>Show in Documents</DocumentsEntryLink>
           )}
           <button type="button" aria-expanded={showFiles} onClick={() => setShowFiles((v) => !v)}>
             {showFiles ? 'Hide files' : 'Show files'}

@@ -99,7 +99,7 @@ func (s *mcpServer) callDocumentsTool(name string, args map[string]interface{}) 
 		if s.documentsOff {
 			return toolResult(documentsOffMessage(name), true), true
 		}
-		raw, err := startDocumentsSyncJob(strings.TrimSpace(s.sessionID), getString(args, "localPath"), getString(args, "path"), getBool(args, "delete"))
+		raw, err := startDocumentsSyncJob(s.t, strings.TrimSpace(s.sessionID), getString(args, "localPath"), getString(args, "path"), getBool(args, "delete"))
 		if err != nil {
 			return toolResult(err.Error(), true), true
 		}
