@@ -148,7 +148,7 @@ final class WikiChatModel {
     /// over the page once the chat is folded away (board 42 ⑤, third phone).
     var updatedCard: WikiChatDraftView? {
         cards.values
-            .filter { $0.state == .applied && $0.rewrite?.result == .updated && $0.rewrite?.seen == false }
+            .filter { ($0.state == .applied || $0.state == .rewritten) && $0.rewrite?.result == .updated && $0.rewrite?.seen == false }
             .max { ($0.rewrite?.settledAt ?? "") < ($1.rewrite?.settledAt ?? "") }
     }
 

@@ -108,7 +108,7 @@ const orbitReplyFileInstructions = "Hand the user a file as `[name](path)`, an i
 	"uploads directory or a git-ignored path."
 
 // orbitEvidenceFileInstructions is where the evidence of a piece of work goes, which is what the repository was for
-// until file_upload (docs/documents-design.md §2.3): 96% of its history was evidence and mocks. It follows
+// until file_upload (docs/drive-design.md §2.3): 96% of its history was evidence and mocks. It follows
 // orbitReplyFileInstructions and repeats its rule: file_upload reads from the same two directories a reply links from
 // (localFileScope), which is why this sentence can lean on the one before it. A log is named as well as the screenshot,
 // because the tool call that printed it is already stored. The FILE check is what spares the file a commit: it binds the
@@ -117,20 +117,20 @@ const orbitEvidenceFileInstructions = "Evidence: cite a command's output by its 
 	"keep screenshots and reports with file_upload rather than in the repository: it reads those same two " +
 	"directories and returns a reply link and the id a FILE check cites."
 
-// The drive paragraphs are the owner's Documents drive, per runner kind (docs/documents-drive-technical-design.md
-// §4.6, §7.3). On Orbit Cloud the drive is mounted at ~/Documents and is used with the shell, so the paragraph says what
+// The drive paragraphs are the owner's Drive, per runner kind (docs/drive-technical-design.md
+// §4.6, §7.3). On Orbit Cloud the drive is mounted at ~/Drive and is used with the shell, so the paragraph says what
 // the mount does not support and where it reports; on every other runner the drive is reached only through the drive
 // tools. Either way agents never see Trash (D11), and verification, judgment and guest-driven turns only read (D9). Kept
 // short: it is in every session's instructions, inside orbitInstructionsMaxBytes. orbitDriveToolInstructions is the
 // paragraph for a runner without the mount, orbitDriveMountInstructions the one for a runner with it (units drive.tools
-// and drive.mount), and neither is given while Documents is off (orbitDocumentsShown).
+// and drive.mount), and neither is given while the drive is off (orbitDocumentsShown).
 // The mount's paragraph names where it reports as {{drive_root}}, which compose renders from the machine
-// (driveParentPath: /run/orbit-documents, or /run/orbit-files of the old driver).
+// (driveParentPath: /run/orbit-drive).
 const (
 	orbitDriveReadOnly         = "Verifying, judging and ORBIT_GUEST turns only read it."
-	orbitDriveToolInstructions = "The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); " +
+	orbitDriveToolInstructions = "The owner's Drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); " +
 		"deletes go to a Trash agents cannot see. " + orbitDriveReadOnly
-	orbitDriveMountInstructions = "~/Documents is the owner's permanent Documents drive; link its files by path. Give ls, find, du ~/Documents/ (a " +
+	orbitDriveMountInstructions = "~/Drive is the owner's permanent Drive; link its files by path. Give ls, find, du ~/Drive/ (a " +
 		"symlink). Copy in with cp -r or rsync -rt (no modes: -a, -p fail on executables; tar x drops the x bit). No " +
 		"links, locks, in-place writes or exec; see {{drive_root}}/errors.log. " + orbitDriveReadOnly
 )
@@ -158,16 +158,16 @@ func orbitDriveGuide() string {
 	}
 	const readOnly = "Verification, judgment and guest-driven turns (a message carrying the ORBIT_GUEST marker) read the drive and do not write it."
 	if !driveMounted() {
-		return "The owner's Documents drive is reached with documents_put, documents_get, documents_list, documents_move, " +
-			"documents_delete and documents_sync, or `orbit documents put|get|ls|mv|rm|sync`, by drive path (/Proj/r.md). " +
-			"documents_put reads only this session's checkout or uploads directory and overwrites with a version; documents_sync " +
-			"copies a whole directory from there once, in the background, skipping files already the same; documents_get saves " +
+		return "The owner's Drive is reached with drive_put, drive_get, drive_list, drive_move, " +
+			"drive_delete and drive_sync, or `orbit drive put|get|ls|mv|rm|sync`, by drive path (/Proj/r.md). " +
+			"drive_put reads only this session's checkout or uploads directory and overwrites with a version; drive_sync " +
+			"copies a whole directory from there once, in the background, skipping files already the same; drive_get saves " +
 			"into the uploads directory. A delete moves the " +
 			"entry to the owner's Trash, which agents cannot see or restore, and no tool shares a drive file. " + readOnly
 	}
-	return "~/Documents (/home/orbit/Documents, mounted at " + driveMountPath + ") is the owner's permanent Documents drive, " +
-		"shared across sessions and runners; link a drive file in a reply by its path. ~/Documents is a symlink: give ls -l, " +
-		"find and du ~/Documents/ with the trailing slash. Copy in with cp -r or rsync -rt: the drive keeps no modes, so cp -a, " +
+	return "~/Drive (/home/orbit/Drive, mounted at " + driveMountPath + ") is the owner's permanent Drive, " +
+		"shared across sessions and runners; link a drive file in a reply by its path. ~/Drive is a symlink: give ls -l, " +
+		"find and du ~/Drive/ with the trailing slash. Copy in with cp -r or rsync -rt: the drive keeps no modes, so cp -a, " +
 		"cp -p and rsync -a report an error and exit non-zero for executables, though the contents are copied, and tar x " +
 		"extracts them without the executable bit. Not " +
 		"supported: hard and symbolic links, mode and owner changes, file locks, shared mmap of a file open for writing, " +

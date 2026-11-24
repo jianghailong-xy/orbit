@@ -56,6 +56,9 @@ var agentPrimerHashes = map[string]string{
 	// 1.4.6 is 1.4.5 with the first line naming Agent Contract 1.13.0 (the drive tools are documents_*, the CLI
 	// `orbit documents`, the link orbit-document:, the old names still served); no rule changed.
 	"1.4.6": "e0ec22b359cb36138e91b08ba216b9455a3d3a957df002d197e2f5722d883a60",
+	// 1.4.7 is 1.4.6 with the first line naming Agent Contract 1.14.0 (the drive tools are drive_* again, the CLI
+	// `orbit drive`, the link orbit-drive:, the documents_* names still served); no rule changed.
+	"1.4.7": "c36f8a00f568741b4c34a1390d82fc4b1f4b93885f8205717506a50bd5359032",
 	// 1.5.0 (instruction-units step 4): what a card's answer and a receipt's error mean moved into the receipt's notes,
 	// and a receipt carries its entity's link. The cards paragraph keeps one sentence that a refusal is final on every
 	// surface and points at the receipt; the receipts paragraph names the link and the notes. No rule changed.
@@ -67,6 +70,9 @@ var agentPrimerHashes = map[string]string{
 	// 1.7.0 (instruction-units step 5b): the CLI paragraph left the primer for the CLI unit, which merges it with the
 	// paragraph that closed the instructions and names the CLI by its path. No rule changed.
 	"1.7.0": "b04a890e4acdbed6cce17edeafd442882fed64f0cbef87ad246f40a4414af1db",
+	// 1.7.1 is 1.7.0 with the first line naming Agent Contract 1.14.0 (main's drive_* rename, primer 1.4.7 there); no
+	// rule changed.
+	"1.7.1": "fbb1b671dd76a2b34518fb2d2cb14c0ef63a1a0e65d94443101994050e3871d3",
 }
 
 // The snapshots: the primer exactly as `initialize` sends it, and the four shapes of the instructions

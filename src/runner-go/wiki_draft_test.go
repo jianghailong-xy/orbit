@@ -335,3 +335,74 @@ func TestWikiDraftCLIRunsTheSameToolAsMCP(t *testing.T) {
 		t.Errorf("wikiDraftToolArgs = %#v (%v)", args, err)
 	}
 }
+
+// wikiDraftAnswerFromView builds the answer wiki_draft gives from a card the real server wrote
+// (shared/src/wiki-chat-views.fixture.json, served by wiki-chat-drafts.pg.spec.ts): the card's own kind, rewrites,
+// state and held, which is what the door answers with.
+func wikiDraftAnswerFromView(t *testing.T, name string) string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("..", "shared", "src", "wiki-chat-views.fixture.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Views map[string]map[string]interface{} `json:"views"`
+	}
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	view, ok := fixture.Views[name]
+	if !ok {
+		t.Fatalf("the fixture has no view %q", name)
+	}
+	answer := map[string]interface{}{
+		"status": "draft", "draftId": view["id"], "kind": view["kind"], "replayed": false,
+		"rewrites": view["rewrites"], "state": view["state"], "held": view["held"],
+	}
+	out, _ := json.Marshal(answer)
+	return string(out)
+}
+
+func TestWikiDraftTellsTheServersOutcome(t *testing.T) {
+	cases := []struct {
+		view    string
+		must    []string
+		mustNot []string
+	}{
+		{"autoRewriting", []string{"without a press", "Undo", "Rewritten from main", "next message"}, []string{"Nothing was written"}},
+		{"heldWeb", []string{"Apply to write: this chat read web content", "waits for the owner's Apply"}, []string{"are being rewritten"}},
+	}
+	for _, c := range cases {
+		reply := wikiDraftAnswerFromView(t, c.view)
+		srv, _ := wikiDoor(t, http.StatusOK, reply)
+		args := map[string]interface{}{
+			"kind": "rewrite", "sections": []interface{}{map[string]interface{}{"doc": "sessions-runtime", "section": "leases"}}, "reason": "r", "idempotencyKey": "k",
+		}
+		text := wikiToolText(t, wikiMCP(t, srv.URL).callTool("wiki_draft", args))
+		for _, phrase := range c.must {
+			if !strings.Contains(text, phrase) {
+				t.Errorf("%s: the MCP answer does not say %q: %q", c.view, phrase, text)
+			}
+		}
+		for _, phrase := range c.mustNot {
+			if strings.Contains(text, phrase) {
+				t.Errorf("%s: the MCP answer says %q: %q", c.view, phrase, text)
+			}
+		}
+		// The CLI prints the same text.
+		cliText := describeWikiDraft(func() wikiDraftAnswer {
+			var a wikiDraftAnswer
+			_ = json.Unmarshal([]byte(reply), &a)
+			return a
+		}())
+		if !strings.Contains(text, cliText) {
+			t.Errorf("%s: the MCP text and the CLI's differ:\n%q\n%q", c.view, text, cliText)
+		}
+	}
+	// An older server's answer, with no state, reads as before.
+	var old wikiDraftAnswer
+	_ = json.Unmarshal([]byte(wikiDraftReply), &old)
+	if text := describeWikiDraft(old); !strings.Contains(text, "Nothing was written") {
+		t.Errorf("an answer without state changed: %q", text)
+	}
+}

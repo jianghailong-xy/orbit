@@ -1705,11 +1705,11 @@ struct TranscriptView: View {
         }
     }
 
-    /// Where a transfer card's "Show in Documents" goes: the file in its folder on the Mac's Documents page. The phone
-    /// has no Documents page, so its card has no such press.
-    private var showInDocuments: ((String) -> Void)? {
+    /// Where a transfer card's "Show in Drive" goes: the file in its folder on the Mac's Drive page. The phone
+    /// has no Drive page, so its card has no such press.
+    private var showInDrive: ((String) -> Void)? {
         #if os(macOS)
-        guard app.documents?.shown == true else { return nil }
+        guard app.drive?.shown == true else { return nil }
         return { app.revealDocument($0) }
         #else
         return nil
@@ -1770,10 +1770,10 @@ struct TranscriptView: View {
             AgentGroupView(cards: cards, fullPayload: console.fullPayload)
         case .transfer(let kind, let cards):
             // No `AnchorRow`, for the steps line's reason. Live as the steps line is, off the session row.
-            DocumentsTransferCardView(
+            DriveTransferCardView(
                 kind: kind, cards: cards,
                 live: app.session(id: console.sessionID)?.isGenerating ?? (console.state.status == .running),
-                showInDocuments: showInDocuments)
+                showInDrive: showInDrive)
         case .exchanges(let turns):
             // No `AnchorRow`, for the steps line's reason: a fold over turns Orbit opened is no
             // "Your question". Opened, it draws each turn's rows through this same function.
@@ -2681,10 +2681,10 @@ struct TranscriptItemView: View {
             // A bg_run call is its job's card from start to end (board A1); one refused, or whose answer
             // names no job, stays a call.
             JobCardView(card: c)
-        case .toolCall(let c) where DocumentsSyncCard.drawsCard(c):
-            // A documents_sync call is its sync's card, live after the turn ends (board documents-sync-card); an
+        case .toolCall(let c) where DriveSyncCard.drawsCard(c):
+            // A drive_sync call is its sync's card, live after the turn ends (board drive-sync-card); an
             // answer that names no sync, from an older runner, stays a call.
-            DocumentsSyncCardView(syncID: DocumentsSyncCard.syncID(c.result) ?? "")
+            DriveSyncCardView(syncID: DriveSyncCard.syncID(c.result) ?? "")
         case .toolCall(let c):
             // The owner's "Chat about this" reply to one of Orbit's own cards: their message, drawn as
             // theirs under the call rather than left inside its result (`OwnerChatReply`).

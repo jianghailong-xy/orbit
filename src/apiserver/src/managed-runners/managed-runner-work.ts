@@ -122,6 +122,12 @@ const WAKING_WORK: readonly ManagedRunnerWork[] = [
   'ACTIVE_CONDITION',
 ];
 
+/** The work, of what this runner holds, that needs it to run (WAKING_WORK): what a FAILED runner's slow retry waits for. */
+export async function managedRunnerWaitingWork(prisma: Pick<PrismaService, '$queryRaw'>, runnerId: string, reclaimRunningTurns = false): Promise<ManagedRunnerWork[]> {
+  return (await managedRunnerWork(prisma, runnerId))
+    .filter((kind) => WAKING_WORK.includes(kind) || (reclaimRunningTurns && kind === 'ACTIVE_TURN'));
+}
+
 /**
  * The sweep: sleeping mappings, not yet asked to wake, whose runner has work waiting. The runners'
  * ids, oldest asleep first; the caller records demand for each. A disabled owner's are not among

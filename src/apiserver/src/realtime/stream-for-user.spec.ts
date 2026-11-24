@@ -935,7 +935,7 @@ test('lifecycle signals never enter a per-session transcript stream', async () =
 /**
  * An agent's directory sync reports every two seconds, and a shipped client re-reads everything on a type it does not
  * know, so `drive.sync` reaches only a stream that declared `hints=drive_syncs`, and only its owner's
- * (docs/documents-directory-sync-design.md S4).
+ * (docs/drive-directory-sync-design.md S4).
  */
 test('drive.sync reaches only its owner\'s streams that declared drive_syncs, carrying the sync id and nothing else', async () => {
   const svc = svcWith({}, 0);

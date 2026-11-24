@@ -95,8 +95,8 @@ function units(quantity: string, scale: 'unit' | 'milli' = 'unit'): number {
 /**
  * One managed runner's compute share, from the profile's Pod template: the larger of the runner and
  * the init container's requests (a Pod's init containers run before its containers, so the scheduler
- * reserves the larger of the two), the `/tmp` emptyDir bound as its ephemeral storage, one Pod, one
- * volume attachment and one active user.
+ * reserves the larger of the two), `runner.tmpSizeLimit` as its ephemeral storage (a reservation: its /tmp is a
+ * directory of its data volume, counted in `storage.capacity`), one Pod, one volume attachment and one active user.
  */
 export function computeShare(profile: Pick<ManagedRunnerProfile, 'runner'>): ComputeAmounts {
   const { runner, init } = profile.runner.resources;

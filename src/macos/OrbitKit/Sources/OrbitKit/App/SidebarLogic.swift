@@ -13,19 +13,19 @@ public enum SidebarSelection: Hashable, Sendable {
     case project(String)
     /// A session someone shared with this account, in the Shared with me group: its guest view.
     case guestSession(String)
-    /// Trash or Storage, the rows under Documents (`.section(.documents)` is the drive itself).
-    case documents(DocumentsPlace)
+    /// Trash or Storage, the rows under Drive (`.section(.drive)` is the drive itself).
+    case drive(DrivePlace)
 }
 
-/// Which of Documents' pages is showing: the drive's folders, Trash or Storage (docs/mocks/documents, 03-mac ③).
-public enum DocumentsPlace: String, Hashable, Sendable, CaseIterable {
+/// Which of Drive' pages is showing: the drive's folders, Trash or Storage (docs/mocks/drive, 03-mac ③).
+public enum DrivePlace: String, Hashable, Sendable, CaseIterable {
     case drive, trash, storage
 
     public var title: String {
         switch self {
-        case .drive: return DocumentsLogic.title
-        case .trash: return DocumentsLogic.trash
-        case .storage: return DocumentsLogic.storage
+        case .drive: return DriveLogic.title
+        case .trash: return DriveLogic.trash
+        case .storage: return DriveLogic.storage
         }
     }
 
@@ -46,7 +46,7 @@ public enum SidebarTarget: Equatable, Sendable {
     case machine(String)
     case project(String)
     case guestSession(String)
-    case documents(DocumentsPlace)
+    case drive(DrivePlace)
     /// Nothing is selected (a cleared selection): nothing to do.
     case none
 }
@@ -58,8 +58,8 @@ public enum SidebarLogic {
     public static func selection(section: AppSection, agentID: String?,
                                  machineDraftRunnerID: String?, projectID: String?,
                                  guestSessionID: String? = nil,
-                                 documentsPlace: DocumentsPlace = .drive) -> SidebarSelection {
-        if section == .documents, documentsPlace != .drive { return .documents(documentsPlace) }
+                                 drivePlace: DrivePlace = .drive) -> SidebarSelection {
+        if section == .drive, drivePlace != .drive { return .drive(drivePlace) }
         if section == .agents, let guestSessionID { return .guestSession(guestSessionID) }
         if let runnerID = machineDraftRunnerID { return .machine(runnerID) }
         if section == .agents, let projectID { return .project(projectID) }
@@ -75,7 +75,7 @@ public enum SidebarLogic {
         case .machine(let runnerID)?: return .machine(runnerID)
         case .project(let id)?: return .project(id)
         case .guestSession(let id)?: return .guestSession(id)
-        case .documents(let place)?: return .documents(place)
+        case .drive(let place)?: return .drive(place)
         case nil: return .none
         }
     }

@@ -38,26 +38,26 @@ final class SidebarLogicTests: XCTestCase {
     func testEveryStoredValueRoundTripsThroughTheNavigationState() {
         for stored in [SidebarSelection.section(.tasks), .section(.wiki), .agent("a1"),
                        .machine("r1"), .project("p1"), .guestSession("g1"),
-                       .documents(.trash), .documents(.storage), .section(.documents)] {
+                       .drive(.trash), .drive(.storage), .section(.drive)] {
             var section = AppSection.agents
             var agentID: String?
             var machine: String?
             var project: String?
             var guest: String?
-            var place = DocumentsPlace.drive
+            var place = DrivePlace.drive
             switch SidebarLogic.target(stored) {
             case .section(let s): section = s
             case .agent(let id): section = .agents; agentID = id
             case .machine(let id): section = .agents; machine = id
             case .project(let id): section = .agents; project = id
             case .guestSession(let id): section = .agents; guest = id
-            case .documents(let p): section = .documents; place = p
+            case .drive(let p): section = .drive; place = p
             case .none: break
             }
             XCTAssertEqual(SidebarLogic.selection(section: section, agentID: agentID,
                                                   machineDraftRunnerID: machine,
                                                   projectID: project, guestSessionID: guest,
-                                                  documentsPlace: place), stored)
+                                                  drivePlace: place), stored)
         }
     }
 }

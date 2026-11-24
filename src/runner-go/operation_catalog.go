@@ -32,7 +32,7 @@ import (
 // of the canonical catalogue and is emitted with `orbit capabilities --json`, so a client can tell
 // which catalogue answered it.
 
-const operationCatalogVersion = "1.11.0"
+const operationCatalogVersion = "1.12.0"
 
 // sessionStateFieldsNote is how an agent reads the session-state fields session_list and session_get
 // return beside `status` (Agent Contract 1.12.0). They are additive: `status` and its values are unchanged.
@@ -3220,7 +3220,7 @@ func buildOperationCatalog() []*operation {
 	// (wiki_tools.go; they are left out entirely when the wiki is off).
 	add(gateAlways, wikiToolDescriptors(obj)...)
 	add(gateAlways, fileToolDescriptors(obj)...)
-	add(gateAlways, documentsToolDescriptors(obj)...)
+	add(gateAlways, driveToolDescriptors(obj)...)
 	// The owner's own Settings (settings_tools.go): listed whether or not Session orchestration is on, since they fix
 	// ordinary settings and turning orchestration off is itself a proposal (docs/settings-from-conversation-design.md §7).
 	add(gateAlways, settingsToolDescriptors(obj)...)
@@ -3699,6 +3699,34 @@ func wikiToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
 		},
 		{
+			"name":        "wiki_read",
+			"description": wikiReadDescription,
+			"inputSchema": obj(map[string]interface{}{
+				"q":       map[string]interface{}{"type": "string", "description": "A search: the sections whose title, covers and sentences hold every word of it."},
+				"doc":     map[string]interface{}{"type": "string", "description": "A document's slug: its whole definition in the confirmed plan, and its written sentences with their footnotes."},
+				"section": map[string]interface{}{"type": "string", "description": "With doc: one section's key, so the answer holds that section alone."},
+				"draft":   map[string]interface{}{"type": "string", "description": "A card of this chat, by its id: its state and result, and the sections it rewrote before and now."},
+				"more":    map[string]interface{}{"type": "string", "description": "The cursor an earlier answer ended with, sent back with the same other arguments for the next part."},
+			}),
+			"outputSchema": obj(map[string]interface{}{
+				"view":        map[string]interface{}{"type": "string", "enum": []string{"contents", "search", "doc", "section", "draft"}, "description": "What was read."},
+				"planVersion": map[string]interface{}{"type": []string{"integer", "null"}, "description": "The confirmed plan's version, or null with none."},
+				"planDraft": map[string]interface{}{
+					"type":        []string{"object", "null"},
+					"description": "A draft of the plan that waits for the owner, { version }, or null. While there is one, wiki_draft refuses a plan card (WIKI_PLAN_STALE).",
+				},
+				"writerJobs": map[string]interface{}{
+					"type":        "array",
+					"description": "The space's jobs that write documents, queued, waiting or running, oldest first.",
+					"items":       map[string]interface{}{"type": "object"},
+				},
+				"text": map[string]interface{}{"type": "string", "description": "The view, at most 60,000 characters, opening with the header that says it is a view and not a source."},
+				"more": map[string]interface{}{"type": []string{"string", "null"}, "description": "The cursor for the next part, or null on the last part."},
+			}, "view", "planVersion", "planDraft", "writerJobs", "text", "more"),
+			// A view of the wiki: it writes nothing and records no card.
+			"annotations": map[string]interface{}{"readOnlyHint": true},
+		},
+		{
 			"name":        "wiki_draft",
 			"description": wikiDraftDescription,
 			"inputSchema": obj(map[string]interface{}{
@@ -3771,7 +3799,7 @@ func fileToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 					"type": "string",
 					"description": "The file or directory, absolute or relative to the working directory. Its real " +
 						"location, links resolved, has to be inside this session's checkout, its uploads directory, " +
-						"or the mounted Documents drive on Orbit Cloud.",
+						"or the mounted Drive on Orbit Cloud.",
 				},
 				"taskId": map[string]interface{}{
 					"type": "string",
@@ -4318,6 +4346,20 @@ var wikiCLICapabilities = []cliCapabilitySpec{
 		SessionOnly: true,
 	},
 	{
+		Tool:  "wiki_read",
+		Argv:  []string{"orbit", "wiki", "read"},
+		Usage: "orbit wiki read [--q WORDS | --doc SLUG [--section KEY] | --draft ID] [--more CURSOR] [--json]",
+		Arguments: []string{
+			"--q <words> (a search; at most one of q, doc and draft)",
+			"--doc <slug> (a document's whole definition and its sentences)",
+			"--section <key> (with doc: that one section)",
+			"--draft <card id> (a card of this chat)",
+			"--more <cursor> (the cursor an earlier answer ended with, with the same other arguments)",
+			"--json",
+		},
+		SessionOnly: true,
+	},
+	{
 		Tool:  "wiki_draft",
 		Argv:  []string{"orbit", "wiki", "draft"},
 		Usage: "orbit wiki draft --kind rewrite --section DOC/KEY... --reason TEXT --idempotency-key KEY [--replaces ID] [--change JSON] [--json]",
@@ -4625,7 +4667,7 @@ func finishOperationCatalog(ops []*operation) []*operation {
 		{"wiki", wikiCLICapabilities},
 		{"wiki", wikiImportCLICapabilities},
 		{"file", fileCLICapabilities},
-		{"documents", documentsCLICapabilities},
+		{"drive", driveCLICapabilities},
 		{"subagent", subagentCLICapabilities},
 		{"settings", settingsCLICapabilities},
 		{"browser", browserCLICapabilities},
@@ -5420,6 +5462,10 @@ var catalogMetadata = map[string]operationMeta{
 		Intent:          "Record one claim or pitfall in the shared wiki.",
 		SuccessEvidence: "The note's id and where it was filed.",
 	},
+	"wiki_read": {
+		Object: objectWiki,
+		Intent: "Read the wiki's documents from a wiki chat.",
+	},
 	"wiki_draft": {
 		Object:          objectWiki,
 		Intent:          "Draft a wiki page section for review.",
@@ -5451,34 +5497,30 @@ var catalogMetadata = map[string]operationMeta{
 		Object: objectFile,
 		Intent: "See the files this session keeps.",
 	},
-	"documents_put": {
+	"drive_put": {
 		Object: objectFile,
-		Intent: "Copy a local file into the owner's Documents drive.",
+		Intent: "Copy a local file into the owner's Drive.",
 	},
-	"documents_get": {
+	"drive_get": {
 		Object: objectFile,
 		Intent: "Download a drive file into this session's uploads directory.",
 	},
-	"documents_list": {
+	"drive_list": {
 		Object: objectFile,
 		Intent: "See the contents of a drive folder.",
 	},
-	"documents_move": {
+	"drive_move": {
 		Object: objectFile,
 		Intent: "Move or rename an entry on the drive.",
 	},
-	"documents_delete": {
+	"drive_delete": {
 		Object:      objectFile,
 		Intent:      "Move an entry to the owner's Trash.",
 		Destructive: true,
 	},
-	"documents_sync": {
-		Object: objectFile,
-		Intent: "Copy a local directory into a Documents folder in the background.",
-	},
 	"drive_sync": {
 		Object: objectFile,
-		Intent: "Copy a local directory into a drive folder in the background.",
+		Intent: "Copy a local directory into a Drive folder in the background.",
 	},
 	"bg_run": {
 		Object: objectBackgroundJob,

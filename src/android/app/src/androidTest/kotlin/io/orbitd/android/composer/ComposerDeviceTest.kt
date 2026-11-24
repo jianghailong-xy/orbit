@@ -327,7 +327,7 @@ class ComposerDeviceTest {
         val original=instrument.context.assets.open("composer-images/exif-6.jpg").use { it.readBytes() }
         resolver.openOutputStream(uri)!!.use { it.write(original) }
         resolver.update(uri,ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING,0) },null,null)
-        // API29 DocumentsUI obtains image metadata from the media scan, unlike the new picker.
+        // API29 DriveUI obtains image metadata from the media scan, unlike the new picker.
         val path=resolver.query(uri,arrayOf(MediaStore.Images.Media.DATA),null,null,null)!!.use { it.moveToFirst();it.getString(0) }
         val scanned=java.util.concurrent.CountDownLatch(1)
         android.media.MediaScannerConnection.scanFile(app,arrayOf(path),arrayOf("image/jpeg")) { _,_ -> scanned.countDown() }

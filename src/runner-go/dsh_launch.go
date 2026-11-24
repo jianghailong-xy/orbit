@@ -15,6 +15,8 @@ type DshLaunchSpec struct {
 	DshHome    string
 	Version    string
 	ConfigHash string
+
+	orbitSessionID string
 }
 
 // prepareDshSessionLaunch is the production seam to P2's preparer. P2's executionDir is

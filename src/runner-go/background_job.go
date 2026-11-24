@@ -494,11 +494,13 @@ func (b *bgTailer) prepareJob(spec bgJobSpec) (*bgPreparedJob, error) {
 func (b *bgTailer) launchJob(p *bgPreparedJob) (bgJobStatus, error) {
 	job, cmd, f, cancel, spec := p.job, p.cmd, p.output, p.cancel, p.spec
 	jobID, outputPath := job.id, job.outputPath
+	checkOOM := watchMemoryTool(p.ctx, spec.SessionID)
 	if err := cmd.Start(); err != nil {
 		cancel()
 		f.Close()
 		return bgJobStatus{}, err
 	}
+	trackMemoryRoots(spec.SessionID, true, cmd.Process.Pid)
 	b.mu.Lock()
 	job.pid = cmd.Process.Pid
 	job.startedAt = time.Now()
@@ -563,6 +565,7 @@ func (b *bgTailer) launchJob(p *bgPreparedJob) (bgJobStatus, error) {
 		// Waits without reaping, so that a job handed on meanwhile stays unreaped for its next host.
 		awaitChildExit(job.pid)
 		if b.claimReap(job) {
+			checkOOM(job.pid)
 			b.finishJob(job, job.reap())
 		} else {
 			b.endKeptJob(job)

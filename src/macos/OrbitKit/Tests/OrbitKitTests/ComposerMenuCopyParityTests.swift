@@ -99,8 +99,8 @@ final class ComposerMenuCopyParityTests: XCTestCase {
     private static let nativeOnlyLabels = ["Paste image"]
 
     /// Items both ends offer only while a server switch is on, so they sit outside the five: the drive picker,
-    /// offered while Documents is on (docs/mocks/documents, 01-ios ⑭) — the web's `drive` item. Native label → web key.
-    private static let switchedLabels = ["Documents": "drive"]
+    /// offered while Drive is on (docs/mocks/drive, 01-ios ⑭) — the web's `drive` item. Native label → web key.
+    private static let switchedLabels = ["Drive": "drive"]
 
     /// The labels the native menu offers, in order.
     private func nativeLabels() throws -> [String] {
@@ -203,7 +203,7 @@ final class ComposerMenuCopyParityTests: XCTestCase {
         }
     }
 
-    /// A switched item says the same word at both ends: the native `+` menu's Documents is the web's `drive` item.
+    /// A switched item says the same word at both ends: the native `+` menu's Drive is the web's `drive` item.
     func testTheSwitchedItemsSayWhatTheWebSays() throws {
         let native = try nativeLabels()
         let items = try webItems(Array(Self.switchedLabels.values))

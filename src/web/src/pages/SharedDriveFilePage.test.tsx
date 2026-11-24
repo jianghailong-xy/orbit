@@ -8,7 +8,7 @@ import type { SharedDriveFile } from '../api';
 import { SharedLinkPage } from './SharedLinkPage';
 
 /**
- * A Documents file link's page (`/s/<token>`, kind DRIVE_FILE): it used to be drawn as a session's conversation and
+ * A Drive file link's page (`/s/<token>`, kind DRIVE_FILE): it used to be drawn as a session's conversation and
  * crash. It shows the file's name and size and a Download of the link's bytes; a PDF in a frame of the browser's
  * viewer from a blob: URL, a picture from the content route, and anything else as a note to download it.
  */
@@ -74,7 +74,7 @@ async function mount() {
 
 const download = () => container.querySelector<HTMLAnchorElement>('a[download]');
 
-describe('a shared Documents file', () => {
+describe('a shared Drive file', () => {
   it('shows a PDF in a frame from a blob: URL, with its name, size and a Download', async () => {
     file = { name: '蠶織圖.F1954-20.注释.pdf', sizeBytes: 653_269, mimeType: 'application/pdf', preview: true };
     await mount();

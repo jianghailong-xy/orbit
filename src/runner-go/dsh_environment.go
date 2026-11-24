@@ -34,7 +34,7 @@ type DshAgentOverlay struct {
 	// Uploads is the session's uploads directory, a writable root of its shell sandbox beside the shared cache
 	// root (dshSandboxCacheRootPlugin). Empty leaves the cache root alone.
 	Uploads string
-	// Drive is the Documents drive's roots (the parent included), writable beside Uploads; empty when none is mounted.
+	// Drive is the drive's roots (the parent included), writable beside Uploads; empty when none is mounted.
 	Drive []string
 }
 
@@ -254,7 +254,7 @@ func prepareDshAgentConfigAt(input DshLaunchInput, agent *DshAgentOverlay, execu
 	env = append(env, "DSH_HOME="+home, "DSH_AGENTS_HOME="+filepath.Join(home, "agents"), "DSH_PERMISSION_MODE="+input.FileMode,
 		"DSH_TELEMETRY_DISABLED=1", "ORBIT_DSH_API_KEY="+input.APIKey)
 	return DshLaunchSpec{Executable: executable, Args: args,
-		Env: env, Cwd: cwd, DshHome: home, Version: dshSupportedVersion, ConfigHash: owner.ConfigHash}, nil
+		Env: env, Cwd: cwd, DshHome: home, Version: dshSupportedVersion, ConfigHash: owner.ConfigHash, orbitSessionID: input.OrbitSessionID}, nil
 }
 
 const dshAgentPatchFile = "orbit-agent.patch.json"

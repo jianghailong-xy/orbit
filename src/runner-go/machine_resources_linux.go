@@ -75,30 +75,59 @@ func readCgroupResources(r *MachineResources, cpu *cpuCounter, dir string, hostT
 		}
 	}
 
-	total := hostTotal
+	if total, available, ok := cgroupMemory(dir, hostTotal); ok {
+		r.MemTotalBytes, r.MemAvailableBytes = &total, &available
+	}
+}
+
+// cgroupMemory is the container's memory at dir: its limit (memory.max, else hostTotal) and what is left of it, where
+// what is used leaves out the page cache the kernel can drop (inactive_file). False when either cannot be read.
+func cgroupMemory(dir string, hostTotal *uint64) (total, available uint64, ok bool) {
+	limit := hostTotal
 	if b, err := os.ReadFile(filepath.Join(dir, "memory.max")); err == nil {
-		if limit, ok := parseCgroupBytes(string(b)); ok && (total == nil || limit < *total) {
-			total = &limit
+		if n, ok := parseCgroupBytes(string(b)); ok && (limit == nil || n < *limit) {
+			limit = &n
 		}
 	}
 	b, err := os.ReadFile(filepath.Join(dir, "memory.current"))
-	if total == nil || err != nil {
-		return
+	if limit == nil || err != nil {
+		return 0, 0, false
 	}
 	current, ok := parseCgroupBytes(string(b))
 	if !ok {
-		return
+		return 0, 0, false
 	}
 	if b, err := os.ReadFile(filepath.Join(dir, "memory.stat")); err == nil {
-		if inactive, ok := statField(string(b), "inactive_file"); ok && inactive < current {
-			current -= inactive
+		if inactive, ok := statField(string(b), "inactive_file"); ok {
+			current -= min(current, inactive)
 		}
 	}
-	available := uint64(0)
-	if current < *total {
-		available = *total - current
+	if current < *limit {
+		available = *limit - current
 	}
-	r.MemTotalBytes, r.MemAvailableBytes = total, &available
+	return *limit, available, true
+}
+
+// availableMemory is the memory left to this runner now, as the turn memory gate reads it (memory_reserve.go): in a
+// container, what its cgroup has left, or the machine's MemAvailable when that is less; on a machine, MemAvailable.
+func availableMemory() (uint64, bool) {
+	var hostTotal, hostAvailable *uint64
+	if f, err := os.Open("/proc/meminfo"); err == nil {
+		hostTotal, hostAvailable = parseMeminfo(bufio.NewScanner(f))
+		f.Close()
+	}
+	if containerCgroup(cgroupRoot) {
+		if _, available, ok := cgroupMemory(cgroupRoot, hostTotal); ok {
+			if hostAvailable != nil && *hostAvailable < available {
+				available = *hostAvailable
+			}
+			return available, true
+		}
+	}
+	if hostAvailable == nil {
+		return 0, false
+	}
+	return *hostAvailable, true
 }
 
 // parseCPUMax reads cpu.max, "$QUOTA $PERIOD" in microseconds, as a number of cores. "max" is no limit.

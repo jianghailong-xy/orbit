@@ -386,7 +386,7 @@ The controls behind each decision:
 CLI path longer than any runner's and a faked drive mount: on Claude Code the appended prompt's Orbit part plus the
 initialize instructions, on Codex its context's Orbit part, in bytes and in rules (composed paragraphs). The longest
 Claude Code shape went from 8,046 bytes and 22 rules at the step-5 base (`task-watch-toplevel-workflows-drive`) to
-6,640 bytes and 19 rules (`free-watch-toplevel-workflows`). The project's goal is 3,500 bytes, and is not reached.
+6,640 bytes and 19 rules (`free-watch-toplevel-workflows`). The project's goal is 3,500 bytes, and is not reached. After main's Drive rename was merged in (primer 1.7.1, Agent Contract 1.14.0), the same shape is 6,612 bytes: the drive unit's wording is shorter, and the caps follow.
 What the longest shape still holds, and what its guarding case says about cutting it:
 
 | Unit | Bytes | Guard, and what leaving it out measured |

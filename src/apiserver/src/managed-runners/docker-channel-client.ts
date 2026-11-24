@@ -77,7 +77,7 @@ export interface ChannelHost {
   serverVersion: string | null;
   /** The filesystem Docker's volumes live on, when the channel can see it. */
   disk: { path: string; totalBytes: number; freeBytes: number } | null;
-  /** What this instance's data volumes hold now, by Docker's measure. */
+  /** Host bytes used by this instance's volumes, including reserved image bytes in filesystem mode. */
   managedVolumeBytes: number;
 }
 
@@ -96,6 +96,7 @@ export interface ChannelInfo {
   limits: Record<string, number>;
   stopGraceSeconds: number;
   diskCheckSeconds: number;
+  volumeLimitMode?: 'filesystem' | 'measured';
   host: ChannelHost;
 }
 

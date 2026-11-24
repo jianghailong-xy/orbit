@@ -47,11 +47,16 @@ func takeMainCheckoutNotice(sessionID string, resp *RunInboxResponse) bool {
 		logln("main checkout notice", resp.TurnID, "for", sessionID, "is not an object; dropped")
 		return true
 	}
-	sink, ok := mainCheckoutNoticeSinks.Load(decodeSessionID(sessionID))
-	if !ok {
+	if !emitSessionNotice(sessionID, payload) {
 		logln("main checkout notice", resp.TurnID, "for", sessionID, "has no session emitter here; dropped")
-		return true
 	}
-	sink.(*mainCheckoutNoticeSink).emit("", evSystem, payload)
 	return true
+}
+
+func emitSessionNotice(sessionID string, payload map[string]interface{}) bool {
+	sink, ok := mainCheckoutNoticeSinks.Load(decodeSessionID(sessionID))
+	if ok {
+		sink.(*mainCheckoutNoticeSink).emit("", evSystem, payload)
+	}
+	return ok
 }
