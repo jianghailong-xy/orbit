@@ -213,8 +213,8 @@ test('migrations 1551 and 1592 rename the drive tables there and back without to
     `INSERT INTO drive_version_chunk ("version_id", "idx", "owner_id", "offset", "size_bytes", "sha256")
      VALUES ($1, 0, $2, 0, 5, $3)`, [randomUUID(), owner, sha]), /drive_version_chunk_version_fkey/);
   await assert.rejects(sql.query(
-    `INSERT INTO drive_sync ("id", "owner_id", "runner_id", "source_name", "dest_path", "status")
-     VALUES ($1, $2, $3, 'x', '/x', 'LOST')`, [randomUUID(), owner, runner]), /drive_sync_status_check/);
+    `INSERT INTO drive_sync ("id", "owner_id", "runner_id", "source_name", "dest_path", "status", "ended_at")
+     VALUES ($1, $2, $3, 'x', '/x', 'LOST', now())`, [randomUUID(), owner, runner]), /drive_sync_status_check/);
 
   // A second run finds nothing to rename.
   const rowsAfter = await contents(sql, scratch, 'drive_', ALL);
