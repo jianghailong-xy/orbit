@@ -10,6 +10,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PublicIdInterceptor } from '../common/public-id.interceptor';
 import { PrismaService } from '../prisma/prisma.service';
 import { RunnerProjectsController } from '../runner-api/runner-projects.controller';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { derivedDoneFromLanes } from './project-done-derived';
 import { ProjectFuseService } from './project-fuse.service';
@@ -76,12 +77,6 @@ const documentOf = (row: ProjectRow) => ({
   members: [],
   runtime: { coordinatorGeneration: 0 },
 });
-
-/** `readDoneState`'s deferred-landing read (8d38abd6a8, `landingDeferredSql`): none here. */
-function readsDeferredLandings(query: unknown): boolean {
-  const sql = (query as { sql?: unknown } | null)?.sql;
-  return typeof sql === 'string' && sql.includes('"delivered_at" IS NULL');
-}
 
 /** The database for the write path: one project row, which `update` writes and the reads return. */
 function writeDouble(row: ProjectRow) {
@@ -284,7 +279,11 @@ function doneDouble(
     },
     session: { findMany: async () => [] },
     projectOpenItem: { findMany: async () => [], updateMany: async () => ({ count: 0 }) },
-    $queryRaw: async (query: unknown) => (readsDeferredLandings(query) ? [] : [{ status: 'OPEN', non_code: marked.nonCode }]),
+    // The project row lock answers its row; the deferred-landing read (FROM "task") finds no work
+    // still moving, as Postgres would here.
+    $queryRaw: async (...args: unknown[]) => (renderRawQuery(args).text.includes('FROM "task"')
+      ? []
+      : [{ status: 'OPEN', non_code: marked.nonCode }]),
   };
   return {
     ...client,
