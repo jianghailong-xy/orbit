@@ -254,6 +254,7 @@ func TestDetachedWorktreeReportsSessionBranch(t *testing.T) {
 	commitFile(t, wt.RepoDir, "project.txt", "project work\n", "another session's work")
 	projectTip := mustGit(t, wt.RepoDir, "rev-parse", "HEAD")
 	mustGit(t, wt.RepoDir, "update-ref", "refs/remotes/origin/project/test", projectTip)
+	mustGit(t, wt.RepoDir, "reset", "--hard", wt.BaseSha)
 	mustGit(t, wt.Path, "checkout", "--detach", "origin/project/test")
 
 	if files, patches := liveDiff(wt); len(files) != 0 || len(patches) != 0 {
@@ -294,18 +295,37 @@ func TestDetachedWorktreeReportsSessionBranch(t *testing.T) {
 	if head := mustGit(t, wt.Path, "rev-parse", "HEAD"); head != projectTip {
 		t.Fatalf("read-only finalize moved detached HEAD to %s, want %s", head, projectTip)
 	}
+	t.Run("session checkout", func(t *testing.T) {
+		removeWorktree(wt, nil)
+		if _, err := os.Stat(wt.Path); !os.IsNotExist(err) {
+			t.Fatalf("cleanup did not remove a read-only detached checkout: %v", err)
+		}
+	})
+	t.Run("orphan sweep checkout", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "orphan")
+		mustGit(t, wt.RepoDir, "worktree", "add", "--detach", path, projectTip)
+		removeWorktree(&Worktree{Path: path, RepoDir: wt.RepoDir, Session: wt.Session}, nil)
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("orphan sweep did not remove a read-only detached checkout: %v", err)
+		}
+	})
 }
 
-// Detach one commit behind the session tip, edit a tracked file, and end the session.
-func TestDetachedFinalizeKeepsEditAndRefusesRemoval(t *testing.T) {
-	wt := sessionWorktree(t, "sDetachedEdit")
+// Detach one commit behind the session tip and edit a tracked file.
+func detachedEditWorktree(t *testing.T, id string) *Worktree {
+	t.Helper()
+	wt := sessionWorktree(t, id)
 	commitFile(t, wt.Path, "work.txt", "session branch work\n", "on the session branch")
-	tip := mustGit(t, wt.Path, "rev-parse", "HEAD")
 	mustGit(t, wt.Path, "checkout", "--detach", "HEAD~1")
 	if err := os.WriteFile(filepath.Join(wt.Path, "base.txt"), []byte("detached edit\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	return wt
+}
 
+func TestDetachedFinalizeKeepsEditAndRefusesRemoval(t *testing.T) {
+	wt := detachedEditWorktree(t, "sDetachedEdit")
+	tip := mustGit(t, wt.RepoDir, "rev-parse", "refs/heads/"+wt.Branch)
 	var req RunFinalizeRequest
 	finalizeWorktreeReport(&req, wt.Session, wt, stSucceeded)
 	if req.CaptureError == "" || !req.WorktreeDirty {
@@ -325,9 +345,57 @@ func TestDetachedFinalizeKeepsEditAndRefusesRemoval(t *testing.T) {
 	if status := mustGit(t, wt.Path, "status", "--porcelain"); status != "" {
 		t.Fatalf("test must exercise cleanup of a Git-clean detached checkout, got %q", status)
 	}
-	// The orphan sweep constructs a Worktree without a Branch.
-	removeWorktree(&Worktree{Path: wt.Path, RepoDir: wt.RepoDir, Session: wt.Session}, nil)
-	if _, err := os.Stat(wt.Path); err != nil {
-		t.Fatalf("cleanup removed the detached checkout: %v", err)
+	orphan := &Worktree{Path: wt.Path, RepoDir: wt.RepoDir, Session: wt.Session}
+	t.Run("reachable only from recovery ref and checkout", func(t *testing.T) {
+		for _, candidate := range []*Worktree{wt, orphan} {
+			removeWorktree(candidate, nil)
+			if _, err := os.Stat(wt.Path); err != nil {
+				t.Fatalf("cleanup with branch %q removed the recovery checkout: %v", candidate.Branch, err)
+			}
+		}
+	})
+	t.Run("reachable only from checkout", func(t *testing.T) {
+		mustGit(t, wt.RepoDir, "update-ref", "-d", detachedRecoveryRef(wt.Session, head))
+		for _, candidate := range []*Worktree{wt, orphan} {
+			removeWorktree(candidate, nil)
+			if _, err := os.Stat(wt.Path); err != nil {
+				t.Fatalf("cleanup with branch %q removed the checkout with an unpinned commit: %v", candidate.Branch, err)
+			}
+		}
+	})
+}
+
+func TestDetachedParkResumesWithRecoveredEdit(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	wt := detachedEditWorktree(t, "sDetachedPark")
+	path := filepath.Join(worktreesDir(), wt.Session)
+	mustGit(t, wt.RepoDir, "worktree", "move", wt.Path, path)
+	wt.Path = path
+
+	var req RunFinalizeRequest
+	finalizeWorktreeReport(&req, wt.Session, wt, stCancelled)
+	head := mustGit(t, path, "rev-parse", "HEAD")
+	ref := detachedRecoveryRef(wt.Session, head)
+	if req.CaptureError == "" || !req.WorktreeDirty || !req.WorktreeDetached {
+		t.Fatalf("park did not report the detached work as uncaptured: %+v", req)
+	}
+	if tip := mustGit(t, wt.RepoDir, "rev-parse", ref); tip != head {
+		t.Fatalf("park recovery ref points to %s, want %s", tip, head)
+	}
+
+	job := &ClaimedSession{SessionID: wt.Session, Branch: wt.Branch}
+	execDir := setupWorktree(job, wt.RepoDir)
+	if execDir != path || job.WT == nil {
+		t.Fatalf("resume did not reattach the existing checkout: %q", execDir)
+	}
+	settleSessionCheckout(job, execDir)
+	if tip, branch := mustGit(t, path, "rev-parse", "HEAD"), currentBranch(job.WT); tip != head || branch != "" {
+		t.Fatalf("resume should keep the permanent detached commit %s, got %s on branch %q", head, tip, branch)
+	}
+	if content, err := os.ReadFile(filepath.Join(path, "base.txt")); err != nil || string(content) != "detached edit\n" {
+		t.Fatalf("resumed checkout lost its edit: %q, %v", content, err)
+	}
+	if content := mustGit(t, wt.RepoDir, "show", "refs/heads/"+wt.Branch+":base.txt"); content != "base" {
+		t.Fatalf("the session branch should not contain the detached edit, found %q", content)
 	}
 }

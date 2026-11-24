@@ -1600,8 +1600,8 @@ func checkoutWorkIsCaptured(wt *Worktree) bool {
 	return err == nil && out == ""
 }
 
-// A clean index is not proof that a detached HEAD's commits reached the branch. The orphan
-// sweep has no branch name, so it requires a named ref and keeps known recovery checkouts.
+// A clean detached checkout can be reclaimed if its HEAD is reachable from a named ref.
+// A recovery checkout stays unless we can prove its HEAD reached the session branch.
 func checkoutHeadIsCaptured(wt *Worktree) bool {
 	if checkoutAbsent(wt.Path) {
 		return true
@@ -1613,8 +1613,8 @@ func checkoutHeadIsCaptured(wt *Worktree) bool {
 	if branch != "" {
 		return true
 	}
-	if wt.Branch != "" {
-		return unboundedWorktreeGitOps.isAncestor(wt.Path, "HEAD", "refs/heads/"+wt.Branch)
+	if wt.Branch != "" && unboundedWorktreeGitOps.isAncestor(wt.Path, "HEAD", "refs/heads/"+wt.Branch) {
+		return true
 	}
 	head, err := git(wt.Path, "rev-parse", "--verify", "HEAD")
 	if err != nil {
