@@ -335,7 +335,8 @@ func claudeAgentToolsReport(job *ClaimedSession, msg map[string]interface{}) *ag
 	prefix := claudeToolName("")
 	for _, name := range stringsFromJSON(msg["tools"]) {
 		if strings.HasPrefix(name, prefix) {
-			listed[strings.TrimPrefix(name, prefix)] = true
+			// An engine started before the Documents rename lists drive_*: the same tools (documents_tools.go).
+			listed[canonicalToolName(strings.TrimPrefix(name, prefix))] = true
 		}
 	}
 	r.countFamilies(listed)
