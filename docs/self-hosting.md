@@ -910,6 +910,26 @@ The apiserver logs a `401` or `403` from Resend under `EmailOutbox`
 (`docker compose logs apiserver | grep EmailOutbox`). The line names the account's id and Resend's message,
 never the key.
 
+## Documents
+
+Documents is the drive every account keeps files in, which its agents read and write with the drive tools. A
+self-deployed server has it **off** until you turn it on:
+
+```sh
+# in .env
+ORBIT_DOCUMENTS_ENABLED=true
+```
+
+then `docker compose up -d apiserver`. Turning it off again hides it: the drive's routes answer
+`404 DOCUMENTS_DISABLED`, share links to drive files stop opening, the clients show no Documents entry and new
+sessions are started without the drive tools. What the drive holds stays on disk and in the database, and is all
+there again when you turn it back on.
+
+A fresh install writes `ORBIT_DOCUMENTS_ENABLED=false`. A deployment that predates the switch had Documents on, so
+the first upgrade that knows the switch writes the line once: `true` if the drive already holds a file or folder
+(or if the upgrade cannot ask postgres), `false` otherwise. After that an upgrade never changes the value you set.
+A two-stage release (`ORBIT_REGISTRY`) does not write it: set it in the deployment host's `.env` yourself.
+
 ## Wiki System model
 
 The `wiki-worker` service calls the wiki's System model: a model endpoint that speaks the Anthropic Messages API, such

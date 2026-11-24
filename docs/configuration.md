@@ -183,6 +183,15 @@ would otherwise pick up the session's values.
 Until the wiki's jobs move to the server, the worker only probes the model and reports its state; wiki jobs still
 run on runners.
 
+### Documents
+
+The drive every account keeps files in and its agents read and write: see
+[Documents](self-hosting.md#documents).
+
+| Variable | Type | Required / default | Purpose | Secret? | Apply change |
+| --- | --- | --- | --- | --- | --- |
+| `ORBIT_DOCUMENTS_ENABLED` | `boolean` (`true` only) | Optional; off. A fresh install writes `false`; an upgrade writes it once, `true` where the drive already holds files | The switch. `true` turns Documents on; absent, empty or `false` is off, and so is any other value, with a warning in the API's log. Off, every drive route answers `404 DOCUMENTS_DISABLED`, `GET /api/auth/capabilities` says `documents.enabled: false` so the clients show no Documents, and sessions have no drive tools. Nothing is deleted. | No | Recreate API |
+
 ### Managed runners
 
 Every account's own runner, a container on this host's Docker, given at sign-in: see
