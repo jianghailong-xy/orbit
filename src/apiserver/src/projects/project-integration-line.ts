@@ -137,9 +137,42 @@ export function defaultIntegrationLine(
     : 'MAIN';
 }
 
-/** A project's own branch, named after its public id — the spelling every client shows (A-Q1). */
-export function projectBranchRef(projectId: string): string {
-  return `refs/heads/project/${uuidToBase62(projectId)}`;
+/** How long a branch's title part may be, in characters: it is cut back to a word boundary. */
+const PROJECT_BRANCH_SLUG_MAX = 40;
+
+/**
+ * A project title as a branch name part: lowercase ASCII letters and digits, every other run of
+ * characters one `-`, capped at {@link PROJECT_BRANCH_SLUG_MAX} on a word boundary. Empty for a
+ * title with no ASCII letter or digit in it, such as a Chinese one.
+ */
+export function projectBranchSlug(title: string): string {
+  const slug = title.toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/^-+|-+$/gu, '');
+  if (slug.length <= PROJECT_BRANCH_SLUG_MAX) return slug;
+  const cut = slug.slice(0, PROJECT_BRANCH_SLUG_MAX + 1);
+  const boundary = cut.lastIndexOf('-');
+  // One word longer than the cap is cut inside it, since there is no boundary to cut at.
+  return (boundary > 0 ? cut.slice(0, boundary) : cut.slice(0, PROJECT_BRANCH_SLUG_MAX)).replace(/-+$/u, '');
+}
+
+/**
+ * A project's own branch by default: `refs/heads/project/<title slug>-<first 8 characters of its
+ * public id>`, or `refs/heads/project/<8 characters>` when the title gives no slug. The name is
+ * chosen once, when the line is decided or starts, and stored as the binding's `integrationRef`;
+ * every later reader reads that, so renaming the project never renames its branch.
+ */
+export function projectBranchRef(projectId: string, title: string): string {
+  const id = uuidToBase62(projectId).slice(0, 8);
+  const slug = projectBranchSlug(title);
+  return `refs/heads/project/${slug ? `${slug}-${id}` : id}`;
+}
+
+/** {@link projectBranchRef} for a project read by id, its title from its own row. */
+async function defaultProjectBranchRef(
+  db: Pick<Prisma.TransactionClient, 'project'>,
+  projectId: string,
+): Promise<string> {
+  const { title } = await db.project.findUniqueOrThrow({ where: { id: projectId }, select: { title: true } });
+  return projectBranchRef(projectId, title);
 }
 
 /**
@@ -257,16 +290,18 @@ export async function readProjectListBindings(
   return bindings;
 }
 
-/** How long this project's exception items wait on its coordinator before they are the owner's. */
-async function escalationWindow(
+/** {@link projectIntegrationView} for a project read by id: how long its exception items wait on
+ *  its coordinator before they are the owner's, and its title for the default branch name. */
+async function settingsViewOf(
   db: Pick<Prisma.TransactionClient, 'project'>,
   projectId: string,
-): Promise<number> {
-  const row = await db.project.findUniqueOrThrow({
+  row: ProjectCodebaseLine | null,
+): Promise<ProjectIntegrationSettingsView> {
+  const project = await db.project.findUniqueOrThrow({
     where: { id: projectId },
-    select: { exceptionEscalationSeconds: true },
+    select: { exceptionEscalationSeconds: true, title: true },
   });
-  return row.exceptionEscalationSeconds;
+  return projectIntegrationView(row, project.exceptionEscalationSeconds, { id: projectId, title: project.title });
 }
 
 /** The line a binding states, when somebody decided it: the owner, or the default rule at the start. */
@@ -290,15 +325,31 @@ export type ProjectIntegrationSettingsView = SharedProjectIntegrationSettings<Da
  *  answers (§1.6), and the five facts the project page's line row is drawn from. */
 export type ProjectIntegrationView = SharedProjectIntegrationView<Date>;
 
+/**
+ * The branch a project branch line of this project is on, as a full ref: the one its binding
+ * stores, once its line is decided on one, and otherwise the name {@link projectBranchRef} gives it
+ * now. What a client shows for a project branch nobody named, so it never builds one itself.
+ */
+export function defaultProjectBranchOf(
+  row: ProjectCodebaseLine | null,
+  project: { id: string; title: string },
+): string {
+  return row && decidedLine(row) === 'PROJECT_BRANCH'
+    ? row.integrationRef
+    : projectBranchRef(project.id, project.title);
+}
+
 export function projectIntegrationView(
   row: ProjectCodebaseLine | null,
   escalationSeconds: number,
+  project: { id: string; title: string },
 ): ProjectIntegrationSettingsView {
   const line = row ? decidedLine(row) : null;
   return {
     line,
     lineAbsentReason: line ? null : 'NOT_DECIDED',
     ref: row && line ? branchName(row.integrationRef) : null,
+    defaultProjectBranch: branchName(defaultProjectBranchOf(row, project)),
     upstreamRef: row ? branchName(row.upstreamRef) : null,
     upstreamChosenAt: row?.upstreamRefChosenAt ?? null,
     source: row && line ? (row.integrationRefSource as IntegrationRefSource) : null,
@@ -1356,7 +1407,7 @@ export async function readProjectIntegrationRead(
 ): Promise<ProjectIntegrationRead<Date>> {
   const [settings, queue, landTasks, promotionViews, log, timeline] = await Promise.all([
     readProjectCodebase(prisma, project.id).then((row) =>
-      projectIntegrationView(row, project.exceptionEscalationSeconds)),
+      projectIntegrationView(row, project.exceptionEscalationSeconds, project)),
     readInFlightJobs(prisma, project.id),
     readProjectLandTaskViews(prisma, project.id),
     readProjectPromotionIntegrationViews(prisma, project.id),
@@ -2002,10 +2053,7 @@ export async function configureProjectIntegration(
     || settings.mergeCheckTimeoutSeconds !== undefined
     || settings.deliveryMode !== undefined;
   if (!bindingNamed) {
-    return projectIntegrationView(
-      await readProjectCodebase(tx, projectId),
-      await escalationWindow(tx, projectId),
-    );
+    return settingsViewOf(tx, projectId, await readProjectCodebase(tx, projectId));
   }
 
   let row = await lockCodebase(tx, projectId);
@@ -2031,7 +2079,8 @@ export async function configureProjectIntegration(
   const upstreamRef = settings.upstreamRef ?? row.upstreamRef;
   const integrationRef = (chosen ?? decided) === 'PROJECT_BRANCH'
     ? settings.projectBranchName
-      ?? (decided === 'PROJECT_BRANCH' ? row.integrationRef : projectBranchRef(projectId))
+      // A line already on a project branch keeps the name it has: never renamed.
+      ?? (decided === 'PROJECT_BRANCH' ? row.integrationRef : await defaultProjectBranchRef(tx, projectId))
     // MAIN, or not decided yet: the line stands on the upstream until the default rule moves it.
     : upstreamRef;
   if ((chosen ?? decided) === 'PROJECT_BRANCH' && integrationRef === upstreamRef) {
@@ -2107,7 +2156,7 @@ export async function configureProjectIntegration(
       });
     }
   }
-  return projectIntegrationView(written, await escalationWindow(tx, projectId));
+  return settingsViewOf(tx, projectId, written);
 }
 
 /**
@@ -2441,7 +2490,7 @@ export async function startOnFirstIntegration(
     let integrationRef = row.integrationRef;
     if (row.integrationRefSource !== 'EXPLICIT') {
       integrationRef = await projectDefaultLine(tx, first.projectId) === 'PROJECT_BRANCH'
-        ? projectBranchRef(first.projectId)
+        ? await defaultProjectBranchRef(tx, first.projectId)
         : row.upstreamRef;
     }
     row = await tx.projectCodebase.update({

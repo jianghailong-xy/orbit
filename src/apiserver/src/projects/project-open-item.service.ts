@@ -128,6 +128,7 @@ import {
 } from './project-integration-job';
 import {
   ProjectIntegrationView,
+  defaultProjectBranchOf,
   projectIntegrationView,
   readInFlightJobs,
   readProjectCodebase,
@@ -2839,7 +2840,7 @@ export class ProjectOpenItemService {
   ): Promise<IntegrationRetriedView> {
     const project = await this.prisma.project.findFirst({
       where: { id: projectId, ownerId },
-      select: { exceptionEscalationSeconds: true },
+      select: { exceptionEscalationSeconds: true, title: true },
     });
     if (!project) throw new NotFoundException('project not found');
     const [job] = await readInFlightJobs(this.prisma, projectId, jobId);
@@ -2870,6 +2871,7 @@ export class ProjectOpenItemService {
       ...(await readProjectIntegrationView(this.prisma, projectId, projectIntegrationView(
         await readProjectCodebase(this.prisma, projectId),
         project.exceptionEscalationSeconds,
+        { id: projectId, title: project.title },
       ))),
       landingSessionId: retried.landingSessionId,
     };
@@ -3896,6 +3898,7 @@ export class ProjectOpenItemService {
       // BACK to decides one press on every item it owns, and it is one project either way.
       select: {
         id: true,
+        title: true,
         coordinatorSessionId: true,
         coordinatorSession: { select: COORDINATOR_PAUSE_SELECT },
       },
@@ -4071,7 +4074,11 @@ export class ProjectOpenItemService {
     const deliveredAt = new Map(
       turns.map((turn) => [`${turn.sessionId}:${turn.clientTurnId}`, turn.deliveredAt]),
     );
-    const mainBranch = mainBranchOf(await readProjectCodebase(this.prisma, projectId));
+    const codebase = await readProjectCodebase(this.prisma, projectId);
+    const mainBranch = mainBranchOf(codebase);
+    // Read now rather than filed with the request: the binding's own branch, once it has one, or the
+    // name the project's title gives it today — what a start with no branch named would choose.
+    const defaultProjectBranchName = defaultProjectBranchOf(codebase, project);
     // The owner's language, read only when a question's card is translated: its detail line is served
     // translated too, in that language alone.
     const langs = rows.some((row) => row.kind === 'COORDINATOR_QUESTION' && row.translation)
@@ -4084,8 +4091,8 @@ export class ProjectOpenItemService {
       const question = row.kind === 'COORDINATOR_QUESTION'
         ? (row.payload as unknown as CoordinatorQuestion)
         : null;
-      const startRequest = row.kind === START_REQUEST_KIND
-        ? (row.payload as unknown as ProjectStartRequest)
+      const startRequest: ProjectStartRequest | null = row.kind === START_REQUEST_KIND
+        ? { ...(row.payload as unknown as ProjectStartRequest), defaultProjectBranchName }
         : null;
       const doneRequest = row.kind === DONE_REQUEST_KIND
         ? (row.payload as unknown as DoneRequest)
@@ -4098,7 +4105,7 @@ export class ProjectOpenItemService {
         detailLine: question
           ? questionDetailLine(question)
           : startRequest
-            ? startRequestDetailLine(projectId, startRequest)
+            ? startRequestDetailLine(startRequest, defaultProjectBranchName)
             : doneRequest
               ? doneRequestDetailLine(doneRequest)
               : detailLine(row.kind, row.payload),

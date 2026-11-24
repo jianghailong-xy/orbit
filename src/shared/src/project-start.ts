@@ -191,6 +191,14 @@ export interface ProjectStartRequest {
    * still carry some; the cards ignore them.
    */
   warnings: ProjectStartFinding[];
+  /**
+   * The project branch a start with no `settings.projectBranchName` would land on, as a full ref:
+   * the project's own branch when its line is already decided on one, else the server's default,
+   * `refs/heads/project/<title slug>-<8 characters of the project id>`. Filled in by the server on
+   * every read of the request, never filed with it. Absent on servers that predate it, which
+   * named the branch `refs/heads/project/<project id>`.
+   */
+  defaultProjectBranchName?: string;
 }
 
 /** What filing a start request answers: the request, the open item that holds it, and the one it

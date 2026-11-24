@@ -3076,7 +3076,7 @@ export class ProjectsService {
       settingChanges,
       blockers,
       integration: {
-        ...projectIntegrationView(codebase, project.exceptionEscalationSeconds),
+        ...projectIntegrationView(codebase, project.exceptionEscalationSeconds, project),
         lastMainBranch: lastMainBranchView(mainBranchMemory),
       },
       // The projection itself, whole: `withheld` is every clause that does not hold — ALL of them,
@@ -3161,7 +3161,7 @@ export class ProjectsService {
   async integration(ownerId: string, id: string): Promise<ProjectIntegrationView> {
     const project = await this.prisma.project.findFirst({
       where: { id, ownerId },
-      select: { exceptionEscalationSeconds: true },
+      select: { exceptionEscalationSeconds: true, title: true },
     });
     if (!project) throw new NotFoundException('project not found');
     return readProjectIntegrationView(
@@ -3170,6 +3170,7 @@ export class ProjectsService {
       projectIntegrationView(
         await readProjectCodebase(this.prisma, id),
         project.exceptionEscalationSeconds,
+        { id, title: project.title },
       ),
     );
   }
