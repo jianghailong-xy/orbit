@@ -95,7 +95,7 @@ class LandingBoardStackDeviceTest {
         val names = mapOf("pullRequest" to "opened-with-checks-running", "pushAsMe" to "push-as-me-on", "refused" to "push-refused",
             "notFromGithub" to "not-from-github", "permissionsPending" to "permissions-pending", "notConnected" to "github-not-connected")
         for ((key, name) in names) {
-            if (only != null && only != key) continue
+            if (only != key) continue
             if (key == "notConnected") break // belongs to the second account; read in the unit shell test
             await(name)
             compose.onAllNodesWithText(name, substring = false).onFirst().performScrollTo().performClick()
