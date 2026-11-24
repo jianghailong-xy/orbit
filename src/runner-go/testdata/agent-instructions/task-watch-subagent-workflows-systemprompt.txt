@@ -1,13 +1,13 @@
-=== antigravity (3941 bytes)
+=== antigravity (4091 bytes)
 Owner system prompt.
 
 Owner instructions.
 
-Orbit primer 1.8.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.7.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
-Start is its own decision: task_start runs recorded work, and task_create says how to start, schedule or hold new work.
+Start is its own decision: task_start runs recorded work, task_create with startNow: true records and starts it on one card, and runAt schedules one start. If the person said nothing should run until they say so, pass autoRunWhenReady: false and do not call task_start.
 
 A create, a batch, a project, a provider or agent change can put a confirmation card in front of the user, which writes nothing until they confirm it, so first say in a sentence or two what you will create and why. A refusal or a declined card is final on every surface; a chat or a card still waiting is not a no, and its receipt says what to do next.
 
@@ -28,14 +28,14 @@ To wait for Orbit work, call task_await or session_await (watch_create for other
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the tools of the `orbit` MCP server (call_mcp_tool with ServerName "orbit"). Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
-=== claude (3691 bytes)
+=== claude (3841 bytes)
 Owner instructions.
 
-Orbit primer 1.8.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.7.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
-Start is its own decision: task_start runs recorded work, and task_create says how to start, schedule or hold new work.
+Start is its own decision: task_start runs recorded work, task_create with startNow: true records and starts it on one card, and runAt schedules one start. If the person said nothing should run until they say so, pass autoRunWhenReady: false and do not call task_start.
 
 A create, a batch, a project, a provider or agent change can put a confirmation card in front of the user, which writes nothing until they confirm it, so first say in a sentence or two what you will create and why. A refusal or a declined card is final on every surface; a chat or a card still waiting is not a no, and its receipt says what to do next.
 
@@ -55,14 +55,14 @@ Before changing a file, use wiki_search with its path to look up known pitfalls.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the `mcp__orbit__*` tools. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
 === claude, resumed: same as claude
-=== codex 0.125-0.134 developer message (4411 bytes)
+=== codex 0.125-0.134 developer message (4561 bytes)
 Owner instructions.
 
-Orbit primer 1.8.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.7.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
-Start is its own decision: task_start runs recorded work, and task_create says how to start, schedule or hold new work.
+Start is its own decision: task_start runs recorded work, task_create with startNow: true records and starts it on one card, and runAt schedules one start. If the person said nothing should run until they say so, pass autoRunWhenReady: false and do not call task_start.
 
 A create, a batch, a project, a provider or agent change can put a confirmation card in front of the user, which writes nothing until they confirm it, so first say in a sentence or two what you will create and why. A refusal or a declined card is final on every surface; a chat or a card still waiting is not a no, and its receipt says what to do next.
 
@@ -85,15 +85,15 @@ Before changing a file, use wiki_search with its path to look up known pitfalls.
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the `mcp__orbit__*` tools. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
 
 After generating an image, preserve the original file. Do not regenerate it solely because Orbit could not attach or upload it. Only claim that the image is attached or delivered when Orbit explicitly confirms attachment delivery; successful generation alone is not delivery confirmation. If delivery fails, report that the image was generated but delivery failed, keep the original file available, and let Orbit retry delivery. If delivery status is unavailable, report only generation success without claiming delivery success or failure.
-=== codex < 0.125 turn input (4468 bytes)
+=== codex < 0.125 turn input (4618 bytes)
 <orbit_application_context>
 Owner instructions.
 
-Orbit primer 1.8.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.7.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
-Start is its own decision: task_start runs recorded work, and task_create says how to start, schedule or hold new work.
+Start is its own decision: task_start runs recorded work, task_create with startNow: true records and starts it on one card, and runAt schedules one start. If the person said nothing should run until they say so, pass autoRunWhenReady: false and do not call task_start.
 
 A create, a batch, a project, a provider or agent change can put a confirmation card in front of the user, which writes nothing until they confirm it, so first say in a sentence or two what you will create and why. A refusal or a declined card is final on every surface; a chat or a card still waiting is not a no, and its receipt says what to do next.
 
@@ -120,16 +120,16 @@ After generating an image, preserve the original file. Do not regenerate it sole
 === codex >= 0.135 additional context: same as codex 0.125-0.134 developer message
 === codex >= 0.135, after compaction: same as codex 0.125-0.134 developer message
 === codex >= 0.135, resumed thread: same as codex 0.125-0.134 developer message
-=== cursor (3901 bytes)
+=== cursor (4051 bytes)
 Owner system prompt.
 
 Owner instructions.
 
-Orbit primer 1.8.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.7.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
-Start is its own decision: task_start runs recorded work, and task_create says how to start, schedule or hold new work.
+Start is its own decision: task_start runs recorded work, task_create with startNow: true records and starts it on one card, and runAt schedules one start. If the person said nothing should run until they say so, pass autoRunWhenReady: false and do not call task_start.
 
 A create, a batch, a project, a provider or agent change can put a confirmation card in front of the user, which writes nothing until they confirm it, so first say in a sentence or two what you will create and why. A refusal or a declined card is final on every surface; a chat or a card still waiting is not a no, and its receipt says what to do next.
 
@@ -150,16 +150,16 @@ To wait for Orbit work, call task_await or session_await (watch_create for other
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the tools of the `orbit` MCP server. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
-=== deepseek harness (3891 bytes)
+=== deepseek harness (4041 bytes)
 Owner system prompt.
 
 Owner instructions.
 
-Orbit primer 1.8.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.7.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
-Start is its own decision: task_start runs recorded work, and task_create says how to start, schedule or hold new work.
+Start is its own decision: task_start runs recorded work, task_create with startNow: true records and starts it on one card, and runAt schedules one start. If the person said nothing should run until they say so, pass autoRunWhenReady: false and do not call task_start.
 
 A create, a batch, a project, a provider or agent change can put a confirmation card in front of the user, which writes nothing until they confirm it, so first say in a sentence or two what you will create and why. A refusal or a declined card is final on every surface; a chat or a card still waiting is not a no, and its receipt says what to do next.
 
@@ -180,17 +180,17 @@ To wait for Orbit work, call task_await or session_await (watch_create for other
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the `mcp__orbit__*` tools. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
-=== kimi (4084 bytes)
+=== kimi (4234 bytes)
 [map[text:<orbit-agent-instructions>
 Owner system prompt.
 
 Owner instructions.
 
-Orbit primer 1.8.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.7.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
-Start is its own decision: task_start runs recorded work, and task_create says how to start, schedule or hold new work.
+Start is its own decision: task_start runs recorded work, task_create with startNow: true records and starts it on one card, and runAt schedules one start. If the person said nothing should run until they say so, pass autoRunWhenReady: false and do not call task_start.
 
 A create, a batch, a project, a provider or agent change can put a confirmation card in front of the user, which writes nothing until they confirm it, so first say in a sentence or two what you will create and why. A refusal or a declined card is final on every surface; a chat or a card still waiting is not a no, and its receipt says what to do next.
 
@@ -218,14 +218,14 @@ Do not use these tools: WebFetch.
 </orbit-agent-instructions>
 
 hi type:text]]
-=== opencode (3863 bytes)
+=== opencode (4013 bytes)
 Owner instructions.
 
-Orbit primer 1.8.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.7.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
-Start is its own decision: task_start runs recorded work, and task_create says how to start, schedule or hold new work.
+Start is its own decision: task_start runs recorded work, task_create with startNow: true records and starts it on one card, and runAt schedules one start. If the person said nothing should run until they say so, pass autoRunWhenReady: false and do not call task_start.
 
 A create, a batch, a project, a provider or agent change can put a confirmation card in front of the user, which writes nothing until they confirm it, so first say in a sentence or two what you will create and why. A refusal or a declined card is final on every surface; a chat or a card still waiting is not a no, and its receipt says what to do next.
 
@@ -246,12 +246,12 @@ To wait for Orbit work, call task_await or session_await (watch_create for other
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the `orbit_*` tools. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
-=== orbit mcp initialize (every other engine) (2519 bytes)
-Orbit primer 1.8.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+=== orbit mcp initialize (every other engine) (2669 bytes)
+Orbit primer 1.7.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
-Start is its own decision: task_start runs recorded work, and task_create says how to start, schedule or hold new work.
+Start is its own decision: task_start runs recorded work, task_create with startNow: true records and starts it on one card, and runAt schedules one start. If the person said nothing should run until they say so, pass autoRunWhenReady: false and do not call task_start.
 
 A create, a batch, a project, a provider or agent change can put a confirmation card in front of the user, which writes nothing until they confirm it, so first say in a sentence or two what you will create and why. A refusal or a declined card is final on every surface; a chat or a card still waiting is not a no, and its receipt says what to do next.
 
@@ -263,7 +263,7 @@ When a person's problem is one of their own Settings, call settings_get, then se
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
 === orbit mcp initialize, claude (684 bytes)
-Orbit primer 1.8.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.7.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
 === orbit mcp initialize, help ask (310 bytes)

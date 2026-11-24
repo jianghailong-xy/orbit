@@ -33,7 +33,7 @@ package main
 // a change to a word is a new agentPrimerVersion, reviewed as a diff.
 
 // agentPrimerVersion is the version of the primer's text. Any change to it is a new version.
-const agentPrimerVersion = "1.8.0"
+const agentPrimerVersion = "1.7.0"
 
 // agentContractVersion is the Agent Contract version the primer was written from: the header of
 // docs/orbit-agent-contract.md and contractVersion in contracts/orbit-agent.contract.json.
@@ -77,9 +77,9 @@ const (
 		"Never file what this session is already doing as another task or session. Unsure which fits, or how to call " +
 		"it? Call guide: no arguments for the routes, a topic for the recipe."
 
-	// One line since 1.8.0 (design step 5c): how to start, schedule or hold new work is task_create's description.
-	agentPrimerStart = "Start is its own decision: task_start runs recorded work, and task_create says how to start, " +
-		"schedule or hold new work."
+	agentPrimerStart = "Start is its own decision: task_start runs recorded work, task_create with startNow: true " +
+		"records and starts it on one card, and runAt schedules one start. If the person said nothing should run " +
+		"until they say so, pass autoRunWhenReady: false and do not call task_start."
 
 	agentPrimerCards = "A create, a batch, a project, a provider or agent change can put a confirmation card in front of " +
 		"the user, which writes nothing until they confirm it, so first say in a sentence or two what you will create " +
