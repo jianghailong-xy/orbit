@@ -41,7 +41,7 @@
         </provider>
         <receiver android:name=".update.UpdateInstallReceiver" android:exported="false" />
         <receiver android:name=".push.OwnerRequestLaterReceiver" android:exported="false" />
-        <receiver android:name=".documents.DocumentsPauseReceiver" android:exported="false" />
+        <receiver android:name=".drive.DrivePauseReceiver" android:exported="false" />
         <service android:name="androidx.work.impl.foreground.SystemForegroundService" android:foregroundServiceType="dataSync"
             tools:node="merge" />
         <activity

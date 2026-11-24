@@ -1,4 +1,4 @@
-package io.orbitd.android.core.documents
+package io.orbitd.android.core.drive
 
 import io.orbitd.android.core.auth.OrbitApi
 import io.orbitd.android.core.auth.SessionHandle
@@ -17,85 +17,85 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-/** The calls an upload makes. [DocumentsApi] is the real one; tests answer with a fake. */
-interface DocumentsUploadTransport {
-    suspend fun openUpload(parentId: String?, name: String, size: Long, relativePath: String?, dropRootId: String?): DocumentsUploadOpened
-    suspend fun uploadStatus(uploadId: String): DocumentsUploadStatus
+/** The calls an upload makes. [DriveApi] is the real one; tests answer with a fake. */
+interface DriveUploadTransport {
+    suspend fun openUpload(parentId: String?, name: String, size: Long, relativePath: String?, dropRootId: String?): DriveUploadOpened
+    suspend fun uploadStatus(uploadId: String): DriveUploadStatus
     suspend fun putChunk(uploadId: String, index: Int, bytes: ByteArray, sha256: String)
-    suspend fun completeUpload(uploadId: String): DocumentsEntry
+    suspend fun completeUpload(uploadId: String): DriveEntry
     suspend fun abandonUpload(uploadId: String)
 }
 
 /**
  * The owner's Documents doors (apiserver documents.controller.ts, prefix `documents`; OrbitKit APIClient's Documents calls). A
- * refusal is the transport's [io.orbitd.android.core.net.ApiError] (a server with Documents off answers 404 DOCUMENTS_DISABLED); an
+ * refusal is the transport's [io.orbitd.android.core.net.ApiError] (a server with Documents off answers 404 DRIVE_DISABLED); an
  * answer this build cannot read is a [ProtocolException].
  */
-class DocumentsApi(private val api: OrbitApi, private val handle: SessionHandle) : DocumentsUploadTransport {
+class DriveApi(private val api: OrbitApi, private val handle: SessionHandle) : DriveUploadTransport {
     /** `GET /auth/capabilities` → `documents.enabled`: null where the server says nothing (a server from before the switch). */
-    suspend fun documentsEnabled(): Boolean? {
+    suspend fun driveEnabled(): Boolean? {
         val body = parse(get(listOf("auth", "capabilities"))) as? JsonObject ?: return null
         return ((body["documents"] as? JsonObject)?.get("enabled") as? JsonPrimitive)?.booleanOrNull
     }
 
     /** Every page of a folder (the root when [parentId] is null): a folder is read whole, a thousand names a page. */
-    suspend fun folder(parentId: String?): DocumentsListing {
+    suspend fun folder(parentId: String?): DriveListing {
         var cursor: String? = null
-        var listing: DocumentsListing? = null
+        var listing: DriveListing? = null
         do {
             val query = listOfNotNull("limit" to "1000", parentId?.let { "parentId" to it }, cursor?.let { "cursor" to it })
-            val page = decode(get(listOf("documents", "entries"), query), DocumentsListing.serializer())
-            listing = listing?.let { DocumentsListing(page.folder, it.entries + page.entries, page.nextCursor) } ?: page
+            val page = decode(get(listOf("documents", "entries"), query), DriveListing.serializer())
+            listing = listing?.let { DriveListing(page.folder, it.entries + page.entries, page.nextCursor) } ?: page
             cursor = page.nextCursor
         } while (cursor != null)
         return listing!!
     }
 
     /** Live entries anywhere in the drive whose name contains [q], each with its folder (the first page, by name). */
-    suspend fun search(q: String): DocumentsSearchResult =
-        decode(get(listOf("documents", "search"), listOf("q" to q, "limit" to "100")), DocumentsSearchResult.serializer())
+    suspend fun search(q: String): DriveSearchResult =
+        decode(get(listOf("documents", "search"), listOf("q" to q, "limit" to "100")), DriveSearchResult.serializer())
 
     /** One entry, with its `path`. */
-    suspend fun entry(id: String): DocumentsEntry = decode(get(listOf("documents", "entries", id)), DocumentsEntry.serializer())
+    suspend fun entry(id: String): DriveEntry = decode(get(listOf("documents", "entries", id)), DriveEntry.serializer())
 
-    suspend fun versions(fileId: String): DocumentsVersions =
-        decode(get(listOf("documents", "entries", fileId, "versions")), DocumentsVersions.serializer())
+    suspend fun versions(fileId: String): DriveVersions =
+        decode(get(listOf("documents", "entries", fileId, "versions")), DriveVersions.serializer())
 
     /** A new folder; a name already taken gets a suffix. */
-    suspend fun createFolder(parentId: String?, name: String): DocumentsEntry =
+    suspend fun createFolder(parentId: String?, name: String): DriveEntry =
         decode(send(listOf("documents", "folders"), HttpMethod.POST, buildJsonObject { parentId?.let { put("parentId", it) }; put("name", name) }),
-            DocumentsEntry.serializer())
+            DriveEntry.serializer())
 
     /** Rename; a taken name is refused, never overwritten. */
-    suspend fun rename(id: String, name: String): DocumentsEntry =
-        decode(send(listOf("documents", "entries", id), HttpMethod.PATCH, buildJsonObject { put("name", name) }), DocumentsEntry.serializer())
+    suspend fun rename(id: String, name: String): DriveEntry =
+        decode(send(listOf("documents", "entries", id), HttpMethod.PATCH, buildJsonObject { put("name", name) }), DriveEntry.serializer())
 
-    suspend fun move(id: String, parentId: String): DocumentsEntry =
-        decode(send(listOf("documents", "entries", id), HttpMethod.PATCH, buildJsonObject { put("parentId", parentId) }), DocumentsEntry.serializer())
+    suspend fun move(id: String, parentId: String): DriveEntry =
+        decode(send(listOf("documents", "entries", id), HttpMethod.PATCH, buildJsonObject { put("parentId", parentId) }), DriveEntry.serializer())
 
     /** Move to Trash; answers the group, which Undo restores. */
-    suspend fun moveToTrash(id: String): DocumentsTrashed =
-        decode(send(listOf("documents", "entries", id), HttpMethod.DELETE), DocumentsTrashed.serializer())
+    suspend fun moveToTrash(id: String): DriveTrashed =
+        decode(send(listOf("documents", "entries", id), HttpMethod.DELETE), DriveTrashed.serializer())
 
     /** Every group in Trash, newest first. */
-    suspend fun trash(): List<DocumentsTrashGroup> {
+    suspend fun trash(): List<DriveTrashGroup> {
         var cursor: String? = null
-        val groups = mutableListOf<DocumentsTrashGroup>()
+        val groups = mutableListOf<DriveTrashGroup>()
         do {
             val page = decode(get(listOf("documents", "trash"), listOfNotNull("limit" to "200", cursor?.let { "cursor" to it })),
-                DocumentsTrashPage.serializer())
+                DriveTrashPage.serializer())
             groups += page.groups
             cursor = page.nextCursor
         } while (cursor != null)
         return groups
     }
 
-    suspend fun restoreGroup(groupId: String): DocumentsRestored =
-        decode(send(listOf("documents", "trash", "groups", groupId, "restore"), HttpMethod.POST), DocumentsRestored.serializer())
+    suspend fun restoreGroup(groupId: String): DriveRestored =
+        decode(send(listOf("documents", "trash", "groups", groupId, "restore"), HttpMethod.POST), DriveRestored.serializer())
 
     /** One item of a group back, and what hangs under it, leaving the rest in Trash (rule 3). */
-    suspend fun restoreItem(groupId: String, entryId: String): DocumentsRestored =
-        decode(send(listOf("documents", "trash", "groups", groupId, "items", entryId, "restore"), HttpMethod.POST), DocumentsRestored.serializer())
+    suspend fun restoreItem(groupId: String, entryId: String): DriveRestored =
+        decode(send(listOf("documents", "trash", "groups", groupId, "items", entryId, "restore"), HttpMethod.POST), DriveRestored.serializer())
 
     /** Delete a group for good. */
     suspend fun deleteGroup(groupId: String) { send(listOf("documents", "trash", "groups", groupId), HttpMethod.DELETE) }
@@ -103,36 +103,36 @@ class DocumentsApi(private val api: OrbitApi, private val handle: SessionHandle)
     suspend fun emptyTrash() { send(listOf("documents", "trash"), HttpMethod.DELETE) }
 
     /** A replaced version back as the file's current one, or as a copy beside it. */
-    suspend fun restoreVersion(versionId: String, asCopy: Boolean): DocumentsEntry =
+    suspend fun restoreVersion(versionId: String, asCopy: Boolean): DriveEntry =
         decode(send(listOf("documents", "versions", versionId, "restore"), HttpMethod.POST,
-            buildJsonObject { put("as", if (asCopy) "COPY" else "CURRENT") }), DocumentsEntry.serializer())
+            buildJsonObject { put("as", if (asCopy) "COPY" else "CURRENT") }), DriveEntry.serializer())
 
     /** The secret scan before sharing (§9): warns, never blocks. */
-    suspend fun shareCheck(fileId: String): DocumentsShareCheck =
-        decode(send(listOf("documents", "entries", fileId, "share-check"), HttpMethod.POST), DocumentsShareCheck.serializer())
+    suspend fun shareCheck(fileId: String): DriveShareCheck =
+        decode(send(listOf("documents", "entries", fileId, "share-check"), HttpMethod.POST), DriveShareCheck.serializer())
 
     /** Share the file's current version, or move its link there. */
-    suspend fun share(fileId: String): DocumentsShareAnswer =
+    suspend fun share(fileId: String): DriveShareAnswer =
         decode(send(listOf("share-links"), HttpMethod.POST, buildJsonObject { put("kind", "DRIVE_FILE"); put("driveEntryId", fileId) }),
-            DocumentsShareAnswer.serializer())
+            DriveShareAnswer.serializer())
 
     /** The drive files' links that have not ended; a row of another kind, or one this build cannot read, is skipped. */
-    suspend fun shareLinks(): List<DocumentsShareLink> {
+    suspend fun shareLinks(): List<DriveShareLink> {
         val rows = ((parse(get(listOf("share-links"), listOf("kind" to "DRIVE_FILE"))) as? JsonObject)?.get("links") as? JsonArray).orEmpty()
-        return rows.mapNotNull { row -> runCatching { Wire.json.decodeFromJsonElement(DocumentsShareLink.serializer(), row) }.getOrNull() }
+        return rows.mapNotNull { row -> runCatching { Wire.json.decodeFromJsonElement(DriveShareLink.serializer(), row) }.getOrNull() }
             .filter { it.kind == "DRIVE_FILE" && it.state != "ENDED" }
     }
 
     suspend fun stopSharing(linkId: String) { send(listOf("share-links", linkId), HttpMethod.DELETE) }
 
     /** The drive's share of the account and the rest (Storage). */
-    suspend fun usage(): DocumentsUsage = decode(get(listOf("documents", "usage")), DocumentsUsage.serializer())
+    suspend fun usage(): DriveUsage = decode(get(listOf("documents", "usage")), DriveUsage.serializer())
 
     /** What the account keeps besides, by project, task and week (Storage's other lists). */
     suspend fun storageUsage(): StorageUsage = decode(get(listOf("attachments", "usage")), StorageUsage.serializer())
 
     /** Agents' directory syncs: running ones and those ended in the last day. */
-    suspend fun syncs(): List<DocumentsSync> = decode(get(listOf("documents", "syncs")), DocumentsSyncList.serializer()).syncs
+    suspend fun syncs(): List<DriveSync> = decode(get(listOf("documents", "syncs")), DriveSyncList.serializer()).syncs
 
     /** A session's title, for "Agent in <session>"; null when it cannot be read. */
     suspend fun sessionTitle(id: String): String? = runCatching {
@@ -147,23 +147,23 @@ class DocumentsApi(private val api: OrbitApi, private val handle: SessionHandle)
 
     /** A short-lived path under the server (`/api/documents/dl/…`) that downloads the current version (or [versionId]) with no login
      * header, so the system's download manager streams it to disk however large the file is (D12). */
-    suspend fun downloadLink(fileId: String, versionId: String? = null): DocumentsDownloadLink =
+    suspend fun downloadLink(fileId: String, versionId: String? = null): DriveDownloadLink =
         decode(send(listOf("documents", "entries", fileId, "download-link"), HttpMethod.POST,
-            buildJsonObject { versionId?.let { put("versionId", it) } }), DocumentsDownloadLink.serializer())
+            buildJsonObject { versionId?.let { put("versionId", it) } }), DriveDownloadLink.serializer())
 
     // Resumable uploads: open, send chunks of at most `chunkSize`, complete.
 
-    override suspend fun openUpload(parentId: String?, name: String, size: Long, relativePath: String?, dropRootId: String?): DocumentsUploadOpened =
+    override suspend fun openUpload(parentId: String?, name: String, size: Long, relativePath: String?, dropRootId: String?): DriveUploadOpened =
         decode(send(listOf("documents", "uploads"), HttpMethod.POST, buildJsonObject {
             parentId?.let { put("parentId", it) }
             put("name", name)
             put("size", size)
             relativePath?.let { put("relativePath", it) }
             dropRootId?.let { put("dropRootId", it) }
-        }), DocumentsUploadOpened.serializer())
+        }), DriveUploadOpened.serializer())
 
-    override suspend fun uploadStatus(uploadId: String): DocumentsUploadStatus =
-        decode(get(listOf("documents", "uploads", uploadId)), DocumentsUploadStatus.serializer())
+    override suspend fun uploadStatus(uploadId: String): DriveUploadStatus =
+        decode(get(listOf("documents", "uploads", uploadId)), DriveUploadStatus.serializer())
 
     /** One chunk as the raw body, with its sha256; sent again, it replaces. */
     override suspend fun putChunk(uploadId: String, index: Int, bytes: ByteArray, sha256: String) {
@@ -173,8 +173,8 @@ class DocumentsApi(private val api: OrbitApi, private val handle: SessionHandle)
     }
 
     /** Create the file; sent again after it applied, it answers the same file. */
-    override suspend fun completeUpload(uploadId: String): DocumentsEntry =
-        decode(send(listOf("documents", "uploads", uploadId, "complete"), HttpMethod.POST), DocumentsEntry.serializer())
+    override suspend fun completeUpload(uploadId: String): DriveEntry =
+        decode(send(listOf("documents", "uploads", uploadId, "complete"), HttpMethod.POST), DriveEntry.serializer())
 
     override suspend fun abandonUpload(uploadId: String) { send(listOf("documents", "uploads", uploadId), HttpMethod.DELETE) }
 

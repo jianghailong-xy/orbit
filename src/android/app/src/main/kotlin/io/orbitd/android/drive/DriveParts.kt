@@ -1,4 +1,4 @@
-package io.orbitd.android.documents
+package io.orbitd.android.drive
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -29,15 +29,15 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.orbitd.android.R
-import io.orbitd.android.core.documents.DocumentsEntry
-import io.orbitd.android.core.documents.DocumentsLogic
-import io.orbitd.android.core.documents.DocumentsWriter
+import io.orbitd.android.core.drive.DriveEntry
+import io.orbitd.android.core.drive.DriveLogic
+import io.orbitd.android.core.drive.DriveWriter
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /** The board's rows: 16 sp names, 13.5 sp lines in the variant colour, 20 dp sides, 56 dp tall at least (04-android `.li`). */
-internal object DocumentsMetrics {
+internal object DriveMetrics {
     val side = 20.dp
     val rowMin = 56.dp
     val icon = 30.dp
@@ -47,26 +47,26 @@ internal object DocumentsMetrics {
 
 /** The icon a row draws: a filled folder in the brand colour, a file's kind in the variant colour. */
 @Composable
-internal fun EntryIcon(icon: DocumentsLogic.Icon, modifier: Modifier = Modifier) {
+internal fun EntryIcon(icon: DriveLogic.Icon, modifier: Modifier = Modifier) {
     val (res, tint) = when (icon) {
-        DocumentsLogic.Icon.FOLDER -> R.drawable.ic_folder_filled to MaterialTheme.colorScheme.primary
-        DocumentsLogic.Icon.PICTURE -> R.drawable.ic_image to Color(0xFF3B7BD9)
-        DocumentsLogic.Icon.MARKDOWN, DocumentsLogic.Icon.TEXT -> R.drawable.ic_doc_text to MaterialTheme.colorScheme.onSurfaceVariant
-        DocumentsLogic.Icon.TABLE -> R.drawable.ic_doc_table to Color(0xFF2E8B57)
-        DocumentsLogic.Icon.PDF -> R.drawable.ic_doc_text to Color(0xFFC6402F)
-        DocumentsLogic.Icon.ARCHIVE -> R.drawable.ic_doc_archive to MaterialTheme.colorScheme.onSurfaceVariant
-        DocumentsLogic.Icon.VIDEO -> R.drawable.ic_video to Color(0xFFC6402F)
-        DocumentsLogic.Icon.AUDIO -> R.drawable.ic_audio to MaterialTheme.colorScheme.onSurfaceVariant
-        DocumentsLogic.Icon.FILE -> R.drawable.ic_doc to MaterialTheme.colorScheme.onSurfaceVariant
+        DriveLogic.Icon.FOLDER -> R.drawable.ic_folder_filled to MaterialTheme.colorScheme.primary
+        DriveLogic.Icon.PICTURE -> R.drawable.ic_image to Color(0xFF3B7BD9)
+        DriveLogic.Icon.MARKDOWN, DriveLogic.Icon.TEXT -> R.drawable.ic_doc_text to MaterialTheme.colorScheme.onSurfaceVariant
+        DriveLogic.Icon.TABLE -> R.drawable.ic_doc_table to Color(0xFF2E8B57)
+        DriveLogic.Icon.PDF -> R.drawable.ic_doc_text to Color(0xFFC6402F)
+        DriveLogic.Icon.ARCHIVE -> R.drawable.ic_doc_archive to MaterialTheme.colorScheme.onSurfaceVariant
+        DriveLogic.Icon.VIDEO -> R.drawable.ic_video to Color(0xFFC6402F)
+        DriveLogic.Icon.AUDIO -> R.drawable.ic_audio to MaterialTheme.colorScheme.onSurfaceVariant
+        DriveLogic.Icon.FILE -> R.drawable.ic_doc to MaterialTheme.colorScheme.onSurfaceVariant
     }
-    Icon(painterResource(res), null, modifier.size(DocumentsMetrics.icon), tint = tint)
+    Icon(painterResource(res), null, modifier.size(DriveMetrics.icon), tint = tint)
 }
 
 /** A picture's thumbnail where it is small enough to read, else its icon (board frame 3). */
 @Composable
-internal fun EntryThumb(store: DocumentsStore, entry: DocumentsEntry) {
-    val icon = DocumentsLogic.icon(entry)
-    if (icon != DocumentsLogic.Icon.PICTURE || entry.sizeBytes > 6L * 1024 * 1024) return EntryIcon(icon)
+internal fun EntryThumb(store: DriveStore, entry: DriveEntry) {
+    val icon = DriveLogic.icon(entry)
+    if (icon != DriveLogic.Icon.PICTURE || entry.sizeBytes > 6L * 1024 * 1024) return EntryIcon(icon)
     val key = "${entry.id}:${entry.currentVersionId}"
     val bitmap by produceState(store.thumbnails.get(key), key) {
         if (value == null) value = runCatching {
@@ -76,7 +76,7 @@ internal fun EntryThumb(store: DocumentsStore, entry: DocumentsEntry) {
     }
     val shown = bitmap
     if (shown == null) EntryIcon(icon)
-    else Image(shown.asImageBitmap(), null, Modifier.size(DocumentsMetrics.icon).clip(RoundedCornerShape(6.dp)), contentScale = ContentScale.Crop)
+    else Image(shown.asImageBitmap(), null, Modifier.size(DriveMetrics.icon).clip(RoundedCornerShape(6.dp)), contentScale = ContentScale.Crop)
 }
 
 internal fun decodeThumb(bytes: ByteArray, max: Int): Bitmap? {
@@ -89,15 +89,15 @@ internal fun decodeThumb(bytes: ByteArray, max: Int): Bitmap? {
 
 /** "Agent in <session>" with the session's title as a link to it (rule 6); every other writer plain. [rest] follows after " · ". */
 @Composable
-internal fun writerLine(store: DocumentsStore, writer: DocumentsWriter, rest: String?, openSession: (String) -> Unit): AnnotatedString {
+internal fun writerLine(store: DriveStore, writer: DriveWriter, rest: String?, openSession: (String) -> Unit): AnnotatedString {
     val name = store.writerName(writer)
-    val session = DocumentsLogic.writerSession(writer)
+    val session = DriveLogic.writerSession(writer)
     val link = MaterialTheme.colorScheme.primary
     return buildAnnotatedString {
-        if (session != null && name.startsWith(DocumentsLogic.AGENT_IN) && name != "${DocumentsLogic.AGENT_IN}a session") {
-            append(DocumentsLogic.AGENT_IN)
+        if (session != null && name.startsWith(DriveLogic.AGENT_IN) && name != "${DriveLogic.AGENT_IN}a session") {
+            append(DriveLogic.AGENT_IN)
             withLink(LinkAnnotation.Clickable("session", TextLinkStyles(SpanStyle(color = link))) { openSession(ObjectId.canonical(session) ?: session) }) {
-                append(name.removePrefix(DocumentsLogic.AGENT_IN))
+                append(name.removePrefix(DriveLogic.AGENT_IN))
             }
         } else append(name)
         if (!rest.isNullOrEmpty()) append(" · $rest")
@@ -107,7 +107,7 @@ internal fun writerLine(store: DocumentsStore, writer: DocumentsWriter, rest: St
 /** One full-width Material list row (board `.li`): leading icon, name and line, trailing text, and an optional ⋮. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun DocumentsRow(
+internal fun DriveRow(
     title: String,
     line: AnnotatedString?,
     modifier: Modifier = Modifier,
@@ -121,21 +121,21 @@ internal fun DocumentsRow(
     /** A small line above the name, which then reads in medium weight (the preview's writer row: "Last written today 14:02"). */
     overline: String? = null,
 ) {
-    Row(modifier.fillMaxWidth().heightIn(min = DocumentsMetrics.rowMin)
+    Row(modifier.fillMaxWidth().heightIn(min = DriveMetrics.rowMin)
         .then(if (selected) Modifier.background(MaterialTheme.colorScheme.secondaryContainer) else Modifier)
         .then(if (onClick != null || onLongClick != null) Modifier.combinedClickable(onClick = { onClick?.invoke() }, onLongClick = onLongClick) else Modifier)
-        .padding(start = DocumentsMetrics.side, end = if (end != null) 8.dp else DocumentsMetrics.side, top = 10.dp, bottom = 10.dp),
+        .padding(start = DriveMetrics.side, end = if (end != null) 8.dp else DriveMetrics.side, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         leading()
         Column(Modifier.weight(1f)) {
-            if (overline != null) Text(overline, fontSize = DocumentsMetrics.line, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-            Text(title, fontSize = if (overline != null) 15.sp else DocumentsMetrics.name, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            if (overline != null) Text(overline, fontSize = DriveMetrics.line, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            Text(title, fontSize = if (overline != null) 15.sp else DriveMetrics.name, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 fontWeight = if (overline != null) FontWeight.Medium else null, color = MaterialTheme.colorScheme.onSurface)
-            if (line != null && line.isNotEmpty()) Text(line, fontSize = DocumentsMetrics.line, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            if (line != null && line.isNotEmpty()) Text(line, fontSize = DriveMetrics.line, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (progress != null) ThinBar(progress, Modifier.padding(top = 8.dp))
         }
-        if (trailing != null) Text(trailing, fontSize = DocumentsMetrics.line, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        if (trailing != null) Text(trailing, fontSize = DriveMetrics.line, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         end?.invoke()
     }
 }
@@ -166,7 +166,7 @@ internal fun Modifier.combinedClickableNoLong(onClick: () -> Unit) = this.combin
 /** A section's heading in the brand colour (`.sh`). */
 @Composable
 internal fun SectionHeading(text: String, modifier: Modifier = Modifier, action: (@Composable () -> Unit)? = null) {
-    Row(modifier.fillMaxWidth().padding(start = DocumentsMetrics.side, end = 8.dp, top = 14.dp, bottom = 4.dp),
+    Row(modifier.fillMaxWidth().padding(start = DriveMetrics.side, end = 8.dp, top = 14.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Text(text, Modifier.weight(1f), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary, maxLines = 1,
             overflow = TextOverflow.Ellipsis)
@@ -177,7 +177,7 @@ internal fun SectionHeading(text: String, modifier: Modifier = Modifier, action:
 /** The trail under the bar (`.crumb2`): "Documents › Orbit UI migration". */
 @Composable
 internal fun Crumb(text: String, modifier: Modifier = Modifier) {
-    Text(text, modifier.fillMaxWidth().padding(start = DocumentsMetrics.side, end = DocumentsMetrics.side, bottom = 8.dp), fontSize = 13.sp,
+    Text(text, modifier.fillMaxWidth().padding(start = DriveMetrics.side, end = DriveMetrics.side, bottom = 8.dp), fontSize = 13.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
 }
 

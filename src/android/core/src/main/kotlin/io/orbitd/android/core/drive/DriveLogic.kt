@@ -1,4 +1,4 @@
-package io.orbitd.android.core.documents
+package io.orbitd.android.core.drive
 
 import java.time.Instant
 import java.time.LocalDate
@@ -11,10 +11,10 @@ import kotlin.math.roundToLong
 /**
  * How the Documents pages read (board docs/mocks/documents/04-android, with 01-ios for what it does not draw): the switch, sizes and
  * dates, who wrote a file, which preview a file gets, Trash's groups, Storage's rows, the uploads sheet's lines and the upload
- * notification. The twin of OrbitKit's DocumentsLogic.swift (the Mac and the phone), so every client says it the same way; the
+ * notification. The twin of OrbitKit's DriveLogic.swift (the Mac and the phone), so every client says it the same way; the
  * Android board's own wording (rows, the notification, Trash's lines) is added here.
  */
-object DocumentsLogic {
+object DriveLogic {
 
     // ---- the switch
 
@@ -146,13 +146,13 @@ object DocumentsLogic {
     }
 
     /** Folders first, then files, each by name as a file manager orders them. */
-    fun sorted(entries: List<DocumentsEntry>): List<DocumentsEntry> = entries.sortedWith { a, b ->
+    fun sorted(entries: List<DriveEntry>): List<DriveEntry> = entries.sortedWith { a, b ->
         if (a.isFolder != b.isFolder) (if (a.isFolder) -1 else 1)
         else compareNames(a.name, b.name).takeIf { it != 0 } ?: a.id.compareTo(b.id)
     }
 
     /** A folder's name in the bar: the drive's root is "Documents". */
-    fun folderTitle(folder: DocumentsEntry?): String = if (folder == null || folder.parentId == null) TITLE else folder.name
+    fun folderTitle(folder: DriveEntry?): String = if (folder == null || folder.parentId == null) TITLE else folder.name
 
     /** "Orbit UI migration": the folder a path ends in; the drive's root (`/`) is "Documents". */
     fun folderLabel(path: String): String = path.split("/").lastOrNull { it.isNotEmpty() } ?: TITLE
@@ -165,12 +165,12 @@ object DocumentsLogic {
         if (folderPath.isNullOrEmpty() || folderPath == "/") TITLE else "Drive" + (if (folderPath.startsWith("/")) folderPath else "/$folderPath")
 
     /** A folder row's line: "14 items · today 14:02", or the time alone until its count is read. */
-    fun folderLine(entry: DocumentsEntry, count: Int?, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String =
+    fun folderLine(entry: DriveEntry, count: Int?, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String =
         listOfNotNull(count?.let(::items), formatWhenLong(entry.updatedAt.ifEmpty { entry.mtime }, now, zone).takeIf { it.isNotEmpty() })
             .joinToString(" · ")
 
     /** A file row's line: "Agent in Redesign the sign-in page · 14:02", "You · Nov 16". */
-    fun fileLine(writer: String, entry: DocumentsEntry, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String =
+    fun fileLine(writer: String, entry: DriveEntry, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String =
         listOf(writer, formatWhen(entry.lastWriter.at ?: entry.updatedAt.ifEmpty { entry.mtime }, now, zone)).filter { it.isNotEmpty() }
             .joinToString(" · ")
 
@@ -178,14 +178,14 @@ object DocumentsLogic {
 
     /** Who last wrote a file: "You"; "Agent in <session title>" where the session was checked (the row links to it); otherwise "An agent
      * on Orbit Cloud". [sessionTitle] is the session's title once read, null before. */
-    fun writerText(writer: DocumentsWriter, sessionTitle: String? = null): String {
+    fun writerText(writer: DriveWriter, sessionTitle: String? = null): String {
         if (writer.isOwner) return YOU
         if (writer.sessionId == null) return UNCHECKED_AGENT
         return sessionTitle?.let(::firstLine)?.let { "Agent in $it" } ?: "Agent in a session"
     }
 
     /** The session a writer's name opens, or null where there is none to follow. */
-    fun writerSession(writer: DocumentsWriter): String? = if (writer.isOwner) null else writer.sessionId
+    fun writerSession(writer: DriveWriter): String? = if (writer.isOwner) null else writer.sessionId
 
     /** The part of [writerText] that links: the session's title after "Agent in ". */
     const val AGENT_IN = "Agent in "
@@ -233,7 +233,7 @@ object DocumentsLogic {
     /** The icon a row draws for an entry. */
     enum class Icon { FOLDER, PICTURE, MARKDOWN, TEXT, TABLE, PDF, ARCHIVE, VIDEO, AUDIO, FILE }
 
-    fun icon(entry: DocumentsEntry): Icon = if (entry.isFolder) Icon.FOLDER else icon(entry.name)
+    fun icon(entry: DriveEntry): Icon = if (entry.isFolder) Icon.FOLDER else icon(entry.name)
 
     fun icon(name: String): Icon {
         val e = ext(name)
@@ -251,14 +251,14 @@ object DocumentsLogic {
     }
 
     /** A picture preview's line: "PNG · 1.2 MB · 1179 × 2556 · Orbit UI migration". */
-    fun infoLine(entry: DocumentsEntry, folder: String?, width: Int? = null, height: Int? = null): String {
+    fun infoLine(entry: DriveEntry, folder: String?, width: Int? = null, height: Int? = null): String {
         val e = ext(entry.name)
         return listOfNotNull(e.uppercase().takeIf { it.isNotEmpty() }, formatSize(entry.sizeBytes),
             if (width != null && height != null && width > 0 && height > 0) "$width × $height" else null, folder).joinToString(" · ")
     }
 
     /** The preview's writer card: "Last written today 14:02". */
-    fun lastWritten(entry: DocumentsEntry, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String =
+    fun lastWritten(entry: DriveEntry, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String =
         "Last written ${formatWhenLong(entry.lastWriter.at ?: entry.updatedAt, now, zone)}"
 
     const val EARLIER_VERSIONS = "Earlier versions"
@@ -295,7 +295,7 @@ object DocumentsLogic {
 
     /** Whether [entry] may go into [folderId]: not into itself, not where it already is, and not into a folder under it
      * ([ancestorsOfTarget] are the target's folders from the root down, as ids). */
-    fun canMove(entry: DocumentsEntry, folderId: String, ancestorsOfTarget: List<String>, same: (String?, String?) -> Boolean = { a, b -> a == b }): Boolean {
+    fun canMove(entry: DriveEntry, folderId: String, ancestorsOfTarget: List<String>, same: (String?, String?) -> Boolean = { a, b -> a == b }): Boolean {
         if (same(entry.id, folderId) || same(entry.parentId, folderId)) return false
         if (entry.isFolder && ancestorsOfTarget.any { same(it, entry.id) }) return false
         return true
@@ -336,18 +336,18 @@ object DocumentsLogic {
     const val LINK_STOPPED = "The link no longer works."
 
     /** "line 14". */
-    fun warningLine(warning: DocumentsShareWarning) = if (warning.line > 0) "line ${warning.line}" else ""
+    fun warningLine(warning: DriveShareWarning) = if (warning.line > 0) "line ${warning.line}" else ""
 
     /** Said whenever the scan stopped before the end of the file (25 MiB or 20 s). */
     fun partialNote(checkedBytes: Long) = "Only the first ${formatSize(checkedBytes)} of this file was checked for secrets."
 
     /** `<server>/s/<token>`, the address a visitor opens. */
-    fun publicUrl(link: DocumentsShareLink, base: String): String = base.trimEnd('/') + "/s/" + link.token
+    fun publicUrl(link: DriveShareLink, base: String): String = base.trimEnd('/') + "/s/" + link.token
 
     // ---- Trash (D6, D11, D17, rule 3)
 
     /** A group's heading: "Orbit UI migration · today 14:20". */
-    fun groupHeading(group: DocumentsTrashGroup, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String =
+    fun groupHeading(group: DriveTrashGroup, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String =
         "${folderLabel(group.folderPath)} · ${formatWhenLong(group.createdAt, now, zone)}"
 
     private fun lowerWho(writer: String) = if (writer == YOU) "you" else if (writer == UNCHECKED_AGENT) "an agent on Orbit Cloud" else writer
@@ -355,18 +355,18 @@ object DocumentsLogic {
     /** A Trash row's line: "Folder · 18 items · 46 MB · by an agent on Orbit Cloud", "Deleted by you". [writer] is the actor's name as
      * [writerText] says it. A group's counts take in everything it marked, the folder itself too: a folder deleted alone reads them as
      * its own. */
-    fun trashLine(entry: DocumentsEntry, group: DocumentsTrashGroup, writer: String): String {
+    fun trashLine(entry: DriveEntry, group: DriveTrashGroup, writer: String): String {
         if (!entry.isFolder) return "Deleted by ${lowerWho(writer)}"
         val alone = group.items.size == 1
         return listOfNotNull("Folder", if (alone) items(maxOf(0, group.itemCount - 1)) else null,
             if (alone && group.sizeBytes > 0) formatSize(group.sizeBytes) else null, "by ${lowerWho(writer)}").joinToString(" · ")
     }
 
-    fun versionLine(group: DocumentsTrashGroup, writer: String, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String =
+    fun versionLine(group: DriveTrashGroup, writer: String, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String =
         "Earlier version · replaced ${formatWhen(group.createdAt, now, zone)} by ${lowerWho(writer)}"
 
     /** The Trash header: "23 items · 2.6 GB · kept until you empty it". */
-    fun trashSummary(groups: List<DocumentsTrashGroup>): String =
+    fun trashSummary(groups: List<DriveTrashGroup>): String =
         "${items(groups.sumOf { it.itemCount })} · ${formatSize(groups.sumOf { it.sizeBytes })} · kept until you empty it"
 
     const val EMPTY = "Empty"
@@ -381,23 +381,23 @@ object DocumentsLogic {
     const val ENDS_A_SHARE_LINK = "This ends a share link."
 
     /** The question before deleting a group for good. */
-    fun deleteForGoodMessage(group: DocumentsTrashGroup): String {
+    fun deleteForGoodMessage(group: DriveTrashGroup): String {
         val what = group.version?.let { "This earlier version of ${it.entry.name} is deleted for good." }
             ?: "${items(group.itemCount)} from ${folderLabel(group.folderPath)} ${if (group.itemCount == 1) "is" else "are"} deleted for good."
         return "$what This can't be undone."
     }
 
     /** The question before Empty Trash. */
-    fun emptyTrashMessage(groups: List<DocumentsTrashGroup>): String {
+    fun emptyTrashMessage(groups: List<DriveTrashGroup>): String {
         val n = groups.sumOf { it.itemCount }
         return "${items(n)} (${formatSize(groups.sumOf { it.sizeBytes })}) ${if (n == 1) "is" else "are"} deleted for good. This can't be undone."
     }
 
     /** The snackbar after a restore: "Restored 18 items to Orbit UI migration", "Restored brief.md to Documents". */
-    fun restored(what: String, group: DocumentsTrashGroup) = "Restored $what to ${folderLabel(group.folderPath)}"
+    fun restored(what: String, group: DriveTrashGroup) = "Restored $what to ${folderLabel(group.folderPath)}"
 
     /** Whether deleting a group for good ends a file's link (§9). */
-    fun groupEndsALink(group: DocumentsTrashGroup, links: List<DocumentsShareLink>, same: (String?, String?) -> Boolean = { a, b -> a == b }): Boolean {
+    fun groupEndsALink(group: DriveTrashGroup, links: List<DriveShareLink>, same: (String?, String?) -> Boolean = { a, b -> a == b }): Boolean {
         group.version?.let { version -> return links.any { same(it.root.id, version.entryId) && !it.root.pinnedIsCurrent } }
         return links.any { link -> group.items.any { same(it.id, link.root.id) } }
     }
@@ -405,9 +405,9 @@ object DocumentsLogic {
     // ---- Storage (D13, D19)
 
     /** One bar of the Storage total, by what it holds, as fractions of the account's total. */
-    data class StorageBar(val documents: Double, val trash: Double, val other: Double)
+    data class StorageBar(val drive: Double, val trash: Double, val other: Double)
 
-    fun storageBar(usage: DocumentsUsage): StorageBar {
+    fun storageBar(usage: DriveUsage): StorageBar {
         val total = maxOf(usage.totalBytes, 1L).toDouble()
         val trash = minOf(usage.trashBytes, usage.driveBytes).toDouble()
         return StorageBar(usage.driveBytes / total - trash / total, trash / total, usage.otherBytes / total)
@@ -428,13 +428,13 @@ object DocumentsLogic {
     const val IN_THIS_ACCOUNT = "in this account"
 
     /** The legend under the bar: "Documents 10.9 GB", "Trash 1.3 GB", "Other 6.2 GB". */
-    fun storageLegend(usage: DocumentsUsage): List<String> = listOf(
+    fun storageLegend(usage: DriveUsage): List<String> = listOf(
         "Drive ${storageSize(maxOf(0L, usage.driveBytes - usage.trashBytes))}",
         "Trash ${storageSize(usage.trashBytes)}",
         "Other ${storageSize(usage.otherBytes)}")
 
     /** What the drive's store says when it is nearly full, or null. */
-    fun storeWarning(usage: DocumentsUsage): String? {
+    fun storeWarning(usage: DriveUsage): String? {
         val used = usage.storeUsedBytes ?: return null
         val quota = usage.storeQuotaBytes ?: return null
         if (usage.nearQuota != true || quota <= 0) return null
@@ -475,15 +475,15 @@ object DocumentsLogic {
         val allFinished get() = finished == count
     }
 
-    fun trayTotals(uploads: List<DocumentsUploadItem>, syncs: List<DocumentsSync>) = TrayTotals(
+    fun trayTotals(uploads: List<DriveUploadItem>, syncs: List<DriveSync>) = TrayTotals(
         count = uploads.size + syncs.size,
-        finished = uploads.count { it.state == DocumentsUploadState.DONE } + syncs.count { !it.running },
-        sentBytes = uploads.sumOf { if (it.state == DocumentsUploadState.DONE) it.size else it.sentBytes } + syncs.sumOf { it.bytesSent },
+        finished = uploads.count { it.state == DriveUploadState.DONE } + syncs.count { !it.running },
+        sentBytes = uploads.sumOf { if (it.state == DriveUploadState.DONE) it.size else it.sentBytes } + syncs.sumOf { it.bytesSent },
         totalBytes = uploads.sumOf { it.size } + syncs.sumOf { it.bytesTotal ?: 0 })
 
     /** The folder card's words: "Uploading 2 of 3" with "410 MB of 1.7 GB" after it, or once all are in "Uploaded 3 files", "Synced 1
      * folder", "Finished 3 of 3" with nothing after. */
-    fun trayTitle(uploads: List<DocumentsUploadItem>, syncs: List<DocumentsSync>): Pair<String, String?> {
+    fun trayTitle(uploads: List<DriveUploadItem>, syncs: List<DriveSync>): Pair<String, String?> {
         val totals = trayTotals(uploads, syncs)
         if (totals.allFinished) {
             return when {
@@ -504,54 +504,54 @@ object DocumentsLogic {
     const val TRY_AGAIN = "Try again"
 
     /** Where an upload goes, after its arrow: the folder of a picked folder's file, else the folder it was put in. */
-    fun uploadDestination(upload: DocumentsUploadItem): String {
+    fun uploadDestination(upload: DriveUploadItem): String {
         val relative = upload.relativePath
         if (relative != null && "/" in relative) return relative.split("/").dropLast(1).joinToString("/")
         return upload.parentName
     }
 
     /** "holiday.mov → Videos". */
-    fun uploadTitle(upload: DocumentsUploadItem) = "${upload.name} → ${uploadDestination(upload)}"
+    fun uploadTitle(upload: DriveUploadItem) = "${upload.name} → ${uploadDestination(upload)}"
 
     /** The line under an upload's bar: what it is doing. */
-    fun uploadStatus(upload: DocumentsUploadItem): String {
+    fun uploadStatus(upload: DriveUploadItem): String {
         val sent = "${formatSize(upload.sentBytes)} of ${formatSize(upload.size)}"
         return when (upload.state) {
-            DocumentsUploadState.QUEUED -> "Waiting · ${formatSize(upload.size)}"
-            DocumentsUploadState.UPLOADING -> listOfNotNull(sent, upload.rate?.let(::rate), timeLeft(upload.size - upload.sentBytes, upload.rate))
+            DriveUploadState.QUEUED -> "Waiting · ${formatSize(upload.size)}"
+            DriveUploadState.UPLOADING -> listOfNotNull(sent, upload.rate?.let(::rate), timeLeft(upload.size - upload.sentBytes, upload.rate))
                 .joinToString(" · ")
-            DocumentsUploadState.PAUSED -> if (upload.error != null) "Connection lost. $sent is kept; it goes on from there." else "Paused · ${upload.percent}%"
-            DocumentsUploadState.FAILED -> upload.error ?: "Couldn't upload"
-            DocumentsUploadState.DONE -> "Uploaded · ${formatSize(upload.size)}"
+            DriveUploadState.PAUSED -> if (upload.error != null) "Connection lost. $sent is kept; it goes on from there." else "Paused · ${upload.percent}%"
+            DriveUploadState.FAILED -> upload.error ?: "Couldn't upload"
+            DriveUploadState.DONE -> "Uploaded · ${formatSize(upload.size)}"
         }
     }
 
     /** A row still going up in its folder (board frame 13): "Uploading · 63%". */
-    fun uploadingInFolder(upload: DocumentsUploadItem): String = when (upload.state) {
-        DocumentsUploadState.QUEUED -> "Waiting to upload"
-        DocumentsUploadState.PAUSED -> "Paused · ${upload.percent}%"
-        DocumentsUploadState.FAILED -> upload.error ?: "Couldn't upload"
+    fun uploadingInFolder(upload: DriveUploadItem): String = when (upload.state) {
+        DriveUploadState.QUEUED -> "Waiting to upload"
+        DriveUploadState.PAUSED -> "Paused · ${upload.percent}%"
+        DriveUploadState.FAILED -> upload.error ?: "Couldn't upload"
         else -> "Uploading · ${upload.percent}%"
     }
 
     /** A sync's row: "out/ → Reports/out". */
-    fun syncTitle(sync: DocumentsSync): String = "${sync.sourceName}/ → ${sync.destPath.trimStart('/')}"
+    fun syncTitle(sync: DriveSync): String = "${sync.sourceName}/ → ${sync.destPath.trimStart('/')}"
 
     const val AGENT_SYNC = "Agent sync"
     const val DETAILS = "Details"
 
     /** A sync's bar, 0…1; null while it is still counting files. */
-    fun syncFraction(sync: DocumentsSync): Double? {
+    fun syncFraction(sync: DriveSync): Double? {
         if (sync.status == "CHECKING") return null
         val total = sync.bytesTotal ?: return 0.0
         return if (total > 0) minOf(1.0, sync.bytesSent.toDouble() / total) else 0.0
     }
 
     /** Whether a sync ended with files it could not send, which its row marks and Details lists. */
-    fun syncHasFailures(sync: DocumentsSync): Boolean = sync.status == "FAILED" || (sync.status == "DONE" && sync.failedCount > 0)
+    fun syncHasFailures(sync: DriveSync): Boolean = sync.status == "FAILED" || (sync.status == "DONE" && sync.failedCount > 0)
 
     /** The line under a sync's bar, or its whole outcome once it ended. [rate] is the bytes a second between the last two reads. */
-    fun syncStatus(sync: DocumentsSync, rate: Double? = null): String = when (sync.status) {
+    fun syncStatus(sync: DriveSync, rate: Double? = null): String = when (sync.status) {
         "CHECKING" -> "Checking files… ${count(sync.filesSeen.toLong())} so far"
         "UPLOADING" -> {
             val left = sync.bytesTotal?.let { timeLeft(it - sync.bytesSent, rate) }
@@ -572,7 +572,7 @@ object DocumentsLogic {
     }
 
     /** The bytes a second between two reads of the same sync; between two reads that moved nothing the last rate stands. */
-    fun syncRate(previous: DocumentsSync?, previousRate: Double?, now: DocumentsSync): Double? {
+    fun syncRate(previous: DriveSync?, previousRate: Double?, now: DriveSync): Double? {
         if (!now.running || previous == null) return null
         val was = instant(previous.updatedAt) ?: return null
         val at = instant(now.updatedAt) ?: return null
@@ -582,10 +582,10 @@ object DocumentsLogic {
     }
 
     /** The Details dialog's heading: "data/ → Datasets". */
-    fun syncDetailsTitle(sync: DocumentsSync) = "${sync.sourceName}/ → ${folderLabel(sync.destPath)}"
+    fun syncDetailsTitle(sync: DriveSync) = "${sync.sourceName}/ → ${folderLabel(sync.destPath)}"
 
     /** Its summary; the session's title is the part that links. */
-    fun syncDetailsSummary(sync: DocumentsSync, zone: ZoneId = ZoneId.systemDefault()): String {
+    fun syncDetailsSummary(sync: DriveSync, zone: ZoneId = ZoneId.systemDefault()): String {
         val at = instant(sync.endedAt ?: sync.updatedAt)?.let { fmt("HH:mm", it, zone) }
         val sb = StringBuilder("Synced ${files(sync.filesDone)}")
         sync.session?.let { sb.append(" from ${it.title}") }
@@ -600,13 +600,13 @@ object DocumentsLogic {
     const val DONE = "Done"
 
     /** "and 12 more", when the server listed fewer failures than it counted. */
-    fun syncMoreFailures(sync: DocumentsSync): String? {
+    fun syncMoreFailures(sync: DriveSync): String? {
         val more = sync.failedCount - sync.failed.size
         return if (more > 0) "and ${count(more.toLong())} more" else null
     }
 
     /** "Open Datasets": the button that opens the folder a sync wrote to. */
-    fun openFolder(sync: DocumentsSync) = "Open ${folderLabel(sync.destPath)}"
+    fun openFolder(sync: DriveSync) = "Open ${folderLabel(sync.destPath)}"
 
     // ---- the Upload sheet (board frame 5)
 
@@ -624,26 +624,26 @@ object DocumentsLogic {
     /** What the one ongoing notification says, or null when it should go (nothing is going up or waiting). */
     data class Notice(val title: String, val text: String, val progress: Double?, val paused: Boolean)
 
-    fun notice(uploads: List<DocumentsUploadItem>): Notice? {
-        val live = uploads.filter { it.state != DocumentsUploadState.DONE && it.state != DocumentsUploadState.FAILED }
+    fun notice(uploads: List<DriveUploadItem>): Notice? {
+        val live = uploads.filter { it.state != DriveUploadState.DONE && it.state != DriveUploadState.FAILED }
         if (live.isEmpty()) return null
-        val going = live.any { it.state == DocumentsUploadState.UPLOADING || it.state == DocumentsUploadState.QUEUED }
+        val going = live.any { it.state == DriveUploadState.UPLOADING || it.state == DriveUploadState.QUEUED }
         if (!going) {
             val first = live.first()
-            val lost = live.any { it.error == DocumentsUploadQueue.CONNECTION_LOST }
+            val lost = live.any { it.error == DriveUploadQueue.CONNECTION_LOST }
             val title = if (live.size == 1) "${first.name} is paused" else "${live.size} uploads are paused"
             val kept = "${formatSize(live.sumOf { it.sentBytes })} of ${formatSize(live.sumOf { it.size })} is kept"
             val text = if (lost) "No connection. $kept; it goes on from there when you're back online." else "$kept. Open Drive to resume."
             return Notice(title, text, null, true)
         }
         // This run's batch: everything not yet cleared, so the count reads "2 of 3" while the third waits.
-        val batch = uploads.filter { it.state != DocumentsUploadState.FAILED }
-        val done = batch.count { it.state == DocumentsUploadState.DONE }
+        val batch = uploads.filter { it.state != DriveUploadState.FAILED }
+        val done = batch.count { it.state == DriveUploadState.DONE }
         val folders = batch.map { it.parentName }.distinct()
         val where = if (folders.size == 1) " to ${folders.single()}" else ""
-        val sent = batch.sumOf { if (it.state == DocumentsUploadState.DONE) it.size else it.sentBytes }
+        val sent = batch.sumOf { if (it.state == DriveUploadState.DONE) it.size else it.sentBytes }
         val total = batch.sumOf { it.size }
-        val rate = batch.firstOrNull { it.state == DocumentsUploadState.UPLOADING }?.rate
+        val rate = batch.firstOrNull { it.state == DriveUploadState.UPLOADING }?.rate
         val text = listOfNotNull("${formatSize(sent)} of ${formatSize(total)}", timeLeft(total - sent, rate)).joinToString(" · ")
         return Notice("Uploading ${minOf(done + 1, batch.size)} of ${batch.size}$where", text,
             if (total > 0) sent.toDouble() / total else null, false)

@@ -8,7 +8,7 @@ import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.net.ApiResponse
 import io.orbitd.android.core.protocol.Wire
-import io.orbitd.android.documents.DocumentsStore
+import io.orbitd.android.drive.DriveStore
 import io.orbitd.android.navigation.OrbitLinks
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -134,7 +134,7 @@ internal object DriveFake {
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = NavShellApplication::class, qualifiers = "w411dp-h891dp")
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-class DocumentsShellTest {
+class DriveShellTest {
     @get:Rule(order = 0)
     val mainDispatcher = object : TestWatcher() {
         override fun starting(description: Description) { Dispatchers.setMain(UnconfinedTestDispatcher()) }
@@ -148,45 +148,45 @@ class DocumentsShellTest {
         NavShell.routes = DriveFake::answer
     }
 
-    @Test fun theDrawerHasDocumentsInItsFirstGroupAndItsRootListsTheDriveWithTrashAndStorage() {
+    @Test fun theDrawerHasDriveInItsFirstGroupAndItsRootListsTheDriveWithTrashAndStorage() {
         signIn()
         openDrawer()
         await { compose.onAllNodes(drawerRow("Drive")).fetchSemanticsNodes().isNotEmpty() }
         // This server has the Wiki off, so its row is away: Documents is the first group's last row, under Tasks and above Workspaces.
         val tasks = compose.onNode(drawerRow("Tasks")).fetchSemanticsNode().boundsInRoot
-        val documents = compose.onNode(drawerRow("Drive")).fetchSemanticsNode().boundsInRoot
+        val drive = compose.onNode(drawerRow("Drive")).fetchSemanticsNode().boundsInRoot
         val workspaces = compose.onNodeWithText("Workspaces").fetchSemanticsNode().boundsInRoot
-        assertTrue("Drive ends the first group", documents.top > tasks.top && documents.bottom <= workspaces.top)
+        assertTrue("Drive ends the first group", drive.top > tasks.top && drive.bottom <= workspaces.top)
         compose.onNode(drawerRow("Drive")).performClick()
-        await { exists("documents-entry:Orbit UI migration") }
+        await { exists("drive-entry:Orbit UI migration") }
         compose.onNodeWithText("Search Drive").assertExists()
-        listOf("Drive service", "Datasets", "reading-list.md").forEach { compose.onNodeWithTag("documents-entry:$it").assertExists() }
-        compose.onNodeWithTag("documents-trash-row").assertExists()
-        compose.onNodeWithTag("documents-storage-row").assertExists()
-        compose.onNodeWithTag("documents-upload").assertExists()
+        listOf("Drive service", "Datasets", "reading-list.md").forEach { compose.onNodeWithTag("drive-entry:$it").assertExists() }
+        compose.onNodeWithTag("drive-trash-row").assertExists()
+        compose.onNodeWithTag("drive-storage-row").assertExists()
+        compose.onNodeWithTag("drive-upload").assertExists()
         // Folders first, then files, as the board orders them.
-        val folder = compose.onNodeWithTag("documents-entry:Orbit UI migration").fetchSemanticsNode().boundsInRoot
-        val file = compose.onNodeWithTag("documents-entry:reading-list.md").fetchSemanticsNode().boundsInRoot
+        val folder = compose.onNodeWithTag("drive-entry:Orbit UI migration").fetchSemanticsNode().boundsInRoot
+        val file = compose.onNodeWithTag("drive-entry:reading-list.md").fetchSemanticsNode().boundsInRoot
         assertTrue(folder.top < file.top)
         await { compose.onAllNodesWithText("You · Nov 16", substring = true).fetchSemanticsNodes().isNotEmpty() }
     }
 
-    @Test fun aServerThatSaysDocumentsIsOffHasNoRow() {
+    @Test fun aServerThatSaysDriveIsOffHasNoRow() {
         DriveFake.enabled = "false"
         signIn()
         openDrawer()
         await { compose.onAllNodes(drawerRow("Tasks")).fetchSemanticsNodes().isNotEmpty() }
-        await { DocumentsStore.of(app(), (app().session.state.value as AuthState.SignedIn).handle).shown != null }
+        await { DriveStore.of(app(), (app().session.state.value as AuthState.SignedIn).handle).shown != null }
         compose.waitForIdle()
         assertTrue(DriveFake.calls.isEmpty() || DriveFake.calls.none { it.startsWith("GET entries") })
         compose.onAllNodes(drawerRow("Drive")).assertCountEquals(0)
-        assertEquals(false, DocumentsStore.of(app(), (app().session.state.value as AuthState.SignedIn).handle).shown)
+        assertEquals(false, DriveStore.of(app(), (app().session.state.value as AuthState.SignedIn).handle).shown)
     }
 
     @Test fun aFolderSaysWhoWroteEachFileAndTheSessionsTitleIsReadOnce() {
-        openDocuments()
-        compose.onNodeWithTag("documents-entry:Orbit UI migration").performClick()
-        await { exists("documents-entry:sign-in-v3.png") }
+        openDrive()
+        compose.onNodeWithTag("drive-entry:Orbit UI migration").performClick()
+        await { exists("drive-entry:sign-in-v3.png") }
         compose.onNodeWithText("Drive › Orbit UI migration").assertExists()
         await { compose.onAllNodesWithText("Agent in Review navigation", substring = true).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("An agent on Orbit Cloud", substring = true).assertExists()
@@ -194,128 +194,128 @@ class DocumentsShellTest {
     }
 
     @Test fun aRowsSheetOffersItsActionsAndMoveToTrashOffersUndo() {
-        openDocuments()
-        compose.onNodeWithTag("documents-more:reading-list.md").performClick()
-        await { exists("documents-action-rename") }
+        openDrive()
+        compose.onNodeWithTag("drive-more:reading-list.md").performClick()
+        await { exists("drive-action-rename") }
         listOf("Rename", "Move to…", "Download", "Send a copy…", "Share link…", "Move to Trash").forEach { compose.onNodeWithText(it).assertExists() }
         // Rename and New folder open a dialog holding a text field, which never settles in Robolectric (as Directory's folder dialog,
-        // SessionListPageShellTest): DocumentsDeviceTest#writes presses them on the emulator against a real server.
-        compose.onNodeWithTag("documents-action-trash").performClick()
+        // SessionListPageShellTest): DriveDeviceTest#writes presses them on the emulator against a real server.
+        compose.onNodeWithTag("drive-action-trash").performClick()
         await { compose.onAllNodesWithText("Moved reading-list.md to Trash").fetchSemanticsNodes().isNotEmpty() }
-        await { !exists("documents-entry:reading-list.md") }
+        await { !exists("drive-entry:reading-list.md") }
         assertTrue("Move to Trash asks nothing (D6)", DriveFake.calls.contains("DELETE entries/reading"))
         compose.onNodeWithText("Undo").performClick()
-        await { exists("documents-entry:reading-list.md") }
+        await { exists("drive-entry:reading-list.md") }
         assertTrue(DriveFake.calls.contains("POST trash/groups/g-reading/restore"))
     }
 
     @Test fun aFolderSheetLeavesOutWhatOnlyAFileHas() {
-        openDocuments()
-        compose.onNodeWithTag("documents-entry:Datasets").performTouchInput { longClick() }
-        await { exists("documents-action-rename") }
-        listOf("documents-action-move", "documents-action-trash").forEach { compose.onNodeWithTag(it).assertExists() }
-        listOf("documents-action-download", "documents-action-send", "documents-action-share").forEach { compose.onAllNodesWithTag(it).assertCountEquals(0) }
+        openDrive()
+        compose.onNodeWithTag("drive-entry:Datasets").performTouchInput { longClick() }
+        await { exists("drive-action-rename") }
+        listOf("drive-action-move", "drive-action-trash").forEach { compose.onNodeWithTag(it).assertExists() }
+        listOf("drive-action-download", "drive-action-send", "drive-action-share").forEach { compose.onAllNodesWithTag(it).assertCountEquals(0) }
     }
 
     @Test fun moveWalksTheFolderTreeAndMovesIntoTheFolderShown() {
-        openDocuments()
-        compose.onNodeWithTag("documents-more:reading-list.md").performClick()
-        await { exists("documents-action-move") }
-        compose.onNodeWithTag("documents-action-move").performClick()
-        await { exists("documents-move-folder:Drive service") }
+        openDrive()
+        compose.onNodeWithTag("drive-more:reading-list.md").performClick()
+        await { exists("drive-action-move") }
+        compose.onNodeWithTag("drive-action-move").performClick()
+        await { exists("drive-move-folder:Drive service") }
         compose.onNodeWithText("Move “reading-list.md”").assertExists()
-        compose.onNodeWithTag("documents-move-confirm").assertIsNotEnabled()
-        compose.onNodeWithTag("documents-move-folder:Drive service").performClick()
-        await { exists("documents-move-up") }
+        compose.onNodeWithTag("drive-move-confirm").assertIsNotEnabled()
+        compose.onNodeWithTag("drive-move-folder:Drive service").performClick()
+        await { exists("drive-move-up") }
         compose.onNodeWithText("Move to Drive service").assertIsEnabled().performClick()
-        await { !exists("documents-move") }
-        await { !exists("documents-entry:reading-list.md") }
+        await { !exists("drive-move") }
+        await { !exists("drive-entry:reading-list.md") }
         assertEquals("f-drive", DriveFake.nodes.first { it.id == "reading" }.parent)
     }
 
     @Test fun aShareLinkWarnsOfSecretsAndMakesTheLinkOnlyWhenAsked() {
-        openDocuments()
-        compose.onNodeWithTag("documents-entry:Drive service").performClick()
-        await { exists("documents-more:deploy-checklist.md") }
-        compose.onNodeWithTag("documents-more:deploy-checklist.md").performClick()
-        await { exists("documents-action-share") }
-        compose.onNodeWithTag("documents-action-share").performClick()
-        await { exists("documents-share-secrets") }
+        openDrive()
+        compose.onNodeWithTag("drive-entry:Drive service").performClick()
+        await { exists("drive-more:deploy-checklist.md") }
+        compose.onNodeWithTag("drive-more:deploy-checklist.md").performClick()
+        await { exists("drive-action-share") }
+        compose.onNodeWithTag("drive-action-share").performClick()
+        await { exists("drive-share-secrets") }
         compose.onNodeWithText("This file looks like it holds secrets").assertExists()
         compose.onNodeWithText("A private key").assertExists()
         compose.onNodeWithText("line 14").assertExists()
         assertNull("nothing shared before Share anyway", DriveFake.linked)
-        compose.onNodeWithTag("documents-share-anyway").performClick()
-        await { exists("documents-share-url") }
+        compose.onNodeWithTag("drive-share-anyway").performClick()
+        await { exists("drive-share-url") }
         assertEquals("checklist", DriveFake.linked)
         compose.onNodeWithText("https://a05c.test/s/tok123").assertExists()
         compose.onNodeWithText("Stop sharing").assertExists()
     }
 
     @Test fun trashRestoresAGroupAndStorageShowsTheTotal() {
-        openDocuments()
-        compose.onNodeWithTag("documents-trash-row").performClick()
-        await { exists("documents-trash-row:old-run.zip") }
+        openDrive()
+        compose.onNodeWithTag("drive-trash-row").performClick()
+        await { exists("drive-trash-row:old-run.zip") }
         compose.onNodeWithText("1 item · 2.5 GB · kept until you empty it").assertExists()
         compose.onNodeWithText("Deleted by you").assertExists()
         compose.onNodeWithText("Restore all").performClick()
         await { compose.onAllNodesWithText("Trash is empty.").fetchSemanticsNodes().isNotEmpty() }
         assertNull(DriveFake.nodes.first { it.id == "old" }.trashed)
         compose.onNodeWithContentDescription("Back").performClick()
-        await { exists("documents-storage-row") }
-        compose.onNodeWithTag("documents-storage-row").performClick()
-        await { exists("documents-storage-total") }
+        await { exists("drive-storage-row") }
+        compose.onNodeWithTag("drive-storage-row").performClick()
+        await { exists("drive-storage-total") }
         compose.onNodeWithText("18.4 GB").assertExists()
         compose.onNodeWithText("Drive 10.9 GB").assertExists()
         compose.onNodeWithText("Week of Nov 16").assertExists()
     }
 
     @Test fun aMarkdownFileOpensRenderedWithItsWriter() {
-        openDocuments()
-        compose.onNodeWithTag("documents-entry:reading-list.md").performClick()
-        await { exists("documents-words") }
+        openDrive()
+        compose.onNodeWithTag("drive-entry:reading-list.md").performClick()
+        await { exists("drive-words") }
         await { compose.onAllNodesWithText("Reading list").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag("documents-file-info").assertTextContains("MD · 4 KB", substring = true)
-        compose.onNodeWithTag("documents-file-download").assertExists()
-        compose.onNodeWithTag("documents-file-share").assertExists()
+        compose.onNodeWithTag("drive-file-info").assertTextContains("MD · 4 KB", substring = true)
+        compose.onNodeWithTag("drive-file-download").assertExists()
+        compose.onNodeWithTag("drive-file-share").assertExists()
     }
 
     @Test fun theUploadsSheetShowsAnAgentsSyncAndItsDetails() {
-        openDocuments()
+        openDrive()
         compose.onNodeWithContentDescription("More").performClick()
         compose.onNodeWithText("Uploads").performClick()
-        await { exists("documents-sync-row:data") }
+        await { exists("drive-sync-row:data") }
         compose.onNodeWithText("data/ → Datasets").assertExists()
         compose.onNodeWithText("Details", substring = true).assertExists()
         // The row of a sync that ended with failures, like its Details link, opens the full-screen dialog.
-        compose.onNodeWithTag("documents-sync-row:data").performClick()
-        await { exists("documents-sync-details") }
+        compose.onNodeWithTag("drive-sync-row:data").performClick()
+        await { exists("drive-sync-details") }
         compose.onNodeWithText("survey-2026/raw/export.zip").assertExists()
         compose.onNodeWithText("Open Datasets").assertExists()
     }
 
-    @Test fun theComposersFromDocumentsPutsThePickedFilesPathInTheDraft() {
+    @Test fun theComposersFromDrivePutsThePickedFilesPathInTheDraft() {
         signIn()
         await { compose.onAllNodesWithText("Review navigation").fetchSemanticsNodes().isNotEmpty() }
         compose.onAllNodesWithText("Review navigation").onFirst().performClick()
         await { compose.onAllNodes(hasTestTag("composer-plus") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("composer-plus").performClick()
-        await { exists("composer-from-documents") }
-        compose.onNodeWithTag("composer-from-documents").performClick()
-        await { exists("documents-picker-file:reading-list.md") }
-        compose.onNodeWithTag("documents-picker-add").assertIsNotEnabled()
-        compose.onNodeWithTag("documents-picker-folder:Orbit UI migration").performClick()
-        await { exists("documents-picker-file:migration-notes.md") }
-        compose.onNodeWithTag("documents-picker-file:migration-notes.md").performClick()
+        await { exists("composer-from-drive") }
+        compose.onNodeWithTag("composer-from-drive").performClick()
+        await { exists("drive-picker-file:reading-list.md") }
+        compose.onNodeWithTag("drive-picker-add").assertIsNotEnabled()
+        compose.onNodeWithTag("drive-picker-folder:Orbit UI migration").performClick()
+        await { exists("drive-picker-file:migration-notes.md") }
+        compose.onNodeWithTag("drive-picker-file:migration-notes.md").performClick()
         compose.onNodeWithText("Add 1").performClick()
-        await { !exists("documents-picker") }
+        await { !exists("drive-picker") }
         val handle = (app().session.state.value as AuthState.SignedIn).handle
         assertEquals("/home/orbit/Documents/Orbit UI migration/migration-notes.md ", app().composer(handle, NavShell.SESSION).state.value.draft.text)
     }
 
-    @Test fun theUploadNotificationsShowLinkOpensDocuments() {
-        val route = OrbitLinks.parse("orbit://documents/uploads")!!
-        assertEquals(io.orbitd.android.navigation.Destination.DOCUMENTS, route.destination)
+    @Test fun theUploadNotificationsShowLinkOpensDrive() {
+        val route = OrbitLinks.parse("orbit://drive/uploads")!!
+        assertEquals(io.orbitd.android.navigation.Destination.DRIVE, route.destination)
         assertEquals("uploads", route.recordId)
     }
 
@@ -325,12 +325,12 @@ class DocumentsShellTest {
         compose.onNodeWithContentDescription("Open navigation").performClick()
         compose.waitForIdle()
     }
-    private fun openDocuments() {
+    private fun openDrive() {
         signIn()
         openDrawer()
         await { compose.onAllNodes(drawerRow("Drive")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(drawerRow("Drive")).performClick()
-        await { exists("documents-entry:reading-list.md") }
+        await { exists("drive-entry:reading-list.md") }
     }
     private fun app() = compose.activity.application as OrbitApplication
     private fun signIn() {

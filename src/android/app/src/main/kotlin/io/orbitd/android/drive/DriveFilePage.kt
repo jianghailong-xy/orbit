@@ -1,4 +1,4 @@
-package io.orbitd.android.documents
+package io.orbitd.android.drive
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
@@ -31,8 +31,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.orbitd.android.R
-import io.orbitd.android.core.documents.DocumentsEntry
-import io.orbitd.android.core.documents.DocumentsLogic
+import io.orbitd.android.core.drive.DriveEntry
+import io.orbitd.android.core.drive.DriveLogic
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitRoute
@@ -54,15 +54,15 @@ private sealed interface Loaded {
  * file's kind and size, who last wrote it (the writer opens its session), its earlier versions, and Download and Share link….
  */
 @Composable
-internal fun DocumentsFilePage(store: DocumentsStore, route: OrbitRoute, open: (OrbitRoute) -> Unit, openSession: (String) -> Unit, back: () -> Unit) {
+internal fun DriveFilePage(store: DriveStore, route: OrbitRoute, open: (OrbitRoute) -> Unit, openSession: (String) -> Unit, back: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
-    val actions = remember(store) { DocumentsActions(context, store, scope, snackbar) }
+    val actions = remember(store) { DriveActions(context, store, scope, snackbar) }
     var fileId by remember { mutableStateOf(route.id!!) }
-    var entry by remember { mutableStateOf<DocumentsEntry?>(null) }
+    var entry by remember { mutableStateOf<DriveEntry?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    var siblings by remember { mutableStateOf<List<DocumentsEntry>>(emptyList()) }
+    var siblings by remember { mutableStateOf<List<DriveEntry>>(emptyList()) }
     var earlier by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(fileId, store.revision) {
         runCatching { store.api.entry(fileId) }.onSuccess { entry = it; error = null }.onFailure { if (entry == null) error = store.failure("read the file", it) }
@@ -70,7 +70,7 @@ internal fun DocumentsFilePage(store: DocumentsStore, route: OrbitRoute, open: (
     }
     LaunchedEffect(route.folderId, store.revision) {
         siblings = runCatching { store.api.folder(route.folderId) }.getOrNull()?.entries.orEmpty()
-            .let(DocumentsLogic::sorted).filter { it.isFile && DocumentsLogic.preview(it.name, it.sizeBytes) == DocumentsLogic.Preview.PICTURE }
+            .let(DriveLogic::sorted).filter { it.isFile && DriveLogic.preview(it.name, it.sizeBytes) == DriveLogic.Preview.PICTURE }
     }
     val shown = entry
     val name = shown?.name ?: route.recordId ?: ""
@@ -79,28 +79,28 @@ internal fun DocumentsFilePage(store: DocumentsStore, route: OrbitRoute, open: (
     var moving by remember { mutableStateOf(false) }
     var sharing by remember { mutableStateOf(false) }
     PageBar.Bind(route, name, actions = {
-        IconButton(onClick = { shown?.let { actions.handOff(it, ShareSend) } }, enabled = shown != null) { Icon(painterResource(R.drawable.ic_share), DocumentsLogic.SEND_A_COPY) }
+        IconButton(onClick = { shown?.let { actions.handOff(it, ShareSend) } }, enabled = shown != null) { Icon(painterResource(R.drawable.ic_share), DriveLogic.SEND_A_COPY) }
         Box {
-            IconButton(onClick = { menu = true }, Modifier.testTag("documents-file-more")) { Icon(painterResource(R.drawable.ic_more), "More") }
+            IconButton(onClick = { menu = true }, Modifier.testTag("drive-file-more")) { Icon(painterResource(R.drawable.ic_more), "More") }
             DropdownMenu(menu, { menu = false }) {
-                DropdownMenuItem(text = { Text(DocumentsLogic.RENAME) }, onClick = { menu = false; renaming = true })
-                DropdownMenuItem(text = { Text(DocumentsLogic.MOVE_TO) }, onClick = { menu = false; moving = true })
-                DropdownMenuItem(text = { Text(DocumentsLogic.OPEN_WITH) }, onClick = { menu = false; shown?.let { actions.handOff(it, ShareView) } })
-                DropdownMenuItem(text = { Text(DocumentsLogic.MOVE_TO_TRASH, color = MaterialTheme.colorScheme.error) },
+                DropdownMenuItem(text = { Text(DriveLogic.RENAME) }, onClick = { menu = false; renaming = true })
+                DropdownMenuItem(text = { Text(DriveLogic.MOVE_TO) }, onClick = { menu = false; moving = true })
+                DropdownMenuItem(text = { Text(DriveLogic.OPEN_WITH) }, onClick = { menu = false; shown?.let { actions.handOff(it, ShareView) } })
+                DropdownMenuItem(text = { Text(DriveLogic.MOVE_TO_TRASH, color = MaterialTheme.colorScheme.error) },
                     onClick = { menu = false; shown?.let { actions.trash(it, back) } })
             }
         }
     })
-    Box(Modifier.fillMaxSize().testTag("documents-file")) {
+    Box(Modifier.fillMaxSize().testTag("drive-file")) {
         if (shown == null) {
             error?.let { ErrorBlock(it) { error = null; store.changed() } } ?: LinearProgressIndicator(Modifier.fillMaxWidth().padding(20.dp))
         } else {
-            val kind = DocumentsLogic.preview(shown.name, shown.sizeBytes)
-            val folder = shown.path?.substringBeforeLast('/')?.let(DocumentsLogic::folderLabel)
+            val kind = DriveLogic.preview(shown.name, shown.sizeBytes)
+            val folder = shown.path?.substringBeforeLast('/')?.let(DriveLogic::folderLabel)
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                 var size by remember { mutableStateOf<Pair<Int, Int>?>(null) }
                 when (kind) {
-                    DocumentsLogic.Preview.PICTURE -> {
+                    DriveLogic.Preview.PICTURE -> {
                         val pages = siblings.takeIf { list -> list.any { ObjectId.same(it.id, shown.id) } } ?: listOf(shown)
                         val start = pages.indexOfFirst { ObjectId.same(it.id, shown.id) }.coerceAtLeast(0)
                         val pager = rememberPagerState(start) { pages.size }
@@ -114,39 +114,39 @@ internal fun DocumentsFilePage(store: DocumentsStore, route: OrbitRoute, open: (
                     }
                     else -> {}
                 }
-                Column(Modifier.fillMaxWidth().padding(horizontal = DocumentsMetrics.side, vertical = 10.dp)) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = DriveMetrics.side, vertical = 10.dp)) {
                     Text(shown.name, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                    Text(DocumentsLogic.infoLine(shown, folder, size?.first, size?.second), fontSize = DocumentsMetrics.line,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("documents-file-info"))
+                    Text(DriveLogic.infoLine(shown, folder, size?.first, size?.second), fontSize = DriveMetrics.line,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("drive-file-info"))
                 }
                 when (kind) {
-                    DocumentsLogic.Preview.MARKDOWN, DocumentsLogic.Preview.TEXT -> WordsPreview(store, shown, kind)
-                    DocumentsLogic.Preview.PICTURE -> {}
+                    DriveLogic.Preview.MARKDOWN, DriveLogic.Preview.TEXT -> WordsPreview(store, shown, kind)
+                    DriveLogic.Preview.PICTURE -> {}
                     else -> Column(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        EntryIcon(DocumentsLogic.icon(shown), Modifier.size(64.dp))
-                        Text(DocumentsLogic.NO_PREVIEW, Modifier.padding(top = 10.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        TextButton(onClick = { actions.handOff(shown, ShareView) }) { Text(DocumentsLogic.OPEN_WITH) }
+                        EntryIcon(DriveLogic.icon(shown), Modifier.size(64.dp))
+                        Text(DriveLogic.NO_PREVIEW, Modifier.padding(top = 10.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        TextButton(onClick = { actions.handOff(shown, ShareView) }) { Text(DriveLogic.OPEN_WITH) }
                     }
                 }
-                WriterCard(store, shown, earlier, openSession) { open(OrbitRoute(Destination.DOCUMENTS_TRASH)) }
+                WriterCard(store, shown, earlier, openSession) { open(OrbitRoute(Destination.DRIVE_TRASH)) }
                 Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedButton(onClick = { actions.download(shown) }, Modifier.weight(1f).testTag("documents-file-download")) { Text(DocumentsLogic.DOWNLOAD) }
-                    Button(onClick = { sharing = true }, Modifier.weight(1f).testTag("documents-file-share")) { Text(DocumentsLogic.SHARE_LINK) }
+                    OutlinedButton(onClick = { actions.download(shown) }, Modifier.weight(1f).testTag("drive-file-download")) { Text(DriveLogic.DOWNLOAD) }
+                    Button(onClick = { sharing = true }, Modifier.weight(1f).testTag("drive-file-share")) { Text(DriveLogic.SHARE_LINK) }
                 }
             }
-            if (renaming) NameDialog(DocumentsLogic.RENAME, shown.name, DocumentsLogic.RENAME, { renaming = false }) { actions.rename(shown, it) { e -> entry = e }; renaming = false }
+            if (renaming) NameDialog(DriveLogic.RENAME, shown.name, DriveLogic.RENAME, { renaming = false }) { actions.rename(shown, it) { e -> entry = e }; renaming = false }
             if (moving) MoveDialog(store, shown, actions) { moving = false }
             if (sharing) ShareDialog(store, shown) { sharing = false }
         }
-        DocumentsSnackbar(snackbar, Modifier.align(Alignment.BottomCenter).padding(12.dp))
+        DriveSnackbar(snackbar, Modifier.align(Alignment.BottomCenter).padding(12.dp))
     }
 }
 
 @Composable
-private fun PicturePage(store: DocumentsStore, entry: DocumentsEntry, measured: (Int, Int) -> Unit) {
+private fun PicturePage(store: DriveStore, entry: DriveEntry, measured: (Int, Int) -> Unit) {
     val loaded by produceState<Loaded>(Loaded.Loading, entry.id, entry.currentVersionId) {
         value = runCatching {
-            val bytes = store.api.content(entry.id, limit = DocumentsLogic.PICTURE_PREVIEW_BYTES + 1)
+            val bytes = store.api.content(entry.id, limit = DriveLogic.PICTURE_PREVIEW_BYTES + 1)
             withContext(Dispatchers.Default) {
                 val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
                 android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
@@ -162,7 +162,7 @@ private fun PicturePage(store: DocumentsStore, entry: DocumentsEntry, measured: 
             Loaded.Loading -> CircularProgressIndicator(color = Color.White)
             is Loaded.Picture -> {
                 LaunchedEffect(l) { measured(l.width, l.height) }
-                Image(l.bitmap.asImageBitmap(), entry.name, Modifier.fillMaxSize().testTag("documents-picture")
+                Image(l.bitmap.asImageBitmap(), entry.name, Modifier.fillMaxSize().testTag("drive-picture")
                     .pointerInput(Unit) {
                         detectTransformGestures { _, pan, zoom, _ ->
                             scale = (scale * zoom).coerceIn(1f, 5f)
@@ -171,49 +171,49 @@ private fun PicturePage(store: DocumentsStore, entry: DocumentsEntry, measured: 
                     }
                     .graphicsLayer(scaleX = scale, scaleY = scale, translationX = offset.x, translationY = offset.y))
             }
-            else -> Text(DocumentsLogic.PREVIEW_FAILED, color = Color.White)
+            else -> Text(DriveLogic.PREVIEW_FAILED, color = Color.White)
         }
     }
 }
 
 @Composable
-private fun WordsPreview(store: DocumentsStore, entry: DocumentsEntry, kind: DocumentsLogic.Preview) {
+private fun WordsPreview(store: DriveStore, entry: DriveEntry, kind: DriveLogic.Preview) {
     val loaded by produceState<Loaded>(Loaded.Loading, entry.id, entry.currentVersionId) {
-        val limit = DocumentsLogic.previewBytes(kind, entry.sizeBytes)
+        val limit = DriveLogic.previewBytes(kind, entry.sizeBytes)
         value = runCatching { store.api.content(entry.id, maxBytes = limit) }
             .map { Loaded.Words(it.decodeToString(), limit != null) }.getOrDefault(Loaded.Failed)
     }
-    Column(Modifier.fillMaxWidth().padding(horizontal = DocumentsMetrics.side, vertical = 8.dp).testTag("documents-words")) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = DriveMetrics.side, vertical = 8.dp).testTag("drive-words")) {
         when (val l = loaded) {
             Loaded.Loading -> LinearProgressIndicator(Modifier.fillMaxWidth())
             is Loaded.Words -> {
-                if (kind == DocumentsLogic.Preview.MARKDOWN) MarkdownText(l.text)
+                if (kind == DriveLogic.Preview.MARKDOWN) MarkdownText(l.text)
                 else Text(l.text, Modifier.horizontalScroll(rememberScrollState()), fontFamily = FontFamily.Monospace, fontSize = 13.sp)
-                if (l.cut) Text(DocumentsLogic.previewCut(DocumentsLogic.TEXT_PREVIEW_BYTES), Modifier.padding(top = 8.dp), fontSize = 12.sp,
+                if (l.cut) Text(DriveLogic.previewCut(DriveLogic.TEXT_PREVIEW_BYTES), Modifier.padding(top = 8.dp), fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            else -> Text(DocumentsLogic.PREVIEW_FAILED, color = MaterialTheme.colorScheme.error)
+            else -> Text(DriveLogic.PREVIEW_FAILED, color = MaterialTheme.colorScheme.error)
         }
     }
 }
 
 /** Who wrote it, with its session, and the earlier versions (board frame 8 ①). */
 @Composable
-private fun WriterCard(store: DocumentsStore, entry: DocumentsEntry, earlier: Int?, openSession: (String) -> Unit, openTrash: () -> Unit) {
-    val session = DocumentsLogic.writerSession(entry.lastWriter)
+private fun WriterCard(store: DriveStore, entry: DriveEntry, earlier: Int?, openSession: (String) -> Unit, openTrash: () -> Unit) {
+    val session = DriveLogic.writerSession(entry.lastWriter)
     val name = store.writerName(entry.lastWriter)
     Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 12.dp).fillMaxWidth()
         .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))) {
-        DocumentsRow(name, null, Modifier.testTag("documents-file-writer"), leading = {
+        DriveRow(name, null, Modifier.testTag("drive-file-writer"), leading = {
             Box(Modifier.size(30.dp).background(if (entry.lastWriter.isOwner) MaterialTheme.colorScheme.primary else Color(0xFF1C1C1E), CircleShape),
                 contentAlignment = Alignment.Center) {
                 Text(if (entry.lastWriter.isOwner) "Y" else "A", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
         }, onClick = session?.let { { openSession(ObjectId.canonical(it) ?: it) } }, end = if (session != null) ({
             Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.padding(end = 12.dp).size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        }) else null, overline = DocumentsLogic.lastWritten(entry))
-        DocumentsRow(DocumentsLogic.EARLIER_VERSIONS, null, leading = { SmallIcon(R.drawable.ic_restore) },
-            trailing = earlier?.let { DocumentsLogic.earlierVersions(it) + if (it > 0) " ›" else "" },
+        }) else null, overline = DriveLogic.lastWritten(entry))
+        DriveRow(DriveLogic.EARLIER_VERSIONS, null, leading = { SmallIcon(R.drawable.ic_restore) },
+            trailing = earlier?.let { DriveLogic.earlierVersions(it) + if (it > 0) " ›" else "" },
             onClick = if ((earlier ?: 0) > 0) openTrash else null)
     }
 }

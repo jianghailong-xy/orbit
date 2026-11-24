@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Documents on a real Orbit server (board docs/mocks/documents/04-android): DocumentsDeviceTest on the shared API 36 emulator, signed in
+# Documents on a real Orbit server (board docs/mocks/documents/04-android): DriveDeviceTest on the shared API 36 emulator, signed in
 # through the login page. The account comes from ACCOUNT_JSON ({"email","password"}), never from the command line; SERVER is the
 # address the emulator reaches (http://10.0.2.2:<port> for a server on this host). DOCS_TEST picks the journey
-# (io.orbitd.android.documents.DocumentsDeviceTest#screens|writes|off); DOCS_NIGHT=yes draws the dark theme; DOCS_DISPLAY sets the
+# (io.orbitd.android.drive.DriveDeviceTest#screens|writes|off); DOCS_NIGHT=yes draws the dark theme; DOCS_DISPLAY sets the
 # display (default 1280x2856@480, the Pixel 10 Pro the client-screenshots skill uses). Captures land in EVIDENCE_DIR.
 if (( $# != 5 )); then
   echo "Usage: $0 APP_APK TEST_APK SERVER ACCOUNT_JSON EVIDENCE_DIR" >&2
@@ -62,7 +62,7 @@ suffix="$([[ "${DOCS_NIGHT:-no}" == yes ]] && echo dark || echo light)"
 start="$(a shell date +%s | tr -d '\r').000"
 # The password goes to the device as an instrumentation argument only; the transcript below has it masked.
 a shell am instrument -w -r -e docs_server "$server" -e docs_email "$email" -e docs_password "$password" -e docs_suffix "$suffix" \
-  -e class "${DOCS_TEST:-io.orbitd.android.documents.DocumentsDeviceTest}" "$runner" 2>&1 | sed "s/$password/<password>/g" > "$output/instrumentation.txt"
+  -e class "${DOCS_TEST:-io.orbitd.android.drive.DriveDeviceTest}" "$runner" 2>&1 | sed "s/$password/<password>/g" > "$output/instrumentation.txt"
 pid="$(sed -n 's/.*a07_pid=\([0-9]*\).*/\1/p' "$output/instrumentation.txt" | head -1)"
 [[ -n "$pid" ]] && a logcat -d -v threadtime --pid="$pid" -T "$start" | sed "s/$password/<password>/g" > "$output/logcat.txt" || true
 a shell run-as "$package" tar -cf files/a07-captures.tar -C files a07-composer > /dev/null 2>&1 || true

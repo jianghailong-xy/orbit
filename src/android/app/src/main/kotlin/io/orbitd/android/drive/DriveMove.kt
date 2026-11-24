@@ -1,4 +1,4 @@
-package io.orbitd.android.documents
+package io.orbitd.android.drive
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
@@ -21,8 +21,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.orbitd.android.R
-import io.orbitd.android.core.documents.DocumentsEntry
-import io.orbitd.android.core.documents.DocumentsLogic
+import io.orbitd.android.core.drive.DriveEntry
+import io.orbitd.android.core.drive.DriveLogic
 import io.orbitd.android.navigation.ObjectId
 
 /**
@@ -31,13 +31,13 @@ import io.orbitd.android.navigation.ObjectId
  * one folder, then closes.
  */
 @Composable
-internal fun MoveDialog(store: DocumentsStore, entry: DocumentsEntry, actions: DocumentsActions, onDismiss: () -> Unit) {
+internal fun MoveDialog(store: DriveStore, entry: DriveEntry, actions: DriveActions, onDismiss: () -> Unit) {
     // The trail from the root down, as (id, name); the root's id is learnt from its listing.
-    var trail by remember { mutableStateOf(listOf<Pair<String?, String>>(null to DocumentsLogic.TITLE)) }
-    var folders by remember { mutableStateOf<List<DocumentsEntry>?>(null) }
+    var trail by remember { mutableStateOf(listOf<Pair<String?, String>>(null to DriveLogic.TITLE)) }
+    var folders by remember { mutableStateOf<List<DriveEntry>?>(null) }
     var rootId by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    var picked by remember { mutableStateOf<DocumentsEntry?>(null) }
+    var picked by remember { mutableStateOf<DriveEntry?>(null) }
     var naming by remember { mutableStateOf(false) }
     var reads by remember { mutableIntStateOf(0) }
     val here = trail.last()
@@ -45,7 +45,7 @@ internal fun MoveDialog(store: DocumentsStore, entry: DocumentsEntry, actions: D
         folders = null
         runCatching { store.api.folder(here.first) }.onSuccess { listing ->
             if (here.first == null) rootId = listing.folder.id
-            folders = DocumentsLogic.sorted(listing.entries.filter { it.isFolder && !ObjectId.same(it.id, entry.id) })
+            folders = DriveLogic.sorted(listing.entries.filter { it.isFolder && !ObjectId.same(it.id, entry.id) })
             error = null
         }.onFailure { error = store.failure("read the folder", it) }
     }
@@ -53,14 +53,14 @@ internal fun MoveDialog(store: DocumentsStore, entry: DocumentsEntry, actions: D
     val targetId = picked?.id ?: here.first ?: rootId
     val targetName = picked?.name ?: here.second
     val ancestors = listOfNotNull(rootId) + trail.mapNotNull { it.first } + listOfNotNull(picked?.id)
-    val allowed = targetId != null && DocumentsLogic.canMove(entry, targetId, ancestors, ObjectId::same)
+    val allowed = targetId != null && DriveLogic.canMove(entry, targetId, ancestors, ObjectId::same)
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         BackHandler { up() }
-        Surface(Modifier.fillMaxSize().testTag("documents-move"), color = MaterialTheme.colorScheme.background) {
+        Surface(Modifier.fillMaxSize().testTag("drive-move"), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().systemBarsPadding()) {
                 Row(Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onDismiss) { Icon(painterResource(R.drawable.ic_close), DocumentsLogic.CANCEL) }
-                    Text(DocumentsLogic.moveTitle(entry.name), Modifier.weight(1f).padding(start = 6.dp), fontSize = 19.sp, maxLines = 1,
+                    IconButton(onClick = onDismiss) { Icon(painterResource(R.drawable.ic_close), DriveLogic.CANCEL) }
+                    Text(DriveLogic.moveTitle(entry.name), Modifier.weight(1f).padding(start = 6.dp), fontSize = 19.sp, maxLines = 1,
                         overflow = TextOverflow.Ellipsis)
                 }
                 Crumb(buildAnnotatedString {
@@ -72,16 +72,16 @@ internal fun MoveDialog(store: DocumentsStore, entry: DocumentsEntry, actions: D
                 }.text)
                 LazyColumn(Modifier.weight(1f)) {
                     if (trail.size > 1) item {
-                        DocumentsRow(trail[trail.lastIndex - 1].second, null, Modifier.testTag("documents-move-up"),
-                            leading = { Icon(painterResource(R.drawable.ic_back), null, Modifier.size(DocumentsMetrics.icon).padding(3.dp),
+                        DriveRow(trail[trail.lastIndex - 1].second, null, Modifier.testTag("drive-move-up"),
+                            leading = { Icon(painterResource(R.drawable.ic_back), null, Modifier.size(DriveMetrics.icon).padding(3.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant) }, onClick = ::up)
                     }
                     error?.let { item { Text(it, Modifier.padding(20.dp), color = MaterialTheme.colorScheme.error) } }
                     if (folders == null && error == null) item { LinearProgressIndicator(Modifier.fillMaxWidth().padding(20.dp)) }
                     items(folders.orEmpty(), key = { it.id }) { folder ->
                         val chosen = picked?.id == folder.id
-                        DocumentsRow(folder.name, if (chosen) AnnotatedString(DocumentsLogic.NEW_FOLDER) else null,
-                            Modifier.testTag("documents-move-folder:${folder.name}"), leading = { EntryIcon(DocumentsLogic.Icon.FOLDER) }, selected = chosen,
+                        DriveRow(folder.name, if (chosen) AnnotatedString(DriveLogic.NEW_FOLDER) else null,
+                            Modifier.testTag("drive-move-folder:${folder.name}"), leading = { EntryIcon(DriveLogic.Icon.FOLDER) }, selected = chosen,
                             onClick = { trail = trail + (folder.id to folder.name); picked = null },
                             end = {
                                 if (chosen) Icon(painterResource(R.drawable.ic_check), null, Modifier.padding(end = 12.dp), tint = MaterialTheme.colorScheme.primary)
@@ -90,18 +90,18 @@ internal fun MoveDialog(store: DocumentsStore, entry: DocumentsEntry, actions: D
                             })
                     }
                     item {
-                        DocumentsRow(DocumentsLogic.NEW_FOLDER, null, Modifier.testTag("documents-move-new-folder"),
-                            leading = { Icon(painterResource(R.drawable.ic_folder_plus), null, Modifier.size(DocumentsMetrics.icon).padding(3.dp),
+                        DriveRow(DriveLogic.NEW_FOLDER, null, Modifier.testTag("drive-move-new-folder"),
+                            leading = { Icon(painterResource(R.drawable.ic_folder_plus), null, Modifier.size(DriveMetrics.icon).padding(3.dp),
                                 tint = MaterialTheme.colorScheme.primary) }, onClick = { naming = true })
                     }
                 }
                 Button(onClick = { targetId?.let { actions.move(entry, it, targetName, onDismiss) } }, enabled = allowed,
-                    modifier = Modifier.fillMaxWidth().padding(16.dp).height(44.dp).testTag("documents-move-confirm")) {
-                    Text(DocumentsLogic.moveButton(targetName))
+                    modifier = Modifier.fillMaxWidth().padding(16.dp).height(44.dp).testTag("drive-move-confirm")) {
+                    Text(DriveLogic.moveButton(targetName))
                 }
             }
         }
-        if (naming) NameDialog(DocumentsLogic.NEW_FOLDER, DocumentsLogic.NEW_FOLDER, "Create", { naming = false }) { name ->
+        if (naming) NameDialog(DriveLogic.NEW_FOLDER, DriveLogic.NEW_FOLDER, "Create", { naming = false }) { name ->
             naming = false
             actions.newFolder(here.first ?: rootId, name) { made -> picked = made; reads++ }
         }
