@@ -199,7 +199,7 @@ function templateProblem(pod: Pod, mapping: PodAdmissionMapping, policy: PodAdmi
     if (kind === 'persistentVolumeClaim' && volume.persistentVolumeClaim?.claimName === mapping.pvcName) continue;
     if (kind === 'emptyDir') continue;
     if (kind === 'secret' && (volume.secret as { secretName?: unknown } | undefined)?.secretName === managedSecretName(mapping.runnerId)) continue;
-    const driveMount = kind === 'csi' && !drive ? driveVolumeMount(volume, mapping) : null;
+    const driveMount: string | null = kind === 'csi' && !drive ? driveVolumeMount(volume, mapping) : null;
     if (driveMount) {
       drive = { name: volume.name, mountPath: driveMount };
       continue;
