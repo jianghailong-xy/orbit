@@ -14,7 +14,7 @@ const explain = (flags, row, s) => {
     if (rest.length) out.push(`accepted, older server only (F3, F4, F6): ${rest.join(',')}`);
   } else {
     if (flags.includes('WORD') && row.name.startsWith('unknown status')) out.push('defect F2, fix task filed');
-    if (flags.includes('RUN')) out.push('defect F5, fix task filed (Apple reads the legacy state; the web task panel badge reads it too)');
+    if (flags.includes('RUN')) out.push('defect: task-run label disagrees');
   }
   return out.join('; ') || 'UNEXPLAINED';
 };
