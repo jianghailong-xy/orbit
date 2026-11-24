@@ -328,11 +328,11 @@ describe('Files, the row under the Wiki', () => {
     serve();
     await visit('/tasks');
     await click(topEntry('Documents'));
-    expect(location).toBe('/files');
+    expect(location).toBe('/documents');
     expect(litTopEntries()).toEqual(['Documents']);
   });
 
-  it.each(['/files', '/files?folder=x&file=y', '/files/trash'])('lights Files, in either form, on %s', async (path) => {
+  it.each(['/documents', '/documents?folder=x&file=y', '/documents/trash'])('lights Files, in either form, on %s', async (path) => {
     serve();
     await visit(path);
     expect(litTopEntries()).toEqual(['Documents']);

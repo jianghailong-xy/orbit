@@ -6,15 +6,15 @@ import { Dialog } from '../ui/Dialog';
 import { Input } from '../ui/Input';
 import { copyText } from '../../lib/clipboard';
 import {
-  checkDriveShare,
+  checkDocumentsShare,
   formatSize,
   messageOf,
-  shareDriveFile,
+  shareDocumentsFile,
   stopSharing,
-  type DriveEntry,
-  type DriveShareLink,
-  type DriveShareWarning,
-} from '../../lib/drive';
+  type DocumentsEntry,
+  type DocumentsShareLink,
+  type DocumentsShareWarning,
+} from '../../lib/documents';
 import { publicLinkUrl } from '../../lib/shareLinks';
 import { useToast } from '../../lib/toast';
 
@@ -27,9 +27,9 @@ export const partialNote = (checkedBytes: number) =>
 
 type Phase =
   | { at: 'checking' }
-  | { at: 'warn'; warnings: DriveShareWarning[]; partial: boolean; checkedBytes: number }
+  | { at: 'warn'; warnings: DocumentsShareWarning[]; partial: boolean; checkedBytes: number }
   | { at: 'sharing' }
-  | { at: 'shared'; link: DriveShareLink; partial: boolean; checkedBytes: number }
+  | { at: 'shared'; link: DocumentsShareLink; partial: boolean; checkedBytes: number }
   | { at: 'failed'; message: string };
 
 /**
@@ -38,14 +38,14 @@ type Phase =
  * nothing, the link is made at once. `existing` is the file's open link: when it already pins the current version the
  * dialog only shows it; "Share this version" (`moveToCurrent`) checks again and moves the link to the current version.
  */
-export function FilesShareDialog({
+export function DocumentsShareDialog({
   file,
   existing,
   moveToCurrent = false,
   onClose,
 }: {
-  file: DriveEntry;
-  existing: DriveShareLink | null;
+  file: DocumentsEntry;
+  existing: DocumentsShareLink | null;
   moveToCurrent?: boolean;
   onClose: () => void;
 }) {
@@ -61,7 +61,7 @@ export function FilesShareDialog({
   const share = async (partial: boolean, checkedBytes: number) => {
     setPhase({ at: 'sharing' });
     try {
-      const answer = await shareDriveFile(file.id);
+      const answer = await shareDocumentsFile(file.id);
       await client.invalidateQueries({ queryKey: ['drive', 'share-links'] });
       if (alive.current) {
         setPhase({
@@ -81,7 +81,7 @@ export function FilesShareDialog({
     let stale = false;
     void (async () => {
       try {
-        const check = await checkDriveShare(file.id);
+        const check = await checkDocumentsShare(file.id);
         if (stale) return;
         if (check.warnings.length > 0) {
           setPhase({ at: 'warn', warnings: check.warnings, partial: check.partial, checkedBytes: check.checkedBytes });
@@ -98,7 +98,7 @@ export function FilesShareDialog({
     // One check per opening.
   }, []);
 
-  const stop = async (link: DriveShareLink) => {
+  const stop = async (link: DocumentsShareLink) => {
     try {
       await stopSharing(link.id);
       await client.invalidateQueries({ queryKey: ['drive', 'share-links'] });

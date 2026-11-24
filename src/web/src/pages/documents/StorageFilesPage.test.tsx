@@ -55,7 +55,7 @@ async function click(element: Element | null | undefined, what: string): Promise
   await settle();
 }
 
-async function open(path = '/files/storage/projects/p1'): Promise<void> {
+async function open(path = '/documents/storage/projects/p1'): Promise<void> {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -65,7 +65,7 @@ async function open(path = '/files/storage/projects/p1'): Promise<void> {
       <MemoryRouter initialEntries={[path]}>
         <QueryClientProvider client={client}>
           <Routes>
-            <Route path="/files/storage/:kind/:id" element={<StorageFilesPage />} />
+            <Route path="/documents/storage/:kind/:id" element={<StorageFilesPage />} />
           </Routes>
         </QueryClientProvider>
       </MemoryRouter>,

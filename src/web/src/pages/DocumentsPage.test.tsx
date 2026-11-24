@@ -21,8 +21,8 @@ vi.mock('../api', async (importOriginal) => ({
   getSession: vi.fn(),
 }));
 const { api, authedFetch, getSession } = await import('../api');
-const { FilesPage } = await import('./FilesPage');
-const { resetDriveUploadsForTest } = await import('../lib/driveUploads');
+const { DocumentsPage } = await import('./DocumentsPage');
+const { resetDocumentsUploadsForTest } = await import('../lib/documentsUploads');
 
 // ── the drive in memory ────────────────────────────────────────────────────────────────────────
 
@@ -250,8 +250,8 @@ async function visit(path: string): Promise<void> {
       <MemoryRouter initialEntries={[path]}>
         <QueryClientProvider client={client}>
           <Routes>
-            <Route path="/files" element={<FilesPage />} />
-            <Route path="/files/trash" element={<FilesPage view="trash" />} />
+            <Route path="/documents" element={<DocumentsPage />} />
+            <Route path="/documents/trash" element={<DocumentsPage view="trash" />} />
           </Routes>
           <Probe />
           <ToastViewport />
@@ -319,7 +319,7 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   localStorage.clear();
-  resetDriveUploadsForTest();
+  resetDocumentsUploadsForTest();
   seed();
   serve();
 });
@@ -345,7 +345,7 @@ afterEach(async () => {
 describe('the folder tree and the list', () => {
   it('lists a folder with who last wrote each file: you, an agent in its session, or an agent on Orbit Cloud', async () => {
     entries.find((e) => e.id === 'deploy')!.writer = { kind: 'OWNER', sessionId: null };
-    await visit('/files?folder=f-ui');
+    await visit('/documents?folder=f-ui');
     await until(() => expect(row('sign-in-v3.png')).toBeTruthy());
     const writer = (name: string) => row(name).querySelector('.files-col-writer')!.textContent;
     await until(() => expect(writer('sign-in-v3.png')).toBe('Agent in Redesign the sign-in page'));
@@ -359,7 +359,7 @@ describe('the folder tree and the list', () => {
 
   it('searches the whole drive from the box, each result with its folder, and opens a result in its folder', async () => {
     entries.push({ id: 'notes2', parentId: 'f-data', kind: 'FILE', name: 'field-notes.csv', sizeBytes: 10 });
-    await visit('/files?folder=f-data');
+    await visit('/documents?folder=f-data');
     const box = document.querySelector<HTMLInputElement>('input[aria-label="Search Files"]')!;
     await type(box, 'NOTES');
     // The box asks the server once typing has stopped.
@@ -372,22 +372,22 @@ describe('the folder tree and the list', () => {
     expect(row('migration-notes.md').querySelector('.files-col-writer')!.textContent).toBe('Documents/Orbit UI migration');
     expect(row('sign-in-v3.png')).toBeNull();
     await click(row('migration-notes.md'));
-    expect(location).toBe('/files?folder=f-ui&file=notes');
+    expect(location).toBe('/documents?folder=f-ui&file=notes');
     expect(document.querySelector('input[aria-label="Search Files"]')).toBeTruthy();
     expect((document.querySelector('input[aria-label="Search Files"]') as HTMLInputElement).value).toBe('');
   });
 
   it('opens a folder from the tree', async () => {
-    await visit('/files');
+    await visit('/documents');
     await until(() => expect(document.querySelectorAll('.files-tree .files-tree-name').length).toBe(3));
     const datasets = [...document.querySelectorAll<HTMLElement>('.files-tree-row')].find((r) => r.textContent?.includes('Datasets'))!;
     await click(datasets);
-    expect(location).toBe('/files?folder=f-data');
+    expect(location).toBe('/documents?folder=f-data');
   });
 
   it('previews a Markdown file rendered, and a picture drawn from its bytes', async () => {
     vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: () => 'blob:picture', revokeObjectURL: () => {} }));
-    await visit('/files?folder=f-ui&file=notes');
+    await visit('/documents?folder=f-ui&file=notes');
     await until(() => expect(document.querySelector('.files-preview-markdown h1')?.textContent).toBe('Migration notes'));
     expect(calls.some((c) => c.path === '/drive/entries/notes')).toBe(true);
     await click(row('sign-in-v3.png'));
@@ -397,7 +397,7 @@ describe('the folder tree and the list', () => {
 
 describe('upload', () => {
   it('sends a picked file in chunks, each named by its sha256, then completes it into the open folder', async () => {
-    await visit('/files?folder=f-ui');
+    await visit('/documents?folder=f-ui');
     await until(() => expect(row('sign-in-v3.png')).toBeTruthy());
     const input = document.querySelector<HTMLInputElement>('input[aria-label="Files to upload"]')!;
     await pick(input, [new File(['hello world'], 'labels.csv', { lastModified: 1 })]);
@@ -418,8 +418,8 @@ describe('upload', () => {
         { key: 'k1', name: 'eval.zip', size: 11, lastModified: 5, parentId: 'f-data', parentName: 'Datasets', relativePath: null, dropKey: null, uploadId: 'upload-7' },
       ]),
     );
-    resetDriveUploadsForTest();
-    await visit('/files?folder=f-ui');
+    resetDocumentsUploadsForTest();
+    await visit('/documents?folder=f-ui');
     await until(() => expect(document.querySelector('.files-tray')?.textContent).toContain('Pick the same file again'));
     const again = document.querySelector<HTMLInputElement>('input[aria-label="Pick eval.zip again"]')!;
     await pick(again, [new File(['hello world'], 'eval.zip', { lastModified: 5 })]);
@@ -438,7 +438,7 @@ describe('upload', () => {
     }) as never);
     vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setTimeout'] });
     try {
-      await visit('/files?folder=f-ui');
+      await visit('/documents?folder=f-ui');
       await until(() => expect(row('sign-in-v3.png')).toBeTruthy());
       await pick(document.querySelector<HTMLInputElement>('input[aria-label="Files to upload"]')!, [new File(['hello world'], 'big.bin')]);
       await act(async () => {
@@ -455,7 +455,7 @@ describe('upload', () => {
   });
 
   it('drops a folder as one drop: its files keep their paths and share the top folder the first one made', async () => {
-    await visit('/files?folder=f-ui');
+    await visit('/documents?folder=f-ui');
     await until(() => expect(row('sign-in-v3.png')).toBeTruthy());
     const file = (name: string, text: string) => ({
       isFile: true, isDirectory: false, name, file: (done: (f: File) => void) => done(new File([text], name)),
@@ -491,7 +491,7 @@ describe('download', () => {
       opened.push(this.getAttribute('href') ?? '');
     });
     try {
-      await visit('/files?folder=f-ui&file=deploy');
+      await visit('/documents?folder=f-ui&file=deploy');
       await until(() => expect(document.querySelector('.files-pane')).toBeTruthy());
       await click_(button('Download', document.querySelector('.files-pane')!));
       await until(() => expect(opened).toEqual(['/api/drive/dl/token-for-deploy']));
@@ -509,7 +509,7 @@ describe('download', () => {
 
 describe('rename and move', () => {
   it('renames in the row: Enter sends the new name', async () => {
-    await visit('/files?folder=f-ui');
+    await visit('/documents?folder=f-ui');
     await until(() => expect(row('migration-notes.md')).toBeTruthy());
     await menu('migration-notes.md', 'Rename');
     const input = document.querySelector<HTMLInputElement>('input[aria-label="New name for migration-notes.md"]')!;
@@ -523,7 +523,7 @@ describe('rename and move', () => {
   });
 
   it('Escape leaves the name as it was', async () => {
-    await visit('/files?folder=f-ui');
+    await visit('/documents?folder=f-ui');
     await until(() => expect(row('migration-notes.md')).toBeTruthy());
     await menu('migration-notes.md', 'Rename');
     const input = document.querySelector<HTMLInputElement>('input[aria-label="New name for migration-notes.md"]')!;
@@ -533,7 +533,7 @@ describe('rename and move', () => {
   });
 
   it('moves into a folder picked in Move to…, its own folder greyed', async () => {
-    await visit('/files?folder=f-ui');
+    await visit('/documents?folder=f-ui');
     await until(() => expect(row('migration-notes.md')).toBeTruthy());
     await menu('migration-notes.md', 'Move to…');
     await until(() => expect(document.querySelector('.files-move-dialog .files-picker-row')).toBeTruthy());
@@ -550,7 +550,7 @@ describe('rename and move', () => {
 
 describe('Trash', () => {
   it('moves to Trash without asking, and Undo restores the group it went in', async () => {
-    await visit('/files?folder=f-ui');
+    await visit('/documents?folder=f-ui');
     await until(() => expect(row('migration-notes.md')).toBeTruthy());
     await menu('migration-notes.md', 'Move to Trash');
     expect(calls.find((c) => c.method === 'DELETE')!.path).toBe('/drive/entries/notes');
@@ -588,7 +588,7 @@ describe('Trash', () => {
         version: null,
       },
     ];
-    await visit('/files/trash');
+    await visit('/documents/trash');
     await until(() => expect(document.querySelectorAll('.files-trash-group')).toHaveLength(3));
     const heads = [...document.querySelectorAll('.files-trash-group-head')].map((h) => h.textContent);
     expect(heads[0]).toContain('From Orbit UI migration · deleted');
@@ -619,7 +619,7 @@ describe('Trash', () => {
     ];
     links = [{ id: 'link-9', token: 't', driveEntryId: 'shared-file', pinnedIsCurrent: true, state: 'PAUSED' }];
     entries.push({ id: 'shared-file', parentId: 'f-data', kind: 'FILE', name: 'labels-old.csv', sizeBytes: 80 });
-    await visit('/files/trash');
+    await visit('/documents/trash');
     await until(() => expect(document.querySelectorAll('.files-trash-group')).toHaveLength(1));
     const trigger = document.querySelector<HTMLButtonElement>('button[aria-label="More for the group from Datasets"]')!;
     await act(async () => trigger.click());
@@ -640,7 +640,7 @@ describe('Trash', () => {
 describe('the one-file share link', () => {
   it('warns, naming what the check found, and the owner can still share', async () => {
     shareCheck = { warnings: [{ kind: 'an AWS access key id', line: 14 }], checkedBytes: 26_214_400, partial: true };
-    await visit('/files?folder=f-ui&file=deploy');
+    await visit('/documents?folder=f-ui&file=deploy');
     await until(() => expect(document.querySelector('.files-pane')).toBeTruthy());
     await click(button('Share link…', document.querySelector('.files-pane')!));
     await until(() => expect(document.querySelector('.files-share-warning')).toBeTruthy());
@@ -660,7 +660,7 @@ describe('the one-file share link', () => {
   });
 
   it('makes the link at once when the check finds nothing', async () => {
-    await visit('/files?folder=f-ui&file=deploy');
+    await visit('/documents?folder=f-ui&file=deploy');
     await until(() => expect(document.querySelector('.files-pane')).toBeTruthy());
     await click(button('Share link…', document.querySelector('.files-pane')!));
     await until(() => expect(document.querySelector<HTMLInputElement>('input[aria-label="Share link"]')).toBeTruthy());
@@ -670,7 +670,7 @@ describe('the one-file share link', () => {
 
   it('offers Share this version when the link pins an earlier one, and moves it', async () => {
     links = [{ id: 'link-1', token: 'Gk2e8TqB', driveEntryId: 'deploy', pinnedIsCurrent: false, state: 'ACTIVE' }];
-    await visit('/files?folder=f-ui&file=deploy');
+    await visit('/documents?folder=f-ui&file=deploy');
     await until(() => expect(document.querySelector('.files-pane-shared')?.textContent).toContain('An earlier version'));
     await click(button('Share this version'));
     await until(() => expect(calls.some((c) => c.path === '/share-links' && c.method === 'POST')).toBe(true));

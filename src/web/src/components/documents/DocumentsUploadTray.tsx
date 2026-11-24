@@ -1,18 +1,18 @@
 import { useRef, useState } from 'react';
 import { CheckOutlined } from '@ant-design/icons';
-import { formatSize } from '../../lib/drive';
+import { formatSize } from '../../lib/documents';
 import {
   cancelUpload,
   clearFinishedUploads,
   pauseUpload,
   resumeUpload,
-  type DriveUpload,
-} from '../../lib/driveUploads';
+  type DocumentsUpload,
+} from '../../lib/documentsUploads';
 import { useToast } from '../../lib/toast';
 
-const percent = (upload: DriveUpload) => (upload.size === 0 ? 100 : Math.floor((upload.sentBytes / upload.size) * 100));
+const percent = (upload: DocumentsUpload) => (upload.size === 0 ? 100 : Math.floor((upload.sentBytes / upload.size) * 100));
 
-function timeLeft(upload: DriveUpload): string | null {
+function timeLeft(upload: DocumentsUpload): string | null {
   if (!upload.rate) return null;
   const seconds = (upload.size - upload.sentBytes) / upload.rate;
   if (seconds < 60) return 'under a minute left';
@@ -20,7 +20,7 @@ function timeLeft(upload: DriveUpload): string | null {
 }
 
 /** The line under a row's bar: what it is doing, and what pressing its button will do. */
-function statusLine(upload: DriveUpload): string {
+function statusLine(upload: DocumentsUpload): string {
   const sent = `${formatSize(upload.sentBytes)} of ${formatSize(upload.size)}`;
   switch (upload.status) {
     case 'queued':
@@ -41,7 +41,7 @@ function statusLine(upload: DriveUpload): string {
 }
 
 /** One row of the tray. */
-function TrayRow({ upload }: { upload: DriveUpload }) {
+function TrayRow({ upload }: { upload: DocumentsUpload }) {
   const picker = useRef<HTMLInputElement>(null);
   const toast = useToast();
   const where = upload.relativePath ? upload.relativePath.split('/').slice(0, -1).join('/') : upload.parentName;
@@ -113,7 +113,7 @@ function TrayRow({ upload }: { upload: DriveUpload }) {
  * The upload tray (board 02-web frame 3): every upload in one corner, as it goes. Large files go up in parts, so there is
  * no size limit (D12); a dropped connection or a closed tab pauses rather than fails.
  */
-export function FilesUploadTray({ uploads }: { uploads: DriveUpload[] }) {
+export function DocumentsUploadTray({ uploads }: { uploads: DocumentsUpload[] }) {
   const [hidden, setHidden] = useState(false);
   if (uploads.length === 0) return null;
   const done = uploads.filter((u) => u.status === 'done').length;

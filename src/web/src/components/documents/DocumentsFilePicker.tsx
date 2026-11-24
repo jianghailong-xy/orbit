@@ -1,13 +1,13 @@
-import '../../pages/FilesPage.css';
+import '../../pages/DocumentsPage.css';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { CheckOutlined, FileOutlined, FolderFilled, RightOutlined } from '@ant-design/icons';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { driveFolderQuery, driveSearchQuery, formatSize, messageOf, useSettled } from '../../lib/drive';
+import { documentsFolderQuery, documentsSearchQuery, formatSize, messageOf, useSettled } from '../../lib/documents';
 
 /** Where the drive is mounted for an agent (design §4.5): a file's path in a message is this plus its place in Files. */
-export const DRIVE_MOUNT = '/home/orbit/Documents';
+export const DOCUMENTS_MOUNT = '/home/orbit/Documents';
 
 interface Crumb {
   id: string | null;
@@ -17,7 +17,7 @@ interface Crumb {
 /** The project's folder name under Files (D22): no `/`, at most 60 characters. */
 export const projectFolderName = (title: string): string => title.replace(/\//g, '-').trim().slice(0, 60);
 
-export interface PickedDriveFile {
+export interface PickedDocumentsFile {
   id: string;
   name: string;
   path: string;
@@ -28,19 +28,19 @@ export interface PickedDriveFile {
  * there is one (D22) and on the drive's root otherwise, browses it, and hands back the files picked with their
  * paths. Nothing is uploaded again; a Cloud agent reads the path from its mount.
  */
-export function DriveFilePicker({
+export function DocumentsFilePicker({
   projectFolder,
   onClose,
   onPick,
 }: {
   projectFolder?: { id: string; title: string } | null;
   onClose: () => void;
-  onPick: (files: PickedDriveFile[]) => void;
+  onPick: (files: PickedDocumentsFile[]) => void;
 }) {
   const [moved, setMoved] = useState<Crumb[] | null>(null);
-  const [picked, setPicked] = useState<ReadonlyMap<string, PickedDriveFile>>(new Map());
+  const [picked, setPicked] = useState<ReadonlyMap<string, PickedDocumentsFile>>(new Map());
   const [search, setSearch] = useState('');
-  const root = useQuery(driveFolderQuery(null));
+  const root = useQuery(documentsFolderQuery(null));
   // The project's folder is looked for by its name, with the short id suffix a clash adds; none found: the root.
   const wanted = projectFolder ? projectFolderName(projectFolder.title) : null;
   const projectCrumb: Crumb | null =
@@ -51,12 +51,12 @@ export function DriveFilePicker({
       : null;
   const trail: Crumb[] = moved ?? [{ id: null, name: 'Documents' }, ...(projectCrumb ? [{ id: projectCrumb.id, name: projectCrumb.name }] : [])];
   const here = trail[trail.length - 1]!;
-  const listing = useQuery({ ...driveFolderQuery(here.id), enabled: root.isSuccess || root.isError });
-  const folderPath = [DRIVE_MOUNT, ...trail.slice(1).map((c) => c.name)].join('/');
+  const listing = useQuery({ ...documentsFolderQuery(here.id), enabled: root.isSuccess || root.isError });
+  const folderPath = [DOCUMENTS_MOUNT, ...trail.slice(1).map((c) => c.name)].join('/');
   // A search looks through the whole drive; its results carry the folder each file is in.
   const needle = useSettled(search.trim());
   const searching = search.trim() !== '';
-  const found = useQuery({ ...driveSearchQuery(needle), enabled: needle !== '' });
+  const found = useQuery({ ...documentsSearchQuery(needle), enabled: needle !== '' });
   const listed = listing.data?.entries ?? [];
   const entries = searching ? (found.data?.entries ?? []).filter((e) => e.kind === 'FILE') : listed;
   const source = searching ? found : listing;
@@ -118,7 +118,7 @@ export function DriveFilePicker({
               role="option"
               aria-selected={picked.has(entry.id)}
               className={`drive-picker-row${picked.has(entry.id) ? ' picked' : ''}`}
-              onClick={() => toggle(entry.name, entry.id, searching ? `${DRIVE_MOUNT}${entry.path ?? `/${entry.name}`}` : `${folderPath}/${entry.name}`)}
+              onClick={() => toggle(entry.name, entry.id, searching ? `${DOCUMENTS_MOUNT}${entry.path ?? `/${entry.name}`}` : `${folderPath}/${entry.name}`)}
             >
               {picked.has(entry.id) ? <CheckOutlined aria-hidden="true" /> : <FileOutlined aria-hidden="true" />}
               <span className="drive-picker-name">

@@ -9,13 +9,13 @@ import { api, ApiError, authedFetch, type ShareLink } from '../api';
  */
 
 /** Who last wrote an entry or a version (§3.6). An agent's session is kept only where the door could check it. */
-export interface DriveWriter {
+export interface DocumentsWriter {
   kind: 'OWNER' | 'AGENT' | string;
   sessionId: string | null;
   runnerId: string | null;
 }
 
-export interface DriveEntry {
+export interface DocumentsEntry {
   id: string;
   parentId: string | null;
   kind: 'FILE' | 'FOLDER' | string;
@@ -26,7 +26,7 @@ export interface DriveEntry {
   seq: number;
   createdAt: string;
   updatedAt: string;
-  lastWriter: DriveWriter & { at: string };
+  lastWriter: DocumentsWriter & { at: string };
   trashedAt: string | null;
   trashGroupId: string | null;
   /** On a read of one entry: `/a/b/name` under the drive's root. */
@@ -35,25 +35,25 @@ export interface DriveEntry {
   folderPath?: string;
 }
 
-export interface DriveListing {
-  folder: DriveEntry;
-  entries: DriveEntry[];
+export interface DocumentsListing {
+  folder: DocumentsEntry;
+  entries: DocumentsEntry[];
   nextCursor: string | null;
 }
 
-export interface DriveVersion {
+export interface DocumentsVersion {
   id: string;
   entryId: string;
   sizeBytes: number;
   chunkCount: number;
   createdAt: string;
   current: boolean;
-  writer: DriveWriter;
+  writer: DocumentsWriter;
   replacedAt: string | null;
   trashGroupId: string | null;
 }
 
-export interface DriveTrashGroup {
+export interface DocumentsTrashGroup {
   id: string;
   kind: 'DELETE' | 'VERSION' | string;
   folderId: string | null;
@@ -61,33 +61,33 @@ export interface DriveTrashGroup {
   createdAt: string;
   itemCount: number;
   sizeBytes: number;
-  actor: DriveWriter;
-  items: DriveEntry[];
-  version: (DriveVersion & { entry: DriveEntry }) | null;
+  actor: DocumentsWriter;
+  items: DocumentsEntry[];
+  version: (DocumentsVersion & { entry: DocumentsEntry }) | null;
 }
 
 /** What the share check found (§9): the shape and line of a credential, never the credential itself. */
-export interface DriveShareWarning {
+export interface DocumentsShareWarning {
   kind: string;
   line: number;
 }
 
-export interface DriveShareCheck {
+export interface DocumentsShareCheck {
   versionId: string;
-  warnings: DriveShareWarning[];
+  warnings: DocumentsShareWarning[];
   checkedBytes: number;
   /** Only the start of the file was read: the scan stops at 25 MiB or 20 s. */
   partial: boolean;
 }
 
 /** A drive file's link as `GET /share-links?kind=DRIVE_FILE` lists it; `root.pinnedIsCurrent` is false once the file moved on. */
-export type DriveShareLink = Omit<ShareLink, 'kind' | 'root'> & {
+export type DocumentsShareLink = Omit<ShareLink, 'kind' | 'root'> & {
   kind: 'DRIVE_FILE';
   root: { id: string; title: string; pinnedIsCurrent: boolean };
 };
 
-export interface DriveShareAnswer extends Omit<DriveShareCheck, 'versionId'> {
-  link: DriveShareLink;
+export interface DocumentsShareAnswer extends Omit<DocumentsShareCheck, 'versionId'> {
+  link: DocumentsShareLink;
 }
 
 const enc = encodeURIComponent;
@@ -95,38 +95,38 @@ const enc = encodeURIComponent;
 // ── reads ──────────────────────────────────────────────────────────────────────────────────────
 
 /** Every page of a folder (the root when `parentId` is null): a folder is read whole, a thousand names a page. */
-export async function listFolder(parentId: string | null): Promise<DriveListing> {
+export async function listFolder(parentId: string | null): Promise<DocumentsListing> {
   let cursor: string | null = null;
-  let listing: DriveListing | null = null;
+  let listing: DocumentsListing | null = null;
   do {
     const params = new URLSearchParams({ limit: '1000' });
     if (parentId) params.set('parentId', parentId);
     if (cursor) params.set('cursor', cursor);
-    const page: DriveListing = await api<DriveListing>(`/drive/entries?${params}`);
+    const page: DocumentsListing = await api<DocumentsListing>(`/drive/entries?${params}`);
     listing = listing ? { ...page, entries: [...listing.entries, ...page.entries] } : page;
     cursor = page.nextCursor;
   } while (cursor);
   return listing;
 }
 
-export const driveFolderQuery = (parentId: string | null) =>
+export const documentsFolderQuery = (parentId: string | null) =>
   queryOptions({
     queryKey: ['drive', 'folder', parentId] as const,
     meta: { entities: ['drive'] },
     queryFn: () => listFolder(parentId),
   });
 
-export interface DriveSearchResult {
-  entries: DriveEntry[];
+export interface DocumentsSearchResult {
+  entries: DocumentsEntry[];
   nextCursor: string | null;
 }
 
 /** Live entries anywhere in the drive whose name contains `q`, each with its path and folder (the first page, by name). */
-export const driveSearchQuery = (q: string) =>
+export const documentsSearchQuery = (q: string) =>
   queryOptions({
     queryKey: ['drive', 'search', q] as const,
     meta: { entities: ['drive'] },
-    queryFn: () => api<DriveSearchResult>(`/drive/search?${new URLSearchParams({ q, limit: '100' })}`),
+    queryFn: () => api<DocumentsSearchResult>(`/drive/search?${new URLSearchParams({ q, limit: '100' })}`),
   });
 
 /** `value` once it has stood still for `ms`: what a search box asks the server with. */
@@ -139,85 +139,85 @@ export function useSettled(value: string, ms = 250): string {
   return settled;
 }
 
-export const driveEntryQuery = (id: string | null) =>
+export const documentsEntryQuery = (id: string | null) =>
   queryOptions({
     queryKey: ['drive', 'entry', id] as const,
     meta: { entities: ['drive'] },
-    queryFn: () => api<DriveEntry>(`/drive/entries/${enc(id!)}`),
+    queryFn: () => api<DocumentsEntry>(`/drive/entries/${enc(id!)}`),
     enabled: id != null,
   });
 
-export const driveVersionsQuery = (fileId: string | null) =>
+export const documentsVersionsQuery = (fileId: string | null) =>
   queryOptions({
     queryKey: ['drive', 'versions', fileId] as const,
     meta: { entities: ['drive'] },
-    queryFn: () => api<{ entry: DriveEntry; versions: DriveVersion[] }>(`/drive/entries/${enc(fileId!)}/versions`),
+    queryFn: () => api<{ entry: DocumentsEntry; versions: DocumentsVersion[] }>(`/drive/entries/${enc(fileId!)}/versions`),
     enabled: fileId != null,
   });
 
-export async function listTrash(): Promise<DriveTrashGroup[]> {
+export async function listTrash(): Promise<DocumentsTrashGroup[]> {
   let cursor: string | null = null;
-  const groups: DriveTrashGroup[] = [];
+  const groups: DocumentsTrashGroup[] = [];
   do {
     const params = new URLSearchParams({ limit: '200' });
     if (cursor) params.set('cursor', cursor);
-    const page: { groups: DriveTrashGroup[]; nextCursor: string | null } = await api(`/drive/trash?${params}`);
+    const page: { groups: DocumentsTrashGroup[]; nextCursor: string | null } = await api(`/drive/trash?${params}`);
     groups.push(...page.groups);
     cursor = page.nextCursor;
   } while (cursor);
   return groups;
 }
 
-export const driveTrashQuery = () =>
+export const documentsTrashQuery = () =>
   queryOptions({ queryKey: ['drive', 'trash'] as const, meta: { entities: ['drive'] }, queryFn: listTrash });
 
 /** The drive files' links, asked for by name: Settings → Shared links does not ask for this kind. */
-export const driveShareLinksQuery = () =>
+export const documentsShareLinksQuery = () =>
   queryOptions({
     queryKey: ['drive', 'share-links'] as const,
     meta: { entities: ['drive'] },
     queryFn: async () =>
-      (await api<{ links: DriveShareLink[] }>('/share-links?kind=DRIVE_FILE')).links.filter(
+      (await api<{ links: DocumentsShareLink[] }>('/share-links?kind=DRIVE_FILE')).links.filter(
         (link) => link.kind === 'DRIVE_FILE' && link.state !== 'ENDED',
       ),
   });
 
 // ── writes ─────────────────────────────────────────────────────────────────────────────────────
 
-export const createDriveFolder = (parentId: string | null, name: string) =>
-  api<DriveEntry>('/drive/folders', { method: 'POST', body: { ...(parentId ? { parentId } : {}), name } });
+export const createDocumentsFolder = (parentId: string | null, name: string) =>
+  api<DocumentsEntry>('/drive/folders', { method: 'POST', body: { ...(parentId ? { parentId } : {}), name } });
 
-export const renameDriveEntry = (id: string, name: string) =>
-  api<DriveEntry>(`/drive/entries/${enc(id)}`, { method: 'PATCH', body: { name } });
+export const renameDocumentsEntry = (id: string, name: string) =>
+  api<DocumentsEntry>(`/drive/entries/${enc(id)}`, { method: 'PATCH', body: { name } });
 
-export const moveDriveEntry = (id: string, parentId: string) =>
-  api<DriveEntry>(`/drive/entries/${enc(id)}`, { method: 'PATCH', body: { parentId } });
+export const moveDocumentsEntry = (id: string, parentId: string) =>
+  api<DocumentsEntry>(`/drive/entries/${enc(id)}`, { method: 'PATCH', body: { parentId } });
 
 /** Move to Trash; the group it answers is what Undo restores. */
-export const trashDriveEntry = (id: string) =>
+export const trashDocumentsEntry = (id: string) =>
   api<{ trashGroupId: string }>(`/drive/entries/${enc(id)}`, { method: 'DELETE' });
 
 /** Restore one item of a group (and what hangs under it), leaving the rest in Trash (board frame 6, rule 3). */
-export const restoreDriveItem = (groupId: string, entryId: string) =>
+export const restoreDocumentsItem = (groupId: string, entryId: string) =>
   api<{ entryIds: string[] }>(`/drive/trash/groups/${enc(groupId)}/items/${enc(entryId)}/restore`, { method: 'POST' });
 
-export const restoreDriveGroup = (groupId: string) =>
+export const restoreDocumentsGroup = (groupId: string) =>
   api<{ entryIds: string[] }>(`/drive/trash/groups/${enc(groupId)}/restore`, { method: 'POST' });
 
-export const deleteDriveGroup = (groupId: string) =>
+export const deleteDocumentsGroup = (groupId: string) =>
   api<{ deleted: true }>(`/drive/trash/groups/${enc(groupId)}`, { method: 'DELETE' });
 
-export const emptyDriveTrash = () => api<{ deleted: true }>('/drive/trash', { method: 'DELETE' });
+export const emptyDocumentsTrash = () => api<{ deleted: true }>('/drive/trash', { method: 'DELETE' });
 
-export const restoreDriveVersion = (versionId: string, as: 'CURRENT' | 'COPY') =>
-  api<DriveEntry>(`/drive/versions/${enc(versionId)}/restore`, { method: 'POST', body: { as } });
+export const restoreDocumentsVersion = (versionId: string, as: 'CURRENT' | 'COPY') =>
+  api<DocumentsEntry>(`/drive/versions/${enc(versionId)}/restore`, { method: 'POST', body: { as } });
 
-export const checkDriveShare = (fileId: string) =>
-  api<DriveShareCheck>(`/drive/entries/${enc(fileId)}/share-check`, { method: 'POST' });
+export const checkDocumentsShare = (fileId: string) =>
+  api<DocumentsShareCheck>(`/drive/entries/${enc(fileId)}/share-check`, { method: 'POST' });
 
 /** Share the file's current version, or move its link there ("Share this version"). Only the owner's login reaches it. */
-export const shareDriveFile = (fileId: string) =>
-  api<DriveShareAnswer>('/share-links', { method: 'POST', body: { kind: 'DRIVE_FILE', driveEntryId: fileId } });
+export const shareDocumentsFile = (fileId: string) =>
+  api<DocumentsShareAnswer>('/share-links', { method: 'POST', body: { kind: 'DRIVE_FILE', driveEntryId: fileId } });
 
 export const stopSharing = (linkId: string) => api<void>(`/share-links/${enc(linkId)}`, { method: 'DELETE' });
 
@@ -226,7 +226,7 @@ export const stopSharing = (linkId: string) => api<void>(`/share-links/${enc(lin
  * that needs no login header, and the page navigates to it, so the browser streams the bytes to disk with its download
  * manager however large the file is (D12). Nothing is read into the page.
  */
-export async function downloadDriveFile(fileId: string, versionId?: string): Promise<void> {
+export async function downloadDocumentsFile(fileId: string, versionId?: string): Promise<void> {
   const { path } = await api<{ path: string; expiresAt: string }>(`/drive/entries/${enc(fileId)}/download-link`, {
     method: 'POST',
     body: versionId ? { versionId } : {},
@@ -240,7 +240,7 @@ export async function downloadDriveFile(fileId: string, versionId?: string): Pro
 }
 
 /** A file's bytes (or one version's) as a blob, for a preview: `maxBytes` reads only the start. Never a download. */
-export async function driveBlob(path: 'entries' | 'versions', id: string, maxBytes?: number): Promise<Blob> {
+export async function documentsBlob(path: 'entries' | 'versions', id: string, maxBytes?: number): Promise<Blob> {
   const res = await authedFetch(`/api/drive/${path}/${enc(id)}/content`, {
     headers: maxBytes ? { range: `bytes=0-${maxBytes - 1}` } : {},
   });
@@ -313,8 +313,8 @@ export const PICTURE_PREVIEW_BYTES = 30 * 1024 * 1024;
  * `trashGroupOf` says which group each such file went in (a file deep in a deleted folder is not one of its top items).
  */
 export function groupEndsALink(
-  group: DriveTrashGroup,
-  links: readonly DriveShareLink[],
+  group: DocumentsTrashGroup,
+  links: readonly DocumentsShareLink[],
   trashGroupOf: ReadonlyMap<string, string | null>,
 ): boolean {
   if (group.version) {

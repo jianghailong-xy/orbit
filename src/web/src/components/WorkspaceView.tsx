@@ -390,7 +390,7 @@ import {
 } from './RunNeverStartedCard';
 import { claudeRegionHeld, claudeRegionHeldWords, useClaudeRegionCheckAgain } from '../lib/claudeRegion';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
-import { DriveFilePicker } from './files/DriveFilePicker';
+import { DocumentsFilePicker } from './documents/DocumentsFilePicker';
 import { AntigravityRepairCard, antigravityRepair, AttachmentImage, TurnStatusFootCtx, type AuthErrorHelp, type AutoRetryHelp, type CursorQuotaHelp, QueuedUserTurn, type SandboxFixHelp, type SteerWithdrawHandle, type TurnAttachmentRef, type TurnImage, type UnreadSteer, unreadSteersOf } from './Transcript';
 import { PendingTray, type PendingTrayRow } from './PendingTray';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
@@ -12412,7 +12412,7 @@ export function SessionComposer({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // The `+` menu's Documents picker (board docs/mocks/orbit-files, 02-web frame 8).
-  const [drivePickerOpen, setDrivePickerOpen] = useState(false);
+  const [documentsPickerOpen, setDocumentsPickerOpen] = useState(false);
   // Manual composer height (px). null = autoSize auto-grow (up to maxRows); once the user
   // drags the top handle, that height wins over autoSize until they double-click to reset.
   const [composerHeight, setComposerHeight] = useState<number | null>(null);
@@ -12605,7 +12605,7 @@ export function SessionComposer({
   // shell command (run on the runner, bypassing claude). The user types the command after.
   // Files the drive picker returned go into the draft as chips (`#name`, like a `#` reference) that are sent as their
   // `/home/orbit/Documents/…` paths, so the box shows names and the agent gets paths (board 02-web frame 8).
-  const insertDriveFiles = (files: { id: string; name: string; path: string }[]): void => {
+  const insertDocumentsFiles = (files: { id: string; name: string; path: string }[]): void => {
     let refs = composerRefs;
     let chips = '';
     for (const file of files) {
@@ -12617,7 +12617,7 @@ export function SessionComposer({
     }
     setComposerRefs(refs);
     setText((t) => `${t}${t && !/\s$/.test(t) ? ' ' : ''}${chips}`);
-    setDrivePickerOpen(false);
+    setDocumentsPickerOpen(false);
     setTimeout(() => taRef.current?.focus(), 0);
   };
   const insertShell = (): void => {
@@ -13123,7 +13123,7 @@ export function SessionComposer({
                 key: 'drive',
                 icon: <FolderOpenOutlined />,
                 label: 'Documents',
-                onSelect: () => setTimeout(() => setDrivePickerOpen(true), 0),
+                onSelect: () => setTimeout(() => setDocumentsPickerOpen(true), 0),
               },
               { key: 'divider', type: 'separator' },
               {
@@ -13175,15 +13175,15 @@ export function SessionComposer({
             align="start"
             arrow={false}
             title={null}
-            open={drivePickerOpen}
-            onOpenChange={setDrivePickerOpen}
+            open={documentsPickerOpen}
+            onOpenChange={setDocumentsPickerOpen}
             disabled={composerDisabled}
             popupClassName="drive-picker-popover"
             // No chip of its own: the picker opens from the `+` menu's Documents, and this
             // zero-width, unfocusable button only anchors it beside the `+`.
             trigger={<button type="button" className="composer-drive-anchor" tabIndex={-1} aria-hidden="true" />}
           >
-            <DriveFilePicker projectFolder={projectFolder} onClose={() => setDrivePickerOpen(false)} onPick={insertDriveFiles} />
+            <DocumentsFilePicker projectFolder={projectFolder} onClose={() => setDocumentsPickerOpen(false)} onPick={insertDocumentsFiles} />
           </Popover>
         )}
         {/* The workspace is only a Select when it can actually be picked (new, unlocked

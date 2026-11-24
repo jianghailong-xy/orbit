@@ -630,7 +630,7 @@ type ToolNode = {
   // `seq` is the *result* event's own seq (≠ the call's), which is what refetches its content.
   result?: { content: any; isError?: boolean; seq: number; truncated?: boolean; ts?: string };
   children: Node[];
-  // When the call was made; with the result's, how long a drive transfer took (DriveTransferCard).
+  // When the call was made; with the result's, how long a drive transfer took (DocumentsTransferCard).
   ts?: string;
 };
 type TextNode = {
@@ -2163,7 +2163,7 @@ export interface TranscriptInsert {
 type NodeListItem =
   | { kind: 'node'; node: Node }
   | { kind: 'steps'; key: string; nodes: Node[] }
-  | { kind: 'drive'; key: string; transfer: DriveTransferKind; nodes: ToolNode[] };
+  | { kind: 'drive'; key: string; transfer: DocumentsTransferKind; nodes: ToolNode[] };
 
 function NodeList({
   nodes,
@@ -2192,7 +2192,7 @@ function NodeList({
       item.kind === 'steps' ? (
         <StepsLine key={item.key} nodes={item.nodes} live={live} />
       ) : item.kind === 'drive' ? (
-        <DriveTransferItem key={item.key} transfer={item.transfer} nodes={item.nodes} live={!!live} />
+        <DocumentsTransferItem key={item.key} transfer={item.transfer} nodes={item.nodes} live={!!live} />
       ) : (
         <NodeView key={item.node.seq} node={item.node} live={live} />
       ),
@@ -2419,7 +2419,7 @@ function groupToolRuns(nodes: Node[], chat = false): NodeListItem[] {
   for (const node of nodes) {
     // An agent's drive_put or drive_get calls are one transfer card, which only thinking may sit inside: the thinking
     // is drawn under the card, so the calls stay together.
-    const transfer = node.kind === 'tool' && node.children.length === 0 ? driveTransferKind(node.name) : null;
+    const transfer = node.kind === 'tool' && node.children.length === 0 ? documentsTransferKind(node.name) : null;
     if (transfer) {
       const last = out[out.length - 1];
       if (last?.kind === 'drive' && last.transfer === transfer && run.every((n) => n.kind === 'thinking')) {
@@ -2442,10 +2442,10 @@ function groupToolRuns(nodes: Node[], chat = false): NodeListItem[] {
 }
 
 /** A run of drive calls as its transfer card: each call's file from its input, its result, or its live byte count. */
-function DriveTransferItem({ transfer, nodes, live }: { transfer: DriveTransferKind; nodes: ToolNode[]; live: boolean }) {
+function DocumentsTransferItem({ transfer, nodes, live }: { transfer: DocumentsTransferKind; nodes: ToolNode[]; live: boolean }) {
   const outputs = useContext(LiveToolOutputsCtx);
   const files = nodes.map((node) =>
-    driveTransferFile({
+    documentsTransferFile({
       id: node.id || String(node.seq),
       toolInput: node.input,
       result: node.result && { text: resultText(node.result.content), isError: node.result.isError },
@@ -2455,7 +2455,7 @@ function DriveTransferItem({ transfer, nodes, live }: { transfer: DriveTransferK
       resultTs: node.result?.ts,
     }),
   );
-  return <DriveTransferCard kind={transfer} files={files} live={live} />;
+  return <DocumentsTransferCard kind={transfer} files={files} live={live} />;
 }
 
 // Calls that render as their own card — an approval, a plan, a spawned child session, a
@@ -4151,9 +4151,9 @@ function CodeBlock({ children }: any) {
   );
 }
 
-import { DriveFileCard, driveIdFromHref } from './files/DriveFileCard';
-import { DriveTransferCard } from './files/DriveTransferCard';
-import { driveTransferFile, driveTransferKind, type DriveTransferKind } from '../lib/driveTransfer';
+import { DocumentsFileCard, documentsIdFromHref } from './documents/DocumentsFileCard';
+import { DocumentsTransferCard } from './documents/DocumentsTransferCard';
+import { documentsTransferFile, documentsTransferKind, type DocumentsTransferKind } from '../lib/documentsTransfer';
 
 const ORBIT_ATTACHMENT_PREFIX = 'orbit-attachment:';
 
@@ -4175,7 +4175,7 @@ function attachmentIdFromSrc(src: unknown): string | null {
 function transcriptUrlTransform(url: string): string {
   const trimmed = url.trim();
   if (trimmed.startsWith(ORBIT_ATTACHMENT_PREFIX)) return trimmed;
-  if (driveIdFromHref(trimmed)) return trimmed;
+  if (documentsIdFromHref(trimmed)) return trimmed;
   return referenceUrlTransform(url);
 }
 
@@ -4234,8 +4234,8 @@ function fileLabel(src: string): string {
 }
 
 function MarkdownImage({ node: _node, src, alt, className: _className, ...rest }: any) {
-  const driveId = driveIdFromHref(src);
-  if (driveId) return <DriveFileCard id={driveId} label={typeof alt === 'string' ? alt : undefined} />;
+  const documentsId = documentsIdFromHref(src);
+  if (documentsId) return <DocumentsFileCard id={documentsId} label={typeof alt === 'string' ? alt : undefined} />;
   const id = attachmentIdFromSrc(src);
   if (id) {
     return (
@@ -4371,8 +4371,8 @@ function nodeText(node: ReactNode): string {
 
 function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
   const exp = useContext(ExportCtx);
-  const driveId = driveIdFromHref(href);
-  if (driveId) return <DriveFileCard id={driveId} label={nodeText(children).trim() || undefined} />;
+  const documentsId = documentsIdFromHref(href);
+  if (documentsId) return <DocumentsFileCard id={documentsId} label={nodeText(children).trim() || undefined} />;
   const id = attachmentIdFromSrc(href);
   if (id) {
     const name = typeof title === 'string' && title.trim() ? title.trim() : nodeText(children).trim() || undefined;

@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type RunEvent, Transcript } from './Transcript';
-import { DriveFilePicker } from './files/DriveFilePicker';
+import { DocumentsFilePicker } from './documents/DocumentsFilePicker';
 import { materializeReferences } from '../lib/composerRefs';
 
 /**
@@ -65,7 +65,7 @@ describe('a reply linking a drive file', () => {
     const card = container.querySelector<HTMLAnchorElement>('a.drive-file-card');
     expect(card?.textContent).toContain('sign-in-copy.md');
     expect(card?.textContent).toContain('Documents › Orbit UI migration · 4.1 KB');
-    expect(card?.getAttribute('href')).toBe('/files?folder=f1&file=e1');
+    expect(card?.getAttribute('href')).toBe('/documents?folder=f1&file=e1');
   });
 
   it('says so when the file is in Trash', async () => {
@@ -105,7 +105,7 @@ describe('the composer drive picker', () => {
   it('hands back the picked file with its path, browsing from the root', async () => {
     serve();
     const onPick = vi.fn();
-    await mount(<DriveFilePicker onClose={() => {}} onPick={onPick} />);
+    await mount(<DocumentsFilePicker onClose={() => {}} onPick={onPick} />);
     await click(option('Orbit UI migration'));
     await click(option('sign-in-copy.md'));
     await click([...document.body.querySelectorAll('button')].find((b) => b.textContent === 'Add 1'));
@@ -115,7 +115,7 @@ describe('the composer drive picker', () => {
   it("opens on the session's project folder", async () => {
     serve();
     const onPick = vi.fn();
-    await mount(<DriveFilePicker projectFolder={{ id: 'p1', title: 'Orbit UI migration' }} onClose={() => {}} onPick={onPick} />);
+    await mount(<DocumentsFilePicker projectFolder={{ id: 'p1', title: 'Orbit UI migration' }} onClose={() => {}} onPick={onPick} />);
     await click(option('sign-in-copy.md'));
     await click([...document.body.querySelectorAll('button')].find((b) => b.textContent === 'Add 1'));
     expect(onPick.mock.calls[0]![0][0].path).toBe('/home/orbit/Documents/Orbit UI migration/sign-in-copy.md');
@@ -123,7 +123,7 @@ describe('the composer drive picker', () => {
 
   it('falls back to the drive root when the project has no folder yet', async () => {
     serve();
-    await mount(<DriveFilePicker projectFolder={{ id: 'p1', title: 'Brand new' }} onClose={() => {}} onPick={() => {}} />);
+    await mount(<DocumentsFilePicker projectFolder={{ id: 'p1', title: 'Brand new' }} onClose={() => {}} onPick={() => {}} />);
     expect(option('Orbit UI migration')).toBeTruthy();
     expect(option('Other')).toBeTruthy();
   });
@@ -138,7 +138,7 @@ describe('the composer drive picker', () => {
       return listing({ id: 'root' }, [{ id: 'f2', kind: 'FOLDER', name: 'Other', sizeBytes: 0 }]);
     });
     const onPick = vi.fn();
-    await mount(<DriveFilePicker onClose={() => {}} onPick={onPick} />);
+    await mount(<DocumentsFilePicker onClose={() => {}} onPick={onPick} />);
     const box = document.body.querySelector<HTMLInputElement>('input[aria-label="Search Files"]')!;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(box, 'budg');

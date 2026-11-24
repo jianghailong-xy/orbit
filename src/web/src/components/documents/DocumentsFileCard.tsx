@@ -1,18 +1,18 @@
-import '../../pages/FilesPage.css';
+import '../../pages/DocumentsPage.css';
 import { FileOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { driveEntryQuery, formatSize } from '../../lib/drive';
+import { documentsEntryQuery, formatSize } from '../../lib/documents';
 import { ApiError } from '../../api';
 
-export const DRIVE_LINK_PREFIX = 'orbit-drive:';
+export const DOCUMENTS_LINK_PREFIX = 'orbit-drive:';
 
 /** The entry id in an `orbit-drive:<id>` link (design §4.5), or null when `href` is not one. */
-export function driveIdFromHref(href: unknown): string | null {
+export function documentsIdFromHref(href: unknown): string | null {
   if (typeof href !== 'string') return null;
   const trimmed = href.trim();
-  if (!trimmed.toLowerCase().startsWith(DRIVE_LINK_PREFIX)) return null;
-  return trimmed.slice(DRIVE_LINK_PREFIX.length).trim().split(/\s+/, 1)[0] || null;
+  if (!trimmed.toLowerCase().startsWith(DOCUMENTS_LINK_PREFIX)) return null;
+  return trimmed.slice(DOCUMENTS_LINK_PREFIX.length).trim().split(/\s+/, 1)[0] || null;
 }
 
 /** The folder a path sits in, as the board's card writes it: `Files › Orbit UI migration`. */
@@ -25,8 +25,8 @@ function folderTrail(path: string | undefined): string {
  * A reply's `orbit-drive:<id>` link drawn as that drive file (board 02-web frame 8): name, folder and size, read live so a
  * later overwrite shows, and a click opens it on the Files page. A file that went to Trash or is gone says so instead.
  */
-export function DriveFileCard({ id, label }: { id: string; label?: string }) {
-  const entry = useQuery(driveEntryQuery(id));
+export function DocumentsFileCard({ id, label }: { id: string; label?: string }) {
+  const entry = useQuery(documentsEntryQuery(id));
   if (entry.isPending) {
     return <span className="drive-file-card loading">{label || 'Loading file…'}</span>;
   }
@@ -43,7 +43,7 @@ export function DriveFileCard({ id, label }: { id: string; label?: string }) {
       </span>
     );
   }
-  const to = `/files?${new URLSearchParams({ ...(file.parentId ? { folder: file.parentId } : {}), file: file.id })}`;
+  const to = `/documents?${new URLSearchParams({ ...(file.parentId ? { folder: file.parentId } : {}), file: file.id })}`;
   return (
     <Link className="drive-file-card" to={to}>
       <FileOutlined aria-hidden="true" />

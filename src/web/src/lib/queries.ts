@@ -1919,7 +1919,7 @@ export const linkPreviewsQuery = (refs: readonly LinkPreviewRef[]) =>
   });
 
 /** What `GET /drive/usage` answers: the account's total split into the drive's share (Trash included) and the rest, each byte once. */
-export interface DriveUsage {
+export interface DocumentsUsage {
   totalBytes: number;
   driveBytes: number;
   trashBytes: number;
@@ -1929,8 +1929,8 @@ export interface DriveUsage {
   nearQuota?: boolean;
 }
 
-export const driveUsageQuery = () =>
+export const documentsUsageQuery = () =>
   queryOptions({
     queryKey: ['drive', 'usage'] as const,
-    queryFn: () => api<DriveUsage>('/drive/usage'),
+    queryFn: () => api<DocumentsUsage>('/drive/usage'),
   });

@@ -1,19 +1,19 @@
-import '../../pages/FilesPage.css';
+import '../../pages/DocumentsPage.css';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { driveEntryQuery, formatSize } from '../../lib/drive';
+import { documentsEntryQuery, formatSize } from '../../lib/documents';
 import {
   durationText,
   filesText,
   rateText,
-  summarizeDriveTransfer,
+  summarizeDocumentsTransfer,
   timeLeftText,
   transferRate,
-  type DriveTransferFile,
-  type DriveTransferKind,
-} from '../../lib/driveTransfer';
-import { driveIdFromHref } from './DriveFileCard';
+  type DocumentsTransferFile,
+  type DocumentsTransferKind,
+} from '../../lib/documentsTransfer';
+import { documentsIdFromHref } from './DocumentsFileCard';
 
 /** Rows a long transfer shows before "Show all". */
 const ROWS_SHOWN = 8;
@@ -28,17 +28,17 @@ const WORDS = {
 const baseName = (p: string) => p.split('/').pop() || p;
 
 /** A link to a file the transfer put in Files: its folder opens with it selected. */
-function DriveEntryLink({ link, children }: { link?: string; children: ReactNode }) {
+function DocumentsEntryLink({ link, children }: { link?: string; children: ReactNode }) {
   const client = useQueryClient();
   const navigate = useNavigate();
-  const id = driveIdFromHref(link);
+  const id = documentsIdFromHref(link);
   if (!id) return <>{children}</>;
   const open = async () => {
     try {
-      const entry = await client.fetchQuery(driveEntryQuery(id));
-      navigate(`/files?${new URLSearchParams({ ...(entry?.parentId ? { folder: entry.parentId } : {}), file: id })}`);
+      const entry = await client.fetchQuery(documentsEntryQuery(id));
+      navigate(`/documents?${new URLSearchParams({ ...(entry?.parentId ? { folder: entry.parentId } : {}), file: id })}`);
     } catch {
-      navigate(`/files?${new URLSearchParams({ file: id })}`);
+      navigate(`/documents?${new URLSearchParams({ file: id })}`);
     }
   };
   return (
@@ -91,7 +91,7 @@ function Bar({ fraction, tone, label }: { fraction: number; tone?: 'ok' | 'warn'
   );
 }
 
-function FileRow({ file, kind, folder }: { file: DriveTransferFile; kind: DriveTransferKind; folder: string }) {
+function FileRow({ file, kind, folder }: { file: DocumentsTransferFile; kind: DocumentsTransferKind; folder: string }) {
   const name = baseName(file.path);
   const mark = { done: '✓', failed: '✕', running: WORDS[kind].arrow, waiting: '·', stopped: '–' }[file.status];
   const size =
@@ -110,7 +110,7 @@ function FileRow({ file, kind, folder }: { file: DriveTransferFile; kind: DriveT
         {mark}
       </span>
       <span className="drive-xfer-name">
-        {file.status === 'done' ? <DriveEntryLink link={file.link}>{name}</DriveEntryLink> : name}
+        {file.status === 'done' ? <DocumentsEntryLink link={file.link}>{name}</DocumentsEntryLink> : name}
       </span>
       <span className="drive-xfer-size">{size}</span>
       {file.status === 'running' && file.size !== null && (
@@ -122,7 +122,7 @@ function FileRow({ file, kind, folder }: { file: DriveTransferFile; kind: DriveT
 }
 
 /** The rows a long transfer shows: around the file going now, or the failed ones first once it is over. */
-function shownRows(files: DriveTransferFile[], all: boolean): DriveTransferFile[] {
+function shownRows(files: DocumentsTransferFile[], all: boolean): DocumentsTransferFile[] {
   if (all || files.length <= ROWS_SHOWN) return files;
   const running = files.findIndex((f) => f.status === 'running' || f.status === 'waiting');
   if (running < 0) {
@@ -133,7 +133,7 @@ function shownRows(files: DriveTransferFile[], all: boolean): DriveTransferFile[
   return files.slice(start, start + ROWS_SHOWN);
 }
 
-function FileList({ files, kind, folder }: { files: DriveTransferFile[]; kind: DriveTransferKind; folder: string }) {
+function FileList({ files, kind, folder }: { files: DocumentsTransferFile[]; kind: DocumentsTransferKind; folder: string }) {
   const [all, setAll] = useState(false);
   const rows = shownRows(files, all);
   const hidden = files.length - rows.length;
@@ -166,17 +166,17 @@ function FileList({ files, kind, folder }: { files: DriveTransferFile[]; kind: D
  * An agent's run of drive_put or drive_get calls as one card (board docs/mocks/agent-drive-transfer): a bar, the
  * speed and the time left while it goes, a row per file, and one line once every file is in.
  */
-export function DriveTransferCard({
+export function DocumentsTransferCard({
   kind,
   files,
   live,
 }: {
-  kind: DriveTransferKind;
-  files: DriveTransferFile[];
+  kind: DocumentsTransferKind;
+  files: DocumentsTransferFile[];
   live: boolean;
 }) {
   const words = WORDS[kind];
-  const summary = summarizeDriveTransfer(kind, files);
+  const summary = summarizeDocumentsTransfer(kind, files);
   const moving = live && !summary.finished;
   const { rate, stalledMs } = useTransferPace(summary.sentBytes, moving);
   const clean = summary.finished && summary.failed === 0 && summary.stopped === 0;
@@ -190,7 +190,7 @@ export function DriveTransferCard({
   const stalled = moving && summary.sentBytes > 0 && stalledMs >= STALL_MS;
   const firstLink = files.find((f) => f.link)?.link;
 
-  if (files.length === 1) return <DriveTransferLine kind={kind} file={files[0]} rate={moving ? rate : null} />;
+  if (files.length === 1) return <DocumentsTransferLine kind={kind} file={files[0]} rate={moving ? rate : null} />;
 
   const timing = summary.elapsedMs !== null ? ` in ${durationText(summary.elapsedMs)}` : '';
   const average =
@@ -261,7 +261,7 @@ export function DriveTransferCard({
         <span className="drive-xfer-folder">{summary.folder}</span>
         <span className="drive-xfer-actions">
           {summary.finished && kind === 'put' && firstLink && (
-            <DriveEntryLink link={firstLink}>Show in Files</DriveEntryLink>
+            <DocumentsEntryLink link={firstLink}>Show in Files</DocumentsEntryLink>
           )}
           <button type="button" aria-expanded={showFiles} onClick={() => setShowFiles((v) => !v)}>
             {showFiles ? (clean ? 'Hide' : 'Hide files') : 'Show files'}
@@ -283,7 +283,7 @@ export function DriveTransferCard({
 }
 
 /** One file is a line, not a card: going, done, or what stopped it. */
-function DriveTransferLine({ kind, file, rate }: { kind: DriveTransferKind; file: DriveTransferFile; rate: number | null }) {
+function DocumentsTransferLine({ kind, file, rate }: { kind: DocumentsTransferKind; file: DocumentsTransferFile; rate: number | null }) {
   const words = WORDS[kind];
   const name = baseName(file.path);
   if (file.status === 'failed') {
@@ -304,7 +304,7 @@ function DriveTransferLine({ kind, file, rate }: { kind: DriveTransferKind; file
           ✓
         </span>
         <span>
-          {words.went} <DriveEntryLink link={file.link}>{name}</DriveEntryLink>
+          {words.went} <DocumentsEntryLink link={file.link}>{name}</DocumentsEntryLink>
         </span>
         <span className="drive-xfer-muted">
           {file.size !== null && ` · ${formatSize(file.size)}`}

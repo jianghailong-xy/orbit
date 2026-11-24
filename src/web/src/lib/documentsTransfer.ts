@@ -1,28 +1,28 @@
 /**
  * An agent's transfers to and from Orbit Files (`drive_put` / `drive_get`), as the chat's transfer card draws them
- * (DriveTransferCard, board docs/mocks/agent-drive-transfer).
+ * (DocumentsTransferCard, board docs/mocks/agent-drive-transfer).
  *
  * While a call runs, the runner sends its bytes as the call's live `tool_output`, one sentence restating the whole
- * count: "Uploaded 3355443 of 11954323 bytes" (runner-go drive_progress.go, driveProgressLine). The durable
+ * count: "Uploaded 3355443 of 11954323 bytes" (runner-go drive_progress.go, documentsProgressLine). The durable
  * tool_result replaces it when the call ends, so a finished card is drawn from results alone.
  */
-import { formatSize } from './drive';
+import { formatSize } from './documents';
 
-export type DriveTransferKind = 'put' | 'get';
+export type DocumentsTransferKind = 'put' | 'get';
 
-const TOOLS: Record<string, DriveTransferKind> = {
+const TOOLS: Record<string, DocumentsTransferKind> = {
   mcp__orbit__drive_put: 'put',
   mcp__orbit__drive_get: 'get',
 };
 
-export function driveTransferKind(toolName: string): DriveTransferKind | null {
+export function documentsTransferKind(toolName: string): DocumentsTransferKind | null {
   return TOOLS[toolName] ?? null;
 }
 
 const PROGRESS_LINE = /^(Uploaded|Downloaded) (\d+) of (\d+) bytes$/;
 
-/** The bytes a progress line counts, or null when the text is not one. Keep in sync with driveProgressLine. */
-export function parseDriveProgress(content: unknown): { sent: number; size: number } | null {
+/** The bytes a progress line counts, or null when the text is not one. Keep in sync with documentsProgressLine. */
+export function parseDocumentsProgress(content: unknown): { sent: number; size: number } | null {
   if (typeof content !== 'string') return null;
   const match = PROGRESS_LINE.exec(content);
   if (!match) return null;
@@ -33,7 +33,7 @@ export function parseDriveProgress(content: unknown): { sent: number; size: numb
 }
 
 /** A drive path as the owner reads it in Files: `~/Files/a` and the mount's `/run/orbit-files/drive/a` are `/a`. */
-export function driveDisplayPath(raw: unknown): string {
+export function documentsDisplayPath(raw: unknown): string {
   let p = typeof raw === 'string' ? raw.trim() : '';
   for (const prefix of ['~/Files', '/run/orbit-files/drive']) {
     if (p === prefix || p.startsWith(`${prefix}/`)) p = p.slice(prefix.length);
@@ -42,13 +42,13 @@ export function driveDisplayPath(raw: unknown): string {
   return p.replace(/\/+/g, '/');
 }
 
-export type DriveFileStatus = 'waiting' | 'running' | 'done' | 'failed' | 'stopped';
+export type DocumentsFileStatus = 'waiting' | 'running' | 'done' | 'failed' | 'stopped';
 
-export type DriveTransferFile = {
+export type DocumentsTransferFile = {
   id: string;
   /** The file's drive path. */
   path: string;
-  status: DriveFileStatus;
+  status: DocumentsFileStatus;
   /** Bytes moved so far; for a finished file, its size. */
   sent: number;
   /** Null until the call has said how big the file is. */
@@ -61,7 +61,7 @@ export type DriveTransferFile = {
 };
 
 /** What one call's input, result and live line say about its file. */
-export function driveTransferFile(input: {
+export function documentsTransferFile(input: {
   id: string;
   toolInput: unknown;
   result?: { text: string; isError?: boolean };
@@ -69,11 +69,11 @@ export function driveTransferFile(input: {
   live: boolean;
   ts?: string;
   resultTs?: string;
-}): DriveTransferFile {
+}): DocumentsTransferFile {
   const toolInput = (input.toolInput ?? {}) as Record<string, unknown>;
-  const file: DriveTransferFile = {
+  const file: DocumentsTransferFile = {
     id: input.id,
-    path: driveDisplayPath(toolInput.path),
+    path: documentsDisplayPath(toolInput.path),
     status: 'waiting',
     sent: 0,
     size: null,
@@ -92,7 +92,7 @@ export function driveTransferFile(input: {
       ...(typeof answer.link === 'string' && answer.link.startsWith('orbit-drive:') ? { link: answer.link } : {}),
     };
   }
-  const progress = parseDriveProgress(input.progress);
+  const progress = parseDocumentsProgress(input.progress);
   // A call with no result in a session that is no longer running was cut off.
   if (progress) return { ...file, status: input.live ? 'running' : 'stopped', sent: progress.sent, size: progress.size };
   return { ...file, status: input.live ? 'waiting' : 'stopped' };
@@ -131,13 +131,13 @@ export function commonFolder(paths: string[]): string {
   return shared.length ? `/${shared.join('/')}/` : '/';
 }
 
-export type DriveTransferSummary = {
-  kind: DriveTransferKind;
+export type DocumentsTransferSummary = {
+  kind: DocumentsTransferKind;
   folder: string;
   total: number;
   done: number;
   failed: number;
-  running: DriveTransferFile | null;
+  running: DocumentsTransferFile | null;
   waiting: number;
   stopped: number;
   /** Bytes moved by every file so far. */
@@ -151,8 +151,8 @@ export type DriveTransferSummary = {
   elapsedMs: number | null;
 };
 
-export function summarizeDriveTransfer(kind: DriveTransferKind, files: DriveTransferFile[]): DriveTransferSummary {
-  const count = (status: DriveFileStatus) => files.filter((f) => f.status === status).length;
+export function summarizeDocumentsTransfer(kind: DocumentsTransferKind, files: DocumentsTransferFile[]): DocumentsTransferSummary {
+  const count = (status: DocumentsFileStatus) => files.filter((f) => f.status === status).length;
   const running = files.find((f) => f.status === 'running') ?? null;
   const done = count('done');
   const open = files.filter((f) => f.status === 'running' || f.status === 'waiting');
@@ -194,7 +194,7 @@ export function transferRate(samples: ReadonlyArray<{ at: number; bytes: number 
   return Math.max(0, (last.bytes - first.bytes) / (span / 1000));
 }
 
-/** As the Files page's upload tray says it (FilesUploadTray). */
+/** As the Files page's upload tray says it (DocumentsUploadTray). */
 export function timeLeftText(leftBytes: number, rate: number): string | null {
   if (!rate) return null;
   const seconds = leftBytes / rate;
