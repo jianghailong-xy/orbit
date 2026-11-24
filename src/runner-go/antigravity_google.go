@@ -58,7 +58,8 @@ func antigravityCredentialEnvKey(key string) bool {
 // antigravityGoogleCommand is the shared entry for login, auth/usage, and Google model reads.
 // HOME, XDG and the empty working directory last only for this invocation; the Gemini directory
 // persists — Default's, or the account's env names (antigravityGoogleDirIn). An unreachable private
-// D-Bus socket keeps agy away from the system's shared keyring. Only the usage probe keeps agy's log,
+// D-Bus socket keeps agy away from the system's shared keyring, and on macOS SSH_CONNECTION keeps it
+// off the Keychain (antigravityTokenFileOnlyEnv). Only the usage probe keeps agy's log,
 // in this invocation's private temporary directory.
 func antigravityGoogleCommand(ctx context.Context, binPath string, env []string, probeLog bool, args ...string) (*exec.Cmd, func(), error) {
 	dir, err := filepath.Abs(antigravityGoogleDirIn(env))
@@ -118,14 +119,14 @@ func antigravityGoogleCommand(ctx context.Context, binPath string, env []string,
 		}
 		cleanEnv = append(cleanEnv, entry)
 	}
-	cleanEnv = replaceEnv(cleanEnv, map[string]string{
+	cleanEnv = replaceEnv(cleanEnv, antigravityTokenFileOnlyEnv(map[string]string{
 		"HOME": filepath.Join(root, "home"), "PWD": filepath.Join(root, "cwd"),
 		"XDG_CONFIG_HOME": filepath.Join(root, "config"), "XDG_DATA_HOME": filepath.Join(root, "data"),
 		"XDG_CACHE_HOME": filepath.Join(root, "cache"), "XDG_STATE_HOME": filepath.Join(root, "state"),
 		"XDG_RUNTIME_DIR":             filepath.Join(root, "runtime"),
 		"DBUS_SESSION_BUS_ADDRESS":    "unix:path=" + filepath.Join(root, "absent-dbus"),
 		"AGY_CLI_DISABLE_AUTO_UPDATE": "true",
-	})
+	}))
 	logFile := "/dev/null"
 	if probeLog {
 		logFile = filepath.Join(root, "probe.log")
