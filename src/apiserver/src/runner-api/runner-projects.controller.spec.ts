@@ -986,6 +986,10 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     'requestDone',
     // K7: the current coordinator may request one promotion with a reason.
     'requestPromotion',
+    // Any session refused on a DONE or CANCELLED project asking the owner to reopen it
+    // (`project_request_reopen`, PROJECT_REOPEN). Asking files a card and reopens nothing: only the
+    // owner's Reopen press does, and it is not on this door.
+    'requestReopen',
     // The coordinator asking the owner to START the project (`project_request_start`). Beside the
     // question and for the same reasons: only the conversation the project is coordinated from may
     // ask, and asking starts nothing — the owner's press on the start card does — so the acting
@@ -1050,6 +1054,7 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     removeProject: RequestMethod.DELETE,
     requestDone: RequestMethod.POST,
     requestPromotion: RequestMethod.POST,
+    requestReopen: RequestMethod.POST,
     requestStart: RequestMethod.POST,
     resolveBlocker: RequestMethod.POST,
     resolveOpenItem: RequestMethod.POST,

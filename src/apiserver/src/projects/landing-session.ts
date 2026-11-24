@@ -13,6 +13,7 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { INTEGRATION_ITEM_KINDS } from './project-open-item';
 import { LANDING_PROVIDER_SLUG } from '../providers/provider-slug';
 import { IN_FLIGHT_JOB_STATES } from './in-flight-job-states';
+import { branchName } from './project-criterion-landing';
 
 /**
  * The landing subject and the LANDING session it addresses
@@ -304,13 +305,22 @@ export async function ensureLandingSession(
 }
 
 /** The server-generated title: `Land · <task>` (with `(#n)` from the second episode) or
- *  `Merge project/<id> → main · #<n>`. */
+ *  `Merge <project branch> → main · #<n>`, the branch the one the project's binding stores. */
 async function landingTitle(
   tx: Prisma.TransactionClient,
   landing: { subject: string; taskId: string | null; projectId: string; episode: number },
 ): Promise<string> {
   if (landing.subject === 'PROMOTION') {
-    return `Merge project/${uuidToBase62(landing.projectId)} → main · #${landing.episode}`;
+    // The stored ref, never one rebuilt from the id: a branch keeps the name it was given (a
+    // project's name is chosen once, from its title then). A merge into main has a binding.
+    const line = await tx.projectCodebase.findFirst({
+      where: { projectId: landing.projectId },
+      select: { integrationRef: true },
+    });
+    const branch = line
+      ? branchName(line.integrationRef)
+      : `project/${uuidToBase62(landing.projectId)}`;
+    return `Merge ${branch} → main · #${landing.episode}`;
   }
   const task = landing.taskId
     ? await tx.task.findFirst({ where: { id: landing.taskId }, select: { title: true } })

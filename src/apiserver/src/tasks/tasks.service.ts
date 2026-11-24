@@ -31,6 +31,7 @@ import {
   isEngine,
   keyDialect,
   planUsageBlockedUntil,
+  PROJECT_REOPEN_TOOL,
   planUsageReported,
   RunEventType,
   SessionEndReason,
@@ -7146,7 +7147,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             + `${uuidToBase62(from)}, which is settled, and a settled project gives up only work `
             + 'none of its criteria count'
           : `project ${to ? uuidToBase62(to) : '(none)'} is not open, and a settled project takes no work until `
-            + 'it is reopened');
+            + 'the account owner reopens it. The session that asked for this move can ask them with '
+            + `${PROJECT_REOPEN_TOOL} (the project id, why, and the work it plans to add)`);
     }
     await this.handoffs.assertMoveNotLanding(tx, ownerId, taskId, {
       handoffId: row.id,

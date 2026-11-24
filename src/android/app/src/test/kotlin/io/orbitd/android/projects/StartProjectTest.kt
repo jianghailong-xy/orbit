@@ -301,7 +301,12 @@ class StartProjectTest {
         assertFalse(draft.copy(maxConcurrentTasks = 0).complete)
         assertFalse(draft.copy(maxConcurrentTasks = StartProjectCopy.maxConcurrentTasks + 1).complete)
         assertTrue(draft.copy(maxConcurrentTasks = StartProjectCopy.maxConcurrentTasks).complete)
-        assertEquals("project/$project", StartProjectCopy.branch(request().settings.projectBranchName, project))
+        assertEquals("project/$project", StartProjectCopy.branch(request().settings.projectBranchName, null, project))
+        val bare = StartProjectCopy.Settings("PROJECT_BRANCH", null, true, 3, null)
+        assertEquals("project/foo-352xNyEH", StartProjectCopy.branch(bare.projectBranchName, "refs/heads/project/foo-352xNyEH", project))
+        assertEquals("project/$project", StartProjectCopy.branch(bare.projectBranchName, null, project))
+        assertEquals("project/foo-352xNyEH", StartProjectCopy.request(j("""{"startRequest":{"settings":{"line":"PROJECT_BRANCH","automatic":true,"maxConcurrentTasks":3},
+            "criteriaDigest":"$seal","defaultProjectBranchName":"refs/heads/project/foo-352xNyEH"}}"""))!!.defaultProjectBranchName!!.removePrefix("refs/heads/"))
     }
 
     // MARK: the reads

@@ -161,6 +161,8 @@ ENV PATH="/usr/local/go/bin:${PATH}" \
 # The runner's commits (the autoInitGit baseline, finalize, checkpoints) need an identity, and
 # a fresh volume has none: give a neutral one at system level, the lowest precedence, so an
 # identity in the repository, the user's global config or the environment still wins.
+# Chromium's browser sign-in (BrowserSignin) is off: Debian's build cannot complete it ("Missing authorization code
+# due to OAuth outage in Dice"), and while it is on, Google signs out the web login at the browser's next start.
 RUN ln -s /opt/codex/bin/codex /usr/local/bin/codex \
  && ln -s /opt/claude/bin/claude /usr/local/bin/claude \
  && ln -s /opt/opencode/bin/opencode /usr/local/bin/opencode \
@@ -171,7 +173,10 @@ RUN ln -s /opt/codex/bin/codex /usr/local/bin/codex \
  && chmod -R go-w /opt/codex /opt/claude /opt/opencode /opt/kimi-code /opt/agy /opt/playwright-mcp /usr/local/go /usr/local/share/orbit \
  && chmod 0755 /usr/local/share/orbit \
  && git config --system user.name 'Orbit Runner' \
- && git config --system user.email runner@orbit.invalid
+ && git config --system user.email runner@orbit.invalid \
+ && install -d -m 0755 /etc/chromium/policies/managed \
+ && printf '{"BrowserSignin": 0}\n' > /etc/chromium/policies/managed/orbit.json \
+ && chmod 0644 /etc/chromium/policies/managed/orbit.json
 # An image before a944a7f362 kept home at /var/lib/orbit/home. The entrypoint moves such a volume's home to /home/orbit
 # (move_earlier_home); this link keeps the paths that home recorded inside itself (git worktree links, the runner's
 # session state) resolving there.
@@ -258,6 +263,8 @@ if platform.machine() == 'x86_64':
 for tool, expected in expected_versions.items():
     if actual[tool] != expected:
         raise SystemExit(f'{tool}: expected {expected}, got {actual[tool]}')
+if json.loads(Path('/etc/chromium/policies/managed/orbit.json').read_text()) != {'BrowserSignin': 0}:
+    raise SystemExit("Chromium's managed policy must turn browser sign-in off")
 orbit = json.loads(version('orbit', 'capabilities', '--json'))
 if orbit['sourceSha'] != os.environ['ORBIT_SOURCE_SHA']:
     raise SystemExit('Orbit source SHA did not reach the binary')

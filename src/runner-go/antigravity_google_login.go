@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -210,16 +211,18 @@ func (r *loginRelay) pumpAntigravityGoogle(run *loginRun, cmd *exec.Cmd, report 
 		}
 		if submitted && ready {
 			if stat, err := os.Stat(antigravityTokenFile(run.googleDir)); err == nil && stat.Mode().IsRegular() {
-				ctx, cancel := context.WithTimeout(run.ctx, 10*time.Second)
-				probe := probeAntigravityGoogle(ctx, run.binPath, envWithValue(os.Environ(), antigravityAccountDirVar, run.googleDir))
-				cancel()
-				if probe.auth == authYes && run.ctx.Err() == nil {
+				problem, ok := verifyAntigravityGoogleLogin(run)
+				if ok {
 					run.signedIn = true
 					report(LoginResultRequest{Status: loginDone})
 					return
 				}
 				// A saved token with a failing independent probe is not a completed login.
-				report(LoginResultRequest{Status: loginFailed, Message: "Google sign-in could not be verified by /usage — start it again"})
+				message := "Google sign-in could not be verified by /usage — start it again"
+				if problem != "" {
+					message = "Google sign-in could not be verified — Antigravity answered: " + problem
+				}
+				report(LoginResultRequest{Status: loginFailed, Message: message})
 				return
 			}
 		}
@@ -239,6 +242,47 @@ func (r *loginRelay) pumpAntigravityGoogle(run *loginRun, cmd *exec.Cmd, report 
 			}
 		case <-run.ctx.Done():
 		case <-tick.C:
+		}
+	}
+}
+
+// How long a fresh sign-in has to pass /usage, and how long one /usage may take. A single short probe
+// made a valid sign-in fail: agy's first start after OAuth, on a busy machine or a slow network, can
+// outlast it, and an unclear answer is not a refusal.
+var (
+	antigravityGoogleVerifyWindow = 60 * time.Second
+	antigravityGoogleProbeTimeout = 30 * time.Second
+)
+
+// verifyAntigravityGoogleLogin asks /usage until it answers signed in, the window closes or the
+// attempt ends. Each answer is logged (never the token) so a failure can be told apart afterwards;
+// problem is agy's last error, for the owner.
+func verifyAntigravityGoogleLogin(run *loginRun) (problem string, ok bool) {
+	deadline := time.Now().Add(antigravityGoogleVerifyWindow)
+	env := envWithValue(os.Environ(), antigravityAccountDirVar, run.googleDir)
+	for try := 1; ; try++ {
+		ctx, cancel := context.WithTimeout(run.ctx, antigravityGoogleProbeTimeout)
+		started := time.Now()
+		probe := probeAntigravityGoogle(ctx, run.binPath, env)
+		cancel()
+		if run.ctx.Err() != nil {
+			return "", false
+		}
+		if probe.auth == authYes {
+			return "", true
+		}
+		if probe.problem != "" {
+			problem = probe.problem
+		}
+		logln("login: Antigravity /usage after sign-in answered " + authWord(probe.auth) + " (try " +
+			strconv.Itoa(try) + ", " + time.Since(started).Round(100*time.Millisecond).String() + "): " + probe.problem)
+		if time.Now().Add(2 * time.Second).After(deadline) {
+			return problem, false
+		}
+		select {
+		case <-run.ctx.Done():
+			return "", false
+		case <-time.After(2 * time.Second):
 		}
 	}
 }

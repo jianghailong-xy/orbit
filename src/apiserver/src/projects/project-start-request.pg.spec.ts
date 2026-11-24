@@ -619,9 +619,13 @@ test('a coordinator asks its owner to start the project, and the plan is checked
     assert.equal(view.startRequest?.itemId, filed.itemId);
     assert.equal(view.startRequest?.kind, 'START_REQUEST');
     assert.equal(view.startRequest?.title, 'Start this project?');
-    assert.deepEqual(view.startRequest?.startRequest, stored.payload);
+    // The branch a start with none named would land on is the server's to say, on every read: the
+    // title's slug and 8 characters of the id. It is read, never filed, so the stored payload has none.
+    const defaultBranch = `refs/heads/project/warnings-${uuidToBase62(project.id).slice(0, 8)}`;
+    assert.equal('defaultProjectBranchName' in stored.payload, false, 'the default is not filed');
+    assert.deepEqual(view.startRequest?.startRequest, { ...stored.payload, defaultProjectBranchName: defaultBranch });
     assert.equal(view.startRequest?.detailLine,
-      `project/${uuidToBase62(project.id)} · Automatic on · 3 tasks at a time · no merge check`);
+      `project/warnings-${uuidToBase62(project.id).slice(0, 8)} · Automatic on · 3 tasks at a time · no merge check`);
     assert.deepEqual(view.startRequest?.actions, []);
     assert.deepEqual(view.needsYou, [], 'not among the exceptions');
     assert.deepEqual(view.withCoordinator, []);
