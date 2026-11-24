@@ -942,3 +942,56 @@ test('T4 with a line-sync item: no sync task filed past the threshold tells the 
     await stack.db.$disconnect();
   }
 });
+
+/** A baseline-red result over (U, T0), as K3 reports it. */
+const BASELINE_RED: Failure = {
+  state: 'CHECK_FAILED', phase: 'CHECK', sourceSha: 'a'.repeat(40), targetShaBefore: T0, upstreamSha: U,
+  testedSha: 'd'.repeat(40), testedTreeSha: 'e'.repeat(40), baselineRed: true,
+  checks: [{
+    name: 'MERGE_CHECK', scope: 'BASELINE', command: 'npm test', expectedExitCode: 0, exitCode: 1, timedOut: false,
+    durationMs: 1, outputTail: 'red on its own', treeSha: '9'.repeat(40),
+  }],
+} as Failure;
+
+test('§4.6 item 3, the K5 question: a baseline fix whose own landing is red again on the baseline is queued again and '
+  + 'claimed at once; a line-sync fix that conflicts again is not (the invariant this design keeps)',
+{ skip, timeout: 300_000 }, async () => {
+  const stack = await connect();
+  try {
+    // K5, as it stands: the fix task is exempt from its own baseline item, and its red result queues it again.
+    const w = await world(stack, 'line-sync-k5');
+    await doneTask(stack, w, 'k5-a');
+    const [aLanding] = await claim(stack, w, 'k5-a');
+    await report(stack, w, aLanding!, BASELINE_RED);
+    const baseline = await stack.db.projectOpenItem.findFirstOrThrow({
+      where: { projectId: w.projectId, dedupeKey: { startsWith: 'ICB:' }, state: 'OPEN' },
+    });
+    const fix = await syncTask(stack, w, baseline.id, 'k5-fix');
+    const [fixLanding] = await claim(stack, w, 'k5-fix');
+    assert.equal(await taskOf(stack.db, fixLanding), fix.taskId);
+    await report(stack, w, fixLanding!, BASELINE_RED);
+    const fixJobs = await landings(stack.db, fix.taskId);
+    // Confirmed: the fix's next generation is queued BASELINE_HELD and the very next beat hands it out again, to run
+    // the same red check on the same source. Nothing stops this but a new commit on the fix's branch or the item
+    // closing. (Reported as a K5 follow-up; this design does not change K5.)
+    assert.deepEqual(fixJobs.map((job) => job.state), ['CHECK_FAILED', 'QUEUED']);
+    assert.equal(await enqueueCause(stack.db, fixJobs[1]!.id), 'BASELINE_HELD');
+    const [again] = await claim(stack, w, 'k5-fix-again');
+    assert.equal(again?.jobId, fixJobs[1]!.id, 'K5: the red fix is claimed again at once');
+
+    // The line-sync item keeps the invariant instead (§4.2's exception): its sync task's second conflict queues
+    // nothing, so nothing is claimable.
+    const v = await world(stack, 'line-sync-k5-sync');
+    await doneTask(stack, v, 'k5-x');
+    const [xLanding] = await claim(stack, v, 'k5-x');
+    await report(stack, v, xLanding!, mainSyncConflict());
+    const [item] = await lineSyncItems(stack.db, v.projectId);
+    const sync = await syncTask(stack, v, item!.id, 'k5-sync');
+    const [syncLanding] = await claim(stack, v, 'k5-sync');
+    await report(stack, v, syncLanding!, mainSyncConflict(U2));
+    assert.deepEqual((await landings(stack.db, sync.taskId)).map((job) => job.state), ['CONFLICT']);
+    assert.equal((await claim(stack, v, 'k5-sync-again')).length, 0);
+  } finally {
+    await stack.db.$disconnect();
+  }
+});
