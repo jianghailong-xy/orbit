@@ -63,13 +63,28 @@ export function evidenceUndecidedDedupeKey(evidenceId: string): string {
 /** The title an item is written with: the kind's words and the task it is about. */
 export const EVIDENCE_UNDECIDED_TITLE = 'Evidence waiting for a decision';
 
-/** How the item's `payload` reads (written by the escalation tick). */
+/**
+ * Why the item was opened. Absent (the escalation tick's own): the coordinator could not take the
+ * revision and the window ran out. The orphan sweep opens the other two (`ProjectOrphanSweepService`),
+ * the window after a notice about the revision was written and nothing moved it:
+ *  - `UNDECIDABLE`: the decision door refuses every answer to it (`reason`), so only a new revision
+ *    clears it, and no live coordinator holding it changes that;
+ *  - `UNDELIVERED`: it was never handed to anyone to decide.
+ */
+export type EvidenceUndecidedRoute = 'UNDECIDABLE' | 'UNDELIVERED';
+
+/** How the item's `payload` reads (written by the escalation tick, or by the orphan sweep). */
 export interface EvidenceUndecidedPayload {
   evidenceId: string;
   revision: string;
   submittedAt: string;
   windowSeconds: number;
   coordinatorSessionId: string | null;
+  route: EvidenceUndecidedRoute | null;
+  /** For UNDECIDABLE: the decision door's reason. */
+  reason: string | null;
+  /** For the sweep's routes: when the first notice about the revision was written. */
+  noticeAt: string | null;
 }
 
 export function evidenceUndecidedPayloadOf(payload: unknown): EvidenceUndecidedPayload | null {
@@ -82,6 +97,9 @@ export function evidenceUndecidedPayloadOf(payload: unknown): EvidenceUndecidedP
     submittedAt: value.submittedAt,
     windowSeconds: typeof value.windowSeconds === 'number' ? value.windowSeconds : 0,
     coordinatorSessionId: typeof value.coordinatorSessionId === 'string' ? value.coordinatorSessionId : null,
+    route: value.route === 'UNDECIDABLE' || value.route === 'UNDELIVERED' ? value.route : null,
+    reason: typeof value.reason === 'string' ? value.reason : null,
+    noticeAt: typeof value.noticeAt === 'string' ? value.noticeAt : null,
   };
 }
 
@@ -105,6 +123,16 @@ export function evidenceUndecidedDetailLine(payload: unknown, now: Date = new Da
   const submitted = Date.parse(facts.submittedAt);
   const ago = Number.isFinite(submitted) ? `${spanInWords(now.getTime() - submitted)} ago` : 'a while ago';
   const revision = facts.revision ? `Revision ${facts.revision}` : 'This evidence';
+  const noticed = facts.noticeAt ? Date.parse(facts.noticeAt) : Number.NaN;
+  const reported = Number.isFinite(noticed) ? `It was reported ${spanInWords(now.getTime() - noticed)} ago` : 'It was reported';
+  if (facts.route === 'UNDECIDABLE') {
+    return `${revision} was submitted ${ago} and cannot be decided`
+      + (facts.reason ? `: ${facts.reason}` : '')
+      + `. ${reported} and nobody has submitted it again; restart the task so a run submits a new revision.`;
+  }
+  if (facts.route === 'UNDELIVERED') {
+    return `${revision} was submitted ${ago} and was never handed to anyone to decide. ${reported} and nobody has decided it.`;
+  }
   return `${revision} was submitted ${ago}, and the coordinator has not decided it.`;
 }
 
