@@ -1338,20 +1338,24 @@ struct DocumentsTrashPage: View {
                     Text(DocumentsLogic.trashFoot).font(.orbitListSubtitle).foregroundStyle(.secondary)
                         .padding(.horizontal, 20).padding(.top, 10)
                 }
+                // What stands in for the groups, in the scroll itself: an overlay on an emptied scroll was not drawn.
+                Group {
+                    if let error = model.trashError, model.trash == nil {
+                        ContentUnavailableView("Couldn't read Trash", systemImage: "exclamationmark.triangle",
+                                               description: Text(error))
+                    } else if model.trash == nil {
+                        ProgressView()
+                    } else if model.trash?.isEmpty == true {
+                        ContentUnavailableView(DocumentsLogic.trashEmpty, systemImage: "trash",
+                                               description: Text(DocumentsLogic.trashFoot))
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 80)
             }
             .padding(.vertical, 8)
         }
         .background(Color(.systemGroupedBackground))
-        .overlay {
-            if let error = model.trashError, model.trash == nil {
-                ContentUnavailableView("Couldn't read Trash", systemImage: "exclamationmark.triangle", description: Text(error))
-            } else if model.trash == nil {
-                ProgressView()
-            } else if model.trash?.isEmpty == true {
-                ContentUnavailableView(DocumentsLogic.trashEmpty, systemImage: "trash",
-                                       description: Text(DocumentsLogic.trashFoot))
-            }
-        }
         .navigationTitle(DocumentsLogic.trash)
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
@@ -1451,7 +1455,8 @@ private struct DocumentsTrashGroupCard: View {
         let line = row.version
             ? DocumentsLogic.trashVersionLine(group, writer: writer)
             : DocumentsLogic.trashLine(row.entry, in: group, writer: writer,
-                                       folderCount: row.entry.isFolder && group.items.count == 1 ? group.itemCount : nil)
+                                       // A group's count includes the folder itself (rm -rf is one row).
+                                       folderCount: row.entry.isFolder && group.items.count == 1 ? max(0, group.itemCount - 1) : nil)
         let size = row.version ? DocumentsLogic.formatSize(group.version?.sizeBytes ?? 0)
             : (row.entry.isFile ? DocumentsLogic.formatSize(row.entry.sizeBytes) : "")
         return HStack(spacing: 12) {
