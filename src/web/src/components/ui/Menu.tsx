@@ -25,6 +25,11 @@ interface MenuAction {
   /** A row with `children` only: a class on its level's popup, as `popupClassName` is on the menu's own (the account
    *  menu's levels draw their rows as tall as its own). */
   popupClassName?: string;
+  /** A row with `children` only: content above and below its level's items, outside their arrow-key and typeahead
+   *  navigation, as the menu's own `footer` is (the session menu's Tags level: a search field over the tags, the
+   *  colour swatches under them). The items scroll between the two. */
+  levelHeader?: ReactNode;
+  levelFooter?: ReactNode;
   /** A class on the item itself, for a row the page styles apart (the account menu's profile row). */
   className?: string;
   /** The item's native tip, as the replaced item's `title` (P5.3: a session row's Complete that cannot run says why). */
@@ -78,6 +83,12 @@ function handOver(event: ReactKeyboardEvent<HTMLElement> & { preventBaseUIHandle
     shiftKey: event.shiftKey, ctrlKey: event.ctrlKey, altKey: event.altKey, metaKey: event.metaKey }));
 }
 
+/** Typed into (a search field), not walked: Base UI's typeahead and arrow keys on the menu would take its letters and
+ *  arrows. Escape and Tab go on to close the menu. */
+const keepTypedKeys = (event: ReactKeyboardEvent<HTMLElement>) => {
+  if (event.key !== 'Escape' && event.key !== 'Tab') event.stopPropagation();
+};
+
 const itemClass = (item: MenuAction) => `orbit-menu-item${item.className ? ` ${item.className}` : ''}`;
 
 function Submenu({ item, contents, container, zIndex, slide }: { item: MenuAction; contents: ReactNode; container: () => HTMLElement | undefined; zIndex: number; slide: boolean }) {
@@ -85,6 +96,7 @@ function Submenu({ item, contents, container, zIndex, slide }: { item: MenuActio
   const anchor = useRef<HTMLDivElement>(null);
   const popup = useRef<HTMLDivElement>(null);
   const { positioner, ...placement } = useSubmenuPlacement(anchor, slide);
+  const framed = item.levelHeader != null || item.levelFooter != null;
   return <BaseMenu.SubmenuRoot open={layer.open} onOpenChange={layer.setOpen}>
     <BaseMenu.SubmenuTrigger ref={anchor} className={itemClass(item)} label={item.textValue} onKeyDown={(event) => {
       // Opened from the keyboard, the submenu highlights its first item before focus moves into it; until then
@@ -99,7 +111,13 @@ function Submenu({ item, contents, container, zIndex, slide }: { item: MenuActio
     }}>{contents}<RightOutlined className="orbit-menu-submenu-icon" aria-hidden /></BaseMenu.SubmenuTrigger>
     <BaseMenu.Portal container={container()}>
       <BaseMenu.Positioner ref={positioner} side="right" align="start" {...placement} collisionPadding={8} positionMethod={layer.positionMethod} className="orbit-floating-positioner" style={{ zIndex: zIndex + 1 }}>
-        <BaseMenu.Popup ref={popup} className={`orbit-menu${item.popupClassName ? ` ${item.popupClassName}` : ''}`} onClick={(event) => event.stopPropagation()}><Items items={item.children!} container={container} zIndex={zIndex + 1} slide={slide} /></BaseMenu.Popup>
+        <BaseMenu.Popup ref={popup} className={`orbit-menu${framed ? ' orbit-menu-footed' : ''}${item.popupClassName ? ` ${item.popupClassName}` : ''}`} onClick={(event) => event.stopPropagation()}>
+          {!framed ? <Items items={item.children!} container={container} zIndex={zIndex + 1} slide={slide} /> : <>
+            {item.levelHeader != null && <div className="orbit-menu-header" onKeyDown={keepTypedKeys}>{item.levelHeader}</div>}
+            {item.children!.length > 0 && <div className="orbit-menu-list"><Items items={item.children!} container={container} zIndex={zIndex + 1} slide={slide} /></div>}
+            {item.levelFooter != null && <div className="orbit-menu-footer" onKeyDown={keepTypedKeys}>{item.levelFooter}</div>}
+          </>}
+        </BaseMenu.Popup>
       </BaseMenu.Positioner>
     </BaseMenu.Portal>
   </BaseMenu.SubmenuRoot>;
@@ -165,11 +183,7 @@ export function Menu({ trigger, items, disabled, variant = 'default', openOnArro
           style={{ '--orbit-menu-anchor-width': anchorWidth === undefined ? undefined : `${anchorWidth}px`, ...popupStyle } as CSSProperties}>
           {footer == null ? <Items items={items} container={layer.container} zIndex={layer.zIndex} slide={slide} /> : <>
             {items.length > 0 && <div className="orbit-menu-list"><Items items={items} container={layer.container} zIndex={layer.zIndex} slide={slide} /></div>}
-            {/* Typed into (a search field), not walked: Base UI's typeahead and arrow keys on the menu would take
-                its letters and arrows. Escape and Tab go on to close the menu. */}
-            <div className="orbit-menu-footer" onKeyDown={(event) => {
-              if (event.key !== 'Escape' && event.key !== 'Tab') event.stopPropagation();
-            }}>{footer}</div>
+            <div className="orbit-menu-footer" onKeyDown={keepTypedKeys}>{footer}</div>
           </>}
         </BaseMenu.Popup>
       </BaseMenu.Positioner>
