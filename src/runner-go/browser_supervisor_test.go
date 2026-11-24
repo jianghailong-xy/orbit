@@ -288,6 +288,43 @@ func TestBrowserDoesNotIdleStopWhileAViewerIsOpen(t *testing.T) {
 	}
 }
 
+// A sign-in that did not succeed keeps its tab, and the browser with it: a stopped browser starts again without it.
+func TestBrowserDoesNotIdleStopWhileAFailedSignInsTabIsKept(t *testing.T) {
+	r := newBrowserRig(t)
+	if err := r.b.ReserveForEngineSignIn("A1"); err != nil {
+		t.Fatal(err)
+	}
+	r.b.KeepSignInTab("TAB1")
+	r.b.EndEngineSignIn("A1")
+	r.clock.Advance(time.Hour)
+	if !r.b.Running() || !r.b.KeepsSignInTab("TAB1") {
+		t.Fatal("the browser stopped for idleness while a failed sign-in's tab was kept")
+	}
+	r.b.ReleaseSignInTabs("TAB1")
+	r.clock.Advance(14 * time.Minute)
+	if !r.b.Running() {
+		t.Fatal("the idle clock did not restart when the kept tab went")
+	}
+	r.clock.Advance(time.Minute)
+	if r.b.Running() {
+		t.Fatal("the browser still runs 15 minutes after the kept tab went")
+	}
+	// A browser that stops anyway keeps nothing: its tabs are gone.
+	_ = r.b.Acquire("sess-a", "")
+	r.b.KeepSignInTab("TAB2")
+	r.b.ReleaseSignInTabs() // every kept tab
+	if r.b.KeepsSignInTab("TAB2") {
+		t.Fatal("ReleaseSignInTabs() kept a tab")
+	}
+	r.b.KeepSignInTab("TAB3")
+	r.b.mu.Lock()
+	r.b.stopLocked("test")
+	r.b.mu.Unlock()
+	if r.b.KeepsSignInTab("TAB3") {
+		t.Fatal("a stopped browser still keeps a tab")
+	}
+}
+
 func TestBrowserStopsWhenTheOfferEndsAfterTheRunningTurn(t *testing.T) {
 	r := newBrowserRig(t)
 	_ = r.b.Acquire("sess-a", "")

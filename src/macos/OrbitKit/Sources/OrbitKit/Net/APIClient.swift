@@ -1096,6 +1096,12 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("owner-requests/\(id)/apply-settings")
     }
 
+    /// A PROJECT_REOPEN card's Reopen (docs/project-reopen-request-design.md §4.2): reopens the project as the project
+    /// page's press does and settles every pending reopen request of it DONE. Answers with the card.
+    public func reopenProjectFromOwnerRequest(_ id: String) async throws -> OwnerRequest {
+        try await postEmpty("owner-requests/\(id)/reopen-project")
+    }
+
     /// Undo of a settings change (design §5.3): the owner's own preferences PATCH with each key's `from`.
     public func undoSettingsChange(_ values: [String: JSONValue]) async throws -> User {
         try await patch("users/me/preferences", body: values)
@@ -2780,6 +2786,11 @@ public final class APIClient: @unchecked Sendable {
     public func documentsSyncs() async throws -> [DocumentsSync] {
         let list: DocumentsSyncList = try await get("documents/syncs")
         return list.syncs
+    }
+
+    /// One agent's sync, whatever its age: the conversation's card for the call that started it.
+    public func documentsSync(_ id: String) async throws -> DocumentsSync {
+        try await get("documents/syncs/\(id)")
     }
 
     /// The first `maxBytes` of a file (or one version) for a preview, or all of it when nil. Never a download.
