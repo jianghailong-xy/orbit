@@ -347,8 +347,10 @@ var instructionUnits = []instructionUnit{
 	{id: "primer.rederive", owner: "primer: task_get after a reset", kind: kindSituation,
 		appliesTo: orbitSession, channels: bothChannels, core: agentPrimerRederive,
 		detail: "context reset note (context_reset_note.go)", guardedBy: []string{"E8-compaction-recovery"},
-		// The next message after a compaction or resume carries the note, so these engines are not also told it up front.
-		skipOnProfile: func(p EngineProfile) bool { return p.ResetNote }},
+		// The next message after a compaction or resume carries the note, so an engine measured to pass E8 without the
+		// paragraph is not also told it up front. Claude Code passed 10/10 and 10/10 (compaction, resume) with it left
+		// out; Codex 10/10 and 9/10 (one invented task id after a resume, against 5/5 at baseline), so Codex keeps it.
+		skipOnProfile: func(p EngineProfile) bool { return p.ResetNote && p.Engine == providerClaude }},
 	{id: "help.ask", owner: "help center Ask: the help reads", kind: kindEnvironment,
 		appliesTo: func(s SessionShape) bool { return s.Role == roleHelpAsk }, channels: []instructionChannel{channelMCP},
 		core: helpAskInstructions, detail: "help tool descriptions"},

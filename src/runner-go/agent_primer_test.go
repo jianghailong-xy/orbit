@@ -437,11 +437,11 @@ func primerCarriers(t *testing.T, job *ClaimedSession) map[string]string {
 	}
 }
 
-// primerFor is the primer as a carrier is given it: Claude Code and Codex are not told the re-read-after-compaction
-// paragraph up front (their next message after a reset carries the note, context_reset_note.go), so it is missing
-// from their own instructions, and every other carrier, and `orbit mcp` initialize, keeps it.
+// primerFor is the primer as a carrier is given it: Claude Code is not told the re-read-after-compaction
+// paragraph up front (its next message after a reset carries the note, context_reset_note.go), so it is missing
+// from their own instructions, and Codex and every other carrier, and `orbit mcp` initialize, keeps it.
 func primerFor(carrier string) string {
-	if strings.HasPrefix(carrier, "claude") || strings.HasPrefix(carrier, "codex") {
+	if strings.HasPrefix(carrier, "claude") {
 		return strings.Replace(agentPrimer, "\n\n"+agentPrimerRederive, "", 1)
 	}
 	return agentPrimer
@@ -505,7 +505,7 @@ func TestCodexPutsThePrimerBackAfterCompaction(t *testing.T) {
 		}
 		return nil
 	})
-	if len(injected) != 1 || !strings.Contains(injected[0], primerFor("codex")) {
+	if len(injected) != 1 || !strings.Contains(injected[0], agentPrimer) {
 		t.Errorf("the developer message re-injected after a compaction = %q, want the primer in it", injected)
 	}
 
@@ -513,7 +513,7 @@ func TestCodexPutsThePrimerBackAfterCompaction(t *testing.T) {
 	for turn := 1; turn <= 2; turn++ {
 		input := codexTurnParams("thread-1", job, "/repo", "/tmp/up", fmt.Sprintf("turn-%d", turn), "hi", nil,
 			codexTurnContextOptions{Executable: exe, Mode: codexInstructionsUserInput})["input"].([]map[string]interface{})
-		if !strings.Contains(input[0]["text"].(string), primerFor("codex")) {
+		if !strings.Contains(input[0]["text"].(string), agentPrimer) {
 			t.Errorf("turn %d of a Codex before 0.125 does not carry the primer: %#v", turn, input)
 		}
 	}
