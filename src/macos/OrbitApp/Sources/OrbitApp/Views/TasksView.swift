@@ -2999,16 +2999,7 @@ private struct TaskDetailContent: View {
     }
 
     private func sessionLabel(_ session: SessionRef) -> String {
-        switch session.resolvedRunState {
-        case .queued:        return "Queued"
-        case .running:       return "Running"
-        case .awaitingInput: return "Awaiting reply"
-        case .succeeded:     return "Finished"
-        case .failed:        return "Failed"
-        case .interrupted:   return "Interrupted"
-        case .ended:         return "Ended"
-        case .unknown, nil:  return "—"
-        }
+        ShareMarkdown.runLabel(session)
     }
 
     private func sessionColor(_ session: SessionRef) -> Color {

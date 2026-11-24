@@ -3,6 +3,8 @@
 // same server-sorted input. Both groupers are pure and take an already console-sorted list
 // (pinned-first, then listedAt) — they only bucket, never reorder within a bucket.
 
+import { sessionPhaseOf, sessionRunStateOf } from './sessionState';
+
 /** A tag as the session list payload carries it (server-ordered: system first, then position). */
 export interface SessionTagRef {
   id: string;
@@ -28,6 +30,11 @@ export interface GroupableSession {
   /** A project row's own roll-up of its members (the row has no status of its own). */
   needsYou?: boolean;
   running?: boolean;
+  /** The session facts' three-state field (contracts/session-state.contract.json); absent from an older control plane. */
+  phase?: string | null;
+  released?: boolean | null;
+  lastTurnOutcome?: string | null;
+  endReason?: string | null;
   tags?: SessionTagRef[] | null;
 }
 
@@ -59,14 +66,25 @@ const createdTime = (s: GroupableSession): number => {
   return Number.isNaN(t) ? Number.NEGATIVE_INFINITY : t;
 };
 
+/** A failure by the state word's own rule when the session facts are present (a release is a failure only when the
+ *  last turn failed and nobody asked for an end); by the legacy status from an older control plane. */
+const sessionFailed = (s: GroupableSession): boolean =>
+  sessionPhaseOf(s) && typeof s.released === 'boolean'
+    ? sessionRunStateOf(s) === 'FAILED'
+    : (s.status ?? s.runStatus) === 'FAILED';
+
 /** Needs you: an approval, question or owner decision is waiting, or a failure no retry is armed for. */
 export const sessionNeedsOwner = (s: GroupableSession): boolean =>
-  (s.pendingApprovals ?? 0) > 0 || s.needsYou === true || ((s.status ?? s.runStatus) === 'FAILED' && !s.retryAt);
+  (s.pendingApprovals ?? 0) > 0 || s.needsYou === true || (sessionFailed(s) && !s.retryAt);
 
-/** Working: running or queued, or a failure the server is retrying. */
+/** Working: running or queued, or a failure the server is retrying. With the session facts, phase RUNNING (a turn
+ *  or work outside one, such as a background job) or PENDING decides; without them (an older control plane) the
+ *  run status does. */
 export const sessionIsWorking = (s: GroupableSession): boolean => {
   const status = s.status ?? s.runStatus;
-  return s.running === true || status === 'RUNNING' || status === 'PENDING' || (status === 'FAILED' && !!s.retryAt);
+  const phase = sessionPhaseOf(s);
+  const inFlight = phase ? phase === 'RUNNING' || phase === 'PENDING' : status === 'RUNNING' || status === 'PENDING';
+  return s.running === true || inFlight || (status === 'FAILED' && !!s.retryAt);
 };
 
 /** listedAt descending (createdAt when null), then createdAt descending, then id ascending. */

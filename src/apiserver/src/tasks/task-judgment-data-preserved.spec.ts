@@ -3447,7 +3447,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1527_pull_request_landing',
       // 1537 adds a nullable managed_runner.current_image_version (no default); `managed_runner` is none of the
       // preserved relations, no row is written, and no trigger, function or DONE fence changes.
-      '1537_managed_runner_current_image_version'],
+      '1537_managed_runner_current_image_version',
+      // 1538 adds nullable owner_request.change_spec, two CHECKs and a partial unique index on owner_request; 1547 adds
+      // a nullable github_pull_request.review_announced_at. Neither table is a preserved relation, no row is
+      // written, and no trigger, function or DONE fence changes.
+      '1538_owner_request_change',
+      '1547_pull_request_review_announced'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -137,14 +137,23 @@ sealed interface TaskRowPhrase {
 
 /** A session ref's run state: the modern `runState`, else the raw runner status, else the legacy mix. */
 fun resolvedRunState(session: JsonObject): String? {
-    // The session facts first when sent: a released session is Finished (its work finished), Failed (a failed turn nobody asked to
-    // end) or Ended, and an unreleased one reads its phase, an interrupted turn staying Interrupted until the release lands.
-    if (SessionFacts.present(session)) {
-        if (SessionFacts.released(session) == true) return SessionFacts.afterRelease(session)
-        when (SessionFacts.phase(session)) {
-            "PENDING" -> return "QUEUED"
-            "RUNNING" -> return "RUNNING"
-            "IDLE" -> return if (SessionFacts.lastTurnOutcome(session) == "INTERRUPTED") "INTERRUPTED" else "AWAITING_INPUT"
+    // The session facts first when sent, as web's task panel reads them (sessionRunStateOf): they count when the phase is a known word
+    // and `released` is present. A released session is Finished (`workFinished`, else the end reason or a settled landing), Failed (a failed turn nobody asked to end) or Ended; an unreleased one reads its phase, RUNNING with
+    // a non-TURN `activity` (TURN is on every queued or running row) being parked work outside a turn, an interrupted turn staying Interrupted until the release lands.
+    val phase = SessionFacts.phase(session)
+    val released = SessionFacts.released(session)
+    if (phase != null && released != null) {
+        if (released) return SessionFacts.afterRelease(session)
+        return when (phase) {
+            "PENDING" -> "QUEUED"
+            // The legacy run status decides first, as web's dispatchedTurnInFlight does: a dispatched turn is running, a parked session
+            // stays parked even while its engine runs its own turn (activity TURN); any other word reads the activity.
+            "RUNNING" -> when (session.text("runStatus") ?: session.text("status")) {
+                "RUNNING", "PENDING", "QUEUED" -> "RUNNING"
+                "AWAITING_INPUT" -> "AWAITING_INPUT"
+                else -> session.text("activity").let { if (it.isNullOrEmpty() || it == "TURN") "RUNNING" else "AWAITING_INPUT" }
+            }
+            else -> if (SessionFacts.lastTurnOutcome(session) == "INTERRUPTED") "INTERRUPTED" else "AWAITING_INPUT"
         }
     }
     session.text("runState")?.takeIf { it != "UNKNOWN" && it in RUN_STATES }?.let { return it }
