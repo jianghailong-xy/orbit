@@ -648,6 +648,9 @@ final class AppModel {
             return names[id] ?? names.first { PublicID.storageKey($0.key) == PublicID.storageKey(id) }?.value
                 ?? "this runner"
         }
+        ownerRequestsModel.runnerRow = { [weak self] id in
+            self?.agents?.runnerRows.first { PublicID.storageKey($0.id) == PublicID.storageKey(id) }
+        }
         #if os(iOS)
         // A terminal that has just started waiting is announced once, as a toast (the owner,
         // 2026-11-16). The Mac's session list keeps its resident "Needs you" line instead.
