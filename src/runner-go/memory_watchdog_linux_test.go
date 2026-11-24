@@ -66,12 +66,14 @@ func TestMemoryWatchdogProtectsOrbitHelpers(t *testing.T) {
 		}
 		if p.name == "sleep" {
 			tool = p.memoryProcessID
+			// The kernel's batched RSS counter can still be zero for a new child.
+			p.rss = 1 << 20
 		} else {
 			helpers = append(helpers, p.memoryProcessID)
 			// A previous tool can exec Orbit without changing its PID.
 			p.rss = 500 << 20
-			processes[p.pid] = p
 		}
+		processes[p.pid] = p
 	}
 	if len(helpers) != 2 || tool.pid == 0 || baseline == "" || baseline == "1000" {
 		t.Fatalf("helpers=%v tool=%v inherited score=%q", helpers, tool, baseline)
