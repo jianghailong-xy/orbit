@@ -46,6 +46,9 @@ import {
   wikiChatNoteLabel,
   wikiChatPlanFace,
   wikiChatPlanMovedNote,
+  wikiChatHeldLine,
+  WIKI_CHAT_REWRITE_HELD,
+  type WikiChatRewriteHeld,
   wikiChatRewriteLinks,
   wikiChatResultLine,
   wikiChatRewrites,
@@ -105,6 +108,9 @@ describe('wiki chat contract', () => {
     expect(DESIGN).toContain('最多 20 句');
     expect(WIKI_CHAT_RULES.rewritesMax).toBe(5);
     expect(DESIGN).toContain('一张卡至多 5 节');
+    // Design §7.2, option A (owner 11-22): the automatic rewrites a space writes in a UTC day.
+    expect(WIKI_CHAT_RULES.chatAutoSectionsPerDay).toBe(20);
+    expect(DESIGN).toContain('`chatAutoSectionsPerDay` = 20');
     expect(CONTRACT.docs.follow.rules.sectionsPerDay).toBe(WIKI_DOCS_FOLLOW.sectionsPerDay);
     expect(WIKI_DOCS_FOLLOW.sectionsPerDay).toBe(40);
     expect(DESIGN).toContain('每个 space 每天至多 40 节（`followSectionsPerDay`）');
@@ -147,7 +153,14 @@ describe('wiki chat contract', () => {
     expect(notes.how).toMatch(/conversation_turn\.content stays the owner's words alone/u);
     expect(notes.how).toMatch(/control-plane-note\.ts/u);
     // The four blocks are the four tags, and the first message's block is the prompt, word for word.
-    expect({ chat: notes.chat.tag, page: notes.page.tag, selection: notes.selection.tag, drafts: notes.drafts.tag }).toEqual({ ...WIKI_CHAT_NOTE_TAGS });
+    expect({ chat: notes.chat.tag, contents: notes.contents.tag, page: notes.page.tag, selection: notes.selection.tag, drafts: notes.drafts.tag }).toEqual({ ...WIKI_CHAT_NOTE_TAGS });
+    expect(notes.chat.when).toMatch(/first message after this text changed/u);
+    expect(notes.contents.when).toMatch(/confirmed plan version differs from the one the chat was last told/u);
+    expect(notes.contents.body).toMatch(/No covers and no sentences/u);
+    expect(notes.contents.cap).toContain("30000");
+    expect(notes.contents.label).toBe('copy.notes.contents');
+    expect(CONTRACT.chat.copy.notes.contents).toBe(WIKI_CHAT_COPY.notes.contents);
+    expect(WIKI_CHAT_COPY.notes.contents).toBe('Wiki contents');
     expect(notes.chat.text).toBe(WIKI_CHAT_PROMPT);
     expect(WIKI_CHAT_PROMPT.startsWith(`<${WIKI_CHAT_NOTE_TAGS.chat}>\n`)).toBe(true);
     expect(WIKI_CHAT_PROMPT.endsWith(`\n</${WIKI_CHAT_NOTE_TAGS.chat}>`)).toBe(true);
@@ -165,10 +178,20 @@ describe('wiki chat contract', () => {
     expect(notes.how).toMatch(/the Android client and every older one draw them and count nothing from them/u);
   });
 
-  it('drafts every op of a chat, opens wiki_draft to a chat alone, and serves it as the fifth tool (C6)', () => {
+  it('drafts every op of a chat, opens wiki_draft to a chat alone, and serves it as the fifth tool (C6), and wiki_read as the sixth (T7)', () => {
     const surface = CONTRACT.agentSurface;
     // The runner's Go test holds tools to what a binary serves; wiki_draft joined with the binary that serves it (C6).
-    expect(surface.tools).toEqual(['wiki_search', 'wiki_get', 'wiki_propose', 'wiki_note', 'wiki_draft']);
+    expect(surface.tools).toEqual(['wiki_search', 'wiki_get', 'wiki_propose', 'wiki_note', 'wiki_draft', 'wiki_read']);
+    // wiki_read is read-only, a chat's alone, and served under an "If you have" prompt so an older runner's chat is never told to use it (D2).
+    const read = surface.chat.read;
+    expect(surface.toolSpecs.wiki_read.readOnly).toBe(true);
+    expect(keysOf(surface.toolSpecs.wiki_read.params)).toEqual(['q', 'doc', 'section', 'draft', 'more']);
+    expect(surface.cli.wiki_read).toBe(read.cli);
+    expect(surface.doors.runner.routes).toContain(read.route);
+    expect(read.description).toMatch(/Works only in a wiki chat\.$/u);
+    expect(read.arrival).toMatch(/If you have a wiki_read tool/u);
+    expect(WIKI_CHAT_PROMPT).toMatch(/If you have a wiki_read tool, read the wiki with it/u);
+    expect(WIKI_CHAT_PROMPT.split('\n').pop()).toBe(`</${WIKI_CHAT_NOTE_TAGS.chat}>`);
     expect(surface.chat.draft.arrival).toMatch(/TestWikiAgentSurfaceIsTheContracts/u);
     const draft = surface.chat.draft;
     // The live tool spec is the chat's block, field for field, and its command is the block's.
@@ -197,8 +220,13 @@ describe('wiki chat contract', () => {
     expect(draft.description).toMatch(/Works only in a wiki chat\.$/u);
     expect(draft.description).toMatch(/never call a draft applied/u);
     for (const tool of [draft.tool, ...surface.tools]) expect(tool).not.toMatch(/accept|confirm|decide|delete|doc/u);
-    // notTools is the sentence it was: no tool accepts, confirms, decides, hard-deletes or overwrites a page.
-    expect(surface.notTools).toBe('No tool accepts, confirms, decides, hard-deletes or overwrites a page. Confirmation exists only on the owner channel.');
+    // notTools: no tool accepts, confirms, decides, hard-deletes or overwrites a page; since option A (design §7.2) an
+    // agent can have the server rewrite the sections it names from main, never choose their words.
+    expect(surface.notTools).toBe('No tool accepts, confirms, decides, hard-deletes or overwrites a page: an agent can have the server rewrite from main the sections it names (wiki_draft, chat.drafts.auto), and never chooses the words. Confirmation exists only on the owner channel.');
+    // What wiki_draft answers says whether the card was written when drafted, and why one was held (option A).
+    expect(surface.chat.draft.returns).toContain('{ status: draft, draftId, kind, rewrites, state, held }');
+    expect(CONTRACT.chat.drafts.auto).toContain('rules.chatAutoSectionsPerDay');
+    for (const held of WIKI_CHAT_REWRITE_HELD) expect(CONTRACT.chat.drafts.auto).toMatch(new RegExp(`\\b${held}\\b`, 'u'));
     // In a chat every op drafts, the two that apply at once elsewhere included; a note's corrects drafts its challenge.
     for (const op of WIKI_OPS) expect(surface.chat.propose).toContain(op);
     expect(surface.chat.propose).toMatch(/In every space and every review mode alike/u);
@@ -508,6 +536,7 @@ describe('wiki chat vectors', () => {
     const v = vector as {
       facts: WikiChatDraftFacts; kind: WikiChatDraftKind; ops: Array<WikiChatDraftOp & { decision?: string }>; undoable: boolean; state: string;
       label: string; title: string; actions: string[]; needsYou: boolean; note?: string | null;
+      held?: WikiChatRewriteHeld | null; heldLine?: string | null;
     };
     const state = wikiChatDraftState(v.facts);
     expect(state).toBe(v.state);
@@ -518,6 +547,10 @@ describe('wiki chat vectors', () => {
     expect(wikiChatCardNeedsYou(card)).toBe(v.needsYou);
     // The line an applied plan card that can no longer be undone carries (C17); every other card carries none of it.
     expect(wikiChatPlanMovedNote(card)).toBe(v.note ?? null);
+    // The line a rewrite card held for a press carries (design §7.2, option A); a card not held carries none.
+    expect(wikiChatHeldLine(v.held ?? null)).toBe(v.heldLine ?? null);
+    // Written without a press is never confirmed by the owner.
+    if (state === 'rewritten') expect(wikiChatCardTitle(state, v.label)).not.toMatch(/Confirmed by you/u);
   });
 
   it.each(cases('results'))('result: %s', (_name, vector) => {

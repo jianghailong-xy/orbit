@@ -1,7 +1,7 @@
 # Orbit operation catalogue v1.12.0
 
 > Generated from `src/runner-go/operation_catalog.go` — do not edit by hand.
-> Content hash: `7e9d0926002da988974db1d2a2a5d8396948daac6d5a5bc22c3acd23fb379ede`.
+> Content hash: `60aca4bb3ac7b57a18a7554d617a519cbf1f0e49b313a1e62d394c4fb05d73a1`.
 
 Every operation an Orbit agent can call is declared once in the operation catalogue. This table is that catalogue rendered for a person: `orbit capabilities --json` and the MCP `tools/list` payload are its two machine surfaces, and the leaf `--help` texts are held to it by tests. `MCP` and `CLI` say how each surface reaches the operation — `always`, an `orchestration` grant, an engine `permission_prompt` bridge, `session`-only, `headless`-only, or a `watch_switch`/`wiki_switch` — and `absent` when that surface deliberately has no door. Gates that must hold together are joined with `+` (for example `orchestration+watch_switch`). `Idempotency` is `read` (safe to repeat), `caller_key` (retry with the same key), `server_key` (a redelivered turn deduplicates) or `none` (re-read before retrying). `Plan` is what a session in Plan mode gets: the call `runs`, is `refused` with what to do instead, or its `own_gate` decides; the per-engine matrix is docs/permission-matrix.md.
 
@@ -162,6 +162,7 @@ Every operation an Orbit agent can call is declared once in the operation catalo
 | `wiki_import` | wiki | medium | yes | none | no | none | refused | absent | session+wiki_switch — `orbit wiki import` | Import a Markdown file or tree into a wiki space. |
 | `wiki_note` | wiki | medium | yes | none | no | none | refused | wiki_switch | session+wiki_switch — `orbit wiki note` | Record one claim or pitfall in the shared wiki. |
 | `wiki_propose` | wiki | medium | yes | none | no | caller_key | refused | wiki_switch | session+wiki_switch — `orbit wiki propose` | Propose a change to the shared wiki. |
+| `wiki_read` | wiki | low | no | none | no | read | runs | wiki_switch | session+wiki_switch — `orbit wiki read` | Read the wiki's documents from a wiki chat. |
 | `wiki_search` | wiki | low | no | none | no | read | runs | wiki_switch | session+wiki_switch — `orbit wiki search` | Search the shared wiki for what is known. |
 | `wiki_verify` | wiki | medium | yes | none | no | none | refused | absent | session+wiki_switch — `orbit wiki verify` | Wait for the server's verdicts on a wiki import. |
 | `withdraw_owner_request` | owner | medium | yes | none | no | none | runs | always | absent | Withdraw a request this session filed with the account owner. |

@@ -23,13 +23,25 @@ public enum WikiChatDraftKind: String, Codable, Sendable, CaseIterable {
 
 /// Where a card stands (contract `chat.drafts.states`, design §7.3), derived on the server's read.
 public enum WikiChatDraftState: String, Codable, Sendable, CaseIterable {
-    case draft, replaced, changed, applied, discarded
+    /// `rewritten`: a rewrite card the server queued without a press (design §7.2, option A), never confirmed by you.
+    case draft, replaced, changed, applied, rewritten, discarded
     case notApplied = "not_applied"
     case undone
     case unknown
 
     public init(from decoder: Decoder) throws {
         self = WikiChatDraftState(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
+    }
+}
+
+/// Why a rewrite card inside option A's other bounds waits for a press (contract `chat.drafts.auto`, design §7.2):
+/// its chat read web content, the day's automatic rewrites are used up, or another draft rewrites the same section.
+public enum WikiChatRewriteHeld: String, Codable, Sendable, CaseIterable {
+    case web, budget, draft
+    case unknown
+
+    public init(from decoder: Decoder) throws {
+        self = WikiChatRewriteHeld(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
     }
 }
 
@@ -127,14 +139,27 @@ public struct WikiChatDraftFacts: Codable, Equatable, Sendable {
     public var replaced: Bool
     public var chatOpen: Bool
     public var baseMoved: Bool
+    /// A rewrite card the server queued without a press (`auto_queued_at`, design §7.2 option A). Absent is false.
+    public var autoQueued: Bool
 
     public init(decision: WikiChatDecision? = nil, undone: Bool = false, replaced: Bool = false,
-                chatOpen: Bool = true, baseMoved: Bool = false) {
+                chatOpen: Bool = true, baseMoved: Bool = false, autoQueued: Bool = false) {
         self.decision = decision
         self.undone = undone
         self.replaced = replaced
         self.chatOpen = chatOpen
         self.baseMoved = baseMoved
+        self.autoQueued = autoQueued
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        decision = try c.decodeIfPresent(WikiChatDecision.self, forKey: .decision)
+        undone = try c.decodeIfPresent(Bool.self, forKey: .undone) ?? false
+        replaced = try c.decodeIfPresent(Bool.self, forKey: .replaced) ?? false
+        chatOpen = try c.decodeIfPresent(Bool.self, forKey: .chatOpen) ?? true
+        baseMoved = try c.decodeIfPresent(Bool.self, forKey: .baseMoved) ?? false
+        autoQueued = try c.decodeIfPresent(Bool.self, forKey: .autoQueued) ?? false
     }
 }
 
@@ -687,6 +712,10 @@ public struct WikiChatDraftView: Codable, Equatable, Sendable, Identifiable {
     public let replacedBy: String?
     public let decision: WikiChatDecision?
     public let decidedAt: String?
+    /// When the server queued a rewrite card's sections without a press (design §7.2, option A); nil otherwise.
+    public let autoQueuedAt: String?
+    /// Why an open rewrite card waits for a press though it is inside option A's other bounds; nil otherwise.
+    public let held: WikiChatRewriteHeld?
     public let undoneAt: String?
     public let undoable: Bool
     public let changesetId: String?
@@ -712,6 +741,8 @@ public struct WikiChatDraftView: Codable, Equatable, Sendable, Identifiable {
         replacedBy = try c.decodeIfPresent(String.self, forKey: .replacedBy)
         decision = try c.decodeIfPresent(WikiChatDecision.self, forKey: .decision)
         decidedAt = try c.decodeIfPresent(String.self, forKey: .decidedAt)
+        autoQueuedAt = try c.decodeIfPresent(String.self, forKey: .autoQueuedAt)
+        held = try c.decodeIfPresent(WikiChatRewriteHeld.self, forKey: .held)
         undoneAt = try c.decodeIfPresent(String.self, forKey: .undoneAt)
         undoable = try c.decodeIfPresent(Bool.self, forKey: .undoable) ?? false
         changesetId = try c.decodeIfPresent(String.self, forKey: .changesetId)

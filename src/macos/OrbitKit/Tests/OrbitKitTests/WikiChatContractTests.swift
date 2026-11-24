@@ -49,6 +49,9 @@ final class WikiChatContractTests: XCTestCase {
         let needsYou: Bool
         /// The line an applied plan card that can no longer be undone carries (C17); absent or null on every other.
         let note: String?
+        /// Why a rewrite card waits for a press (design §7.2, option A), and the line it carries; absent or null on every other.
+        let held: WikiChatRewriteHeld?
+        let heldLine: String?
     }
 
     private struct ResultCase: Decodable {
@@ -151,6 +154,7 @@ final class WikiChatContractTests: XCTestCase {
         XCTAssertEqual(known(WikiChatDraftKind.self, except: .unknown), try sharedList("WIKI_CHAT_DRAFT_KINDS"))
         XCTAssertEqual(known(WikiChatDraftState.self, except: .unknown), try sharedList("WIKI_CHAT_DRAFT_STATES"))
         XCTAssertEqual(known(WikiChatRewriteResult.self, except: .unknown), try sharedList("WIKI_CHAT_REWRITE_RESULTS"))
+        XCTAssertEqual(known(WikiChatRewriteHeld.self, except: .unknown), try sharedList("WIKI_CHAT_REWRITE_HELD"))
         XCTAssertEqual(known(WikiChatPress.self), try sharedList("WIKI_CHAT_PRESSES"))
         XCTAssertEqual(known(WikiChatAction.self), try sharedList("WIKI_CHAT_ACTIONS"))
         XCTAssertEqual(known(WikiChatFabState.self), try sharedList("WIKI_CHAT_FAB_STATES"))
@@ -186,6 +190,7 @@ final class WikiChatContractTests: XCTestCase {
         XCTAssertEqual(chat["rules"]?["selectionSentencesMax"], .int(WikiChatLogic.selectionSentencesMax))
         XCTAssertEqual(chat["rules"]?["rewritesMax"], .int(WikiChatLogic.rewritesMax))
         XCTAssertEqual(chat["rules"]?["chatsListed"], .int(WikiChatLogic.chatsListed))
+        XCTAssertEqual(chat["rules"]?["chatAutoSectionsPerDay"], .int(WikiChatLogic.chatAutoSectionsPerDay))
         for (kind, tag) in WikiChatLogic.noteTags {
             XCTAssertEqual(chat["notes"]?[kind]?["tag"]?.stringValue, tag, "the \(kind) note's tag")
         }
@@ -247,6 +252,9 @@ final class WikiChatContractTests: XCTestCase {
             XCTAssertEqual(WikiChatLogic.cardActions(card), test.actions, test.name)
             XCTAssertEqual(WikiChatLogic.cardNeedsYou(card), test.needsYou, test.name)
             XCTAssertEqual(WikiChatLogic.planMovedNote(card), test.note, test.name)
+            XCTAssertEqual(WikiChatLogic.heldLine(test.held), test.heldLine, test.name)
+            // Written without a press is never confirmed by the owner (design §7.2, option A).
+            if test.state == .rewritten { XCTAssertFalse(test.title.contains("Confirmed by you"), test.name) }
         }
     }
 
@@ -364,6 +372,8 @@ final class WikiChatContractTests: XCTestCase {
         switch value["kind"]?.stringValue {
         case "chat":
             return .chat
+        case "contents":
+            return .contents
         case "page":
             switch value["of"]?.stringValue {
             case "doc":   return text(value["doc"]).flatMap { doc in text(value["section"]).map { .pageDoc(doc: doc, section: $0) } }
@@ -377,7 +387,8 @@ final class WikiChatContractTests: XCTestCase {
             return .selection(doc: doc, section: section, toSection: text(value["toSection"]), sentences: sentences, sources: sources)
         case "drafts":
             return .drafts(applied: number(value["applied"]) ?? 0, edited: number(value["edited"]) ?? 0,
-                           discarded: number(value["discarded"]) ?? 0, undone: number(value["undone"]) ?? 0)
+                           discarded: number(value["discarded"]) ?? 0, undone: number(value["undone"]) ?? 0,
+                           rewritten: number(value["rewritten"]) ?? 0, settled: number(value["settled"]) ?? 0)
         default:
             return nil
         }
@@ -406,7 +417,7 @@ final class WikiChatContractTests: XCTestCase {
                      attribute("to", text(value["toSection"])), attribute("sentences", text(value["sentences"])),
                      attribute("sources", text(value["sources"]))]
         case "drafts":
-            parts = ["applied", "edited", "discarded", "undone"].map { attribute($0, text(value[$0])) }
+            parts = ["applied", "edited", "discarded", "undone", "rewritten", "settled"].map { attribute($0, text(value[$0])) }
         default:
             parts = []
         }

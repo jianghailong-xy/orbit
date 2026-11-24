@@ -451,9 +451,9 @@ export type WikiEvidenceRecord =
 /** The tools that write a file: what they hold is what the agent wrote, not what happened. */
 const WIKI_FILE_WRITE_TOOLS: ReadonlySet<string> = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'apply_patch', 'ApplyPatch']);
 /** `wiki_search` and `wiki_get` as each engine files them: `mcp__orbit__wiki_get`, Codex's `orbit__wiki_get`, a bare `wiki_get`. */
-const WIKI_READ_TOOL = /(?:^|_)wiki_(?:search|get)$/u;
+const WIKI_READ_TOOL = /(?:^|_)wiki_(?:search|get|read)$/u;
 /** The same reads through the CLI, wherever a shell command runs them: `orbit wiki get`, `'/usr/local/bin/orbit' wiki search`. */
-const WIKI_READ_COMMAND = /(?:^|[\s;&|(`'"/])orbit['"]?\s+wiki\s+(?:search|get)(?![\w-])/u;
+const WIKI_READ_COMMAND = /(?:^|[\s;&|(`'"/])orbit['"]?\s+wiki\s+(?:search|get|read)(?![\w-])/u;
 
 /**
  * Is this call a read of the wiki itself? What the wiki said is no evidence of what it says: it stays

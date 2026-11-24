@@ -60,6 +60,7 @@ test('a CHECK_ONLY run on Claude Code is allowed what a check needs and nothing 
     'mcp__orbit__project_get',
     'mcp__orbit__wiki_search',
     'mcp__orbit__wiki_get',
+    'mcp__orbit__wiki_read',
     'mcp__orbit__file_fetch',
     'mcp__orbit__file_list',
     'mcp__orbit__browser_status',
@@ -88,7 +89,7 @@ test('a CHECK_ONLY run on Claude Code is allowed what a check needs and nothing 
   }
   // Only Orbit tools that read, report the run, or touch the run's own schedule.
   for (const tool of allowed.filter((t) => t.startsWith('mcp__orbit__'))) {
-    assert.match(tool, /^mcp__orbit__(schedule_(run_report|get|list|update|end)|notify|guide|browser_status|[a-z]+_(get|list|search|fetch))$/, tool);
+    assert.match(tool, /^mcp__orbit__(schedule_(run_report|get|list|update|end)|notify|guide|browser_status|[a-z]+_(get|list|search|fetch)|wiki_read)$/, tool);
   }
   // A rule for a file edit is not carried: Edit is denied anyway, and no rule but a shell command's is the run's.
   assert.ok(!allowed.includes('Edit'));

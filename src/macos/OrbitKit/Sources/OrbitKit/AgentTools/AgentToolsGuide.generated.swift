@@ -795,6 +795,7 @@ let agentToolsGuideJSON = #"""
         "wiki_get",
         "wiki_note",
         "wiki_propose",
+        "wiki_read",
         "wiki_search"
       ]
     },

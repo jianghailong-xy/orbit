@@ -10,6 +10,7 @@ import { ExportCtx, type RunEvent, Transcript } from './Transcript';
 const CONDITIONS = '<list-conditions>\n  Quota held dispatch\n</list-conditions>';
 const PAGE = '<orbit_wiki_page of="doc" doc="1.1" slug="runner-presence">\nA runner sends a heartbeat every 30 seconds.\n</orbit_wiki_page>';
 const SELECTION = '<orbit_wiki_selection doc="1.1" slug="runner-presence" sentences="1" sources="1">\nSelected heartbeat source.\n</orbit_wiki_selection>';
+const CONTENTS = '<orbit_wiki_contents planVersion="3">\nThis is a view of the wiki\'s structure, not a source.\n1.1 runner-presence · Runner presence · Runtime\n  §1 heartbeat · Heartbeat · written, repoSha 7f3e2a1c0d9b\n</orbit_wiki_contents>';
 const TYPED = 'What is the current state?';
 
 let container: HTMLDivElement;
@@ -42,6 +43,8 @@ describe('recorded control-plane notes (owner decision 2026-11-18)', () => {
     ['background inventory', '<background-jobs>\n  Still running: hidden-job\n</background-jobs>', 'hidden-job'],
     ['coordinator role', '<orbit_project_coordinator_context>\nYou coordinate this project.\n</orbit_project_coordinator_context>', 'You coordinate this project.'],
     ['wiki chat with page and selection', `${WIKI_CHAT_PROMPT}\n\n${PAGE}\n\n${SELECTION}`, 'A runner sends a heartbeat every 30 seconds.'],
+    ['wiki chat first message with its contents', `${WIKI_CHAT_PROMPT}\n\n${CONTENTS}\n\n${PAGE}`, '§1 heartbeat · Heartbeat · written'],
+    ['wiki contents alone, after the plan changed', CONTENTS, 'Runner presence · Runtime'],
     ['wiki chat without attachments', WIKI_CHAT_PROMPT, 'You are chatting beside a page of this repository'],
   ])('keeps %s out of the bubble and the rest of the transcript', async (_kind, block, marker) => {
     const note = `\n\n${block}`;
