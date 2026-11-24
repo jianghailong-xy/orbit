@@ -42,6 +42,7 @@ object ProjectDone {
     const val checkTask = "1 task is still running"
     const val checkOwnerItems = "Open owner items: {n}"
     const val checkLandings = "Landings in flight: {n}"
+    const val checkDeferredLandings = "Landings waiting for work sessions to finish: {n}"
     const val findingsHeading = "Orbit can’t prove {n} things"
     const val findingsAccepted = "These will be kept as the gaps you accepted."
     const val recordAsDoneAnyway = "Record as done anyway"
@@ -220,6 +221,7 @@ object ProjectDone {
             "DONE_TASKS_IN_FLIGHT" -> (if (finding.objects("tasks").size == 1) checkTask else checkTasks) to finding.objects("tasks").size
             "DONE_OWNER_ITEMS_OPEN" -> checkOwnerItems to finding.objects("items").size
             "DONE_INTEGRATION_IN_FLIGHT" -> checkLandings to finding.objects("jobs").size
+            "DONE_LANDING_DEFERRED" -> checkDeferredLandings to finding.objects("tasks").size
             else -> return finding.text("message").orEmpty()
         }
         return template.replace("{n}", "$n").replace("{main}", main)

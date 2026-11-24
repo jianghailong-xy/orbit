@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { SETTLED_TASK_STATUSES, type CoordinatorWakeEvent } from './coordinator-wake';
 import { IN_FLIGHT_JOB_STATES, LANDING_JOB_KINDS } from './criterion-landing-reason';
-import { isCodeTaskSql, taskLandingSql, workStillMovingSql } from './project-criterion-landing';
+import { landingDeferredSql } from './project-criterion-landing';
 import {
   readDerivedProjectDoneReading,
   type DerivedProjectDoneReading,
@@ -93,12 +93,7 @@ export async function landingDeferred(
     SELECT EXISTS (
       SELECT 1 FROM "task" t
        WHERE t."project_id" = ${projectId}::uuid
-         AND t."status" = 'DONE'
-         AND t."delivered_at" IS NULL
-         AND ${Prisma.raw(isCodeTaskSql('t'))}
-         AND ${Prisma.raw(workStillMovingSql('t'))}
-         -- Work a receipt already puts on the line has no landing left to decide.
-         AND (${Prisma.raw(taskLandingSql('t'))}) = 'NOT_KNOWN'
+         AND ${Prisma.raw(landingDeferredSql('t'))}
     ) AS "deferred"`);
   return row?.deferred === true;
 }
