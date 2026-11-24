@@ -563,6 +563,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
     'GET /documents/changes',
     'GET /documents/usage',
     'GET /documents/syncs',
+    'GET /documents/syncs/:id',
     'POST /documents/uploads',
     'GET /documents/uploads/:id',
     'PUT /documents/uploads/:id/chunks/:idx',

@@ -323,7 +323,7 @@ describe('one Google account', () => {
     [
       'a macOS runner',
       { antigravity: { supported: true, installed: true, version: '1.3.0', envKeyAvailable: true, authSource: 'google', googleLogin: 'unsupported_platform' } },
-      'Google sign-in is not supported on macOS runners yet. Use a Gemini API key.',
+      "Google sign-in is not supported on this runner's operating system. Use a Gemini API key.",
     ],
     [
       'an older runner',

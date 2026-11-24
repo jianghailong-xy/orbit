@@ -1782,7 +1782,20 @@ export type SharedRoot =
   | (SharedSession & { kind?: 'SESSION' })
   | { kind: 'TASK'; include: ShareInclude; sharedAt: string; root: SharedTask }
   | { kind: 'PROJECT'; include: ShareInclude; sharedAt: string; root: SharedProject; scope: SharedScope }
-  | { kind: 'WIKI'; include: ShareInclude; sharedAt: string; root: SharedWiki };
+  | { kind: 'WIKI'; include: ShareInclude; sharedAt: string; root: SharedWiki }
+  | { kind: 'DRIVE_FILE'; include: ShareInclude; sharedAt: string; root: SharedDriveFile };
+
+/** A Documents file a link shares, pinned to the version shared: its bytes are at `sharedDriveFileUrl`.
+ *  `preview` says the browser can show it as it is (a PDF or a picture). */
+export interface SharedDriveFile {
+  name: string;
+  sizeBytes: number;
+  mimeType: string;
+  preview: boolean;
+}
+
+/** Where a file link's bytes are served (with `Range`), no login needed. */
+export const sharedDriveFileUrl = (token: string): string => `/api/shared/${encodeURIComponent(token)}/content`;
 
 /** One of a project link's tasks (`/s/<token>/t/<id>`): the task as a task link shows its task,
  *  with the link's layers and what it opens. */

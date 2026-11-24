@@ -201,7 +201,7 @@ The drive every account keeps files in and its agents read and write: see
 
 | Variable | Type | Required / default | Purpose | Secret? | Apply change |
 | --- | --- | --- | --- | --- | --- |
-| `ORBIT_DOCUMENTS_ENABLED` | `boolean` (`true` only) | Optional; off. A fresh install writes `false`; an upgrade writes it once, `true` where the drive already holds files | The switch. `true` turns Documents on; absent, empty or `false` is off, and so is any other value, with a warning in the API's log. Off, every drive route answers `404 DOCUMENTS_DISABLED`, `GET /api/auth/capabilities` says `documents.enabled: false` so the clients show no Documents, and sessions have no drive tools. Nothing is deleted. | No | Recreate API |
+| `ORBIT_DOCUMENTS_ENABLED` | `boolean` (`true` only) | Optional; off. A fresh install writes `false`; an upgrade never writes it | The switch. `true` turns Documents on; absent, empty or `false` is off, and so is any other value, with a warning in the API's log. Off, every drive route answers `404 DOCUMENTS_DISABLED`, `GET /api/auth/capabilities` says `documents.enabled: false` so the clients show no Documents, and sessions have no drive tools. Nothing is deleted. | No | Recreate API |
 
 ### Managed runners
 

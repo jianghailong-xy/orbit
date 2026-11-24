@@ -769,7 +769,7 @@ function EngineRow({
   const googleLogin = engine === 'antigravity' ? (antigravity?.googleLogin ?? 'needs_update') : undefined;
   const envKey = engine === 'antigravity' && kind === 'in' && health?.authSource !== 'google';
   const loginHint = googleLogin === 'unsupported_platform'
-    ? 'Google sign-in is not supported on macOS runners yet. Use a Gemini API key.'
+    ? "Google sign-in is not supported on this runner's operating system. Use a Gemini API key."
     : googleLogin === 'needs_update' ? 'Update this runner to sign in with Google.' : null;
   // Cursor CLI's own admission (cursorRunnerState): a runner that predates it, a platform its pinned
   // build was never measured on, or a build other than the pinned one. Each is the row's whole story —

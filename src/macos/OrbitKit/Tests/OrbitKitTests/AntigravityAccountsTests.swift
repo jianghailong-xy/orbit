@@ -221,7 +221,7 @@ final class AntigravityAccountsTests: XCTestCase {
         XCTAssertFalse(RunnerPageFormat.canAddAccount(mac, engine: "antigravity"))
         XCTAssertFalse(RunnerPageFormat.canSignIn(mac, engine: "antigravity"))
         XCTAssertEqual(RunnerPageFormat.signInHint(mac, engine: "antigravity"),
-                       "Google sign-in is not supported on macOS runners yet. Use a Gemini API key.")
+                       "Google sign-in is not supported on this runner's operating system. Use a Gemini API key.")
         XCTAssertEqual(RunnerPageFormat.signInHint(try runner(one, googleLogin: "needs_update"), engine: "antigravity"),
                        "Update this runner to sign in with Google.")
         // Every other engine is as it was.

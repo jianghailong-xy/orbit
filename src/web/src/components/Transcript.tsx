@@ -474,7 +474,7 @@ export function AntigravityRepairCard({ repair, help, seq }: {
       {repair === 'needsKey' && help.provider === 'antigravity' && (
         help.googleLogin === 'available' && help.runnerId
           ? <RunnerSignIn runnerId={help.runnerId} engine="antigravity" onDone={help.onRetry} />
-          : <div className="chat-authfix-desc">{help.googleLogin === 'unsupported_platform' ? 'Google sign-in is not supported on macOS runners yet. Use a Gemini API key.' : 'Update this runner to sign in with Google.'}</div>
+          : <div className="chat-authfix-desc">{help.googleLogin === 'unsupported_platform' ? "Google sign-in is not supported on this runner's operating system. Use a Gemini API key." : 'Update this runner to sign in with Google.'}</div>
       )}
       <div className="chat-authfix-actions">
         {repair === 'needsKey' ? (
@@ -2481,6 +2481,7 @@ function isGroupableTool(node: Node, chat = false): node is ToolNode {
     node.name !== 'mcp__orbit__project_create' &&
     !isBackgroundTaskCall(node.name) &&
     node.name !== BG_RUN_TOOL &&
+    node.name !== DOCUMENTS_SYNC_TOOL &&
     !ownerChatReplyOf(node)
   );
 }
@@ -4153,6 +4154,8 @@ function CodeBlock({ children }: any) {
 
 import { DocumentsFileCard, documentsIdFromHref } from './documents/DocumentsFileCard';
 import { DocumentsTransferCard } from './documents/DocumentsTransferCard';
+import { DocumentsSyncCard } from './documents/DocumentsSyncCard';
+import { DOCUMENTS_SYNC_TOOL, documentsSyncIdOf } from '../lib/documentsSyncs';
 import { documentsTransferFile, documentsTransferKind, type DocumentsTransferKind } from '../lib/documentsTransfer';
 import { useDocumentsSaidOff } from '../lib/documentsSwitch';
 
@@ -4945,6 +4948,12 @@ function ToolView({ node, live, startOpen }: { node: ToolNode; live?: boolean; s
     if (!node.result || receipt) {
       return <JobCard seq={node.seq} input={input} jobId={receipt?.jobId ?? null} startedAt={receipt?.startedAt ?? null} live={live} />;
     }
+  }
+  // A documents_sync call is its sync's card once its answer names the sync; an older runner's answer names none and
+  // stays a call (board docs/mocks/documents-sync-card).
+  if (node.name === DOCUMENTS_SYNC_TOOL && node.result && !node.result.isError) {
+    const syncId = documentsSyncIdOf(resultText(resultContent));
+    if (syncId) return <DocumentsSyncCard syncId={syncId} />;
   }
   if (node.name === 'mcp__orbit__session_create' && node.result && !node.result.isError) {
     // Nothing to render until the untrimmed result lands (see needsWholeResult).

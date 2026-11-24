@@ -2308,9 +2308,10 @@ export type AntigravityAuthSource = 'google' | 'env_key';
 
 /**
  * Whether Orbit can sign this runner's Antigravity into a Google account: `available`;
- * `needs_update`, a runner that does not declare `antigravity-google-login/v1`; or
- * `unsupported_platform`, one that reported an operating system other than Linux, which the
- * sign-in does not support yet (show it as not supported, with the Gemini key as the way in). A
+ * `needs_update`, a runner that does not declare `antigravity-google-login/v1`, or a Mac runner
+ * that does not also declare `antigravity-google-login-macos/v1`; or `unsupported_platform`, one
+ * that reported an operating system other than Linux and macOS, which the sign-in does not support
+ * (show it as not supported, with the Gemini key as the way in). A
  * runner that has not reported its OS is `available`: it refuses a platform it cannot do itself,
  * and the relay reports that as the sign-in's failure.
  */

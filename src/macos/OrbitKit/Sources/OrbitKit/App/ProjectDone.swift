@@ -356,6 +356,7 @@ public struct ProjectDoneFinding: Codable, Equatable, Sendable {
         case "DONE_TASKS_IN_FLIGHT": template = tasks.count == 1 ? ProjectDone.checkTask : ProjectDone.checkTasks; n = tasks.count
         case "DONE_OWNER_ITEMS_OPEN": template = ProjectDone.checkOwnerItems; n = items.count
         case "DONE_INTEGRATION_IN_FLIGHT": template = ProjectDone.checkLandings; n = jobs.count
+        case "DONE_LANDING_DEFERRED": template = ProjectDone.checkDeferredLandings; n = tasks.count
         default: return message
         }
         return template.replacingOccurrences(of: "{n}", with: String(n)).replacingOccurrences(of: "{main}", with: main)
@@ -600,6 +601,7 @@ public enum ProjectDone {
     public static let checkTask = "1 task is still running"
     public static let checkOwnerItems = "Open owner items: {n}"
     public static let checkLandings = "Landings in flight: {n}"
+    public static let checkDeferredLandings = "Landings waiting for work sessions to finish: {n}"
     public static let findingsHeading = "Orbit can’t prove {n} things"
     public static let findingsAccepted = "These will be kept as the gaps you accepted."
     public static let recordAsDoneAnyway = "Record as done anyway"

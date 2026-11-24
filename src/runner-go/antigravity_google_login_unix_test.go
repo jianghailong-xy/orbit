@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || darwin
 
 package main
 
@@ -71,6 +71,13 @@ take() {
  [[ "$key" == "$1" || ( "$1" == $'\r' && -z "$key" ) ]] || exit 9
 }
 if [[ "$GOOGLE_REPLAY_MODE" == no_url ]]; then sleep 30; exit 0; fi
+if [[ "${GOOGLE_REPLAY_DA2:-}" == 1 ]]; then
+ # agy 1.5.16 on macOS: ask the terminal who it is, and draw nothing until it answers.
+ printf '\033[>c'
+ reply=""
+ while IFS= read -rsn1 key; do reply+="$key"; [[ "$key" == c ]] && break; done
+ [[ "$reply" == $'\033[>0;95;0c' ]] || exit 8
+fi
 onboard() {
  cat "$GOOGLE_REPLAY_DIR/theme"; take $'\r'
  cat "$GOOGLE_REPLAY_DIR/terms"; take $'\r'; take $'\t'; take $'\t'; take $'\r'
@@ -223,6 +230,36 @@ func TestAntigravityGoogleLoginReplaySuccess(t *testing.T) {
 	}
 	if stat, err := os.Stat(antigravityGoogleTokenPath()); err != nil || stat.Mode().Perm() != 0o600 {
 		t.Fatal("token missing or not private")
+	}
+}
+
+// An agy that waits for the terminal to say who it is (secondary Device Attributes) before it draws
+// gets its answer, once, and the sign-in goes on to its link and its code.
+func TestAntigravityGoogleLoginReplayAnswersTheTerminalIdentityQuery(t *testing.T) {
+	h := newGoogleLoginHarness(t, "success")
+	t.Setenv("GOOGLE_REPLAY_DA2", "1")
+	h.start()
+	if res := h.wait(t, loginAwaitingCode); res.URL != googleReplayURL {
+		t.Fatal("OSC target was not preserved")
+	}
+	h.code()
+	h.wait(t, loginDone)
+}
+
+func TestAntigravityGoogleLoginOutputAnswersTheIdentityQueryOnce(t *testing.T) {
+	o := &antigravityGoogleLoginOutput{}
+	_, _ = o.Write([]byte("\x1b[>"))
+	_, _ = o.Write([]byte("c\x1b[>q\x1b[c"))
+	_, _ = o.Write([]byte("\x1b[>c"))
+	if len(o.actions) != 1 || o.actions[0] != antigravityGoogleDA2Reply {
+		t.Fatalf("actions = %q, want one %q", o.actions, antigravityGoogleDA2Reply)
+	}
+	quiet := &antigravityGoogleLoginOutput{}
+	_, _ = quiet.Write([]byte("Select login method:\n"))
+	for _, keys := range quiet.actions {
+		if keys == antigravityGoogleDA2Reply {
+			t.Fatal("answered a query agy never asked")
+		}
 	}
 }
 

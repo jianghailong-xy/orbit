@@ -30,16 +30,21 @@ public struct ManagedRunnerCapability: Decodable, Equatable, Sendable {
 /// Reading it allocates nothing on the server.
 public struct ServerCapabilities: Decodable, Equatable, Sendable {
     public let managedRunners: ManagedRunnerCapability?
+    /// Documents (the drive, `/documents`), the deployment switch ORBIT_DOCUMENTS_ENABLED. A server from before
+    /// the switch omits it; `DocumentsLogic.shown` reads that as on.
+    public let documents: DocumentsCapability?
 
-    public init(managedRunners: ManagedRunnerCapability?) {
+    public init(managedRunners: ManagedRunnerCapability?, documents: DocumentsCapability? = nil) {
         self.managedRunners = managedRunners
+        self.documents = documents
     }
 
-    private enum CodingKeys: String, CodingKey { case managedRunners }
+    private enum CodingKeys: String, CodingKey { case managedRunners, documents }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         managedRunners = try? values.decode(ManagedRunnerCapability.self, forKey: .managedRunners)
+        documents = try? values.decode(DocumentsCapability.self, forKey: .documents)
     }
 }
 
