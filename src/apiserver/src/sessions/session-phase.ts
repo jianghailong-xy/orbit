@@ -49,6 +49,12 @@ export interface SessionHoldFacts {
   runnerUnavailable: boolean;
 }
 
+/** `runnerUnavailable` in SQL, for the runner row aliased `runner` (LEFT JOINed on the session's assigned runner). */
+export function runnerUnavailableSql(runner: string): Prisma.Sql {
+  const r = Prisma.raw(runner);
+  return Prisma.sql`(${r}."id" IS NULL OR ${runnerOfflineSql(runner)} OR ${r}."heartbeat_draining" IS TRUE)`;
+}
+
 export const NO_HOLD: SessionHoldFacts = { dispatchPaused: false, runnerUnavailable: false };
 
 /**
@@ -73,7 +79,7 @@ export function sessionHasHoldNotice(row: { status: string; error?: string | nul
 }
 
 /** A queued turn that something nobody asked for keeps from starting. */
-export function sessionIsHeld(row: SessionPhaseRow, hold: SessionHoldFacts): boolean {
+export function sessionIsHeld(row: Pick<SessionPhaseRow, 'status' | 'error'>, hold: SessionHoldFacts): boolean {
   return row.status === RunStatus.PENDING
     && (hold.dispatchPaused || hold.runnerUnavailable || sessionHasHoldNotice(row));
 }
@@ -171,7 +177,7 @@ export async function readSessionPhaseFields(
            s."running_bg_jobs" AS "runningBgJobs", s."running_bg_shells" AS "runningBgShells", s."retry_at" AS "retryAt",
            (${Prisma.raw(RESUME_WATCH.sql('s'))}) AS "hasResumeWatch",
            (${Prisma.raw(PENDING_WAKEUP.sql('s'))}) AS "hasPendingWakeup",
-           (r."id" IS NULL OR ${runnerOfflineSql('r')} OR r."heartbeat_draining" IS TRUE) AS "runnerUnavailable",
+           ${runnerUnavailableSql('r')} AS "runnerUnavailable",
            ${DISPATCH_PAUSED} AS "dispatchPaused"
       FROM "session" s
       LEFT JOIN "runner" r ON r."id" = s."assigned_runner_id"

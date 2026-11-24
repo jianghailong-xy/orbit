@@ -25,8 +25,8 @@ function contentOf(parts: Buffer[]) {
     return chunk;
   });
   const prisma = {
-    driveVersion: { findFirst: async () => ({ sizeBytes: BigInt(offset) }) },
-    driveVersionChunk: { findMany: async () => chunks },
+    documentVersion: { findFirst: async () => ({ sizeBytes: BigInt(offset) }) },
+    documentVersionChunk: { findMany: async () => chunks },
     fileBlob: { findUnique: async () => ({ storage: 'local' }) },
   };
   const files = {

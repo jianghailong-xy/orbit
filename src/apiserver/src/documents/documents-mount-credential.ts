@@ -83,11 +83,11 @@ export async function issueDriveMountCredential(
   const token = `${DRIVE_MOUNT_TOKEN_PREFIX}${generateToken(32)}`;
   const now = new Date();
   const created = await withTransactionRetry(prisma, async (tx: Prisma.TransactionClient) => {
-    await tx.driveMountCredential.updateMany({
+    await tx.documentMountCredential.updateMany({
       where: { runnerId: input.runnerId, generation: { lt: input.generation }, revokedAt: null },
       data: { revokedAt: now },
     });
-    return tx.driveMountCredential.create({
+    return tx.documentMountCredential.create({
       data: { ownerId: input.ownerId, runnerId: input.runnerId, generation: input.generation, tokenHash: sha256(token), createdAt: now },
       select: { id: true },
     });
@@ -97,11 +97,11 @@ export async function issueDriveMountCredential(
 
 /** Every live mount credential of a runner's generations below `generation`, revoked: what retiring a generation does. */
 export async function revokeDriveMountCredentials(
-  prisma: Pick<PrismaService, 'driveMountCredential'>,
+  prisma: Pick<PrismaService, 'documentMountCredential'>,
   runnerId: string,
   belowGeneration: number,
 ): Promise<number> {
-  const { count } = await prisma.driveMountCredential.updateMany({
+  const { count } = await prisma.documentMountCredential.updateMany({
     where: { runnerId, generation: { lt: belowGeneration }, revokedAt: null },
     data: { revokedAt: new Date() },
   });
@@ -114,12 +114,12 @@ export async function revokeDriveMountCredentials(
  * the credential's generation, which the request must also name.
  */
 export async function authorizeDriveMount(
-  prisma: Pick<PrismaService, 'driveMountCredential' | 'managedRunner'>,
+  prisma: Pick<PrismaService, 'documentMountCredential' | 'managedRunner'>,
   token: string,
   headers: Record<string, string | string[] | undefined>,
   admit: (runner: Runner & { owner: { disabledAt: Date | null } }) => Runner,
 ): Promise<{ runner: Runner; instance: ManagedRunnerInstance; mount: DriveMount }> {
-  const credential = await prisma.driveMountCredential.findUnique({
+  const credential = await prisma.documentMountCredential.findUnique({
     where: { tokenHash: sha256(token) },
     include: { runner: { include: { owner: { select: { disabledAt: true } } } } },
   });

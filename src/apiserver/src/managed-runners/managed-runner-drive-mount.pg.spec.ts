@@ -45,7 +45,7 @@ test('the manager delivers each generation its mount credential, for the CSI plu
   await verifyCoordinatorPgIdentity(sql);
 
   const liveCredentials = (runnerId: string) =>
-    db.driveMountCredential.findMany({ where: { runnerId, revokedAt: null }, orderBy: { createdAt: 'asc' } });
+    db.documentMountCredential.findMany({ where: { runnerId, revokedAt: null }, orderBy: { createdAt: 'asc' } });
 
   await t.test('a generation gets its Secret before its Pod, and the Pod gets the drive', async () => {
     const w = managedRunnerWorld(db, { files: true });
@@ -106,7 +106,7 @@ test('the manager delivers each generation its mount credential, for the CSI plu
     v.cluster.inject({ op: 'create', kind: 'drivesecrets', mode: 'status', status: 500 });
     const failed = await v.readyRunner('drive-failed-create');
     const delivered = bootstrapCredentialOf(v.cluster.object<Secret>('drivesecrets', driveMountSecretName(failed.mapping.runnerId))!)!;
-    const all = await db.driveMountCredential.findMany({ where: { runnerId: failed.mapping.runnerId } });
+    const all = await db.documentMountCredential.findMany({ where: { runnerId: failed.mapping.runnerId } });
     assert.equal(all.length, 2, 'issued twice');
     assert.deepEqual(all.filter((c) => !c.revokedAt).map((c) => c.tokenHash), [sha256(delivered)], 'only the delivered one is live');
   });

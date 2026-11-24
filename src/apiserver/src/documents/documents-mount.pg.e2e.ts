@@ -718,7 +718,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
     assert.match(s.out, /cp-a rc=1/);
     assert.match(s.out, /copied/);
     assert.match(s.err, /preserving permissions for .*script\.sh.*Operation not permitted/);
-    assert.match(errorsLog(a), /EPERM chmod \/home\/orbit\/Files\/script\.sh to 0755: the drive keeps no modes/);
+    assert.match(errorsLog(a), /EPERM chmod \/home\/orbit\/Documents\/script\.sh to 0755: the drive keeps no modes/);
     d.push('contents copied; cp printed "preserving permissions … Operation not permitted", exit 1 both; errors.log has the chmod line');
   });
 
@@ -766,7 +766,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
     assert.match(s.out, /Operation not supported/);
     assert.match(s.out, /dd rc=1/);
     const sparse = await mustEntry('/sparse');
-    const m = await db.driveVersionChunk.findMany({ where: { versionId: (await db.driveEntry.findUniqueOrThrow({ where: { id: toUuid(sparse.id) } })).currentVersionId! } });
+    const m = await db.documentVersionChunk.findMany({ where: { versionId: (await db.documentEntry.findUniqueOrThrow({ where: { id: toUuid(sparse.id) } })).currentVersionId! } });
     assert.equal(m.length, 128);
     assert.equal(new Set(m.map((c) => c.sha256)).size, 1, 'one shared all-zero chunk');
     d.push('truncate: 1 GiB of 128 chunks naming one all-zero blob; holes: 100 MiB of zeros then Z; dd into the closed sparse: "Operation not supported", exit 1');
@@ -933,7 +933,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
     // regular file neither as a user nor with -p. The executable bit the drive cannot keep goes without tar seeing a
     // refusal, so §5.9's "Cannot change mode … exits 2" cannot happen; errors.log names each such file instead.
     assert.match(s.out, /rc=0\nsame\n644\nrc-p=0\nsame-p/);
-    assert.match(errorsLog(a), /INFO create \/home\/orbit\/Files\/x23\/run\.sh with mode 0755: the drive keeps no modes: the file is 0644 and cannot be executed/);
+    assert.match(errorsLog(a), /INFO create \/home\/orbit\/Documents\/x23\/run\.sh with mode 0755: the drive keeps no modes: the file is 0644 and cannot be executed/);
     d.push('every file\'s content matches; tar -x and tar -xp both exit 0 and run.sh shows 0644: GNU tar takes the mode it created a file with as set and chmods no regular file, so it meets no refusal (§5.9\'s "Cannot change mode … exit 2" does not happen with GNU tar 1.35); errors.log says run.sh was created executable and is kept 0644');
   });
 
@@ -999,17 +999,17 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
     const pid = toUuid(parent.id);
     await db.$executeRawUnsafe(`
       WITH f AS (
-        INSERT INTO "drive_entry" ("id","owner_id","parent_id","kind","name","last_writer_kind")
+        INSERT INTO "document_entry" ("id","owner_id","parent_id","kind","name","last_writer_kind")
         SELECT gen_random_uuid(), $1::uuid, $2::uuid, 'FOLDER', 'd' || lpad(i::text, 5, '0'), 'OWNER' FROM generate_series(1, $3) i
         RETURNING "id"
       ), e AS (
         SELECT gen_random_uuid() AS "id", gen_random_uuid() AS "vid", f."id" AS "parent", j FROM f, generate_series(1, $4) j
       ), ins AS (
-        INSERT INTO "drive_entry" ("id","owner_id","parent_id","kind","name","current_version_id","last_writer_kind")
+        INSERT INTO "document_entry" ("id","owner_id","parent_id","kind","name","current_version_id","last_writer_kind")
         SELECT e."id", $1::uuid, e."parent", 'FILE', 'f' || lpad(j::text, 6, '0'), e."vid", 'OWNER' FROM e
         RETURNING "id", "current_version_id"
       )
-      INSERT INTO "drive_version" ("id","owner_id","entry_id","writer_kind") SELECT "current_version_id", $1::uuid, "id", 'OWNER' FROM ins`,
+      INSERT INTO "document_version" ("id","owner_id","entry_id","writer_kind") SELECT "current_version_id", $1::uuid, "id", 'OWNER' FROM ins`,
     owner, pid, folders, perFolder);
   };
   const seedFlat = async (folder: string, count: number) => {
@@ -1017,10 +1017,10 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
     await db.$executeRawUnsafe(`
       WITH e AS (SELECT gen_random_uuid() AS "id", gen_random_uuid() AS "vid", j FROM generate_series(1, $3) j),
       ins AS (
-        INSERT INTO "drive_entry" ("id","owner_id","parent_id","kind","name","current_version_id","last_writer_kind")
+        INSERT INTO "document_entry" ("id","owner_id","parent_id","kind","name","current_version_id","last_writer_kind")
         SELECT e."id", $1::uuid, $2::uuid, 'FILE', 'f' || (j - 1), e."vid", 'OWNER' FROM e RETURNING "id", "current_version_id"
       )
-      INSERT INTO "drive_version" ("id","owner_id","entry_id","writer_kind") SELECT "current_version_id", $1::uuid, "id", 'OWNER' FROM ins`,
+      INSERT INTO "document_version" ("id","owner_id","entry_id","writer_kind") SELECT "current_version_id", $1::uuid, "id", 'OWNER' FROM ins`,
     owner, toUuid(parent.id), count);
   };
 
@@ -1037,7 +1037,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
     assert.equal(added[0].itemCount, hugeFolders * 101 + 1);
     const restore = await api('POST', `/documents/trash/groups/${added[0].id}/restore`);
     assert.ok(restore.status === 200 || restore.status === 201, restore.text.slice(0, 300));
-    const back = await db.driveEntry.count({ where: { ownerId: owner, kind: 'FILE', trashedAt: null, parent: { parentId: toUuid((await mustEntry('/huge30')).id) } } });
+    const back = await db.documentEntry.count({ where: { ownerId: owner, kind: 'FILE', trashedAt: null, parent: { parentId: toUuid((await mustEntry('/huge30')).id) } } });
     assert.equal(back, hugeFolders * 100);
     d.push(`exit 0 in ${(s.ms / 1000).toFixed(0)} s (${(s.ms / (hugeFolders * 101)).toFixed(1)} ms per delete); one group of ${added[0].itemCount} items; restoring it brought back ${back} files`);
     if (FULL) assert.ok(s.ms < 15 * 60_000, 'within 15 minutes');
@@ -1077,7 +1077,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
         for (let cur: string | null = id; cur; ) {
           assert.ok(!seen.has(cur), 'a cycle');
           seen.add(cur);
-          const entry: { name: string; parentId: string | null } = await db.driveEntry.findUniqueOrThrow({ where: { id: cur } });
+          const entry: { name: string; parentId: string | null } = await db.documentEntry.findUniqueOrThrow({ where: { id: cur } });
           chain.push(entry.name || '/');
           cur = entry.parentId;
         }
@@ -1096,7 +1096,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
         sh(a, `echo n > $F/r32-${i}/s/new.txt 2>&1; echo "rc=$?"`),
       ]);
       assert.equal(web.status, 200, web.text);
-      const rows = await db.driveEntry.findMany({ where: { ownerId: owner, name: 'new.txt', parent: { name: 's', parent: { id: toUuid(r.id) } } } });
+      const rows = await db.documentEntry.findMany({ where: { ownerId: owner, name: 'new.txt', parent: { name: 's', parent: { id: toUuid(r.id) } } } });
       for (const row of rows) assert.ok(row.trashedAt, 'never a live new.txt under a trashed r');
       trashOutcomes += rows.length ? 'created first, in Trash with r; ' : `open refused (${(/: ([^:\n]+)\nrc=/.exec(mount.out)?.[1] ?? mount.out.trim())}); `;
     }
@@ -1198,7 +1198,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
     const lines = s.out.trim().split('\n');
     const used = Number(lines[2].trim().split(/\s+/)[0]);
     const avail = Number(lines[2].trim().split(/\s+/)[1]);
-    const live = await db.driveEntry.aggregate({ where: { ownerId: owner, kind: 'FILE', trashedAt: null }, _sum: { sizeBytes: true } });
+    const live = await db.documentEntry.aggregate({ where: { ownerId: owner, kind: 'FILE', trashedAt: null }, _sum: { sizeBytes: true } });
     const liveBytes = Number(live._sum.sizeBytes ?? 0);
     assert.ok(Math.abs(used - liveBytes) <= 4096 * 2 + liveBytes * 0.01, `df used ${used} vs drive ${liveBytes}`);
     assert.ok(avail >= 2 ** 49, 'a large free figure');
@@ -1228,7 +1228,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
     assert.match(s.err, /No locks available/);
     assert.match(s.out, /flock rc=(1|71)\b/);
     assert.match(s.out, /sqlite rc=[1-9]/);
-    assert.match(errorsLog(a), /ENOLCK fcntl lock \/home\/orbit\/Files\/x40\.db: the drive has no file locks/);
+    assert.match(errorsLog(a), /ENOLCK fcntl lock \/home\/orbit\/Documents\/x40\.db: the drive has no file locks/);
     d.push(`flock: "No locks available", exit ${/flock rc=(\d+)/.exec(s.out)![1]} (util-linux exits EX_OSERR for ENOLCK); sqlite (the sqlite3 CLI is not on this host, so Python's sqlite3, the same library): "${(/sqlite3\.\w+: ([^\n]+)/.exec(s.err) ?? ['', 'fails'])[1]}", exit ≠ 0; errors.log says the drive has no file locks`);
   });
 
@@ -1508,7 +1508,7 @@ f = open('$F/long52.log', 'w'); f.write('one line\\n'); f.flush(); time.sleep(70
     const onB = ok(await sh(b, 'cat $F/long52.log'), 'B reads it');
     assert.equal(onB.out, 'one line\n');
     await waitFor('nothing uncommitted', () => status(a).uncommittedHandles === 0, 10_000);
-    const stagings = await db.driveStaging.findMany({ where: { entryId: toUuid((await mustEntry('/long52.log')).id) } });
+    const stagings = await db.documentStaging.findMany({ where: { entryId: toUuid((await mustEntry('/long52.log')).id) } });
     assert.ok(stagings.every((s) => !s.dirty), 'no staging holds the runner awake (§8.1)');
     await holder;
     d.push(`the line was on the server ${(onServer / 1000).toFixed(1)} s after the write (periodic commit, 30 s idle) while the handle stayed open; runner B read it; no dirty staging, status.json uncommittedHandles 0, so the runner may sleep`);
@@ -1608,14 +1608,14 @@ f = open('$F/long52.log', 'w'); f.write('one line\\n'); f.flush(); time.sleep(70
 
   await row('58', 'a superseded generation\'s daemon writes', async (d) => {
     ok(await sh(a, 'echo before > $F/r58.txt'), 'write');
-    const versionsBefore = await db.driveVersion.count({ where: { ownerId: owner } });
+    const versionsBefore = await db.documentVersion.count({ where: { ownerId: owner } });
     await db.managedRunner.update({ where: { id: mapping.id }, data: { generation: 2, podUid: randomUUID() } });
     // The daemon learns it at its next request: the change feed polls every 15 s at most.
     await waitFor('the daemon is fenced', () => /instance was replaced/.test(errorsLog(a)) || status(a).fenced !== undefined, 40_000, 500);
     const s = await sh(a, 'echo x >> $F/r58.txt; echo "rc=$?"');
     assert.match(s.err, /Input\/output error|Transport endpoint is not connected/);
     assert.match(errorsLog(a), /the runner instance was replaced|instance was replaced/);
-    assert.equal(await db.driveVersion.count({ where: { ownerId: owner } }), versionsBefore, 'nothing committed');
+    assert.equal(await db.documentVersion.count({ where: { ownerId: owner } }), versionsBefore, 'nothing committed');
     assert.equal((await content('/r58.txt')).toString(), 'before\n');
     d.push(`write failed (${/Input\/output error|Transport endpoint is not connected/.exec(s.err)![0]}); errors.log: "${/[^\n]*instance was replaced[^\n]*/.exec(errorsLog(a))![0].slice(21, 140)}…"; nothing committed; the daemon left and the parent did not mount again`);
   });

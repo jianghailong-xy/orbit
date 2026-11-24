@@ -209,7 +209,7 @@ function storeCases(leg: Leg) {
     };
     const owner = await accountOf('drive-owner');
     const stranger = await accountOf('drive-stranger');
-    const stagingRows = (stagingId: string) => db.driveStagingChunk.findMany({ where: { stagingId }, orderBy: { idx: 'asc' } });
+    const stagingRows = (stagingId: string) => db.documentStagingChunk.findMany({ where: { stagingId }, orderBy: { idx: 'asc' } });
     /** The bytes of a staging, chunk after chunk in index order, hashed as they are read. */
     const readBack = async (stagingId: string) => {
       const hash = createHash('sha256');
@@ -335,7 +335,7 @@ function storeCases(leg: Leg) {
       await refusedWith(chunks.putChunk(stranger, staging.id, 1, sha256(theirs), Readable.from([theirs])), 404, DRIVE_STAGING_NOT_FOUND);
       await refusedWith(chunks.putChunk(owner, randomUUID(), 1, sha256(theirs), Readable.from([theirs])), 404, DRIVE_STAGING_NOT_FOUND);
       assert.equal(await blobs(theirs), 0);
-      await db.driveStaging.update({ where: { id: staging.id }, data: { committedAt: new Date() } });
+      await db.documentStaging.update({ where: { id: staging.id }, data: { committedAt: new Date() } });
       await refusedWith(chunks.putChunk(owner, staging.id, 1, sha256(theirs), Readable.from([theirs])), 404, DRIVE_STAGING_NOT_FOUND);
       assert.equal(await blobs(theirs), 0);
       assert.deepEqual((await stagingRows(staging.id)).map((row) => row.idx), [0], 'no refused chunk left a row');
@@ -357,7 +357,7 @@ function storeCases(leg: Leg) {
       await chunks.putChunk(owner, versionStaging.id, 0, sha256(versioned), Readable.from([versioned]));
       // A file's version for the chunk row to belong to (its foreign key, migration 1327).
       const versionId = (await new DocumentsService(db as never).createFile(owner, { name: `held-${leg.storage}-${RUN}.bin` })).currentVersionId!;
-      await db.driveVersionChunk.create({
+      await db.documentVersionChunk.create({
         data: { versionId, idx: 0, ownerId: owner, offset: 0n, sizeBytes: versioned.length, sha256: sha256(versioned) },
       });
       // The big stream's staging, committed: its chunks are named by nothing else once its rows go.
@@ -365,12 +365,12 @@ function storeCases(leg: Leg) {
 
       let done = await sweep.sweep(at(3 * DAY));
       assert.equal((await blobOf(sha256(held))).releasedAt, null, 'held by its staging');
-      assert.equal(await db.driveStaging.count({ where: { id: staging.id } }), 1, 'touched three days ago, the staging stays');
+      assert.equal(await db.documentStaging.count({ where: { id: staging.id } }), 1, 'touched three days ago, the staging stays');
 
       // Eight days untouched: step 0 removes the stagings (the big one too), and step 3 releases what only they held.
       done = await sweep.sweep(at(8 * DAY));
       assert.ok(done.stagingsRemoved >= 3, `removed ${done.stagingsRemoved}`);
-      assert.equal(await db.driveStaging.count({ where: { id: { in: [staging.id, versionStaging.id, big.id] } } }), 0);
+      assert.equal(await db.documentStaging.count({ where: { id: { in: [staging.id, versionStaging.id, big.id] } } }), 0);
       assert.deepEqual((await blobOf(sha256(held))).releasedAt, at(8 * DAY));
       assert.equal((await blobOf(sha256(versioned))).releasedAt, null, 'held by its version chunk');
       assert.deepEqual((await blobOf(bigRows[0].sha256)).releasedAt, at(8 * DAY));
@@ -380,10 +380,10 @@ function storeCases(leg: Leg) {
       const again = await chunks.openStaging(owner, { source: 'TOOL' });
       await chunks.putChunk(owner, again.id, 0, sha256(held), Readable.from([held]));
       // Touched as of the spec's clock, or step 0 would find it idle and remove it first.
-      await db.driveStaging.update({ where: { id: again.id }, data: { touchedAt: at(8 * DAY) } });
+      await db.documentStaging.update({ where: { id: again.id }, data: { touchedAt: at(8 * DAY) } });
       await sweep.sweep(at(8 * DAY + 1000));
       assert.equal((await blobOf(sha256(held))).releasedAt, null, 'held again');
-      await db.driveStaging.delete({ where: { id: again.id } });
+      await db.documentStaging.delete({ where: { id: again.id } });
       await sweep.sweep(at(8 * DAY + 2000));
       assert.deepEqual((await blobOf(sha256(held))).releasedAt, at(8 * DAY + 2000));
 
@@ -399,7 +399,7 @@ function storeCases(leg: Leg) {
       assert.equal(await store.has(sha256(versioned)), true, 'a year on, too');
 
       // Deleted for good, the version chunk row lets them go a grace period later.
-      await db.driveVersionChunk.deleteMany({ where: { versionId } });
+      await db.documentVersionChunk.deleteMany({ where: { versionId } });
       await sweep.sweep(at(401 * DAY));
       await sweep.sweep(at(401 * DAY + grace + 1000));
       assert.equal(await store.has(sha256(versioned)), false);

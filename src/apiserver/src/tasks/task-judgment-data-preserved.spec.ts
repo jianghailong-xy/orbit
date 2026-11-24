@@ -3448,13 +3448,20 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1537 adds a nullable managed_runner.current_image_version (no default); `managed_runner` is none of the
       // preserved relations, no row is written, and no trigger, function or DONE fence changes.
       '1537_managed_runner_current_image_version',
-      // 1547 adds a nullable github_pull_request.review_announced_at (no default); `github_pull_request` is none of the
-      // preserved relations, no row is written, and no trigger, function or DONE fence changes.
+      // 1538 adds nullable owner_request.change_spec, two CHECKs and a partial unique index on owner_request; 1547 adds
+      // a nullable github_pull_request.review_announced_at. Neither table is a preserved relation, no row is
+      // written, and no trigger, function or DONE fence changes.
+      '1538_owner_request_change',
       '1547_pull_request_review_announced',
       // 1550 rewrites the access token scope `files` to `documents` in personal_access_token.scopes and
       // pat_device_login.scopes: two UPDATEs of those tables only, none of the preserved relations, no row added or
       // removed, and no table, column, trigger, function or DONE fence changes.
-      '1550_pat_scope_documents'],
+      '1550_pat_scope_documents',
+      // 1551 renames the ten drive_* tables (1283, 1327, 1339, 1438) to document_*, with their constraints, indexes and
+      // the drive_change sequence: catalog renames only, so no row is written or removed and nothing is created, and
+      // no column, value or reference changes. None of them is a preserved relation, and no trigger, function or DONE
+      // fence names them.
+      '1551_documents_tables'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

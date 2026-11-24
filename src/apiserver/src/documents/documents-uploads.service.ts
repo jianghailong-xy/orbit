@@ -70,7 +70,7 @@ export class DocumentsUploadsService {
   /** Which chunks have arrived: what makes an upload resumable after a reload or a lost connection. */
   async status(ownerId: string, id: string) {
     const staging = await this.find(ownerId, id);
-    const done = await this.prisma.driveCommit.findUnique({ where: { ownerId_commitId: { ownerId, commitId: id } } });
+    const done = await this.prisma.documentCommit.findUnique({ where: { ownerId_commitId: { ownerId, commitId: id } } });
     return {
       id: staging.id,
       name: staging.name,
@@ -99,7 +99,7 @@ export class DocumentsUploadsService {
 
   private async completeLocked(ownerId: string, id: string) {
     const staging = await this.find(ownerId, id);
-    const answered = await this.prisma.driveCommit.findUnique({ where: { ownerId_commitId: { ownerId, commitId: id } } });
+    const answered = await this.prisma.documentCommit.findUnique({ where: { ownerId_commitId: { ownerId, commitId: id } } });
     if (answered) return this.drive.get(ownerId, answered.entryId);
 
     const size = Number(staging.declaredSize ?? 0);
@@ -118,7 +118,7 @@ export class DocumentsUploadsService {
         { missing: missing.slice(0, 100), expected },
       );
     }
-    const existing = await this.prisma.driveVersion.findFirst({ where: { ownerId, handleId: id }, select: { id: true, entryId: true } });
+    const existing = await this.prisma.documentVersion.findFirst({ where: { ownerId, handleId: id }, select: { id: true, entryId: true } });
     let entryId: string;
     let versionId: string;
     if (existing) {
@@ -145,19 +145,19 @@ export class DocumentsUploadsService {
 
   /** The upload is this owner's, still open: the first thing a chunk request is asked, whatever else it carries. */
   async assertOpen(ownerId: string, id: string): Promise<void> {
-    const found = await this.prisma.driveStaging.findFirst({ where: { id, ownerId, source: 'OWNER_UPLOAD', committedAt: null }, select: { id: true } });
+    const found = await this.prisma.documentStaging.findFirst({ where: { id, ownerId, source: 'OWNER_UPLOAD', committedAt: null }, select: { id: true } });
     if (!found) throw notFound();
   }
 
   /** Abandon: the staging and its chunk rows go; the bytes go with the retention sweep. */
   async abandon(ownerId: string, id: string): Promise<{ deleted: true }> {
     await this.find(ownerId, id);
-    await this.prisma.driveStaging.deleteMany({ where: { id, ownerId, source: 'OWNER_UPLOAD' } });
+    await this.prisma.documentStaging.deleteMany({ where: { id, ownerId, source: 'OWNER_UPLOAD' } });
     return { deleted: true };
   }
 
   private async find(ownerId: string, id: string) {
-    const staging = await this.prisma.driveStaging.findFirst({
+    const staging = await this.prisma.documentStaging.findFirst({
       where: { id, ownerId, source: 'OWNER_UPLOAD' },
       include: { chunks: { orderBy: { idx: 'asc' } } },
     });

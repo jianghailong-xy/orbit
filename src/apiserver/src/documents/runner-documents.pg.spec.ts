@@ -219,7 +219,7 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
     assert.equal(again.replayed, true);
     assert.equal(again.versionId, overwritten.versionId);
     assert.equal(again.mtime, overwritten.mtime);
-    assert.equal(await db.driveVersion.count({ where: { entryId: toUuid(stat.id) } }), 2, 'two versions, not three');
+    assert.equal(await db.documentVersion.count({ where: { entryId: toUuid(stat.id) } }), 2, 'two versions, not three');
     const status = ok(await as(aliceRunner.token, 'GET', `/commits/${q(over.body.commitId)}`), 'commit status').json;
     assert.equal(status.applied, true);
     assert.equal(status.result.mtime, overwritten.mtime);
@@ -239,18 +239,18 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
     ok(other.reply, 'another file');
     // A move onto a file (§3.2, a write-then-os.replace save): the target keeps its id and takes the source's content as
     // a new version, its previous one going to Trash as a version; the source is gone, not in Trash.
-    const r2Was = (await db.driveEntry.findUniqueOrThrow({ where: { id: toUuid(stat.id) } })).currentVersionId!;
+    const r2Was = (await db.documentEntry.findUniqueOrThrow({ where: { id: toUuid(stat.id) } })).currentVersionId!;
     const onto = ok(await as(aliceRunner.token, 'POST', '/rename', { from: '/Proj/other.md', to: '/Proj/r2.md' }), 'a move onto a file').json;
     assert.equal(onto.path, '/Proj/r2.md');
     assert.equal(onto.id, stat.id, 'the target keeps its entry id');
     const ontoManifest = ok(await as(aliceRunner.token, 'GET', `/manifest?id=${stat.id}`), 'the manifest after the move').json;
     assert.deepEqual(ontoManifest.chunks.map((c: { sha256: string }) => c.sha256), [sha256(Buffer.from('other'))], "the source's content");
-    const r2Previous = await db.driveVersion.findUniqueOrThrow({ where: { id: r2Was } });
+    const r2Previous = await db.documentVersion.findUniqueOrThrow({ where: { id: r2Was } });
     assert.equal(r2Previous.entryId, toUuid(stat.id));
-    assert.equal((await db.driveTrashGroup.findUniqueOrThrow({ where: { id: r2Previous.trashGroupId! } })).kind, 'VERSION', 'the previous version is in Trash');
+    assert.equal((await db.documentTrashGroup.findUniqueOrThrow({ where: { id: r2Previous.trashGroupId! } })).kind, 'VERSION', 'the previous version is in Trash');
     refused(await as(aliceRunner.token, 'GET', `/stat?path=${q('/Proj/other.md')}`), 404, 'DRIVE_ENTRY_NOT_FOUND', 'the source by path');
     refused(await as(aliceRunner.token, 'GET', `/stat?id=${other.entry.id}`), 404, 'DRIVE_ENTRY_NOT_FOUND', 'the source by id');
-    assert.equal(await db.driveEntry.count({ where: { ownerId: alice, name: 'other.md' } }), 0, 'and not in Trash');
+    assert.equal(await db.documentEntry.count({ where: { ownerId: alice, name: 'other.md' } }), 0, 'and not in Trash');
     // A handle still bound to the source opens a staging and commits: a new file in Trash named after it.
     const lateBytes = Buffer.from('written after the move');
     const lateStaging = ok(await as(aliceRunner.token, 'POST', '/stagings', { entryId: other.entry.id }), 'a staging for the removed source').json;
@@ -262,7 +262,7 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
       commitId: randomUUID(), entryId: other.entry.id, handleId: randomUUID(), mode: 'OVERWRITE', baseVersionId: other.body.baseVersionId,
       stagingId: lateStaging.id, chunks: [{ idx: 0, sha256: sha256(lateBytes), size: lateBytes.length }],
     }), 'a commit for the removed source').json;
-    const lateRow = await db.driveEntry.findUniqueOrThrow({ where: { id: toUuid(late.entryId) } });
+    const lateRow = await db.documentEntry.findUniqueOrThrow({ where: { id: toUuid(late.entryId) } });
     assert.equal(lateRow.name, 'other.md');
     assert.notEqual(lateRow.trashedAt, null, 'in the owner\'s Trash');
     assert.equal(ok(await as(aliceRunner.token, 'GET', `/stat?path=${q('/Proj/r2.md')}`), 'r2.md after').json.id, stat.id, 'r2.md untouched by it');
@@ -274,7 +274,7 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
     const gone = ok(await as(aliceRunner.token, 'POST', '/delete', { path: '/Proj/r2.md' }), 'delete').json;
     assert.equal(gone.deleted, true);
     assert.equal('trashGroupId' in gone, false, 'no Trash group is named to an agent');
-    const row = await db.driveEntry.findUniqueOrThrow({ where: { id: toUuid(gone.id) } });
+    const row = await db.documentEntry.findUniqueOrThrow({ where: { id: toUuid(gone.id) } });
     assert.ok(row.trashedAt, 'in the owner\'s Trash');
     refused(await as(aliceRunner.token, 'GET', `/stat?path=${q('/Proj/r2.md')}`), 404, 'DRIVE_ENTRY_NOT_FOUND', 'a deleted path');
     refused(await as(aliceRunner.token, 'GET', `/stat?id=${gone.id}`), 404, 'DRIVE_ENTRY_NOT_FOUND', 'a deleted id');
@@ -308,7 +308,7 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
     const entryId = written.entry.id;
 
     // What the mount's df shows as used: this account's live files, never another's.
-    const live = await db.driveEntry.aggregate({ where: { ownerId: alice, kind: 'FILE', trashedAt: null }, _sum: { sizeBytes: true } });
+    const live = await db.documentEntry.aggregate({ where: { ownerId: alice, kind: 'FILE', trashedAt: null }, _sum: { sizeBytes: true } });
     assert.equal(ok(await as(aliceRunner.token, 'GET', '/usage'), 'alice\'s usage').json.driveBytes, Number(live._sum.sizeBytes ?? 0));
     assert.equal(ok(await as(bobRunner.token, 'GET', '/usage'), 'bob\'s usage').json.driveBytes, 0, 'alice\'s bytes are not bob\'s');
 
@@ -343,7 +343,7 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
     );
     refused(await as(bobRunner.token, 'POST', '/delete', { id: entryId }), 404, 'DRIVE_ENTRY_NOT_FOUND', 'deleting alice\'s entry');
     refused(await as(bobRunner.token, 'POST', '/rename', { id: entryId, to: '/stolen.txt' }), 404, 'DRIVE_ENTRY_NOT_FOUND', 'moving it');
-    const still = await db.driveEntry.findUniqueOrThrow({ where: { id: toUuid(entryId) } });
+    const still = await db.documentEntry.findUniqueOrThrow({ where: { id: toUuid(entryId) } });
     assert.equal(still.trashedAt, null);
     assert.equal(still.name, 'secret.txt');
   });
@@ -363,14 +363,14 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
       [MANAGED_RUNNER_POD_UID_HEADER]: pod,
     });
     const first = await issueDriveMountCredential(db as never, { ownerId: alice, runnerId: managed.id, generation: 1 });
-    const stored = await db.driveMountCredential.findUniqueOrThrow({ where: { id: first.id } });
+    const stored = await db.documentMountCredential.findUniqueOrThrow({ where: { id: first.id } });
     assert.notEqual(stored.tokenHash, first.token, 'only its hash is kept');
 
     const stat = await as(first.token, 'GET', `/stat?path=${q('/Proj')}`, undefined, instance(1));
     assert.equal(ok(stat, 'the mount reads alice\'s drive').json.path, '/Proj');
     const written = await put(first.token, '/Cloud/a.txt', Buffer.from('from the mount'), randomUUID(), instance(1));
     ok(written.reply, 'the mount writes');
-    const staging = await db.driveStaging.findFirstOrThrow({ where: { entryId: toUuid(written.entry.id) } });
+    const staging = await db.documentStaging.findFirstOrThrow({ where: { entryId: toUuid(written.entry.id) } });
     assert.equal(staging.source, 'MOUNT');
     assert.equal(staging.generation, 1);
 
@@ -383,7 +383,7 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
     // A commit that passed the guard while the generation moves on: its own transaction refuses it, and writes nothing.
     const pending = await put(first.token, '/Cloud/a.txt', Buffer.from('racing the generation'), randomUUID(), instance(1));
     assert.equal(pending.reply.status, 200);
-    const versionsBefore = await db.driveVersion.count({ where: { entryId: toUuid(written.entry.id) } });
+    const versionsBefore = await db.documentVersion.count({ where: { entryId: toUuid(written.entry.id) } });
     await db.managedRunner.update({ where: { id: mapping.id }, data: { generation: 2, podUid: randomUUID() } });
     const drive = new DocumentsService(db as never);
     await assert.rejects(
@@ -394,7 +394,7 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
       (error) => error instanceof HttpException && error.getStatus() === 403
         && (error.getResponse() as { code: string }).code === 'MANAGED_RUNNER_INSTANCE_SUPERSEDED',
     );
-    assert.equal(await db.driveVersion.count({ where: { entryId: toUuid(written.entry.id) } }), versionsBefore, 'nothing committed');
+    assert.equal(await db.documentVersion.count({ where: { entryId: toUuid(written.entry.id) } }), versionsBefore, 'nothing committed');
 
     // At the door: the superseded generation is refused every write and read.
     for (const [method, route, body] of [
@@ -420,7 +420,7 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
     }
     const deleteOf = async (name: string) => {
       const gone = ok(await as(second.token, 'POST', '/delete', { path: `/Burst/${name}.txt` }, mounted), `delete ${name}`).json;
-      return (await db.driveEntry.findUniqueOrThrow({ where: { id: toUuid(gone.id) } })).trashGroupId;
+      return (await db.documentEntry.findUniqueOrThrow({ where: { id: toUuid(gone.id) } })).trashGroupId;
     };
     const g1 = await deleteOf('x1');
     const g2 = await deleteOf('x2');
@@ -430,7 +430,7 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
     await sleep(2_300);
     const g4 = await deleteOf('y1');
     assert.notEqual(g4, g1, 'a pause of more than 2 s starts another group');
-    const group = await db.driveTrashGroup.findUniqueOrThrow({ where: { id: g1! } });
+    const group = await db.documentTrashGroup.findUniqueOrThrow({ where: { id: g1! } });
     assert.equal(group.itemCount, 3);
     assert.equal(group.actorKind, 'AGENT');
     assert.equal(group.actorRunnerId, managed.id);
@@ -439,7 +439,7 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
     ok((await put(aliceRunner.token, '/Burst/t2.txt', Buffer.from('t2'))).reply, 't2');
     const t1 = ok(await as(aliceRunner.token, 'POST', '/delete', { path: '/Burst/t1.txt' }), 'tool delete').json;
     const t2 = ok(await as(aliceRunner.token, 'POST', '/delete', { path: '/Burst/t2.txt' }), 'tool delete').json;
-    const [r1, r2] = await Promise.all([t1, t2].map((g) => db.driveEntry.findUniqueOrThrow({ where: { id: toUuid(g.id) } })));
+    const [r1, r2] = await Promise.all([t1, t2].map((g) => db.documentEntry.findUniqueOrThrow({ where: { id: toUuid(g.id) } })));
     assert.notEqual(r1.trashGroupId, r2.trashGroupId);
   });
 
