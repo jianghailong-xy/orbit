@@ -204,3 +204,33 @@ describe('session list order fixture', () => {
     expect(out.find((s) => s.section === 'Working')?.ids).not.toContain('work-ci');
   });
 });
+
+// A failure in "Needs you" is read from the session facts when the payload carries them (the same rule as the state
+// word); from the legacy status when it does not. Rows are shaped as the server sends them.
+describe('Needs you failure reading', () => {
+  const row = (o: Record<string, unknown>) => ({
+    id: 's',
+    createdAt: at(2026, 7, 8, 9),
+    status: 'FAILED',
+    runStatus: 'FAILED',
+    ...o,
+  });
+  const facts = { phase: 'IDLE', released: true, lastTurnOutcome: 'FAILED' };
+  const needs = (o: Record<string, unknown>) =>
+    sessionTimeSections([row(o)], { attention: true, now: NOW }).map((x) => x.title)[0] === 'Needs you';
+
+  it('keeps an end the runner never confirmed out of Needs you', () => {
+    expect(needs({ ...facts, endReason: 'user_ended' })).toBe(false);
+  });
+  it('puts a real failure under Needs you', () => {
+    expect(needs({ ...facts, endReason: null })).toBe(true);
+  });
+  it('keeps a failure being retried out of Needs you', () => {
+    expect(needs({ ...facts, endReason: null, retryAt: at(2026, 7, 8, 13) })).toBe(false);
+  });
+  it('groups as before when the facts are absent', () => {
+    expect(needs({})).toBe(true);
+    expect(needs({ endReason: 'user_ended' })).toBe(true);
+    expect(needs({ retryAt: at(2026, 7, 8, 13) })).toBe(false);
+  });
+});
