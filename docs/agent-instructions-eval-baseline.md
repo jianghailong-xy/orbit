@@ -178,6 +178,53 @@ These are the baseline as it stands, not defects of this step, and later steps m
 - Claude Code I3 (5/10): in five runs it used its own `Agent` tool.
 - Claude Code I5 (7/10), I6 (1/10) and I7 (1/10): as above.
 
+## Step 3: Claude Code against this baseline
+
+Step 3 sends the primer to a Claude Code session once: `orbit mcp` initialize now answers with the lead paragraph
+only, since the appended system prompt carries the whole primer. The full Claude Code suite was played on
+2026-11-24 on commit `74097fc3f2`, with the same engine, model and runs per scenario as above. Three cells that came
+out below this baseline were checked against a control on the step's parent commit `3a424a9bd9`, which lacks the
+change, and E4 and I6 were topped up with more runs.
+
+| Scenario | Step 0 | Step 3 | Parent `3a424a9bd9` (control) |
+| --- | --- | --- | --- |
+| `E1-record-task` (and `/acceptEdits`, `/dontAsk`, `/auto`) | 5/5 each | 5/5 each | |
+| `E2-private-plan` | 1/5 | 4/5 | |
+| `E3-create-no-start` | 5/5 | 5/5 | |
+| `E3-create-no-start/owner-starts` | 4/5 | 5/5 | |
+| `E4-batch-plan` | 5/5 | 19/20 | 15/15 |
+| `E5-read-only-project` | 5/5 | 5/5 | |
+| `E5-read-only-project/plan` | 5/5 | 5/5 | |
+| `E6-immediate-delegation` | 0/5 | 0/5 | |
+| `E7-no-orchestration` | 0/5 | 0/5 | |
+| `E8-compaction-recovery` | 5/5 | 5/5 | |
+| `E8-compaction-recovery/resume` | 5/5 | 5/5 | |
+| `X2-approval-declined` | 5/5 | 5/5 | |
+| `X3-approval-chat` | 5/5 | 5/5 | |
+| `X4-lost-answer-retry` | 5/5 | 5/5 | |
+| `X5-plan-mode-write` | 5/5 | 5/5 | |
+| `I1-wait-await` | 10/10 | 10/10 | |
+| `I2-notify-when-done` | 10/10 | 10/10 | |
+| `I3-delegate-subagent` | 5/10 | 5/10 | |
+| `I3-delegate-subagent/background` | 10/10 | 10/10 | |
+| `I4-reply-file-link` | 4/10 | 0/10 | 0/10 |
+| `I5-evidence-file-upload` | 7/10 | 9/10 | |
+| `I6-progress-report` | 1/10 | 0/20 | 0/10 |
+| `I7-wiki-path-search` | 1/10 | 6/10 | |
+| `I8-settings-propose` | 10/10 | 10/10 | |
+| `I9-no-project-for-ordinary-work` | 10/10 | 10/10 | |
+
+Reports: [`agent-eval/instructions-step3/step3-claude.json`](agent-eval/instructions-step3/step3-claude.json) and
+`step3-control.json` (with `.md` renderings).
+
+- **E4**: the first five runs had one failure, a batch item sent without `autoRunWhenReady: false`. Fifteen more runs
+  passed 15/15, so 19/20 in all, and the control passed 15/15. One miss in 20 is not a drop.
+- **I4 and I6** are lower than step 0, and equally low on the parent commit, which does not have this change. I4
+  fails as it did at step 0, only more often: the agent pastes the log and names its `/tmp` path without copying or
+  linking it. The reply-files and progress paragraphs are sent only in the appended prompt, which this step does not
+  change. Whatever lowered these two cells landed before step 3. Both cells were already the weakest at step 0
+  ("Low pass rates with the paragraph present").
+
 ## Kimi Code smoke run (step 3)
 
 Step 3 may change Kimi's carrier (the whole instruction block in every prompt) only after a smoke run of E1, E3 and
