@@ -1046,6 +1046,13 @@ function removableProject(tasks: number, calls: string[] = []) {
             updateMany: async () => assert.fail('deleting a project must not write to any task'),
             deleteMany: async () => assert.fail('deleting a project must not delete any task'),
           },
+          // The delete withdraws the project's waiting PROJECT_REOPEN cards in the same transaction.
+          ownerRequest: {
+            updateManyAndReturn: async (args: any) => {
+              calls.push(`settleReopens:${args.data.state}`);
+              return [];
+            },
+          },
           project: {
             delete: async () => {
               calls.push('deleteProject');
@@ -1069,6 +1076,7 @@ test('an empty project is deleted, under the lock that makes the count binding',
   assert.deepEqual(calls, [
     'lock',
     `count:{"projectId":"${PROJECT_ID}"}`,
+    'settleReopens:WITHDRAWN',
     'deleteProject',
   ]);
 });
@@ -1098,6 +1106,7 @@ test('the database’s RESTRICT is reported as the same 409 the check raises', a
         $queryRaw: async () => [{ id: PROJECT_ID }],
         // The count is honest at the moment it runs; the FK is not, a moment later.
         task: { count: async () => 0 },
+        ownerRequest: { updateManyAndReturn: async () => [] },
         project: {
           delete: async () => {
             throw Object.assign(
