@@ -67,6 +67,9 @@ var agentPrimerHashes = map[string]string{
 	// 1.7.0 (instruction-units step 5b): the CLI paragraph left the primer for the CLI unit, which merges it with the
 	// paragraph that closed the instructions and names the CLI by its path. No rule changed.
 	"1.7.0": "b04a890e4acdbed6cce17edeafd442882fed64f0cbef87ad246f40a4414af1db",
+	// 1.8.0 (instruction-units step 5c): the start paragraph is one line, and what it said of startNow, runAt and holding
+	// a task is task_create's description, which now also says not to call task_start on a held task. No rule changed.
+	"1.8.0": "202d034ce4374118c3270164b5119150e9e28423811cbe8e2c31f0efe901d92f",
 }
 
 // The snapshots: the primer exactly as `initialize` sends it, and the four shapes of the instructions
@@ -204,7 +207,7 @@ func TestAgentPrimerSaysEveryRuleOfTheContract(t *testing.T) {
 		"1":  {"durable record", "private scratch", "No returned id, no claim."},
 		"2":  {"Pick the object by the question it answers", "Task list:", "Session:", "Agent:", "the smaller wins"},
 		"3":  {"Use Orbit's MCP tools first", "The Orbit CLI is for pipes, scripts, bulk input"},
-		"4":  {"Create is not start", "autoRunWhenReady defaults to true", "pass autoRunWhenReady: false", "startNow: true", "runAt"},
+		"4":  {"Create is not start", "autoRunWhenReady defaults to true", "pass false to hold a task", "Start is its own decision", "task_start runs recorded work"},
 		"5":  {"confirmation card", "writes nothing until they confirm it", "A refusal or a declined card is final on every surface", "a chat or a card still waiting is not a no", "its receipt says what to do next"},
 		"6":  {"Only a structured receipt counts", "ok: true and outcome: written", "by its receipt's link, never a bare id", "`[Fix login redirect](orbit-task:<id>)`"},
 		"7":  {"follow its error.retry", "idempotencyKey derived from the work"},
@@ -214,6 +217,18 @@ func TestAgentPrimerSaysEveryRuleOfTheContract(t *testing.T) {
 	}
 	// Since primer 1.5.0 (design step 4) part of rules 5 and 6 is said where the answer is read, in the receipt, and
 	// the primer points there (receipt_recovery_notes_test.go holds each note to the receipt that carries it).
+	// Since primer 1.8.0 (design step 5c) how to start, schedule or hold new work is task_create's description (rule 4).
+	create := ""
+	for _, tool := range catalogToolDescriptors(false, false) {
+		if tool["name"] == "task_create" {
+			create, _ = tool["description"].(string)
+		}
+	}
+	for _, phrase := range []string{"pass `autoRunWhenReady: false` and do not call task_start", "`startNow: true`", "`runAt`"} {
+		if !strings.Contains(create, phrase) {
+			t.Errorf("§0 rule 4: task_create's description does not say %q", phrase)
+		}
+	}
 	notes := strings.Join([]string{declinedNote, chatNote, pendingCardNote, ownerAnswersNote}, " ")
 	for _, phrase := range []string{"final on every surface", "Not a no", "still waiting is not a no", "never answer it yourself"} {
 		if !strings.Contains(notes, phrase) {
