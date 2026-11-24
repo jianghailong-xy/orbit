@@ -16,7 +16,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const memoryWatchdogCooldown = 10 * time.Second
+const memoryWatchdogSettleWindow = 4 * time.Second
 const memoryWatchdogBaselineEnv = "ORBIT_TOOL_OOM_BASELINE"
 
 var orbitMemoryExecutable = sync.OnceValue(func() os.FileInfo {
@@ -48,21 +48,24 @@ type memoryGroup struct {
 }
 
 type memoryWatchdog struct {
-	readMemory func() (limit, available uint64, ok bool)
-	processes  func() map[int]memoryProcess
-	raiseScore func(memoryProcessID) bool
-	kill       func(memoryProcessID) bool
-	notify     func(session, message string)
-	baseline   string
+	readMemory   func() (limit, available uint64, ok bool)
+	readOOMKills func() (uint64, bool)
+	processes    func() map[int]memoryProcess
+	processSize  func(memoryProcess) uint64
+	raiseScore   func(memoryProcessID) bool
+	kill         func(memoryProcessID) bool
+	notify       func(session, message string)
+	baseline     string
 
 	mu    sync.Mutex
 	roots map[memoryProcessID]memoryRoot
 
 	// Only the sampling goroutine uses these. Remember observed tools across reparenting.
-	tools       map[memoryProcessID]memoryGroup
-	raised      map[memoryProcessID]bool
-	lastKill    time.Time
-	waitForDrop bool
+	tools         map[memoryProcessID]memoryGroup
+	raised        map[memoryProcessID]bool
+	oomKills      uint64
+	lastAvailable uint64
+	settleUntil   time.Time
 }
 
 var activeMemoryWatchdog atomic.Pointer[memoryWatchdog]
@@ -75,8 +78,17 @@ func startMemoryWatchdog(ctx context.Context, managed bool) func() {
 	if limit, _, ok := read(); !ok || limit == 0 {
 		return func() {}
 	}
+	readOOMKills := func() (uint64, bool) {
+		data, err := os.ReadFile(filepath.Join(cgroupRoot, "memory.events"))
+		if err != nil {
+			return 0, false
+		}
+		return statField(string(data), "oom_kill")
+	}
+	oomKills, _ := readOOMKills()
 	w := &memoryWatchdog{
-		readMemory: read, processes: readMemoryProcesses,
+		readMemory: read, readOOMKills: readOOMKills, oomKills: oomKills,
+		processes: readMemoryProcesses, processSize: memoryProcessSize,
 		raiseScore: raiseToolOOMScore, kill: killMemoryProcess, notify: notifyMemoryWatchdogKill,
 		baseline: readOOMScore("/proc/self"),
 		roots:    make(map[memoryProcessID]memoryRoot),
@@ -91,8 +103,8 @@ func startMemoryWatchdog(ctx context.Context, managed bool) func() {
 		defer ticker.Stop()
 		for {
 			select {
-			case now := <-ticker.C:
-				w.sample(now)
+			case <-ticker.C:
+				w.sample(time.Now)
 			case <-ctx.Done():
 				return
 			}
@@ -148,14 +160,35 @@ func trackMemoryRoots(session string, tool bool, pids ...int) {
 	}
 }
 
-func (w *memoryWatchdog) sample(now time.Time) {
+func (w *memoryWatchdog) memoryPressure(now time.Time) (limit, available uint64, canKill bool) {
 	limit, available, ok := w.readMemory()
 	if !ok || limit == 0 {
-		return
+		return 0, 0, false
 	}
-	pressured := available <= limit/10
-	if !pressured {
-		w.waitForDrop = false
+	kills, ok := w.readOOMKills()
+	if ok {
+		if kills > w.oomKills {
+			w.settleUntil = now.Add(memoryWatchdogSettleWindow)
+		}
+		w.oomKills = kills
+	}
+	// Require a quiet window after either kind of kill. A brief recovery below
+	// the threshold is common while the victim's pages are still being freed.
+	if !w.settleUntil.IsZero() && available > w.lastAvailable {
+		w.settleUntil = now.Add(memoryWatchdogSettleWindow)
+	}
+	w.lastAvailable = available
+	settled := !now.Before(w.settleUntil)
+	if ok && settled && available > limit/10 {
+		w.settleUntil = time.Time{}
+	}
+	return limit, available, ok && available <= limit/10 && settled
+}
+
+func (w *memoryWatchdog) sample(now func() time.Time) {
+	limit, _, canKill := w.memoryPressure(now())
+	if limit == 0 {
+		return
 	}
 
 	w.mu.Lock()
@@ -211,11 +244,6 @@ func (w *memoryWatchdog) sample(now time.Time) {
 		return group
 	}
 
-	type usage struct {
-		members []memoryProcessID
-		rss     uint64
-	}
-	groups := make(map[memoryGroup]*usage)
 	for _, p := range processes {
 		group := groupFor(p)
 		if group.session == "" {
@@ -224,11 +252,6 @@ func (w *memoryWatchdog) sample(now time.Time) {
 		if !w.raised[p.memoryProcessID] && w.raiseScore(p.memoryProcessID) {
 			w.raised[p.memoryProcessID] = true
 		}
-		if groups[group] == nil {
-			groups[group] = &usage{}
-		}
-		groups[group].members = append(groups[group].members, p.memoryProcessID)
-		groups[group].rss += p.rss
 	}
 	for id := range w.raised {
 		if _, ok := tools[id]; !ok {
@@ -237,14 +260,26 @@ func (w *memoryWatchdog) sample(now time.Time) {
 	}
 	w.tools = tools
 
-	if !pressured || w.waitForDrop || now.Sub(w.lastKill) < memoryWatchdogCooldown {
+	if !canKill {
 		return
+	}
+	type usage struct {
+		members []memoryProcessID
+		bytes   uint64
+	}
+	groups := make(map[memoryGroup]*usage)
+	for id, group := range tools {
+		if groups[group] == nil {
+			groups[group] = &usage{}
+		}
+		groups[group].members = append(groups[group].members, id)
+		groups[group].bytes += w.processSize(processes[id.pid])
 	}
 	var victim memoryGroup
 	var largest uint64
 	for group, use := range groups {
-		if use.rss > largest || (use.rss == largest && group.leader.pid < victim.leader.pid) {
-			victim, largest = group, use.rss
+		if use.bytes > largest || (use.bytes == largest && group.leader.pid < victim.leader.pid) {
+			victim, largest = group, use.bytes
 		}
 	}
 	if largest == 0 {
@@ -257,6 +292,12 @@ func (w *memoryWatchdog) sample(now time.Time) {
 	if leader.memoryProcessID == victim.leader && leader.name != "" {
 		description = "the " + strconv.QuoteToGraphic(leader.name) + " tool process group"
 	}
+	// A kernel OOM or reclaim can happen while we walk the tools' mappings.
+	limit, available, canKill := w.memoryPressure(now())
+	if !canKill {
+		return
+	}
+	w.settleUntil = time.Time{}
 	killed := false
 	for _, id := range groups[victim].members {
 		if w.kill(id) {
@@ -264,12 +305,39 @@ func (w *memoryWatchdog) sample(now time.Time) {
 		}
 	}
 	if killed {
-		w.lastKill = now
-		w.waitForDrop = true
+		w.settleUntil = now().Add(memoryWatchdogSettleWindow)
 		w.notify(victim.session, fmt.Sprintf(
 			"The runner stopped %s (PID %d) because the container was using %d MiB of its %d MiB memory limit.",
 			description, victim.leader.pid, (limit-available)>>20, limit>>20))
 	}
+}
+
+func memoryProcessSize(p memoryProcess) uint64 {
+	// Pss includes mapped shmem (including memfd) and divides shared pages
+	// among their users, so a group of compilers doesn't count them repeatedly.
+	// Some kernels or ptrace policies deny smaps_rollup. Keep RSS as a fallback.
+	dir := filepath.Join("/proc", strconv.Itoa(p.pid))
+	data, err := os.ReadFile(filepath.Join(dir, "smaps_rollup"))
+	if current, ok := readMemoryProcess(dir, p.pid); !ok || current.memoryProcessID != p.memoryProcessID {
+		return 0
+	}
+	if err == nil {
+		if size, ok := memoryPSS(string(data)); ok {
+			return size
+		}
+	}
+	return p.rss
+}
+
+func memoryPSS(rollup string) (uint64, bool) {
+	for _, line := range strings.Split(rollup, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 3 && fields[0] == "Pss:" && fields[2] == "kB" {
+			kib, err := strconv.ParseUint(fields[1], 10, 54)
+			return kib << 10, err == nil
+		}
+	}
+	return 0, false
 }
 
 func readMemoryProcesses() map[int]memoryProcess {

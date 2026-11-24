@@ -73,12 +73,12 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | Caller | Routes |
 | --- | --- |
 | `public` | 40 |
-| `user` | 534 |
+| `user` | 535 |
 | `admin` | 31 |
 | `runner` | 231 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **840** |
+| **Total** | **841** |
 
 ## Public routes
 
@@ -246,6 +246,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/outcomes/inbox` | query `limit` | `OutcomeSurfacesController.inbox` |
 | `GET` | `/api/owner-requests` | query `state` | `OwnerRequestsController.list` |
 | `GET` | `/api/owner-requests/:id` | path `id` | `OwnerRequestsController.get` |
+| `POST` | `/api/owner-requests/:id/apply` | body `ApplyOwnerRequestChangeDto`; path `id` | `OwnerRequestsController.applyChange` |
 | `POST` | `/api/owner-requests/:id/apply-settings` | path `id` | `OwnerRequestsController.applySettings` |
 | `POST` | `/api/owner-requests/:id/create-wiki` | path `id` | `OwnerRequestsController.createWiki` |
 | `POST` | `/api/owner-requests/:id/decline` | body `DeclineOwnerRequestDto`; path `id` | `OwnerRequestsController.decline` |
@@ -515,7 +516,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/sessions/imported` | query `workspaceId` | `SessionsController.importedCount` |
 | `GET` | `/api/sessions/project-placement` | query `projectIds`, `view` | `SessionsController.projectPlacement` |
 | `POST` | `/api/sessions/remove-imported` | body `Object` | `SessionsController.removeImported` |
-| `GET` | `/api/sessions/search` | query `limit`, `q` | `SessionsController.search` |
+| `GET` | `/api/sessions/search` | query `folderId`, `limit`, `q` | `SessionsController.search` |
 | `GET` | `/api/share-links` | query `kind` | `ShareLinksController.list` |
 | `POST` | `/api/share-links` | body `ShareDriveFileDto` | `ShareLinksController.shareDriveFile` |
 | `DELETE` | `/api/share-links/:id` | path `id` | `ShareLinksController.turnOff` |

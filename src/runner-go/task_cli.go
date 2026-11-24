@@ -3637,6 +3637,7 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	// orchestration power, and the agents most likely to need one are the plain single-session
 	// ones this document is usually read by.
 	specs = append(specs, notifyCLICapabilities...)
+	specs = append(specs, ownerRequestCLICapabilities...)
 	// Same argument again (§13.7): recording that a merge happened is evidence about the caller's
 	// own work, not a power over somebody else's session.
 	specs = append(specs, mergeReceiptCLICapabilities...)

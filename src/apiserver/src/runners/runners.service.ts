@@ -65,6 +65,7 @@ import { loginCodeRelay } from './login-code-relay';
 import { engineKeepsAccounts } from '../common/runner-engines';
 import { ENGINE_LABELS } from '../sessions/engine-signin-preflight';
 import { ACCOUNT_ID_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunnerDto } from './dto';
+import { runnerSettingsData } from './runner-settings';
 import { accountPauseUntil } from '../common/account-pause';
 import { refuseManagedRunnerDeletion, refuseManagedRunnerRotation } from '../managed-runners/managed-runner-delete';
 import { clampManagedConcurrency, managedConcurrencyCeiling, managedConcurrencyClampNotice } from '../managed-runners/managed-runner-concurrency';
@@ -565,38 +566,16 @@ export class RunnersService {
   async updateRunner(ownerId: string, id: string, dto: UpdateRunnerDto) {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
     if (!runner) throw new NotFoundException('runner not found');
-    const data: {
-      displayName?: string | null;
-      maxConcurrent?: number;
-      burstConcurrent?: number;
-      minFreeDiskMb?: number | null;
-    } = {};
-    if (dto.displayName !== undefined) {
-      const trimmed = dto.displayName.trim();
-      data.displayName = trimmed.length ? trimmed : null;
-    }
-    // The queue gates live sessions on this per claim, so a change takes effect
-    // next cycle without restarting the runner. A managed runner's is at most what its memory allows
-    // (managed-runner-concurrency.ts), and the answer tells the owner when what they set was lowered.
+    const data = runnerSettingsData(dto);
+    // Cap managed concurrency at the memory ceiling and tell the owner when it was lowered.
     let notice: string | undefined;
     if (dto.maxConcurrent !== undefined) {
-      data.maxConcurrent = dto.maxConcurrent;
       const ceiling = managedConcurrencyCeiling(this.managedRuntime);
       if (ceiling && dto.maxConcurrent > ceiling.ceiling
         && (await this.prisma.managedRunner.findUnique({ where: { runnerId: id }, select: { id: true } }))) {
         data.maxConcurrent = clampManagedConcurrency(dto.maxConcurrent, ceiling);
         notice = managedConcurrencyClampNotice(dto.maxConcurrent, ceiling);
       }
-    }
-    // Extra sessions on demand: read by the next overflow claim and by the session list's Run now, so it too
-    // takes effect at once. 0 turns Run now off on this machine.
-    if (dto.burstConcurrent !== undefined) {
-      data.burstConcurrent = dto.burstConcurrent;
-    }
-    // Read by the auto-run sweep against each workspace's own measured filesystem; null clears
-    // the floor. Also effective next sweep — nothing to restart.
-    if (dto.minFreeDiskMb !== undefined) {
-      data.minFreeDiskMb = dto.minFreeDiskMb;
     }
     // Never echo back tokenHash.
     const updated = await this.prisma.runner.update({

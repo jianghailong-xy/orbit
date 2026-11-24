@@ -66,21 +66,25 @@ func TestMemoryWatchdogProtectsOrbitHelpers(t *testing.T) {
 		}
 		if p.name == "sleep" {
 			tool = p.memoryProcessID
+			// The kernel's batched RSS counter can still be zero for a new child.
+			p.rss = 1 << 20
 		} else {
 			helpers = append(helpers, p.memoryProcessID)
 			// A previous tool can exec Orbit without changing its PID.
 			p.rss = 500 << 20
-			processes[p.pid] = p
 		}
+		processes[p.pid] = p
 	}
 	if len(helpers) != 2 || tool.pid == 0 || baseline == "" || baseline == "1000" {
 		t.Fatalf("helpers=%v tool=%v inherited score=%q", helpers, tool, baseline)
 	}
 	var victims []memoryProcessID
 	w := &memoryWatchdog{
-		readMemory: func() (uint64, uint64, bool) { return 1 << 30, 0, true },
-		processes:  func() map[int]memoryProcess { return processes },
-		raiseScore: raiseToolOOMScore,
+		readMemory:   func() (uint64, uint64, bool) { return 1 << 30, 0, true },
+		readOOMKills: func() (uint64, bool) { return 0, true },
+		processes:    func() map[int]memoryProcess { return processes },
+		processSize:  func(p memoryProcess) uint64 { return p.rss },
+		raiseScore:   raiseToolOOMScore,
 		kill: func(id memoryProcessID) bool {
 			victims = append(victims, id)
 			return true
@@ -90,7 +94,7 @@ func TestMemoryWatchdogProtectsOrbitHelpers(t *testing.T) {
 		raised: make(map[memoryProcessID]bool),
 		tools:  map[memoryProcessID]memoryGroup{helpers[0]: {"session", helpers[0]}},
 	}
-	w.sample(time.Now())
+	w.sample(time.Now)
 	if !reflect.DeepEqual(w.raised, map[memoryProcessID]bool{tool: true}) || !reflect.DeepEqual(victims, []memoryProcessID{tool}) {
 		t.Fatalf("raised=%v victims=%v, want only tool %v", w.raised, victims, tool)
 	}
@@ -138,12 +142,14 @@ func TestMemoryWatchdogKillsLargestToolGroup(t *testing.T) {
 	var notices []string
 	snapshots := 0
 	w := &memoryWatchdog{
-		readMemory: func() (uint64, uint64, bool) { return 1024 * mib, available, limited },
+		readMemory:   func() (uint64, uint64, bool) { return 1024 * mib, available, limited },
+		readOOMKills: func() (uint64, bool) { return 0, true },
 		processes: func() map[int]memoryProcess {
 			snapshots++
 			return processes
 		},
-		raiseScore: func(memoryProcessID) bool { return true },
+		processSize: func(p memoryProcess) uint64 { return p.rss },
+		raiseScore:  func(memoryProcessID) bool { return true },
 		kill: func(id memoryProcessID) bool {
 			kills = append(kills, id)
 			delete(processes, id.pid)
@@ -157,13 +163,13 @@ func TestMemoryWatchdogKillsLargestToolGroup(t *testing.T) {
 		raised: map[memoryProcessID]bool{},
 	}
 	now := time.Now()
-	w.sample(now)
+	sampleMemoryWatchdogAt(w, now)
 	if snapshots != 0 || len(kills) != 0 || len(notices) != 0 {
 		t.Fatal("an unlimited cgroup triggered the watchdog")
 	}
 
 	limited, available = true, 160*mib
-	w.sample(now)
+	sampleMemoryWatchdogAt(w, now)
 	if !reflect.DeepEqual(w.raised, map[memoryProcessID]bool{build: true, worker: true, other: true}) {
 		t.Fatalf("OOM score raised for %v, want only the three tools", w.raised)
 	}
@@ -176,7 +182,7 @@ func TestMemoryWatchdogKillsLargestToolGroup(t *testing.T) {
 	p.ppid = keeper.pid
 	processes[worker.pid] = p
 	available = 90 * mib
-	w.sample(now)
+	sampleMemoryWatchdogAt(w, now)
 	if len(kills) != 2 || !containsMemoryIDs(kills, build, worker) {
 		t.Fatalf("killed %v, want only the largest build and its compiler", kills)
 	}
@@ -186,30 +192,127 @@ func TestMemoryWatchdogKillsLargestToolGroup(t *testing.T) {
 	t.Log(notices[0])
 
 	available = 160 * mib
-	w.sample(now.Add(time.Second))
+	sampleMemoryWatchdogAt(w, now.Add(time.Second))
 	available = 90 * mib
-	w.sample(now.Add(2 * time.Second))
+	sampleMemoryWatchdogAt(w, now.Add(2*time.Second))
 	if len(kills) != 2 {
 		t.Fatal("the watchdog killed again during the cooldown")
 	}
-	w.sample(now.Add(memoryWatchdogCooldown))
+	sampleMemoryWatchdogAt(w, now.Add(time.Second+memoryWatchdogSettleWindow))
 	if len(kills) != 3 || kills[2] != other || len(notices) != 2 || !strings.HasPrefix(notices[1], "other-session: ") {
 		t.Fatalf("after recovery: kills=%v notices=%v", kills, notices)
 	}
-	late := add(23, 12, 12, 75, "late-tool")
-	w.sample(now.Add(3 * memoryWatchdogCooldown))
-	if len(kills) != 3 {
-		t.Fatal("the watchdog killed again before usage fell")
-	}
-	delete(processes, late.pid)
-	available = 160 * mib
-	w.sample(now.Add(4 * memoryWatchdogCooldown))
-	available = 90 * mib
-	w.sample(now.Add(4 * memoryWatchdogCooldown))
+	sampleMemoryWatchdogAt(w, now.Add(3*memoryWatchdogSettleWindow))
 	if len(kills) != 3 {
 		t.Fatal("the watchdog fell back to a daemon, engine or unrelated process")
 	}
-	t.Log("The daemon, both engines, and unrelated processes were protected. The watchdog waited for both recovery and cooldown.")
+	t.Log("The daemon, both engines, and unrelated processes were protected.")
+}
+
+func TestMemoryWatchdogPrefersShmemGroupAndWaitsForRelease(t *testing.T) {
+	shmem, sibling := memoryProcessID{20, 1}, memoryProcessID{21, 1}
+	processes := map[int]memoryProcess{
+		20: {memoryProcessID: shmem, rss: 600 << 20},
+		21: {memoryProcessID: sibling, rss: 700 << 20},
+	}
+	rollups := map[int]string{
+		20: "Rss: 614400 kB\nPss: 604160 kB\nPss_Anon: 10240 kB\nPss_Shmem: 593920 kB\n",
+		21: "Rss: 716800 kB\nPss: 409600 kB\nPss_File: 409600 kB\nPss_Shmem: 0 kB\n",
+	}
+	available := uint64(20 << 20)
+	now := time.Now()
+	sampledAt := now
+	var victims []memoryProcessID
+	w := &memoryWatchdog{
+		readMemory:   func() (uint64, uint64, bool) { return 1 << 30, available, true },
+		readOOMKills: func() (uint64, bool) { return 0, true },
+		processes:    func() map[int]memoryProcess { return processes },
+		processSize: func(p memoryProcess) uint64 {
+			size, ok := memoryPSS(rollups[p.pid])
+			if !ok {
+				t.Fatalf("missing PSS for process %d", p.pid)
+			}
+			return size
+		},
+		raiseScore: func(memoryProcessID) bool { return true },
+		kill: func(id memoryProcessID) bool {
+			if id == shmem {
+				sampledAt = now.Add(memoryWatchdogSettleWindow)
+			}
+			victims = append(victims, id)
+			delete(processes, id.pid)
+			return true
+		},
+		notify: func(string, string) {},
+		roots:  map[memoryProcessID]memoryRoot{shmem: {"shmem", true}, sibling: {"sibling", true}},
+		raised: make(map[memoryProcessID]bool),
+	}
+	w.sample(func() time.Time { return sampledAt })
+	if !reflect.DeepEqual(victims, []memoryProcessID{shmem}) {
+		t.Fatalf("victims = %v, want the shmem-heavy group %v", victims, shmem)
+	}
+	sampleMemoryWatchdogAt(w, sampledAt.Add(time.Second))
+	if len(victims) != 1 {
+		t.Fatal("the settle window elapsed before the first kill finished")
+	}
+
+	// Usage is still above the threshold and falling after the initial window.
+	for elapsed := 2 * time.Second; elapsed <= 2*memoryWatchdogSettleWindow; elapsed += time.Second {
+		available += 1 << 20
+		sampleMemoryWatchdogAt(w, sampledAt.Add(elapsed))
+		if len(victims) != 1 {
+			t.Fatalf("a second group was killed during memory release at %v", elapsed)
+		}
+	}
+	sampleMemoryWatchdogAt(w, sampledAt.Add(3*memoryWatchdogSettleWindow))
+	if !reflect.DeepEqual(victims, []memoryProcessID{shmem, sibling}) {
+		t.Fatalf("victims = %v, want a second kill only after pressure settled", victims)
+	}
+}
+
+func TestMemoryWatchdogWaitsAfterKernelOOMKill(t *testing.T) {
+	sibling := memoryProcessID{20, 1}
+	oomKills := uint64(5)
+	now := time.Now()
+	sampledAt := now
+	var victims []memoryProcessID
+	w := &memoryWatchdog{
+		readMemory:   func() (uint64, uint64, bool) { return 1 << 30, 10 << 20, true },
+		readOOMKills: func() (uint64, bool) { return oomKills, true },
+		oomKills:     oomKills,
+		processes: func() map[int]memoryProcess {
+			return map[int]memoryProcess{20: {memoryProcessID: sibling, rss: 400 << 20}}
+		},
+		processSize: func(p memoryProcess) uint64 {
+			// The kernel can kill the other group's allocator during the scan.
+			if oomKills == 5 {
+				oomKills = 6
+				sampledAt = now.Add(memoryWatchdogSettleWindow)
+			}
+			return p.rss
+		},
+		raiseScore: func(memoryProcessID) bool { return true },
+		kill: func(id memoryProcessID) bool {
+			victims = append(victims, id)
+			return true
+		},
+		notify: func(string, string) {},
+		roots:  map[memoryProcessID]memoryRoot{sibling: {"sibling", true}},
+		raised: make(map[memoryProcessID]bool),
+	}
+	w.sample(func() time.Time { return sampledAt })
+	sampleMemoryWatchdogAt(w, sampledAt.Add(time.Second))
+	if len(victims) != 0 {
+		t.Fatalf("watchdog killed the sibling immediately after a kernel OOM: %v", victims)
+	}
+	sampleMemoryWatchdogAt(w, sampledAt.Add(memoryWatchdogSettleWindow))
+	if !reflect.DeepEqual(victims, []memoryProcessID{sibling}) {
+		t.Fatalf("victims = %v, want killing to resume after the settle window", victims)
+	}
+}
+
+func sampleMemoryWatchdogAt(w *memoryWatchdog, now time.Time) {
+	w.sample(func() time.Time { return now })
 }
 
 func containsMemoryIDs(have []memoryProcessID, want ...memoryProcessID) bool {

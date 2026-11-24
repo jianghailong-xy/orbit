@@ -204,6 +204,7 @@ public enum Notifications {
         case .wikiCreate: return "Review"
         case .settingsChange: return "Review"
         case .browserSignIn: return BrowserSignInCopy.action
+        case .change: return "Review"
         }
     }
 
