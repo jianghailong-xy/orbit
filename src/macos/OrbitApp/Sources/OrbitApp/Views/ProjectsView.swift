@@ -641,8 +641,7 @@ struct ProjectDetailView: View {
         } message: { nonCode in
             Text(nonCode
                  ? ProjectDone.runToNotCode.replacingOccurrences(of: "{branch}", with: RunSettings.shortBranch(
-                    store.integration?.line == .projectBranch ? (store.integration?.ref ?? "project/\(document.id)")
-                                                               : "project/\(document.id)"))
+                    store.integration?.projectBranchName(projectID: document.id) ?? "project/\(document.id)"))
                  : ProjectDone.runToCode)
         }
         // Held on the list rather than beside the page's own alert: one view, one alert.
@@ -1629,7 +1628,7 @@ struct ProjectDetailView: View {
     @ViewBuilder
     private func lineSetting(_ store: ProjectDetailModel, _ view: ProjectIntegrationView,
                              document: ProjectDocument, now: Date) -> some View {
-        let branch = view.line == .projectBranch ? (view.ref ?? "project/\(document.id)") : "project/\(document.id)"
+        let branch = view.projectBranchName(projectID: document.id)
         let main = RunSettings.storedMainBranch(view) ?? RunSettings.defaultMainBranch
         if view.locked {
             VStack(alignment: .leading, spacing: 4) {
