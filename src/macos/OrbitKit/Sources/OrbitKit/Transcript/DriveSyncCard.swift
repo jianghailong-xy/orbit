@@ -1,6 +1,6 @@
 import Foundation
 
-/// An agent's `documents_sync` call, as its sync's card in the transcript (board docs/mocks/documents-sync-card): the same
+/// An agent's `drive_sync` call, as its sync's card in the transcript (board docs/mocks/documents-sync-card): the same
 /// live progress as the Documents popover, kept current after the agent's turn ends, since the sync runs in the
 /// background. A sync that ends cleanly folds to one line; failures, a stop and a failed sync stay open.
 ///
@@ -8,7 +8,9 @@ import Foundation
 /// `components/documents/DriveSyncCard.tsx`, whose words these are.
 public enum DriveSyncCard {
     /// Orbit's sync tool, as every engine's MCP name for it reaches the transcript.
-    public static let toolName = "mcp__orbit__documents_sync"
+    public static let toolName = "mcp__orbit__drive_sync"
+    /// Its name while Drive was called Documents, which stored transcripts and runners already deployed carry.
+    public static let documentsToolName = "mcp__orbit__documents_sync"
 
     /// The sync a call's answer names, or nil for one that names none (a runner from before the card). A runner
     /// that answers with a receipt puts the call's own answer under `entity`, and a refused receipt names nothing.
@@ -25,7 +27,7 @@ public enum DriveSyncCard {
     /// Whether a call draws as its sync's card: one that answered, naming its sync. A call still running, refused,
     /// or answered by an older runner stays an ordinary call.
     public static func drawsCard(_ card: ToolCard) -> Bool {
-        card.name == toolName && card.status == .ok && syncID(card.result) != nil
+        (card.name == toolName || card.name == documentsToolName) && card.status == .ok && syncID(card.result) != nil
     }
 
     // MARK: words

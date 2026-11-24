@@ -1,11 +1,11 @@
 import XCTest
 @testable import OrbitKit
 
-/// An agent's documents_sync call as its sync's card (board docs/mocks/documents-sync-card), in the words of the web's
+/// An agent's drive_sync call as its sync's card (board docs/mocks/documents-sync-card), in the words of the web's
 /// `DriveSyncCard.tsx`: which calls draw it, read off the receipt a runner really answers with, and each state's lines.
 final class DriveSyncCardTests: XCTestCase {
     private func receipt(_ entity: String, ok: Bool = true) -> String {
-        #"{"receiptVersion":1,"ok":\#(ok),"outcome":"\#(ok ? "written" : "refused")","operation":"documents_sync","id":"bgj_1","entity":\#(entity)}"#
+        #"{"receiptVersion":1,"ok":\#(ok),"outcome":"\#(ok ? "written" : "refused")","operation":"drive_sync","id":"bgj_1","entity":\#(entity)}"#
     }
 
     private func call(_ result: String?, status: ToolStatus = .ok) -> ToolCard {
@@ -39,8 +39,11 @@ final class DriveSyncCardTests: XCTestCase {
         XCTAssertFalse(DriveSyncCard.drawsCard(call(nil, status: .running)))
         XCTAssertFalse(DriveSyncCard.drawsCard(call(receipt(#"{"jobId":"bgj_1"}"#))))
         XCTAssertFalse(DriveSyncCard.drawsCard(call("refused", status: .error)))
+        var documents = call(receipt(#"{"syncId":"s1"}"#))
+        documents.name = "mcp__orbit__documents_sync"
+        XCTAssertTrue(DriveSyncCard.drawsCard(documents), "its name while Drive was called Documents")
         var other = call(receipt(#"{"syncId":"s1"}"#))
-        other.name = "mcp__orbit__documents_put"
+        other.name = "mcp__orbit__drive_put"
         XCTAssertFalse(DriveSyncCard.drawsCard(other))
     }
 
