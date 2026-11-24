@@ -1,5 +1,6 @@
 import type { ProjectReopenAskerView, ProjectReopenPayload } from '@orbit/shared';
 import type { OwnerRequest } from './ownerRequests';
+import { sameResourceId } from './watches';
 
 /**
  * PROJECT_REOPEN on the web (docs/project-reopen-request-design.md §6; board docs/mocks/project-reopen-request): the words
@@ -46,7 +47,7 @@ export function projectReopenProjectTitle(request: Pick<OwnerRequest, 'title'>):
 export function waitingReopenRequests(requests: readonly OwnerRequest[], projectId: string): OwnerRequest[] {
   return requests
     .filter((r) => r.kind === 'PROJECT_REOPEN' && r.state === 'PENDING'
-      && projectReopenPayloadOf(r.payload)?.projectId === projectId)
+      && sameResourceId(projectReopenPayloadOf(r.payload)?.projectId ?? '', projectId))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 

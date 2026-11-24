@@ -1154,6 +1154,7 @@ export function ProjectDetailPage() {
               card beside two lines of title metadata, creating a large dead rectangle under the
               title. A balanced command centre now leads with changing work state and the way to
               act on it, followed by the stable goal they are working toward. */}
+          {p.status === 'DONE' || p.status === 'CANCELLED' ? <ProjectReopenRow projectId={id!} /> : null}
           <header className="project-detail-identity" data-project-block="header">
             <h2 className="page-title orbit-typography">
               {p.title}
@@ -1210,7 +1211,6 @@ export function ProjectDetailPage() {
               />
             </div>
           </header>
-          {p.status === 'DONE' || p.status === 'CANCELLED' ? <ProjectReopenRow projectId={id!} /> : null}
 
           {/* Where this project's finished work goes, directly under the title that names it: the
               branch, how far ahead of main it is, when main last came in, what the queue has in
