@@ -238,14 +238,24 @@ func currentBranch(wt *Worktree) string {
 }
 
 func (ops worktreeGitOps) currentBranch(wt *Worktree) string {
-	if wt == nil || wt.Path == "" {
-		return ""
-	}
-	b, err := ops.run(wt.Path, "symbolic-ref", "--short", "HEAD")
+	b, err := ops.checkedOutBranch(wt)
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(b)
+	return b
+}
+
+// checkedOutBranch distinguishes a detached HEAD (empty branch) from an unreadable checkout.
+func (ops worktreeGitOps) checkedOutBranch(wt *Worktree) (string, error) {
+	if wt == nil || wt.Path == "" {
+		return "", errors.New("worktree path is missing")
+	}
+	b, err := ops.run(wt.Path, "symbolic-ref", "--quiet", "--short", "HEAD")
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == 1 {
+		return "", nil
+	}
+	return strings.TrimSpace(b), err
 }
 
 // effectiveBranch is the branch every live worktree computation (diff base, "already merged")
@@ -280,11 +290,14 @@ func (ops worktreeGitOps) effectiveBranchSha(wt *Worktree) string {
 	if wt == nil || wt.RepoDir == "" {
 		return ""
 	}
-	branch := ops.effectiveBranch(wt)
-	if branch == "" {
+	return ops.localBranchSha(wt.RepoDir, ops.effectiveBranch(wt))
+}
+
+func (ops worktreeGitOps) localBranchSha(repoDir, branch string) string {
+	if repoDir == "" || branch == "" {
 		return ""
 	}
-	sha, err := ops.run(wt.RepoDir, "rev-parse", "--verify", "refs/heads/"+branch)
+	sha, err := ops.run(repoDir, "rev-parse", "--verify", "refs/heads/"+branch)
 	if err != nil {
 		return ""
 	}
@@ -980,9 +993,8 @@ const parkCheckpointTrailer = "Orbit-Park-Checkpoint"
 // the checkout dir may then be removed. `checkpoint` tags the commit as an undo-on-resume park
 // checkpoint (see parkCheckpointTrailer) rather than a permanent end commit.
 //
-// A non-nil error means the work did NOT reach the branch, and the returned empty diff is
-// "unknown", not "the session changed nothing" — the caller must keep the checkout, which is
-// then the only copy of it.
+// A non-nil error means finalization could not put all the work on the branch. A detached
+// checkout can still report the branch's diff while its off-branch work is kept for recovery.
 //
 // The commit subject is derived from the diff, never the session title/prompt: a permanent end
 // gets an LLM-summarized Conventional-Commits message (diffstat fallback, same as the manual
@@ -995,13 +1007,29 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 			return reportAbsentCheckout(wt)
 		}
 	}
-	// Staging is what puts the session's work under git's control, so a failure here makes every
-	// later question meaningless: nothing is staged, `diff --cached --quiet` reads that as "no
-	// changes to commit", and finalize would report a session that changed nothing while its whole
-	// output sits uncommitted in a checkout about to be deleted. An empty diff may only be
-	// reported when staging actually succeeded.
+	branch, err := unboundedWorktreeGitOps.checkedOutBranch(wt)
+	if err != nil {
+		return nil, nil, fmt.Errorf("reading the checkout of session %s failed: %w", wt.Session, err)
+	}
+	captureErr := commitForFinalize(wt, checkpoint && branch != "")
+	if branch == "" {
+		captureErr = errors.Join(captureErr, preserveDetachedHead(wt))
+	} else if captureErr != nil {
+		return nil, nil, captureErr
+	}
+	// A mid-session rebase moved the fork point — re-base the final diff on the new one.
+	baseSha := unboundedWorktreeGitOps.freshenBaseSha(wt)
+	recordWorktreeTaint(wt)
+	tip := effectiveBranchSha(wt)
+	files, patches := unboundedWorktreeGitOps.committedWorktreeDiff(wt, baseSha, tip, branch != "", true)
+	return files, patches, captureErr
+}
+
+func commitForFinalize(wt *Worktree, checkpoint bool) error {
+	// A failed stage can leave the index empty even while the checkout still holds work.
+	// Report the failure before treating an empty index as nothing to commit.
 	if err := stageForFinalize(wt.Path); err != nil {
-		return nil, nil, fmt.Errorf("staging the work of session %s failed: %w", wt.Session, err)
+		return fmt.Errorf("staging the work of session %s failed: %w", wt.Session, err)
 	}
 	// A file holding an owner-request secret is left out of the commit, and the session is told (secret_git.go).
 	unstageHeldSecrets(wt.Path, nil, wt.Session)
@@ -1020,64 +1048,67 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 		}
 		// Use the user's git identity; --no-verify keeps hooks from blocking finalization.
 		if _, err := git(wt.Path, "commit", "--no-verify", "-m", msg); err != nil {
-			return nil, nil, fmt.Errorf("committing the work of session %s failed: %w", wt.Session, err)
+			return fmt.Errorf("committing the work of session %s failed: %w", wt.Session, err)
 		}
 	}
-	// A mid-session rebase moved the fork point — re-base the final diff on the new one.
-	freshenBaseSha(wt)
-	// The finished branch, recorded while the values are known (secret_taint.go).
-	recordWorktreeTaint(wt)
-	baseSha := wt.baseSha()
-	if baseSha == "" {
-		return nil, nil, nil
+	return nil
+}
+
+// A named branch, remote-tracking branch or tag distinguishes a detached read of existing history
+// from a commit held only by this checkout. Recovery refs do not count as capture on a branch.
+func detachedHeadHasNamedRef(dir, head string) (bool, error) {
+	refs, err := git(dir, "for-each-ref", "--count=1", "--contains="+head, "refs/heads/", "refs/remotes/", "refs/tags/")
+	return refs != "", err
+}
+
+func preserveDetachedHead(wt *Worktree) error {
+	head, err := git(wt.Path, "rev-parse", "--verify", "HEAD")
+	if err != nil {
+		return fmt.Errorf("reading detached HEAD: %w", err)
 	}
-	files := diffFiles(wt.Path, baseSha, "HEAD")
-	if len(files) > maxChangedFiles {
-		// Same bound as the live diff, for the same reason (maxChangedFiles): the finalize
-		// payload goes through the same body limit, and a base this old reports an upstream's
-		// work rather than this session's.
-		logln(fmt.Sprintf("finalize diff for %s spans %d files — reporting the first %d, without patches",
-			wt.Session, len(files), maxChangedFiles))
-		return files[:maxChangedFiles], nil, nil
+	named, err := detachedHeadHasNamedRef(wt.Path, head)
+	if err != nil {
+		return fmt.Errorf("checking references to detached HEAD: %w", err)
 	}
-	patchOut, _ := git(wt.Path, "diff", "--full-index", baseSha+"..HEAD")
-	// The committed pictures are what the checkout holds now: their placeholders come from it.
-	return files, withoutSecretPatches(withImagePreviews(wt.Path, files, buildFilePatches(files, splitPatch(patchOut))), wt.Session), nil
+	if named {
+		return nil
+	}
+	// A session can resume and detach again. Keep each distinct tip reachable.
+	ref := detachedRecoveryRef(wt.Session, head)
+	if _, err := git(wt.Path, "update-ref", ref, head); err != nil {
+		return fmt.Errorf("saving detached HEAD at %s: %w", ref, err)
+	}
+	return fmt.Errorf("detached work was saved at %s and still needs to be brought onto %s", ref, wt.Branch)
+}
+
+func detachedRecoveryRef(sessionID, head string) string {
+	return "refs/orbit/detached/" + decodeSessionID(sessionID) + "/" + head
 }
 
 // reportAbsentCheckout is finalizeWorktree for a session ended while its checkout was known to be away
 // (absentRefName): nothing in it is left to capture, and git has nothing to say about a path that is not
 // there, so the diff is read from the branch. There is no checkout to draw pictures from.
 func reportAbsentCheckout(wt *Worktree) ([]ChangedFile, []FilePatch, error) {
-	freshenBaseSha(wt)
-	baseSha := wt.baseSha()
-	if baseSha == "" {
-		return nil, nil, nil
-	}
-	tip := "refs/heads/" + wt.Branch
-	files := diffFiles(wt.RepoDir, baseSha, tip)
-	if len(files) > maxChangedFiles {
-		return files[:maxChangedFiles], nil, nil
-	}
-	patchOut, _ := git(wt.RepoDir, "diff", "--full-index", baseSha+".."+tip)
-	return files, withoutSecretPatches(buildFilePatches(files, splitPatch(patchOut)), wt.Session), nil
+	ops := unboundedWorktreeGitOps
+	baseSha := ops.freshenBaseSha(wt)
+	files, patches := ops.committedWorktreeDiff(wt, baseSha, ops.localBranchSha(wt.RepoDir, wt.Branch), false, true)
+	return files, patches, nil
 }
 
 // finalizeWorktreeReport commits the work of an ending session (finalizeWorktree) and fills the
 // worktree half of its finalize report from the checkout as finalization leaves it.
 //
-// A finalize that could not put the work on the branch reports no diff — which is
-// indistinguishable on the wire from a session that changed nothing, and is why no checkout
-// may be dropped on the server's say-so alone. Logged here; enforced where the removal
-// actually happens, by removeWorktree re-checking that the work reached the branch.
+// Report capture failures separately from the branch snapshot. removeWorktree verifies capture
+// independently before deleting the checkout.
 func finalizeWorktreeReport(req *RunFinalizeRequest, sessionID string, wt *Worktree, status string) {
 	req.Branch = wt.Branch
-	// The worktree's ACTUAL HEAD branch (before finalize/removal) differs from the reported
-	// branch when the agent ran `git checkout -b` inside the checkout, so the server can flag
-	// it / offer Adopt.
-	req.WorktreeBranch = currentBranch(wt)
 	var captureErr error
 	req.ChangedFiles, req.ChangedDiff, captureErr = finalizeWorktree(wt, status == stCancelled)
+	branch, branchErr := unboundedWorktreeGitOps.checkedOutBranch(wt)
+	if branchErr == nil {
+		req.WorktreeBranch = branch
+		req.WorktreeDetached = branch == ""
+	}
 	if captureErr != nil {
 		logln("worktree finalization failed for", sessionID+":", captureErr)
 		// Say it on the wire too. A log line on whichever machine happened to run this is not
@@ -1085,9 +1116,8 @@ func finalizeWorktreeReport(req *RunFinalizeRequest, sessionID string, wt *Workt
 		// produced nothing from one whose entire output is still uncommitted in a checkout.
 		req.CaptureError = clip(captureErr.Error(), 1000)
 	}
-	// Measured, not assumed: this is the checkout as it actually stands once finalization is
-	// done with it, and it is what tells the control plane the work still needs committing.
-	req.WorktreeDirty = worktreeIsDirty(wt)
+	// Pending files and saved detached commits both need further work to reach the branch.
+	req.WorktreeDirty = worktreeIsDirty(wt) || (captureErr != nil && req.WorktreeDetached)
 	// finalizeWorktree may heal a stale fork point while computing this snapshot.
 	req.BaseSha = wt.baseSha()
 	// Candidate merge targets for the ended session's "Merge to…" dropdown.
@@ -1098,10 +1128,13 @@ func finalizeWorktreeReport(req *RunFinalizeRequest, sessionID string, wt *Workt
 	// still reported: a run the control plane ends (a task its acceptance made DONE ends as
 	// `task_done`, which the runner sees as a cancel) has no later report, and the last live one
 	// may predate the run's own commits.
-	if status != stCancelled {
+	if status != stCancelled || req.WorktreeDetached {
 		req.BranchSha = effectiveBranchSha(wt)
 	} else {
 		req.BranchSha = tipUnderParkCheckpoint(wt)
+	}
+	if req.BaseSha != "" && req.BranchSha != "" {
+		req.BranchCommits = branchCommitsBetween(wt.RepoDir, req.BaseSha, req.BranchSha)
 	}
 }
 
@@ -1177,14 +1210,43 @@ func gitEnvCtx(ctx context.Context, dir string, env []string, args ...string) (s
 
 // diffFiles returns the per-file change summary for the committed `git diff base..head`.
 func diffFiles(dir, base, head string) []ChangedFile {
+	return unboundedWorktreeGitOps.diffFiles(dir, base, head)
+}
+
+func (ops worktreeGitOps) diffFiles(dir, base, head string) []ChangedFile {
 	rng := base + ".." + head
-	numOut, err := git(dir, "diff", "--numstat", rng)
+	numOut, err := ops.run(dir, "diff", "--numstat", rng)
 	if err != nil {
 		logln("worktree diff failed in", dir+":", err)
 		return nil
 	}
-	statusOut, _ := git(dir, "diff", "--name-status", rng)
+	statusOut, _ := ops.run(dir, "diff", "--name-status", rng)
 	return parseNumstat(numOut, statusOut)
+}
+
+// A committed diff can also be read with the checkout detached or absent. Only read image
+// previews from disk when the files there are the ones represented by the diff.
+func (ops worktreeGitOps) committedWorktreeDiff(wt *Worktree, base, tip string, previews, withPatch bool) ([]ChangedFile, []FilePatch) {
+	if base == "" || tip == "" || base == tip {
+		return nil, nil
+	}
+	files := ops.diffFiles(wt.RepoDir, base, tip)
+	if len(files) > maxChangedFiles {
+		if withPatch {
+			logln(fmt.Sprintf("committed diff for %s spans %d files — reporting the first %d, without patches",
+				wt.Session, len(files), maxChangedFiles))
+		}
+		return files[:maxChangedFiles], nil
+	}
+	if !withPatch || len(files) == 0 {
+		return files, nil
+	}
+	patchOut, _ := ops.run(wt.RepoDir, "diff", "--full-index", base+".."+tip)
+	patches := buildFilePatches(files, splitPatch(patchOut))
+	if previews {
+		patches = withImagePreviews(wt.Path, files, patches)
+	}
+	return files, withoutSecretPatches(patches, wt.Session)
 }
 
 // liveDiff returns the per-file stat summary AND the per-file unified-diff patches of the
@@ -1225,6 +1287,14 @@ func (ops worktreeGitOps) stagedLiveDiff(wt *Worktree, withPatch bool) ([]Change
 	baseSha := ops.freshenBaseSha(wt)
 	if wt == nil || baseSha == "" {
 		return nil, nil
+	}
+	branch, err := ops.checkedOutBranch(wt)
+	if err != nil {
+		return nil, nil
+	}
+	if branch == "" {
+		tip := ops.localBranchSha(wt.RepoDir, wt.Branch)
+		return ops.committedWorktreeDiff(wt, baseSha, tip, false, withPatch)
 	}
 	tmp, err := os.CreateTemp("", "orbit-idx-*")
 	if err != nil {
@@ -1500,9 +1570,8 @@ func removeWorktree(wt *Worktree, storage *checkoutStorage) {
 	// branch. Confirm that belief instead of acting on it: staging or committing can fail, and
 	// `worktree remove --force` is then the step that destroys the session's only copy of its
 	// work. A status we cannot read counts as unconfirmed for exactly the same reason.
-	if !checkoutWorkIsCaptured(wt) {
-		logln("worktree remove refused for", wt.Session+": work is not on", wt.Branch+
-			"; keeping the checkout", wt.Path)
+	if !checkoutWorkIsCaptured(wt) || !checkoutHeadIsCaptured(wt) {
+		logln("worktree remove refused for", wt.Session+": work is not captured; keeping the checkout", wt.Path)
 		return
 	}
 	teardownWorktreeProcesses(wt.Path)
@@ -1518,7 +1587,7 @@ func removeWorktree(wt *Worktree, storage *checkoutStorage) {
 	_, _ = git(wt.RepoDir, "update-ref", "-d", baseRefName(wt.Session))
 }
 
-// checkoutWorkIsCaptured reports whether everything in the checkout is already on the branch:
+// checkoutWorkIsCaptured reports whether the checkout has no pending file changes:
 // `git status --porcelain` ran and came back empty (.gitignore'd build output and the runner's
 // own scratch never counted as work, and still don't). A checkout that is already gone has
 // nothing left to lose and counts as captured. Anything else — pending changes, or a status that
@@ -1529,6 +1598,34 @@ func checkoutWorkIsCaptured(wt *Worktree) bool {
 	}
 	out, err := git(wt.Path, "status", "--porcelain")
 	return err == nil && out == ""
+}
+
+// A clean index is not proof that a detached HEAD's commits reached the branch. The orphan
+// sweep has no branch name, so it requires a named ref and keeps known recovery checkouts.
+func checkoutHeadIsCaptured(wt *Worktree) bool {
+	if checkoutAbsent(wt.Path) {
+		return true
+	}
+	branch, err := unboundedWorktreeGitOps.checkedOutBranch(wt)
+	if err != nil {
+		return false
+	}
+	if branch != "" {
+		return true
+	}
+	if wt.Branch != "" {
+		return unboundedWorktreeGitOps.isAncestor(wt.Path, "HEAD", "refs/heads/"+wt.Branch)
+	}
+	head, err := git(wt.Path, "rev-parse", "--verify", "HEAD")
+	if err != nil {
+		return false
+	}
+	ref, err := git(wt.Path, "for-each-ref", "--count=1", detachedRecoveryRef(wt.Session, head))
+	if err != nil || ref != "" {
+		return false
+	}
+	named, err := detachedHeadHasNamedRef(wt.Path, head)
+	return err == nil && named
 }
 
 // dropEmptyChatBranch removes a wiki chat's checkout and deletes its branch when the run ends with
