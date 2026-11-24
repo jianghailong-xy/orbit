@@ -1,0 +1,15 @@
+# drive.orbit.dev: node only, inline (ephemeral) volumes only, with the Pod's name, namespace and UID passed to
+# NodePublishVolume so the plugin can check them (§6.1).
+apiVersion: storage.k8s.io/v1
+kind: CSIDriver
+metadata:
+  name: drive.orbit.dev
+  labels:
+    app.kubernetes.io/name: orbit-drive-csi
+spec:
+  attachRequired: false
+  podInfoOnMount: true
+  volumeLifecycleModes: [Ephemeral]
+  fsGroupPolicy: None
+  requiresRepublish: false
+  storageCapacity: false

@@ -31,39 +31,54 @@ func fakeDriveMount(t *testing.T, mounted bool) {
 	}
 	fstype := "ext4"
 	if mounted {
-		fstype = "fuse.orbit-documents"
+		fstype = "fuse.orbit-drive"
 	}
-	writeTestFile(t, mountinfoPath, fmt.Sprintf("10 9 0:33 / %s rw - %s orbit-documents rw\n", driveMountPath, fstype))
+	writeTestFile(t, mountinfoPath, fmt.Sprintf("10 9 0:33 / %s rw - %s orbit-drive rw\n", driveMountPath, fstype))
 }
 
-// A Pod of the CSI driver from before the rename has its drive at /run/orbit-files, mounted by a daemon whose FUSE type
-// is still fuse.orbit-files: the runner takes whichever root it has, and either type as the drive.
-func TestDriveRootOfEitherDriver(t *testing.T) {
+// A Pod of an older CSI driver has its drive at /run/orbit-documents (documents.orbit.dev) or /run/orbit-files
+// (files.orbit.dev), mounted by a daemon whose FUSE type is still fuse.orbit-documents or fuse.orbit-files: the runner
+// takes whichever root it has, and any of the three types as the drive.
+func TestDriveRootOfEveryDriver(t *testing.T) {
 	dir := t.TempDir()
-	root, legacy := filepath.Join(dir, "run", "orbit-documents"), filepath.Join(dir, "run", "orbit-files")
-	if got := pickDriveRoot(root, legacy); got != root {
-		t.Fatalf("with neither directory: %s", got)
+	root := filepath.Join(dir, "run", "orbit-drive")
+	documents, files := filepath.Join(dir, "run", "orbit-documents"), filepath.Join(dir, "run", "orbit-files")
+	pick := func() string { return pickDriveRoot(root, documents, files) }
+	if got := pick(); got != root {
+		t.Fatalf("with no directory: %s", got)
 	}
-	if err := os.MkdirAll(legacy, 0o755); err != nil {
+	if err := os.MkdirAll(files, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got := pickDriveRoot(root, legacy); got != legacy {
-		t.Fatalf("in a Pod of the old driver: %s", got)
+	if got := pick(); got != files {
+		t.Fatalf("in a Pod of files.orbit.dev: %s", got)
+	}
+	if err := os.MkdirAll(documents, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(files); err != nil {
+		t.Fatal(err)
+	}
+	if got := pick(); got != documents {
+		t.Fatalf("in a Pod of documents.orbit.dev: %s", got)
 	}
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got := pickDriveRoot(root, legacy); got != root {
+	if got := pick(); got != root {
 		t.Fatalf("with both: %s", got)
 	}
-	if err := os.Remove(legacy); err != nil {
+	if err := os.Remove(documents); err != nil {
 		t.Fatal(err)
 	}
-	if got := pickDriveRoot(root, legacy); got != root {
-		t.Fatalf("in a Pod of the new driver: %s", got)
+	if got := pick(); got != root {
+		t.Fatalf("in a Pod of drive.orbit.dev: %s", got)
+	}
+	if driveRootPath != "/run/orbit-drive" || strings.Join(driveLegacyRootPaths, " ") != "/run/orbit-documents /run/orbit-files" {
+		t.Fatalf("the runner looks for %s, then %v", driveRootPath, driveLegacyRootPaths)
 	}
 
-	for fstype, want := range map[string]bool{"fuse.orbit-documents": true, "fuse.orbit-files": true, "fuse.sshfs": false} {
+	for fstype, want := range map[string]bool{"fuse.orbit-drive": true, "fuse.orbit-documents": true, "fuse.orbit-files": true, "fuse.sshfs": false} {
 		fakeDriveMount(t, false)
 		writeTestFile(t, mountinfoPath, fmt.Sprintf("10 9 0:33 / %s rw - %s x rw\n", driveMountPath, fstype))
 		if got := driveMounted(); got != want {
@@ -82,7 +97,7 @@ func TestDriveHomeAliasesNoLongerResolve(t *testing.T) {
 }
 
 func TestDrivePathNormalization(t *testing.T) {
-	for _, p := range []string{"/Proj/r.md", "Proj/r.md", "~/Drive/Proj/r.md", "/home/orbit/Drive/Proj/r.md", "/run/orbit-documents/drive/Proj/r.md", "/run/orbit-files/drive/Proj/r.md"} {
+	for _, p := range []string{"/Proj/r.md", "Proj/r.md", "~/Drive/Proj/r.md", "/home/orbit/Drive/Proj/r.md", "/run/orbit-drive/drive/Proj/r.md", "/run/orbit-documents/drive/Proj/r.md", "/run/orbit-files/drive/Proj/r.md"} {
 		if got, err := normalizeDrivePath(p); err != nil || got != "/Proj/r.md" {
 			t.Errorf("normalize %q = %q, %v", p, got, err)
 		}
@@ -272,7 +287,7 @@ func TestDriveGetVerifiesEachChunk(t *testing.T) {
 		}
 	})
 	s := &mcpServer{sessionID: fileTestSession, t: newCallerTransport(srv.URL, "runner-secret", runnerCallerMCP)}
-	args := map[string]interface{}{"path": "/run/orbit-documents/drive/Proj/r.md"}
+	args := map[string]interface{}{"path": "/run/orbit-drive/drive/Proj/r.md"}
 	expected := filepath.Join(uploadsDir(fileTestSession), "drive", "e1", "r.md")
 	corrupt = true
 	if reply := fileToolText(t, s, "drive_get", args, true); !strings.Contains(reply, "sha256") {

@@ -530,7 +530,7 @@ func TestOrbitDriveGuidanceMatchesRunnerKind(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			fakeDriveMount(t, mounted)
 			if mounted {
-				// Whichever root the Pod has (/run/orbit-documents, or /run/orbit-files of the old driver) is the one named.
+				// Whichever root the Pod has (/run/orbit-drive, or /run/orbit-documents or /run/orbit-files of an older driver) is the one named.
 				brief = append(brief, driveParentPath+"/errors.log")
 				full = append(full, "mounted at "+driveMountPath+")", driveParentPath+"/errors.log")
 			}

@@ -14,6 +14,9 @@
  *      section's own material asks the model nothing at all;
  *   3. a press's section is written whatever its fingerprint, from material that carries the entry the card wrote
  *      and the owner's words in the chat, keeps its version with the chat's reason, and the card reads the rewrite;
+ *   3½. a rewrite card queued without a press (contract `chat.drafts.auto`): its fact is marked auto, its section is
+ *      written whatever its fingerprint from material that holds no turn of the chat, and it counts toward no day's
+ *      budget of merges and landings (`docs.follow.daily`);
  *   4. the day's budget: past 40 sections for merges and landings the rest are left for the next maintenance run and
  *      Activity's Docs rows say how many, while a press's section is neither counted nor left;
  *   5. a follow job runs beside articles and verify and waits for maintain, as the claim reads the rule, and the
@@ -620,7 +623,7 @@ function writePrompts(h: Harness, from: number): string[] {
 }
 
 /** A press of a card in its own transaction, as C6's Apply makes one. */
-async function press(h: Harness, s: Scene, input: { chatId: string; sections: Array<{ doc: string; key: string }>; entryIds: string[] }): Promise<{ draftId: string; jobId: string }> {
+async function press(h: Harness, s: Scene, input: { chatId: string; sections: Array<{ doc: string; key: string }>; entryIds: string[]; auto?: boolean }): Promise<{ draftId: string; jobId: string }> {
   const draftId = randomUUID();
   const queued = await h.prisma.$transaction((tx) => followWikiDocsPress(tx, { ownerId: s.owner.id, spaceId: s.spaceId, draftId, ...input }));
   assert.ok(queued, 'the press joins or makes the space\'s follow job');
@@ -826,6 +829,41 @@ test('a press has its section written whatever its fingerprint, from the entry t
   const read = (await readWikiDocsFollowRewrites(h.prisma as unknown as PrismaService, { ownerId: s.owner.id, spaceId: s.spaceId, draftIds: [draftId] })).get(draftId)!;
   assert.deepEqual([read.jobId, read.result, read.sha, read.sections.map((one) => [one.key, one.result, one.versionId])],
     [jobId, 'updated', A, [[keys.delivery, 'updated', kept?.id]]]);
+});
+
+// ── 3½. a rewrite queued without a press ─────────────────────────────────────────────────────────────
+
+test('a rewrite queued without a press is written from main with no turn of its chat, and counts toward no merge budget', { skip, timeout: 180_000 }, async () => {
+  const h = await boot();
+  const { s, keys, w, A } = await built(h, 'auto');
+  const talk = await chat(h, s, 'Chat about delivery', CHAT_WORDS);
+  const hits = h.model.hits.length;
+  const { draftId, jobId } = await press(h, s, { chatId: talk.id, sections: [{ doc: SLUG, key: keys.delivery }], entryIds: [], auto: true });
+  const queued = await job(h, jobId);
+  assert.deepEqual([queued.state, queued.priority], ['queued', WIKI_DOCS_FOLLOW.priorities.press]);
+  const fact = (queued.input as { facts: Array<Record<string, unknown>> }).facts.find((one) => one.draftId === draftId)!;
+  assert.deepEqual([fact.kind, fact.auto], ['press', true], 'the fact says it was queued without a press');
+
+  const ended = await runToEnd(h, w, jobId);
+  assert.equal(ended.state, 'succeeded', JSON.stringify(ended).slice(0, 1200));
+  const section = ended.report!.sections.find((one) => one.key === keys.delivery)!;
+  assert.deepEqual([section.outcome, section.forced, section.draftIds], ['written', true, [draftId]], 'written whatever its fingerprint');
+  const prompt = writePrompts(h, hits).find((one) => one.includes('## 2. Delivery'))!;
+  assert.ok(prompt, 'the delivery section was written from its own material');
+  assert.ok(!prompt.includes(CHAT_WORDS), 'no word of the chat is material: nothing the owner pressed published it');
+  const notes = (await h.sql.query<{ kind: string; ref: string }>(
+    `SELECT f."kind", f."ref" FROM "wiki_doc_footnote" f
+       JOIN "wiki_doc_sentence" t ON t."id" = f."sentence_id" JOIN "wiki_doc_section" x ON x."id" = t."section_id"
+       JOIN "wiki_doc" d ON d."id" = x."doc_id"
+      WHERE d."space_id" = $1 AND x."key" = $2`,
+    [s.spaceId, keys.delivery],
+  )).rows;
+  assert.ok(!notes.some((note) => note.kind === 'turn' && note.ref === talk.turnId), JSON.stringify(notes));
+  assert.equal((await writtenAt(h, s.spaceId)).get(keys.delivery), A);
+  const kept = await latestVersion(h, s.spaceId, keys.delivery);
+  assert.deepEqual([kept?.reason, kept?.job_id], ['chat', jobId]);
+  // Not a merge's or a landing's: the day's count of those (rules.sectionsPerDay) does not move.
+  assert.equal(await wikiDocsFollowSectionsToday(h.prisma as unknown as PrismaService, { ownerId: s.owner.id, spaceId: s.spaceId, now: new Date() }), 0);
 });
 
 // ── 4. the day's budget ──────────────────────────────────────────────────────────────────────────────

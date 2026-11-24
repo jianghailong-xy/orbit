@@ -570,7 +570,7 @@ test('a plan card of two documents: a split gated as one edit, one press, its re
     const note = await prisma.$transaction(async (tx) => appendWikiChatNotes(tx as never, {
       ownerId, spaceId, sessionId: chat, turn: { seq: 99, kind: 'message', wikiContext: null },
     }, 'Thanks.'));
-    assert.match(note ?? '', /undone="1">/u);
+    assert.match(note ?? '', /undone="1" rewritten="0" settled="0">/u);
     assert.match(note ?? '', new RegExp(`- ${pub(cardA)} Plan change: undone\\. The plan is back to what version 1 said, stored and confirmed as version 3`, 'u'));
   });
 

@@ -13,7 +13,7 @@ func TestEnsureDriveLink(t *testing.T) {
 	dir := t.TempDir()
 	oldMount, oldHome := driveMountPath, driveHomePath
 	t.Cleanup(func() { driveMountPath, driveHomePath = oldMount, oldHome })
-	driveMountPath = filepath.Join(dir, "run", "orbit-documents", "drive")
+	driveMountPath = filepath.Join(dir, "run", "orbit-drive", "drive")
 	driveHomePath = filepath.Join(dir, "home", "orbit", "Drive")
 	var logged []string
 	logf := func(format string, args ...interface{}) { logged = append(logged, fmt.Sprintf(format, args...)) }
@@ -28,7 +28,7 @@ func TestEnsureDriveLink(t *testing.T) {
 	// A runner that does not receive the drive is not touched.
 	ensureDriveLink(logf)
 	if _, err := os.Lstat(driveHomePath); !os.IsNotExist(err) {
-		t.Fatalf("a runner without /run/orbit-documents got %s", driveHomePath)
+		t.Fatalf("a runner without /run/orbit-drive got %s", driveHomePath)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(driveMountPath), 0o755); err != nil {
@@ -97,7 +97,7 @@ func TestEnsureDriveLinkRemovesStaleLinks(t *testing.T) {
 	dir := t.TempDir()
 	oldMount, oldHome, oldStale := driveMountPath, driveHomePath, driveStaleHomePaths
 	t.Cleanup(func() { driveMountPath, driveHomePath, driveStaleHomePaths = oldMount, oldHome, oldStale })
-	driveMountPath = filepath.Join(dir, "run", "orbit-documents", "drive")
+	driveMountPath = filepath.Join(dir, "run", "orbit-drive", "drive")
 	driveHomePath = filepath.Join(dir, "home", "orbit", "Drive")
 	docs := filepath.Join(dir, "home", "orbit", "Documents")
 	files := filepath.Join(dir, "home", "orbit", "Files")

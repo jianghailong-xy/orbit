@@ -196,8 +196,8 @@ export function namesDriveFile(ref: string): boolean {
   const text = ref.trim();
   return /^orbit-(?:document|drive):/i.test(text)
     || /^(?:~|\/home\/orbit)\/(?:Drive|Documents|Files)(?:\/|$)/.test(text)
-    // /run/orbit-files is the mount root of a Pod of the CSI driver from before the rename to Documents.
-    || /^\/run\/orbit-(?:documents|files)\/drive(?:\/|$)/.test(text);
+    // /run/orbit-documents and /run/orbit-files are the mount roots of Pods of the older CSI drivers.
+    || /^\/run\/orbit-(?:drive|documents|files)\/drive(?:\/|$)/.test(text);
 }
 
 function refuseCitation(code: string, message: string, requiredAction: string): never {

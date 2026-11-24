@@ -52,7 +52,7 @@ test('the manager delivers each generation its mount credential, for the CSI plu
     const { mapping } = await w.readyRunner('drive-owner');
     const secret = w.cluster.object<Secret>('drivesecrets', driveMountSecretName(mapping.runnerId))!;
     assert.ok(secret, 'Secret mrf-<runner uuid> is written');
-    assert.equal(secret.metadata.namespace, 'orbit-documents-test', 'in the files namespace');
+    assert.equal(secret.metadata.namespace, 'orbit-drive-test', 'in the files namespace');
     assert.equal(w.cluster.object<Secret>('secrets', driveMountSecretName(mapping.runnerId)), undefined, 'never in the runner namespace');
     assert.equal(secretGeneration(secret), mapping.generation);
     const token = bootstrapCredentialOf(secret)!;
@@ -67,8 +67,8 @@ test('the manager delivers each generation its mount credential, for the CSI plu
     assert.ok(order.indexOf('drivesecrets') >= 0 && order.indexOf('drivesecrets') < order.indexOf('pods'), order.join(' → '));
     // The Pod has the drive, admitted by the guard; the runner's bootstrap Secret is not the mount credential.
     const pod = w.cluster.object<Pod>('pods', managedPodName(mapping.runnerId))!;
-    assert.deepEqual(pod.spec.volumes!.find((v) => v.name === 'orbit-documents'), {
-      name: 'orbit-documents', csi: { driver: 'documents.orbit.dev', volumeAttributes: { runnerId: mapping.runnerId } },
+    assert.deepEqual(pod.spec.volumes!.find((v) => v.name === 'orbit-drive'), {
+      name: 'orbit-drive', csi: { driver: 'drive.orbit.dev', volumeAttributes: { runnerId: mapping.runnerId } },
     });
     const boot = w.cluster.object<Secret>('secrets', managedSecretName(mapping.runnerId))!;
     assert.notEqual(bootstrapCredentialOf(boot), token);
@@ -117,6 +117,6 @@ test('the manager delivers each generation its mount credential, for the CSI plu
     assert.equal(w.cluster.count('create', 'drivesecrets'), 0);
     assert.deepEqual(await liveCredentials(mapping.runnerId), []);
     const pod = w.cluster.object<Pod>('pods', managedPodName(mapping.runnerId))!;
-    assert.ok(!pod.spec.volumes!.some((v) => v.name === 'orbit-documents'));
+    assert.ok(!pod.spec.volumes!.some((v) => v.name === 'orbit-drive'));
   });
 });
