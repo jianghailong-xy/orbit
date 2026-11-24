@@ -17,12 +17,12 @@ import (
 )
 
 const (
-	documentsRoute     = "/runner/documents"
-	documentsChunkSize = 8 * 1024 * 1024
-	documentsTimeout   = 35 * time.Second
+	driveRoute     = "/runner/drive"
+	driveChunkSize = 8 * 1024 * 1024
+	driveTimeout   = 35 * time.Second
 )
 
-type documentsEntry struct {
+type driveEntry struct {
 	ID               string  `json:"id"`
 	Kind             string  `json:"kind"`
 	Name             string  `json:"name"`
@@ -32,48 +32,49 @@ type documentsEntry struct {
 	CurrentVersionID string  `json:"currentVersionId,omitempty"`
 }
 
-type documentsChunk struct {
+type driveChunk struct {
 	Index  int    `json:"idx"`
 	Size   int    `json:"size"`
 	SHA256 string `json:"sha256"`
 }
 
-type documentsCommitResult struct {
+type driveCommitResult struct {
 	EntryID    string `json:"entryId"`
 	VersionID  string `json:"versionId"`
 	NewVersion bool   `json:"newVersion"`
 	SizeBytes  int64  `json:"sizeBytes"`
 }
 
-type documentsWriter struct {
+type driveWriter struct {
 	SessionID string `json:"sessionId,omitempty"`
 }
 
-// documentLink is a Documents file's link for a reply. Transcripts written before the rename carry orbit-drive:<id>,
-// which every client still reads.
-func documentLink(id string) string { return "orbit-document:" + id }
+// driveLink is a Drive file's link for a reply. Transcripts written while Drive was called Documents carry
+// orbit-document:<id>, which every client still reads.
+func driveLink(id string) string { return "orbit-drive:" + id }
 
-// documentsToolAliases are the Documents tools' names before the rename. They are still served, so an engine, a saved
-// prompt or a schedule that calls drive_put keeps working, and never listed.
-var documentsToolAliases = map[string]string{
-	"drive_put":    "documents_put",
-	"drive_get":    "documents_get",
-	"drive_list":   "documents_list",
-	"drive_move":   "documents_move",
-	"drive_delete": "documents_delete",
+// driveToolAliases are the Drive tools' names while Drive was called Documents. They are still served, so an engine, a
+// saved prompt or a schedule that calls documents_put keeps working, and never listed.
+var driveToolAliases = map[string]string{
+	"documents_put":    "drive_put",
+	"documents_get":    "drive_get",
+	"documents_list":   "drive_list",
+	"documents_move":   "drive_move",
+	"documents_delete": "drive_delete",
+	"documents_sync":   "drive_sync",
 }
 
-// canonicalToolName is the name a call is served under: a Documents tool's old name is its new one.
+// canonicalToolName is the name a call is served under: a Drive tool's Documents name is its Drive one.
 func canonicalToolName(name string) string {
-	if current, ok := documentsToolAliases[name]; ok {
+	if current, ok := driveToolAliases[name]; ok {
 		return current
 	}
 	return name
 }
 
-// documentsMountRelative recognizes the spellings of a mounted drive path: ~/Drive, /home/orbit/Drive and the mount; ~/Documents and ~/Files are
+// driveMountRelative recognizes the spellings of a mounted drive path: ~/Drive, /home/orbit/Drive and the mount; ~/Documents and ~/Files are
 // ordinary local paths. Either root's drive/ is the drive whichever one this Pod has.
-func documentsMountRelative(p string) (string, bool) {
+func driveMountRelative(p string) (string, bool) {
 	for _, root := range []string{"~/Drive", driveHomePath, driveMountPath,
 		driveRootPath + "/drive", driveLegacyRootPath + "/drive"} {
 		if p == root || strings.HasPrefix(p, root+"/") {
@@ -83,8 +84,8 @@ func documentsMountRelative(p string) (string, bool) {
 	return p, false
 }
 
-func normalizeDocumentsPath(p string) (string, error) {
-	p, _ = documentsMountRelative(p)
+func normalizeDrivePath(p string) (string, error) {
+	p, _ = driveMountRelative(p)
 	for _, part := range strings.Split(p, "/") {
 		if part == ".." {
 			return "", errors.New("a drive path cannot contain a parent (..) segment")
@@ -93,23 +94,23 @@ func normalizeDocumentsPath(p string) (string, error) {
 	return path.Clean("/" + p), nil
 }
 
-func (s *mcpServer) callDocumentsTool(name string, args map[string]interface{}) (map[string]interface{}, bool) {
+func (s *mcpServer) callDriveTool(name string, args map[string]interface{}) (map[string]interface{}, bool) {
 	switch name {
-	case "documents_sync":
+	case "drive_sync":
 		if s.documentsOff {
 			return toolResult(documentsOffMessage(name), true), true
 		}
-		raw, err := startDocumentsSyncJob(s.t, strings.TrimSpace(s.sessionID), getString(args, "localPath"), getString(args, "path"), getBool(args, "delete"))
+		raw, err := startDriveSyncJob(s.t, strings.TrimSpace(s.sessionID), getString(args, "localPath"), getString(args, "path"), getBool(args, "delete"))
 		if err != nil {
 			return toolResult(err.Error(), true), true
 		}
 		return toolResult(prettyJSON(raw), false), true
-	case "documents_put", "documents_get", "documents_list", "documents_move", "documents_delete":
+	case "drive_put", "drive_get", "drive_list", "drive_move", "drive_delete":
 		if s.documentsOff {
 			return toolResult(documentsOffMessage(name), true), true
 		}
-		progress := sessionDocumentsProgress(name, s.callToolUseID)
-		raw, err := runDocumentsTool(s.t, fileToolContext{sessionID: strings.TrimSpace(s.sessionID), callTimeout: s.callTimeout, progress: progress}, name, args)
+		progress := sessionDriveProgress(name, s.callToolUseID)
+		raw, err := runDriveTool(s.t, fileToolContext{sessionID: strings.TrimSpace(s.sessionID), callTimeout: s.callTimeout, progress: progress}, name, args)
 		progress.close()
 		if err != nil {
 			return toolResult(err.Error(), true), true
@@ -120,105 +121,105 @@ func (s *mcpServer) callDocumentsTool(name string, args map[string]interface{}) 
 	}
 }
 
-func runDocumentsTool(t *Transport, tool fileToolContext, name string, args map[string]interface{}) (json.RawMessage, error) {
+func runDriveTool(t *Transport, tool fileToolContext, name string, args map[string]interface{}) (json.RawMessage, error) {
 	ctx, cancel := tool.callContext()
 	defer cancel()
 	pathArg := "path"
-	if name == "documents_move" {
+	if name == "drive_move" {
 		pathArg = "from"
 	}
 	value := getString(args, pathArg)
-	if value == "" && name != "documents_list" {
+	if value == "" && name != "drive_list" {
 		return nil, fmt.Errorf("%s requires %s", name, pathArg)
 	}
-	p, err := normalizeDocumentsPath(value)
+	p, err := normalizeDrivePath(value)
 	if err != nil {
 		return nil, err
 	}
 
-	writer := documentsWriter{SessionID: tool.sessionID}
+	writer := driveWriter{SessionID: tool.sessionID}
 	var answer interface{}
 	switch name {
-	case "documents_put":
-		answer, err = putDocumentsFile(ctx, t, tool, getString(args, "localPath"), p, writer)
-	case "documents_get":
-		answer, err = getDocumentsFile(ctx, t, tool, p)
-	case "documents_list":
+	case "drive_put":
+		answer, err = putDriveFile(ctx, t, tool, getString(args, "localPath"), p, writer)
+	case "drive_get":
+		answer, err = getDriveFile(ctx, t, tool, p)
+	case "drive_list":
 		query := url.Values{"path": {p}}
 		if cursor := getString(args, "cursor"); cursor != "" {
 			query.Set("cursor", cursor)
 		}
 		page := struct {
-			Entries    []documentsEntry `json:"entries"`
-			NextCursor *string          `json:"nextCursor"`
-		}{Entries: []documentsEntry{}}
-		err = t.do(ctx, http.MethodGet, documentsRoute+"/list?"+query.Encode(), nil, &page, documentsTimeout)
+			Entries    []driveEntry `json:"entries"`
+			NextCursor *string      `json:"nextCursor"`
+		}{Entries: []driveEntry{}}
+		err = t.do(ctx, http.MethodGet, driveRoute+"/list?"+query.Encode(), nil, &page, driveTimeout)
 		answer = page
-	case "documents_move":
+	case "drive_move":
 		value := getString(args, "to")
 		if value == "" {
-			return nil, errors.New("documents_move requires to")
+			return nil, errors.New("drive_move requires to")
 		}
-		to, pathErr := normalizeDocumentsPath(value)
+		to, pathErr := normalizeDrivePath(value)
 		if pathErr != nil {
 			return nil, pathErr
 		}
-		// As documents_put does, the destination's folder is made first: the door's rename, which the mount shares,
+		// As drive_put does, the destination's folder is made first: the door's rename, which the mount shares,
 		// refuses a missing folder as rename(2) does.
 		if parent := path.Dir(to); parent != "/" {
-			if err := documentsWrite(ctx, t, "/mkdir", map[string]interface{}{"path": parent, "parents": true, "writer": writer}, nil); err != nil {
+			if err := driveWrite(ctx, t, "/mkdir", map[string]interface{}{"path": parent, "parents": true, "writer": writer}, nil); err != nil {
 				return nil, err
 			}
 		}
 		var entry json.RawMessage
-		err = documentsWrite(ctx, t, "/rename", map[string]interface{}{"from": p, "to": to, "noReplace": false, "writer": writer}, &entry)
+		err = driveWrite(ctx, t, "/rename", map[string]interface{}{"from": p, "to": to, "noReplace": false, "writer": writer}, &entry)
 		answer = entry
-	case "documents_delete":
+	case "drive_delete":
 		var deleted json.RawMessage
-		err = documentsWrite(ctx, t, "/delete", map[string]interface{}{"path": p, "writer": writer}, &deleted)
+		err = driveWrite(ctx, t, "/delete", map[string]interface{}{"path": p, "writer": writer}, &deleted)
 		answer = deleted
 	default:
 		return nil, fmt.Errorf("unknown drive tool %q", name)
 	}
 	if err != nil {
-		return nil, documentsToolError(name, err)
+		return nil, driveToolError(name, err)
 	}
 	return json.Marshal(answer)
 }
 
-func documentsToolError(name string, err error) error {
+func driveToolError(name string, err error) error {
 	if documentsDisabledByServer(err) {
 		return errors.New(documentsOffMessage(name))
 	}
-	if failure := documentsDoorFailure(err); failure.Message != "" {
+	if failure := driveDoorFailure(err); failure.Message != "" {
 		return fmt.Errorf("%s: %s", name, failure.Message)
 	}
 	return fmt.Errorf("%s: %w", name, err)
 }
 
-func documentsDoorFailure(err error) (failure struct{ Code, Message string }) {
+func driveDoorFailure(err error) (failure struct{ Code, Message string }) {
 	if httpErr, ok := err.(*transportHTTPError); ok {
 		_ = json.Unmarshal([]byte(httpErr.body), &failure)
 	}
 	return failure
 }
 
-func documentsPathQuery(route, p string) string {
-	return documentsRoute + route + "?" + url.Values{"path": {p}}.Encode()
+func drivePathQuery(route, p string) string {
+	return driveRoute + route + "?" + url.Values{"path": {p}}.Encode()
 }
 
-func documentsStat(ctx context.Context, t *Transport, p string) (documentsEntry, error) {
-	var entry documentsEntry
-	err := t.do(ctx, http.MethodGet, documentsPathQuery("/stat", p), nil, &entry, documentsTimeout)
+func driveStat(ctx context.Context, t *Transport, p string) (driveEntry, error) {
+	var entry driveEntry
+	err := t.do(ctx, http.MethodGet, drivePathQuery("/stat", p), nil, &entry, driveTimeout)
 	return entry, err
 }
 
-func documentsWrite(ctx context.Context, t *Transport, route string, body map[string]interface{}, out interface{}) error {
-	return t.do(ctx, http.MethodPost, documentsRoute+route, body, out, documentsTimeout)
+func driveWrite(ctx context.Context, t *Transport, route string, body map[string]interface{}, out interface{}) error {
+	return t.do(ctx, http.MethodPost, driveRoute+route, body, out, driveTimeout)
 }
 
-func putDocumentsFile(ctx context.Context, t *Transport, tool fileToolContext, localPath, p string, writer documentsWriter) (interface{}, error) {
-	sessionID, err := fileSessionOf(tool, "documents_put")
+func putDriveFile(ctx context.Context, t *Transport, tool fileToolContext, localPath, p string, writer driveWriter) (interface{}, error) {
+	sessionID, err := fileSessionOf(tool, "drive_put")
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +234,7 @@ func putDocumentsFile(ctx context.Context, t *Transport, tool fileToolContext, l
 	if tool.progress != nil {
 		tool.progress.setSize(info.Size())
 	}
-	result, entryPath, err := sendDocumentsFile(ctx, t, file, p, writer, tool.progress)
+	result, entryPath, err := sendDriveFile(ctx, t, file, p, writer, tool.progress)
 	if err != nil {
 		return nil, err
 	}
@@ -244,57 +245,57 @@ func putDocumentsFile(ctx context.Context, t *Transport, tool fileToolContext, l
 		SizeBytes  int64  `json:"sizeBytes"`
 		VersionID  string `json:"versionId"`
 		NewVersion bool   `json:"newVersion"`
-	}{result.EntryID, entryPath, documentLink(result.EntryID), result.SizeBytes, result.VersionID, result.NewVersion}, nil
+	}{result.EntryID, entryPath, driveLink(result.EntryID), result.SizeBytes, result.VersionID, result.NewVersion}, nil
 }
 
-// sendDocumentsFile writes an open local file to Documents path p, which documents_put and documents_sync share: the
+// sendDriveFile writes an open local file to Documents path p, which drive_put and drive_sync share: the
 // folder made first, the file created or overwritten (the previous version kept), its 8 MiB chunks staged, one commit.
 // A non-nil progress counts the bytes as they go up. It answers the commit and the entry's Documents path.
-func sendDocumentsFile(ctx context.Context, t *Transport, file io.Reader, p string, writer documentsWriter, progress *documentsProgress) (documentsCommitResult, string, error) {
+func sendDriveFile(ctx context.Context, t *Transport, file io.Reader, p string, writer driveWriter, progress *driveProgress) (driveCommitResult, string, error) {
 	handleID, err := randomUUID()
 	if err != nil {
-		return documentsCommitResult{}, "", err
+		return driveCommitResult{}, "", err
 	}
 	commitID, err := randomUUID()
 	if err != nil {
-		return documentsCommitResult{}, "", err
+		return driveCommitResult{}, "", err
 	}
 	if parent := path.Dir(p); parent != "/" {
-		if err := documentsWrite(ctx, t, "/mkdir", map[string]interface{}{"path": parent, "parents": true, "writer": writer}, nil); err != nil {
-			return documentsCommitResult{}, "", err
+		if err := driveWrite(ctx, t, "/mkdir", map[string]interface{}{"path": parent, "parents": true, "writer": writer}, nil); err != nil {
+			return driveCommitResult{}, "", err
 		}
 	}
-	entry, err := documentsStat(ctx, t, p)
+	entry, err := driveStat(ctx, t, p)
 	mode := "OVERWRITE"
 	if isTransportHTTPStatus(err, http.StatusNotFound) {
-		err = documentsWrite(ctx, t, "/create", map[string]interface{}{"path": p, "handleId": handleID, "writer": writer}, &entry)
+		err = driveWrite(ctx, t, "/create", map[string]interface{}{"path": p, "handleId": handleID, "writer": writer}, &entry)
 		mode = "CONTINUE"
 	}
 	if err != nil {
-		return documentsCommitResult{}, "", err
+		return driveCommitResult{}, "", err
 	}
 	if entry.Kind == "FOLDER" {
-		return documentsCommitResult{}, "", fmt.Errorf("%s is a folder", p)
+		return driveCommitResult{}, "", fmt.Errorf("%s is a folder", p)
 	}
 	var staging struct{ ID string }
-	if err := documentsWrite(ctx, t, "/stagings", map[string]interface{}{"entryId": entry.ID}, &staging); err != nil {
-		return documentsCommitResult{}, "", err
+	if err := driveWrite(ctx, t, "/stagings", map[string]interface{}{"entryId": entry.ID}, &staging); err != nil {
+		return driveCommitResult{}, "", err
 	}
-	chunks := []documentsChunk{}
-	buf := make([]byte, documentsChunkSize)
+	chunks := []driveChunk{}
+	buf := make([]byte, driveChunkSize)
 	for {
 		n, err := io.ReadFull(file, buf)
 		if err == io.EOF {
 			break
 		}
 		if err != nil && err != io.ErrUnexpectedEOF {
-			return documentsCommitResult{}, "", err
+			return driveCommitResult{}, "", err
 		}
 		digest := sha256.Sum256(buf[:n])
-		chunk := documentsChunk{Index: len(chunks), Size: n, SHA256: hex.EncodeToString(digest[:])}
+		chunk := driveChunk{Index: len(chunks), Size: n, SHA256: hex.EncodeToString(digest[:])}
 		route := fmt.Sprintf("/stagings/%s/chunks/%d", url.PathEscape(staging.ID), chunk.Index)
-		if _, err := t.documentsChunkCall(ctx, http.MethodPut, route, buf[:n], chunk.SHA256, 0, progress); err != nil {
-			return documentsCommitResult{}, "", err
+		if _, err := t.driveChunkCall(ctx, http.MethodPut, route, buf[:n], chunk.SHA256, 0, progress); err != nil {
+			return driveCommitResult{}, "", err
 		}
 		chunks = append(chunks, chunk)
 	}
@@ -305,20 +306,20 @@ func sendDocumentsFile(ctx context.Context, t *Transport, file io.Reader, p stri
 	if mode == "CONTINUE" {
 		body["baseVersionId"] = entry.CurrentVersionID
 	}
-	result, err := commitDocumentsFile(ctx, t, commitID, body)
+	result, err := commitDriveFile(ctx, t, commitID, body)
 	if err != nil {
-		return documentsCommitResult{}, "", err
+		return driveCommitResult{}, "", err
 	}
 	return result, entry.Path, nil
 }
 
-func commitDocumentsFile(ctx context.Context, t *Transport, commitID string, body map[string]interface{}) (documentsCommitResult, error) {
-	var result documentsCommitResult
+func commitDriveFile(ctx context.Context, t *Transport, commitID string, body map[string]interface{}) (driveCommitResult, error) {
+	var result driveCommitResult
 	attempts, uncertain := 0, false
 	err := retryIdempotentWhile(ctx, func(ctx context.Context) error {
 		attempts++
-		result = documentsCommitResult{}
-		err := documentsWrite(ctx, t, "/commit", body, &result)
+		result = driveCommitResult{}
+		err := driveWrite(ctx, t, "/commit", body, &result)
 		if err == nil && result.EntryID == "" {
 			return errors.New("the drive returned an empty commit answer")
 		}
@@ -334,10 +335,10 @@ func commitDocumentsFile(ctx context.Context, t *Transport, commitID string, bod
 	}
 
 	var receipt struct {
-		Applied bool                  `json:"applied"`
-		Result  documentsCommitResult `json:"result"`
+		Applied bool              `json:"applied"`
+		Result  driveCommitResult `json:"result"`
 	}
-	if statusErr := t.do(ctx, http.MethodGet, documentsRoute+"/commits/"+commitID, nil, &receipt, documentsTimeout); statusErr == nil {
+	if statusErr := t.do(ctx, http.MethodGet, driveRoute+"/commits/"+commitID, nil, &receipt, driveTimeout); statusErr == nil {
 		if receipt.Applied {
 			return receipt.Result, nil
 		}
@@ -346,8 +347,8 @@ func commitDocumentsFile(ctx context.Context, t *Transport, commitID string, bod
 	return result, fmt.Errorf("could not confirm whether commit %s applied: %w", commitID, err)
 }
 
-func getDocumentsFile(ctx context.Context, t *Transport, tool fileToolContext, p string) (interface{}, error) {
-	sessionID, err := fileSessionOf(tool, "documents_get")
+func getDriveFile(ctx context.Context, t *Transport, tool fileToolContext, p string) (interface{}, error) {
+	sessionID, err := fileSessionOf(tool, "drive_get")
 	if err != nil {
 		return nil, err
 	}
@@ -355,13 +356,13 @@ func getDocumentsFile(ctx context.Context, t *Transport, tool fileToolContext, p
 		EntryID   string `json:"entryId"`
 		SizeBytes int64  `json:"sizeBytes"`
 		Chunks    []struct {
-			documentsChunk
+			driveChunk
 			Offset int64 `json:"offset"`
 		} `json:"chunks"`
 	}
-	if err := t.do(ctx, http.MethodGet, documentsPathQuery("/manifest", p), nil, &manifest, documentsTimeout); err != nil {
-		if documentsDoorFailure(err).Code == "DRIVE_NOT_A_FILE" {
-			return nil, fmt.Errorf("%s is a folder. Use documents_list to see its entries", p)
+	if err := t.do(ctx, http.MethodGet, drivePathQuery("/manifest", p), nil, &manifest, driveTimeout); err != nil {
+		if driveDoorFailure(err).Code == "DRIVE_NOT_A_FILE" {
+			return nil, fmt.Errorf("%s is a folder. Use drive_list to see its entries", p)
 		}
 		return nil, err
 	}
@@ -377,11 +378,11 @@ func getDocumentsFile(ctx context.Context, t *Transport, tool fileToolContext, p
 		var size int64
 		for i, chunk := range manifest.Chunks {
 			digest, err := hex.DecodeString(chunk.SHA256)
-			if err != nil || len(digest) != sha256.Size || chunk.Size <= 0 || chunk.Size > documentsChunkSize ||
+			if err != nil || len(digest) != sha256.Size || chunk.Size <= 0 || chunk.Size > driveChunkSize ||
 				chunk.Index != i || chunk.Offset != size {
 				return fmt.Errorf("invalid drive manifest chunk %d", i)
 			}
-			data, err := t.documentsChunkCall(ctx, http.MethodGet, "/chunks/"+chunk.SHA256, nil, "", chunk.Size, tool.progress)
+			data, err := t.driveChunkCall(ctx, http.MethodGet, "/chunks/"+chunk.SHA256, nil, "", chunk.Size, tool.progress)
 			if err != nil {
 				return err
 			}
@@ -408,14 +409,14 @@ func getDocumentsFile(ctx context.Context, t *Transport, tool fileToolContext, p
 	}{dest, manifest.SizeBytes}, nil
 }
 
-// documentsChunkCall uses the same runner authentication as the file tools' raw transfers. A non-nil progress counts
+// driveChunkCall uses the same runner authentication as the file tools' raw transfers. A non-nil progress counts
 // the bytes as they go up or come down.
-func (t *Transport) documentsChunkCall(parent context.Context, method, route string, data []byte, digest string, size int, progress *documentsProgress) (_ []byte, err error) {
+func (t *Transport) driveChunkCall(parent context.Context, method, route string, data []byte, digest string, size int, progress *driveProgress) (_ []byte, err error) {
 	noteTransportAttempt()
 	defer func() { noteTransportResult(method, err) }()
 	ctx, cancel := context.WithTimeout(parent, fileCallTimeout)
 	defer cancel()
-	route = documentsRoute + route
+	route = driveRoute + route
 	var body io.Reader = bytes.NewReader(data)
 	if progress != nil && method == http.MethodPut {
 		body = countingReader{r: body, add: progress.add}

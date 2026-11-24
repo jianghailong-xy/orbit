@@ -271,7 +271,7 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		if json.Unmarshal(req.Params, &p) != nil {
 			return s.err(req.ID, -32602, "invalid params"), true
 		}
-		// A Documents tool called by its name before the rename is served as the tool it is now (documents_tools.go).
+		// A Drive tool called by its Documents name is served as the tool it is now (drive_tools.go).
 		p.Name = canonicalToolName(p.Name)
 		if s.helpAsk {
 			return s.ok(req.ID, s.callHelpAskTool(p.Name)), true
@@ -405,13 +405,13 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	return s.withRecovery(name, args, mark, s.runTool(name, args))
 }
 
-func documentsToolDescriptors(obj func(map[string]interface{}, ...string) map[string]interface{}) []map[string]interface{} {
+func driveToolDescriptors(obj func(map[string]interface{}, ...string) map[string]interface{}) []map[string]interface{} {
 	drivePath := map[string]interface{}{"type": "string", "description": "A drive path such as /Proj/r.md or ~/Drive/Proj/r.md."}
 	return []map[string]interface{}{
 		{
-			"name": "documents_put",
+			"name": "drive_put",
 			"description": "Copy a local file into the owner's Drive. Creates missing parent folders and " +
-				"keeps the previous version when overwriting a file. Returns an orbit-document: link for replies. The file is " +
+				"keeps the previous version when overwriting a file. Returns an orbit-drive: link for replies. The file is " +
 				"sent in 8 MiB chunks and has no size limit: file_upload's 25 MiB cap does not apply here.",
 			"inputSchema": obj(map[string]interface{}{
 				"localPath": map[string]interface{}{"type": "string", "description": "A file in this session's checkout or uploads directory."},
@@ -420,13 +420,13 @@ func documentsToolDescriptors(obj func(map[string]interface{}, ...string) map[st
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
 		},
 		{
-			"name":        "documents_get",
+			"name":        "drive_get",
 			"description": "Download a drive file into this session's uploads directory and return its local path and size.",
 			"inputSchema": obj(map[string]interface{}{"path": drivePath}, "path"),
 			"annotations": map[string]interface{}{"readOnlyHint": true},
 		},
 		{
-			"name":        "documents_list",
+			"name":        "drive_list",
 			"description": "List one page of a drive folder with each entry's path, kind, size and modification time.",
 			"inputSchema": obj(map[string]interface{}{
 				"path":   map[string]interface{}{"type": "string", "description": "The folder's drive path. Omit it to list the root."},
@@ -435,13 +435,13 @@ func documentsToolDescriptors(obj func(map[string]interface{}, ...string) map[st
 			"annotations": map[string]interface{}{"readOnlyHint": true},
 		},
 		{
-			"name":        "documents_move",
+			"name":        "drive_move",
 			"description": "Move or rename a drive entry. This overwrites an existing file at the destination.",
 			"inputSchema": obj(map[string]interface{}{"from": drivePath, "to": drivePath}, "from", "to"),
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
 		},
 		{
-			"name": "documents_sync",
+			"name": "drive_sync",
 			"description": "Copy a local directory into a Drive folder, once, in the background. Answers at once with a " +
 				"background job id; you are woken when it ends, and its last output line is the summary (uploaded, unchanged, " +
 				"deleted, failed). Files already the same in Drive are skipped, so a second sync only sends what changed. " +
@@ -454,7 +454,7 @@ func documentsToolDescriptors(obj func(map[string]interface{}, ...string) map[st
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
 		},
 		{
-			"name":        "documents_delete",
+			"name":        "drive_delete",
 			"description": "Move a drive entry to the owner's Trash. The owner can restore it from the Drive page. Agents cannot see Trash.",
 			"inputSchema": obj(map[string]interface{}{"path": drivePath}, "path"),
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": true},
@@ -486,8 +486,8 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 	if result, handled := s.callFileTool(name, args); handled {
 		return result
 	}
-	// The Documents tools: `orbit documents` runs the same runDocumentsTool (documents_tools.go).
-	if result, handled := s.callDocumentsTool(name, args); handled {
+	// The Drive tools: `orbit drive` runs the same runDriveTool (drive_tools.go).
+	if result, handled := s.callDriveTool(name, args); handled {
 		return result
 	}
 	// The owner's Settings: `orbit settings` runs the same runSettingsTool (settings_tools.go).

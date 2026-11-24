@@ -339,7 +339,7 @@ func claudeAgentToolsReport(job *ClaimedSession, msg map[string]interface{}) *ag
 	prefix := claudeToolName("")
 	for _, name := range stringsFromJSON(msg["tools"]) {
 		if strings.HasPrefix(name, prefix) {
-			// An engine started before the Documents rename lists drive_*: the same tools (documents_tools.go).
+			// An engine started while Drive was called Documents lists documents_*: the same tools (drive_tools.go).
 			listed[canonicalToolName(strings.TrimPrefix(name, prefix))] = true
 		}
 	}
