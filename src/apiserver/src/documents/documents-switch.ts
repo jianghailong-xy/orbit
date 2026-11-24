@@ -36,11 +36,11 @@ export function readDocumentsSwitch(value: string | undefined): DocumentsSwitch 
   if (said === '' || said === 'false') return { enabled: false, problem: null };
   return {
     enabled: false,
-    problem: `${DOCUMENTS_ENABLED_ENV}=${JSON.stringify(value)} is neither true nor false: Documents is off`,
+    problem: `${DOCUMENTS_ENABLED_ENV}=${JSON.stringify(value)} is neither true nor false: Drive is off`,
   };
 }
 
-const log = new Logger('Documents');
+const log = new Logger('Drive');
 let announced: string | undefined;
 
 /** Whether this process offers Documents, from its environment; a problem with the value is logged once. */
@@ -57,7 +57,7 @@ export function documentsEnabled(env: NodeJS.ProcessEnv = process.env): boolean 
 export function documentsDisabledError(): NotFoundException {
   return new NotFoundException({
     code: DOCUMENTS_DISABLED,
-    message: `Documents is not enabled on this Orbit server (${DOCUMENTS_ENABLED_ENV}), so nothing was read or written.`,
+    message: `Drive is not enabled on this Orbit server (${DOCUMENTS_ENABLED_ENV}), so nothing was read or written.`,
   });
 }
 
