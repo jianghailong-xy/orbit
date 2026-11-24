@@ -285,6 +285,7 @@ import { startHistoryImport } from '../lib/claudeHistoryImport';
 import { ManagedRunnerNotice } from './ManagedRunnerNotice';
 import { useNewAccount } from './WelcomeCard';
 import type { LoginEngine } from '@orbit/shared';
+import { useDocumentsEnabled } from '../lib/documents';
 import { managedRowOf, managedRunnerStatusQuery, useManagedRunnerId, type ManagedRunner } from '../lib/managedRunner';
 import { MANAGED_RUNNER_COPY } from '@orbit/shared';
 import {
@@ -12414,6 +12415,8 @@ export function SessionComposer({
   const fileInputRef = useRef<HTMLInputElement>(null);
   // The `+` menu's "From Files" picker (board docs/mocks/orbit-files, 02-web frame 8).
   const [drivePickerOpen, setDrivePickerOpen] = useState(false);
+  // No From Files on a server without Documents (ORBIT_DOCUMENTS_ENABLED), nor until that is read.
+  const documentsEnabled = useDocumentsEnabled().enabled;
   // Manual composer height (px). null = autoSize auto-grow (up to maxRows); once the user
   // drags the top handle, that height wins over autoSize until they double-click to reset.
   const [composerHeight, setComposerHeight] = useState<number | null>(null);
@@ -13121,12 +13124,16 @@ export function SessionComposer({
                 label: 'Upload Image',
                 onSelect: () => imageInputRef.current?.click(),
               },
-              {
-                key: 'drive',
-                icon: <FolderOpenOutlined />,
-                label: 'Add from Orbit Files',
-                onSelect: () => setTimeout(() => setDrivePickerOpen(true), 0),
-              },
+              ...(documentsEnabled
+                ? [
+                    {
+                      key: 'drive',
+                      icon: <FolderOpenOutlined />,
+                      label: 'Add from Orbit Files',
+                      onSelect: () => setTimeout(() => setDrivePickerOpen(true), 0),
+                    },
+                  ]
+                : []),
               { key: 'divider', type: 'separator' },
               {
                 key: 'shell',
@@ -13171,7 +13178,7 @@ export function SessionComposer({
           }
         />
         )}
-        {!shellMode && (
+        {!shellMode && documentsEnabled && (
           <Popover
             side="top"
             align="start"

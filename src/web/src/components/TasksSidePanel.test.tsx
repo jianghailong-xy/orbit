@@ -125,7 +125,9 @@ describe('TasksSidePanel nav', () => {
     // account the server has not switched it on for — so a TOP entry reaches both surfaces without
     // either render site needing its own list. Nothing is appended for admins: Admin is a row of the
     // account menu (TasksSidePanel.admin.test.tsx).
-    expect(source).toContain("const topItems = wikiShown(wikiSpaces) ? TOP : TOP.filter((t) => t.key !== 'wiki');");
+    expect(source).toContain(
+      "const topItems = TOP.filter((t) => (t.key !== 'wiki' || wikiShown(wikiSpaces)) && (t.key !== 'files' || documents.enabled));",
+    );
     expect(source.match(/\{topItems\.map\(\(t\) => \(/g)).toHaveLength(2);
   });
 

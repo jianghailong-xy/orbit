@@ -1,3 +1,4 @@
+import { useDocumentsEnabled } from '../../lib/documents';
 import '../../pages/FilesPage.css';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -31,7 +32,8 @@ const baseName = (p: string) => p.split('/').pop() || p;
 function DriveEntryLink({ link, children }: { link?: string; children: ReactNode }) {
   const client = useQueryClient();
   const navigate = useNavigate();
-  const id = driveIdFromHref(link);
+  const documentsOff = useDocumentsEnabled().off;
+  const id = !documentsOff ? driveIdFromHref(link) : null;
   if (!id) return <>{children}</>;
   const open = async () => {
     try {

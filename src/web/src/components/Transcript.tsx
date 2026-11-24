@@ -4153,6 +4153,7 @@ function CodeBlock({ children }: any) {
 
 import { DriveFileCard, driveIdFromHref } from './files/DriveFileCard';
 import { DriveTransferCard } from './files/DriveTransferCard';
+import { useDocumentsEnabled } from '../lib/documents';
 import { driveTransferFile, driveTransferKind, type DriveTransferKind } from '../lib/driveTransfer';
 
 const ORBIT_ATTACHMENT_PREFIX = 'orbit-attachment:';
@@ -4234,7 +4235,8 @@ function fileLabel(src: string): string {
 }
 
 function MarkdownImage({ node: _node, src, alt, className: _className, ...rest }: any) {
-  const driveId = driveIdFromHref(src);
+  const documentsOff = useDocumentsEnabled().off;
+  const driveId = !documentsOff ? driveIdFromHref(src) : null;
   if (driveId) return <DriveFileCard id={driveId} label={typeof alt === 'string' ? alt : undefined} />;
   const id = attachmentIdFromSrc(src);
   if (id) {
@@ -4371,7 +4373,8 @@ function nodeText(node: ReactNode): string {
 
 function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
   const exp = useContext(ExportCtx);
-  const driveId = driveIdFromHref(href);
+  const documentsOff = useDocumentsEnabled().off;
+  const driveId = !documentsOff ? driveIdFromHref(href) : null;
   if (driveId) return <DriveFileCard id={driveId} label={nodeText(children).trim() || undefined} />;
   const id = attachmentIdFromSrc(href);
   if (id) {

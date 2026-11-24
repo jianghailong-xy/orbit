@@ -36,6 +36,7 @@ function serve(role: 'ADMIN' | 'MEMBER') {
     if (path === '/sessions/counts') return [];
     if (path === '/users/me') return { id: 'me', name: 'Me', email: 'me@example.com', role, avatarUpdatedAt: null };
     if (path === '/wiki/spaces') return [];
+    if (path === '/auth/capabilities') return { managedRunners: { enabled: false }, documents: { enabled: true } };
     throw new Error(`unstubbed ${path}`);
   }) as never);
 }

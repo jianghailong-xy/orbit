@@ -64,6 +64,7 @@ import type {
 } from '@orbit/shared';
 import { SCHEDULE_COPY } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
+import { useDocumentsEnabled } from '../lib/documents';
 import { managedFirst, managedRowOf, useManagedRunner, useManagedRunnerId } from '../lib/managedRunner';
 import { routeId, encodeId } from '../lib/idCodec';
 import { SharedWithMeGroup } from './SharedWithMe';
@@ -400,7 +401,9 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const wikiWaitingCount = wikiWaiting(wikiSpaces.data ?? []);
   // No Wiki row at all for an account the server has not switched the wiki on for (WIKI_DISABLED):
   // an entry that led to a refusal would be worse than none.
-  const topItems = wikiShown(wikiSpaces) ? TOP : TOP.filter((t) => t.key !== 'wiki');
+  // Nor a Files row on a server without Documents (ORBIT_DOCUMENTS_ENABLED), nor while that is still being read.
+  const documents = useDocumentsEnabled();
+  const topItems = TOP.filter((t) => (t.key !== 'wiki' || wikiShown(wikiSpaces)) && (t.key !== 'files' || documents.enabled));
   // The wikis the Wiki group lists, in the server's order, each called what the Wiki's own head calls it.
   const wikiRows = wikiSpaces.data ?? [];
   const wikiNames = useMemo(() => wikiSpaceNames(wikiSpaces.data ?? []), [wikiSpaces.data]);

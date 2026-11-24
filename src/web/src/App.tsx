@@ -3,7 +3,9 @@ import { Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-r
 import { useQuery } from '@tanstack/react-query';
 import { getToken } from './api';
 import { encodeId, routeId } from './lib/idCodec';
+import type { ReactNode } from 'react';
 import { useManagedRunner } from './lib/managedRunner';
+import { useDocumentsEnabled } from './lib/documents';
 import { workspacesQuery, runnersQuery } from './lib/queries';
 import { machineDraftPath } from './lib/machineSetup';
 import { firstOpenableWorkspace } from './lib/workspaceOrder';
@@ -86,6 +88,21 @@ function LegacySessionRedirect() {
 function StorageSettingsRedirect() {
   const { kind, id } = useParams();
   return <Navigate to={`/files/storage/${kind}/${id}`} replace />;
+}
+
+/** Documents' routes: the page once the server has Documents, the not-found page without them, a spinner while that is read. */
+function DocumentsGate({ children, notFound }: { children: ReactNode; notFound: ReactNode }) {
+  const documents = useDocumentsEnabled();
+  if (!documents.settled) {
+    return (
+      <main className="app-main">
+        <div className="app-view app-view--doc" style={{ padding: 48, textAlign: 'center' }}>
+          <Spinner aria-busy="true" />
+        </div>
+      </main>
+    );
+  }
+  return documents.enabled ? <>{children}</> : <>{notFound}</>;
 }
 
 function InfrastructureRedirect() {
@@ -321,8 +338,8 @@ export function App() {
             <Route path="notifications" element={<NotificationsSettingsPage />} />
             <Route path="appearance" element={<AppearanceSettingsPage />} />
             {/* Storage moved into Files (docs/mocks/orbit-files, board choice a): the old addresses lead there. */}
-            <Route path="storage" element={<Navigate to="/files/storage" replace />} />
-            <Route path="storage/:kind/:id" element={<StorageSettingsRedirect />} />
+            <Route path="storage" element={<DocumentsGate notFound={notFound}><Navigate to="/files/storage" replace /></DocumentsGate>} />
+            <Route path="storage/:kind/:id" element={<DocumentsGate notFound={notFound}><StorageSettingsRedirect /></DocumentsGate>} />
             <Route path="profile" element={<ProfilePage />} />
             {/* Old account-settings link, now Profile. Keep the redirect so existing
                 bookmarks/deep links don't 404. */}
@@ -399,19 +416,23 @@ export function App() {
             <Route
               path="files"
               element={
-                <FlushView>
-                  <FilesPage />
-                </FlushView>
+                <DocumentsGate notFound={notFound}>
+                  <FlushView>
+                    <FilesPage />
+                  </FlushView>
+                </DocumentsGate>
               }
             />
-            <Route path="files/storage" element={<FlushView><StorageSettingsPage /></FlushView>} />
-            <Route path="files/storage/:kind/:id" element={<FlushView><StorageFilesPage /></FlushView>} />
+            <Route path="files/storage" element={<DocumentsGate notFound={notFound}><FlushView><StorageSettingsPage /></FlushView></DocumentsGate>} />
+            <Route path="files/storage/:kind/:id" element={<DocumentsGate notFound={notFound}><FlushView><StorageFilesPage /></FlushView></DocumentsGate>} />
             <Route
               path="files/trash"
               element={
-                <FlushView>
-                  <FilesPage view="trash" />
-                </FlushView>
+                <DocumentsGate notFound={notFound}>
+                  <FlushView>
+                    <FilesPage view="trash" />
+                  </FlushView>
+                </DocumentsGate>
               }
             />
             {/* The Waiting on you inbox is gone; its old address opens the session that filed the request. */}

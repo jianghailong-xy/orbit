@@ -59,8 +59,12 @@ function RouterProbe() {
   return null;
 }
 
+// What /auth/capabilities answers: the Documents switch (ORBIT_DOCUMENTS_ENABLED).
+let capabilities: unknown = { managedRunners: { enabled: false }, documents: { enabled: true } };
+
 function serve() {
   vi.mocked(api).mockImplementation((async (path: string) => {
+    if (path === '/auth/capabilities') return capabilities;
     if (path === '/runners') return [{ id: RUNNER, name: 'wikova', online: true }];
     if (path === '/workspaces') return WORKSPACES;
     if (path === '/projects/sidebar') return OPEN_PROJECTS;
@@ -133,6 +137,7 @@ beforeEach(() => {
     dispatchEvent: () => false,
   }));
   navigations = 0;
+  capabilities = { managedRunners: { enabled: false }, documents: { enabled: true } };
 });
 
 afterEach(async () => {
@@ -154,6 +159,33 @@ const phone = () => vi.stubGlobal('matchMedia', (query: string) => ({
   addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {},
   dispatchEvent: () => false,
 }));
+
+describe('the Files row and the Documents switch', () => {
+  const labels = () => [...container!.querySelectorAll('.tp-section .tp-item .tp-label')].map((el) => el.textContent);
+  const driveCalls = () => vi.mocked(api).mock.calls.filter(([path]) => String(path).startsWith('/drive'));
+
+  it('is there when Documents is on', async () => {
+    serve();
+    await visit('/tasks');
+    expect(labels()).toContain('Files');
+  });
+
+  it('is there when the server omits the member', async () => {
+    capabilities = { managedRunners: { enabled: false } };
+    serve();
+    await visit('/tasks');
+    expect(labels()).toContain('Files');
+  });
+
+  it('is gone, and nothing asks /drive, when Documents is off', async () => {
+    capabilities = { managedRunners: { enabled: false }, documents: { enabled: false } };
+    serve();
+    await visit('/tasks');
+    expect(labels()).not.toContain('Files');
+    expect(labels()).toContain('Tasks');
+    expect(driveCalls()).toEqual([]);
+  });
+});
 
 describe('the sidebar’s rows as destinations', () => {
   it('opens a project’s sessions page over the workspace showing on a phone, and lights the project instead of it', async () => {
