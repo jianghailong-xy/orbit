@@ -7,7 +7,7 @@ import { Input } from '../ui/Input';
 import { driveFolderQuery, driveSearchQuery, formatSize, messageOf, useSettled } from '../../lib/drive';
 
 /** Where the drive is mounted for an agent (design §4.5): a file's path in a message is this plus its place in Files. */
-export const DRIVE_MOUNT = '/home/orbit/Documents';
+export const DRIVE_MOUNT = '/home/orbit/Drive';
 
 interface Crumb {
   id: string | null;

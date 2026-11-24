@@ -16,21 +16,21 @@ func TestErrorsLogSaysWhyAndKeepsTheLastLines(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Date(2026, 11, 20, 10, 0, 0, 0, time.UTC)
 	r := NewReporter(ReporterOptions{Dir: dir, MaxLines: 10, Now: func() time.Time { return now }})
-	r.Log(fuse.Status(syscall.EOPNOTSUPP), "write", "/home/orbit/Documents/Proj/app.db", "at offset 4096",
+	r.Log(fuse.Status(syscall.EOPNOTSUPP), "write", "/home/orbit/Drive/Proj/app.db", "at offset 4096",
 		"the drive does not change a file in place; write a new file and rename it over the old one")
 	data, _ := os.ReadFile(filepath.Join(dir, "errors.log"))
-	want := "2026-11-20T10:00:00Z EOPNOTSUPP write /home/orbit/Documents/Proj/app.db at offset 4096: the drive does not change a file in place; write a new file and rename it over the old one\n"
+	want := "2026-11-20T10:00:00Z EOPNOTSUPP write /home/orbit/Drive/Proj/app.db at offset 4096: the drive does not change a file in place; write a new file and rename it over the old one\n"
 	if string(data) != want {
 		t.Fatalf("errors.log:\n%q\nwant\n%q", data, want)
 	}
 	// The same line within a second is not repeated.
-	r.Log(fuse.Status(syscall.EOPNOTSUPP), "write", "/home/orbit/Documents/Proj/app.db", "at offset 4096", "again")
+	r.Log(fuse.Status(syscall.EOPNOTSUPP), "write", "/home/orbit/Drive/Proj/app.db", "at offset 4096", "again")
 	if n := len(r.Lines()); n != 1 {
 		t.Fatalf("lines %d", n)
 	}
 	for i := 0; i < 30; i++ {
 		now = now.Add(2 * time.Second)
-		r.Log(fuse.EPERM, "chmod", "/home/orbit/Documents/x", "", "line")
+		r.Log(fuse.EPERM, "chmod", "/home/orbit/Drive/x", "", "line")
 	}
 	data, _ = os.ReadFile(filepath.Join(dir, "errors.log"))
 	if lines := strings.Count(string(data), "\n"); lines > 12 || lines < 10 {

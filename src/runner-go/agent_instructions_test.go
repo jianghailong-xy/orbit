@@ -521,9 +521,9 @@ func TestOrbitDriveGuidanceMatchesRunnerKind(t *testing.T) {
 			"owner's Trash, which agents cannot see", "no tool shares a drive file", "ORBIT_GUEST", "do not write it"}
 		if mounted {
 			name = "cloud"
-			brief = []string{"~/Documents", "permanent Drive", "link its files by path", "~/Documents/ (a symlink)", "cp -r",
+			brief = []string{"~/Drive", "permanent Drive", "link its files by path", "~/Drive/ (a symlink)", "cp -r",
 				"rsync -rt", "tar x", "locks", "in-place writes", "ORBIT_GUEST turns only read it"}
-			full = []string{"/home/orbit/Documents", "shared across sessions", "trailing slash", "cp -a",
+			full = []string{"/home/orbit/Drive", "shared across sessions", "trailing slash", "cp -a",
 				"cp -p", "rsync -a", "tar x", "file locks", "writing inside an existing file", "executing a file", "errors.log",
 				"status.json", "unsent/", "ORBIT_GUEST", "do not write it"}
 		}
@@ -560,7 +560,7 @@ func TestOrbitDriveGuidanceMatchesRunnerKind(t *testing.T) {
 					t.Errorf("the files guide omits %q", phrase)
 				}
 			}
-			if got := strings.Contains(instructions, "~/Documents is the owner's"); got != mounted {
+			if got := strings.Contains(instructions, "~/Drive is the owner's"); got != mounted {
 				t.Errorf("shell mount instructions present = %t, mounted = %t", got, mounted)
 			}
 		})

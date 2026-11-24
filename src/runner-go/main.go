@@ -974,7 +974,7 @@ func cmdRun() {
 		fmt.Fprintln(os.Stderr, "managed runner instance:", err)
 		os.Exit(1)
 	}
-	// A runner that receives the Documents drive shows it to its agents as ~/Documents (documents_link.go).
+	// A runner that receives the Documents drive shows it to its agents as ~/Drive (documents_link.go).
 	ensureDocumentsLink(func(format string, args ...interface{}) { fmt.Fprintf(os.Stderr, format+"\n", args...) })
 	// A managed runner's volume has to survive its node's power loss (volume_durability.go): before
 	// anything runs Git there, it looks at what the last stop left.

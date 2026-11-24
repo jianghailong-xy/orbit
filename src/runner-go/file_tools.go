@@ -523,7 +523,7 @@ func uploadPath(t *Transport, tool fileToolContext, path, taskID, label, as stri
 	return out, nil
 }
 
-// newFileUploadScope also accepts the mounted drive. The ~/Documents symlink and the mount point
+// newFileUploadScope also accepts the mounted drive. The ~/Drive symlink and the mount point
 // resolve to the same root, so access through either spelling is checked against the mount.
 func newFileUploadScope(sessionID string) localFileScope {
 	scope := newSessionFileScope(sessionID)

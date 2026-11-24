@@ -27,9 +27,10 @@ var (
 	// keep the dead mount (design §7.2).
 	driveParentPath = pickDriveRoot(driveRootPath, driveLegacyRootPath)
 	driveMountPath  = filepath.Join(driveParentPath, "drive")
-	driveHomePath   = "/home/orbit/Documents"
-	// driveLegacyHomePath is where the drive was shown before it was renamed Documents; still accepted in paths.
-	driveLegacyHomePath = "/home/orbit/Files"
+	driveHomePath   = "/home/orbit/Drive"
+	// driveStaleHomePaths are where earlier runners linked the drive (as Documents, before that Files). They are no
+	// longer the drive: ensureDocumentsLink removes one that is a link to the mount.
+	driveStaleHomePaths = []string{"/home/orbit/Documents", "/home/orbit/Files"}
 )
 
 // pickDriveRoot is root, or legacy when only legacy is a directory: a Pod of the old CSI driver.

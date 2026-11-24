@@ -143,7 +143,7 @@ const orbitEvidenceFileInstructions = "Evidence: cite a command's output by its 
 	"directories and returns a reply link and the id a FILE check cites.\n\n"
 
 // orbitDriveInstructions is the owner's Documents drive, per runner kind (docs/documents-drive-technical-design.md
-// §4.6, §7.3). On Orbit Cloud the drive is mounted at ~/Documents and is used with the shell, so the paragraph says what the
+// §4.6, §7.3). On Orbit Cloud the drive is mounted at ~/Drive and is used with the shell, so the paragraph says what the
 // mount does not support and where it reports; on every other runner the drive is reached only through the drive tools.
 // Either way agents never see Trash (D11), and verification, judgment and guest-driven turns only read (D9). Kept short:
 // it is in every session's instructions, inside orbitInstructionsMaxBytes.
@@ -156,7 +156,7 @@ func orbitDriveInstructions() string {
 		return "The owner's Drive: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); " +
 			"deletes go to a Trash agents cannot see. " + readOnly + "\n\n"
 	}
-	return "~/Documents is the owner's permanent Drive; link its files by path. Give ls, find, du ~/Documents/ (a " +
+	return "~/Drive is the owner's permanent Drive; link its files by path. Give ls, find, du ~/Drive/ (a " +
 		"symlink). Copy in with cp -r or rsync -rt (no modes: -a, -p fail on executables; tar x drops the x bit). No " +
 		"links, locks, in-place writes or exec; see " + driveParentPath + "/errors.log. " + readOnly + "\n\n"
 }
@@ -176,9 +176,9 @@ func orbitDriveGuide() string {
 			"into the uploads directory. A delete moves the " +
 			"entry to the owner's Trash, which agents cannot see or restore, and no tool shares a drive file. " + readOnly
 	}
-	return "~/Documents (/home/orbit/Documents, mounted at " + driveMountPath + ") is the owner's permanent Drive, " +
-		"shared across sessions and runners; link a drive file in a reply by its path. ~/Documents is a symlink: give ls -l, " +
-		"find and du ~/Documents/ with the trailing slash. Copy in with cp -r or rsync -rt: the drive keeps no modes, so cp -a, " +
+	return "~/Drive (/home/orbit/Drive, mounted at " + driveMountPath + ") is the owner's permanent Drive, " +
+		"shared across sessions and runners; link a drive file in a reply by its path. ~/Drive is a symlink: give ls -l, " +
+		"find and du ~/Drive/ with the trailing slash. Copy in with cp -r or rsync -rt: the drive keeps no modes, so cp -a, " +
 		"cp -p and rsync -a report an error and exit non-zero for executables, though the contents are copied, and tar x " +
 		"extracts them without the executable bit. Not " +
 		"supported: hard and symbolic links, mode and owner changes, file locks, shared mmap of a file open for writing, " +

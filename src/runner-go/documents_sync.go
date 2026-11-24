@@ -80,7 +80,7 @@ func documentsSyncSource(sessionID, localPath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("documents_sync: %w", err)
 	}
-	for _, root := range []string{driveMountPath, driveHomePath, driveLegacyHomePath} {
+	for _, root := range []string{driveMountPath, driveHomePath} {
 		if pathInsideAny(real, realPath(root)) {
 			return "", fmt.Errorf("documents_sync: %s is inside Drive itself; sync a directory of this session's checkout or uploads directory", abs)
 		}

@@ -195,7 +195,7 @@ function refuseShape(why: string): never {
 export function namesDriveFile(ref: string): boolean {
   const text = ref.trim();
   return /^orbit-(?:document|drive):/i.test(text)
-    || /^(?:~|\/home\/orbit)\/(?:Documents|Files)(?:\/|$)/.test(text)
+    || /^(?:~|\/home\/orbit)\/(?:Drive|Documents|Files)(?:\/|$)/.test(text)
     // /run/orbit-files is the mount root of a Pod of the CSI driver from before the rename to Documents.
     || /^\/run\/orbit-(?:documents|files)\/drive(?:\/|$)/.test(text);
 }
