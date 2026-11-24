@@ -156,7 +156,7 @@ test('Orbit Files drive: resumable upload and ranged download', { skip: !URL, co
     assert.equal(entry.name, 'big.bin');
     const again = (await (await call('POST', `/uploads/${upload.id}/complete`)).json()) as { id: string };
     assert.equal(again.id, entryId, 'a second complete answers the same file');
-    assert.equal(await db.driveEntry.count({ where: { ownerId: owner, name: 'big.bin' } }), 1);
+    assert.equal(await db.documentEntry.count({ where: { ownerId: owner, name: 'big.bin' } }), 1);
     const got = await download(entryId);
     assert.equal(got.reply.status, 200);
     assert.equal(sha256(got.bytes), sha256(whole));
@@ -231,7 +231,7 @@ test('Orbit Files drive: resumable upload and ranged download', { skip: !URL, co
     const wrong = await putChunk(upload.id, 0, Buffer.from('abc'), sha256(Buffer.from('xyz')));
     assert.equal(wrong.status, 400);
     assert.equal(((await wrong.json()) as { code: string }).code, 'DRIVE_CHUNK_SHA256_MISMATCH');
-    assert.equal(await db.driveStagingChunk.count({ where: { stagingId: upload.id } }), 0, 'nothing was kept');
+    assert.equal(await db.documentStagingChunk.count({ where: { stagingId: upload.id } }), 0, 'nothing was kept');
   });
 
   await t.test('(4) abandon removes the upload and its chunk rows', async () => {
@@ -239,7 +239,7 @@ test('Orbit Files drive: resumable upload and ranged download', { skip: !URL, co
     assert.equal((await putChunk(upload.id, 0, Buffer.from('abc'))).status, 200);
     assert.equal((await call('DELETE', `/uploads/${upload.id}`)).status, 200);
     assert.equal((await call('GET', `/uploads/${upload.id}`)).status, 404);
-    assert.equal(await db.driveStagingChunk.count({ where: { stagingId: upload.id } }), 0);
+    assert.equal(await db.documentStagingChunk.count({ where: { stagingId: upload.id } }), 0);
   });
 
   await t.test('(5) a dropped folder shares one top folder, suffixed once', async () => {
@@ -254,15 +254,15 @@ test('Orbit Files drive: resumable upload and ranged download', { skip: !URL, co
     };
     const first = await send('Photos/2026/a.txt', 'aaa');
     assert.ok(first.upload.dropRootId);
-    const top = await db.driveEntry.findFirstOrThrow({ where: { id: first.upload.dropRootId!, ownerId: owner } });
+    const top = await db.documentEntry.findFirstOrThrow({ where: { id: first.upload.dropRootId!, ownerId: owner } });
     assert.equal(top.name, 'Photos (2)', 'the taken name gets one suffix');
     const second = await send('Photos/2026/b.txt', 'bbb', first.upload.dropRootId!);
     const third = await send('Photos/c.txt', 'ccc', first.upload.dropRootId!);
     assert.equal(second.upload.dropRootId, top.id);
     assert.equal(second.done.parentId, first.done.parentId, 'the same sub-folder');
     assert.equal(third.done.parentId, top.id);
-    assert.equal(await db.driveEntry.count({ where: { ownerId: owner, name: { startsWith: 'Photos' }, parentId: top.parentId } }), 2);
-    assert.equal(await db.driveEntry.count({ where: { ownerId: owner, name: '2026', parentId: top.id } }), 1);
+    assert.equal(await db.documentEntry.count({ where: { ownerId: owner, name: { startsWith: 'Photos' }, parentId: top.parentId } }), 2);
+    assert.equal(await db.documentEntry.count({ where: { ownerId: owner, name: '2026', parentId: top.id } }), 1);
   });
 
   await t.test('(6) another account sees none of it', async () => {
@@ -274,7 +274,7 @@ test('Orbit Files drive: resumable upload and ranged download', { skip: !URL, co
       assert.equal((await call('DELETE', `/uploads/${mine.id}`)).status, 404);
       assert.equal((await call('GET', `/entries/${entryId}/content`)).status, 404);
       assert.equal((await call('GET', `/versions/${versionId}/content`)).status, 404);
-      assert.equal((await call('POST', '/uploads', { body: { name: 'x', size: 1, parentId: (await db.driveEntry.findFirstOrThrow({ where: { ownerId: owner, parentId: { not: null }, kind: 'FOLDER' } })).id } })).status, 404);
+      assert.equal((await call('POST', '/uploads', { body: { name: 'x', size: 1, parentId: (await db.documentEntry.findFirstOrThrow({ where: { ownerId: owner, parentId: { not: null }, kind: 'FOLDER' } })).id } })).status, 404);
     });
     caller = owner;
   });
@@ -305,8 +305,8 @@ test('Orbit Files drive: resumable upload and ranged download', { skip: !URL, co
       assert.equal(b.status, 200);
       const [ea, eb] = [(await a.json()) as { id: string }, (await b.json()) as { id: string }];
       assert.equal(ea.id, eb.id, 'both callers end on the same entry');
-      assert.equal(await db.driveEntry.count({ where: { ownerId: owner, name: { startsWith: 'race' } } }), 1, 'one entry');
-      assert.equal(await db.driveVersion.count({ where: { entryId: ea.id } }), 1);
+      assert.equal(await db.documentEntry.count({ where: { ownerId: owner, name: { startsWith: 'race' } } }), 1, 'one entry');
+      assert.equal(await db.documentVersion.count({ where: { entryId: ea.id } }), 1);
     } finally {
       drive.createFile = original;
     }

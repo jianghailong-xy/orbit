@@ -3454,7 +3454,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1550 rewrites the access token scope `files` to `documents` in personal_access_token.scopes and
       // pat_device_login.scopes: two UPDATEs of those tables only, none of the preserved relations, no row added or
       // removed, and no table, column, trigger, function or DONE fence changes.
-      '1550_pat_scope_documents'],
+      '1550_pat_scope_documents',
+      // 1551 renames the ten drive_* tables (1283, 1327, 1339, 1438) to document_*, with their constraints, indexes and
+      // the drive_change sequence, and adds the owner foreign key schema.prisma always declared on document_commit
+      // (NOT VALID, then validated). No row is written or removed and no column or value changes. None of them is a
+      // preserved relation, and no trigger, function or DONE fence names them.
+      '1551_documents_tables'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

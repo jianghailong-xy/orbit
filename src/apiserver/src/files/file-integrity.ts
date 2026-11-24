@@ -213,7 +213,7 @@ export class FileIntegrity implements OnApplicationBootstrap, OnModuleDestroy {
           sha256,
           storage,
           problem,
-          driveVersions: (await this.prisma.driveVersionChunk.findMany({ where: { sha256 }, distinct: ['versionId'], select: { versionId: true } })).length,
+          driveVersions: (await this.prisma.documentVersionChunk.findMany({ where: { sha256 }, distinct: ['versionId'], select: { versionId: true } })).length,
           attachments: await this.prisma.attachment.count({ where: { sha256 } }),
         });
       }
