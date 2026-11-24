@@ -294,7 +294,7 @@ test('Documents drive: the mount daemon passes the shell-operation list (§5.9)'
     await db.session.create({ data: { id, ownerId: owner, creatorId: owner, title, prompt: title, assignedRunnerId: ra.id } });
   }
   const pat = (await new PatService(db as unknown as PrismaService).issue(owner, {
-    name: 'documents', scopes: ['documents'], expiresInDays: 1, createdVia: 'WEB', workspaceIds: [],
+    name: 'drive', scopes: ['drive'], expiresInDays: 1, createdVia: 'WEB', workspaceIds: [],
   })).token;
 
   const server: Apiserver = await startApiserver(url, `drive-mount-${RUN}`, { ORBIT_DOCUMENTS_DIR: filesDir });

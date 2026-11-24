@@ -18,8 +18,8 @@ import { DriveEnabledGuard } from './drive-switch';
 import { CreateDriveFolderDto, DriveDownloadLinkDto, OpenDriveUploadDto, RestoreDriveVersionDto, UpdateDriveEntryDto } from './dto';
 import { DriveSyncsService, type DriveSyncView } from './drive-syncs.service';
 
-/** What every Documents route declares for a token: the documents scope; Documents hold no workspace, so a confined token is refused. */
-export const DRIVE_PAT = () => PatScope('documents', { workspaceConfinable: false });
+/** What every Drive route declares for a token: the drive scope; Drive holds no workspace, so a confined token is refused. */
+export const DRIVE_PAT = () => PatScope('drive', { workspaceConfinable: false });
 
 const limitOf = (limit?: string) => (limit === undefined ? undefined : Number.parseInt(limit, 10));
 
@@ -27,7 +27,7 @@ const limitOf = (limit?: string) => (limit === undefined ? undefined : Number.pa
  * The owner's drive routes (docs/documents-drive-technical-design.md §4.1), under the owner's login: folders and files,
  * versions, Trash and the change feed. The owner is always the credential's; another account's entry, version or group
  * is not found. Usage and the share check are their own tasks' routes. A token reaches them with the
- * `documents` scope (DRIVE_PAT), declared on each handler like every scope; without it the guard refuses with the scope's 403.
+ * `drive` scope (DRIVE_PAT), declared on each handler like every scope; without it the guard refuses with the scope's 403.
  */
 @UseGuards(JwtAuthGuard, DriveEnabledGuard)
 @Controller(DRIVE_ROUTE_PREFIXES)
