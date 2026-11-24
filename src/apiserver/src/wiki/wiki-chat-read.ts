@@ -387,7 +387,8 @@ async function draftBody(db: Prisma.TransactionClient, input: WikiChatReadInput,
   const [view] = await draftViews(db, input.ownerId, [row]);
   const out: Line[] = [
     { text: `Card ${uuidToBase62(row.id)} · ${view!.label} · ${view!.state}` },
-    ...JSON.stringify(addTwins(view, true), null, 2).split('\n').map((text) => ({ text })),
+    // A clone: addTwins rewrites ids in place, and the versionIds below are read as the UUIDs they are.
+    ...JSON.stringify(addTwins(structuredClone(view), true), null, 2).split('\n').map((text) => ({ text })),
   ];
   const sections = view!.rewrite?.sections ?? [];
   if (sections.length === 0) return out;
