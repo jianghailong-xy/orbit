@@ -3693,6 +3693,34 @@ func wikiToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
 		},
 		{
+			"name":        "wiki_read",
+			"description": wikiReadDescription,
+			"inputSchema": obj(map[string]interface{}{
+				"q":       map[string]interface{}{"type": "string", "description": "A search: the sections whose title, covers and sentences hold every word of it."},
+				"doc":     map[string]interface{}{"type": "string", "description": "A document's slug: its whole definition in the confirmed plan, and its written sentences with their footnotes."},
+				"section": map[string]interface{}{"type": "string", "description": "With doc: one section's key, so the answer holds that section alone."},
+				"draft":   map[string]interface{}{"type": "string", "description": "A card of this chat, by its id: its state and result, and the sections it rewrote before and now."},
+				"more":    map[string]interface{}{"type": "string", "description": "The cursor an earlier answer ended with, sent back with the same other arguments for the next part."},
+			}),
+			"outputSchema": obj(map[string]interface{}{
+				"view":        map[string]interface{}{"type": "string", "enum": []string{"contents", "search", "doc", "section", "draft"}, "description": "What was read."},
+				"planVersion": map[string]interface{}{"type": []string{"integer", "null"}, "description": "The confirmed plan's version, or null with none."},
+				"planDraft": map[string]interface{}{
+					"type":        []string{"object", "null"},
+					"description": "A draft of the plan that waits for the owner, { version }, or null. While there is one, wiki_draft refuses a plan card (WIKI_PLAN_STALE).",
+				},
+				"writerJobs": map[string]interface{}{
+					"type":        "array",
+					"description": "The space's jobs that write documents, queued, waiting or running, oldest first.",
+					"items":       map[string]interface{}{"type": "object"},
+				},
+				"text": map[string]interface{}{"type": "string", "description": "The view, at most 60,000 characters, opening with the header that says it is a view and not a source."},
+				"more": map[string]interface{}{"type": []string{"string", "null"}, "description": "The cursor for the next part, or null on the last part."},
+			}, "view", "planVersion", "planDraft", "writerJobs", "text", "more"),
+			// A view of the wiki: it writes nothing and records no card.
+			"annotations": map[string]interface{}{"readOnlyHint": true},
+		},
+		{
 			"name":        "wiki_draft",
 			"description": wikiDraftDescription,
 			"inputSchema": obj(map[string]interface{}{
@@ -4309,6 +4337,20 @@ var wikiCLICapabilities = []cliCapabilitySpec{
 			"--json",
 		},
 		Mutates:     true,
+		SessionOnly: true,
+	},
+	{
+		Tool:  "wiki_read",
+		Argv:  []string{"orbit", "wiki", "read"},
+		Usage: "orbit wiki read [--q WORDS | --doc SLUG [--section KEY] | --draft ID] [--more CURSOR] [--json]",
+		Arguments: []string{
+			"--q <words> (a search; at most one of q, doc and draft)",
+			"--doc <slug> (a document's whole definition and its sentences)",
+			"--section <key> (with doc: that one section)",
+			"--draft <card id> (a card of this chat)",
+			"--more <cursor> (the cursor an earlier answer ended with, with the same other arguments)",
+			"--json",
+		},
 		SessionOnly: true,
 	},
 	{
@@ -5413,6 +5455,10 @@ var catalogMetadata = map[string]operationMeta{
 		Object:          objectWiki,
 		Intent:          "Record one claim or pitfall in the shared wiki.",
 		SuccessEvidence: "The note's id and where it was filed.",
+	},
+	"wiki_read": {
+		Object: objectWiki,
+		Intent: "Read the wiki's documents from a wiki chat.",
 	},
 	"wiki_draft": {
 		Object:          objectWiki,

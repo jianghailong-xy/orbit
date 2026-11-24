@@ -48,6 +48,11 @@ export interface WikiDocsFollowPress {
   chatId: string;
   sections: readonly WikiChatSectionRef[];
   entryIds: readonly string[];
+  /**
+   * Queued without a press (contract `chat.drafts.auto`, design §7.2 option A): a rewrite card inside the bounds, at its
+   * drafting or once the card it waited on was decided. Its fact says so, and its sections get no turn of the chat.
+   */
+  auto?: boolean;
 }
 
 /** Where a fact goes: the job it joined or made, and whether it made it. */
@@ -181,6 +186,7 @@ export async function followWikiDocsPress(tx: Prisma.TransactionClient, press: W
       sections,
       entryIds: [...new Set(press.entryIds)],
       at: at.toISOString(),
+      ...(press.auto ? { auto: true as const } : {}),
     },
   });
 }

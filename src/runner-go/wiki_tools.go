@@ -16,20 +16,21 @@ import (
 //
 // An agent reads the wiki and proposes to it; it never decides. There is no accept, no confirm, no
 // hard delete and no page overwrite here, and no tool that would be one: what an agent learned goes
-// through the space's review mode, which decides whether it waits or is live. Five tools, split by
-// risk rather than by entity — the two that only read say so, the one that proposes changes what
+// through the space's review mode, which decides whether it waits or is live. Six tools, split by
+// risk rather than by entity — the three that only read say so, the one that proposes changes what
 // anyone can see, and wiki_note only leaves a claim for maintenance to check, unless it corrects an
 // entry, which flags it at once. The fifth, wiki_draft, is a wiki chat's alone (contract
 // `agentSurface.chat.draft`): it makes a card the chat's owner may press, and the server refuses it to
-// every other session. In a wiki chat wiki_propose and a wiki_note's corrects make cards too, and
-// nothing of the wiki changes until the owner presses one.
+// every other session. The sixth, wiki_read, is a wiki chat's alone too (contract `chat.read`): it reads the
+// wiki's documents and the chat's cards, and the server refuses it to every other session. In a wiki chat wiki_propose
+// and a wiki_note's corrects make cards too, and nothing of the wiki changes until the owner presses one.
 //
 // WHAT A SESSION MAY READ IS WHAT ITS WORKSPACE IS BOUND TO. The space comes from the calling
 // session's own header on the server side (never from an argument here), so nothing a model writes
 // can widen the reach of a call; a session reads the entries its bound workspace shares, plus the
 // proposals it made itself and the owner has not decided.
 //
-// The same five verbs are `orbit wiki search|get|propose|note|draft` (wiki_cli.go), which run the runWikiTool
+// The same six verbs are `orbit wiki search|get|propose|note|draft|read` (wiki_cli.go), which run the runWikiTool
 // below: one implementation, two doors.
 
 // The contract's limits, repeated so a schema states the bounds a request would be refused against.
@@ -43,6 +44,8 @@ const (
 	wikiNotePathMaxChars = 200
 	// contracts/wiki.contract.json chat.rules.rewritesMax: the most sections one card rewrites.
 	wikiDraftSectionsMax = 5
+	// contracts/wiki.contract.json chat.rules.readMaxChars: the most characters one wiki_read answer's text holds.
+	wikiReadMaxChars = 60000
 )
 
 // wikiDraftKinds is what wiki_draft drafts (contract `agentSurface.chat.draft.params.kind`): a rewrite of sections from
@@ -113,10 +116,11 @@ const wikiNoteDescription = "Tell the wiki something this session learned that s
 // wikiDraftDescription is contracts/wiki.contract.json `agentSurface.chat.draft.description`, word for word, and
 // wiki_tools_test.go holds the two equal. It says first that nothing is written until the owner presses the card, and
 // last that it works only in a wiki chat, which the server enforces for every other session (WIKI_SESSION_EXCLUDED).
-const wikiDraftDescription = "Draft, for the owner of this wiki chat to apply, a change that is not an entry: a rewrite of " +
-	"wiki sections from main, when the code changed and a section did not follow it, or a change to how the wiki's " +
-	"documents are planned. Nothing is written until the owner presses Apply on the card, so never call a draft applied. " +
-	"A change to what the wiki knows is an entry: use wiki_propose. Works only in a wiki chat."
+const wikiDraftDescription = "Draft, for the owner of this wiki chat to apply, a change that is not an entry: a rewrite of wiki sections from main, when the code changed and a section did not follow it, or a change to how the wiki's documents are planned. A bounded rewrite from main is written when you draft it: its card says Rewritten from main, and the owner can undo it. Nothing else is written until the owner presses Apply on its card, so never call a draft applied. A change to what the wiki knows is an entry: use wiki_propose. Works only in a wiki chat."
+
+// wikiReadDescription is contracts/wiki.contract.json `agentSurface.chat.read.description`, word for word, and
+// wiki_tools_test.go holds the two equal. What it returns is a view of the wiki and never a source.
+const wikiReadDescription = "Read the wiki of this wiki chat: with no argument, its contents, every document and section; with q, the sections that hold every word of it; with doc, a document's whole definition and its written sentences with their footnotes, or with section too, that one section; with draft, a card of this chat, with the sections it rewrote. Give at most one of q, doc and draft. An answer holds at most 60,000 characters, and ends with a more cursor to send back, with the same arguments, for the rest. It is a view of the wiki, not a source: never cite it or this call; cite the code and the records its footnotes point to. Works only in a wiki chat."
 
 // wikiReplacesDescription is what the `replaces` parameter of the three drafting tools says (contract
 // `agentSurface.chat.replaces`).
@@ -143,6 +147,7 @@ var wikiToolNames = map[string]bool{
 	"wiki_propose": true,
 	"wiki_note":    true,
 	"wiki_draft":   true,
+	"wiki_read":    true,
 }
 
 // callWikiTool runs one wiki tool for the session this server runs in, and reports whether it
@@ -319,6 +324,21 @@ func runWikiTool(t *Transport, caller cliOrchestrationContext, name string, args
 		}
 		return wikiAnswer{Text: describeWikiNote(answer), Data: answer}, nil
 
+	case "wiki_read":
+		query, err := wikiReadQuery(args)
+		if err != nil {
+			return wikiAnswer{}, err
+		}
+		raw, err := t.readWiki(caller.sessionID, query)
+		if err != nil {
+			return wikiAnswer{}, wikiReadCallError(err)
+		}
+		var answer wikiReadAnswer
+		if err := json.Unmarshal(raw, &answer); err != nil {
+			return wikiAnswer{}, fmt.Errorf("wiki_read: the server's answer is not the shape this build reads: %w", err)
+		}
+		return wikiAnswer{Text: answer.Text, Data: answer}, nil
+
 	case "wiki_draft":
 		body, err := wikiDraftBody(args)
 		if err != nil {
@@ -411,6 +431,55 @@ type wikiProposeAnswer struct {
 	Rewrites []map[string]interface{} `json:"rewrites,omitempty"`
 }
 
+// wikiReadQueryArgs is one wiki_read as the runner door takes it.
+type wikiReadQueryArgs struct {
+	Q, Doc, Section, Draft, More string
+}
+
+// wikiReadAnswer is `GET /api/runner/wiki/read` (contract `chat.read.answer`). Text is what the model reads.
+type wikiReadAnswer struct {
+	View        string                   `json:"view"`
+	PlanVersion *int                     `json:"planVersion"`
+	PlanDraft   *wikiReadPlanDraft       `json:"planDraft"`
+	WriterJobs  []map[string]interface{} `json:"writerJobs"`
+	Text        string                   `json:"text"`
+	More        *string                  `json:"more"`
+}
+
+type wikiReadPlanDraft struct {
+	Version int `json:"version"`
+}
+
+// wikiReadQuery reads wiki_read's arguments. The server holds the same bounds; saying them here keeps a request that
+// would be refused off the wire.
+func wikiReadQuery(args map[string]interface{}) (wikiReadQueryArgs, error) {
+	query := wikiReadQueryArgs{
+		Q:       strings.TrimSpace(getString(args, "q")),
+		Doc:     strings.TrimSpace(getString(args, "doc")),
+		Section: strings.TrimSpace(getString(args, "section")),
+		Draft:   strings.TrimSpace(getString(args, "draft")),
+		More:    strings.TrimSpace(getString(args, "more")),
+	}
+	given := 0
+	for _, value := range []string{query.Q, query.Doc, query.Draft} {
+		if value != "" {
+			given++
+		}
+	}
+	if given > 1 {
+		return query, fmt.Errorf("give at most one of q, doc and draft")
+	}
+	if query.Section != "" && query.Doc == "" {
+		return query, fmt.Errorf("section needs doc: it is a section of that document")
+	}
+	if query.Draft != "" {
+		if err := validatePathSegmentID(query.Draft); err != nil {
+			return query, fmt.Errorf("draft %w", err)
+		}
+	}
+	return query, nil
+}
+
 // wikiDraftAnswer is `POST /api/runner/wiki/drafts` (contract `agentSurface.chat.draft.returns`).
 type wikiDraftAnswer struct {
 	Status   string                   `json:"status"`
@@ -418,6 +487,10 @@ type wikiDraftAnswer struct {
 	Kind     string                   `json:"kind"`
 	Replayed bool                     `json:"replayed"`
 	Rewrites []map[string]interface{} `json:"rewrites"`
+	// State is "rewritten" for a rewrite card written without a press, "draft" otherwise; empty from an older server.
+	State string `json:"state,omitempty"`
+	// Held is why a rewrite card stayed a draft inside option A's other bounds: web, budget or draft.
+	Held *string `json:"held,omitempty"`
 }
 
 // wikiSessionNoteAnswer is `POST /api/runner/wiki/notes` (contract `agentSurface.note.answer`). challenged is passed
@@ -802,7 +875,16 @@ func describeWikiChatPropose(answer wikiProposeAnswer, names []string, dryRun bo
 	return out.String()
 }
 
-// describeWikiDraft says what wiki_draft made: a card, and nothing written.
+// wikiHeldReasons is the shared "Apply to write: …" copy (WIKI_CHAT_COPY.card.held*), by the server's held value.
+var wikiHeldReasons = map[string]string{
+	"web":    "Apply to write: this chat read web content",
+	"budget": "Apply to write: today's automatic rewrites are used up",
+	"draft":  "Written once you apply or discard the draft that rewrites the same section",
+}
+
+// describeWikiDraft says what wiki_draft made: a card, and whether anything was written. A rewrite card the server
+// wrote without a press says so; a held one says why it waits; every other card, and an older server's answer
+// without state, says nothing was written.
 func describeWikiDraft(answer wikiDraftAnswer) string {
 	var out strings.Builder
 	if answer.Replayed {
@@ -811,6 +893,13 @@ func describeWikiDraft(answer wikiDraftAnswer) string {
 		fmt.Fprintf(&out, "Drafted card %s (plan) for the owner of this wiki chat. Nothing was written: the owner presses the card, and "+
 			"only then is the plan changed, confirmed and its documents rebuilt. Never call it applied; pass replaces: %s when you revise it.",
 			answer.DraftID, answer.DraftID)
+	} else if answer.State == "rewritten" {
+		fmt.Fprintf(&out, "Drafted card %s (%s) for the owner of this wiki chat. It was written when drafted, without a press: its sections "+
+			"are being rewritten from main now, its card says Rewritten from main, and the owner can Undo it. Its result arrives with the "+
+			"owner's next message; until then do not say what it changed. Pass replaces: %s when you revise it.", answer.DraftID, answer.Kind, answer.DraftID)
+	} else if reason, ok := wikiHeldReasons[wikiHeldValue(answer)]; ok {
+		fmt.Fprintf(&out, "Drafted card %s (%s) for the owner of this wiki chat. Nothing was written yet: %s. It waits for the owner's Apply. "+
+			"Never call it applied; pass replaces: %s when you revise it.", answer.DraftID, answer.Kind, reason, answer.DraftID)
 	} else {
 		fmt.Fprintf(&out, "Drafted card %s (%s) for the owner of this wiki chat. Nothing was written: the owner presses the card, and "+
 			"only then are the sections rewritten. Never call it applied; pass replaces: %s when you revise it.", answer.DraftID, answer.Kind, answer.DraftID)
@@ -822,9 +911,20 @@ func describeWikiDraft(answer wikiDraftAnswer) string {
 			title, _ := section["title"].(string)
 			wheres = append(wheres, strings.TrimSpace(where+" "+title))
 		}
-		out.WriteString("\nIts press would rewrite: " + strings.Join(wheres, "; ") + ".")
+		if answer.State == "rewritten" && answer.Kind != "plan" {
+			out.WriteString("\nRewriting: " + strings.Join(wheres, "; ") + ".")
+		} else {
+			out.WriteString("\nIts press would rewrite: " + strings.Join(wheres, "; ") + ".")
+		}
 	}
 	return out.String()
+}
+
+func wikiHeldValue(answer wikiDraftAnswer) string {
+	if answer.Held == nil {
+		return ""
+	}
+	return *answer.Held
 }
 
 // wikiFloat is a JSON number, or -1.
@@ -1125,6 +1225,17 @@ func wikiDraftCallError(err error) error {
 			"with wiki_propose")
 	}
 	return wikiCallError("wiki_draft", err)
+}
+
+// wikiReadCallError is wikiCallError for wiki_read, whose door is the newest: a server that has the wiki and not this
+// route answers a plain 404, and what is true then is that this binary is newer than its server, so nothing was read.
+func wikiReadCallError(err error) error {
+	if wikiDoorMissing(err) {
+		return fmt.Errorf("wiki_read: this Orbit server is too old for wiki_read (it answered 404 for GET " +
+			"/api/runner/wiki/read), so nothing was read. Work from the Wiki contents note and wiki_search, or tell the " +
+			"owner the server needs upgrading")
+	}
+	return wikiCallError("wiki_read", err)
 }
 
 // refusalCodeOf and refusalMessageOf pull a wiki refusal's code and sentence out of a response the

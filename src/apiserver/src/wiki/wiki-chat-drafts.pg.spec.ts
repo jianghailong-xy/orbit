@@ -29,18 +29,24 @@
  *  10. wiki_draft is a chat's alone: its shape, its refusals (a plan change of no proposal's shape is the plan gate's,
  *      C12), its rewrite card, Try again and seen, and chatWaiting;
  *      and a follow job's write of a section only undone cards asked for writes nothing (`WikiDocs.store`);
+ *  10¾. option A (design §7.2): a rewrite card of an untainted chat is written when drafted — queued at priority 1 in the
+ *      drafting call's transaction, no press, Rewritten from main — and its result reaches the agent with the next
+ *      message, again once it settles; Undo restores what it wrote; while another open card of the chat rewrites the
+ *      same section it waits, written on that card's Apply (one job) or Discard, a plain draft once it is replaced;
  *  11. the next message tells the agent what was pressed, once (`<orbit_wiki_drafts>`);
  *  12. a card of a chat that ended reads Not applied;
  *  13. every press and read with a session header is refused WIKI_OWNER_CHANNEL_ONLY; another account's is the plain 404;
- *  14. the card read, a chat's cards and the chats list's counts.
+ *  14. the card read, a chat's cards and the chats list's counts;
+ *  15. two drafts at once cannot pass the day's chatAutoSectionsPerDay: one is written, the other held for Apply.
  *
  * Not destructive: every row belongs to accounts this run creates.
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { toUuid, uuidToBase62, WIKI_CHAT_COPY, WIKI_DOCS_FOLLOW, WIKI_DOCS_FOLLOW_WAITING } from '@orbit/shared';
+import { toUuid, uuidToBase62, WIKI_CHAT_COPY, WIKI_CHAT_RULES, WIKI_DOCS_FOLLOW, WIKI_DOCS_FOLLOW_WAITING } from '@orbit/shared';
 import type { PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 
@@ -51,7 +57,8 @@ import type { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import type { PushService } from '../push/push.service';
 import type { RealtimeService } from '../realtime/realtime.service';
-import { appendWikiChatNotes } from './wiki-chat-notes';
+import { appendWikiChatNotes, WIKI_CHAT_PROMPT_DIGEST } from './wiki-chat-notes';
+import { wikiDocsFollowSectionsToday } from './wiki-docs-follow';
 import { WikiDocs, wikiDocsBuildJobPrincipal } from './wiki-docs';
 import { WikiService } from './wiki.service';
 import '../test-support/daemon-routes-over-http';
@@ -219,6 +226,12 @@ test('a wiki chat drafts cards, and only the owner presses them', { skip: !URL_,
   const asSession = (sessionId: string) => ({ 'x-orbit-session-id': pub(sessionId) });
   const propose = (sessionId: string, body: Record<string, unknown>) => api('POST', '/api/runner/wiki/changesets', hpc.token, body, asSession(sessionId));
   const draft = (sessionId: string, body: Record<string, unknown>) => api('POST', '/api/runner/wiki/drafts', hpc.token, body, asSession(sessionId));
+  // The draft views the drafts read route served, kept for the clients' fixtures: set WIKI_CHAT_VIEWS_OUT to write them.
+  const views: Record<string, unknown> = {};
+  const keep = (name: string, served: { json: unknown }) => {
+    views[name] = served.json;
+    if (process.env.WIKI_CHAT_VIEWS_OUT) writeFileSync(process.env.WIKI_CHAT_VIEWS_OUT, `${JSON.stringify({ about: 'Served by wiki-chat-drafts.pg.spec.ts: the drafts read route, as the web fetches it. Not edited by hand.', views }, null, 2)}\n`);
+  };
   const card = (draftId: string, bearer = ownerToken, headers?: Record<string, string>) => api('GET', `/api/wiki/chat-drafts/${pub(draftId)}`, bearer, undefined, headers);
   const press = (draftId: string, what: string, body?: unknown, bearer = ownerToken, headers?: Record<string, string>) =>
     api('POST', `/api/wiki/chat-drafts/${pub(draftId)}/${what}`, bearer, body ?? {}, headers);
@@ -243,6 +256,10 @@ test('a wiki chat drafts cards, and only the owner presses them', { skip: !URL_,
     `SELECT "id"::text AS "id", "state", "priority", "input" FROM "wiki_job" WHERE "space_id" = $1::uuid AND "kind" = 'docs_follow' ORDER BY "created_at", "id"`,
     [spaceId])).rows as Array<{ id: string; state: string; priority: number; input: { facts: Array<Record<string, unknown>> } }>;
   const draftRow = async (id: string) => (await sql.query(`SELECT * FROM "wiki_chat_draft" WHERE "id" = $1::uuid`, [id])).rows[0];
+  /** A chat that read web content (contract `effectPolicy.taintedRule`): a WebFetch call of its session. */
+  const readTheWeb = (sessionId: string) => prisma.toolCall.create({
+    data: { sessionId, name: 'WebFetch', toolUseId: `web-${randomUUID()}`, input: { url: 'https://example.com/leases' }, isError: false },
+  });
 
   /** Six ops, one of each kind a chat drafts: add, amend, reinforce, challenge, retire, and a principle's add. */
   const sixOps = () => [
@@ -628,6 +645,8 @@ test('a wiki chat drafts cards, and only the owner presses them', { skip: !URL_,
     assert.deepEqual([excluded.status, excluded.json.code], [403, 'WIKI_SESSION_EXCLUDED'], excluded.text);
     assert.match(excluded.json.message, /works only in a wiki chat/u);
     const chat = await newChat(null);
+    // This chat read the web, so its rewrite card stays a draft the owner applies (design §7.2, option A; 10¾ holds the rest).
+    await readTheWeb(chat);
     // The plan kind is open (C12, wiki-chat-plan-card.pg.spec.ts holds it): a change of no shape the plan card takes is refused
     // by the plan's gate — { docs, categories? } since one card changes several documents (C17, wiki-chat-plan-split.pg.spec.ts).
     const plan = await draft(chat, { kind: 'plan', change: { op: 'edit' }, reason: 'r', idempotencyKey: `plan-${RUN}` });
@@ -643,11 +662,17 @@ test('a wiki chat drafts cards, and only the owner presses them', { skip: !URL_,
     assert.deepEqual(withoutTwins({ ...drafted.json, draftId: 'D' }), {
       status: 'draft', draftId: 'D', kind: 'rewrite', replayed: false,
       rewrites: [{ doc: 'sessions-runtime', key: 'leases', where: '1.1 §3', title: 'Leases' }],
+      state: 'draft', held: 'web',
     });
     const id = toUuid(drafted.json.draftId);
     rewriteCard = id;
+    assert.deepEqual((await followJobs()).filter((one) => one.input.facts.some((fact) => fact.draftId === id)), [], 'held: nothing queued');
+    const heldRead = await card(id);
+    assert.deepEqual([heldRead.json.state, heldRead.json.held, heldRead.json.autoQueuedAt, heldRead.json.tainted], ['draft', 'web', null, true]);
+    keep('heldWeb', heldRead);
+    assert.deepEqual([(await draftRow(id)).held, (await draftRow(id)).auto_queued_at], ['web', null], 'why it was held is stored');
     const replay = await draft(chat, body);
-    assert.deepEqual([replay.json.replayed, toUuid(replay.json.draftId)], [true, id]);
+    assert.deepEqual([replay.json.replayed, toUuid(replay.json.draftId), replay.json.state, replay.json.held], [true, id, 'draft', 'web']);
     const applied = await press(id, 'apply');
     assert.equal(applied.status, 200, applied.text);
     assert.deepEqual([applied.json.draft.state, applied.json.draft.changesetId, applied.json.draft.undoable], ['applied', null, true]);
@@ -699,14 +724,143 @@ test('a wiki chat drafts cards, and only the owner presses them', { skip: !URL_,
     assert.equal(await versions(), before.versions + 1, 'what it replaced is kept');
   });
 
+
+  // ── 10¾ ───────────────────────────────────────────────────────────────────────────────────────────────────────
+  await t.test('10¾. option A: a bounded rewrite is written when drafted, its result told to the agent, undone by Undo; one waits on an open card of the same section', async () => {
+    // What delivery appends, as dequeueTurn's transaction does; these chats were told the rules and the contents already.
+    const told = async (sessionId: string) => {
+      await sql.query(
+        `UPDATE "session" SET "wiki_chat_prompt_digest" = $2,
+           "wiki_chat_contents_version" = (SELECT "version" FROM "wiki_plan" WHERE "space_id" = $3::uuid AND "status" = 'confirmed')
+         WHERE "id" = $1::uuid`,
+        [sessionId, WIKI_CHAT_PROMPT_DIGEST, spaceId]);
+      return prisma.$transaction(async (tx) => appendWikiChatNotes(tx as never, {
+        ownerId: owner.id, spaceId, sessionId, turn: { seq: 99, kind: 'message', wikiContext: null },
+      }, 'Next.'));
+    };
+    const leases = [{ doc: 'sessions-runtime', section: 'leases' }];
+    const beforeText = await leasesText();
+    const mergeBudget = await wikiDocsFollowSectionsToday(prisma as never, { ownerId: owner.id, spaceId, now: new Date() });
+
+    // ① A chat that never read the web: the card is written when drafted — no press.
+    const chat = await newChat(null);
+    const before = await writes();
+    const drafted = await draft(chat, { kind: 'rewrite', sections: leases, reason: 'The lease is two minutes on main.', idempotencyKey: `auto-${RUN}` });
+    assert.equal(drafted.status, 200, drafted.text);
+    assert.deepEqual([drafted.json.status, drafted.json.state, drafted.json.held], ['draft', 'rewritten', null]);
+    const id = toUuid(drafted.json.draftId);
+    const row = await draftRow(id);
+    assert.deepEqual([row.decision, row.decided_at, row.held, row.auto_queued_at !== null], [null, null, null, true], 'no press, no decision: queued without one');
+    const job = (await followJobs()).find((one) => one.state === 'queued' && one.input.facts.some((fact) => fact.draftId === id))!;
+    assert.ok(job, 'queued in the drafting call\'s own transaction');
+    const fact = job.input.facts.find((one) => one.draftId === id)!;
+    assert.deepEqual([job.priority, fact.kind, fact.auto, fact.sections], [1, 'press', true, [{ doc: 'sessions-runtime', key: 'leases' }]]);
+    assert.deepEqual(await writes(), before, 'no entry is written');
+    const read = await card(id);
+    assert.deepEqual([read.json.state, read.json.decision, read.json.held, read.json.undoable, read.json.autoQueuedAt !== null], ['rewritten', null, null, true, true]);
+    assert.ok(['rewriting', 'waiting'].includes(read.json.rewrite.result), read.text);
+    keep('autoRewriting', read);
+    const replay = await draft(chat, { kind: 'rewrite', sections: leases, reason: 'The lease is two minutes on main.', idempotencyKey: `auto-${RUN}` });
+    assert.deepEqual([replay.json.replayed, replay.json.state, toUuid(replay.json.draftId)], [true, 'rewritten', id]);
+    assert.equal((await press(id, 'apply')).status, 409, 'nothing to press: it is written already');
+
+    // ② The agent's next message carries the card and how its rewrite stands.
+    const first = await told(chat);
+    assert.match(first ?? '', /<orbit_wiki_drafts applied="0" edited="0" discarded="0" undone="0" rewritten="1" settled="0">/u);
+    assert.match(first ?? '', new RegExp(`- ${pub(id)} Rewrite from main: rewritten from main without a press, when you drafted it\\. The owner confirmed nothing; they can undo it\\. Rewrite: `, 'u'));
+
+    // ③ The job writes the section (as the worker would) and ends: the result settles after the card was told.
+    await rewriteAsTheJob(job.id, 'leases', 'A lease lasts two minutes on main.');
+    const version = await prisma.wikiDocSectionVersion.findFirstOrThrow({ where: { spaceId, sectionKey: 'leases', jobId: job.id } });
+    const report = {
+      kind: 'docs_follow', sha: SHA, left: 0, usage: { inputTokens: 0, outputTokens: 0, calls: 0 },
+      sections: [{ doc: 'sessions-runtime', key: 'leases', outcome: 'written', changed: 1, versionId: version.id, forced: true, draftIds: [id] }],
+    };
+    await sql.query(`UPDATE "wiki_job" SET "state" = 'succeeded', "ended_at" = now(), "report" = $2::jsonb WHERE "id" = $1::uuid`, [job.id, JSON.stringify(report)]);
+    const settled = await card(id);
+    assert.deepEqual([settled.json.state, settled.json.rewrite.result], ['rewritten', 'updated']);
+    keep('autoUpdated', settled);
+    const later = await told(chat);
+    assert.match(later ?? '', /<orbit_wiki_drafts applied="0" edited="0" discarded="0" undone="0" rewritten="0" settled="1">/u);
+    assert.match(later ?? '', new RegExp(`- ${pub(id)} Rewrite from main: its rewrite has finished since you were told of it\\. Rewrite: Wiki updated · 1\\.1 §3 — 1 sentence\\.`, 'u'));
+    assert.equal(await told(chat), 'Next.', 'told once more, and then nothing');
+    assert.equal(await wikiDocsFollowSectionsToday(prisma as never, { ownerId: owner.id, spaceId, now: new Date() }), mergeBudget,
+      'its section counts toward no merge budget (followSectionsPerDay)');
+    assert.equal((await press(id, 'seen')).json.seen, true, 'its settled result is seen as an applied card\'s is');
+
+    // ④ Undo restores the version it replaced.
+    const undone = await press(id, 'undo');
+    assert.equal(undone.status, 200, undone.text);
+    assert.deepEqual([undone.json.draft.state, undone.json.draft.decision], ['undone', null]);
+    assert.deepEqual(await leasesText(), beforeText, 'the section reads as before the rewrite');
+    assert.match((await told(chat)) ?? '', /undone="1"[^>]*>[\s\S]*undone by the owner\. The sections its rewrite wrote were restored/u);
+
+    // ⑤ The same section waits on an open card of the chat: its Apply writes both, in one job.
+    const ops = (title: string) => ({
+      ops: [{ op: 'add', entry: { kind: 'concept', title, summary: 'A lease lasts two minutes on main.', fields: { definition: 'd', boundaries: 'b' } }, sources: [source] }],
+      rationale: 'r', idempotencyKey: `${title}-${RUN}`,
+    });
+    const waitOn = async (label: string) => {
+      const c = await newChat();
+      const entry = await propose(c, ops(`Blocker ${label}`));
+      assert.equal(entry.status, 200, entry.text);
+      const entryId = toUuid(entry.json.draftId);
+      assert.ok(entry.json.rewrites.some((r: { key: string }) => r.key === 'leases'), 'the page the chat is on is a section the entry card rewrites');
+      const held = await draft(c, { kind: 'rewrite', sections: leases, reason: 'The lease moved.', idempotencyKey: `held-${label}-${RUN}` });
+      assert.deepEqual([held.status, held.json.state, held.json.held], [200, 'draft', 'draft'], held.text);
+      const heldId = toUuid(held.json.draftId);
+      assert.deepEqual([(await draftRow(heldId)).held_by_id, (await card(heldId)).json.held], [entryId, 'draft']);
+      assert.deepEqual((await followJobs()).filter((one) => one.input.facts.some((f) => f.draftId === heldId)), [], 'nothing queued while it waits');
+      return { chat: c, entryId, heldId };
+    };
+    const a = await waitOn('apply');
+    // A second rewrite of the same section waits on the same open card, not on the first one waiting.
+    const second = await draft(a.chat, { kind: 'rewrite', sections: leases, reason: 'Still the lease.', idempotencyKey: `held-apply-2-${RUN}` });
+    assert.deepEqual([second.status, second.json.held], [200, 'draft'], second.text);
+    const secondId = toUuid(second.json.draftId);
+    assert.equal((await draftRow(secondId)).held_by_id, a.entryId);
+    const applied = await press(a.entryId, 'apply');
+    assert.equal(applied.status, 200, applied.text);
+    const both = (await followJobs()).filter((one) => one.input.facts.some((f) => f.draftId === a.heldId));
+    assert.equal(both.length, 1);
+    assert.ok(both[0]!.input.facts.some((f) => f.draftId === a.entryId), 'the Apply and the card waiting on it join one job');
+    assert.ok(both[0]!.input.facts.some((f) => f.draftId === secondId), 'and so does every card waiting on it');
+    assert.deepEqual([(await card(a.heldId)).json.state, (await draftRow(a.heldId)).decision], ['rewritten', null]);
+    assert.equal((await card(secondId)).json.state, 'rewritten');
+    const aNote = await told(a.chat);
+    assert.match(aNote ?? '', /applied="1"[^>]*rewritten="2"/u);
+    assert.match(aNote ?? '', /rewritten from main without a press, once the owner decided the card it waited on/u);
+    // ... and its Discard writes the waiting card alone.
+    const d = await waitOn('discard');
+    assert.equal((await press(d.entryId, 'discard')).status, 200);
+    assert.deepEqual([(await card(d.heldId)).json.state, (await draftRow(d.heldId)).auto_queued_at !== null], ['rewritten', true]);
+    assert.ok((await followJobs()).some((one) => one.input.facts.some((f) => f.draftId === d.heldId && f.auto === true)));
+    // ... and once the card it waits on is replaced, it is a plain draft to apply.
+    const r = await waitOn('replace');
+    const replacing = await propose(r.chat, { ...ops('Blocker replaced again'), replaces: pub(r.entryId) });
+    assert.equal(replacing.status, 200, replacing.text);
+    const plain = await card(r.heldId);
+    assert.deepEqual([plain.json.state, plain.json.held], ['draft', null]);
+    assert.equal((await press(toUuid(replacing.json.draftId), 'discard')).status, 200);
+    assert.deepEqual([(await card(r.heldId)).json.state, (await draftRow(r.heldId)).auto_queued_at], ['draft', null], 'it waited on the replaced card, not this one');
+    const own = await press(r.heldId, 'apply');
+    assert.deepEqual([own.status, own.json.draft.state, own.json.draft.decision], [200, 'applied', 'applied'], 'the owner applies it as any card');
+  });
+
   // ── 11 ────────────────────────────────────────────────────────────────────────────────────────────────────────
   await t.test('11. the next message tells the agent what the owner pressed, once', async () => {
+    // These chats were told the rules and the contents already; what is left to tell is what the owner pressed.
+    await sql.query(
+      `UPDATE "session" SET "wiki_chat_prompt_digest" = $2,
+         "wiki_chat_contents_version" = (SELECT "version" FROM "wiki_plan" WHERE "space_id" = $3::uuid AND "status" = 'confirmed')
+       WHERE "id" = ANY($1::uuid[])`,
+      [[chats.manual, chats.automatic], WIKI_CHAT_PROMPT_DIGEST, spaceId]);
     // What delivery appends, in a transaction of the delivery's own (runner-api.controller.ts dequeueTurn's).
     const notes = (sessionId: string) => prisma.$transaction(async (tx) => appendWikiChatNotes(tx as never, {
       ownerId: owner.id, spaceId, sessionId, turn: { seq: 99, kind: 'message', wikiContext: null },
     }, 'And what about the steer?'));
     const first = await notes(chats.manual!);
-    assert.ok(first?.startsWith('And what about the steer?\n\n<orbit_wiki_drafts applied="1" edited="0" discarded="0" undone="0">'), String(first));
+    assert.ok(first?.startsWith('And what about the steer?\n\n<orbit_wiki_drafts applied="1" edited="0" discarded="0" undone="0" rewritten="0" settled="0">'), String(first));
     assert.match(first!, new RegExp(`- ${pub(cards.manual!)} 6 changes: applied by the owner\\. It wrote entry `, 'u'));
     assert.match(first!, /\(challenge, challenged, waiting for the owner in Review\)|\(challenge, owner\)/u);
     assert.match(first!, /Rewrite: Wiki updated · 1\.1 §3 — reads the same · 1\.1 §2 — 1 sentence\./u);
@@ -719,7 +873,7 @@ test('a wiki chat drafts cards, and only the owner presses them', { skip: !URL_,
       throw new Error('the claim rolled back');
     }), /rolled back/u);
     const told = await notes(chat);
-    assert.match(told ?? '', /<orbit_wiki_drafts applied="0" edited="0" discarded="1" undone="0">/u);
+    assert.match(told ?? '', /<orbit_wiki_drafts applied="0" edited="0" discarded="1" undone="0" rewritten="0" settled="0">/u);
     assert.match(told ?? '', /discarded\. Nothing of it was written\./u);
   });
 
@@ -770,7 +924,7 @@ test('a wiki chat drafts cards, and only the owner presses them', { skip: !URL_,
     const read = await card(cards.manual!);
     assert.deepEqual(Object.keys(withoutTwins(read.json) as object), [
       'id', 'sessionId', 'kind', 'state', 'label', 'rationale', 'ops', 'sections', 'rewrites', 'similar', 'tainted', 'replaces', 'replacedBy',
-      'decision', 'decidedAt', 'undoneAt', 'undoable', 'changesetId', 'rewrite', 'change', 'createdAt',
+      'decision', 'decidedAt', 'autoQueuedAt', 'held', 'undoneAt', 'undoable', 'changesetId', 'rewrite', 'change', 'createdAt',
     ], 'the contract\'s card, field for field');
     assert.equal(read.json.change, null, 'an entry card has no plan change');
     assert.deepEqual([read.json.label, read.json.kind, read.json.rewrites.map((r: { where: string }) => r.where)], [
@@ -784,5 +938,45 @@ test('a wiki chat drafts cards, and only the owner presses them', { skip: !URL_,
     const row = chatsList.json.chats.find((one: { sessionId: string }) => toUuid(one.sessionId) === chats.manual);
     assert.equal(row.drafts, 1, 'the chat holds one card');
     assert.ok(chatsList.json.fab.needsYou >= 1, 'open drafts of open chats need the owner');
+  });
+  // ── 15 ────────────────────────────────────────────────────────────────────────────────────────────────────────
+  await t.test('15. two drafts at once cannot pass the day\'s automatic sections: one is written, the other held for Apply', async () => {
+    const used = async () => count(
+      `SELECT COALESCE(sum(jsonb_array_length("rewrites")), 0)::int AS n FROM "wiki_chat_draft"
+        WHERE "space_id" = $1::uuid AND "kind" = 'rewrite' AND "created_at" >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+          AND ("auto_queued_at" IS NOT NULL OR "held" = 'draft')`, [spaceId]);
+    const limit = WIKI_CHAT_RULES.chatAutoSectionsPerDay;
+    assert.equal(limit, 20);
+    // Earlier cards of today, made up to three short of the day's sections.
+    const filler = await newChat(null);
+    let n = await used();
+    assert.ok(n <= limit - 3, `the run used ${n} already`);
+    while (n < limit - 3) {
+      const take = Math.min(5, limit - 3 - n);
+      const sections = Array.from({ length: take }, (_, i) => ({ doc: 'earlier', key: `s${n + i}` }));
+      await sql.query(
+        `INSERT INTO "wiki_chat_draft" ("id", "owner_id", "space_id", "session_id", "kind", "rationale", "sections", "rewrites", "auto_queued_at")
+         VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'rewrite', 'earlier today', $5::jsonb, $5::jsonb, now())`,
+        [randomUUID(), owner.id, spaceId, filler, JSON.stringify(sections)]);
+      n += take;
+    }
+    assert.equal(await used(), limit - 3);
+    // Two chats draft two sections each at once: both fit alone, together they would pass the day's twenty.
+    const [c1, c2] = [await newChat(null), await newChat(null)];
+    const both = { sections: [{ doc: 'sessions-runtime', section: 'leases' }, { doc: 'sessions-runtime', section: 'turn-delivery' }], reason: 'Both lag behind main.' };
+    const answers = await Promise.all([
+      draft(c1, { kind: 'rewrite', ...both, idempotencyKey: `race-1-${RUN}` }),
+      draft(c2, { kind: 'rewrite', ...both, idempotencyKey: `race-2-${RUN}` }),
+    ]);
+    for (const one of answers) assert.equal(one.status, 200, one.text);
+    assert.deepEqual(answers.map((one) => `${one.json.state}/${one.json.held}`).sort(), ['draft/budget', 'rewritten/null']);
+    assert.ok(await used() <= limit, 'the day\'s automatic sections never pass twenty');
+    const heldId = toUuid(answers.find((one) => one.json.held === 'budget')!.json.draftId);
+    const held = await card(heldId);
+    assert.deepEqual([held.json.state, held.json.held, (await draftRow(heldId)).held], ['draft', 'budget', 'budget']);
+    keep('heldBudget', held);
+    // The owner applies it as any card: a press, which no day's count holds back.
+    const applied = await press(heldId, 'apply');
+    assert.deepEqual([applied.status, applied.json.draft.state], [200, 'applied'], applied.text);
   });
 });

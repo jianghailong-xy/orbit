@@ -3,10 +3,12 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WikiChatDraftView, WikiDocSectionVersionView } from '@orbit/shared';
 import { WikiDraftCard, WikiDraftCardCtx, type WikiDraftCardHost } from './WikiDraftCard';
-import { WIKI_CHAT_REDO_MESSAGE } from '../lib/wikiChat';
+import { WIKI_CHAT_REDO_MESSAGE, wikiChatActionLabel } from '../lib/wikiChat';
 import { wikiMonthDayTime } from '../lib/wikiDocs';
 
 /**
@@ -265,12 +267,12 @@ describe('a card in each state the server reads (design §7.3)', () => {
     expect(!!document.querySelector('.wk-draft-kv')).toBe(open);
   });
 
-  it('draws a rewrite card with Rewrite, and a plan card with Apply & rebuild and Open in Plan', async () => {
+  it('draws a rewrite card held for a press with Apply (D7), and a plan card with Apply & rebuild and Open in Plan', async () => {
     await show(draft({ kind: 'rewrite', label: 'Rewrite from main', ops: [], similar: [], rewrites: [REWRITES[0]!] }));
     expect(text('.wk-draft-k')).toBe('Draft · Rewrite from main');
     expect(text('.wk-draft-ti')).toBe('3.1 §3 Turn delivery and inbox claims');
-    expect(buttons()).toEqual(['Rewrite', 'Discard']);
-    await press('Rewrite');
+    expect(buttons()).toEqual(['Apply', 'Discard']);
+    await press('Apply');
     expect(pressed()).toEqual(['apply']);
 
     await show(draft({ kind: 'plan', label: 'Plan change', ops: [], similar: [], rewrites: [] }));
@@ -655,5 +657,47 @@ describe('the line under an applied card, for every result (design §8.3)', () =
     writes = [];
     await show(applied({ result: 'waiting', reason: 'runner_offline', seen: false }));
     expect(pressed()).toEqual([]);
+  });
+});
+
+/**
+ * The cards written without a press and the cards held for one (design §7.2–§7.3, option A), drawn from the views the
+ * apiserver served — `wiki-chat-views.fixture.json`, written by wiki-chat-drafts.pg.spec.ts from the drafts read route
+ * over a real PostgreSQL, not edited by hand.
+ */
+const SERVED = JSON.parse(
+  readFileSync(
+    [resolve(process.cwd(), '../shared/src/wiki-chat-views.fixture.json'), resolve(process.cwd(), 'src/shared/src/wiki-chat-views.fixture.json')].find((path) => existsSync(path))!,
+    'utf8',
+  ),
+) as { views: Record<'heldWeb' | 'heldBudget' | 'autoRewriting' | 'autoUpdated', WikiChatDraftView> };
+
+describe('a rewrite card written when drafted, and one held for a press (views served by the apiserver)', () => {
+  it.each([
+    ['heldWeb', 'Apply to write: this chat read web content'],
+    ['heldBudget', "Apply to write: today's automatic rewrites are used up"],
+  ] as const)('held (%s): its reason line, with Apply and Discard', async (name, line) => {
+    await show(SERVED.views[name]);
+    expect(text('.wk-draft-k')).toBe('Draft · Rewrite from main');
+    expect(text('.wk-draft-note[data-held]')).toBe(line);
+    expect(buttons()).toEqual(['Apply', 'Discard']);
+  });
+
+  it('auto, rewrite not yet written: Rewritten from main, its waiting line, Undo', async () => {
+    const view = SERVED.views.autoRewriting;
+    await show(view);
+    expect(text('.wk-draft-k')).toBe('Rewritten from main');
+    expect(document.querySelector('.wk-draft-k')!.className).toContain('ok');
+    expect(document.querySelector('.wk-draft-result')!.getAttribute('data-result')).toBe(view.rewrite!.result);
+    expect(document.querySelector('.wk-draft-result')!.getAttribute('data-waits')).toBe('true');
+    expect(buttons()).toEqual(['Undo']);
+  });
+
+  it('auto, settled: Rewritten from main, the result line, Undo and See changes', async () => {
+    await show(SERVED.views.autoUpdated);
+    expect(text('.wk-draft-k')).toBe('Rewritten from main');
+    expect(text('.wk-draft-result .t')).toMatch(/^Wiki updated · /u);
+    expect(buttons()).toEqual(['Undo']);
+    expect(buttons('.wk-draft-result')).toEqual(['See changes']);
   });
 });
