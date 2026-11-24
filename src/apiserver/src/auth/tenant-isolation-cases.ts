@@ -1089,6 +1089,8 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     'written by (id, the caller) only, and 404 when that matched nothing (owner-requests/owner-secrets.service.ts:455); owner-secrets.pg.spec.ts (h) sends another account\'s',
   'DELETE /account-secrets/:id':
     'read FOR UPDATE by (id, the caller) only, 404 when that matched nothing, before anything is written; the copies revokeCopies ends are read by (that id, the caller) (owner-requests/owner-secrets.service.ts:470); owner-secrets.pg.spec.ts (h) sends another account\'s',
+  'POST /account-health/:id/check':
+    'the pressed row is read inside the one UPDATE by (id, owner = the caller, still live), so another account\'s id matches no row, clears nothing, and the controller answers 404 for the zero it returns (providers/account-health.service.ts:206, providers/account-health.controller.ts:90); account-health-check-again.pg.spec.ts (3) presses another owner\'s row and finds it still blocked. The census Tenant holds no account_health row to aim at, so no case is stood up here',
   'POST /account-secrets/grants/:id/revoke':
     'the grant is read by (id, the caller) only, 404 for another account\'s, and its request is then revoked by (request id, the caller) (owner-requests/owner-secrets.service.ts:828); owner-secrets.pg.spec.ts (k) sends another account\'s',
   'POST /owner-requests/:id/create-wiki':
@@ -1376,6 +1378,7 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
   'GET /sessions query tagId': { request: (of) => ({ params: {}, query: { tagId: of.tagId } }) },
   'GET /sessions query agentId': { request: (of) => ({ params: {}, query: { agentId: of.workspaceId } }) },
   'GET /sessions query workspaceId': { request: (of) => ({ params: {}, query: { workspaceId: of.workspaceId } }) },
+  'GET /sessions/search query folderId': { request: (of) => ({ params: {}, query: { folderId: of.folderId } }) },
   'GET /sessions query runnerId': { request: (of) => ({ params: {}, query: { runnerId: of.runnerId } }) },
   // The attempt a landing page names: B reads its own landing with A's job in the query, and is
   // answered as if it named nothing — the job is resolved within that landing and nowhere else.

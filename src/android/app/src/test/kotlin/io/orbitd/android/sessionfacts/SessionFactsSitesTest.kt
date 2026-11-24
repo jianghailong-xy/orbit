@@ -1,6 +1,9 @@
 package io.orbitd.android.sessionfacts
 
 import io.orbitd.android.composer.sendEndpoint
+import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.directory.DirectorySession
+import io.orbitd.android.directory.SessionHeader
 import io.orbitd.android.directory.runEnded
 import io.orbitd.android.push.pushStale
 import io.orbitd.android.reader.WorktreeBarLogic
@@ -13,6 +16,8 @@ import org.junit.Test
 /** Plan step 5.4: the five sites that decided on exact terminal words, each with the session facts present and absent. */
 class SessionFactsSitesTest {
     private fun row(json: String) = Json.parseToJsonElement(json).jsonObject
+    private fun directorySession(json: String): DirectorySession =
+        Wire.json.decodeFromString<DirectorySession>("""{"id":"s",${json.trim().removePrefix("{")}""")
 
     // Site 1: the push filter (push/PushAuthority.kt).
     @Test fun pushFinishedStandsForAReleasedSessionWhoseWorkFinished() {
@@ -79,7 +84,8 @@ class SessionFactsSitesTest {
         assertEquals("Ended", label("""{"status":"SUCCEEDED","released":true,"phase":"IDLE","lastTurnOutcome":"ANSWERED"}"""))
         assertEquals("Failed", label("""{"status":"FAILED","released":true,"phase":"IDLE","lastTurnOutcome":"FAILED"}"""))
         assertEquals("Interrupted", label("""{"status":"INTERRUPTED","released":false,"phase":"IDLE","lastTurnOutcome":"INTERRUPTED","endReason":"ended"}"""))
-        assertEquals("Running", label("""{"status":"AWAITING_INPUT","released":false,"phase":"RUNNING"}"""))
+        // A parked session reads parked: the status decides before the phase (web dispatchedTurnInFlight).
+        assertEquals("Awaiting reply", label("""{"status":"AWAITING_INPUT","released":false,"phase":"RUNNING"}"""))
         assertEquals("On hold", label("""{"status":"PENDING","released":false,"phase":"PENDING","waitingOn":"HOLD"}"""))
         assertEquals("Queued", label("""{"status":"PENDING","released":false,"phase":"PENDING"}"""))
         assertEquals("Awaiting reply", label("""{"status":"AWAITING_INPUT","released":false,"phase":"IDLE"}"""))
@@ -93,5 +99,68 @@ class SessionFactsSitesTest {
         // An unknown phase with released false falls back to the status.
         assertEquals("Running", label("""{"status":"RUNNING","released":false,"phase":"HIBERNATING"}"""))
         assertEquals("RUNNING", resolvedRunState(row("""{"runState":"RUNNING"}""")))
+    }
+
+    // F2: a held session whose status word is unknown reads its phase; absent fields keep the old reading.
+    @Test fun anUnknownStatusHeldSessionWithActivityTurnReadsRunning() {
+        fun word(json: String) = SessionHeader.statusWord(directorySession(json))
+        assertEquals("Running", word("""{"status":"MYSTERY","released":false,"phase":"RUNNING","activity":"TURN"}"""))
+        assertEquals("Queued", word("""{"status":"MYSTERY","released":false,"phase":"PENDING","activity":"TURN"}"""))
+    }
+    // F1: the server's own capabilities for a resumable session carry canSend AND canResume.
+    @Test fun aReleasedSessionResumesWhenCapabilitiesSayBoth() {
+        val caps = ""","capabilities":{"canSend":true,"canResume":true}"""
+        assertEquals("resume", sendEndpoint(row("""{"status":"AWAITING_INPUT","released":true,"phase":"IDLE"$caps}""")))
+        assertEquals("resume", sendEndpoint(row("""{"status":"MYSTERY","released":true,"phase":"IDLE"$caps}""")))
+    }
+    @Test fun aHeldSessionTakesATurnWhenCapabilitiesSayBoth() {
+        val caps = ""","capabilities":{"canSend":true,"canResume":true}"""
+        assertEquals("turns", sendEndpoint(row("""{"status":"AWAITING_INPUT","released":false,"phase":"IDLE"$caps}""")))
+        assertEquals("turns", sendEndpoint(row("""{"status":"MYSTERY","released":false,"phase":"RUNNING"$caps}""")))
+    }
+    @Test fun withoutTheReleaseFieldCapabilitiesDecideAsBefore() {
+        val caps = ""","capabilities":{"canSend":true,"canResume":true}"""
+        assertEquals("turns", sendEndpoint(row("""{"status":"FAILED"$caps}""")))
+        assertEquals("turns", sendEndpoint(row("""{"status":"AWAITING_INPUT"$caps}""")))
+        assertEquals("turns", sendEndpoint(row("""{"status":"AWAITING_INPUT","capabilities":{"canSend":true,"canResume":false}}""")))
+    }
+    @Test fun anUnknownStatusHeldSessionReadsItsPhase() {
+        fun word(json: String) = SessionHeader.statusWord(directorySession(json))
+        assertEquals("Waiting for your reply", word("""{"status":"MYSTERY","released":false,"phase":"IDLE"}"""))
+        assertEquals("Running", word("""{"status":"MYSTERY","released":false,"phase":"RUNNING"}"""))
+        assertEquals("Queued", word("""{"status":"MYSTERY","released":false,"phase":"PENDING"}"""))
+        assertEquals("Interrupted", word("""{"status":"MYSTERY","released":false,"phase":"IDLE","lastTurnOutcome":"INTERRUPTED"}"""))
+    }
+    @Test fun anUnknownStatusReleasedSessionReadsTheReleaseRules() {
+        fun word(json: String) = SessionHeader.statusWord(directorySession(json))
+        assertEquals("Failed", word("""{"status":"MYSTERY","released":true,"phase":"IDLE","lastTurnOutcome":"FAILED"}"""))
+        assertEquals("Finished", word("""{"status":"MYSTERY","released":true,"phase":"IDLE","endReason":"task_done"}"""))
+        assertEquals("Ended", word("""{"status":"MYSTERY","released":true,"phase":"IDLE","lastTurnOutcome":"ANSWERED"}"""))
+    }
+    @Test fun anUnknownStatusWithoutTheFactsKeepsReadingEnded() {
+        assertEquals("Ended", SessionHeader.statusWord(directorySession("""{"status":"MYSTERY"}""")))
+        assertEquals("Ended", SessionHeader.statusWord(directorySession("""{"status":"MYSTERY","phase":"IDLE"}""")))
+        assertEquals("Ended", SessionHeader.statusWord(directorySession("""{"status":"MYSTERY","released":false,"phase":"HIBERNATING"}""")))
+    }
+    @Test fun theTaskRunLabelReadsPhaseForAnUnknownStatusAndFallsBackWhenAbsent() {
+        fun label(json: String) = TaskDetailLogic.runLabel(row(json))
+        assertEquals("Awaiting reply", label("""{"status":"MYSTERY","released":false,"phase":"IDLE"}"""))
+        assertEquals("Running", label("""{"status":"MYSTERY","released":false,"phase":"RUNNING"}"""))
+        assertEquals("Queued", label("""{"status":"MYSTERY","released":false,"phase":"PENDING"}"""))
+        // The server sends activity TURN on every queued or running row: that is a running turn, not parked work.
+        assertEquals("Running", label("""{"status":"RUNNING","released":false,"phase":"RUNNING","activity":"TURN"}"""))
+        assertEquals("Queued", label("""{"status":"PENDING","released":false,"phase":"PENDING","activity":"TURN"}"""))
+        // A job with no turn (RUNNING phase, another activity) keeps the parked wording, as web's task panel shows.
+        assertEquals("Awaiting reply", label("""{"status":"AWAITING_INPUT","released":false,"phase":"RUNNING","activity":"BACKGROUND_JOB"}"""))
+        // A parked session whose engine runs its own turn is still parked: the status decides before the activity.
+        assertEquals("Awaiting reply", label("""{"status":"AWAITING_INPUT","released":false,"phase":"RUNNING","activity":"TURN"}"""))
+        assertEquals("Running", label("""{"status":"RUNNING","released":false,"phase":"RUNNING","activity":"TURN"}"""))
+        // An unknown status falls back to the activity.
+        assertEquals("Running", label("""{"status":"MYSTERY","released":false,"phase":"RUNNING","activity":"TURN"}"""))
+        assertEquals("Awaiting reply", label("""{"status":"MYSTERY","released":false,"phase":"RUNNING","activity":"BACKGROUND_JOB"}"""))
+        assertEquals("Running", label("""{"status":"RUNNING","released":false,"phase":"RUNNING","activity":"WAITING"}"""))
+        // `released` with an unknown phase is not the facts: web, and now Android, fall back to the status.
+        assertEquals("Running", label("""{"status":"RUNNING","released":true,"phase":"HIBERNATING"}"""))
+        assertEquals("—", label("""{"status":"MYSTERY"}"""))
     }
 }
