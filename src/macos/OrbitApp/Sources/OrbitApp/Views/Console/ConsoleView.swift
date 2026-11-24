@@ -1705,6 +1705,17 @@ struct TranscriptView: View {
         }
     }
 
+    /// Where a transfer card's "Show in Documents" goes: the file in its folder on the Mac's Documents page. The phone
+    /// has no Documents page, so its card has no such press.
+    private var showInDocuments: ((String) -> Void)? {
+        #if os(macOS)
+        guard app.documents?.shown == true else { return nil }
+        return { app.revealDocument($0) }
+        #else
+        return nil
+        #endif
+    }
+
     /// The words of a message at the tail that never reached the engine, back in the composer
     /// (`ConsoleModel.putBack`): the row goes, and a receipt is discarded with it.
     private func putBack(_ bubble: UserBubble) -> (() -> Void)? {
@@ -1757,6 +1768,12 @@ struct TranscriptView: View {
         case .agents(let cards):
             // No `AnchorRow`, for the steps line's reason: a group of Agents is no "Your question".
             AgentGroupView(cards: cards, fullPayload: console.fullPayload)
+        case .transfer(let kind, let cards):
+            // No `AnchorRow`, for the steps line's reason. Live as the steps line is, off the session row.
+            DocumentsTransferCardView(
+                kind: kind, cards: cards,
+                live: app.session(id: console.sessionID)?.isGenerating ?? (console.state.status == .running),
+                showInDocuments: showInDocuments)
         case .exchanges(let turns):
             // No `AnchorRow`, for the steps line's reason: a fold over turns Orbit opened is no
             // "Your question". Opened, it draws each turn's rows through this same function.
