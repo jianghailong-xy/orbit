@@ -217,6 +217,13 @@ test('KubernetesBackend issues, reads and removes the bootstrap credential, and 
   assert.deepEqual((await backend.readInstance(running))!.exit, { code: 137, outOfMemory: true });
   cluster.stopPod(managedPodName(RUNNER), 255, 'OOMKilled');
   assert.deepEqual((await backend.readInstance(running))!.exit, { code: 255, outOfMemory: false });
+  // Evicted for its temporary storage: storage full; evicted for anything else: a plain stop.
+  cluster.evictPod(managedPodName(RUNNER), 'Usage of EmptyDir volume "tmp" exceeds the limit "1Gi". ');
+  assert.deepEqual((await backend.readInstance(running))!.exit, { code: 137, outOfMemory: false, storageFull: true });
+  cluster.evictPod(managedPodName(RUNNER), 'Pod ephemeral local storage usage exceeds the total limit of containers 1Gi. ');
+  assert.deepEqual((await backend.readInstance(running))!.exit, { code: 137, outOfMemory: false, storageFull: true });
+  cluster.evictPod(managedPodName(RUNNER), 'The node was low on resource: memory. ');
+  assert.deepEqual((await backend.readInstance(running))!.exit, { code: 137, outOfMemory: false });
   cluster.stopPod(managedPodName(RUNNER));
   const predecessor = { runnerId: RUNNER, generation: 1, podName: instance.name, podUid: instance.uid, nodeName: 'node-a', pvcUid: volume.uid, volumeHandle: backing.handle };
   const proof = backend.observedStop(predecessor, stopped, new Date('2026-10-17T00:00:00.000Z'));

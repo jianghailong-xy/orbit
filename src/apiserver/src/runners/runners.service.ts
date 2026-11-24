@@ -3,6 +3,7 @@ import {
   ConflictException,
   HttpException,
   HttpStatus,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -67,6 +68,8 @@ import { ACCOUNT_ID_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunn
 import { runnerSettingsData } from './runner-settings';
 import { accountPauseUntil } from '../common/account-pause';
 import { refuseManagedRunnerDeletion, refuseManagedRunnerRotation } from '../managed-runners/managed-runner-delete';
+import { clampManagedConcurrency, managedConcurrencyCeiling, managedConcurrencyClampNotice } from '../managed-runners/managed-runner-concurrency';
+import { MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from '../managed-runners/managed-runner-runtime';
 import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from './runner-presence';
 import { runningSessionCounts } from './runner-background-holders';
 import { runnerResourcesAnswerOf } from './runner-resources';
@@ -106,6 +109,9 @@ export class RunnersService {
     // Optional, and last, for the specs that build this service on a bare Prisma: without it a
     // sign-in still reaches the runner, on its next heartbeat instead of at once.
     @Optional() private readonly realtime?: RealtimeService,
+    // The managed runner runtime, for the profile a managed runner's concurrency ceiling is read from
+    // (managed-runner-concurrency.ts). Absent, as on a server with the switch off, no ceiling is applied.
+    @Optional() @Inject(MANAGED_RUNNER_RUNTIME) private readonly managedRuntime?: ManagedRunnerRuntime | null,
   ) {}
 
   private readonly deviceLookups = new Map<string, number[]>();
@@ -561,8 +567,18 @@ export class RunnersService {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
     if (!runner) throw new NotFoundException('runner not found');
     const data = runnerSettingsData(dto);
+    // Cap managed concurrency at the memory ceiling and tell the owner when it was lowered.
+    let notice: string | undefined;
+    if (dto.maxConcurrent !== undefined) {
+      const ceiling = managedConcurrencyCeiling(this.managedRuntime);
+      if (ceiling && dto.maxConcurrent > ceiling.ceiling
+        && (await this.prisma.managedRunner.findUnique({ where: { runnerId: id }, select: { id: true } }))) {
+        data.maxConcurrent = clampManagedConcurrency(dto.maxConcurrent, ceiling);
+        notice = managedConcurrencyClampNotice(dto.maxConcurrent, ceiling);
+      }
+    }
     // Never echo back tokenHash.
-    return this.prisma.runner.update({
+    const updated = await this.prisma.runner.update({
       where: { id },
       data,
       select: {
@@ -574,6 +590,7 @@ export class RunnersService {
         minFreeDiskMb: true,
       },
     });
+    return notice ? { ...updated, notice } : updated;
   }
 
   /**

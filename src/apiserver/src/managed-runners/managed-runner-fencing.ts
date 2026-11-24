@@ -102,6 +102,8 @@ export interface ObservedStopProof {
   kind: 'OBSERVED_STOP';
   predecessor: ManagedRunnerPredecessor;
   recordedAt: string;
+  /** The host reported this instance stopped because it ran out of memory. */
+  outOfMemory?: true;
   observation: {
     phase: string;
     containers: Array<{ name: string; state: 'terminated' | 'waiting'; exitCode?: number; finishedAt?: string }>;
@@ -121,6 +123,11 @@ export interface FencingReceiptProof {
 }
 
 export type ManagedRunnerStopProof = ObservedStopProof | FencingReceiptProof;
+
+export function wasOutOfMemoryStop(proof: unknown): proof is ObservedStopProof {
+  const observed = proof as Partial<ObservedStopProof> | null;
+  return observed?.kind === 'OBSERVED_STOP' && observed.outOfMemory === true;
+}
 
 /** How far a receipt's clocks may run ahead of the manager's. */
 const CLOCK_SKEW_MS = 5 * 60_000;

@@ -301,7 +301,10 @@ public enum ManagedRunnerLogic {
         let frozen = reason?.code == environmentUnavailable
         // Asleep, or going to sleep, it comes back only on a wake the server would perform.
         let wakeable = !sleepStates.contains(status.managementState) || status.actions.canWake
-        let acceptsWork = !frozen && wakeable && comingBack.contains(status.managementState)
+        // FAILED with its slow retry scheduled comes back by itself too (managed-runner-demand.ts `slowRetryScheduled`).
+        let slowRetry = status.managementState == "FAILED" && status.nextAttemptAt?.isEmpty == false
+            && status.reason?.retryable == true
+        let acceptsWork = !frozen && wakeable && (comingBack.contains(status.managementState) || slowRetry)
         let said = kind == .available ? nil : reason?.message
         return ManagedRunnerDisplay(
             kind: kind,
@@ -324,7 +327,7 @@ public enum ManagedRunnerLogic {
 
     public static func managedSetupState(runnerID: String?, status: ManagedRunnerStatus?) -> ManagedSetupState? {
         guard let row = row(runnerID: runnerID, status: status), row.acceptsWork,
-              row.kind != .available, row.kind != .unresponsive else { return nil }
+              row.kind != .available, row.kind != .unresponsive, row.kind != .failed else { return nil }
         return status?.initialProvider?.isEmpty == false ? .asleep : .preparing
     }
 

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -20,6 +21,7 @@ import {
   pvcIdentityProblem,
   secretGeneration,
   secretIdentityProblem,
+  TMP_SUBPATH,
 } from './managed-runner-resources';
 
 // The objects the manager creates are the ones deploy/managed-runner describes: the PVC is the
@@ -146,7 +148,6 @@ test('the Pod is deploy/managed-runner/runner-pod.yaml.example, filled in and no
     __RUNNER_CPU_LIMIT__: profile.runner.resources.runner.limits.cpu,
     __RUNNER_MEMORY_LIMIT__: profile.runner.resources.runner.limits.memory,
     __EXISTING_PER_USER_TEST_PVC__: managedPvcName(RUNNER),
-    __AUTHORIZED_TMP_SIZE__: profile.runner.tmpSizeLimit,
     __BOOTSTRAP_SECRET__: managedSecretName(RUNNER),
   };
   const yaml = readFileSync(path.join(DEPLOY, 'runner-pod.yaml.example'), 'utf8')
@@ -164,6 +165,51 @@ test('the Pod is deploy/managed-runner/runner-pod.yaml.example, filled in and no
   const env = (pod.spec.containers as Array<{ env: Array<{ name: string; valueFrom?: { fieldRef?: { fieldPath?: string } } }> }>)[0].env;
   assert.equal(env.find((e) => e.name === 'ORBIT_MANAGED_RUNNER_GENERATION')?.valueFrom?.fieldRef?.fieldPath, "metadata.annotations['orbit.dev/generation']");
   assert.equal(env.find((e) => e.name === 'ORBIT_MANAGED_RUNNER_POD_UID')?.valueFrom?.fieldRef?.fieldPath, 'metadata.uid');
+});
+
+type Mount = { name: string; mountPath: string; subPath?: string; readOnly?: boolean };
+type Container = { name: string; volumeMounts: Mount[] };
+
+test('Kubernetes: /tmp is a directory of the data volume, so filling it is ENOSPC — no emptyDir, no sizeLimit, no eviction', () => {
+  const pod = buildManagedPod(identity, PVC_UID, profile);
+  const volumes = pod.spec.volumes!;
+  assert.deepEqual(volumes.map((v) => [v.name, Object.keys(v).filter((key) => key !== 'name')]), [
+    ['user-state', ['persistentVolumeClaim']],
+    ['bootstrap', ['secret']],
+  ], 'the data volume and the bootstrap Secret, and no emptyDir');
+  assert.equal(volumes[0].persistentVolumeClaim?.claimName, managedPvcName(RUNNER));
+  assert.doesNotMatch(JSON.stringify(pod), /emptyDir|sizeLimit|ephemeral-storage/);
+  const containers = [...(pod.spec.initContainers as Container[]), ...(pod.spec.containers as Container[])];
+  assert.deepEqual(containers.map((c) => c.name), ['private-volume-directories', 'runner']);
+  for (const container of containers) {
+    const tmp = container.volumeMounts.filter((m) => m.mountPath === '/tmp');
+    assert.deepEqual(tmp, [{ name: 'user-state', mountPath: '/tmp', subPath: TMP_SUBPATH }], `${container.name}: /tmp on the data volume`);
+    assert.deepEqual(container.volumeMounts.find((m) => m.mountPath === '/home/orbit'), { name: 'user-state', mountPath: '/home/orbit' });
+  }
+  assert.equal(TMP_SUBPATH, '.orbit-tmp', 'the image (entrypoint.py) and the runner (managed_tmp.go) name the same directory');
+});
+
+test('Docker: the channel\'s template mounts the same data volume directory at /tmp, and no tmpfs', () => {
+  // The Docker backend's container is built by the channel alone (deploy/managed-runner/docker-channel/channel.py):
+  // its template, rendered for this runner by its own code.
+  const channel = path.join(DEPLOY, 'docker-channel/channel.py');
+  const script = [
+    'import importlib.util, json, sys',
+    'spec = importlib.util.spec_from_file_location("channel", sys.argv[1])',
+    'ch = importlib.util.module_from_spec(spec); spec.loader.exec_module(ch)',
+    'config = {"image": "sha256:" + "a" * 64, "network": "orbit-mr", "extraLabels": {}, "instanceId": "i", "stopGraceSeconds": 200, "logMaxSize": "10m", "logMaxFiles": 3}',
+    'request = {"runnerId": sys.argv[2], "ownerId": sys.argv[3], "generation": 1, "volume": {"name": "mr-data-" + sys.argv[2], "uid": sys.argv[4]},',
+    '           "resources": {"cpuMillis": 1000, "memoryBytes": 2 ** 31, "pids": 512, "tmpBytes": 2 ** 30}, "runner": {"serverUrl": "http://10.0.0.1:3000", "maxConcurrent": 2}}',
+    'made = ch.container_spec(config, request, sys.argv[4])',
+    'print(json.dumps({"subpath": ch.TMP_SUBPATH, "mounts": made["HostConfig"]["Mounts"], "problems": ch.unsafe(config, made)}))',
+  ].join('\n');
+  const out = JSON.parse(execFileSync('python3', ['-I', '-c', script, channel, RUNNER, OWNER, PVC_UID], { encoding: 'utf8' }));
+  assert.equal(out.subpath, TMP_SUBPATH, 'both backends mount the same directory of the volume');
+  assert.deepEqual(out.problems, [], 'the template keeps the channel\'s own rules');
+  const tmp = out.mounts.filter((m: { Target: string }) => m.Target === '/tmp');
+  assert.deepEqual(tmp, [{ Type: 'volume', Source: managedPvcName(RUNNER), Target: '/tmp', ReadOnly: false, VolumeOptions: { NoCopy: true, Subpath: TMP_SUBPATH } }]);
+  assert.equal(out.mounts.find((m: { Target: string }) => m.Target === '/home/orbit')?.Source, managedPvcName(RUNNER), '/tmp is the runner\'s own data volume');
+  assert.ok(!out.mounts.some((m: { Type: string }) => m.Type === 'tmpfs'), 'no tmpfs held in the container\'s memory');
 });
 
 test('the drive adds one CSI volume and one mount to the runner, and changes nothing else (G3)', () => {
