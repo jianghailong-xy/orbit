@@ -287,9 +287,8 @@ class DocumentsShellTest {
         await { exists("documents-sync-row:data") }
         compose.onNodeWithText("data/ → Datasets").assertExists()
         compose.onNodeWithText("Details", substring = true).assertExists()
-        // The Details link opens the full-screen dialog with the failed paths.
-        compose.onNodeWithTag("documents-sync-row:data").onChildren().filterToOne(hasText("Details", substring = true))
-            .performTouchInput { click(centerRight - androidx.compose.ui.geometry.Offset(20f, 0f)) }
+        // The row of a sync that ended with failures, like its Details link, opens the full-screen dialog.
+        compose.onNodeWithTag("documents-sync-row:data").performClick()
         await { exists("documents-sync-details") }
         compose.onNodeWithText("survey-2026/raw/export.zip").assertExists()
         compose.onNodeWithText("Open Datasets").assertExists()

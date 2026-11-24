@@ -66,7 +66,14 @@ class DocumentsDeviceTest {
         compose.onNodeWithContentDescription("More").performClick()
         compose.onNodeWithText("Uploads").performClick()
         await { exists("documents-uploads-sheet") }
+        await { exists("documents-sync-row:data") }
         capture("07-uploads-sheet")
+        // A sync that ended with failures opens its details (board frame 15).
+        compose.onNodeWithTag("documents-sync-row:data").performClick()
+        await { exists("documents-sync-details") }
+        capture("15-sync-details")
+        compose.onNodeWithText("Done").performClick()
+        await { !exists("documents-sync-details") }
         instrument.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
         await { !exists("documents-uploads-sheet") }
         compose.onNodeWithTag("documents-entry:sign-in-v3.png").performClick()

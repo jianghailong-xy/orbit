@@ -88,7 +88,8 @@ private fun UploadRow(store: DocumentsStore, upload: DocumentsUploadItem) {
 private fun SyncRow(store: DocumentsStore, sync: DocumentsSync, openSession: (String) -> Unit, details: () -> Unit) {
     val failures = DocumentsLogic.syncHasFailures(sync)
     val link = TextLinkStyles(SpanStyle(color = MaterialTheme.colorScheme.primary))
-    Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 10.dp).testTag("documents-sync-row:${sync.sourceName}")) {
+    Column(Modifier.fillMaxWidth().then(if (failures) Modifier.combinedClickableNoLong(details) else Modifier)
+        .padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 10.dp).testTag("documents-sync-row:${sync.sourceName}")) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             EntryIcon(DocumentsLogic.Icon.FOLDER)
             Column(Modifier.weight(1f)) {

@@ -196,9 +196,10 @@ internal fun DocumentsStoragePage(store: DocumentsStore, route: OrbitRoute, open
                     StorageRow(t.title, DocumentsLogic.storageSize(t.bytes) + " ›") { open(OrbitRoute(Destination.TASK, ObjectId.canonical(t.taskId) ?: t.taskId)) }
                 }
             }
-            if (rest.weeks.isNotEmpty()) {
+            val weeks = rest.weeks.filter { it.bytes > 0 }
+            if (weeks.isNotEmpty()) {
                 item { SectionHeading(DocumentsLogic.ADDED_EACH_WEEK) }
-                items(rest.weeks.reversed().take(8), key = { "w:${it.weekStart}" }) { w -> StorageRow(DocumentsLogic.weekLabel(w.weekStart), DocumentsLogic.storageSize(w.bytes)) }
+                items(weeks.reversed().take(8), key = { "w:${it.weekStart}" }) { w -> StorageRow(DocumentsLogic.weekLabel(w.weekStart), DocumentsLogic.storageSize(w.bytes)) }
             }
         }
     }
