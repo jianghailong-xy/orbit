@@ -270,7 +270,7 @@ var guideTopics = []guideTopic{
 		Asks:   []string{"Keep this screenshot with the task."},
 		Intent: "Keep a screenshot, report or log in Orbit instead of the repository, or read one back.",
 		Steps: []guideStep{
-			{Op: "file_upload", Why: "Keep a file from this session's checkout, uploads directory or a mounted Documents drive."},
+			{Op: "file_upload", Why: "Keep a file from this session's checkout, uploads directory or a mounted Drive."},
 			{Op: "file_list", Optional: true, Why: "What this task's sessions have uploaded."},
 			{Op: "file_fetch", Optional: true, Why: "Read a file back by id."},
 			{Op: "documents_put", Optional: true, Why: "Keep a local file on the owner's drive.", Example: map[string]interface{}{"localPath": "report.md", "path": "/reports/report.md"}},
@@ -278,7 +278,7 @@ var guideTopics = []guideTopic{
 			{Op: "documents_list", Optional: true, Why: "List a folder on the owner's drive."},
 			{Op: "documents_move", Optional: true, Why: "Move a drive entry.", Example: map[string]interface{}{"from": "/reports/report.md", "to": "/archive/report.md"}},
 			{Op: "documents_delete", Optional: true, Why: "Move a drive entry to the owner's Trash.", Example: map[string]interface{}{"path": "/archive/report.md"}},
-			{Op: "documents_sync", Optional: true, Why: "Copy a whole directory to the owner's Documents in the background.", Example: map[string]interface{}{"localPath": "out", "path": "/Reports/out"}},
+			{Op: "documents_sync", Optional: true, Why: "Copy a whole directory to the owner's Drive in the background.", Example: map[string]interface{}{"localPath": "out", "path": "/Reports/out"}},
 		},
 		Rules: []string{
 			"A file linked in a reply reaches the user only from the working directory or this session's uploads directory: copy it there first, and keep files that do not belong in the repository out of the checkout.",
@@ -415,7 +415,7 @@ type guideContext struct {
 	Orchestration bool   `json:"orchestration"`
 	Watches       bool   `json:"watches"`
 	Wiki          bool   `json:"wiki"`
-	DocumentsOff  bool   `json:"documentsOff,omitempty"` // the server has Documents off: no drive tools (documents_switch.go)
+	DocumentsOff  bool   `json:"documentsOff,omitempty"` // the server has Drive off: no drive tools (documents_switch.go)
 }
 
 // guideFacts is a guide's context plus what it reads availability from: the MCP server's own switches,

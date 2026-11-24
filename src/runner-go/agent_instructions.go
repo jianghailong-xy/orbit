@@ -153,10 +153,10 @@ func orbitDriveInstructions() string {
 	}
 	const readOnly = "Verifying, judging and ORBIT_GUEST turns only read it."
 	if !driveMounted() {
-		return "The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); " +
+		return "The owner's Drive: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); " +
 			"deletes go to a Trash agents cannot see. " + readOnly + "\n\n"
 	}
-	return "~/Documents is the owner's permanent Documents drive; link its files by path. Give ls, find, du ~/Documents/ (a " +
+	return "~/Documents is the owner's permanent Drive; link its files by path. Give ls, find, du ~/Documents/ (a " +
 		"symlink). Copy in with cp -r or rsync -rt (no modes: -a, -p fail on executables; tar x drops the x bit). No " +
 		"links, locks, in-place writes or exec; see " + driveParentPath + "/errors.log. " + readOnly + "\n\n"
 }
@@ -169,14 +169,14 @@ func orbitDriveGuide() string {
 	}
 	const readOnly = "Verification, judgment and guest-driven turns (a message carrying the ORBIT_GUEST marker) read the drive and do not write it."
 	if !driveMounted() {
-		return "The owner's Documents drive is reached with documents_put, documents_get, documents_list, documents_move, " +
+		return "The owner's Drive is reached with documents_put, documents_get, documents_list, documents_move, " +
 			"documents_delete and documents_sync, or `orbit documents put|get|ls|mv|rm|sync`, by drive path (/Proj/r.md). " +
 			"documents_put reads only this session's checkout or uploads directory and overwrites with a version; documents_sync " +
 			"copies a whole directory from there once, in the background, skipping files already the same; documents_get saves " +
 			"into the uploads directory. A delete moves the " +
 			"entry to the owner's Trash, which agents cannot see or restore, and no tool shares a drive file. " + readOnly
 	}
-	return "~/Documents (/home/orbit/Documents, mounted at " + driveMountPath + ") is the owner's permanent Documents drive, " +
+	return "~/Documents (/home/orbit/Documents, mounted at " + driveMountPath + ") is the owner's permanent Drive, " +
 		"shared across sessions and runners; link a drive file in a reply by its path. ~/Documents is a symlink: give ls -l, " +
 		"find and du ~/Documents/ with the trailing slash. Copy in with cp -r or rsync -rt: the drive keeps no modes, so cp -a, " +
 		"cp -p and rsync -a report an error and exit non-zero for executables, though the contents are copied, and tar x " +

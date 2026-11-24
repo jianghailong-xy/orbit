@@ -1,7 +1,7 @@
 # Orbit operation catalogue v1.11.0
 
 > Generated from `src/runner-go/operation_catalog.go` — do not edit by hand.
-> Content hash: `3b39b18bb0848a27aded744564ba17990e02b2dd3dab74bbc1197bd8a8c1e449`.
+> Content hash: `3294161daedab57b3bf54e7c0b825b52a803ce38d93f487ec61371d3e671a906`.
 
 Every operation an Orbit agent can call is declared once in the operation catalogue. This table is that catalogue rendered for a person: `orbit capabilities --json` and the MCP `tools/list` payload are its two machine surfaces, and the leaf `--help` texts are held to it by tests. `MCP` and `CLI` say how each surface reaches the operation — `always`, an `orchestration` grant, an engine `permission_prompt` bridge, `session`-only, `headless`-only, or a `watch_switch`/`wiki_switch` — and `absent` when that surface deliberately has no door. Gates that must hold together are joined with `+` (for example `orchestration+watch_switch`). `Idempotency` is `read` (safe to repeat), `caller_key` (retry with the same key), `server_key` (a redelivered turn deduplicates) or `none` (re-read before retrying). `Plan` is what a session in Plan mode gets: the call `runs`, is `refused` with what to do instead, or its `own_gate` decides; the per-engine matrix is docs/permission-matrix.md.
 
@@ -50,8 +50,8 @@ Every operation an Orbit agent can call is declared once in the operation catalo
 | `documents_get` | file | low | no | none | no | read | runs | always | session — `orbit documents get` | Download a drive file into this session's uploads directory. |
 | `documents_list` | file | low | no | none | no | read | runs | always | always — `orbit documents ls` | See the contents of a drive folder. |
 | `documents_move` | file | medium | yes | none | no | none | refused | always | always — `orbit documents mv` | Move or rename an entry on the drive. |
-| `documents_put` | file | medium | yes | none | no | none | refused | always | session — `orbit documents put` | Copy a local file into the owner's Documents drive. |
-| `documents_sync` | file | medium | yes | none | no | none | refused | always | session — `orbit documents sync` | Copy a local directory into a Documents folder in the background. |
+| `documents_put` | file | medium | yes | none | no | none | refused | always | session — `orbit documents put` | Copy a local file into the owner's Drive. |
+| `documents_sync` | file | medium | yes | none | no | none | refused | always | session — `orbit documents sync` | Copy a local directory into a Drive folder in the background. |
 | `file_fetch` | file | low | no | none | no | read | runs | always | session — `orbit file fetch` | Read a file's bytes back. |
 | `file_list` | file | low | no | none | no | read | runs | always | always — `orbit file list` | See the files this session keeps. |
 | `file_pin` | file | medium | yes | none | no | none | refused | always | session — `orbit file pin` | Keep a file so it survives the turn. |

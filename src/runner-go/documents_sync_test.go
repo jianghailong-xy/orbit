@@ -344,7 +344,7 @@ func TestDocumentsSyncSkipsLinksAndGitAndRefusesPathsOutsideTheSession(t *testin
 		t.Errorf("a file was accepted as a directory: %v", err)
 	}
 	fakeDriveMount(t, true)
-	if _, err := documentsSyncSource(fileTestSession, driveHomePath); err == nil || !strings.Contains(err.Error(), "inside Documents") {
+	if _, err := documentsSyncSource(fileTestSession, driveHomePath); err == nil || !strings.Contains(err.Error(), "inside Drive") {
 		t.Errorf("the drive's own mount was accepted: %v", err)
 	}
 }
@@ -409,12 +409,12 @@ func TestDocumentsSyncStoppedMidwayListsNoFailuresAndReportsStopped(t *testing.T
 func TestDocumentsSyncIsUnlistedAndRefusedWhileDocumentsIsOff(t *testing.T) {
 	kept := withoutDriveTools([]map[string]interface{}{{"name": "documents_sync"}, {"name": "bg_run"}})
 	if len(kept) != 1 || kept[0]["name"] != "bg_run" {
-		t.Errorf("documents_sync was listed with Documents off: %v", kept)
+		t.Errorf("documents_sync was listed with Drive off: %v", kept)
 	}
 	s := &mcpServer{sessionID: fileTestSession, documentsOff: true}
 	result, handled := s.callDocumentsTool("documents_sync", map[string]interface{}{"localPath": "out", "path": "/R"})
 	if !handled || result["isError"] != true {
-		t.Fatalf("documents_sync ran with Documents off: %v", result)
+		t.Fatalf("documents_sync ran with Drive off: %v", result)
 	}
 }
 
