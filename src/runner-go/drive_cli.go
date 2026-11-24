@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -73,6 +74,9 @@ func cmdDriveCLI(args []string, out io.Writer) error {
 }
 
 func runDriveCLI(spec cliCapabilitySpec, args []string, out io.Writer) error {
+	if !documentsEnabledFromEnv() {
+		return errors.New(documentsOffMessage("orbit " + strings.Join(spec.Argv[1:], " ")))
+	}
 	fs := newCLIFlagSet(strings.Join(spec.Argv, " "))
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	var cursor *string

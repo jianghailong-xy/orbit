@@ -453,6 +453,9 @@ func (s *mcpServer) listedToolDescriptors() []map[string]interface{} {
 	if s.wikiOff {
 		tools = withoutWikiTools(tools)
 	}
+	if s.documentsOff {
+		tools = withoutDriveTools(tools)
+	}
 	if !s.browserOn {
 		tools = withoutBrowserTools(tools)
 	} else if !onOrbitCloudRunner() {

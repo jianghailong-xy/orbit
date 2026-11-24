@@ -74,6 +74,9 @@ func normalizeDrivePath(p string) (string, error) {
 func (s *mcpServer) callDriveTool(name string, args map[string]interface{}) (map[string]interface{}, bool) {
 	switch name {
 	case "drive_put", "drive_get", "drive_list", "drive_move", "drive_delete":
+		if s.documentsOff {
+			return toolResult(documentsOffMessage(name), true), true
+		}
 		progress := sessionDriveProgress(name, s.callToolUseID)
 		raw, err := runDriveTool(s.t, fileToolContext{sessionID: strings.TrimSpace(s.sessionID), callTimeout: s.callTimeout, progress: progress}, name, args)
 		progress.close()
@@ -153,6 +156,9 @@ func runDriveTool(t *Transport, tool fileToolContext, name string, args map[stri
 }
 
 func driveToolError(name string, err error) error {
+	if documentsDisabledByServer(err) {
+		return errors.New(documentsOffMessage(name))
+	}
 	if failure := driveDoorFailure(err); failure.Message != "" {
 		return fmt.Errorf("%s: %s", name, failure.Message)
 	}

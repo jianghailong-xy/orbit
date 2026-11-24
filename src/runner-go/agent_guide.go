@@ -414,6 +414,7 @@ type guideContext struct {
 	Orchestration bool   `json:"orchestration"`
 	Watches       bool   `json:"watches"`
 	Wiki          bool   `json:"wiki"`
+	DocumentsOff  bool   `json:"documentsOff,omitempty"` // the server has Documents off: no drive tools (documents_switch.go)
 }
 
 // guideFacts is a guide's context plus what it reads availability from: the MCP server's own switches,
@@ -531,6 +532,9 @@ func (f guideFacts) mcpAvailability(op *operation) (bool, string) {
 	if wikiToolNames[op.Tool] && !f.context.Wiki {
 		return false, wikiOffMessage(op.Tool)
 	}
+	if driveToolNames[op.Tool] && f.context.DocumentsOff {
+		return false, documentsOffMessage(op.Tool)
+	}
 	return true, ""
 }
 
@@ -609,7 +613,7 @@ func (f guideFacts) topic(built *builtOperationCatalog, topic *guideTopic) guide
 			doc.Routes = append(doc.Routes, route.Route)
 		}
 	}
-	if topic.ID == "files" {
+	if topic.ID == "files" && !f.context.DocumentsOff {
 		doc.Rules = append(append([]string{}, doc.Rules...), orbitDriveGuide())
 	}
 	for i, step := range topic.Steps {
@@ -702,6 +706,7 @@ func (s *mcpServer) guideFacts() guideFacts {
 			Orchestration: s.orchestrationEnabled(),
 			Watches:       !s.watchesOff,
 			Wiki:          !s.wikiOff,
+			DocumentsOff:  s.documentsOff,
 		},
 		onlyTools: s.onlyTools,
 	}
@@ -743,6 +748,7 @@ func cliGuideFacts(executable string) guideFacts {
 			Orchestration: d.facts.orchestration,
 			Watches:       d.facts.watches,
 			Wiki:          d.facts.wiki,
+			DocumentsOff:  d.facts.documentsOff,
 		},
 		cli: d,
 	}

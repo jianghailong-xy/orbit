@@ -148,6 +148,9 @@ const orbitEvidenceFileInstructions = "Evidence: cite a command's output by its 
 // Either way agents never see Trash (D11), and verification, judgment and guest-driven turns only read (D9). Kept short:
 // it is in every session's instructions, inside orbitInstructionsMaxBytes.
 func orbitDriveInstructions() string {
+	if documentsOffProcess.Load() || !documentsEnabledFromEnv() {
+		return ""
+	}
 	const readOnly = "Verifying, judging and ORBIT_GUEST turns only read it."
 	if !driveMounted() {
 		return "The owner's Orbit Files drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); " +
@@ -161,6 +164,9 @@ func orbitDriveInstructions() string {
 // orbitDriveGuide is the drive's rule in the guide's files topic: the whole of §7.3, which orbitDriveInstructions says
 // in brief because the guide is read on demand and has no byte budget.
 func orbitDriveGuide() string {
+	if documentsOffProcess.Load() || !documentsEnabledFromEnv() {
+		return ""
+	}
 	const readOnly = "Verification, judgment and guest-driven turns (a message carrying the ORBIT_GUEST marker) read the drive and do not write it."
 	if !driveMounted() {
 		return "The owner's Orbit Files drive is reached with drive_put, drive_get, drive_list, drive_move and drive_delete, " +
