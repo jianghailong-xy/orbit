@@ -548,6 +548,9 @@ final class AppModel {
     /// The account's scheduled tasks: the Scheduled section, the drawer's Scheduled row, the cards a
     /// conversation asks and the Waiting on you items (docs/scheduled-tasks-design.md §9.2).
     private(set) var scheduled: ScheduledModel?
+    /// The account's Documents (the drive): the Documents section, its sidebar rows and the uploads that outlive the
+    /// page (docs/mocks/documents, 03-mac).
+    private(set) var documents: DocumentsModel?
     /// The wiki chat beside every wiki page: its round button, its panel and the cards it draws
     /// (docs/wiki-chat-design.md §9).
     private(set) var wikiChat: WikiChatModel?
@@ -660,6 +663,12 @@ final class AppModel {
         projects = ProjectsModel(baseURL: url, tokenStore: tokenStore)
         wiki = WikiModel(baseURL: url, tokenStore: tokenStore)
         scheduled = ScheduledModel(baseURL: url, tokenStore: tokenStore)
+        let documentsModel = DocumentsModel(baseURL: url, tokenStore: tokenStore)
+        documentsModel.onToast = { [weak self] message, subtitle, tone, undo in
+            self?.showToast(message, subtitle: subtitle, tone: tone, undo: undo)
+        }
+        documentsModel.openSession = { [weak self] id in self?.route(to: .session(id)) }
+        documents = documentsModel
         wikiChat = WikiChatModel(baseURL: url, tokenStore: tokenStore)
         consoleRegistry = ConsoleRegistry(baseURL: url, tokenStore: tokenStore,
                                           store: ConsoleRegistry.defaultStore(for: url))
@@ -1499,6 +1508,13 @@ final class AppModel {
         // space and nothing else, so the loaded Wiki re-reads what it shows (the drawer's number
         // included). It moves no session row: falling through to the snapshot below would be the web's
         // `groupsFor` default of `['sessions']`, a list refetch for an event about something else.
+        // A write to the drive committed, or an agent's directory sync moved: what Documents has loaded.
+        case .documents(let syncs):
+            if syncs {
+                documents?.nudge(syncs: true)
+            } else {
+                whenSeen("documents") { $0.documents?.nudge(syncs: false) }
+            }
         case .wiki:
             whenSeen("wiki") {
                 $0.wiki?.nudge()
@@ -2820,6 +2836,7 @@ final class AppModel {
         // An entry's page, or Review, over the Wiki's home: the same one read.
         case .wiki: return nav.sectionAtRoot
         case .scheduled: return nav.sectionAtRoot
+        case .documents: return nav.sectionAtRoot
         }
     }
 
