@@ -33,7 +33,7 @@ package main
 // a change to a word is a new agentPrimerVersion, reviewed as a diff.
 
 // agentPrimerVersion is the version of the primer's text. Any change to it is a new version.
-const agentPrimerVersion = "1.4.6"
+const agentPrimerVersion = "1.5.0"
 
 // agentContractVersion is the Agent Contract version the primer was written from: the header of
 // docs/orbit-agent-contract.md and contractVersion in contracts/orbit-agent.contract.json.
@@ -81,24 +81,21 @@ const (
 		"records and starts it on one card, and runAt schedules one start. If the person said nothing should run " +
 		"until they say so, pass autoRunWhenReady: false and do not call task_start."
 
-	agentPrimerCards = "A create, a batch, a project, a provider or agent change puts a confirmation card " +
-		"in front of the user (not for a session's first few tasks) and writes nothing until they confirm it, so first " +
-		"say in a sentence or two what you will create and why. A declined card (APPROVAL_DECLINED) is a refusal: do " +
-		"not create it another way. A chat is not a no: answer the owner's words, then call the tool again, changed as agreed. A card still " +
-		"waiting is not a no either, and an owner-only decision is never yours to answer."
+	agentPrimerCards = "A create, a batch, a project, a provider or agent change can put a confirmation card in front of " +
+		"the user, which writes nothing until they confirm it, so first say in a sentence or two what you will create " +
+		"and why. A refusal or a declined card is final on every surface; a chat or a card still waiting is not a no, " +
+		"and its receipt says what to do next."
 
 	agentPrimerCLI = "The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with " +
 		"no MCP tool and commands that outlive this turn, run by the absolute path Orbit gives you. It reaches " +
 		"the same server under the same approvals: a refusal, a declined card or a missing switch there is the same " +
 		"answer."
 
-	agentPrimerReceipts = "Only a structured receipt counts: a write happened when its receipt says ok: true and " +
-		"outcome: written, with the entity's id and status; read and dry_run wrote nothing. Any other outcome is ok: " +
-		"false; except on a chat, follow its error.retry (resend, reread_first, fix_input, do_not_retry, wait). Key " +
-		"task_create and task_create_batch with an idempotencyKey derived from the work, so a retry cannot file twice. " +
-		"Name an Orbit object to the user by a link, never a bare id: `[Fix login redirect](orbit-task:<id>)`, " +
-		"likewise `orbit-session:<id>`, `orbit-project:<id>` and `orbit-list:<id>`, and a wiki entry as " +
-		"`[title](orbit-wiki:<id>)`."
+	agentPrimerReceipts = "Only a structured receipt counts: a write happened when it says ok: true and outcome: written; " +
+		"read and dry_run wrote nothing. Any other outcome is ok: false; except on a chat, follow its error.retry " +
+		"(resend, reread_first, fix_input, do_not_retry, wait) and its notes. Key task_create and task_create_batch with " +
+		"an idempotencyKey derived from the work. Name an Orbit object to the user by its receipt's link, never a bare " +
+		"id: `[Fix login redirect](orbit-task:<id>)`."
 
 	agentPrimerOrchestration = "Session, agent and runner tools exist only while the account's Session " +
 		"orchestration switch is on. Without session_* tools, do not try `orbit session`: task_start the work if " +

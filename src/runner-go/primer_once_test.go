@@ -129,3 +129,22 @@ func TestBareOrbitMCPAnswersWithTheWholePrimer(t *testing.T) {
 		t.Errorf("an unprintable CLI path still gave Claude Code Orbit's text: %q", got)
 	}
 }
+
+// What Orbit's always-on text costs a Claude Code session in each shape: the appended prompt's Orbit part (without the
+// agent's own prompt and the checkout notes) plus the initialize instructions. Logged for the budget the project holds
+// it to (3,500 bytes for the longest shape, a cap per shape enforced in step 7); the longest shape is named last.
+func TestClaudeCodeAlwaysOnBytesPerShape(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	longest, longestName := 0, ""
+	for _, shape := range instructionSnapshotShapes() {
+		job := shape.job(t)
+		orbitText := claudeOrbitInstructions(job.sessionShape(orbitCLIExecutable()))
+		initialize := claudeSessionInitializeInstructions(t, job)
+		total := len(orbitText) + len(initialize)
+		t.Logf("%s: Claude Code always-on %d bytes (appended %d + initialize %d)", shape.name, total, len(orbitText), len(initialize))
+		if total > longest {
+			longest, longestName = total, shape.name
+		}
+	}
+	t.Logf("longest Claude Code shape: %s, %d bytes", longestName, longest)
+}

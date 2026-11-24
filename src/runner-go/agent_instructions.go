@@ -262,13 +262,12 @@ func agentDelegates(agent AgentExecConfig) bool {
 
 // orbitProgressInstructions tells a session running a task how its progress reaches Orbit. A watch on the
 // task decides from task_progress_report alone, so "3 of 8 done" written into a reply or printed by a shell
-// has reported nothing, and a report that changes only its message has not progressed. Only the task form
-// carries it (unit progress.report): without a taskId the tool reports on the task being run. ASCII like the rest of
-// the paragraph.
+// has reported nothing. Only the task form carries it (unit progress.report): without a taskId the tool reports on the
+// task being run. What a report's answer means is said in its receipt since primer 1.5.0 (design step 4): its note says
+// whether it counted as progress (taskProgressLead), and a 409 PROGRESS_REVISION_CONFLICT says to read it again
+// (progressConflictNote). ASCII like the rest of the paragraph.
 const orbitProgressInstructions = "When this task's position changes -- a new phase, or another item of a known total done -- report it " +
-	"with task_progress_report. Orbit reads progress only from that report, never from your Bash output or " +
-	"transcript, and only a change of phase, current or total counts as progress; a message alone does not. If a " +
-	"report is refused with 409 PROGRESS_REVISION_CONFLICT, read the progress again, then report."
+	"with task_progress_report: Orbit reads progress from that report alone, not from your output or replies."
 
 // orbitProjectInsideInstructions and orbitProjectProposeInstructions are the paragraph about what deserves an Orbit
 // Project, in the two forms a session can be in (units project.inside-recorded-work and project.propose).

@@ -174,7 +174,7 @@ func TestOrbitProjectInstructionsDifferInsideRecordedWork(t *testing.T) {
 	if open == inside {
 		t.Fatal("a session inside recorded work receives the same project paragraph as a free conversation")
 	}
-	for _, shared := range []string{"durable record", "No returned id, no claim.", "orbit-session:<id>", "capabilities --id <id> --json", "guide [topic] --json", "mcp__orbit__*"} {
+	for _, shared := range []string{"durable record", "No returned id, no claim.", "orbit-task:<id>", "capabilities --id <id> --json", "guide [topic] --json", "mcp__orbit__*"} {
 		if !strings.Contains(open, shared) || !strings.Contains(inside, shared) {
 			t.Errorf("both forms must keep %q", shared)
 		}

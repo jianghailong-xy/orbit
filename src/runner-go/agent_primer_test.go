@@ -56,6 +56,10 @@ var agentPrimerHashes = map[string]string{
 	// 1.4.6 is 1.4.5 with the first line naming Agent Contract 1.13.0 (the drive tools are documents_*, the CLI
 	// `orbit documents`, the link orbit-document:, the old names still served); no rule changed.
 	"1.4.6": "e0ec22b359cb36138e91b08ba216b9455a3d3a957df002d197e2f5722d883a60",
+	// 1.5.0 (instruction-units step 4): what a card's answer and a receipt's error mean moved into the receipt's notes,
+	// and a receipt carries its entity's link. The cards paragraph keeps one sentence that a refusal is final on every
+	// surface and points at the receipt; the receipts paragraph names the link and the notes. No rule changed.
+	"1.5.0": "bd5101be18ab11b7070a2f97dff2415b881cceb133daff2382fcc6dcf6e71fcb",
 }
 
 // The snapshots: the primer exactly as `initialize` sends it, and the four shapes of the instructions
@@ -194,12 +198,25 @@ func TestAgentPrimerSaysEveryRuleOfTheContract(t *testing.T) {
 		"2":  {"Pick the object by the question it answers", "Task list:", "Session:", "Agent:", "the smaller wins"},
 		"3":  {"Use Orbit's MCP tools first", "The Orbit CLI is for pipes, scripts, bulk input"},
 		"4":  {"Create is not start", "autoRunWhenReady defaults to true", "pass autoRunWhenReady: false", "startNow: true", "runAt"},
-		"5":  {"confirmation card", "writes nothing until they confirm it", "A declined card (APPROVAL_DECLINED) is a refusal", "A chat is not a no", "owner-only decision"},
-		"6":  {"Only a structured receipt counts", "ok: true and outcome: written, with the entity's id and status", "`[Fix login redirect](orbit-task:<id>)`"},
+		"5":  {"confirmation card", "writes nothing until they confirm it", "A refusal or a declined card is final on every surface", "a chat or a card still waiting is not a no", "its receipt says what to do next"},
+		"6":  {"Only a structured receipt counts", "ok: true and outcome: written", "by its receipt's link, never a bare id", "`[Fix login redirect](orbit-task:<id>)`"},
 		"7":  {"follow its error.retry", "idempotencyKey derived from the work"},
 		"8":  {"the same server under the same approvals"},
 		"9":  {"Session orchestration switch", "Without session_* tools", "never claim a delegation"},
 		"10": {"After compaction or a resume", "never rebuild an id, a status or an approval"},
+	}
+	// Since primer 1.5.0 (design step 4) part of rules 5 and 6 is said where the answer is read, in the receipt, and
+	// the primer points there (receipt_recovery_notes_test.go holds each note to the receipt that carries it).
+	notes := strings.Join([]string{declinedNote, chatNote, pendingCardNote, ownerAnswersNote}, " ")
+	for _, phrase := range []string{"final on every surface", "Not a no", "still waiting is not a no", "never answer it yourself"} {
+		if !strings.Contains(notes, phrase) {
+			t.Errorf("§0 rule 5: no receipt note says %q", phrase)
+		}
+	}
+	for _, kind := range []string{string(objectTask), string(objectSession), string(objectProject), string(objectTaskList)} {
+		if receiptLinkSchemes[kind] == "" {
+			t.Errorf("§0 rule 6: a %s's receipt carries no link", kind)
+		}
 	}
 	if len(rules) != len(said) {
 		t.Fatalf("§0 has %d rules and the primer is checked against %d: say the new rule in the primer, then here", len(rules), len(said))
