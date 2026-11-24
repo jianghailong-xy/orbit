@@ -1096,6 +1096,12 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("owner-requests/\(id)/apply-settings")
     }
 
+    /// A PROJECT_REOPEN card's Reopen (docs/project-reopen-request-design.md §4.2): reopens the project as the project
+    /// page's press does and settles every pending reopen request of it DONE. Answers with the card.
+    public func reopenProjectFromOwnerRequest(_ id: String) async throws -> OwnerRequest {
+        try await postEmpty("owner-requests/\(id)/reopen-project")
+    }
+
     /// Undo of a settings change (design §5.3): the owner's own preferences PATCH with each key's `from`.
     public func undoSettingsChange(_ values: [String: JSONValue]) async throws -> User {
         try await patch("users/me/preferences", body: values)
