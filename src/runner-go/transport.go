@@ -102,6 +102,7 @@ func init() {
 		pushAsMeCapabilityV1,
 		codexAccountLoginCapabilityV1,
 		antigravityGoogleLoginCapabilityV1,
+		antigravityGoogleLoginMacOSCapabilityV1,
 		codexAccountRemoveCapabilityV1,
 		codexAccountMoveCapabilityV1,
 		claudeAccountLoginCapabilityV1,

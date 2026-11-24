@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Owner request · CHANGE · 效果图</title>
+<style>
+  :root { --border:#dee0e3; --t1:#1f2329; --t2:#646a73; --t3:#8f959e; --brand:#3370ff; --tint:#eaf1ff; --bborder:#bcd3ff; --warn:#c2710c; --warnbg:#fff6e8; --warnbd:#f5d7a8; --ok:#1f8a3b; --okbg:#e9f7ee; }
+  body { margin:0; background:#f4f4f6; font:15px/1.55 "Inter","Noto Sans SC","WenQuanYi Zen Hei",sans-serif; color:#1d1d1f; }
+  .b-part { width:1440px; margin:0 auto; padding:36px 44px 40px; box-sizing:border-box; background:#fff; border-bottom:1px solid #e3e3e8; }
+  h1 { font-size:26px; margin:0 0 6px; } h2 { font-size:20px; margin:0 0 14px; } h3 { font-size:16px; margin:0 0 8px; }
+  .b-sub { color:#6e6e73; margin:0 0 20px; }
+  .b-cols { display:grid; grid-template-columns:1fr 1fr; gap:28px; }
+  .b-cols3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:22px; }
+  .b-cap { font-size:14px; font-weight:700; margin:0 0 8px; }
+  .b-cap.old { color:#8e8e93; } .b-cap.new { color:var(--ok); }
+  .b-n { display:inline-block; min-width:22px; height:22px; line-height:22px; text-align:center; border-radius:11px; background:#ff3b30; color:#fff; font-size:13px; font-weight:700; margin-right:4px; font-style:normal; }
+  .b-pin { position:absolute; z-index:5; }
+  .b-notes { margin-top:16px; display:grid; grid-template-columns:1fr 1fr; gap:6px 28px; font-size:14px; }
+  .b-notes p { margin:0; }
+  .b-mono { font-family:"DejaVu Sans Mono",monospace; font-size:12.5px; }
+  .b-warn { border-left:4px solid #ff9f0a; background:#fff8ec; padding:10px 14px; border-radius:6px; margin-top:14px; font-size:14px; }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th,td { border:1px solid #e0e0e5; padding:8px 10px; vertical-align:top; text-align:left; }
+  th { background:#f6f6f8; } td.rec { background:#f1fbf3; }
+  .b-tag { display:inline-block; font-size:12px; padding:1px 7px; border-radius:8px; background:#34a853; color:#fff; margin-left:6px; }
+
+  /* web frame */
+  .win { border:1px solid #d6d7da; border-radius:12px; overflow:hidden; background:#fff; box-shadow:0 6px 24px rgba(0,0,0,.07); position:relative; }
+  .win-top { height:30px; background:#f3f4f6; border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 12px; gap:6px; }
+  .win-top i { width:11px; height:11px; border-radius:6px; background:#d0d2d6; display:inline-block; }
+  .pane-head { height:44px; border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 18px; font-weight:600; font-size:14px; color:var(--t1); gap:8px; }
+  .pane-head .st { font-weight:400; color:var(--t3); font-size:12.5px; }
+  .pane-body { padding:16px 20px; display:flex; flex-direction:column; gap:12px; background:#fff; font-size:13.5px; color:var(--t1); }
+  .asst { line-height:1.6; }
+  .asst code { background:#f2f3f5; border-radius:4px; padding:0 4px; font-size:12.5px; }
+  .tools { font-size:12px; color:var(--t3); }
+  .tools b { color:var(--t2); font-weight:500; }
+
+  /* owner request card (web) */
+  .orc { border:1px solid var(--warnbd); border-radius:12px; background:#fff; overflow:visible; position:relative; font-size:13.5px; color:var(--t1); }
+  .orc-head { border-radius:11px 11px 0 0; display:flex; align-items:center; gap:8px; padding:7px 14px; background:var(--warnbg); border-bottom:1px solid var(--warnbd); font-size:12px; }
+  .orc-head .dot { width:7px; height:7px; border-radius:50%; background:#e8890c; }
+  .orc-head .w { color:var(--warn); font-weight:600; }
+  .orc-head .age { color:var(--t2); margin-left:auto; }
+  .orc-body { padding:12px 14px 14px; display:flex; flex-direction:column; gap:10px; }
+  .orc-tr { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .orc-title { font-size:16px; font-weight:600; margin:0; }
+  .orc-kind { border:1px solid var(--border); border-radius:4px; color:var(--t2); font-size:10px; font-weight:600; padding:1px 6px; letter-spacing:.04em; white-space:nowrap; }
+  .orc-why { color:var(--t2); line-height:1.55; }
+  .chg { border:1px solid var(--border); border-radius:10px; background:#fafbfc; padding:10px 12px; position:relative; }
+  .chg .lbl { font-size:12px; color:var(--t2); margin-bottom:6px; }
+  .chg .lbl b { color:var(--t1); font-weight:600; }
+  .chg .row { display:flex; align-items:center; gap:10px; }
+  .chg .cur { font-size:20px; font-weight:600; color:var(--t3); min-width:26px; text-align:right; }
+  .chg .arr { color:var(--t3); font-size:16px; }
+  .num { display:inline-flex; align-items:center; border:1px solid #c9cdd4; border-radius:8px; background:#fff; height:32px; }
+  .num span { width:28px; text-align:center; color:var(--t2); font-size:15px; }
+  .num b { min-width:34px; text-align:center; font-size:17px; border-left:1px solid var(--border); border-right:1px solid var(--border); line-height:32px; }
+  .num.edited { border-color:var(--brand); box-shadow:0 0 0 2px var(--tint); }
+  .chg .run { margin-left:auto; font-size:12.5px; color:var(--t2); }
+  .chg .run i { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--brand); margin-right:5px; font-style:normal; }
+  .chg .cons { font-size:12.5px; color:var(--t2); margin-top:8px; }
+  .chg .was { font-size:12px; color:var(--warn); margin-top:4px; }
+  .facts { display:grid; grid-template-columns:90px 1fr; gap:4px 10px; font-size:12.5px; }
+  .facts dt { color:var(--t3); } .facts dd { margin:0; }
+  .tchip { display:inline-block; border:1px solid var(--bborder); background:var(--tint); color:var(--brand); border-radius:6px; padding:0 7px; font-size:12px; }
+  .acts { display:flex; align-items:center; gap:14px; }
+  .btn { font-size:13px; border:1px solid var(--border); border-radius:8px; padding:5px 14px; background:#fff; color:var(--t1); white-space:nowrap; }
+  .btn.pri { background:var(--brand); border-color:var(--brand); color:#fff; font-weight:500; }
+  .lnk { color:var(--brand); font-size:13px; }
+  .lnk.g { color:var(--t2); }
+  .unans { font-size:12px; color:var(--t2); border-top:1px dashed var(--border); padding-top:8px; }
+  .ended { border:1px solid var(--border); border-radius:12px; padding:10px 14px; display:flex; gap:10px; align-items:flex-start; font-size:13px; }
+  .ended .ic { width:16px; height:16px; border-radius:50%; background:var(--ok); color:#fff; font-size:11px; line-height:16px; text-align:center; flex:none; margin-top:2px; }
+  .ended .ic.no { background:#8f959e; }
+  .ended .t { font-weight:600; }
+  .ended .s { color:var(--t2); font-size:12.5px; }
+  .turn { border:1px dashed #c9cdd4; border-radius:10px; padding:10px 12px; background:#fafbfc; font-size:12px; color:var(--t2); }
+  .turn pre { margin:6px 0 0; font-family:"DejaVu Sans Mono",monospace; font-size:11.5px; color:var(--t1); white-space:pre-wrap; }
+
+  /* macOS */
+  .mac { border:1px solid #cfd0d4; border-radius:12px; overflow:hidden; background:#fff; box-shadow:0 10px 30px rgba(0,0,0,.10); font-family:"Inter",-apple-system,sans-serif; }
+  .mac-top { height:38px; background:#ececee; border-bottom:1px solid #d6d6da; display:flex; align-items:center; padding:0 14px; gap:7px; font-size:13px; font-weight:600; color:#3a3a3c; }
+  .mac-top i { width:12px; height:12px; border-radius:6px; display:inline-block; }
+  .mac-top .tt { margin-left:14px; }
+  .mac-app { display:grid; grid-template-columns:220px 1fr; min-height:560px; }
+  .mac-side { background:#f0f0f3; border-right:1px solid #dcdce0; padding:12px 10px; font-size:13px; }
+  .mac-side .g { font-size:11px; color:#8a8a8e; font-weight:600; margin:10px 8px 4px; }
+  .mac-side .it { padding:5px 8px; border-radius:6px; display:flex; justify-content:space-between; }
+  .mac-side .it.sel { background:#d7e3fb; }
+  .mac-side .badge { background:#e8890c; color:#fff; border-radius:8px; font-size:11px; padding:0 6px; }
+  .mac-main { padding:18px 22px; background:#fff; }
+  .mac-main h3 { font-size:17px; margin-bottom:12px; }
+  .mac .orc { border-radius:10px; }
+  .mac .btn.pri { background:#0a66ff; border-color:#0a66ff; border-radius:6px; }
+  .mac .btn { border-radius:6px; }
+  .stepper { display:inline-flex; align-items:center; gap:6px; }
+  .stepper .f { border:1px solid #c7c7cc; border-radius:5px; width:44px; height:24px; text-align:center; line-height:24px; font-size:14px; background:#fff; }
+  .stepper .s { display:inline-flex; flex-direction:column; border:1px solid #c7c7cc; border-radius:5px; overflow:hidden; font-size:8px; line-height:11px; color:#555; width:14px; text-align:center; }
+  .stepper .s span:first-child { border-bottom:1px solid #c7c7cc; }
+
+  /* phones */
+  .phone { width:393px; height:852px; border-radius:54px; border:10px solid #1c1c1e; background:#f2f2f7; position:relative; overflow:hidden; box-sizing:content-box; font-family:"Inter","Noto Sans SC",sans-serif; }
+  .phone.and { border-radius:36px; background:#f7f5fb; }
+  .ph-status { height:54px; display:flex; justify-content:space-between; align-items:flex-end; padding:0 34px 6px; font-size:15px; font-weight:600; }
+  .ph-nav { height:44px; display:flex; align-items:center; padding:0 16px; font-size:17px; font-weight:600; justify-content:center; position:relative; }
+  .ph-nav .bk { position:absolute; left:16px; color:#007aff; font-weight:400; font-size:22px; }
+  .and .ph-nav { justify-content:flex-start; padding-left:56px; font-size:20px; font-weight:500; }
+  .and .ph-nav .bk { color:#1d1b20; font-size:22px; }
+  .ph-body { padding:10px 14px; }
+  .pc { background:#fff; border-radius:14px; overflow:hidden; font-size:14.5px; color:#1c1c1e; margin-bottom:12px; position:relative; }
+  .and .pc { border-radius:16px; border:1px solid #e7e0ec; }
+  .pc-h { background:#fff4e5; padding:7px 14px; font-size:12.5px; display:flex; gap:7px; align-items:center; color:#b25e00; font-weight:600; }
+  .pc-h .age { margin-left:auto; color:#8a8a8e; font-weight:400; }
+  .pc-h .dot { width:7px; height:7px; border-radius:50%; background:#ff9500; }
+  .pc-b { padding:12px 14px 14px; }
+  .pc-t { font-size:17px; font-weight:600; margin-bottom:4px; line-height:1.3; }
+  .pc-k { font-size:10px; font-weight:700; color:#8a8a8e; letter-spacing:.05em; }
+  .pc-w { color:#6e6e73; font-size:14px; line-height:1.45; margin:6px 0 10px; }
+  .pchg { background:#f2f2f7; border-radius:12px; padding:10px 12px; }
+  .and .pchg { background:#f3edf7; }
+  .pchg .l { font-size:13px; color:#6e6e73; margin-bottom:6px; }
+  .pchg .r { display:flex; align-items:center; gap:10px; }
+  .pchg .c { font-size:22px; font-weight:600; color:#8a8a8e; }
+  .ios-step { display:inline-flex; align-items:center; background:#e3e3e8; border-radius:9px; height:32px; }
+  .ios-step span { width:44px; text-align:center; font-size:20px; color:#1c1c1e; }
+  .ios-step span:first-child { border-right:1px solid #c7c7cc; }
+  .pchg .v { font-size:22px; font-weight:700; min-width:24px; text-align:center; }
+  .and-step { display:inline-flex; align-items:center; gap:8px; }
+  .and-step span { width:32px; height:32px; border-radius:16px; border:1px solid #79747e; text-align:center; line-height:30px; font-size:18px; color:#49454f; box-sizing:border-box; }
+  .pchg .cons { font-size:12.5px; color:#6e6e73; margin-top:8px; line-height:1.4; }
+  .pchg .rn { font-size:12.5px; color:#6e6e73; margin-top:4px; }
+  .pc-f { font-size:13px; color:#6e6e73; margin-top:10px; }
+  .pc-f b { color:#007aff; font-weight:500; }
+  .and .pc-f b { color:#6750a4; }
+  .pbtn { display:block; text-align:center; padding:11px 0; border-radius:12px; font-size:16px; margin-top:10px; background:#e9e9ee; color:#007aff; }
+  .pbtn.pri { background:#007aff; color:#fff; font-weight:600; }
+  .and .pbtn { border-radius:20px; background:transparent; border:1px solid #79747e; color:#6750a4; font-weight:500; padding:9px 0; }
+  .and .pbtn.pri { background:#6750a4; color:#fff; border-color:#6750a4; }
+  .pbtns { display:flex; gap:8px; } .pbtns .pbtn { flex:1; }
+  .push { margin:8px 10px 0; background:rgba(245,245,247,.96); border-radius:20px; padding:11px 14px; box-shadow:0 6px 20px rgba(0,0,0,.18); font-size:14px; }
+  .push .a { display:flex; gap:8px; align-items:center; font-size:12.5px; color:#6e6e73; margin-bottom:3px; }
+  .push .a i { width:20px; height:20px; border-radius:5px; background:#1d1b3a; display:inline-block; }
+  .push .a span { margin-left:auto; }
+  .push b { display:block; font-size:14.5px; }
+  .and .push { border-radius:24px; background:#fff; margin:6px 8px 0; }
+  .pended { background:#fff; border-radius:14px; padding:12px 14px; display:flex; gap:10px; font-size:14px; }
+  .and .pended { border:1px solid #e7e0ec; border-radius:16px; }
+  .pended .ic { width:20px; height:20px; border-radius:50%; background:#34c759; color:#fff; font-size:12px; line-height:20px; text-align:center; flex:none; }
+  .pended .s { color:#6e6e73; font-size:12.5px; }
+  .ph-cap { font-size:12px; color:#8a8a8e; text-transform:uppercase; margin:12px 4px 6px; letter-spacing:.03em; }
+</style>
+</head>
+<body>
+
+<!-- ① -->
+<section class="b-part">
+<h1>Owner request · CHANGE：agent 提议改设置，owner 一键 Apply · 四端效果图</h1>
+<p class="b-sub">第一个用例：runner 的 Max Concurrent。设计文档 <span class="b-mono">docs/design/owner-request-change.md</span>。界面文案都是英文，标注是中文。</p>
+<h2>① 今天 vs 建议：协调者的对话里（Web）</h2>
+<div class="b-cols">
+  <div>
+    <p class="b-cap old">今天：只能叫你自己去找设置</p>
+    <div class="win">
+      <div class="win-top"><i></i><i></i><i></i></div>
+      <div class="pane-head">Orbit 生产控制面迁移到 10.66.0.4 <span class="st">· Coordinator</span></div>
+      <div class="pane-body" style="min-height:520px">
+        <div class="tools"><b>Used 5 tools</b> · runner_list</div>
+        <div class="asst">The project has started; the first task is running: <span style="color:var(--brand)">Prepare .4 and the image registry</span>.</div>
+        <div class="asst">wikova has been overloaded the whole time. You can lower <code>wikova</code>'s concurrency to about 6 in the runner settings on the web; only you can change that.</div>
+        <div class="b-warn" style="margin-top:6px">你要：打开 Infrastructure → 找到 wikova → Capacity → Max Concurrent → 输入 6 → 回车 → 回对话里告诉它"改好了"。<br>agent 也不知道你最后改成了几。</div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <p class="b-cap new">建议：同一句话变成一张能直接 Apply 的卡片</p>
+    <div class="win">
+      <div class="win-top"><i></i><i></i><i></i></div>
+      <div class="pane-head">Orbit 生产控制面迁移到 10.66.0.4 <span class="st">· Coordinator</span></div>
+      <div class="pane-body" style="min-height:520px">
+        <div class="tools"><b>Used 6 tools</b> · runner_list · request_owner_action</div>
+        <div class="asst">wikova has run at 12/12 for 40 minutes. I've asked you to lower it to 6; the card is below.</div>
+        <div class="orc">
+          <em class="b-n b-pin" style="left:-12px;top:-10px">1</em>
+          <div class="orc-head"><span class="dot"></span><span class="w">Waiting on you</span><span class="age">Asked just now</span></div>
+          <div class="orc-body">
+            <div class="orc-tr"><h3 class="orc-title">Lower wikova to 6 concurrent sessions</h3><span class="orc-kind">SETTING</span></div>
+            <div class="orc-why">wikova has run at 12/12 for 40 minutes; the cutover rehearsal needs headroom.</div>
+            <div class="chg">
+              <em class="b-n b-pin" style="right:-12px;top:-10px">2</em>
+              <div class="lbl"><b>wikova</b> · Max Concurrent</div>
+              <div class="row">
+                <span class="cur">12</span><span class="arr">→</span>
+                <span class="num"><span>−</span><b>6</b><span>+</span></span>
+                <span class="run"><i></i>8 running now</span>
+              </div>
+              <div class="cons">Nothing running stops. New sessions wait until fewer than 6 run.</div>
+            </div>
+            <dl class="facts"><dt>Holding up</dt><dd><span class="tchip">Rehearse the cutover on 10.66.0.4</span></dd></dl>
+            <div class="acts" style="position:relative">
+              <em class="b-n b-pin" style="left:-26px;top:3px">3</em>
+              <span class="btn pri">Apply</span><span class="lnk">Decline…</span><span class="lnk g">Remind me later</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="b-notes">
+  <p><i class="b-n">1</i>就是已有的 owner 请求卡片（和 SECRET、DECISION 同一个组件），新种类标签 <b>SETTING</b>。同时出现在 Waiting on you 收件箱里，也会推送。</p>
+  <p><i class="b-n">2</i>左边 12 是 runner 的<b>实时</b>值，右边是 agent 提议的 6，可以直接改。下面一行说清楚后果：正在跑的不会停。</p>
+  <p><i class="b-n">3</i>Apply 由服务端直接写 Max Concurrent，同一事务把请求标为 DONE，并给 agent 发一轮结果。agent 自己永远写不了这个设置。</p>
+  <p>Decline… 和 Remind me later 跟其他种类完全一样。拒绝理由会原样回给 agent。</p>
+</div>
+</section>
+
+<!-- ② -->
+<section class="b-part">
+<h2>② Web：卡片的几种状态，以及 agent 收到什么</h2>
+<div class="b-cols3">
+  <div>
+    <p class="b-cap new">A · 你把 6 改成 8 再 Apply</p>
+    <div class="orc">
+      <div class="orc-head"><span class="dot"></span><span class="w">Waiting on you</span><span class="age">Asked 3m ago</span></div>
+      <div class="orc-body">
+        <div class="orc-tr"><h3 class="orc-title">Lower wikova to 6 concurrent sessions</h3><span class="orc-kind">SETTING</span></div>
+        <div class="chg">
+          <div class="lbl"><b>wikova</b> · Max Concurrent</div>
+          <div class="row"><span class="cur">12</span><span class="arr">→</span><span class="num edited"><span>−</span><b>8</b><span>+</span></span><span class="run"><i></i>8 running now</span></div>
+          <div class="cons">Nothing running stops. New sessions wait until fewer than 8 run.</div>
+        </div>
+        <div class="acts"><span class="btn pri">Apply</span><span class="lnk">Decline…</span><span class="lnk g">Remind me later</span></div>
+      </div>
+    </div>
+    <p style="font-size:13px;color:var(--t2)">按钮文字不变；结果里记的是 applied 8、requested 6。</p>
+  </div>
+  <div>
+    <p class="b-cap new">B · 提议之后有人已经改过这个值</p>
+    <div class="orc">
+      <div class="orc-head"><span class="dot"></span><span class="w">Waiting on you</span><span class="age">Asked 25m ago</span></div>
+      <div class="orc-body">
+        <div class="orc-tr"><h3 class="orc-title">Lower wikova to 6 concurrent sessions</h3><span class="orc-kind">SETTING</span></div>
+        <div class="chg">
+          <div class="lbl"><b>wikova</b> · Max Concurrent</div>
+          <div class="row"><span class="cur">10</span><span class="arr">→</span><span class="num"><span>−</span><b>6</b><span>+</span></span><span class="run"><i></i>7 running now</span></div>
+          <div class="was">Was 12 when asked.</div>
+          <div class="cons">Nothing running stops. New sessions wait until fewer than 6 run.</div>
+        </div>
+        <div class="acts"><span class="btn pri">Apply</span><span class="lnk">Decline…</span><span class="lnk g">Remind me later</span></div>
+      </div>
+    </div>
+    <p style="font-size:13px;color:var(--t2)">不拒绝 Apply（决定 3）；结果里多一个 actualBefore 10。</p>
+  </div>
+  <div>
+    <p class="b-cap new">C · 调高的方向，后果那行换一句</p>
+    <div class="orc">
+      <div class="orc-head"><span class="dot"></span><span class="w">Waiting on you</span><span class="age">Asked 1m ago</span></div>
+      <div class="orc-body">
+        <div class="orc-tr"><h3 class="orc-title">Raise hpc-02 to 16 concurrent sessions</h3><span class="orc-kind">SETTING</span></div>
+        <div class="chg">
+          <div class="lbl"><b>hpc-02</b> · Max Concurrent</div>
+          <div class="row"><span class="cur">8</span><span class="arr">→</span><span class="num"><span>−</span><b>16</b><span>+</span></span><span class="run"><i></i>8 running now</span></div>
+          <div class="cons">Up to 16 sessions can run at once on this machine.</div>
+        </div>
+        <div class="acts"><span class="btn pri">Apply</span><span class="lnk">Decline…</span><span class="lnk g">Remind me later</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="b-cols" style="margin-top:26px">
+  <div>
+    <p class="b-cap new">结束后：卡片收成一行（对话里与 Waiting on you 一致）</p>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="ended"><span class="ic">✓</span><div><div class="t">Lower wikova to 6 concurrent sessions</div><div class="s">Applied: wikova Max Concurrent 12 → 6 · by you · 12:58 · iPhone</div></div></div>
+      <div class="ended"><span class="ic">✓</span><div><div class="t">Lower wikova to 6 concurrent sessions</div><div class="s">Applied: wikova Max Concurrent 12 → 8 (asked for 6) · by you · 12:58 · Web</div></div></div>
+      <div class="ended"><span class="ic no">✕</span><div><div class="t">Lower wikova to 6 concurrent sessions</div><div class="s">Declined: “Keep 12 until the backfill finishes” · by you · 13:02</div></div></div>
+      <div class="ended"><span class="ic no">↺</span><div><div class="t">Lower wikova to 8 concurrent sessions</div><div class="s">Withdrawn: “Replaced by a newer request” · by the session that asked</div></div></div>
+    </div>
+  </div>
+  <div>
+    <p class="b-cap new">agent 收到的那一轮（已有格式，payload 多一个 change）</p>
+    <div class="turn">Orbit owner request 7f3c… (CHANGE) ended DONE: the owner did it.<br>This turn was queued by Orbit when the request ended, not typed by a person. …
+<pre>"change": {
+  "runnerId": "…wikova…",
+  "field": "maxConcurrent",
+  "requested": 6,
+  "applied": 8,
+  "before": 12,
+  "actualBefore": 12
+}</pre></div>
+    <p style="font-size:13px;color:var(--t2);margin-top:8px">工具说明会告诉 agent：以 <span class="b-mono">applied</span> 为准，不是 <span class="b-mono">requested</span>。</p>
+  </div>
+</div>
+</section>
+
+<!-- ③ -->
+<section class="b-part">
+<h2>③ macOS：Waiting on you 里的同一张卡片</h2>
+<div class="mac" style="width:1100px">
+  <div class="mac-top"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span class="tt">Orbit</span></div>
+  <div class="mac-app">
+    <div class="mac-side">
+      <div class="g">ORBIT</div>
+      <div class="it sel"><span>Waiting on you</span><span class="badge">1</span></div>
+      <div class="it"><span>Sessions</span></div>
+      <div class="it"><span>Projects</span></div>
+      <div class="it"><span>Tasks</span></div>
+      <div class="g">SETTINGS</div>
+      <div class="it"><span>Machines &amp; models</span></div>
+    </div>
+    <div class="mac-main">
+      <h3>Waiting on you</h3>
+      <div class="orc" style="max-width:640px">
+        <div class="orc-head"><span class="dot"></span><span class="w">Waiting on you</span><span class="age">Asked 2m ago · Orbit 生产控制面迁移到 10.66.0.4</span></div>
+        <div class="orc-body">
+          <div class="orc-tr"><h3 class="orc-title">Lower wikova to 6 concurrent sessions</h3><span class="orc-kind">SETTING</span></div>
+          <div class="orc-why">wikova has run at 12/12 for 40 minutes; the cutover rehearsal needs headroom.</div>
+          <div class="chg" style="position:relative">
+            <em class="b-n b-pin" style="right:-12px;top:-10px">1</em>
+            <div class="lbl"><b>wikova</b> · Max Concurrent</div>
+            <div class="row"><span class="cur">12</span><span class="arr">→</span><span class="stepper"><span class="f">6</span><span class="s"><span>▲</span><span>▼</span></span></span><span class="run"><i></i>8 running now</span></div>
+            <div class="cons">Nothing running stops. New sessions wait until fewer than 6 run.</div>
+          </div>
+          <dl class="facts"><dt>Holding up</dt><dd><span class="tchip">Rehearse the cutover on 10.66.0.4</span></dd></dl>
+          <div class="acts"><span class="btn pri">Apply</span><span class="lnk">Decline…</span><span class="lnk g">Remind Me Later</span></div>
+          <div class="unans"><b>If nobody answers:</b> the rehearsal runs on a crowded machine and takes longer.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="b-notes">
+  <p><i class="b-n">1</i>macOS 用原生 stepper（和 Machines &amp; models 里 Max Concurrent 的控件一样），其余和 Web 同一套字。</p>
+  <p>对话里的卡片同样长这样；侧栏徽标只是已有的 Waiting on you 计数。</p>
+</div>
+</section>
+
+<!-- ④ -->
+<section class="b-part">
+<h2>④ iPhone 与 Android：推送 → 卡片 → 结束</h2>
+<div class="b-cols3">
+  <div>
+    <p class="b-cap new">iPhone · 推送 + 卡片</p>
+    <div class="phone">
+      <div class="ph-status"><span>12:55</span><span>●●● ▮</span></div>
+      <div class="push"><div class="a"><i></i>ORBIT<span>now</span></div><b>Lower wikova to 6 concurrent sessions</b>Waiting on you · SETTING</div>
+      <div class="ph-nav" style="margin-top:6px"><span class="bk">‹</span>Waiting on you</div>
+      <div class="ph-body">
+        <div class="pc">
+          <div class="pc-h"><span class="dot"></span>Waiting on you<span class="age">Asked just now</span></div>
+          <div class="pc-b">
+            <div class="pc-k">SETTING</div>
+            <div class="pc-t">Lower wikova to 6 concurrent sessions</div>
+            <div class="pc-w">wikova has run at 12/12 for 40 minutes; the cutover rehearsal needs headroom.</div>
+            <div class="pchg">
+              <div class="l"><b style="color:#1c1c1e">wikova</b> · Max Concurrent</div>
+              <div class="r"><span class="c">12</span><span style="color:#8a8a8e">→</span><span class="v">6</span><span class="ios-step" style="margin-left:auto"><span>−</span><span>+</span></span></div>
+              <div class="rn">8 running now</div>
+              <div class="cons">Nothing running stops. New sessions wait until fewer than 6 run.</div>
+            </div>
+            <div class="pc-f">Holding up <b>Rehearse the cutover on 10.66.0.4</b></div>
+            <span class="pbtn pri">Apply</span>
+            <div class="pbtns"><span class="pbtn">Decline…</span><span class="pbtn">Later…</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <p class="b-cap new">Android · 推送 + 卡片</p>
+    <div class="phone and">
+      <div class="ph-status"><span>12:55</span><span>▾ ▮</span></div>
+      <div class="push"><div class="a"><i></i>Orbit · now</div><b>Lower wikova to 6 concurrent sessions</b>Waiting on you · SETTING</div>
+      <div class="ph-nav" style="margin-top:6px"><span class="bk" style="left:18px">←</span>Waiting on you</div>
+      <div class="ph-body">
+        <div class="pc">
+          <div class="pc-h"><span class="dot"></span>Waiting on you<span class="age">Asked just now</span></div>
+          <div class="pc-b">
+            <div class="pc-k">SETTING</div>
+            <div class="pc-t">Lower wikova to 6 concurrent sessions</div>
+            <div class="pc-w">wikova has run at 12/12 for 40 minutes; the cutover rehearsal needs headroom.</div>
+            <div class="pchg">
+              <div class="l"><b style="color:#1d1b20">wikova</b> · Max Concurrent</div>
+              <div class="r"><span class="c">12</span><span style="color:#8a8a8e">→</span><span class="and-step" style="margin-left:auto"><span>−</span><span class="v" style="border:0;width:auto;font-size:22px;color:#1d1b20">6</span><span>+</span></span></div>
+              <div class="rn">8 running now</div>
+              <div class="cons">Nothing running stops. New sessions wait until fewer than 6 run.</div>
+            </div>
+            <div class="pc-f">Holding up <b>Rehearse the cutover on 10.66.0.4</b></div>
+            <span class="pbtn pri">Apply</span>
+            <div class="pbtns"><span class="pbtn">Decline…</span><span class="pbtn">Later…</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <p class="b-cap new">iPhone · Apply 之后回到对话</p>
+    <div class="phone">
+      <div class="ph-status"><span>12:58</span><span>●●● ▮</span></div>
+      <div class="ph-nav"><span class="bk">‹</span>Coordinator</div>
+      <div class="ph-body">
+        <div class="pended"><span class="ic">✓</span><div><b>Lower wikova to 6 concurrent sessions</b><div class="s">Applied: wikova Max Concurrent 12 → 6 · by you · 12:58 · iPhone</div></div></div>
+        <div style="font-size:15px;line-height:1.5;margin:14px 4px;color:#1c1c1e">wikova is at 6 now. The 8 sessions already running will finish; new ones queue until fewer than 6 run. Starting the rehearsal.</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="b-notes">
+  <p>推送正文就是标题（已有规则）。点推送打开这张卡片，不打开 runner 设置页。</p>
+  <p>手机上数字用 stepper 改，不弹键盘。Apply 失败（例如 runner 已删除）时，用卡片已有的 “That was not recorded” 提示。</p>
+</div>
+</section>
+
+<!-- ⑤ -->
+<section class="b-part">
+<h2>⑤ 规则、文案，以及要你拍板的三件事</h2>
+<div class="b-cols">
+  <div>
+    <h3>规则</h3>
+    <table>
+      <tr><th>谁</th><th>能做什么</th></tr>
+      <tr><td>agent（任意会话）</td><td><span class="b-mono">request_owner_action kind=CHANGE</span>，只能提议；提议的 runner 必须是同一个 owner 的；新值必须 ≥1 且与当前值不同。</td></tr>
+      <tr><td>agent</td><td>写 Max Concurrent：<b>不能</b>。<span class="b-mono">PATCH /runners/:id</span> 和新的 <span class="b-mono">/owner-requests/:id/apply</span> 都只认 owner 登录，PAT 也不行。</td></tr>
+      <tr><td>owner</td><td>Apply（可改数字）/ Decline… / Remind me later。</td></tr>
+      <tr><td>同一 runner 同一设置</td><td>同时只有一张待处理卡片；新提议把旧的以 “Replaced by a newer request” 撤回。</td></tr>
+      <tr><td>正在跑的会话</td><td>不受影响；新值从下一次领取开始生效（现有行为）。runner 离线也能 Apply。</td></tr>
+    </table>
+    <h3 style="margin-top:20px">新增文案（全部英文）</h3>
+    <table>
+      <tr><th>位置</th><th>文案</th></tr>
+      <tr><td>种类标签 / 主按钮</td><td>SETTING / Apply</td></tr>
+      <tr><td>设置行</td><td>{runner} · Max Concurrent　·　{n} running now</td></tr>
+      <tr><td>调低</td><td>Nothing running stops. New sessions wait until fewer than {n} run.</td></tr>
+      <tr><td>调高</td><td>Up to {n} sessions can run at once on this machine.</td></tr>
+      <tr><td>值已被改过</td><td>Was {before} when asked.</td></tr>
+      <tr><td>结束行</td><td>Applied: {runner} Max Concurrent {from} → {to}[ (asked for {requested})]</td></tr>
+      <tr><td>被替换</td><td>Replaced by a newer request</td></tr>
+    </table>
+  </div>
+  <div>
+    <h3>要你拍板</h3>
+    <table>
+      <tr><th>#</th><th>问题</th><th>建议</th></tr>
+      <tr><td>1</td><td>卡片上的数字能不能改？</td><td class="rec">能改<span class="b-tag">建议</span><br>想要 8 而不是 6 时不用拒绝再等新请求；agent 读 applied。</td></tr>
+      <tr><td>2</td><td>第一版覆盖哪些设置？</td><td class="rec">只有 runner 的 Max Concurrent<span class="b-tag">建议</span><br>类型化白名单，Keep Free 之后逐个加；不做“改任意字段”。</td></tr>
+      <tr><td>3</td><td>提议后值已被改过，还让不让 Apply？</td><td class="rec">让，显示 “Was 12 when asked.”<span class="b-tag">建议</span><br>你看的是实时值；拒绝只会逼 agent 重提一遍。</td></tr>
+    </table>
+    <h3 style="margin-top:20px">改哪里</h3>
+    <table>
+      <tr><td>服务端</td><td>迁移（kind 加 CHANGE、change_spec、部分唯一索引）、提议校验、<span class="b-mono">POST /owner-requests/:id/apply</span>、结果 payload</td></tr>
+      <tr><td>runner</td><td><span class="b-mono">mcp.go</span> 的 <span class="b-mono">change</span> 参数 + CLI，parity 测试</td></tr>
+      <tr><td>Web</td><td><span class="b-mono">OwnerRequestCard.tsx</span></td></tr>
+      <tr><td>macOS/iOS</td><td><span class="b-mono">OrbitKit/App/OwnerRequests.swift</span></td></tr>
+      <tr><td>Android</td><td><span class="b-mono">cards/OwnerRequestViews.kt</span></td></tr>
+    </table>
+  </div>
+</div>
+</section>
+
+</body>
+</html>

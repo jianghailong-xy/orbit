@@ -474,7 +474,7 @@ export function AntigravityRepairCard({ repair, help, seq }: {
       {repair === 'needsKey' && help.provider === 'antigravity' && (
         help.googleLogin === 'available' && help.runnerId
           ? <RunnerSignIn runnerId={help.runnerId} engine="antigravity" onDone={help.onRetry} />
-          : <div className="chat-authfix-desc">{help.googleLogin === 'unsupported_platform' ? 'Google sign-in is not supported on macOS runners yet. Use a Gemini API key.' : 'Update this runner to sign in with Google.'}</div>
+          : <div className="chat-authfix-desc">{help.googleLogin === 'unsupported_platform' ? "Google sign-in is not supported on this runner's operating system. Use a Gemini API key." : 'Update this runner to sign in with Google.'}</div>
       )}
       <div className="chat-authfix-actions">
         {repair === 'needsKey' ? (

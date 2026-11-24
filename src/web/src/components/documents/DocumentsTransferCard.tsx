@@ -166,7 +166,8 @@ function FileList({ files, kind, folder }: { files: DocumentsTransferFile[]; kin
 
 /**
  * An agent's run of documents_put or documents_get calls as one card (board docs/mocks/agent-drive-transfer): a bar, the
- * speed and the time left while it goes, a row per file, and one line once every file is in.
+ * speed and the time left while it goes, and a row per file. A finished run stays a card, with its green bar and its
+ * totals: the owner read folding it to one line as the card going away.
  */
 export function DocumentsTransferCard({
   kind,
@@ -182,13 +183,7 @@ export function DocumentsTransferCard({
   const moving = live && !summary.finished;
   const { rate, stalledMs } = useTransferPace(summary.sentBytes, moving);
   const clean = summary.finished && summary.failed === 0 && summary.stopped === 0;
-  const [showFiles, setShowFiles] = useState(!clean);
-  // A transfer that finishes while it is watched folds to its line, as one finished before the page opened.
-  const wasClean = useRef(clean);
-  useEffect(() => {
-    if (clean && !wasClean.current) setShowFiles(false);
-    wasClean.current = clean;
-  }, [clean]);
+  const [showFiles, setShowFiles] = useState(true);
   const stalled = moving && summary.sentBytes > 0 && stalledMs >= STALL_MS;
   const firstLink = files.find((f) => f.link)?.link;
 
@@ -197,24 +192,6 @@ export function DocumentsTransferCard({
   const timing = summary.elapsedMs !== null ? ` in ${durationText(summary.elapsedMs)}` : '';
   const average =
     summary.elapsedMs && summary.elapsedMs >= 1000 ? rateText(summary.sentBytes / (summary.elapsedMs / 1000)) : null;
-
-  if (clean && !showFiles) {
-    return (
-      <div className="drive-xfer-fold">
-        <span className="drive-xfer-tick" aria-hidden="true">
-          ✓
-        </span>
-        <button type="button" className="drive-xfer-fold-open" aria-expanded={false} onClick={() => setShowFiles(true)}>
-          {words.went} {filesText(summary.done)} {kind === 'put' ? 'to' : 'from'} {summary.folder}
-        </button>
-        <span className="drive-xfer-muted">
-          · {formatSize(summary.sentBytes)}
-          {timing}
-          {average ? ` · ${average}` : ''}
-        </span>
-      </div>
-    );
-  }
 
   const icon = summary.finished ? (clean ? '✓' : '!') : words.arrow;
   const title = !summary.finished
@@ -266,7 +243,7 @@ export function DocumentsTransferCard({
             <DocumentsEntryLink link={firstLink}>Show in Files</DocumentsEntryLink>
           )}
           <button type="button" aria-expanded={showFiles} onClick={() => setShowFiles((v) => !v)}>
-            {showFiles ? (clean ? 'Hide' : 'Hide files') : 'Show files'}
+            {showFiles ? 'Hide files' : 'Show files'}
           </button>
         </span>
       </header>

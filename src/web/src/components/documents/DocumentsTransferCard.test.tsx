@@ -57,7 +57,7 @@ describe('drive transfer card', () => {
     expect(html).not.toContain('chat-steps-line');
   });
 
-  it('folds a finished batch to one line', () => {
+  it('keeps a finished batch as its card, with the files listed, rather than folding it away', () => {
     const html = render([
       ...calls,
       putDone(4, 'toolu_a', 2_600_000),
@@ -65,10 +65,38 @@ describe('drive transfer card', () => {
       putDone(9, 'toolu_c', 12_900_000),
     ]);
 
-    expect(html).toContain('drive-xfer-fold');
-    expect(html).toContain('Uploaded 3 files to /Shuge/2026-11-24/');
+    expect(html).toContain('class="drive-xfer"');
+    expect(html).toContain('Uploaded 3 files');
+    expect(html).toContain('3 uploaded');
     expect(html).toContain('27 MB in 8 s');
-    expect(html).not.toContain('class="drive-xfer"');
+    expect(html).toContain('Show in Files');
+    expect(html).toContain('Hide files');
+    expect(html).toContain('魁星图.jpg');
+    expect(html).not.toContain('class="drive-xfer-fold"');
+  });
+
+  it('reads the size and link of a runner that answers with a receipt', () => {
+    const receipt = (seq: number, id: string, size: number): RunEvent => ({
+      seq,
+      type: 'tool_result',
+      ts: `2026-11-24T10:00:${String(seq).padStart(2, '0')}Z`,
+      payload: {
+        toolUseId: id,
+        isError: null,
+        content: JSON.stringify({
+          receiptVersion: 1,
+          ok: true,
+          outcome: 'written',
+          operation: 'documents_put',
+          entity: { id: `e-${id}`, path: '/x', link: `orbit-document:e-${id}`, sizeBytes: size },
+        }),
+      },
+    });
+    const html = render([calls[0], calls[1], receipt(3, 'toolu_a', 2_600_000), receipt(4, 'toolu_b', 11_400_000)]);
+
+    expect(html).toContain('14 MB in 3 s');
+    expect(html).toContain('2.6 MB');
+    expect(html).toContain('Show in Files');
   });
 
   it('keeps a batch with a failed file open, with the error on its row', () => {
