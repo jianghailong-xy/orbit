@@ -71,7 +71,7 @@ final class ProjectReopenRequestTests: XCTestCase {
         XCTAssertNil(ProjectReopenCopy.alsoAskedBy([]))
         XCTAssertTrue(ProjectReopenCopy.settledLine(status: "DONE", settledAt: "2026-11-18T12:00:00Z").hasPrefix("DONE since Nov "))
         XCTAssertTrue(ProjectReopenCopy.settledLine(status: "CANCELLED", settledAt: "2026-11-18T12:00:00Z").hasPrefix("Cancelled since "))
-        XCTAssertEqual(OwnerRequests.ownerRequestActionTitle(.projectReopen), "Review")
+        XCTAssertEqual(Notifications.ownerRequestActionTitle(.projectReopen), "Review")
     }
 
     func testTheEndedLines() throws {
