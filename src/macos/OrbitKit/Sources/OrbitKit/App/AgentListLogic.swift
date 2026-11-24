@@ -137,11 +137,11 @@ public enum AgentListLogic {
     public static func sidebarSections(_ sections: [AppSection], wiki: Bool,
                                        projectsWaiting: Int, wikiWaiting: Int,
                                        scheduled: Bool = false, scheduledNeedsYou: Int = 0,
-                                       documents: Bool = false) -> [SidebarSectionRow] {
-        let shown = sections.contains(.wiki) && documents && !sections.contains(.documents)
-            ? sections.flatMap { $0 == .wiki ? [$0, .documents] : [$0] }
+                                       drive: Bool = false) -> [SidebarSectionRow] {
+        let shown = sections.contains(.wiki) && drive && !sections.contains(.drive)
+            ? sections.flatMap { $0 == .wiki ? [$0, .drive] : [$0] }
             : sections
-        return shown.filter { ($0 != .wiki || wiki) && ($0 != .documents || documents) }.flatMap { section -> [SidebarSectionRow] in
+        return shown.filter { ($0 != .wiki || wiki) && ($0 != .drive || drive) }.flatMap { section -> [SidebarSectionRow] in
             let waiting: Int
             switch section {
             case .projects: waiting = projectsWaiting

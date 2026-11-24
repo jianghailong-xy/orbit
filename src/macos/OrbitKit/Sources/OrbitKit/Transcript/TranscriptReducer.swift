@@ -1440,8 +1440,8 @@ public struct TranscriptReducer: Sendable, Codable {
                             inputSeq: ev.seq, inputTruncated: ev.truncated, ts: ev.ts)
         if foregroundShell, !suppressedLiveToolIDs.contains(id), let snapshot = liveToolOutputs[id] {
             card.result = snapshot.content
-        } else if DocumentsTransfer.kind(name) != nil, !suppressedLiveToolIDs.contains(id),
-                  let snapshot = liveToolOutputs[id], DocumentsTransfer.progress(snapshot.content) != nil {
+        } else if DriveTransfer.kind(name) != nil, !suppressedLiveToolIDs.contains(id),
+                  let snapshot = liveToolOutputs[id], DriveTransfer.progress(snapshot.content) != nil {
             // A Documents transfer's byte count that crossed replicas ahead of its call (`applyToolOutput`).
             card.result = snapshot.content
         } else if id.hasPrefix("shell-"), !foregroundShell {
@@ -1506,13 +1506,13 @@ public struct TranscriptReducer: Sendable, Codable {
     /// excluding `run_in_background` preserves that separate tray behavior.
     private mutating func applyToolOutput(_ ev: RunEvent) {
         // A foreground shell's output, or a Documents transfer's byte count: the runner sends the latter for a
-        // documents_put / documents_get call as one sentence (`DocumentsTransfer.progress`), and the card it lands on
+        // documents_put / documents_get call as one sentence (`DriveTransfer.progress`), and the card it lands on
         // must be a transfer — checked below once the card is found.
         guard let id = str(ev, "toolUseId") ?? str(ev, "tool_use_id"),
               let content = str(ev, "content"), !state.status.isTerminal,
               !suppressedLiveToolIDs.contains(id) else { return }
         let transferCount = !id.hasPrefix("shell-")
-        if transferCount, DocumentsTransfer.progress(content) == nil { return }
+        if transferCount, DriveTransfer.progress(content) == nil { return }
 
         // New control planes always preserve the runner's original event seq here while forcing
         // the live event's top-level seq to zero. Keep legacy missing-version compatibility, but a
@@ -1534,7 +1534,7 @@ public struct TranscriptReducer: Sendable, Codable {
         }
         if let cardIndex, case .toolCall(let card) = state.items[cardIndex],
            card.status != .running || card.input["run_in_background"]?.boolValue == true
-            || (transferCount && DocumentsTransfer.kind(card.name) == nil) {
+            || (transferCount && DriveTransfer.kind(card.name) == nil) {
             liveToolOutputs.removeValue(forKey: id)
             suppressedLiveToolIDs.insert(id)
             return
@@ -1575,7 +1575,7 @@ public struct TranscriptReducer: Sendable, Codable {
         for idx in state.items.indices {
             guard case .toolCall(var card) = state.items[idx], card.status == .running,
                   card.id.hasPrefix("shell-") && card.input["run_in_background"]?.boolValue != true
-                    || DocumentsTransfer.kind(card.name) != nil && DocumentsTransfer.progress(card.result) != nil
+                    || DriveTransfer.kind(card.name) != nil && DriveTransfer.progress(card.result) != nil
             else { continue }
             suppressedLiveToolIDs.insert(card.id)
             if card.result != nil {

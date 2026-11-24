@@ -502,8 +502,8 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
     case agents([ToolCard])
     /// An agent's run of Documents transfers — `documents_put` or `documents_get` calls with nothing but settled
     /// thinking between them — drawn as one card with a bar, the speed and a row per file
-    /// (`DocumentsTransfer`, `TranscriptRows.groupTransfers`; web parity: the `drive` item of `groupToolRuns`).
-    case transfer(DocumentsTransfer.Kind, [ToolCard])
+    /// (`DriveTransfer`, `TranscriptRows.groupTransfers`; web parity: the `drive` item of `groupToolRuns`).
+    case transfer(DriveTransfer.Kind, [ToolCard])
     /// Turns Orbit opened, each with everything drawn under it, folded into one row — a run of them
     /// into one group row (`OrbitExchangeFold`; web parity: `OrbitExchangeSolo` / `OrbitExchangeGroup`).
     case exchanges([OrbitExchange])
@@ -759,7 +759,7 @@ public enum TranscriptRows {
     /// shell command — starts a new card (web parity: `groupToolRuns`' `drive` item).
     static func groupTransfers(_ rows: [TranscriptRow]) -> [TranscriptRow] {
         var out: [TranscriptRow] = []
-        var kind: DocumentsTransfer.Kind?
+        var kind: DriveTransfer.Kind?
         var run: [ToolCard] = []
         var held: [TranscriptRow] = []
         func flush() {
@@ -770,7 +770,7 @@ public enum TranscriptRows {
             held.removeAll()
         }
         for row in rows {
-            if case .item(.toolCall(let card)) = row, let next = DocumentsTransfer.kind(card.name) {
+            if case .item(.toolCall(let card)) = row, let next = DriveTransfer.kind(card.name) {
                 if next != kind { flush() }
                 kind = next
                 run.append(card)
@@ -854,12 +854,12 @@ public enum TranscriptRows {
         // (docs/subagent-design.md §6.4), and an Orbit workflow, whose block counts its calls.
         case "AskUserQuestion", "ExitPlanMode", "mcp__orbit__session_create", "Task", "Agent", "Workflow",
              SubagentBlock.toolName, WorkflowBlock.toolName, BgJobCard.toolName,
-             // An agent's directory sync is its sync's card, live after the turn ends (DocumentsSyncCard).
-             DocumentsSyncCard.toolName:
+             // An agent's directory sync is its sync's card, live after the turn ends (DriveSyncCard).
+             DriveSyncCard.toolName:
             return false
         default:
             // A Documents transfer is its run's card (`groupTransfers`).
-            return DocumentsTransfer.kind(card.name) == nil
+            return DriveTransfer.kind(card.name) == nil
         }
     }
 }

@@ -98,19 +98,34 @@ const CENSUS = 'projects/project-status-write-sites.spec.ts';
  * writes only DONE recorded DERIVED, with the projection's own record, when the projection's own
  * decision is DONE. It takes `status` from nobody, runs only at the server's start, and what a
  * session may ASK for is still refused. A fifth entry needs the same paragraph.
+ *
+ * THE FIFTH ENTRY
+ * ===============
+ * `owner-requests/owner-requests.service.ts#reopenProject`, 2026-11-24, migration 1573
+ * (docs/project-reopen-request-design.md, approved by the account owner that day). The owner
+ * decided on 2026-11-23 that any session refused on a DONE or CANCELLED project may ASK for a
+ * reopen, and on 2026-11-24 that the ask is a PROJECT_REOPEN owner request, one card per project.
+ * Asking writes no status. This entry is the owner's own Reopen pressed on that card,
+ * `POST /owner-requests/:id/reopen-project`: refused REOPEN_OWNER_CHANNEL_ONLY when an acting
+ * session is on the request, and closed to a personal access token. It writes one fixed value,
+ * OPEN, with exactly the record the project page's own press writes (`reopenRecordOfPress`,
+ * migration 0469), so it is that press made from a card. It takes `status` from nobody, and what
+ * a session may ASK for is still refused. A sixth entry needs the same paragraph.
  */
 const BASELINE_DECLARATION =
-  "const FROZEN_WRITE_SITES: readonly string[] = ['projects/landing-regression-repair.ts#storeDoneOverOpen', 'projects/project-acceptance.service.ts#recordProjectDone', 'projects/project-done-derived.ts#storeDerivedProjectStatus', 'projects/projects.service.ts#update'];";
+  "const FROZEN_WRITE_SITES: readonly string[] = ['owner-requests/owner-requests.service.ts#reopenProject', 'projects/landing-regression-repair.ts#storeDoneOverOpen', 'projects/project-acceptance.service.ts#recordProjectDone', 'projects/project-done-derived.ts#storeDerivedProjectStatus', 'projects/projects.service.ts#update'];";
 
 /**
  * The revisions the copy above was taken from, so the checks a reviewer runs are written down:
  * the one-entry declaration at the first, the entry added by the projection at the second, the
- * owner's door at the third, and the landing repair's DONE over OPEN at the fourth.
+ * owner's door at the third, the landing repair's DONE over OPEN at the fourth, and the Reopen on
+ * a PROJECT_REOPEN card at the fifth.
  */
 const BASELINE_REVISION = '59f674e2';
 const PROJECTION_REVISION = 'the 2026-09-08 project-done-derived unit';
 const OWNER_DONE_REVISION = 'the 2026-10-01 owner-done door (migration 0345)';
 const LANDING_REPAIR_REVISION = 'the 2026-11-20 landing repair (task 350u8yS3VY8ASG25fpRLX)';
+const PROJECT_REOPEN_REVISION = 'the 2026-11-24 PROJECT_REOPEN card (migration 1573)';
 
 /**
  * The whole `FROZEN_WRITE_SITES` statement in a source, or `null` when it declares none.
@@ -140,7 +155,8 @@ test('(a) the frozen write-site list is what it was before this work started', (
     BASELINE_DECLARATION,
     `${CENSUS}'s frozen list differs from the one written down here (the owner endpoint at `
     + `${BASELINE_REVISION}, the projection from ${PROJECTION_REVISION}, the owner's door from `
-    + `${OWNER_DONE_REVISION}, the DONE over OPEN from ${LANDING_REPAIR_REVISION}); a project that added a `
+    + `${OWNER_DONE_REVISION}, the DONE over OPEN from ${LANDING_REPAIR_REVISION}, the card's Reopen `
+    + `from ${PROJECT_REOPEN_REVISION}); a project that added a `
     + 'way to write project.status and appended it here would read exactly like this',
   );
 
@@ -149,6 +165,7 @@ test('(a) the frozen write-site list is what it was before this work started', (
   const entries = entriesOf(declared);
   assert.ok(entries.length > 0, 'the frozen baseline is empty');
   assert.deepEqual(entries, [
+    'owner-requests/owner-requests.service.ts#reopenProject',
     'projects/landing-regression-repair.ts#storeDoneOverOpen',
     'projects/project-acceptance.service.ts#recordProjectDone',
     'projects/project-done-derived.ts#storeDerivedProjectStatus',
