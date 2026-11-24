@@ -14396,7 +14396,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           mimeType: source.mimeType,
           sizeBytes: source.sizeBytes,
           fileName: source.fileName,
-          // The same stored bytes as the source; only a row from before Orbit Files carries `data`.
+          // The same stored bytes as the source; only a row from before Documents carries `data`.
           sha256: source.sha256,
           data: source.data,
         },
@@ -14418,7 +14418,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * already scoped to it, which is what `createTurn`/`resume` require of an attachment they link.
    * Returns [] for a task with no inputs, so a caller pays one indexed read and nothing else.
    *
-   * A copy is a ROW, never the bytes again (docs/orbit-files-design.md §2.1): it names the template's
+   * A copy is a ROW, never the bytes again (docs/documents-design.md §2.1): it names the template's
    * stored bytes by their sha256, and the bytes are read by neither. A template from before Orbit
    * Files, whose bytes are still in `data`, has them kept in the file store the first time it is
    * copied (`FilesService.referenceOf`), and is copied the same way from then on.

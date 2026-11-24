@@ -1,5 +1,5 @@
 /**
- * One-file share links (docs/orbit-files-drive-technical-design.md §9), without a database: the owner shares a file and a
+ * One-file share links (docs/documents-drive-technical-design.md §9), without a database: the owner shares a file and a
  * planted key warns without blocking, the scan reads what a share is pinned to, only the owner's controller makes a link,
  * and a client that does not ask for the new kind still lists its links. The rows themselves are held by
  * share-links-drive-file.pg.spec.ts.
@@ -10,7 +10,7 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { test } from 'node:test';
 import { PAT_FORBIDDEN } from '../auth/pat-scope.decorator';
-import { DriveContentService, SHARE_CHECK_MAX_BYTES } from '../drive/drive-content.service';
+import { DocumentsContentService, SHARE_CHECK_MAX_BYTES } from '../documents/documents-content.service';
 import { issued } from '../files/file-secret-samples.spec';
 import { SHARE_ROOT_KINDS } from './share-link';
 import { ShareLinksController } from './share-links.controller';
@@ -25,8 +25,8 @@ function contentOf(parts: Buffer[]) {
     return chunk;
   });
   const prisma = {
-    driveVersion: { findFirst: async () => ({ sizeBytes: BigInt(offset) }) },
-    driveVersionChunk: { findMany: async () => chunks },
+    documentVersion: { findFirst: async () => ({ sizeBytes: BigInt(offset) }) },
+    documentVersionChunk: { findMany: async () => chunks },
     fileBlob: { findUnique: async () => ({ storage: 'local' }) },
   };
   const files = {
@@ -37,7 +37,7 @@ function contentOf(parts: Buffer[]) {
       },
     }),
   };
-  return new DriveContentService(prisma as never, files as never);
+  return new DocumentsContentService(prisma as never, files as never);
 }
 
 const KEY = issued('ghp_', 36);

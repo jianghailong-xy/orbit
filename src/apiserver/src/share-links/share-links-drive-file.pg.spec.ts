@@ -1,5 +1,5 @@
 /**
- * One-file share links (docs/orbit-files-drive-technical-design.md §9; migration 1340; share-links.service.ts putDriveFile),
+ * One-file share links (docs/documents-drive-technical-design.md §9; migration 1340; share-links.service.ts putDriveFile),
  * over a real PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty, through the real controllers' methods:
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/share-links/share-links-drive-file.pg.spec.ts
@@ -29,9 +29,9 @@ import { HttpException, NotFoundException, type StreamableFile } from '@nestjs/c
 import type { PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 
-import { DriveChunksService } from '../drive/drive-chunks.service';
-import { DriveContentService } from '../drive/drive-content.service';
-import { DriveService } from '../drive/drive.service';
+import { DocumentsChunksService } from '../documents/documents-chunks.service';
+import { DocumentsContentService } from '../documents/documents-content.service';
+import { DocumentsService } from '../documents/documents.service';
 import { issued } from '../files/file-secret-samples.spec';
 import { FilesService } from '../files/files.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -60,9 +60,9 @@ test('one-file share links: pinned to the version shared, warn on a planted key,
     rmSync(dir, { recursive: true, force: true });
   });
   const files = new FilesService(db as never, { dir, storage: 'local' });
-  const chunks = new DriveChunksService(db as never, files);
-  const drive = new DriveService(db as never, undefined);
-  const content = new DriveContentService(db as never, files);
+  const chunks = new DocumentsChunksService(db as never, files);
+  const drive = new DocumentsService(db as never, undefined);
+  const content = new DocumentsContentService(db as never, files);
   const links = new ShareLinksService(db as never);
   const owners = new ShareLinksController(links, drive, content);
   const door = new SharedController(links, null as never, null as never, null as never, content);
@@ -89,7 +89,7 @@ test('one-file share links: pinned to the version shared, warn on a planted key,
     return entry.id;
   };
   const overwrite = async (who: string, entryId: string, text: string) => {
-    const row = await db.driveEntry.findUniqueOrThrow({ where: { id: entryId } });
+    const row = await db.documentEntry.findUniqueOrThrow({ where: { id: entryId } });
     await drive.commit(who, { commitId: randomUUID(), entryId, mode: 'OVERWRITE', baseVersionId: row.currentVersionId, ...(await send(who, text)), writer: { kind: 'AGENT' } });
   };
   const response = () => {
@@ -104,7 +104,7 @@ test('one-file share links: pinned to the version shared, warn on a planted key,
   const KEY = issued('ghp_', 36);
 
   const entryId = await fileWith(owner, 'report.txt', `line one\nTOKEN=${KEY}\n`);
-  const first = await db.driveEntry.findUniqueOrThrow({ where: { id: entryId } });
+  const first = await db.documentEntry.findUniqueOrThrow({ where: { id: entryId } });
   let token = '';
   let linkId = '';
 
@@ -173,7 +173,7 @@ test('one-file share links: pinned to the version shared, warn on a planted key,
     const id = await fileWith(owner, 'private.txt', 'mine\n');
     await assert.rejects(owners.shareDriveFile(as(stranger), { kind: 'DRIVE_FILE', driveEntryId: id }), HttpException);
     assert.equal(await db.shareLink.count({ where: { driveEntryId: id } }), 0);
-    const version = (await db.driveEntry.findUniqueOrThrow({ where: { id } })).currentVersionId!;
+    const version = (await db.documentEntry.findUniqueOrThrow({ where: { id } })).currentVersionId!;
     const bad = (data: Record<string, unknown>) =>
       assert.rejects(db.shareLink.create({ data: { token: randomUUID(), include: {}, ...data } as never }));
     await bad({ ownerId: stranger, driveEntryId: id, driveVersionId: version }); // not the stranger's file
@@ -185,7 +185,7 @@ test('one-file share links: pinned to the version shared, warn on a planted key,
 
   await t.test('(6) a save renamed onto a shared file keeps the link on it, serving the version it pinned, until the owner moves it', async () => {
     const shared = await fileWith(owner, 'saved.txt', 'as shared\n');
-    const pinned = (await db.driveEntry.findUniqueOrThrow({ where: { id: shared } })).currentVersionId!;
+    const pinned = (await db.documentEntry.findUniqueOrThrow({ where: { id: shared } })).currentVersionId!;
     const link = await owners.shareDriveFile(as(owner), { kind: 'DRIVE_FILE', driveEntryId: shared });
     // An editor's write-then-os.replace save (§3.2): the target keeps its id, the shared version goes to Trash as a version.
     const tmp = await fileWith(owner, 'saved.txt.tmp', 'as saved since\n');
@@ -195,7 +195,7 @@ test('one-file share links: pinned to the version shared, warn on a planted key,
     assert.equal(row.revokedAt, null, 'the link is still live');
     assert.equal(row.driveEntryId, shared, 'on the same file');
     assert.equal(row.driveVersionId, pinned, 'pinned to the version shared');
-    assert.notEqual((await db.driveVersion.findUniqueOrThrow({ where: { id: pinned } })).trashGroupId, null, 'which is in Trash now');
+    assert.notEqual((await db.documentVersion.findUniqueOrThrow({ where: { id: pinned } })).trashGroupId, null, 'which is in Trash now');
     const page = await door.get(link.link.token) as { kind: string; root: { name: string; sizeBytes: number } };
     assert.equal(page.root.name, 'saved.txt');
     assert.equal(page.root.sizeBytes, 'as shared\n'.length);

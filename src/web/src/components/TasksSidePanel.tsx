@@ -190,9 +190,9 @@ const TOP: TopNavItem[] = [
   // the Workspaces; this one stands for them all, as Projects does: the whole count, the one way in on
   // the collapsed rail, and the way to a first wiki for an account with none to list.
   { key: 'wiki', icon: <SidebarNavIcon name="wiki" />, label: 'Wiki' },
-  // Orbit Files, the account's drive, directly under the Wiki (docs/mocks/orbit-files/02-web, frame 1). No count and no
+  // Documents, the account's drive, directly under the Wiki (docs/mocks/documents/02-web, frame 1). No count and no
   // shortcut: nothing in Files waits on the owner. Its Trash and earlier versions are reached from inside it.
-  { key: 'files', icon: <SidebarNavIcon name="files" />, label: 'Files' },
+  { key: 'documents', icon: <SidebarNavIcon name="files" />, label: 'Documents' },
   // No Following here: its watches are the waits agents keep for their own sessions, already shown
   // in each session's header and Watching strip, and those are what link to /following.
   // No Machines & models either (docs/mocks/machines-and-models, 02): where agents run and whose quota
@@ -510,9 +510,9 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
           ? (projectRowKey ?? 'projects')
           : onWiki
             ? (wikiRowKey ?? 'wiki')
-            // The Files page and its Trash are Files.
-            : loc.pathname === '/files' || loc.pathname.startsWith('/files/')
-              ? 'files'
+            // The Documents page and its Trash are Documents.
+            : loc.pathname === '/documents' || loc.pathname.startsWith('/documents/')
+              ? 'documents'
             // Every task route — all tasks, one task, a list, the tasks in none — is the Tasks
             // page, whose title picks among them.
             : loc.pathname.startsWith('/tasks/') || loc.pathname.startsWith('/lists/')

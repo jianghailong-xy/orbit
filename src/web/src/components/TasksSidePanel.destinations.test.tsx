@@ -286,7 +286,7 @@ describe('Machines & models, which has no sidebar row (docs/mocks/machines-and-m
     serve();
     await visit('/tasks');
     const labels = [...container!.querySelectorAll('.tp-section .tp-label')].map((label) => label.textContent);
-    expect(labels).toEqual(['Projects', 'Tasks', 'Scheduled', 'Wiki', 'Files']);
+    expect(labels).toEqual(['Projects', 'Tasks', 'Scheduled', 'Wiki', 'Documents']);
   });
 
   it.each([
@@ -308,7 +308,7 @@ describe('Machines & models, which has no sidebar row (docs/mocks/machines-and-m
   });
 });
 
-// Orbit Files (docs/mocks/orbit-files/02-web, frame 1): the row directly under the Wiki, with no count and no shortcut.
+// Documents (docs/mocks/documents/02-web, frame 1): the row directly under the Wiki, with no count and no shortcut.
 describe('Files, the row under the Wiki', () => {
   const litTopEntries = () =>
     [...container!.querySelectorAll<HTMLElement>('.tp-section .tp-item.active .tp-label')].map((label) => label.textContent);
@@ -319,23 +319,23 @@ describe('Files, the row under the Wiki', () => {
     serve();
     await visit('/tasks');
     const labels = [...container!.querySelectorAll('.tp-section .tp-label')].map((label) => label.textContent);
-    expect(labels.indexOf('Files')).toBe(labels.indexOf('Wiki') + 1);
-    expect(topEntry('Files').querySelector('.tp-count')).toBeNull();
-    expect(topEntry('Files').querySelector('.sidebar-nav-icon-files')).not.toBeNull();
+    expect(labels.indexOf('Documents')).toBe(labels.indexOf('Wiki') + 1);
+    expect(topEntry('Documents').querySelector('.tp-count')).toBeNull();
+    expect(topEntry('Documents').querySelector('.sidebar-nav-icon-files')).not.toBeNull();
   });
 
   it('opens the Files page', async () => {
     serve();
     await visit('/tasks');
-    await click(topEntry('Files'));
-    expect(location).toBe('/files');
-    expect(litTopEntries()).toEqual(['Files']);
+    await click(topEntry('Documents'));
+    expect(location).toBe('/documents');
+    expect(litTopEntries()).toEqual(['Documents']);
   });
 
-  it.each(['/files', '/files?folder=x&file=y', '/files/trash'])('lights Files, in either form, on %s', async (path) => {
+  it.each(['/documents', '/documents?folder=x&file=y', '/documents/trash'])('lights Files, in either form, on %s', async (path) => {
     serve();
     await visit(path);
-    expect(litTopEntries()).toEqual(['Files']);
-    expect(litRailEntries()).toEqual(['Files']);
+    expect(litTopEntries()).toEqual(['Documents']);
+    expect(litRailEntries()).toEqual(['Documents']);
   });
 });

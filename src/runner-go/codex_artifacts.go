@@ -83,9 +83,9 @@ func rewriteLocalMarkdownLinks(ctx context.Context, text string, roots []string,
 			return match
 		}
 		if lookup, err := url.PathUnescape(raw); err == nil && !strings.ContainsAny(raw, "?#") {
-			if _, isDrive := driveMountRelative(lookup); isDrive && mounted() {
+			if _, isDrive := documentsMountRelative(lookup); isDrive && mounted() {
 				// Codex's early attachment pass leaves these for the shared reply flush.
-				p, err := normalizeDrivePath(lookup)
+				p, err := normalizeDocumentsPath(lookup)
 				if err != nil || resolveDrive == nil {
 					return match
 				}
@@ -97,7 +97,7 @@ func rewriteLocalMarkdownLinks(ctx context.Context, text string, roots []string,
 				if id == "" {
 					return match
 				}
-				return fmt.Sprintf("%s[%s](%s%s)", parts[1], parts[2], driveLink(id), parts[4])
+				return fmt.Sprintf("%s[%s](%s%s)", parts[1], parts[2], documentLink(id), parts[4])
 			}
 		}
 		if len(cleanRoots) == 0 || upload == nil {
@@ -195,6 +195,7 @@ func skipMarkdownAttachmentSrc(src string) bool {
 		strings.HasPrefix(lower, "http://") ||
 		strings.HasPrefix(lower, "https://") ||
 		strings.HasPrefix(lower, "orbit-attachment:") ||
+		strings.HasPrefix(lower, "orbit-document:") ||
 		strings.HasPrefix(lower, "orbit-drive:")
 }
 
