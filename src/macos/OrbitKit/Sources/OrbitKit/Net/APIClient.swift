@@ -2788,6 +2788,11 @@ public final class APIClient: @unchecked Sendable {
         return list.syncs
     }
 
+    /// One agent's sync, whatever its age: the conversation's card for the call that started it.
+    public func documentsSync(_ id: String) async throws -> DocumentsSync {
+        try await get("documents/syncs/\(id)")
+    }
+
     /// The first `maxBytes` of a file (or one version) for a preview, or all of it when nil. Never a download.
     public func driveContent(_ id: String, version: Bool = false, maxBytes: Int? = nil) async throws -> Data {
         var req = try makeRequest("documents/\(version ? "versions" : "entries")/\(id)/content", method: "GET",
