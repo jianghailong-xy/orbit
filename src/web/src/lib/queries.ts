@@ -1795,7 +1795,8 @@ export const wikiChatDraftQuery = (draftId: string | null) =>
     enabled: draftId !== null,
     staleTime: 5_000,
     refetchInterval: (query) => {
-      const result = query.state.data?.state === 'applied' ? query.state.data.rewrite?.result : undefined;
+      const state = query.state.data?.state;
+      const result = state === 'applied' || state === 'rewritten' ? query.state.data?.rewrite?.result : undefined;
       return result === 'rewriting' || result === 'waiting' ? 15_000 : false;
     },
   });

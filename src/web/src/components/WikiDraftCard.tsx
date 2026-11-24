@@ -237,9 +237,10 @@ function WikiDraftCardView({ view, host }: { view: WikiChatDraftView; host: Wiki
     <div className="wk-draft" data-draft={view.id} data-state={view.state} ref={rootRef} id={`wk-draft-${view.id}`}>
       <div className={`wk-draft-card${look.quiet ? ' quiet' : ''}${focused ? ' focus' : ''}`}>
         <div className={`wk-draft-k ${look.tone}`}>
-          {view.state === 'applied' && !look.inReview && <CheckOutlined className="ic" />}
+          {(view.state === 'applied' || view.state === 'rewritten') && !look.inReview && <CheckOutlined className="ic" />}
           <span>{look.title}</span>
         </div>
+        {look.held && <div className="wk-draft-note" data-held={view.held ?? undefined}>{look.held}</div>}
         {look.note &&
           (look.inReview ? (
             <button

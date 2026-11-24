@@ -3,10 +3,12 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WikiChatDraftView, WikiDocSectionVersionView } from '@orbit/shared';
 import { WikiDraftCard, WikiDraftCardCtx, type WikiDraftCardHost } from './WikiDraftCard';
-import { WIKI_CHAT_REDO_MESSAGE } from '../lib/wikiChat';
+import { WIKI_CHAT_REDO_MESSAGE, wikiChatActionLabel } from '../lib/wikiChat';
 import { wikiMonthDayTime } from '../lib/wikiDocs';
 
 /**
@@ -655,5 +657,85 @@ describe('the line under an applied card, for every result (design §8.3)', () =
     writes = [];
     await show(applied({ result: 'waiting', reason: 'runner_offline', seen: false }));
     expect(pressed()).toEqual([]);
+  });
+});
+
+/**
+ * The cards written without a press and the cards held for one (design §7.2–§7.3, option A), drawn from the shared
+ * `wiki-chat.fixture.json` the server's derivations produce — its states, titles, held lines and buttons — not from
+ * a fixture made here. Each card is the view the server would read with those states and a rewrite as the fixture has it.
+ */
+interface FixtureCard {
+  name: string;
+  kind: WikiChatDraftView['kind'];
+  state: WikiChatDraftView['state'];
+  undoable: boolean;
+  title: string;
+  actions: string[];
+  held?: WikiChatDraftView['held'];
+  heldLine?: string | null;
+  facts: { autoQueued?: boolean };
+}
+interface FixtureResult {
+  name: string;
+  card: { kind: WikiChatDraftView['kind']; state: WikiChatDraftView['state']; undoable: boolean; rewrite: { result: string; reason: string | null; sha: string | null; seen: boolean; sections: Array<{ where: string; result: string | null; changed?: number }> } };
+  line: string;
+  actions: string[];
+}
+const CHAT_FIXTURE = JSON.parse(
+  readFileSync(
+    [resolve(process.cwd(), '../shared/src/wiki-chat.fixture.json'), resolve(process.cwd(), 'src/shared/src/wiki-chat.fixture.json')].find((path) => existsSync(path))!,
+    'utf8',
+  ),
+) as { cards: FixtureCard[]; results: FixtureResult[] };
+
+describe('a rewrite card written when drafted, and one held for a press (shared fixture)', () => {
+  const autoCards = CHAT_FIXTURE.cards.filter((one) => one.kind === 'rewrite' && one.state === 'rewritten' && one.facts.autoQueued);
+  const heldCards = CHAT_FIXTURE.cards.filter((one) => one.kind === 'rewrite' && one.state === 'draft' && one.held);
+  const autoResults = CHAT_FIXTURE.results.filter((one) => one.card.state === 'rewritten');
+
+  it('has the cases to draw', () => {
+    expect(autoCards.length).toBeGreaterThan(0);
+    expect(heldCards.map((one) => one.held)).toEqual(['web', 'budget', 'draft']);
+    expect(autoResults.length).toBeGreaterThan(2);
+  });
+
+  it.each(heldCards.map((one) => [one.name, one] as const))('held: %s', async (_name, fixture) => {
+    await show(
+      draft({ kind: 'rewrite', state: 'draft', label: 'Rewrite from main', ops: [], undoable: false, held: fixture.held ?? null, autoQueuedAt: null } as Partial<WikiChatDraftView>),
+    );
+    expect(text('.wk-draft-k')).toBe(fixture.title);
+    expect(text('.wk-draft-note')).toBe(fixture.heldLine);
+    expect(buttons()).toEqual(fixture.actions.map((action) => wikiChatActionLabel(action as never)));
+    expect(buttons()).toEqual(['Apply', 'Discard']);
+  });
+
+  it.each(autoCards.map((one) => [one.name, one] as const))('auto: %s', async (_name, fixture) => {
+    await show(
+      draft({
+        kind: 'rewrite', state: 'rewritten', label: 'Rewrite from main', ops: [], undoable: fixture.undoable, held: null,
+        autoQueuedAt: '2026-11-06T10:00:00.000Z',
+      } as Partial<WikiChatDraftView>),
+    );
+    expect(text('.wk-draft-k')).toBe(fixture.title);
+    expect(document.querySelector('.wk-draft-k')!.className).toContain('ok');
+    expect(buttons()).toEqual(fixture.actions.map((action) => wikiChatActionLabel(action as never)));
+  });
+
+  it.each(autoResults.map((one) => [one.name, one] as const))('auto result: %s', async (_name, fixture) => {
+    const source = fixture.card.rewrite;
+    await show(
+      draft({
+        kind: 'rewrite', state: 'rewritten', label: 'Rewrite from main', ops: [], undoable: fixture.card.undoable, held: null,
+        autoQueuedAt: '2026-11-06T10:00:00.000Z',
+        rewrite: {
+          jobId: 'J1', result: source.result, reason: source.reason, sha: source.sha, seen: true, settledAt: null,
+          sections: source.sections.map((one) => ({ doc: 'sessions-runtime', key: 'turn-delivery', where: one.where, result: one.result, changed: one.changed ?? null, versionId: null })),
+        },
+      } as unknown as Partial<WikiChatDraftView>),
+    );
+    expect(text('.wk-draft-k')).toBe('Rewritten from main');
+    expect(text('.wk-draft-result .t')).toBe(fixture.line);
+    expect(buttons('.wk-draft-acts').concat(buttons('.wk-draft-result'))).toEqual(fixture.actions.map((action) => wikiChatActionLabel(action as never)));
   });
 });
