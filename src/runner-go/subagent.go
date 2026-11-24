@@ -186,8 +186,7 @@ func delegateToolDescriptor(obj func(map[string]interface{}, ...string) map[stri
 		"description": "Hand a self-contained piece of work to a SubAgent: another coding engine that Orbit starts in this" +
 			" session's own working directory. Use it instead of your engine's built-in subagent or Agent tool whenever" +
 			" you would start a subagent or run work in the background: Orbit picks its model (or runs the one you name)," +
-			" records its cost and brings its result back even if this engine is recycled. Not for work Orbit already" +
-			" records: look with task_list first, and task_start a recorded task instead." +
+			" records its cost and brings its result back even if this engine is recycled." +
 			" It sees your uncommitted changes, edits files directly and never commits;" +
 			" its edits stay in your working tree for you to review and commit. Its progress is shown nested under this" +
 			" call. In the foreground (the default) the call returns { runId, status, result, changedFiles, model, costUsd, rate }" +
