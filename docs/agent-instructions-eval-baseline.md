@@ -297,6 +297,54 @@ link. That is a gap in the harness, not something the instructions decide. The s
 a call deadline (Cursor, DeepSeek Harness). Until the eval plays that wake, it cannot measure what moving Kimi's
 instructions to the first prompt would cost.
 
+The eval now plays that wake, and the smoke passes; see the next section.
+
+## Kimi Code smoke run with the wake turn
+
+The step-3 smoke could not pass because the eval never played the turn in which a handed-off owner wait's result
+reaches the agent. The eval now plays it (`agent_eval_wake_test.go`, commit `21940b7611`). After a turn, it waits for
+the owner waits that turn handed to a runner-hosted job (`bgJobService.startOwnerWait`) to end. It then plays one more
+turn whose words are the control plane's wake block (`buildBackgroundWakeBlock`, ported and pinned to its words by
+`TestAgentEvalWakeBlockSaysWhatTheControlPlaneSays`). That turn is graded with the scenario turn it follows, as a
+follow-up is. Both runs were played on 2026-11-24 with Kimi Code 2.7.3 and its configured default model, three runs per
+case:
+
+| Scenario | Every prompt (`21940b7611`) | First prompt and after a reset (`18d94e4102`) |
+| --- | --- | --- |
+| `E1-record-task` | 3/3 | 3/3 |
+| `E3-create-no-start` | 3/3 | 3/3 |
+| `X2-approval-declined` | 3/3 | 3/3 |
+
+Reports: [`agent-eval/kimi-wake/kimi-every-prompt.json`](agent-eval/kimi-wake/kimi-every-prompt.json) and
+[`agent-eval/kimi-wake/kimi-first-prompt.json`](agent-eval/kimi-wake/kimi-first-prompt.json) (and `.md`). Both gates
+read INCOMPLETE because a smoke plays three scenarios of the suite; no run failed a gating clause, and none had a
+harness error.
+
+- **Every prompt, today's carrier.** Every E1 and E3 run filed its task through the handed-off owner wait. Each one
+  linked that task as `orbit-task:<id>` in the wake turn, which is where the id first reaches it. Every X2 run told
+  the person, in the wake turn, that the declined card was final and filed nothing. The only clause missed was the
+  advisory `asks_criteria`, in all three E1 runs: Kimi filed without asking what would settle the task.
+- **Claude Code and Codex are unaffected.** They hold an owner wait inline and start no job, so they play no wake turn.
+  `E1-record-task`, three runs each on the same commit: Claude Code 2.1.331 (`claude-sonnet-5-5`) 3/3, Codex 0.172.0
+  3/3, every run a single turn ([`agent-eval/kimi-wake/claude-codex-e1.json`](agent-eval/kimi-wake/claude-codex-e1.json)).
+- **The carrier changes.** With each case at 3/3, `kimiProfile.Carrier` is now `first-prompt` (`18d94e4102`). A
+  `kimiInstructionLedger` reads the conversation's main wire in Kimi's own session directory. A `turn.prompt` whose
+  input carries `<orbit-agent-instructions>` puts the block in the history; a main-agent `context.apply_compaction`
+  takes it out. The next prompt carries the block only when the history does not hold it, so it goes on the first
+  prompt and on the first after a compaction. A resumed conversation is read from its wire's start, so it is sent the
+  block again only when a compaction since the last block removed it. A wire that cannot be read sends the block as
+  before. Kimi's own wire for the second run's sessions shows the block on the first prompt only; under the first run,
+  every prompt had it.
+- **On the changed carrier** the three cases pass 3/3 again. The follow-up and wake turns now run without the block,
+  and they still link the task, hold it, and report the decline. `asks_criteria` was missed in two E1 runs of three.
+  The engine-instruction bytes are those of one prompt (5,101); from the second prompt on, a Kimi turn no longer
+  resends them. The median steps to a first successful Orbit call went from 2 to none. In both runs a handed-off
+  create answers `AWAITING_OWNER`, which is not a success. Only the two first-run conversations that read `task_list`
+  first had a value, and they did so in their first turn, which carries the block on both carriers.
+- **Not measured.** The eval plays no compaction or resume on Kimi (`kimiEvalEngine.reset`), so sending the block
+  again after a reset rests on the ledger's unit test (`TestKimiInstructionsRideTheFirstPromptAndTheFirstAfterAReset`)
+  and on the wire records named above, not on a live run.
+
 ## Step 4: recovery advice in receipts, shorter cards, receipts and progress paragraphs
 
 Step 4 has two commits. Phase 1 (`d0fea7b359`) gives each receipt a recovery note and a ready-made link. The notes cover
