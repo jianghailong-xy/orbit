@@ -72,13 +72,22 @@ func TestDriveRootOfEitherDriver(t *testing.T) {
 	}
 }
 
+// ~/Documents and ~/Files are ordinary local paths now, not the drive.
+func TestDriveHomeAliasesNoLongerResolve(t *testing.T) {
+	for _, p := range []string{"~/Documents/Proj/r.md", "/home/orbit/Documents/Proj/r.md", "~/Files/Proj/r.md", "/home/orbit/Files/Proj/r.md"} {
+		if _, ok := documentsMountRelative(p); ok {
+			t.Errorf("%q still resolves to the drive", p)
+		}
+	}
+}
+
 func TestDrivePathNormalization(t *testing.T) {
-	for _, p := range []string{"/Proj/r.md", "Proj/r.md", "~/Documents/Proj/r.md", "/home/orbit/Documents/Proj/r.md", "~/Files/Proj/r.md", "/home/orbit/Files/Proj/r.md", "/run/orbit-documents/drive/Proj/r.md", "/run/orbit-files/drive/Proj/r.md"} {
+	for _, p := range []string{"/Proj/r.md", "Proj/r.md", "~/Drive/Proj/r.md", "/home/orbit/Drive/Proj/r.md", "/run/orbit-documents/drive/Proj/r.md", "/run/orbit-files/drive/Proj/r.md"} {
 		if got, err := normalizeDocumentsPath(p); err != nil || got != "/Proj/r.md" {
 			t.Errorf("normalize %q = %q, %v", p, got, err)
 		}
 	}
-	for _, p := range []string{"../Proj/r.md", "~/Files/../Proj/r.md", "/Proj/../r.md"} {
+	for _, p := range []string{"../Proj/r.md", "~/Drive/../Proj/r.md", "/Proj/../r.md"} {
 		if _, err := normalizeDocumentsPath(p); err == nil {
 			t.Errorf("accepted traversal %q", p)
 		}
@@ -198,7 +207,7 @@ func TestDrivePutChunksAndRecoversCommit(t *testing.T) {
 		}
 	})
 	s := &mcpServer{sessionID: fileTestSession, t: newCallerTransport(srv.URL, "runner-secret", runnerCallerMCP)}
-	reply := fileToolText(t, s, "documents_put", map[string]interface{}{"localPath": local, "path": "~/Files/Proj/r.md"}, false)
+	reply := fileToolText(t, s, "documents_put", map[string]interface{}{"localPath": local, "path": "~/Drive/Proj/r.md"}, false)
 	var answer struct {
 		ID, Path, Link, VersionID string
 		SizeBytes                 int
@@ -352,7 +361,7 @@ func TestDriveCLIListsMovesDeletesAndOverwrites(t *testing.T) {
 			want string
 		}{
 			{[]string{"ls", "--cursor", "next+1", "--json"}, `"nextCursor":"next+2"`},
-			{[]string{"mv", "~/Files/Proj/r.md", "--json", "Archive/r.md"}, `"path":"/Archive/r.md"`},
+			{[]string{"mv", "~/Drive/Proj/r.md", "--json", "Archive/r.md"}, `"path":"/Archive/r.md"`},
 			{[]string{"put", "empty", "/r.md", "--json"}, `"newVersion":true`},
 			{[]string{"rm", "/r.md", "--json"}, `"deleted":true`},
 		} {

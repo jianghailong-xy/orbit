@@ -406,7 +406,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 }
 
 func documentsToolDescriptors(obj func(map[string]interface{}, ...string) map[string]interface{}) []map[string]interface{} {
-	drivePath := map[string]interface{}{"type": "string", "description": "A drive path such as /Proj/r.md or ~/Documents/Proj/r.md."}
+	drivePath := map[string]interface{}{"type": "string", "description": "A drive path such as /Proj/r.md or ~/Drive/Proj/r.md."}
 	return []map[string]interface{}{
 		{
 			"name": "documents_put",

@@ -451,9 +451,9 @@ func TestAttachLocalReplyFilesRewritesDrivePaths(t *testing.T) {
 			http.NotFound(w, r)
 		}
 	})
-	text := "[home](" + driveHomePath + "/Proj/r.md) [tilde](~/Documents/Proj/r.md) " +
-		"[resolved](" + driveMountPath + "/Proj/r.md) [missing](~/Documents/absent)"
-	want := "[home](orbit-document:e1) [tilde](orbit-document:e1) [resolved](orbit-document:e1) [missing](~/Documents/absent)"
+	text := "[home](" + driveHomePath + "/Proj/r.md) [tilde](~/Drive/Proj/r.md) " +
+		"[resolved](" + driveMountPath + "/Proj/r.md) [missing](~/Drive/absent)"
+	want := "[home](orbit-document:e1) [tilde](orbit-document:e1) [resolved](orbit-document:e1) [missing](~/Drive/absent)"
 	out := []RunEvent{{Type: evAssistant, Payload: map[string]interface{}{"text": text}}}
 	transport := newCallerTransport(srv.URL, "runner-secret", runnerCallerMCP)
 	attachLocalReplyFiles(context.Background(), transport, fileTestSession, out, []string{t.TempDir()}, newReplyAttachmentIDs())

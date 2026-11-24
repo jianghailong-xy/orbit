@@ -3,7 +3,7 @@
 The node plugin that gives each managed runner Pod its Documents drive (docs/documents-drive-technical-design.md
 §6.1). The runner container receives one plain directory, `/run/orbit-documents`, with HostToContainer propagation; the
 drive's FUSE mount sits below it at `drive/`, made by the plugin, never in the container. The runner makes
-`/home/orbit/Documents` a link to it (`src/runner-go/drive_link.go`). Source: `src/documents-mount` (the `csi` command and
+`/home/orbit/Drive` a link to it (`src/runner-go/drive_link.go`). Source: `src/documents-mount` (the `csi` command and
 packages `csi` and `parent`).
 
 | File | What it is |

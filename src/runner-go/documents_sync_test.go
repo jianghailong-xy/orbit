@@ -314,7 +314,7 @@ func TestDocumentsSyncDeleteSendsOnlyWhatTheDirectoryLacksToTrash(t *testing.T) 
 	if _, err := documentsSyncDest("/", true); err == nil {
 		t.Error("--delete into the root was accepted")
 	}
-	if dest, err := documentsSyncDest("~/Files/Site", true); err != nil || dest != "/Site" {
+	if dest, err := documentsSyncDest("~/Drive/Site", true); err != nil || dest != "/Site" {
 		t.Errorf("documentsSyncDest = %q, %v", dest, err)
 	}
 }

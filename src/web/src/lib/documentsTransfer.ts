@@ -36,12 +36,11 @@ export function parseDocumentsProgress(content: unknown): { sent: number; size: 
   return { sent: Math.min(sent, size), size };
 }
 
-/** A drive path as the owner reads it in Documents: `~/Documents/a`, `/home/orbit/Documents/a` and the mount's
- * `/run/orbit-documents/drive/a` are `/a`, as are the spellings from before the rename (`~/Files/a`, `/home/orbit/Files/a`,
- * `/run/orbit-files/drive/a`), which the runner still accepts. */
+/** A drive path as the owner reads it: `~/Drive/a`, `/home/orbit/Drive/a` and the mount's `/run/orbit-documents/drive/a`
+ * (or `/run/orbit-files/drive/a` in an older Pod) are `/a`. */
 export function documentsDisplayPath(raw: unknown): string {
   let p = typeof raw === 'string' ? raw.trim() : '';
-  for (const prefix of ['~/Documents', '/home/orbit/Documents', '~/Files', '/home/orbit/Files', '/run/orbit-documents/drive', '/run/orbit-files/drive']) {
+  for (const prefix of ['~/Drive', '/home/orbit/Drive', '/run/orbit-documents/drive', '/run/orbit-files/drive']) {
     if (p === prefix || p.startsWith(`${prefix}/`)) p = p.slice(prefix.length);
   }
   if (!p.startsWith('/')) p = `/${p}`;

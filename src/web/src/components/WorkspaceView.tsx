@@ -12701,7 +12701,7 @@ export function SessionComposer({
   // The `+` menu "Shell" entry: prefix the draft with `!` so onSend routes it as a raw
   // shell command (run on the runner, bypassing claude). The user types the command after.
   // Files the drive picker returned go into the draft as chips (`#name`, like a `#` reference) that are sent as their
-  // `/home/orbit/Documents/…` paths, so the box shows names and the agent gets paths (board 02-web frame 8).
+  // `/home/orbit/Drive/…` paths, so the box shows names and the agent gets paths (board 02-web frame 8).
   const insertDocumentsFiles = (files: { id: string; name: string; path: string }[]): void => {
     let refs = composerRefs;
     let chips = '';

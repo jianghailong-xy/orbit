@@ -13,7 +13,7 @@
  *     runner of the same account (an account has one Cloud runner, so B is self-registered and its daemon presents the
  *     runner credential, which the door also takes). Each daemon reaches the apiserver through a fault proxy that can
  *     refuse connections, hold them unanswered, or drop a commit's answer after the door applied it.
- *   - `$F` is `~/Documents`, a symlink to `<root>/drive` as on a runner, so the rows give `$F/` where §5.9 does. The mounts
+ *   - `$F` is `~/Drive`, a symlink to `<root>/drive` as on a runner, so the rows give `$F/` where §5.9 does. The mounts
  *     sit outside /tmp, where vim's default backupskip would change row 20.
  *   - "Trash" is the owner's Trash as the owner routes list it (a personal access token holding `files`).
  *   - DRIVE_MOUNT_E2E_SCALE=full runs the sizes §5.9 names (5 GiB, 5 × 900 MiB with a 1 GiB spool, a 3 GiB zip member,
@@ -201,7 +201,7 @@ interface Runner {
   root: string; // /run/orbit-documents
   drive: string; // /run/orbit-documents/drive
   home: string; // /home/orbit
-  F: string; // ~/Documents
+  F: string; // ~/Drive
   spool: string;
   tokenFile: string;
   proxy: FaultProxy;
@@ -433,7 +433,7 @@ test('Documents drive: the mount daemon passes the shell-operation list (§5.9)'
       name, id, dir, root, drive: path.join(root, 'drive'), home, F: path.join(home, 'Documents'), spool: path.join(dir, 'spool'),
       tokenFile, proxy, podUid: pod, cgroup, args: extra, log: '',
     };
-    // ~/Documents is a symlink to the drive, as the runner's entrypoint makes it (§6.1).
+    // ~/Drive is a symlink to the drive, as the runner's entrypoint makes it (§6.1).
     spawnSync('ln', ['-sfn', r.drive, r.F]);
     lchownSync(r.F, AGENT_UID, AGENT_UID);
     return r;
@@ -718,7 +718,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
     assert.match(s.out, /cp-a rc=1/);
     assert.match(s.out, /copied/);
     assert.match(s.err, /preserving permissions for .*script\.sh.*Operation not permitted/);
-    assert.match(errorsLog(a), /EPERM chmod \/home\/orbit\/Documents\/script\.sh to 0755: the drive keeps no modes/);
+    assert.match(errorsLog(a), /EPERM chmod \/home\/orbit\/Drive\/script\.sh to 0755: the drive keeps no modes/);
     d.push('contents copied; cp printed "preserving permissions … Operation not permitted", exit 1 both; errors.log has the chmod line');
   });
 
@@ -933,7 +933,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
     // regular file neither as a user nor with -p. The executable bit the drive cannot keep goes without tar seeing a
     // refusal, so §5.9's "Cannot change mode … exits 2" cannot happen; errors.log names each such file instead.
     assert.match(s.out, /rc=0\nsame\n644\nrc-p=0\nsame-p/);
-    assert.match(errorsLog(a), /INFO create \/home\/orbit\/Documents\/x23\/run\.sh with mode 0755: the drive keeps no modes: the file is 0644 and cannot be executed/);
+    assert.match(errorsLog(a), /INFO create \/home\/orbit\/Drive\/x23\/run\.sh with mode 0755: the drive keeps no modes: the file is 0644 and cannot be executed/);
     d.push('every file\'s content matches; tar -x and tar -xp both exit 0 and run.sh shows 0644: GNU tar takes the mode it created a file with as set and chmods no regular file, so it meets no refusal (§5.9\'s "Cannot change mode … exit 2" does not happen with GNU tar 1.35); errors.log says run.sh was created executable and is kept 0644');
   });
 
@@ -1228,7 +1228,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
     assert.match(s.err, /No locks available/);
     assert.match(s.out, /flock rc=(1|71)\b/);
     assert.match(s.out, /sqlite rc=[1-9]/);
-    assert.match(errorsLog(a), /ENOLCK fcntl lock \/home\/orbit\/Documents\/x40\.db: the drive has no file locks/);
+    assert.match(errorsLog(a), /ENOLCK fcntl lock \/home\/orbit\/Drive\/x40\.db: the drive has no file locks/);
     d.push(`flock: "No locks available", exit ${/flock rc=(\d+)/.exec(s.out)![1]} (util-linux exits EX_OSERR for ENOLCK); sqlite (the sqlite3 CLI is not on this host, so Python's sqlite3, the same library): "${(/sqlite3\.\w+: ([^\n]+)/.exec(s.err) ?? ['', 'fails'])[1]}", exit ≠ 0; errors.log says the drive has no file locks`);
   });
 
@@ -1418,7 +1418,7 @@ except OSError as e:
     const saved = spawnSync('ls', [unsent], { encoding: 'utf8' }).stdout.trim().split('\n').filter((f) => f.endsWith('w49.txt'));
     assert.equal(saved.length, 1, 'unsent/ holds its bytes');
     assert.equal(readFileSync(path.join(unsent, saved[0]), 'utf8'), 'kept bytes\n');
-    assert.match(errorsLog(a), new RegExp(`EIO close /home/orbit/Documents/w49\\.txt: .*kept in /run/orbit-documents/unsent/${saved[0].replace(/[.]/g, '\\.')}`));
+    assert.match(errorsLog(a), new RegExp(`EIO close /home/orbit/Drive/w49\\.txt: .*kept in /run/orbit-documents/unsent/${saved[0].replace(/[.]/g, '\\.')}`));
     a.proxy.set('pass');
     await waitFor('back online', () => status(a).connected === true, 30_000);
     ok(await sh(a, 'echo after > $F/after49.txt && cat $F/after49.txt'), 'reads and writes work without a remount');
@@ -1549,11 +1549,11 @@ f = open('$F/long52.log', 'w'); f.write('one line\\n'); f.flush(); time.sleep(70
   });
 
   // Row 56 (docs/documents-drive-technical-design.md §5.9, §7.2): for each engine's own sandbox, a process started
-  // under it writes and reads ~/Documents, the daemon is SIGKILLed, the parent remounts, and the SAME process writes and reads
+  // under it writes and reads ~/Drive, the daemon is SIGKILLed, the parent remounts, and the SAME process writes and reads
   // again. Cursor's is bwrap with the parent bound (cursor_sandbox.go wrap); Codex's is `codex sandbox`, whose writable
   // roots are the ones codexSandboxPolicy names. Claude Code, OpenCode, Antigravity, Kimi and DSH run no OS sandbox of
   // their own on Linux (their grants are launch arguments and permission rules), so their process is a plain one.
-  await row('56', 'each engine\'s sandbox keeps ~/Documents across a remount', async (d) => {
+  await row('56', 'each engine\'s sandbox keeps ~/Drive across a remount', async (d) => {
     const probe = (name: string) => `n=${name}
       echo "before-$n" > "$F/e56-$n.txt" && echo "before write ok" && cat "$F/e56-$n.txt" && echo "before read ok" || echo "before FAILED"
       sleep 3

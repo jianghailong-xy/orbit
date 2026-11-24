@@ -14,7 +14,7 @@ import (
 // refused on the spot with planDriveRefusal, and no card is filed. Reads, and every call about any other path, take
 // the path they took before.
 
-const planDriveRefusal = "The Documents drive is read-only in Plan mode: nothing was written to ~/Documents. Do not retry " +
+const planDriveRefusal = "The Documents drive is read-only in Plan mode: nothing was written to ~/Drive. Do not retry " +
 	"it or make the same write another way. Put the change in your plan; it can be made once the owner approves the " +
 	"plan or switches this session out of Plan mode."
 
@@ -41,7 +41,7 @@ func planDriveWrite(toolName string, input map[string]interface{}) bool {
 // driveRootSpellings are the drive's roots as written and as their links resolve: the parent, ~/Documents and the mount.
 func driveRootSpellings() []string {
 	var roots []string
-	for _, root := range []string{driveParentPath, driveHomePath, driveLegacyHomePath, driveMountPath} {
+	for _, root := range []string{driveParentPath, driveHomePath, driveMountPath} {
 		roots = appendUnique(roots, filepath.Clean(root), realPath(root))
 	}
 	return roots
