@@ -495,6 +495,7 @@ func TestOnlyATopLevelSessionIsToldWhenToDelegate(t *testing.T) {
 		},
 	}
 	whenToDelegate := strings.TrimSuffix(orbitHandoffInstructions, "{{toolsearch:delegate}}")
+	whenToDelegate = strings.TrimPrefix(whenToDelegate, "Hand work to another agent through Orbit{{own_subagents}}. ")
 	for name, build := range builders {
 		top := build(parent)
 		if !strings.Contains(top, whenToDelegate) {
@@ -509,7 +510,7 @@ func TestOnlyATopLevelSessionIsToldWhenToDelegate(t *testing.T) {
 		}
 	}
 	// One paragraph, in one order: look, start what is recorded, delegate a piece whose result comes back, create new work.
-	for _, want := range []string{"never your engine's own sub-agents or Agent tool", "Look with task_list first",
+	for _, want := range []string{"Hand work to another agent through Orbit", "Look with task_list first",
 		"task_start work already recorded", "never file it twice", "use delegate for a piece whose result you need back",
 		"in the background", "cheaper or stronger model", "another machine", `needs: ["os:darwin"]`, "workspace",
 		"task_create with startNow", "ToolSearch select:mcp__orbit__delegate"} {

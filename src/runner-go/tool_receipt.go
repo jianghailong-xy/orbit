@@ -1175,6 +1175,8 @@ func (s *mcpServer) invokeTool(name string, args map[string]interface{}) map[str
 	if !op.answersWithReceipt() {
 		return s.callTool(name, args)
 	}
+	// A create that carries no key is given one before the record is made, so its receipt reports the key it was sent under (D4).
+	args = s.withDerivedCreateKey(name, args)
 	rec := newCallRecord(op, args)
 	rec.defaultTaskID = s.taskID
 	stop := s.t.watch(rec.observe)

@@ -559,7 +559,7 @@ func TestContractServerRefusalsCarryTheirCodeAndRetryRule(t *testing.T) {
 		{"conflict", 409, `{"code":"TASK_ALREADY_RUNNING","message":"running"}`, "", outcomeRefused, "TASK_ALREADY_RUNNING", retryRereadFirst, false},
 		{"bad request", 400, `{"message":["title must be a string"]}`, "", outcomeRefused, "HTTP_400", retryFixInput, false},
 		{"rate limited", 429, `{"code":"RATE_LIMITED","message":"slow down"}`, "30", outcomeRefused, "RATE_LIMITED", retryResend, true},
-		{"server error", 503, `upstream unavailable`, "", outcomeUnknown, "HTTP_503", retryRereadFirst, false},
+		{"server error", 503, `upstream unavailable`, "", outcomeUnknown, "HTTP_503", retryResend, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -697,7 +697,7 @@ func TestContractDuplicateSubmissionWithTheSameKeyAnswersTheFirstTask(t *testing
 	}
 }
 
-// Non-idempotent retry: without a key nothing makes a second send the same request, so a blind
+// Keyless retry (D4): `orbit mcp` derives the key, so both sends carry the same one. Before that, without a key nothing made a second send the same request, so a blind
 // retry writes twice — which is why the receipt names the retry rule instead of leaving it to the
 // caller to guess. The catalogue says so too.
 func TestContractNonIdempotentRetryWritesAgainAndTheReceiptSaysSo(t *testing.T) {
@@ -713,9 +713,10 @@ func TestContractNonIdempotentRetryWritesAgainAndTheReceiptSaysSo(t *testing.T) 
 	if idOf(first) == idOf(second) || created != 2 {
 		t.Fatalf("two keyless sends wrote %d task(s): %q %q", created, idOf(first), idOf(second))
 	}
+	// `orbit mcp` derived one key for both sends (D4): the receipts say so, though this fake server does not dedupe by it.
 	for _, r := range []toolReceipt{first, second} {
-		if r.Idempotency.Kind != string(idempotencyServerKey) {
-			t.Fatalf("a keyless create claims %q", r.Idempotency.Kind)
+		if r.Idempotency.Kind != string(idempotencyCallerKey) || !strings.HasPrefix(r.Idempotency.Key, "auto-") || r.Idempotency.Key != first.Idempotency.Key {
+			t.Fatalf("a keyless create reports idempotency %+v", r.Idempotency)
 		}
 	}
 	op := lookupCatalogOperation("task_create")

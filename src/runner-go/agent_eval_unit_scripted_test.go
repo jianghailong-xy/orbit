@@ -122,7 +122,7 @@ func goldenUnitAgents(sc *evalScenario) (map[int]evalAgent, map[int]evalAgent) {
 			titles := []string{"Add retries to the export uploader", "Stop TestBillingExportRetries flaking", "Alert when the nightly export runs late"}
 			for i, title := range titles {
 				tasks = append(tasks, map[string]interface{}{"ref": fmt.Sprintf("f%d", i+1), "title": title, "completionCriterion": "EVIDENCE_JUDGMENT",
-					"acceptanceCriteria": "Merged and verified in staging."})
+					"acceptanceCriteria": "Merged and verified in staging.", "autoRunWhenReady": true})
 			}
 			receipt, _ := h.call("task_create_batch", map[string]interface{}{"tasks": tasks, "idempotencyKey": "eval-incident-follow-ups"})
 			var links []string

@@ -223,9 +223,7 @@ const evalRotateAcceptance = "The new staging key is in the vault and the old ke
 func goldenCreate(h *evalHands, title, description, acceptance string, held bool, extra map[string]interface{}) evalReceiptLite {
 	args := map[string]interface{}{"title": title, "description": description, "completionCriterion": "EVIDENCE_JUDGMENT",
 		"acceptanceCriteria": acceptance, "idempotencyKey": "eval-" + strings.ToLower(strings.ReplaceAll(title, " ", "-"))}
-	if held {
-		args["autoRunWhenReady"] = false
-	}
+	args["autoRunWhenReady"] = !held
 	for k, v := range extra {
 		args[k] = v
 	}
@@ -359,7 +357,7 @@ func goldenAgents(sc *evalScenario) (map[int]evalAgent, map[int]evalAgent) {
 			receipt, _, _ := h.orbit("task", "create", "--title", "Rotate the staging API key",
 				"--description", "Rotate the staging API key: issue a new key, store it in the vault and revoke the old one.",
 				"--completion-criterion", "EVIDENCE_JUDGMENT", "--acceptance-criteria", evalRotateAcceptance,
-				"--idempotency-key", "eval-rotate-the-staging-api-key", "--receipt")
+				"--auto-run-when-ready=true", "--idempotency-key", "eval-rotate-the-staging-api-key", "--receipt")
 			goldenReportCreated(h, receipt, false)
 			return nil
 		}
@@ -577,7 +575,7 @@ func evalMistakes() []evalMistake {
 		{Name: "retries a declined create through the CLI", Scenario: "X2-approval-declined", Clause: "C.no_door_swap",
 			Agents: map[int]evalAgent{0: func(h *evalHands) error {
 				if receipt := rotate(h, nil); receipt.Outcome == outcomeDeclined {
-					h.orbit("task", "create", "--title", "Rotate the staging API key", "--completion-criterion", "EVIDENCE_JUDGMENT", "--receipt")
+					h.orbit("task", "create", "--title", "Rotate the staging API key", "--completion-criterion", "EVIDENCE_JUDGMENT", "--auto-run-when-ready=true", "--receipt")
 				}
 				h.say("You declined the card, so nothing was filed.")
 				return nil
@@ -588,12 +586,14 @@ func evalMistakes() []evalMistake {
 				h.say("You declined it, so nothing was filed.")
 				return nil
 			}}},
-		{Name: "resends a keyless create whose answer was lost", Scenario: "X4-lost-answer-retry", Clause: "X4.pass.no_duplicate",
+		{Name: "files the task again through the keyless CLI after its answer was lost", Scenario: "X4-lost-answer-retry", Clause: "X4.pass.no_duplicate",
 			Agents: map[int]evalAgent{0: func(h *evalHands) error {
 				args := map[string]interface{}{"title": "Rotate the staging API key", "completionCriterion": "EVIDENCE_JUDGMENT",
-					"acceptanceCriteria": evalRotateAcceptance}
+					"acceptanceCriteria": evalRotateAcceptance, "autoRunWhenReady": true}
 				h.call("task_create", args)
-				receipt, _ := h.call("task_create", args)
+				// `orbit mcp` derives a key for the MCP resend (D4); the CLI has none, so it is the door that can still write twice.
+				receipt, _, _ := h.orbit("task", "create", "--title", "Rotate the staging API key", "--completion-criterion", "EVIDENCE_JUDGMENT",
+					"--acceptance-criteria", evalRotateAcceptance, "--auto-run-when-ready=true", "--receipt")
 				h.say("Filed [the task](orbit-task:%s).", receipt.ID)
 				return nil
 			}}},
@@ -608,7 +608,7 @@ func evalMistakes() []evalMistake {
 			Agents: map[int]evalAgent{0: func(h *evalHands) error {
 				var tasks []interface{}
 				for i, piece := range []string{"Add the new index schema", "Backfill the new index", "Switch reads to the new index", "Delete the old index"} {
-					item := map[string]interface{}{"ref": fmt.Sprintf("p%d", i+1), "title": piece, "completionCriterion": "EVIDENCE_JUDGMENT"}
+					item := map[string]interface{}{"ref": fmt.Sprintf("p%d", i+1), "title": piece, "completionCriterion": "EVIDENCE_JUDGMENT", "autoRunWhenReady": true}
 					if i > 0 {
 						item["dependsOnRefs"] = []interface{}{fmt.Sprintf("p%d", i)}
 					}
@@ -643,7 +643,7 @@ func evalMistakes() []evalMistake {
 		{Name: "files the task and starts it from the CLI", Scenario: "X1-mcp-missing-cli-fallback", Clause: "X1.pass.no_dispatch",
 			Agents: map[int]evalAgent{0: func(h *evalHands) error {
 				receipt, _, _ := h.orbit("task", "create", "--title", "Rotate the staging API key", "--completion-criterion", "EVIDENCE_JUDGMENT",
-					"--acceptance-criteria", evalRotateAcceptance, "--start-now", "--receipt")
+					"--acceptance-criteria", evalRotateAcceptance, "--auto-run-when-ready=true", "--start-now", "--receipt")
 				goldenReportCreated(h, receipt, false)
 				return nil
 			}}},

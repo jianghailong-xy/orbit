@@ -139,17 +139,21 @@ A fix starts at the top of this list. Taking a lower rung means saying why every
 - Every step that removes or moves text runs its affected cases with that text left out, at ten or more runs per case. Three runs at a two-thirds pass bar cannot detect a rule whose removal moves failure from 0% to 20%.
 - Kimi has no eval today. It needs at least a smoke run of E1, E3 and X2 before step 3 changes its carrier.
 
-## 7. Open decisions for the owner
+## 7. Decisions for the owner
 
-| # | Question | Recommendation |
-|---|---|---|
-| D1 | Disallow the engine's own Agent tool where delegate is served, as todo tools already are? | Owner's call. It removes the biggest steering rule but loses native sub-agents. |
-| D2 | Keep `alwaysLoad` for notify (about 330 tokens) and delegate (about 692 tokens), or keep only their lines (about 35 and 60 tokens)? | Keep the lines, and drop `alwaysLoad` if the eval passes without it. |
-| D3 | Require `autoRunWhenReady` on creates made from a session? | — |
-| D4 | Have `orbit mcp` fill in an idempotency key when one is missing? | — |
-| D5 | Keep the 500-byte reply-files paragraph, or cut it to one line plus a correction note on the next turn? | — |
-| D6 | Keep one always-on sentence saying a refusal is final on every surface? | Yes |
-| D7 | Add eval smoke coverage for Kimi and Cursor? | Without it, their text has to stay cautious. |
-| D8 | Does a bare `orbit mcp` outside a session keep the full primer? | Yes |
+The owner answered all eight on 2026-11-24 (D2, D6, D7 and D8 on the recommended defaults, recorded by the coordinator).
+Step 6 implemented each answer; "Mechanism" says where, and the measurements are in
+`docs/agent-instructions-eval-baseline.md`, "Step 6".
+
+| # | Question | Owner's answer | Mechanism |
+|---|---|---|---|
+| D1 | Disallow the engine's own Agent tool where delegate is served, as todo tools already are? | Yes: disable the engine's own sub-agent tool in sessions where delegate is served, as the todo tools are. Then remove the always-on rule against the engine's own sub-agents. SubAgent sessions, which don't get delegate, keep the native tool. | `claude_spawn.go` adds `builtinSubAgentTools` (`Agent`, `Task`) to `--disallowedTools` when `shape.serves(delegate)` and the session is not a SubAgent. The handoff unit's clause "never your engine's own sub-agents or Agent tool" is the placeholder `{{own_subagents}}`, left out where the profile says the tool is off (`EngineProfile.OwnSubAgentsOff`, Claude Code). Codex and the other engines have no such switch, so their text keeps the clause. |
+| D2 | Keep `alwaysLoad` for notify and delegate, or keep only their lines? | Default: keep the one-line rules, and drop `alwaysLoad` only if their step-0 cases pass without it at 10 or more runs. | See the baseline doc, "Step 6": the outcome is recorded there with the runs. |
+| D3 | Require `autoRunWhenReady` on creates made from a session? | Yes: required on `task_create` and every `task_create_batch` item from an agent session (MCP and CLI); a person's create in the web UI is unaffected. A missing value is refused with a `fix_input` error naming the field and both meanings. Remove the lead's "Create is not start, but autoRunWhenReady defaults to true" sentence. | `task_create_autorun.go` (`requireRunnerTaskAutoRunDeclaration`), called by the MCP tools (`mcp.go`) and `orbit task create` / `create-batch` (`task_cli.go`). Tool descriptions, the guide recipes and the examples say it is required. Primer 1.8.0. |
+| D4 | Have `orbit mcp` fill in an idempotency key when one is missing? | Yes: when `task_create` or `task_create_batch` arrives without one, `orbit mcp` derives a hash of the session id, the tool and the canonical arguments, valid for a bounded window; a key the caller gives wins. Remove the receipts paragraph's "Key task_create ..." sentence. | `derivedCreateKeys` (`task_create_autorun.go`), applied in `mcpServer.callTool`. **The window is 10 minutes** (`createKeyWindow`): inside it identical arguments get the same key, so a retry answers with the first write; after it the key changes, so a deliberate re-create files anew. Dry runs get none. Only `orbit mcp` derives: the CLI is one process per call and keeps no window, and the receipt's `idempotency.kind` is `caller_key` with the derived key. Primer 1.8.0. |
+| D5 | Keep the 500-byte reply-files paragraph, or cut it to one line plus a correction note on the next turn? | Cut it to one sentence, and add a correction note: when a reply links a file that cannot be attached (outside the working directory and uploads directory, or missing), the runner tells the agent at the start of the next turn, naming the path and the directories that work. | `orbitReplyFileInstructions` is one sentence. `replyAttachmentIDs.remember` / `takeCorrection` (`reply_attachments.go`) keep what `attachLocalReplyFiles` could not attach; `runClaudeSessionProcess` leads the next message with `replyFileCorrection`. Claude Code only: Codex rewrites links at emit time and has no per-session memo to carry the note, so its paragraph is one sentence without a correction. |
+| D6 | Keep one always-on sentence saying a refusal is final on every surface? | Yes (default). | Unchanged: `primer.cards`. |
+| D7 | Add eval smoke coverage for Kimi and Cursor? | Default: no new Cursor coverage in this project; Kimi gets the E1, E3 and X2 smoke run in step 3; Cursor, OpenCode, Antigravity and DeepSeek Harness keep today's conservative carrier. | None in step 6. |
+| D8 | Does a bare `orbit mcp` outside a session keep the full primer? | Yes (default). | Unchanged: `unknownEngineProfile`, which also keeps the sub-agent clause. |
 
 **Recommended goal.** The instructions are about 1.9k tokens and prompt-cached, so bytes alone are the wrong target. The bigger costs are dilution, rules sent to shapes they don't apply to, Kimi's resend, and always-loaded descriptions. The goal is to hold the eval pass rate, cap the number of rules per shape, and allow no always-on unit without a guarding eval case.

@@ -1768,7 +1768,7 @@ func (d *ownerWaitDouble) decide(id, status string) {
 	d.status[id] = status
 }
 
-var ownerWaitTaskArgs = map[string]interface{}{"title": "handed off", "completionCriterion": "EVIDENCE_JUDGMENT"}
+var ownerWaitTaskArgs = map[string]interface{}{"title": "handed off", "completionCriterion": "EVIDENCE_JUDGMENT", "autoRunWhenReady": true}
 
 func resultText(res map[string]interface{}) string {
 	return res["content"].([]map[string]interface{})[0]["text"].(string)
