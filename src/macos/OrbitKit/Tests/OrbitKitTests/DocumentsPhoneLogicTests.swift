@@ -127,4 +127,15 @@ final class DocumentsPhoneLogicTests: XCTestCase {
         XCTAssertEqual(DocumentsLogic.cardLine(folder), "Documents › Reports")
         XCTAssertEqual(DocumentsLogic.cardGone(trashed: false), "No longer in Documents · moved or deleted")
     }
+
+    /// A paragraph's drive links are found with their words; an image, a task link and a plain URL are not.
+    func testAParagraphsDriveLinksAreFound() {
+        let text = "I saved [sign-in-v3.png](orbit-document:e1) and [notes](orbit-drive:e2 \"t\"), " +
+            "not ![x](orbit-document:e3), [a task](orbit-task:t1) or [site](https://x.test)."
+        let found = DocumentsLogic.linkMatches(in: text)
+        XCTAssertEqual(found.map(\.entryID), ["e1", "e2"])
+        XCTAssertEqual(found.map(\.label), ["sign-in-v3.png", "notes"])
+        XCTAssertEqual(String(text[found[0].range]), "[sign-in-v3.png](orbit-document:e1)")
+        XCTAssertTrue(DocumentsLogic.linkMatches(in: "no links here").isEmpty)
+    }
 }

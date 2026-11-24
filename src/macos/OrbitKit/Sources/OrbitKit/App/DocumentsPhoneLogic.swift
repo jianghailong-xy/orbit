@@ -224,6 +224,29 @@ extension DocumentsLogic {
         return nil
     }
 
+    /// A Markdown link to a drive file in a paragraph: where it is, the entry it names and the words it shows.
+    public struct LinkMatch: Equatable, Sendable {
+        public let range: Range<String.Index>
+        public let entryID: String
+        public let label: String
+    }
+
+    private static let markdownLink = try! NSRegularExpression(pattern: #"(!?)\[([^\]\n]*)\]\(([^)\s]+)[^)]*\)"#)
+
+    /// Every `[label](orbit-document:<id>)` (or `orbit-drive:`) link in a paragraph, in order: a reply draws each as
+    /// the file it names (frame 15). Image syntax and other links are left as they are.
+    public static func linkMatches(in text: String) -> [LinkMatch] {
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return markdownLink.matches(in: text, range: range).compactMap { match in
+            guard let whole = Range(match.range(at: 0), in: text),
+                  let bang = Range(match.range(at: 1), in: text), text[bang].isEmpty,
+                  let label = Range(match.range(at: 2), in: text),
+                  let href = Range(match.range(at: 3), in: text),
+                  let id = linkedEntryID(String(text[href])) else { return nil }
+            return LinkMatch(range: whole, entryID: id, label: String(text[label]).trimmingCharacters(in: .whitespaces))
+        }
+    }
+
     /// The folder a linked file sits in: "Documents › Orbit UI migration".
     public static func cardTrail(_ path: String?) -> String {
         let parts = (path ?? "").split(separator: "/").map(String.init)

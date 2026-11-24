@@ -662,7 +662,11 @@ struct SectionContent: View {
             #if os(macOS)
             DocumentsContentColumn()
             #else
-            ContentUnavailableView(section.title, systemImage: section.systemImage)
+            // The iPad's column is the phone's pages, on the section's stack (documents board 01-ios).
+            NavigationStack(path: Bindable(model).nav.path) {
+                DocumentsFolderPage(folderID: nil, name: DocumentsLogic.title)
+                    .navigationDestination(for: NavNode.self) { node in DocumentsDestination(node: node) }
+            }
             #endif
         case .scheduled:
             // The phone's drawer and the iPad's sidebar open the phone's page; the Mac's source list opens the web
