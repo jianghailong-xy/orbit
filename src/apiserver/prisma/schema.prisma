@@ -411,6 +411,8 @@ model User {
   feishuOutbox     FeishuOutbox[]
   /// What Orbit has learned about its accounts from the runs it sent there (migration 1494).
   accountHealth         AccountHealth[]
+  /// Its agents' directory syncs into Documents, as the upload tray shows them (migration 1560).
+  documentSyncs         DocumentSync[]
 
   @@map("user")
   mentionDeliveries TaskCommentMentionDelivery[]
@@ -1289,6 +1291,8 @@ model Runner {
   documentMountCredentials DocumentMountCredential[]
   // Account health of the sign-ins on this runner (migration 1494).
   accountHealth     AccountHealth[]
+  // The directory syncs into Documents this runner runs (migration 1560).
+  documentSyncs     DocumentSync[]
 
   @@index([ownerId])
   /// The tenancy fence `project_codebase` hangs off: naming BOTH the runner and the owner in one
@@ -11169,4 +11173,47 @@ model AccountHealth {
   @@index([providerId], map: "account_health_provider_id_idx")
   @@index([poolId], map: "account_health_pool_id_idx")
   @@map("account_health")
+}
+
+/// One agent's directory sync into the owner's Documents, as the upload tray shows it (migration 1560,
+/// docs/documents-directory-sync-design.md S4). The runner running it opens and reports into the row; the owner reads it.
+model DocumentSync {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  ownerId      String    @map("owner_id") @db.Uuid
+  owner        User      @relation(fields: [ownerId], references: [id], onDelete: Cascade, map: "document_sync_owner_id_fkey")
+  runnerId     String    @map("runner_id") @db.Uuid
+  runner       Runner    @relation(fields: [runnerId], references: [id], onDelete: Cascade, map: "document_sync_runner_id_fkey")
+  /// The session that started it: history read by id, not a key.
+  sessionId    String?   @map("session_id") @db.Uuid
+  /// The local directory's last segment only, never a runner path.
+  sourceName   String    @map("source_name")
+  destPath     String    @map("dest_path")
+  /// The destination folder once it exists: history read by id, not a key.
+  destEntryId  String?   @map("dest_entry_id") @db.Uuid
+  /// CHECKING | UPLOADING | DONE | FAILED | STOPPED (document_sync_status_check).
+  status       String    @default("CHECKING")
+  /// Local files looked at so far, while checking.
+  filesSeen    Int       @default(0) @map("files_seen")
+  /// Files that need uploading, once checking is done.
+  filesTotal   Int?      @map("files_total")
+  filesDone    Int       @default(0) @map("files_done")
+  /// Files already the same in Documents, skipped.
+  filesSame    Int       @default(0) @map("files_same")
+  /// Files and folders `--delete` moved to Trash.
+  filesDeleted Int       @default(0) @map("files_deleted")
+  bytesTotal   BigInt?   @map("bytes_total")
+  bytesSent    BigInt    @default(0) @map("bytes_sent")
+  currentPath  String?   @map("current_path")
+  /// At most 100 `{ path, error }`, paths relative to the destination; failedCount counts them all.
+  failed       Json      @default("[]")
+  failedCount  Int       @default(0) @map("failed_count")
+  /// Why a FAILED sync could not finish.
+  error        String?
+  startedAt    DateTime  @default(now()) @map("started_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+  endedAt      DateTime? @map("ended_at") @db.Timestamptz(3)
+
+  @@index([ownerId, startedAt(sort: Desc)], map: "document_sync_owner_started_idx")
+  @@index([runnerId], map: "document_sync_runner_id_idx")
+  @@map("document_sync")
 }

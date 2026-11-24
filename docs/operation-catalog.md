@@ -1,7 +1,7 @@
 # Orbit operation catalogue v1.11.0
 
 > Generated from `src/runner-go/operation_catalog.go` — do not edit by hand.
-> Content hash: `e47e44764c3c70e6aa1dbc3ee0efa22c20d67f309be7a23154e0f4f6ba9d5f9a`.
+> Content hash: `3b39b18bb0848a27aded744564ba17990e02b2dd3dab74bbc1197bd8a8c1e449`.
 
 Every operation an Orbit agent can call is declared once in the operation catalogue. This table is that catalogue rendered for a person: `orbit capabilities --json` and the MCP `tools/list` payload are its two machine surfaces, and the leaf `--help` texts are held to it by tests. `MCP` and `CLI` say how each surface reaches the operation — `always`, an `orchestration` grant, an engine `permission_prompt` bridge, `session`-only, `headless`-only, or a `watch_switch`/`wiki_switch` — and `absent` when that surface deliberately has no door. Gates that must hold together are joined with `+` (for example `orchestration+watch_switch`). `Idempotency` is `read` (safe to repeat), `caller_key` (retry with the same key), `server_key` (a redelivered turn deduplicates) or `none` (re-read before retrying). `Plan` is what a session in Plan mode gets: the call `runs`, is `refused` with what to do instead, or its `own_gate` decides; the per-engine matrix is docs/permission-matrix.md.
 
@@ -20,7 +20,7 @@ Every operation an Orbit agent can call is declared once in the operation catalo
 | `inspect` | R1.8 | `project_get`? → `task_get` → `task_list`? → `session_get`? | Read the state of a project, a task or a session before deciding anything. |
 | `wait` | R1.9 | `task_await` → `session_await`? → `watch_create`? | Wait for Orbit work to finish without holding the turn open. |
 | `wiki` | R1.10 | `wiki_search` → `wiki_get`? → `wiki_propose`? → `wiki_note`? | Find what is already known about a file or a pattern, and keep what you learned. |
-| `files` | R1.11 | `file_upload` → `file_list`? → `file_fetch`? → `documents_put`? → `documents_get`? → `documents_list`? → `documents_move`? → `documents_delete`? | Keep a screenshot, report or log in Orbit instead of the repository, or read one back. |
+| `files` | R1.11 | `file_upload` → `file_list`? → `file_fetch`? → `documents_put`? → `documents_get`? → `documents_list`? → `documents_move`? → `documents_delete`? → `documents_sync`? | Keep a screenshot, report or log in Orbit instead of the repository, or read one back. |
 | `task-list` | R1.12 | `tasklist_list`? → `tasklist_create` → `tasklist_update`? | Give a class of work its own dispatch policy: a concurrency cap, a pause, standing instructions. |
 | `agent` | R1.13 | `agent_list` → `agent_update`? → `agent_create`? | Choose where work runs and under which identity, or change an agent's defaults. |
 | `finish-task` | — | `task_get` → `task_progress_report` → `bg_run`? → `task_evidence_submit` → `task_comment`? | Carry the task this session runs to its end: progress, checks and the evidence its criterion decides by. |
@@ -51,6 +51,7 @@ Every operation an Orbit agent can call is declared once in the operation catalo
 | `documents_list` | file | low | no | none | no | read | runs | always | always — `orbit documents ls` | See the contents of a drive folder. |
 | `documents_move` | file | medium | yes | none | no | none | refused | always | always — `orbit documents mv` | Move or rename an entry on the drive. |
 | `documents_put` | file | medium | yes | none | no | none | refused | always | session — `orbit documents put` | Copy a local file into the owner's Documents drive. |
+| `documents_sync` | file | medium | yes | none | no | none | refused | always | session — `orbit documents sync` | Copy a local directory into a Documents folder in the background. |
 | `file_fetch` | file | low | no | none | no | read | runs | always | session — `orbit file fetch` | Read a file's bytes back. |
 | `file_list` | file | low | no | none | no | read | runs | always | always — `orbit file list` | See the files this session keeps. |
 | `file_pin` | file | medium | yes | none | no | none | refused | always | session — `orbit file pin` | Keep a file so it survives the turn. |

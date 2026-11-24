@@ -1459,6 +1459,21 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * An agent's directory sync into the owner's Documents started, reported progress or ended
+   * (docs/documents-directory-sync-design.md S4). THE PAYLOAD IS THE SYNC'S ID AND NOTHING ELSE: the tray reads
+   * `GET /drive/syncs`, and re-reads it on focus and reconnect. Published after the write commits, and only to the
+   * streams that declared `hints=drive_syncs`.
+   */
+  publishDriveSync(ownerId: string, syncId: string): void {
+    this.publish(`${RealtimeService.USER_SCOPE}${ownerId}`, {
+      seq: 0,
+      type: RunEventType.DRIVE_SYNC,
+      ts: new Date().toISOString(),
+      payload: { syncId },
+    });
+  }
+
+  /**
    * The owner's drive changed (docs/documents-drive-technical-design.md §5.4): a write committed rows to its change feed,
    * the highest of them `seq`. THE PAYLOAD IS THE SEQ AND NOTHING ELSE: no name, path or size. An accelerant only: the Files
    * page reads `GET /drive/changes` for what changed, and re-reads it on focus and reconnect. Published after the write
@@ -1514,12 +1529,21 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
 
   streamForUser(
     userId: string,
-    options: { listChanged?: boolean; listScopes?: boolean; ownerRequests?: boolean; driveChanged?: boolean; scheduleCards?: boolean } = {},
+    options: {
+      listChanged?: boolean;
+      listScopes?: boolean;
+      ownerRequests?: boolean;
+      driveChanged?: boolean;
+      driveSyncs?: boolean;
+      scheduleCards?: boolean;
+    } = {},
   ): Observable<ControlEvent> {
     const events$ = this.hub.asObservable().pipe(
       filter((m) => controlTypeFor(m.event.type) !== null),
       // `drive.changed` only for a stream that declared it (`?hints=drive_changed`), for the same reason.
       filter((m) => options.driveChanged === true || m.event.type !== RunEventType.DRIVE_CHANGED),
+      // `drive.sync` only for a stream that declared it (`?hints=drive_syncs`): a running sync reports every 2 seconds.
+      filter((m) => options.driveSyncs === true || m.event.type !== RunEventType.DRIVE_SYNC),
       // `schedule_cards.changed` only for a stream that declared it (`?hints=schedule_cards`), like the hints below.
       filter((m) => options.scheduleCards === true || m.event.type !== RunEventType.SCHEDULE_CARDS_CHANGED),
       mergeMap((m) => this.toControlEvent(userId, m)),
@@ -1567,6 +1591,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
           ? taskChange instanceof Promise ? await taskChange : taskChange
           : type === ControlEventType.DRIVE_CHANGED
             ? { seq: String(ev.payload.seq ?? '') }
+            : type === ControlEventType.DRIVE_SYNC
+              ? { syncId: String(ev.payload.syncId ?? '') }
             : type === ControlEventType.SCHEDULE_CARDS_CHANGED
               ? scheduleCardsChangedData(ev.payload)
           : type === ControlEventType.AGENT_CHANGED

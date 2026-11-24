@@ -95,6 +95,15 @@ func normalizeDocumentsPath(p string) (string, error) {
 
 func (s *mcpServer) callDocumentsTool(name string, args map[string]interface{}) (map[string]interface{}, bool) {
 	switch name {
+	case "documents_sync":
+		if s.documentsOff {
+			return toolResult(documentsOffMessage(name), true), true
+		}
+		raw, err := startDocumentsSyncJob(strings.TrimSpace(s.sessionID), getString(args, "localPath"), getString(args, "path"), getBool(args, "delete"))
+		if err != nil {
+			return toolResult(err.Error(), true), true
+		}
+		return toolResult(prettyJSON(raw), false), true
 	case "documents_put", "documents_get", "documents_list", "documents_move", "documents_delete":
 		if s.documentsOff {
 			return toolResult(documentsOffMessage(name), true), true
@@ -224,18 +233,35 @@ func putDocumentsFile(ctx context.Context, t *Transport, tool fileToolContext, l
 	if tool.progress != nil {
 		tool.progress.setSize(info.Size())
 	}
-
-	handleID, err := randomUUID()
+	result, entryPath, err := sendDocumentsFile(ctx, t, file, p, writer, tool.progress)
 	if err != nil {
 		return nil, err
+	}
+	return struct {
+		ID         string `json:"id"`
+		Path       string `json:"path"`
+		Link       string `json:"link"`
+		SizeBytes  int64  `json:"sizeBytes"`
+		VersionID  string `json:"versionId"`
+		NewVersion bool   `json:"newVersion"`
+	}{result.EntryID, entryPath, documentLink(result.EntryID), result.SizeBytes, result.VersionID, result.NewVersion}, nil
+}
+
+// sendDocumentsFile writes an open local file to Documents path p, which documents_put and documents_sync share: the
+// folder made first, the file created or overwritten (the previous version kept), its 8 MiB chunks staged, one commit.
+// A non-nil progress counts the bytes as they go up. It answers the commit and the entry's Documents path.
+func sendDocumentsFile(ctx context.Context, t *Transport, file io.Reader, p string, writer documentsWriter, progress *documentsProgress) (documentsCommitResult, string, error) {
+	handleID, err := randomUUID()
+	if err != nil {
+		return documentsCommitResult{}, "", err
 	}
 	commitID, err := randomUUID()
 	if err != nil {
-		return nil, err
+		return documentsCommitResult{}, "", err
 	}
 	if parent := path.Dir(p); parent != "/" {
 		if err := documentsWrite(ctx, t, "/mkdir", map[string]interface{}{"path": parent, "parents": true, "writer": writer}, nil); err != nil {
-			return nil, err
+			return documentsCommitResult{}, "", err
 		}
 	}
 	entry, err := documentsStat(ctx, t, p)
@@ -245,14 +271,14 @@ func putDocumentsFile(ctx context.Context, t *Transport, tool fileToolContext, l
 		mode = "CONTINUE"
 	}
 	if err != nil {
-		return nil, err
+		return documentsCommitResult{}, "", err
 	}
 	if entry.Kind == "FOLDER" {
-		return nil, fmt.Errorf("%s is a folder", p)
+		return documentsCommitResult{}, "", fmt.Errorf("%s is a folder", p)
 	}
 	var staging struct{ ID string }
 	if err := documentsWrite(ctx, t, "/stagings", map[string]interface{}{"entryId": entry.ID}, &staging); err != nil {
-		return nil, err
+		return documentsCommitResult{}, "", err
 	}
 	chunks := []documentsChunk{}
 	buf := make([]byte, documentsChunkSize)
@@ -262,13 +288,13 @@ func putDocumentsFile(ctx context.Context, t *Transport, tool fileToolContext, l
 			break
 		}
 		if err != nil && err != io.ErrUnexpectedEOF {
-			return nil, err
+			return documentsCommitResult{}, "", err
 		}
 		digest := sha256.Sum256(buf[:n])
 		chunk := documentsChunk{Index: len(chunks), Size: n, SHA256: hex.EncodeToString(digest[:])}
 		route := fmt.Sprintf("/stagings/%s/chunks/%d", url.PathEscape(staging.ID), chunk.Index)
-		if _, err := t.documentsChunkCall(ctx, http.MethodPut, route, buf[:n], chunk.SHA256, 0, tool.progress); err != nil {
-			return nil, err
+		if _, err := t.documentsChunkCall(ctx, http.MethodPut, route, buf[:n], chunk.SHA256, 0, progress); err != nil {
+			return documentsCommitResult{}, "", err
 		}
 		chunks = append(chunks, chunk)
 	}
@@ -281,16 +307,9 @@ func putDocumentsFile(ctx context.Context, t *Transport, tool fileToolContext, l
 	}
 	result, err := commitDocumentsFile(ctx, t, commitID, body)
 	if err != nil {
-		return nil, err
+		return documentsCommitResult{}, "", err
 	}
-	return struct {
-		ID         string `json:"id"`
-		Path       string `json:"path"`
-		Link       string `json:"link"`
-		SizeBytes  int64  `json:"sizeBytes"`
-		VersionID  string `json:"versionId"`
-		NewVersion bool   `json:"newVersion"`
-	}{result.EntryID, entry.Path, documentLink(result.EntryID), result.SizeBytes, result.VersionID, result.NewVersion}, nil
+	return result, entry.Path, nil
 }
 
 func commitDocumentsFile(ctx context.Context, t *Transport, commitID string, body map[string]interface{}) (documentsCommitResult, error) {

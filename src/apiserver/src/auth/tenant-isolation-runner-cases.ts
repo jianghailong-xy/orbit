@@ -168,6 +168,8 @@ export interface RunnerObjects {
   driveCommitId: string;
   driveMoveFileId: string;
   driveDeleteFileId: string;
+  /** An agent's directory sync this machine opened and is still reporting into (docs/documents-directory-sync-design.md S4). */
+  driveSyncId: string;
   /** Shared: a session link's root with a file in it; a task link's root with a run and a file; a project link's. */
   sharedSessionId: string;
   sharedSessionAttachmentId: string;
@@ -787,6 +789,8 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     'GET /runner/documents/stagings/:id/chunks/:idx': { as: RUNNER, request: (of) => ({ params: { id: of.runner.driveStagingId, idx: '0' } }) },
     'POST /runner/documents/stagings/:id/keepalive': { as: RUNNER, request: (of) => ({ params: { id: of.runner.driveStagingId }, body: { dirty: false } }) },
     'GET /runner/documents/commits/:commitId': { as: RUNNER, request: (of) => ({ params: { commitId: of.runner.driveCommitId } }) },
+    // A sync is reported into only by the runner that opened it, in the caller's account.
+    'PATCH /runner/documents/syncs/:id': { as: RUNNER, request: (of) => ({ params: { id: of.runner.driveSyncId }, body: { status: 'UPLOADING', filesDone: 1 } }) },
   }),
 };
 
@@ -1927,6 +1931,15 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
       "a drive write's attribution (docs/documents-drive-technical-design.md §3.6): kept only when it is a session of the "
       + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
       + "stored as null otherwise (documents/documents.service.ts:1226); no session is read beyond that, written or authorized by it",
+  }),
+  // ── an agent's directory sync, reported for the owner's upload tray (docs/documents-directory-sync-design.md S4) ──
+  ...underEveryDoorPrefix({
+    'POST /runner/documents/syncs body sessionId':
+      "the session a sync is shown under: kept only when it is a session of the runner's owner, read by (id, owner), and "
+      + "stored as null otherwise (documents/documents-syncs.service.ts:95); only its title is shown back, to that owner",
+    'PATCH /runner/documents/syncs/:id body destEntryId':
+      "the destination folder's id, stored on the caller's own sync row and never looked up (documents/documents-syncs.service.ts:132); "
+      + "it is shown only to the runner's owner, whose own read of another account's entry by that id is not found",
   }),
   'POST /runner/drive/delete body id':
     'the same handler as POST /runner/documents/delete, whose case above holds it across accounts: RunnerDocumentsController '

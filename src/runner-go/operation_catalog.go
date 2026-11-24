@@ -5442,6 +5442,14 @@ var catalogMetadata = map[string]operationMeta{
 		Intent:      "Move an entry to the owner's Trash.",
 		Destructive: true,
 	},
+	"documents_sync": {
+		Object: objectFile,
+		Intent: "Copy a local directory into a Documents folder in the background.",
+	},
+	"drive_sync": {
+		Object: objectFile,
+		Intent: "Copy a local directory into a drive folder in the background.",
+	},
 	"bg_run": {
 		Object: objectBackgroundJob,
 		Intent: "Run a command in the background on this runner.",

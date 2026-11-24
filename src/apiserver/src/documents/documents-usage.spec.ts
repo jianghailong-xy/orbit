@@ -23,7 +23,7 @@ function usageRoute(quota?: string, storeBytes: number | null = null) {
     fileBlob: { aggregate },
   } as unknown as PrismaService;
   const files = new FilesService(prisma, filesConfigFrom({ ...s3Env, ORBIT_DOCUMENTS_STORE_QUOTA_BYTES: quota }));
-  const controller = new DocumentsController(null!, null!, null!, null!, null!, files);
+  const controller = new DocumentsController(null!, null!, null!, null!, null!, files, null!);
   return { usage: () => controller.usage(user), aggregate };
 }
 

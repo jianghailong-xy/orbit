@@ -69,6 +69,15 @@ describe('a reply linking a drive file', () => {
     expect(apiMock).toHaveBeenCalledWith(expect.stringContaining('e1'));
   });
 
+  it('draws a linked folder as a folder that opens itself, with no size (a drive_sync summary links one)', async () => {
+    apiMock.mockResolvedValue({ id: 'd1', parentId: 'r1', kind: 'FOLDER', name: 'out', sizeBytes: 0, path: '/Reports/out', trashedAt: null });
+    await reply('305 files uploaded to [out](orbit-drive:d1), 0 failed.');
+    const card = container.querySelector<HTMLAnchorElement>('a.drive-file-card');
+    expect(card?.textContent).toContain('Documents › Reports');
+    expect(card?.textContent).not.toContain('0 B');
+    expect(card?.getAttribute('href')).toBe('/documents?folder=d1');
+  });
+
   it('says so when the file is in Trash', async () => {
     apiMock.mockResolvedValue({ ...FILE, trashedAt: '2026-11-21T10:00:00Z' });
     await reply('[sign-in-copy.md](orbit-document:e1)');

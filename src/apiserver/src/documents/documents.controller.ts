@@ -16,6 +16,7 @@ import { DocumentsDownloadLinks } from './documents-download-links';
 import { DOCUMENTS_ROUTE_PREFIXES } from './documents-routes';
 import { DocumentsEnabledGuard } from './documents-switch';
 import { CreateDocumentsFolderDto, DocumentsDownloadLinkDto, OpenDocumentsUploadDto, RestoreDocumentsVersionDto, UpdateDocumentsEntryDto } from './dto';
+import { DocumentsSyncsService, type DocumentsSyncView } from './documents-syncs.service';
 
 /** What every Documents route declares for a token: the documents scope; Documents hold no workspace, so a confined token is refused. */
 export const DOCUMENTS_PAT = () => PatScope('documents', { workspaceConfinable: false });
@@ -38,7 +39,15 @@ export class DocumentsController {
     private readonly content: DocumentsContentService,
     private readonly downloadLinks: DocumentsDownloadLinks,
     private readonly files: FilesService,
+    private readonly syncs: DocumentsSyncsService,
   ) {}
+
+  /** Agents' directory syncs for the upload tray: running ones and those ended in the last day (S4). */
+  @DOCUMENTS_PAT()
+  @Get('syncs')
+  listSyncs(@CurrentUser() user: AuthUser): Promise<{ syncs: DocumentsSyncView[] }> {
+    return this.syncs.list(user.userId);
+  }
 
   // What Files → Storage shows: the drive's share and the rest, each content once (§2.5).
   @DOCUMENTS_PAT()
