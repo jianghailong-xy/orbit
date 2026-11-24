@@ -65,6 +65,11 @@ export function toUuid(idOrPublicId: string): string {
  *  and every foreign key to one. Accepted in either spelling on the way in (`PublicIdPipe` /
  *  `IsPublicId`); to be rendered base62 on the way out. */
 export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
+  // `account_health.last_session_id`, `account_health.trial_session_id` (1494): the session whose failure last wrote an
+  // account's health, and the one run testing it now (docs/routing-account-health-design.md §6.2). Addresses the
+  // owner surface links to, never fences.
+  'lastSessionId',
+  'trialSessionId',
   'consumedByPromotionId',
   'promotionRequestId',
   // `condition_sample.condition_id`, `condition_event.condition_id` (1030): the condition a sample or an event belongs
@@ -159,6 +164,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // the attempt to the session and its record. Not a fence — a job's own claim is fenced by
   // `claimGeneration` and `claimLeaseOwner`.
   'landingId',
+  // The pull request a landing or a session's Merge waits on or landed through (migration 1527).
+  'pullRequestId',
+  'mergePullRequestId',
   // The session a task's delivery identity was read from (migration 0453, contract §10.4): an
   // address a reader follows from the task to the work session. A history reference with no foreign
   // key, so it may 404 — never a fence: nothing echoes it back to be compared.

@@ -1,5 +1,33 @@
 import Foundation
 
+extension SessionRunState {
+    static func afterRelease(endReason: String?, lastTurnOutcome: SessionTurnOutcome?,
+                             workFinished: Bool?, isLanding: Bool = false) -> SessionRunState {
+        if workFinished ?? (endReason == "task_done" || (endReason == nil && isLanding)) { return .succeeded }
+        if endReason == nil && lastTurnOutcome == .failed { return .failed }
+        return .ended
+    }
+}
+
+extension Session {
+    /// The outcome the session's release can establish for the header, list and notifications.
+    var releasedRunState: SessionRunState? {
+        guard released == true else { return nil }
+        return .afterRelease(endReason: endReason, lastTurnOutcome: lastTurnOutcome,
+                             workFinished: workFinished, isLanding: isLanding)
+    }
+
+    var displayRunState: SessionRunState {
+        if let releasedRunState { return releasedRunState }
+        if released == false && endReason != nil && lastTurnOutcome == .interrupted {
+            return .interrupted
+        }
+        return effectiveRunState
+    }
+
+    var queueWord: String { waitingOn == .hold ? "On hold" : "Queued" }
+}
+
 /// The session console's header text — a 1:1 port of the web Agent console header (`AgentView.tsx`):
 /// the session's title over a "run state · lifecycle · when" subtitle
 /// ("Running · Open · 3m ago"). Kept in OrbitKit so
@@ -15,8 +43,7 @@ public enum SessionHeader {
         return "Session"
     }
 
-    /// The short execution-state word. Lifecycle location is deliberately not consulted: a succeeded
-    /// session remains "Succeeded" in Open, Completed and Trash alike. The DTO resolves old servers.
+    /// The short execution-state word, independent of where the session is filed.
     /// `watching` is the session as an observer: parked with a live watch that will resume it, it
     /// reads "Watching 7 targets" — not "Waiting for your reply", and not a background process.
     /// `machine`, where the caller knows it, is the runner the session runs on, by name: a session held
@@ -34,12 +61,12 @@ public enum SessionHeader {
         // reviewer (contract §5 N3): the card is there, but nobody is asking the owner yet. Web
         // parity: `statusLabel`'s `confirmationUnderReview` branch.
         if s.confirmationUnderReview != nil { return OwnerConfirmations.underReview }
-        switch s.effectiveRunState {
+        switch s.displayRunState {
         case .queued:
             return ClaudeRegion.heldWords(s, machine: machine)
                 ?? (RunnerUpdating.holds(s) ? RunnerUpdating.title(s)
                     : QueuedCapacity.holds(s) ? QueuedCapacity.title(s)
-                    : QueuedDiskLow.holds(s) ? QueuedDiskLow.title : "Queued")
+                    : QueuedDiskLow.holds(s) ? QueuedDiskLow.title : s.queueWord)
         case .running:
             return "Running"
         case .awaitingInput:
@@ -58,7 +85,7 @@ public enum SessionHeader {
             if (s.runningBgCount ?? 0) > 0 { return SessionLine.bgRunningLabel(s.runningBgCount ?? 0) }
             return "Waiting for your reply"
         case .succeeded:
-            return "Succeeded"
+            return s.releasedRunState == .succeeded ? "Finished" : "Succeeded"
         case .failed:
             // Not "Failed" while the server is still going to re-send it — see `retryPending`.
             if s.retryPending(now: now) { return "Retrying" }

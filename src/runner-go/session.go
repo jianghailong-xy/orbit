@@ -975,6 +975,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// run_event held the message. Keep the last one so finalize can carry it.
 	var lastErrMu sync.Mutex
 	lastErrorMessage := ""
+	// What the run's last FAILED turn failed with, as its adapter classified it, and its admission (§5.1):
+	// finalize carries both on a FAILED end. Under lastErrMu.
+	var lastTurnFailure *RunFailure
+	var lastTurnAdmission *bool
 	// Baseline for the main-checkout card below, taken before this session runs anything so
 	// pre-existing changes are never blamed on it. Nil unless the session is isolated.
 	mainCheckout := watchMainCheckout(job.WT)
@@ -1308,6 +1312,15 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		// Every owner-request secret's value out of its text and patches, before it is kept on disk or sent
 		// (secret_wire.go).
 		req = scrubTurnComplete(req, sessionID)
+		// A classification and an admission belong to a FAILED turn only (engine_failure.go); the last one is the
+		// run's, for finalize.
+		if req.Status != stFailed {
+			req.Failure, req.Admission = nil, nil
+		} else {
+			lastErrMu.Lock()
+			lastTurnFailure, lastTurnAdmission = req.Failure, req.Admission
+			lastErrMu.Unlock()
+		}
 		// Kept before anything else: the flush below sends no completion when it fails, and a runner that
 		// stops, or is killed, before the control plane answers leaves it to its next process.
 		completions.keep(req)
@@ -1853,6 +1866,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		finalizeSubtype = ""
 		lastErrMu.Lock()
 		lastErrorMessage = (*givenUp).Error()
+		// The run ends on the runner's reason, not the engine's: no turn's classification describes it.
+		lastTurnFailure, lastTurnAdmission = nil, nil
 		lastErrMu.Unlock()
 	}
 	// Stop and join runner-owned background work before the final event drain and
@@ -1949,6 +1964,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	if status == stFailed {
 		lastErrMu.Lock()
 		finalizeRequest.Error = lastErrorMessage
+		finalizeRequest.Failure, finalizeRequest.Admission = lastTurnFailure, lastTurnAdmission
 		lastErrMu.Unlock()
 		finalizeRequest.Subtype = finalizeSubtype
 	}
@@ -3058,6 +3074,8 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// content filtering) shows up here while the trailing `result` still says success,
 	// so we use it to fail the turn below. Reset once the turn's `result` is handled.
 	var lastAssistantText string
+	// What the turn put out before its result, for the admission of a failed one (claudeTurnOutput).
+	var turnOutput claudeTurnOutput
 	// Running context-window occupancy: the latest top-level assistant message's total
 	// tokens (input + cache + output). Carried into each turn_end event so the clients'
 	// context gauge updates live and, via event replay, on session reopen. Persists
@@ -3151,6 +3169,7 @@ scanLoop:
 			if len(pending) == 0 {
 				engineOwnTurn.Store(true)
 			}
+			turnOutput.observe(msg)
 			if txt := assistantText(msg); txt != "" {
 				lastAssistantText = txt
 			}
@@ -3257,6 +3276,14 @@ scanLoop:
 					isConnectionFailure(r.Result) || isConnectionFailure(lastAssistantText)) {
 				turnStatus = stFailed
 			}
+			// What a failed turn failed with, and whether the engine put anything out first (§5.2, §5.3).
+			var turnFailure engineFailure
+			var turnAdmitted *bool
+			if turnStatus == stFailed {
+				turnFailure = claudeTurnFailureOf(r.Result, lastAssistantText)
+				turnAdmitted = turnOutput.admission(r, firstNonEmpty(turnFailure.Said, strings.TrimSpace(r.Result), strings.TrimSpace(lastAssistantText)))
+			}
+			turnOutput = claudeTurnOutput{}
 			lastAssistantText = ""
 			// A failed turn's own card is what comes next, so nothing is suggested after it.
 			lastAnsweredTurnID = ""
@@ -3293,7 +3320,7 @@ scanLoop:
 					BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 					BranchMerged:   branchMergedInto(job.WT),
 					WorktreeBranch: currentBranch(job.WT),
-				}); err != nil {
+				}.withFailure(turnFailure, turnAdmitted)); err != nil {
 					logln("turn-complete failed for", job.SessionID+":", err)
 				}
 				inbox.clearInflight(turnID)

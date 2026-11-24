@@ -16,7 +16,7 @@ import { ProjectAcceptanceService } from '../projects/project-acceptance.service
 import { ProjectsService } from '../projects/projects.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
-import { planTaskRunRoute, taskRouteReads } from '../tasks/task-route-decision';
+import { planTaskRunRoute, routeOfPlan, taskRouteReads } from '../tasks/task-route-decision';
 import { TasksService } from '../tasks/tasks.service';
 import type { TaskRunsWith } from './start-anchor';
 
@@ -119,7 +119,7 @@ test('task runsWith and orbit status say what dispatch starts the task on', {
     await prisma.user.update({ where: { id: ownerId }, data: { preferences: { modelRouting: true, optimizeFor: 'cost' } } });
     try {
       const subject = await prisma.task.findUniqueOrThrow({ where: { id: taskId } });
-      const route = await planTaskRunRoute(taskRouteReads(db, ownerId), subject, { id: workspaceId, runnerId }, 'go');
+      const route = routeOfPlan(await planTaskRunRoute(taskRouteReads(db, ownerId), subject, { id: workspaceId, runnerId }, 'go'));
       assert.ok(route, 'routing is on, so a route is planned');
       return { engine: route.baseline.engine, provider: route.baseline.provider };
     } finally {

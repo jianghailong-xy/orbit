@@ -30450,6 +30450,56 @@ td > .routing-report-tier + .model-routing-flag {
 .project-integration-setting.project-changes-entry {
   display: block;
 }
+/* A blocked account's line: the provider's words, the next trial, and Check again (routing-account-health §8). */
+.re-health {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.re-health-text.needs-action {
+  color: var(--orange, #d46b08);
+}
+.tdp-account-hold,
+.tdp-relaxed-run {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+/* A held task's one quiet line under its title (routing-account-health §7.5): secondary text, truncated, the full
+   sentence on hover and as its accessible name. The title keeps its own width. */
+.task-title-cell.has-hold {
+  flex-wrap: wrap;
+  align-content: center;
+  row-gap: 0;
+}
+.task-title-cell.has-hold .task-title {
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+.task-hold-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  flex-basis: 100%;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--text-3);
+}
+.task-hold-line-text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.task-hold-line-action {
+  flex: none;
+  color: var(--brand);
+}
 
 /* ── A failed landing handed first to the task's own session (revision 42, §12.5–§12.7; owner ruling
    2026-11-22, docs/mocks/landing-fix-own-session web a–e) ─────────────────────────────────────── */
@@ -30637,3 +30687,20 @@ td > .routing-report-tier + .model-routing-flag {
 .project-task-integration-press {
   text-decoration: none;
 }
+
+/* The landing's pull request states (docs/mocks/protected-branch-landing 02). */
+.landing-pr { display: flex; flex-direction: column; gap: 6px; }
+.landing-pr-head { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; font-size: 13px; }
+.landing-pr[data-tone='red'] .landing-pr-title { color: var(--error-solid); }
+.landing-pr[data-tone='green'] .landing-pr-title { color: var(--text-primary); }
+.landing-pr[data-tone='amber'] .landing-pr-right { color: var(--warning-solid); background: var(--warning-bg); border: 1px solid var(--warning-border); border-radius: 999px; padding: 0 8px; font-size: 11px; font-weight: 500; }
+.landing-pr-right { color: var(--text-secondary); font-weight: 400; }
+.landing-pr-bar { display: flex; gap: 4px; }
+.landing-pr-bar span { flex: 1; height: 3px; border-radius: 2px; background: var(--fill-muted); }
+.landing-pr-bar span[data-seg='passed'] { background: var(--success-solid); }
+.landing-pr-bar span[data-seg='failed'] { background: var(--error-solid); }
+.landing-pr-detail { margin: 0; font-size: 12px; color: var(--text-secondary); }
+.landing-pr-actions { display: flex; gap: 12px; font-size: 12px; }
+.landing-pr-tip { display: flex; justify-content: space-between; gap: 8px; margin: 0; padding: 8px 10px; font-size: 12px; border-radius: 8px; background: var(--brand-tint); border: 1px solid var(--brand-border); }
+.landing-pr-tip button { border: 0; background: none; cursor: pointer; color: var(--text-secondary); }
+.landings-window-entry > .landing-pr { margin: 8px 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-subtle); }

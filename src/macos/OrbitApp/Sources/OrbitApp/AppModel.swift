@@ -423,6 +423,7 @@ final class AppModel {
     /// Entries are released in `applySessionSnapshot` the moment a snapshot without the row lands:
     /// from then on the row isn't in `lastSnapshot` either, so no later diff can announce it.
     private var filedSessions: Set<String> = []
+    private var finishedDepartures: Set<String> = []
     /// Sessions being moved to Trash, or completed, from this device. Delete and Complete take the
     /// row out of every loaded list on the tap (`hideTrashedSession`), and these stay out of every
     /// list written until the move has settled — a read that left before the server had the move would put the row back for a beat,
@@ -1568,7 +1569,11 @@ final class AppModel {
         // the row's absence as a run finishing (`SessionDelta.announcesFinish`). Without this, a
         // session completed in a browser announced itself as finished on every other client.
         case .sessionLeft:
-            if !SessionDelta.announcesFinish(endReason: ev.payload(ControlSessionEnded.self)?.endReason) {
+            let ended = ev.payload(ControlSessionEnded.self)
+            let finished = ended?.workFinished ?? SessionDelta.announcesFinish(endReason: ended?.endReason)
+            if ended?.released == true && finished {
+                finishedDepartures.insert(ev.sessionId)
+            } else if !finished {
                 filedSessions.insert(ev.sessionId)
             }
             // It joins Completed or Trash: a list of those on screen reads again.
@@ -1981,15 +1986,17 @@ final class AppModel {
         // the session whose console is on screen — its own stream already shows the change.
         if notify, let prev = lastSnapshot {
             post(SessionDelta.diff(previous: prev, current: list,
-                                   focusedSessionID: focusedConsoleSessionID, filed: filedSessions))
+                                   focusedSessionID: focusedConsoleSessionID, filed: filedSessions,
+                                   finishedDepartures: finishedDepartures))
         }
         // A filing has done its silencing once a snapshot without the row lands: `lastSnapshot` no
         // longer holds it either, so nothing later can read its absence as a finish. Releasing here
         // (rather than only where the mark was made) is what keeps the set from growing on filings
         // that arrive as events, which have no completion of their own to clean up after.
-        if !filedSessions.isEmpty {
+        if !filedSessions.isEmpty || !finishedDepartures.isEmpty {
             let present = Set(list.map(\.id))
             filedSessions.formIntersection(present)
+            finishedDepartures.formIntersection(present)
         }
         if !openListFromLaunchSnapshot { lastSnapshot = list }
         // Only cached cold-route records are reconciled; the Open list itself remains the
@@ -2354,6 +2361,13 @@ final class AppModel {
     /// The account read again, for the marks a just-applied card wrote.
     func reloadUser() async {
         if let me = try? await api?.me() { assignIfChanged(\.user, me) }
+    }
+
+    /// Where a held task's account row is, and its Check again: Machines & models (contract §3 Open account).
+    func openAccounts() {
+        settingsPresented = false
+        selectedSection = .runners
+        selectedRunnerID = nil
     }
 
     /// Settings → GitHub: the sheet's page on iOS, the Settings section on the Mac, where GitHub is a group of its form.
@@ -4020,7 +4034,7 @@ final class AppModel {
         let outcome = await SessionWorkspaceMove.run(
             endingFirst: endingFirst,
             end: { try await api.endSession(id) },
-            status: { try await api.session(id).effectiveRunStatus },
+            session: { try await api.session(id) },
             move: { try await api.moveSession(id, toWorkspace: target.workspaceId, folderID: folderID) },
             phase: { phase($0) })
         defer { Task { await reloadSessionLists() } }
@@ -4518,6 +4532,15 @@ final class AppModel {
             // Machines & models' Needs you section is where the card lives now (board
             // docs/mocks/waiting-on-you-removal/02 ④); the push's own id lights that card.
             openTerminalRequests(requestID)
+        case .openProviders:
+            // The key's or pool's row is on Providers: Settings' page on iOS, Machines & models on the Mac.
+            #if os(iOS)
+            nav.openSettings(at: .providers)
+            #else
+            settingsPresented = false
+            selectedSection = .runners
+            selectedRunnerID = nil
+            #endif
         case .openShare(let entryID):
             requestShareClaim(entryID: entryID)
         case let .openSchedule(scheduleID, sessionID):

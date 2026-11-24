@@ -35,7 +35,7 @@ public enum MenuBar {
     static func summary(_ g: SessionGroups, limit: Int = 8) -> MenuBarSummary {
         let items = (g.needsYou + g.running).prefix(limit).map(item)
         return MenuBarSummary(needsYou: g.needsYou.count,
-                              running: g.running.count,
+                              running: g.running.count + g.needsYou.filter { $0.phase == .running }.count,
                               queued: g.queued.count,
                               badge: badge(g.needsYou.count),
                               items: Array(items))

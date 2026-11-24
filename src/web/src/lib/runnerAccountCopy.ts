@@ -133,3 +133,39 @@ export const RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED = 'Both logins are as they wer
 /** What a former Default is called — the account a Set as default moved out of ~/.claude into an added
  *  folder — while the owner has not named it and no email is known for it. */
 export const RUNNER_ACCOUNT_FORMER_DEFAULT = 'Former default';
+
+/** The question in front of Default's Sign out…, which deletes its login from the machine. */
+export function runnerDefaultSignOutTitle(name: string): string {
+  return `Sign out of ${name}?`;
+}
+
+/** What Sign out of Default does to the machine: the login goes, the history and settings stay. */
+export function runnerDefaultSignOutDetail(runner: string): string {
+  return `Its login is deleted from ${runner}. Its history and settings stay.`;
+}
+
+/** Added for Claude Code and Codex, whose CLI shares Default's login; `command` is `claude` or `codex`. */
+export function runnerDefaultSignOutTerminal(runner: string, command: string): string {
+  return `${command} in a terminal on ${runner} is signed out too.`;
+}
+
+export const RUNNER_DEFAULT_SIGN_OUT_CONFIRM = 'Sign out';
+
+/** The menu item, and the row's state while the runner takes the login off the machine. */
+export const RUNNER_DEFAULT_SIGN_OUT = 'Sign out…';
+export const RUNNER_DEFAULT_SIGNING_OUT = 'Signing out…';
+
+/** The second question, after the runner refused because sessions are running on Default. */
+export function runnerDefaultSignOutRunningOne(name: string): string {
+  return `1 session is running on ${name}. Sign out anyway?`;
+}
+
+export function runnerDefaultSignOutRunningMany(count: number, name: string): string {
+  return `${count} sessions are running on ${name}. Sign out anyway?`;
+}
+
+export const RUNNER_DEFAULT_SIGN_OUT_RUNNING_DETAIL = 'They will stop working until you sign in again.';
+
+export function runnerDefaultSignOutFailed(name: string): string {
+  return `Couldn’t sign out of ${name}`;
+}

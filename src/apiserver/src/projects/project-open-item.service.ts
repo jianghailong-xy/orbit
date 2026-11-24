@@ -36,6 +36,7 @@ import {
   type ProjectRulingView,
   type RequestProjectDoneBody,
   type OwnerCardTranslation,
+  type ProjectAccountWait,
   type ProjectSignInWait,
   type TaskSignInHold,
   RunEventType,
@@ -197,6 +198,7 @@ import {
   supersedeStaleDoneRequest,
 } from './project-done-request';
 import { sessionHeldSql } from '../common/session-release';
+import { IN_FLIGHT_JOB_STATES, IN_FLIGHT_JOB_STATES_SQL, isInFlightJobState } from './in-flight-job-states';
 
 /**
  * Who is asking for an item to be put in front of the project's coordinator conversation.
@@ -589,6 +591,31 @@ export interface ProjectOpenItems {
   mainBranch: string | null;
   /** The sign-ins the project's held tasks wait for, one per runner and engine (`projectSignInWaits`). */
   signIns: ProjectSignInWait[];
+  /** The tasks held because no account can run them, as one row (`projectAccountWait`). */
+  accountWait: ProjectAccountWait<Date> | null;
+}
+
+/** The hold of one task, as the project row needs it (TasksService.accountHolds). */
+import type { ModelRoutingHold } from '../tasks/model-routing';
+export interface AccountHoldRead {
+  reason: string;
+  until: string;
+}
+
+/**
+ * The project's account holds as its one Needs you row: "N tasks wait for an account" over the sentence of the hold that
+ * lifts first. Null when no task is held.
+ */
+export function projectAccountWait(holds: ReadonlyMap<string, AccountHoldRead>): ProjectAccountWait<Date> | null {
+  if (holds.size === 0) return null;
+  const first = [...holds.values()].sort((a, b) => a.until.localeCompare(b.until))[0];
+  const n = holds.size;
+  return {
+    taskIds: [...holds.keys()],
+    title: n === 1 ? '1 task waits for an account' : `${n} tasks wait for an account`,
+    detailLine: first.reason,
+    until: new Date(first.until),
+  };
 }
 
 /** The one read of TasksService this service makes: the sweep's signed-out holds (TasksService.signInHolds). */
@@ -751,6 +778,28 @@ export class ProjectOpenItemService {
       }
     }
     return reader ? reader.signInHolds(ownerId, scope) : new Map();
+  }
+
+  /** `accountHold` of each of these tasks (TasksService.accountHoldsFor), for a project's task rows; none without a reader. */
+  async accountHoldsFor(ownerId: string, taskIds: readonly string[]): Promise<Map<string, ModelRoutingHold>> {
+    try {
+      const { TasksService } = await import('../tasks/tasks.service.js');
+      const tasks = this.moduleRef?.get(TasksService, { strict: false });
+      return tasks ? await tasks.accountHoldsFor(ownerId, taskIds) : new Map();
+    } catch {
+      return new Map();
+    }
+  }
+
+  /** The project's tasks held for an account (TasksService.accountHolds), one row; none when no reader is reachable. */
+  private async accountWait(ownerId: string, projectId: string): Promise<ProjectAccountWait<Date> | null> {
+    try {
+      const { TasksService } = await import('../tasks/tasks.service.js');
+      const tasks = this.moduleRef?.get(TasksService, { strict: false });
+      return tasks ? projectAccountWait(await tasks.accountHolds(ownerId, projectId)) : null;
+    } catch {
+      return null;
+    }
   }
 
   /** The project's sign-in waits, one per runner and engine. */
@@ -1147,7 +1196,7 @@ export class ProjectOpenItemService {
         where: { id: item.handlingJobId },
         select: { state: true },
       });
-      if (handling && (handling.state === 'QUEUED' || handling.state === 'RUNNING')) return;
+      if (handling && isInFlightJobState(handling.state)) return;
     }
     // THE SWITCH DECIDES AUTOMATIC HAND-OVERS, AND ONLY THOSE. `coordinatorEnabled` is the owner
     // saying the coordinator may not act on its own, and an item handed over by the platform is
@@ -2880,7 +2929,7 @@ export class ProjectOpenItemService {
       // J3 allows at most one in-flight LAND_TASK per task; the newest is the one that would be
       // stopped, and a task with none has nothing for this door.
       const landing = await tx.projectIntegrationJob.findFirst({
-        where: { projectId, taskId, kind: 'LAND_TASK', state: { in: ['QUEUED', 'RUNNING'] } },
+        where: { projectId, taskId, kind: 'LAND_TASK', state: { in: [...IN_FLIGHT_JOB_STATES] } },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         select: {
           id: true, state: true, phase: true, progressProtocol: true,
@@ -3061,7 +3110,7 @@ export class ProjectOpenItemService {
         select: { id: true, generation: true, state: true, checks: true, phase: true },
       });
       if (ownerRequester && newestLanding
-        && (newestLanding.state === 'QUEUED' || newestLanding.state === 'RUNNING')) {
+        && isInFlightJobState(newestLanding.state)) {
         return this.skipInFlightLandingCheck(tx, {
           ownerId, projectId, taskId, taskStatus: locked.status, jobId: newestLanding.id, reason,
         });
@@ -3969,7 +4018,7 @@ export class ProjectOpenItemService {
     const handlingJobIds = unique(rows.map((row) => row.handlingJobId));
     const inFlight = new Map((handlingJobIds.length > 0
       ? await this.prisma.projectIntegrationJob.findMany({
-          where: { id: { in: handlingJobIds }, state: { in: ['QUEUED', 'RUNNING'] } },
+          where: { id: { in: handlingJobIds }, state: { in: [...IN_FLIGHT_JOB_STATES] } },
           select: { id: true, kind: true, generation: true, state: true },
         })
       : []).map((job) => [job.id, job]));
@@ -4244,6 +4293,7 @@ export class ProjectOpenItemService {
       closedQuestions: await this.closedQuestions(projectId),
       mainBranch,
       signIns: await this.signInWaits(ownerId, projectId),
+      accountWait: await this.accountWait(ownerId, projectId),
     };
   }
 
@@ -4362,7 +4412,7 @@ export class ProjectOpenItemService {
            SELECT 1
              FROM "project_integration_job" handling
             WHERE handling."id" = item."handling_job_id"
-              AND handling."state" IN ('QUEUED', 'RUNNING')
+              AND handling."state" IN ${IN_FLIGHT_JOB_STATES_SQL}
          )`);
     if ((owed?.count ?? 0) === 0) throw new OpenItemNoLongerOwed();
     // One row per item per conversation. A row that was taken back unrun is re-armed rather than

@@ -66,6 +66,12 @@ public struct GuestSessionSummary: Codable, Equatable, Sendable, Identifiable {
     public let title: String
     public let ownerName: String
     public let status: String?
+    @LenientSessionField public private(set) var phase: SessionPhase?
+    @LenientSessionField public private(set) var released: Bool?
+    @LenientSessionField public private(set) var workFinished: Bool?
+    @LenientSessionField public private(set) var lastTurnOutcome: SessionTurnOutcome?
+    @LenientSessionField public private(set) var waitingOn: SessionWaitingOn?
+    @LenientSessionField public private(set) var endReason: String?
     public let sessionState: String?
     public let lifecycleState: String?
     public let addedAt: String
@@ -86,7 +92,9 @@ public struct GuestSessionSummary: Codable, Equatable, Sendable, Identifiable {
     /// How the session stands, read from the row's own fields the way the guest view reads its head.
     public var state: GuestSessionState {
         GuestSessionState(runState: nil, runStatus: status, sessionState: sessionState,
-                          lifecycleState: lifecycleState, waitingOnOwner: false)
+                          lifecycleState: lifecycleState, waitingOnOwner: false,
+                          phase: phase, released: released, lastTurnOutcome: lastTurnOutcome,
+                          waitingOn: waitingOn, endReason: endReason, workFinished: workFinished)
     }
 }
 
@@ -103,20 +111,35 @@ public struct GuestSessionState: Equatable, Sendable {
     public let sessionState: String?
     public let lifecycleState: String?
     public let waitingOnOwner: Bool
+    public let phase: SessionPhase?
+    public let released: Bool?
+    public let lastTurnOutcome: SessionTurnOutcome?
+    public let waitingOn: SessionWaitingOn?
+    public let endReason: String?
+    public let workFinished: Bool?
 
     public init(runState: SessionRunState?, runStatus: String?, sessionState: String?,
-                lifecycleState: String?, waitingOnOwner: Bool) {
+                lifecycleState: String?, waitingOnOwner: Bool, phase: SessionPhase? = nil,
+                released: Bool? = nil, lastTurnOutcome: SessionTurnOutcome? = nil,
+                waitingOn: SessionWaitingOn? = nil, endReason: String? = nil, workFinished: Bool? = nil) {
         self.runState = runState
         self.runStatus = runStatus
         self.sessionState = sessionState
         self.lifecycleState = lifecycleState
         self.waitingOnOwner = waitingOnOwner
+        self.phase = phase
+        self.released = released
+        self.lastTurnOutcome = lastTurnOutcome
+        self.waitingOn = waitingOn
+        self.endReason = endReason
+        self.workFinished = workFinished
     }
 }
 
 private enum GuestHeadKeys: String, CodingKey {
     case title, ownerName, status, runStatus, sessionState, runState, lifecycleState, filingState,
-         waitingOnOwner, events, hasMore, after
+         waitingOnOwner, events, hasMore, after, phase, released, lastTurnOutcome, waitingOn,
+         endReason, workFinished
 }
 
 private extension KeyedDecodingContainer where K == GuestHeadKeys {
@@ -129,7 +152,13 @@ private extension KeyedDecodingContainer where K == GuestHeadKeys {
             sessionState: (try? decodeIfPresent(String.self, forKey: .sessionState)) ?? nil,
             lifecycleState: ((try? decodeIfPresent(String.self, forKey: .lifecycleState)) ?? nil)
                 ?? ((try? decodeIfPresent(String.self, forKey: .filingState)) ?? nil),
-            waitingOnOwner: ((try? decodeIfPresent(Bool.self, forKey: .waitingOnOwner)) ?? nil) ?? false)
+            waitingOnOwner: (try? decodeIfPresent(Bool.self, forKey: .waitingOnOwner)) ?? false,
+            phase: try? decodeIfPresent(SessionPhase.self, forKey: .phase),
+            released: try? decodeIfPresent(Bool.self, forKey: .released),
+            lastTurnOutcome: try? decodeIfPresent(SessionTurnOutcome.self, forKey: .lastTurnOutcome),
+            waitingOn: try? decodeIfPresent(SessionWaitingOn.self, forKey: .waitingOn),
+            endReason: try? decodeIfPresent(String.self, forKey: .endReason),
+            workFinished: try? decodeIfPresent(Bool.self, forKey: .workFinished))
     }
 }
 

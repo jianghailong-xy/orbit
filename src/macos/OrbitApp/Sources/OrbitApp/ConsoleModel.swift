@@ -524,6 +524,7 @@ final class ConsoleModel {
     // and heartbeat freshness. These snapshots let the composer choose /turns vs /resume — or
     // block both — without relying on status alone. nil capabilities preserve old-server behavior.
     private var serverStatus: RunStatus?
+    private var serverReleased: Bool?
     private var serverCapabilities: SessionCapabilities?
 
     // composer
@@ -2348,7 +2349,8 @@ final class ConsoleModel {
     /// available while a run is ending.
     var sendBlockedMessage: String? {
         guard !isDraft, replyContext == nil else { return nil }
-        return ComposerLogic.blockedMessage(status: sessionStatus, capabilities: sendCapabilities)
+        return ComposerLogic.blockedMessage(status: sessionStatus, released: serverReleased,
+                                            capabilities: sendCapabilities)
     }
 
     /// Heartbeat-derived denials can change without the transcript changing. The composer exposes
@@ -2679,6 +2681,7 @@ final class ConsoleModel {
             madeWorkspaceReadAt = Date()
         }
         serverStatus = session.effectiveRunStatus
+        serverReleased = session.released
         sessionError = session.error
         if CursorRuntime.conversationStarted(session) { conversationStarted = true }
         sessionSourceState = session.sourceState
@@ -3334,7 +3337,7 @@ final class ConsoleModel {
         // Resume eligibility depends on context presence and a fresh runner heartbeat. Re-read it
         // immediately before any terminal resume attempt (and when retrying a cached offline denial),
         // then let the server capability — not the old status heuristic — authorize the endpoint.
-        let terminalAttempt = ComposerLogic.shouldResume(status: sessionStatus)
+        let terminalAttempt = ComposerLogic.shouldResume(status: sessionStatus, released: serverReleased)
         if terminalAttempt || serverCapabilities?.resumeBlockedReason == .runnerOffline {
             let refreshed = await refreshServerStatus()
             // Once a server has supplied capabilities, do not authorize a heartbeat-sensitive
@@ -3345,6 +3348,7 @@ final class ConsoleModel {
             }
         }
         if let message = ComposerLogic.blockedMessage(status: sessionStatus,
+                                                      released: serverReleased,
                                                       capabilities: sendCapabilities) {
             statusMessage = message
             return
@@ -3408,7 +3412,8 @@ final class ConsoleModel {
         handedOverSessionID = nil
         // Decide the endpoint once, before any retry: a replay has to be the same request, and the
         // status it reads can move underneath a retry that's waiting out a gateway blip.
-        let resuming = ComposerLogic.shouldResume(status: sessionStatus, capabilities: sendCapabilities)
+        let resuming = ComposerLogic.shouldResume(status: sessionStatus, released: serverReleased,
+                                                 capabilities: sendCapabilities)
         do {
             let accepted = try await postTurn(resuming: resuming, clientTurnId: clientTurnId,
                                               text: text, shell: shell, attachmentIds: attachmentIds,
@@ -3426,6 +3431,7 @@ final class ConsoleModel {
                 // snapshot so the stream drives status again and a quick follow-up doesn't
                 // re-resume a session that hasn't re-claimed yet.
                 serverStatus = nil
+                serverReleased = nil
                 serverCapabilities = nil
             }
             // The pick has done what it said it would; the sentence describing it is spent.

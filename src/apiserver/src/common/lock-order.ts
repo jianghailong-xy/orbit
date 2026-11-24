@@ -170,7 +170,7 @@ export const LOCK_ORDER = [
   },
   {
     rank: 60,
-    relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_wakeup_loop, session_scheduled_wakeup, session_request, session_message_charge, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation, project_open_item, project_open_item_delivery, project_integration_job, project_integration_job_log, project_integration_job_event, project_landing, project_promotion, project_promotion_request, project_task_status_count, project_rollup_candidate, project_fuse_episode, project_fuse_held_action',
+    relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_wakeup_loop, session_scheduled_wakeup, session_request, session_message_charge, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation, project_open_item, project_open_item_delivery, project_integration_job, project_integration_job_log, project_integration_job_event, project_landing, project_promotion, project_promotion_request, project_task_status_count, project_rollup_candidate, project_fuse_episode, project_fuse_held_action, github_pull_request',
     modes: 'INSERT/UPDATE/DELETE · on `project_integration_job` also FOR UPDATE SKIP LOCKED (the claim, one job), FOR NO KEY UPDATE (the progress, release and output gates) and FOR SHARE SKIP LOCKED (the X-E5 insert) · on `project_promotion` also FOR KEY SHARE SKIP LOCKED (the X-E5 tick\'s hold)',
     why:
       'Child rows whose FK parents are already held by this point, so they add no wait edge of their '
@@ -274,7 +274,7 @@ export const LOCK_ORDER = [
       + 'withdrawal, turnComplete, finalize, transitionEnd) or FOR NO KEY UPDATE through the status UPDATE it '
       + 'has just made (ReaperService.forceFinalize). Rank 30, then 60, so it meets the worker\'s drop and a '
       + 'stop on the loop row, in their order. The one-shot wakeup it re-arms for an armed retry is an INSERT '
-      + 'whose foreign key takes the session FOR KEY SHARE, which the held lock covers.',
+      + 'whose foreign key takes the session FOR KEY SHARE, which the held lock covers. `github_pull_request` (1527) is written beside the job row it belongs to, in the transaction that holds it: J-T14\'s runner result, the pull request door\'s J-T15, and a session\'s Merge result, which holds its session (30) first.',
   },
   {
     rank: 70,
