@@ -155,8 +155,9 @@ struct WorkspaceLandingSection: View {
                            url: pending.reviewUrl, identifier: "landing-permissions-pending")
                 }
                 if let refusal = WorkspaceLandingCopy.refusal(landing) {
-                    notice(WorkspaceLandingCopy.refused + " " + WorkspaceLandingCopy.refusalText(
+                    notice(WorkspaceLandingCopy.refusalText(
                         branch: refusal.branch, repo: WorkspaceLandingCopy.repoSlug(agent.repoUrl), message: refusal.message),
+                           title: WorkspaceLandingCopy.refused,
                            linkTitle: WorkspaceLandingCopy.connectAgain, url: nil, identifier: "landing-refused")
                 }
                 if let error { Text(error).font(.orbitMeta).foregroundStyle(.red) }
@@ -194,12 +195,20 @@ struct WorkspaceLandingSection: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
-    private func notice(_ text: String, linkTitle: String, url: String?, identifier: String) -> some View {
+    /// The board's amber notice box, as web (`.landing-setting-notice`) and Android draw it: a warning tint, a border
+    /// and the warning ink for the title, the sentence and the link.
+    private func notice(_ text: String, title: String? = nil, linkTitle: String, url: String?, identifier: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
+            if let title { Text(title).font(.orbitLabel.weight(.bold)) }
             Text(text).font(.orbitLabel).fixedSize(horizontal: false, vertical: true)
             Button(linkTitle) { if let url { if let u = URL(string: url) { openURL(u) } } else { connect() } }
-                .font(.orbitLabel.weight(.semibold)).buttonStyle(.plain).foregroundStyle(Color.accentColor)
+                .font(.orbitLabel.weight(.semibold)).buttonStyle(.plain).underline()
         }
+        .foregroundStyle(ProjectPalette.warningInk)
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.orange.opacity(0.4), lineWidth: 1))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(identifier)
     }
