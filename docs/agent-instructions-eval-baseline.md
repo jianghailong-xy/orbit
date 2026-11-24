@@ -329,6 +329,10 @@ Always-on bytes (`TestAgentPrimerBudgets`, `TestClaudeCodeAlwaysOnBytesPerShape`
 bytes, and the longest engine instructions (a task run with Watch on) from 7,711 to 7,185. The longest Claude Code
 shape (`task-watch-toplevel-workflows`), appended prompt plus initialize, went from 8,315 to 7,789 bytes.
 
+The wiki citation (`[title](orbit-wiki:<id>)`) left the receipts paragraph for the wiki line, which only sessions
+with the wiki on receive (`137cef95c7`). So `I7-wiki-path-search`, the case that guards that line, was played on that
+commit, 10 runs each: Claude Code 9/10 (step 0: 1/10, step 3: 6/10) and Codex 10/10 (step 0: 10/10).
+
 Reports: [`agent-eval/instructions-step4/`](agent-eval/instructions-step4/). `step4-phase1.json` and
 `step4-phase2.json` merge the per-engine reports beside them. The gate of each reads INCOMPLETE because only these six
 scenarios were played.
