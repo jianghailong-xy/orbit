@@ -230,7 +230,7 @@ func runShellTurn(ctx context.Context, execDir, command string, emit emitFn, tur
 	var combined shellOutputBuffer
 	cmd.Stdout = &combined
 	cmd.Stderr = &combined
-	checkOOM := watchMemoryTool(sessionID)
+	checkOOM := watchMemoryTool(cctx, sessionID)
 	err := cmd.Start()
 	if err == nil {
 		trackMemoryRoots(sessionID, true, cmd.Process.Pid)

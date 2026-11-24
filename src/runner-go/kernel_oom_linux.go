@@ -3,13 +3,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"syscall"
 
 	"golang.org/x/sys/unix"
 )
@@ -27,13 +30,17 @@ func cgroupOOMKills(dir string) (uint64, bool) {
 
 // Arm the check before starting a runner-owned tool. Check the real wait
 // status while the PID still belongs to that tool, before cmd.Wait reaps it.
-func watchMemoryTool(session string) func(int) {
+// A tool ended through ctx was killed by the runner (a budget, bg_kill, a
+// stop), not by the kernel, even if another tool's OOM moved the counter.
+func watchMemoryTool(ctx context.Context, session string) func(int) {
 	w := activeMemoryWatchdog.Load()
 	if w != nil && session != "" {
 		if before, ok := w.readOOMKills(); ok {
 			return func(pid int) {
 				awaitChildExit(pid)
-				w.reportKernelOOM(session, pid, os.Getpid(), before)
+				if ctx.Err() == nil {
+					w.reportKernelOOM(session, pid, os.Getpid(), before)
+				}
 			}
 		}
 	}
@@ -95,12 +102,14 @@ func memoryToolClaudeEnv(env []string) []string {
 	return envWithValue(env, "CLAUDE_CODE_SHELL", path)
 }
 
-func runMemoryToolShell(args []string) int {
+func runMemoryToolShell(args []string) int { return runMemoryToolShellIn(cgroupRoot, args) }
+
+func runMemoryToolShellIn(cgroup string, args []string) int {
 	if len(args) == 0 || !filepath.IsAbs(args[0]) {
 		return 126
 	}
 	socket, token := os.Getenv(envBgSocket), os.Getenv(envBgToken)
-	before, ok := cgroupOOMKills(cgroupRoot)
+	before, ok := cgroupOOMKills(cgroup)
 	if !ok || socket == "" || token == "" {
 		if err := unix.Exec(args[0], args, os.Environ()); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -108,6 +117,12 @@ func runMemoryToolShell(args []string) int {
 		return 126
 	}
 	_ = os.WriteFile("/proc/self/comm", []byte(memoryToolShellComm), 0)
+	// Claude signals the shell's whole process group, so the shell gets each
+	// signal itself. Outlive it instead of killing it through the death signal.
+	// Unlike signal.Ignore, Notify does not pass to the shell across exec.
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, unix.SIGHUP, unix.SIGINT, unix.SIGQUIT, unix.SIGTERM)
+	defer signal.Stop(signals)
 	// Linux binds the death signal to the thread that starts the child.
 	// Keep that thread alive until Wait, and reap if Claude stops the launcher.
 	runtime.LockOSThread()
@@ -128,10 +143,9 @@ func runMemoryToolShell(args []string) int {
 		})
 	}
 	_ = cmd.Wait()
-	if status, ok := cmd.ProcessState.Sys().(unix.WaitStatus); ok && status.Signaled() {
-		// Preserve a signal exit for Claude and use the shell convention if
-		// the launcher itself handles this signal.
-		_ = unix.Kill(os.Getpid(), status.Signal())
+	if status, ok := cmd.ProcessState.Sys().(syscall.WaitStatus); ok && status.Signaled() {
+		// The shell's own convention. Raising the signal here instead would
+		// make Go print a goroutine dump for SIGABRT or SIGSEGV.
 		return 128 + int(status.Signal())
 	}
 	return cmd.ProcessState.ExitCode()
