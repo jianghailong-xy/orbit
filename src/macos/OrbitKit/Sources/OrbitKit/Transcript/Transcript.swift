@@ -543,6 +543,8 @@ public struct ToolCard: Equatable, Sendable, Codable {
     /// `AssistantBubble.ts` is kept: a receipt arrives from a read rather than from the stream and
     /// is placed by comparing clocks.
     public var ts: String?
+    /// The runner's clock on the `tool_result`: with `ts`, how long a Documents transfer took (`DocumentsTransfer`).
+    public var resultTs: String?
 
     public init(id: String, name: String, input: JSONValue, result: String?,
                 resultImages: [Data] = [], resultHasImage: Bool = false, status: ToolStatus,
@@ -566,7 +568,8 @@ public struct ToolCard: Equatable, Sendable, Codable {
     // Tolerant decode so transcript snapshots written before `resultImages` existed still rehydrate
     // (the key just defaults to empty) instead of discarding the whole cached session.
     enum CodingKeys: String, CodingKey {
-        case id, name, input, result, resultImages, resultHasImage, status, inputSeq, inputTruncated, resultSeq, resultTruncated, ts
+        case id, name, input, result, resultImages, resultHasImage, status, inputSeq, inputTruncated, resultSeq, resultTruncated, ts,
+             resultTs
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -584,6 +587,7 @@ public struct ToolCard: Equatable, Sendable, Codable {
         resultSeq = try? c.decodeIfPresent(Int.self, forKey: .resultSeq)
         resultTruncated = (try? c.decodeIfPresent(Bool.self, forKey: .resultTruncated)) ?? false
         ts = try? c.decodeIfPresent(String.self, forKey: .ts)
+        resultTs = try? c.decodeIfPresent(String.self, forKey: .resultTs)
     }
 }
 

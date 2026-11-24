@@ -195,6 +195,36 @@ export async function readPendingAddressees(
   projectId: string,
   readAt: Date = new Date(),
 ): Promise<PendingAddresseeRead | null> {
+  return (await readPendingWithEvidence(tx, ownerId, projectId, readAt))?.read ?? null;
+}
+
+/** One unanswered latest revision, read as an EVIDENCE item whether or not it is its task's own item. */
+export interface PendingEvidence {
+  item: PendingItem;
+  /** The decision door's reason it would refuse every answer (`criterionStandingRefusal`), or null when decidable. */
+  undecidableReason: string | null;
+}
+
+export interface PendingReadWithEvidence {
+  read: PendingAddresseeRead;
+  /**
+   * Every unanswered latest revision of the project's unfinished tasks, as an EVIDENCE item of its
+   * own. A task's one pending item is its exception item when it has one, and that hides the
+   * revision: on 2026-11-12 M2 (34wRI2JqCvMMQ4hruFvch) had an open MAIN_SYNC item its coordinator
+   * had been handed, so its undecidable revision 3 never read as an orphan and nobody was told for
+   * 33 hours. The orphan sweep reads these too, so a revision nobody can decide or nobody was handed
+   * is reported whatever else the task waits on.
+   */
+  evidence: PendingEvidence[];
+}
+
+/** `readPendingAddressees`, with every unanswered revision beside the per-task items. */
+export async function readPendingWithEvidence(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  projectId: string,
+  readAt: Date = new Date(),
+): Promise<PendingReadWithEvidence | null> {
   const own = await tx.project.findFirst({ where: { id: projectId, ownerId }, select: { id: true } });
   if (!own) return null;
   const population = await tx.task.findMany({
@@ -577,7 +607,7 @@ export async function readPendingAddressees(
     };
   };
 
-  return {
+  const read: PendingAddresseeRead = {
     projectId,
     readAt,
     items: population.flatMap((task) => {
@@ -585,6 +615,14 @@ export async function readPendingAddressees(
       return item ? [item] : [];
     }),
   };
+  const evidence = population.flatMap((task): PendingEvidence[] => {
+    const own = evidenceItem(task);
+    if (!own) return [];
+    const item: PendingItem = { taskId: task.id, title: task.title, status: task.status, waitsOnTaskId: null, ...own, orphan: false };
+    item.orphan = isOrphan(item, readAt);
+    return [{ item, undecidableReason: standing.get(task.id) ?? null }];
+  });
+  return { read, evidence };
 }
 
 /** No addressee, or one never told, once the state it is in has had `ORPHAN_SETTLE_MS` to settle. */

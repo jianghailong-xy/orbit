@@ -73,12 +73,12 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | Caller | Routes |
 | --- | --- |
 | `public` | 41 |
-| `user` | 566 |
+| `user` | 567 |
 | `admin` | 31 |
-| `runner` | 252 |
+| `runner` | 253 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **894** |
+| **Total** | **896** |
 
 ## Public routes
 
@@ -283,6 +283,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/owner-requests/:id/create-wiki` | path `id` | `OwnerRequestsController.createWiki` |
 | `POST` | `/api/owner-requests/:id/decline` | body `DeclineOwnerRequestDto`; path `id` | `OwnerRequestsController.decline` |
 | `POST` | `/api/owner-requests/:id/done` | body `CompleteOwnerRequestDto`; path `id` | `OwnerRequestsController.complete` |
+| `POST` | `/api/owner-requests/:id/reopen-project` | path `id` | `OwnerRequestsController.reopenProject` |
 | `POST` | `/api/owner-requests/:id/secret` | body `SubmitOwnerSecretDto`; path `id` | `OwnerRequestsController.submitSecret` |
 | `POST` | `/api/owner-requests/:id/secret/cancel` | path `id` | `OwnerRequestsController.cancelSecret` |
 | `POST` | `/api/owner-requests/:id/secret/revoke` | path `id` | `OwnerRequestsController.revokeSecret` |
@@ -834,6 +835,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/runner/projects/:id/owner-questions` | body `AskOwnerDto`; path `id` | `RunnerProjectsController.askOwner` |
 | `POST` | `/api/runner/projects/:id/promotions/:promotionId/integration/retry` | body `RetryIntegrationDto`; path `id`, `promotionId` | `RunnerProjectsController.retryPromotionCheck` |
 | `POST` | `/api/runner/projects/:id/promotions/request` | body `RequestPromotionDto`; path `id` | `RunnerProjectsController.requestPromotion` |
+| `POST` | `/api/runner/projects/:id/reopen-requests` | body `RequestProjectReopenDto`; path `id` | `RunnerProjectsController.requestReopen` |
 | `POST` | `/api/runner/projects/:id/rulings` | body `RecordProjectRulingDto`; path `id` | `RunnerProjectsController.recordRuling` |
 | `POST` | `/api/runner/projects/:id/start-requests` | body `RequestProjectStartDto`; path `id` | `RunnerProjectsController.requestStart` |
 | `POST` | `/api/runner/projects/:id/tasks/:taskId/integration/retry` | body `RetryIntegrationDto`; path `id`, `taskId` | `RunnerProjectsController.retryIntegration` |

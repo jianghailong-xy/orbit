@@ -498,6 +498,11 @@ final class AppModel {
     /// first agent in the list. Read in `loadAgentsThenLand`, written by `selectedAgentID`'s didSet.
     private static let lastAgentKey = "orbit.lastAgent"
 
+#if DEBUG
+    /// Test-only: a screenshot gallery's Documents model.
+    func seedDocumentsForTesting(_ model: DocumentsModel) { documents = model }
+#endif
+
     init() {
         #if canImport(Security)
         tokenStore = KeychainTokenStore()
@@ -1188,6 +1193,16 @@ final class AppModel {
 
     /// One schedule's detail panel, over the Scheduled page, from anywhere: a change line's Open, a scheduled
     /// task's card, a push that names the schedule.
+    #if os(macOS)
+    /// A file an agent put in Documents, opened where it lives with it selected (a transfer card's "Show in
+    /// Documents", `DocumentsTransferCardView`).
+    func revealDocument(_ entryID: String) {
+        guard let documents else { return }
+        selectedSection = .documents
+        Task { await documents.reveal(entryID: entryID) }
+    }
+    #endif
+
     func openSchedule(_ id: String) {
         settingsPresented = false
         selectedSection = .scheduled
