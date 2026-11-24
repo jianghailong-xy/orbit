@@ -297,6 +297,42 @@ link. That is a gap in the harness, not something the instructions decide. The s
 a call deadline (Cursor, DeepSeek Harness). Until the eval plays that wake, it cannot measure what moving Kimi's
 instructions to the first prompt would cost.
 
+## Step 4: recovery advice in receipts, shorter cards, receipts and progress paragraphs
+
+Step 4 has two commits. Phase 1 (`d0fea7b359`) gives each receipt a recovery note and a ready-made link. The notes cover
+a declined card, a chat, a card still waiting, an owner-only question, `ORCHESTRATION_OFF`, `PROGRESS_REVISION_CONFLICT`,
+`SETTING_OWNER_ONLY` (with the row's link) and `SETTINGS_CHANGE_DECLINED`. The link (`orbit-task:<id>` and the
+session, project and list forms) goes on every receipt for one of those objects. Phase 2 (`2849fc9b1a`, primer
+1.5.0) shortens the paragraphs whose advice those notes now carry: cards from 511 to 352 bytes, receipts from 635 to
+462, progress from 403 to 205. The cards paragraph keeps one sentence saying that a refusal is final on every surface.
+
+Both phases were played on 2026-11-24, with Claude Code 2.1.331 (`claude-sonnet-5-5`) and Codex 0.172.0 as at step
+0, 10 runs of each cell, each from its commit's precompiled test binary.
+
+| Scenario | Step 0 Claude Code | Phase 1 Claude Code | Phase 2 Claude Code | Step 0 Codex | Phase 1 Codex | Phase 2 Codex |
+| --- | --- | --- | --- | --- | --- | --- |
+| `X2-approval-declined` | 5/5 | 10/10 | 10/10 | 5/5 | 10/10 | 10/10 |
+| `X3-approval-chat` | 5/5 | 10/10 | 10/10 | 5/5 | 10/10 | 10/10 |
+| `X4-lost-answer-retry` | 5/5 | 10/10 | 10/10 | 5/5 | 10/10 | 10/10 |
+| `X5-plan-mode-write` | 5/5 | 10/10 | 10/10 | 5/5 | 10/10 | 10/10 |
+| `I6-progress-report` | 1/10 (reference 1/40) | 0/10 | 1/10 | 10/10 | 10/10 | 10/10 |
+| `I8-settings-propose` | 10/10 | 10/10 | 10/10 | 10/10 | 10/10 | 10/10 |
+
+No run had a harness ERROR. `scripts/agent-eval.sh compare` finds no regression against `baseline.json` for either phase.
+- **I6 on Claude Code** stays at its floor (the 1/40 reference above). In every failed run the agent never called
+  `task_progress_report`, as at step 0. On Codex, where the progress paragraph is measured to matter (10/10 with it,
+  2/10 without), the shortened paragraph holds 10/10.
+- **The cards paragraph** no longer spells out a decline, a chat or a waiting card; their receipts do. X2 and X3 hold
+  10/10 on both engines.
+
+Always-on bytes (`TestAgentPrimerBudgets`, `TestClaudeCodeAlwaysOnBytesPerShape`): the primer went from 3,388 to 3,060
+bytes, and the longest engine instructions (a task run with Watch on) from 7,711 to 7,185. The longest Claude Code
+shape (`task-watch-toplevel-workflows`), appended prompt plus initialize, went from 8,315 to 7,789 bytes.
+
+Reports: [`agent-eval/instructions-step4/`](agent-eval/instructions-step4/). `step4-phase1.json` and
+`step4-phase2.json` merge the per-engine reports beside them. The gate of each reads INCOMPLETE because only these six
+scenarios were played.
+
 ## How it was run
 
 ```bash
