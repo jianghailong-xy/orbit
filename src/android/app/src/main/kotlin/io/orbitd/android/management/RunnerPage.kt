@@ -249,7 +249,7 @@ internal object AccountCopy {
     const val ENV_KEY_LINE = "env key · runs on your Gemini key"
     const val NOT_SUPPORTED_YET = "Not supported yet"
     const val UPDATE_RUNNER = "Update runner"
-    const val HINT_UNSUPPORTED = "Google sign-in is not supported on macOS runners yet. Use a Gemini API key."
+    const val HINT_UNSUPPORTED = "Google sign-in is not supported on this runner's operating system. Use a Gemini API key."
     const val HINT_UPDATE = "Update this runner to sign in with Google."
     const val GOOGLE_TERMS_WARNING = "Google terms restrict personal account sign-in through third-party tools; your account may be suspended."
     const val GOOGLE_TERMS = "Google terms"

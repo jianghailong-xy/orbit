@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
 import { ENGINE_SIGNED_OUT, type EngineSignedOutRefusal, type RunnerEngineHealth } from '@orbit/shared';
-import { ANTIGRAVITY_GOOGLE_LOGIN_V1 } from '../common/antigravity-readiness';
+import { ANTIGRAVITY_GOOGLE_LOGIN_MACOS_V1, ANTIGRAVITY_GOOGLE_LOGIN_V1 } from '../common/antigravity-readiness';
 import { SessionsService } from './sessions.service';
 import { isEngineSignedOut, signedOutEngineRefusal } from './engine-signin-preflight';
 
@@ -276,20 +276,43 @@ test('a runner that cannot relay the Google sign-in is refused without one, nami
   });
 });
 
-test('a macOS runner is refused without the Google sign-in it does not support yet', async () => {
+test('a runner on a platform the Google sign-in does not support is refused without one', async () => {
   const fixture = makeService([{ engine: 'antigravity', installed: true, auth: 'no' }], {
-    displayName: 'MacBook',
-    capabilities: ['provider:antigravity', ANTIGRAVITY_GOOGLE_LOGIN_V1, 'os:darwin'],
+    displayName: 'Desktop',
+    capabilities: ['provider:antigravity', ANTIGRAVITY_GOOGLE_LOGIN_V1, ANTIGRAVITY_GOOGLE_LOGIN_MACOS_V1, 'os:windows'],
   });
   await assert.rejects(fixture.service.create('owner-1', { ...PROMPT, provider: 'antigravity' }), (error: unknown) => {
     assert.ok(isEngineSignedOut(error));
-    assert.match(error.message, /Antigravity has no Google sign-in or Gemini API key on runner "MacBook"/);
-    assert.match(error.message, /works on Linux runners only for now/);
+    assert.match(error.message, /Antigravity has no Google sign-in or Gemini API key on runner "Desktop"/);
+    assert.match(error.message, /works on Linux and macOS runners only for now/);
     assert.match(error.message, /connect Gemini under API keys on the Machines & models page \(\/providers\/new\/gemini\)/);
     assert.equal((error.getResponse() as EngineSignedOutRefusal).signIn, undefined);
     return true;
   });
   assert.deepEqual(fixture.creates, []);
+});
+
+test('a Mac runner offers the Google sign-in once it relays it, and asks for an update before that', async () => {
+  const mac = makeService([{ engine: 'antigravity', installed: true, auth: 'no' }], {
+    displayName: 'MacBook',
+    capabilities: ['provider:antigravity', ANTIGRAVITY_GOOGLE_LOGIN_V1, ANTIGRAVITY_GOOGLE_LOGIN_MACOS_V1, 'os:darwin'],
+  });
+  await assert.rejects(mac.service.create('owner-1', { ...PROMPT, provider: 'antigravity' }), (error: unknown) => {
+    assert.ok(isEngineSignedOut(error));
+    assert.match(error.message, /Sign in with Google from the Machines & models page/);
+    assert.deepEqual((error.getResponse() as EngineSignedOutRefusal).signIn, { engine: 'antigravity' });
+    return true;
+  });
+  const oldMac = makeService([{ engine: 'antigravity', installed: true, auth: 'no' }], {
+    displayName: 'MacBook',
+    capabilities: ['provider:antigravity', ANTIGRAVITY_GOOGLE_LOGIN_V1, 'os:darwin'],
+  });
+  await assert.rejects(oldMac.service.create('owner-1', { ...PROMPT, provider: 'antigravity' }), (error: unknown) => {
+    assert.ok(isEngineSignedOut(error));
+    assert.match(error.message, /needs a newer Orbit runner there/);
+    assert.equal((error.getResponse() as EngineSignedOutRefusal).signIn, undefined);
+    return true;
+  });
 });
 
 test('an added Antigravity account that is signed out is refused by its name, with no Gemini key way out', () => {

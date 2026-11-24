@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException } from '@nestjs/common';
-import { ANTIGRAVITY_GOOGLE_LOGIN_LINUX_ONLY, ANTIGRAVITY_GOOGLE_LOGIN_V1 } from '../common/antigravity-readiness';
+import {
+  ANTIGRAVITY_GOOGLE_LOGIN_MACOS_V1,
+  ANTIGRAVITY_GOOGLE_LOGIN_UNSUPPORTED_PLATFORM,
+  ANTIGRAVITY_GOOGLE_LOGIN_V1,
+} from '../common/antigravity-readiness';
 import { RunnersService } from './runners.service';
 
 test('the runners response carries Antigravity readiness for old, missing and ready machines', async () => {
@@ -15,9 +19,19 @@ test('the runners response carries Antigravity readiness for old, missing and re
       engines: [{ engine: 'antigravity', installed: true, version: '1.2.16', auth: 'yes', authSource: 'google' }],
     },
     {
-      id: 'mac',
+      id: 'windows',
+      capabilities: ['provider:antigravity', ANTIGRAVITY_GOOGLE_LOGIN_V1, 'os:windows'],
+      engines: [{ engine: 'antigravity', installed: true, version: '1.2.16', auth: 'yes', authSource: 'env_key' }],
+    },
+    {
+      id: 'old-mac',
       capabilities: ['provider:antigravity', ANTIGRAVITY_GOOGLE_LOGIN_V1, 'os:darwin'],
       engines: [{ engine: 'antigravity', installed: true, version: '1.2.16', auth: 'yes', authSource: 'env_key' }],
+    },
+    {
+      id: 'mac',
+      capabilities: ['provider:antigravity', ANTIGRAVITY_GOOGLE_LOGIN_V1, ANTIGRAVITY_GOOGLE_LOGIN_MACOS_V1, 'os:darwin'],
+      engines: [{ engine: 'antigravity', installed: true, version: '1.2.16', auth: 'yes', authSource: 'google' }],
     },
   ];
   const prisma = { runner: { findMany: async () => rows }, session: { groupBy: async () => [] }, $queryRaw: async () => [] };
@@ -28,6 +42,8 @@ test('the runners response carries Antigravity readiness for old, missing and re
     { supported: true, installed: true, version: '1.2.3', envKeyAvailable: true, authSource: 'env_key', googleLogin: 'needs_update' },
     { supported: true, installed: true, version: '1.2.16', envKeyAvailable: true, authSource: 'google', googleLogin: 'available' },
     { supported: true, installed: true, version: '1.2.16', envKeyAvailable: true, authSource: 'env_key', googleLogin: 'unsupported_platform' },
+    { supported: true, installed: true, version: '1.2.16', envKeyAvailable: true, authSource: 'env_key', googleLogin: 'needs_update' },
+    { supported: true, installed: true, version: '1.2.16', envKeyAvailable: true, authSource: 'google', googleLogin: 'available' },
   ]);
 });
 
@@ -93,15 +109,22 @@ test('Antigravity sign-in is started only on a runner that relays it, for Defaul
       (error: unknown) => error instanceof BadRequestException && /too old to sign Antigravity in with Google — update it/.test(error.message),
     );
   }
-  // A macOS runner declares it too — it is the same binary — but the sign-in is Linux-only for now.
-  for (const os of ['os:darwin', 'os:windows']) {
-    runner.capabilities = [ANTIGRAVITY_GOOGLE_LOGIN_V1, os];
-    await assert.rejects(
-      service.startLogin('owner-1', 'runner-1', { engine: 'antigravity' }),
-      (error: unknown) => error instanceof BadRequestException && error.message === ANTIGRAVITY_GOOGLE_LOGIN_LINUX_ONLY,
-    );
-  }
+  // A Windows runner declares it too — it is the same source — but the sign-in is Linux and macOS only.
+  runner.capabilities = [ANTIGRAVITY_GOOGLE_LOGIN_V1, ANTIGRAVITY_GOOGLE_LOGIN_MACOS_V1, 'os:windows'];
+  await assert.rejects(
+    service.startLogin('owner-1', 'runner-1', { engine: 'antigravity' }),
+    (error: unknown) => error instanceof BadRequestException && error.message === ANTIGRAVITY_GOOGLE_LOGIN_UNSUPPORTED_PLATFORM,
+  );
+  // A Mac runner from before the macOS relay refuses it on the machine: one an update fixes.
+  runner.capabilities = [ANTIGRAVITY_GOOGLE_LOGIN_V1, 'os:darwin'];
+  await assert.rejects(
+    service.startLogin('owner-1', 'runner-1', { engine: 'antigravity' }),
+    (error: unknown) => error instanceof BadRequestException && /too old to sign Antigravity in with Google — update it/.test(error.message),
+  );
   assert.equal(writes.length, 1, 'a refused start writes nothing');
+  // A Mac runner with the macOS relay starts it.
+  runner.capabilities = [ANTIGRAVITY_GOOGLE_LOGIN_V1, ANTIGRAVITY_GOOGLE_LOGIN_MACOS_V1, 'os:darwin'];
+  assert.equal((await service.startLogin('owner-1', 'runner-1', { engine: 'antigravity' })).status, 'pending');
   // A Linux runner that says so starts it — for its own sign-in, one of its accounts, or a new one,
   // each in a Gemini directory of its own as Claude's and Codex's accounts are.
   runner.capabilities = [ANTIGRAVITY_GOOGLE_LOGIN_V1, 'os:linux'];
