@@ -239,7 +239,7 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		}
 		// The agent primer, versioned in its first line, is the one set of instructions every engine's
 		// MCP client is handed; each engine's own instructions carry it too (agent_primer.go).
-		instructions := agentPrimer
+		instructions := agentPrimerText()
 		if s.helpAsk {
 			instructions = helpAskInstructions
 		}

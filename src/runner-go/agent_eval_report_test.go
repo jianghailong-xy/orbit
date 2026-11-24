@@ -114,6 +114,9 @@ type evalReportContract struct {
 	CatalogVersion  string `json:"catalogVersion"`
 	CatalogHash     string `json:"catalogHash"`
 	GuideVersion    string `json:"guideVersion"`
+	// InstructionsLeftOut is the instruction units the runs were played without (ORBIT_AGENT_EVAL_LEAVE_OUT): a
+	// report with any is a measurement of those units, never a baseline of the instructions as they ship.
+	InstructionsLeftOut []string `json:"instructionsLeftOut,omitempty"`
 }
 
 type evalReportSuite struct {
@@ -466,7 +469,8 @@ func buildEvalReport(runs []*evalRun, repoSHA string, baseline *evalReport, skip
 	rep := &evalReport{ReportVersion: evalReportVersion, Kind: evalReportKind, GeneratedAt: time.Now().UTC().Format(time.RFC3339),
 		Source: evalReportSource{RepoSHA: repoSHA, CLIVersion: version},
 		Contract: evalReportContract{ContractVersion: agentContractVersion, PrimerVersion: agentPrimerVersion,
-			CatalogVersion: operationCatalogVersion, CatalogHash: operationCatalog().Hash, GuideVersion: agentGuideVersion},
+			CatalogVersion: operationCatalogVersion, CatalogHash: operationCatalog().Hash, GuideVersion: agentGuideVersion,
+			InstructionsLeftOut: evalLeftOutList()},
 		Suite: evalReportSuite{Hash: evalSuiteHash(), ScenarioHash: evalScenarioHash(), GraderVersion: evalGraderVersion},
 		Runs:  []evalRunReport{}, Skipped: skipped}
 	for _, sc := range evalScenarios() {
@@ -732,6 +736,9 @@ func (rep *evalReport) markdown() string {
 	fmt.Fprintf(&b, "Generated %s from `%s` (orbit %s). Contract %s, primer %s, catalogue %s (`%.12s`), guide %s. Suite `%.12s`, %d scenarios.\n\n",
 		rep.GeneratedAt, rep.Source.RepoSHA, rep.Source.CLIVersion, rep.Contract.ContractVersion, rep.Contract.PrimerVersion,
 		rep.Contract.CatalogVersion, rep.Contract.CatalogHash, rep.Contract.GuideVersion, rep.Suite.Hash, len(rep.Suite.Scenarios))
+	if left := rep.Contract.InstructionsLeftOut; len(left) > 0 {
+		fmt.Fprintf(&b, "Played without the instruction units %s: a measurement of those units, not a baseline.\n\n", "`"+strings.Join(left, "`, `")+"`")
+	}
 	fmt.Fprintf(&b, "**Gate: %s.** %d runs: %d passed, %d failed, %d harness errors.\n\n", rep.Gate.Verdict, rep.Summary.Runs,
 		rep.Summary.Passed, rep.Summary.Failed, rep.Summary.Errors)
 	for _, reason := range rep.Gate.Reasons {
@@ -893,6 +900,9 @@ func mergeEvalReports(reports []*evalReport) (*evalReport, error) {
 	for _, rep := range reports {
 		if rep.Suite.Hash != out.Suite.Hash {
 			return nil, fmt.Errorf("a report graded by suite %.12s does not merge with one graded by %.12s", rep.Suite.Hash, out.Suite.Hash)
+		}
+		if a, b := strings.Join(rep.Contract.InstructionsLeftOut, ","), strings.Join(out.Contract.InstructionsLeftOut, ","); a != b {
+			return nil, fmt.Errorf("a report played without instruction units [%s] does not merge with one played without [%s]", a, b)
 		}
 		if rep.Source.RepoSHA != out.Source.RepoSHA {
 			out.Source.RepoSHA = "several"

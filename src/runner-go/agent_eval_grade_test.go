@@ -19,6 +19,10 @@ type evalWorldIDs struct {
 	TaskID    string
 	ProjectID string
 	Seeds     map[string]string
+	// The session's checkout, its uploads directory and the directory of the files outside both (evalSetup.Outside).
+	WorkDir    string `json:",omitempty"`
+	UploadsDir string `json:",omitempty"`
+	OutsideDir string `json:",omitempty"`
 }
 
 // evalRun is one scenario played once on one engine, ready to grade.
@@ -43,6 +47,8 @@ type evalRun struct {
 	Context      evalContextBytes
 	HarnessError string
 	DurationMs   int
+	// Files is every file in the checkout and the uploads directory as the run ended (evalSession.files).
+	Files []string
 }
 
 // evalContextBytes is the context overhead the report states (docs/agent-contract-eval.md §Metrics).

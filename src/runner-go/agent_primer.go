@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 // The Orbit agent primer: the short core of docs/orbit-agent-contract.md §0 that every agent Orbit
 // runs reads before anything else Orbit says to it (contract §2.6).
 //
@@ -120,3 +122,31 @@ const agentPrimer = agentPrimerLead + "\n\n" +
 	agentPrimerOrchestration + "\n\n" +
 	agentPrimerSettings + "\n\n" +
 	agentPrimerRederive
+
+// agentPrimerUnits is the primer's paragraphs in order, each under its instruction unit id (instructionUnitIDs).
+var agentPrimerUnits = []struct{ id, text string }{
+	{unitPrimerLead, agentPrimerLead},
+	{unitPrimerObjects, agentPrimerObjects},
+	{unitPrimerStart, agentPrimerStart},
+	{unitPrimerCards, agentPrimerCards},
+	{unitPrimerCLI, agentPrimerCLI},
+	{unitPrimerReceipts, agentPrimerReceipts},
+	{unitPrimerOrchestration, agentPrimerOrchestration},
+	{unitPrimerSettings, agentPrimerSettings},
+	{unitPrimerRederive, agentPrimerRederive},
+}
+
+// agentPrimerText is the primer as this process sends it: agentPrimer itself, unless the agent-contract eval left one
+// of its paragraphs out (instructionUnitsLeftOut), which production never does.
+func agentPrimerText() string {
+	if len(instructionUnitsLeftOut) == 0 {
+		return agentPrimer
+	}
+	var kept []string
+	for _, unit := range agentPrimerUnits {
+		if !instructionUnitsLeftOut[unit.id] {
+			kept = append(kept, unit.text)
+		}
+	}
+	return strings.Join(kept, "\n\n")
+}

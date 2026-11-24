@@ -88,7 +88,7 @@ func orbitCLIInstructions(executable string, insideRecordedWork, watches, delega
 		return ""
 	}
 	command := shellQuote(executable)
-	return agentPrimer + "\n\n" +
+	text := agentPrimer + "\n\n" +
 		orbitSubAgentInstructions +
 		orbitReplyFileInstructions +
 		orbitEvidenceFileInstructions +
@@ -100,7 +100,30 @@ func orbitCLIInstructions(executable string, insideRecordedWork, watches, delega
 		orbitDelegateInstructionsFor(delegates) +
 		orbitWorkflowInstructionsFor(delegates, workflows) +
 		orbitWikiPathInstructions +
-		"Prefer the `mcp__orbit__*` tools (schema-checked, no shell). Inside a session the CLI at `" + command +
+		orbitCLIPathInstructions(command)
+	if len(instructionUnitsLeftOut) == 0 {
+		return text
+	}
+	// The agent-contract eval's run without one or more units (instruction_units.go); never production's.
+	text = agentPrimerText() + "\n\n" +
+		instructionUnit(unitSubAgents, orbitSubAgentInstructions) +
+		instructionUnit(unitReplyFiles, orbitReplyFileInstructions) +
+		instructionUnit(unitEvidenceFiles, orbitEvidenceFileInstructions) +
+		instructionUnit(unitDrive, orbitDriveInstructions()) +
+		instructionUnit(unitProject, orbitProjectInstructions(insideRecordedWork)) +
+		instructionUnit(unitProgress, orbitProgressInstructions(insideRecordedWork)) +
+		instructionUnit(unitWait, orbitWaitInstructionsFor(watches)) +
+		instructionUnit(unitNotify, orbitNotifyInstructions) +
+		instructionUnit(unitDelegate, orbitDelegateInstructionsFor(delegates)) +
+		instructionUnit(unitWorkflow, orbitWorkflowInstructionsFor(delegates, workflows)) +
+		instructionUnit(unitWikiPath, orbitWikiPathInstructions) +
+		instructionUnit(unitCLI, orbitCLIPathInstructions(command))
+	return strings.TrimRight(text, "\n")
+}
+
+// orbitCLIPathInstructions is the last paragraph: the MCP tools first, and the CLI by its absolute path.
+func orbitCLIPathInstructions(command string) string {
+	return "Prefer the `mcp__orbit__*` tools (schema-checked, no shell). Inside a session the CLI at `" + command +
 		"` takes the same approvals and attributes work to you: `" + command + " guide [topic] --json` or `" + command +
 		" capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt " +
 		"its MCP tool answers with; `--json` prints the entity alone. Do not run `" + command + " mcp` directly."

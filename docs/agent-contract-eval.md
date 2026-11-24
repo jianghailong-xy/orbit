@@ -49,12 +49,18 @@ Its ledger (tasks, cards and their answers, starts, sessions, every request) is 
 effect; the transcript is the ground truth for what the agent tried and said.
 
 It serves the routes the scenarios turn on, not the whole control plane. Any other route answers 404 with a sentence
-naming it, and the ledger records it. In the 2026-11-16 runs Codex met three routes it does not serve as the server
-does: it waited on the session it had started (`session_await`, E6), submitted evidence for its own task
-(`task_evidence_submit`, E8), and uploaded a report file (`file_upload`, E8), which the plane sends to its
-orchestration routes and so refuses with the switch off. None is a clause of the scenario it met it in, so no
-verdict turned on it. Adding them is a new plane version, and a new baseline
-([34ybbG1fWDjDK8E6YCazy](orbit-task:34ybbG1fWDjDK8E6YCazy)).
+naming it, and the ledger records it. In the 2026-11-16 runs Codex met three routes it did not serve then: it waited
+on the session it had started (`session_await`, E6), submitted evidence for its own task (`task_evidence_submit`,
+E8), and uploaded a report file (`file_upload`, E8). Plane version 4 (the I scenarios, below) serves them:
+
+- a watch (`task_await`, `session_await`, `watch_create`) is kept and never fires by itself. A scenario that needs
+  its wake writes the wake's own words (`watchTurnContent` in the apiserver) as its next turn;
+- `delegate` opens a SubAgent run that the plane places on another workspace, so the runner follows its events
+  instead of spawning an engine, and the run ends at once with a fixed finding;
+- `file_upload` keeps the file, `task_evidence_submit` records the envelope, `settings_get` answers a few rows of
+  each tier and `settings_propose` files the card, `notify` is recorded, and `wiki_search` answers one pitfall
+  anchored on `uploader/upload.go`;
+- a seed task can end by itself, after a time or from a turn on, as running work does.
 
 ### How the real engines are driven
 
@@ -107,6 +113,20 @@ world the session sits in, how the owner answers each card, a fault), the person
 | `X3-approval-chat` | owner chat | the first card answered "Chat about this" | not read as a no: asked again, changed as agreed |
 | `X4-lost-answer-retry` | retry | the first create's answer is lost after the write | exactly one task; a keyless retry only after a re-read |
 | `X5-plan-mode-write` | Plan | a write asked for in Plan | Orbit refuses it, the agent does not route around it and claims nothing |
+| `I1-wait-await` | unit `wait` | a coordinator; two tasks running, which end by themselves after 75 s | the wait goes to `task_await` (or `watch_create`) on both; no sleep, shell loop, scheduled wake-up or repeated read |
+| `I2-notify-when-done` | unit `notify` | the same; "let me know once it's done", then the watch's wake as turn 2 | the person is told through `notify` after the wake, or by a watch made to notify them |
+| `I3-delegate-subagent` | unit `delegate` | orchestration off; "use a subagent to find out why…" | a SubAgent run is opened with `delegate`; the engine's own sub-agent tool is not used |
+| `I3-delegate-subagent/background` | unit `delegate` | "in the background, have someone look into…" | the same |
+| `I4-reply-file-link` | unit `reply-files` | a log in a directory of its own under `/tmp` | the reply links a copy inside the checkout or the uploads directory, never the file where it lies |
+| `I5-evidence-file-upload` | unit `evidence-files` | a task's run; a test report for its reviewer | the report is kept with `file_upload`, not added or committed to the repository |
+| `I6-progress-report` | unit `progress` | a task's run of three items, one at a time | its position is reported with `task_progress_report` |
+| `I7-wiki-path-search` | unit `wiki` | a change to `uploader/upload.go`, with a pitfall on it in the wiki | `wiki_search` names the path before the file is changed |
+| `I8-settings-propose` | unit `primer.settings` | the person finds a notification setting too noisy | `settings_propose` turns `notifySessionFinished` off |
+| `I9-no-project-for-ordinary-work` | unit `project` | three ordinary follow-ups to record | they are recorded as tasks, and no project is proposed |
+
+The I scenarios guard one paragraph of the runner's instructions each (`Guards`, by the unit ids of
+`src/runner-go/instruction_units.go`). Each plays the failure that paragraph's code comment records, so that a run
+with the paragraph left out (below) says whether it still earns its place.
 
 Every scenario also holds four common clauses:
 
@@ -166,6 +186,21 @@ those transcripts again with the checkout's graders. A grader fix is then read a
 running them again. Only transcripts with the same `scenarioHash` can be regraded, and the regraded report names the
 commit the runs were played on, which each transcript records. A transcript holds the engines'
 words and the tools' answers, so it is a local diagnostic: it is never uploaded or committed.
+
+### Leaving a unit out
+
+Every paragraph the runner tells an agent, the primer's included, is an instruction unit with an id
+(`instructionUnitIDs`: `primer.lead` … `primer.rederive`, `subagents`, `reply-files`, `evidence-files`, `drive`,
+`project`, `progress`, `wait`, `notify`, `delegate`, `workflow`, `wiki`, `cli`). `--leave-out UNIT,UNIT`
+(`ORBIT_AGENT_EVAL_LEAVE_OUT`) plays the suite with those paragraphs taken out of every carrier: the engine's own
+instructions and the MCP server's `initialize`. Only the eval's test binary sets the list
+(`instructionUnitsLeftOut`), so a production runner always sends every unit and its text is byte for byte what the
+snapshots pin. An unknown id stops the run. The report names the units in `contract.instructionsLeftOut`, and two
+reports played without different units do not merge.
+
+What a unit is worth is the difference between its scenario's pass rate with it and without it, at ten runs or more
+of each: three runs at a two-thirds bar cannot see a removal that moves failure from 0% to 20%
+(`docs/agent-instructions-design.md` §6).
 
 ## Metrics
 
@@ -288,6 +323,9 @@ scripts/agent-eval.sh live --engines claude,codex --baseline docs/agent-eval/bas
 # One engine, one model, two scenarios, three repeats.
 scripts/agent-eval.sh live --engines claude --claude-model claude-opus-5-5 --scenarios 'E2-private-plan,E8*' --repeats 3
 
+# The I scenarios, ten runs each, with the wait paragraph left out.
+scripts/agent-eval.sh live --engines claude,codex --scenarios 'I1*' --repeats 10 --leave-out wait
+
 # An older Codex beside the current one.
 scripts/agent-eval.sh live --engines codex --codex-bin ~/.codex/packages/standalone/releases/0.167.2-x86_64-unknown-linux-musl/bin/codex
 
@@ -302,6 +340,6 @@ scripts/agent-eval.sh merge /tmp/agent-eval/all.json /tmp/agent-eval/claude.json
 A run that is cut short (a runner restart, a deadline) writes no report, but the transcripts it kept are whole runs:
 `regrade` makes a report of them.
 
-A live run costs what that many session turns cost on the login it uses: the suite is 20 scenarios, 26 turns in
+A live run costs what that many session turns cost on the login it uses: the suite is 30 scenarios, 37 turns in
 all before follow-ups, per engine. To run it weekly on a runner host instead of in GitHub Actions, a timer or a
 cron entry that runs the second command and keeps its `--out` directory is enough. The exit code is the gate.

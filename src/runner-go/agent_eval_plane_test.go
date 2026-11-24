@@ -14,7 +14,12 @@ package main
 //     owner's "Chat about this" with their words;
 //   - autoRunWhenReady defaults to true, startNow arrives as a run time and then an execute, and a caller key
 //     answers a repeated create with the first task;
-//   - the orchestration routes answer only while the scenario's switch is on.
+//   - the orchestration routes answer only while the scenario's switch is on;
+//   - a watch (task_await, session_await, watch_create) is kept and never fires by itself: a scenario that needs its
+//     wake writes the wake's own words as the next turn (evalTurnSpec.Prompt's {watch});
+//   - a delegate call opens a SubAgent run the plane says another workspace runs, and that run ends at once with a
+//     fixed result, so no engine is spawned for it;
+//   - a seed task may end by itself, after a time (DoneAfter) or from a turn on (DoneAtTurn), as running work does.
 //
 // A fault can drop the answer to a create after the task was written, which is what a lost answer looks like to
 // the caller (contract §5.2 rule 4).
@@ -31,6 +36,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 // evalCardAnswer is what the eval's owner answers a card with.
@@ -81,6 +87,21 @@ type evalTaskRow struct {
 	CardID              string
 	IdempotencyKey      string
 	Body                map[string]interface{}
+	// DoneAfter and DoneAtTurn end a seed task by itself: DONE once that long has passed since the run began, or from
+	// that log turn on. Zero is never.
+	DoneAfter  time.Duration
+	DoneAtTurn int
+}
+
+// evalWatchRow is a watch the session made.
+type evalWatchRow struct {
+	ID      string
+	Turn    int
+	Action  string // RESUME_SESSION or NOTIFY_USER
+	Targets []string
+	State   string
+	// ByWorld marks the watch the harness made itself, for a wake turn whose agent made none.
+	ByWorld bool
 }
 
 // evalSessionRow is a session the double started or created.
@@ -151,10 +172,15 @@ type evalPlane struct {
 	ledger   []evalLedgerEvent
 	keys     map[string]string // caller key -> task id (or batch key -> first id)
 	batches  map[string][]string
+	watches  []*evalWatchRow
+	started  time.Time
+	// raw and contentType are the request being answered, for the one route that is not JSON (a file upload).
+	raw         []byte
+	contentType string
 }
 
 func newEvalPlane() *evalPlane {
-	p := &evalPlane{keys: map[string]string{}, batches: map[string][]string{},
+	p := &evalPlane{keys: map[string]string{}, batches: map[string][]string{}, started: time.Now(),
 		owner: func(card *evalCard, _ int) (evalCardAnswer, string) { return evalOwnerDefault(card) }}
 	p.srv = httptest.NewServer(http.HandlerFunc(p.serve))
 	return p
@@ -356,6 +382,8 @@ func (p *evalPlane) serve(w http.ResponseWriter, r *http.Request) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	session := decodeSessionID(strings.TrimSpace(r.Header.Get("X-Orbit-Session-Id")))
+	p.raw, p.contentType = raw, r.Header.Get("Content-Type")
+	p.settleLocked()
 	status, code := p.route(w, r, body, session)
 	p.requests = append(p.requests, evalRequest{Turn: p.turn, Method: r.Method, Path: r.URL.Path, Session: session, Status: status, Code: code})
 }
@@ -421,11 +449,33 @@ func (p *evalPlane) route(w http.ResponseWriter, r *http.Request, body map[strin
 		p.record("project_created", project.ID, project.Title)
 		writeEvalJSON(w, 201, p.projectDoc(project))
 		return 201, ""
+	case len(parts) >= 4 && parts[0] == "runner" && parts[1] == "sessions" && parts[3] == "subagents":
+		// Neither a SubAgent run nor a file is an orchestration family: delegate and file_upload are served with the
+		// switch off, so these two are matched before the orchestration routes.
+		return p.subagentRoute(w, r, parts, body)
+	case r.Method == http.MethodPost && len(parts) == 4 && parts[0] == "runner" && parts[1] == "sessions" && parts[3] == "files":
+		return p.uploadFile(w)
 	case strings.HasPrefix(path, "/runner/sessions") || strings.HasPrefix(path, "/runner/agents") || strings.HasPrefix(path, "/runner/runners"):
 		return p.orchestrationRoute(w, r, parts, body, session)
 	case path == "/runner/notify":
+		p.record("notified", "", "")
 		writeEvalJSON(w, 200, map[string]interface{}{"delivered": 1})
 		return 200, ""
+	case strings.HasPrefix(path, "/runner/watches"):
+		return p.watchRoute(w, r, parts, body)
+	case r.Method == http.MethodGet && path == "/runner/settings":
+		writeEvalJSON(w, 200, map[string]interface{}{"settings": evalSettingsView()})
+		return 200, ""
+	case r.Method == http.MethodPost && path == "/runner/settings-proposals":
+		return p.proposeSettings(w, body)
+	case r.Method == http.MethodGet && path == "/runner/wiki/search":
+		return p.searchWiki(w, r.URL.Query())
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/runner/wiki/entries/"):
+		if strings.TrimPrefix(path, "/runner/wiki/entries/") == evalWikiPitfall.ID {
+			writeEvalJSON(w, 200, evalWikiPitfallEntry())
+			return 200, ""
+		}
+		return p.refuse(w, 404, "WIKI_ENTRY_NOT_FOUND", "wiki entry not found", "")
 	case strings.HasPrefix(path, "/runner/wiki"):
 		writeEvalJSON(w, 200, map[string]interface{}{"entries": []interface{}{}})
 		return 200, ""
@@ -822,6 +872,13 @@ func (p *evalPlane) taskRoute(w http.ResponseWriter, r *http.Request, rest []str
 		p.record("dependency_added", task.ID, dep)
 		writeEvalJSON(w, 200, p.taskDoc(task))
 		return 200, ""
+	case len(rest) == 2 && rest[1] == "evidence" && r.Method == http.MethodPost:
+		p.record("evidence_submitted", task.ID, "")
+		writeEvalJSON(w, 201, map[string]interface{}{"id": evalPublicID(), "taskId": task.ID, "revision": 1, "status": "SUBMITTED"})
+		return 201, ""
+	case len(rest) == 2 && rest[1] == "evidence" && r.Method == http.MethodGet:
+		writeEvalJSON(w, 200, []interface{}{})
+		return 200, ""
 	case len(rest) == 2 && rest[1] == "dependency-graph":
 		writeEvalJSON(w, 200, map[string]interface{}{"nodes": []interface{}{p.taskDoc(task)}, "edges": []interface{}{}})
 		return 200, ""
@@ -904,6 +961,7 @@ type evalLedger struct {
 	Project  *evalProjectRow
 	// Created is the projects the agent created during the run.
 	Created []evalProjectRow
+	Watches []evalWatchRow
 }
 
 func (p *evalPlane) snapshot() evalLedger {
@@ -929,6 +987,11 @@ func (p *evalPlane) snapshot() evalLedger {
 	}
 	for _, project := range p.created {
 		out.Created = append(out.Created, *project)
+	}
+	for _, watch := range p.watches {
+		copyWatch := *watch
+		copyWatch.Targets = append([]string(nil), watch.Targets...)
+		out.Watches = append(out.Watches, copyWatch)
 	}
 	return out
 }
@@ -990,6 +1053,11 @@ func (l evalLedger) knownID(id string) bool {
 	}
 	for _, s := range l.Sessions {
 		if s.ID == id {
+			return true
+		}
+	}
+	for _, watch := range l.Watches {
+		if watch.ID == id {
 			return true
 		}
 	}
