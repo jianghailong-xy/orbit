@@ -8,7 +8,7 @@
  *       document_* tables are there;
  *   (2) the drive migrations as they were applied (1283, 1327, 1339, 1438, 1439, 1440, 1448, read from their files) are
  *       replayed into a scratch schema and filled with a row of every kind; 1551 then renames every table, constraint,
- *       index and sequence `drive_*` to `document_*` and adds only document_commit's owner key, every table keeps its row count and the text of
+ *       index and sequence `drive_*` to `document_*` and creates nothing, every table keeps its row count and the text of
  *       every row, the renamed sequence goes on numbering the change feed, and the names it leaves are exactly the
  *       names the fully migrated database has (which `prisma migrate diff` holds to schema.prisma). Run a second time
  *       it changes nothing.
@@ -163,11 +163,8 @@ test('migration 1551 leaves no drive_* name and renames the drive tables without
 
   assert.deepEqual(await driveNamed(sql, scratch), [], 'no relation or constraint named drive_* is left');
   const namesAfter = await names(sql, scratch, 'document_');
-  assert.deepEqual(namesAfter, [
-    ...namesBefore.map((n) => n.replace(/(^|[ .])drive_/g, '$1document_')),
-    // The one constraint 1551 adds: the owner key schema.prisma declares and 1327 never made.
-    'constraint document_commit.document_commit_owner_id_fkey f',
-  ].sort(), 'every name is the old one with drive_ replaced by document_, and only the commit owner key is new');
+  assert.deepEqual(namesAfter, namesBefore.map((n) => n.replace(/(^|[ .])drive_/g, '$1document_')).sort(),
+    'every name is the old one with drive_ replaced by document_, and nothing is added or dropped');
   assert.deepEqual(namesAfter, migrated, 'the names are the ones the fully migrated database has');
   assert.deepEqual(await contents(sql, scratch, 'document_'), rowsBefore, 'every table keeps its row count and every row');
 

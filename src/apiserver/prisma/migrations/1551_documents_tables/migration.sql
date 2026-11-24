@@ -13,13 +13,9 @@
 -- and every constraint (primary keys, unique keys, foreign keys, checks), index (partial and trigram ones included)
 -- and sequence (drive_change_seq_seq) of those tables whose name begins `drive_`, to the same name beginning
 -- `document_`. Prisma's own names are `<table>_pkey` and the `map:` names schema.prisma states, which follow the same
--- rule, so `prisma migrate diff` against schema.prisma is empty afterwards.
---
--- One constraint is added, the one schema.prisma has always declared and 1327 never made: document_commit's owner_id
--- foreign key to "user" (document_commit_owner_id_fkey, ON DELETE CASCADE as every owner key of these tables). Every
--- row already satisfies it, since its (entry_id, owner_id) key names an entry whose owner is a user; it is added NOT
--- VALID and then validated, so "user" is held only for the catalog change and the scan of a table pruned to a day.
--- With it, `prisma migrate diff` reports nothing on the ten tables.
+-- rule, so `prisma migrate diff` reports on these tables only what it reported before: the owner foreign key of
+-- document_commit that schema.prisma declares and 1327 never made. Nothing is created here; adding that key is a
+-- separate change, after a read-only count on production of commit rows whose owner has no user.
 --
 -- WHAT IT KEEPS
 -- =============
@@ -62,8 +58,6 @@ BEGIN
           EXECUTE format('LOCK TABLE %I IN ACCESS EXCLUSIVE MODE', 'document_' || base);
         END IF;
       END LOOP;
-      -- What the foreign key added below takes on the table it references.
-      LOCK TABLE "user" IN SHARE ROW EXCLUSIVE MODE;
       EXIT;
     EXCEPTION WHEN lock_not_available OR deadlock_detected THEN
       tries := tries + 1;
@@ -129,14 +123,3 @@ BEGIN
     EXECUTE format('ALTER SEQUENCE %s RENAME TO %I', r.seq, 'document_' || substr(r.name, length('drive_') + 1));
   END LOOP;
 END $$;
-
--- The owner key schema.prisma declares on document_commit (see WHAT IT RENAMES). Skipped when it is already there.
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint
-                  WHERE conrelid = to_regclass('document_commit') AND conname = 'document_commit_owner_id_fkey') THEN
-    ALTER TABLE "document_commit" ADD CONSTRAINT "document_commit_owner_id_fkey"
-      FOREIGN KEY ("owner_id") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE NOT VALID;
-  END IF;
-END $$;
-ALTER TABLE "document_commit" VALIDATE CONSTRAINT "document_commit_owner_id_fkey";
