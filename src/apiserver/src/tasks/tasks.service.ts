@@ -138,6 +138,7 @@ import {
   signedOutEngineRefusal,
 } from '../sessions/engine-signin-preflight';
 import { RUNNER_BEATS } from '../runners/runner-presence';
+import { readSessionPhaseFields } from '../sessions/session-phase';
 import { withSessionState } from '../sessions/session-state';
 import {
   readTaskWorkCarriers,
@@ -9795,10 +9796,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         mayBeSweepCandidate(task) ? this.accountHold(ownerId, task) : null,
       ]);
     const dependencyState = computeDependencyState(dependencyFacts.get(id) ?? []);
+    // The session facts of every run, from the function every other session payload reads
+    // (sessions/session-phase.ts), so a run here answers as the same session does elsewhere.
+    const runFacts = await readSessionPhaseFields(this.prisma, (task.sessions ?? []).map((session) => session.id));
     return {
       ...task,
       sessions: (task.sessions ?? []).map((session) => ({
         ...withSessionState(session),
+        ...runFacts.get(session.id),
         route: routes.get(session.id) ?? null,
       })),
       creatorSession: task.creatorSession ? withSessionState(task.creatorSession) : null,

@@ -10,7 +10,9 @@ import {
   RUNNING_BG_JOB,
   RUNNING_SUBAGENT,
 } from '../common/session-working';
+import { DISPATCH_PAUSED } from '../queue/dispatch-pause';
 import type { PrismaService } from '../prisma/prisma.service';
+import { runnerUnavailableSql, sessionIsHeld } from './session-phase';
 
 /**
  * Whether a work session is still CARRYING its task: the one definition behind every surface that
@@ -170,6 +172,8 @@ export interface TaskWorkCarrier {
   status: RunStatus;
   runReason: TaskRunReason;
   runStalled: boolean;
+  /** The queued turn is held (`sessionIsHeld`, the rule behind `waitingOn: 'HOLD'`); false for any other status. */
+  held: boolean;
   /** When the session's run first started; null while it never has. */
   startedAt: Date | null;
 }
@@ -180,6 +184,9 @@ interface CarrierRow extends RunStallFacts {
   status: RunStatus;
   runReason: TaskRunReason;
   startedAt: Date | null;
+  error: string | null;
+  runnerUnavailable: boolean;
+  dispatchPaused: boolean;
 }
 
 /**
@@ -202,8 +209,12 @@ export async function readTaskWorkCarriers(
            (${Prisma.raw(sessionRunReasonSql('carrier'))}) AS "runReason",
            carrier."running_bg_jobs" AS "runningBgJobs",
            carrier."running_bg_job_activity" AS "runningBgJobActivity",
-           carrier."started_at" AS "startedAt"
+           carrier."started_at" AS "startedAt",
+           carrier."error" AS "error",
+           ${runnerUnavailableSql('r')} AS "runnerUnavailable",
+           ${DISPATCH_PAUSED} AS "dispatchPaused"
       FROM "session" carrier
+      LEFT JOIN "runner" r ON r."id" = carrier."assigned_runner_id"
      WHERE carrier."task_id" IS NOT NULL
        AND ${scope}
        AND ${Prisma.raw(sessionCarriesTaskSql('carrier'))}`);
@@ -212,6 +223,7 @@ export async function readTaskWorkCarriers(
     status: row.status,
     runReason: row.runReason,
     runStalled: runStalled(row, nowMs),
+    held: sessionIsHeld(row, { dispatchPaused: row.dispatchPaused === true, runnerUnavailable: row.runnerUnavailable === true }),
     startedAt: row.startedAt,
   }]));
 }
@@ -239,10 +251,12 @@ export interface TaskRunOverlay {
   queued: boolean;
   runReason: TaskRunReason | null;
   runStalled: boolean;
+  /** Additive: the queued run is held (waitingOn HOLD). `queued` keeps its value. */
+  queuedOnHold: boolean;
 }
 
 export function taskRunOverlay(carrier: TaskWorkCarrier | undefined): TaskRunOverlay {
-  if (!carrier) return { running: false, queued: false, runReason: null, runStalled: false };
+  if (!carrier) return { running: false, queued: false, runReason: null, runStalled: false, queuedOnHold: false };
   const queued = carrier.status === RunStatus.PENDING;
-  return { running: !queued, queued, runReason: carrier.runReason, runStalled: carrier.runStalled };
+  return { running: !queued, queued, runReason: carrier.runReason, runStalled: carrier.runStalled, queuedOnHold: queued && carrier.held };
 }

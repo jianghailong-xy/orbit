@@ -209,7 +209,11 @@ internal const val NEEDS_YOU_GROUP = "section:needs-you"
 internal const val WORKING_GROUP = "section:working"
 
 /** Pending approvals, or a failure the server is not retrying. */
-internal fun DirectorySession.needsOwner() = pendingApprovals > 0 || (status == "FAILED" && retryAt == null)
+internal fun DirectorySession.needsOwner() = pendingApprovals > 0 || (failedForList() && retryAt == null)
+
+/** With the session facts, the state word's own reading ([displayRunState]); from an older server, the legacy status. */
+private fun DirectorySession.failedForList() = if (phase != null && released != null) displayRunState == RunState.FAILED else status == "FAILED"
+
 
 internal fun DirectorySession.isWorkingForList() = status == "RUNNING" || status == "PENDING" || (status == "FAILED" && retryAt != null)
 
