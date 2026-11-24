@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AdminRoleGuard } from '../users/admin-role.guard';
+import { AccountHealthController } from './account-health.controller';
+import { AccountHealthService } from './account-health.service';
 import { AdminProvidersController } from './admin-providers.controller';
 import { AnthropicGatewayController } from './anthropic-gateway.controller';
 import { AnthropicGatewayService } from './anthropic-gateway.service';
@@ -26,7 +28,7 @@ import { SharedPoolsService } from './shared-pools.service';
 
 @Module({
   controllers: [
-    ProvidersController, AdminProvidersController, SharedPoolsController, PoolGatewayController, AnthropicGatewayController,
+    ProvidersController, AccountHealthController, AdminProvidersController, SharedPoolsController, PoolGatewayController, AnthropicGatewayController,
   ],
   // AdminRoleGuard depends only on the global PrismaService, so provide it here too (it is
   // not exported from UsersModule) for the admin controller's @UseGuards.
@@ -56,11 +58,14 @@ import { SharedPoolsService } from './shared-pools.service';
     // Claude Code on an OpenAI key (docs/claude-engine-openai-gateway-design.md §4.1): to the key's own endpoint.
     AnthropicGatewayService,
     AnthropicLoginGatewayService,
+    // Account health (docs/routing-account-health-design.md §6): what runs taught Orbit about an account. Exported
+    // for the run-end ingest that writes it and the router that reads it.
+    AccountHealthService,
   ],
   // For RunnerApiModule's provider list, and for QueueModule's claim, which reads an account pool's
   // quota. Exported rather than re-provided there: a second provider entry would be a second
   // instance — for the quota, a second cache that starts cold — which is how the auto-run sweep
   // once ran twice.
-  exports: [ProvidersService, ProviderPlanUsageService],
+  exports: [ProvidersService, ProviderPlanUsageService, AccountHealthService],
 })
 export class ProvidersModule {}

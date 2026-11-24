@@ -15,6 +15,7 @@ import { storableBranchSha } from '../tasks/owner-confirmation-review';
 import { mergeHeartbeatPlanUsage } from './codex-reset-plan-usage';
 import { runnerLinkHintsOf, runnerLinkHintsSql, type RunnerLinkHintColumns, type RunnerLinkHints } from './runner-link-hints';
 import { stripNul } from './strip-nul';
+import { RUNNER_JOB_STATES_SQL } from '../projects/in-flight-job-states';
 
 /**
  * A heartbeat the runner link's gateway forwarded, answered from runner_presence (docs/runner-link-design.md §5.7,
@@ -192,7 +193,11 @@ export const HEARTBEAT_DELIVERIES = {
     writers: ['runners/runners.service.ts#startLogin', 'runners/runners.service.ts#submitLoginCode', 'runners/runners.service.ts#cancelLogin'],
     pending: 'a sign-in in flight',
   },
-  accountRemoveRequest: { how: 'MARKED', writers: ['runners/runners.service.ts#removeAccount'], pending: 'a removal pending' },
+  accountRemoveRequest: {
+    how: 'MARKED',
+    writers: ['runners/runners.service.ts#removeAccount', 'runners/runners.service.ts#signOutDefault'],
+    pending: 'a removal or a Default sign-out pending',
+  },
   codexAccountRemoveRequest: { how: 'MARKED', writers: ['runners/runners.service.ts#removeAccount'], pending: 'a removal pending' },
   claudeAccountSwapRequest: { how: 'MARKED', writers: ['runners/runners.service.ts#setDefaultAccount'], pending: 'a Set as default swap pending' },
   installRequest: {
@@ -912,7 +917,7 @@ export async function readLinkReconcilePending(prisma: Pick<PrismaService, '$que
         SELECT 1 FROM "project_integration_job" j
           JOIN "session" s ON s."id" = j."session_id"
           JOIN "workspace" w ON w."id" = s."workspace_id"
-         WHERE w."runner_id" = ${runnerId}::uuid AND j."state" IN ('QUEUED', 'RUNNING')
+         WHERE w."runner_id" = ${runnerId}::uuid AND j."state" IN ${RUNNER_JOB_STATES_SQL}
       )
       OR EXISTS (
         SELECT 1 FROM "owner_request_secret" g

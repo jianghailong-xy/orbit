@@ -36,6 +36,7 @@ import { Switch } from './ui/Switch';
 import { Textarea } from './ui/Textarea';
 import { Tooltip } from './ui/Tooltip';
 import { Fragment, lazy, type MouseEvent as ReactMouseEvent, type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
+import { TaskAccountHoldNote, RelaxedRunNote } from './TaskAccountHold';
 import { Link, useNavigate } from 'react-router-dom';
 import Markdown from './Markdown';
 import rehypeHighlight from 'rehype-highlight';
@@ -1649,6 +1650,7 @@ export function TaskDetailPanel({
           </div>
           <span className={`tdp-badge tone-${meta.tone}`}>{meta.label}</span>
         </Link>
+        {s.route?.relaxedRun && <RelaxedRunNote sentence={s.route.relaxedRun} />}
         {route && whyShown && (
           <div className="tdp-route-why">
             <div className="tdp-route-why-title">Why {routePick(route)}</div>
@@ -1811,6 +1813,8 @@ export function TaskDetailPanel({
           {/* A task forked from a session says where its checkout came from, in the server's own
               words (docs/task-fork-from-session-design.md §2.3). Absent on an older server. */}
           {q.data?.forkSource && <div className="tdp-fork-source">{q.data.forkSource}</div>}
+          {/* No account that could run it can run now (§7.5): the provider's words, the next try, and where to look. */}
+          {q.data?.accountHold && <div className="tdp-account-hold"><TaskAccountHoldNote hold={q.data.accountHold} /></div>}
           {/* A task that starts when its condition holds says what it waits for (condition-triggers design §6.2):
               "Waiting for: 3 or more OSDs are in", in the server's own words, while the condition has not fired. */}
           {q.data?.startWhen?.waitingLine && (

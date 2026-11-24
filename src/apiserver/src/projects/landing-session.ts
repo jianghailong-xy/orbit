@@ -12,6 +12,7 @@ import { uuidToBase62 } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { INTEGRATION_ITEM_KINDS } from './project-open-item';
 import { LANDING_PROVIDER_SLUG } from '../providers/provider-slug';
+import { IN_FLIGHT_JOB_STATES } from './in-flight-job-states';
 
 /**
  * The landing subject and the LANDING session it addresses
@@ -362,7 +363,7 @@ async function settleLanding(
     // pushes, so it cannot move this fact — and M-T13's receipt retirement stops one in the very
     // transaction that writes the receipt, which settles here.
     const inFlight = await tx.projectIntegrationJob.count({
-      where: { landingId, state: { in: ['QUEUED', 'RUNNING'] }, kind: { not: 'CHECK_PROMOTION' } },
+      where: { landingId, state: { in: [...IN_FLIGHT_JOB_STATES] }, kind: { not: 'CHECK_PROMOTION' } },
     });
     if (inFlight > 0) return false;
     if (!(await stillHolds(tx, locked))) return false;

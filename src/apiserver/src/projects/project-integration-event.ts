@@ -52,6 +52,9 @@ export const INTEGRATION_JOB_EVENT_KINDS = [
   'CANCELLED',
   'ABANDONED',
   'TIMED_OUT',
+  // The landing's pull request (docs/design/protected-branch-landing.md §14, migration 1527): the landing branch
+  // pushed, the pull request opened, and merged. `data.step` says which.
+  'PULL_REQUEST',
 ] as const;
 
 /** Who caused a fact, when a person or a conversation did. */

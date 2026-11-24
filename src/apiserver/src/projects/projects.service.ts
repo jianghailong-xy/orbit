@@ -3463,7 +3463,7 @@ export class ProjectsService {
     // sits at is a fact about the graph rather than about the row, so it cannot be answered by
     // selecting more columns of `task`.
     const openIds = page.filter(mayBeSweepCandidate).map((task) => task.id);
-    const [dependencies, workStates, integrations, holds] = await Promise.all([
+    const [dependencies, workStates, integrations, holds, accountHolds] = await Promise.all([
       this.taskDependencyFields(
         ownerId,
         projectId,
@@ -3488,6 +3488,10 @@ export class ProjectsService {
       openIds.length > 0 && this.openItems
         ? this.openItems.signInHolds(ownerId, Prisma.sql`t.id = ANY(${openIds}::uuid[])`)
         : new Map<string, TaskSignInHold>(),
+      // Why its next automatic start stands down: no account that could run it can run now (§7.5).
+      openIds.length > 0 && this.openItems
+        ? this.openItems.accountHoldsFor(ownerId, openIds)
+        : new Map(),
     ]);
     const items = page.map(({ _count, ...task }) => {
       const dependency = dependencies.get(task.id) ?? UNCONNECTED_TASK;
@@ -3519,6 +3523,7 @@ export class ProjectsService {
         ...dependency,
         blocked: dependency.dependencyState !== 'READY',
         hold: holds.get(task.id) ?? null,
+        accountHold: accountHolds.get(task.id) ?? null,
       };
     });
     return {

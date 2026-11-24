@@ -241,6 +241,10 @@ object OrbitLinks {
         if (scheme.startsWith("orbit-")) {
             kind = references[scheme.removePrefix("orbit-")]
             id = if (kind == Destination.SESSION) uri.schemeSpecificPart.substringBefore('?') else uri.schemeSpecificPart
+        } else if (scheme == "orbit" && uri.host.equals("settings", ignoreCase = true)) {
+            // `orbit://settings/<page>`: a Settings page itself, as the Providers screen a key's alert opens.
+            val page = uri.path.orEmpty().trim('/')
+            return if (page in setOf("providers", "machines", "machines-and-models")) OrbitRoute(Destination.SETTINGS, page, origin = origin) else null
         } else if (scheme == "orbit") {
             val parts = uri.path.orEmpty().trim('/').split('/')
             // `orbit://terminal-login/<id>`, a terminal asking to be approved: Settings › Machines & models, on its Needs you section,
