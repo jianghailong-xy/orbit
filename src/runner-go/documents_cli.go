@@ -7,19 +7,19 @@ import (
 	"strings"
 )
 
-const driveHelp = `orbit drive — work with the owner's Documents drive
+const documentsHelp = `orbit documents — work with the owner's Documents
 
 Usage:
-  orbit drive put <local-path> <path> [--json]
-  orbit drive get <path> [--json]
-  orbit drive ls [path] [--cursor CURSOR] [--json]
-  orbit drive mv <from> <to> [--json]
-  orbit drive rm <path> [--json]
+  orbit documents put <local-path> <path> [--json]
+  orbit documents get <path> [--json]
+  orbit documents ls [path] [--cursor CURSOR] [--json]
+  orbit documents mv <from> <to> [--json]
+  orbit documents rm <path> [--json]
 
-Use orbit drive <command> --help for details.
+Use orbit documents <command> --help for details. orbit drive is the same command under its old name.
 `
 
-var driveCLIHelp = map[string]string{
+var documentsCLIHelp = map[string]string{
 	"put": "Copy a file from this session's checkout or uploads directory to the drive. Overwriting keeps the previous version. " +
 		"The file is sent in 8 MiB chunks and has no size limit: file_upload's 25 MiB cap does not apply here.",
 	"get": "Download a drive file into this session's uploads directory and return its local path.",
@@ -28,55 +28,55 @@ var driveCLIHelp = map[string]string{
 	"rm":  "Move a drive entry to the owner's Trash. The owner can restore it from the Documents page. Agents cannot see Trash.",
 }
 
-var driveCLICapabilities = []cliCapabilitySpec{
-	{Tool: "drive_put", Argv: []string{"orbit", "drive", "put"}, Usage: "orbit drive put <local-path> <path> [--json]",
+var documentsCLICapabilities = []cliCapabilitySpec{
+	{Tool: "documents_put", Argv: []string{"orbit", "documents", "put"}, Usage: "orbit documents put <local-path> <path> [--json]",
 		Arguments: []string{"[local-path] (required)", "[path] (required)", "--json"}, Mutates: true, SessionOnly: true},
-	{Tool: "drive_get", Argv: []string{"orbit", "drive", "get"}, Usage: "orbit drive get <path> [--json]",
+	{Tool: "documents_get", Argv: []string{"orbit", "documents", "get"}, Usage: "orbit documents get <path> [--json]",
 		Arguments: []string{"[path] (required)", "--json"}, SessionOnly: true},
-	{Tool: "drive_list", Argv: []string{"orbit", "drive", "ls"}, Usage: "orbit drive ls [path] [--cursor CURSOR] [--json]",
+	{Tool: "documents_list", Argv: []string{"orbit", "documents", "ls"}, Usage: "orbit documents ls [path] [--cursor CURSOR] [--json]",
 		Arguments: []string{"[path]", "--cursor <cursor>", "--json"}},
-	{Tool: "drive_move", Argv: []string{"orbit", "drive", "mv"}, Usage: "orbit drive mv <from> <to> [--json]",
+	{Tool: "documents_move", Argv: []string{"orbit", "documents", "mv"}, Usage: "orbit documents mv <from> <to> [--json]",
 		Arguments: []string{"[from] (required)", "[to] (required)", "--json"}, Mutates: true},
-	{Tool: "drive_delete", Argv: []string{"orbit", "drive", "rm"}, Usage: "orbit drive rm <path> [--json]",
+	{Tool: "documents_delete", Argv: []string{"orbit", "documents", "rm"}, Usage: "orbit documents rm <path> [--json]",
 		Arguments: []string{"[path] (required)", "--json"}, Mutates: true},
 }
 
-var driveActionHelp = func() map[string]string {
-	help := make(map[string]string, len(driveCLICapabilities))
-	for _, spec := range driveCLICapabilities {
+var documentsActionHelp = func() map[string]string {
+	help := make(map[string]string, len(documentsCLICapabilities))
+	for _, spec := range documentsCLICapabilities {
 		action := spec.Argv[2]
-		help[action] = fmt.Sprintf("%s\n\n%s\n", spec.Usage, driveCLIHelp[action])
+		help[action] = fmt.Sprintf("%s\n\n%s\n", spec.Usage, documentsCLIHelp[action])
 	}
 	return help
 }()
 
-func cmdDriveCLI(args []string, out io.Writer) error {
+func cmdDocumentsCLI(args []string, out io.Writer) error {
 	help := false
 	if len(args) > 0 && args[0] == "help" {
 		args, help = args[1:], true
 	}
 	if len(args) == 0 || wantsHelp(args[:1]) {
-		_, err := fmt.Fprint(out, driveHelp)
+		_, err := fmt.Fprint(out, documentsHelp)
 		return err
 	}
 	action := args[0]
-	for _, spec := range driveCLICapabilities {
+	for _, spec := range documentsCLICapabilities {
 		if action == spec.Argv[2] {
 			if help || wantsHelp(args[1:]) {
-				_, err := fmt.Fprint(out, driveActionHelp[action])
+				_, err := fmt.Fprint(out, documentsActionHelp[action])
 				return err
 			}
-			return runDriveCLI(spec, args[1:], out)
+			return runDocumentsCLI(spec, args[1:], out)
 		}
 	}
-	return fmt.Errorf("unknown drive command %q\n\n%s", action, driveHelp)
+	return fmt.Errorf("unknown documents command %q\n\n%s", action, documentsHelp)
 }
 
-func runDriveCLI(spec cliCapabilitySpec, args []string, out io.Writer) error {
+func runDocumentsCLI(spec cliCapabilitySpec, args []string, out io.Writer) error {
 	fs := newCLIFlagSet(strings.Join(spec.Argv, " "))
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	var cursor *string
-	if spec.Tool == "drive_list" {
+	if spec.Tool == "documents_list" {
 		cursor = fs.String("cursor", "", "nextCursor from the previous page")
 	}
 	positionals, err := parseInterspersed(fs, args)
@@ -85,16 +85,16 @@ func runDriveCLI(spec cliCapabilitySpec, args []string, out io.Writer) error {
 	}
 	toolArgs := map[string]interface{}{}
 	switch spec.Tool {
-	case "drive_put", "drive_move":
+	case "documents_put", "documents_move":
 		if len(positionals) != 2 {
 			return fmt.Errorf("usage: %s", spec.Usage)
 		}
-		if spec.Tool == "drive_put" {
+		if spec.Tool == "documents_put" {
 			toolArgs["localPath"], toolArgs["path"] = positionals[0], positionals[1]
 		} else {
 			toolArgs["from"], toolArgs["to"] = positionals[0], positionals[1]
 		}
-	case "drive_list":
+	case "documents_list":
 		if len(positionals) > 1 {
 			return fmt.Errorf("usage: %s", spec.Usage)
 		}
@@ -112,7 +112,7 @@ func runDriveCLI(spec cliCapabilitySpec, args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	raw, err := runDriveTool(t, fileToolContext{sessionID: strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID"))}, spec.Tool, toolArgs)
+	raw, err := runDocumentsTool(t, fileToolContext{sessionID: strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID"))}, spec.Tool, toolArgs)
 	if err != nil {
 		return err
 	}

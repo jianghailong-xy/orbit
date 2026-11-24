@@ -338,9 +338,9 @@ type fileToolContext struct {
 	// retry queues behind it and keeps everything a second time, so a call stops at the longest it may hold the engine
 	// and says what it got done.
 	callTimeout time.Duration
-	// progress counts a drive_put or drive_get call's bytes for the chat's transfer card (drive_progress.go); nil
+	// progress counts a documents_put or documents_get call's bytes for the chat's transfer card (documents_progress.go); nil
 	// reports nothing.
-	progress *driveProgress
+	progress *documentsProgress
 }
 
 // callContext is the time this call has.

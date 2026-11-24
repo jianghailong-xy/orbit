@@ -26,7 +26,7 @@ func TestEnsureDriveLink(t *testing.T) {
 	}
 
 	// A runner that does not receive the drive is not touched.
-	ensureDriveLink(logf)
+	ensureDocumentsLink(logf)
 	if _, err := os.Lstat(driveHomePath); !os.IsNotExist(err) {
 		t.Fatalf("a runner without /run/orbit-files got %s", driveHomePath)
 	}
@@ -34,7 +34,7 @@ func TestEnsureDriveLink(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(driveMountPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	ensureDriveLink(logf)
+	ensureDocumentsLink(logf)
 	if link() != driveMountPath {
 		t.Fatalf("the link is %q", link())
 	}
@@ -43,7 +43,7 @@ func TestEnsureDriveLink(t *testing.T) {
 	if err := os.Remove(driveHomePath); err != nil {
 		t.Fatal(err)
 	}
-	ensureDriveLink(logf)
+	ensureDocumentsLink(logf)
 	if link() != driveMountPath {
 		t.Fatalf("the link was not made again: %q", link())
 	}
@@ -61,7 +61,7 @@ func TestEnsureDriveLink(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(driveHomePath, "mine.txt"), []byte("mine"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	ensureDriveLink(logf)
+	ensureDocumentsLink(logf)
 	if link() != driveMountPath {
 		t.Fatalf("the link was not made over a folder: %q", link())
 	}
@@ -83,7 +83,7 @@ func TestEnsureDriveLink(t *testing.T) {
 	if err := os.Symlink(dir, driveHomePath); err != nil {
 		t.Fatal(err)
 	}
-	ensureDriveLink(logf)
+	ensureDocumentsLink(logf)
 	if link() != driveMountPath {
 		t.Fatalf("a wrong link stayed: %q", link())
 	}

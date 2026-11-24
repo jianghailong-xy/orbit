@@ -32,7 +32,7 @@ import (
 // of the canonical catalogue and is emitted with `orbit capabilities --json`, so a client can tell
 // which catalogue answered it.
 
-const operationCatalogVersion = "1.10.0"
+const operationCatalogVersion = "1.11.0"
 
 // sessionStateFieldsNote is how an agent reads the session-state fields session_list and session_get
 // return beside `status` (Agent Contract 1.12.0). They are additive: `status` and its values are unchanged.
@@ -3185,7 +3185,7 @@ func buildOperationCatalog() []*operation {
 	// (wiki_tools.go; they are left out entirely when the wiki is off).
 	add(gateAlways, wikiToolDescriptors(obj)...)
 	add(gateAlways, fileToolDescriptors(obj)...)
-	add(gateAlways, driveToolDescriptors(obj)...)
+	add(gateAlways, documentsToolDescriptors(obj)...)
 	// The owner's own Settings (settings_tools.go): listed whether or not Session orchestration is on, since they fix
 	// ordinary settings and turning orchestration off is itself a proposal (docs/settings-from-conversation-design.md §7).
 	add(gateAlways, settingsToolDescriptors(obj)...)
@@ -4571,7 +4571,7 @@ func finishOperationCatalog(ops []*operation) []*operation {
 		{"wiki", wikiCLICapabilities},
 		{"wiki", wikiImportCLICapabilities},
 		{"file", fileCLICapabilities},
-		{"drive", driveCLICapabilities},
+		{"documents", documentsCLICapabilities},
 		{"subagent", subagentCLICapabilities},
 		{"settings", settingsCLICapabilities},
 		{"browser", browserCLICapabilities},
@@ -5392,23 +5392,23 @@ var catalogMetadata = map[string]operationMeta{
 		Object: objectFile,
 		Intent: "See the files this session keeps.",
 	},
-	"drive_put": {
+	"documents_put": {
 		Object: objectFile,
 		Intent: "Copy a local file into the owner's Documents drive.",
 	},
-	"drive_get": {
+	"documents_get": {
 		Object: objectFile,
 		Intent: "Download a drive file into this session's uploads directory.",
 	},
-	"drive_list": {
+	"documents_list": {
 		Object: objectFile,
 		Intent: "See the contents of a drive folder.",
 	},
-	"drive_move": {
+	"documents_move": {
 		Object: objectFile,
 		Intent: "Move or rename an entry on the drive.",
 	},
-	"drive_delete": {
+	"documents_delete": {
 		Object:      objectFile,
 		Intent:      "Move an entry to the owner's Trash.",
 		Destructive: true,

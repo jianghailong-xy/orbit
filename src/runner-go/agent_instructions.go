@@ -150,7 +150,7 @@ const orbitEvidenceFileInstructions = "Evidence: cite a command's output by its 
 func orbitDriveInstructions() string {
 	const readOnly = "Verifying, judging and ORBIT_GUEST turns only read it."
 	if !driveMounted() {
-		return "The owner's Documents drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); " +
+		return "The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); " +
 			"deletes go to a Trash agents cannot see. " + readOnly + "\n\n"
 	}
 	return "~/Documents is the owner's permanent Documents drive; link its files by path. Give ls, find, du ~/Documents/ (a " +
@@ -163,9 +163,9 @@ func orbitDriveInstructions() string {
 func orbitDriveGuide() string {
 	const readOnly = "Verification, judgment and guest-driven turns (a message carrying the ORBIT_GUEST marker) read the drive and do not write it."
 	if !driveMounted() {
-		return "The owner's Documents drive is reached with drive_put, drive_get, drive_list, drive_move and drive_delete, " +
-			"or `orbit drive put|get|ls|mv|rm`, by drive path (/Proj/r.md). drive_put reads only this session's checkout or " +
-			"uploads directory and overwrites with a version; drive_get saves into the uploads directory. A delete moves the " +
+		return "The owner's Documents drive is reached with documents_put, documents_get, documents_list, documents_move and " +
+			"documents_delete, or `orbit documents put|get|ls|mv|rm`, by drive path (/Proj/r.md). documents_put reads only this " +
+			"session's checkout or uploads directory and overwrites with a version; documents_get saves into the uploads directory. A delete moves the " +
 			"entry to the owner's Trash, which agents cannot see or restore, and no tool shares a drive file. " + readOnly
 	}
 	return "~/Documents (/home/orbit/Documents, mounted at /run/orbit-files/drive) is the owner's permanent Documents drive, " +

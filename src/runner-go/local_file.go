@@ -263,7 +263,7 @@ func (s localFileScope) open(path string) (*os.File, os.FileInfo, error) {
 	return s.openRegular(path, true)
 }
 
-// openRegular enforces the path rule for both attachments and drive_put.
+// openRegular enforces the path rule for both attachments and documents_put.
 func (s localFileScope) openRegular(path string, scanSecrets bool) (*os.File, os.FileInfo, error) {
 	real, err := filepath.EvalSymlinks(path)
 	if err != nil {
