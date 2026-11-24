@@ -85,7 +85,13 @@ const row = (n: number, title: string, extra: Record<string, unknown> = {}) => (
   ...extra,
 });
 const LOOSE = row(921, 'Loose one', { lastTurnAt: '2026-10-03T08:00:00Z' });
-const NOTES = row(922, 'Release notes', { folderId: RELEASE.id, pendingApprovals: 1, lastTurnAt: '2026-10-03T07:00:00Z' });
+const FRONTEND = { id: pid(915), name: 'frontend', color: '#e8892b' };
+const NOTES = row(922, 'Release notes', {
+  folderId: RELEASE.id,
+  pendingApprovals: 1,
+  lastTurnAt: '2026-10-03T07:00:00Z',
+  tags: [FRONTEND],
+});
 const BUILD = row(923, 'Tag the build', {
   folderId: RELEASE.id,
   status: 'RUNNING',
@@ -205,6 +211,26 @@ const listRow = (title: string): HTMLElement => {
   if (!found) throw new Error(`no list row titled ${title}`);
   return found;
 };
+const submenuRows = (): HTMLElement[] =>
+  [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"][aria-haspopup]')];
+/** Picks a tag from the scope menu's Filter by Tag, the mouse coming to rest on that row. */
+async function filterByTag(name: string): Promise<void> {
+  await click(mounted().querySelector('.session-scope-menu'), 'the scope menu');
+  await until(() => expect(submenuRows()).not.toHaveLength(0));
+  const filter = submenuRows().find((el) => el.textContent?.startsWith('Filter by Tag'));
+  expect(filter, 'Filter by Tag is on screen').toBeTruthy();
+  await act(async () => {
+    filter!.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse', relatedTarget: document.body }));
+    filter!.dispatchEvent(new PointerEvent('pointerenter', { pointerType: 'mouse', relatedTarget: document.body }));
+    filter!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: document.body }));
+    filter!.dispatchEvent(new MouseEvent('mouseenter', { relatedTarget: document.body }));
+    filter!.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+  });
+  const tagItem = () => [...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-closed]) [role="menuitem"]')]
+    .find((el) => (el.textContent ?? '').trim().startsWith(name));
+  await until(() => expect(tagItem()).toBeTruthy());
+  await click(tagItem(), `the ${name} tag`);
+}
 const openMenu = (): HTMLElement | null => document.querySelector<HTMLElement>('[role="menu"]:not([data-closed])');
 const menuItem = (label: string): HTMLElement | undefined =>
   [...(openMenu()?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])].find((el) =>
@@ -319,6 +345,7 @@ beforeEach(() => {
       return reply([{ id: WORKSPACE_ID, name: 'orbit', runnerId: RUNNER_ID, createdAt: '2026-01-01T00:00:00Z', lastProvider: 'claude' }]);
     }
     if (path === '/session-folders') return reply(folders.map((f) => ({ ...f })));
+    if (path === '/session-tags') return reply([FRONTEND]);
     if (path.startsWith('/sessions?')) {
       listCalls.push(path);
       return reply(path.includes('view=open') || !path.includes('view=') ? rows : []);
@@ -446,6 +473,83 @@ describe('folders in the session list', { timeout: 60_000 }, () => {
       workspaceId: WORKSPACE_ID,
       folderId: RELEASE.id,
     });
+  });
+});
+
+describe('scoping a folder’s page', { timeout: 60_000 }, () => {
+  it('keeps the scope menu at the page’s head, without New Folder…', async () => {
+    await mountOnLoose();
+    await click(folderRow('Release'), 'the Release folder row');
+    await until(() => expect(mounted().querySelector('.session-folder-title')?.textContent).toBe('Release'));
+
+    const head = mounted().querySelector('.session-folder-head')!;
+    expect(head.querySelector('.session-scope-menu')?.textContent).toBe('Open');
+    expect(head.querySelector('.session-folder-head-more'), 'Rename… and Delete Folder… stay in ⋯').not.toBeNull();
+    expect(mounted().querySelector('.session-search')?.textContent).toContain('Search in Release');
+
+    await click(head.querySelector('.session-scope-menu'), 'the scope menu');
+    await until(() => expect(menuItem('Completed')).toBeTruthy());
+    expect(menuItem('New Folder…'), 'no folder is made inside a folder').toBeUndefined();
+  });
+
+  it('narrows the folder by a tag, and Back gives the list its folders again without it', async () => {
+    await mountOnLoose();
+    await click(folderRow('Release'), 'the Release folder row');
+    await until(() => expect(sessionTitles()).toEqual(['Release notes', 'Tag the build']));
+
+    await filterByTag('frontend');
+    // Still the folder's page, narrowed to its tagged session.
+    await until(() => expect(sessionTitles()).toEqual(['Release notes']));
+    expect(mounted().querySelector('.session-folder-title')?.textContent).toBe('Release');
+    expect(location).toBe(`/sessions/${LOOSE.id}?folder=${RELEASE.id}`);
+    const chip = mounted().querySelector('.session-tag-chip');
+    expect(chip?.textContent).toContain('frontend');
+
+    // The chip clears the filter in one click.
+    await click(chip, 'the tag chip');
+    await until(() => expect(sessionTitles()).toEqual(['Release notes', 'Tag the build']));
+    expect(mounted().querySelector('.session-tag-chip')).toBeNull();
+
+    // Filtered again, then Back: the tag was the page's, so the list has its folders.
+    await filterByTag('frontend');
+    await until(() => expect(sessionTitles()).toEqual(['Release notes']));
+    await click(mounted().querySelector('.session-folder-back'), 'the back button');
+    await until(() => expect(folderNames()).toEqual(['Release', 'Wiki']));
+    expect(sessionTitles()).toEqual(['Loose one']);
+    expect(mounted().querySelector('.session-scope-menu')?.classList.contains('on')).toBe(false);
+  });
+
+  it('says what narrowed the page when nothing is left, and clears it from there', async () => {
+    await mountOnLoose();
+    await click(folderRow('Wiki'), 'the Wiki folder row');
+    await until(() => expect(sessionTitles()).toEqual(['Wiki cursor']));
+
+    await filterByTag('frontend');
+    await until(() => expect(mounted().querySelector('.chat-note')?.textContent)
+      .toContain('No sessions with “frontend” in this folder.'));
+    await click(mounted().querySelector('.chat-note-action'), 'Clear filter');
+    await until(() => expect(sessionTitles()).toEqual(['Wiki cursor']));
+  });
+
+  it('switches to Completed on the page, and Trash leaves it', async () => {
+    await mount(`/workspaces/${WORKSPACE_ID}?folder=${RELEASE.id}`, () =>
+      expect(mounted().querySelector('.session-folder-title')?.textContent).toBe('Release'));
+
+    await click(mounted().querySelector('.session-scope-menu'), 'the scope menu');
+    await until(() => expect(menuItem('Completed')).toBeTruthy());
+    await click(menuItem('Completed'), 'Completed');
+    await until(() => expect(mounted().querySelector('.session-scope-menu')?.textContent).toBe('Completed'));
+    expect(mounted().querySelector('.session-folder-title')?.textContent).toBe('Release');
+    expect(location).toBe(`/workspaces/${WORKSPACE_ID}?folder=${RELEASE.id}`);
+    await until(() => expect(mounted().querySelector('.chat-note')?.textContent)
+      .toContain('No completed sessions in this folder.'));
+
+    await click(mounted().querySelector('.session-scope-menu'), 'the scope menu');
+    await until(() => expect(menuItem('Trash')).toBeTruthy());
+    await click(menuItem('Trash'), 'Trash');
+    await until(() => expect(location).toBe(`/workspaces/${WORKSPACE_ID}`));
+    expect(mounted().querySelector('.session-folder-title')).toBeNull();
+    expect(mounted().querySelector('.session-scope-menu')?.textContent).toBe('Trash');
   });
 });
 

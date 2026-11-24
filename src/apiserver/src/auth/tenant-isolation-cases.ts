@@ -1093,6 +1093,8 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     'the grant is read by (id, the caller) only, 404 for another account\'s, and its request is then revoked by (request id, the caller) (owner-requests/owner-secrets.service.ts:828); owner-secrets.pg.spec.ts (k) sends another account\'s',
   'POST /owner-requests/:id/create-wiki':
     'read by (id, the caller) first, 404 for another account\'s id (owner-requests/owner-requests.service.ts:306); the wiki is made under the caller\'s account through wiki.createSpace from that row\'s repository and workspace, never from the body, and the card is settled by a compare-and-set on (id, the caller, PENDING) (owner-requests/owner-requests.service.ts:521)',
+  'POST /owner-requests/:id/apply':
+    'the request is read FOR UPDATE by (id, the caller) and nothing else, 404 for another account\'s id, and its runner is then read FOR UPDATE by (the id its change_spec names, the caller), 404 when that finds nothing, before anything is written; the body carries only the value, never a runner (owner-requests/owner-requests.service.ts:897, owner-requests/owner-requests.service.ts:931); owner-request-change.pg.spec.ts (11) sends another account\'s',
   'POST /owner-requests/:id/apply-settings':
     'read by (id, the caller) first, 404 for another account\'s id (owner-requests/owner-requests.service.ts:509); the preferences read FOR NO KEY UPDATE and written are the caller\'s own user row, never one the body names (owner-requests/settings-apply.ts:21, owner-requests/settings-apply.ts:39), and the card is settled by a compare-and-set on (id, the caller, PENDING) (owner-requests/owner-requests.service.ts:820)',
   'POST /owner-requests/:id/decline':

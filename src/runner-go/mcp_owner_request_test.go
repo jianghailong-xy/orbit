@@ -20,14 +20,14 @@ func TestRequestOwnerActionIsOfferedWithoutOrchestration(t *testing.T) {
 	props := mcpToolProps(tools, "request_owner_action")
 	for _, want := range []string{
 		"kind", "title", "why", "blocksTaskIds", "ifUnanswered", "steps", "secretSpec",
-		"options", "recommendedOption", "expiresIn", "clientRequestId",
+		"options", "recommendedOption", "expiresIn", "clientRequestId", "change",
 	} {
 		if _, ok := props[want]; !ok {
 			t.Fatalf("request_owner_action does not take %q: %#v", want, props)
 		}
 	}
 	kind, _ := props["kind"].(map[string]interface{})
-	if got := kind["enum"]; !reflect.DeepEqual(got, []string{"DECISION", "SECRET", "MANUAL_STEP", "CONFIRM", "WIKI_CREATE"}) {
+	if got := kind["enum"]; !reflect.DeepEqual(got, []string{"DECISION", "SECRET", "MANUAL_STEP", "CONFIRM", "WIKI_CREATE", "CHANGE"}) {
 		t.Fatalf("request_owner_action kinds = %#v", got)
 	}
 	// A WIKI_CREATE carries no title (Orbit writes it), so title cannot be required by the schema.
@@ -233,5 +233,88 @@ func TestNotifyDescriptionSendsCredentialAndActionNeedsToRequestOwnerAction(t *t
 	message, _ := mcpToolProps(tools, "notify")["message"].(map[string]interface{})
 	if text, _ := message["description"].(string); strings.Contains(text, "what you need") {
 		t.Fatalf("notify's message still asks for what you need: %q", text)
+	}
+}
+
+// A CHANGE filing is the same request body from the tool and from `orbit owner-request`, and the runner name the
+// command line takes is turned into its id before either is built.
+func TestOwnerRequestChangeIsTheSameBodyFromMCPAndCLI(t *testing.T) {
+	runners := json.RawMessage(`[{"id":"runner-1","name":"wikova","displayName":null},{"id":"runner-2","name":"ws01","displayName":"Build"}]`)
+	cliArgs := func(runner string) map[string]interface{} {
+		got, _, err := ownerRequestCLIArgs([]string{
+			"--kind", "CHANGE", "--runner", runner, "--max-concurrent", "6",
+			"--title", "Lower wikova to 6", "--why", "It has run at 12/12.",
+			"--blocks-task-id", "task-4", "--blocks-task-id", "task-7", "--client-request-id", "call-1",
+		}, func(v string) string { return pickRunnerID(runners, v) })
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	mcpArgs := map[string]interface{}{
+		"kind": "CHANGE", "title": "Lower wikova to 6", "why": "It has run at 12/12.",
+		"change":        map[string]interface{}{"runnerId": "runner-1", "maxConcurrent": float64(6)},
+		"blocksTaskIds": []interface{}{"task-4", "task-7"}, "clientRequestId": "call-1",
+	}
+	now := time.Now()
+	want, err := ownerRequestBody(mcpArgs, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, runner := range []string{"runner-1", "wikova"} {
+		got, err := ownerRequestBody(cliArgs(runner), now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("--runner %s built %#v, MCP built %#v", runner, got, want)
+		}
+	}
+	if want["change"].(map[string]interface{})["maxConcurrent"] != 6 {
+		t.Fatalf("change = %#v", want["change"])
+	}
+	if got := pickRunnerID(runners, "Build"); got != "runner-2" {
+		t.Fatalf("a display name resolved to %q", got)
+	}
+	if got := pickRunnerID(runners, "nobody"); got != "nobody" {
+		t.Fatalf("an unknown runner was rewritten to %q", got)
+	}
+}
+
+func TestOwnerRequestChangeIsRefusedWhereItDoesNotBelong(t *testing.T) {
+	now := time.Now()
+	change := map[string]interface{}{"runnerId": "runner-1", "maxConcurrent": float64(6)}
+	for name, args := range map[string]map[string]interface{}{
+		"change on CONFIRM":     {"kind": "CONFIRM", "title": "t", "why": "w", "change": change},
+		"change on DECISION":    {"kind": "DECISION", "title": "t", "why": "w", "change": change},
+		"CHANGE with no change": {"kind": "CHANGE", "title": "t", "why": "w"},
+		"no runner":             {"kind": "CHANGE", "title": "t", "why": "w", "change": map[string]interface{}{"maxConcurrent": float64(6)}},
+		"zero":                  {"kind": "CHANGE", "title": "t", "why": "w", "change": map[string]interface{}{"runnerId": "r", "maxConcurrent": float64(0)}},
+		"fraction":              {"kind": "CHANGE", "title": "t", "why": "w", "change": map[string]interface{}{"runnerId": "r", "maxConcurrent": 2.5}},
+		"another setting":       {"kind": "CHANGE", "title": "t", "why": "w", "change": map[string]interface{}{"runnerId": "r", "maxConcurrent": float64(2), "name": "x"}},
+	} {
+		if _, err := ownerRequestBody(args, now); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+	// Over the CLI, the same refusal for a kind that has no change.
+	got, _, err := ownerRequestCLIArgs([]string{"--kind", "CONFIRM", "--runner", "r", "--max-concurrent", "6", "--title", "t", "--why", "w"}, func(v string) string { return v })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ownerRequestBody(got, now); err == nil {
+		t.Error("the CLI filed a CONFIRM with a change")
+	}
+	if _, _, err := ownerRequestCLIArgs([]string{"--kind", "CHANGE", "--runner", "r", "--title", "t", "--why", "w"}, func(v string) string { return v }); err == nil {
+		t.Error("--runner without --max-concurrent was accepted")
+	}
+}
+
+func TestRequestOwnerActionDescriptionTellsAgentToReadApplied(t *testing.T) {
+	desc := mcpToolDescription(toolDescriptors(false, false), "request_owner_action")
+	for _, want := range []string{"CHANGE", "applies it with one press", "you never write the setting yourself", "read `applied`, not `requested`"} {
+		if !strings.Contains(desc, want) {
+			t.Fatalf("description does not say %q: %q", want, desc)
+		}
 	}
 }

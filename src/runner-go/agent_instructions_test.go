@@ -293,6 +293,7 @@ var advertisedCapabilityFamilies = []struct {
 	{"providerCLICapabilities", providerCLICapabilities, false},
 	{"projectCLICapabilities", projectCLICapabilities, false},
 	{"notifyCLICapabilities", notifyCLICapabilities, false},
+	{"ownerRequestCLICapabilities", ownerRequestCLICapabilities, false},
 	{"mergeReceiptCLICapabilities", mergeReceiptCLICapabilities, false},
 	{"watchCLICapabilities", watchCLICapabilities, false},
 	// Ungated like the watch commands and SessionOnly for the same kind of reason: a wiki command
