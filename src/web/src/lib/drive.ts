@@ -302,11 +302,30 @@ export const pictureType = (name: string): string | null => PICTURES[extension(n
 
 export const isMarkdown = (name: string): boolean => ['md', 'markdown'].includes(extension(name));
 
-/** A Markdown preview reads at most this much of the file. */
-export const MARKDOWN_PREVIEW_BYTES = 1024 * 1024;
+const TEXT = new Set(
+  (
+    'txt text log csv tsv json jsonl ndjson yaml yml toml ini cfg conf env properties xml sql sh bash zsh ps1 ' +
+    'py rb go rs ts tsx js jsx mjs cjs css scss less swift kt kts java c h cc cpp hpp cs php lua r pl ' +
+    'diff patch gitignore dockerfile makefile graphql proto tex rst srt vtt'
+  ).split(' '),
+);
+
+/** Plain text or code, shown as it is written. */
+export const isText = (name: string): boolean => TEXT.has(extension(name)) || TEXT.has(name.toLowerCase());
+
+/** A web page, drawn in a frame that runs nothing it carries. */
+export const isHtml = (name: string): boolean => ['html', 'htm'].includes(extension(name));
+
+export const isPdf = (name: string): boolean => extension(name) === 'pdf';
+
+/** A Markdown, text, code or HTML preview reads at most this much of the file. */
+export const TEXT_PREVIEW_BYTES = 1024 * 1024;
 
 /** A picture preview is read whole up to this size; a bigger one is downloaded rather than drawn. */
 export const PICTURE_PREVIEW_BYTES = 30 * 1024 * 1024;
+
+/** A PDF preview is read whole up to this size, like a picture. */
+export const PDF_PREVIEW_BYTES = PICTURE_PREVIEW_BYTES;
 
 /**
  * Whether "Delete for good" on a group ends a file's link with it (§9). A shared file in Trash has a paused link, and
