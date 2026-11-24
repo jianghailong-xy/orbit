@@ -134,7 +134,7 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
   const aliceRunner = await runnerOf(alice, 'alice-laptop');
   const bobRunner = await runnerOf(bob, 'bob-laptop');
 
-  const server = await startApiserver(url, `runner-drive-${RUN}`, { ORBIT_FILES_DIR: filesDir });
+  const server = await startApiserver(url, `runner-drive-${RUN}`, { ORBIT_DOCUMENTS_DIR: filesDir });
   t.after(() => server.stop());
   /** A door request under `prefix`: /runner/documents, or the /runner/drive alias deployed runners call. */
   const at = (prefix: string) => (token: string, method: string, route: string, body?: unknown, headers: Record<string, string> = {}) =>

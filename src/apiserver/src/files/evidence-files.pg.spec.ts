@@ -97,8 +97,8 @@ test('the files of a version of evidence', { skip: !URL, concurrency: 1, timeout
   server = await startApiserver(url, jwtSecret, {
     PROVIDER_SECRET_KEY,
     MODEL_CATALOG_URL: 'http://127.0.0.1:9/',
-    ORBIT_FILES_BACKEND: 'local',
-    ORBIT_FILES_DIR: dir,
+    ORBIT_DOCUMENTS_BACKEND: 'local',
+    ORBIT_DOCUMENTS_DIR: dir,
   });
   const api = server;
 

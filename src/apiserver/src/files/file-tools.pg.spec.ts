@@ -124,8 +124,8 @@ test('the doors behind file_upload, file_fetch and file_list', { skip: !URL, con
   server = await startApiserver(url, jwtSecret, {
     PROVIDER_SECRET_KEY,
     MODEL_CATALOG_URL: 'http://127.0.0.1:9/',
-    ORBIT_FILES_BACKEND: 'local',
-    ORBIT_FILES_DIR: dir,
+    ORBIT_DOCUMENTS_BACKEND: 'local',
+    ORBIT_DOCUMENTS_DIR: dir,
   });
   const api = server;
   const tempFiles = () => {
@@ -139,7 +139,7 @@ test('the doors behind file_upload, file_fetch and file_list', { skip: !URL, con
   // An owner with two machines, and on the first a session with no task, one running a task, and one that has ended
   // its share of a task but stays the owner's; a task nobody here runs; and a stranger.
   const ownerId = randomUUID();
-  const email = `file-tools-${RUN}@orbit-files.invalid`;
+  const email = `file-tools-${RUN}@orbit-documents.invalid`;
   await db.user.create({ data: { id: ownerId, email, name: 'file tools', passwordHash: 'x' } });
   const bearer = await new JwtService({ secret: jwtSecret }).signAsync({ sub: ownerId, email });
   const machineOf = async (name: string, owner = ownerId) => {

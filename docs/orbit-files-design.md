@@ -129,7 +129,7 @@
 
 ### 2.10 部署、备份、用量
 
-- **compose**：apiserver 加一个绑定挂载 `./data/files:/var/lib/orbit/files`，和 Postgres 的 `./data/postgres` 同一个做法。存储后端用 `ORBIT_FILES_BACKEND=local`（默认）或 `s3`；用 S3 时还要配 endpoint、bucket 和 key。
+- **compose**：apiserver 加一个绑定挂载 `./data/files:/var/lib/orbit/files`，和 Postgres 的 `./data/postgres` 同一个做法。存储后端用 `ORBIT_DOCUMENTS_BACKEND=local`（默认）或 `s3`；用 S3 时还要配 endpoint、bucket 和 key。
 - **备份**：pgbackup 侧车已经把 `./data/pg-archive` 同步到 `ORBIT_BACKUP_SYNC_TARGET`（`docker-compose.yml:147`），把 `./data/files` 也加进去一起同步。文件按 sha256 命名、只增不改，增量同步很便宜。恢复时先恢复 Postgres，再恢复文件；有删字节的宽限期，恢复出来的元数据就找得到对应的字节。
 - **用量**：Settings 里显示本账户的存储量、按项目和任务的排行，以及每周增长。自托管默认不设配额；托管实例用环境变量设每个账户的配额，超出时上传返回明确的错误。
 - **单文件上限**：沿用 25 MiB（第 6 节第 4 项）。

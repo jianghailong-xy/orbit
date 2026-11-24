@@ -182,6 +182,11 @@
 // runners' containers (deploy/monitoring/alloy). Two named volumes are added, Loki's data and Alloy's read positions.
 // The apiserver gains one environment line, ORBIT_LOG_FORMAT (json unless the host's .env says text), its JSON log lines
 // carrying the web gateway's request id (src/apiserver/src/common/request-log.ts).
+//
+// On 2026-11-24 Orbit Files was renamed Documents (project 352m8OwBHdxxcHAOboe9B, whose instructions the account owner
+// chose: old names keep working wherever a host .env still uses them). The apiserver's and pgbackup's ORBIT_FILES_*
+// lines become ORBIT_DOCUMENTS_*, each defaulting to its ORBIT_FILES_* value and then to the default it had, so a host
+// .env from before renders the same values under the new names. Nothing else moves; the blocks below pin the lines.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -572,21 +577,23 @@ const APPROVED_APISERVER_BLOCKS = [
   ],
   // Orbit Files' store (2026-11-02, the top of this file): local unless the host's .env says s3, and the S3-compatible
   // bucket's endpoint, bucket, key pair and region, each empty unless .env sets it. It comes after the releases' line in
-  // the file, and before the managed runners'.
+  // the file, and before the managed runners'. Amended on 2026-11-24, when Orbit Files was renamed Documents (project
+  // 352m8OwBHdxxcHAOboe9B): each is ORBIT_DOCUMENTS_*, falling back to its ORBIT_FILES_* name in the host's .env.
   [
-    '      ORBIT_FILES_BACKEND: "${ORBIT_FILES_BACKEND:-local}"',
-    '      ORBIT_FILES_S3_ENDPOINT: "${ORBIT_FILES_S3_ENDPOINT:-}"',
-    '      ORBIT_FILES_S3_BUCKET: "${ORBIT_FILES_S3_BUCKET:-}"',
-    '      ORBIT_FILES_S3_ACCESS_KEY_ID: "${ORBIT_FILES_S3_ACCESS_KEY_ID:-}"',
-    '      ORBIT_FILES_S3_SECRET_ACCESS_KEY: "${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}"',
-    '      ORBIT_FILES_S3_REGION: "${ORBIT_FILES_S3_REGION:-}"',
-    '      ORBIT_FILES_S3_MIRROR: "${ORBIT_FILES_S3_MIRROR:-0}"',
+    '      ORBIT_DOCUMENTS_BACKEND: "${ORBIT_DOCUMENTS_BACKEND:-${ORBIT_FILES_BACKEND:-local}}"',
+    '      ORBIT_DOCUMENTS_S3_ENDPOINT: "${ORBIT_DOCUMENTS_S3_ENDPOINT:-${ORBIT_FILES_S3_ENDPOINT:-}}"',
+    '      ORBIT_DOCUMENTS_S3_BUCKET: "${ORBIT_DOCUMENTS_S3_BUCKET:-${ORBIT_FILES_S3_BUCKET:-}}"',
+    '      ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID: "${ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID:-${ORBIT_FILES_S3_ACCESS_KEY_ID:-}}"',
+    '      ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY: "${ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY:-${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}}"',
+    '      ORBIT_DOCUMENTS_S3_REGION: "${ORBIT_DOCUMENTS_S3_REGION:-${ORBIT_FILES_S3_REGION:-}}"',
+    '      ORBIT_DOCUMENTS_S3_MIRROR: "${ORBIT_DOCUMENTS_S3_MIRROR:-${ORBIT_FILES_S3_MIRROR:-0}}"',
   ],
   // Orbit Files' quota and grace period (2026-11-03, the top of this file): the quota, empty unless the host's .env sets it,
   // and pgbackup's two retention values with its own defaults. They come right after the store's lines in the file.
+  // Amended on 2026-11-24 like the store's lines: ORBIT_DOCUMENTS_*, falling back to ORBIT_FILES_*.
   [
-    '      ORBIT_FILES_QUOTA_BYTES: "${ORBIT_FILES_QUOTA_BYTES:-}"',
-    '      ORBIT_FILES_STORE_QUOTA_BYTES: "${ORBIT_FILES_STORE_QUOTA_BYTES:-}"',
+    '      ORBIT_DOCUMENTS_QUOTA_BYTES: "${ORBIT_DOCUMENTS_QUOTA_BYTES:-${ORBIT_FILES_QUOTA_BYTES:-}}"',
+    '      ORBIT_DOCUMENTS_STORE_QUOTA_BYTES: "${ORBIT_DOCUMENTS_STORE_QUOTA_BYTES:-${ORBIT_FILES_STORE_QUOTA_BYTES:-}}"',
     '      ORBIT_BASE_BACKUP_INTERVAL: "${ORBIT_BASE_BACKUP_INTERVAL:-86400}"',
     '      ORBIT_BASE_BACKUP_KEEP: "${ORBIT_BASE_BACKUP_KEEP:-2}"',
   ],
@@ -625,14 +632,15 @@ const APPROVED_WEB_BLOCK = [
   '        ORBIT_RUNNER_SOURCE_SHA: "${ORBIT_RUNNER_SOURCE_SHA:-}"',
 ];
 // Orbit Files' off-host copy (2026-11-02, the top of this file): the sidecar reads the files directory and cannot write it.
+// Its bucket settings were amended on 2026-11-24 like the apiserver's: ORBIT_DOCUMENTS_*, falling back to ORBIT_FILES_*.
 const PGBACKUP_FILES_MOUNT = '      - ./data/files:/var/lib/orbit/files:ro';
 const PGBACKUP_S3_MIRROR = [
-  '      ORBIT_FILES_S3_MIRROR: "${ORBIT_FILES_S3_MIRROR:-0}"',
-  '      ORBIT_FILES_S3_ENDPOINT: "${ORBIT_FILES_S3_ENDPOINT:-}"',
-  '      ORBIT_FILES_S3_BUCKET: "${ORBIT_FILES_S3_BUCKET:-}"',
-  '      ORBIT_FILES_S3_ACCESS_KEY_ID: "${ORBIT_FILES_S3_ACCESS_KEY_ID:-}"',
-  '      ORBIT_FILES_S3_SECRET_ACCESS_KEY: "${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}"',
-  '      ORBIT_FILES_S3_REGION: "${ORBIT_FILES_S3_REGION:-}"',
+  '      ORBIT_DOCUMENTS_S3_MIRROR: "${ORBIT_DOCUMENTS_S3_MIRROR:-${ORBIT_FILES_S3_MIRROR:-0}}"',
+  '      ORBIT_DOCUMENTS_S3_ENDPOINT: "${ORBIT_DOCUMENTS_S3_ENDPOINT:-${ORBIT_FILES_S3_ENDPOINT:-}}"',
+  '      ORBIT_DOCUMENTS_S3_BUCKET: "${ORBIT_DOCUMENTS_S3_BUCKET:-${ORBIT_FILES_S3_BUCKET:-}}"',
+  '      ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID: "${ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID:-${ORBIT_FILES_S3_ACCESS_KEY_ID:-}}"',
+  '      ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY: "${ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY:-${ORBIT_FILES_S3_SECRET_ACCESS_KEY:-}}"',
+  '      ORBIT_DOCUMENTS_S3_REGION: "${ORBIT_DOCUMENTS_S3_REGION:-${ORBIT_FILES_S3_REGION:-}}"',
 ];
 // The approved additions to postgres's command that (k) sets aside, which (i) pins byte for byte with the rest of the
 // service. Each is found by its LAST line: `      - -c` opens every setting, so a block's first line would find the
@@ -1087,7 +1095,7 @@ for last; do :; done
       env: {
         PATH: `${stubs}:${process.env.PATH}`,
         ORBIT_ARCHIVE_DIR: path.join(scratch, 'archive'),
-        ORBIT_FILES_DIR: filesDir,
+        ORBIT_DOCUMENTS_DIR: filesDir,
         ORBIT_BACKUP_SYNC_TARGET: target,
         ORBIT_BACKUP_MIN_FREE_MB: '0',
       },
@@ -1141,7 +1149,7 @@ test('(r) the sidecar copies the files after the archive, beside its target, wit
   assert.ok(slashed.rsyncCalls[2].endsWith(` ${FILES_SYNC_TARGET}/`), slashed.rsyncCalls[2]);
 });
 
-test('(r) a files directory with nothing but tmp/ has nothing to copy, as with ORBIT_FILES_BACKEND=s3, and that is no error', () => {
+test('(r) a files directory with nothing but tmp/ has nothing to copy, as with ORBIT_DOCUMENTS_BACKEND=s3, and that is no error', () => {
   for (const files of [['tmp'], []]) {
     const { status, log, rsyncCalls } = backupRound({ target: SYNC_TARGET, files });
     assert.equal(status, 7, log);

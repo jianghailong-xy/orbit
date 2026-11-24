@@ -20,6 +20,7 @@ describe('drive transfer progress', () => {
 
   it('shows drive paths as Files does', () => {
     expect(documentsDisplayPath('~/Files/Shuge/a.jpg')).toBe('/Shuge/a.jpg');
+    expect(documentsDisplayPath('/run/orbit-documents/drive/Shuge/a.jpg')).toBe('/Shuge/a.jpg');
     expect(documentsDisplayPath('/run/orbit-files/drive/Shuge/a.jpg')).toBe('/Shuge/a.jpg');
     expect(documentsDisplayPath('Shuge//a.jpg')).toBe('/Shuge/a.jpg');
     expect(commonFolder(['/Shuge/d/单幅/a.jpg', '/Shuge/d/老地图/b.jpg'])).toBe('/Shuge/d/');

@@ -141,7 +141,7 @@ export interface ManagedCredential {
 }
 
 /**
- * Where the Orbit Files drive's mount credential of a generation is delivered for the mounter, never the instance
+ * Where the Documents drive's mount credential of a generation is delivered for the mounter, never the instance
  * (docs/orbit-files-drive-technical-design.md §4.3, §6.1): on Kubernetes, Secret `mrf-<runner uuid>` in the files
  * namespace, which the CSI plugin reads when the kubelet publishes the drive.
  */
@@ -352,7 +352,7 @@ export interface ManagedRunnerBackend {
   /** Remove a retired generation's credential, by the identity it was read with. */
   removeCredential(mapping: ManagedRunner, credential: ManagedCredential): Promise<void>;
 
-  /** The drive's mount credential: present only where runner instances receive the Orbit Files drive. */
+  /** The drive's mount credential: present only where runner instances receive the Documents drive. */
   readonly driveMount?: ManagedDriveMountDelivery;
 
   // ── the instance ──

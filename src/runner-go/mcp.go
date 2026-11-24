@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -3684,6 +3685,13 @@ func ownerRequestBody(args map[string]interface{}, now time.Time) (map[string]in
 		return nil, errors.New("title is required for every kind but WIKI_CREATE")
 	}
 	copyIfPresent(body, args, "ifUnanswered", "steps", "secretSpec", "options", "recommendedOption", "clientRequestId")
+	change, err := ownerRequestChange(kind, args)
+	if err != nil {
+		return nil, err
+	}
+	if change != nil {
+		body["change"] = change
+	}
 	if blocked := getStringSlice(args, "blocksTaskIds"); len(blocked) > 0 {
 		body["blocksTaskIds"] = blocked
 	}
@@ -3695,6 +3703,42 @@ func ownerRequestBody(args map[string]interface{}, now time.Time) (map[string]in
 		body["expiresAt"] = now.Add(time.Duration(expiresIn) * time.Second).UTC().Format(time.RFC3339)
 	}
 	return body, nil
+}
+
+// ownerRequestChange is the `change` of a CHANGE request, { runnerId, maxConcurrent }, or nil for every other kind.
+// `change` names a setting the owner applies, so it is refused for a kind that has none and required for the one that
+// does; the server checks that the runner is the owner's and that the value differs from the current one.
+func ownerRequestChange(kind string, args map[string]interface{}) (map[string]interface{}, error) {
+	raw, present := args["change"]
+	if kind != "CHANGE" {
+		if present && raw != nil {
+			return nil, errors.New("change is only for kind CHANGE")
+		}
+		return nil, nil
+	}
+	change, ok := raw.(map[string]interface{})
+	if !ok {
+		return nil, errors.New("kind CHANGE needs change: { runnerId, maxConcurrent }")
+	}
+	runnerID := strings.TrimSpace(getString(change, "runnerId"))
+	if runnerID == "" {
+		return nil, errors.New("change.runnerId is required")
+	}
+	for key := range change {
+		if key != "runnerId" && key != "maxConcurrent" {
+			return nil, fmt.Errorf("change takes only runnerId and maxConcurrent, not %q", key)
+		}
+	}
+	maxConcurrent, ok := change["maxConcurrent"].(float64)
+	if !ok {
+		if i, isInt := change["maxConcurrent"].(int); isInt {
+			maxConcurrent, ok = float64(i), true
+		}
+	}
+	if !ok || maxConcurrent != math.Trunc(maxConcurrent) || maxConcurrent < 1 || maxConcurrent > math.MaxInt32 {
+		return nil, errors.New("change.maxConcurrent must be an integer of at least 1")
+	}
+	return map[string]interface{}{"runnerId": runnerID, "maxConcurrent": int(maxConcurrent)}, nil
 }
 
 func prettyJSON(raw json.RawMessage) string {
