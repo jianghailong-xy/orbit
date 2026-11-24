@@ -563,6 +563,33 @@ test('every record handed out is redacted and placed where a footnote\'s check r
   assert.deepEqual([mechanism.condition, mechanism.entries, mechanism.records], [null, [], []]);
 });
 
+test('a call that reads the wiki, cited by a picked entry, is no record of the section\'s material; a call of another tool is', { skip }, async () => {
+  const h = await boot();
+  const s = await scene(h);
+  const { keys } = await confirmPlan(h, s);
+  const long = await h.prisma.toolCall.findUniqueOrThrow({ where: { id: s.r.long }, select: { sessionId: true } });
+  const READ = 'WIKI-READ-WORDS the suite must run on the runner 宿主';
+  const reads = [
+    await toolCall(h, long.sessionId, 'mcp__orbit__wiki_get', { ids: ['34abc'] }, READ),
+    await toolCall(h, long.sessionId, 'wiki_read', { id: '34abc' }, READ),
+    await toolCall(h, long.sessionId, 'Bash', { command: 'orbit wiki read 34abc' }, READ),
+  ];
+  const fine = await toolCall(h, long.sessionId, 'Bash', { command: 'cat notes.txt' }, 'WIKI-NOT-READ words the suite must run on the runner 宿主');
+  // Cited by the entry the keyword finds (written by hand: no door takes a wiki read as a source any more).
+  const entry = await h.prisma.wikiEntry.findUniqueOrThrow({ where: { id: s.entries.keyword }, select: { currentRevision: true } });
+  const revision = await h.prisma.wikiEntryRevision.findFirstOrThrow({ where: { entryId: s.entries.keyword, revision: entry.currentRevision }, select: { id: true } });
+  for (const ref of [...reads, fine]) {
+    await h.prisma.wikiSource.create({ data: { revisionId: revision.id, ownerId: s.owner.id, kind: 'tool_call', ref, locator: {}, quote: null, state: 'live' } });
+  }
+  const material = await gathered(h, s, keys[2]);
+  const refs = material.records.map((record) => toUuid(record.ref));
+  for (const ref of reads) assert.ok(!refs.includes(toUuid(ref)), `a wiki read ${ref} is not in the material`);
+  assert.ok(!JSON.stringify(material).includes('WIKI-READ-WORDS'), 'nor its words');
+  assert.ok(refs.includes(toUuid(fine)), 'a call of another tool is');
+  assert.ok(refs.includes(toUuid(s.r.long)), 'and so are the entry\'s other records');
+  assert.ok(material.unresolved.every((one) => !reads.map(toUuid).includes(toUuid(one.ref))), 'a dropped record is not counted unresolved');
+});
+
 // ── 3. another tenant ───────────────────────────────────────────────────────────────────────────
 
 test('another tenant gets a 404 for the document, and no record of theirs comes back through an entry that cites one', { skip }, async () => {
