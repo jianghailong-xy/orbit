@@ -108,7 +108,7 @@ class LandingBoardStackDeviceTest {
             compose.onNodeWithContentDescription("Session scope", substring = true).performClick()
             compose.onNodeWithText("Settings").performClick()
             await("$name settings"); await("Landing")
-            when (key) { "refused" -> scrollTo("Connect GitHub again"); "permissionsPending" -> scrollTo("Review on GitHub"); else -> scrollTo("Landing") }
+            when (key) { "refused", "permissionsPending" -> { val box = if (key == "refused") "refused" else "permissions-pending"; compose.onNodeWithTag("landing-setting:$box:action", useUnmergedTree = true).performScrollTo() }; else -> scrollTo("Landing") }
             capture("settings-$key")
         }
         note("DONE ${only ?: "all"}")
