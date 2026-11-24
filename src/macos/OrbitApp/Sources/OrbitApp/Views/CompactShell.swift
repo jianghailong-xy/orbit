@@ -415,11 +415,13 @@ private struct CompactSections: View {
             // and the line a rewrite floats (docs/wiki-chat-design.md §9).
             .wikiChatHost()
 
-        // DOCUMENTS — the phone's pages come with the iOS task; nothing in the drawer opens this section yet.
+        // DOCUMENTS — the drive's top level → a folder, a file's page, its earlier versions, Trash or Storage
+        // (docs/mocks/documents, 01-ios). The path is the section's stack, like every section here.
         case .documents:
-            NavigationStack {
-                ContentUnavailableView(AppSection.documents.title, systemImage: AppSection.documents.systemImage)
+            NavigationStack(path: $model.nav.path) {
+                DocumentsFolderPage(folderID: nil, name: DocumentsLogic.title)
                     .drawerToggle(open: openDrawer)
+                    .navigationDestination(for: NavNode.self) { node in DocumentsDestination(node: node) }
             }
 
         // SCHEDULED — the timeline and its bottom panel.
@@ -777,7 +779,9 @@ struct NavigationDrawer: View {
                     wiki: model.wiki?.shown == true,
                     // Scheduled (board 01 ①): account-wide, here and nowhere in a workspace's list; away while
                     // the server predates scheduled tasks.
-                    scheduled: model.scheduled.map { !$0.unsupported } ?? false)) { row in
+                    scheduled: model.scheduled.map { !$0.unsupported } ?? false,
+                    // Documents under the Wiki, no count (documents board 01-ios ①), only while the server has it on.
+                    documents: model.documents?.shown == true)) { row in
                     switch row {
                     case .projects:       projectsRow
                     case .wiki:           wikiRow
@@ -810,6 +814,8 @@ struct NavigationDrawer: View {
             .task { await model.wiki?.loadSpaces() }
             // Scheduled's number — the schedules failing or held — read with the drawer like the others.
             .task { await model.scheduled?.load() }
+            // Whether the Documents row is drawn is the capabilities read's answer (`DocumentsLogic.shown`).
+            .task { await model.documents?.loadCapabilities() }
             // Shared with me, the rail's last group: read with the drawer, then every minute.
             .task { await model.followSharedWithMe() }
             // The action bar *floats over* the rail (ChatGPT-style) rather than being docked below a

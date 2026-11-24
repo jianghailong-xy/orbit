@@ -225,7 +225,8 @@
           "TASK",
           "taskId"
         ]
-      ]
+      ],
+      "nextTool": "project_request_reopen"
     },
     {
       "code": "MOVE_TASK_SERVES_SETTLED_CRITERION",
@@ -254,7 +255,8 @@
           "TASK",
           "taskId"
         ]
-      ]
+      ],
+      "nextTool": "project_request_reopen"
     },
     {
       "code": "CROSS_PROJECT_APPROVAL_REQUIRED",

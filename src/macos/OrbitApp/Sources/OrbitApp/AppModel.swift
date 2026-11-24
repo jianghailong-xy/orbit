@@ -4197,6 +4197,17 @@ final class AppModel {
         nav.path = [.wikiEntry(entryID: id)]
     }
 
+    /// A drive file (or folder) a reply links, opened in Documents (docs/mocks/documents, 01-ios ⑮): on the phone and
+    /// the iPad its page on the section's stack, on the Mac its folder with it selected.
+    func openDocumentsEntry(_ entry: DocumentsEntry) {
+        selectedSection = .documents
+        #if os(macOS)
+        if entry.isFolder { documents?.open(folder: entry.id) } else { documents?.reveal(entry) }
+        #else
+        nav.path = [entry.isFolder ? .documentsFolder(entryID: entry.id, name: entry.name) : .documentsFile(entryID: entry.id)]
+        #endif
+    }
+
     /// The project's page on the web — a signed-in address, for the project menu's Copy Link.
     func projectWebURL(_ projectID: String) -> URL? {
         baseURL?.appendingPathComponent("projects").appendingPathComponent(PublicID.toPublic(projectID))

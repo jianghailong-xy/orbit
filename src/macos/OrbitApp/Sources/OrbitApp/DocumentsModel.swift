@@ -3,6 +3,8 @@ import Observation
 import OrbitKit
 #if os(macOS)
 import AppKit
+#elseif os(iOS)
+import UIKit
 #endif
 
 /// Documents, the account's drive (docs/documents-drive-design.md; board docs/mocks/documents, 03-mac): the folder on
@@ -20,6 +22,12 @@ final class DocumentsModel {
 
     /// Which page is up: the drive, Trash or Storage (the sidebar's rows under Documents).
     var place: DocumentsPlace = .drive
+
+    /// Counts every write this app made or heard of (`drive.changed`, an upload landing). The phone's pages, each
+    /// holding its own folder, read again when it moves.
+    private(set) var changes = 0
+    /// Every entry a phone page has read, by id: a pushed page draws from here before its own read answers.
+    private(set) var known: [String: DocumentsEntry] = [:]
 
     // MARK: the folder
 
@@ -146,6 +154,40 @@ final class DocumentsModel {
         }
         loading = false
         await loadShareLinks()
+    }
+
+    /// One folder (nil: the root), for a page that holds its own: the phone pushes one page per folder.
+    func read(folder id: String?) async throws -> DocumentsListing {
+        let read = try await api.documentsFolder(id)
+        if read.folder.parentId == nil { rootID = read.folder.id }
+        learnSessions(read.entries.map(\.lastWriter))
+        for entry in [read.folder] + read.entries { known[entry.id] = entry }
+        return read
+    }
+
+    /// The drive's matches for some words, sorted, for a page or a picker that searches on its own.
+    func search(_ words: String) async throws -> [DocumentsEntry] {
+        let found = try await api.documentsSearch(words)
+        learnSessions(found.entries.map(\.lastWriter))
+        for entry in found.entries { known[entry.id] = entry }
+        return DocumentsLogic.sorted(found.entries)
+    }
+
+    /// How many entries a folder holds, read once per change (a phone row's "14 items").
+    func count(of folder: DocumentsEntry) async -> Int? {
+        if let known = folderCounts[folder.id] { return known }
+        guard let read = try? await api.documentsFolder(folder.id) else { return nil }
+        folderCounts[folder.id] = read.entries.count
+        return read.entries.count
+    }
+
+    /// One entry read on its own, with its path (a reply's link to a drive file); nil when it is gone.
+    func entry(_ id: String) async -> DocumentsEntry? {
+        guard let read = try? await api.documentsEntry(id) else { return nil }
+        entryDetails[read.id] = read
+        known[read.id] = read
+        learnSessions([read.lastWriter])
+        return read
     }
 
     /// The rows the list shows: the search's matches while there are any words, else the folder's entries.
@@ -327,6 +369,24 @@ final class DocumentsModel {
         }
     }
 
+    /// A folder named `name` in `parent` (nil: the root), as the phone's New folder alert and Move sheet make it.
+    func createFolder(named name: String, in parent: DocumentsEntry?) async -> DocumentsEntry? {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let problem = DocumentsLogic.nameProblem(name) {
+            onToast?("Couldn't make the folder", problem, .error, nil)
+            return nil
+        }
+        do {
+            let made = try await api.documentsCreateFolder(parentID: parent.flatMap { $0.parentId == nil ? nil : $0.id },
+                                                           name: name)
+            changes += 1
+            return made
+        } catch {
+            failed("Couldn't make the folder", error)
+            return nil
+        }
+    }
+
     func rename(_ entry: DocumentsEntry, to name: String) async {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard name != entry.name else { return }
@@ -336,6 +396,7 @@ final class DocumentsModel {
         }
         do {
             _ = try await api.documentsRename(entry.id, to: name)
+            changes += 1
             await reload()
         } catch {
             failed("Couldn't rename \(entry.name)", error)
@@ -344,8 +405,12 @@ final class DocumentsModel {
 
     /// Move entries into a folder (nil: the root).
     func move(_ ids: [String], to folder: DocumentsEntry?) async {
+        await move(entries: ids.compactMap { id in rows.first { $0.id == id } }, to: folder)
+    }
+
+    /// Move these entries into a folder (nil: the root) — the phone's pages hold their own rows.
+    func move(entries: [DocumentsEntry], to folder: DocumentsEntry?) async {
         guard let target = folder?.id ?? rootID else { return }
-        let entries = ids.compactMap { id in rows.first { $0.id == id } }
         var moved = 0
         for entry in entries where DocumentsLogic.canMove(entry, into: target, ancestorsOfTarget: []) {
             do {
@@ -359,6 +424,7 @@ final class DocumentsModel {
             let name = folder.map { DocumentsLogic.folderTitle($0) } ?? DocumentsLogic.title
             toast(moved == 1 ? DocumentsLogic.moved(entries[0].name, to: name) : "Moved \(DocumentsLogic.items(moved)) to \(name)", nil)
         }
+        changes += 1
         await reload()
     }
 
@@ -374,7 +440,10 @@ final class DocumentsModel {
 
     /// Move to Trash, with Undo (each entry's group restored).
     func moveToTrash(_ ids: [String]) async {
-        let entries = ids.compactMap { id in rows.first { $0.id == id } }
+        await moveToTrash(entries: ids.compactMap { id in rows.first { $0.id == id } })
+    }
+
+    func moveToTrash(entries: [DocumentsEntry]) async {
         var groups: [String] = []
         for entry in entries {
             do {
@@ -384,6 +453,7 @@ final class DocumentsModel {
             }
         }
         selection = []
+        changes += 1
         await reload()
         guard !groups.isEmpty else { return }
         let subtitle = entries.count == 1 ? entries[0].name : DocumentsLogic.items(entries.count)
@@ -417,6 +487,31 @@ final class DocumentsModel {
         }
         #endif
     }
+
+    #if os(iOS)
+    /// Download a file (or one version) for the share sheet: its bytes stream into a folder of their own under the
+    /// app's temporary directory, named as the drive names it, and the sheet saves or sends them on. Nil on failure,
+    /// which a toast has said.
+    func downloadForSharing(_ entry: DocumentsEntry, version: DocumentsVersion? = nil) async -> URL? {
+        do {
+            let url = try await api.documentsDownloadURL(entry.id, versionID: version?.id)
+            let (temporary, response) = try await URLSession.shared.download(from: url)
+            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                throw APIError.http(status: http.statusCode, body: nil)
+            }
+            let folder = FileManager.default.temporaryDirectory
+                .appendingPathComponent("Documents-downloads", isDirectory: true)
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let file = Self.freeName(entry.name, in: folder)
+            try FileManager.default.moveItem(at: temporary, to: file)
+            return file
+        } catch {
+            failed("Couldn't download \(entry.name)", error)
+            return nil
+        }
+    }
+    #endif
 
     /// "name.png", else "name 2.png", "name 3.png", as Finder names a second copy.
     private static func freeName(_ name: String, in folder: URL) -> URL {
@@ -558,7 +653,60 @@ final class DocumentsModel {
 
     func pauseUpload(_ id: String) { queue.pause(id) }
     func resumeUpload(_ id: String) { queue.resume(id) }
-    func cancelUpload(_ id: String) { queue.cancel(id) }
+    func cancelUpload(_ id: String) {
+        let path = uploads.first { $0.id == id }?.filePath
+        queue.cancel(id)
+        if let path { Self.dropStaged(path) }
+    }
+
+    /// Where the phone keeps what it was handed to upload. A picked file is only lent to the app while the picker's
+    /// answer is in hand, and Photos hands over a copy, so each is copied here first: the upload then goes on from
+    /// these bytes after a lost connection or a relaunch, and the copy goes once the file is in.
+    nonisolated static var stagingFolder: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return base.appendingPathComponent("DocumentsUploads", isDirectory: true)
+    }
+
+    /// A new folder of its own under the staging folder, for one picked file or folder (names never clash).
+    nonisolated static func stagingSlot() throws -> URL {
+        let slot = stagingFolder.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: slot, withIntermediateDirectories: true)
+        return slot
+    }
+
+    /// Copy what a picker lent (files, or folders whole) into the staging folder, then upload the copies.
+    func uploadPicked(_ urls: [URL], into folder: DocumentsEntry?) {
+        var staged: [URL] = []
+        for url in urls {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            do {
+                let copy = try Self.stagingSlot().appendingPathComponent(url.lastPathComponent)
+                try FileManager.default.copyItem(at: url, to: copy)
+                staged.append(copy)
+            } catch {
+                failed("Couldn't read \(url.lastPathComponent)", error)
+            }
+        }
+        guard !staged.isEmpty else { return }
+        upload(staged, into: folder)
+    }
+
+    /// Remove a staged copy once its upload is in or cancelled; a file picked on the Mac is the owner's and stays.
+    private nonisolated static func dropStaged(_ path: String) {
+        let root = stagingFolder.standardizedFileURL.path
+        let file = URL(fileURLWithPath: path).standardizedFileURL
+        guard file.path.hasPrefix(root + "/") else { return }
+        try? FileManager.default.removeItem(at: file)
+        // The slot folder (and a staged folder's emptied subfolders) go with their last file.
+        var parent = file.deletingLastPathComponent()
+        while parent.path.hasPrefix(root + "/"),
+              (try? FileManager.default.contentsOfDirectory(atPath: parent.path))?.isEmpty == true {
+            try? FileManager.default.removeItem(at: parent)
+            parent = parent.deletingLastPathComponent()
+        }
+    }
 
     /// Clear the finished uploads and hide the ended syncs on this Mac.
     func clearFinished() {
@@ -571,18 +719,55 @@ final class DocumentsModel {
     /// The toolbar's ring and popover have something to show.
     var trayShown: Bool { !uploads.isEmpty || !syncs.isEmpty }
 
-    private func uploadsMoved() { uploads = queue.items }
+    private func uploadsMoved() {
+        uploads = queue.items
+        #if os(iOS)
+        holdTheAppAwake()
+        #endif
+    }
 
     private func uploadCompleted(_ item: DocumentsUploadItem) {
+        Self.dropStaged(item.filePath)
+        changes += 1
         // The folder on screen reads again once a file lands in it (or in a folder under it).
         Task { await reload() }
     }
+
+    #if os(iOS)
+    @ObservationIgnored private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+
+    /// While an upload is going or waiting, ask iOS for time to finish it if the app is sent to the background; once
+    /// none is, give that time back. If iOS ends the time first, the chunk in flight fails as a lost connection, the
+    /// upload pauses with what the server already holds, and it goes on from there when the app is back.
+    private func holdTheAppAwake() {
+        let busy = uploads.contains { $0.state == .uploading || $0.state == .queued }
+        if busy, backgroundTask == .invalid {
+            backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Documents uploads") { [weak self] in
+                MainActor.assumeIsolated { self?.letTheAppSleep() }
+            }
+        } else if !busy {
+            letTheAppSleep()
+        }
+    }
+
+    private func letTheAppSleep() {
+        guard backgroundTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(backgroundTask)
+        backgroundTask = .invalid
+    }
+    #endif
 
     /// A connection that came back, or a Mac that woke: what a lost connection paused goes on.
     private func watchForAWayBack() {
         #if os(macOS)
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.queue.resumeInterrupted() }
+            })
+        #elseif os(iOS)
+        // Back in the foreground: what iOS cut off when the app was suspended goes on from where it stopped.
+        observers.append(NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.queue.resumeInterrupted() }
             })
         #endif
@@ -648,6 +833,8 @@ final class DocumentsModel {
 
     /// After a write: the page that is up, and what the inspector shows.
     private func refreshAfterWrite() async {
+        changes += 1
+        folderCounts = [:]
         switch place {
         case .drive:
             await reload()
