@@ -86,6 +86,8 @@ import io.orbitd.android.management.RunnerCopy
 import io.orbitd.android.composer.rememberManagedRunner
 import io.orbitd.android.composer.rememberNewAccount
 import io.orbitd.android.text.LocalReaderResources
+import io.orbitd.android.reader.LandingPullRequestEnv
+import io.orbitd.android.reader.LocalLandingPullRequest
 import io.orbitd.android.text.ReaderResources
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
@@ -507,7 +509,9 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                 Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding(), contentAlignment = Alignment.TopCenter) {
                     Box(Modifier.fillMaxHeight().widthIn(max = 840.dp).fillMaxWidth()) {
                         CompositionLocalProvider(LocalReaderResources provides remember(signedIn.handle) { ReaderResources(app.session, signedIn.handle) },
-                            LocalManagedRunnerStatus provides managedForLanding.shown?.status) {
+                            LocalManagedRunnerStatus provides managedForLanding.shown?.status,
+                            LocalLandingPullRequest provides LandingPullRequestEnv(
+                                { id -> data.workspaces.firstOrNull { ObjectId.same(it.id, id) }?.landingMode }, ::open)) {
                         holder.SaveableStateProvider(Wire.json.encodeToString(route)) {
                             when (route.destination) {
                                 Destination.WORKSPACES -> WorkspaceHome(data, management, startSession = { openNewSession() }) { app.realtime.refreshDirectory() }

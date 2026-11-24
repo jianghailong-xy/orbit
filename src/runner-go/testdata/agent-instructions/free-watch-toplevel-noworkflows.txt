@@ -1,7 +1,7 @@
-=== antigravity (6808 bytes)
+=== antigravity (6824 bytes)
 Owner instructions.
 
-Orbit primer 1.4.5 (Agent Contract 1.12.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.4.6 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -25,7 +25,7 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one in
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
-The owner's Orbit Files drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
+The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
 Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then call project_create from this same session so the conversation becomes its coordinator; do not switch or open a session for it. Its confirmation card is the user's answer: if they decline, a task is the right record, and do not propose the same body of work twice.
 
@@ -38,10 +38,10 @@ Use delegate whenever you would start a subagent or run an independent piece in 
 Before changing a file, use wiki_search with its path to look up known pitfalls, if your tool list has it.
 
 Prefer the tools of the `orbit` MCP server (call_mcp_tool with ServerName "orbit") (schema-checked, no shell). Inside a session the CLI at `'<orbit-cli>'` takes the same approvals and attributes work to you: `'<orbit-cli>' guide [topic] --json` or `'<orbit-cli>' capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt its MCP tool answers with; `--json` prints the entity alone. Do not run `'<orbit-cli>' mcp` directly.
-=== claude (6758 bytes)
+=== claude (6774 bytes)
 Owner instructions.
 
-Orbit primer 1.4.5 (Agent Contract 1.12.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.4.6 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -65,7 +65,7 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one in
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
-The owner's Orbit Files drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
+The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
 Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then call project_create from this same session so the conversation becomes its coordinator; do not switch or open a session for it. Its confirmation card is the user's answer: if they decline, a task is the right record, and do not propose the same body of work twice.
 
@@ -79,10 +79,10 @@ Before changing a file, use wiki_search with its path to look up known pitfalls,
 
 Prefer the `mcp__orbit__*` tools (schema-checked, no shell). Inside a session the CLI at `'<orbit-cli>'` takes the same approvals and attributes work to you: `'<orbit-cli>' guide [topic] --json` or `'<orbit-cli>' capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt its MCP tool answers with; `--json` prints the entity alone. Do not run `'<orbit-cli>' mcp` directly.
 === claude, resumed: same as claude
-=== codex 0.125-0.134 developer message (7718 bytes)
+=== codex 0.125-0.134 developer message (7734 bytes)
 Owner instructions.
 
-Orbit primer 1.4.5 (Agent Contract 1.12.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.4.6 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -106,7 +106,7 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one in
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
-The owner's Orbit Files drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
+The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
 Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then call project_create from this same session so the conversation becomes its coordinator; do not switch or open a session for it. Its confirmation card is the user's answer: if they decline, a task is the right record, and do not propose the same body of work twice.
 
@@ -123,11 +123,11 @@ Before changing a file, use wiki_search with its path to look up known pitfalls,
 Prefer the `mcp__orbit__*` tools (schema-checked, no shell). Inside a session the CLI at `'<orbit-cli>'` takes the same approvals and attributes work to you: `'<orbit-cli>' guide [topic] --json` or `'<orbit-cli>' capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt its MCP tool answers with; `--json` prints the entity alone. Do not run `'<orbit-cli>' mcp` directly.
 
 After generating an image, preserve the original file. Do not regenerate it solely because Orbit could not attach or upload it. Only claim that the image is attached or delivered when Orbit explicitly confirms attachment delivery; successful generation alone is not delivery confirmation. If delivery fails, report that the image was generated but delivery failed, keep the original file available, and let Orbit retry delivery. If delivery status is unavailable, report only generation success without claiming delivery success or failure.
-=== codex < 0.125 turn input (7357 bytes)
+=== codex < 0.125 turn input (7373 bytes)
 <orbit_application_context>
 Owner instructions.
 
-Orbit primer 1.4.5 (Agent Contract 1.12.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.4.6 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -151,7 +151,7 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one in
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
-The owner's Orbit Files drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
+The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
 Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then call project_create from this same session so the conversation becomes its coordinator; do not switch or open a session for it. Its confirmation card is the user's answer: if they decline, a task is the right record, and do not propose the same body of work twice.
 
@@ -167,10 +167,10 @@ Prefer the `mcp__orbit__*` tools (schema-checked, no shell). Inside a session th
 
 After generating an image, preserve the original file. Do not regenerate it solely because Orbit could not attach or upload it. Only claim that the image is attached or delivered when Orbit explicitly confirms attachment delivery; successful generation alone is not delivery confirmation. If delivery fails, report that the image was generated but delivery failed, keep the original file available, and let Orbit retry delivery. If delivery status is unavailable, report only generation success without claiming delivery success or failure.
 </orbit_application_context>
-=== codex >= 0.135 additional context (7300 bytes)
+=== codex >= 0.135 additional context (7316 bytes)
 Owner instructions.
 
-Orbit primer 1.4.5 (Agent Contract 1.12.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.4.6 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -194,7 +194,7 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one in
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
-The owner's Orbit Files drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
+The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
 Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then call project_create from this same session so the conversation becomes its coordinator; do not switch or open a session for it. Its confirmation card is the user's answer: if they decline, a task is the right record, and do not propose the same body of work twice.
 
@@ -211,10 +211,10 @@ Prefer the `mcp__orbit__*` tools (schema-checked, no shell). Inside a session th
 After generating an image, preserve the original file. Do not regenerate it solely because Orbit could not attach or upload it. Only claim that the image is attached or delivered when Orbit explicitly confirms attachment delivery; successful generation alone is not delivery confirmation. If delivery fails, report that the image was generated but delivery failed, keep the original file available, and let Orbit retry delivery. If delivery status is unavailable, report only generation success without claiming delivery success or failure.
 === codex >= 0.135, after compaction: same as codex >= 0.135 additional context
 === codex >= 0.135, resumed thread: same as codex >= 0.135 additional context
-=== cursor (6680 bytes)
+=== cursor (6696 bytes)
 Owner instructions.
 
-Orbit primer 1.4.5 (Agent Contract 1.12.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.4.6 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -238,7 +238,7 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one in
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
-The owner's Orbit Files drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
+The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
 Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then call project_create from this same session so the conversation becomes its coordinator; do not switch or open a session for it. Its confirmation card is the user's answer: if they decline, a task is the right record, and do not propose the same body of work twice.
 
@@ -252,11 +252,11 @@ Before changing a file, use wiki_search with its path to look up known pitfalls,
 
 Prefer the tools of the `orbit` MCP server (schema-checked, no shell). Inside a session the CLI at `'<orbit-cli>'` takes the same approvals and attributes work to you: `'<orbit-cli>' guide [topic] --json` or `'<orbit-cli>' capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt its MCP tool answers with; `--json` prints the entity alone. Do not run `'<orbit-cli>' mcp` directly.
 === deepseek harness: same as claude
-=== kimi (6839 bytes)
+=== kimi (6855 bytes)
 [map[text:<orbit-agent-instructions>
 Owner instructions.
 
-Orbit primer 1.4.5 (Agent Contract 1.12.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.4.6 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -280,7 +280,7 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one in
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
-The owner's Orbit Files drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
+The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
 Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then call project_create from this same session so the conversation becomes its coordinator; do not switch or open a session for it. Its confirmation card is the user's answer: if they decline, a task is the right record, and do not propose the same body of work twice.
 
@@ -296,10 +296,10 @@ Prefer the `mcp__orbit__*` tools (schema-checked, no shell). Inside a session th
 </orbit-agent-instructions>
 
 hi type:text]]
-=== opencode (6752 bytes)
+=== opencode (6768 bytes)
 Owner instructions.
 
-Orbit primer 1.4.5 (Agent Contract 1.12.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.4.6 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -323,7 +323,7 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one in
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
-The owner's Orbit Files drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
+The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
 Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then call project_create from this same session so the conversation becomes its coordinator; do not switch or open a session for it. Its confirmation card is the user's answer: if they decline, a task is the right record, and do not propose the same body of work twice.
 
@@ -337,7 +337,7 @@ Before changing a file, use wiki_search with its path to look up known pitfalls,
 
 Prefer the `orbit_*` tools (schema-checked, no shell). Inside a session the CLI at `'<orbit-cli>'` takes the same approvals and attributes work to you: `'<orbit-cli>' guide [topic] --json` or `'<orbit-cli>' capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt its MCP tool answers with; `--json` prints the entity alone. Do not run `'<orbit-cli>' mcp` directly.
 === orbit mcp initialize (every engine) (3388 bytes)
-Orbit primer 1.4.5 (Agent Contract 1.12.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.4.6 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 

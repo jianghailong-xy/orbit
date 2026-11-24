@@ -397,7 +397,7 @@ func goldenAgents(sc *evalScenario) (map[int]evalAgent, map[int]evalAgent) {
 		}
 		return map[int]evalAgent{0: create}, map[int]evalAgent{0: create}
 	}
-	return nil, nil
+	return goldenUnitAgents(sc)
 }
 
 // evalEntityOf is a read's entity, read again through the receipt's text when a call returned one.
@@ -483,7 +483,7 @@ func evalMistakes() []evalMistake {
 	rotate := func(h *evalHands, extra map[string]interface{}) evalReceiptLite {
 		return goldenCreate(h, "Rotate the staging API key", "Rotate the staging API key.", evalRotateAcceptance, false, extra)
 	}
-	return []evalMistake{
+	return append([]evalMistake{
 		{Name: "starts what it was told to file", Scenario: "E1-record-task", Clause: "E1.pass.no_dispatch",
 			Agents: map[int]evalAgent{0: func(h *evalHands) error {
 				receipt := rotate(h, map[string]interface{}{"startNow": true})
@@ -667,5 +667,5 @@ func evalMistakes() []evalMistake {
 				h.say("I've filed the task to rotate the staging key.")
 				return nil
 			}}},
-	}
+	}, evalUnitMistakes()...)
 }

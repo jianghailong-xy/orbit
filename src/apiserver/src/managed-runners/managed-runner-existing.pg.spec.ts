@@ -230,7 +230,7 @@ test('managed runners switched off with existing state: nothing is stopped, dele
       const owner = await login(ready.ownerId);
 
       const capabilities = await call(server, 'GET', '/api/auth/capabilities', owner);
-      assert.deepEqual(capabilities.json, { managedRunners: { enabled: false, contractVersion: 1 } });
+      assert.deepEqual(capabilities.json, { managedRunners: { enabled: false, contractVersion: 1 }, documents: { enabled: false } });
       const status = await call(server, 'GET', '/api/managed-runner', owner);
       assert.equal(status.status, 200, status.text);
       assert.equal(status.json.enabled, false);

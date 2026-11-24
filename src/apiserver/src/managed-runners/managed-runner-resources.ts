@@ -22,9 +22,9 @@ import type { ManagedRunnerProfile } from './managed-runner-profile';
  * ORBIT_MANAGED_RUNNER_POD_UID, which the image entrypoint checks against the Secret and the runner
  * sends with every request (managed-runner-instance.ts).
  *
- * With the profile's `files` section the Pod also receives the Orbit Files drive (docs/orbit-files-drive-technical-
- * design.md §6.1): one inline CSI volume of the `files.orbit.dev` node plugin, naming only the runner, mounted in the
- * runner container at /run/orbit-files with HostToContainer propagation. Nothing else of the Pod changes: the runner
+ * With the profile's `files` section the Pod also receives the Documents drive (docs/documents-drive-technical-
+ * design.md §6.1): one inline CSI volume of the `documents.orbit.dev` node plugin, naming only the runner, mounted in the
+ * runner container at /run/orbit-documents with HostToContainer propagation. Nothing else of the Pod changes: the runner
  * container's security context is the same with or without it. The plugin reads that generation's mount credential
  * from Secret `mrf-<runner uuid>` in the files namespace, which the manager writes (`buildDriveMountSecret`) and the
  * runner never sees.
@@ -60,10 +60,16 @@ export const CREDENTIAL_FILE_ENV = 'ORBIT_RUNNER_CREDENTIAL_FILE';
 /** The instance identity the runner sends (runner-go managed_instance.go), from the Downward API. */
 export const GENERATION_ENV = 'ORBIT_MANAGED_RUNNER_GENERATION';
 export const POD_UID_ENV = 'ORBIT_MANAGED_RUNNER_POD_UID';
-/** The Orbit Files CSI driver, and where the runner container receives the drive's plain parent directory. */
-export const DRIVE_CSI_DRIVER = 'files.orbit.dev';
-export const DRIVE_VOLUME = 'orbit-files';
-export const DRIVE_MOUNT = '/run/orbit-files';
+/** The Documents CSI driver, and where the runner container receives the drive's plain parent directory. */
+export const DRIVE_CSI_DRIVER = 'documents.orbit.dev';
+export const DRIVE_VOLUME = 'orbit-documents';
+export const DRIVE_MOUNT = '/run/orbit-documents';
+/**
+ * The driver and mount of a Pod created before the drive was renamed Documents. The manager creates none; admission
+ * still accepts one while such Pods drain (deploy/managed-runner/documents-csi/README.md, "Moving from files.orbit.dev").
+ */
+export const LEGACY_DRIVE_CSI_DRIVER = 'files.orbit.dev';
+export const LEGACY_DRIVE_MOUNT = '/run/orbit-files';
 
 function canonical(runnerId: string): string {
   const id = runnerId.toLowerCase();
@@ -153,7 +159,7 @@ export function buildDriveMountSecret(identity: ManagedRunnerIdentity, namespace
     metadata: {
       name: driveMountSecretName(identity.runnerId),
       namespace,
-      labels: { 'app.kubernetes.io/name': 'orbit-files-mount' },
+      labels: { 'app.kubernetes.io/name': 'orbit-documents-mount' },
       annotations: {
         [OWNER_ANNOTATION]: identity.ownerId,
         [RUNNER_ANNOTATION]: identity.runnerId,

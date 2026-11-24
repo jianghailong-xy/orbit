@@ -627,6 +627,7 @@ private fun LandingSection(status: TaskLandingStatus, open: (OrbitRoute) -> Unit
         }
         status.noReport?.let { Text(it, Modifier.testTag("task-landing-no-report"), style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold, color = LocalOrbitColors.current.needsYou) }
+        status.pullRequest?.let { io.orbitd.android.reader.LandingPullRequestCard(it, TaskLandingLogic.branch(status.targetRef).ifEmpty { "main" }, status.landingSessionId) }
         status.reason?.let { Text(it, Modifier.testTag("task-landing-reason"), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant) }
         status.receipt?.let { Text(it, Modifier.testTag("task-landing-receipt"), style = MaterialTheme.typography.bodySmall,

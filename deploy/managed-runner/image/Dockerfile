@@ -127,6 +127,7 @@ RUN mkdir -p /etc/ssl/certs \
       xvfb=2:21.1.16-1.3+deb13u4 x11vnc=0.9.17-1 \
       xclip=0.13-4 xdotool=1:3.20160805.1-5.1 \
       fonts-noto-cjk=1:20240730+repack1-1 fonts-noto-color-emoji=2.051-0+deb13u1 \
+      fonts-noto-core=20201225-2 \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd --gid 10001 orbit \
  && useradd --uid 10001 --gid 10001 --home-dir /home/orbit --no-create-home --shell /bin/bash orbit \
@@ -236,6 +237,7 @@ actual = {
     'xdotool': package('xdotool', '/usr/bin/xdotool'),
     'fontsNotoCjk': package('fonts-noto-cjk'),
     'fontsNotoColorEmoji': package('fonts-noto-color-emoji'),
+    'fontsNotoCore': package('fonts-noto-core'),
     'playwrightMcp': version('playwright-mcp', '--version'),
 }
 # Cursor CLI and DeepSeek Harness are where the runner looks for them (ORBIT_ENGINE_STORE), on Linux x64 only.
@@ -249,6 +251,7 @@ expected_versions.update(chromium='Chromium 154.0.8037.57 built on Debian GNU/Li
                          xvfb='2:21.1.16-1.3+deb13u4', x11vnc='x11vnc: 0.9.17 lastmod: 2025-04-11',
                          xclip='0.13-4', xdotool='1:3.20160805.1-5.1',
                          fontsNotoCjk='1:20240730+repack1-1', fontsNotoColorEmoji='2.051-0+deb13u1',
+                         fontsNotoCore='20201225-2',
                          playwrightMcp='Version 0.0.85')
 if platform.machine() == 'x86_64':
     expected_versions.update(cursor='2026.10.14-941492e', dsh='0.2.0-rc.2')

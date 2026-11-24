@@ -313,7 +313,7 @@ var instructionUnits = []instructionUnit{
 		detail: "guide", guardedBy: []string{"E7-no-orchestration"}},
 	{id: "primer.settings", owner: "primer: settings_get, settings_propose", kind: kindSelection,
 		appliesTo: orbitSession, channels: bothChannels, core: agentPrimerSettings,
-		detail: "settings_propose description"},
+		detail: "settings_propose description", guardedBy: []string{"I8-settings-propose"}},
 	{id: "primer.rederive", owner: "primer: task_get after a reset", kind: kindSituation,
 		appliesTo: orbitSession, channels: bothChannels, core: agentPrimerRederive,
 		detail: "context reset note (context_reset_note.go)", guardedBy: []string{"E8-compaction-recovery"}},
@@ -326,40 +326,41 @@ var instructionUnits = []instructionUnit{
 		detail: "guide", guardedBy: []string{"E6-immediate-delegation", "E7-no-orchestration"}},
 	{id: "files.reply-links", owner: "reply attachments", kind: kindEnvironment,
 		appliesTo: orbitSession, channels: []instructionChannel{channelSystem}, core: orbitReplyFileInstructions,
-		detail: "guide topic files"},
+		detail: "guide topic files", guardedBy: []string{"I4-reply-file-link"}},
 	{id: "files.evidence", owner: "evidence files: file_upload", kind: kindDisposition,
 		appliesTo: orbitSession, channels: []instructionChannel{channelSystem}, core: orbitEvidenceFileInstructions,
-		tools: []string{"file_upload"}, detail: "file_upload description"},
-	{id: "drive.tools", owner: "Orbit Files drive: drive_*", kind: kindEnvironment,
-		appliesTo: func(s SessionShape) bool { return orbitSession(s) && !s.DriveMounted }, channels: []instructionChannel{channelSystem},
+		tools: []string{"file_upload"}, detail: "file_upload description", guardedBy: []string{"I5-evidence-file-upload"}},
+	{id: "drive.tools", owner: "Documents drive: documents_*", kind: kindEnvironment,
+		appliesTo: func(s SessionShape) bool { return orbitSession(s) && orbitDocumentsShown() && !s.DriveMounted }, channels: []instructionChannel{channelSystem},
 		core: orbitDriveToolInstructions, detail: "guide topic files (orbitDriveGuide)", conflicts: []string{"drive.mount"}},
-	{id: "drive.mount", owner: "Orbit Files drive: ~/Files", kind: kindEnvironment,
-		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.DriveMounted }, channels: []instructionChannel{channelSystem},
+	{id: "drive.mount", owner: "Documents drive: ~/Documents", kind: kindEnvironment,
+		appliesTo: func(s SessionShape) bool { return orbitSession(s) && orbitDocumentsShown() && s.DriveMounted }, channels: []instructionChannel{channelSystem},
 		core: orbitDriveMountInstructions, detail: "guide topic files (orbitDriveGuide)", conflicts: []string{"drive.tools"}},
 	{id: "project.inside-recorded-work", owner: "projects: task_create, project_create", kind: kindSelection,
 		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.InsideRecordedWork }, channels: []instructionChannel{channelSystem},
 		core: orbitProjectInsideInstructions, detail: "project_create description", conflicts: []string{"project.propose"}},
 	{id: "project.propose", owner: "projects: project_create", kind: kindSelection,
 		appliesTo: func(s SessionShape) bool { return orbitSession(s) && !s.InsideRecordedWork }, channels: []instructionChannel{channelSystem},
-		core: orbitProjectProposeInstructions, detail: "project_create description", conflicts: []string{"project.inside-recorded-work"}},
+		core: orbitProjectProposeInstructions, detail: "project_create description", guardedBy: []string{"I9-no-project-for-ordinary-work"}, conflicts: []string{"project.inside-recorded-work"}},
 	{id: "progress.report", owner: "progress: task_progress_report", kind: kindDisposition,
 		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.InsideRecordedWork }, channels: []instructionChannel{channelSystem},
-		core: orbitProgressInstructions, tools: []string{"task_progress_report"}, detail: "task_progress_report description"},
+		core: orbitProgressInstructions, tools: []string{"task_progress_report"}, detail: "task_progress_report description", guardedBy: []string{"I6-progress-report"}},
 	{id: "wait.use-await", owner: "watches: task_await, session_await, watch_create", kind: kindDisposition,
 		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.Watches }, channels: []instructionChannel{channelSystem},
-		core: orbitWaitInstructions, tools: []string{"task_await", "session_await", "watch_create"}, detail: "task_await description"},
+		core: orbitWaitInstructions, tools: []string{"task_await", "session_await", "watch_create"}, detail: "task_await description", guardedBy: []string{"I1-wait-await"}},
 	{id: "notify.when-asked", owner: "notify", kind: kindDisposition,
 		appliesTo: orbitSession, channels: []instructionChannel{channelSystem}, core: orbitNotifyInstructions,
-		tools: []string{"notify"}, detail: "notify description"},
+		tools: []string{"notify"}, detail: "notify description", guardedBy: []string{"I2-notify-when-done"}},
 	{id: "delegate.use-delegate", owner: "SubAgents: delegate", kind: kindDisposition,
 		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.delegates() }, channels: []instructionChannel{channelSystem},
-		core: orbitDelegateInstructions, tools: []string{"delegate"}, detail: "delegate description"},
+		core: orbitDelegateInstructions, tools: []string{"delegate"}, detail: "delegate description",
+		guardedBy: []string{"I3-delegate-subagent", "I3-delegate-subagent/background"}},
 	{id: "workflow.use-workflow", owner: "SubAgents: workflow", kind: kindDisposition,
 		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.delegates() && s.Workflows }, channels: []instructionChannel{channelSystem},
 		core: orbitWorkflowInstructions, tools: []string{"workflow"}, detail: "workflow description"},
 	{id: "wiki.search-by-path", owner: "wiki: wiki_search", kind: kindSelection,
 		appliesTo: orbitSession, channels: []instructionChannel{channelSystem}, core: orbitWikiPathInstructions,
-		tools: []string{"wiki_search"}, detail: "wiki_search description"},
+		tools: []string{"wiki_search"}, detail: "wiki_search description", guardedBy: []string{"I7-wiki-path-search"}},
 	{id: "cli.prefer-mcp", owner: "the Orbit CLI: guide, capabilities", kind: kindEnvironment,
 		appliesTo: orbitSession, channels: []instructionChannel{channelSystem}, core: orbitCLIPreferMCPInstructions,
 		detail: "capabilities --json", guardedBy: []string{"X1-mcp-missing-cli-fallback"}},
@@ -384,9 +385,17 @@ func compose(shape SessionShape, profile EngineProfile) composedInstructions {
 	return composed
 }
 
+// instructionUnitsLeftOut is the units, by id, this process leaves out of everything it composes. Only the
+// agent-contract eval's test binary sets it (--leave-out, agent_eval_leave_out_test.go), to measure what a unit is
+// worth by the scenario that guards it; it is nil in every production process, where every unit is composed.
+var instructionUnitsLeftOut map[string]bool
+
 func composeChannel(shape SessionShape, profile EngineProfile, channel instructionChannel) string {
 	var paragraphs []string
 	for _, unit := range instructionUnits {
+		if instructionUnitsLeftOut[unit.id] {
+			continue
+		}
 		if unit.deliveredOn(channel) && unit.appliesTo(shape) && shape.serves(unit.tools) {
 			paragraphs = append(paragraphs, renderInstructionUnit(unit.core, shape, profile))
 		}
@@ -408,6 +417,7 @@ func (u instructionUnit) deliveredOn(channel instructionChannel) bool {
 //	{{cli}}              the shell-quoted path of the Orbit CLI
 //	{{orbit_tools}}      Orbit's MCP tools as a family (EngineProfile.OrbitTools)
 //	{{toolsearch:<tool>}} the sentence on loading a deferred tool with ToolSearch, or nothing (EngineProfile.ToolSearchNotes)
+//	{{drive_root}}       the Documents mount's directory on this machine (driveParentPath)
 //
 // A placeholder it does not know is left as it is, which TestEveryUnitRendersOnEveryEngine catches.
 func renderInstructionUnit(core string, shape SessionShape, profile EngineProfile) string {
@@ -428,6 +438,8 @@ func renderInstructionUnit(core string, shape SessionShape, profile EngineProfil
 			b.WriteString(shellQuote(shape.CLI))
 		case name == "orbit_tools":
 			b.WriteString(profile.OrbitTools)
+		case name == "drive_root":
+			b.WriteString(driveParentPath)
 		case strings.HasPrefix(name, "toolsearch:"):
 			if profile.ToolSearchNotes {
 				b.WriteString(" In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__" +

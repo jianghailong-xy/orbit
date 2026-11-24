@@ -10,7 +10,7 @@ import {
 
 import { generateToken, sha256 } from '../common/crypto.util';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
-import { issueDriveMountCredential, revokeDriveMountCredentials } from '../drive/drive-mount-credential';
+import { issueDriveMountCredential, revokeDriveMountCredentials } from '../documents/documents-mount-credential';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { ManagedKubeClient } from './kube-client';
 import { KubernetesBackend } from './kubernetes-backend';
@@ -2013,8 +2013,8 @@ export class ManagedRunnerManager {
   }
 
   /**
-   * The Orbit Files drive's mount credential of the mapping's generation, delivered for the mounter before any
-   * instance of the generation is created (docs/orbit-files-drive-technical-design.md §4.3, §6.1): the CSI plugin reads
+   * The Documents drive's mount credential of the mapping's generation, delivered for the mounter before any
+   * instance of the generation is created (docs/documents-drive-technical-design.md §4.3, §6.1): the CSI plugin reads
    * it when the kubelet publishes the drive. An older generation's is removed first. Issuing revokes every live mount
    * credential of the runner, this generation's included, so one that was issued and never delivered (a crash, a
    * failed create) holds nothing. Null once it is in place, or where runners receive no drive.

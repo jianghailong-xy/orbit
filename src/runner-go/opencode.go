@@ -488,6 +488,7 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 		"ORBIT_ALLOW_ORCHESTRATION":       orchestrationEnv(job.AllowOrchestration),
 		envWatches:                        watchesEnv(job.WatchesDisabled),
 		envWiki:                           wikiEnv(job.WikiDisabled),
+		envDocuments:                      documentsEnv(job.DocumentsDisabled),
 		envBrowser:                        browserEnv(job.BrowserEnabled),
 		envWorkflows:                      workflowsEnv(job.WorkflowsDisabled),
 		envScheduleRun:                    scheduleRunEnv(job.ScheduleRun),
@@ -927,6 +928,7 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 			"ORBIT_ALLOW_ORCHESTRATION": orchestrationEnv(job.AllowOrchestration),
 			envWatches:                  watchesEnv(job.WatchesDisabled),
 			envWiki:                     wikiEnv(job.WikiDisabled),
+			envDocuments:                documentsEnv(job.DocumentsDisabled),
 			envBrowser:                  browserEnv(job.BrowserEnabled),
 			envWorkflows:                workflowsEnv(job.WorkflowsDisabled),
 			envScheduleRun:              scheduleRunEnv(job.ScheduleRun),
@@ -1095,7 +1097,7 @@ func applyOpenCodePermissions(permission map[string]interface{}, agent AgentExec
 		permission["bash"] = "ask"
 	}
 
-	// The Orbit Files drive is a workspace root: outside the checkout, so its external-directory check is told. Plan
+	// The Documents drive is a workspace root: outside the checkout, so its external-directory check is told. Plan
 	// keeps its denial of every edit above, so there the drive is only read (design §7.2).
 	if guarded {
 		if roots := driveGrantRoots(); len(roots) > 0 {

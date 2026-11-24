@@ -314,6 +314,8 @@ test('GET /workspaces/:id says when the workspace was last used and how many con
   const prisma = {
     runner: { findMany: async () => [] },
     workspace: { findFirst: async () => ({ id: 'workspace-1', name: 'orbit', runner: null }) },
+    // The landing view asks whether the owner holds a live GitHub connection; none here.
+    githubConnection: { findFirst: async () => null },
     session: {
       count: async (args: unknown) => {
         counted.push(args);

@@ -11,6 +11,7 @@ import { MemoryRouter } from 'react-router-dom';
 import type { TaskIntegrationView } from '@orbit/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError, api } from '../api';
+import { SITUATIONS } from '../lib/sessionPhaseFields.fixture';
 import { newRunRequestToken } from '../lib/runRequestToken';
 import { encodeId } from '../lib/idCodec';
 import { TASK_RUN_HELD_TITLE, TASK_RUN_PIN_TITLE } from '../lib/taskRunHandoff';
@@ -1151,6 +1152,20 @@ describe('the task page led by the run', () => {
     expect(html).toContain('Editing manager.service.ts');
     expect(html).toContain('aria-valuenow="60"');
     expect(html).toContain('$0.84 so far');
+  });
+
+  const nowTitle = (html: string) => /class="tdp-now-title">([^<]+)</.exec(html)?.[1];
+  const queuedRun = (situation: string) =>
+    task({ sessions: [{ ...SITUATIONS[situation], workFinished: false, endReason: null, id: LIVE_RUN, createdAt: STARTED, workspace: { name: 'Builder' } }] });
+
+  it('the Now card reads "On hold" for a held queued run, by the run badge\'s own rule', () => {
+    const html = renderPanel(queuedRun('on hold'));
+    expect(nowTitle(html)).toBe('On hold');
+  });
+
+  it('the Now card reads "Queued" for a queued run that nothing holds', () => {
+    const html = renderPanel(queuedRun('a queued turn'));
+    expect(nowTitle(html)).toBe('Queued');
   });
 
   it('draws no Now and no progress when nothing is running, and none from a revision-0 progress', () => {

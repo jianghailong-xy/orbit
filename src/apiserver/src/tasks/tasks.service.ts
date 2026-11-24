@@ -138,6 +138,7 @@ import {
   signedOutEngineRefusal,
 } from '../sessions/engine-signin-preflight';
 import { RUNNER_BEATS } from '../runners/runner-presence';
+import { readSessionPhaseFields } from '../sessions/session-phase';
 import { withSessionState } from '../sessions/session-state';
 import {
   readTaskWorkCarriers,
@@ -9795,10 +9796,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         mayBeSweepCandidate(task) ? this.accountHold(ownerId, task) : null,
       ]);
     const dependencyState = computeDependencyState(dependencyFacts.get(id) ?? []);
+    // The session facts of every run, from the function every other session payload reads
+    // (sessions/session-phase.ts), so a run here answers as the same session does elsewhere.
+    const runFacts = await readSessionPhaseFields(this.prisma, (task.sessions ?? []).map((session) => session.id));
     return {
       ...task,
       sessions: (task.sessions ?? []).map((session) => ({
         ...withSessionState(session),
+        ...runFacts.get(session.id),
         route: routes.get(session.id) ?? null,
       })),
       creatorSession: task.creatorSession ? withSessionState(task.creatorSession) : null,
@@ -14391,7 +14396,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           mimeType: source.mimeType,
           sizeBytes: source.sizeBytes,
           fileName: source.fileName,
-          // The same stored bytes as the source; only a row from before Orbit Files carries `data`.
+          // The same stored bytes as the source; only a row from before Documents carries `data`.
           sha256: source.sha256,
           data: source.data,
         },
@@ -14413,7 +14418,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * already scoped to it, which is what `createTurn`/`resume` require of an attachment they link.
    * Returns [] for a task with no inputs, so a caller pays one indexed read and nothing else.
    *
-   * A copy is a ROW, never the bytes again (docs/orbit-files-design.md §2.1): it names the template's
+   * A copy is a ROW, never the bytes again (docs/documents-design.md §2.1): it names the template's
    * stored bytes by their sha256, and the bytes are read by neither. A template from before Orbit
    * Files, whose bytes are still in `data`, has them kept in the file store the first time it is
    * copied (`FilesService.referenceOf`), and is copied the same way from then on.

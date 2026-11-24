@@ -59,8 +59,12 @@ function RouterProbe() {
   return null;
 }
 
+// What /auth/capabilities answers: the Documents switch (ORBIT_DOCUMENTS_ENABLED).
+let capabilities: unknown = { managedRunners: { enabled: false }, documents: { enabled: true } };
+
 function serve() {
   vi.mocked(api).mockImplementation((async (path: string) => {
+    if (path === '/auth/capabilities') return capabilities;
     if (path === '/runners') return [{ id: RUNNER, name: 'wikova', online: true }];
     if (path === '/workspaces') return WORKSPACES;
     if (path === '/projects/sidebar') return OPEN_PROJECTS;
@@ -133,6 +137,7 @@ beforeEach(() => {
     dispatchEvent: () => false,
   }));
   navigations = 0;
+  capabilities = { managedRunners: { enabled: false }, documents: { enabled: true } };
 });
 
 afterEach(async () => {
@@ -154,6 +159,33 @@ const phone = () => vi.stubGlobal('matchMedia', (query: string) => ({
   addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {},
   dispatchEvent: () => false,
 }));
+
+describe('the Documents row and the Documents switch', () => {
+  const labels = () => [...container!.querySelectorAll('.tp-section .tp-item .tp-label')].map((el) => el.textContent);
+  const driveCalls = () => vi.mocked(api).mock.calls.filter(([path]) => /^\/(drive|documents)/.test(String(path)));
+
+  it('is there when Documents is on', async () => {
+    serve();
+    await visit('/tasks');
+    expect(labels()).toContain('Documents');
+  });
+
+  it('is there when the server omits the member', async () => {
+    capabilities = { managedRunners: { enabled: false } };
+    serve();
+    await visit('/tasks');
+    expect(labels()).toContain('Documents');
+  });
+
+  it('is gone, and nothing asks /drive, when Documents is off', async () => {
+    capabilities = { managedRunners: { enabled: false }, documents: { enabled: false } };
+    serve();
+    await visit('/tasks');
+    expect(labels()).not.toContain('Documents');
+    expect(labels()).toContain('Tasks');
+    expect(driveCalls()).toEqual([]);
+  });
+});
 
 describe('the sidebar’s rows as destinations', () => {
   it('opens a project’s sessions page over the workspace showing on a phone, and lights the project instead of it', async () => {
@@ -286,7 +318,7 @@ describe('Machines & models, which has no sidebar row (docs/mocks/machines-and-m
     serve();
     await visit('/tasks');
     const labels = [...container!.querySelectorAll('.tp-section .tp-label')].map((label) => label.textContent);
-    expect(labels).toEqual(['Projects', 'Tasks', 'Scheduled', 'Wiki', 'Files']);
+    expect(labels).toEqual(['Projects', 'Tasks', 'Scheduled', 'Wiki', 'Documents']);
   });
 
   it.each([
@@ -308,7 +340,7 @@ describe('Machines & models, which has no sidebar row (docs/mocks/machines-and-m
   });
 });
 
-// Orbit Files (docs/mocks/orbit-files/02-web, frame 1): the row directly under the Wiki, with no count and no shortcut.
+// Documents (docs/mocks/documents/02-web, frame 1): the row directly under the Wiki, with no count and no shortcut.
 describe('Files, the row under the Wiki', () => {
   const litTopEntries = () =>
     [...container!.querySelectorAll<HTMLElement>('.tp-section .tp-item.active .tp-label')].map((label) => label.textContent);
@@ -319,23 +351,23 @@ describe('Files, the row under the Wiki', () => {
     serve();
     await visit('/tasks');
     const labels = [...container!.querySelectorAll('.tp-section .tp-label')].map((label) => label.textContent);
-    expect(labels.indexOf('Files')).toBe(labels.indexOf('Wiki') + 1);
-    expect(topEntry('Files').querySelector('.tp-count')).toBeNull();
-    expect(topEntry('Files').querySelector('.sidebar-nav-icon-files')).not.toBeNull();
+    expect(labels.indexOf('Documents')).toBe(labels.indexOf('Wiki') + 1);
+    expect(topEntry('Documents').querySelector('.tp-count')).toBeNull();
+    expect(topEntry('Documents').querySelector('.sidebar-nav-icon-files')).not.toBeNull();
   });
 
   it('opens the Files page', async () => {
     serve();
     await visit('/tasks');
-    await click(topEntry('Files'));
-    expect(location).toBe('/files');
-    expect(litTopEntries()).toEqual(['Files']);
+    await click(topEntry('Documents'));
+    expect(location).toBe('/documents');
+    expect(litTopEntries()).toEqual(['Documents']);
   });
 
-  it.each(['/files', '/files?folder=x&file=y', '/files/trash'])('lights Files, in either form, on %s', async (path) => {
+  it.each(['/documents', '/documents?folder=x&file=y', '/documents/trash'])('lights Files, in either form, on %s', async (path) => {
     serve();
     await visit(path);
-    expect(litTopEntries()).toEqual(['Files']);
-    expect(litRailEntries()).toEqual(['Files']);
+    expect(litTopEntries()).toEqual(['Documents']);
+    expect(litRailEntries()).toEqual(['Documents']);
   });
 });

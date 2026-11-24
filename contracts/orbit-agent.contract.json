@@ -1,6 +1,6 @@
 {
   "name": "orbit.agent",
-  "contractVersion": "1.12.0",
+  "contractVersion": "1.13.0",
   "doc": "docs/orbit-agent-contract.md",
   "status": "frozen",
   "frozenAt": "2026-11-16",
@@ -90,7 +90,7 @@
       "toolsWithOrchestrationCodex": 97,
       "toolsWithoutOrchestrationClaude": 76,
       "toolsWithoutOrchestrationCodex": 75,
-      "initializeInstructions": {"source": "src/runner-go/agent_primer.go", "primerVersion": "1.4.5", "firstLine": "Orbit primer <primerVersion> (Agent Contract <contractVersion>).", "leadMaxChars": 512, "primerMaxBytes": 3456, "engineInstructionsMaxBytes": 8192, "codexContextValueMaxBytes": 900, "ascii": true, "snapshots": "src/runner-go/testdata/agent-primer/", "sameTextAlsoIn": ["claude --append-system-prompt", "codex additionalContext (>= 0.135)", "codex thread/inject_items developer message (0.125-0.134)", "codex turn input (< 0.125)", "kimi prompt", "cursor first prompt", "antigravity global rules", "deepseek harness appended prompt", "opencode instructions file"], "readsCheckoutFiles": false, "measuredClientDisplay": {"codex 0.167.2": "first 250 characters, as the server's line in the deferred-tool list"}, "since": "1.5.0"},
+      "initializeInstructions": {"source": "src/runner-go/agent_primer.go", "primerVersion": "1.4.6", "firstLine": "Orbit primer <primerVersion> (Agent Contract <contractVersion>).", "leadMaxChars": 512, "primerMaxBytes": 3456, "engineInstructionsMaxBytes": 8192, "codexContextValueMaxBytes": 900, "ascii": true, "snapshots": "src/runner-go/testdata/agent-primer/", "sameTextAlsoIn": ["claude --append-system-prompt", "codex additionalContext (>= 0.135)", "codex thread/inject_items developer message (0.125-0.134)", "codex turn input (< 0.125)", "kimi prompt", "cursor first prompt", "antigravity global rules", "deepseek harness appended prompt", "opencode instructions file"], "readsCheckoutFiles": false, "measuredClientDisplay": {"codex 0.167.2": "first 250 characters, as the server's line in the deferred-tool list"}, "since": "1.5.0"},
       "resultShape": "since 1.3.0 every catalogued write answers with the versioned receipt (receipt.schema) as structuredContent and as its text, as does a call refused before it ran; a read keeps its text and carries the receipt as structuredContent when it answered with a JSON document or failed, a read answered in prose keeps its text alone; the wiki tools keep their own outputSchema and permission_prompt the engine's protocol",
       "engineView": "measured 2026-11-13, Claude Code 2.1.325: a successful result's structuredContent reaches the model as compact JSON in place of its text; an error result's text is shown as it is; Codex prefers structuredContent likewise",
       "outputSchema": "the receipt schema, advertised on task_create, task_create_batch, task_update, task_start, project_create, project_update, tasklist_create, tasklist_update, session_create, agent_create, agent_update",
@@ -242,7 +242,7 @@
     ],
     "gate": {"passNumerator": 2, "passDenominator": 3, "metricWarnFraction": 0.5},
     "baseline": {"report": "docs/agent-eval/baseline.json", "measuredAt": "2026-11-16", "repoSha": "1d882a28bef668d611e5c86101108702e44c95ad", "suite": "69fadf53a6f0cb13c6a4df4c5e4b82efe31464311dd7e5736db50404e1a1f1ae", "gate": "PASS"},
-    "scenarios": ["E1-record-task", "E1-record-task/acceptEdits", "E1-record-task/dontAsk", "E1-record-task/auto", "E1-record-task/bypassPermissions", "E2-private-plan", "E3-create-no-start", "E3-create-no-start/owner-starts", "E4-batch-plan", "E5-read-only-project", "E5-read-only-project/plan", "E6-immediate-delegation", "E7-no-orchestration", "E8-compaction-recovery", "E8-compaction-recovery/resume", "X1-mcp-missing-cli-fallback", "X2-approval-declined", "X3-approval-chat", "X4-lost-answer-retry", "X5-plan-mode-write"],
+    "scenarios": ["E1-record-task", "E1-record-task/acceptEdits", "E1-record-task/dontAsk", "E1-record-task/auto", "E1-record-task/bypassPermissions", "E2-private-plan", "E3-create-no-start", "E3-create-no-start/owner-starts", "E4-batch-plan", "E5-read-only-project", "E5-read-only-project/plan", "E6-immediate-delegation", "E7-no-orchestration", "E8-compaction-recovery", "E8-compaction-recovery/resume", "X1-mcp-missing-cli-fallback", "X2-approval-declined", "X3-approval-chat", "X4-lost-answer-retry", "X5-plan-mode-write", "I1-wait-await", "I2-notify-when-done", "I3-delegate-subagent", "I3-delegate-subagent/background", "I4-reply-file-link", "I5-evidence-file-upload", "I6-progress-report", "I7-wiki-path-search", "I8-settings-propose", "I9-no-project-for-ordinary-work"],
     "layers": {"deterministic": {"ci": "Agent contract eval", "command": "scripts/agent-eval.sh deterministic"}, "blackBox": {"workflow": ".github/workflows/agent-eval.yml", "command": "scripts/agent-eval.sh live"}},
     "telemetry": {"subtype": "agent_contract_telemetry", "source": "src/runner-go/agent_contract_telemetry.go", "version": 1, "off": "ORBIT_AGENT_CONTRACT_TELEMETRY=off", "never": ["argument values", "tool answers", "replies", "the person's words", "ids", "paths", "credentials"]}
   },
