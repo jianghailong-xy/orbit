@@ -113,13 +113,17 @@ func TestEveryUnitRendersOnEveryEngine(t *testing.T) {
 	}
 }
 
-// initialize answers with the primer, and an Ask with the help reads' instructions, on every engine profile.
+// initialize answers with the primer, and an Ask with the help reads' instructions, on every engine profile. On an
+// engine whose own carrier is confirmed, which has the rest, it answers with the primer's lead paragraph only.
 func TestComposedMCPInstructionsAreThePrimer(t *testing.T) {
 	for _, profile := range append(engineProfiles, unknownEngineProfile) {
 		for _, shape := range instructionTestShapes() {
 			want := agentPrimer
 			if shape.Orchestration {
 				want = strings.Replace(want, agentPrimerOrchestration+"\n\n", "", 1)
+			}
+			if profile.SystemCarrier == probeYes {
+				want = agentPrimerLead
 			}
 			if shape.Role == roleHelpAsk {
 				want = helpAskInstructions
@@ -130,7 +134,7 @@ func TestComposedMCPInstructionsAreThePrimer(t *testing.T) {
 		}
 	}
 	// It does not need the CLI path, which only the engine's own carrier prints.
-	if got := compose(SessionShape{Role: roleTaskRun}, claudeCodeProfile); got.MCP != agentPrimer || got.System != "" {
+	if got := compose(SessionShape{Role: roleTaskRun}, unknownEngineProfile); got.MCP != agentPrimer || got.System != "" {
 		t.Errorf("with no CLI path: %+v", got)
 	}
 }

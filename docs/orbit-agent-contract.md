@@ -348,7 +348,7 @@ to the guide (§2.5); the two parentheticals the guide's topics now carry (a lis
 
 | Carrier | Engine | When it is there |
 | --- | --- | --- |
-| MCP `initialize` → `instructions` | every engine, through `orbit mcp` | whenever the engine starts the server; Claude Code 2.1.325 shows the whole of it under "MCP Server Instructions" and attaches it again after a compaction (measured 2026-11-14: after a manual `/compact` it still quoted the primer's first line) |
+| MCP `initialize` → `instructions` | every engine, through `orbit mcp`; inside a Claude Code session, the first paragraph only, since its appended system prompt carries the whole primer | whenever the engine starts the server; Claude Code 2.1.325 shows the whole of it under "MCP Server Instructions" and attaches it again after a compaction (measured 2026-11-14: after a manual `/compact` it still quoted the primer's first line) |
 | `--append-system-prompt` | Claude Code | every spawn, `--resume` included; a compaction does not touch the system prompt |
 | application context (`additionalContext`), whole paragraphs in values of at most 900 bytes | Codex ≥ 0.135 | every turn, under keys whose generation advances after a compaction, so Codex adds them again |
 | one developer message (`thread/inject_items`) | Codex 0.125–0.134 | at thread start, and again before the first turn after a compaction |

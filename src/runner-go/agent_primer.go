@@ -11,7 +11,9 @@ package main
 // Antigravity's global rules, DeepSeek Harness's appended prompt and OpenCode's instructions. The
 // second carrier is the fallback for an engine that does not show a server's instructions, or a
 // session whose MCP server did not start, so it is sent whether or not the first one arrived: the
-// runner cannot see which of them reached the model. On 2026-11-14 Codex 0.167.2 showed only the
+// runner cannot see which of them reached the model. The exception is an engine whose own carrier is
+// measured to reach the model (EngineProfile.SystemCarrier, so far Claude Code): there `orbit mcp`
+// answers initialize with the first paragraph only, and the primer is given once. On 2026-11-14 Codex 0.167.2 showed only the
 // first 250 characters of a server's instructions, as that server's line in its list of deferred
 // tools (`codex debug prompt-input`), while Claude Code 2.1.325 puts the whole of them under "MCP
 // Server Instructions" and, after a manual /compact, still quoted their first line. That is why the

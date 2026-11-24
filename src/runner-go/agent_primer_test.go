@@ -433,14 +433,19 @@ func primerCarriers(t *testing.T, job *ClaimedSession) map[string]string {
 		"antigravity":                         antigravityInstructions(job, exe),
 		"deepseek harness":                    dshSessionAgentOverlay(job).AppendSystemPrompt,
 		"opencode":                            string(openCode),
-		"orbit mcp initialize (every engine)": mcpInitializeInstructions(t),
+		"orbit mcp initialize (every other engine)": mcpInitializeInstructions(t),
+		"orbit mcp initialize, claude":              claudeSessionInitializeInstructions(t, job),
 	}
 }
 
 // primerFor is the primer as a carrier is given it: Claude Code is not told the re-read-after-compaction
 // paragraph up front (its next message after a reset carries the note, context_reset_note.go), so it is missing
-// from their own instructions, and Codex and every other carrier, and `orbit mcp` initialize, keeps it.
+// from their own instructions, and Codex and every other carrier, and `orbit mcp` initialize, keeps it. Inside a
+// Claude Code session initialize answers with the lead paragraph only: the appended prompt has the rest.
 func primerFor(carrier string) string {
+	if carrier == "orbit mcp initialize, claude" {
+		return agentPrimerLead
+	}
 	if strings.HasPrefix(carrier, "claude") {
 		return strings.Replace(agentPrimer, "\n\n"+agentPrimerRederive, "", 1)
 	}
@@ -468,7 +473,7 @@ func TestEveryEngineIsGivenTheSamePrimer(t *testing.T) {
 			if !strings.Contains(text, primerFor(carrier)) {
 				t.Errorf("%s (inside recorded work: %v) is not given the primer:\n%s", carrier, inside, text)
 			}
-			if carrier != "orbit mcp initialize (every engine)" && !strings.Contains(text, "Owner instructions.") {
+			if !strings.HasPrefix(carrier, "orbit mcp initialize") && !strings.Contains(text, "Owner instructions.") {
 				t.Errorf("%s lost the agent's own prompt beside the primer", carrier)
 			}
 		}

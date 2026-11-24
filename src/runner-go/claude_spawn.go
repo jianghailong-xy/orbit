@@ -54,7 +54,8 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 	// The Orbit CLI discovery instructions are platform instructions and therefore
 	// always join the append prompt rather than replacing the provider's defaults.
 	orbitExe := orbitCLIExecutable()
-	args = appendClaudeAgentInstructionArgs(args, job.instructionAgent(), job.sessionShape(orbitExe))
+	shape := job.sessionShape(orbitExe)
+	args = appendClaudeAgentInstructionArgs(args, job.instructionAgent(), shape)
 	// Orbit ships its own task tools via the `orbit` MCP server (mcp__orbit__task_*).
 	// Claude's built-in Task* tools collide by intent: an agent told to "create tasks"
 	// reaches for them, but those entries are session-local todos that never reach
@@ -80,11 +81,17 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 		servers[k] = v
 	}
 	if orbitExe != "" {
-		servers["orbit"] = map[string]interface{}{
+		orbitServer := map[string]interface{}{
 			"command": orbitExe,
 			"args":    []string{"mcp"},
 			"timeout": mcpToolTimeoutMs,
 		}
+		// The appended prompt above carries Orbit's instructions, so initialize is told it need not repeat them
+		// (mcpServer.engineProfile). Claude Code gives the server this env over its own.
+		if claudeOrbitInstructions(shape) != "" {
+			orbitServer["env"] = map[string]string{envMCPEngine: providerClaude}
+		}
+		servers["orbit"] = orbitServer
 		// The runner's browser, while it is active (browser_mcp.go).
 		addClaudeBrowserMCPServer(servers, orbitExe)
 	}

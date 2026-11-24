@@ -51,6 +51,9 @@ type instructionUnit struct {
 	conflicts []string
 	// skipOnProfile drops the unit for an engine whose profile it says so of: the engine has a better channel for it.
 	skipOnProfile func(EngineProfile) bool
+	// safety marks a unit sent on both channels on purpose, even to an engine whose own carrier is confirmed to
+	// deliver it (EngineProfile.SystemCarrier); every other unit reaches such an engine once (design §4.3).
+	safety bool
 }
 
 // sessionRole is what a session is there to do.
@@ -207,6 +210,9 @@ type EngineProfile struct {
 	AlwaysLoad probe
 	// Carrier is how the engine is given channelSystem text.
 	Carrier instructionCarrier
+	// SystemCarrier is whether text on that carrier is measured to reach the model. When it is, `orbit mcp` inside
+	// a session of this engine leaves out of initialize every unit the carrier has, but the safety units.
+	SystemCarrier probe
 	// SurvivesCompaction is whether that text is still in front of the model after a compaction.
 	SurvivesCompaction probe
 	// ValueCapBytes is the most one carrier value holds (0: no cap); longer text is split into values.
@@ -223,12 +229,15 @@ type EngineProfile struct {
 
 var (
 	claudeCodeProfile = EngineProfile{
-		Engine:             providerClaude,
-		MCPInstructions:    mcpInstructionsWhole,
-		ToolDescriptions:   toolDescriptionsDeferred, // behind ToolSearch
-		AlwaysLoad:         probeUnknown,
-		Carrier:            carrierSystemPrompt, // --append-system-prompt
-		SurvivesCompaction: probeYes,            // the appended prompt stays and the MCP instructions are attached again
+		Engine:           providerClaude,
+		MCPInstructions:  mcpInstructionsWhole,
+		ToolDescriptions: toolDescriptionsDeferred, // behind ToolSearch
+		AlwaysLoad:       probeUnknown,
+		Carrier:          carrierSystemPrompt, // --append-system-prompt
+		// Paragraphs sent only in the appended prompt are acted on, and fail when taken out: notify 10/10 to 0/10,
+		// reply files 4/10 to 0/10, evidence files 7/10 to 1/10 (docs/agent-instructions-eval-baseline.md).
+		SystemCarrier:      probeYes,
+		SurvivesCompaction: probeYes, // the appended prompt stays and the MCP instructions are attached again
 		ResetNote:          true,
 		OrbitTools:         "the `mcp__orbit__*` tools",
 		ToolSearchNotes:    true,
@@ -322,7 +331,9 @@ var bothChannels = []instructionChannel{channelSystem, channelMCP}
 var instructionUnits = []instructionUnit{
 	{id: "primer.lead", owner: "primer: task_create, task_create_batch, project_create", kind: kindDisposition,
 		appliesTo: orbitSession, channels: bothChannels, core: agentPrimerLead,
-		detail: "guide", guardedBy: []string{"E1-record-task", "E2-private-plan"}},
+		detail: "guide", guardedBy: []string{"E1-record-task", "E2-private-plan"},
+		// The one paragraph initialize keeps everywhere: it says what Orbit is for, and carries the primer's version.
+		safety: true},
 	{id: "primer.objects", owner: "primer: guide", kind: kindSelection,
 		appliesTo: orbitSession, channels: bothChannels, core: agentPrimerObjects,
 		detail: "guide", guardedBy: []string{"E4-batch-plan"}},
@@ -431,6 +442,10 @@ func composeChannel(shape SessionShape, profile EngineProfile, channel instructi
 			continue
 		}
 		if channel == channelSystem && unit.skipOnProfile != nil && unit.skipOnProfile(profile) {
+			continue
+		}
+		// An engine whose own carrier is confirmed already has the unit there: initialize does not repeat it.
+		if channel == channelMCP && profile.SystemCarrier == probeYes && unit.deliveredOn(channelSystem) && !unit.safety {
 			continue
 		}
 		if unit.deliveredOn(channel) && unit.appliesTo(shape) && shape.serves(unit.tools) {

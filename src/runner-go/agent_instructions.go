@@ -530,7 +530,7 @@ func appendClaudeAgentInstructionArgs(args []string, agent AgentExecConfig, shap
 	if agent.SystemPrompt != "" {
 		args = append(args, "--system-prompt", agent.SystemPrompt)
 	}
-	if appendPrompt := withOrbitInstructions(agent.AppendSystemPrompt, compose(shape, claudeCodeProfile).System); appendPrompt != "" {
+	if appendPrompt := withOrbitInstructions(agent.AppendSystemPrompt, claudeOrbitInstructions(shape)); appendPrompt != "" {
 		args = append(args, "--append-system-prompt", appendPrompt)
 	}
 	allowed := agent.AllowedTools
@@ -543,4 +543,11 @@ func appendClaudeAgentInstructionArgs(args []string, agent AgentExecConfig, shap
 		args = append(args, "--allowedTools", strings.Join(allowed, ","))
 	}
 	return args
+}
+
+// claudeOrbitInstructions is Orbit's own text in Claude Code's --append-system-prompt for this shape: "" when the CLI
+// path cannot be printed into it.
+func claudeOrbitInstructions(shape SessionShape) string {
+	shape.CLI = orbitCLIPermissionExecutable(shape.CLI)
+	return compose(shape, claudeCodeProfile).System
 }
