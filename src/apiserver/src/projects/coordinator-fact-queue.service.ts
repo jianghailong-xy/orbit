@@ -107,6 +107,10 @@ export class CoordinatorFactQueueService {
     const sessionId = (row.detail as { sessionId?: string } | null)?.sessionId;
     if (!sessionId) return null;
     const stopKey = row.subjectVersion.slice(sessionId.length + 1);
+    if (stopKey.startsWith('idle:')) {
+      const fact = await this.stopped.idleFactFor(sessionId, new Date());
+      return fact && fact.subjectVersion === row.subjectVersion ? fact : null;
+    }
     return this.stopped.factFor(sessionId, stopKey.startsWith('engine:')
       ? { engineTurnEndSeq: Number(stopKey.slice('engine:'.length)) }
       : { turnId: stopKey });

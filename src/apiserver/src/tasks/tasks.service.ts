@@ -105,6 +105,7 @@ import {
 } from './project-pause-dispatch';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { CoordinatorFactQueueService } from '../projects/coordinator-fact-queue.service';
+import { TaskRunIdleService } from '../projects/task-run-idle.service';
 import { CoordinatorEvidenceQueueService } from '../projects/coordinator-evidence-queue.service';
 import { EvidenceReviewService } from './evidence-review.service';
 import { OwnerConfirmationReviewService } from './owner-confirmation-review.service';
@@ -2362,6 +2363,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      */
     @Optional() conditions?: ConditionsService,
     @Optional() private readonly coordinatorFacts?: CoordinatorFactQueueService,
+    @Optional() private readonly runIdle?: TaskRunIdleService,
   ) {
     this.conditions = conditions ?? new ConditionsService(prisma);
     // A task's startWhen fired (docs/condition-triggers-design.md §5.2): in the firing's own transaction, the task
@@ -2835,6 +2837,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // has no turn ending is not left with revisions waiting (coordinator-evidence-queue.service.ts).
       .then(() => this.deliverLooksFinishedOwedTo())
       .then(() => this.coordinatorFacts?.deliverOwedTo())
+      .then(() => this.runIdle?.tick())
       .then(() => this.evidenceQueue?.deliverToIdleCoordinators())
       .then(() => this.evidenceReviews?.deliverOwedTo())
       .then(() => this.evidenceReviews?.deliverSendBacksOwedTo())

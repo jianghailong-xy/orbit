@@ -438,6 +438,37 @@ export function taskRunStoppedFact(stopped: {
 }
 
 /**
+ * `TASK_RUN_STOPPED`, the timed form (`task-run-idle.ts`): a run has sat parked, with no evidence and
+ * no progress, for longer than the idle threshold. Keyed on when its idle period began, so one period
+ * is one fact and any activity that moves `idleSince` starts a new one. The event is the stop's, so
+ * no migration is needed; `detail.idle` is what the message is rendered from.
+ */
+export function taskRunIdleFact(idle: {
+  projectId: string;
+  taskId: string;
+  taskTitle: string;
+  sessionId: string;
+  idleSince: Date;
+  lastProgress: string | null;
+  lastWords: string | null;
+}): WakeFact {
+  return {
+    event: 'TASK_RUN_STOPPED',
+    projectId: idle.projectId,
+    subjectType: 'TASK',
+    subjectId: idle.taskId,
+    subjectVersion: `${idle.sessionId}:idle:${idle.idleSince.getTime()}`,
+    detail: {
+      title: idle.taskTitle,
+      sessionId: idle.sessionId,
+      idleSince: idle.idleSince.toISOString(),
+      lastProgress: idle.lastProgress,
+      ...(idle.lastWords ? { lastWords: idle.lastWords } : {}),
+    },
+  };
+}
+
+/**
  * `TASK_DISPATCH_REFUSED` — a start of this task never became a run: the runner refused the
  * checkout its pinned commit would have been.
  *

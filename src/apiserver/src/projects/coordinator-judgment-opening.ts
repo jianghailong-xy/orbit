@@ -171,6 +171,14 @@ export function describeWakeFact(fact: WakeFact): string {
       );
     }
     case 'TASK_RUN_STOPPED':
+      if (typeof detail.idleSince === 'string') {
+        return (
+          `The run of task “${String(detail.title ?? '')}” (${uuidToBase62(fact.subjectId)}) has been idle since `
+          + `${detail.idleSince}: session ${uuidToBase62(String(detail.sessionId))} ended its turn, no evidence was `
+          + `submitted and no progress was reported since. Its last progress: ${
+            typeof detail.lastProgress === 'string' ? detail.lastProgress : 'none reported'}. Nudge that session.`
+        );
+      }
       return (
         `The run of task “${String(detail.title ?? '')}” (${uuidToBase62(fact.subjectId)}) has stopped working: `
         + `session ${uuidToBase62(String(detail.sessionId))} ended its turn with nothing left to wake it, the task `
