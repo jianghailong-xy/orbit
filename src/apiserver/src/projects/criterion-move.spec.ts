@@ -459,7 +459,11 @@ function recordDoneOver(store: Store, written: Row[]) {
       findMany: async () => store.projectOpenItem.filter((item) => item.projectId === A && item.state === 'OPEN'),
       updateMany: async () => ({ count: 0 }),
     },
-    $queryRaw: async () => [{ status: projectA().status, non_code: true }],
+    // The project row lock answers its row; the deferred-landing read (FROM "task") finds no work
+    // still moving, as Postgres would here.
+    $queryRaw: async (...args: unknown[]) => (renderRawQuery(args).text.includes('FROM "task"')
+      ? []
+      : [{ status: projectA().status, non_code: true }]),
   };
   return new ProjectAcceptanceService({
     ...client,

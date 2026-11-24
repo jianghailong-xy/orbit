@@ -214,8 +214,9 @@ function makeService(opts: {
     { notifySessionQueued: () => undefined } as never,
     { notifyInbox: (id: string) => notified.push(id), publishQueuedTurnsChanged: () => undefined } as never,
   );
-  // An answer that is not coming is waited for briefly here.
-  (service as unknown as { steerWithdrawWaitMs: number }).steerWithdrawWaitMs = 250;
+  // An answer that is not coming is waited for briefly here. One that is coming keeps the real wait,
+  // so a loaded host's slow timers cannot run the deadline out between the polls before it.
+  if (answers.at(-1) === null) (service as unknown as { steerWithdrawWaitMs: number }).steerWithdrawWaitMs = 250;
   return { service, deleteFilters, created, afterCommitDeletes, notified };
 }
 
