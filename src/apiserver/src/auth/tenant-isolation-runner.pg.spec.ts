@@ -74,7 +74,7 @@ import {
   type SharedCase,
   type SharedLinkKind,
 } from './tenant-isolation-runner-cases';
-import { DriveService } from '../drive/drive.service';
+import { DocumentsService } from '../documents/documents.service';
 import '../test-support/daemon-routes-over-http';
 import { sessionLease } from '../test-support/dequeue-under-lease';
 
@@ -478,7 +478,7 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     const driveCommitStagingId = await driveStagingOf();
     const driveCommitId = `census-commit-${name}-${randomUUID()}`;
     await db.driveCommit.create({ data: { ownerId, commitId: driveCommitId, entryId: of.driveFileId, result: { census: true } } });
-    const drive = new DriveService(db as never);
+    const drive = new DocumentsService(db as never);
     const driveMoveFileId = (await drive.createFile(ownerId, { parentId: of.driveFolderId, name: 'census to move.txt' })).id;
     const driveDeleteFileId = (await drive.createFile(ownerId, { parentId: of.driveFolderId, name: 'census to delete.txt' })).id;
 

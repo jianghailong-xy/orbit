@@ -2,25 +2,25 @@ import { IsInt, IsIn, IsOptional, IsString, Min } from 'class-validator';
 import { IsPublicId } from '../common/public-id';
 
 /** `POST /drive/folders`: a new folder; a name already taken in the folder gets a suffix (§3.5). */
-export class CreateDriveFolderDto {
+export class CreateDocumentsFolderDto {
   /** The folder it goes in; the root when absent. */
   @IsOptional() @IsPublicId() parentId?: string;
   @IsString() name!: string;
 }
 
 /** `PATCH /drive/entries/:id`: rename and/or move. A taken name is refused, never overwritten (§4.1). */
-export class UpdateDriveEntryDto {
+export class UpdateDocumentsEntryDto {
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsPublicId() parentId?: string;
 }
 
 /** `POST /drive/versions/:id/restore` (board choice c). */
-export class RestoreDriveVersionDto {
+export class RestoreDocumentsVersionDto {
   @IsIn(['CURRENT', 'COPY']) as!: 'CURRENT' | 'COPY';
 }
 
 /** `POST /drive/uploads`: open a resumable upload (§4.1). */
-export class OpenDriveUploadDto {
+export class OpenDocumentsUploadDto {
   /** The folder it lands in; the root when absent. */
   @IsOptional() @IsPublicId() parentId?: string;
   @IsString() name!: string;
@@ -33,7 +33,7 @@ export class OpenDriveUploadDto {
 }
 
 /** `POST /drive/entries/:id/download-link`: a URL the browser downloads from itself, for the current version or `versionId`. */
-export class DriveDownloadLinkDto {
+export class DocumentsDownloadLinkDto {
   /** A version of this file; its current one when absent. */
   @IsOptional() @IsPublicId() versionId?: string;
 }

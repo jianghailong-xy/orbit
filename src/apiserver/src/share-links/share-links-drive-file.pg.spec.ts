@@ -29,9 +29,9 @@ import { HttpException, NotFoundException, type StreamableFile } from '@nestjs/c
 import type { PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 
-import { DriveChunksService } from '../drive/drive-chunks.service';
-import { DriveContentService } from '../drive/drive-content.service';
-import { DriveService } from '../drive/drive.service';
+import { DocumentsChunksService } from '../documents/documents-chunks.service';
+import { DocumentsContentService } from '../documents/documents-content.service';
+import { DocumentsService } from '../documents/documents.service';
 import { issued } from '../files/file-secret-samples.spec';
 import { FilesService } from '../files/files.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -60,9 +60,9 @@ test('one-file share links: pinned to the version shared, warn on a planted key,
     rmSync(dir, { recursive: true, force: true });
   });
   const files = new FilesService(db as never, { dir, storage: 'local' });
-  const chunks = new DriveChunksService(db as never, files);
-  const drive = new DriveService(db as never, undefined);
-  const content = new DriveContentService(db as never, files);
+  const chunks = new DocumentsChunksService(db as never, files);
+  const drive = new DocumentsService(db as never, undefined);
+  const content = new DocumentsContentService(db as never, files);
   const links = new ShareLinksService(db as never);
   const owners = new ShareLinksController(links, drive, content);
   const door = new SharedController(links, null as never, null as never, null as never, content);

@@ -3,8 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { createHmac } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import { DriveContentService, type DriveContent } from './drive-content.service';
-import { DRIVE_ENTRY_NOT_FOUND, DRIVE_NOT_A_FILE, DRIVE_VERSION_NOT_FOUND } from './drive.service';
+import { DocumentsContentService, type DriveContent } from './documents-content.service';
+import { DRIVE_ENTRY_NOT_FOUND, DRIVE_NOT_A_FILE, DRIVE_VERSION_NOT_FOUND } from './documents.service';
 
 /** How long a minted download URL opens its file: long enough for the browser to start, short enough to leak little. */
 export const DRIVE_DOWNLOAD_LINK_TTL_SECONDS = 5 * 60;
@@ -37,13 +37,13 @@ const gone = () =>
  * Stateless: the URL's token is signed and says what it opens and until when; nothing is written to mint or open one.
  */
 @Injectable()
-export class DriveDownloadLinks {
+export class DocumentsDownloadLinks {
   private readonly jwt: JwtService;
 
   constructor(
     config: ConfigService,
     private readonly prisma: PrismaService,
-    private readonly content: DriveContentService,
+    private readonly content: DocumentsContentService,
   ) {
     const rootSecret = config.get<string>('JWT_SECRET');
     if (!rootSecret) throw new Error('JWT_SECRET is required');
@@ -66,7 +66,7 @@ export class DriveDownloadLinks {
     const claims: Claims = { sub: ownerId, e: entryId, v: version, k: KIND };
     const token = await this.jwt.signAsync(claims, { expiresIn: DRIVE_DOWNLOAD_LINK_TTL_SECONDS });
     return {
-      path: `/api/drive/dl/${token}`,
+      path: `/api/documents/dl/${token}`,
       expiresAt: new Date(Date.now() + DRIVE_DOWNLOAD_LINK_TTL_SECONDS * 1000).toISOString(),
     };
   }

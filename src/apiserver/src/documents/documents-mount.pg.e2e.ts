@@ -3,7 +3,7 @@
  * run as uid 10001 through a real FUSE mount made the way the privileged parent makes it (src/drive-mount), against
  * the production apiserver (`node build/main.js`) over a real PostgreSQL that `scripts/run-pg-spec.sh` migrates:
  *
- *   sudo RUN_PG_SPEC_TIMEOUT=7200 bash scripts/run-pg-spec.sh src/apiserver/src/drive/drive-mount.pg.e2e.ts
+ *   sudo RUN_PG_SPEC_TIMEOUT=7200 bash scripts/run-pg-spec.sh src/apiserver/src/documents/documents-mount.pg.e2e.ts
  *
  * Needs root (it mounts, as the CSI plugin does), a usable /dev/fuse, Go (it builds src/drive-mount unless
  * DRIVE_MOUNT_BIN names a binary) and the shell tools the rows use. Not in CI's pg roster, which takes *.pg.spec only.
@@ -44,7 +44,7 @@ import { call, startApiserver, type Apiserver } from '../auth/pat-test-apiserver
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
-import { issueDriveMountCredential } from './drive-mount-credential';
+import { issueDriveMountCredential } from './documents-mount-credential';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -294,7 +294,7 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
     await db.session.create({ data: { id, ownerId: owner, creatorId: owner, title, prompt: title, assignedRunnerId: ra.id } });
   }
   const pat = (await new PatService(db as unknown as PrismaService).issue(owner, {
-    name: 'files', scopes: ['files'], expiresInDays: 1, createdVia: 'WEB', workspaceIds: [],
+    name: 'documents', scopes: ['documents'], expiresInDays: 1, createdVia: 'WEB', workspaceIds: [],
   })).token;
 
   const server: Apiserver = await startApiserver(url, `drive-mount-${RUN}`, { ORBIT_FILES_DIR: filesDir });
@@ -317,7 +317,7 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
       req.end();
     });
   const resolveEntry = async (drivePath: string) => {
-    const reply = await api('GET', `/drive/resolve?path=${encodeURIComponent(drivePath)}`);
+    const reply = await api('GET', `/documents/resolve?path=${encodeURIComponent(drivePath)}`);
     if (reply.status === 404) return null;
     assert.equal(reply.status, 200, `resolve ${drivePath}: ${reply.text}`);
     return reply.json as { id: string; kind: string; name: string; sizeBytes: number; mtime: string; lastWriter: { kind: string; sessionId: string | null; runnerId: string | null }; parentId: string };
@@ -329,12 +329,12 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
   };
   const content = async (drivePath: string) => {
     const e = await mustEntry(drivePath);
-    const reply = await rawApi('GET', `/drive/entries/${e.id}/content`);
+    const reply = await rawApi('GET', `/documents/entries/${e.id}/content`);
     assert.equal(reply.status, 200, `content of ${drivePath}`);
     return reply.body;
   };
   const versions = async (id: string) => {
-    const reply = await api('GET', `/drive/entries/${id}/versions`);
+    const reply = await api('GET', `/documents/entries/${id}/versions`);
     assert.equal(reply.status, 200, reply.text);
     return reply.json.versions as Array<{ id: string; current: boolean; sizeBytes: number; trashGroupId: string | null }>;
   };
@@ -343,7 +343,7 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
     const groups: Group[] = [];
     let cursor = '';
     for (;;) {
-      const reply = await api('GET', `/drive/trash?limit=1000${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
+      const reply = await api('GET', `/documents/trash?limit=1000${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
       assert.equal(reply.status, 200, reply.text);
       groups.push(...reply.json.groups);
       if (!reply.json.nextCursor) return groups;
@@ -355,41 +355,41 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
     return (await trash()).filter((g) => !seen.has(g.id));
   };
   const groupEntries = async (groupId: string, parentId?: string) => {
-    const reply = await api('GET', `/drive/trash/groups/${groupId}?limit=1000${parentId ? `&parentId=${parentId}` : ''}`);
+    const reply = await api('GET', `/documents/trash/groups/${groupId}?limit=1000${parentId ? `&parentId=${parentId}` : ''}`);
     assert.equal(reply.status, 200, reply.text);
     return reply.json.entries as Array<{ id: string; name: string; kind: string }>;
   };
   const trashedContent = async (entryId: string) => {
     const vs = await versions(entryId);
     const current = vs.find((v) => v.current)!;
-    const reply = await rawApi('GET', `/drive/versions/${current.id}/content`);
+    const reply = await rawApi('GET', `/documents/versions/${current.id}/content`);
     assert.equal(reply.status, 200);
     return reply.body;
   };
   const versionContent = async (versionId: string) => {
-    const reply = await rawApi('GET', `/drive/versions/${versionId}/content`);
+    const reply = await rawApi('GET', `/documents/versions/${versionId}/content`);
     assert.equal(reply.status, 200, `content of version ${versionId}`);
     return reply.body;
   };
   /** A folder made on the Files page: no mount has listed it, so none holds a listing the SQL seeding would bypass. */
   const ownerFolder = async (name: string) => {
-    const made = await api('POST', '/drive/folders', { name });
+    const made = await api('POST', '/documents/folders', { name });
     assert.equal(made.status, 201, made.text);
     assert.equal(made.json.name, name);
     return made.json as { id: string };
   };
   const ownerUpload = async (parentPath: string, name: string, bytes: Buffer) => {
     const parent = parentPath === '/' ? null : await mustEntry(parentPath);
-    const opened = await api('POST', '/drive/uploads', { ...(parent ? { parentId: parent.id } : {}), name, size: bytes.length });
+    const opened = await api('POST', '/documents/uploads', { ...(parent ? { parentId: parent.id } : {}), name, size: bytes.length });
     assert.equal(opened.status, 201, opened.text);
     const chunk = opened.json.chunkSize as number;
     for (let i = 0, idx = 0; i < bytes.length || (i === 0 && bytes.length === 0); i += chunk, idx += 1) {
       const part = bytes.subarray(i, i + chunk);
       if (!part.length) break;
-      const put = await rawApi('PUT', `/drive/uploads/${opened.json.id}/chunks/${idx}`, part, { 'x-orbit-chunk-sha256': sha256(part) });
+      const put = await rawApi('PUT', `/documents/uploads/${opened.json.id}/chunks/${idx}`, part, { 'x-orbit-chunk-sha256': sha256(part) });
       assert.equal(put.status, 200, put.body.toString());
     }
-    const done = await api('POST', `/drive/uploads/${opened.json.id}/complete`);
+    const done = await api('POST', `/documents/uploads/${opened.json.id}/complete`);
     assert.equal(done.status, 200, done.text);
     return done.json;
   };
@@ -563,7 +563,7 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
     assert.equal(toUuid(e.lastWriter.runnerId!), a.id, 'written through runner A');
     assert.equal(toUuid(e.lastWriter.sessionId!), sessionOnA, 'and by the session whose process wrote it (§5.8)');
     // What the Files page lists (FilesPage.tsx reads GET /drive/entries; DriveWriterName shows "Agent in <session>").
-    const page = await api('GET', '/drive/entries');
+    const page = await api('GET', '/documents/entries');
     assert.equal(page.status, 200, page.text);
     const listed = (page.json.entries as Array<{ name: string; sizeBytes: number; lastWriter: { kind: string; sessionId: string | null } }>)
       .find((x) => x.name === 'r1-a.txt')!;
@@ -986,7 +986,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
     assert.equal(added.filter((g) => g.items.some((i) => i.name === 'dir29' || i.name.startsWith('top') || i.name.startsWith('s'))).length, 1, 'one group for the rm -rf');
     assert.equal(dirGroup.itemCount, 500);
     assert.equal(dirGroup.folderPath, '/');
-    const restored = await api('POST', `/drive/trash/groups/${dirGroup.id}/restore`);
+    const restored = await api('POST', `/documents/trash/groups/${dirGroup.id}/restore`);
     assert.ok(restored.status === 200 || restored.status === 201, restored.text);
     await waitFor('the restored tree on the mount', async () => (await sh(a, 'test "$(find $F/dir29/ -type f | wc -l)" = 490')).code === 0, 30_000, 500);
     ok(await sh(a, 'diff -r ~/dir29 $F/dir29'), 'the tree is back');
@@ -1035,7 +1035,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
     const added = await newGroups(before);
     assert.equal(added.length, 1, `one group, not ${added.length}`);
     assert.equal(added[0].itemCount, hugeFolders * 101 + 1);
-    const restore = await api('POST', `/drive/trash/groups/${added[0].id}/restore`);
+    const restore = await api('POST', `/documents/trash/groups/${added[0].id}/restore`);
     assert.ok(restore.status === 200 || restore.status === 201, restore.text.slice(0, 300));
     const back = await db.driveEntry.count({ where: { ownerId: owner, kind: 'FILE', trashedAt: null, parent: { parentId: toUuid((await mustEntry('/huge30')).id) } } });
     assert.equal(back, hugeFolders * 100);
@@ -1048,7 +1048,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
     const before = await trash();
     ok(await sh(a, 'rm $F/a31.txt && echo second > $F/a31.txt'), 'rm and write again');
     const g = (await newGroups(before)).find((x) => x.items.some((i) => i.name === 'a31.txt'))!;
-    const restored = await api('POST', `/drive/trash/groups/${g.id}/restore`);
+    const restored = await api('POST', `/documents/trash/groups/${g.id}/restore`);
     assert.ok(restored.status === 200 || restored.status === 201, restored.text);
     assert.equal((await content('/a31 (2).txt')).toString(), 'first\n');
     assert.equal((await content('/a31.txt')).toString(), 'second\n');
@@ -1065,7 +1065,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
       const q = await mustEntry(`/q32-${i}`);
       // Started apart by a little more each time, so either side gets there first.
       const [web, mount] = await Promise.all([
-        sleep(stagger[i]).then(() => api('PATCH', `/drive/entries/${p.id}`, { parentId: q.id })),
+        sleep(stagger[i]).then(() => api('PATCH', `/documents/entries/${p.id}`, { parentId: q.id })),
         sh(a, `mv $F/q32-${i} $F/p32-${i}/ 2>&1; echo "rc=$?"`),
       ]);
       const webOk = web.status === 200;
@@ -1092,7 +1092,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
       ok(await sh(a, `mkdir -p $F/r32-${i}/s && ls $F/r32-${i}/s/`), 'setup');
       const r = await mustEntry(`/r32-${i}`);
       const [web, mount] = await Promise.all([
-        sleep(stagger[i]).then(() => api('DELETE', `/drive/entries/${r.id}`)),
+        sleep(stagger[i]).then(() => api('DELETE', `/documents/entries/${r.id}`)),
         sh(a, `echo n > $F/r32-${i}/s/new.txt 2>&1; echo "rc=$?"`),
       ]);
       assert.equal(web.status, 200, web.text);
@@ -1334,7 +1334,7 @@ print('listxattr', os.listxattr('$F/x46'))"`);
       return changed > 0;
     }, 30_000, 100);
     const e = await mustEntry('/r47.txt');
-    assert.equal((await api('PATCH', `/drive/entries/${e.id}`, { name: 'r47-renamed.txt' })).status, 200);
+    assert.equal((await api('PATCH', `/documents/entries/${e.id}`, { name: 'r47-renamed.txt' })).status, 200);
     const renamed = Date.now();
     let moved = 0;
     await waitFor('A sees the rename', async () => {

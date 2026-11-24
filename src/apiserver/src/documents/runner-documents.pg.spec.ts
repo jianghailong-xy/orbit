@@ -1,9 +1,9 @@
 /**
- * The runner drive door (docs/orbit-files-drive-technical-design.md §4.2, §4.3, §4.6, §8.2; drive/runner-drive.controller.ts,
- * drive/drive-mount-credential.ts), through the production apiserver (`node build/main.js`, every guard and pipe) over a
+ * The runner drive door (docs/orbit-files-drive-technical-design.md §4.2, §4.3, §4.6, §8.2; documents/runner-documents.controller.ts,
+ * documents/documents-mount-credential.ts), through the production apiserver (`node build/main.js`, every guard and pipe) over a
  * real PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty:
  *
- *   bash scripts/run-pg-spec.sh src/apiserver/src/drive/runner-drive.pg.spec.ts
+ *   bash scripts/run-pg-spec.sh src/apiserver/src/documents/runner-documents.pg.spec.ts
  *
  *   (1) a self-registered runner's credential puts, gets, lists, moves and deletes by path, as the drive tools do: mkdir -p,
  *       create, a staging's chunks, commit, stat, list (a one-chunk file carries its sha256), manifest, a chunk's bytes
@@ -44,9 +44,9 @@ import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-te
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
-import { issueDriveMountCredential, fenceManagedInstance } from './drive-mount-credential';
-import { DriveService } from './drive.service';
-import { RunnerDriveController } from './runner-drive.controller';
+import { issueDriveMountCredential, fenceManagedInstance } from './documents-mount-credential';
+import { DocumentsService } from './documents.service';
+import { RunnerDocumentsController } from './runner-documents.controller';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -272,18 +272,18 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
     refused(await as(aliceRunner.token, 'GET', `/stat?path=${q('/Proj/r2.md')}`), 404, 'DRIVE_ENTRY_NOT_FOUND', 'a deleted path');
     refused(await as(aliceRunner.token, 'GET', `/stat?id=${gone.id}`), 404, 'DRIVE_ENTRY_NOT_FOUND', 'a deleted id');
     // The owner can still restore it: it is in Trash, not gone.
-    await new DriveService(db as never).restoreGroup(alice, row.trashGroupId!);
+    await new DocumentsService(db as never).restoreGroup(alice, row.trashGroupId!);
     ok(await as(aliceRunner.token, 'GET', `/stat?path=${q('/Proj/r2.md')}`), 'restored by the owner');
   });
 
   await t.test('(2) no Trash and no share operation', async () => {
-    const proto = RunnerDriveController.prototype as unknown as Record<string, unknown>;
+    const proto = RunnerDocumentsController.prototype as unknown as Record<string, unknown>;
     const routes = Object.getOwnPropertyNames(proto)
       .filter((name) => typeof proto[name] === 'function' && Reflect.getMetadata(METHOD_METADATA, proto[name] as object) !== undefined)
       .map((name) => String(Reflect.getMetadata(PATH_METADATA, proto[name] as object)));
     assert.ok(routes.length >= 15, `the door's routes: ${routes.join(', ')}`);
     for (const route of routes) assert.doesNotMatch(route, /trash|share|restore|purge/i, route);
-    assert.deepEqual(Reflect.getMetadata(GUARDS_METADATA, RunnerDriveController), [RunnerAuthGuard]);
+    assert.deepEqual(Reflect.getMetadata(GUARDS_METADATA, RunnerDocumentsController), [RunnerAuthGuard]);
 
     for (const [method, route] of [['GET', '/trash'], ['POST', '/trash/restore'], ['POST', '/share'], ['POST', '/share-links']]) {
       const reply = await as(aliceRunner.token, method, route, {});
@@ -378,7 +378,7 @@ test('Orbit Files drive: the runner drive door — drive tools by path, no Trash
     assert.equal(pending.reply.status, 200);
     const versionsBefore = await db.driveVersion.count({ where: { entryId: toUuid(written.entry.id) } });
     await db.managedRunner.update({ where: { id: mapping.id }, data: { generation: 2, podUid: randomUUID() } });
-    const drive = new DriveService(db as never);
+    const drive = new DocumentsService(db as never);
     await assert.rejects(
       drive.commit(alice, {
         ...pending.body, commitId: randomUUID(), entryId: toUuid(pending.body.entryId), baseVersionId: null, stagingId: null, mode: 'OVERWRITE',

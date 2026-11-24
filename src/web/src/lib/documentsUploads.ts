@@ -4,8 +4,8 @@ import { sha256Hex } from './sha256';
 
 /**
  * Resumable uploads into the drive (docs/orbit-files-drive-technical-design.md §4.1, board 02-web frame 3): each file is
- * opened with `POST /drive/uploads`, sent as chunks of at most 8 MiB with `PUT /drive/uploads/:id/chunks/:idx`, and
- * completed. What has arrived is asked of the server (`GET /drive/uploads/:id`), never assumed, so an upload goes on
+ * opened with `POST /documents/uploads`, sent as chunks of at most 8 MiB with `PUT /documents/uploads/:id/chunks/:idx`, and
+ * completed. What has arrived is asked of the server (`GET /documents/uploads/:id`), never assumed, so an upload goes on
  * from where it stopped: after a dropped connection on its own, and after a reload once the same file is picked again
  * (a page cannot keep a file across a reload; the upload's id and what it was are kept in localStorage).
  *
@@ -194,7 +194,7 @@ export function cancelUpload(key: string): void {
   if (running?.key === key) running.abort.abort();
   uploads = uploads.filter((u) => u.key !== key);
   emit();
-  if (upload.uploadId) void api(`/drive/uploads/${encodeURIComponent(upload.uploadId)}`, { method: 'DELETE' }).catch(() => {});
+  if (upload.uploadId) void api(`/documents/uploads/${encodeURIComponent(upload.uploadId)}`, { method: 'DELETE' }).catch(() => {});
 }
 
 /** Clear the finished rows from the tray. */
@@ -290,7 +290,7 @@ async function sendOnce(key: string, signal: AbortSignal): Promise<{ id: string 
         chunks: Array<{ idx: number; sizeBytes: number }>;
         completed: boolean;
         entryId: string | null;
-      }>(`/drive/uploads/${encodeURIComponent(upload.uploadId)}`);
+      }>(`/documents/uploads/${encodeURIComponent(upload.uploadId)}`);
       if (status.completed && status.entryId) return { id: status.entryId };
       chunkSize = status.chunkSize;
       arrived = new Map(status.chunks.map((c) => [c.idx, c.sizeBytes]));
@@ -303,7 +303,7 @@ async function sendOnce(key: string, signal: AbortSignal): Promise<{ id: string 
   upload = find(key)!;
   if (!upload.uploadId) {
     const dropRootId = upload.dropKey ? drops[upload.dropKey] : undefined;
-    const opened = await api<{ id: string; chunkSize: number; dropRootId: string | null }>('/drive/uploads', {
+    const opened = await api<{ id: string; chunkSize: number; dropRootId: string | null }>('/documents/uploads', {
       method: 'POST',
       body: {
         ...(upload.parentId ? { parentId: upload.parentId } : {}),
@@ -332,7 +332,7 @@ async function sendOnce(key: string, signal: AbortSignal): Promise<{ id: string 
     for (let attempt = 0; ; attempt += 1) {
       if (signal.aborted) throw new Offline('stopped');
       try {
-        const res = await authedFetch(`/api/drive/uploads/${encodeURIComponent(uploadId)}/chunks/${idx}`, {
+        const res = await authedFetch(`/api/documents/uploads/${encodeURIComponent(uploadId)}/chunks/${idx}`, {
           method: 'PUT',
           headers: { 'content-type': 'application/octet-stream', 'x-orbit-chunk-sha256': sha256 },
           body: chunk,
@@ -353,7 +353,7 @@ async function sendOnce(key: string, signal: AbortSignal): Promise<{ id: string 
     const seconds = (Date.now() - started) / 1000;
     patch(key, { sentBytes: sent, rate: seconds > 0 ? sentThisRun / seconds : null });
   }
-  return api<{ id: string }>(`/drive/uploads/${encodeURIComponent(uploadId)}/complete`, { method: 'POST' });
+  return api<{ id: string }>(`/documents/uploads/${encodeURIComponent(uploadId)}/complete`, { method: 'POST' });
 }
 
 /** For tests: forget every upload and what was kept. */

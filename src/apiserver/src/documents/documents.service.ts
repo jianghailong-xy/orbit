@@ -4,12 +4,12 @@ import { randomBytes } from 'node:crypto';
 import { classifyTransactionFault, loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
-import { DRIVE_CHUNK_MAX } from './drive-chunks.service';
+import { DRIVE_CHUNK_MAX } from './documents-chunks.service';
 
 /**
  * The drive's name layer (docs/orbit-files-drive-technical-design.md §1, §3, §5.4): folders and files over the chunk
  * store, versions, Trash and the change feed. Every rule here holds whichever door a write came through: the owner's
- * routes (drive.controller.ts), and the runner drive door and the mount daemon, which belong to their own tasks.
+ * routes (documents.controller.ts), and the runner drive door and the mount daemon, which belong to their own tasks.
  *
  *   - An overwrite makes a version and puts the previous one in Trash, in a VERSION group of its own; an append grows the
  *     current version in place and makes none (§3.2).
@@ -268,8 +268,8 @@ const isUniqueViolation = (error: unknown) =>
   error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
 
 @Injectable()
-export class DriveService implements OnApplicationBootstrap, OnModuleDestroy {
-  private readonly logger = new Logger(DriveService.name);
+export class DocumentsService implements OnApplicationBootstrap, OnModuleDestroy {
+  private readonly logger = new Logger(DocumentsService.name);
   private finisher?: ReturnType<typeof setInterval>;
   private finishing?: Promise<unknown>;
 

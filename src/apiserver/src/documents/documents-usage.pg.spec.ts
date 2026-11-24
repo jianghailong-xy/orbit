@@ -2,7 +2,7 @@
  * Files → Storage's total (docs/orbit-files-drive-technical-design.md §2.5; files/files.service.ts#driveUsage), over a real
  * PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty:
  *
- *   bash scripts/run-pg-spec.sh src/apiserver/src/drive/drive-usage.pg.spec.ts
+ *   bash scripts/run-pg-spec.sh src/apiserver/src/documents/documents-usage.pg.spec.ts
  *
  *   (1) total = drive + other, with each content counted once: bytes that an attachment and a drive chunk both hold are
  *       the drive's, and two attachments of the same bytes are one;
@@ -26,8 +26,8 @@ import { Client } from 'pg';
 import { FilesService } from '../files/files.service';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
-import { DriveChunksService } from './drive-chunks.service';
-import { DriveService } from './drive.service';
+import { DocumentsChunksService } from './documents-chunks.service';
+import { DocumentsService } from './documents.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -47,8 +47,8 @@ test('Orbit Files drive: usage — total = drive + other storage, each content o
     rmSync(dir, { recursive: true, force: true });
   });
   const files = new FilesService(db as never, { dir, storage: 'local' });
-  const chunks = new DriveChunksService(db as never, files);
-  const drive = new DriveService(db as never);
+  const chunks = new DocumentsChunksService(db as never, files);
+  const drive = new DocumentsService(db as never);
   const account = async (name: string) => {
     const id = randomUUID();
     await db.user.create({ data: { id, email: `${name}-${RUN}@orbit-drive.invalid`, name, passwordHash: 'x' } });

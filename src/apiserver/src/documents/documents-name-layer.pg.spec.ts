@@ -1,9 +1,9 @@
 /**
- * The drive's name layer (docs/orbit-files-drive-technical-design.md §1, §3, §5.4; migration 1327; drive/drive.service.ts),
+ * The drive's name layer (docs/orbit-files-drive-technical-design.md §1, §3, §5.4; migration 1327; documents/documents.service.ts),
  * over a real PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty, with chunks kept on a files directory of this
  * run's through the chunk door:
  *
- *   bash scripts/run-pg-spec.sh src/apiserver/src/drive/drive-name-layer.pg.spec.ts
+ *   bash scripts/run-pg-spec.sh src/apiserver/src/documents/documents-name-layer.pg.spec.ts
  *
  *   (1)  an overwrite makes a version and puts the previous one in Trash, in a VERSION group the owner restores;
  *   (2)  an append makes no version: the current version grows in place; a tail that moved is answered 409 with the tail
@@ -49,7 +49,7 @@ import { FileRetentionSweep } from '../files/file-retention-sweep';
 import { FilesService } from '../files/files.service';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
-import { DriveChunksService } from './drive-chunks.service';
+import { DocumentsChunksService } from './documents-chunks.service';
 import {
   DRIVE_CHUNK_NOT_HELD,
   DRIVE_ENTRY_NOT_FOUND,
@@ -59,10 +59,10 @@ import {
   DRIVE_TAIL_MOVED,
   DRIVE_TRASH_GROUP_NOT_FOUND,
   DRIVE_VERSION_NOT_FOUND,
-  DriveService,
+  DocumentsService,
   type DriveCommitInput,
   type DriveWriter,
-} from './drive.service';
+} from './documents.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -97,10 +97,10 @@ test('Orbit Files drive: the name layer — versions, append, Trash groups, rest
     rmSync(dir, { recursive: true, force: true });
   });
   const files = new FilesService(db as never, { dir, storage: 'local' });
-  const chunks = new DriveChunksService(db as never, files);
+  const chunks = new DocumentsChunksService(db as never, files);
   const announced: Array<{ ownerId: string; seq: number }> = [];
   const realtime = { publishDriveChanged: (ownerId: string, seq: number) => announced.push({ ownerId, seq }) };
-  const drive = new DriveService(db as never, realtime as never);
+  const drive = new DocumentsService(db as never, realtime as never);
 
   const accountOf = async (name: string) => {
     const id = randomUUID();
