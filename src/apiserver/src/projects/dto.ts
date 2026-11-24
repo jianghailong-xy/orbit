@@ -213,8 +213,8 @@ export class UpdateProjectIntegrationDto implements IntegrationSettings {
   /** `MAIN` lands finished tasks straight on the upstream; `PROJECT_BRANCH` on the project's own
    *  branch first. */
   @IsOptional() @IsIn(INTEGRATION_LINES) line?: IntegrationLine;
-  /** The project branch as a full ref, `refs/heads/project/<project id>` unless named. Naming one
-   *  chooses `PROJECT_BRANCH`. */
+  /** The project branch as a full ref, `refs/heads/project/<title slug>-<8 characters of the
+   *  project id>` unless named (`projectBranchRef`). Naming one chooses `PROJECT_BRANCH`. */
   @IsOptional()
   @Matches(BRANCH_REF, {
     message: 'CODEBASE_AUTHORITY_INVALID: projectBranchName must be a full branch ref such as refs/heads/project/next',
@@ -557,8 +557,8 @@ export class StartProjectDto implements StartProjectRequestBody {
   criteriaDigest!: string;
   /** Where finished tasks land: the project's own branch first, or directly into main. */
   @IsOptional() @IsIn(INTEGRATION_LINES) line?: IntegrationLine;
-  /** The project branch as a full ref, with `PROJECT_BRANCH` only; `refs/heads/project/<project
-   *  id>` unless named. */
+  /** The project branch as a full ref, with `PROJECT_BRANCH` only; `refs/heads/project/<title
+   *  slug>-<8 characters of the project id>` unless named (`projectBranchRef`). */
   @IsOptional()
   @Matches(BRANCH_REF, {
     message: 'CODEBASE_AUTHORITY_INVALID: projectBranchName must be a full branch ref such as refs/heads/project/next',

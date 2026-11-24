@@ -288,7 +288,7 @@ function fakePrisma(input: { cards?: Array<Record<string, unknown>>; repository?
   const prisma: any = {
     project: {
       findFirst: async () => ({ id: PROJECT_ID, coordinatorSessionId: null }),
-      findUniqueOrThrow: async () => ({ exceptionEscalationSeconds: 7200 }),
+      findUniqueOrThrow: async () => ({ exceptionEscalationSeconds: 7200, title: 'Merge check cards' }),
       update: async (args: any) => {
         projectWrites.push(args.data);
         return {

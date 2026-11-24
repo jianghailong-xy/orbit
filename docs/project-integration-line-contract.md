@@ -196,7 +196,7 @@ Orbit 仓库的项目可将 `merge_check_command` 配为 `bash scripts/merge-che
 2. 新插入的行取值：
    - `canonical_repo_url`：该任务工作会话所在 workspace 的 `repo_url`，经 PSC SR36 的规范化函数处理。为 NULL 时不插入代码库行、不入队作业，改为生成 `INTEGRATION_ERROR` 待办（`error_code = INTEGRATION_REPOSITORY_UNKNOWN`，§4.2）。
    - `upstream_ref`：这个账号在同一仓库上次选的（L6 的记忆），没有才 `'refs/heads/main'`；`upstream_ref_chosen_at` 为 NULL。
-   - `integration_ref`：`MAIN` → 等于 `upstream_ref`；`PROJECT_BRANCH` → `refs/heads/project/<projectPublicId>`（附录 A-Q1）。
+   - `integration_ref`：`MAIN` → 等于 `upstream_ref`；`PROJECT_BRANCH` → `refs/heads/project/<标题 slug>-<publicId 前 8 位>`，标题生成不出 slug 时为 `refs/heads/project/<publicId 前 8 位>`（附录 A-Q1，2026-11-24 改订）。slug：标题转小写，只留 ASCII 字母与数字，其余每一段连续字符变成一个 `-`，去掉首尾 `-`，超过 40 个字符时在词边界截断。名字在线决定或开始时选定一次，存为 `integration_ref`；之后只读存下的值，项目改名不会改分支名，2026-11-24 之前存下的 `project/<projectPublicId>` 也原样保留。服务端在集成设置读数上给出 `defaultProjectBranch`（短名），在开始请求的每次读取上给出 `defaultProjectBranchName`（全名），客户端照此显示，不再自己拼名字。
    - `ref_authority = 'REMOTE'`，`remote_name = 'origin'`（附录 A-Q2）。
    - `integration_ref_source = 'DEFAULT_RULE'`。
 3. `UPDATE … SET integration_started_at = now() WHERE integration_started_at IS NULL`。已有 `EXPLICIT` 行时只做这一步。
@@ -213,7 +213,7 @@ Orbit 仓库的项目可将 `merge_check_command` 配为 `bash scripts/merge-che
 ```ts
 interface UpdateProjectIntegrationDto {
   line?: 'MAIN' | 'PROJECT_BRANCH';
-  projectBranchName?: string;        // 全名 refs/heads/…；缺省 refs/heads/project/<projectPublicId>
+  projectBranchName?: string;        // 全名 refs/heads/…；缺省 refs/heads/project/<标题 slug>-<publicId 前 8 位>
   upstreamRef?: string;              // 全名；锁定后拒绝
   mergeCheckCommand?: string | null;
   mergeCheckTimeoutSeconds?: number | null;
@@ -2846,7 +2846,7 @@ P-M1 不加列：它读的 `delivered_sha` 与 `delivered_base_sha` 是修订 29
 
 | # | 问题 | 默认做法 | 可推翻为 |
 |---|---|---|---|
-| Q1 | 项目分支叫什么 | `project/<projectPublicId>`，锁定前可在设置里改名 | 按项目标题生成 ASCII slug（`project/bg-jobs`），标题无法生成时回退 publicId |
+| Q1 | 项目分支叫什么 | 已裁决（2026-11-24）：`project/<标题 slug>-<publicId 前 8 位>`，标题生成不出 slug 时为 `project/<publicId 前 8 位>`；已存下的名字不改。锁定前可在设置里改名 | — |
 | Q2 | workspace 没有远端时怎么办 | 拒绝集成，生成 `INTEGRATION_ERROR / INTEGRATION_REPOSITORY_UNKNOWN` 待办 | 允许 `RUNNER_LOCAL` 权威，绑定到该 workspace 的 runner |
 | Q3 | 开始集成后能否换线 | v1 不能；要换，先合入 main 或放弃当前项目分支（owner 手工处理） | v1 就提供「放弃项目分支并解锁」的 owner 操作 |
 | Q4 | upstream 是否自动探测 | 不探测。默认取这个账号在同一仓库上次选的，没有才 `refs/heads/main`；某个仓库第一次用时由协调者在开始请求里建议（它在仓库里读 origin/HEAD），owner 在开始卡片上定；找不到就报错（L6，owner 2026-10-09） | 第一条作业时由 runner 读远端 HEAD 并记录 |
