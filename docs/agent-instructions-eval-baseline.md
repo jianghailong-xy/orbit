@@ -338,6 +338,83 @@ Reports: [`agent-eval/instructions-step4/`](agent-eval/instructions-step4/). `st
 `step4-phase2.json` merge the per-engine reports beside them. The gate of each reads INCOMPLETE because only these six
 scenarios were played.
 
+## Step 5: merges and moves into tool descriptions
+
+Each change was its own commit and was played on that commit's precompiled test binary on 2026-11-24/25, with Claude
+Code 2.1.331 (`claude-sonnet-5-5`) and Codex 0.172.0 as at step 0, 10 runs of each cell unless said. Where a cell came
+out below step 0, the same cell was played on the commit before the change (a control) on the same day. A change
+whose cell dropped against its control was reverted. Reports: [`agent-eval/instructions-step5/`](agent-eval/instructions-step5/)
+(`step5-<commit label>-<engine>.json`, with `.md` renderings; controls are `step5-<cell>-control-<commit>.json`).
+
+| Change | Commit | Cells (Claude Code / Codex) | Step 0 | Kept? |
+| --- | --- | --- | --- | --- |
+| (a) one handoff unit (sub-agents, delegate, orchestration hand-off) | `05fb49e208` | E6 0/10 / 10/10, E7 0/10 / 10/10, I3 8/10 / 10/10, I3 background 10/10 / 10/10 | E6 0/5 / 5/5, E7 0/5 / 5/5, I3 5/10 / 10/10, I3b 10/10 / 10/10 | kept, with (a3) |
+| (a2) delegate description: "look with task_list first" | `cc13633afa` | E6 0/10 / 10/10, E7 0/10 / 10/10, I3 10/10 / 10/10, I3b 10/10 / 9/10 | as above | reverted (`9965f7867d`) |
+| (a3) task_create: an unassigned task cannot be started | `12a9d17a1a` | E3 10/10 / 20/20, E3 owner-starts 10/10 / 20/20 (Codex 20 runs) | E3 5/5 / 3/3, owner-starts 4/5 / 3/3 | kept |
+| (b) one CLI unit | `3d0a8ea34c` | X2 10/10 / 10/10, X1 n/a / 0/10 | X2 5/5 / 5/5, X1 n/a / 5/5 | kept (X1: below) |
+| (c) start paragraph to one line | `bfacd0e075` | E3 10/10 / 10/10, E3 owner-starts 10/10 / 4/10 | as above | reverted (`1df7ca8ec7`) |
+| (d) both project paragraphs into project_create | `1072ece3bb` | I9 10/10 / 10/10, E4 18/20 / 10/10, E5 10/10 / 3/10 | I9 10/10 / 10/10, E4 5/5 / 4/4, E5 5/5 / 2/3 | reverted (`5be50b0701`) |
+| (d') only the task run's project paragraph, to one line | `64acf35faa` | E5 10/10 / 15/20, I9 10/10 / 19/20, I5 10/10 / 10/10 | E5 5/5 / 2/3, I9 10/10 / 10/10, I5 7/10 / 10/10 | kept |
+| (e) wait paragraph to one line | `fe3f65a4aa` | I1 10/10 / 10/10, I2 10/10 / 10/10 | I1 10/10 / 10/10, I2 10/10 / 12/12 | kept |
+| (f) reply-files and evidence paragraphs merged | `4b6d71ce96` | I4 3/10 / not played, I5 7/10 / not played | I4 4/10 / 10/10, I5 7/10 / 10/10 | reverted (`da0a687123`) |
+
+The controls behind each decision:
+
+- **(a2)**: Claude Code still delegated E6 and E7 in every run, without a task_list call. On Codex the new sentence
+  made run 6 of I3 background call task_list and guide and never delegate.
+- **(c)**: E4 on Claude Code held every batch item in 20/20 on its parent `3d0a8ea34c` and in 18/20 with it (both
+  misses an item without `autoRunWhenReady: false`). E3 owner-starts on Codex was 4/10 against 6/10 on the parent.
+- **(d)**: E5 on Codex was 10/10 on the parent `bfacd0e075` and 3/10 with the change, every failure
+  `C.no_invented_ids` (project_get with an id made up from the project's name, step 0's E5 failure). (d') leaves a free
+  conversation's paragraph as it was. With it, E5 on Codex is 15/20, above step 0's 2/3, and its five failures are the
+  same invented id. Against the 10/10 control that is not a measured difference at 20 runs.
+- **(f)**: I4 on Claude Code was 6/10 on the parent `fe3f65a4aa` and 3/10 with the merge. The failures pasted the
+  `/tmp` log and named its path, as at step 0.
+- **E3 owner-starts on Codex** was 9/10 on the step-0 commit and 8/10 on the step-5 base `b2402a477e` today, and
+  6/10 after (a). Every failure, at every commit, filed the held task with `assigneeId: null`, so the owner's "Create and
+  start" had nothing to start. (a3) puts the reason not to in task_create's description: with it, E3 owner-starts on Codex passed 20/20 and E3 20/20, and Claude Code 10/10 on both.
+- **E6 and E7 on Claude Code** stay at step 0's 0/10: Claude calls delegate at once for "have another agent fix the
+  flaky test right now", in every run with and without the merged paragraph. Codex holds 10/10.
+- **X1 on Codex cannot be played today.** The step-0 commit's own binary passed it 5/5 on the morning of 2026-11-24, and
+  fails it 0/5 now (`step5-x1-control-step0`), as does (a) (0/5) and (b) (0/10): Codex declines the CLI call before it
+  runs. Whatever changed is outside the repository, so (b) stands on X2 and on what the CLI paragraph still says (the
+  path, `guide <topic> --json`, `--receipt`).
+
+### Always-on bytes after step 5
+
+`TestAlwaysOnBudgetPerShape` (`src/runner-go/primer_once_test.go`) logs and caps every canonical shape, measured with a
+CLI path longer than any runner's and a faked drive mount: on Claude Code the appended prompt's Orbit part plus the
+initialize instructions, on Codex its context's Orbit part, in bytes and in rules (composed paragraphs). The longest
+Claude Code shape went from 8,046 bytes and 22 rules at the step-5 base (`task-watch-toplevel-workflows-drive`) to
+6,640 bytes and 19 rules (`free-watch-toplevel-workflows`). The project's goal is 3,500 bytes, and is not reached.
+What the longest shape still holds, and what its guarding case says about cutting it:
+
+| Unit | Bytes | Guard, and what leaving it out measured |
+| --- | --- | --- |
+| `primer.lead` (appended and initialize) | 506 + 506 | E1, E2, I9; the safety unit sent on both channels (design §4.3) |
+| `cli.orbit-cli` | 648 | X1, not playable today |
+| `project.propose` | 613 | I9 10/10 without it on both engines at step 0, but taking it out took E5 on Codex to 3/10 (d) |
+| `handoff.use-orbit` | 551 | I3 on Claude Code 5/10 to 0/10 without the delegate paragraph (step 0) |
+| `primer.receipts` | 466 | X4 |
+| `primer.objects` | 453 | E4 |
+| `workflow.use-workflow` | 416 | no case |
+| `primer.cards` | 352 | X2, X3; keeps the sentence that a refusal is final |
+| `files.reply-links` | 339 | I4 on Claude Code 4/10 to 0/10 without it; merging it with evidence took I4 to 3/10 (f) |
+| `primer.start` | 269 | E3; one line took E4 to 18/20 and E3 owner-starts on Codex to 4/10 (c) |
+| `primer.orchestration` | 246 | E7 |
+| `files.evidence` | 245 | I5 on Claude Code 7/10 to 1/10 without it; kept for every Orbit-writing session |
+| `drive.tools` | 218 | no case |
+| `primer.settings` | 187 | I8 10/10 without it on both engines (a sunset candidate, design §4.5) |
+| `primer.rederive` (initialize) | 176 | E8; initialize keeps the unit Claude Code's carrier skips |
+| `notify.when-asked` | 157 | I2 10/10 to 0/10 without it on both engines |
+| `wait.use-await` | 139 | I1 |
+| `wiki.search-by-path` | 125 | I7 on Codex 10/10 to 0/11 without it |
+
+Cutting every unit that has no case or showed no drop without it (`workflow.use-workflow`, `drive.tools`,
+`primer.settings`, the second copy of the lead) would leave about 5,300 bytes. 3,500 needs units whose cases fail
+without them, or a mechanism from step 6 (design §7: D1 removes the hand-off unit's reason to exist, D5 shortens the
+reply-files unit).
+
 ## How it was run
 
 ```bash
