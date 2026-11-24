@@ -1,6 +1,6 @@
-// Puts a numbered red mark on the top-left corner of every element with data-mk, inside its frame (.win, .mac or .ph).
+// Puts a numbered red mark on the top-left corner of every element with data-mk, inside its frame (.win, .mac, .ph or .ad).
 for (const el of document.querySelectorAll('[data-mk]')) {
-  const f = el.closest('.win, .mac, .ph');
+  const f = el.closest('.win, .mac, .ph, .ad');
   const r = el.getBoundingClientRect(), fr = f.getBoundingClientRect();
   const m = document.createElement('span');
   m.className = 'mk abs';
