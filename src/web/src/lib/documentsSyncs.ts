@@ -83,7 +83,7 @@ export async function refreshDocumentsSyncs(): Promise<void> {
   }
   reading = true;
   try {
-    const { syncs: read } = await api<{ syncs: DocumentsSyncView[] }>('/documents/syncs');
+    const { syncs: read } = await api<{ syncs: DocumentsSyncView[] }>('/drive/syncs');
     const before = new Map(syncs.map((sync) => [sync.id, sync]));
     syncs = read.map((sync) => {
       const was = before.get(sync.id);
@@ -179,7 +179,7 @@ export function useDocumentsSync(id: string): DocumentsSync | null {
     if (!listRead) return;
     let gone = false;
     setTried(true);
-    api<DocumentsSyncView>(`/documents/syncs/${encodeURIComponent(id)}`)
+    api<DocumentsSyncView>(`/drive/syncs/${encodeURIComponent(id)}`)
       .then((sync) => !gone && setRead({ ...sync, rate: null }))
       .catch(() => undefined);
     return () => {

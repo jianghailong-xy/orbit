@@ -36,7 +36,7 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   resetDocumentsSyncs();
   apiMock.mockReset();
-  apiMock.mockImplementation(async (path: string) => (path === '/documents/syncs' ? { syncs: [SYNC] } : SYNC) as never);
+  apiMock.mockImplementation(async (path: string) => (path === '/drive/syncs' ? { syncs: [SYNC] } : SYNC) as never);
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);

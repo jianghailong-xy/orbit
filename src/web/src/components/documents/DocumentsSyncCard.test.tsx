@@ -58,8 +58,8 @@ afterEach(() => {
 
 async function draw(list: DocumentsSyncView[], byId?: DocumentsSyncView) {
   apiMock.mockImplementation(async (path: string) => {
-    if (path === '/documents/syncs') return { syncs: list };
-    if (byId && path === `/documents/syncs/${byId.id}`) return byId;
+    if (path === '/drive/syncs') return { syncs: list };
+    if (byId && path === `/drive/syncs/${byId.id}`) return byId;
     throw new Error('not found');
   });
   await act(async () => {
@@ -142,7 +142,7 @@ describe('the sync card', () => {
 
   it('reads a sync too old for the tray by id', async () => {
     const text = await draw([], sync({ status: 'DONE', filesDone: 9, endedAt: '2026-11-20T06:57:05Z' }));
-    expect(apiMock).toHaveBeenCalledWith('/documents/syncs/s1');
+    expect(apiMock).toHaveBeenCalledWith('/drive/syncs/s1');
     expect(text).toContain('Synced 9 files to');
   });
 });

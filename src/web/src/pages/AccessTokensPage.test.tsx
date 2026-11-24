@@ -382,7 +382,7 @@ describe('Settings → Access tokens', { timeout: 60_000 }, () => {
     await vi.waitFor(() => expect(issueAccessToken).toHaveBeenCalledTimes(1));
     expect(issueAccessToken).toHaveBeenCalledWith({
       name: 'Wiki bot',
-      scopes: ['wiki:read', 'wiki:write', 'documents', 'notify'],
+      scopes: ['wiki:read', 'wiki:write', 'drive', 'notify'],
       workspaceIds: [],
       expiresInDays: 90,
     });

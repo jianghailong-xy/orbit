@@ -1935,5 +1935,5 @@ export interface DocumentsUsage {
 export const documentsUsageQuery = () =>
   queryOptions({
     queryKey: ['drive', 'usage'] as const,
-    queryFn: () => api<DocumentsUsage>('/documents/usage'),
+    queryFn: () => api<DocumentsUsage>('/drive/usage'),
   });
