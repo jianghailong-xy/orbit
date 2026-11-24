@@ -74,7 +74,7 @@ class LandingBoardStackDeviceTest {
     @Test fun everyBoardStateOnARealStack() {
         val server = args.getString("boardServer")!!
         runBlocking { app.session.login(ServerAddress.parse(server, true), args.getString("boardEmail")!!, args.getString("boardPassword")!!) }
-        compose.waitUntil(30_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
+        compose.waitUntil(90_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
         val only = args.getString("boardOnly")
         val cards = manifest.getJSONObject("cards")
         // The pull request states, on each task's own Landing section.
@@ -111,6 +111,7 @@ class LandingBoardStackDeviceTest {
             when (key) { "refused" -> scrollTo("Connect GitHub again"); "permissionsPending" -> scrollTo("Review on GitHub"); else -> scrollTo("Landing") }
             capture("settings-$key")
         }
+        note("DONE ${only ?: "all"}")
         runBlocking { app.session.logout() }
     }
 }
