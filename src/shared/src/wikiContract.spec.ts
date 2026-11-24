@@ -1793,10 +1793,10 @@ describe('wiki contract', () => {
 
   it('serves a wiki chat its read of the wiki on the runner door, a view cut at readMaxChars (chat.read, D10)', () => {
     const read = CONTRACT.chat.read;
-    // The route is the runner door's, and the tool is not named yet: the runner serves it with its own release.
+    // The route is the runner door's, and the runner serves the tool with this release (T7), so tools names it.
     expect(read.route).toBe(WIKI_CHAT_READ.route);
     expect(CONTRACT.agentSurface.doors.runner.routes).toContain(read.route);
-    expect(CONTRACT.agentSurface.tools).not.toContain('wiki_read');
+    expect(CONTRACT.agentSurface.tools).toContain('wiki_read');
     expect(read.tool).toMatch(/TestWikiAgentSurfaceIsTheContracts/u);
     // A chat's alone, as wiki_draft is.
     expect(read.who).toMatch(/WIKI_SESSION_EXCLUDED/u);
@@ -1858,10 +1858,11 @@ describe('wiki contract', () => {
     expect(status('WIKI_OWNER_CHANNEL_ONLY')).toBe(403);
   });
 
-  it('gives agents five tools and two doors, and no way to decide', () => {
+  it('gives agents six tools and two doors, and no way to decide', () => {
     const surface = CONTRACT.agentSurface;
-    // The fifth, wiki_draft, is a wiki chat's alone (agentSurface.chat.draft): every other session is refused it.
-    expect(surface.tools).toEqual(['wiki_search', 'wiki_get', 'wiki_propose', 'wiki_note', 'wiki_draft']);
+    // The fifth, wiki_draft, and the sixth, wiki_read, are a wiki chat's alone (agentSurface.chat.draft, chat.read): every other session is refused them.
+    expect(surface.tools).toEqual(['wiki_search', 'wiki_get', 'wiki_propose', 'wiki_note', 'wiki_draft', 'wiki_read']);
+    expect(surface.toolSpecs.wiki_read.readOnly).toBe(true);
     expect(keysOf(surface.toolSpecs)).toEqual(surface.tools);
     expect(keysOf(surface.cli)).toEqual(surface.tools);
     expect(surface.toolSpecs.wiki_search.readOnly).toBe(true);
