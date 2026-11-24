@@ -2105,6 +2105,20 @@ func (t *Transport) requestProjectDone(sessionID, id string, body map[string]int
 	return out, err
 }
 
+// requestProjectReopen files a session's request that the account owner reopen a DONE or CANCELLED
+// project, and returns at once: the owner answers on the card. Any session may ask; the session
+// header names the asker. A project already OPEN is 409 PROJECT_ALREADY_OPEN and an ask the owner
+// declined is 409 REOPEN_REQUEST_DECLINED, both travelling as the server raised them.
+func (t *Transport) requestProjectReopen(sessionID, id string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/reopen-requests", body,
+		&out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 // criterionConfirmationCall is the coordinator's confirm, withdraw or start-a-check on one of its
 // project's CONFIRMATION criteria (migration 0545). The session header is the authority: the server
 // checks it against the project's own coordinator pointer.

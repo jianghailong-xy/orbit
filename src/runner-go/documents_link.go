@@ -36,16 +36,16 @@ func ensureDocumentsLink(logf func(format string, args ...interface{})) {
 			kept = fmt.Sprintf("%s.local-%s-%d", driveHomePath, time.Now().UTC().Format("20060102T150405Z"), n)
 		}
 		if err := os.Rename(driveHomePath, kept); err != nil {
-			logf("cannot make %s the Documents drive: moving what is there aside failed: %v", driveHomePath, err)
+			logf("cannot make %s the Drive: moving what is there aside failed: %v", driveHomePath, err)
 			return
 		}
-		logf("moved what was at %s to %s: %s is the Documents drive", driveHomePath, kept, driveHomePath)
+		logf("moved what was at %s to %s: %s is the Drive", driveHomePath, kept, driveHomePath)
 	}
 	if err := os.MkdirAll(filepath.Dir(driveHomePath), 0o755); err != nil {
-		logf("cannot make %s the Documents drive: %v", driveHomePath, err)
+		logf("cannot make %s the Drive: %v", driveHomePath, err)
 		return
 	}
 	if err := os.Symlink(driveMountPath, driveHomePath); err != nil {
-		logf("cannot make %s the Documents drive: %v", driveHomePath, err)
+		logf("cannot make %s the Drive: %v", driveHomePath, err)
 	}
 }

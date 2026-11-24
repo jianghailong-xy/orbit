@@ -103,6 +103,8 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
             TextRange(draft.selectionStart.coerceIn(0, draft.text.length), draft.selectionEnd.coerceIn(0, draft.text.length)))
     }
     var menu by remember { mutableStateOf(false) }
+    var drivePicker by remember { mutableStateOf(false) }
+    val driveOffered = io.orbitd.android.drive.driveShown(app, handle)
     var models by remember { mutableStateOf(false) }
     var preview by remember { mutableStateOf<StagedAttachment?>(null) }
     var queued by remember { mutableStateOf(false) }
@@ -123,6 +125,18 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
     }
     val clipboard = context.getSystemService(ClipboardManager::class.java)
     val detail = session?.snapshot?.detail ?: JsonObject(emptyMap())
+    if (drivePicker) {
+        // It opens on the session's project folder (D22), named as the project is.
+        val project = ((detail["projectMembership"] as? JsonObject)?.get("projectTitle") as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
+        io.orbitd.android.drive.DrivePickerSheet(io.orbitd.android.drive.DriveStore.of(app, handle), project,
+            onDismiss = { drivePicker = false }) { paths ->
+            drivePicker = false
+            val text = draft.text
+            val added = (if (text.isNotEmpty() && !text.last().isWhitespace()) " " else "") + paths.joinToString(" ") + " "
+            val end = text.length + added.length
+            model.edit(text + added, end, end)
+        }
+    }
     val picked = JsonObject(detail + draft.resumeConfig)
     // A new session that names no model starts on its workspace's `lastModel` when it runs on the workspace's lastEngine and
     // lastProvider, while the runner still offers it (docs/workspace-default-model-design.md) — read once the workspace has one.
@@ -351,6 +365,9 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                             DropdownMenu(menu, onDismissRequest = { menu = false }) {
                                 DropdownMenuItem(text = { Text("Image") }, onClick = { menu = false; photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) })
                                 DropdownMenuItem(text = { Text("File") }, onClick = { menu = false; files.launch(arrayOf("*/*")) })
+                                // From Documents (board 04-android ⑭, D21): a drive file's path goes in the message; nothing is uploaded again.
+                                if (driveOffered) DropdownMenuItem(text = { Text("Drive") }, onClick = { menu = false; drivePicker = true },
+                                    modifier = Modifier.testTag("composer-from-drive"))
                                 val clip = clipboard.primaryClip
                                 if (clip != null && clip.itemCount > 0 && clip.description.hasMimeType("image/*")) {
                                     DropdownMenuItem(text = { Text("Paste image") }, onClick = {

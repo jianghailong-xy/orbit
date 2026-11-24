@@ -25,7 +25,7 @@ Line numbers refer to `58e176a1be`.
 
 | Piece | What it is | Where |
 |---|---|---|
-| Name layer | Postgres tables `drive_entry`, `drive_version`, `drive_version_chunk`, `drive_trash_group`, `drive_staging`, `drive_staging_chunk`, `drive_commit`, `drive_change`, `drive_mount_credential` | apiserver, `src/apiserver/src/documents/` (was `src/apiserver/src/drive/`) |
+| Name layer | Postgres tables `drive_entry`, `drive_version`, `drive_version_chunk`, `drive_trash_group`, `drive_staging`, `drive_staging_chunk`, `drive_commit`, `drive_change`, `drive_mount_credential` | apiserver, `src/apiserver/src/drive/` |
 | Bytes | Chunks of at most 8 MiB kept as ordinary `file_blob` rows through the existing `FileStore`; a file is an ordered chunk list | `src/apiserver/src/files/` gains a ranged read; nothing else in the store changes |
 | Owner routes | `/drive/*` under the owner's login, resumable chunked upload, ranged download | apiserver |
 | Runner drive door | `/runner/drive/*`, taking the runner credential (drive tools) or a mount credential bound to one runner generation (the mount daemon) | apiserver |

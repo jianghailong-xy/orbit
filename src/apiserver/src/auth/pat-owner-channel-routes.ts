@@ -18,6 +18,9 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   // The owner's Save changes on a SETTINGS_CHANGE card (docs/settings-from-conversation-design.md §5.2): it writes the
   // account's preferences; it also refuses an acting session, SETTINGS_OWNER_CHANNEL_ONLY.
   'POST /owner-requests/:id/apply-settings',
+  // The owner's Reopen on a PROJECT_REOPEN card (docs/project-reopen-request-design.md §4.2): the project page's Reopen
+  // press made from a card; it also refuses an acting session, REOPEN_OWNER_CHANNEL_ONLY.
+  'POST /owner-requests/:id/reopen-project',
   'GET /account-secrets',
   'POST /account-secrets',
   'GET /account-secrets/grants',

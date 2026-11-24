@@ -20,36 +20,36 @@ func TestDocumentsOffLeavesOutTheDriveTools(t *testing.T) {
 			t.Fatalf("%s is not in the full list, so the test proves nothing", name)
 		}
 		if hasMCPTool(stripped, name) {
-			t.Errorf("%s is still offered with Documents off", name)
+			t.Errorf("%s is still offered with Drive off", name)
 		}
 	}
 	for _, kept := range []string{"task_list", "file_upload", "wiki_search"} {
 		if !hasMCPTool(stripped, kept) {
-			t.Errorf("turning Documents off dropped %s along with it", kept)
+			t.Errorf("turning Drive off dropped %s along with it", kept)
 		}
 	}
 	srv := &mcpServer{documentsOff: true}
 	if hasMCPTool(srv.listedToolDescriptors(), "documents_put") {
-		t.Error("tools/list offers documents_put with Documents off")
+		t.Error("tools/list offers documents_put with Drive off")
 	}
 	on := &mcpServer{}
 	if !hasMCPTool(on.listedToolDescriptors(), "documents_put") {
-		t.Error("tools/list leaves out documents_put with Documents on")
+		t.Error("tools/list leaves out documents_put with Drive on")
 	}
 
 	// The CLI half: not offered, and the commands themselves refuse.
 	t.Setenv("ORBIT_HOME", t.TempDir())
 	t.Setenv("ORBIT_SESSION_ID", "caller-session")
 	if ids := capabilityIDs(buildCLICapabilities("/usr/local/bin/orbit")); contains(ids, "documents_put") {
-		t.Errorf("capabilities offer documents_put with Documents off: %v", ids)
+		t.Errorf("capabilities offer documents_put with Drive off: %v", ids)
 	}
 	err := cmdDocumentsCLI([]string{"ls"}, &strings.Builder{})
 	if err == nil || !strings.Contains(err.Error(), "ORBIT_DOCUMENTS_ENABLED") {
-		t.Errorf("orbit drive ls with Documents off = %v, want the refusal that names ORBIT_DOCUMENTS_ENABLED", err)
+		t.Errorf("orbit drive ls with Drive off = %v, want the refusal that names ORBIT_DOCUMENTS_ENABLED", err)
 	}
 	t.Setenv(envDocuments, "on")
 	if ids := capabilityIDs(buildCLICapabilities("/usr/local/bin/orbit")); !contains(ids, "documents_put") {
-		t.Errorf("capabilities with Documents on do not offer documents_put: %v", ids)
+		t.Errorf("capabilities with Drive on do not offer documents_put: %v", ids)
 	}
 }
 
@@ -60,13 +60,13 @@ func TestDocumentsOffRefusesADriveCallWithoutTouchingTheServer(t *testing.T) {
 	for name := range driveToolNames {
 		result := off.callTool(name, map[string]interface{}{"path": "/a.md", "localPath": "a.md", "from": "/a", "to": "/b"})
 		text := wikiToolText(t, result)
-		if result["isError"] != true || !strings.Contains(text, "Documents is not enabled on this Orbit server (ORBIT_DOCUMENTS_ENABLED)") ||
+		if result["isError"] != true || !strings.Contains(text, "Drive is not enabled on this Orbit server (ORBIT_DOCUMENTS_ENABLED)") ||
 			!strings.Contains(text, "Nothing was read or written") {
-			t.Errorf("%s with Documents off = %s", name, text)
+			t.Errorf("%s with Drive off = %s", name, text)
 		}
 	}
 	if len(*requests) != 0 {
-		t.Fatalf("a drive call with Documents off reached the server: %#v", *requests)
+		t.Fatalf("a drive call with Drive off reached the server: %#v", *requests)
 	}
 }
 
@@ -121,18 +121,18 @@ func TestDocumentsOffDropsTheDriveFromTheAgentsInstructions(t *testing.T) {
 	t.Cleanup(func() { noteDocumentsDisabled(false) })
 	noteDocumentsDisabled(false)
 	if !strings.Contains(orbitDriveInstructions(), "documents_put") {
-		t.Fatal("the drive paragraph is missing with Documents on")
+		t.Fatal("the drive paragraph is missing with Drive on")
 	}
 	noteDocumentsDisabled(true)
 	if got := orbitDriveInstructions(); got != "" {
-		t.Errorf("drive instructions with Documents off = %q", got)
+		t.Errorf("drive instructions with Drive off = %q", got)
 	}
 	if got := orbitDriveGuide(); got != "" {
-		t.Errorf("drive guide rule with Documents off = %q", got)
+		t.Errorf("drive guide rule with Drive off = %q", got)
 	}
 	exe := "/opt/orbit/orbit"
 	if text := orbitCLIInstructions(exe, false, true, true, true); strings.Contains(text, "documents_put") || strings.Contains(text, "~/Files") {
-		t.Errorf("the instructions still advertise the drive with Documents off")
+		t.Errorf("the instructions still advertise the drive with Drive off")
 	}
 	// The report names the switch as what withholds the tools.
 	op := &operation{Tool: "documents_put"}
@@ -140,6 +140,6 @@ func TestDocumentsOffDropsTheDriveFromTheAgentsInstructions(t *testing.T) {
 		t.Errorf("withheld by %q, want documents", got)
 	}
 	if got := agentToolsWithheldBy(op, agentToolsSwitches{}); got != "" {
-		t.Errorf("withheld by %q with Documents on", got)
+		t.Errorf("withheld by %q with Drive on", got)
 	}
 }

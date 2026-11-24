@@ -12,7 +12,7 @@ import (
 	"syscall"
 )
 
-const documentsHelp = `orbit documents — work with the owner's Documents
+const documentsHelp = `orbit documents — work with the owner's Drive
 
 Usage:
   orbit documents put <local-path> <path> [--json]
@@ -31,12 +31,12 @@ var documentsCLIHelp = map[string]string{
 	"get": "Download a drive file into this session's uploads directory and return its local path.",
 	"ls":  "List one page of a drive folder. With no path, list the root.",
 	"mv":  "Move or rename a drive entry. This overwrites an existing file at the destination.",
-	"rm":  "Move a drive entry to the owner's Trash. The owner can restore it from the Documents page. Agents cannot see Trash.",
-	"sync": "Copy a directory of this session's checkout or uploads directory into a Documents folder, once, in the background: " +
+	"rm":  "Move a drive entry to the owner's Trash. The owner can restore it from the Drive page. Agents cannot see Trash.",
+	"sync": "Copy a directory of this session's checkout or uploads directory into a Drive folder, once, in the background: " +
 		"it answers with a background job id at once, and the job wakes you when it ends, its last output line the summary. " +
-		"Files already the same in Documents are skipped, so running it again only sends what changed. One way: nothing " +
-		"comes down. --delete moves Documents files the directory no longer has to the owner's Trash. --wait runs it in the " +
-		"foreground instead. The owner watches it in the Documents page's upload tray.",
+		"Files already the same in Drive are skipped, so running it again only sends what changed. One way: nothing " +
+		"comes down. --delete moves Drive files the directory no longer has to the owner's Trash. --wait runs it in the " +
+		"foreground instead. The owner watches it in the Drive page's upload tray.",
 }
 
 var documentsCLICapabilities = []cliCapabilitySpec{
@@ -98,7 +98,7 @@ func runDocumentsCLI(spec cliCapabilitySpec, args []string, out io.Writer) error
 	var deleteExtra, wait *bool
 	var syncID *string
 	if spec.Tool == "documents_sync" {
-		deleteExtra = fs.Bool("delete", false, "move Documents files the directory no longer has to Trash")
+		deleteExtra = fs.Bool("delete", false, "move Drive files the directory no longer has to Trash")
 		wait = fs.Bool("wait", false, "run the sync in the foreground")
 		// The record documents_sync opened for this job before starting it; not for people.
 		syncID = fs.String("sync-id", "", "the sync record to report into")
