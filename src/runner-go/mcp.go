@@ -1005,6 +1005,22 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 		}
 		return toolResult(projectDoneRequestFiled(raw), false)
 
+	case "project_request_reopen":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		body, err := projectReopenRequestBody(args)
+		if err != nil {
+			return toolResult(err.Error(), true)
+		}
+		// Any session may ask: the session header names the asker, and the server files or joins the card.
+		raw, err := s.t.requestProjectReopen(s.sessionID, id, body)
+		if err != nil {
+			return toolResult("request reopen failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "criterion_confirm", "criterion_confirmation_withdraw", "criterion_check_start":
 		id := getString(args, "projectId")
 		criterionID := getString(args, "criterionId")

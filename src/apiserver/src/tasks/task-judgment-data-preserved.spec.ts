@@ -3468,6 +3468,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1561 adds two nullable columns to session (wiki_chat_prompt_digest, wiki_chat_contents_version) in short lock
       // tries; `session` is not a preserved relation, no row is written, and no trigger, function or DONE fence changes.
       '1561_wiki_chat_delivery_markers',
+      // 1573 restates owner_request's kind CHECK with PROJECT_REOPEN, restates 1273's payload CHECK under a kind-neutral
+      // name admitting PROJECT_REOPEN, and adds one CHECK and one partial unique index on owner_request. Not a preserved
+      // relation; no row is written, and no trigger, function or DONE fence changes.
+      '1573_owner_request_project_reopen',
       // 1574 adds three nullable columns to wiki_chat_draft (auto_queued_at, held, held_by_id), two checks, a partial index,
       // and loosens its undone, seen and told checks; no preserved relation, row, trigger, function or DONE fence changes.
       '1574_wiki_chat_draft_auto'],

@@ -498,6 +498,11 @@ final class AppModel {
     /// first agent in the list. Read in `loadAgentsThenLand`, written by `selectedAgentID`'s didSet.
     private static let lastAgentKey = "orbit.lastAgent"
 
+#if DEBUG
+    /// Test-only: a screenshot gallery's Documents model.
+    func seedDocumentsForTesting(_ model: DocumentsModel) { documents = model }
+#endif
+
     init() {
         #if canImport(Security)
         tokenStore = KeychainTokenStore()

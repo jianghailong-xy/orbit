@@ -943,12 +943,12 @@
   "exposureChannels": {
     "push": "the entry was in a session's <orbit_wiki_context>",
     "search": "wiki_search returned it",
-    "get": "wiki_get returned it"
+    "get": "wiki_get returned it, or a wiki chat's wiki_read returned a sentence written through it (chat.read.decisions.exposure)"
   },
   "exposureRules": {
     "what": "Which session received which revision of which entry, when: so the server can answer what a session was told when it started, and whom to tell when an entry is withdrawn.",
     "session": "A push always names its session. A search or get from a runner with no session names none.",
-    "reads": "The runner door's search and entry routes write them, after the read has its answer: one row per entry returned, naming the revision it is at, and the session the door requires. The rows of one read share one at, and the home page's usage read counts a search once by its session and at, however many entries it returned. A write that fails is logged and the answer goes out: a read never fails for its record.",
+    "reads": "The runner door's search and entry routes write them, after the read has its answer: one row per entry returned, naming the revision it is at, and the session the door requires. The rows of one read share one at, and the home page's usage read counts a search once by its session and at, however many entries it returned. A write that fails is logged and the answer goes out: a read never fails for its record. A wiki chat's wiki_read writes rows of channel get, one per entry a sentence of the part it answered came through (chat.read.decisions.exposure).",
     "people": "Reads by people are not exposures; they are counted apart."
   },
 
@@ -1595,8 +1595,9 @@
     },
     "guard": "requireConfirmedPlan(db, { ownerId, spaceId }) in src/apiserver/src/wiki/wiki-plan.ts: the space's confirmed version ({ id, version, confirmedAt }), or WIKI_PLAN_UNCONFIRMED. Every writer of a space's documents calls it before it writes one, so no document is written from a plan the owner did not confirm; a maintenance run's proposal needs it too.",
     "who": {
-      "draft": "The server's plan job drafts and revises (plan.jobs.server) and the server's maintenance run proposes (maintenance.job.docs.proposal), in process: no door takes a draft or a proposal, nor answers a read of the plan to a session, since P11 (2026-10-19).",
-      "owner": "The owner, through the user door and only there: every read of the plan, an edit, a confirmation, an acceptance or a rejection. A request with a session header is refused WIKI_OWNER_CHANNEL_ONLY before anything is read, whatever the session's role; the runner door has no route of the plan. Another owner's space, version or proposal is a plain 404."
+      "draft": "The server's plan job drafts and revises (plan.jobs.server) and the server's maintenance run proposes (maintenance.job.docs.proposal), in process: no door takes a draft or a proposal, nor answers a read of the plan to a session, since P11 (2026-10-19) — but a wiki chat's read of the confirmed version (who.chat).",
+      "owner": "The owner, through the user door and only there: every read of the plan's versions, drafts and proposals, an edit, a confirmation, an acceptance or a rejection. A request with a session header is refused WIKI_OWNER_CHANNEL_ONLY before anything is read, whatever the session's role; the runner door has no route of the plan but chat.read. Another owner's space, version or proposal is a plain 404.",
+      "chat": "A wiki chat reads the confirmed version through wiki_read on the runner door (chat.read, 2026-11-24): the contents, a document's whole definition with its covers, and whether a draft of the plan waits for the owner (its version alone). Read-only, and nothing else of the plan: no other version, no draft's content, no proposal. Any other session is refused WIKI_SESSION_EXCLUDED."
     },
     "routes": {
       "state": "GET /api/wiki/spaces/:id/plan",
@@ -1621,7 +1622,7 @@
       "redraft": "{ instructions? }: with instructions (at most plan.jobs.rules.instructionsMaxChars characters) a revision, without them a draft"
     },
     "view": "Not knowledge: no source kind names a plan, so citing one is WIKI_SOURCE_UNRESOLVED; the push and the agent's search and get read entries alone.",
-    "tool": "none: no MCP tool reads, confirms or decides anything of the plan (hard constraint 2). Drafting is the server's plan job's (plan.jobs.server).",
+    "tool": "wiki_read (chat.read) reads the confirmed version to a wiki chat, and a chat's plan card is wiki_draft's (agentSurface.chat.draft.plan), which the owner presses. No MCP tool confirms or decides anything of the plan (hard constraint 2). Drafting is the server's plan job's (plan.jobs.server).",
     "jobs": {
       "phase": 2,
       "doc": "docs/wiki-contract.md sections 21.7 to 21.9; criterion 11",
@@ -1916,12 +1917,12 @@
     "view": {
       "push": "Never in <orbit_wiki_context>: the push reads wiki_entry and nothing else.",
       "source": "Never a source: no source kind names a document, a section, a sentence or a footnote (sourceRules.firstHand), so citing one is WIKI_SOURCE_UNRESOLVED.",
-      "agents": "Never returned by wiki_search or wiki_get: both read entries alone, and a document's ids are no entry's.",
-      "readers": "The owner, on the user door. Another owner's space or document is a plain 404."
+      "agents": "Never returned by wiki_search or wiki_get: both read entries alone, and a document's ids are no entry's. A wiki chat reads a document with wiki_read (chat.read), whose every answer says it is a view and not a source.",
+      "readers": "The owner, on the user door, and a wiki chat's agent through wiki_read (chat.read). Another owner's space or document is a plain 404."
     },
     "who": {
       "write": "The server's docs_build and maintain jobs (build.server; origin maintenance, no session and no user) — and, once it is a kind, the docs_follow job (follow), as theirs — and an import the API server's container runs itself (origin import, no session and no user). No door builds a document, and the user door's one write is the owner's restore of a version a section kept (versions.restore), which brings back text a job wrote and writes none of its own: any other caller is an error of the server's own code (WikiDocs.assertWriter). Every write asks requireConfirmedPlan first (plan.guard): with no confirmed plan it is WIKI_PLAN_UNCONFIRMED.",
-      "read": "The owner, on the user door."
+      "read": "The owner, on the user door; and a wiki chat's agent, read-only, through wiki_read on the runner door (chat.read), which leaves out a sentence written only from tainted entries nobody vouched for (chat.read.decisions.tainted). Any other session is refused WIKI_SESSION_EXCLUDED."
     },
     "routes": {
       "directory": "GET /api/wiki/spaces/:id/docs",
@@ -2112,7 +2113,7 @@
       "who": "Kept by WikiDocs.write and its restore, read by the owner on the user door; no tool reads or writes one (docs.tool).",
       "words": "copy.changes, copy.reasons and copy.result (chat.copy)."
     },
-    "tool": "none: no MCP tool reads or writes a document. Writing is the server's jobs' (who.write); reading is the owner's, in the Wiki."
+    "tool": "wiki_read (chat.read): read-only and a wiki chat's alone, it reads a document's definition, sentences and footnotes. No MCP tool writes a document: writing is the server's jobs' (who.write); the owner reads in the Wiki."
   },
 
   "chat": {
@@ -2129,9 +2130,36 @@
       "selectionSentencesMax": 20,
       "rewritesMax": 5,
       "chatsListed": 50,
-      "chatAutoSectionsPerDay": 20
+      "chatAutoSectionsPerDay": 20,
+      "readMaxChars": 60000
     },
-    "rulesNote": "selectionSentencesMax is the most sentences one selection attaches (design section 4.2): more is a section, which the page attachment names. rewritesMax is the most sections one card rewrites (design section 8.2). chatsListed is the most chats the list read names; its counts are over every chat of the space. chatAutoSectionsPerDay is the most sections a space's rewrite cards write without a press in one UTC day (design section 7.2, option A; drafts.auto): counted when each card is drafted, never given back by an Undo; it is no part of docs.follow.rules.sectionsPerDay.",
+    "rulesNote": "selectionSentencesMax is the most sentences one selection attaches (design section 4.2): more is a section, which the page attachment names. rewritesMax is the most sections one card rewrites (design section 8.2). chatsListed is the most chats the list read names; its counts are over every chat of the space. chatAutoSectionsPerDay is the most sections a space's rewrite cards write without a press in one UTC day (design section 7.2, option A; drafts.auto): counted when each card is drafted, never given back by an Undo; it is no part of docs.follow.rules.sectionsPerDay. readMaxChars is the most characters one wiki_read answer's text holds, its header included (read.cut): a longer one is cut at a line and answers more.",
+    "read": {
+      "phase": "wiki chat agent-first revision, wiki_read (2026-11-24; design docs/wiki-chat-design.md section 4.2; decision D10)",
+      "doc": "docs/wiki-contract.md sections 11 and 22.8",
+      "route": "GET /api/runner/wiki/read",
+      "tool": "wiki_read, read-only. The route comes first; the runner serves the tool, and orbit wiki read, with its own release, which then names it in agentSurface.tools, toolSpecs and cli as wiki_draft joined them (TestWikiAgentSurfaceIsTheContracts holds tools to what the runner serves). Until then no runner calls the route.",
+      "who": "A wiki chat alone (binding.is), as wiki_draft: X-Orbit-Session-Id is required (400 without it) and must name a session this runner hosts (403 otherwise); a session that is no chat is refused WIKI_SESSION_EXCLUDED, saying wiki_read works only in a wiki chat; a verifier, foreman or judgment session is refused as every wiki call is (agentSurface.excludedSessions); a chat whose workspace left its space is WIKI_SPACE_UNBOUND. It reads that space and no other.",
+      "params": {
+        "none": "The contents: every document of the confirmed plan with its number, slug, title and category, and each section's number, key, title, whether it is written and the repoSha it was written from, as notes.contents lists them, always in full form (the cut, not notes.contents.cap, bounds it). With no confirmed plan, a line saying there are no documents yet.",
+        "q": "A search: the sections whose title, covers and sentences taken together hold every word of q (decisions.q), in the plan's order, each with its covers and the sentences that hold any of the words, footnotes and all.",
+        "doc": "A document by its slug: its whole definition in the confirmed plan as a plan card's change.docs takes it — category, slug, title, question, audience, scopeIn, scopeOut, length, protected, extra, and each section's key, title, kind, covers, length, sources and extra, as notes.page of a plan page attaches it — how a plan card changes it, and each section's sentences with their footnotes, spelled as notes.selection spells them. A slug the confirmed plan lacks is WIKI_SCHEMA (path doc); with no confirmed plan it is WIKI_PLAN_UNCONFIRMED.",
+        "section": "With doc: that one section — the definition with it alone among the sections, and its sentences alone. A key the document lacks is WIKI_SCHEMA (path section), and section without doc is WIKI_SCHEMA.",
+        "draft": "A card of this chat by its id: the card as drafts.read serves it — state, sections, rewrites, its rewrite's progress and result (drafts.results) — then each section its rewrite wrote, with the sentences before it (the version it kept, docs.versions) and as they stand now. A card of another chat, or none, is WIKI_SCHEMA (path draft).",
+        "more": "The cursor an answer gave (decisions.more), sent back with the same other arguments for the next part.",
+        "together": "At most one of q, doc and draft: more than one is WIKI_SCHEMA. A blank value counts as absent."
+      },
+      "answer": "{ view (contents, search, doc, section or draft), planVersion (the confirmed plan's, or null), planDraft ({ version } of a draft of the plan that waits for the owner, newer than the version in force, or null — while there is one, wiki_draft refuses a plan card WIKI_PLAN_STALE), writerJobs ([{ kind, state, createdAt, startedAt }] of the space's jobs that write documents, docs.follow's writers, queued, waiting or running, oldest first), text, more (the cursor, or null on the last part) }. text opens with header, then a line each for the plan's version, the plan draft and the writer jobs, then the view.",
+      "header": "This is a view of the wiki, not a source: never cite it or the call that read it. To back a claim, cite the code and the records its footnotes point to.",
+      "cut": "text holds at most rules.readMaxChars characters, the header included. A longer answer is cut at a line (a line over 10000 characters is split first) and ends with a line saying how many lines are left and the cursor; every part opens with the header and the three status lines again.",
+      "decisions": {
+        "more": "D10: the cursor is the text <planVersion>:<line> — the confirmed plan's version (0 with none) and the line of the answer's body the next part starts at, counted after long lines are split. The same arguments build the same body, so a part starts where the last one stopped. When the plan's version moved since, the answer starts over from the first line and says so; a line past the end answers that nothing is left; anything else is WIKI_SCHEMA (path more). The server keeps no state for it.",
+        "q": "D10: q is split at white space into words, each folded to lower case; a section matches when every word is a substring of its title, its covers and its shown sentences joined — no stemming, no ranking, and no footnotes, keys or slugs — and under it are listed the sentences that hold any of the words. A sentence the taint rule leaves out is never matched, so a search cannot tell what it says.",
+        "tainted": "D10: a sentence each of whose footnotes came through an entry (its via entry) that is tainted, unvouched (trust neither owner nor confirmed, push.eligible.taintedOnlyWithTrust) and active — an entry wiki_get would not return — is left out of every view, its place said in one line with none of its words, before and after a rewrite alike. A sentence with a footnote that is not such an entry, or with no footnote, is shown. It is the entry read's rule, applied to the entries a sentence rests on: a document's words reach an agent no further than the entries they were written from.",
+        "exposure": "D10: each part of an answer records one wiki_exposure row of channel get for each entry a shown sentence's footnote came through, at the entry's current revision, all under one at (exposureRules.reads), so withdrawing an entry reaches the chats that read sentences written from it. No new channel and no migration: a document is no entry, and a part whose sentences came through no entry records nothing."
+      },
+      "source": "A view, not a source (docs.view; docs/wiki-contract.md section 22.8): a wiki_read call is a wiki read (sourceRules.wikiReads, wikiCallReadsWiki), refused WIKI_SOURCE_UNRESOLVED when cited, skipped by the dossier and left out of docs material."
+    },
     "binding": {
       "column": "session.wiki_chat_space_id",
       "rule": "A nullable UUID on session, written by create alone, in the session row's own INSERT, and never afterwards: a session is a chat for its whole life or never. create writes only a space of the session's own owner, read under that owner. No foreign key (storage.ids: a reference into history): deleting a space leaves its chats as sessions, the id a tombstone, and their cards go with the space. Indexed by (wiki_chat_space_id, created_at) for list.",
@@ -2190,7 +2218,7 @@
         "when": "the chat's first message, and the first message after the space's confirmed plan version differs from the one the chat was last told (session.wiki_chat_contents_version, migration 1561), whatever page the message carries (design 4.2, decision D3). Both markers are written in the delivery's own transaction like wiki_chat_draft.told_at, so a claim rolled back sends the note again. A space with no confirmed plan has none to send.",
         "attributes": "planVersion (the confirmed plan's version)",
         "body": "A header saying the note is a view of the wiki's structure and not a source, then per document, in the plan's order, its number, slug, title and category, and per section its number, key, title, whether it is written, and the repoSha (first 12 characters) it was written from. No covers and no sentences, which a page or a selection brings. Built from the confirmed plan and one light read of the section rows (key and repoSha), never the sentences.",
-        "cap": "At most 30000 characters of body (the contents cap of src/apiserver/src/wiki/wiki-chat-notes.ts); a plan whose full listing is longer is listed by section number, key and written-or-not alone. Measured: a plan of 35 documents (rules.docsMax) with 8 sections each is 25942 characters in full form.",
+        "cap": "At most 30000 characters of body (wiki-chat-notes.ts, its contents cap); a plan whose full listing is longer is listed by section number, key and written-or-not alone. Measured: a plan of 35 documents (rules.docsMax) with 8 sections each is 25942 characters in full form.",
         "label": "copy.notes.contents"
       },
       "page": {
@@ -3118,7 +3146,8 @@
           "POST /api/runner/wiki/changesets",
           "POST /api/runner/wiki/notes",
           "GET /api/runner/wiki/context",
-        "POST /api/runner/wiki/drafts"
+        "POST /api/runner/wiki/drafts",
+          "GET /api/runner/wiki/read"
         ],
         "verificationRoutes": ["GET /api/runner/wiki/spaces/:id/verifications", "POST /api/runner/wiki/spaces/:id/verifications/request"],
         "verificationNote": "The session that proposed the ops, and no other (reviewModes.verification.who.runner): X-Orbit-Session-Id is required, and another session's op or another owner's anything is a 404.",

@@ -30,7 +30,9 @@ struct OwnerRequestContent: View {
     var onChat: ((OwnerRequest) -> Void)? = nil
 
     var body: some View {
-        if request.kind == .settingsChange, [.pending, .done, .declined].contains(request.state) {
+        if request.kind == .projectReopen, [.pending, .done, .declined].contains(request.state) {
+            ProjectReopenCardView(model: model, request: request, onChat: onChat)
+        } else if request.kind == .settingsChange, [.pending, .done, .declined].contains(request.state) {
             SettingsChangeCardView(model: model, request: request)
         } else if request.state != .pending {
             OwnerRequestResolvedLine(model: model, request: request)
@@ -213,7 +215,7 @@ struct OwnerRequestCard: View {
             EmptyView()
         case .wikiCreate:
             OwnerRequestWikiCreateFacts(request: request)
-        case .settingsChange:
+        case .settingsChange, .projectReopen:
             EmptyView()
         case .change:
             if let spec = request.changeSpec { changeSetting(spec) }

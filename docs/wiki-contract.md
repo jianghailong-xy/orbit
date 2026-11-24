@@ -934,6 +934,33 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
       要立的标记撤掉（`recomputeFlags` 只把 pending 的 challenge 算作开着）。reinforce 追加出处、trust 不变（§8 的 op 表）。add、supersede、amend
       记 confirmed（amend 照 decide：改的是机器写的条目才升到 confirmed），原则类记 owner。
     - Apply 一张 `changed` 的卡拒 `WIKI_REVISION_CONFLICT`，什么都不写；它的动作只有 Redo 和 Discard。
+  - **读 wiki 的路由 `GET /api/runner/wiki/read`**（JSON 的 `chat.read`，设计 §4.2，决定 D10，2026-11-24）：工具 `wiki_read` 与
+    `orbit wiki read` 随 runner 的下一次发版提供，那时才进 `agentSurface.tools`、`toolSpecs`、`cli`（`TestWikiAgentSurfaceIsTheContracts`
+    要求 `tools` 与 binary 实际提供的相等），这之前没有 runner 调这条路由。只读，只对聊天会话开放，和 `wiki_draft` 一样：没有会话头 400，
+    不是本 runner 托管的会话 403，不是聊天的会话拒 `WIKI_SESSION_EXCLUDED`（消息写明它只在 wiki 聊天里用），验证、foreman、判断会话照旧拒，
+    聊天的 workspace 已不在它的 space 里是 `WIKI_SPACE_UNBOUND`。参数至多一个 `q`、`doc`、`draft`（多给是 `WIKI_SCHEMA`，空值当没给）：
+    - 不带参数：目录，同 `<orbit_wiki_contents>` 的列法，总是全量（由下面的截断限长，不用附注的 30,000 字压缩）；没有已确认的 plan 就说还没有文档。
+    - `q`：标题、`covers` 与句子合起来含有每个词的节，按 plan 的顺序，带 `covers` 和含任一个词的句子（连脚注）。
+    - `doc`：这一篇在已确认 plan 里的完整定义（plan 卡 `change.docs` 要的形状，含 `covers`，同 plan 页附注）、plan 卡怎样改它，以及每节写成的句子与脚注；
+      slug 不在 plan 里是 `WIKI_SCHEMA`（path `doc`），没有已确认的 plan 是 `WIKI_PLAN_UNCONFIRMED`。再带 `section` 只取一节：定义里只留这一节，
+      句子也只这一节；key 不在这一篇是 `WIKI_SCHEMA`，只带 `section` 不带 `doc` 也是。
+    - `draft`：这场聊天的一张卡，照读卡接口（`chat.drafts.read`）给状态、要写的节、写的进展与结果，再逐节给重写前（留下的版本）和现在的句子；
+      别的聊天的卡或没有这张卡是 `WIKI_SCHEMA`（path `draft`）。
+    - 回答 `{ view, planVersion, planDraft, writerJobs, text, more }`：`planDraft` 是在等 owner 的 plan 草稿的版本（有它时 `wiki_draft` 的 plan 卡拒
+      `WIKI_PLAN_STALE`），`writerJobs` 是这个 space 排着、等着或在跑的写文档作业（`docs.follow` 的 writers）。`text` 开头是一句一字不差的
+      「这是视图，不是出处」（`chat.read.header`，`WIKI_CHAT_READ.header`），接着三行：plan 的版本、有没有待确认的草稿、写文档的作业。
+    - **截断**：`text` 连开头至多 `chat.rules.readMaxChars` = 60,000 字。超出的按行截断（超过 10,000 字的一行先拆开），最后一行写明还剩几行和 `more`；
+      每一段都重复开头和三行状态。
+    - **D10 的四个决定**（`chat.read.decisions`）：
+      1. **`more` 的形状**：文本 `<planVersion>:<line>`——已确认 plan 的版本（没有就是 0）和下一段从回答正文的第几行开始（拆过长行之后数）。同样的参数
+         生成同样的正文，所以下一段接着上一段；plan 换了版本就从头给并说明，行号超出说没有了，其余形状是 `WIKI_SCHEMA`（path `more`）。服务端不存状态。
+      2. **`q` 怎样匹配**：按空白拆成词、转小写；一节的标题、`covers` 与能给的句子连起来，每个词都是其中的子串才算命中——不做词干、不排序，不看脚注、
+         key 和 slug；节下列出含任一个词的句子。被下一条扣下的句子不参与匹配，搜索也就透露不出它说了什么。
+      3. **只靠未经担保、带污染标记的条目写成的句子**：一句的每个脚注都经由（`via entry`）一条 tainted、没人担保（trust 不是 owner / confirmed）、
+         仍是 active 的条目——也就是 `wiki_get` 不会返回的条目——这一句在所有视图里都不给，只留一行说这里扣下了一句，不带它的字；重写前后一样。
+         有一个脚注不是经由这样的条目，或者没有脚注，就给。这是条目读的规则，用在句子所依据的条目上。
+      4. **读文档记什么 `wiki_exposure`**：每一段回答，为给出的句子的脚注经由的每条条目记一行，channel 用 `get`，记条目当时的版本，共用一个 `at`。
+         这样撤下一条条目时，读过由它写成的句子的聊天也找得到。不加 channel，不用迁移：文档不是条目，句子没经由条目的一段什么都不记。
   - 不是聊天的会话：`wiki_propose`、`wiki_note`、它们的说明和回答一点不变。
 - **用户门** `/api/wiki`（JwtAuthGuard，owner 本人）：spaces 列表（待审数、plan 等你数、绑定的 workspace、文档数，§2）、建 space、改设置（含审阅模式）、读 / 加入 / 留在外面 workspace、首页、条目列表、主题、
   时间线、owner 的变更集（立即生效，带 CAS）、条目详情、pin / unpin、逐条 Reject 与 Confirm、`GET /api/wiki/search`（⌘K 的独立端点）、Review、
@@ -941,7 +968,7 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
   （§28.3、§28.6），节的版本列表、恢复旧版与 Activity 的 Docs 行（§30）。
 - **runner 门** `/api/runner/wiki`（RunnerAuthGuard，外加照 `runner-watches.controller.ts` 校验调用会话）：search（只返回 active 条目，
   外加本会话自己的待审提议；tainted 且没人担保——trust 不是 owner / confirmed——的 active 条目不返回，get 同样 404）、条目、提议、`wiki_note`、推送块预览、
-  聊天会话的 `wiki_draft`（`POST /api/runner/wiki/drafts`，C6 实现）；
+  聊天会话的 `wiki_draft`（`POST /api/runner/wiki/drafts`，C6 实现）与读 wiki 的 `GET /api/runner/wiki/read`（`chat.read`，上面）；
   核实的两条路由 `GET /api/runner/wiki/spaces/:id/verifications` 与 `POST …/verifications/request`（§7.4，只对提交这批 op 的会话）；
   导入的 `POST …/notes`、`GET …/import`、`POST …/import-jobs` 与 `GET …/import-jobs/:jobId`（§5.1）。阶段 2 的维护专用路由（dossiers、anchors、
   anchor-checks、cursor，以及 `…/maintenance/*`、plan、文档与文章的那些）和维护运行接手核实的 `…/maintenance/verifications` 都在 P11 删除；
@@ -954,7 +981,7 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
   workspace 之间共享**已确认**的条目，把某个 workspace 留在外面就是收回。待审提议只有提出它的会话看得见。
 - **读取记录**（`exposureRules.reads`）：runner 门的 search 和读条目拿到答案之后写 `wiki_exposure`，channel 分别是 `search`、`get`，返回一条写一行，记条目当时的版本和调用会话。
   一次读取写出的行共用一个 `at`，首页用量的 `searches` 按 (session_id, at) 去重，一次搜索返回多条只算一次；每条条目的 `searched` 仍各记一次。
-  写失败只记日志，答案照常返回。owner 门的读不写。
+  写失败只记日志，答案照常返回。owner 门的读不写。聊天的 `wiki_read` 也记 `get`：每段回答为给出的句子经由的每条条目记一行（`chat.read.decisions.exposure`）。
 - **灰度**：`ORBIT_WIKI=off|canary|on`，默认 `on`；`canary` 只给 `ORBIT_WIKI_CANARY_OWNERS` 列出的账号（逗号分隔的 id），其余账号同 `off`。
   对没开 wiki 的账号：两道门的所有路由都回 404 `WIKI_DISABLED`，claim 下发 `wikiDisabled`，runner 不挂这组工具，不推送
   `<orbit_wiki_context>`，`orbit-wiki:` 链接卡读作 unavailable；web 收到 `WIKI_DISABLED` 就藏起侧栏入口和 ⌘K 的 Wiki 分区。
@@ -2239,7 +2266,9 @@ P11（2026-10-19）起这条 runner 门路由没有了：写入是 `WikiDocs.wri
   无论引的是 tool_call，还是这个调用的 tool_use / tool_result 事件，或命令是它们的 `background_task` 事件（决定：覆盖 background_task，案卷本来就跳过它），一律 `WIKI_SOURCE_UNRESOLVED`。
   所有会话一样，不只聊天；待结算的 op 若已引了它，结算时同样被拒，不留旧账；runner 还没送达的调用只能在结算时拒。已记下的条目的出处不变。
   构建一节材料时，这样的记录直接丢掉（不进 `unresolved`）。
-- agent 的 `wiki_search` / `wiki_get` 只返回条目。没有读写文档的 MCP 工具。
+- agent 的 `wiki_search` / `wiki_get` 只返回条目。没有写文档的 MCP 工具。读文档的只有聊天会话的 `wiki_read`（`chat.read`，§11）：只读，别的会话拒
+  `WIKI_SESSION_EXCLUDED`；每次回答开头都写明「这是视图，不是出处：要引就引它脚注指向的代码和记录」，引它或这次调用一律 `WIKI_SOURCE_UNRESOLVED`
+  （上一条）；只靠未经担保、带污染标记的条目写成的句子不给（§11 的 D10 第 3 条）。
 
 ### 22.9 处置留痕：每条材料最后怎样了（迁移 0337）
 

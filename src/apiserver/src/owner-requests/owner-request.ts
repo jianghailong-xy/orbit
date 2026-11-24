@@ -13,6 +13,8 @@
 
 import {
   OWNER_REQUEST_CHANGE_REPLACED_NOTE,
+  PROJECT_REOPEN_KIND,
+  PROJECT_REOPEN_NOTES,
   type OwnerRequestChangeAnswer,
   type OwnerRequestChangeFiling,
   type OwnerRequestChangeOutcome,
@@ -30,8 +32,14 @@ export type OwnerRequestKind = (typeof OWNER_REQUEST_KINDS)[number];
  * OWNER_REQUEST_KINDS `POST /runner/owner-requests` takes.
  */
 export const SETTINGS_CHANGE = 'SETTINGS_CHANGE';
+/**
+ * A session asking the owner to reopen a DONE or CANCELLED project (docs/project-reopen-request-design.md §4, migration
+ * 1573). Filed only by `POST /runner/projects/:id/reopen-requests`, which writes its title and payload, so it is not one
+ * of the OWNER_REQUEST_KINDS either.
+ */
+export const PROJECT_REOPEN = PROJECT_REOPEN_KIND;
 /** Every kind a session files and the owner is alerted to. */
-export type FiledOwnerRequestKind = OwnerRequestKind | typeof SETTINGS_CHANGE;
+export type FiledOwnerRequestKind = OwnerRequestKind | typeof SETTINGS_CHANGE | typeof PROJECT_REOPEN;
 
 export const OWNER_REQUEST_STATES = ['PENDING', 'DONE', 'DECLINED', 'EXPIRED', 'WITHDRAWN'] as const;
 export type OwnerRequestState = (typeof OWNER_REQUEST_STATES)[number];
@@ -381,6 +389,7 @@ const ALERT_TITLES: Readonly<Record<FiledOwnerRequestKind, string>> = {
   SETTINGS_CHANGE: 'Confirm settings',
   BROWSER_SIGN_IN: 'Sign in needed',
   CHANGE: 'Setting change',
+  PROJECT_REOPEN: 'Reopen project?',
 };
 
 /** Longest body a lock screen shows without cutting it. */
@@ -430,6 +439,8 @@ export interface EndedOwnerRequest {
   repoUrlNorm?: string | null;
   /** CHANGE: `{ runnerId, field, requested, before }`, as the server wrote it at filing. */
   changeSpec?: unknown;
+  /** PROJECT_REOPEN: `{ projectId, statusAtAsk, settledAt, plannedWork, askers }`, as the server wrote it. */
+  payload?: unknown;
 }
 
 /**
@@ -454,6 +465,24 @@ function changeReplacedMeaning(request: EndedOwnerRequest): string | undefined {
   if (request.kind !== 'CHANGE' || request.state !== 'WITHDRAWN') return undefined;
   if (request.resolutionNote !== OWNER_REQUEST_CHANGE_REPLACED_NOTE) return undefined;
   return 'A newer request for the same runner setting replaced it; that one is the request the owner sees now.';
+}
+
+/**
+ * A PROJECT_REOPEN's endings, in the words the asking sessions read (design §3): on DONE the project is OPEN and the
+ * agent retries the write that was refused; on a decline it does not ask again; a deleted project has nothing to retry.
+ */
+function projectReopenMeaning(request: EndedOwnerRequest): string | undefined {
+  if (request.kind !== PROJECT_REOPEN) return undefined;
+  if (request.state === 'DONE') {
+    return 'The project is OPEN again: the owner reopened it. Retry the write that was refused.';
+  }
+  if (request.state === 'DECLINED') {
+    return 'The owner did not reopen the project; their reason is in the payload. Do not ask again: tell the person.';
+  }
+  if (request.state === 'WITHDRAWN' && request.resolutionNote === PROJECT_REOPEN_NOTES.projectDeleted) {
+    return 'The project was deleted while the request waited; there is nothing to reopen.';
+  }
+  return undefined;
 }
 
 /** What each ending means, in the turn's first line. */
@@ -519,6 +548,11 @@ export function ownerRequestResolutionPayload(request: EndedOwnerRequest): Recor
     payload.change = ownerRequestChangeOutcome(request);
     return payload;
   }
+  if (request.kind === PROJECT_REOPEN) {
+    const asked = (request.payload ?? {}) as { projectId?: string; statusAtAsk?: string };
+    payload.project = { projectId: asked.projectId ?? null, statusAtAsk: asked.statusAtAsk ?? null };
+    return payload;
+  }
   if (request.kind === 'DECISION' && answer.option !== undefined) {
     const options = (request.options ?? []) as OwnerRequestOption[];
     payload.chosenOption = { index: answer.option, label: options[answer.option]?.label ?? null };
@@ -553,7 +587,7 @@ export function ownerRequestChangeOutcome(request: Pick<EndedOwnerRequest, 'stat
  * delivery writes the same bytes and a retry replays the turn already queued.
  */
 export function ownerRequestResolutionTurn(request: EndedOwnerRequest): string {
-  const special = wikiCreateMeaning(request) ?? changeReplacedMeaning(request);
+  const special = wikiCreateMeaning(request) ?? changeReplacedMeaning(request) ?? projectReopenMeaning(request);
   const meaning = ENDING_MEANING[request.state as Exclude<OwnerRequestState, 'PENDING'>] ?? 'it ended';
   const header = [
     special

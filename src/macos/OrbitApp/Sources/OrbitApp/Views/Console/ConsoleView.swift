@@ -2664,6 +2664,10 @@ struct TranscriptItemView: View {
             // A bg_run call is its job's card from start to end (board A1); one refused, or whose answer
             // names no job, stays a call.
             JobCardView(card: c)
+        case .toolCall(let c) where DocumentsSyncCard.drawsCard(c):
+            // A documents_sync call is its sync's card, live after the turn ends (board documents-sync-card); an
+            // answer that names no sync, from an older runner, stays a call.
+            DocumentsSyncCardView(syncID: DocumentsSyncCard.syncID(c.result) ?? "")
         case .toolCall(let c):
             // The owner's "Chat about this" reply to one of Orbit's own cards: their message, drawn as
             // theirs under the call rather than left inside its result (`OwnerChatReply`).

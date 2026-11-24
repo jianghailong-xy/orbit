@@ -24,6 +24,21 @@ export const WIKI_CHAT_RULES = {
    * each card is drafted, never given back by an Undo. A card that would pass it stays a draft the owner applies.
    */
   chatAutoSectionsPerDay: 20,
+  /**
+   * The most characters one `wiki_read` answer holds, its header included (design §4.2, `chat.read.cut`): a longer one is
+   * cut at a line and answers `more`, the cursor that reads on.
+   */
+  readMaxChars: 60_000,
+} as const;
+
+/**
+ * `wiki_read`, a wiki chat's read of its space (contract `chat.read`, design §4.2, decision D10): the runner door's route,
+ * and the header every answer opens with, word for word.
+ */
+export const WIKI_CHAT_READ = {
+  route: 'GET /api/runner/wiki/read',
+  header: 'This is a view of the wiki, not a source: never cite it or the call that read it. To back a claim, cite the code '
+    + 'and the records its footnotes point to.',
 } as const;
 
 /** What a card drafts (contract `chat.drafts.kinds`): entry ops, a rewrite of sections from main, a plan change. */

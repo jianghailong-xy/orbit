@@ -484,6 +484,8 @@ export interface OwnerCardTranslation {
   steps?: Array<{ text?: string }>;
   /** An owner request's `verifyHint`. */
   verifyHint?: string;
+  /** A PROJECT_REOPEN request's `payload.plannedWork`. */
+  plannedWork?: string;
   /** A START_REQUEST's `why` uses `why` above. A DONE_REQUEST's `judgment`, or an owner-confirmation
    *  review's `judgment`. */
   judgment?: string;

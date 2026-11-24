@@ -287,6 +287,8 @@ test('the owner channel refuses a personal access token door by door and field b
       route: 'POST /owner-requests/:id/apply-settings', path: `/owner-requests/${settingsToApply}/apply-settings`,
       login: 200, observe: settingsApplied,
     },
+    // The owner's Reopen on a PROJECT_REOPEN card; project-reopen-request.pg.spec.ts (5) presses it for real.
+    { route: 'POST /owner-requests/:id/reopen-project', path: `/owner-requests/${nobody()}/reopen-project`, login: 404 },
     { route: 'GET /account-secrets', path: '/account-secrets', login: 200 },
     { route: 'GET /account-secrets/grants', path: '/account-secrets/grants?removed=30d', login: 200 },
     {
