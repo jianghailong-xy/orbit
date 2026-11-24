@@ -55,8 +55,8 @@ import { isReleasedStatus } from '../common/session-release';
 import { RunEventType, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
-import { DocumentsContentService } from '../documents/documents-content.service';
-import { DocumentsService } from '../documents/documents.service';
+import { DriveContentService } from '../drive/drive-content.service';
+import { DriveService } from '../drive/drive.service';
 import { AttachmentsService } from '../attachments/attachments.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { publicIdHeaders } from '../common/public-id-headers';
@@ -419,8 +419,8 @@ test('a shared project: its seven blocks, the red line, and the scope a token re
       // SharedController's streams, which nothing here opens.
       { provide: ViewerStreamService, useValue: {} },
       // Drive file links, which nothing here shares or opens (share-links-drive-file.pg.spec.ts holds them).
-      { provide: DocumentsService, useValue: {} },
-      { provide: DocumentsContentService, useValue: {} },
+      { provide: DriveService, useValue: {} },
+      { provide: DriveContentService, useValue: {} },
       { provide: SessionsService, useValue: sessions },
       { provide: TasksService, useValue: tasks },
       { provide: ProjectsService, useValue: owners },

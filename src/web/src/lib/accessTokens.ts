@@ -20,7 +20,7 @@ export const SCOPE_GROUPS: readonly { resource: string; read: string; write?: st
  * The one scope that is not read/write by resource: Files (the Documents drive) is a single grant that
  * reads and changes it, so the Read-only preset leaves it out and Read & write includes it.
  */
-export const FILES_SCOPE = 'documents';
+export const FILES_SCOPE = 'drive';
 const FILES_GROUP = { resource: 'Drive', read: FILES_SCOPE, write: FILES_SCOPE };
 
 /**

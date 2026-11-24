@@ -141,7 +141,7 @@ describe('the composer drive picker', () => {
   it('searches the whole drive, shows each result with its folder, and picks it by its path', async () => {
     const searches: string[] = [];
     apiMock.mockImplementation(async (path: string) => {
-      if (path.startsWith('/documents/search')) {
+      if (path.startsWith('/drive/search')) {
         searches.push(path);
         return { entries: [{ ...FILE, id: 'e7', name: 'budget.xlsx', path: '/Finance/2026/budget.xlsx', folderPath: '/Finance/2026' }], nextCursor: null };
       }

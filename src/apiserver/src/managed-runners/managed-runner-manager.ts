@@ -10,7 +10,7 @@ import {
 
 import { generateToken, sha256 } from '../common/crypto.util';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
-import { issueDriveMountCredential, revokeDriveMountCredentials } from '../documents/documents-mount-credential';
+import { issueDriveMountCredential, revokeDriveMountCredentials } from '../drive/drive-mount-credential';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { ManagedKubeClient } from './kube-client';
 import { KubernetesBackend } from './kubernetes-backend';

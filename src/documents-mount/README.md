@@ -3,7 +3,7 @@
 The Drive mount daemon (docs/documents-drive-technical-design.md §5): the account's drive as a FUSE file
 system, at `/run/orbit-documents/drive` on an Orbit Cloud runner, which the runner shows its agents as `~/Documents`
 (`/home/orbit/Documents`, a symlink `orbit run` makes). Go on go-fuse's raw protocol, speaking the runner drive door
-(`/api/runner/documents/*`, `src/apiserver/src/documents/runner-documents.controller.ts`).
+(`/api/runner/documents/*`, `src/apiserver/src/drive/runner-drive.controller.ts`).
 
 | Package | What it is |
 |---|---|
@@ -44,7 +44,7 @@ The design's shell-operation list (§5.9) runs as uid 10001 through real mounts 
 real PostgreSQL:
 
 ```
-sudo RUN_PG_SPEC_TIMEOUT=7200 bash scripts/run-pg-spec.sh src/apiserver/src/documents/documents-mount.pg.e2e.ts
+sudo RUN_PG_SPEC_TIMEOUT=7200 bash scripts/run-pg-spec.sh src/apiserver/src/drive/drive-mount.pg.e2e.ts
 ```
 
 `DRIVE_MOUNT_E2E_SCALE=full` runs the sizes the list names (5 GiB, 5 × 900 MiB, 100,000-file folders) and holds its

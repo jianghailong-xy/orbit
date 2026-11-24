@@ -1,7 +1,7 @@
 import Foundation
 
 // Documents: the account's drive as the owner's routes answer it (docs/documents-drive-technical-design.md §4.1,
-// apiserver documents/documents.controller.ts, prefix `documents`). Mirrors the web's src/web/src/lib/drive.ts,
+// apiserver drive/drive.controller.ts, prefix `drive`). Mirrors the web's src/web/src/lib/drive.ts,
 // driveSyncs.ts and driveUploads.ts. Kinds and states are Strings where a newer server may add one, so an
 // answer still decodes; the reading rules live in `DriveLogic`.
 

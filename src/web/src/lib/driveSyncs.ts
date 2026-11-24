@@ -83,7 +83,7 @@ export async function refreshDriveSyncs(): Promise<void> {
   }
   reading = true;
   try {
-    const { syncs: read } = await api<{ syncs: DriveSyncView[] }>('/documents/syncs');
+    const { syncs: read } = await api<{ syncs: DriveSyncView[] }>('/drive/syncs');
     const before = new Map(syncs.map((sync) => [sync.id, sync]));
     syncs = read.map((sync) => {
       const was = before.get(sync.id);
@@ -179,7 +179,7 @@ export function useDriveSync(id: string): DriveSync | null {
     if (!listRead) return;
     let gone = false;
     setTried(true);
-    api<DriveSyncView>(`/documents/syncs/${encodeURIComponent(id)}`)
+    api<DriveSyncView>(`/drive/syncs/${encodeURIComponent(id)}`)
       .then((sync) => !gone && setRead({ ...sync, rate: null }))
       .catch(() => undefined);
     return () => {

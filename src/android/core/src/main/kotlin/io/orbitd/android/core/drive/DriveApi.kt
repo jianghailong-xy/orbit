@@ -27,8 +27,8 @@ interface DriveUploadTransport {
 }
 
 /**
- * The owner's Documents doors (apiserver documents.controller.ts, prefix `documents`; OrbitKit APIClient's Documents calls). A
- * refusal is the transport's [io.orbitd.android.core.net.ApiError] (a server with Documents off answers 404 DRIVE_DISABLED); an
+ * The owner's Documents doors (apiserver drive.controller.ts, at its `documents` alias prefix; OrbitKit APIClient's Documents calls). A
+ * refusal is the transport's [io.orbitd.android.core.net.ApiError] (a server with Documents off answers 404 DOCUMENTS_DISABLED); an
  * answer this build cannot read is a [ProtocolException].
  */
 class DriveApi(private val api: OrbitApi, private val handle: SessionHandle) : DriveUploadTransport {

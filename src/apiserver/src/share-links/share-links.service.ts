@@ -14,7 +14,7 @@ import { withSessionState } from '../sessions/session-state';
 import { assertEngineSession } from '../sessions/engine-session';
 import { WikiDocs } from '../wiki/wiki-docs';
 import { currentWikiRollout, wikiDisabledError, wikiOnFor } from '../wiki/wiki-rollout';
-import { documentsDisabledError, documentsEnabled } from '../documents/documents-switch';
+import { documentsDisabledError, documentsEnabled } from '../drive/drive-switch';
 import type { PutShareLinkDto } from './dto';
 import {
   effectiveProjectInclude,
@@ -480,7 +480,7 @@ export class ShareLinksService {
    *  public door's `content` route; nothing the file has since been given reaches here. */
   async driveFilePage(link: OpenLink): Promise<{ name: string; sizeBytes: number; versionId: string }> {
     const entryId = this.rootOf(link, 'DRIVE_FILE');
-    // A link made while Documents was on reads, while it is off, as one naming nothing (documents-switch.ts).
+    // A link made while Documents was on reads, while it is off, as one naming nothing (drive-switch.ts).
     if (!documentsEnabled()) throw linkNotFound();
     const version = link.driveVersionId
       ? await this.prisma.documentVersion.findFirst({

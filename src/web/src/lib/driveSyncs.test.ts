@@ -56,7 +56,7 @@ describe('drive syncs store', () => {
     const first = mount();
     await settle();
     expect(first.seen.current).toHaveLength(1);
-    expect(apiMock).toHaveBeenCalledWith('/documents/syncs');
+    expect(apiMock).toHaveBeenCalledWith('/drive/syncs');
 
     apiMock.mockResolvedValue({ syncs: [view('a', 'DONE'), view('b', 'UPLOADING')] });
     await act(() => refreshDriveSyncs());

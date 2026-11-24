@@ -28,7 +28,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.util.concurrent.CopyOnWriteArrayList
 
-/** A drive held in memory behind the A05c shell's server: the owner's /documents routes as documents.controller.ts answers them. */
+/** A drive held in memory behind the A05c shell's server: the owner's /documents routes as drive.controller.ts answers them. */
 internal object DriveFake {
     data class Node(val id: String, var parent: String?, val kind: String, var name: String, val size: Long = 0, val writer: String = """{"kind":"OWNER"}""",
                     var trashed: String? = null)

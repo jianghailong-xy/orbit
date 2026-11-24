@@ -10,7 +10,7 @@ import { clearToasts } from '../lib/toastStore';
 
 /**
  * The Files page (docs/mocks/documents/02-web) against a drive held in memory, answered the way the owner's routes
- * answer (apiserver documents/documents.controller.ts, share-links.controller.ts): what each press sends, and what the page
+ * answer (apiserver drive/drive.controller.ts, share-links.controller.ts): what each press sends, and what the page
  * shows of what comes back.
  */
 
@@ -113,7 +113,7 @@ function serve(): void {
     calls.push({ method, path, body: options.body });
     const url = new URL(path, 'http://x');
     const p = url.pathname;
-    if (method === 'GET' && p === '/documents/entries') {
+    if (method === 'GET' && p === '/drive/entries') {
       const parentId = url.searchParams.get('parentId') ?? 'root';
       const folder = entries.find((e) => e.id === parentId)!;
       return {
@@ -122,7 +122,7 @@ function serve(): void {
         nextCursor: null,
       };
     }
-    if (method === 'GET' && p === '/documents/search') {
+    if (method === 'GET' && p === '/drive/search') {
       const q = (url.searchParams.get('q') ?? '').toLowerCase();
       const hits = entries.filter((e) => e.parentId && e.name.toLowerCase().includes(q)).sort((a, b) => a.name.localeCompare(b.name));
       return {
@@ -130,7 +130,7 @@ function serve(): void {
         nextCursor: null,
       };
     }
-    let m = /^\/documents\/entries\/([^/]+)$/.exec(p);
+    let m = /^\/drive\/entries\/([^/]+)$/.exec(p);
     if (m && method === 'GET') return { ...view(entries.find((e) => e.id === m![1])!), path: pathOf(m[1]) };
     if (m && method === 'PATCH') {
       const e = entries.find((x) => x.id === m![1])!;
@@ -143,9 +143,9 @@ function serve(): void {
       entries = entries.filter((x) => x.id !== m![1]);
       return { trashGroupId: 'group-1' };
     }
-    m = /^\/documents\/entries\/([^/]+)\/versions$/.exec(p);
+    m = /^\/drive\/entries\/([^/]+)\/versions$/.exec(p);
     if (m) return { entry: view(entries.find((e) => e.id === m![1])!), versions: [] };
-    m = /^\/documents\/entries\/([^/]+)\/share-check$/.exec(p);
+    m = /^\/drive\/entries\/([^/]+)\/share-check$/.exec(p);
     if (m) return { versionId: `v-${m[1]}`, ...shareCheck };
     if (p === '/share-links' && method === 'GET') {
       return {
@@ -167,13 +167,13 @@ function serve(): void {
         ...shareCheck,
       };
     }
-    if (p === '/documents/folders') {
+    if (p === '/drive/folders') {
       const body = options.body as { parentId: string; name: string };
       const made: Entry = { id: `folder-${entries.length}`, parentId: body.parentId, kind: 'FOLDER', name: body.name, sizeBytes: 0 };
       entries.push(made);
       return view(made);
     }
-    if (p === '/documents/uploads' && method === 'POST') {
+    if (p === '/drive/uploads' && method === 'POST') {
       const body = options.body as { parentId: string; name: string; size: number; relativePath?: string; dropRootId?: string };
       uploadSeq += 1;
       const id = `upload-${uploadSeq}`;
@@ -183,30 +183,30 @@ function serve(): void {
       // A tiny chunk size, so a few bytes make several chunks.
       return { id, chunkSize: 4, parentId: body.parentId, name: body.name, dropRootId };
     }
-    m = /^\/documents\/uploads\/([^/]+)$/.exec(p);
+    m = /^\/drive\/uploads\/([^/]+)$/.exec(p);
     if (m && method === 'GET') return { id: m[1], chunkSize: 4, ...uploadStatus[m[1]], completed: false, entryId: null };
-    m = /^\/documents\/uploads\/([^/]+)\/complete$/.exec(p);
+    m = /^\/drive\/uploads\/([^/]+)\/complete$/.exec(p);
     if (m) {
-      const opened = calls.find((c) => c.path === '/documents/uploads' && c.method === 'POST')!.body as { parentId: string; name: string; size: number };
+      const opened = calls.find((c) => c.path === '/drive/uploads' && c.method === 'POST')!.body as { parentId: string; name: string; size: number };
       const made: Entry = { id: `file-${m[1]}`, parentId: opened.parentId, kind: 'FILE', name: opened.name, sizeBytes: opened.size };
       entries.push(made);
       return { ...view(made), path: pathOf(made.id) };
     }
-    m = /^\/documents\/entries\/([^/]+)\/download-link$/.exec(p);
-    if (m && method === 'POST') return { path: `/api/documents/dl/token-for-${m[1]}`, expiresAt: AT };
-    m = /^\/documents\/trash\/groups\/([^/]+)\/items\/([^/]+)\/restore$/.exec(p);
+    m = /^\/drive\/entries\/([^/]+)\/download-link$/.exec(p);
+    if (m && method === 'POST') return { path: `/api/drive/dl/token-for-${m[1]}`, expiresAt: AT };
+    m = /^\/drive\/trash\/groups\/([^/]+)\/items\/([^/]+)\/restore$/.exec(p);
     if (m) return { entryIds: [m[2]] };
-    if (p === '/documents/trash' && method === 'GET') return { groups, nextCursor: null };
-    m = /^\/documents\/trash\/groups\/([^/]+)\/restore$/.exec(p);
+    if (p === '/drive/trash' && method === 'GET') return { groups, nextCursor: null };
+    m = /^\/drive\/trash\/groups\/([^/]+)\/restore$/.exec(p);
     if (m) return { entryIds: ['x'] };
-    m = /^\/documents\/trash\/groups\/([^/]+)$/.exec(p);
+    m = /^\/drive\/trash\/groups\/([^/]+)$/.exec(p);
     if (m && method === 'DELETE') return { deleted: true };
-    m = /^\/documents\/versions\/([^/]+)\/restore$/.exec(p);
+    m = /^\/drive\/versions\/([^/]+)\/restore$/.exec(p);
     if (m) return view(entries.find((e) => e.id === 'sign-in')!);
     throw new Error(`unstubbed ${method} ${path}`);
   }) as never);
   vi.mocked(authedFetch).mockImplementation((async (input: string, init: RequestInit = {}) => {
-    const m = /^\/api\/documents\/uploads\/([^/]+)\/chunks\/(\d+)$/.exec(input);
+    const m = /^\/api\/drive\/uploads\/([^/]+)\/chunks\/(\d+)$/.exec(input);
     if (m && init.method === 'PUT') {
       const body = await (init.body as Blob).text();
       const sha256 = (init.headers as Record<string, string>)['x-orbit-chunk-sha256'];
@@ -214,7 +214,7 @@ function serve(): void {
       uploadStatus[m[1]].chunks.push({ idx: Number(m[2]), sha256, sizeBytes: body.length });
       return json({ sha256, sizeBytes: body.length });
     }
-    const c = /^\/api\/documents\/entries\/([^/]+)\/content$/.exec(input);
+    const c = /^\/api\/drive\/entries\/([^/]+)\/content$/.exec(input);
     if (c) return new Response(entries.find((e) => e.id === c[1])?.bytes ?? 'bytes', { status: 200 });
     throw new Error(`unstubbed fetch ${input}`);
   }) as never);
@@ -389,7 +389,7 @@ describe('the folder tree and the list', () => {
     vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: () => 'blob:picture', revokeObjectURL: () => {} }));
     await visit('/drive?folder=f-ui&file=notes');
     await until(() => expect(document.querySelector('.files-preview-markdown h1')?.textContent).toBe('Migration notes'));
-    expect(calls.some((c) => c.path === '/documents/entries/notes')).toBe(true);
+    expect(calls.some((c) => c.path === '/drive/entries/notes')).toBe(true);
     await click(row('sign-in-v3.png'));
     await until(() => expect(document.querySelector<HTMLImageElement>('.files-preview-picture')?.getAttribute('src')).toBe('blob:picture'));
   });
@@ -414,7 +414,7 @@ describe('the folder tree and the list', () => {
     await click(row('runner.log'));
     await until(() => expect(document.querySelector('.files-preview-text')?.textContent).toBe('heartbeat ok'));
     expect(document.querySelector('.files-preview-note')?.textContent).toBe('Showing the first 1 MB of 6.4 MB.');
-    const reads = vi.mocked(authedFetch).mock.calls.filter(([input]) => String(input) === '/api/documents/entries/log/content');
+    const reads = vi.mocked(authedFetch).mock.calls.filter(([input]) => String(input) === '/api/drive/entries/log/content');
     expect((reads[0][1] as RequestInit).headers).toEqual({ range: 'bytes=0-1048575' });
 
     await click(row('report.html'));
@@ -432,7 +432,7 @@ describe('the folder tree and the list', () => {
 
     await click(row('scan.pdf'));
     await until(() => expect(document.querySelector('.files-preview-none')?.textContent).toBe('Too large to preview (48 MB). Download it to open.'));
-    expect(vi.mocked(authedFetch).mock.calls.some(([input]) => String(input) === '/api/documents/entries/scan/content')).toBe(false);
+    expect(vi.mocked(authedFetch).mock.calls.some(([input]) => String(input) === '/api/drive/entries/scan/content')).toBe(false);
 
     await click(row('eval.zip'));
     await until(() => expect(document.querySelector('.files-pane-name')?.textContent).toBe('eval.zip'));
@@ -446,8 +446,8 @@ describe('upload', () => {
     await until(() => expect(row('sign-in-v3.png')).toBeTruthy());
     const input = document.querySelector<HTMLInputElement>('input[aria-label="Files to upload"]')!;
     await pick(input, [new File(['hello world'], 'labels.csv', { lastModified: 1 })]);
-    await until(() => expect(calls.some((c) => c.path === '/documents/uploads/upload-1/complete')).toBe(true));
-    expect(calls.find((c) => c.path === '/documents/uploads')!.body).toEqual({ parentId: 'f-ui', name: 'labels.csv', size: 11 });
+    await until(() => expect(calls.some((c) => c.path === '/drive/uploads/upload-1/complete')).toBe(true));
+    expect(calls.find((c) => c.path === '/drive/uploads')!.body).toEqual({ parentId: 'f-ui', name: 'labels.csv', size: 11 });
     // Chunks of the size the open answered (4 bytes here), every one with its digest.
     expect(chunks.map((c) => c.body)).toEqual(['hell', 'o wo', 'rld']);
     expect(chunks.map((c) => c.sha256)).toEqual(['hell', 'o wo', 'rld'].map(sha));
@@ -468,10 +468,10 @@ describe('upload', () => {
     await until(() => expect(document.querySelector('.files-tray')?.textContent).toContain('Pick the same file again'));
     const again = document.querySelector<HTMLInputElement>('input[aria-label="Pick eval.zip again"]')!;
     await pick(again, [new File(['hello world'], 'eval.zip', { lastModified: 5 })]);
-    await until(() => expect(calls.some((c) => c.path === '/documents/uploads/upload-7/complete')).toBe(true));
+    await until(() => expect(calls.some((c) => c.path === '/drive/uploads/upload-7/complete')).toBe(true));
     // Nothing opened anew; chunk 0 was there already.
-    expect(calls.filter((c) => c.path === '/documents/uploads' && c.method === 'POST')).toEqual([]);
-    expect(chunks.map((c) => c.path)).toEqual(['/api/documents/uploads/upload-7/chunks/1', '/api/documents/uploads/upload-7/chunks/2']);
+    expect(calls.filter((c) => c.path === '/drive/uploads' && c.method === 'POST')).toEqual([]);
+    expect(chunks.map((c) => c.path)).toEqual(['/api/drive/uploads/upload-7/chunks/1', '/api/drive/uploads/upload-7/chunks/2']);
   });
 
   it('pauses on a lost connection, saying what is kept, and goes on from there on Resume', async () => {
@@ -492,7 +492,7 @@ describe('upload', () => {
       await until(() => expect(document.querySelector('.files-tray')?.textContent).toContain('Connection lost. 4 B of 11 B is kept'));
       fail = false;
       await click(button('Resume', document.querySelector('.files-tray')!));
-      await until(() => expect(calls.some((c) => c.path === '/documents/uploads/upload-1/complete')).toBe(true));
+      await until(() => expect(calls.some((c) => c.path === '/drive/uploads/upload-1/complete')).toBe(true));
       expect(chunks.map((c) => c.body)).toEqual(['hell', 'o wo', 'rld']);
     } finally {
       vi.useRealTimers();
@@ -522,8 +522,8 @@ describe('upload', () => {
       Object.defineProperty(event, 'dataTransfer', { value: dataTransfer });
       zone.dispatchEvent(event);
     });
-    await until(() => expect(calls.filter((c) => c.path === '/documents/uploads' && c.method === 'POST')).toHaveLength(2));
-    const opens = calls.filter((c) => c.path === '/documents/uploads' && c.method === 'POST').map((c) => c.body);
+    await until(() => expect(calls.filter((c) => c.path === '/drive/uploads' && c.method === 'POST')).toHaveLength(2));
+    const opens = calls.filter((c) => c.path === '/drive/uploads' && c.method === 'POST').map((c) => c.body);
     expect(opens[0]).toEqual({ parentId: 'f-ui', name: 'a.csv', size: 2, relativePath: 'survey-2026/a.csv' });
     expect(opens[1]).toEqual({ parentId: 'f-ui', name: 'b.csv', size: 2, relativePath: 'survey-2026/raw/b.csv', dropRootId: 'droproot-1' });
   });
@@ -539,9 +539,9 @@ describe('download', () => {
       await visit('/drive?folder=f-ui&file=deploy');
       await until(() => expect(document.querySelector('.files-pane')).toBeTruthy());
       await click_(button('Download', document.querySelector('.files-pane')!));
-      await until(() => expect(opened).toEqual(['/api/documents/dl/token-for-deploy']));
-      expect(calls.find((c) => c.path === '/documents/entries/deploy/download-link')).toEqual({
-        method: 'POST', path: '/documents/entries/deploy/download-link', body: {},
+      await until(() => expect(opened).toEqual(['/api/drive/dl/token-for-deploy']));
+      expect(calls.find((c) => c.path === '/drive/entries/deploy/download-link')).toEqual({
+        method: 'POST', path: '/drive/entries/deploy/download-link', body: {},
       });
       // No byte of it went through the page: the one read of its content is the Markdown preview's, bounded by a Range.
       const reads = vi.mocked(authedFetch).mock.calls.filter(([input]) => String(input).includes('/content'));
@@ -563,7 +563,7 @@ describe('rename and move', () => {
     await until(() => expect(document.activeElement).toBe(input));
     await type(input, 'brief-v2.md');
     await key(input, 'Enter');
-    expect(calls.find((c) => c.method === 'PATCH')).toEqual({ method: 'PATCH', path: '/documents/entries/notes', body: { name: 'brief-v2.md' } });
+    expect(calls.find((c) => c.method === 'PATCH')).toEqual({ method: 'PATCH', path: '/drive/entries/notes', body: { name: 'brief-v2.md' } });
     await until(() => expect(row('brief-v2.md')).toBeTruthy());
   });
 
@@ -589,7 +589,7 @@ describe('rename and move', () => {
     expect(pickerRow('Orbit UI migration').textContent).toContain('(here now)');
     await click(pickerRow('Datasets'));
     await click(button('Move to Datasets'));
-    expect(calls.find((c) => c.method === 'PATCH')).toEqual({ method: 'PATCH', path: '/documents/entries/notes', body: { parentId: 'f-data' } });
+    expect(calls.find((c) => c.method === 'PATCH')).toEqual({ method: 'PATCH', path: '/drive/entries/notes', body: { parentId: 'f-data' } });
   });
 });
 
@@ -598,11 +598,11 @@ describe('Trash', () => {
     await visit('/drive?folder=f-ui');
     await until(() => expect(row('migration-notes.md')).toBeTruthy());
     await menu('migration-notes.md', 'Move to Trash');
-    expect(calls.find((c) => c.method === 'DELETE')!.path).toBe('/documents/entries/notes');
+    expect(calls.find((c) => c.method === 'DELETE')!.path).toBe('/drive/entries/notes');
     expect(document.querySelector('[role="alertdialog"]')).toBeNull();
     await until(() => expect(document.body.textContent).toContain('Moved to Trash'));
     await click(document.querySelector('button[aria-label="Undo moving migration-notes.md to Trash"]')!);
-    expect(calls.some((c) => c.method === 'POST' && c.path === '/documents/trash/groups/group-1/restore')).toBe(true);
+    expect(calls.some((c) => c.method === 'POST' && c.path === '/drive/trash/groups/group-1/restore')).toBe(true);
   });
 
   it('groups Trash by folder and time, restores a group whole, and a version as current', async () => {
@@ -643,14 +643,14 @@ describe('Trash', () => {
     const [, versionGroup, dataGroup] = document.querySelectorAll<HTMLElement>('.files-trash-group');
     // One item out of a group, leaving the rest (rule 3).
     await click(dataGroup.querySelector('button[aria-label="Restore eval-runs-draft.zip"]')!);
-    expect(calls.some((c) => c.method === 'POST' && c.path === '/documents/trash/groups/g-data/items/draft/restore')).toBe(true);
-    expect(calls.some((c) => c.path === '/documents/trash/groups/g-data/restore')).toBe(false);
+    expect(calls.some((c) => c.method === 'POST' && c.path === '/drive/trash/groups/g-data/items/draft/restore')).toBe(true);
+    expect(calls.some((c) => c.path === '/drive/trash/groups/g-data/restore')).toBe(false);
     await click(button('Restore all', dataGroup));
-    expect(calls.some((c) => c.method === 'POST' && c.path === '/documents/trash/groups/g-data/restore')).toBe(true);
+    expect(calls.some((c) => c.method === 'POST' && c.path === '/drive/trash/groups/g-data/restore')).toBe(true);
     await click(button('Restore as current', versionGroup));
-    expect(calls.find((c) => c.path === '/documents/versions/ver-1/restore')!.body).toEqual({ as: 'CURRENT' });
+    expect(calls.find((c) => c.path === '/drive/versions/ver-1/restore')!.body).toEqual({ as: 'CURRENT' });
     await click(button('Restore as a copy', versionGroup));
-    expect(calls.filter((c) => c.path === '/documents/versions/ver-1/restore').map((c) => c.body)).toEqual([{ as: 'CURRENT' }, { as: 'COPY' }]);
+    expect(calls.filter((c) => c.path === '/drive/versions/ver-1/restore').map((c) => c.body)).toEqual([{ as: 'CURRENT' }, { as: 'COPY' }]);
   });
 
   it('asks before deleting for good, and says when that ends a share link', async () => {
@@ -678,7 +678,7 @@ describe('Trash', () => {
     expect(document.body.textContent).toContain('This ends a share link.');
     const confirm = [...document.querySelectorAll<HTMLButtonElement>('button')].filter((b) => b.textContent?.trim() === 'Delete for good').at(-1)!;
     await click(confirm);
-    await until(() => expect(calls.some((c) => c.method === 'DELETE' && c.path === '/documents/trash/groups/g-data')).toBe(true));
+    await until(() => expect(calls.some((c) => c.method === 'DELETE' && c.path === '/drive/trash/groups/g-data')).toBe(true));
   });
 });
 
@@ -710,7 +710,7 @@ describe('the one-file share link', () => {
     await click(button('Share link…', document.querySelector('.files-pane')!));
     await until(() => expect(document.querySelector<HTMLInputElement>('input[aria-label="Share link"]')).toBeTruthy());
     expect(document.querySelector('.files-share-warning')).toBeNull();
-    expect(calls.filter((c) => c.path.endsWith('/share-check')).map((c) => c.path)).toEqual(['/documents/entries/deploy/share-check']);
+    expect(calls.filter((c) => c.path.endsWith('/share-check')).map((c) => c.path)).toEqual(['/drive/entries/deploy/share-check']);
   });
 
   it('offers Share this version when the link pins an earlier one, and moves it', async () => {
@@ -719,6 +719,6 @@ describe('the one-file share link', () => {
     await until(() => expect(document.querySelector('.files-pane-shared')?.textContent).toContain('An earlier version'));
     await click(button('Share this version'));
     await until(() => expect(calls.some((c) => c.path === '/share-links' && c.method === 'POST')).toBe(true));
-    expect(calls.some((c) => c.path === '/documents/entries/deploy/share-check')).toBe(true);
+    expect(calls.some((c) => c.path === '/drive/entries/deploy/share-check')).toBe(true);
   });
 });

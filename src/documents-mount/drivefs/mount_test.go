@@ -25,7 +25,7 @@ import (
 )
 
 // These tests mount the file system for real, over go-fuse, in front of fakeDoor: they need /dev/fuse and root (they
-// mount it directly, as the privileged parent would). The e2e (src/apiserver/src/documents/documents-mount.pg.e2e.ts) runs the
+// mount it directly, as the privileged parent would). The e2e (src/apiserver/src/drive/drive-mount.pg.e2e.ts) runs the
 // shell-operation list against the real door.
 
 func mountFake(t *testing.T, opts Options) (*fakeDoor, string, *Reporter) {

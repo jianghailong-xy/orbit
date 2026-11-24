@@ -18,7 +18,7 @@ import {
   authorizeDriveMount,
   driveMountCredentialOutsideDrive,
   isDriveMountToken,
-} from '../documents/documents-mount-credential';
+} from '../drive/drive-mount-credential';
 import { authorizeManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { PrismaService } from '../prisma/prisma.service';
 import {

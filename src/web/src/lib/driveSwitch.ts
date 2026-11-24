@@ -1,4 +1,4 @@
-// Whether this server has Documents (the drive, /documents, API /api/documents/*). The deployment
+// Whether this server has Documents (the drive, /documents, API /api/drive/*). The deployment
 // switch ORBIT_DOCUMENTS_ENABLED is read from `GET /auth/capabilities`, the query managed runners already
 // use. A server from before the switch omits `documents`, and a failed or refused read says nothing:
 // both read as on. Until the read has finished the answer is "not yet": entries stay out rather than
