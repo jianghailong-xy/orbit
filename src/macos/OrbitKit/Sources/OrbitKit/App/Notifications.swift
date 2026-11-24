@@ -205,6 +205,7 @@ public enum Notifications {
         case .settingsChange: return "Review"
         case .browserSignIn: return BrowserSignInCopy.action
         case .change: return "Review"
+        case .projectReopen: return "Review"
         }
     }
 

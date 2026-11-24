@@ -19,6 +19,7 @@ public enum OwnerRequests {
         case .settingsChange: return "SETTINGS"
         case .browserSignIn: return "SIGN IN"
         case .change: return ChangeCopy.tag
+        case .projectReopen: return "REOPEN"
         }
     }
 
@@ -33,6 +34,7 @@ public enum OwnerRequests {
         case .settingsChange: return SettingsChangeCopy.save
         case .browserSignIn: return BrowserSignInCopy.openBrowser
         case .change: return ChangeCopy.primary
+        case .projectReopen: return ProjectReopenCopy.reopen
         }
     }
 
@@ -177,7 +179,7 @@ public enum OwnerRequests {
         switch request.kind {
         case .secret:   return draft.body != nil
         case .decision: return option != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        case .manualStep, .confirm, .wikiCreate, .settingsChange, .browserSignIn, .change: return true
+        case .manualStep, .confirm, .wikiCreate, .settingsChange, .browserSignIn, .change, .projectReopen: return true
         }
     }
 
@@ -200,6 +202,7 @@ public enum OwnerRequests {
     /// What came of it: the summary's second line.
     public static func outcomeLine(_ request: OwnerRequest, runner: String) -> String {
         let note = request.resolutionNote?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if request.kind == .projectReopen { return ProjectReopenCopy.outcomeLine(request) }
         if request.kind == .browserSignIn, request.state == .declined { return BrowserSignInCopy.notNow }
         switch request.state {
         case .declined:  return note.map { $0.isEmpty ? "Declined" : "Declined: “\($0)”" } ?? "Declined"
