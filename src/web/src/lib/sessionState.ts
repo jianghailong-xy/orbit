@@ -85,6 +85,8 @@ export interface SessionStateSource {
   sessionKind?: string | null;
   lastTurnOutcome?: string | null;
   waitingOn?: string | null;
+  /** The server's answer to "did this release finish the work" (releaseFinishedTheWork); absent from an older control plane. */
+  workFinished?: boolean | null;
 }
 
 const SESSION_PHASE_SET: ReadonlySet<string> = new Set(SESSION_PHASES);
@@ -230,23 +232,27 @@ export function sessionRunStateOf(session: SessionStateSource): SessionRunState 
 /** Whether a released session finished its work: its task ended DONE, or it is a landing that settled
  *  (the server's releaseFinishedTheWork). The only release worded "Finished" (decision D2). */
 export const sessionFinishedTheWork = (session: SessionStateSource): boolean =>
-  session.released === true &&
-  ((session.endReason ?? '') === 'task_done' ||
-    ((session.sessionKind ?? '') === 'LANDING' && !session.endReason));
+  typeof session.workFinished === 'boolean'
+    ? session.workFinished
+    : session.released === true &&
+      ((session.endReason ?? '') === 'task_done' ||
+        ((session.sessionKind ?? '') === 'LANDING' && !session.endReason));
 
 /**
  * Whether phase RUNNING is a dispatched turn rather than work outside one. The server's `activity` cannot tell
  * them apart: it answers TURN for every stored PENDING or RUNNING row and also for a parked session whose engine
  * runs its own turn or a sub-agent. The legacy run status can: a dispatched turn is stored RUNNING, work outside a
  * turn is stored AWAITING_INPUT (or INTERRUPTED) with an activity. This is the ONE legacy read left in this
- * function, kept until the server sends a turn-in-flight fact. With no run status at all, an activity means
- * work outside a turn.
+ * function, kept until the server sends a turn-in-flight fact. With no run status at all (or one this client does
+ * not know), no activity or TURN is a dispatched turn and any other activity is work outside one.
  */
 function dispatchedTurnInFlight(session: SessionStateSource): boolean {
   const runStatus = sessionRunStatusOf(session);
   if (runStatus === 'RUNNING' || runStatus === 'PENDING' || runStatus === 'QUEUED') return true;
   if (runStatus === 'AWAITING_INPUT') return false;
-  return !session.activity;
+  // A status word this client does not know: the server sends activity TURN for every dispatched turn, so no
+  // activity or TURN is a turn in flight; any other activity is work outside one (Apple and Android read it so).
+  return !session.activity || session.activity === 'TURN';
 }
 
 /**
