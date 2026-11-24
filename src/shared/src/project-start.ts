@@ -19,8 +19,9 @@ import type { DeliveryMode, IntegrationLine } from './project-progress';
  *   its upstream (`MAIN`). Written as the owner's choice, unless the line had already started
  *   integrating, which locks it.
  * - `projectBranchName` — the project branch as a full `refs/heads/…` ref, only with
- *   `PROJECT_BRANCH`. Absent on a request means `refs/heads/project/<project id>`, or the branch the
- *   project already names.
+ *   `PROJECT_BRANCH`. Absent on a request means the server's default, which a request's read
+ *   carries as `defaultProjectBranchName` (`refs/heads/project/<title slug>-<8 characters of the
+ *   project id>`), or the branch the project already names.
  * - `upstreamRef` — the project's main branch as a full `refs/heads/…` ref: where its line comes
  *   from and what its work is merged into, with either line. On a start it is the owner's choice,
  *   recorded as such; on a coordinator's request it is a suggestion. Absent asks for nothing: the
