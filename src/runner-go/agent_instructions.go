@@ -102,10 +102,14 @@ const orbitCLIUseInstructions = "The Orbit CLI is for pipes, scripts, bulk input
 // because an agent must not read it as the runner committing for it. The uploads path is not spelled
 // out because this text is the same for every session, and "a git-ignored path" is there for the
 // engines that do not show it to the agent. ASCII like the rest of the paragraph.
-const orbitReplyFileInstructions = "Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one " +
-	"inside your working directory or this session's uploads directory reaches them: from elsewhere, /tmp included, " +
-	"copy the file there first and link the copy. Unignored files there can end up in a commit; keep others in the " +
-	"uploads directory or a git-ignored path."
+//
+// One sentence since design D5. What the other three said (a link from elsewhere, /tmp included, reaches nobody; copy
+// first; unignored files in the checkout can end up in a commit) is now said once and only when it applies: the next
+// turn's replyFileCorrection names the path that could not be attached and the directories that work.
+// The commit warning is gone with the paragraph: an agent that copies into the checkout is told by the uploads directory
+// being named first in the correction, and the evidence unit's file_upload keeps screenshots out of the repository.
+const orbitReplyFileInstructions = "Hand the user a file as `[name](path)`, an image as `![name](path)`, from your " +
+	"working directory or this session's uploads directory."
 
 // orbitEvidenceFileInstructions is where the evidence of a piece of work goes, which is what the repository was for
 // until file_upload (docs/drive-design.md §2.3): 96% of its history was evidence and mocks. It follows
@@ -221,8 +225,7 @@ const orbitNotifyInstructions = "When the person asked to hear once something is
 // description's. Only a session that writes to Orbit gets it (unit handoff.use-orbit): a SubAgent is served neither
 // delegate nor the task writes, and a check-only run's writes are refused. Its Claude Code sentence,
 // {{toolsearch:delegate}}, is left out for Cursor, which never shows mcp__orbit__* names (cursorProfile). ASCII.
-const orbitHandoffInstructions = "Hand work to another agent through Orbit, never your engine's own sub-agents or " +
-	"Agent tool, which are as private as its plan. Look with task_list first: task_start work already recorded, never " +
+const orbitHandoffInstructions = "Hand work to another agent through Orbit{{own_subagents}}. Look with task_list first: task_start work already recorded, never " +
 	"file it twice. Otherwise use delegate for a piece whose result you need back, in the background, on a cheaper or " +
 	"stronger model or on another machine (needs: [\"os:darwin\"], or workspace: an agent's name from agent_list); new " +
 	"work of its own is task_create with startNow.{{toolsearch:delegate}}"

@@ -222,6 +222,9 @@ type EngineProfile struct {
 	ResetNote bool
 	// OrbitTools renders {{orbit_tools}}: how the text names Orbit's MCP tools as a family.
 	OrbitTools string
+	// OwnSubAgentsOff is whether the runner turns the engine's own sub-agent tool off where delegate is served
+	// (claude_spawn.go, design D1), so the hand-off unit need not say never to use it ({{own_subagents}}).
+	OwnSubAgentsOff bool
 	// ToolSearchNotes renders {{toolsearch:<tool>}}: whether the text keeps its sentence on loading a deferred tool
 	// with Claude Code's ToolSearch.
 	ToolSearchNotes bool
@@ -239,6 +242,7 @@ var (
 		SystemCarrier:      probeYes,
 		SurvivesCompaction: probeYes, // the appended prompt stays and the MCP instructions are attached again
 		ResetNote:          true,
+		OwnSubAgentsOff:    true,
 		OrbitTools:         "the `mcp__orbit__*` tools",
 		ToolSearchNotes:    true,
 	}
@@ -468,6 +472,7 @@ func (u instructionUnit) deliveredOn(channel instructionChannel) bool {
 //	{{cli}}              the shell-quoted path of the Orbit CLI
 //	{{orbit_tools}}      Orbit's MCP tools as a family (EngineProfile.OrbitTools)
 //	{{toolsearch:<tool>}} the sentence on loading a deferred tool with ToolSearch, or nothing (EngineProfile.ToolSearchNotes)
+//	{{own_subagents}}    the clause forbidding the engine's own sub-agents, unless the runner turns them off (EngineProfile.OwnSubAgentsOff)
 //	{{drive_root}}       the Documents mount's directory on this machine (driveParentPath)
 //
 // A placeholder it does not know is left as it is, which TestEveryUnitRendersOnEveryEngine catches.
@@ -489,6 +494,10 @@ func renderInstructionUnit(core string, shape SessionShape, profile EngineProfil
 			b.WriteString(shellQuote(shape.CLI))
 		case name == "orbit_tools":
 			b.WriteString(profile.OrbitTools)
+		case name == "own_subagents":
+			if !profile.OwnSubAgentsOff {
+				b.WriteString(", never your engine's own sub-agents or Agent tool, which are as private as its plan")
+			}
 		case name == "drive_root":
 			b.WriteString(driveParentPath)
 		case strings.HasPrefix(name, "toolsearch:"):

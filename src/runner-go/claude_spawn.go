@@ -66,6 +66,11 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 		// A scheduled CHECK_ONLY run: the Orbit CLI denied by this runner's own path (schedule_check_only.go).
 		configuredDisallowed = checkOnlyDisallowedTools(configuredDisallowed, orbitExe)
 	}
+	if shape.serves([]string{delegateToolName}) && shape.delegates() {
+		// Where Orbit's delegate is served, Claude's own sub-agent tool is the wrong door for the same request: its
+		// work runs inside this session, unseen and unrecorded. A SubAgent is not served delegate, so keeps it.
+		configuredDisallowed = append(append([]string{}, configuredDisallowed...), builtinSubAgentTools...)
+	}
 	if disallowed := withBuiltinTaskToolsDisallowed(configuredDisallowed); len(disallowed) > 0 {
 		args = append(args, "--disallowedTools", strings.Join(disallowed, ","))
 	}

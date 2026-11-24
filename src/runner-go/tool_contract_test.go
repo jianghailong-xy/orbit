@@ -600,22 +600,28 @@ func TestContractServerRefusalsCarryTheirCodeAndRetryRule(t *testing.T) {
 	}
 }
 
-// Timeout, non-idempotent: a create without a key whose answer is lost is sent ONCE — the runner
-// does not resend what it cannot prove did not land — and the receipt says the outcome is unknown
-// and to re-read before sending it again.
-func TestContractLostAnswerOnAKeylessCreateIsNotResentAndSaysRereadFirst(t *testing.T) {
+// Timeout, keyless (D4): a create without a key is given one by `orbit mcp`, so a lost answer is sent again under that
+// derived key, which the server answers with the first write; the receipt says the key is the caller's to resend.
+func TestContractLostAnswerOnAKeylessCreateIsResentUnderTheDerivedKey(t *testing.T) {
 	cs, srv := newContractServer(t, `{"status":"ALLOWED"}`, func(*http.Request, map[string]interface{}) (int, string) { return 0, "" })
 	result, receipt := rpcCall(t, contractMCP(srv.URL), "task_create", map[string]interface{}{"title": "a", "completionCriterion": "EVIDENCE_JUDGMENT"})
-	if n := len(cs.writes()); n != 1 {
-		t.Fatalf("a keyless create was sent %d times", n)
+	writes := cs.writes()
+	if len(writes) != runRequestResendAttempts {
+		t.Fatalf("a keyless create was sent %d times, want %d", len(writes), runRequestResendAttempts)
 	}
-	if result["isError"] != true || receipt.OK || receipt.Outcome != outcomeUnknown {
+	key, _ := writes[0].Body["idempotencyKey"].(string)
+	if !strings.HasPrefix(key, "auto-") {
+		t.Fatalf("the first delivery carried key %q, want a derived one", key)
+	}
+	for _, w := range writes {
+		if w.Body["idempotencyKey"] != key {
+			t.Fatalf("a delivery carried key %v, want %s", w.Body["idempotencyKey"], key)
+		}
+	}
+	if result["isError"] != true || receipt.OK || receipt.Outcome != outcomeUnknown || receipt.Error == nil || receipt.Error.Retry != retryResend {
 		t.Fatalf("receipt = %+v", receipt)
 	}
-	if e := receipt.Error; e == nil || e.Code != errorCodeNoResponse || e.Retry != retryRereadFirst || e.Retryable {
-		t.Fatalf("error = %+v", receipt.Error)
-	}
-	if receipt.Idempotency.Kind != string(idempotencyServerKey) || receipt.Idempotency.Key != "" {
+	if receipt.Idempotency.Kind != string(idempotencyCallerKey) || receipt.Idempotency.Key != key {
 		t.Fatalf("idempotency = %+v", receipt.Idempotency)
 	}
 }

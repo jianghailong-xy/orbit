@@ -230,11 +230,7 @@ func TestOrbitInstructionsSayWhichLinkedFilesReachTheUser(t *testing.T) {
 		for _, phrase := range []string{
 			"`[name](path)`",
 			"`![name](path)`",
-			"inside your working directory or this session's uploads directory",
-			"/tmp included",
-			"copy the file there first and link the copy",
-			"can end up in a commit",
-			"the uploads directory or a git-ignored path",
+			"from your working directory or this session's uploads directory",
 		} {
 			if !strings.Contains(got, phrase) {
 				t.Errorf("instructions (inside=%v, watches=%v) do not say %q", form.inside, form.watches, phrase)

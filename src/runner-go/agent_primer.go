@@ -33,7 +33,7 @@ package main
 // a change to a word is a new agentPrimerVersion, reviewed as a diff.
 
 // agentPrimerVersion is the version of the primer's text. Any change to it is a new version.
-const agentPrimerVersion = "1.7.1"
+const agentPrimerVersion = "1.8.0"
 
 // agentContractVersion is the Agent Contract version the primer was written from: the header of
 // docs/orbit-agent-contract.md and contractVersion in contracts/orbit-agent.contract.json.
@@ -68,8 +68,7 @@ const (
 		"Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or " +
 		"followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own " +
 		"acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get " +
-		"around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a " +
-		"task. No returned id, no claim."
+		"around a card or a refusal. No returned id, no claim."
 
 	agentPrimerObjects = "Pick the object by the question it answers. Project: the whole goal and what settles it. " +
 		"Task: one durable piece of work. Task list: how a class of work is dispatched, " +
@@ -88,8 +87,7 @@ const (
 
 	agentPrimerReceipts = "Only a structured receipt counts: a write happened when it says ok: true and outcome: written; " +
 		"read and dry_run wrote nothing. Any other outcome is ok: false; except on a chat, follow its error.retry " +
-		"(resend, reread_first, fix_input, do_not_retry, wait) and its notes. Key task_create and task_create_batch with " +
-		"an idempotencyKey derived from the work. Name an Orbit object to the user by its receipt's link, never a bare " +
+		"(resend, reread_first, fix_input, do_not_retry, wait) and its notes. Name an Orbit object to the user by its receipt's link, never a bare " +
 		"id: `[Fix login redirect](orbit-task:<id>)`."
 
 	// Its hand-off half (task_start what task_list shows recorded, else record it) is the handoff unit's since 1.6.0.

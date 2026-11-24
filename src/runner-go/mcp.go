@@ -59,6 +59,7 @@ func mcpServerFromEnv(t *Transport) *mcpServer {
 
 type mcpServer struct {
 	t                     *Transport
+	createKeys            derivedCreateKeys // the keys given to creates that carried none (task_create_autorun.go)
 	sessionID             string
 	agentID               string // attributes created tasks/comments; "" => server falls back to USER
 	taskID                string // the "current task" default for get/update/comment
@@ -451,8 +452,24 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	if refusal := s.planRefusal(name, args); refusal != "" {
 		return toolResult(refusal, true)
 	}
+	args = s.withDerivedCreateKey(name, args)
 	mark := markTransportActivity()
 	return s.withRecovery(name, args, mark, s.runTool(name, args))
+}
+
+// withDerivedCreateKey is args with an idempotencyKey derived for a task_create or task_create_batch that carries none
+// (design D4): a retry of the same call inside createKeyWindow answers with the first write. A key the caller gave
+// always wins, and a dry run writes nothing, so it gets none.
+func (s *mcpServer) withDerivedCreateKey(name string, args map[string]interface{}) map[string]interface{} {
+	if (name != "task_create" && name != "task_create_batch") || getString(args, "idempotencyKey") != "" || getBool(args, "dryRun") {
+		return args
+	}
+	keyed := make(map[string]interface{}, len(args)+1)
+	for key, value := range args {
+		keyed[key] = value
+	}
+	keyed["idempotencyKey"] = s.createKeys.derive(s.sessionID, name, args, createKeyNow())
+	return keyed
 }
 
 func driveToolDescriptors(obj func(map[string]interface{}, ...string) map[string]interface{}) []map[string]interface{} {
@@ -1387,6 +1404,9 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 		if err := requireRunnerTaskCompletionDeclaration(body); err != nil {
 			return toolResult(err.Error(), true)
 		}
+		if err := requireRunnerTaskAutoRunDeclaration(body); err != nil {
+			return toolResult(err.Error(), true)
+		}
 		// The snapshot is taken at the start of the call, before the card (design §2.1): the task
 		// starts from what this session had when it asked, and the card shows the fork it will carry.
 		var fork *forkSnapshot
@@ -1474,6 +1494,9 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 				body["assigneeId"] = s.agentID
 			}
 			if err := requireRunnerTaskCompletionDeclaration(body); err != nil {
+				return toolResult(fmt.Sprintf("tasks[%d]: %s", i, err), true)
+			}
+			if err := requireRunnerTaskAutoRunDeclaration(body); err != nil {
 				return toolResult(fmt.Sprintf("tasks[%d]: %s", i, err), true)
 			}
 			bodies = append(bodies, body)

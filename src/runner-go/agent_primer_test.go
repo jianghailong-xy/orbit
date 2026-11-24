@@ -73,6 +73,11 @@ var agentPrimerHashes = map[string]string{
 	// 1.7.1 is 1.7.0 with the first line naming Agent Contract 1.14.0 (main's drive_* rename, primer 1.4.7 there); no
 	// rule changed.
 	"1.7.1": "fbb1b671dd76a2b34518fb2d2cb14c0ef63a1a0e65d94443101994050e3871d3",
+	// 1.8.0 (instruction-units step 6, D3 and D4): autoRunWhenReady is required by task_create and task_create_batch
+	// (the runner refuses a create without it), and `orbit mcp` derives an idempotency key for a create that has none, so
+	// the lead lost its "Create is not start, but autoRunWhenReady defaults to true" sentence and the receipts paragraph its
+	// "Key task_create ..." sentence.
+	"1.8.0": "6a1f80d73ff927be738c996e943279dbb4c220f428a557ddc1e017f8fd328733",
 }
 
 // The snapshots: the primer exactly as `initialize` sends it, and the four shapes of the instructions
@@ -175,7 +180,6 @@ func TestAgentPrimerLeadStandsAlone(t *testing.T) {
 		"durable record", "private scratch",
 		"task_create", "task_create_batch", "project_create", "the smaller wins",
 		"MCP tools first", "never the CLI to get around a card or a refusal",
-		"Create is not start", "autoRunWhenReady defaults to true", "pass false",
 		"No returned id, no claim.",
 	} {
 		if !strings.Contains(head, phrase) {
@@ -210,10 +214,10 @@ func TestAgentPrimerSaysEveryRuleOfTheContract(t *testing.T) {
 		"1":  {"durable record", "private scratch", "No returned id, no claim."},
 		"2":  {"Pick the object by the question it answers", "Task list:", "Session:", "Agent:", "the smaller wins"},
 		"3":  {"Use Orbit's MCP tools first", "The Orbit CLI is for pipes, scripts, bulk input"},
-		"4":  {"Create is not start", "autoRunWhenReady defaults to true", "pass autoRunWhenReady: false", "startNow: true", "runAt"},
+		"4":  {"Start is its own decision", "pass autoRunWhenReady: false", "startNow: true", "runAt"},
 		"5":  {"confirmation card", "writes nothing until they confirm it", "A refusal or a declined card is final on every surface", "a chat or a card still waiting is not a no", "its receipt says what to do next"},
 		"6":  {"Only a structured receipt counts", "ok: true and outcome: written", "by its receipt's link, never a bare id", "`[Fix login redirect](orbit-task:<id>)`"},
-		"7":  {"follow its error.retry", "idempotencyKey derived from the work"},
+		"7":  {"follow its error.retry"},
 		"8":  {"the same server under the same approvals"},
 		"9":  {"Session orchestration switch", "Without session_* tools", "never claim a delegation"},
 		"10": {"After compaction or a resume", "never rebuild an id, a status or an approval"},

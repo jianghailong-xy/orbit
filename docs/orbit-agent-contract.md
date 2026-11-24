@@ -50,12 +50,13 @@
 3. **MCP first, CLI for what MCP cannot do.** Use the `mcp__orbit__*` tools when the tool list has
    them. Reach for the CLI for pipes, scripts, bulk stdin, and the few operations with no MCP tool —
    never to get around a card, a refusal, or a missing authorization.
-4. **Create is not start — but the default can start it later.** `task_create` does not run anything
-   in the call. It records work. Start is a trigger: `task_start`, `startNow: true`, `runAt`, the
-   person's own "Create and start" on the card — **and `autoRunWhenReady`, which defaults to true**.
-   An in-project task with an assignee therefore starts by itself once the project has started and
-   its prerequisites are `DONE`. When the user says nobody should start it, pass
-   `autoRunWhenReady: false`; omitting the field is not "do not start".
+4. **Create is not start — and an agent says whether it may start later.** `task_create` does not run
+   anything in the call. It records work. Start is a trigger: `task_start`, `startNow: true`, `runAt`,
+   the person's own "Create and start" on the card — **and `autoRunWhenReady`, which an agent must pass
+   on every create** (the runner refuses a `task_create`, or a `task_create_batch` item, without it).
+   `true` makes an in-project task with an assignee start by itself once the project has started and
+   its prerequisites are `DONE`; `false` keeps it recorded. When the user says nobody should start it,
+   pass `autoRunWhenReady: false`. Since primer 1.8.0 the tools say this, not the primer.
 5. **A person answers the consequential writes.** A create, a batch, a project, a provider change and
    every owner-only decision are cards. The card is the approval; there is no second door. A declined
    card is a refusal, never a success. A card the owner answers with "Chat about this" is neither: it
@@ -64,7 +65,10 @@
    status. Link it for the user as `orbit-<kind>:<id>`; do not paste bare ids.
 7. **Retry only what is safe.** Server-side transient conflicts are retried for you; a caller's retry
    is safe for reads, for operations with a caller idempotency key, and after a re-read proves the
-   first attempt did not land. A create answered by nothing is re-read before it is sent twice.
+   first attempt did not land. A create answered by nothing is re-read before it is sent twice. Since primer 1.8.0 `orbit mcp` derives an
+   idempotency key for a `task_create` or `task_create_batch` that carries none (session id, tool and
+   canonical arguments, valid for 10 minutes), so a retry inside that window answers with the first write;
+   a key the caller gives always wins.
 8. **Same semantics on both surfaces.** MCP and the in-session CLI must produce the same
    authorization, approval, attribution, side effects and ids for the same input. A difference is a
    defect in the surface, not a licence for the agent. Since v1.1.0 the rule is enforced in the
