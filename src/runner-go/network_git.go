@@ -128,11 +128,20 @@ func networkGitArgs(dir string, args []string) []string {
 // workspace's (--workspace), git hands it the repository path so the helper can check it is that repository's, and
 // no hook runs, since a hook would inherit the environment the credential travels in.
 func networkGitArgsWith(dir string, credential *orbitGitCredential, args []string) []string {
+	return networkGitArgsFor(dir, credential, false, args)
+}
+
+// networkGitArgsFor is networkGitArgsWith, and with only set the helper is told to answer Orbit's credential and
+// nothing else (gitCredentialOnlyFlag): Push as me's target push, which no machine credential may make.
+func networkGitArgsFor(dir string, credential *orbitGitCredential, only bool, args []string) []string {
 	out := []string{"-C", dir, "-c", "credential.helper="}
 	if exe := orbitCLIExecutable(); exe != "" {
 		helper := "!" + shellQuote(filepath.ToSlash(exe)) + " " + gitCredentialReadOnlyCommand
 		if credential != nil {
 			helper += " " + gitCredentialWorkspaceFlag + " " + shellQuote(credential.WorkspaceID)
+			if only {
+				helper += " " + gitCredentialOnlyFlag
+			}
 		}
 		out = append(out, "-c", "credential.helper="+helper)
 	}
@@ -140,6 +149,42 @@ func networkGitArgsWith(dir string, credential *orbitGitCredential, args []strin
 		out = append(out, "-c", "credential.useHttpPath=true", "-c", "core.hooksPath="+filepath.ToSlash(os.DevNull))
 	}
 	return append(out, args...)
+}
+
+// networkGitOwnerOnly is one network git command whose only credential is credential: the machine's helpers are
+// emptied and Orbit's helper answers nothing else (networkGitArgsFor with only), so a question the credential does
+// not match is answered with none and the command fails as an authentication failure (errGitAuthFailed). It answers
+// git's stderr whether or not the command succeeded — an accepted push's `remote:` lines are what says GitHub let it
+// past the branch's rules (bypassedRulesOf) — and on a failure an error that gitStderr reads that same stderr from.
+func networkGitOwnerOnly(dir string, timeout time.Duration, credential *orbitGitCredential, args []string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", networkGitArgsFor(dir, credential, true, args)...)
+	cmd.Env = networkGitCommandEnv(credential)
+	cmd.Cancel = func() error { return interruptGit(cmd.Process) }
+	cmd.WaitDelay = networkGitWaitDelay
+	var said strings.Builder
+	cmd.Stdout, cmd.Stderr = io.Discard, &said
+	err := cmd.Run()
+	if errors.Is(err, exec.ErrWaitDelay) {
+		err = nil
+	}
+	stderr := strings.TrimSpace(said.String())
+	if err == nil {
+		return stderr, nil
+	}
+	if failure := gitAuthFailure(stderr); failure != nil {
+		return stderr, failure
+	}
+	if ctx.Err() != nil {
+		return stderr, fmt.Errorf("git %s did not finish within %s: %s", args[0], timeout, firstNonEmpty(stderr, err.Error()))
+	}
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		// What gitStderr, and so every reader of a failed push, reads.
+		exit.Stderr = []byte(stderr)
+	}
+	return stderr, gitFailure(err)
 }
 
 // networkGitCommandEnv is the environment of a network git command: the runner's own, networkGitEnv, and Orbit's
@@ -183,11 +228,15 @@ const gitCredentialReadOnlyCommand = "git-credential-readonly"
 //
 // With --workspace (a command networkGit runs again with Orbit's credential), it answers that credential instead,
 // but only for the workspace it names and for the host and repository Orbit issued it for: git asking about any
-// other remote is answered by the machine's helpers as before.
+// other remote is answered by the machine's helpers as before. With --only as well (Push as me's target push,
+// networkGitOwnerOnly), any other question is answered with nothing: the machine's helpers are never asked.
 func runGitCredentialReadOnly(args []string) int {
-	workspace := ""
+	workspace, only := "", false
 	if len(args) >= 2 && args[0] == gitCredentialWorkspaceFlag {
 		workspace, args = args[1], args[2:]
+		if len(args) > 0 && args[0] == gitCredentialOnlyFlag {
+			only, args = true, args[1:]
+		}
 	}
 	if len(args) == 0 || args[0] != "get" {
 		_, _ = io.Copy(io.Discard, os.Stdin)
@@ -200,6 +249,9 @@ func runGitCredentialReadOnly(args []string) int {
 	if workspace != "" {
 		if answer, ok := orbitGitCredentialAnswer(workspace, string(question), os.Getenv(orbitGitCredentialEnv)); ok {
 			_, _ = io.WriteString(os.Stdout, answer)
+			return 0
+		}
+		if only {
 			return 0
 		}
 	}

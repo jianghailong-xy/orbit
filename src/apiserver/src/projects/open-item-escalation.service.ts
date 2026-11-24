@@ -24,6 +24,7 @@ import {
   evidenceUndecidedEnding,
   openUndecidedEvidenceStatement,
 } from './evidence-undecided';
+import { IN_FLIGHT_JOB_STATES_SQL } from './in-flight-job-states';
 
 /**
  * How often the clock looks. Not how long anything waits: each item carries its own
@@ -228,7 +229,7 @@ export function escalatesAt(alias: string): Prisma.Sql {
         SELECT 1
           FROM "project_integration_job" handling
          WHERE handling."id" = ${item}."handling_job_id"
-           AND handling."state" IN ('QUEUED', 'RUNNING')
+           AND handling."state" IN ${IN_FLIGHT_JOB_STATES_SQL}
       )
     THEN NULL
     -- Taken up: the project's coordinator took one of this item's own ITEM delivery

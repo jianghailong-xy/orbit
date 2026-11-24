@@ -3416,11 +3416,35 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1491 sets feishu_app.message_detail's default to FULL and moves every TITLES_ONLY row to FULL: an ALTER and an
       // UPDATE of that table only, none of the preserved relations, and no trigger, function or DONE fence changes.
       '1491_feishu_details_by_default',
+      // 1492 adds two columns to runner for a Default sign-out on the account-removal relay: account_remove_action, a
+      // nullable TEXT, and account_remove_force, a BOOLEAN with a constant false default (both catalog-only); no row is
+      // written, and no preserved relation, trigger, function or DONE fence changes. Written as 1465 on its task branch, it
+      // was renumbered after main took 1465 and 1491.
+      '1492_runner_account_sign_out',
+      // 1493 adds four nullable session columns (failure_kind, failure_scope, failure_said, admission_failure) with no
+      // default, CHECK, index or backfill; no row is written, and no preserved relation, trigger, function or DONE
+      // fence changes.
+      '1493_session_failure_kind',
+      // 1494 creates account_health (docs/routing-account-health-design.md §6): a new table, its partial unique index on
+      // the live row and three foreign-key indexes. No existing row, trigger or judgment column is touched.
+      '1494_account_health',
+      // 1495 adds the nullable session.account_health_effect with a CHECK on its three values and no default, index or
+      // backfill; no row is written, and no preserved relation, trigger, function or DONE fence changes.
+      '1495_session_account_health_effect',
       // 1501 adds four nullable work-session columns and three checks on project_open_item, and widens
       // project_integration_job_retry_failure_class_chk to admit CONFLICT (revision 42, §12.4, R1); no row is
       // written, and no preserved relation, trigger, function or DONE fence changes. Written as 1444 on the project
       // line, it was renumbered after main took 1444.
       '1501_open_item_work_session',
+      // 1527 lands on a protected GitHub branch through a pull request (docs/design/protected-branch-landing.md §7). Of
+      // the preserved relations it adds two nullable columns to session (merge_pull_request_id, merge_owner_token_for)
+      // and widens session_merge_receipt_recorded_by_check by SERVER, a CHECK every stored row passes; it writes no row
+      // of either. Beside them: nullable workspace and project_integration_job columns, the PULL_REQUEST job state in
+      // project_integration_job_state_chk, J3's index and project_integration_job_terminal_guard (a function of that
+      // table, none of the preserved ones), PULL_REQUEST in project_integration_job_event_kind_chk,
+      // github_app_config.webhook_secret_enc, and the new github_pull_request and github_webhook_delivery tables. No
+      // DONE fence changes. It takes its locks in short tries inside one DO.
+      '1527_pull_request_landing',
       // 1537 adds a nullable managed_runner.current_image_version (no default); `managed_runner` is none of the
       // preserved relations, no row is written, and no trigger, function or DONE fence changes.
       '1537_managed_runner_current_image_version'],

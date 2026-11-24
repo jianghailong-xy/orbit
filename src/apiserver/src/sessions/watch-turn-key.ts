@@ -1,5 +1,6 @@
 import { RUN_QUESTION_PREFIX } from './run-question';
 import { LANDING_FIX_TURN_KEY_PREFIX } from './landing-fix-turn-key';
+import { PULL_REQUEST_FIX_TURN_KEY_PREFIX } from './pull-request-fix-turn';
 import { BadRequestException } from '@nestjs/common';
 import { TASK_ACCEPTANCE_CLIENT_TURN_PREFIX } from '../tasks/executable-acceptance-round';
 
@@ -113,6 +114,8 @@ const RESERVED_TURN_KEY_PREFIXES = [
   OPEN_ITEM_TURN_KEY_PREFIX,
   // Its turn revives a session that ended because its task was done; a caller naming it would buy that.
   LANDING_FIX_TURN_KEY_PREFIX,
+  // Its turn's end merges the session again (docs/design/protected-branch-landing.md §4.6, D5); only the server queues one.
+  PULL_REQUEST_FIX_TURN_KEY_PREFIX,
 ] as const;
 
 /**

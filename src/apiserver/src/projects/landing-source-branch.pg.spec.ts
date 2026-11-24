@@ -403,15 +403,16 @@ test('a branch with nothing of the task\'s own on it is not written down as a la
   assert.equal(landed.receiptIds.length, 1, 'the receipt for a real landing was withheld');
 
   // ── the closed set, and the migration that holds it ─────────────────────────────────────────────
-  // The state these cases are about is in the CHECK the newest migration wrote, and in the list the
-  // API server validates a result against. The two are one set: a state the database refuses is a
-  // result the runner reports and this process cannot record.
+  // The state these cases are about is in the CHECK the newest migration wrote (1527 added
+  // PULL_REQUEST, docs/design/protected-branch-landing.md §4.2), and in the list the API server
+  // validates a result against. The two are one set: a state the database refuses is a result the
+  // runner reports and this process cannot record.
   const migration = readFileSync(
-    path.resolve(__dirname, '../../prisma/migrations/0453_landing_observation_delivery_mode/migration.sql'),
+    path.resolve(__dirname, '../../prisma/migrations/1527_pull_request_landing/migration.sql'),
     'utf8',
   );
   const check = /"state" IN \(([\s\S]*?)\)\)/.exec(migration);
-  assert.ok(check, 'migration 0453 no longer constrains the state column');
+  assert.ok(check, 'migration 1527 no longer constrains the state column');
   assert.deepEqual(
     [...check![1].matchAll(/'([A-Z_]+)'/g)].map((hit) => hit[1]).sort(),
     [...INTEGRATION_JOB_STATES].sort(),

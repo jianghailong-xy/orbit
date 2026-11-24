@@ -157,7 +157,10 @@ func runKimiChild(ctx context.Context, c subagentChild) (ExecResult, string, err
 	}
 	switch {
 	case outcome.failure != "":
-		return subagentChildResult(stFailed, reply, outcome.failure, 0, nil), sessionID, nil
+		res := subagentChildResult(stFailed, reply, outcome.failure, 0, nil)
+		res.Failure = outcome.classified.wire()
+		res.Admission = turnAdmission(turn != nil && !kimiTurnSaidNothing(turn), nil, 0)
+		return res, sessionID, nil
 	case outcome.read && !outcome.ran && turn != nil && kimiTurnSaidNothing(turn):
 		return subagentChildResult(stFailed, "", kimiNoTurn, 0, nil), sessionID, nil
 	}

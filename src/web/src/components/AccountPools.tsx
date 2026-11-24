@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { EllipsisOutlined, PlayCircleOutlined, RightOutlined, TeamOutlined } from '@ant-design/icons';
 import { api } from '../api';
 import { accountIsPaused, usePauseClock } from '../lib/accountPause';
+import { AccountHealthLoginLine, AccountHealthProviderLine } from './AccountHealthLine';
 import { AccountPauseActions, AccountPauseStatus, type AccountPauseControls } from './AccountPause';
 import { isLoginPool, loginLine, type CodexLogin } from '../lib/codexLogin';
 import { foldFromAnywhere } from '../lib/foldHead';
@@ -268,6 +269,7 @@ function MemberRow({
             <span className="pool-member-label">{member.label}</span>
             {member.next && !accountIsPaused(member.pausedUntil, now) && <span className="re-chip">NEXT</span>}
           </div>
+          <AccountHealthProviderLine providerId={member.id} />
         </div>
       </div>
       <AccountPauseStatus dot className="pool-status" until={member.pausedUntil} now={now} detail={member.login?.state === 'ACTIVE' ? 'Signed in' : undefined} status={status} />
@@ -488,6 +490,7 @@ function LoginRow({
             {/* With one account there is nothing to choose between, so the mark would say nothing. */}
             {member.next && !accountIsPaused(member.pausedUntil, now) && pool.members.length > 1 && <span className="re-chip">NEXT</span>}
           </div>
+          <AccountHealthLoginLine poolId={pool.id} accountId={member.id.replace(/^login:/, '')} />
           <div className="pool-key-mask">
             {contributor && `${contributor.name} · `}
             {loginLine(login)}
