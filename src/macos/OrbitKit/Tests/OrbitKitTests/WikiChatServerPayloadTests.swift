@@ -68,6 +68,7 @@ final class WikiChatServerPayloadTests: XCTestCase {
         let budget = WikiChatLogic.cardLook(try card("heldBudget"))
         XCTAssertEqual(budget.note, "Apply to write: today's automatic rewrites are used up")
         XCTAssertEqual(budget.actions, [.apply, .discard])
+    }
 
     func testTheDeliveredContentsBlockIsLabelledWikiContents() throws {
         let text = String(decoding: try raw("chat.delivered.contents"), as: UTF8.self)
