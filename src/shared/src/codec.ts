@@ -737,6 +737,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // reference with no foreign key). Addresses a reader follows — never a fence: a press is decided on the card's row.
   'draftId',
   'replacesId',
+  // The open card of the same chat a rewrite card waits on (migration 1574, contract `chat.drafts.auto`): a history
+  // reference with no foreign key, an address like `replacesId` — never a fence: a release is decided on the card's row.
+  'heldById',
   // An Documents drive write not committed yet (migration 1283, docs/documents-drive-technical-design.md §1.1): the
   // upload or handle a chunk row belongs to, which the upload and door routes address. Never a fence.
   'stagingId',
