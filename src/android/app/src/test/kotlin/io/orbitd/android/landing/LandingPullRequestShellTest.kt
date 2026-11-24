@@ -217,8 +217,8 @@ class LandingPullRequestShellTest {
         compose.onNodeWithTag("landing-setting:PUSH_AS_ME").assertIsSelected()
         compose.onNodeWithTag("landing-setting:refused").performScrollTo().assertIsDisplayed()
         // The notice is one box: its bold lead, the sentence and the link are all inside it.
-        compose.onNodeWithTag("landing-setting:refused").assertTextContains(WorkspaceLandingWords.REFUSED, substring = true)
-        compose.onNodeWithTag("landing-setting:refused").assertTextContains(WorkspaceLandingWords.CONNECT_AGAIN, substring = true)
+        for (inside in listOf(WorkspaceLandingWords.REFUSED, WorkspaceLandingWords.CONNECT_AGAIN))
+            compose.onNode(hasText(inside, substring = true) and hasAnyAncestor(hasTestTag("landing-setting:refused")), useUnmergedTree = true).assertExists()
         compose.onNodeWithText(WorkspaceLandingWords.CONNECT_AGAIN).performClick()
         assertEquals(OrbitRoute(Destination.SETTINGS, "github"), opened.last())
     }
@@ -226,7 +226,7 @@ class LandingPullRequestShellTest {
     @Test fun pendingPermissionsAreNamedWithTheirReviewLink() {
         openSettings(settings("permissionsPending"))
         compose.onNodeWithTag("landing-setting:permissions-pending").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithTag("landing-setting:permissions-pending").assertTextContains(WorkspaceLandingWords.REVIEW, substring = true)
+        compose.onNode(hasText(WorkspaceLandingWords.REVIEW) and hasAnyAncestor(hasTestTag("landing-setting:permissions-pending")), useUnmergedTree = true).assertExists()
         compose.onNodeWithText("Landing through pull requests starts once owner accepts Orbit's updated GitHub permissions.", substring = true).assertExists()
         compose.onNodeWithText(WorkspaceLandingWords.REVIEW).assertExists()
     }
