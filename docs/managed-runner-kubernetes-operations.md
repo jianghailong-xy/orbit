@@ -677,7 +677,7 @@ Every node that runs managed runners needs it. On k3s:
    (`KillMode=process`), but the API server and the kubelet are away until k3s is back (9 s on .3), so every Pod on
    the node is briefly unmanaged and no runner Pod can be created. Before the restart, check that no runner is running a turn: read each runner Pod's log (`kubectl logs
    --since=20m`), and list the processes in its container cgroup from the host. An idle runner has only `tini`,
-   `orbit-container run` and `orbit run`.
+   `orbit-container run`, `orbit run` and its memory reserve, `orbit orbit-headroom`.
 4. Verify. `kubectl get --raw /api/v1/nodes/<node>/proxy/configz` must show `"singleProcessOOMKill": true`, and the
    file must be in the kubelet's drop-in directory: k3s v1.37.2 copies a `config=` kubelet-arg file to
    `/var/lib/rancher/k3s/agent/etc/kubelet.conf.d/10-cli-config.conf` and still passes only `--config-dir`, so the
