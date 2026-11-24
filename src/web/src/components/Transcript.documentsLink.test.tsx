@@ -9,8 +9,8 @@ import { DocumentsFilePicker } from './documents/DocumentsFilePicker';
 import { materializeReferences } from '../lib/composerRefs';
 
 /**
- * A reply that links a drive file (`orbit-drive:<id>`, which the runner writes for a path under /home/orbit/Documents) draws
- * that file — name, folder, size — and opens it on the Files page; one that is trashed or gone says so. The composer's
+ * A reply that links a drive file (`orbit-document:<id>`, which the runner writes for a path under /home/orbit/Documents, or
+ * `orbit-drive:<id>`, its scheme before the Documents rename, which stored transcripts carry) draws that file — name, folder, size — and opens it on the Files page; one that is trashed or gone says so. The composer's
  * Add from Files picker hands back the paths of the files picked (board docs/mocks/orbit-files/02-web frame 8).
  */
 
@@ -59,18 +59,19 @@ const reply = (text: string) => {
 };
 
 describe('a reply linking a drive file', () => {
-  it('draws the file and links to it on the Files page', async () => {
+  it.each(['orbit-document', 'orbit-drive'])('draws a %s: link as the file and links to it on the Documents page', async (scheme) => {
     apiMock.mockResolvedValue(FILE);
-    await reply('Saved [sign-in-copy.md](orbit-drive:e1) for you.');
+    await reply(`Saved [sign-in-copy.md](${scheme}:e1) for you.`);
     const card = container.querySelector<HTMLAnchorElement>('a.drive-file-card');
     expect(card?.textContent).toContain('sign-in-copy.md');
     expect(card?.textContent).toContain('Documents › Orbit UI migration · 4.1 KB');
     expect(card?.getAttribute('href')).toBe('/documents?folder=f1&file=e1');
+    expect(apiMock).toHaveBeenCalledWith(expect.stringContaining('e1'));
   });
 
   it('says so when the file is in Trash', async () => {
     apiMock.mockResolvedValue({ ...FILE, trashedAt: '2026-11-21T10:00:00Z' });
-    await reply('[sign-in-copy.md](orbit-drive:e1)');
+    await reply('[sign-in-copy.md](orbit-document:e1)');
     expect(container.querySelector('a.drive-file-card')).toBeNull();
     expect(container.querySelector('.drive-file-card.gone')?.textContent).toContain('In Trash');
   });
@@ -160,5 +161,10 @@ describe('the composer drive picker', () => {
   it('sends a picked chip as the file path', () => {
     const refs = { 'brief.md': { kind: 'drive' as const, id: 'e1', path: '/home/orbit/Documents/P/brief.md' } };
     expect(materializeReferences('Check #brief.md too', refs)).toBe('Check /home/orbit/Documents/P/brief.md too');
+  });
+
+  it('sends a chip without a path as an orbit-document: link', () => {
+    const refs = { 'brief.md': { kind: 'drive' as const, id: 'e1' } };
+    expect(materializeReferences('Check #brief.md too', refs)).toBe('Check [brief.md](orbit-document:e1) too');
   });
 });

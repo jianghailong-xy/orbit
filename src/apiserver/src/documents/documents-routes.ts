@@ -10,3 +10,14 @@ export const DOCUMENTS_ROUTE_PREFIXES = ['documents', 'drive'];
  */
 export const underEveryDocumentsPrefix = (route: string): string[] =>
   DOCUMENTS_ROUTE_PREFIXES.map((prefix) => route.replace(' /documents/', ` /${prefix}/`));
+
+/**
+ * Where the runner Documents door answers (runner-documents.controller.ts): /runner/documents, and /runner/drive as an
+ * alias of the very same handlers, because runners and mount daemons already deployed call /runner/drive. Callers in this
+ * tree use /runner/documents.
+ */
+export const RUNNER_DOCUMENTS_ROUTE_PREFIXES = ['runner/documents', 'runner/drive'];
+
+/** A route list's `METHOD /runner/documents/…` key as every runner door prefix answers it (anything may follow the path). */
+export const underEveryRunnerDocumentsPrefix = (route: string): string[] =>
+  RUNNER_DOCUMENTS_ROUTE_PREFIXES.map((prefix) => route.replace(' /runner/documents/', ` /${prefix}/`));

@@ -393,6 +393,51 @@ describe('the folder tree and the list', () => {
     await click(row('sign-in-v3.png'));
     await until(() => expect(document.querySelector<HTMLImageElement>('.files-preview-picture')?.getAttribute('src')).toBe('blob:picture'));
   });
+
+  it('previews text and code as written, a page in a frame that runs nothing, and a PDF in a frame of its own', async () => {
+    const made: Blob[] = [];
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: (b: Blob) => `blob:file-${made.push(b)}`, revokeObjectURL: () => {} }));
+    entries.push(
+      { id: 'cfg', parentId: 'f-data', kind: 'FILE', name: 'run.json', sizeBytes: 20, bytes: '{ "ok": true }\n<b>x</b>' },
+      { id: 'log', parentId: 'f-data', kind: 'FILE', name: 'runner.log', sizeBytes: 6_400_000, bytes: 'heartbeat ok' },
+      { id: 'page', parentId: 'f-data', kind: 'FILE', name: 'report.html', sizeBytes: 60, bytes: '<h1>Week 47</h1><script>parent.x=1</script>' },
+      { id: 'pdf', parentId: 'f-data', kind: 'FILE', name: 'review.pdf', sizeBytes: 1_800, bytes: '%PDF-1.4' },
+      { id: 'scan', parentId: 'f-data', kind: 'FILE', name: 'scan.pdf', sizeBytes: 48_000_000, bytes: '%PDF-1.4' },
+      { id: 'zip', parentId: 'f-data', kind: 'FILE', name: 'eval.zip', sizeBytes: 10, bytes: 'PK' },
+    );
+    await visit('/documents?folder=f-data&file=cfg');
+    // Text, not markup: the angle brackets stay as written.
+    await until(() => expect(document.querySelector('.files-preview-text')?.textContent).toBe('{ "ok": true }\n<b>x</b>'));
+    expect(document.querySelector('.files-preview-text b')).toBeNull();
+    expect(document.querySelector('.files-preview-note')).toBeNull();
+
+    await click(row('runner.log'));
+    await until(() => expect(document.querySelector('.files-preview-text')?.textContent).toBe('heartbeat ok'));
+    expect(document.querySelector('.files-preview-note')?.textContent).toBe('Showing the first 1 MB of 6.4 MB.');
+    const reads = vi.mocked(authedFetch).mock.calls.filter(([input]) => String(input) === '/api/documents/entries/log/content');
+    expect((reads[0][1] as RequestInit).headers).toEqual({ range: 'bytes=0-1048575' });
+
+    await click(row('report.html'));
+    await until(() => expect(document.querySelector('iframe.files-preview-page')).toBeTruthy());
+    const page = document.querySelector<HTMLIFrameElement>('iframe.files-preview-page')!;
+    // Every sandbox permission off: no script, no origin, no form, no navigation.
+    expect(page.getAttribute('sandbox')).toBe('');
+    expect(page.getAttribute('srcdoc')).toBe('<h1>Week 47</h1><script>parent.x=1</script>');
+    expect(page.getAttribute('src')).toBeNull();
+
+    await click(row('review.pdf'));
+    await until(() => expect(document.querySelector('iframe.files-preview-pdf')?.getAttribute('src')).toMatch(/^blob:file-/));
+    const pdf = made[Number(document.querySelector('iframe.files-preview-pdf')!.getAttribute('src')!.slice('blob:file-'.length)) - 1];
+    expect(pdf.type).toBe('application/pdf');
+
+    await click(row('scan.pdf'));
+    await until(() => expect(document.querySelector('.files-preview-none')?.textContent).toBe('Too large to preview (48 MB). Download it to open.'));
+    expect(vi.mocked(authedFetch).mock.calls.some(([input]) => String(input) === '/api/documents/entries/scan/content')).toBe(false);
+
+    await click(row('eval.zip'));
+    await until(() => expect(document.querySelector('.files-pane-name')?.textContent).toBe('eval.zip'));
+    expect(document.querySelector('.files-preview-text, .files-preview-page, .files-preview-pdf, .files-preview-none')).toBeNull();
+  });
 });
 
 describe('upload', () => {

@@ -128,7 +128,7 @@ func (c *chunkCache) local(sha string) ([]byte, bool) {
 }
 
 // ensure makes sure the chunk is on disk, fetching it from the door once however many readers ask (§4.2:
-// `GET /runner/drive/chunks/:sha256`) and checking its sha256.
+// `GET /runner/documents/chunks/:sha256`) and checking its sha256.
 func (c *chunkCache) ensure(ctx context.Context, sha string, size int64) error {
 	for {
 		c.mu.Lock()

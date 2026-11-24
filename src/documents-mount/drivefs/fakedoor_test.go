@@ -170,7 +170,7 @@ func (f *fakeDoor) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	route := strings.TrimPrefix(r.URL.Path, "/api/runner/drive")
+	route := strings.TrimPrefix(r.URL.Path, "/api/runner/documents")
 	var body map[string]interface{}
 	if r.Method == http.MethodPost {
 		_ = json.NewDecoder(r.Body).Decode(&body)

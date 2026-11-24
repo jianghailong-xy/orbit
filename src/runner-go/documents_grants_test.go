@@ -285,14 +285,14 @@ func TestSupersededInstanceDriveWriteIsRefused(t *testing.T) {
 		_, _ = w.Write([]byte(`{"code":"MANAGED_RUNNER_INSTANCE_SUPERSEDED","message":"this runner instance was replaced by a later one"}`))
 	})
 	tr := newCallerTransport(srv.URL, "runner-secret", runnerCallerMCP)
-	_, err := commitDriveFile(context.Background(), tr, "commit-1", map[string]interface{}{"path": "/a.md"})
+	_, err := commitDocumentsFile(context.Background(), tr, "commit-1", map[string]interface{}{"path": "/a.md"})
 	if err == nil {
 		t.Fatal("a superseded instance's drive write was accepted")
 	}
 	if commits != 1 {
 		t.Fatalf("the refusal was retried: %d attempts", commits)
 	}
-	if got := driveToolError("drive_put", err); !strings.Contains(got.Error(), "replaced") {
+	if got := documentsToolError("documents_put", err); !strings.Contains(got.Error(), "replaced") {
 		t.Fatalf("the refusal does not say why: %v", got)
 	}
 	if !isManagedInstanceRevoked(err) {
