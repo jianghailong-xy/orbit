@@ -244,6 +244,29 @@ class DocumentsDeviceTest {
         note("storage: ${compose.onNodeWithTag("documents-storage-total").fetchSemanticsNode().config[SemanticsProperties.Text].joinToString()}")
     }
 
+    /** Frames 7 and 13: a file still going up sits in its folder with its bar, and the uploads sheet holds it beside an agent's
+     * running sync. The upload is cancelled afterwards, so the drive is left as it was. */
+    @Test fun live() = journey("live") {
+        login(); openDocuments()
+        compose.onNodeWithTag("documents-entry:Orbit UI migration").performClick()
+        await { exists("documents-entry:sign-in-v3.png") }
+        val folder = runBlocking { api.folder(null).entries.first { it.name == "Orbit UI migration" } }
+        val file = File(app.cacheDir, "walkthrough.mov")
+        java.io.RandomAccessFile(file, "rw").use { it.setLength(3L * 1024 * 1024 * 1024) }
+        DocumentsUploads.add(app, handle, DocumentsUploads.requests(app, listOf(Uri.fromFile(file)), folder.id, folder.name))
+        await { exists("documents-uploading:walkthrough.mov") && exists("documents-uploads-card") }
+        SystemClock.sleep(1500)
+        capture("13-folder-uploading")
+        compose.onNodeWithTag("documents-uploads-card").performClick()
+        await { exists("documents-uploads-sheet") && exists("documents-upload-row:walkthrough.mov") }
+        SystemClock.sleep(800)
+        capture("07-uploads-sheet-live")
+        val queue = DocumentsStore.of(app, handle).uploads
+        queue.items.value.filter { it.name == "walkthrough.mov" }.forEach { queue.cancel(it.id) }
+        file.delete()
+        note("live: walkthrough.mov went up in Orbit UI migration beside the agent's sync, then was cancelled")
+    }
+
     @Test fun off() = journey("off") {
         login()
         openDrawer()
