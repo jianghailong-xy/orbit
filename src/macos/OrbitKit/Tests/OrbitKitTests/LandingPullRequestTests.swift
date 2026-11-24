@@ -114,12 +114,13 @@ final class LandingPullRequestTests: XCTestCase {
     func testTheProjectsInFlightJobAndTheTasksLandingCarryTheSameBlock() throws {
         let integration = try XCTUnwrap(try views()["integration"]?["a"] as? [String: Any])
         let view = try decode(ProjectIntegrationView.self, integration)
+        XCTAssertNotNil(view.inFlight, "inFlight decoded")
         XCTAssertEqual(view.inFlight?.pullRequest?.number, 100)
         XCTAssertEqual(view.inFlight?.pullRequest?.checks.passed, 2)
         XCTAssertEqual(ProjectPage.landingCard(view)?.pullRequest, view.inFlight?.pullRequest)
         let land = try decode(LandTaskIntegrationView.self, [
             "jobId": "j", "state": "PULL_REQUEST", "targetRef": "refs/heads/main",
-            "pullRequest": try XCTUnwrap(try views()["landing"]?["b"]?["pullRequest"]),
+            "pullRequest": try XCTUnwrap((try views()["landing"]?["b"] as? [String: Any])?["pullRequest"]),
         ])
         XCTAssertEqual(land.pullRequest?.condition, "REVIEW_REQUIRED")
     }
