@@ -1076,12 +1076,12 @@ func kimiNameValuePairs(value interface{}) []map[string]string {
 	return pairs
 }
 
-func kimiAgentInstructions(agent AgentExecConfig, orbitExe string, insideRecordedWork, watches, workflows bool) string {
+func kimiAgentInstructions(agent AgentExecConfig, shape SessionShape) string {
 	parts := []string{}
 	if strings.TrimSpace(agent.SystemPrompt) != "" {
 		parts = append(parts, agent.SystemPrompt)
 	}
-	if appendPrompt := strings.TrimSpace(withOrbitCLIInstructions(agent.AppendSystemPrompt, orbitExe, insideRecordedWork, watches, agentDelegates(agent), workflows)); appendPrompt != "" {
+	if appendPrompt := strings.TrimSpace(withOrbitInstructions(agent.AppendSystemPrompt, compose(shape, kimiProfile).System)); appendPrompt != "" {
 		parts = append(parts, appendPrompt)
 	}
 	if len(agent.AllowedTools) > 0 {
@@ -1093,8 +1093,8 @@ func kimiAgentInstructions(agent AgentExecConfig, orbitExe string, insideRecorde
 	return strings.Join(parts, "\n\n")
 }
 
-func kimiPromptText(agent AgentExecConfig, orbitExe, text string, insideRecordedWork, watches, workflows bool) string {
-	instructions := kimiAgentInstructions(agent, orbitExe, insideRecordedWork, watches, workflows)
+func kimiPromptText(agent AgentExecConfig, shape SessionShape, text string) string {
+	instructions := kimiAgentInstructions(agent, shape)
 	if instructions == "" {
 		return text
 	}
@@ -1146,7 +1146,7 @@ func prepareKimiPrompt(ctx context.Context, t *Transport, job *ClaimedSession, r
 			feedText = note
 		}
 	}
-	feedText = kimiPromptText(job.instructionAgent(), orbitCLIExecutable(), feedText, job.insideRecordedWork(), job.watchesOn(), job.workflowsOn())
+	feedText = kimiPromptText(job.instructionAgent(), job.sessionShape(orbitCLIExecutable()), feedText)
 	if feedText != "" || len(blocks) == 0 {
 		blocks = append(blocks, map[string]interface{}{"type": "text", "text": feedText})
 	}

@@ -61,7 +61,7 @@ func TestShellQuote(t *testing.T) {
 
 func TestAppendClaudeAgentInstructionArgsAddsOnlyAbsolutePhase1Rules(t *testing.T) {
 	exe := "/usr/local/bin/orbit"
-	got := appendClaudeAgentInstructionArgs([]string{"-p"}, AgentExecConfig{
+	got := claudeInstructionArgs([]string{"-p"}, AgentExecConfig{
 		SystemPrompt:       "Base agent instructions.",
 		AppendSystemPrompt: "Owner append instructions.",
 		AllowedTools:       []string{"Read", "mcp__orbit__*"},
@@ -100,13 +100,13 @@ func TestAppendClaudeAgentInstructionArgsFailsClosedWithoutSafeExecutable(t *tes
 		AllowedTools:       []string{"Read"},
 	}
 	want := []string{"-p", "--append-system-prompt", "Owner instructions.", "--allowedTools", "Read"}
-	if got := appendClaudeAgentInstructionArgs([]string{"-p"}, agent, "", false, false, true, false, true); !reflect.DeepEqual(got, want) {
+	if got := claudeInstructionArgs([]string{"-p"}, agent, "", false, false, true, false, true); !reflect.DeepEqual(got, want) {
 		t.Fatalf("missing executable args = %#v, want %#v", got, want)
 	}
 	if got := withOrbitCLIInstructions("Owner instructions.", "", false, true, true, true); got != "Owner instructions." {
 		t.Fatalf("missing executable instructions = %q", got)
 	}
-	if got := appendClaudeAgentInstructionArgs([]string{"-p"}, AgentExecConfig{}, "", false, false, true, false, true); !reflect.DeepEqual(got, []string{"-p"}) {
+	if got := claudeInstructionArgs([]string{"-p"}, AgentExecConfig{}, "", false, false, true, false, true); !reflect.DeepEqual(got, []string{"-p"}) {
 		t.Fatalf("empty fail-closed args = %#v", got)
 	}
 }
@@ -262,7 +262,7 @@ func TestOrbitInstructionsKeepEvidenceOutOfTheRepository(t *testing.T) {
 			}
 		}
 		reply, evidence := strings.Index(got, orbitReplyFileInstructions), strings.Index(got, orbitEvidenceFileInstructions)
-		if reply < 0 || evidence != reply+len(orbitReplyFileInstructions) {
+		if reply < 0 || evidence != reply+len(orbitReplyFileInstructions+"\n\n") {
 			t.Errorf("the evidence paragraph must follow the reply paragraph it leans on: reply at %d, evidence at %d", reply, evidence)
 		}
 	}
@@ -293,6 +293,7 @@ var advertisedCapabilityFamilies = []struct {
 	{"providerCLICapabilities", providerCLICapabilities, false},
 	{"projectCLICapabilities", projectCLICapabilities, false},
 	{"notifyCLICapabilities", notifyCLICapabilities, false},
+	{"ownerRequestCLICapabilities", ownerRequestCLICapabilities, false},
 	{"mergeReceiptCLICapabilities", mergeReceiptCLICapabilities, false},
 	{"watchCLICapabilities", watchCLICapabilities, false},
 	// Ungated like the watch commands and SessionOnly for the same kind of reason: a wiki command
@@ -432,7 +433,7 @@ func TestClaudeInstructionArgsFollowTheSessionShape(t *testing.T) {
 		t.Error("a session dispatched for a task does not read as inside recorded work")
 	}
 	appendPromptFor := func(job *ClaimedSession) string {
-		args := appendClaudeAgentInstructionArgs(nil, AgentExecConfig{}, exe, false, job.insideRecordedWork(), true, false, true)
+		args := claudeInstructionArgs(nil, AgentExecConfig{}, exe, false, job.insideRecordedWork(), true, false, true)
 		for i, arg := range args {
 			if arg == "--append-system-prompt" && i+1 < len(args) {
 				return args[i+1]
@@ -458,20 +459,20 @@ func TestOnlyATopLevelSessionIsToldWhenToDelegate(t *testing.T) {
 	child := subagentChildJob(parent, AgentExecConfig{}, subagentDefinition{}, "run-1", providerClaude, "")
 	builders := map[string]func(job *ClaimedSession) string{
 		"claude": func(job *ClaimedSession) string {
-			return strings.Join(appendClaudeAgentInstructionArgs(nil, job.instructionAgent(), exe, false, job.insideRecordedWork(), job.watchesOn(), false, true), "\n")
+			return strings.Join(claudeInstructionArgs(nil, job.instructionAgent(), exe, false, job.insideRecordedWork(), job.watchesOn(), false, true), "\n")
 		},
 		"codex context": func(job *ClaimedSession) string {
-			return codexAgentContext(job.instructionAgent(), exe, job.insideRecordedWork(), job.watchesOn(), true)
+			return codexAgentContextOf(job.instructionAgent(), exe, job.insideRecordedWork(), job.watchesOn(), true)
 		},
 		"codex additionalContext": func(job *ClaimedSession) string {
 			var values []string
-			for _, v := range codexAgentAdditionalContext(job.instructionAgent(), exe, 1, job.insideRecordedWork(), job.watchesOn(), true) {
+			for _, v := range codexAgentAdditionalContextOf(job.instructionAgent(), exe, 1, job.insideRecordedWork(), job.watchesOn(), true) {
 				values = append(values, asString(mapValue(v)["value"]))
 			}
 			return strings.Join(values, "\n\n")
 		},
 		"kimi": func(job *ClaimedSession) string {
-			return kimiAgentInstructions(job.instructionAgent(), exe, job.insideRecordedWork(), job.watchesOn(), true)
+			return kimiAgentInstructionsOf(job.instructionAgent(), exe, job.insideRecordedWork(), job.watchesOn(), true)
 		},
 		"cursor":      cursorAgentInstructions,
 		"dsh":         func(job *ClaimedSession) string { return dshSessionAgentOverlay(job).AppendSystemPrompt },
@@ -488,7 +489,7 @@ func TestOnlyATopLevelSessionIsToldWhenToDelegate(t *testing.T) {
 			return string(raw)
 		},
 	}
-	whenToDelegate := strings.TrimSuffix(strings.TrimSuffix(orbitDelegateInstructions, "\n\n"), orbitDelegateClaudeCodeLoad)
+	whenToDelegate := strings.TrimSuffix(orbitDelegateInstructions, "{{toolsearch:delegate}}")
 	for name, build := range builders {
 		top := build(parent)
 		if !strings.Contains(top, whenToDelegate) {
@@ -504,7 +505,7 @@ func TestOnlyATopLevelSessionIsToldWhenToDelegate(t *testing.T) {
 	}
 	for _, want := range []string{"cheaper or stronger model", "another machine", `needs: ["os:darwin"]`, "workspace",
 		"in the background", "built-in subagent or Agent tool", "records the cost", "ToolSearch select:mcp__orbit__delegate"} {
-		if !strings.Contains(orbitDelegateInstructions, want) {
+		if !strings.Contains(renderInstructionUnit(orbitDelegateInstructions, SessionShape{}, claudeCodeProfile), want) {
 			t.Errorf("the delegate paragraph lacks %q", want)
 		}
 	}

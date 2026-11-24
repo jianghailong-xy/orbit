@@ -53,10 +53,7 @@ func orbitCLIInstructionExecutable(exe string) string {
 	return filepath.Clean(exe)
 }
 
-// orbitCLIInstructions is generated with the resolved binary path so an agent
-// cannot accidentally execute a project-local/PATH-shadowed `orbit` program.
-//
-// It leads with the agent primer (agent_primer.go), the same words `orbit mcp` sends as its
+// Orbit's instructions to an engine are composed from the unit registry (instruction_units.go, compose). They lead with the agent primer (agent_primer.go), the same words `orbit mcp` sends as its
 // instructions: what separates an Orbit task from an engine's built-in todo/plan entry — audience,
 // not tool preference — which object an intent belongs to, the CLI's place, create versus start,
 // the cards, and what counts as a receipt. An agent that never learns the first distinction
@@ -82,52 +79,14 @@ func orbitCLIInstructionExecutable(exe string) string {
 // Kept ASCII and in paragraphs no longer than one Codex application-context value: codex carries
 // each value capped at 1,000 tokens, and codexAgentAdditionalContext sends these paragraphs packed
 // into values of at most codexContextValueMaxBytes.
-func orbitCLIInstructions(executable string, insideRecordedWork, watches, delegates, workflows bool) string {
-	executable = orbitCLIInstructionExecutable(executable)
-	if executable == "" {
-		return ""
-	}
-	command := shellQuote(executable)
-	text := agentPrimer + "\n\n" +
-		orbitSubAgentInstructions +
-		orbitReplyFileInstructions +
-		orbitEvidenceFileInstructions +
-		orbitDriveInstructions() +
-		orbitProjectInstructions(insideRecordedWork) +
-		orbitProgressInstructions(insideRecordedWork) +
-		orbitWaitInstructionsFor(watches) +
-		orbitNotifyInstructions +
-		orbitDelegateInstructionsFor(delegates) +
-		orbitWorkflowInstructionsFor(delegates, workflows) +
-		orbitWikiPathInstructions +
-		orbitCLIPathInstructions(command)
-	if len(instructionUnitsLeftOut) == 0 {
-		return text
-	}
-	// The agent-contract eval's run without one or more units (instruction_units.go); never production's.
-	text = agentPrimerText() + "\n\n" +
-		instructionUnit(unitSubAgents, orbitSubAgentInstructions) +
-		instructionUnit(unitReplyFiles, orbitReplyFileInstructions) +
-		instructionUnit(unitEvidenceFiles, orbitEvidenceFileInstructions) +
-		instructionUnit(unitDrive, orbitDriveInstructions()) +
-		instructionUnit(unitProject, orbitProjectInstructions(insideRecordedWork)) +
-		instructionUnit(unitProgress, orbitProgressInstructions(insideRecordedWork)) +
-		instructionUnit(unitWait, orbitWaitInstructionsFor(watches)) +
-		instructionUnit(unitNotify, orbitNotifyInstructions) +
-		instructionUnit(unitDelegate, orbitDelegateInstructionsFor(delegates)) +
-		instructionUnit(unitWorkflow, orbitWorkflowInstructionsFor(delegates, workflows)) +
-		instructionUnit(unitWikiPath, orbitWikiPathInstructions) +
-		instructionUnit(unitCLI, orbitCLIPathInstructions(command))
-	return strings.TrimRight(text, "\n")
-}
 
-// orbitCLIPathInstructions is the last paragraph: the MCP tools first, and the CLI by its absolute path.
-func orbitCLIPathInstructions(command string) string {
-	return "Prefer the `mcp__orbit__*` tools (schema-checked, no shell). Inside a session the CLI at `" + command +
-		"` takes the same approvals and attributes work to you: `" + command + " guide [topic] --json` or `" + command +
-		" capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt " +
-		"its MCP tool answers with; `--json` prints the entity alone. Do not run `" + command + " mcp` directly."
-}
+// orbitCLIPreferMCPInstructions closes Orbit's instructions with the CLI's resolved binary path, so an agent cannot
+// accidentally execute a project-local/PATH-shadowed `orbit` program, and with Orbit's tools spelled as the engine
+// shows them.
+const orbitCLIPreferMCPInstructions = "Prefer {{orbit_tools}} (schema-checked, no shell). Inside a session the CLI at `{{cli}}" +
+	"` takes the same approvals and attributes work to you: `{{cli}} guide [topic] --json` or `{{cli}}" +
+	" capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt " +
+	"its MCP tool answers with; `--json` prints the entity alone. Do not run `{{cli}} mcp` directly."
 
 // orbitSubAgentInstructions is §0 rule 1 for the engine's own sub-agents (Claude Code's Agent tool, a Codex sub-agent):
 // they run inside this session, so the person cannot see them and they end with it, as a todo list does. The
@@ -138,7 +97,7 @@ func orbitCLIPathInstructions(command string) string {
 // six and filed the recorded work a second time, so the paragraph says to look first.
 const orbitSubAgentInstructions = "Your engine's own sub-agents are as private as its plan, so work the person hands to " +
 	"another agent goes to Orbit: look it up with task_list and task_start it if recorded (never file it twice), else " +
-	"task_create with startNow or session_create.\n\n"
+	"task_create with startNow or session_create."
 
 // orbitReplyFileInstructions says which files a reply can really hand over. The runner uploads a linked
 // file only out of the session's own directories (reply_attachments.go), so an agent that leaves its
@@ -153,7 +112,7 @@ const orbitSubAgentInstructions = "Your engine's own sub-agents are as private a
 const orbitReplyFileInstructions = "Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one " +
 	"inside your working directory or this session's uploads directory reaches them: from elsewhere, /tmp included, " +
 	"copy the file there first and link the copy. Unignored files there can end up in a commit; keep others in the " +
-	"uploads directory or a git-ignored path.\n\n"
+	"uploads directory or a git-ignored path."
 
 // orbitEvidenceFileInstructions is where the evidence of a piece of work goes, which is what the repository was for
 // until file_upload (docs/orbit-files-design.md §2.3): 96% of its history was evidence and mocks. It follows
@@ -163,25 +122,25 @@ const orbitReplyFileInstructions = "Hand the user a file as `[name](path)`, an i
 // bytes into the evidence the way a commit would, and it is how whoever judges the work gets to read it. ASCII like the rest.
 const orbitEvidenceFileInstructions = "Evidence: cite a command's output by its tool call rather than saving a log; " +
 	"keep screenshots and reports with file_upload rather than in the repository: it reads those same two " +
-	"directories and returns a reply link and the id a FILE check cites.\n\n"
+	"directories and returns a reply link and the id a FILE check cites."
 
-// orbitDriveInstructions is the owner's Orbit Files drive, per runner kind (docs/orbit-files-drive-technical-design.md
+// The drive paragraphs are the owner's Orbit Files drive, per runner kind (docs/orbit-files-drive-technical-design.md
 // §4.6, §7.3). On Orbit Cloud the drive is mounted at ~/Files and is used with the shell, so the paragraph says what the
 // mount does not support and where it reports; on every other runner the drive is reached only through the drive tools.
 // Either way agents never see Trash (D11), and verification, judgment and guest-driven turns only read (D9). Kept short:
-// it is in every session's instructions, inside orbitInstructionsMaxBytes.
-func orbitDriveInstructions() string {
-	const readOnly = "Verifying, judging and ORBIT_GUEST turns only read it."
-	if !driveMounted() {
-		return "The owner's Orbit Files drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); " +
-			"deletes go to a Trash agents cannot see. " + readOnly + "\n\n"
-	}
-	return "~/Files is the owner's permanent Orbit Files drive; link its files by path. Give ls, find, du ~/Files/ (a " +
+// it is in every session's instructions, inside orbitInstructionsMaxBytes. orbitDriveToolInstructions is the
+// paragraph for a runner without the mount, orbitDriveMountInstructions the one for a runner with it (units drive.tools
+// and drive.mount).
+const (
+	orbitDriveReadOnly         = "Verifying, judging and ORBIT_GUEST turns only read it."
+	orbitDriveToolInstructions = "The owner's Orbit Files drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); " +
+		"deletes go to a Trash agents cannot see. " + orbitDriveReadOnly
+	orbitDriveMountInstructions = "~/Files is the owner's permanent Orbit Files drive; link its files by path. Give ls, find, du ~/Files/ (a " +
 		"symlink). Copy in with cp -r or rsync -rt (no modes: -a, -p fail on executables; tar x drops the x bit). No " +
-		"links, locks, in-place writes or exec; see /run/orbit-files/errors.log. " + readOnly + "\n\n"
-}
+		"links, locks, in-place writes or exec; see /run/orbit-files/errors.log. " + orbitDriveReadOnly
+)
 
-// orbitDriveGuide is the drive's rule in the guide's files topic: the whole of §7.3, which orbitDriveInstructions says
+// orbitDriveGuide is the drive's rule in the guide's files topic: the whole of §7.3, which the drive paragraphs say
 // in brief because the guide is read on demand and has no byte budget.
 func orbitDriveGuide() string {
 	const readOnly = "Verification, judgment and guest-driven turns (a message carrying the ORBIT_GUEST marker) read the drive and do not write it."
@@ -207,7 +166,7 @@ func orbitDriveGuide() string {
 // (docs/wiki-memory-claims-design.md). "If your tool list has it" because this text goes to every session, and
 // an account with the wiki off has no such tool (wikiToolDescriptors). ASCII like the rest of the paragraph.
 const orbitWikiPathInstructions = "Before changing a file, use wiki_search with its path to look up known pitfalls, " +
-	"if your tool list has it.\n\n"
+	"if your tool list has it."
 
 // orbitWaitInstructions routes a wait on Orbit's own work to a watch. An agent told to "wait for these
 // tasks" otherwise writes the loop it knows, sleep plus task_get or `orbit task get`, which holds its turn
@@ -215,17 +174,11 @@ const orbitWikiPathInstructions = "Before changing a file, use wiki_search with 
 const orbitWaitInstructions = "To wait for Orbit work -- tasks reaching a status, sessions finishing a turn -- do not " +
 	"poll with sleep, Bash loops, background jobs or schedule_wakeup: call task_await or session_await (watch_create for " +
 	"other conditions) and end your turn. Orbit holds the watch on its server and starts a turn in this session with a " +
-	"structured payload when the condition holds, even if this engine was recycled in the meantime.\n\n"
+	"structured payload when the condition holds, even if this engine was recycled in the meantime."
 
-// orbitWaitInstructionsFor is that paragraph for a session spawned with Watch on, and nothing for one spawned
-// with it off (watch_rollout.go): it has no await tool to send a wait to, and is told what sessions were told
-// before watches.
-func orbitWaitInstructionsFor(watches bool) string {
-	if !watches {
-		return ""
-	}
-	return orbitWaitInstructions
-}
+//
+// Only a session spawned with Watch on gets it (unit wait.use-await): one spawned with it off (watch_rollout.go) has
+// no await tool to send a wait to, and is told what sessions were told before watches.
 
 // orbitNotifyInstructions says when notify is called: when a wait the person asked to hear about ends. On
 // 2026-11-17 an agent told "tell me when the upgrade is complete" waited on a bg_run job with wakeOnExit, woke,
@@ -233,7 +186,7 @@ func orbitWaitInstructionsFor(watches bool) string {
 // description, which says exactly this, was behind ToolSearch. Every session is offered notify, so every form of
 // these instructions carries it. ASCII like the rest of the paragraph.
 const orbitNotifyInstructions = "When the person asked to hear once something is done, tell them with notify when " +
-	"it is: an answer in this conversation reaches them only when they next look.\n\n"
+	"it is: an answer in this conversation reaches them only when they next look."
 
 // orbitDelegateInstructions says when to reach for the delegate tool (subagent.go). Its description says what it
 // does, but nothing said when: in Claude Code it is a deferred MCP tool, seen by name only until ToolSearch loads it,
@@ -253,21 +206,12 @@ const orbitDelegateInstructions = "Use delegate whenever you would start a subag
 	"cost and brings the result back even if this engine is recycled. Use it too to hand work to a cheaper or " +
 	"stronger model than yours, or to run it on another machine (needs: [\"os:darwin\"], or workspace: another " +
 	"agent's name from agent_list). Prefer it to session_create when you only need that piece's result back." +
-	orbitDelegateClaudeCodeLoad + "\n\n"
+	"{{toolsearch:delegate}}"
 
-// orbitDelegateClaudeCodeLoad is the paragraph's Claude Code sentence. Cursor, which never shows mcp__orbit__*
-// names, is given the paragraph without it (cursorAgentInstructions). Delegate is marked to load up front
-// (subagent.go), so this only matters for a Claude Code that still defers it.
-const orbitDelegateClaudeCodeLoad = " In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate."
-
-// orbitDelegateInstructionsFor is that paragraph for a top-level session, and nothing for a SubAgent, which is
-// neither offered nor served delegate (mcp.go).
-func orbitDelegateInstructionsFor(delegates bool) string {
-	if !delegates {
-		return ""
-	}
-	return orbitDelegateInstructions
-}
+// The paragraph ends with its Claude Code sentence, {{toolsearch:delegate}}. Cursor, which never shows mcp__orbit__*
+// names, is given the paragraph without it (cursorProfile). Delegate is marked to load up front (subagent.go), so the
+// sentence only matters for a Claude Code that still defers it. Only a top-level session gets the paragraph (unit
+// delegate.use-delegate): a SubAgent is neither offered nor served delegate (mcp.go).
 
 // orbitWorkflowInstructions says when to reach for the workflow tool (subagent_workflow.go), next to delegate's.
 // Measured 2026-11-22: it shipped, a smoke run worked, and no agent ever chose it. Nothing named it, and in Claude Code
@@ -277,20 +221,12 @@ func orbitDelegateInstructionsFor(delegates bool) string {
 const orbitWorkflowInstructions = "To fan out several SubAgents, in parallel or in phases, whose results you only need " +
 	"combined, use workflow: one script runs them all and wakes this session once with its return value; delegate " +
 	"stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's " +
-	"built-in Workflow tool." + orbitWorkflowClaudeCodeLoad + "\n\n"
+	"built-in Workflow tool.{{toolsearch:workflow}}"
 
-// orbitWorkflowClaudeCodeLoad is the paragraph's Claude Code sentence, left out for Cursor like delegate's.
-const orbitWorkflowClaudeCodeLoad = " In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__workflow."
-
-// orbitWorkflowInstructionsFor is that paragraph for a session that is offered the workflow tool: one that is offered
-// delegate (a SubAgent is not) and whose Agent has Workflows on (ClaimedSession.WorkflowsDisabled), the same two
-// conditions under which `orbit mcp` lists the tool (recovery_render.go). It never names a tool the session lacks.
-func orbitWorkflowInstructionsFor(delegates, workflows bool) string {
-	if !delegates || !workflows {
-		return ""
-	}
-	return orbitWorkflowInstructions
-}
+// Its Claude Code sentence, {{toolsearch:workflow}}, is left out for Cursor like delegate's. Only a session that is
+// offered the workflow tool gets the paragraph (unit workflow.use-workflow): one that is offered delegate (a SubAgent is
+// not) and whose Agent has Workflows on (ClaimedSession.WorkflowsDisabled), the same two conditions under which
+// `orbit mcp` lists the tool (recovery_render.go). It never names a tool the session lacks.
 
 // workflowsOn reports whether this claimed session is spawned with the workflow tool offered.
 func (s *ClaimedSession) workflowsOn() bool {
@@ -306,19 +242,15 @@ func agentDelegates(agent AgentExecConfig) bool {
 // orbitProgressInstructions tells a session running a task how its progress reaches Orbit. A watch on the
 // task decides from task_progress_report alone, so "3 of 8 done" written into a reply or printed by a shell
 // has reported nothing, and a report that changes only its message has not progressed. Only the task form
-// carries it: without a taskId the tool reports on the task being run. ASCII like the rest of the paragraph.
-func orbitProgressInstructions(insideRecordedWork bool) string {
-	if !insideRecordedWork {
-		return ""
-	}
-	return "When this task's position changes -- a new phase, or another item of a known total done -- report it " +
-		"with task_progress_report. Orbit reads progress only from that report, never from your Bash output or " +
-		"transcript, and only a change of phase, current or total counts as progress; a message alone does not. If a " +
-		"report is refused with 409 PROGRESS_REVISION_CONFLICT, read the progress again, then report.\n\n"
-}
+// carries it (unit progress.report): without a taskId the tool reports on the task being run. ASCII like the rest of
+// the paragraph.
+const orbitProgressInstructions = "When this task's position changes -- a new phase, or another item of a known total done -- report it " +
+	"with task_progress_report. Orbit reads progress only from that report, never from your Bash output or " +
+	"transcript, and only a change of phase, current or total counts as progress; a message alone does not. If a " +
+	"report is refused with 409 PROGRESS_REVISION_CONFLICT, read the progress again, then report."
 
-// orbitProjectInstructions is the paragraph about what deserves an Orbit Project, in the two
-// forms a session can be in.
+// orbitProjectInsideInstructions and orbitProjectProposeInstructions are the paragraph about what deserves an Orbit
+// Project, in the two forms a session can be in (units project.inside-recorded-work and project.propose).
 //
 // A session already running inside recorded work -- the task it was dispatched for, or a project
 // it coordinates -- gets the second form. It used to withhold the proposal altogether: work such
@@ -330,23 +262,21 @@ func orbitProgressInstructions(insideRecordedWork bool) string {
 // instead is the default it would be trading away, and what agreeing costs. Offering both forms
 // of the same paragraph to both kinds of session is what made the proposal read as something to
 // do on every turn rather than something to do rarely, and that is still why the two differ.
-func orbitProjectInstructions(insideRecordedWork bool) string {
-	if insideRecordedWork {
-		return "You are running one task Orbit has already recorded, so newly discovered work has somewhere to go: file it " +
-			"as a task, saying first what you are filing. It lands under the same project this one belongs to, without your naming it. " +
-			"Work that is a separate undertaking is the user's to start, and you may put it in front of them rather than " +
-			"starting it yourself: project_create raises a confirmation card and waits for the answer, and on a yes this " +
-			"conversation becomes that project's coordinator -- opening the project later comes back here rather than " +
-			"starting a stranger. Filing the task is still the default, and the cheaper one. Nothing is created without " +
-			"the user's yes, and the card is the only place that yes comes from: never create a project another way.\n\n"
-	}
-	return "Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and " +
+const (
+	orbitProjectInsideInstructions = "You are running one task Orbit has already recorded, so newly discovered work has somewhere to go: file it " +
+		"as a task, saying first what you are filing. It lands under the same project this one belongs to, without your naming it. " +
+		"Work that is a separate undertaking is the user's to start, and you may put it in front of them rather than " +
+		"starting it yourself: project_create raises a confirmation card and waits for the answer, and on a yes this " +
+		"conversation becomes that project's coordinator -- opening the project later comes back here rather than " +
+		"starting a stranger. Filing the task is still the default, and the cheaper one. Nothing is created without " +
+		"the user's yes, and the card is the only place that yes comes from: never create a project another way."
+	orbitProjectProposeInstructions = "Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and " +
 		"that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different " +
 		"parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then " +
 		"call project_create from this same session so the conversation becomes its coordinator; do not switch or open a " +
 		"session for it. Its confirmation card is the user's answer: if they decline, a task is the right record, and do not " +
-		"propose the same body of work twice.\n\n"
-}
+		"propose the same body of work twice."
+)
 
 // insideRecordedWork reports whether this session is already executing something Orbit has
 // recorded. Today that is exactly "was dispatched for a task" -- which covers a conversation
@@ -358,7 +288,7 @@ func (s *ClaimedSession) insideRecordedWork() bool {
 }
 
 // appendSystemPrompt is what a session's engine is given after its system prompt, ahead of Orbit's own
-// instructions (withOrbitCLIInstructions): the agent's appended prompt, then what the runner has to say about the
+// instructions (withOrbitInstructions): the agent's appended prompt, then what the runner has to say about the
 // checkout the session runs in (checkoutInstructions). It is read from the checkout each time an engine's
 // instructions are built, so a checkout made or brought back since the last spawn is described as it now is.
 func (s *ClaimedSession) appendSystemPrompt() string {
@@ -408,17 +338,6 @@ func (s *ClaimedSession) instructionAgent() AgentExecConfig {
 	agent := s.Agent
 	agent.AppendSystemPrompt = s.appendSystemPrompt()
 	return agent
-}
-
-func withOrbitCLIInstructions(configured, executable string, insideRecordedWork, watches, delegates, workflows bool) string {
-	orbit := orbitCLIInstructions(executable, insideRecordedWork, watches, delegates, workflows)
-	if orbit == "" {
-		return configured
-	}
-	if strings.TrimSpace(configured) == "" {
-		return orbit
-	}
-	return strings.TrimRight(configured, "\r\n") + "\n\n" + orbit
 }
 
 // orbitCLIAllowedTools is Claude Code's allowlist for the Orbit CLI: `capabilities --json` and its graded views
@@ -582,31 +501,22 @@ func appendUnique(values []string, additions ...string) []string {
 // the owner's tool policy. Session command prefixes are added only when the
 // current claimed session may orchestrate; arbitrary orbit subcommands and
 // PATH-resolved binaries do not become approval-free.
-func appendClaudeAgentInstructionArgs(
-	args []string,
-	agent AgentExecConfig,
-	executable string,
-	allowOrchestration bool,
-	insideRecordedWork bool,
-	watches bool,
-	browser bool,
-	workflows bool,
-) []string {
+func appendClaudeAgentInstructionArgs(args []string, agent AgentExecConfig, shape SessionShape) []string {
 	// The raw absolute path remains safe for direct exec/MCP configuration. Only
 	// inject and auto-allow the CLI when it is also unambiguous in Claude's
 	// comma-separated Bash(...) permission grammar.
-	executable = orbitCLIPermissionExecutable(executable)
+	shape.CLI = orbitCLIPermissionExecutable(shape.CLI)
 	if agent.SystemPrompt != "" {
 		args = append(args, "--system-prompt", agent.SystemPrompt)
 	}
-	if appendPrompt := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable, insideRecordedWork, watches, agentDelegates(agent), workflows); appendPrompt != "" {
+	if appendPrompt := withOrbitInstructions(agent.AppendSystemPrompt, compose(shape, claudeCodeProfile).System); appendPrompt != "" {
 		args = append(args, "--append-system-prompt", appendPrompt)
 	}
 	allowed := agent.AllowedTools
 	// A scheduled CHECK_ONLY run does not get the CLI: it reads Orbit through the tools the claim allows, and its
 	// deny list names this executable (schedule_check_only.go).
 	if !agent.ScheduledCheckOnly {
-		allowed = appendUnique(allowed, orbitCLIAllowedTools(executable, allowOrchestration, browser)...)
+		allowed = appendUnique(allowed, orbitCLIAllowedTools(shape.CLI, shape.Orchestration, shape.Browser)...)
 	}
 	if len(allowed) > 0 {
 		args = append(args, "--allowedTools", strings.Join(allowed, ","))

@@ -1,14 +1,12 @@
 package main
 
-import "strings"
-
 // The Orbit agent primer: the short core of docs/orbit-agent-contract.md §0 that every agent Orbit
 // runs reads before anything else Orbit says to it (contract §2.6).
 //
 // It has two kinds of carrier, and both carry these exact words. The MCP server sends it as its
 // `initialize` instructions (mcpServer.handle), which is the one carrier every engine shares. And
 // the runner puts it first in the instructions it writes into each engine's own context
-// (orbitCLIInstructions): Claude Code's --append-system-prompt, Codex's application context (or,
+// (compose, instruction_units.go): Claude Code's --append-system-prompt, Codex's application context (or,
 // on an older Codex, its developer message or turn input), Kimi's every prompt and Cursor's first,
 // Antigravity's global rules, DeepSeek Harness's appended prompt and OpenCode's instructions. The
 // second carrier is the fallback for an engine that does not show a server's instructions, or a
@@ -23,7 +21,7 @@ import "strings"
 // it nor can take it away. It names tools by their MCP names, which every engine shows under its
 // own prefix, and so it holds the same in an MCP client and in every engine's instructions; the
 // engine-specific spelling, the CLI's absolute path and everything that depends on the session's
-// shape live in orbitCLIInstructions, after it. ASCII, like the rest of those instructions.
+// shape live in the units compose puts after it. ASCII, like the rest of those instructions.
 //
 // Budgets (TestAgentPrimerBudgets): the first paragraph is at most agentPrimerLeadMaxChars, the
 // whole primer at most agentPrimerMaxBytes, Orbit's own instructions to an engine (the primer and
@@ -49,7 +47,7 @@ const agentPrimerLeadMaxChars = 512
 const agentPrimerMaxBytes = 3456
 
 // orbitInstructionsMaxBytes is the most the instructions the runner writes into an engine may take,
-// the primer included (orbitCLIInstructions, in its longest shape: a task's session with Watch on). Raised from
+// the primer included (compose, in its longest shape: a task's session with Watch on). Raised from
 // 6,400 on 2026-11-15, with the owner's agreement, for the delegate paragraph (orbitDelegateInstructions, 440
 // bytes): the longest shape was already 6,309 bytes without it. On the project line Agent Contract 1.9.0 had
 // raised it to 6,656 for the paragraph on an engine's own sub-agents (orbitSubAgentInstructions), which the
@@ -122,31 +120,3 @@ const agentPrimer = agentPrimerLead + "\n\n" +
 	agentPrimerOrchestration + "\n\n" +
 	agentPrimerSettings + "\n\n" +
 	agentPrimerRederive
-
-// agentPrimerUnits is the primer's paragraphs in order, each under its instruction unit id (instructionUnitIDs).
-var agentPrimerUnits = []struct{ id, text string }{
-	{unitPrimerLead, agentPrimerLead},
-	{unitPrimerObjects, agentPrimerObjects},
-	{unitPrimerStart, agentPrimerStart},
-	{unitPrimerCards, agentPrimerCards},
-	{unitPrimerCLI, agentPrimerCLI},
-	{unitPrimerReceipts, agentPrimerReceipts},
-	{unitPrimerOrchestration, agentPrimerOrchestration},
-	{unitPrimerSettings, agentPrimerSettings},
-	{unitPrimerRederive, agentPrimerRederive},
-}
-
-// agentPrimerText is the primer as this process sends it: agentPrimer itself, unless the agent-contract eval left one
-// of its paragraphs out (instructionUnitsLeftOut), which production never does.
-func agentPrimerText() string {
-	if len(instructionUnitsLeftOut) == 0 {
-		return agentPrimer
-	}
-	var kept []string
-	for _, unit := range agentPrimerUnits {
-		if !instructionUnitsLeftOut[unit.id] {
-			kept = append(kept, unit.text)
-		}
-	}
-	return strings.Join(kept, "\n\n")
-}

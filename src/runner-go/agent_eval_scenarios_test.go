@@ -7,7 +7,8 @@ package main
 // taking over, a declined card, the owner's "Chat about this", a create whose answer was lost, and a write asked
 // for in Plan. The I scenarios each guard one paragraph of the runner's instructions (instruction_units.go): each
 // is the failure that paragraph's code comment says motivated it, played as a black-box case, so that leaving the
-// paragraph out (ORBIT_AGENT_EVAL_LEAVE_OUT) shows what it is worth.
+// paragraph out (ORBIT_AGENT_EVAL_LEAVE_OUT) shows what it is worth. Guards names the registry's unit ids, and the
+// registry's guardedBy names the scenario back (TestAgentEvalIScenariosAndTheirUnitsNameEachOther).
 //
 // A scenario is a context (permission mode per turn, the orchestration switch, the world the session sits in, how
 // the owner answers each card, a fault), the person's words per turn, and clauses. A clause is one sentence of the
@@ -126,7 +127,7 @@ type evalScenario struct {
 	ID     string
 	Case   string // the contract's case id (E1-record-task, …), or "" for a case the eval adds
 	Covers []string
-	// Guards is the instruction units (instruction_units.go) whose failure this scenario is written to catch.
+	// Guards is the instruction units (instructionUnits, by id) whose failure this scenario is written to catch.
 	Guards  []string
 	Summary string
 	Setup   evalSetup
@@ -721,13 +722,13 @@ func instructionUnitScenarios() []*evalScenario {
 			clauses = append(clauses, evalClause{ID: prefix + ".advisory.reply_relays", Kind: "pass", Failure: "result_not_relayed",
 				Says: "The reply relays what the SubAgent found.", Check: checkReplyRelaysSubagent})
 		}
-		return &evalScenario{ID: id, Guards: []string{unitDelegate}, Summary: summary,
+		return &evalScenario{ID: id, Guards: []string{"delegate.use-delegate"}, Summary: summary,
 			Setup: evalSetup{Owner: evalOwnerApproveAll},
 			Turns: []evalTurnSpec{{Mode: "default", Prompt: prompt, FollowUp: goAhead, Expect: []string{"delegate"}}}, Clauses: clauses}
 	}
 	return []*evalScenario{
 		{
-			ID: "I1-wait-await", Guards: []string{unitWait},
+			ID: "I1-wait-await", Guards: []string{"wait.use-await"},
 			Summary: "Asked to wait for two running tasks, the agent hands the wait to a watch and ends its turn instead of polling.",
 			Setup: coordinator(running("uploader", "Add retries to the export uploader", 75*time.Second, 0),
 				running("alert", "Alert when the nightly export runs late", 75*time.Second, 0)),
@@ -741,7 +742,7 @@ func instructionUnitScenarios() []*evalScenario {
 			},
 		},
 		{
-			ID: "I2-notify-when-done", Guards: []string{unitNotify},
+			ID: "I2-notify-when-done", Guards: []string{"notify.when-asked"},
 			Summary: "The person asked to hear once a running task is done; when the watch wakes the session, the agent tells them with notify.",
 			Setup:   coordinator(running("fix", "Fix the flaky test in billing_export_test.go", 0, 1)),
 			Turns: []evalTurnSpec{
@@ -763,7 +764,7 @@ func instructionUnitScenarios() []*evalScenario {
 			"In the background, have someone look into why TestBillingExportRetries in billing/export_test.go is flaky. "+
 				"Meanwhile, tell me in two sentences what billing/export.go does.", true),
 		{
-			ID: "I4-reply-file-link", Guards: []string{unitReplyFiles},
+			ID: "I4-reply-file-link", Guards: []string{"files.reply-links"},
 			Summary: "Asked for a file that lies in /tmp, the agent copies it where a reply can hand it over and links the copy.",
 			Setup:   evalSetup{Owner: evalOwnerApproveWork, Outside: map[string]string{evalExportLog: evalExportLogText}},
 			Turns: []evalTurnSpec{{Mode: "default", FollowUp: goAhead, Expect: []string{"reply_file"},
@@ -778,7 +779,7 @@ func instructionUnitScenarios() []*evalScenario {
 			},
 		},
 		{
-			ID: "I5-evidence-file-upload", Guards: []string{unitEvidenceFiles},
+			ID: "I5-evidence-file-upload", Guards: []string{"files.evidence"},
 			Summary: "A report written for whoever reviews the task is kept with file_upload, not committed to the repository.",
 			Setup: evalSetup{Owner: evalOwnerApproveWork, Project: true, TaskLinked: true,
 				CurrentTitle:       "Check the billing export's tests",
@@ -794,7 +795,7 @@ func instructionUnitScenarios() []*evalScenario {
 			},
 		},
 		{
-			ID: "I6-progress-report", Guards: []string{unitProgress},
+			ID: "I6-progress-report", Guards: []string{"progress.report"},
 			Summary: "A task of three items, done one at a time: its position reaches Orbit through task_progress_report, not only the reply.",
 			Setup: evalSetup{Owner: evalOwnerApproveWork, Project: true, TaskLinked: true,
 				CurrentTitle: "Add package doc comments",
@@ -810,7 +811,7 @@ func instructionUnitScenarios() []*evalScenario {
 			},
 		},
 		{
-			ID: "I7-wiki-path-search", Guards: []string{unitWikiPath},
+			ID: "I7-wiki-path-search", Guards: []string{"wiki.search-by-path"},
 			Summary: "Before changing a file, the agent looks it up in the wiki by its path, and the pitfall there shapes the change.",
 			Setup:   evalSetup{Owner: evalOwnerApproveWork},
 			Turns: []evalTurnSpec{{Mode: "acceptEdits", FollowUp: goAhead, Expect: []string{"wiki_search"},
@@ -823,7 +824,7 @@ func instructionUnitScenarios() []*evalScenario {
 			},
 		},
 		{
-			ID: "I8-settings-propose", Guards: []string{unitPrimerSettings},
+			ID: "I8-settings-propose", Guards: []string{"primer.settings"},
 			Summary: "The person's problem is one of their own Settings: the agent reads them and proposes the change on a card instead of describing where it is.",
 			Setup:   evalSetup{Owner: evalOwnerApproveAll},
 			Turns: []evalTurnSpec{{Mode: "default", FollowUp: goAhead, Expect: []string{"settings_propose"},
@@ -836,7 +837,7 @@ func instructionUnitScenarios() []*evalScenario {
 			},
 		},
 		{
-			ID: "I9-no-project-for-ordinary-work", Guards: []string{unitProject},
+			ID: "I9-no-project-for-ordinary-work", Guards: []string{"project.propose"},
 			Summary: "Three ordinary follow-ups are recorded as tasks, and no project is proposed for them.",
 			Setup:   evalSetup{Owner: evalOwnerApproveAll},
 			Turns: []evalTurnSpec{{Mode: "default", Expect: []string{"task_create", "task_create_batch"},

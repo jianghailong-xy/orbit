@@ -15,7 +15,7 @@
 #       machine's runner gives its sessions, so a run costs what that many session turns cost). Writes
 #       DIR/agent-eval-<UTC time>.json and .md, and exits non-zero unless the release gate passes. With --baseline,
 #       the report compares itself with that one, cell by cell, and a regression fails the gate. With --leave-out,
-#       every engine is given its instructions without those units (src/runner-go/instruction_units.go), and the
+#       every engine is given its instructions without those units (instructionUnits ids, instruction_units.go), and the
 #       report names them: a measurement of what the units are worth, never a baseline.
 #
 #   scripts/agent-eval.sh compare BASELINE.json REPORT.json

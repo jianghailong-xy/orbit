@@ -4,9 +4,30 @@ Status: measured 2026-11-24 on this repository's runner host (`workstation`), fo
 [the instruction-units migration](orbit-project:352R9eS7ejsJ7azhLMsqh) (`docs/agent-instructions-design.md` §6). Every later
 step compares itself with this report, scenario by scenario, and so does the final eval.
 
+## Summary
+
+- Removing the paragraph lowers its scenario's pass rate:
+  - `notify.when-asked`, on both engines;
+  - `delegate.use-delegate`, on Claude Code for "use a subagent" and on Codex for "in the background";
+  - `files.reply-links` and `files.evidence`, on Claude Code;
+  - `progress.report` and `wiki.search-by-path`, on Codex.
+- It does not lower it for `wait.use-await`, `primer.settings` or `project.propose`, on either engine, nor for the
+  cases listed under "Where it does not" below.
+- **`progress.report` and `wiki.search-by-path` fail on Claude Code even when present: 1/10 each.** On Claude Code
+  (Sonnet 5.5) the agent almost never reports a task's progress or searches the wiki before changing a file, though
+  both paragraphs are in its instructions. Both tools are deferred behind ToolSearch, and nothing else in the turn
+  names them. On Codex the same paragraphs pass 10/10, and taking them out drops that to 2/10 and 0/11. Steps 2 and
+  5, which move or condition these paragraphs, start from a Claude Code cell that already fails: what is needed there
+  is a stronger channel (a tool loaded up front, a per-turn note or a receipt), not keeping the text as it is.
+- The contract's E6 and E7 fail on Claude Code (0/5) because the delegate and sub-agents paragraphs give two answers
+  to one request. That is step 5's merge.
+
 ## What was measured
 
-- **Code.** The runs were played on commit `dccc711c83`. They were then graded again from their transcripts by the
+- **Code.** The runs were played on commit `dccc711c83`, before the unit registry and `compose()` of step 1
+  (`c6fa82d58e`) were merged in. Step 1's output is byte-identical (`TestEngineInstructionSnapshots`), so the
+  instruction text these runs saw is the text every engine is given now, and they stand as the baseline after the
+  merge. The leave-out switch was re-expressed on the registry in the merge. They were then graded again from their transcripts by the
   graders of `ab56654795` (grader version 7, `scripts/agent-eval.sh regrade`). The top-up runs (below) were played
   and graded on `ab56654795`. Both commits carry the same scenarios (`suite.scenarioHash`), and the instructions
   are byte for byte those of `main` at `c338f5e3fa`: primer 1.4.5, Agent Contract 1.12.0, catalogue 1.10.0, guide
@@ -24,7 +45,12 @@ step compares itself with this report, scenario by scenario, and so does the fin
   Codex updated itself from 0.171.0 to 0.172.0 between the smoke run and the batch. Every run in these reports is
   0.172.0.
 - **Leave-one-out.** Each I scenario was run 10 times more with its paragraph taken out of every carrier
-  (`scripts/agent-eval.sh live --leave-out UNIT`; the unit ids are `src/runner-go/instruction_units.go`'s).
+  (`scripts/agent-eval.sh live --leave-out UNIT`). The runs named the paragraphs by the ids the switch had before
+  the merge (`wait`, `notify`, `delegate`, `reply-files`, `evidence-files`, `progress`, `wiki`, `primer.settings`,
+  `project`). The reports keep those names, in `contract.instructionsLeftOut` and in the `without-<id>.json` file
+  names. Each named the same paragraph as the registry's unit in the table below. After the merge,
+  `TestAgentEvalEachIScenarioRunsWithoutItsUnit` plays every I scenario's session with the registry's unit left out
+  and checks that the unit's text is absent from Claude Code's and Codex's instructions and from `initialize`.
 - **Reports.** [`agent-eval/instructions-step0/baseline.json`](agent-eval/instructions-step0/baseline.json) holds the
   baseline and `without-<unit>.json` holds each leave-out run, with markdown renderings beside them. To compare a
   later step's report with them:
@@ -98,46 +124,46 @@ instructions and the MCP server's `initialize`.
 
 | Scenario | Unit left out | Claude Code with | Claude Code without | Codex with | Codex without |
 | --- | --- | --- | --- | --- | --- |
-| `I1-wait-await` | `wait` | 10/10 | 10/10 | 10/10 | 10/10 |
-| `I2-notify-when-done` | `notify` | 10/10 | 0/10 | 12/12 (+2 err) | 0/10 |
-| `I3-delegate-subagent` | `delegate` | 5/10 | 0/10 | 10/10 (+4 err) | 10/10 |
-| `I3-delegate-subagent/background` | `delegate` | 10/10 | 10/10 | 10/10 (+4 err) | 4/10 |
-| `I4-reply-file-link` | `reply-files` | 4/10 | 0/10 | 10/10 | 10/10 |
-| `I5-evidence-file-upload` | `evidence-files` | 7/10 | 1/10 | 10/10 | 10/10 |
-| `I6-progress-report` | `progress` | 1/10 | 0/10 | 10/10 | 2/10 |
-| `I7-wiki-path-search` | `wiki` | 1/10 | 0/10 | 10/10 | 0/11 (+1 err) |
+| `I1-wait-await` | `wait.use-await` | 10/10 | 10/10 | 10/10 | 10/10 |
+| `I2-notify-when-done` | `notify.when-asked` | 10/10 | 0/10 | 12/12 (+2 err) | 0/10 |
+| `I3-delegate-subagent` | `delegate.use-delegate` | 5/10 | 0/10 | 10/10 (+4 err) | 10/10 |
+| `I3-delegate-subagent/background` | `delegate.use-delegate` | 10/10 | 10/10 | 10/10 (+4 err) | 4/10 |
+| `I4-reply-file-link` | `files.reply-links` | 4/10 | 0/10 | 10/10 | 10/10 |
+| `I5-evidence-file-upload` | `files.evidence` | 7/10 | 1/10 | 10/10 | 10/10 |
+| `I6-progress-report` | `progress.report` | 1/10 | 0/10 | 10/10 | 2/10 |
+| `I7-wiki-path-search` | `wiki.search-by-path` | 1/10 | 0/10 | 10/10 | 0/11 (+1 err) |
 | `I8-settings-propose` | `primer.settings` | 10/10 | 10/10 | 10/10 | 10/10 (+3 err) |
-| `I9-no-project-for-ordinary-work` | `project` | 10/10 | 10/10 | 10/10 | 10/10 (+4 err) |
+| `I9-no-project-for-ordinary-work` | `project.propose` | 10/10 | 10/10 | 10/10 | 10/10 (+4 err) |
 
 ### Where leaving the paragraph out lowers the pass rate
 
-- **`notify`**: on both engines, 10/10 to 0/10 on Claude Code and 12/12 to 0/10 on Codex. Without it the agent answers
+- **`notify.when-asked`**: on both engines, 10/10 to 0/10 on Claude Code and 12/12 to 0/10 on Codex. Without it the agent answers
   the watch's wake in the conversation, which the person who stepped away does not see.
-- **`delegate`**: on Claude Code for "use a subagent" (5/10 to 0/10), where it otherwise runs its own `Agent`; on
+- **`delegate.use-delegate`**: on Claude Code for "use a subagent" (5/10 to 0/10), where it otherwise runs its own `Agent`; on
   Codex for "in the background" (10/10 to 4/10).
-- **`reply-files`** on Claude Code: 4/10 to 0/10. Without it the agent always names the `/tmp` path or pastes the
+- **`files.reply-links`** on Claude Code: 4/10 to 0/10. Without it the agent always names the `/tmp` path or pastes the
   log.
-- **`evidence-files`** on Claude Code: 7/10 to 1/10. Without it the report stays in the checkout and is never
+- **`files.evidence`** on Claude Code: 7/10 to 1/10. Without it the report stays in the checkout and is never
   `file_upload`ed.
-- **`progress`** on Codex: 10/10 to 2/10. On Claude Code it is 1/10 to 0/10 (below).
-- **`wiki`** on Codex: 10/10 to 0/11. On Claude Code it is 1/10 to 0/10 (below).
+- **`progress.report`** on Codex: 10/10 to 2/10. On Claude Code it is 1/10 to 0/10 (below).
+- **`wiki.search-by-path`** on Codex: 10/10 to 0/11. On Claude Code it is 1/10 to 0/10 (below).
 
 ### Where it does not, said plainly
 
-- **`wait`**: no drop on either engine (10/10 with and without). Both find `task_await` by its name and end the turn
+- **`wait.use-await`**: no drop on either engine (10/10 with and without). Both find `task_await` by its name and end the turn
   on its receipt, whose lead says "End your turn now… Do not poll or sleep to wait for it". This paragraph is the
   first candidate for the sunset rule (design §4.5): the receipt already carries what it says.
 - **`primer.settings`**: no drop on either engine (10/10 with and without). The request names a notification the
   agent can only change through Settings, and `settings_get` and `settings_propose` are found by name.
-- **`project`**: no drop on either engine (10/10 with and without). This was expected. The paragraph's job is to
+- **`project.propose`**: no drop on either engine (10/10 with and without). This was expected. The paragraph's job is to
   curb the over-proposal its earlier form caused, so taking it out also takes out the invitation to propose. The
   primer's "when two fit, the smaller wins" is left either way.
-- **`delegate`, the other case on each engine**: "in the background" on Claude Code (10/10 with and without) and
+- **`delegate.use-delegate`, the other case on each engine**: "in the background" on Claude Code (10/10 with and without) and
   "use a subagent" on Codex (10/10 with and without). These runs do not show why. One possibility, not measured: the
   delegate tool's own description, which is loaded up front, is enough for those two requests.
-- **`reply-files` and `evidence-files` on Codex**: no drop (10/10 with and without). Codex hands the log over with
+- **`files.reply-links` and `files.evidence` on Codex**: no drop (10/10 with and without). Codex hands the log over with
   `file_upload` and an `orbit-attachment:` link in both forms.
-- **`progress` and `wiki` on Claude Code**: the drop is from 1/10 to 0/10, which ten runs cannot tell from noise. On
+- **`progress.report` and `wiki.search-by-path` on Claude Code**: the drop is from 1/10 to 0/10, which ten runs cannot tell from noise. On
   Claude Code these two paragraphs fail even when present. In 9 runs of 10, Claude never called
   `task_progress_report` while it worked through the task's three items, and never searched the wiki before
   changing `uploader/upload.go`. Their guidance does not reach Sonnet on Claude Code as written. Both tools are
@@ -159,7 +185,7 @@ These are the baseline as it stands, not defects of this step, and later steps m
 scripts/agent-eval.sh live --engines claude --scenarios 'E*,X*' --repeats 5 --transcripts DIR
 scripts/agent-eval.sh live --engines claude --scenarios 'I*' --repeats 10 --transcripts DIR
 # Each unit left out, ten runs of the scenario that guards it, for example:
-scripts/agent-eval.sh live --engines codex --scenarios I1-wait-await --repeats 10 --leave-out wait
+scripts/agent-eval.sh live --engines codex --scenarios I1-wait-await --repeats 10 --leave-out wait.use-await
 # Graded again with grader 7, then one report each:
 scripts/agent-eval.sh regrade OUT.json DIR
 scripts/agent-eval.sh merge docs/agent-eval/instructions-step0/baseline.json REPORT.json...

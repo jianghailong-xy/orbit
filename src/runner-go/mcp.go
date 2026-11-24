@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -170,6 +171,32 @@ func mcpOrchestrationEnabled() bool {
 // orchestrationEnabled requires the account's switch and an exact session context.
 // The credential is read (or, if absent/invalid, refreshed) lazily by Transport,
 // so a long-lived MCP process never depends on its startup environment snapshot.
+// sessionShape is the shape of the session this server serves, as its spawn environment says it. It does not know
+// the engine it serves, so it composes for unknownEngineProfile.
+func (s *mcpServer) sessionShape() SessionShape {
+	role := roleTopLevel
+	switch {
+	case s.helpAsk:
+		role = roleHelpAsk
+	case os.Getenv(envSubagentRunID) != "":
+		role = roleSubAgent
+	case scheduledCheckOnlyFromEnv():
+		role = roleCheckOnly
+	case s.taskID != "":
+		role = roleTaskRun
+	}
+	return SessionShape{
+		Role:               role,
+		InsideRecordedWork: s.taskID != "",
+		Watches:            !s.watchesOff,
+		Browser:            s.browserOn,
+		Orchestration:      s.orchestrationEnabled(),
+		Wiki:               !s.wikiOff,
+		Workflows:          !s.workflowsOff,
+		DriveMounted:       driveMounted(),
+	}
+}
+
 func (s *mcpServer) orchestrationEnabled() bool {
 	return s.allowOrchestration &&
 		strings.TrimSpace(s.sessionID) != ""
@@ -238,11 +265,9 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 			pv = p.ProtocolVersion
 		}
 		// The agent primer, versioned in its first line, is the one set of instructions every engine's
-		// MCP client is handed; each engine's own instructions carry it too (agent_primer.go).
-		instructions := agentPrimerText()
-		if s.helpAsk {
-			instructions = helpAskInstructions
-		}
+		// MCP client is handed; each engine's own instructions carry it too (agent_primer.go). An Ask is
+		// given the help reads' instructions instead (unit help.ask).
+		instructions := compose(s.sessionShape(), unknownEngineProfile).MCP
 		return s.ok(req.ID, map[string]interface{}{
 			"protocolVersion": pv,
 			"capabilities":    map[string]interface{}{"tools": map[string]interface{}{}},
@@ -3681,6 +3706,13 @@ func ownerRequestBody(args map[string]interface{}, now time.Time) (map[string]in
 		return nil, errors.New("title is required for every kind but WIKI_CREATE")
 	}
 	copyIfPresent(body, args, "ifUnanswered", "steps", "secretSpec", "options", "recommendedOption", "clientRequestId")
+	change, err := ownerRequestChange(kind, args)
+	if err != nil {
+		return nil, err
+	}
+	if change != nil {
+		body["change"] = change
+	}
 	if blocked := getStringSlice(args, "blocksTaskIds"); len(blocked) > 0 {
 		body["blocksTaskIds"] = blocked
 	}
@@ -3692,6 +3724,42 @@ func ownerRequestBody(args map[string]interface{}, now time.Time) (map[string]in
 		body["expiresAt"] = now.Add(time.Duration(expiresIn) * time.Second).UTC().Format(time.RFC3339)
 	}
 	return body, nil
+}
+
+// ownerRequestChange is the `change` of a CHANGE request, { runnerId, maxConcurrent }, or nil for every other kind.
+// `change` names a setting the owner applies, so it is refused for a kind that has none and required for the one that
+// does; the server checks that the runner is the owner's and that the value differs from the current one.
+func ownerRequestChange(kind string, args map[string]interface{}) (map[string]interface{}, error) {
+	raw, present := args["change"]
+	if kind != "CHANGE" {
+		if present && raw != nil {
+			return nil, errors.New("change is only for kind CHANGE")
+		}
+		return nil, nil
+	}
+	change, ok := raw.(map[string]interface{})
+	if !ok {
+		return nil, errors.New("kind CHANGE needs change: { runnerId, maxConcurrent }")
+	}
+	runnerID := strings.TrimSpace(getString(change, "runnerId"))
+	if runnerID == "" {
+		return nil, errors.New("change.runnerId is required")
+	}
+	for key := range change {
+		if key != "runnerId" && key != "maxConcurrent" {
+			return nil, fmt.Errorf("change takes only runnerId and maxConcurrent, not %q", key)
+		}
+	}
+	maxConcurrent, ok := change["maxConcurrent"].(float64)
+	if !ok {
+		if i, isInt := change["maxConcurrent"].(int); isInt {
+			maxConcurrent, ok = float64(i), true
+		}
+	}
+	if !ok || maxConcurrent != math.Trunc(maxConcurrent) || maxConcurrent < 1 || maxConcurrent > math.MaxInt32 {
+		return nil, errors.New("change.maxConcurrent must be an integer of at least 1")
+	}
+	return map[string]interface{}{"runnerId": runnerID, "maxConcurrent": int(maxConcurrent)}, nil
 }
 
 func prettyJSON(raw json.RawMessage) string {

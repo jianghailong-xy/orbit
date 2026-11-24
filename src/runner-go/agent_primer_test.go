@@ -398,7 +398,7 @@ func primerCarriers(t *testing.T, job *ClaimedSession) map[string]string {
 		return strings.Join(values, "\n\n")
 	}
 	developerMessage := func() string {
-		items := codexInjectedAgentItems(job.instructionAgent(), exe, job.insideRecordedWork(), job.watchesOn(), true)
+		items := codexInjectedAgentItemsOf(job.instructionAgent(), exe, job.insideRecordedWork(), job.watchesOn(), true)
 		return items[0]["content"].([]map[string]interface{})[0]["text"].(string)
 	}
 	turnInput := func() string {
@@ -477,7 +477,7 @@ func TestCodexPutsThePrimerBackAfterCompaction(t *testing.T) {
 	if after == before {
 		t.Fatalf("a compaction left the context generation at %d, so Codex keeps the keys it already dropped", after)
 	}
-	for key := range codexAgentAdditionalContext(AgentExecConfig{}, exe, after, false, true, true) {
+	for key := range codexAgentAdditionalContextOf(AgentExecConfig{}, exe, after, false, true, true) {
 		if strings.HasPrefix(key, fmt.Sprintf("orbit_%08d_", before)) {
 			t.Errorf("key %s survives the compaction unchanged", key)
 		}
@@ -487,7 +487,7 @@ func TestCodexPutsThePrimerBackAfterCompaction(t *testing.T) {
 	items := &codexAppServer{instructionMode: codexInstructionsInjectItems}
 	items.markInstructionContextForRefresh()
 	items.prepareInstructionContext(func() error {
-		for _, item := range codexInjectedAgentItems(AgentExecConfig{}, exe, false, true, true) {
+		for _, item := range codexInjectedAgentItemsOf(AgentExecConfig{}, exe, false, true, true) {
 			injected = append(injected, item["content"].([]map[string]interface{})[0]["text"].(string))
 		}
 		return nil
