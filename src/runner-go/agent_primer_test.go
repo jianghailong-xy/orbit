@@ -60,6 +60,10 @@ var agentPrimerHashes = map[string]string{
 	// and a receipt carries its entity's link. The cards paragraph keeps one sentence that a refusal is final on every
 	// surface and points at the receipt; the receipts paragraph names the link and the notes. No rule changed.
 	"1.5.0": "bd5101be18ab11b7070a2f97dff2415b881cceb133daff2382fcc6dcf6e71fcb",
+	// 1.6.0 (instruction-units step 5a): the orchestration paragraph's hand-off half (task_start what task_list shows
+	// recorded, else record it) moved into the handoff unit, which merges it with the sub-agents and delegate
+	// paragraphs; the paragraph keeps the switch, `orbit session` and no claimed delegation. No rule changed.
+	"1.6.0": "815100a9b5f2ca99c0f71aa4c5954d386ee22202a8a4c1a910c78a1ed3b7a2c0",
 }
 
 // The snapshots: the primer exactly as `initialize` sends it, and the four shapes of the instructions

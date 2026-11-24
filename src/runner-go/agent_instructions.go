@@ -88,17 +88,6 @@ const orbitCLIPreferMCPInstructions = "Prefer {{orbit_tools}} (schema-checked, n
 	" capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt " +
 	"its MCP tool answers with; `--json` prints the entity alone. Do not run `{{cli}} mcp` directly."
 
-// orbitSubAgentInstructions is §0 rule 1 for the engine's own sub-agents (Claude Code's Agent tool, a Codex sub-agent):
-// they run inside this session, so the person cannot see them and they end with it, as a todo list does. The
-// agent-contract eval measured the need on 2026-11-14 (E6/E7 on Claude Code 2.1.325, claude-sonnet-5-5): asked to
-// have another agent fix a test now, the agent launched its own background sub-agent and told the person the work
-// was handed off, with no Orbit record and no receipt. Measured again on 2026-11-16: told "task_start if task_list shows
-// it recorded, else task_create with startNow or session_create", claude-sonnet-5-5 called no task_list in six runs of
-// six and filed the recorded work a second time, so the paragraph says to look first.
-const orbitSubAgentInstructions = "Your engine's own sub-agents are as private as its plan, so work the person hands to " +
-	"another agent goes to Orbit: look it up with task_list and task_start it if recorded (never file it twice), else " +
-	"task_create with startNow or session_create."
-
 // orbitReplyFileInstructions says which files a reply can really hand over. The runner uploads a linked
 // file only out of the session's own directories (reply_attachments.go), so an agent that leaves its
 // screenshot in /tmp and links it there has given the user a label nothing can open: a session on
@@ -209,30 +198,29 @@ const orbitWaitInstructions = "To wait for Orbit work -- tasks reaching a status
 const orbitNotifyInstructions = "When the person asked to hear once something is done, tell them with notify when " +
 	"it is: an answer in this conversation reaches them only when they next look."
 
-// orbitDelegateInstructions says when to reach for the delegate tool (subagent.go). Its description says what it
-// does, but nothing said when: in Claude Code it is a deferred MCP tool, seen by name only until ToolSearch loads it,
-// while the engine's own Agent tool is always loaded and does a similar job without Orbit's routing, cost record or
-// runs on another machine, so agents called delegate only when a person asked for it. Measured 2026-11-15: 440 bytes,
-// 98 o200k tokens. ASCII like the rest of the paragraph.
+// orbitHandoffInstructions is how work goes to another agent: the engine's own sub-agents, task_start, task_create
+// and delegate in one paragraph (design §6 step 5). It was three: a sub-agents paragraph (task_start what task_list
+// shows recorded, else task_create or session_create), a delegate paragraph (delegate whenever you would start a
+// subagent) and the hand-off half of the orchestration-off paragraph. Each gave its own answer to "have another agent
+// do this", and on 2026-11-24 Claude Code answered E6 and E7 with delegate in every run, never starting the work
+// already recorded (docs/agent-instructions-eval-baseline.md). The paragraph puts the three in one order: look first,
+// start what is recorded, delegate a piece whose result comes back here, create and start new work of its own.
 //
-// Measured 2026-11-15 in three fresh sessions asked to read production data: each one thought of "the orbit-prod
-// agent", found it with agent_list and used session_create, never delegate. So the paragraph says that workspace
-// is another agent's name, and when delegate beats session_create.
-//
-// Measured 2026-11-19 with headless Claude Code on Opus, Sonnet and Haiku 5.5: when the paragraph only said to
-// prefer delegate "when Orbit should pick the model, record the cost or run the work elsewhere", a request to work
-// in the background or to "use a subagent" went to the engine's own Agent tool. So it now claims both outright.
-const orbitDelegateInstructions = "Use delegate whenever you would start a subagent or run an independent piece in " +
-	"the background, in place of your engine's built-in subagent or Agent tool: Orbit picks the model, records the " +
-	"cost and brings the result back even if this engine is recycled. Use it too to hand work to a cheaper or " +
-	"stronger model than yours, or to run it on another machine (needs: [\"os:darwin\"], or workspace: another " +
-	"agent's name from agent_list). Prefer it to session_create when you only need that piece's result back." +
-	"{{toolsearch:delegate}}"
-
-// The paragraph ends with its Claude Code sentence, {{toolsearch:delegate}}. Cursor, which never shows mcp__orbit__*
-// names, is given the paragraph without it (cursorProfile). Delegate is marked to load up front (subagent.go), so the
-// sentence only matters for a Claude Code that still defers it. Only a top-level session gets the paragraph (unit
-// delegate.use-delegate): a SubAgent is neither offered nor served delegate (mcp.go).
+// What each part was measured to need. The engine's own sub-agents run inside this session, so the person cannot see
+// them and they end with it (E6/E7 on Claude Code 2.1.325, 2026-11-14: the agent launched a background sub-agent and
+// said the work was handed off, with no record). Told "task_start if task_list shows it recorded", claude-sonnet-5-5
+// called no task_list in six runs of six (2026-11-16), so it says to look first. A request to work in the background
+// or to "use a subagent" went to the engine's Agent tool until the text claimed both for delegate (2026-11-19), and
+// agents asked to read another machine's data used session_create with that agent until the text named workspace
+// (2026-11-15). What delegate does (Orbit picks the model, records the cost, brings the result back) is its
+// description's. Only a session that writes to Orbit gets it (unit handoff.use-orbit): a SubAgent is served neither
+// delegate nor the task writes, and a check-only run's writes are refused. Its Claude Code sentence,
+// {{toolsearch:delegate}}, is left out for Cursor, which never shows mcp__orbit__* names (cursorProfile). ASCII.
+const orbitHandoffInstructions = "Hand work to another agent through Orbit, never your engine's own sub-agents or " +
+	"Agent tool, which are as private as its plan. Look with task_list first: task_start work already recorded, never " +
+	"file it twice. Otherwise use delegate for a piece whose result you need back, in the background, on a cheaper or " +
+	"stronger model or on another machine (needs: [\"os:darwin\"], or workspace: an agent's name from agent_list); new " +
+	"work of its own is task_create with startNow.{{toolsearch:delegate}}"
 
 // orbitWorkflowInstructions says when to reach for the workflow tool (subagent_workflow.go), next to delegate's.
 // Measured 2026-11-22: it shipped, a smoke run worked, and no agent ever chose it. Nothing named it, and in Claude Code

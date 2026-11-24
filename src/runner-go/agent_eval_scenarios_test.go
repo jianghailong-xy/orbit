@@ -722,7 +722,7 @@ func instructionUnitScenarios() []*evalScenario {
 			clauses = append(clauses, evalClause{ID: prefix + ".advisory.reply_relays", Kind: "pass", Failure: "result_not_relayed",
 				Says: "The reply relays what the SubAgent found.", Check: checkReplyRelaysSubagent})
 		}
-		return &evalScenario{ID: id, Guards: []string{"delegate.use-delegate"}, Summary: summary,
+		return &evalScenario{ID: id, Guards: []string{"handoff.use-orbit"}, Summary: summary,
 			Setup: evalSetup{Owner: evalOwnerApproveAll},
 			Turns: []evalTurnSpec{{Mode: "default", Prompt: prompt, FollowUp: goAhead, Expect: []string{"delegate"}}}, Clauses: clauses}
 	}

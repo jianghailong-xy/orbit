@@ -1,9 +1,9 @@
-=== antigravity (7276 bytes)
+=== antigravity (6914 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
 
-Orbit primer 1.5.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.6.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -15,13 +15,11 @@ The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few op
 
 Only a structured receipt counts: a write happened when it says ok: true and outcome: written; read and dry_run wrote nothing. Any other outcome is ok: false; except on a chat, follow its error.retry (resend, reread_first, fix_input, do_not_retry, wait) and its notes. Key task_create and task_create_batch with an idempotencyKey derived from the work. Name an Orbit object to the user by its receipt's link, never a bare id: `[Fix login redirect](orbit-task:<id>)`.
 
-Session, agent and runner tools exist only while the account's Session orchestration switch is on. Without session_* tools, do not try `orbit session`: task_start the work if task_list shows it recorded, else record it as a task, tell the user the switch is in Settings -> Session orchestration, and never claim a delegation.
+Session, agent and runner tools exist only while the account's Session orchestration switch is on. Without session_* tools, do not try `orbit session` and never claim a delegation: tell the user the switch is in Settings -> Session orchestration.
 
 When a person's problem is one of their own Settings, call settings_get, then settings_propose the change; for a key it refuses, link the row it returns instead of describing where it is.
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
-
-Your engine's own sub-agents are as private as its plan, so work the person hands to another agent goes to Orbit: look it up with task_list and task_start it if recorded (never file it twice), else task_create with startNow or session_create.
 
 Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one inside your working directory or this session's uploads directory reaches them: from elsewhere, /tmp included, copy the file there first and link the copy. Unignored files there can end up in a commit; keep others in the uploads directory or a git-ignored path.
 
@@ -35,19 +33,19 @@ To wait for Orbit work -- tasks reaching a status, sessions finishing a turn -- 
 
 When the person asked to hear once something is done, tell them with notify when it is: an answer in this conversation reaches them only when they next look.
 
-Use delegate whenever you would start a subagent or run an independent piece in the background, in place of your engine's built-in subagent or Agent tool: Orbit picks the model, records the cost and brings the result back even if this engine is recycled. Use it too to hand work to a cheaper or stronger model than yours, or to run it on another machine (needs: ["os:darwin"], or workspace: another agent's name from agent_list). Prefer it to session_create when you only need that piece's result back. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
+Hand work to another agent through Orbit, never your engine's own sub-agents or Agent tool, which are as private as its plan. Look with task_list first: task_start work already recorded, never file it twice. Otherwise use delegate for a piece whose result you need back, in the background, on a cheaper or stronger model or on another machine (needs: ["os:darwin"], or workspace: an agent's name from agent_list); new work of its own is task_create with startNow. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
 
 To fan out several SubAgents, in parallel or in phases, whose results you only need combined, use workflow: one script runs them all and wakes this session once with its return value; delegate stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's built-in Workflow tool. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__workflow.
 
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 Prefer the tools of the `orbit` MCP server (call_mcp_tool with ServerName "orbit") (schema-checked, no shell). Inside a session the CLI at `'<orbit-cli>'` takes the same approvals and attributes work to you: `'<orbit-cli>' guide [topic] --json` or `'<orbit-cli>' capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt its MCP tool answers with; `--json` prints the entity alone. Do not run `'<orbit-cli>' mcp` directly.
-=== claude (7048 bytes)
+=== claude (6686 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
 
-Orbit primer 1.5.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.6.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -59,11 +57,9 @@ The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few op
 
 Only a structured receipt counts: a write happened when it says ok: true and outcome: written; read and dry_run wrote nothing. Any other outcome is ok: false; except on a chat, follow its error.retry (resend, reread_first, fix_input, do_not_retry, wait) and its notes. Key task_create and task_create_batch with an idempotencyKey derived from the work. Name an Orbit object to the user by its receipt's link, never a bare id: `[Fix login redirect](orbit-task:<id>)`.
 
-Session, agent and runner tools exist only while the account's Session orchestration switch is on. Without session_* tools, do not try `orbit session`: task_start the work if task_list shows it recorded, else record it as a task, tell the user the switch is in Settings -> Session orchestration, and never claim a delegation.
+Session, agent and runner tools exist only while the account's Session orchestration switch is on. Without session_* tools, do not try `orbit session` and never claim a delegation: tell the user the switch is in Settings -> Session orchestration.
 
 When a person's problem is one of their own Settings, call settings_get, then settings_propose the change; for a key it refuses, link the row it returns instead of describing where it is.
-
-Your engine's own sub-agents are as private as its plan, so work the person hands to another agent goes to Orbit: look it up with task_list and task_start it if recorded (never file it twice), else task_create with startNow or session_create.
 
 Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one inside your working directory or this session's uploads directory reaches them: from elsewhere, /tmp included, copy the file there first and link the copy. Unignored files there can end up in a commit; keep others in the uploads directory or a git-ignored path.
 
@@ -77,7 +73,7 @@ To wait for Orbit work -- tasks reaching a status, sessions finishing a turn -- 
 
 When the person asked to hear once something is done, tell them with notify when it is: an answer in this conversation reaches them only when they next look.
 
-Use delegate whenever you would start a subagent or run an independent piece in the background, in place of your engine's built-in subagent or Agent tool: Orbit picks the model, records the cost and brings the result back even if this engine is recycled. Use it too to hand work to a cheaper or stronger model than yours, or to run it on another machine (needs: ["os:darwin"], or workspace: another agent's name from agent_list). Prefer it to session_create when you only need that piece's result back. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
+Hand work to another agent through Orbit, never your engine's own sub-agents or Agent tool, which are as private as its plan. Look with task_list first: task_start work already recorded, never file it twice. Otherwise use delegate for a piece whose result you need back, in the background, on a cheaper or stronger model or on another machine (needs: ["os:darwin"], or workspace: an agent's name from agent_list); new work of its own is task_create with startNow. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
 
 To fan out several SubAgents, in parallel or in phases, whose results you only need combined, use workflow: one script runs them all and wakes this session once with its return value; delegate stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's built-in Workflow tool. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__workflow.
 
@@ -85,12 +81,12 @@ Before changing a file, use wiki_search with its path to look up known pitfalls.
 
 Prefer the `mcp__orbit__*` tools (schema-checked, no shell). Inside a session the CLI at `'<orbit-cli>'` takes the same approvals and attributes work to you: `'<orbit-cli>' guide [topic] --json` or `'<orbit-cli>' capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt its MCP tool answers with; `--json` prints the entity alone. Do not run `'<orbit-cli>' mcp` directly.
 === claude, resumed: same as claude
-=== codex 0.125-0.134 developer message (7768 bytes)
+=== codex 0.125-0.134 developer message (7406 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
 
-Orbit primer 1.5.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.6.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -102,13 +98,11 @@ The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few op
 
 Only a structured receipt counts: a write happened when it says ok: true and outcome: written; read and dry_run wrote nothing. Any other outcome is ok: false; except on a chat, follow its error.retry (resend, reread_first, fix_input, do_not_retry, wait) and its notes. Key task_create and task_create_batch with an idempotencyKey derived from the work. Name an Orbit object to the user by its receipt's link, never a bare id: `[Fix login redirect](orbit-task:<id>)`.
 
-Session, agent and runner tools exist only while the account's Session orchestration switch is on. Without session_* tools, do not try `orbit session`: task_start the work if task_list shows it recorded, else record it as a task, tell the user the switch is in Settings -> Session orchestration, and never claim a delegation.
+Session, agent and runner tools exist only while the account's Session orchestration switch is on. Without session_* tools, do not try `orbit session` and never claim a delegation: tell the user the switch is in Settings -> Session orchestration.
 
 When a person's problem is one of their own Settings, call settings_get, then settings_propose the change; for a key it refuses, link the row it returns instead of describing where it is.
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
-
-Your engine's own sub-agents are as private as its plan, so work the person hands to another agent goes to Orbit: look it up with task_list and task_start it if recorded (never file it twice), else task_create with startNow or session_create.
 
 Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one inside your working directory or this session's uploads directory reaches them: from elsewhere, /tmp included, copy the file there first and link the copy. Unignored files there can end up in a commit; keep others in the uploads directory or a git-ignored path.
 
@@ -122,7 +116,7 @@ To wait for Orbit work -- tasks reaching a status, sessions finishing a turn -- 
 
 When the person asked to hear once something is done, tell them with notify when it is: an answer in this conversation reaches them only when they next look.
 
-Use delegate whenever you would start a subagent or run an independent piece in the background, in place of your engine's built-in subagent or Agent tool: Orbit picks the model, records the cost and brings the result back even if this engine is recycled. Use it too to hand work to a cheaper or stronger model than yours, or to run it on another machine (needs: ["os:darwin"], or workspace: another agent's name from agent_list). Prefer it to session_create when you only need that piece's result back. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
+Hand work to another agent through Orbit, never your engine's own sub-agents or Agent tool, which are as private as its plan. Look with task_list first: task_start work already recorded, never file it twice. Otherwise use delegate for a piece whose result you need back, in the background, on a cheaper or stronger model or on another machine (needs: ["os:darwin"], or workspace: an agent's name from agent_list); new work of its own is task_create with startNow. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
 
 To fan out several SubAgents, in parallel or in phases, whose results you only need combined, use workflow: one script runs them all and wakes this session once with its return value; delegate stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's built-in Workflow tool. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__workflow.
 
@@ -131,13 +125,13 @@ Before changing a file, use wiki_search with its path to look up known pitfalls.
 Prefer the `mcp__orbit__*` tools (schema-checked, no shell). Inside a session the CLI at `'<orbit-cli>'` takes the same approvals and attributes work to you: `'<orbit-cli>' guide [topic] --json` or `'<orbit-cli>' capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt its MCP tool answers with; `--json` prints the entity alone. Do not run `'<orbit-cli>' mcp` directly.
 
 After generating an image, preserve the original file. Do not regenerate it solely because Orbit could not attach or upload it. Only claim that the image is attached or delivered when Orbit explicitly confirms attachment delivery; successful generation alone is not delivery confirmation. If delivery fails, report that the image was generated but delivery failed, keep the original file available, and let Orbit retry delivery. If delivery status is unavailable, report only generation success without claiming delivery success or failure.
-=== codex < 0.125 turn input (7825 bytes)
+=== codex < 0.125 turn input (7463 bytes)
 <orbit_application_context>
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
 
-Orbit primer 1.5.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.6.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -149,13 +143,11 @@ The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few op
 
 Only a structured receipt counts: a write happened when it says ok: true and outcome: written; read and dry_run wrote nothing. Any other outcome is ok: false; except on a chat, follow its error.retry (resend, reread_first, fix_input, do_not_retry, wait) and its notes. Key task_create and task_create_batch with an idempotencyKey derived from the work. Name an Orbit object to the user by its receipt's link, never a bare id: `[Fix login redirect](orbit-task:<id>)`.
 
-Session, agent and runner tools exist only while the account's Session orchestration switch is on. Without session_* tools, do not try `orbit session`: task_start the work if task_list shows it recorded, else record it as a task, tell the user the switch is in Settings -> Session orchestration, and never claim a delegation.
+Session, agent and runner tools exist only while the account's Session orchestration switch is on. Without session_* tools, do not try `orbit session` and never claim a delegation: tell the user the switch is in Settings -> Session orchestration.
 
 When a person's problem is one of their own Settings, call settings_get, then settings_propose the change; for a key it refuses, link the row it returns instead of describing where it is.
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
-
-Your engine's own sub-agents are as private as its plan, so work the person hands to another agent goes to Orbit: look it up with task_list and task_start it if recorded (never file it twice), else task_create with startNow or session_create.
 
 Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one inside your working directory or this session's uploads directory reaches them: from elsewhere, /tmp included, copy the file there first and link the copy. Unignored files there can end up in a commit; keep others in the uploads directory or a git-ignored path.
 
@@ -169,7 +161,7 @@ To wait for Orbit work -- tasks reaching a status, sessions finishing a turn -- 
 
 When the person asked to hear once something is done, tell them with notify when it is: an answer in this conversation reaches them only when they next look.
 
-Use delegate whenever you would start a subagent or run an independent piece in the background, in place of your engine's built-in subagent or Agent tool: Orbit picks the model, records the cost and brings the result back even if this engine is recycled. Use it too to hand work to a cheaper or stronger model than yours, or to run it on another machine (needs: ["os:darwin"], or workspace: another agent's name from agent_list). Prefer it to session_create when you only need that piece's result back. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
+Hand work to another agent through Orbit, never your engine's own sub-agents or Agent tool, which are as private as its plan. Look with task_list first: task_start work already recorded, never file it twice. Otherwise use delegate for a piece whose result you need back, in the background, on a cheaper or stronger model or on another machine (needs: ["os:darwin"], or workspace: an agent's name from agent_list); new work of its own is task_create with startNow. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
 
 To fan out several SubAgents, in parallel or in phases, whose results you only need combined, use workflow: one script runs them all and wakes this session once with its return value; delegate stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's built-in Workflow tool. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__workflow.
 
@@ -182,12 +174,12 @@ After generating an image, preserve the original file. Do not regenerate it sole
 === codex >= 0.135 additional context: same as codex 0.125-0.134 developer message
 === codex >= 0.135, after compaction: same as codex 0.125-0.134 developer message
 === codex >= 0.135, resumed thread: same as codex 0.125-0.134 developer message
-=== cursor (7060 bytes)
+=== cursor (6698 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
 
-Orbit primer 1.5.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.6.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -199,13 +191,11 @@ The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few op
 
 Only a structured receipt counts: a write happened when it says ok: true and outcome: written; read and dry_run wrote nothing. Any other outcome is ok: false; except on a chat, follow its error.retry (resend, reread_first, fix_input, do_not_retry, wait) and its notes. Key task_create and task_create_batch with an idempotencyKey derived from the work. Name an Orbit object to the user by its receipt's link, never a bare id: `[Fix login redirect](orbit-task:<id>)`.
 
-Session, agent and runner tools exist only while the account's Session orchestration switch is on. Without session_* tools, do not try `orbit session`: task_start the work if task_list shows it recorded, else record it as a task, tell the user the switch is in Settings -> Session orchestration, and never claim a delegation.
+Session, agent and runner tools exist only while the account's Session orchestration switch is on. Without session_* tools, do not try `orbit session` and never claim a delegation: tell the user the switch is in Settings -> Session orchestration.
 
 When a person's problem is one of their own Settings, call settings_get, then settings_propose the change; for a key it refuses, link the row it returns instead of describing where it is.
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
-
-Your engine's own sub-agents are as private as its plan, so work the person hands to another agent goes to Orbit: look it up with task_list and task_start it if recorded (never file it twice), else task_create with startNow or session_create.
 
 Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one inside your working directory or this session's uploads directory reaches them: from elsewhere, /tmp included, copy the file there first and link the copy. Unignored files there can end up in a commit; keep others in the uploads directory or a git-ignored path.
 
@@ -219,19 +209,19 @@ To wait for Orbit work -- tasks reaching a status, sessions finishing a turn -- 
 
 When the person asked to hear once something is done, tell them with notify when it is: an answer in this conversation reaches them only when they next look.
 
-Use delegate whenever you would start a subagent or run an independent piece in the background, in place of your engine's built-in subagent or Agent tool: Orbit picks the model, records the cost and brings the result back even if this engine is recycled. Use it too to hand work to a cheaper or stronger model than yours, or to run it on another machine (needs: ["os:darwin"], or workspace: another agent's name from agent_list). Prefer it to session_create when you only need that piece's result back.
+Hand work to another agent through Orbit, never your engine's own sub-agents or Agent tool, which are as private as its plan. Look with task_list first: task_start work already recorded, never file it twice. Otherwise use delegate for a piece whose result you need back, in the background, on a cheaper or stronger model or on another machine (needs: ["os:darwin"], or workspace: an agent's name from agent_list); new work of its own is task_create with startNow.
 
 To fan out several SubAgents, in parallel or in phases, whose results you only need combined, use workflow: one script runs them all and wakes this session once with its return value; delegate stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's built-in Workflow tool.
 
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 Prefer the tools of the `orbit` MCP server (schema-checked, no shell). Inside a session the CLI at `'<orbit-cli>'` takes the same approvals and attributes work to you: `'<orbit-cli>' guide [topic] --json` or `'<orbit-cli>' capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt its MCP tool answers with; `--json` prints the entity alone. Do not run `'<orbit-cli>' mcp` directly.
-=== deepseek harness (7226 bytes)
+=== deepseek harness (6864 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
 
-Orbit primer 1.5.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.6.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -243,13 +233,11 @@ The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few op
 
 Only a structured receipt counts: a write happened when it says ok: true and outcome: written; read and dry_run wrote nothing. Any other outcome is ok: false; except on a chat, follow its error.retry (resend, reread_first, fix_input, do_not_retry, wait) and its notes. Key task_create and task_create_batch with an idempotencyKey derived from the work. Name an Orbit object to the user by its receipt's link, never a bare id: `[Fix login redirect](orbit-task:<id>)`.
 
-Session, agent and runner tools exist only while the account's Session orchestration switch is on. Without session_* tools, do not try `orbit session`: task_start the work if task_list shows it recorded, else record it as a task, tell the user the switch is in Settings -> Session orchestration, and never claim a delegation.
+Session, agent and runner tools exist only while the account's Session orchestration switch is on. Without session_* tools, do not try `orbit session` and never claim a delegation: tell the user the switch is in Settings -> Session orchestration.
 
 When a person's problem is one of their own Settings, call settings_get, then settings_propose the change; for a key it refuses, link the row it returns instead of describing where it is.
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
-
-Your engine's own sub-agents are as private as its plan, so work the person hands to another agent goes to Orbit: look it up with task_list and task_start it if recorded (never file it twice), else task_create with startNow or session_create.
 
 Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one inside your working directory or this session's uploads directory reaches them: from elsewhere, /tmp included, copy the file there first and link the copy. Unignored files there can end up in a commit; keep others in the uploads directory or a git-ignored path.
 
@@ -263,20 +251,20 @@ To wait for Orbit work -- tasks reaching a status, sessions finishing a turn -- 
 
 When the person asked to hear once something is done, tell them with notify when it is: an answer in this conversation reaches them only when they next look.
 
-Use delegate whenever you would start a subagent or run an independent piece in the background, in place of your engine's built-in subagent or Agent tool: Orbit picks the model, records the cost and brings the result back even if this engine is recycled. Use it too to hand work to a cheaper or stronger model than yours, or to run it on another machine (needs: ["os:darwin"], or workspace: another agent's name from agent_list). Prefer it to session_create when you only need that piece's result back. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
+Hand work to another agent through Orbit, never your engine's own sub-agents or Agent tool, which are as private as its plan. Look with task_list first: task_start work already recorded, never file it twice. Otherwise use delegate for a piece whose result you need back, in the background, on a cheaper or stronger model or on another machine (needs: ["os:darwin"], or workspace: an agent's name from agent_list); new work of its own is task_create with startNow. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
 
 To fan out several SubAgents, in parallel or in phases, whose results you only need combined, use workflow: one script runs them all and wakes this session once with its return value; delegate stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's built-in Workflow tool. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__workflow.
 
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 Prefer the `mcp__orbit__*` tools (schema-checked, no shell). Inside a session the CLI at `'<orbit-cli>'` takes the same approvals and attributes work to you: `'<orbit-cli>' guide [topic] --json` or `'<orbit-cli>' capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt its MCP tool answers with; `--json` prints the entity alone. Do not run `'<orbit-cli>' mcp` directly.
-=== kimi (7307 bytes)
+=== kimi (6945 bytes)
 [map[text:<orbit-agent-instructions>
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
 
-Orbit primer 1.5.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.6.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -288,13 +276,11 @@ The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few op
 
 Only a structured receipt counts: a write happened when it says ok: true and outcome: written; read and dry_run wrote nothing. Any other outcome is ok: false; except on a chat, follow its error.retry (resend, reread_first, fix_input, do_not_retry, wait) and its notes. Key task_create and task_create_batch with an idempotencyKey derived from the work. Name an Orbit object to the user by its receipt's link, never a bare id: `[Fix login redirect](orbit-task:<id>)`.
 
-Session, agent and runner tools exist only while the account's Session orchestration switch is on. Without session_* tools, do not try `orbit session`: task_start the work if task_list shows it recorded, else record it as a task, tell the user the switch is in Settings -> Session orchestration, and never claim a delegation.
+Session, agent and runner tools exist only while the account's Session orchestration switch is on. Without session_* tools, do not try `orbit session` and never claim a delegation: tell the user the switch is in Settings -> Session orchestration.
 
 When a person's problem is one of their own Settings, call settings_get, then settings_propose the change; for a key it refuses, link the row it returns instead of describing where it is.
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
-
-Your engine's own sub-agents are as private as its plan, so work the person hands to another agent goes to Orbit: look it up with task_list and task_start it if recorded (never file it twice), else task_create with startNow or session_create.
 
 Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one inside your working directory or this session's uploads directory reaches them: from elsewhere, /tmp included, copy the file there first and link the copy. Unignored files there can end up in a commit; keep others in the uploads directory or a git-ignored path.
 
@@ -308,7 +294,7 @@ To wait for Orbit work -- tasks reaching a status, sessions finishing a turn -- 
 
 When the person asked to hear once something is done, tell them with notify when it is: an answer in this conversation reaches them only when they next look.
 
-Use delegate whenever you would start a subagent or run an independent piece in the background, in place of your engine's built-in subagent or Agent tool: Orbit picks the model, records the cost and brings the result back even if this engine is recycled. Use it too to hand work to a cheaper or stronger model than yours, or to run it on another machine (needs: ["os:darwin"], or workspace: another agent's name from agent_list). Prefer it to session_create when you only need that piece's result back. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
+Hand work to another agent through Orbit, never your engine's own sub-agents or Agent tool, which are as private as its plan. Look with task_list first: task_start work already recorded, never file it twice. Otherwise use delegate for a piece whose result you need back, in the background, on a cheaper or stronger model or on another machine (needs: ["os:darwin"], or workspace: an agent's name from agent_list); new work of its own is task_create with startNow. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
 
 To fan out several SubAgents, in parallel or in phases, whose results you only need combined, use workflow: one script runs them all and wakes this session once with its return value; delegate stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's built-in Workflow tool. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__workflow.
 
@@ -318,12 +304,12 @@ Prefer the `mcp__orbit__*` tools (schema-checked, no shell). Inside a session th
 </orbit-agent-instructions>
 
 hi type:text]]
-=== opencode (7220 bytes)
+=== opencode (6858 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
 
-Orbit primer 1.5.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.6.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -335,13 +321,11 @@ The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few op
 
 Only a structured receipt counts: a write happened when it says ok: true and outcome: written; read and dry_run wrote nothing. Any other outcome is ok: false; except on a chat, follow its error.retry (resend, reread_first, fix_input, do_not_retry, wait) and its notes. Key task_create and task_create_batch with an idempotencyKey derived from the work. Name an Orbit object to the user by its receipt's link, never a bare id: `[Fix login redirect](orbit-task:<id>)`.
 
-Session, agent and runner tools exist only while the account's Session orchestration switch is on. Without session_* tools, do not try `orbit session`: task_start the work if task_list shows it recorded, else record it as a task, tell the user the switch is in Settings -> Session orchestration, and never claim a delegation.
+Session, agent and runner tools exist only while the account's Session orchestration switch is on. Without session_* tools, do not try `orbit session` and never claim a delegation: tell the user the switch is in Settings -> Session orchestration.
 
 When a person's problem is one of their own Settings, call settings_get, then settings_propose the change; for a key it refuses, link the row it returns instead of describing where it is.
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
-
-Your engine's own sub-agents are as private as its plan, so work the person hands to another agent goes to Orbit: look it up with task_list and task_start it if recorded (never file it twice), else task_create with startNow or session_create.
 
 Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one inside your working directory or this session's uploads directory reaches them: from elsewhere, /tmp included, copy the file there first and link the copy. Unignored files there can end up in a commit; keep others in the uploads directory or a git-ignored path.
 
@@ -355,15 +339,15 @@ To wait for Orbit work -- tasks reaching a status, sessions finishing a turn -- 
 
 When the person asked to hear once something is done, tell them with notify when it is: an answer in this conversation reaches them only when they next look.
 
-Use delegate whenever you would start a subagent or run an independent piece in the background, in place of your engine's built-in subagent or Agent tool: Orbit picks the model, records the cost and brings the result back even if this engine is recycled. Use it too to hand work to a cheaper or stronger model than yours, or to run it on another machine (needs: ["os:darwin"], or workspace: another agent's name from agent_list). Prefer it to session_create when you only need that piece's result back. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
+Hand work to another agent through Orbit, never your engine's own sub-agents or Agent tool, which are as private as its plan. Look with task_list first: task_start work already recorded, never file it twice. Otherwise use delegate for a piece whose result you need back, in the background, on a cheaper or stronger model or on another machine (needs: ["os:darwin"], or workspace: an agent's name from agent_list); new work of its own is task_create with startNow. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
 
 To fan out several SubAgents, in parallel or in phases, whose results you only need combined, use workflow: one script runs them all and wakes this session once with its return value; delegate stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's built-in Workflow tool. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__workflow.
 
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 Prefer the `orbit_*` tools (schema-checked, no shell). Inside a session the CLI at `'<orbit-cli>'` takes the same approvals and attributes work to you: `'<orbit-cli>' guide [topic] --json` or `'<orbit-cli>' capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt its MCP tool answers with; `--json` prints the entity alone. Do not run `'<orbit-cli>' mcp` directly.
-=== orbit mcp initialize (every other engine) (3060 bytes)
-Orbit primer 1.5.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+=== orbit mcp initialize (every other engine) (2981 bytes)
+Orbit primer 1.6.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 Pick the object by the question it answers. Project: the whole goal and what settles it. Task: one durable piece of work. Task list: how a class of work is dispatched, not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. Never file what this session is already doing as another task or session. Unsure which fits, or how to call it? Call guide: no arguments for the routes, a topic for the recipe.
 
@@ -375,13 +359,13 @@ The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few op
 
 Only a structured receipt counts: a write happened when it says ok: true and outcome: written; read and dry_run wrote nothing. Any other outcome is ok: false; except on a chat, follow its error.retry (resend, reread_first, fix_input, do_not_retry, wait) and its notes. Key task_create and task_create_batch with an idempotencyKey derived from the work. Name an Orbit object to the user by its receipt's link, never a bare id: `[Fix login redirect](orbit-task:<id>)`.
 
-Session, agent and runner tools exist only while the account's Session orchestration switch is on. Without session_* tools, do not try `orbit session`: task_start the work if task_list shows it recorded, else record it as a task, tell the user the switch is in Settings -> Session orchestration, and never claim a delegation.
+Session, agent and runner tools exist only while the account's Session orchestration switch is on. Without session_* tools, do not try `orbit session` and never claim a delegation: tell the user the switch is in Settings -> Session orchestration.
 
 When a person's problem is one of their own Settings, call settings_get, then settings_propose the change; for a key it refuses, link the row it returns instead of describing where it is.
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
 === orbit mcp initialize, claude (684 bytes)
-Orbit primer 1.5.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
+Orbit primer 1.6.0 (Agent Contract 1.13.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. Create is not start, but autoRunWhenReady defaults to true: pass false to hold a task. No returned id, no claim.
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
 === orbit mcp initialize, help ask (310 bytes)

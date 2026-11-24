@@ -493,7 +493,7 @@ func TestOnlyATopLevelSessionIsToldWhenToDelegate(t *testing.T) {
 			return string(raw)
 		},
 	}
-	whenToDelegate := strings.TrimSuffix(orbitDelegateInstructions, "{{toolsearch:delegate}}")
+	whenToDelegate := strings.TrimSuffix(orbitHandoffInstructions, "{{toolsearch:delegate}}")
 	for name, build := range builders {
 		top := build(parent)
 		if !strings.Contains(top, whenToDelegate) {
@@ -502,15 +502,18 @@ func TestOnlyATopLevelSessionIsToldWhenToDelegate(t *testing.T) {
 		if loads := strings.Contains(top, orbitDelegateClaudeCodeLoad); loads == (name == "cursor") {
 			t.Errorf("%s: says how to load delegate in Claude Code = %v", name, loads)
 		}
-		if sub := build(child); strings.Contains(sub, "Use delegate") || strings.Contains(sub, "select:mcp__orbit__delegate") ||
+		if sub := build(child); strings.Contains(sub, "use delegate") || strings.Contains(sub, "select:mcp__orbit__delegate") ||
 			!strings.Contains(sub, "Orbit primer") {
 			t.Errorf("%s: a SubAgent is told to use delegate, or is not given Orbit's instructions:\n%s", name, sub)
 		}
 	}
-	for _, want := range []string{"cheaper or stronger model", "another machine", `needs: ["os:darwin"]`, "workspace",
-		"in the background", "built-in subagent or Agent tool", "records the cost", "ToolSearch select:mcp__orbit__delegate"} {
-		if !strings.Contains(renderInstructionUnit(orbitDelegateInstructions, SessionShape{}, claudeCodeProfile), want) {
-			t.Errorf("the delegate paragraph lacks %q", want)
+	// One paragraph, in one order: look, start what is recorded, delegate a piece whose result comes back, create new work.
+	for _, want := range []string{"never your engine's own sub-agents or Agent tool", "Look with task_list first",
+		"task_start work already recorded", "never file it twice", "use delegate for a piece whose result you need back",
+		"in the background", "cheaper or stronger model", "another machine", `needs: ["os:darwin"]`, "workspace",
+		"task_create with startNow", "ToolSearch select:mcp__orbit__delegate"} {
+		if !strings.Contains(renderInstructionUnit(orbitHandoffInstructions, SessionShape{}, claudeCodeProfile), want) {
+			t.Errorf("the handoff paragraph lacks %q", want)
 		}
 	}
 }

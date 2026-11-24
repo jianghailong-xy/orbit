@@ -33,7 +33,7 @@ package main
 // a change to a word is a new agentPrimerVersion, reviewed as a diff.
 
 // agentPrimerVersion is the version of the primer's text. Any change to it is a new version.
-const agentPrimerVersion = "1.5.0"
+const agentPrimerVersion = "1.6.0"
 
 // agentContractVersion is the Agent Contract version the primer was written from: the header of
 // docs/orbit-agent-contract.md and contractVersion in contracts/orbit-agent.contract.json.
@@ -97,10 +97,10 @@ const (
 		"an idempotencyKey derived from the work. Name an Orbit object to the user by its receipt's link, never a bare " +
 		"id: `[Fix login redirect](orbit-task:<id>)`."
 
+	// Its hand-off half (task_start what task_list shows recorded, else record it) is the handoff unit's since 1.6.0.
 	agentPrimerOrchestration = "Session, agent and runner tools exist only while the account's Session " +
-		"orchestration switch is on. Without session_* tools, do not try `orbit session`: task_start the work if " +
-		"task_list shows it recorded, else record it as a task, tell the user the switch is in Settings -> Session " +
-		"orchestration, and never claim a delegation."
+		"orchestration switch is on. Without session_* tools, do not try `orbit session` and never claim a delegation: " +
+		"tell the user the switch is in Settings -> Session orchestration."
 
 	agentPrimerSettings = "When a person's problem is one of their own Settings, call settings_get, then settings_propose " +
 		"the change; for a key it refuses, link the row it returns instead of describing where it is."
