@@ -98,7 +98,6 @@ struct DocumentsFolderPage: View {
         .task(id: searchText) { await search(model) }
         .refreshable { await load(model) }
         .documentsActionSheets(model: model, actions: $actions, here: listing?.folder)
-        .accessibilityIdentifier(isRoot ? "documents-root" : "documents-folder")
     }
 
     @ViewBuilder
@@ -235,6 +234,7 @@ struct DocumentsEntryRow: View {
 }
 
 /// "You", "An agent on Orbit Cloud", or "Agent in" with the session's title in the accent colour (rule 6).
+@MainActor
 enum DocumentsWriterText {
     static func of(_ model: DocumentsModel, _ writer: DocumentsWriter) -> Text {
         let name = model.writerName(writer)
@@ -560,7 +560,6 @@ struct DocumentsUploadsSheet: View {
         }
         .presentationDetents([.medium, .large])
         .task { await model.loadSyncs() }
-        .accessibilityIdentifier("documents-uploads-sheet")
     }
 
     private func uploadRow(_ upload: DocumentsUploadItem) -> some View {
@@ -799,7 +798,6 @@ struct DocumentsFilePage: View {
             if let fresh = await model.entry(entryID) { await model.inspect(fresh) } else { gone = true }
         }
         .documentsActionSheets(model: model, actions: $actions, here: nil)
-        .accessibilityIdentifier("documents-file")
     }
 
     private func facts(_ model: DocumentsModel, _ entry: DocumentsEntry) -> String {
@@ -947,34 +945,8 @@ struct DocumentsVersionsPage: View {
             if let model, let entry {
                 Section {
                     ForEach(model.earlierVersions(of: entry)) { version in
-                        Menu {
-                            Text(DocumentsLogic.versionWhereNow(entry.name, folder: folder(model, entry)))
-                            Button(DocumentsLogic.restoreAsCurrent) {
-                                Task { await model.restoreVersion(version, asCopy: false) }
-                            }
-                            Button(DocumentsLogic.restoreAsCopy) {
-                                Task { await model.restoreVersion(version, asCopy: true) }
-                            }
-                            Button("Download") {
-                                Task {
-                                    if let url = await model.downloadForSharing(entry, version: version) {
-                                        shareFile = DocumentsSharedFile(url: url)
-                                    }
-                                }
-                            }
-                        } label: {
-                            HStack(spacing: 12) {
-                                DocumentsEntryIcon(entry: entry)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(entry.name).foregroundStyle(.primary)
-                                    Text(DocumentsLogic.versionLine(version, writer: model.writerName(version.writer)))
-                                        .font(.orbitListSubtitle).foregroundStyle(.secondary)
-                                }
-                                Spacer(minLength: 0)
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
+                        DocumentsVersionRow(model: model, entry: entry, version: version,
+                                            folder: folder(model, entry), shareFile: $shareFile)
                     }
                 } footer: {
                     Text(DocumentsLogic.trashFoot)
@@ -988,12 +960,46 @@ struct DocumentsVersionsPage: View {
             if let model, let fresh = await model.entry(entryID) { await model.inspect(fresh) }
         }
         .sheet(item: $shareFile) { file in DocumentsActivityView(items: [file.url]).ignoresSafeArea() }
-        .accessibilityIdentifier("documents-versions")
     }
 
     private func folder(_ model: DocumentsModel, _ entry: DocumentsEntry) -> String {
         DocumentsLogic.cardTrail(model.entryDetails[entry.id]?.path).split(separator: "›").last
             .map { $0.trimmingCharacters(in: .whitespaces) } ?? DocumentsLogic.title
+    }
+}
+
+/// One earlier version; a tap offers frame 12's choices.
+private struct DocumentsVersionRow: View {
+    let model: DocumentsModel
+    let entry: DocumentsEntry
+    let version: DocumentsVersion
+    let folder: String
+    @Binding var shareFile: DocumentsSharedFile?
+
+    var body: some View {
+        Menu {
+            Text(DocumentsLogic.versionWhereNow(entry.name, folder: folder))
+            Button(DocumentsLogic.restoreAsCurrent) { Task { await model.restoreVersion(version, asCopy: false) } }
+            Button(DocumentsLogic.restoreAsCopy) { Task { await model.restoreVersion(version, asCopy: true) } }
+            Button("Download") { Task { await download() } }
+        } label: {
+            HStack(spacing: 12) {
+                DocumentsEntryIcon(entry: entry)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(entry.name).foregroundStyle(.primary)
+                    Text(DocumentsLogic.versionLine(version, writer: model.writerName(version.writer)))
+                        .font(.orbitListSubtitle).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func download() async {
+        guard let url = await model.downloadForSharing(entry, version: version) else { return }
+        shareFile = DocumentsSharedFile(url: url)
     }
 }
 
@@ -1024,28 +1030,11 @@ struct DocumentsPhoneMoveSheet: View {
                         }
                     }
                     ForEach(children) { folder in
-                        let isMade = made?.id == folder.id
-                        Button {
-                            if isMade { made = nil }
+                        DocumentsMoveFolderRow(folder: folder, made: made?.id == folder.id,
+                                               moving: entries.contains { $0.id == folder.id }) {
+                            made = nil
                             Task { await open(folder.id, back: false) }
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: isMade ? "folder.badge.plus" : "folder.fill")
-                                    .foregroundStyle(isMade ? Color.green : Color.accentColor).frame(width: 28)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(folder.name).foregroundStyle(.primary)
-                                    if isMade { Text(DocumentsLogic.newFolderTitle).font(.orbitListSubtitle).foregroundStyle(.secondary) }
-                                }
-                                Spacer(minLength: 8)
-                                Image(systemName: isMade ? "checkmark" : "chevron.right")
-                                    .font(.orbitLabel.weight(.semibold))
-                                    .foregroundStyle(isMade ? Color.green : Color.secondary)
-                            }
-                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
-                        .listRowBackground(isMade ? Color.green.opacity(0.12) : nil)
-                        .disabled(entries.contains { $0.id == folder.id })
                     }
                     Button {
                         newName = DocumentsLogic.newFolderName
@@ -1118,6 +1107,37 @@ struct DocumentsPhoneMoveSheet: View {
     }
 }
 
+/// A folder in the Move sheet: a tap opens it; the one just made from the sheet is drawn selected (frame 7 ①).
+private struct DocumentsMoveFolderRow: View {
+    let folder: DocumentsEntry
+    let made: Bool
+    let moving: Bool
+    let open: () -> Void
+
+    var body: some View {
+        Button(action: open) {
+            HStack(spacing: 12) {
+                Image(systemName: made ? "folder.badge.plus" : "folder.fill")
+                    .foregroundStyle(made ? Color.green : Color.accentColor).frame(width: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(folder.name).foregroundStyle(.primary)
+                    Text(made ? DocumentsLogic.newFolderTitle : "").font(.orbitListSubtitle).foregroundStyle(.secondary)
+                        .opacity(made ? 1 : 0)
+                        .frame(height: made ? nil : 0)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: made ? "checkmark" : "chevron.right")
+                    .font(.orbitLabel.weight(.semibold))
+                    .foregroundStyle(made ? Color.green : Color.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(made ? Color.green.opacity(0.12) : nil)
+        .disabled(moving)
+    }
+}
+
 // MARK: - share link (frames 9-10, D18)
 
 struct DocumentsPhoneShareSheet: View {
@@ -1151,7 +1171,6 @@ struct DocumentsPhoneShareSheet: View {
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .task { await start() }
-        .accessibilityIdentifier("documents-share-sheet")
     }
 
     @ViewBuilder
@@ -1306,53 +1325,23 @@ struct DocumentsTrashPage: View {
     }
 
     private func page(_ model: DocumentsModel) -> some View {
-        List {
-            if let groups = model.trash, !groups.isEmpty {
-                Section {} header: {
-                    Text(DocumentsLogic.trashSummary(groups)).font(.orbitSubtext).foregroundStyle(.secondary).textCase(nil)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if let groups = model.trash, !groups.isEmpty {
+                    Text(DocumentsLogic.trashSummary(groups)).font(.orbitSubtext).foregroundStyle(.secondary)
+                        .padding(.horizontal, 20).padding(.bottom, 6)
+                }
+                ForEach(model.trash ?? []) { group in
+                    DocumentsTrashGroupCard(model: model, group: group, deleting: $deleting)
+                }
+                if model.trash?.isEmpty == false {
+                    Text(DocumentsLogic.trashFoot).font(.orbitListSubtitle).foregroundStyle(.secondary)
+                        .padding(.horizontal, 20).padding(.top, 10)
                 }
             }
-            ForEach(model.trash ?? []) { group in
-                Section {
-                    if let version = group.version {
-                        rowMenu(model, group: group, item: version.entry, version: true) {
-                            itemLabel(icon: version.entry, name: version.entry.name,
-                                      line: DocumentsLogic.trashVersionLine(group, writer: model.writerName(group.actor)),
-                                      size: DocumentsLogic.formatSize(version.sizeBytes))
-                        }
-                    }
-                    ForEach(group.items) { item in
-                        rowMenu(model, group: group, item: item, version: false) {
-                            itemLabel(icon: item, name: item.name,
-                                      line: DocumentsLogic.trashLine(item, in: group, writer: model.writerName(group.actor),
-                                                                     folderCount: item.isFolder && group.items.count == 1
-                                                                        ? group.itemCount : nil),
-                                      size: item.isFile ? DocumentsLogic.formatSize(item.sizeBytes) : "")
-                        }
-                    }
-                } header: {
-                    HStack {
-                        Text(DocumentsLogic.trashHeading(group))
-                        Spacer(minLength: 8)
-                        Button(DocumentsLogic.restoreAll) {
-                            Task {
-                                if group.version != nil {
-                                    await model.restoreVersion(of: group, asCopy: false)
-                                } else {
-                                    await model.restore(group)
-                                }
-                            }
-                        }
-                        .font(.orbitSubtext)
-                        .textCase(nil)
-                        .accessibilityIdentifier("documents-restore-all")
-                    }
-                } footer: {
-                    if group.id == model.trash?.last?.id { Text(DocumentsLogic.trashFoot) }
-                }
-            }
+            .padding(.vertical, 8)
         }
-        .listStyle(.insetGrouped)
+        .background(Color(.systemGroupedBackground))
         .overlay {
             if let error = model.trashError, model.trash == nil {
                 ContentUnavailableView("Couldn't read Trash", systemImage: "exclamationmark.triangle", description: Text(error))
@@ -1389,39 +1378,93 @@ struct DocumentsTrashPage: View {
             Text(DocumentsLogic.emptyTrashMessage(groups)
                  + (groups.contains(where: model.endsALink) ? " " + DocumentsLogic.endsAShareLink : ""))
         }
-        .accessibilityIdentifier("documents-trash")
+    }
+}
+
+/// One Trash group: the folder it was deleted from and when, Restore all, and its rows (rule 3); tapping a row offers
+/// what can be done with it (frame 12's three choices).
+private struct DocumentsTrashGroupCard: View {
+    let model: DocumentsModel
+    let group: DocumentsTrashGroup
+    @Binding var deleting: DocumentsTrashGroup?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(DocumentsLogic.trashHeading(group).uppercased())
+                    .font(.orbitListSubtitle).foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                Button(DocumentsLogic.restoreAll) {
+                    Task {
+                        if group.version != nil {
+                            await model.restoreVersion(of: group, asCopy: false)
+                        } else {
+                            await model.restore(group)
+                        }
+                    }
+                }
+                .font(.orbitSubtext)
+                .accessibilityIdentifier("documents-restore-all")
+            }
+            .padding(.horizontal, 20)
+            VStack(spacing: 0) {
+                ForEach(rows, id: \.entry.id) { row in
+                    if row.entry.id != rows.first?.entry.id { Divider().padding(.leading, 58) }
+                    menu(row)
+                }
+            }
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal, 16)
+        }
+        .padding(.top, 14)
     }
 
-    /// Tapping a row offers what can be done with it (frame 12's three choices).
-    private func rowMenu<Label: View>(_ model: DocumentsModel, group: DocumentsTrashGroup, item: DocumentsEntry,
-                                      version: Bool, @ViewBuilder label: () -> Label) -> some View {
+    private struct Row {
+        let entry: DocumentsEntry
+        let version: Bool
+    }
+
+    private var rows: [Row] {
+        (group.version.map { [Row(entry: $0.entry, version: true)] } ?? []) + group.items.map { Row(entry: $0, version: false) }
+    }
+
+    private func menu(_ row: Row) -> some View {
         Menu {
-            if version {
-                Text(DocumentsLogic.versionWhereNow(item.name, folder: DocumentsLogic.groupTitle(group)))
+            if row.version {
+                Text(DocumentsLogic.versionWhereNow(row.entry.name, folder: DocumentsLogic.groupTitle(group)))
                 Button(DocumentsLogic.restoreAsCurrent) { Task { await model.restoreVersion(of: group, asCopy: false) } }
                 Button(DocumentsLogic.restoreAsCopy) { Task { await model.restoreVersion(of: group, asCopy: true) } }
             } else {
-                Button("Restore") { Task { await model.restore(item, of: group) } }
+                Button("Restore") { Task { await model.restore(row.entry, of: group) } }
             }
             Divider()
             Button(DocumentsLogic.deleteForGood, role: .destructive) { deleting = group }
         } label: {
-            label()
+            label(row)
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier("documents-trash-row-\(item.name)")
+        .accessibilityIdentifier("documents-trash-row-\(row.entry.name)")
     }
 
-    private func itemLabel(icon: DocumentsEntry, name: String, line: String, size: String) -> some View {
-        HStack(spacing: 12) {
-            DocumentsEntryIcon(entry: icon)
+    private func label(_ row: Row) -> some View {
+        let writer = model.writerName(group.actor)
+        let line = row.version
+            ? DocumentsLogic.trashVersionLine(group, writer: writer)
+            : DocumentsLogic.trashLine(row.entry, in: group, writer: writer,
+                                       folderCount: row.entry.isFolder && group.items.count == 1 ? group.itemCount : nil)
+        let size = row.version ? DocumentsLogic.formatSize(group.version?.sizeBytes ?? 0)
+            : (row.entry.isFile ? DocumentsLogic.formatSize(row.entry.sizeBytes) : "")
+        return HStack(spacing: 12) {
+            DocumentsEntryIcon(entry: row.entry)
             VStack(alignment: .leading, spacing: 2) {
-                Text(name).foregroundStyle(.primary).lineLimit(1).truncationMode(.middle)
+                Text(row.entry.name).foregroundStyle(.primary).lineLimit(1).truncationMode(.middle)
                 Text(line).font(.orbitListSubtitle).foregroundStyle(.secondary).multilineTextAlignment(.leading)
             }
             Spacer(minLength: 8)
             Text(size).font(.orbitSubtext).foregroundStyle(.secondary).monospacedDigit()
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
         .contentShape(Rectangle())
     }
 }
@@ -1483,7 +1526,6 @@ struct DocumentsStoragePage: View {
         .navigationBarTitleDisplayMode(.large)
         .task(id: model.changes) { await model.loadStorage() }
         .refreshable { await model.loadStorage() }
-        .accessibilityIdentifier("documents-storage")
     }
 
     private func total(_ usage: DocumentsUsage) -> some View {
@@ -1613,7 +1655,6 @@ struct DocumentsPickerSheet: View {
             .task { await start() }
             .task(id: searchText) { await search() }
         }
-        .accessibilityIdentifier("documents-picker")
     }
 
     private var searching: Bool { !searchText.trimmingCharacters(in: .whitespaces).isEmpty }
