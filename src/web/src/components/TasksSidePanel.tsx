@@ -64,7 +64,7 @@ import type {
 } from '@orbit/shared';
 import { SCHEDULE_COPY } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
-import { useDocumentsEnabled } from '../lib/documentsSwitch';
+import { useDriveEnabled } from '../lib/driveSwitch';
 import { managedFirst, managedRowOf, useManagedRunner, useManagedRunnerId } from '../lib/managedRunner';
 import { routeId, encodeId } from '../lib/idCodec';
 import { SharedWithMeGroup } from './SharedWithMe';
@@ -193,7 +193,7 @@ const TOP: TopNavItem[] = [
   { key: 'wiki', icon: <SidebarNavIcon name="wiki" />, label: 'Wiki' },
   // Documents, the account's drive, directly under the Wiki (docs/mocks/documents/02-web, frame 1). No count and no
   // shortcut: nothing in Files waits on the owner. Its Trash and earlier versions are reached from inside it.
-  { key: 'documents', icon: <SidebarNavIcon name="files" />, label: 'Drive' },
+  { key: 'drive', icon: <SidebarNavIcon name="files" />, label: 'Drive' },
   // No Following here: its watches are the waits agents keep for their own sessions, already shown
   // in each session's header and Watching strip, and those are what link to /following.
   // No Machines & models either (docs/mocks/machines-and-models, 02): where agents run and whose quota
@@ -402,8 +402,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // No Wiki row at all for an account the server has not switched the wiki on for (WIKI_DISABLED):
   // an entry that led to a refusal would be worse than none.
   // Nor a Files row on a server without Documents (ORBIT_DOCUMENTS_ENABLED), nor while that is still being read.
-  const documents = useDocumentsEnabled();
-  const topItems = TOP.filter((t) => (t.key !== 'wiki' || wikiShown(wikiSpaces)) && (t.key !== 'documents' || documents.enabled));
+  const drive = useDriveEnabled();
+  const topItems = TOP.filter((t) => (t.key !== 'wiki' || wikiShown(wikiSpaces)) && (t.key !== 'drive' || drive.enabled));
   // The wikis the Wiki group lists, in the server's order, each called what the Wiki's own head calls it.
   const wikiRows = wikiSpaces.data ?? [];
   const wikiNames = useMemo(() => wikiSpaceNames(wikiSpaces.data ?? []), [wikiSpaces.data]);
@@ -513,9 +513,9 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
           ? (projectRowKey ?? 'projects')
           : onWiki
             ? (wikiRowKey ?? 'wiki')
-            // The Documents page and its Trash are Documents.
-            : loc.pathname === '/documents' || loc.pathname.startsWith('/documents/')
-              ? 'documents'
+            // The Drive page and its Trash are Drive.
+            : loc.pathname === '/drive' || loc.pathname.startsWith('/drive/')
+              ? 'drive'
             // Every task route — all tasks, one task, a list, the tasks in none — is the Tasks
             // page, whose title picks among them.
             : loc.pathname.startsWith('/tasks/') || loc.pathname.startsWith('/lists/')

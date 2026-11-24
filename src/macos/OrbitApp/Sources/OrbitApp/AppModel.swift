@@ -500,7 +500,7 @@ final class AppModel {
 
 #if DEBUG
     /// Test-only: a screenshot gallery's Documents model.
-    func seedDocumentsForTesting(_ model: DocumentsModel) { documents = model }
+    func seedDriveForTesting(_ model: DriveModel) { documents = model }
 #endif
 
     init() {
@@ -555,7 +555,7 @@ final class AppModel {
     private(set) var scheduled: ScheduledModel?
     /// The account's Documents (the drive): the Documents section, its sidebar rows and the uploads that outlive the
     /// page (docs/mocks/documents, 03-mac).
-    private(set) var documents: DocumentsModel?
+    private(set) var drive: DriveModel?
     /// The wiki chat beside every wiki page: its round button, its panel and the cards it draws
     /// (docs/wiki-chat-design.md §9).
     private(set) var wikiChat: WikiChatModel?
@@ -668,12 +668,12 @@ final class AppModel {
         projects = ProjectsModel(baseURL: url, tokenStore: tokenStore)
         wiki = WikiModel(baseURL: url, tokenStore: tokenStore)
         scheduled = ScheduledModel(baseURL: url, tokenStore: tokenStore)
-        let documentsModel = DocumentsModel(baseURL: url, tokenStore: tokenStore)
-        documentsModel.onToast = { [weak self] message, subtitle, tone, undo in
+        let driveModel = DriveModel(baseURL: url, tokenStore: tokenStore)
+        driveModel.onToast = { [weak self] message, subtitle, tone, undo in
             self?.showToast(message, subtitle: subtitle, tone: tone, undo: undo)
         }
-        documentsModel.openSession = { [weak self] id in self?.route(to: .session(id)) }
-        documents = documentsModel
+        driveModel.openSession = { [weak self] id in self?.route(to: .session(id)) }
+        drive = driveModel
         wikiChat = WikiChatModel(baseURL: url, tokenStore: tokenStore)
         consoleRegistry = ConsoleRegistry(baseURL: url, tokenStore: tokenStore,
                                           store: ConsoleRegistry.defaultStore(for: url))
@@ -1195,10 +1195,10 @@ final class AppModel {
     /// task's card, a push that names the schedule.
     #if os(macOS)
     /// A file an agent put in Documents, opened where it lives with it selected (a transfer card's "Show in
-    /// Documents", `DocumentsTransferCardView`).
+    /// Documents", `DriveTransferCardView`).
     func revealDocument(_ entryID: String) {
         guard let documents else { return }
-        selectedSection = .documents
+        selectedSection = .drive
         Task { await documents.reveal(entryID: entryID) }
     }
     #endif
@@ -1524,11 +1524,11 @@ final class AppModel {
         // included). It moves no session row: falling through to the snapshot below would be the web's
         // `groupsFor` default of `['sessions']`, a list refetch for an event about something else.
         // A write to the drive committed, or an agent's directory sync moved: what Documents has loaded.
-        case .documents(let syncs):
+        case .drive(let syncs):
             if syncs {
-                documents?.nudge(syncs: true)
+                drive?.nudge(syncs: true)
             } else {
-                whenSeen("documents") { $0.documents?.nudge(syncs: false) }
+                whenSeen("drive") { $0.drive?.nudge(syncs: false) }
             }
         case .wiki:
             whenSeen("wiki") {
@@ -2851,7 +2851,7 @@ final class AppModel {
         // An entry's page, or Review, over the Wiki's home: the same one read.
         case .wiki: return nav.sectionAtRoot
         case .scheduled: return nav.sectionAtRoot
-        case .documents: return nav.sectionAtRoot
+        case .drive: return nav.sectionAtRoot
         }
     }
 
@@ -4204,12 +4204,12 @@ final class AppModel {
 
     /// A drive file (or folder) a reply links, opened in Documents (docs/mocks/documents, 01-ios ⑮): on the phone and
     /// the iPad its page on the section's stack, on the Mac its folder with it selected.
-    func openDocumentsEntry(_ entry: DocumentsEntry) {
-        selectedSection = .documents
+    func openDriveEntry(_ entry: DriveEntry) {
+        selectedSection = .drive
         #if os(macOS)
-        if entry.isFolder { documents?.open(folder: entry.id) } else { documents?.reveal(entry) }
+        if entry.isFolder { drive?.open(folder: entry.id) } else { drive?.reveal(entry) }
         #else
-        nav.path = [entry.isFolder ? .documentsFolder(entryID: entry.id, name: entry.name) : .documentsFile(entryID: entry.id)]
+        nav.path = [entry.isFolder ? .driveFolder(entryID: entry.id, name: entry.name) : .driveFile(entryID: entry.id)]
         #endif
     }
 

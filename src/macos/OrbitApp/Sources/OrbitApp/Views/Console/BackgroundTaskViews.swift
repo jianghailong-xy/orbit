@@ -184,7 +184,7 @@ struct SubagentTranscriptView: View {
                     StepsRowView(items: items, fullPayload: fullPayload)
                 case .transfer(let kind, let cards):
                     // A SubAgent's own run has no turn status here: a call still waiting counts as going.
-                    DocumentsTransferCardView(kind: kind, cards: cards,
+                    DriveTransferCardView(kind: kind, cards: cards,
                                               live: cards.contains { $0.status == .running })
                 default:
                     EmptyView()
