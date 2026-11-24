@@ -56,6 +56,7 @@ type memoryWatchdog struct {
 	kill         func(memoryProcessID) bool
 	notify       func(session, message string)
 	baseline     string
+	smallRunner  bool
 
 	mu    sync.Mutex
 	roots map[memoryProcessID]memoryRoot
@@ -75,7 +76,8 @@ func startMemoryWatchdog(ctx context.Context, managed bool) func() {
 		return func() {}
 	}
 	read := func() (uint64, uint64, bool) { return watchdogCgroupMemory(cgroupRoot) }
-	if limit, _, ok := read(); !ok || limit == 0 {
+	limit, _, ok := read()
+	if !ok || limit == 0 {
 		return func() {}
 	}
 	readOOMKills := func() (uint64, bool) {
@@ -90,9 +92,10 @@ func startMemoryWatchdog(ctx context.Context, managed bool) func() {
 		readMemory: read, readOOMKills: readOOMKills, oomKills: oomKills,
 		processes: readMemoryProcesses, processSize: memoryProcessSize,
 		raiseScore: raiseToolOOMScore, kill: killMemoryProcess, notify: notifyMemoryWatchdogKill,
-		baseline: readOOMScore("/proc/self"),
-		roots:    make(map[memoryProcessID]memoryRoot),
-		raised:   make(map[memoryProcessID]bool),
+		baseline:    readOOMScore("/proc/self"),
+		smallRunner: limit <= 4<<30,
+		roots:       make(map[memoryProcessID]memoryRoot),
+		raised:      make(map[memoryProcessID]bool),
 	}
 	activeMemoryWatchdog.Store(w)
 	ctx, cancel := context.WithCancel(ctx)
@@ -156,8 +159,16 @@ func readOOMScore(dir string) string {
 }
 
 func memoryWatchdogChildEnv(env []string) []string {
-	if w := activeMemoryWatchdog.Load(); w != nil && w.baseline != "" {
-		return envWithValue(env, memoryWatchdogBaselineEnv, w.baseline)
+	if w := activeMemoryWatchdog.Load(); w != nil {
+		if w.baseline != "" {
+			env = envWithValue(env, memoryWatchdogBaselineEnv, w.baseline)
+		}
+		// A single cold Go test compile can cross the watchdog threshold
+		// on a 4 GiB runner even with one compiler worker. Collect earlier
+		// by default and preserve an explicit session or runner setting.
+		if w.smallRunner && envValue(env, "GOGC") == "" {
+			env = envWithValue(env, "GOGC", "50")
+		}
 	}
 	return env
 }

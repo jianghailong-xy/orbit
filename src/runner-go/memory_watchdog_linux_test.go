@@ -83,6 +83,29 @@ func TestMemoryWatchdogIgnoresFileCacheAndStopsOneToolUnderPressure(t *testing.T
 	}
 }
 
+func TestMemoryWatchdogDefaultsGoGCOnlyForSmallManagedRunners(t *testing.T) {
+	previous := activeMemoryWatchdog.Swap(nil)
+	t.Cleanup(func() { activeMemoryWatchdog.Store(previous) })
+	for _, tc := range []struct {
+		name     string
+		watchdog *memoryWatchdog
+		env      []string
+		want     string
+	}{
+		{name: "unmanaged"},
+		{name: "larger runner", watchdog: &memoryWatchdog{}},
+		{name: "small runner", watchdog: &memoryWatchdog{smallRunner: true}, want: "50"},
+		{name: "explicit setting", watchdog: &memoryWatchdog{smallRunner: true}, env: []string{"GOGC=80"}, want: "80"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			activeMemoryWatchdog.Store(tc.watchdog)
+			if got := envValue(runnerChildEnv(tc.env), "GOGC"); got != tc.want {
+				t.Fatalf("GOGC = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestMemoryWatchdogProtectsOrbitHelpers(t *testing.T) {
 	// The test binary stands in for Orbit. Launch both helpers through an
 	// alternate path to exercise executable identity, regardless of argv.
