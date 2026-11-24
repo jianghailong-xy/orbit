@@ -147,7 +147,7 @@ private fun Pill(model: WorktreeModel, state: WorktreeState, d: JsonObject, bran
     }
     val displayBranch = WorktreeBarLogic.displayBranch(d, branch)
     val runStatus = d.string("runStatus") ?: d.string("status")
-    val committed = runStatus !in setOf("RUNNING", "AWAITING_INPUT", "INTERRUPTED")
+    val committed = WorktreeBarLogic.committed(d, runStatus)
     // The session's authoritative run status gates Commit and Merge: a clean mid-turn tree is a checkpoint, not finished work.
     // A queued turn, a message on its way and a parked session's running sub-agents count too; the recovery review reads the same gate.
     val turnActive = WorktreeBarLogic.turnActive(runStatus, WorktreeBarLogic.runningSubagents(d), sending)

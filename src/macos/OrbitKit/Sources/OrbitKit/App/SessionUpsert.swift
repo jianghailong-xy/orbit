@@ -35,7 +35,7 @@ public extension Session {
             }
             return SessionAgentRef(id: ref.id, name: ref.name, provider: nil, model: ref.model, effort: ref.effort)
         }
-        return merging(
+        var row = merging(
             // A summary with no title means "still untitled" (the naming pass hasn't run), not
             // "cleared" — so it never overwrites a title this row already has.
             title: summary.title,
@@ -56,6 +56,11 @@ public extension Session {
             // Travelling with the same count, and cleared by the same rule: a summary that says
             // nothing is waiting here has to be able to take the bar's card away with it.
             ownerItems: summary.ownerItems,
+            // The requests this session filed and the moves waiting on it travel with the same
+            // count, cleared by the same rule: the summary that answers the last one sends `[]`,
+            // and the row must stop lighting with it.
+            ownerRequests: summary.ownerRequests,
+            taskMoves: summary.taskMoves,
             // Overwritten with the same count, by the same rule: the summary that says a review is
             // over (null) is what turns the row from "Under review" to whatever comes next.
             confirmationUnderReview: summary.confirmationUnderReview,
@@ -65,6 +70,8 @@ public extension Session {
             owesReplyTo: summary.owesReplyTo,
             taskId: summary.taskId,
             lastTurnAt: summary.lastTurnAt,
+            // Moves the row only when the server moved it; streamed activity refreshes lastTurnAt alone.
+            listedAt: summary.listedAt,
             // Null is a value here, like the previews beside them: the summary is how an already-open
             // list learns the recap a settle just wrote — and how it lets go of one a manual refresh
             // dropped — without waiting for the next snapshot.
@@ -92,6 +99,13 @@ public extension Session {
             // Owned by the summary like the handoff: the summary that ends a compaction is a null.
             enginePhase: summary.enginePhase
         )
+        row.phase = summary.phase
+        row.released = summary.released
+        row.workFinished = summary.workFinished
+        row.lastTurnOutcome = summary.lastTurnOutcome
+        row.waitingOn = summary.waitingOn
+        if let endReason = summary.endReason { row.endReason = endReason }
+        return row
     }
 
     /// Apply a title the user just typed, so the header and every loaded row show the new name before
@@ -165,6 +179,10 @@ public extension Session {
                          // Doubly optional for the same reason: nil keeps the row's items, and
                          // `.some([])` is the server saying there are none.
                          ownerItems: [SessionOwnerItem]?? = nil,
+                         // Doubly optional for the same reason: nil keeps the row's, and
+                         // `.some([])` is the server saying nothing is waiting.
+                         ownerRequests: [SessionOwnerRequest]?? = nil,
+                         taskMoves: [SessionTaskMoveGroup]?? = nil,
                          // Doubly optional for the same reason: `.some(nil)` is "none under review".
                          confirmationUnderReview: ConfirmationUnderReview?? = nil,
                          // Doubly optional for the same reason.
@@ -172,6 +190,7 @@ public extension Session {
                          owesReplyTo: [SessionRequestPeer]?? = nil,
                          taskId: String? = nil,
                          lastTurnAt: String? = nil,
+                         listedAt: String? = nil,
                          // Doubly optional like `retryAt`: nil keeps the row's recap, `.some(nil)`
                          // is the server saying the session has none, `.some(text)` the one just
                          // written — which travels with its time so the row's label can date it.
@@ -212,6 +231,8 @@ public extension Session {
                 pendingApprovals: pendingApprovals ?? self.pendingApprovals,
                 waitingKind: waitingKind ?? self.waitingKind,
                 ownerItems: ownerItems ?? self.ownerItems,
+                ownerRequests: ownerRequests ?? self.ownerRequests,
+                taskMoves: taskMoves ?? self.taskMoves,
                 taskId: taskId ?? self.taskId,
                 branch: branch,
                 updatedAt: updatedAt,
@@ -249,6 +270,7 @@ public extension Session {
                 pinnedAt: pinnedAt,
                 createdAt: createdAt,
                 lastTurnAt: lastTurnAt ?? self.lastTurnAt,
+                listedAt: listedAt ?? self.listedAt,
                 tags: tags,
                 retryAt: retryAt ?? self.retryAt,
                 // Both read off this row like the fields above: the list's summaries and every
@@ -271,12 +293,18 @@ public extension Session {
                 owesReplyTo: owesReplyTo ?? self.owesReplyTo,
                 folderId: folderId ?? self.folderId,
                 confirmationUnderReview: confirmationUnderReview ?? self.confirmationUnderReview,
-                projectMembership: projectMembership ?? self.projectMembership)
+                projectMembership: projectMembership ?? self.projectMembership,
+                sessionKind: sessionKind, landing: landing)
         // The queue's gate is the list query's alone, and no event carries it: kept while the row is
         // still queued, and dropped once it is not, so a later queue does not read an old gate.
         merged.coordinatorHandoff = coordinatorHandoff ?? self.coordinatorHandoff
         merged.coordinatorHandoffReceived = coordinatorHandoffReceived ?? self.coordinatorHandoffReceived
         merged.enginePhase = enginePhase ?? self.enginePhase
+        merged.phase = phase
+        merged.released = released
+        merged.workFinished = workFinished
+        merged.lastTurnOutcome = lastTurnOutcome
+        merged.waitingOn = waitingOn
         if merged.effectiveRunState == .queued {
             merged.queuedReason = queuedReason
             merged.queuedActive = queuedActive

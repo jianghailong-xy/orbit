@@ -236,9 +236,11 @@ async function runNow(services: Services, target: Fixture, taskId: string): Prom
   return result.sessionId;
 }
 
-/** The run ends as the runner's /finalize leaves it. */
+/** The run ends as the runner's /finalize leaves it: a failure is on the turn it cut off (removal step R2). */
 async function end(db: PrismaClient, sessionId: string, status: typeof RunStatus.SUCCEEDED | typeof RunStatus.FAILED, error: string | null = null) {
-  await db.session.update({ where: { id: sessionId }, data: { status, error, finishedAt: new Date()} });
+  await db.session.update({ where: { id: sessionId }, data: {
+    status, error, finishedAt: new Date(), ...(status === RunStatus.FAILED ? { lastTurnOutcome: 'FAILED' } : {}),
+  } });
 }
 
 /** What a run actually is: the three values routing decides. */
@@ -301,7 +303,7 @@ test('the engines list on an Agent is still the owner\'s to write: the user API 
     const services = connect();
     try {
       // The user API validates with a whitelist (main.ts): engines with a tier table are kept, nothing else.
-      for (const Dto of [CreateWorkspaceDto, UpdateWorkspaceDto]) {
+      for (const Dto of [CreateWorkspaceDto, UpdateWorkspaceDto] as Array<typeof UpdateWorkspaceDto>) {
         const ok = plainToInstance(Dto, { name: 'agent', modelRoutingProviders: ['codex', 'claude'] });
         assert.deepEqual(await validate(ok, { whitelist: true }), []);
         assert.deepEqual(ok.modelRoutingProviders, ['codex', 'claude'], `${Dto.name} keeps it`);

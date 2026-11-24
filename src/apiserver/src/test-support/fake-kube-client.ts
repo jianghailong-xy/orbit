@@ -79,6 +79,8 @@ export interface FakeKubeCall {
   op: FakeKubeOp;
   kind?: Kind;
   name?: string;
+  /** A delete's grace, when it gave one. */
+  gracePeriodSeconds?: number;
 }
 
 const clone = <T>(value: T): T => structuredClone(value);
@@ -392,7 +394,8 @@ export class FakeKubeCluster {
         const found = objects.get(name) as Pod | undefined;
         if (!found || (found.metadata.finalizers ?? []).length === 0) return base.delete(name, options);
         await pause();
-        this.calls.push({ op: 'delete', kind: 'pods', name });
+        const grace = options?.gracePeriodSeconds;
+        this.calls.push({ op: 'delete', kind: 'pods', name, ...(grace !== undefined ? { gracePeriodSeconds: grace } : {}) });
         this.fault('delete', 'pods');
         if (options?.uid && found.metadata.uid !== options.uid) {
           throw new KubeApiError(409, 'Conflict', `Precondition failed: UID in precondition: ${options.uid}, UID in object meta: ${found.metadata.uid}`);
@@ -485,7 +488,8 @@ export class FakeKubeCluster {
       },
       delete: async (name, options) => {
         await pause();
-        this.calls.push({ op: 'delete', kind, name });
+        const grace = options?.gracePeriodSeconds;
+        this.calls.push({ op: 'delete', kind, name, ...(grace !== undefined ? { gracePeriodSeconds: grace } : {}) });
         this.fault('delete', kind);
         const found = objects.get(name);
         if (!found) return;

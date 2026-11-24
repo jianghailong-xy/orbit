@@ -24,9 +24,10 @@ import { SessionsService } from '../sessions/sessions.service';
 import { fileLostJobWake, settleLostRunnerWork } from './lost-runner-work';
 import { retireSessionInboxGeneration } from '../common/session-inbox-fence';
 import { PrismaService } from '../prisma/prisma.service';
+import { returnWaitingSessionsToOpen } from '../sessions/return-to-open';
 import { postRunFailureComment, reclaimStalledTask } from '../tasks/reclaim-stalled-task';
 import { RealtimeService } from './realtime.service';
-import { announceParkedSessionEnd, claimParkedSessionEnd } from './parked-session-end';
+import { announceParkedSessionEnd, claimParkedSessionEnd, fixingLandingWithWakeSource } from './parked-session-end';
 import { readRuntimeStartupFacts, runtimeStartupClock, runtimeStartupOverdue } from './runtime-startup-clock';
 import {
   classifyTransactionFault,
@@ -354,7 +355,24 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
   /** What the timer runs every REAP_INTERVAL_MS: a sweep, on the one process that sweeps (`leading`). */
   async tick(): Promise<void> {
     if (!this.leading()) return;
+    // Its own failure, never the sweep's: a session waiting on the owner comes back to Open whatever
+    // happened to the runs this sweep reaps.
+    await this.returnWaitingSessions().catch((e: unknown) =>
+      this.log.error('waiting-session sweep failed: ' + (e as Error).message));
     await this.sweep();
+  }
+
+  /**
+   * Every session filed in Completed or Trash that still has a question waiting on the owner comes
+   * back to Open (`returnWaitingSessionsToOpen`), whatever filed it there. The writers that file a
+   * session already do this after their own commit; this catches every other path, and its first
+   * run after boot is the backfill for sessions filed away before it existed.
+   */
+  async returnWaitingSessions(): Promise<number> {
+    const back = await returnWaitingSessionsToOpen(this.prisma, this.log);
+    for (const { id } of back) this.realtime.publishSessionCreated(id);
+    if (back.length) this.log.log(`brought ${back.length} session(s) with a question waiting back to Open`);
+    return back.length;
   }
 
   /**
@@ -395,7 +413,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
    * path that actually removes session data — soft-delete just hides it.
    *
    * A session holding a file somebody pinned or evidence cites waits in Trash until that stops, with everything else in it
-   * (docs/orbit-files-design.md §2.8): the row would go with the session, and nobody asked for that. A person who empties
+   * (docs/documents-design.md §2.8): the row would go with the session, and nobody asked for that. A person who empties
    * Trash by hand (`SessionsService.purge`) is asking for exactly that, and gets it.
    */
   private async purgeTrash(): Promise<void> {
@@ -458,6 +476,12 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         runClaimedAt: true,
         cancelRequestedAt: true,
         endReason: true,
+        // The failure a held session's last turn reported under the new runner protocol, whose release never came:
+        // the cancel-grace branch keeps it (SESSION_RELEASE_V1).
+        lastTurnOutcome: true,
+        // And, for that hold, what its task is told: the failure's words, and whether a retry was armed for it.
+        error: true,
+        retryAt: true,
         // §13.6 SU6: whether this run is DOING the task's work or looking at it. Only the first
         // follows the task's lifecycle; see `shouldEndTerminalTask`.
         startsTaskWork: true,
@@ -518,6 +542,10 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           // a runner that was never handed it.
           const queued = !graceful && s.status === RunStatus.PENDING;
           const status = graceful ?? (queued ? RunStatus.CANCELLED : undefined);
+          // The hold a failed turn leaves under the new runner protocol (SESSION_RELEASE_V1), whose release never
+          // came: no end asked, and its failure already on the turn and copied to last_turn_outcome.
+          const failedTurnHeld = !status && s.status === RunStatus.RUNNING && s.endReason == null
+            && s.lastTurnOutcome === 'FAILED';
           await this.forceFinalize(
             s.id,
             s.assignedRunnerId,
@@ -535,9 +563,22 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               // as asked.
               // Not honoured, the end still is one somebody asked for: the turn it cut off ends CANCELLED, and nothing
               // records a failure (design §12.1 W7). Only a RUNNING session had one: idle, none was in flight.
-              ...(!status && s.status === RunStatus.RUNNING
+              // Except the hold a failed turn leaves under the new runner protocol (SESSION_RELEASE_V1): no end asked,
+              // the queue drained, and its failure already on the turn and copied to last_turn_outcome. Its release
+              // never came; released here, it reads as the failure it is, as the old protocol's would have.
+              ...(!status && s.status === RunStatus.RUNNING && !failedTurnHeld
                 ? { carryingTurn: { outcome: 'CANCELLED' as const, orLatest: false } }
                 : {}),
+              // Its task is told what the release would have told it (the old protocol's failed turn): FAILED with
+              // the run-failure comment, or, with a retry armed, nothing yet.
+              ...(failedTurnHeld
+                ? (s.retryAt == null
+                  ? { resetTaskTo: TaskStatus.FAILED, taskFailure: 'RUN_FAILED' as const, failureDetail: s.error ?? undefined }
+                  : { keepTask: true })
+                : {}),
+              // And the session keeps the failure's own words, which its turn report wrote, as the release it stands
+              // in for would have: "cancel not honored" is this sweep's reason, not what failed (step 6.2's walk).
+              ...(failedTurnHeld ? { keepError: true } : {}),
             },
           );
           continue;
@@ -731,7 +772,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         // durable end claim starts the cancel grace timer, whose later sweep can finalize
         // without that runner. Ordinary parked sessions still returned above.
         if (shouldEndTerminalTask) {
-          await this.endParked(s.id, s.assignedRunnerId, taskEndReason);
+          await this.endParked(s.id, s.assignedRunnerId, taskEndReason, offline);
         }
       } catch (e) {
         // Isolate per-session failures so one doesn't skip the rest; retried next sweep. A failure
@@ -964,6 +1005,12 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
        * session, the one that has such a turn. Absent, no turn outcome is written.
        */
       carryingTurn?: { outcome: 'FAILED' | 'CANCELLED'; orLatest: boolean };
+      /** Leave the task as it is: a retry armed for the run's failure goes on with it (the new runner protocol's held
+       *  failed turn, released by the cancel grace). */
+      keepTask?: boolean;
+      /** Leave the session's `error` as it is rather than writing `reason` over it: the failure a held failed turn's
+       *  report already recorded (the new runner protocol's hold, released by the cancel grace). */
+      keepError?: boolean;
     },
   ): Promise<void> {
     const status = opts.status ?? RunStatus.FAILED;
@@ -1013,7 +1060,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         // recovering from a partition to stop (the session is already finalized here).
         data: {
           status,
-          ...(failed ? { error: reason } : {}),
+          ...(failed && !opts.keepError ? { error: reason } : {}),
           // Due immediately: AutoRetryService's own sweep is what waits for the runner to
           // come back, so arming for "now" makes the first sweep after this the first check
           // rather than a fixed delay guessing when the runner returns.
@@ -1090,7 +1137,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         `its run was reaped as ${status} (${reason})`,
       );
       // Reclaim a now-stalled IN_PROGRESS task so it stops showing as running.
-      const taskReclaimed = taskId && status !== RunStatus.SUCCEEDED
+      const taskReclaimed = taskId && status !== RunStatus.SUCCEEDED && !opts.keepTask
         ? await reclaimStalledTask(
             tx,
             taskId,
@@ -1138,6 +1185,8 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     // WORK_ELSEWHERE item its frozen identity opened (§12.15 P-M1).
     if ('identitySettled' in outcome && outcome.identitySettled && taskId) {
       await this.openItems?.deliverForTasks([taskId]);
+      // §12.5 W7: a failed landing this session held, handed back by this finish (TURN_FAILED), whatever it names.
+      await this.openItems?.offerLandingFixesTo(sessionId);
       // And the project facts the deferred landing held (PROJECT_TASKS_SETTLED / looks-finished),
       // re-derived now that it is decided. The dependents themselves are the 60 s ready sweep's.
       if (this.completionInputs) {
@@ -1170,6 +1219,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     sessionId: string,
     runnerId: string | null,
     reason: SessionEndReason,
+    runnerOffline: boolean,
   ): Promise<void> {
     // Claim the teardown atomically: re-evaluate the trigger at execution time and put
     // the cancelRequestedAt flip + the 'end' turn in ONE transaction so a seq P2002
@@ -1179,14 +1229,29 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     // makes at once for its task's idle work (parked-session-end.ts, §12.15 P-M1);
     // this sweep is the backstop for what that one left.
     // Retried whole, for the same reason as forceFinalize above.
+    // R2 (§12.5 W6, W7): not a session its task's failed landing revived that something will still wake — it
+    // ends at its own park, or on a later sweep, once nothing does — unless its runner is gone, when nothing will.
     const done = await withTransactionRetry(
       this.prisma,
-      (tx) => claimParkedSessionEnd(tx, sessionId, reason),
+      async (tx) => {
+        if (reason === SessionEndReason.TASK_DONE && !runnerOffline
+          && (await fixingLandingWithWakeSource(tx, sessionId))) return false;
+        return claimParkedSessionEnd(tx, sessionId, reason);
+      },
       loggedRetry(this.log, 'reaper.endParked'),
     );
     if (!done) return;
     if (runnerId) this.realtime.requestCancel(runnerId, sessionId);
     announceParkedSessionEnd(this.realtime, { sessionId, reason });
+    if (reason === SessionEndReason.TASK_DONE) {
+      // A run filed in Completed with a question still waiting on the owner comes straight back.
+      const back = await returnWaitingSessionsToOpen(this.prisma, this.log, { sessionIds: [sessionId] })
+        .catch((e: unknown) => {
+          this.log.warn(`could not bring session ${sessionId} back to Open: ${(e as Error).message}`);
+          return [];
+        });
+      for (const { id } of back) this.realtime.publishSessionCreated(id);
+    }
     this.log.log(`recycling parked session ${sessionId}`);
   }
 }

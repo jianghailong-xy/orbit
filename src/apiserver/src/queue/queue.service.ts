@@ -20,6 +20,7 @@ import {
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { runtimeCatalogModels } from '../common/runtime-model';
 import { anthropicGatewayEnabled, engineTableOptions, withKeyGatewayToken } from '../providers/key-gateway';
 import {
   claudeCodexLoginEnabled,
@@ -29,13 +30,13 @@ import {
 } from '../providers/codex-login-claude';
 import { codexPoolUnavailableReason } from '../providers/codex-login';
 import { loginCanRun, loginPoolResumesAt, loginRunsAgainAt, type LoginAccount } from '../providers/pool-login-select';
+import { accountName } from '../providers/codex-login-gateway';
 import { choosePoolCredential } from '../providers/pool-credential-select';
 import {
   accountPoolRuntime,
   adminOnlyProviderRefusal,
   builtinSessionEngine,
   engineBaseEnv,
-  ENGINE_INCOMPATIBLE_ERROR_LIKE,
   engineIncompatibleMessage,
   isBuiltinProvider,
   keyCredential,
@@ -62,6 +63,7 @@ import {
 import { PoolNotices } from '../providers/pool-notice';
 import { ACCOUNT_MOVE_CAPABILITY } from '../providers/account-move-capability';
 import { countedAccountBeforeDispatch } from '../providers/active-sessions';
+import { healthIndexFor, runnerWithHealth, subjectBlocked, withAccountHealth, withoutBlocked } from '../providers/account-health-blocked';
 import {
   accountBeforeDispatch,
   accountSwitchNotice,
@@ -95,16 +97,7 @@ import {
 } from '../common/session-tree-sql';
 import {
   ADMIN_ONLY_PROVIDER_ERROR,
-  ANTIGRAVITY_RUNNER_UPGRADE_ERROR,
-  CURSOR_NOT_INSTALLED_ERROR,
-  CURSOR_RUNNER_UPGRADE_ERROR,
-  DSH_NOT_INSTALLED_ERROR,
-  DSH_PLATFORM_UNSUPPORTED_ERROR,
-  DSH_RUNNER_UPGRADE_ERROR,
-  DSH_VERSION_INCOMPATIBLE_ERROR,
-  OPENCODE_RUNNER_UPGRADE_ERROR,
   PROVIDER_UNAVAILABLE_ERROR,
-  SOURCE_PROTOCOL_UNSUPPORTED_ERROR,
 } from '../runner-api/runner-provider-support';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
 import { orchestrationEnabled } from '../common/orchestration-switch';
@@ -120,6 +113,7 @@ import { RunnerHints } from '../realtime/runner-hints';
 import { forkAuthorityBindings, sessionSourceSnapshot } from '../projects/session-source';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
+import { documentsClaimFields } from '../documents/documents-switch';
 import { workflowClaimFields } from '../runner-api/workflow-run';
 import { branchName } from '../projects/project-criterion-landing';
 import { codelessClaimFields } from '../sessions/codeless-checkout';
@@ -128,6 +122,7 @@ import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/
 import { browserClaimFields, MANAGED_RUNNER_BROWSER_GATE, type ManagedRunnerBrowserGate } from '../managed-runners/managed-runner-browser-gate';
 import { DISPATCH_PAUSED } from './dispatch-pause';
 import { CLAUDE_REGION_ERROR_PREFIX, claudeRegionHold } from '../runners/runner-region';
+import { holdNoticeSql } from './hold-notice';
 import { openingTurnId } from '../sessions/orbit-authored-turn';
 import {
   runAccessLevel,
@@ -136,6 +131,7 @@ import {
   scheduleRunAllowedTools,
   scheduleRunDisallowedTools,
 } from '../schedules/schedule-access';
+import { claimModelLogLine } from './claim-model-log';
 
 /** What a claim attempt answers when another transaction holds the row it picked (FOR UPDATE NOWAIT, 55P03). */
 const LOST_LOCK = Symbol('the claim lost the row lock');
@@ -288,6 +284,9 @@ export class QueueService {
     });
     const blocked: string[] = [];
     const poolPauses = new Map<string, Date | null>();
+    // Each owner's account health, read once and only for a paused session that may move: the move the claim
+    // makes passes over an account health takes out (accountsForClaim), so the one asked about here must too.
+    const health = new Map<string, Awaited<ReturnType<typeof healthIndexFor>>>();
     for (const session of pending) {
       const runner = session.assignedRunner;
       // A pending Set as default for Claude Code holds back the sessions on either of its accounts: a claim now would
@@ -311,10 +310,13 @@ export class QueueService {
       let credential: AnthropicBoundCredential | null = null;
       if (until && runner && isAccountEngine(slug)) {
         const canMove = runner.capabilities.includes(ACCOUNT_MOVE_CAPABILITY[slug]);
+        if (canMove && !health.has(session.ownerId)) {
+          health.set(session.ownerId, await healthIndexFor(this.prisma, session.ownerId, now));
+        }
         const move = canMove && accountBeforeDispatch(slug, {
           account: session[ACCOUNT_CHOICE[slug]],
           pinned: session[ACCOUNT_PINNED[slug]],
-        }, session.workspace, runner, now);
+        }, session.workspace, runnerWithHealth(runner, runnerId, health.get(session.ownerId), now), now);
         // Off a Default its owner removed from Orbit the move is to Automatic's pick even when that is
         // paused too — every account left is — and the session waits for it.
         if (move && !runnerAccountPausedUntil(runner.accountPauses, slug, move.to, now)) until = null;
@@ -497,23 +499,9 @@ export class QueueService {
           -- runner unable to drive the row and had nothing else to say why it sat there; the row
           -- being claimed IS the answer, so leaving the text behind would make a running session
           -- read as blocked on the machine that is running it.
+          -- The hold notices (queue/hold-notice.ts), the one list a payload's waitingOn HOLD reads too.
           error = CASE
-            WHEN error IN (
-              ${OPENCODE_RUNNER_UPGRADE_ERROR},
-              ${ANTIGRAVITY_RUNNER_UPGRADE_ERROR},
-              ${DSH_RUNNER_UPGRADE_ERROR},
-              ${CURSOR_RUNNER_UPGRADE_ERROR},
-              ${CURSOR_NOT_INSTALLED_ERROR},
-              ${DSH_NOT_INSTALLED_ERROR},
-              ${DSH_PLATFORM_UNSUPPORTED_ERROR},
-              ${DSH_VERSION_INCOMPATIBLE_ERROR},
-              ${PROVIDER_UNAVAILABLE_ERROR},
-              ${ADMIN_ONLY_PROVIDER_ERROR},
-              ${SOURCE_PROTOCOL_UNSUPPORTED_ERROR}
-            ) OR error LIKE 'Account paused until %' OR error LIKE ${ENGINE_INCOMPATIBLE_ERROR_LIKE}
-              -- The region check's hold, released (docs/claude-region-check-contract.md §11), and the sentence a turn it
-              -- stopped ended with: both begin with the code.
-              OR starts_with(error, ${CLAUDE_REGION_ERROR_PREFIX}) THEN NULL
+            WHEN ${holdNoticeSql(Prisma.sql`error`)} THEN NULL
             ELSE error
           END,
           "started_at" = COALESCE("started_at", now()),
@@ -867,6 +855,7 @@ export class QueueService {
    */
   private async accountsForClaim(session: {
     id: string;
+    ownerId: string;
     assignedRunnerId: string | null;
     provider: string | null;
     providerBuiltin: boolean;
@@ -897,6 +886,7 @@ export class QueueService {
     if (!engine || !isBuiltinProvider(session.provider, session.providerBuiltin) || !runner) return accounts;
     const column = ACCOUNT_CHOICE[engine];
     const own = session[column];
+    const now = new Date();
     const move = await countedAccountBeforeDispatch(
       this.prisma,
       session.assignedRunnerId!,
@@ -904,8 +894,9 @@ export class QueueService {
       { account: own, pinned: session[ACCOUNT_PINNED[engine]] },
       // The account a directory variable names is read off the env the engine starts on (engineBaseEnv).
       workspace && { ...workspace, env: engineBaseEnv(workspace.env as Record<string, string> | null, session.env) },
-      runner,
-      new Date(),
+      // An account that account health takes out is left as a paused one is (§7.6), unless this run is its trial.
+      await withAccountHealth(this.prisma, session.ownerId, session.assignedRunnerId, runner, now, session.id),
+      now,
     );
     if (!move || (!move.defaultRemoved && !(runner.capabilities ?? []).includes(ACCOUNT_MOVE_CAPABILITY[engine]))) {
       return accounts;
@@ -922,8 +913,9 @@ export class QueueService {
       data: { poolSwitchNotice: accountSwitchNotice(engine, move, runner) },
     });
     // A resident engine still holds the previous account's environment. Reload before
-    // the next message so a pause cannot be bypassed by reusing that warm process, nor a removed Default.
-    if (move.paused || move.defaultRemoved) await new PoolNotices(this.prisma, this.realtime).carrier(session.id, engine);
+    // the next message so a pause cannot be bypassed by reusing that warm process, nor a removed Default,
+    // nor an account health took out, which would only refuse it again.
+    if (move.paused || move.defaultRemoved || move.blocked) await new PoolNotices(this.prisma, this.realtime).carrier(session.id, engine);
     return { ...accounts, [column]: move.to };
   }
 
@@ -1139,6 +1131,9 @@ export class QueueService {
         runner: session.assignedRunner,
       });
     let exec = resolveExec(session.model);
+    // The value the resolution ran on, for the claim-model line below: moved to the PATCH winner's
+    // when that compare-and-set loses, so the line shows the choice dispatch actually used.
+    let resolvedFrom = session.model;
     // Snapshot an inherited default on the session at its first claim, and refresh one the runtime
     // has since retired. Later Runtime heartbeat changes must not silently switch an
     // already-established conversation on reclaim/resume — only a model that is no longer offered
@@ -1163,6 +1158,7 @@ export class QueueService {
           select: { model: true },
         });
         exec = resolveExec(winner.model);
+        resolvedFrom = winner.model;
       }
     }
     const provider = exec.provider;
@@ -1176,6 +1172,20 @@ export class QueueService {
     // What the runner is handed as the model: the session's own id, except an OpenCode session on a
     // key, which names it the way OpenCode selects it (resolveProviderExec `runnerModel`).
     const runnerModel = exec.runnerModel ?? exec.model;
+    // What this claim decided about the model, `claim-model {json}` (claim-model-log.ts): the
+    // catalogue the assigned runner reported, what the resolver was offered, and what the runner is
+    // told to run. Diagnostic for the Antigravity Google-account rollout, whose failure mode was a
+    // catalogue id reaching the runner as no `--model` at all with nothing on this side to read.
+    this.logger.log(
+      claimModelLogLine({
+        sessionId: session.id,
+        provider,
+        requestedModel: resolvedFrom,
+        catalog: (session.assignedRunner?.modelCatalog as RunnerModelCatalog | null)?.[provider],
+        offered: runtimeCatalogModels(session.assignedRunner?.modelCatalog, provider),
+        resolvedModel: runnerModel,
+      }),
+    );
     const permissionMode = resolvePermissionMode(session.permissionMode, session.owner);
     // Claude spawns with a pre-generated --session-id, so a Claude row without one has no
     // conversation the runtime could resume — it was created before the column existed, or
@@ -1291,6 +1301,9 @@ export class QueueService {
       // The same for the wiki (ORBIT_WIKI, wiki/wiki-rollout.ts): `wikiDisabled` when it is not on for the owner, so
       // the runner spawns the session without the wiki tools.
       ...wikiClaimFields(currentWikiRollout(), session.ownerId),
+      // The Documents switch (documents/documents-switch.ts): `documentsDisabled` while it is off, so the runner spawns the
+      // session without the drive tools.
+      ...documentsClaimFields(),
       // The browser switch (managed-runner-browser-gate.ts): `browserEnabled` while it is on, so the runner spawns the
       // session with the browser tools; absent, they are not there.
       ...browserClaimFields(this.browserGate),
@@ -1733,7 +1746,20 @@ export class QueueService {
     if (!pool || pool.engine === AgentProvider.CODEX) return null;
     const now = new Date();
     const { rows, candidates } = pool;
-    const chosen = choosePoolMember(candidates, session.poolMemberProviderId, now);
+    // A member that account health takes out is skipped while another can run (§9 "Claude pool"), as bestPoolMember
+    // skips it when routing; with every one out the pool is chosen from as before. Not the member this run is
+    // the trial of.
+    const health = candidates.length > 1 ? await healthIndexFor(this.prisma, session.ownerId, now, session.id) : new Map();
+    const blockedMember = (id: string | null | undefined) => !!id && subjectBlocked(health, { type: 'provider', providerId: id });
+    const chosen = choosePoolMember(
+      withoutBlocked(
+        candidates,
+        (candidate) => blockedMember(candidate.row.id),
+        (candidate) => !candidate.refused && !(candidate.pausedUntil && candidate.pausedUntil > now),
+      ),
+      session.poolMemberProviderId,
+      now,
+    );
     if (!chosen && candidates.some((candidate) => candidate.pausedUntil && candidate.pausedUntil > now)) {
       const pausedUntil = await this.accountPoolPausedUntil(session.ownerId, slug, now, db);
       throw new ConflictException({ code: 'POOL_ACCOUNT_PAUSED', message: 'The pool accounts are paused', pausedUntil: pausedUntil?.toISOString() });
@@ -1755,7 +1781,8 @@ export class QueueService {
         // The first member a session runs on is where it starts, not a move.
         ...(session.poolMemberProviderId
           ? {
-              poolSwitchNotice: poolSwitchNotice(
+              // Health's reason, never "paused": nobody paused it.
+              poolSwitchNotice: previous && blockedMember(previous.id) ? `Switched to ${chosen.label} — ${previous.label} needs action` : poolSwitchNotice(
                 chosen,
                 previous
                   ? {
@@ -1833,17 +1860,36 @@ export class QueueService {
     if (pool?.engine !== AgentProvider.CODEX) return null;
     const now = new Date();
     const claude = engine === AgentProvider.CLAUDE && claudeCodexLoginEnabled();
+    // A ChatGPT account that account health takes out is skipped while another can run (§9 "Codex pool"); with every
+    // one out they are chosen from as before. Not the account this run is the trial of.
+    const health = pool.logins.length > 1 ? await healthIndexFor(this.prisma, session.ownerId, now, session.id) : new Map();
+    const blockedLogin = (accountId: string | null) =>
+      !!accountId && subjectBlocked(health, { type: 'pool-login', poolId: pool.id, accountId });
+    const logins = withoutBlocked(
+      claude ? pool.logins.filter((login) => login.userId === session.ownerId) : pool.logins,
+      (login) => blockedLogin(login.accountId),
+      (login) => loginCanRun(login, now),
+    );
     // accountPool found it as a pool of the session's owner's own, never a shared one: its accounts first.
-    const { chosen, next, notice } = choosePoolCredential(
+    const choice = choosePoolCredential(
       {
         ownerId: session.ownerId,
-        accounts: claude ? pool.logins.filter((login) => login.userId === session.ownerId) : pool.logins,
+        accounts: logins,
         keys: claude ? [] : await sharedPoolKeyCandidates(db, pool.id, now),
         ownKeyFirst: pool.ownKeyFirst,
       },
       { ownerId: session.ownerId, accountId: session.poolCodexAccountId, keyId: session.poolKeyId },
       now,
     );
+    const { chosen, next } = choice;
+    // Moved off an account health took out, which is then not among the accounts chosen from: the line says why in
+    // health's terms rather than that the account left the pool.
+    const left = !blockedLogin(session.poolCodexAccountId) || logins.some((login) => login.accountId === session.poolCodexAccountId)
+      ? null
+      : pool.logins.find((login) => login.accountId === session.poolCodexAccountId);
+    const notice = left && choice.notice
+      ? choice.notice.replace(' — the previous account is no longer in this pool', ` — ${accountName(left)} needs action`)
+      : choice.notice;
     if (!chosen) {
       const pausedUntil = await this.accountPoolPausedUntil(session.ownerId, slug, now, db);
       if (pausedUntil) throw new ConflictException({

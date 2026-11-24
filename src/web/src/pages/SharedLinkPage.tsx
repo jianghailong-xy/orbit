@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { getSharedProjectTask, type SharedRoot } from '../api';
+import { SharedDriveFilePage } from './SharedDriveFilePage';
 import { SharedProjectPage } from './SharedProjectPage';
 import { SharedLoading, sharedRootQuery, SharedSessionPage, SharedUnavailable } from './SharedSessionPage';
 import { SharedTaskPage } from './SharedTaskPage';
@@ -8,7 +9,7 @@ import { SharedWikiHome } from './SharedWikiPage';
 
 /**
  * `/s/<token>`: read what the link opens, once, and draw the page for its root — a project's page,
- * a task's page, a wiki's home, or a session's conversation (SharedSessionPage, which finds this same
+ * a task's page, a wiki's home, a shared file, or a session's conversation (SharedSessionPage, which finds this same
  * read already answered). The owner's Preview arrives as `?preview=1` and is passed on, so looking at one's own
  * link before handing it out is not counted as somebody opening it.
  */
@@ -22,6 +23,7 @@ export function SharedLinkPage() {
   if (root.kind === 'PROJECT') return <SharedProjectPage token={token} data={root} />;
   if (root.kind === 'TASK') return <SharedTaskPage token={token} data={root} />;
   if (root.kind === 'WIKI') return <SharedWikiHome token={token} data={root} />;
+  if (root.kind === 'DRIVE_FILE') return <SharedDriveFilePage token={token} data={root} />;
   return <SharedSessionPage />;
 }
 

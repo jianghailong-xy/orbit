@@ -46,7 +46,7 @@ enum FileHandoff {
         // A folder of their own: Finder shows it to the reader, and a name somebody else chose cannot
         // land on a file another application keeps in the temporary directory.
         let folder = FileManager.default.temporaryDirectory
-            .appendingPathComponent("Orbit Files", isDirectory: true)
+            .appendingPathComponent("Documents", isDirectory: true)
         let file = folder.appendingPathComponent(safeName(name))
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

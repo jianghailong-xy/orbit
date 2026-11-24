@@ -70,6 +70,7 @@ object SettingsFromConversation {
     private val rowless = mapOf(
         "defaultModel" to "Default model", "defaultModels" to "Default model per provider",
         "defaultEffort" to "Default effort", "subagentBlockedProviders" to "SubAgent providers",
+        "relaxBlockedPins" to "Run pinned tasks elsewhere when their account can't run",
     )
 
     /** Settings' route ids for the pages that hold rows (`SettingsScreen`). */

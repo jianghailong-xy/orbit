@@ -29,6 +29,9 @@ test('needs-you includes only canonical Open, non-ending sessions', async () => 
       },
     },
     // The owner-item half of the count reads its own rows (see the two tests below); none here.
+    // The open owner requests and waiting task moves the same row counts (none here).
+    ownerRequest: { findMany: async () => [] },
+    projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: { findMany: async () => [] },
   };
   const service = new PushService(prisma as any, enabledConfig());
@@ -56,6 +59,9 @@ function approvalPrisma() {
   return {
     session: { findMany: async () => [{ id: 's-blocked', approvals: [{ id: 'approval-blocked', toolName: 'Bash' }] }] },
     // Overridden per test with the rows that half should or should not count.
+    // The open owner requests and waiting task moves the same row counts (none here).
+    ownerRequest: { findMany: async () => [] },
+    projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: { findMany: async (): Promise<any[]> => [] },
     // Which of those rows nobody owes any more (`openItemsNoLongerOwed`): none, here.
     $queryRaw: async (): Promise<Array<{ id: string }>> => [],
@@ -617,6 +623,9 @@ function ownerItemHarness(
 ) {
   const sent: { body: string; collapseId?: string }[] = [];
   const prisma = {
+    // The open owner requests and waiting task moves the same row counts (none here).
+    ownerRequest: { findMany: async () => [] },
+    projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: { findUnique: async () => item },
     // Whether the item is one nobody owes any more (`openItemsNoLongerOwed`): it is still owed.
     $queryRaw: async (): Promise<Array<{ id: string }>> => [],
@@ -1297,7 +1306,9 @@ test('an escalated item whose coordinator cannot be reached says so, not "no one
   });
   const live = { status: 'AWAITING_INPUT', endReason: null, completedAt: null, archivedAt: null, deletedAt: null, cancelRequestedAt: null };
   const cases = [
-    { what: 'reaped, runner away', session: { ...live, status: 'FAILED', finishedAt: new Date(), cancelRequestedAt: new Date() }, blocked: 'RUNNER_OFFLINE',
+    // The reaper records the failure on the carrying turn and copies it to lastTurnOutcome (removal step R2), which is
+    // what "released by a failure" reads since the status bridge went (R7).
+    { what: 'reaped, runner away', session: { ...live, status: 'FAILED', finishedAt: new Date(), cancelRequestedAt: new Date(), lastTurnOutcome: 'FAILED' }, blocked: 'RUNNER_OFFLINE',
       title: 'Now yours — no one acted on this for 2h 56m' },
     { what: 'live, but no message reaches it', session: live, blocked: 'RUN_RETIRED',
       title: 'Now yours — the coordinator can’t take messages' },

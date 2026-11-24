@@ -65,7 +65,7 @@ delegate({
 | `description` | 给父模型看，决定是否委派 | — |
 | `model` | `inherit` = 父会话的模型；`auto` = 路由；具体 id = 点名 | 当作 `auto`，Why 里写明 |
 | `size` | Orbit 扩展：S / M / L / XL | 忽略 |
-| `readonly` | `true` → 不给编辑工具；Claude 子 Agent 沿用父会话的权限模式，其他引擎降为 plan | — |
+| `readonly` | `true` → 不给编辑工具；各引擎都沿用父会话的权限模式，只读靠引擎自己的只读设置（§5.3） | — |
 | `tools` / `disallowedTools` | 原样传给支持它的引擎；不支持的引擎忽略并在 Why 里写明 | — |
 | `is_background` | 作为 `background` 的默认值 | — |
 
@@ -243,15 +243,29 @@ account codex-pool: its quota resets first, a subscription pool whose account �
 
 ### 5.3 权限与审批
 
-- 权限模式：定义里 `readonly` → Claude 子 Agent 与父会话相同、去掉编辑工具（Edit / MultiEdit / Write / NotebookEdit），
-  因为 plan 下每次 Bash 都要问人，父会话开 Auto 时只读子 Agent 反而最打扰人；其他引擎 → plan。否则与父会话相同。不会比父会话宽（沿用 `assertChildModeOrNarrow` 的规则）。
-  只读子 Agent 在各引擎上怎样读仓库：Claude 在父会话的模式下保留读文件工具；Kimi、OpenCode、Cursor、Antigravity 在 plan 下保留各自的读文件工具；
-  DSH 没有 plan，用它的只读文件策略（Don't Ask）。Codex 只能用 shell 读仓库，而它的 plan 拒绝一切命令，所以只读的
-  Codex 子 Agent 不走 plan 的 Codex 配置，改用 Codex 自己的 `read-only` 沙箱（无写、无网络）加 `never`：命令不问人，
-  在沙箱里跑，写入由沙箱拒绝；要求越出沙箱的请求一律拒绝（`codexReadonlySubagentMode`）。会话本身的 plan 含义不变。
-  只读的 Kimi 子 Agent 在 plan 下每次 shell 调用都会请求批准：按 owner 2026-11-20 的决定，这类请求跟随父会话**当时**的模式——
-  父会话是 Auto 或 Bypass 时 runner 直接批准、不出卡；其他模式照常出卡（`kimiReadonlyShellFollowsParent`）。runner 不检查命令本身，
-  所以在这两种父模式下，Kimi 子 Agent 的「只读」只靠 plan 模式的指令约束，写文件的 shell 命令也会被执行。
+- 权限模式（owner 2026-11-23：任何模型、任何 coding agent 都透传父会话的权限模式，优先 Auto）：子 Agent 的模式**一律是父会话的模式**，
+  只读与否、哪个引擎都一样（`subagentChildMode`）；定义里写了模式且不比父会话宽（`isWiderThanParent`）时用它，只读的不用。
+  引擎守不住这个模式时取它守得住、又不更宽的最近一个，不拒绝：DSH 的 Plan → Don't Ask、Accept Edits → Default、Bypass → Auto；
+  Cursor 的 Default → Plan。
+  只读靠各引擎自己的只读设置，子 Agent 请求的批准按父会话**当时**的模式回答（`readonlySubagentAnswer`）：父会话 Auto / Bypass → 直接放行、
+  不出卡；Don't Ask → 直接拒绝；其他模式 → 照常出卡。编辑工具（Edit / MultiEdit / Write / NotebookEdit，各引擎的拼写）的请求一律拒绝
+  （`readonlySubagentRefusesEdit`）。各引擎：
+  - Claude：父会话的模式，去掉编辑工具（plan 下每次 Bash 都要问人，父会话开 Auto 时只读子 Agent 反而最打扰人）。
+  - Codex：只能用 shell 读仓库，而它的 plan 拒绝一切命令，所以用 Codex 自己的 `read-only` 沙箱（无写、无网络）加 `never`：
+    命令不问人，在沙箱里跑，写入由沙箱拒绝（`codexReadonlySubagentMode`）。会话本身的 plan 含义不变。
+  - Kimi：plan（关掉编辑），它请求的批准按上面的规则回答。
+  - Cursor：plan（关掉编辑）；plan 本来拒绝一切请求，只读子 Agent 的请求改按上面的规则回答，父会话问人时出卡。
+  - DSH：没有 plan，用它的只读文件策略（Default）；越出沙箱的请求按上面的规则回答，写文件的一律拒绝。
+  - OpenCode：运行中不能回答任何请求（它的 ask 一律被拒），所以启动时按父会话的模式定一次：Auto / Bypass → 那个模式，
+    拒绝编辑和它自己的 subagent（`openCodeReadonlyFollowsParent`）；其他 → plan。
+  - Antigravity：agy 的 plan 自己拒绝一切命令，所以改走 Orbit 的审批 hook（同 Default）：写文件拒绝（agy 自己的 artifact 除外），
+    其余按启动时父会话的模式回答（`agyApprovalPolicy.ReadonlyParentMode`）。
+  - 远程运行：领取里带父会话的模式（`RemoteSubagentClaim.parentPermissionMode`），目标 runner 按它回答，Plan 门也读它；
+    旧服务端不带时退回子 Agent 自己的模式。
+  runner 不检查命令本身（owner 2026-11-20）：父会话 Auto / Bypass 时，Claude 和 Codex 以外的只读子 Agent 的「只读」只靠关掉编辑工具和指令约束，
+  写文件的 shell 命令也会被执行。
+  写的子 Agent 继承父会话的 Auto 时，在 Kimi、OpenCode、Antigravity 上等同 Bypass（`runsAsBypass`）；按透传的规则这是预期的，
+  `isWiderThanParent` 只约束定义里点名的模式。
 - 审批卡用父会话的 `sessionId` 发出，`toolUseId` 加 runId 前缀，并带 `subagentRunId`（与 `backgroundJobId` 同一作用：
   父会话的 tool_result 到达时不把它当作已返回的调用收走）。卡片出现在父会话的审批区，标题写明来自哪个 SubAgent。
 - 子 Agent 的 AskUserQuestion / 计划审批一律拒绝，提示它把疑问写进结果里交回。Cursor 在 subagent 里也是这样。
@@ -428,7 +442,7 @@ P1 不路由，所以可以先把最难的部分（同 cwd 子进程、事件内
   - 子引擎的 `orbit mcp` 对上传、文件夹清单和 pin 的请求带 `?subagentRunId=<run>`；服务端（`sessionOfRemoteSubagent`）
     只在这次运行属于该会话和账号、派给的正是这台 runner、且仍是 `RUNNING` 时放行，其余照旧按托管会话的 runner 判断。
   - 目标 runner 上没有父会话的 socket，Plan 门读不到实时模式；远程运行的子引擎带 `ORBIT_SUBAGENT_REMOTE_MODE`
-    （领取时的模式），Plan 门按它判断。所以在 Plan 模式下领取的运行仍然不能上传。
+    （领取时父会话的模式，旧服务端不带时是子 Agent 自己的模式），Plan 门按它判断。所以在 Plan 模式下领取的运行仍然不能上传。
   - 远程运行的 worktree 在 `~/.orbit/remote-subagents/<run>/tree`，在 Orbit 自己的目录里；`file_upload` 把这次运行自己的
     worktree 当作它的 checkout 放行（别的运行的不放行），父会话的 uploads 目录照旧可用。
   - `file_fetch` 和其他 Orbit 写操作没有放开：服务端仍只认托管父会话的 runner。

@@ -64,7 +64,7 @@ var guideRoutes = []guideRoute{
 	{"R1.8", "What is the state of this project, task or session?", "none", "inspect", []string{"project_get", "task_get", "task_list", "session_get"}},
 	{"R1.9", "Wait for it to finish", "watch", "wait", []string{"task_await", "session_await", "watch_create"}},
 	{"R1.10", "Remember this lesson or pitfall about a file or a pattern", "wiki", "wiki", []string{"wiki_search", "wiki_propose", "wiki_note"}},
-	{"R1.11", "Keep this file, or read one back", "file", "files", []string{"file_upload", "file_fetch", "file_list", "drive_put", "drive_get", "drive_list", "drive_move", "drive_delete"}},
+	{"R1.11", "Keep this file, or read one back", "file", "files", []string{"file_upload", "file_fetch", "file_list", "documents_put", "documents_get", "documents_list", "documents_move", "documents_delete", "documents_sync"}},
 	{"R1.12", "This class of work needs its own dispatch policy", "task_list", "task-list", []string{"tasklist_create", "tasklist_update"}},
 	{"R1.13", "Which agent should run this, or change an agent's defaults", "agent", "agent", []string{"agent_list", "agent_create", "agent_update"}},
 	{"R1.14", "Answer, explain, or edit code", "none", "", nil},
@@ -222,7 +222,7 @@ var guideTopics = []guideTopic{
 			{Op: "project_get", Optional: true, Why: "A project's goal, acceptance criteria, instructions, blockers and task counts."},
 			{Op: "task_get", Why: "One task in full, with its comments and sessions; with no id, the task this session runs.", Example: map[string]interface{}{"taskId": "<taskId>"}},
 			{Op: "task_list", Optional: true, Why: "Tasks filtered by project, status, list or label, as compact rows.", Example: map[string]interface{}{"projectId": "<projectId>"}},
-			{Op: "session_get", Optional: true, Why: "One session's record."},
+			{Op: "session_get", Optional: true, Why: "One session's record: over when `released`; failed when released with `lastTurnOutcome` FAILED and no endReason; working when `phase` is RUNNING; `waitingOn` names what holds it."},
 		},
 		Rules: []string{
 			"After a compaction or a resume, read the object again: never rebuild an id, a status or an approval from memory or a summary.",
@@ -270,14 +270,15 @@ var guideTopics = []guideTopic{
 		Asks:   []string{"Keep this screenshot with the task."},
 		Intent: "Keep a screenshot, report or log in Orbit instead of the repository, or read one back.",
 		Steps: []guideStep{
-			{Op: "file_upload", Why: "Keep a file from this session's checkout, uploads directory or a mounted Orbit Files drive."},
+			{Op: "file_upload", Why: "Keep a file from this session's checkout, uploads directory or a mounted Documents drive."},
 			{Op: "file_list", Optional: true, Why: "What this task's sessions have uploaded."},
 			{Op: "file_fetch", Optional: true, Why: "Read a file back by id."},
-			{Op: "drive_put", Optional: true, Why: "Keep a local file on the owner's drive.", Example: map[string]interface{}{"localPath": "report.md", "path": "/reports/report.md"}},
-			{Op: "drive_get", Optional: true, Why: "Download a drive file into session uploads.", Example: map[string]interface{}{"path": "/reports/report.md"}},
-			{Op: "drive_list", Optional: true, Why: "List a folder on the owner's drive."},
-			{Op: "drive_move", Optional: true, Why: "Move a drive entry.", Example: map[string]interface{}{"from": "/reports/report.md", "to": "/archive/report.md"}},
-			{Op: "drive_delete", Optional: true, Why: "Move a drive entry to the owner's Trash.", Example: map[string]interface{}{"path": "/archive/report.md"}},
+			{Op: "documents_put", Optional: true, Why: "Keep a local file on the owner's drive.", Example: map[string]interface{}{"localPath": "report.md", "path": "/reports/report.md"}},
+			{Op: "documents_get", Optional: true, Why: "Download a drive file into session uploads.", Example: map[string]interface{}{"path": "/reports/report.md"}},
+			{Op: "documents_list", Optional: true, Why: "List a folder on the owner's drive."},
+			{Op: "documents_move", Optional: true, Why: "Move a drive entry.", Example: map[string]interface{}{"from": "/reports/report.md", "to": "/archive/report.md"}},
+			{Op: "documents_delete", Optional: true, Why: "Move a drive entry to the owner's Trash.", Example: map[string]interface{}{"path": "/archive/report.md"}},
+			{Op: "documents_sync", Optional: true, Why: "Copy a whole directory to the owner's Documents in the background.", Example: map[string]interface{}{"localPath": "out", "path": "/Reports/out"}},
 		},
 		Rules: []string{
 			"A file linked in a reply reaches the user only from the working directory or this session's uploads directory: copy it there first, and keep files that do not belong in the repository out of the checkout.",
@@ -414,6 +415,7 @@ type guideContext struct {
 	Orchestration bool   `json:"orchestration"`
 	Watches       bool   `json:"watches"`
 	Wiki          bool   `json:"wiki"`
+	DocumentsOff  bool   `json:"documentsOff,omitempty"` // the server has Documents off: no drive tools (documents_switch.go)
 }
 
 // guideFacts is a guide's context plus what it reads availability from: the MCP server's own switches,
@@ -531,6 +533,9 @@ func (f guideFacts) mcpAvailability(op *operation) (bool, string) {
 	if wikiToolNames[op.Tool] && !f.context.Wiki {
 		return false, wikiOffMessage(op.Tool)
 	}
+	if driveToolNames[op.Tool] && f.context.DocumentsOff {
+		return false, documentsOffMessage(op.Tool)
+	}
 	return true, ""
 }
 
@@ -609,7 +614,7 @@ func (f guideFacts) topic(built *builtOperationCatalog, topic *guideTopic) guide
 			doc.Routes = append(doc.Routes, route.Route)
 		}
 	}
-	if topic.ID == "files" {
+	if topic.ID == "files" && !f.context.DocumentsOff {
 		doc.Rules = append(append([]string{}, doc.Rules...), orbitDriveGuide())
 	}
 	for i, step := range topic.Steps {
@@ -702,6 +707,7 @@ func (s *mcpServer) guideFacts() guideFacts {
 			Orchestration: s.orchestrationEnabled(),
 			Watches:       !s.watchesOff,
 			Wiki:          !s.wikiOff,
+			DocumentsOff:  s.documentsOff,
 		},
 		onlyTools: s.onlyTools,
 	}
@@ -743,6 +749,7 @@ func cliGuideFacts(executable string) guideFacts {
 			Orchestration: d.facts.orchestration,
 			Watches:       d.facts.watches,
 			Wiki:          d.facts.wiki,
+			DocumentsOff:  d.facts.documentsOff,
 		},
 		cli: d,
 	}

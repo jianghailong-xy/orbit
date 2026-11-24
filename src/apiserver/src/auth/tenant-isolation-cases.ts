@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { underEveryDocumentsPrefix } from '../documents/documents-routes';
 
 /**
  * The tenant isolation census (docs/google-sign-in-design.md §5.6, §11 T1). Orbit keeps accounts
@@ -137,7 +138,7 @@ export interface Tenant {
   adminSubjectTokenId: string;
   adminProviderId: string;
   /**
-   * The account's drive (docs/orbit-files-drive-technical-design.md §4.1): a folder, a file in it with a replaced
+   * The account's drive (docs/documents-drive-technical-design.md §4.1): a folder, a file in it with a replaced
    * version in Trash, and a Trash group of a deleted file.
    */
   driveFolderId: string;
@@ -146,6 +147,8 @@ export interface Tenant {
   driveTrashGroupId: string;
   /** An upload in progress (OWNER_UPLOAD staging) with no chunks yet. */
   driveUploadId: string;
+  /** An agent's directory sync this account's runner opened. */
+  driveSyncId: string;
   /** Objects a destructive route takes away, one each, so that no other case loses its own. */
   spare: {
     accessTokenId: string;
@@ -211,6 +214,24 @@ export interface TenantCase {
 
 /** The path parameters a route template names: `GET /tasks/:id/comments/:commentId` → id, commentId. */
 export const paramsOf = (route: string): string[] => [...route.matchAll(/:(\w+)/g)].map((m) => m[1]);
+
+/**
+ * The /drive aliases of the Documents cases that spend a spare of A's: a delete or a restore that A's own request uses
+ * up, so a second run of it under /drive finds nothing left to answer. Read by hand instead (TENANT_ISOLATION_BY_HAND).
+ */
+const DOCUMENTS_SPARE_SPENDING_ALIASES: Readonly<Record<string, string>> = {
+  'DELETE /drive/entries/:id': 'documents/documents.service.ts:1097 (moveToTrash)',
+  'POST /drive/uploads/:id/complete': 'documents/documents-uploads.service.ts:92 (complete)',
+  'DELETE /drive/uploads/:id': 'documents/documents-uploads.service.ts:153 (abandon)',
+  'DELETE /drive/versions/:id': 'documents/documents.service.ts:1386 (deleteVersion)',
+  'POST /drive/trash/groups/:id/restore': 'documents/documents.service.ts:1203 (restoreGroup)',
+  'DELETE /drive/trash/groups/:id': 'documents/documents.service.ts:1364 (deleteGroup)',
+  'POST /drive/trash/groups/:id/items/:entryId/restore': 'documents/documents.service.ts:1278 (restoreItem)',
+};
+
+/** Cases keyed `METHOD /documents/…`, each held under /documents and under its /drive alias (documents/documents-routes.ts). */
+const documentsUnderEveryPrefix = <T>(cases: Record<string, T>): Record<string, T> =>
+  Object.fromEntries(Object.entries(cases).flatMap(([key, c]) => underEveryDocumentsPrefix(key).map((route) => [route, c])));
 
 const workspaceRoutes = (prefix: 'agents' | 'workspaces', ruleOf: (t: Tenant) => string, spareOf: (t: Tenant) => string) => ({
   [`GET /${prefix}/:id`]: { request: (of: Tenant) => ({ params: { id: of.workspaceId } }) },
@@ -308,32 +329,37 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /attachments/usage/tasks/:id/files': { request: (of) => ({ params: { id: of.taskId } }) },
   'DELETE /attachments/:id/everywhere': { request: (of) => ({ params: { id: of.spare.storedFileId } }) },
 
-  // ── the drive (docs/orbit-files-drive-technical-design.md §4.1, §4.4): every read and write by (id, owner) ────────
-  'GET /drive/entries/:id': { request: (of) => ({ params: { id: of.driveFileId } }) },
-  'PATCH /drive/entries/:id': { request: (of) => ({ params: { id: of.driveFileId }, body: { name: 'renamed by the census.txt' } }) },
-  'DELETE /drive/entries/:id': { request: (of) => ({ params: { id: of.spare.driveEntryId } }) },
-  'POST /drive/entries/:id/share-check': { request: (of) => ({ params: { id: of.driveFileId } }) },
-  'GET /drive/entries/:id/versions': { request: (of) => ({ params: { id: of.driveFileId } }) },
-  'GET /drive/entries/:id/content': { request: (of) => ({ params: { id: of.driveFileId } }) },
-  'GET /drive/versions/:id/content': { request: (of) => ({ params: { id: of.driveVersionId } }) },
-  'GET /drive/uploads/:id': { request: (of) => ({ params: { id: of.driveUploadId } }) },
-  // An empty body is answered 400 for A (a chunk holds at least one byte): not a 404, and B is refused before anything else is read.
-  'PUT /drive/uploads/:id/chunks/:idx': {
-    request: (of) => ({ params: { id: of.driveUploadId, idx: 0 }, headers: { 'x-orbit-chunk-sha256': 'a'.repeat(64) } }),
-  },
-  'POST /drive/uploads/:id/complete': { request: (of) => ({ params: { id: of.spare.driveCompleteUploadId } }) },
-  'DELETE /drive/uploads/:id': { request: (of) => ({ params: { id: of.spare.driveAbandonUploadId } }) },
-  // As a copy: the owner's own restore leaves the version in Trash for the cases after it.
-  'POST /drive/versions/:id/restore': { request: (of) => ({ params: { id: of.driveVersionId }, body: { as: 'COPY' } }) },
-  'DELETE /drive/versions/:id': { request: (of) => ({ params: { id: of.spare.driveVersionId } }) },
-  'GET /drive/trash/groups/:id': { request: (of) => ({ params: { id: of.driveTrashGroupId } }) },
-  'POST /drive/trash/groups/:id/restore': { request: (of) => ({ params: { id: of.spare.driveRestoreGroupId } }) },
-  'DELETE /drive/trash/groups/:id': { request: (of) => ({ params: { id: of.spare.driveTrashGroupId } }) },
-  'POST /drive/trash/groups/:id/items/:entryId/restore': {
+  // ── Documents (docs/documents-drive-technical-design.md §4.1, §4.4): every read and write by (id, owner) ──────────
+  ...documentsUnderEveryPrefix({
+    'GET /documents/entries/:id': { request: (of) => ({ params: { id: of.driveFileId } }) },
+    'GET /documents/syncs/:id': { request: (of) => ({ params: { id: of.driveSyncId } }) },
+    'PATCH /documents/entries/:id': { request: (of) => ({ params: { id: of.driveFileId }, body: { name: 'renamed by the census.txt' } }) },
+    'POST /documents/entries/:id/share-check': { request: (of) => ({ params: { id: of.driveFileId } }) },
+    'GET /documents/entries/:id/versions': { request: (of) => ({ params: { id: of.driveFileId } }) },
+    'GET /documents/entries/:id/content': { request: (of) => ({ params: { id: of.driveFileId } }) },
+    'GET /documents/versions/:id/content': { request: (of) => ({ params: { id: of.driveVersionId } }) },
+    'GET /documents/uploads/:id': { request: (of) => ({ params: { id: of.driveUploadId } }) },
+    // An empty body is answered 400 for A (a chunk holds at least one byte): not a 404, and B is refused before anything else is read.
+    'PUT /documents/uploads/:id/chunks/:idx': {
+      request: (of) => ({ params: { id: of.driveUploadId, idx: 0 }, headers: { 'x-orbit-chunk-sha256': 'a'.repeat(64) } }),
+    },
+    // As a copy: the owner's own restore leaves the version in Trash for the cases after it.
+    'POST /documents/versions/:id/restore': { request: (of) => ({ params: { id: of.driveVersionId }, body: { as: 'COPY' } }) },
+    'GET /documents/trash/groups/:id': { request: (of) => ({ params: { id: of.driveTrashGroupId } }) },
+    'POST /documents/entries/:id/download-link': { request: (of) => ({ params: { id: of.driveFileId } }) },
+  }),
+  // Each of these spends a spare of A's, so it is held under /documents alone; its /drive alias is read by hand
+  // (DOCUMENTS_SPARE_SPENDING_ALIASES).
+  'DELETE /documents/entries/:id': { request: (of) => ({ params: { id: of.spare.driveEntryId } }) },
+  'POST /documents/uploads/:id/complete': { request: (of) => ({ params: { id: of.spare.driveCompleteUploadId } }) },
+  'DELETE /documents/uploads/:id': { request: (of) => ({ params: { id: of.spare.driveAbandonUploadId } }) },
+  'DELETE /documents/versions/:id': { request: (of) => ({ params: { id: of.spare.driveVersionId } }) },
+  'POST /documents/trash/groups/:id/restore': { request: (of) => ({ params: { id: of.spare.driveRestoreGroupId } }) },
+  'DELETE /documents/trash/groups/:id': { request: (of) => ({ params: { id: of.spare.driveTrashGroupId } }) },
+  'POST /documents/trash/groups/:id/items/:entryId/restore': {
     request: (of) => ({ params: { id: of.spare.driveRestoreItemGroupId, entryId: of.spare.driveRestoreItemEntryId } }),
     nested: ['entryId'],
   },
-  'POST /drive/entries/:id/download-link': { request: (of) => ({ params: { id: of.driveFileId } }) },
 
   // ── projects ─────────────────────────────────────────────────────────────────────────────────
   'GET /projects/:id': { request: (of) => ({ params: { id: of.projectId } }) },
@@ -592,11 +618,17 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'DELETE /runners/:id/accounts/:engine/:account': {
     request: (of) => ({ params: { id: of.runnerId, ...of.runnerAccount } }),
   },
+  'DELETE /runners/:id/accounts/:engine/:account/set-default': {
+    request: (of) => ({ params: { id: of.runnerId, ...of.runnerAccount } }),
+  },
   'POST /runners/:id/accounts/:engine/:account/set-default': {
     request: (of) => ({ params: { id: of.runnerId, ...of.runnerAccount } }),
   },
   'POST /runners/:id/accounts/:engine/default/restore': {
     request: (of) => ({ params: { id: of.runnerId, engine: of.runnerAccount.engine } }),
+  },
+  'POST /runners/:id/accounts/:engine/default/sign-out': {
+    request: (of) => ({ params: { id: of.runnerId, engine: of.runnerAccount.engine }, body: { force: true } }),
   },
   'POST /runners/:id/attention/:kind/fix': {
     request: (of) => ({ params: { id: of.runnerId, kind: 'installFailed' }, body: { engine: 'codex' } }),
@@ -652,6 +684,13 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   // ── sessions ─────────────────────────────────────────────────────────────────────────────────
   'GET /sessions/:id': { request: (of) => ({ params: { id: of.sessionId } }) },
   'GET /sessions/:id/compact': { request: (of) => ({ params: { id: of.sessionId } }) },
+  'GET /sessions/:id/task-moves': { request: (of) => ({ params: { id: of.sessionId } }) },
+  'POST /sessions/:id/task-moves/decision': {
+    request: (of) => ({
+      params: { id: of.sessionId },
+      body: { decision: 'DENY', moves: [{ handoffId: of.handoffId, crossingKey: 'a'.repeat(64) }] },
+    }),
+  },
   // A landing session's check output (contract §2.9 LS2): the subject the session belongs to is the
   // account's, and another account's session is the same 404 as one that does not exist.
   'GET /sessions/:id/landing/log': { request: (of) => ({ params: { id: of.landingSessionId } }) },
@@ -949,6 +988,12 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
  * that shows the route finds its object only under the caller's own account. Kept as short as it can be.
  */
 export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  // ── Documents' /drive alias, where its case spends a spare (DOCUMENTS_SPARE_SPENDING_ALIASES) ──────────────────────
+  ...Object.fromEntries(Object.entries(DOCUMENTS_SPARE_SPENDING_ALIASES).map(([route, scoped]) => [route,
+    `the same handler as ${route.replace(' /drive/', ' /documents/')}, whose case above holds it across accounts: `
+    + 'DocumentsController is one class mounted under both prefixes (documents/documents.controller.ts:31, '
+    + `@Controller(DOCUMENTS_ROUTE_PREFIXES)), so the alias reaches the same lookup by (id, owner), ${scoped}; the case `
+    + "spends a spare of A's, which a second run under /drive would find already spent"])),
   // ── the owner's tier for a built-in engine's model (docs/subagent-design.md §7) ─────────────────────────
   'PATCH /providers/builtin/:engine/model-tier':
     'the path names an engine (claude, cursor, …), which every account shares, not an object of any account: the write '
@@ -1015,7 +1060,7 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     "the request is read FOR UPDATE by (id, the caller as its owner) and nothing else, 404 SCHEDULE_REQUEST_NOT_FOUND for another account's (schedules/schedules.service.ts:427)",
   'GET /sessions/:id/schedule-cards':
     "the session is read by (id, the caller) first, 404 for another account's (schedules/schedule-reads.service.ts:183), and the cards and records are read by the caller as owner",
-  // Settings → Storage's file lists (docs/orbit-files-design.md §2.10).
+  // Settings → Storage's file lists (docs/documents-design.md §2.10).
   'GET /attachments/usage/weeks/:week/files':
     'the week is a date, not an object: every row the list reads is filtered by the caller\'s owner_id, in the scope, in what is counted as holding it and in its totals, so another account\'s files never reach it (files/files.service.ts:963, :965, :1011); it writes nothing',
   // ── main checkout (0534) ──
@@ -1076,10 +1121,14 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     'written by (id, the caller) only, and 404 when that matched nothing (owner-requests/owner-secrets.service.ts:455); owner-secrets.pg.spec.ts (h) sends another account\'s',
   'DELETE /account-secrets/:id':
     'read FOR UPDATE by (id, the caller) only, 404 when that matched nothing, before anything is written; the copies revokeCopies ends are read by (that id, the caller) (owner-requests/owner-secrets.service.ts:470); owner-secrets.pg.spec.ts (h) sends another account\'s',
+  'POST /account-health/:id/check':
+    'the pressed row is read inside the one UPDATE by (id, owner = the caller, still live), so another account\'s id matches no row, clears nothing, and the controller answers 404 for the zero it returns (providers/account-health.service.ts:206, providers/account-health.controller.ts:90); account-health-check-again.pg.spec.ts (3) presses another owner\'s row and finds it still blocked. The census Tenant holds no account_health row to aim at, so no case is stood up here',
   'POST /account-secrets/grants/:id/revoke':
     'the grant is read by (id, the caller) only, 404 for another account\'s, and its request is then revoked by (request id, the caller) (owner-requests/owner-secrets.service.ts:828); owner-secrets.pg.spec.ts (k) sends another account\'s',
   'POST /owner-requests/:id/create-wiki':
     'read by (id, the caller) first, 404 for another account\'s id (owner-requests/owner-requests.service.ts:306); the wiki is made under the caller\'s account through wiki.createSpace from that row\'s repository and workspace, never from the body, and the card is settled by a compare-and-set on (id, the caller, PENDING) (owner-requests/owner-requests.service.ts:521)',
+  'POST /owner-requests/:id/apply':
+    'the request is read FOR UPDATE by (id, the caller) and nothing else, 404 for another account\'s id, and its runner is then read FOR UPDATE by (the id its change_spec names, the caller), 404 when that finds nothing, before anything is written; the body carries only the value, never a runner (owner-requests/owner-requests.service.ts:897, owner-requests/owner-requests.service.ts:931); owner-request-change.pg.spec.ts (11) sends another account\'s',
   'POST /owner-requests/:id/apply-settings':
     'read by (id, the caller) first, 404 for another account\'s id (owner-requests/owner-requests.service.ts:509); the preferences read FOR NO KEY UPDATE and written are the caller\'s own user row, never one the body names (owner-requests/settings-apply.ts:21, owner-requests/settings-apply.ts:39), and the card is settled by a compare-and-set on (id, the caller, PENDING) (owner-requests/owner-requests.service.ts:820)',
   'POST /owner-requests/:id/decline':
@@ -1298,25 +1347,27 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
     request: (of, mine) => ({ params: { id: mine.projectId }, query: { parentId: of.projectTaskId } }),
   },
 
-  // ── the drive: a folder named in B's own request ─────────────────────────────────────────────
-  'GET /drive/entries query parentId': { request: (of) => ({ params: {}, query: { parentId: of.driveFolderId } }) },
-  'GET /drive/trash/groups/:id query parentId': {
-    request: (of, mine) => ({ params: { id: mine.driveTrashGroupId }, query: { parentId: of.driveFolderId } }),
-  },
+  // ── Documents: a folder named in B's own request ─────────────────────────────────────────────
   'POST /share-links body driveEntryId': {
     request: (of) => ({ params: {}, body: { kind: 'DRIVE_FILE', driveEntryId: of.driveFileId } }),
   },
-  'POST /drive/folders body parentId': { request: (of) => ({ params: {}, body: { parentId: of.driveFolderId, name: 'census folder' } }) },
-  'POST /drive/uploads body parentId': { request: (of) => ({ params: {}, body: { parentId: of.driveFolderId, name: 'census.bin', size: 1 } }) },
-  'POST /drive/uploads body dropRootId': {
-    request: (of, mine) => ({ params: {}, body: { parentId: mine.driveFolderId, name: 'census.bin', size: 1, relativePath: 'Dir/census.bin', dropRootId: of.driveFolderId } }),
-  },
-  'POST /drive/entries/:id/download-link body versionId': {
-    request: (of, mine) => ({ params: { id: mine.driveFileId }, body: { versionId: of.driveVersionId } }),
-  },
-  'PATCH /drive/entries/:id body parentId': {
-    request: (of, mine) => ({ params: { id: mine.driveFileId }, body: { parentId: of.driveFolderId } }),
-  },
+  ...documentsUnderEveryPrefix({
+    'GET /documents/entries query parentId': { request: (of) => ({ params: {}, query: { parentId: of.driveFolderId } }) },
+    'GET /documents/trash/groups/:id query parentId': {
+      request: (of, mine) => ({ params: { id: mine.driveTrashGroupId }, query: { parentId: of.driveFolderId } }),
+    },
+    'POST /documents/folders body parentId': { request: (of) => ({ params: {}, body: { parentId: of.driveFolderId, name: 'census folder' } }) },
+    'POST /documents/uploads body parentId': { request: (of) => ({ params: {}, body: { parentId: of.driveFolderId, name: 'census.bin', size: 1 } }) },
+    'POST /documents/uploads body dropRootId': {
+      request: (of, mine) => ({ params: {}, body: { parentId: mine.driveFolderId, name: 'census.bin', size: 1, relativePath: 'Dir/census.bin', dropRootId: of.driveFolderId } }),
+    },
+    'POST /documents/entries/:id/download-link body versionId': {
+      request: (of, mine) => ({ params: { id: mine.driveFileId }, body: { versionId: of.driveVersionId } }),
+    },
+    'PATCH /documents/entries/:id body parentId': {
+      request: (of, mine) => ({ params: { id: mine.driveFileId }, body: { parentId: of.driveFolderId } }),
+    },
+  }),
 
   // ── providers, phones, runners ───────────────────────────────────────────────────────────────
   'POST /providers/pools body providerIds[]': { request: (of) => ({ params: {}, body: { label: 'census pool', providerIds: [of.providerId] } }) },
@@ -1361,6 +1412,7 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
   'GET /sessions query tagId': { request: (of) => ({ params: {}, query: { tagId: of.tagId } }) },
   'GET /sessions query agentId': { request: (of) => ({ params: {}, query: { agentId: of.workspaceId } }) },
   'GET /sessions query workspaceId': { request: (of) => ({ params: {}, query: { workspaceId: of.workspaceId } }) },
+  'GET /sessions/search query folderId': { request: (of) => ({ params: {}, query: { folderId: of.folderId } }) },
   'GET /sessions query runnerId': { request: (of) => ({ params: {}, query: { runnerId: of.runnerId } }) },
   // The attempt a landing page names: B reads its own landing with A's job in the query, and is
   // answered as if it named nothing — the job is resolved within that landing and nowhere else.
@@ -1583,6 +1635,14 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
   // Where a space's chats run, set to another account's workspace: not one this space's chats may run in.
   'PATCH /wiki/spaces/:id body chat.workspaceId': {
     request: (of, mine) => ({ params: { id: mine.wikiSpaceId }, body: { chat: { workspaceId: of.workspaceId } } }),
+  },
+  // A batch answer naming another account's move from the caller's own session: the rows are read by
+  // (id, the caller) before anything is locked or written, so it is the 404 of a move that does not exist.
+  'POST /sessions/:id/task-moves/decision body moves[].handoffId': {
+    request: (of, mine) => ({
+      params: { id: mine.sessionId },
+      body: { decision: 'DENY', moves: [{ handoffId: of.handoffId, crossingKey: 'a'.repeat(64) }] },
+    }),
   },
   'POST /wiki/changesets/:id/decide body decisions[].opId': {
     request: (of, mine) => ({

@@ -221,6 +221,8 @@ export class FeishuGroupService {
     try {
       await this.sessions.createTurn(route.ownerId, sessionId, { clientTurnId: feishuTurnKey(app.appId, message.eventId), content: message.text }, {
         senderClient: { client: 'feishu' },
+        // A group member's message is a person's: the row moves to the top of the list.
+        listed: true,
         ...(sender ? { externalSender: sender } : {}),
         // Written with the turn, so a replay of this clientTurnId records nothing again.
         onTurnWritten: async (tx, turn) => {

@@ -31,6 +31,9 @@ struct LandingStatusCardView: View {
     let waitDoors: [LandingMenuAction]
     let acting: Bool
     let act: (LandingMenuAction) -> Void
+    /// The files the landing's failure item names (`OpenItemFacts.files`), which the Fixing and hand-back
+    /// cards' failure line counts (board landing-fix-own-session 02 c, d); nil where nobody read them.
+    var failureFiles: [String]? = nil
     /// Whether what the card carries is open under its line: its caret's turn.
     var open: Bool = true
     @Environment(AppModel.self) private var app
@@ -58,6 +61,10 @@ struct LandingStatusCardView: View {
         let card = LandingPageCopy.attemptCard(landing, now: now, updatedAt: readAt,
                                                failed: readFailed, facts: facts)
         let outcome = LandingPageCopy.outcomeCard(landing, promotion: promotion)
+        // Revision 42 (board landing-fix-own-session 02 c, d): the failure in the task's own session's
+        // hands, or handed back from it to the coordinator.
+        let fixing = outcome == nil && LandingFix.isFixing(landing)
+        let handBack = outcome == nil ? LandingFix.handBack(landing) : nil
         // A round's word (Merge check, Merge to main) says which of its jobs this is.
         let word = landing.subject == "PROMOTION" && card?.rightIsClock == false ? card?.word : nil
         // No card of its own: the line, and what it carries hung under the line's mark, as the chat
@@ -65,6 +72,8 @@ struct LandingStatusCardView: View {
         VStack(alignment: .leading, spacing: 6) {
             if let outcome {
                 line(kind: outcome.ok ? .ok : .quiet, title: outcome.title, status: outcome.right)
+            } else if fixing {
+                line(kind: .fixing, title: LandingFixCopy.fixing)
             } else if let card {
                 line(kind: card.stoppedOnFailure || card.timedOut ? .failed : .running,
                      title: card.rightIsClock ? card.word : card.right, word: word,
@@ -93,7 +102,11 @@ struct LandingStatusCardView: View {
                         Text(treeLine).font(.orbitMeta).foregroundStyle(.secondary)
                     }
                 } else if let card {
-                    if !card.detail.isEmpty {
+                    if fixing {
+                        Text(LandingFix.fixingDetail(landing)).font(.orbitMeta).foregroundStyle(.tertiary)
+                    } else if handBack != nil {
+                        Text(LandingFix.handBackDetail(landing)).font(.orbitMeta).foregroundStyle(.tertiary)
+                    } else if !card.detail.isEmpty {
                         Text(card.detail).font(.orbitMeta).foregroundStyle(.tertiary)
                     }
                     if let budget = card.budget {
@@ -125,15 +138,31 @@ struct LandingStatusCardView: View {
                             Text(push).font(.orbitMeta).foregroundStyle(.secondary)
                         }
                     }
-                    if let failure = card.failure {
+                    // With the task's session, or handed back from it: the board's own failure line, once.
+                    if let failure = (fixing || handBack != nil)
+                        ? LandingFix.failureLine(landing, files: failureFiles) ?? card.failure : card.failure {
                         Text(failure).font(.orbitMeta).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("landing-failure")
                     }
                     if card.timedOut {
                         timedOutDoors(landing)
                     }
                 }
-                if !waitDoors.isEmpty {
-                    waitingDoors
+                if let pullRequest = landing.pullRequest {
+                    LandingPullRequestBlock(
+                        pullRequest: pullRequest,
+                        main: landing.currentAttempt.map { TaskLandingLogic.branch($0.targetRef) } ?? facts.mainBranch)
+                }
+                if fixing {
+                    LandingFixingDoors(landing: landing, now: now, act: act)
+                } else {
+                    if let handBack {
+                        LandingFixHandBackView(handBack: handBack)
+                    }
+                    if !waitDoors.isEmpty {
+                        waitingDoors(handBack: handBack)
+                    }
                 }
             }
             .padding(.leading, LandingLineView.indent)
@@ -221,23 +250,35 @@ struct LandingStatusCardView: View {
 
     /// The doors a landing that waits for a decision carries (board 02 d): the first is the solid
     /// one, as the board draws Open Coordinator beside a plain Open Task.
-    private var waitingDoors: some View {
+    private func waitingDoors(handBack: LandingFixHandBack?) -> some View {
         VStack(alignment: .leading, spacing: 9) {
-            if waitDoors.contains(.openCoordinator) {
+            if let handBack, waitDoors.contains(.openCoordinator) {
+                // Handed back (board 02 d): who has it now, and since when.
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "person").foregroundStyle(Color.accentColor)
+                    (Text(LandingFixCopy.coordinator).fontWeight(.semibold)
+                     + Text(" ") + Text(LandingFix.coordinatorHasIt(handBack, now: now)).foregroundColor(.secondary))
+                }
+                .font(.orbitMeta)
+            } else if waitDoors.contains(.openCoordinator) {
                 Label(LandingPageCopy.decisionsTheCoordinator, systemImage: "person")
                     .font(.orbitMeta).foregroundStyle(.secondary)
             }
-            HStack(spacing: 8) {
-                ForEach(Array(waitDoors.enumerated()), id: \.offset) { index, action in
-                    if index == 0 {
-                        Button(Self.doorLabel(action)) { act(action) }
-                            .buttonStyle(.borderedProminent).controlSize(.small)
-                    } else {
-                        Button(Self.doorLabel(action)) { act(action) }
-                            .buttonStyle(.bordered).controlSize(.small)
+            // Two to a row, as the board draws the hand-back's three (02 d): no door's word wraps.
+            ForEach(Array(stride(from: 0, to: waitDoors.count, by: 2)), id: \.self) { start in
+                HStack(spacing: 8) {
+                    ForEach(Array(waitDoors.enumerated()).filter { $0.offset >= start && $0.offset < start + 2 },
+                            id: \.offset) { index, action in
+                        if index == 0 {
+                            Button(Self.doorLabel(action)) { act(action) }
+                                .buttonStyle(.borderedProminent).controlSize(.small)
+                        } else {
+                            Button(Self.doorLabel(action)) { act(action) }
+                                .buttonStyle(.bordered).controlSize(.small)
+                        }
                     }
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
@@ -249,6 +290,7 @@ struct LandingStatusCardView: View {
         switch action {
         case .openCoordinator: return LandingPageCopy.openCoordinator
         case .openTask: return LandingPageCopy.openTask
+        case .openSourceSession: return LandingFixCopy.openSession
         default: return LandingPageCopy.reviewCard
         }
     }
@@ -315,6 +357,14 @@ struct LandingTimelineView: View {
                 let status = LandingStepStatus.of(step, kind: section.kind, isLast: last, live: live,
                                                   queued: current && landing.currentAttempt?.state == "QUEUED")
                 stepRow(step, status: status, section: section)
+            }
+            // Revision 42's rows under the attempt whose failure they are about (board
+            // landing-fix-own-session 02 c ②, d ②): the hand-off, the fix landing again, the hand-back.
+            if let sections = landing.timeline?.sections,
+               let at = sections.firstIndex(where: { $0.jobId == section.jobId }) {
+                ForEach(LandingFix.rows(after: at, in: sections)) { row in
+                    LandingFixRowView(row: row)
+                }
             }
             // A task exempt from the landing check (board 04 b, D5): the merge check still runs on the
             // way into main, said under the list.
@@ -754,7 +804,9 @@ final class LandingPromotionSource: PromotionReviewSource {
 /// `Details ›`; under them the task's name, up to two lines. Web: `LandingLine` in
 /// ProjectLandingsWindow.tsx, one line on a wide window.
 struct LandingLineView: View {
-    enum Kind { case ok, merge, quiet, failed, running }
+    /// `fixing` (revision 42, board landing-fix-own-session 02 c): the task's own session has the failure —
+    /// the board's blue circling arrows, and the word in blue.
+    enum Kind { case ok, merge, quiet, failed, running, fixing }
 
     /// Where what a line carries hangs: under its title, off its mark.
     static let indent: CGFloat = 22
@@ -771,7 +823,7 @@ struct LandingLineView: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 mark.frame(width: 16)
                 Text(title)
-                    .foregroundStyle(kind == .failed ? Color.red : Color.secondary)
+                    .foregroundStyle(kind == .failed ? Color.red : kind == .fixing ? Color.accentColor : Color.secondary)
                     .lineLimit(1)
                 if let status, !status.isEmpty {
                     Text(status)
@@ -815,6 +867,7 @@ struct LandingLineView: View {
         case .failed: Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
         case .quiet: Image(systemName: "minus.circle").foregroundStyle(.secondary)
         case .running: Image(systemName: "clock").foregroundStyle(.secondary)
+        case .fixing: Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(Color.accentColor)
         case .merge: Text("⇢").fontWeight(.semibold).foregroundStyle(Color.accentColor)
         }
     }

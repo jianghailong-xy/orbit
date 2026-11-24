@@ -221,6 +221,7 @@ final class ComposerMenuCopyParityTests: XCTestCase {
 
         // Read from the attach items onward: the native menu does gate Command and Skill, and that
         // gate is its own business.
+        // The first attach item (Image, then File).
         guard let first = menu.range(of: "Label(\"Image\"") else {
             throw ParityError.unparsed("the native `addMenu` offers no `Image` item")
         }

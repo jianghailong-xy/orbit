@@ -114,6 +114,12 @@ export class GithubWorkspaceService {
     return { username: 'x-access-token', password: token.token, expiresAt: token.expiresAt.toISOString() };
   }
 
+  /** The repository `repoId` as GitHub calls it now, when the owner can see it (§5.4's access check, shared by Push as
+   *  me's credential door). */
+  async repositoryFullName(ownerId: string, repoId: string): Promise<string> {
+    return (await this.ownerSees(ownerId, repoId)).fullName;
+  }
+
   /** The owner can see the repository on GitHub, as GitHub said within the last ten minutes. */
   private async ownerSees(ownerId: string, repoId: string): Promise<AccessCheck> {
     const key = `${ownerId}:${repoId}`;

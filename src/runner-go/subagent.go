@@ -942,7 +942,8 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 	var res ExecResult
 	var err error
 	// A child that fails on a usage limit, capacity or a failed login is started again, with the same prompt, on the next
-	// candidate the server names (§4.3), at most subagentMaxMoves times; any other end is the run's result.
+	// candidate the server names (§4.3), as often as the server moves it (it holds the bound, which a refused trial is
+	// not counted against); any other end is the run's result.
 	limit, limitNote := "", ""
 	scratch := dir
 	// Every attempt's spend is the run's: a limit failure can still have cost something.
@@ -961,11 +962,7 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 		if limit, limited = subagentLimitFailure(res, err); !limited {
 			break
 		}
-		if attempt > subagentMaxMoves {
-			limitNote = fmt.Sprintf("It hit a usage limit, capacity or a failed login on %d candidates in a row and was moved %d times, the most one delegate call is.", attempt, subagentMaxMoves)
-			break
-		}
-		next, ferr := s.nextSubagentCandidate(run.id, limit, def)
+		next, ferr := s.nextSubagentCandidate(run.id, limit, res, def)
 		if ferr != nil {
 			limitNote = "It was not moved to another candidate: " + ferr.Error()
 			break
@@ -1006,7 +1003,14 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 		}
 	case limit != "":
 		status = subagentStatusFailed
-		result = strings.TrimSpace("The SubAgent failed: " + limit + "\n" + limitNote)
+		// A failed end whose words are not the engine's own error (a refusal at admission, read off the reply) says
+		// that error first, as any other failed end does.
+		why := limit
+		if engineWhy := firstNonEmpty(strings.TrimSpace(res.ErrorMsg), res.Subtype); res.Status != stSucceeded &&
+			engineWhy != "" && !strings.Contains(limit, engineWhy) {
+			why = engineWhy + "\n" + limit
+		}
+		result = strings.TrimSpace("The SubAgent failed: " + why + "\n" + limitNote)
 	case err != nil:
 		status = subagentStatusFailed
 		result = strings.TrimSpace("The SubAgent failed: " + err.Error() + "\n" + result)
@@ -1349,6 +1353,7 @@ func runClaudeChildProcess(ctx context.Context, parent *ClaimedSession, exec Age
 	}
 	var res ExecResult
 	got := false
+	var output claudeTurnOutput
 	sc := bufio.NewScanner(sp.stdout)
 	sc.Buffer(make([]byte, 0, 1024*1024), 16*1024*1024)
 	for sc.Scan() {
@@ -1361,8 +1366,15 @@ func runClaudeChildProcess(ctx context.Context, parent *ClaimedSession, exec Age
 		}
 		if msg["type"] == "result" {
 			res, got = resultFrom(msg, ctx), true
+			// Claude Code ends a spent window or a refused sign-in with a "success" result whose reply is the
+			// failure: what it was is read off that reply, for the fallback ask (subagentLimitFailure).
+			if failure := claudeTurnFailureOf(res.Result); failure.Kind != "" || res.Status == stFailed {
+				res.Failure = failure.wire()
+				res.Admission = output.admission(res, firstNonEmpty(failure.Said, strings.TrimSpace(res.Result)))
+			}
 			break
 		}
+		output.observe(msg)
 		handleMessage(msg, emit, nil)
 	}
 	_ = sp.stdin.Close()
@@ -1591,9 +1603,43 @@ func subagentEngine(exec AgentExecConfig, parent *ClaimedSession) string {
 	return runtimeProvider(&ClaimedSession{Provider: exec.Provider, Agent: AgentExecConfig{Provider: parent.Provider}})
 }
 
+// readonlySubagentRefusesEdit reports whether job is a read-only SubAgent on an engine other than Claude and toolName
+// one of the edit tools a read-only Claude child goes without (subagentReadonlyDisallowed), under any engine's
+// spelling: such a request is refused, whatever the parent's mode or a rule says.
+func readonlySubagentRefusesEdit(job *ClaimedSession, toolName string) bool {
+	if job == nil || !job.readonlySubagent || job.readonlyParentMode == nil {
+		return false
+	}
+	for _, edit := range subagentReadonlyDisallowed {
+		if strings.EqualFold(toolName, edit) {
+			return true
+		}
+	}
+	return false
+}
+
+// readonlySubagentAnswer is how a read-only SubAgent on an engine other than Claude has a request answered: the way
+// its parent's mode answers it, read now (docs/subagent-design.md §5.3). Auto and Bypass allow it, Don't Ask refuses
+// it, and under any other mode decided is false: the engine files the card it files for its own session. Its edits
+// are refused before this is asked (readonlySubagentRefusesEdit). Nothing here reads the command: a shell call that
+// writes runs too under an Auto parent, so such a child is read-only by its engine's edit lock and its instructions
+// alone (owner, 2026-11-20).
+func readonlySubagentAnswer(job *ClaimedSession, toolName string) (allowed, decided bool) {
+	if job == nil || !job.readonlySubagent || job.readonlyParentMode == nil || readonlySubagentRefusesEdit(job, toolName) {
+		return false, false
+	}
+	switch job.readonlyParentMode() {
+	case "auto", "bypassPermissions":
+		return true, true
+	case "dontAsk":
+		return false, true
+	}
+	return false, false
+}
+
 // subagentChildJob is the claim a child engine is launched from: the parent's, in child mode, on the server's
 // execution target, with the definition applied — the preamble and the definition's body as its appended system
-// prompt, no delegate, and when it is read-only no edit tools on Claude, plan mode elsewhere. engineSession is the conversation a
+// prompt, no delegate, and when it is read-only no edit tools on Claude, its engine's read-only setup elsewhere. engineSession is the conversation a
 // resume continues (RuntimeSessionID, which every engine's open-or-resume reads), "" for a new one.
 func subagentChildJob(parent *ClaimedSession, exec AgentExecConfig, def subagentDefinition, runID, provider, engineSession string) *ClaimedSession {
 	child := *parent
@@ -1624,11 +1670,11 @@ func subagentChildJob(parent *ClaimedSession, exec AgentExecConfig, def subagent
 			// them, and plan mode would ask about every Bash call, however the parent runs (§5.3).
 			child.Agent.DisallowedTools = appendUnique(child.Agent.DisallowedTools, subagentReadonlyDisallowed...)
 		} else {
-			// The server already narrows a read-only run on any other engine to plan mode (§5.3); kept here so the
-			// child never reads wider.
+			// No other engine takes a denylist of edit tools, so each keeps its own read-only setup — plan mode here,
+			// or what its launcher sets instead (Codex's and DSH's read-only sandboxes, OpenCode's edit denial,
+			// Antigravity's approval hook) — and what the child asks is answered by the parent's mode, read when it
+			// is asked (readonlySubagentAnswer; owner, 2026-11-20 and 2026-11-23).
 			child.Agent.PermissionMode = "plan"
-			// Plan mode asks about every shell call; the parent's mode, read when one is asked, answers it instead
-			// (owner, 2026-11-20; kimiReadonlyShellFollowsParent).
 			parentLive, parentMode := parent.liveMode, parent.Agent.PermissionMode
 			child.readonlyParentMode = func() string {
 				if parentLive != nil {

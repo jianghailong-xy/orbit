@@ -87,6 +87,7 @@ final class SessionViewsTests: XCTestCase {
                            agentId: nil, assignedRunnerId: nil, pendingApprovals: nil,
                            branch: nil, updatedAt: nil,
                            lastTurnAt: "2026-08-26T11:57:00Z",
+                           listedAt: "2026-08-26T11:57:00Z",
                            currentTurnStartedAt: "2026-08-26T11:20:00Z")
 
         XCTAssertEqual(SessionListTime.format(for: done, now: now), "3m ago")
@@ -97,11 +98,13 @@ final class SessionViewsTests: XCTestCase {
         let idle = Session(id: "idle", title: "Idle", status: .awaitingInput,
                            agentId: nil, assignedRunnerId: nil, pendingApprovals: nil,
                            branch: nil, updatedAt: nil,
-                           lastTurnAt: "2026-08-26T11:57:00Z")
+                           lastTurnAt: "2026-08-26T11:57:00Z",
+                           listedAt: "2026-08-26T11:57:00Z")
         let approval = Session(id: "approval", title: "Approval", status: .running,
                                agentId: nil, assignedRunnerId: nil, pendingApprovals: 1,
                                branch: nil, updatedAt: nil,
-                               lastTurnAt: "2026-08-26T11:59:30Z")
+                               lastTurnAt: "2026-08-26T11:59:30Z",
+                               listedAt: "2026-08-26T11:59:30Z")
 
         XCTAssertEqual(SessionListTime.format(for: idle, now: now), "3m ago")
         XCTAssertEqual(SessionListTime.format(for: approval, now: now), "just now")

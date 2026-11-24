@@ -32,7 +32,11 @@ import (
 // of the canonical catalogue and is emitted with `orbit capabilities --json`, so a client can tell
 // which catalogue answered it.
 
-const operationCatalogVersion = "1.9.0"
+const operationCatalogVersion = "1.11.0"
+
+// sessionStateFieldsNote is how an agent reads the session-state fields session_list and session_get
+// return beside `status` (Agent Contract 1.12.0). They are additive: `status` and its values are unchanged.
+const sessionStateFieldsNote = " Beside `status` it carries `phase` (PENDING, RUNNING, IDLE), `released` (true: the session is over), `lastTurnOutcome` (ANSWERED, FAILED, INTERRUPTED, CANCELLED or null) and `waitingOn` (PERSON, HOLD, WAKE or null: what stands between it and its next turn). It failed when released with lastTurnOutcome FAILED and no endReason; it is working when phase is RUNNING. A server that does not send them leaves them out: then read `status`."
 
 // operationObject is the Orbit object an operation acts on (docs/orbit-agent-contract.md §1.1),
 // plus the auxiliary resources (watch, wiki, file) and the two doors that are not writes at all
@@ -240,7 +244,6 @@ var catalogCLIExemptions = map[string]string{
 	"bg_list":                         "runner-hosted background jobs: a per-session socket call, not a control-plane API call",
 	"schedule_wakeup":                 "wakes the calling session: there is no session to wake at a terminal outside one",
 	"ask_owner":                       "asks as the project's coordinator session: a terminal outside one is refused by the server",
-	"request_owner_action":            "files as the calling session and answers it with a turn: a terminal outside one is refused by the server",
 	"withdraw_owner_request":          "withdraws as the calling session what it filed: a terminal outside one is refused by the server",
 	"schedule_create":                 "proposes a schedule in the calling session's workspace, on its engine: a terminal outside a session has neither",
 	"schedule_update":                 "changes a schedule as the calling session, which the envelope rule judges: a terminal outside one is refused by the server",
@@ -1237,7 +1240,9 @@ func buildOperationCatalog() []*operation {
 				"do NOT query the production database directly — these are the same facts, served by the " +
 				"interface that is allowed to serve them. Read only. The acting session must belong to " +
 				"the project (its coordinator, a session of one of its tasks, or a child of one); another " +
-				"project's session is refused, and another account's project answers 404. jobId names " +
+				"project's session is refused, and another account's project answers 404. A task's own " +
+				"work session reads its own task's landing here — including one handed to it to fix — " +
+				"as a session of the project. jobId names " +
 				"one attempt and serves what its checks printed under `log` and its timeline under " +
 				"`timeline`; claim, round and check narrow either page, cursor continues the log " +
 				"page and timelineCursor continues the timeline page. Without jobId the line is " +
@@ -1713,14 +1718,18 @@ func buildOperationCatalog() []*operation {
 				"wiki, only from a workspace whose repository has no wiki, and only when the owner asked for " +
 				"one or this session has something worth a wiki. Never file WIKI_CREATE because a wiki_search " +
 				"found no wiki: carry on without it. For WIKI_CREATE Orbit fills in the title and the " +
-				"repository, so give only why and ifUnanswered. options and recommendedOption are " +
-				"only for DECISION, steps only for MANUAL_STEP and secretSpec only for SECRET; any other " +
-				"mix is refused. " +
+				"repository, so give only why and ifUnanswered. CHANGE to propose a setting of one of the " +
+				"owner's runners (change: its runnerId and the maxConcurrent you want); the owner applies it " +
+				"with one press, and you never write the setting yourself. When the outcome arrives, read " +
+				"`applied`, not `requested`: the owner may choose a different number. A DECLINED, EXPIRED or " +
+				"WITHDRAWN outcome has no `applied`, and the setting was not changed. options and " +
+				"recommendedOption are only for DECISION, steps only for MANUAL_STEP, secretSpec only for " +
+				"SECRET and change only for CHANGE; any other mix is refused. " +
 				"Do NOT file what you can read or do yourself: a request costs a person's attention.",
 			"inputSchema": obj(map[string]interface{}{
 				"kind": map[string]interface{}{
 					"type":        "string",
-					"enum":        []string{"DECISION", "SECRET", "MANUAL_STEP", "CONFIRM", "WIKI_CREATE"},
+					"enum":        []string{"DECISION", "SECRET", "MANUAL_STEP", "CONFIRM", "WIKI_CREATE", "CHANGE"},
 					"description": "What you need from the owner. Use SECRET for any credential.",
 				},
 				"title": map[string]interface{}{
@@ -1787,6 +1796,17 @@ func buildOperationCatalog() []*operation {
 				"recommendedOption": map[string]interface{}{
 					"type":        "integer",
 					"description": "DECISION only: index into options of the one you recommend.",
+				},
+				"change": map[string]interface{}{
+					"type": "object",
+					"description": "CHANGE only, and required there: the one setting you propose. maxConcurrent is " +
+						"how many sessions the runner may run at once. The runner must be the owner's, and the " +
+						"value must differ from the one it has now.",
+					"properties": map[string]interface{}{
+						"runnerId":      map[string]interface{}{"type": "string", "description": "The runner's id, from runner_list."},
+						"maxConcurrent": map[string]interface{}{"type": "integer", "minimum": 1, "description": "The Max Concurrent you propose (1 or more)."},
+					},
+					"required": []string{"runnerId", "maxConcurrent"},
 				},
 				"expiresIn": map[string]interface{}{
 					"type": "integer",
@@ -2916,7 +2936,7 @@ func buildOperationCatalog() []*operation {
 			},
 			map[string]interface{}{
 				"name":        "session_list",
-				"description": "List this owner's sessions (optionally filter by status or parentSessionId). Use to see what other sessions are doing and to collect the children you spawned (pass your own session id as parentSessionId).",
+				"description": "List this owner's sessions (optionally filter by status or parentSessionId). Use to see what other sessions are doing and to collect the children you spawned (pass your own session id as parentSessionId)." + sessionStateFieldsNote,
 				"inputSchema": obj(map[string]interface{}{"status": sessionStatus, "parentSessionId": str}),
 			},
 			map[string]interface{}{
@@ -2929,7 +2949,7 @@ func buildOperationCatalog() []*operation {
 			},
 			map[string]interface{}{
 				"name":        "session_get",
-				"description": fmt.Sprintf("Get one session's current status and latest output (to collect a spawned sub-task's result). To wait for a session, call session_await instead of calling this in a loop. A record over %d characters is shortened to fit: the prompt first, then changedFiles, lastToolUse, lastUserText and error; lastAssistantText and result stay whole unless nothing else is left to shorten. What was shortened is named in truncatedFields; summary=false returns the full record.", toolResultBudget),
+				"description": fmt.Sprintf("Get one session's current status and latest output (to collect a spawned sub-task's result). To wait for a session, call session_await instead of calling this in a loop. A record over %d characters is shortened to fit: the prompt first, then changedFiles, lastToolUse, lastUserText and error; lastAssistantText and result stay whole unless nothing else is left to shorten. What was shortened is named in truncatedFields; summary=false returns the full record. A landing session id (task_get's integration.landTask.landingSessionId, or the landing a landing-fix turn names) returns that landing's view: its attempts, timeline and open items. A task's own work session may read its own task's landing this way."+sessionStateFieldsNote, toolResultBudget),
 				"inputSchema": obj(map[string]interface{}{
 					"sessionId": sessionIDProp,
 					"summary":   map[string]interface{}{"type": "boolean", "description": "Default true: the record held under the budget. false returns it in full."},
@@ -3179,7 +3199,7 @@ func buildOperationCatalog() []*operation {
 	// (wiki_tools.go; they are left out entirely when the wiki is off).
 	add(gateAlways, wikiToolDescriptors(obj)...)
 	add(gateAlways, fileToolDescriptors(obj)...)
-	add(gateAlways, driveToolDescriptors(obj)...)
+	add(gateAlways, documentsToolDescriptors(obj)...)
 	// The owner's own Settings (settings_tools.go): listed whether or not Session orchestration is on, since they fix
 	// ordinary settings and turning orchestration off is itself a proposal (docs/settings-from-conversation-design.md §7).
 	add(gateAlways, settingsToolDescriptors(obj)...)
@@ -3727,7 +3747,7 @@ func fileToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 					"type": "string",
 					"description": "The file or directory, absolute or relative to the working directory. Its real " +
 						"location, links resolved, has to be inside this session's checkout, its uploads directory, " +
-						"or the mounted Orbit Files drive on Orbit Cloud.",
+						"or the mounted Documents drive on Orbit Cloud.",
 				},
 				"taskId": map[string]interface{}{
 					"type": "string",
@@ -4139,6 +4159,20 @@ var notifyCLICapabilities = []cliCapabilitySpec{
 		Arguments:   []string{"--message <text> (required)", "--json"},
 		Description: "In a task run of an Automatic project this goes to the project's coordinator, not to the owner's devices. Read recipient in the result to see who got it: coordinator, or owner when Orbit fell back. Alert the human this runs for on their devices, with a line you write. For when you need something only they can give and are otherwise stuck, or the thing they were waiting for is done — not for progress updates. Inside a session they can reply from the notification. At most one per session per minute; read the result, which says whether anybody was actually alerted.",
 		Mutates:     true,
+	},
+}
+
+var ownerRequestCLICapabilities = []cliCapabilitySpec{
+	{
+		Tool:  "request_owner_action",
+		Argv:  []string{"orbit", "owner-request"},
+		Usage: "orbit owner-request --kind KIND --title TEXT --why TEXT [options] [--json]",
+		Arguments: []string{"--kind <DECISION|SECRET|MANUAL_STEP|CONFIRM|WIKI_CREATE|CHANGE> (required)", "--title <text> (required for every kind but WIKI_CREATE)", "--why <text> (required)",
+			"--runner <id|name> --max-concurrent <n> (CHANGE only: the runner's Max Concurrent you propose, n of 1 or more; a runner name is looked up in the runner list)",
+			"--blocks-task-id <id> (repeatable)", "--if-unanswered <text>", "--steps <json array>", "--secret-spec <json object>", "--options <json array>", "--recommended-option <n>", "--expires-in <seconds>", "--client-request-id <id>", "--json"},
+		Description: "Ask the account owner for something only they can do or provide; the same request as the request_owner_action tool, filed as the session it runs in. It returns once the request is filed, and the outcome arrives later as a turn in the conversation. kind CHANGE proposes a runner's Max Concurrent: the owner applies it with one press and you never write the setting yourself; read `applied` in the outcome, not `requested`, because the owner may choose a different number.",
+		Mutates:     true,
+		SessionOnly: true,
 	},
 }
 
@@ -4557,6 +4591,7 @@ func finishOperationCatalog(ops []*operation) []*operation {
 		{"provider", providerCLICapabilities},
 		{"project", projectCLICapabilities},
 		{"notify", notifyCLICapabilities},
+		{"owner-request", ownerRequestCLICapabilities},
 		{"session", sessionCLICapabilities},
 		{"merge", mergeReceiptCLICapabilities},
 		{"agent", agentCLICapabilities},
@@ -4565,7 +4600,7 @@ func finishOperationCatalog(ops []*operation) []*operation {
 		{"wiki", wikiCLICapabilities},
 		{"wiki", wikiImportCLICapabilities},
 		{"file", fileCLICapabilities},
-		{"drive", driveCLICapabilities},
+		{"documents", documentsCLICapabilities},
 		{"subagent", subagentCLICapabilities},
 		{"settings", settingsCLICapabilities},
 		{"browser", browserCLICapabilities},
@@ -5386,26 +5421,34 @@ var catalogMetadata = map[string]operationMeta{
 		Object: objectFile,
 		Intent: "See the files this session keeps.",
 	},
-	"drive_put": {
+	"documents_put": {
 		Object: objectFile,
-		Intent: "Copy a local file into the owner's Orbit Files drive.",
+		Intent: "Copy a local file into the owner's Documents drive.",
 	},
-	"drive_get": {
+	"documents_get": {
 		Object: objectFile,
 		Intent: "Download a drive file into this session's uploads directory.",
 	},
-	"drive_list": {
+	"documents_list": {
 		Object: objectFile,
 		Intent: "See the contents of a drive folder.",
 	},
-	"drive_move": {
+	"documents_move": {
 		Object: objectFile,
 		Intent: "Move or rename an entry on the drive.",
 	},
-	"drive_delete": {
+	"documents_delete": {
 		Object:      objectFile,
 		Intent:      "Move an entry to the owner's Trash.",
 		Destructive: true,
+	},
+	"documents_sync": {
+		Object: objectFile,
+		Intent: "Copy a local directory into a Documents folder in the background.",
+	},
+	"drive_sync": {
+		Object: objectFile,
+		Intent: "Copy a local directory into a drive folder in the background.",
 	},
 	"bg_run": {
 		Object: objectBackgroundJob,

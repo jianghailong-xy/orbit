@@ -4,6 +4,7 @@ import { RunStatus } from '@prisma/client';
 import { SESSION_MERGE_RECOVERY_V1 } from '@orbit/shared';
 import { SessionsService } from './sessions.service';
 import { noSessionRequests } from '../test-support/prisma-transaction-double';
+import { isSessionPhaseFactsQuery, noAnswersOwed, sessionPhaseFactsAnswer } from '../test-support/session-phase-facts';
 
 const NOW = new Date();
 
@@ -117,10 +118,10 @@ test('UI list and detail payloads include the same derived capabilities', async 
     // …and the four owner items a project can be waiting on its owner for (§7.6 V13),
     // which these fixtures have none of either.
     sessionRequest: noSessionRequests(),
-    projectOpenItem: { findMany: async () => [] },
-    ownerRequest: { groupBy: async () => [] },
-    // A move out of a project waiting on the owner (57a2943fa4's crossing signal): none here.
+    // The open owner requests and waiting task moves the same row counts (none here).
+    ownerRequest: { findMany: async () => [] },
     projectHandoffApproval: { findMany: async () => [] },
+    projectOpenItem: { findMany: async () => [] },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);
 
@@ -193,10 +194,10 @@ test('the session list and detail carry the SOURCE snapshot the never-started ca
     taskOwnerConfirmationRequest: { findMany: async () => [] },
     task: { findMany: async () => [] },
     sessionRequest: noSessionRequests(),
-    projectOpenItem: { findMany: async () => [] },
-    ownerRequest: { groupBy: async () => [] },
-    // A move out of a project waiting on the owner (57a2943fa4's crossing signal): none here.
+    // The open owner requests and waiting task moves the same row counts (none here).
+    ownerRequest: { findMany: async () => [] },
     projectHandoffApproval: { findMany: async () => [] },
+    projectOpenItem: { findMany: async () => [] },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);
 
@@ -231,8 +232,11 @@ test('a session that resolves no SOURCE reports UNBOUND with null refusal keys',
   const plain = sessionRow();
   const prisma = {
     // The list row and the membership reads both come through $queryRaw; only the first is the row.
-    $queryRaw: async (query: { sql?: string }) =>
-      (query?.sql?.includes('FROM session s') ? [plain] : [{ projectMembership: null }]),
+    $queryRaw: async (query: { sql?: string }) => {
+      if (query?.sql?.includes('FROM session s')) return [plain];
+      if (isSessionPhaseFactsQuery(query)) return sessionPhaseFactsAnswer(query, { [plain.id]: plain });
+      return [{ projectMembership: null }];
+    },
     session: {
       findFirst: async () => ({ ...plain, coordinatorForProject: null }),
       findMany: async () => [],
@@ -244,10 +248,10 @@ test('a session that resolves no SOURCE reports UNBOUND with null refusal keys',
     taskOwnerConfirmationRequest: { findMany: async () => [] },
     task: { findMany: async () => [] },
     sessionRequest: noSessionRequests(),
-    projectOpenItem: { findMany: async () => [] },
-    ownerRequest: { groupBy: async () => [] },
-    // A move out of a project waiting on the owner (57a2943fa4's crossing signal): none here.
+    // The open owner requests and waiting task moves the same row counts (none here).
+    ownerRequest: { findMany: async () => [] },
     projectHandoffApproval: { findMany: async () => [] },
+    projectOpenItem: { findMany: async () => [] },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);
 
@@ -267,8 +271,11 @@ test('merge recovery is offered only by a capable assigned runner', async () => 
     const row = sessionRow();
     row.assignedRunner.capabilities = capabilities;
     const service = new SessionsService({
-      $queryRaw: async () => [{ projectMembership: null }],
-      session: { findFirst: async () => row },
+      $queryRaw: async (query: unknown) => (isSessionPhaseFactsQuery(query)
+        ? sessionPhaseFactsAnswer(query, { [row.id]: row })
+        : [{ projectMembership: null }]),
+      session: { findFirst: async () => row, findMany: async () => [] },
+      ...noAnswersOwed(),
       projectIntegrationJob: { findFirst: async () => null },
       coordinatorHandoff: { findFirst: async () => null },
     } as never, {} as never, {} as never);
@@ -277,8 +284,11 @@ test('merge recovery is offered only by a capable assigned runner', async () => 
   }
   const row = sessionRow();
   const service = new SessionsService({
-    $queryRaw: async () => [{ projectMembership: null }],
-    session: { findFirst: async () => ({ ...row, assignedRunner: null }) },
+    $queryRaw: async (query: unknown) => (isSessionPhaseFactsQuery(query)
+      ? sessionPhaseFactsAnswer(query, { [row.id]: row })
+      : [{ projectMembership: null }]),
+    session: { findFirst: async () => ({ ...row, assignedRunner: null }), findMany: async () => [] },
+    ...noAnswersOwed(),
     projectIntegrationJob: { findFirst: async () => null },
     coordinatorHandoff: { findFirst: async () => null },
   } as never, {} as never, {} as never);
@@ -293,8 +303,11 @@ test('session detail resolves the embedded workspace key against its actual runn
   };
   const workspace = { id: 'workspace-1', runnerId: 'a-different-runner', env: { GEMINI_API_KEY: '' } };
   const service = new SessionsService({
-    $queryRaw: async () => [{ projectMembership: null }],
-    session: { findFirst: async () => ({ ...row, assignedRunner: runner, workspace }) },
+    $queryRaw: async (query: unknown) => (isSessionPhaseFactsQuery(query)
+      ? sessionPhaseFactsAnswer(query, { [row.id]: row })
+      : [{ projectMembership: null }]),
+    session: { findFirst: async () => ({ ...row, assignedRunner: runner, workspace }), findMany: async () => [] },
+    ...noAnswersOwed(),
     projectIntegrationJob: { findFirst: async () => null },
     coordinatorHandoff: { findFirst: async () => null },
   } as never, {} as never, {} as never);
@@ -321,8 +334,11 @@ test('session detail says which credential the runner runs built-in Antigravity 
   };
   const workspace = { id: 'workspace-1', runnerId: runner.id, env: null };
   const service = new SessionsService({
-    $queryRaw: async () => [{ projectMembership: null }],
-    session: { findFirst: async () => ({ ...row, assignedRunner: runner, workspace }) },
+    $queryRaw: async (query: unknown) => (isSessionPhaseFactsQuery(query)
+      ? sessionPhaseFactsAnswer(query, { [row.id]: row })
+      : [{ projectMembership: null }]),
+    session: { findFirst: async () => ({ ...row, assignedRunner: runner, workspace }), findMany: async () => [] },
+    ...noAnswersOwed(),
     projectIntegrationJob: { findFirst: async () => null },
     coordinatorHandoff: { findFirst: async () => null },
   } as never, {} as never, {} as never);
@@ -361,8 +377,11 @@ test('session detail serves its runner’s engines as the runner list does, a De
   };
   const workspace = { id: 'workspace-1', runnerId: runner.id, env: null };
   const service = new SessionsService({
-    $queryRaw: async () => [{ projectMembership: null }],
-    session: { findFirst: async () => ({ ...row, assignedRunner: runner, workspace }) },
+    $queryRaw: async (query: unknown) => (isSessionPhaseFactsQuery(query)
+      ? sessionPhaseFactsAnswer(query, { [row.id]: row })
+      : [{ projectMembership: null }]),
+    session: { findFirst: async () => ({ ...row, assignedRunner: runner, workspace }), findMany: async () => [] },
+    ...noAnswersOwed(),
     projectIntegrationJob: { findFirst: async () => null },
     coordinatorHandoff: { findFirst: async () => null },
   } as never, {} as never, {} as never);

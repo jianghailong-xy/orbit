@@ -68,6 +68,30 @@ export async function claimParkedSessionEnd(
 }
 
 /**
+ * R2 (§12.5 W6, W7): whether this idle work session of a DONE task is one its task's failed landing revived — an OPEN
+ * item still in its hands — that something will still wake (`hasPendingWakeSource`: a background job it started, a
+ * wakeup it set, a watch, an armed retry). W7 decides the landing at this session's finish, so ending it now would
+ * freeze its branch before its fix is on it, and stop the job it is waiting on. The DONE's own request
+ * (`endIdleWorkOfDoneTask`) leaves every session with a wake source alone already; the reaper asks this.
+ */
+export async function fixingLandingWithWakeSource(tx: Prisma.TransactionClient, sessionId: string): Promise<boolean> {
+  const session = await tx.session.findUnique({
+    where: { id: sessionId },
+    select: { id: true, runningBgJobs: true, retryAt: true, task: { select: { projectId: true } } },
+  });
+  if (!session?.task?.projectId) return false;
+  // By the project's OPEN items, as `project_open_item_project_state_idx` reads them.
+  const fixing = await tx.projectOpenItem.findFirst({
+    where: {
+      projectId: session.task.projectId, state: 'OPEN', workSessionId: sessionId,
+      workSessionOfferedAt: { not: null }, workSessionReturnedAt: null,
+    },
+    select: { id: true },
+  });
+  return fixing !== null && (await hasPendingWakeSource(tx, session));
+}
+
+/**
  * After the claim has committed: the clients see it filed, and the session's inbox is poked. The caller that
  * committed the claim marks its runner changed itself (`requestCancel`), which is what delivers the end to a link
  * heartbeat; link-heartbeat.ts names each such caller as a writer of `cancelSessionIds`.

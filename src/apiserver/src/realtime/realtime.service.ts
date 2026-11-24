@@ -1,6 +1,7 @@
 import { questionsWithCoordinator } from '../sessions/run-question';
 import { KEEP_BACKGROUND_WORK_END_CONTENT } from '../sessions/running-work';
-import { readMergeRecovery, type MergeRecoveryAction } from '@orbit/shared';
+import { readMergeRecovery, type MergeRecoveryAction, type SessionPhaseFields } from '@orbit/shared';
+import { readOneSessionPhaseFields } from '../sessions/session-phase';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
@@ -57,6 +58,8 @@ import { OpenListHints } from './open-list-hints';
 import { RunnerHints, type LinkLiveEvent, type LinkTurnPrefix } from './runner-hints';
 import {
   ownerItemsForRow,
+  ownerRequestsForRow,
+  taskMovesForRow,
   readOwnerDecisionsBySession,
   sessionWaitingKind,
   type OwnerDecisionsOnSession,
@@ -240,6 +243,13 @@ function scheduleCardsChangedData(payload: Record<string, unknown>): Record<stri
 }
 
 /** Reconstruct lifecycle fields for the legacy session.ended wire event. */
+/** The session-phase fields without the row's end reason, for the one event that sends the end reason it settled with. */
+function withoutEndReason(fields: SessionPhaseFields | null): Omit<SessionPhaseFields, 'endReason'> | null {
+  if (!fields) return null;
+  const { endReason: _fromRow, ...rest } = fields;
+  return rest;
+}
+
 function endedSessionStates(
   status: RunStatus | string,
   endReason: SessionEndReason | string | null,
@@ -1308,6 +1318,15 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /** What waits on the owner on these conversations changed with no turn behind it — an owner
+   *  request filed, answered or withdrawn, a task move asked or answered. Each row re-reads its
+   *  summary (`session.updated`, so `pendingApprovals`, `waitingKind`, `ownerRequests` and
+   *  `taskMoves` arrive at once), and the owner's badge and Feishu cards are reconciled. */
+  publishOwnerSignalChanged(ownerId: string, sessionIds: Iterable<string>): void {
+    for (const sessionId of new Set(sessionIds)) this.publishSessionUpdated(sessionId);
+    this.push.scheduleBadgeSync(ownerId);
+  }
+
   /** Drop the cached owner + workspace of a session that moved to another workspace
    *  (SessionsService.move). The cached workspaceId is otherwise only evicted when the session
    *  ends, and it is what every later control event names as the envelope's `agentId`. The runner
@@ -1440,7 +1459,22 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * The owner's drive changed (docs/orbit-files-drive-technical-design.md §5.4): a write committed rows to its change feed,
+   * An agent's directory sync into the owner's Documents started, reported progress or ended
+   * (docs/documents-directory-sync-design.md S4). THE PAYLOAD IS THE SYNC'S ID AND NOTHING ELSE: the tray reads
+   * `GET /drive/syncs`, and re-reads it on focus and reconnect. Published after the write commits, and only to the
+   * streams that declared `hints=drive_syncs`.
+   */
+  publishDriveSync(ownerId: string, syncId: string): void {
+    this.publish(`${RealtimeService.USER_SCOPE}${ownerId}`, {
+      seq: 0,
+      type: RunEventType.DRIVE_SYNC,
+      ts: new Date().toISOString(),
+      payload: { syncId },
+    });
+  }
+
+  /**
+   * The owner's drive changed (docs/documents-drive-technical-design.md §5.4): a write committed rows to its change feed,
    * the highest of them `seq`. THE PAYLOAD IS THE SEQ AND NOTHING ELSE: no name, path or size. An accelerant only: the Files
    * page reads `GET /drive/changes` for what changed, and re-reads it on focus and reconnect. Published after the write
    * commits, and only to the streams that declared `hints=drive_changed`.
@@ -1495,12 +1529,21 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
 
   streamForUser(
     userId: string,
-    options: { listChanged?: boolean; listScopes?: boolean; ownerRequests?: boolean; driveChanged?: boolean; scheduleCards?: boolean } = {},
+    options: {
+      listChanged?: boolean;
+      listScopes?: boolean;
+      ownerRequests?: boolean;
+      driveChanged?: boolean;
+      driveSyncs?: boolean;
+      scheduleCards?: boolean;
+    } = {},
   ): Observable<ControlEvent> {
     const events$ = this.hub.asObservable().pipe(
       filter((m) => controlTypeFor(m.event.type) !== null),
       // `drive.changed` only for a stream that declared it (`?hints=drive_changed`), for the same reason.
       filter((m) => options.driveChanged === true || m.event.type !== RunEventType.DRIVE_CHANGED),
+      // `drive.sync` only for a stream that declared it (`?hints=drive_syncs`): a running sync reports every 2 seconds.
+      filter((m) => options.driveSyncs === true || m.event.type !== RunEventType.DRIVE_SYNC),
       // `schedule_cards.changed` only for a stream that declared it (`?hints=schedule_cards`), like the hints below.
       filter((m) => options.scheduleCards === true || m.event.type !== RunEventType.SCHEDULE_CARDS_CHANGED),
       mergeMap((m) => this.toControlEvent(userId, m)),
@@ -1548,6 +1591,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
           ? taskChange instanceof Promise ? await taskChange : taskChange
           : type === ControlEventType.DRIVE_CHANGED
             ? { seq: String(ev.payload.seq ?? '') }
+            : type === ControlEventType.DRIVE_SYNC
+              ? { syncId: String(ev.payload.syncId ?? '') }
             : type === ControlEventType.SCHEDULE_CARDS_CHANGED
               ? scheduleCardsChangedData(ev.payload)
           : type === ControlEventType.AGENT_CHANGED
@@ -1703,6 +1748,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             lifecycleState,
             filingState,
             endReason,
+            // The row as it stands now (sessions/session-phase.ts); absent when the session is gone. The end reason
+            // stays the one the end settled with, as this event has always sent it.
+            ...withoutEndReason(await readOneSessionPhaseFields(this.prisma, sessionId)),
           };
         }
       case ControlEventType.SESSION_ERROR:
@@ -1818,6 +1866,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         sourceRefusalCode: true,
         sourceRefusalDetail: true,
         lastTurnAt: true,
+        listedAt: true,
+        createdAt: true,
         // What the row previews, and the recap the list prefers to it: an already-open list
         // learns a new reply (or a fresh recap) from this event alone, so a summary that omitted
         // them would leave every row on screen previewing the turn before the one just finished.
@@ -1902,6 +1952,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       questionWithCoordinator: s.taskId ? (await questionsWithCoordinator(this.prisma, [sessionId])).get(sessionId) ?? null : null,
       pendingApprovals,
       waitingKind: sessionWaitingKind(approvals, decisions),
+      // phase, released, lastTurnOutcome, waitingOn (sessions/session-phase.ts), over the count above.
+      ...(await readOneSessionPhaseFields(this.prisma, sessionId, pendingApprovals)),
       confirmationUnderReview: underReview
         ? {
           ...underReview,
@@ -1912,9 +1964,15 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       // The four owner items, sent with every summary — including as an empty list, which is how a
       // row learns that the one it was showing has been answered (§7.6 V13).
       ownerItems: ownerItemsForRow(decisions),
+      // The open owner requests and waiting task moves, sent as [] too: that is how an answered
+      // request or move clears the row.
+      ownerRequests: ownerRequestsForRow(decisions),
+      taskMoves: taskMovesForRow(decisions),
       awaitingReplyFrom: peers?.awaitingReplyFrom ?? [],
       owesReplyTo: peers?.owesReplyTo ?? [],
       lastTurnAt: s.lastTurnAt ? s.lastTurnAt.toISOString() : null,
+      // The list's order key; NULL only on a row an older server inserted mid-deploy, read as its creation.
+      listedAt: (s.listedAt ?? s.createdAt).toISOString(),
       // The two previews, clipped the way the list's own query clips them, and the recap beside
       // them. Null as a value, not "unchanged": a preview the server cleared has to clear on the
       // row holding this summary, and a recap the session does not have is a null.

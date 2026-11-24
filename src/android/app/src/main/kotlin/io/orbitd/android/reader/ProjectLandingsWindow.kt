@@ -30,6 +30,9 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -363,6 +366,8 @@ internal fun ProjectLandingsWindow(app: OrbitApplication, handle: SessionHandle,
             LandingMenuAction.OPEN_TASK -> view?.taskId?.let { open(OrbitRoute(Destination.TASK, it, origin = Origin.LINK)) }
             LandingMenuAction.OPEN_SOURCE_SESSION -> view?.currentAttempt?.sourceSessionId?.let { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LINK)) }
             LandingMenuAction.OPEN_COORDINATOR -> coordinator?.let { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LINK)) }
+            LandingMenuAction.OPEN_WORK_SESSION -> (state.cards[id] ?: state.records[id])?.workSession?.sessionId
+                ?.let { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LINK)) }
             LandingMenuAction.REVIEW_CARD -> if (view == null || view.settledAt != null) receipt = promotion
                 else view.promotionId?.let { review = it; scope.launch { merge.load(force = true) } }
             else -> press(id, action)
@@ -437,7 +442,9 @@ internal fun ProjectLandingsWindow(app: OrbitApplication, handle: SessionHandle,
                 }
             }
         }
-        LandingsFooter(state.coordinatorId) { state.coordinatorId?.let { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LINK)) } }
+        // Revision 42 (board ② c ③): while a landing is with its task's own session, the footer says who decides, in that order.
+        val sessionFirst = state.rows.any { it.landing?.state == "FIXING" } || state.cards.values.any { it.workSession?.held == true }
+        LandingsFooter(state.coordinatorId, sessionFirst) { state.coordinatorId?.let { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LINK)) } }
     }
     review?.let { promotionId -> ProjectMergeReviewSheet(merge, promotionId, null) { review = null } }
     receipt?.let { record -> PromotionReceiptSheet(record) { receipt = null } }
@@ -509,6 +516,7 @@ private fun LandingWindowRow(row: LandingsWindowRow, record: LandingSessionRead?
         if (expanded) Column(Modifier.fillMaxWidth().padding(start = LANDING_LINE_INDENT, bottom = 6.dp).testTag("landing:record-panel"),
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (merge) LandingReceiptBlock(LandingSessionModel.mergeReceipt(row.promotion, view))
+            view?.pullRequest?.let { LandingPullRequestCard(it, view.currentAttempt?.targetRef?.removePrefix("refs/heads/") ?: "main") }
             if (row.sessionId != null) {
                 if (view != null) {
                     LandingRecord(view, now, zone, onLog)
@@ -540,18 +548,28 @@ private fun LandingWindowCard(card: LandingsWindowCard, read: LandingSessionRead
     val menuItems = view?.let { LandingSessionModel.menuItems(it, gates, coordinatorId != null, read.currentPromotion() != null, nothingPushed) }
     // A landing that waits for a decision carries the doors to the people who make it (board 02 d): the coordinator, and the task (or
     // the round's own card). A timed-out one has its own doors.
-    val waitDoors = if (view == null || card.state != "AWAITING_DECISION" || view.settledAt != null || attemptCard?.timedOut == true) emptyList()
+    // Revision 42 (§12.7, board ② c, d): the task's own session has the failure — Fixing, with that session's door first — or handed it
+    // back, when the coordinator's doors carry that session's too.
+    val work = read.workSession
+    val fixing = work?.takeIf { it.held && view?.settledAt == null }
+    val handedBack = work?.takeIf { !it.held && fixing == null && card.state == "AWAITING_DECISION" && view?.settledAt == null }
+    val hasTask = view?.subject == "TASK" && !view.taskId.isNullOrEmpty()
+    val waitDoors = if (view == null || view.settledAt != null || attemptCard?.timedOut == true) emptyList()
+        else if (fixing != null) listOfNotNull(LandingMenuAction.OPEN_WORK_SESSION, LandingMenuAction.OPEN_TASK.takeIf { hasTask })
+        else if (card.state != "AWAITING_DECISION") emptyList()
         else listOfNotNull(
             LandingMenuAction.OPEN_COORDINATOR.takeIf { coordinatorId != null },
-            LandingMenuAction.OPEN_TASK.takeIf { view.subject == "TASK" && !view.taskId.isNullOrEmpty() },
+            LandingMenuAction.OPEN_WORK_SESSION.takeIf { handedBack != null },
+            LandingMenuAction.OPEN_TASK.takeIf { hasTask },
             LandingMenuAction.REVIEW_CARD.takeIf { view.subject == "PROMOTION" && read.currentPromotion() != null })
     val toggle by rememberUpdatedState(onToggle)
     val menu by rememberUpdatedState(onMenu)
     val settled = view?.settledAt != null
     val running = !settled && attempt?.state == "RUNNING" && !attempt.timedOut
     val timedOut = !settled && attempt?.timedOut == true
-    val waiting = !settled && card.state == "AWAITING_DECISION"
-    // What needs a look stays open: a landing that runs, waits for a decision or timed out (docs/mocks/landings-chat-tools-native g).
+    val waiting = !settled && (card.state == "AWAITING_DECISION" || card.state == "FIXING")
+    // What needs a look stays open: a landing that runs, waits for a decision, is being fixed or timed out
+    // (docs/mocks/landings-chat-tools-native g).
     val open = expanded || running || waiting || timedOut
     Column(Modifier.fillMaxWidth().then(outline(outlined, RoundedCornerShape(14.dp))).testTag("landing-entry:${card.sessionId}"),
         verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -569,13 +587,14 @@ private fun LandingWindowCard(card: LandingsWindowCard, read: LandingSessionRead
                         onClick { toggle(); true }
                         onLongClick("Landing actions") { menu(); true }
                     }.testTag("landing:card-line"),
-                taskName = card.title, expanded = open, waitDoors = waitDoors)
+                taskName = card.title, expanded = open, waitDoors = waitDoors, fixing = fixing, handedBack = handedBack)
             LandingEntryMenu(menuOpen && menuItems?.isEmpty() != true, menuItems, onMenuDismiss, onAction)
         }
         read.refusal?.let { refusal ->
             Text(refusal, Modifier.padding(horizontal = 4.dp).testTag("landing:refusal"), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error)
         }
+        view?.pullRequest?.let { LandingPullRequestCard(it, attempt?.targetRef?.removePrefix("refs/heads/") ?: "main") }
         if (open && view != null) Column(Modifier.fillMaxWidth().padding(start = LANDING_LINE_INDENT, bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             LandingRecord(view, now, zone, onLog)
@@ -628,25 +647,45 @@ private fun LandingReceiptBlock(receipt: LandingMergeReceipt) {
  * the end (docs/mocks/landings-ui-polish ③). No text field; a screen reader hears the whole sentence.
  */
 @Composable
-private fun LandingsFooter(coordinatorId: String?, onOpenCoordinator: () -> Unit) {
+private fun LandingsFooter(coordinatorId: String?, sessionFirst: Boolean, onOpenCoordinator: () -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val words = SessionLandingsCopy.orbitRunsTheseLandings
+    val coordinator = @Composable {
+        if (coordinatorId != null) OutlinedButton(onClick = onOpenCoordinator, modifier = Modifier.testTag("landings:open-coordinator")
+            .semantics { stateDescription = if (sessionFirst) LandingFixWindowCopy.DECISIONS_SESSION_FIRST else LandingSessionCopy.DECISIONS_THE_COORDINATOR },
+            contentPadding = PaddingValues(start = 12.dp, end = 16.dp)) {
+            Icon(painterResource(R.drawable.ic_person), null, Modifier.size(ButtonDefaults.IconSize))
+            Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+            Text(LandingSessionCopy.OPEN_COORDINATOR, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+        }
+    }
     Surface(tonalElevation = 2.dp) {
         Column {
             HorizontalDivider()
-            Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = 16.dp, end = 8.dp).testTag("landings:footer"),
+            // Revision 42 (board ② c ③, owner's ruling 2026-11-22, which puts this over landings-ui-polish ③'s one line): while a landing
+            // is with its task's own session, the whole sentence shows, across the bar in two lines, with the button under it.
+            if (sessionFirst) Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 6.dp).testTag("landings:footer"),
+                verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.Top) {
+                    Icon(painterResource(R.drawable.ic_lock), null, Modifier.padding(top = 3.dp).size(14.dp), tint = muted)
+                    Spacer(Modifier.width(8.dp))
+                    Text(buildAnnotatedString {
+                        append(words.substringBefore(" — "))
+                        append(" — ")
+                        withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)) { append(words.substringAfter(" — ")) }
+                        append(" ${LandingFixWindowCopy.DECISIONS_SESSION_FIRST}")
+                    }, Modifier.weight(1f).semantics { contentDescription = LandingFixWindowCopy.footer(words) }.testTag("landings:footer-line"),
+                        style = MaterialTheme.typography.bodySmall, color = muted)
+                }
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { coordinator() }
+            }
+            else Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = 16.dp, end = 8.dp).testTag("landings:footer"),
                 verticalAlignment = Alignment.CenterVertically) {
                 Icon(painterResource(R.drawable.ic_lock), null, Modifier.size(14.dp), tint = muted)
                 Spacer(Modifier.width(8.dp))
                 Text(words.substringBefore(" — "), Modifier.weight(1f).semantics { contentDescription = words }.testTag("landings:footer-line"),
                     style = MaterialTheme.typography.bodyMedium, color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (coordinatorId != null) OutlinedButton(onClick = onOpenCoordinator, modifier = Modifier.testTag("landings:open-coordinator")
-                    .semantics { stateDescription = LandingSessionCopy.DECISIONS_THE_COORDINATOR },
-                    contentPadding = PaddingValues(start = 12.dp, end = 16.dp)) {
-                    Icon(painterResource(R.drawable.ic_person), null, Modifier.size(ButtonDefaults.IconSize))
-                    Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-                    Text(LandingSessionCopy.OPEN_COORDINATOR, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                }
+                coordinator()
             }
         }
     }

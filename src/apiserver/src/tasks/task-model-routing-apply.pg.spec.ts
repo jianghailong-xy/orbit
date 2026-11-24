@@ -498,7 +498,7 @@ test('a takeover creates the run on the route that was bound, not on one decided
       const press = randomUUID();
       // Decided at S by a holder that died between binding and creating; the task now says M.
       const route = {
-        policyVersion: 2, applied: true, level: 'S', provider: 'claude', model: SONNET, effort: 'low',
+        policyVersion: 4, applied: true, level: 'S', provider: 'claude', model: SONNET, effort: 'low',
         baseline: { provider: 'claude', providerSource: 'task-pin', model: null, effort: AGENT_EFFORT },
         features: { modelHint: 'S', modelRouting: true }, reasons: ['decided by the holder that died'],
       };
@@ -531,7 +531,7 @@ test('a routed run refused by a run already holding the task names no pin the ta
       const press = randomUUID();
       await boundReceipt(services.db, target.ownerId, TASK_RUN_ACTION.execute, press, `task:${taskId}`,
         routedTarget(target, taskId, press, {
-          policyVersion: 2, applied: true, level: 'M', provider: 'claude', model: SONNET, effort: 'medium',
+          policyVersion: 4, applied: true, level: 'M', provider: 'claude', model: SONNET, effort: 'medium',
           baseline: { provider: 'claude', providerSource: 'task-pin', model: null, effort: AGENT_EFFORT },
           features: { modelHint: 'M', modelRouting: true }, reasons: ['decided by the holder that died'],
         }));
@@ -554,7 +554,7 @@ test('the switch is the owner\'s: the user API turns it on and off, the agent to
     const services = connect();
     try {
       // The user API validates with a whitelist (main.ts): a boolean is kept, anything else is refused.
-      for (const Dto of [CreateWorkspaceDto, UpdateWorkspaceDto]) {
+      for (const Dto of [CreateWorkspaceDto, UpdateWorkspaceDto] as Array<typeof UpdateWorkspaceDto>) {
         const ok = plainToInstance(Dto, { name: 'agent', modelRouting: true });
         assert.deepEqual(await validate(ok, { whitelist: true }), []);
         assert.equal(ok.modelRouting, true, `${Dto.name} keeps it`);

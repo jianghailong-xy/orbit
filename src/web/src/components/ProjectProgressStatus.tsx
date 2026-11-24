@@ -1,6 +1,7 @@
 import { LANDING_CHECK_COPY, baselineTitle } from '../lib/landingCheck';
 import { useCallback, useId, useState, useSyncExternalStore, type JSX, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { UserOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type {
   CoordinatorFuseUsage,
@@ -14,6 +15,7 @@ import type {
   ProjectIntegrationView,
   ProjectOpenItemRow,
   ProjectOpenItemsView,
+  ProjectAccountWait,
   ProjectSignInWait,
 } from '@orbit/shared';
 import { SessionLifecycleState } from '@orbit/shared';
@@ -32,6 +34,7 @@ import {
 import { JOB_PHASES, jobPhases, landingClockTime, landingRoundClause } from './ProjectPanoramaHeader';
 import { decisionReceiptAnchor, type ReceiptPlacement } from '../lib/decisionReceipt';
 import { encodeId } from '../lib/idCodec';
+import { LANDING_FIX_COPY, heldByItsSession, openItemFixLine, openItemFixTitle } from '../lib/landingFix';
 import { abandonJob } from '../lib/projectMerge';
 import {
   projectCoordinatorStatusQuery,
@@ -3188,6 +3191,31 @@ export function SignInWaitRowView({ wait }: { wait: ProjectSignInWait }): JSX.El
   );
 }
 
+/**
+ * The project's tasks held because no account can run them (`accountWait`): "2 tasks wait for an account", the
+ * provider's words and the next try, and a link to the account rows where Check again is. Derived on each read, so it
+ * goes once an account can run them.
+ */
+export function AccountWaitRowView({ wait }: { wait: ProjectAccountWait }): JSX.Element {
+  return (
+    <li className="project-open-item-row is-owner" data-kind="ACCOUNT_WAIT">
+      <span className="project-open-item-dot" aria-hidden="true" />
+      <div className="project-open-item-main">
+        <div className="project-open-item-title" title={wait.title}>{wait.title}</div>
+        <div className="project-open-item-line" title={wait.detailLine}>{wait.detailLine}</div>
+      </div>
+      <div className="project-open-item-who">
+        <span>{WHO.OWNER}</span>
+      </div>
+      <div className="project-open-item-press">
+        <Link className="project-open-item-action is-primary" to="/settings/machines">
+          Open accounts
+        </Link>
+      </div>
+    </li>
+  );
+}
+
 /** The owner-facing DONE_REQUEST row opens the same settlement card as the transcript. */
 function DoneRequestRowView({
   row,
@@ -3328,11 +3356,15 @@ export function ProjectOpenItems({
     ...(items.data?.needsYou ?? []).filter((row) => row.kind !== 'FUSE_PAUSED' && row.kind !== 'DONE_REQUEST'),
   ];
   const signIns = items.data?.signIns ?? [];
+  const accountWait = items.data?.accountWait ?? null;
+  // Landing failures their task's own session is fixing (revision 42, §12.7; web d ①): listed apart, and waiting on
+  // nobody — not counted in Needs you.
+  const fixing = (items.data?.withWorkSession ?? []).filter(heldByItsSession);
   const ownStart = start?.kind === 'own' && onStartProject ? onStartProject : null;
   const ownDone = items.data !== undefined && !doneRequest && onRecordDone ? onRecordDone : null;
   if (
     !projectId
-    || (paused.length + needsYou.length + signIns.length === 0 && !ownStart && !ownDone)
+    || (paused.length + needsYou.length + signIns.length + (accountWait ? 1 : 0) + fixing.length === 0 && !ownStart && !ownDone)
   ) return null;
 
   return (
@@ -3340,13 +3372,13 @@ export function ProjectOpenItems({
       <header className="project-open-items-head">
         <span className="project-open-items-title">{OPEN_ITEMS_HEADING}</span>
         <span className="project-open-items-hint">
-          {`${needsYou.length + signIns.length} need you · oldest first`}
+          {`${needsYou.length + signIns.length + (accountWait ? 1 : 0)} need you · oldest first`}
         </span>
       </header>
       {paused.map((row) => (
         <FusePauseCard key={row.itemId} projectId={projectId} row={row} now={now} />
       ))}
-      {needsYou.length > 0 || signIns.length > 0 || ownStart || ownDone ? (
+      {needsYou.length > 0 || signIns.length > 0 || accountWait || ownStart || ownDone ? (
         <>
           <div className="project-open-items-group">{NEEDS_YOU_GROUP}</div>
           <ul className="project-open-items-list">
@@ -3355,6 +3387,7 @@ export function ProjectOpenItems({
             {signIns.map((wait) => (
               <SignInWaitRowView key={`${wait.runnerId}:${wait.engine}`} wait={wait} />
             ))}
+            {accountWait ? <AccountWaitRowView wait={accountWait} /> : null}
             {needsYou.map((row) =>
               row === startRequest ? (
                 <StartRequestRowView
@@ -3386,7 +3419,40 @@ export function ProjectOpenItems({
           </ul>
         </>
       ) : null}
+      {fixing.length > 0 ? (
+        <>
+          <div className="project-open-items-group is-fixing">{`${LANDING_FIX_COPY.GROUP} · ${fixing.length}`}</div>
+          <ul className="project-open-items-list">
+            {fixing.map((row) => <LandingFixItemRowView key={row.itemId} row={row} now={now} />)}
+          </ul>
+        </>
+      ) : null}
     </section>
+  );
+}
+
+/**
+ * One failure its task's own session is fixing (web d ①): a person for the mark, `Landing conflict · <task>`, how long
+ * the session has had it and which round, and the one door the board gives it — into that session.
+ */
+function LandingFixItemRowView({ row, now }: { row: ProjectOpenItemRow; now: number }): JSX.Element {
+  const sessionId = row.workSession?.sessionId ?? null;
+  return (
+    <li className="project-open-item-row is-fixing" data-kind={row.kind} data-landing-fix-item={row.itemId}>
+      <span className="project-open-item-fix-mark" aria-hidden="true"><UserOutlined /></span>
+      <div className="project-open-item-main">
+        <div className="project-open-item-title">{openItemFixTitle(row)}</div>
+        <div className="project-open-item-line">{openItemFixLine(row, now)}</div>
+      </div>
+      <div className="project-open-item-who" />
+      <div className="project-open-item-press">
+        {sessionId ? (
+          <Link className="landing-fix-link" to={`/sessions/${encodeURIComponent(encodeId(sessionId))}`}>
+            {`${LANDING_FIX_COPY.OPEN_SESSION_LINK} ›`}
+          </Link>
+        ) : null}
+      </div>
+    </li>
   );
 }
 

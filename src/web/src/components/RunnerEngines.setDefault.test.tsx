@@ -235,6 +235,21 @@ describe('what a swap comes to', () => {
     expect(workRow.querySelector('.re-swapping')).toBeNull();
   });
 
+  it('closes a failed swap with its ✕: the runner forgets it, and the panel goes', async () => {
+    let dismissed = false;
+    const failed = runner([DEFAULT, WORK], { claudeAccountSwap: swap({ status: 'failed', message: 'No claudeAiOauth entry' }) });
+    const page = mount([failed], async () => { dismissed = true; return { ok: true }; }, () => [dismissed ? runner([DEFAULT, WORK]) : failed]);
+    const close = claudeRows(page)[1].querySelector<HTMLButtonElement>('.re-swap-failed button[aria-label="Dismiss"]');
+    expect(close?.textContent).toBe('✕');
+    await act(async () => close!.click());
+    const [path, options] = setDefaults()[0];
+    expect(path).toBe(`/runners/${failed.id}/accounts/claude/${WORK.id}/set-default`);
+    expect(options).toEqual({ method: 'DELETE' });
+    await act(async () => {
+      await vi.waitFor(() => expect(page.querySelector('.re-swap-failed')).toBeNull());
+    });
+  });
+
   it('says a refusal from the control plane the same way, as a toast', async () => {
     const page = mount([runner([DEFAULT, WORK])], async () => {
       throw new Error('A default is already being set on this runner. Wait for it to finish.');

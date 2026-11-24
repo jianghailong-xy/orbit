@@ -159,6 +159,8 @@ suite('outside a project the dispatching session settles the evidence, and the o
           ...(over.status === RunStatus.SUCCEEDED || over.status === RunStatus.FAILED
             ? { finishedAt: over.finishedAt ?? new Date()}
             : over.status === RunStatus.CANCELLED ? { finishedAt: over.finishedAt ?? new Date()} : {}),
+          // A failure release carries FAILED on its turn (removal step R2), which is what reads it as one since R7.
+          ...(over.status === RunStatus.FAILED && over.lastTurnOutcome === undefined ? { lastTurnOutcome: 'FAILED' } : {}),
         },
       });
       return id;
@@ -450,7 +452,7 @@ suite('outside a project the dispatching session settles the evidence, and the o
       let turns = await deliveredTo(reviewer);
       assert.equal(turns.length, 1);
       await db.conversationTurn.update({ where: { id: turns[0].id }, data: { status: 'ANSWERED' } });
-      await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.FAILED, finishedAt: new Date()} });
+      await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', finishedAt: new Date()} });
       assert.equal(await cardIn(reviewer, work.taskId, new Date(Date.now() + 10 * WINDOW_MS)), null);
       await db.session.update({ where: { id: reviewer }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null} });
       await Promise.all([reviews.deliverOwedTo(reviewer), reviews.deliverOwedTo(reviewer)]);
@@ -477,7 +479,7 @@ suite('outside a project the dispatching session settles the evidence, and the o
       assert.equal(await reviews.deliver(ownerId, ownWork.taskId, (await latestEvidence(ownWork.taskId)).id),
         'REVIEWER_NOT_INDEPENDENT', 'the fixture is refused for independence');
       // Release the run's execution claim before making the other session live on the same task.
-      await db.session.update({ where: { id: ownWork.run }, data: { status: RunStatus.FAILED, finishedAt: new Date()} });
+      await db.session.update({ where: { id: ownWork.run }, data: { status: RunStatus.FAILED, lastTurnOutcome: 'FAILED', finishedAt: new Date()} });
       await db.session.update({ where: { id: nonIndependent }, data: { status: RunStatus.AWAITING_INPUT, finishedAt: null} });
 
       const ended = await conversation('interrupted with a recorded end', { status: RunStatus.FAILED });
@@ -568,7 +570,7 @@ suite('outside a project the dispatching session settles the evidence, and the o
         await submit(work, 'Ready.');
         await db.session.update({ where: { id: work.run }, data: {
           status: outage === 'FAILED' ? RunStatus.FAILED : outage === 'PENDING' ? RunStatus.PENDING : RunStatus.AWAITING_INPUT,
-          ...(outage === 'FAILED' ? { finishedAt: new Date()} : {}),
+          ...(outage === 'FAILED' ? { finishedAt: new Date(), lastTurnOutcome: 'FAILED' } : {}),
           retryAt: outage === 'RETRY' ? new Date(Date.now() + 3_600_000) : null,
           completedAt: outage === 'ENDED' ? new Date() : null,
         } });

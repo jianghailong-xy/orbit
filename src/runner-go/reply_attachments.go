@@ -44,7 +44,7 @@ func attachLocalReplyFiles(ctx context.Context, t *Transport, sessionID string, 
 	}
 	upload := memo.uploader(t, sessionID)
 	resolveDrive := func(ctx context.Context, p string) (string, error) {
-		entry, err := driveStat(ctx, t, p)
+		entry, err := documentsStat(ctx, t, p)
 		return entry.ID, err
 	}
 	for i := range events {

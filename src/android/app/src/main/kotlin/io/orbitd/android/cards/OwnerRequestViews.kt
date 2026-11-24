@@ -23,6 +23,8 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -33,14 +35,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
+import io.orbitd.android.core.cards.ChangeCopy
 import io.orbitd.android.core.cards.OwnerCardTranslation
 import io.orbitd.android.core.cards.OwnerRequest
 import io.orbitd.android.core.cards.OwnerRequestStep
 import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.core.cards.OwnerReview
-import io.orbitd.android.core.cards.TerminalRequest
+import io.orbitd.android.directory.DirectoryRunner
+import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.directory.rememberDirectoryData
-import io.orbitd.android.management.Terminals
 import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.text.MarkdownText
 import io.orbitd.android.translation.AnswerNotTranslated
@@ -57,11 +60,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * What a session asked the owner to do (web `OwnerRequestCard`), drawn the same in the conversation that asked and in the "Waiting on
- * you" inbox. Pending it is the whole request; once ended it is one line saying how, who and when ([OwnerRequestResolved]). [runner]
- * names a runner by the name the owner knows it by. [focusInput]: opened from a push's action, the card takes the focus on its input —
- * the key's field, the answer's words, or Mark done. [discuss]: the conversation's composer, which Chat about this hands the request
- * to; the inbox has none, so its cards offer no Chat about this.
+ * What a session asked the owner to do (web `OwnerRequestCard`), drawn in the conversation that asked. Pending it is the whole
+ * request; once ended it is one line saying how, who and when ([OwnerRequestResolved]). [runner] names a runner by the name the owner
+ * knows it by. [focusInput]: opened from a push's action, the card takes the focus on its input — the key's field, the answer's words,
+ * or Mark done. [discuss]: the conversation's composer, which Chat about this hands the request to.
  */
 @Composable
 fun OwnerRequestCard(asked: OwnerRequest, store: OwnerRequestStore, runner: (String?) -> String, open: (String) -> Unit,
@@ -78,7 +80,7 @@ fun OwnerRequestCard(asked: OwnerRequest, store: OwnerRequestStore, runner: (Str
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val tag = "owner-request:${request.id}"
-    val runnerName = runner(request.secretSpec?.runnerId)
+    val runnerName = runner(request.secretSpec?.runnerId ?: request.changeSpec?.runnerId)
     // The key is held in this card's state only: never saved, never in a URL, a view model or a cache, gone with the card.
     var value by remember(request.id) { mutableStateOf("") }
     var save by remember(request.id) { mutableStateOf(false) }
@@ -86,6 +88,8 @@ fun OwnerRequestCard(asked: OwnerRequest, store: OwnerRequestStore, runner: (Str
     var savedId by remember(request.id) { mutableStateOf<String?>(null) }
     var chosen by remember(request.id) { mutableStateOf(request.recommendedOption) }
     var text by remember(request.id) { mutableStateOf("") }
+    // CHANGE: the number the owner would apply, starting at the one asked for.
+    var maxValue by remember(request.id) { mutableStateOf(request.changeSpec?.requested ?: 1) }
     var declining by remember(request.id) { mutableStateOf(false) }
     var reason by remember(request.id) { mutableStateOf("") }
     var busy by remember(request.id) { mutableStateOf(false) }
@@ -128,6 +132,7 @@ fun OwnerRequestCard(asked: OwnerRequest, store: OwnerRequestStore, runner: (Str
                 value = ""; save = false; savedId = null
                 press { if (saved != null) provideSaved(request.id, saved) else provide(request.id, typed, name) }
             }
+            OwnerRequests.CHANGE -> { val n = maxValue; press { applyChange(request.id, n) } }
             OwnerRequests.DECISION -> { val words = text.trim().takeIf { it.isNotEmpty() }; pressWords { asWritten -> { done(request.id, chosen, words, asWritten) } } }
             else -> press { done(request.id) }
         }
@@ -184,6 +189,9 @@ fun OwnerRequestCard(asked: OwnerRequest, store: OwnerRequestStore, runner: (Str
         }
 
         if (request.kind == OwnerRequests.WIKI_CREATE) WikiCreateFacts(request, store, tag)
+        if (request.kind == OwnerRequests.CHANGE) request.changeSpec?.let { spec ->
+            ChangeSetting(spec, runnerName, maxValue, { maxValue = it }, !busy && !closed, tag, store)
+        }
         if (request.kind == OwnerRequests.MANUAL_STEP) Steps(request.steps.orEmpty(), tag, open)
         if (request.kind == OwnerRequests.SECRET) request.secretSpec?.let { spec ->
             when {
@@ -302,6 +310,39 @@ fun OwnerRequestCard(asked: OwnerRequest, store: OwnerRequestStore, runner: (Str
     }
 }
 
+/** The runner rows a CHANGE card reads its live value from, when a host supplies them (tests); null reads the directory. */
+internal val LocalChangeRunners = compositionLocalOf<List<DirectoryRunner>?> { null }
+
+/** A CHANGE card's setting block (web `ChangeSetting`): the runner's live value → a − / + stepper holding the number to apply (no
+ * keyboard), what is running now, and what that number would do. */
+@Composable
+private fun ChangeSetting(spec: io.orbitd.android.core.cards.OwnerRequestChangeSpec, runnerName: String, value: Int, onValue: (Int) -> Unit,
+    enabled: Boolean, tag: String, store: OwnerRequestStore) {
+    val app = LocalContext.current.applicationContext as OrbitApplication
+    val data by rememberDirectoryData(app, store.handle)
+    val row = (LocalChangeRunners.current ?: data.runners).firstOrNull { ObjectId.same(it.id, spec.runnerId) }
+    val current = row?.maxConcurrent ?: spec.before
+    val running = row?.activeSessions
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(Modifier.fillMaxWidth().testTag("$tag:change").background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+        .padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(ChangeCopy.setting(runnerName), Modifier.testTag("$tag:change-setting"), style = MaterialTheme.typography.bodyMedium, color = secondary)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("$current", Modifier.testTag("$tag:change-live"), style = MaterialTheme.typography.headlineMedium, color = secondary)
+            Text("→", color = secondary)
+            Spacer(Modifier.weight(1f))
+            OutlinedIconButton(onClick = { onValue(value - 1) }, enabled = enabled && value > 1, modifier = Modifier.size(36.dp).testTag("$tag:change-minus")
+                .semantics { contentDescription = "${ChangeCopy.numberLabel}: fewer" }) { Text("−") }
+            Text("$value", Modifier.testTag("$tag:change-value"), style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold))
+            OutlinedIconButton(onClick = { onValue(value + 1) }, enabled = enabled, modifier = Modifier.size(36.dp).testTag("$tag:change-plus")
+                .semantics { contentDescription = "${ChangeCopy.numberLabel}: more" }) { Text("+") }
+        }
+        running?.let { Text(ChangeCopy.runningNow(it), Modifier.testTag("$tag:change-running"), style = MaterialTheme.typography.bodySmall, color = secondary) }
+        if (current != spec.before) Text(ChangeCopy.wasWhenAsked(spec.before), Modifier.testTag("$tag:change-was"), style = MaterialTheme.typography.bodySmall, color = secondary)
+        OwnerRequests.changeEffect(value, current)?.let { Text(it, Modifier.testTag("$tag:change-effect"), style = MaterialTheme.typography.bodySmall, color = secondary) }
+    }
+}
+
 /** What a WIKI_CREATE card will make (docs/wiki-explicit-creation-design.md §3.6, board 46 part 3; web `WikiCreateFacts`): the
  * repository, the asking session's workspace it reads it from — offline when its runner is — and the maintenance it starts with. */
 @Composable
@@ -368,48 +409,6 @@ private fun BrowserSignInActions(request: OwnerRequest, store: OwnerRequestStore
     }
 }
 
-/**
- * A terminal asking to be approved (docs/terminal-session-design.md, board 2 marker 7): the owner request card's frame, header and
- * buttons — no look of its own. Approve mints the terminal's credential for 30 days; Deny tells the terminal so. Either way the card
- * leaves once the door answers. iOS `TerminalApproveCard`, web `TerminalApproveCard.tsx`; the words are [Terminals]'.
- */
-@Composable
-fun TerminalApproveCard(request: TerminalRequest, store: OwnerRequestStore, now: Instant = Instant.now()) {
-    val scope = rememberCoroutineScope()
-    var busy by remember(request.id) { mutableStateOf(false) }
-    var failure by remember(request.id) { mutableStateOf<String?>(null) }
-    val tag = "terminal-request:${request.id}"
-    fun decide(approve: Boolean) {
-        busy = true; failure = null
-        scope.launch { failure = store.decideTerminal(request, approve); busy = false }
-    }
-    val tone = LocalOrbitColors.current.needsYou
-    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
-    Column(Modifier.fillMaxWidth().testTag(tag)
-        .background(tone.copy(alpha = 0.07f), RoundedCornerShape(14.dp)).border(1.dp, tone.copy(alpha = 0.28f), RoundedCornerShape(14.dp))
-        .padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Box(Modifier.size(8.dp).background(tone, RoundedCornerShape(50)))
-            Text(OwnerRequests.waitingOnYou, style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold), color = tone)
-            Spacer(Modifier.weight(1f))
-            Text("Asked ${OwnerRequests.ago(request.createdAt, now)}", Modifier.testTag("$tag:asked"), style = MaterialTheme.typography.labelSmall,
-                color = secondary)
-        }
-        Text(Terminals.APPROVE_TITLE, Modifier.testTag("$tag:title"), style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold))
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(Terminals.requestLine(request), Modifier.testTag("$tag:line"), style = MaterialTheme.typography.bodyMedium, color = secondary)
-            Text(Terminals.APPROVE_DETAIL, Modifier.testTag("$tag:detail"), style = MaterialTheme.typography.bodyMedium, color = secondary)
-        }
-        failure?.let { Text("${OwnerRequests.notRecorded}: $it", Modifier.testTag("$tag:error"), style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.error) }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { decide(approve = false) }, Modifier.weight(1f).testTag("$tag:deny"), enabled = !busy) { Text(Terminals.DENY) }
-            Button(onClick = { decide(approve = true) }, Modifier.weight(1f).testTag("$tag:approve"), enabled = !busy) { Text(Terminals.APPROVE) }
-        }
-        if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-    }
-}
-
 @Composable
 private fun Fact(label: String, tag: String, content: @Composable () -> Unit) {
     Row(Modifier.fillMaxWidth().testTag(tag), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -460,7 +459,8 @@ fun OwnerRequestResolved(request: OwnerRequest, store: OwnerRequestStore, runner
     val scope = rememberCoroutineScope()
     var busy by remember(request.id) { mutableStateOf(false) }
     var failure by remember(request.id) { mutableStateOf<String?>(null) }
-    val runnerName = runner(request.secretSpec?.runnerId.takeIf { request.kind == OwnerRequests.SECRET })
+    val runnerName = runner(if (request.kind == OwnerRequests.CHANGE) request.changeSpec?.runnerId
+        else request.secretSpec?.runnerId.takeIf { request.kind == OwnerRequests.SECRET })
     val grant = OwnerRequests.resolvedGrant(request)
     val tag = "owner-request:${request.id}"
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
@@ -507,19 +507,33 @@ fun OwnerRequestSnoozed(request: OwnerRequest, until: Long, now: Instant = Insta
     }
 }
 
-/** One request where a conversation draws it: whole, folded for later, or as its summary. */
+/** A runner by the name the owner knows it by. */
+internal fun runnerNames(runners: List<DirectoryRunner>): (String?) -> String = { id ->
+    runners.firstOrNull { ObjectId.same(it.id, id) }?.let { io.orbitd.android.management.RunnerPage.nameOf(it.id, it.name, it.displayName, managed = it.managed) } ?: "this runner"
+}
+
+/** One request where a conversation draws it: whole, folded for later, or as its summary. The request a link opened [sessionId]'s
+ * conversation onto ([OwnerRequestLinks]) is shown whole even if it was put off, brought into view and its input focused. */
 @Composable
 fun OwnerRequestInConversation(request: OwnerRequest, store: OwnerRequestStore, runner: (String?) -> String, open: (String) -> Unit,
-    discuss: ((String) -> Unit)? = null) {
+    sessionId: String? = null, discuss: ((String) -> Unit)? = null) {
     val snoozes by OwnerRequestSnoozes.of(LocalContext.current).state.collectAsState()
+    val context = LocalContext.current
     // Drawn again when the reminder falls due.
     var due by remember(request.id) { mutableIntStateOf(0) }
+    var focused by remember(request.id) { mutableStateOf(false) }
+    val focus = sessionId?.let(CardFocus::pending)?.takeIf { it == CardFocus.ownerRequest(request.id) }
+    if (focus != null) LaunchedEffect(focus) {
+        OwnerRequestSnoozes.of(context).wake(request.id)
+        focused = true
+        CardFocus.spend(sessionId!!)
+    }
     val now = Instant.now()
     val until = snoozes[OwnerRequests.key(request.id)] ?: 0
     if (until > now.toEpochMilli()) LaunchedEffect(until, due) { delay(until - System.currentTimeMillis()); due++ }
     when {
         !request.pending -> OwnerRequestResolved(request, store, runner, now)
         until > now.toEpochMilli() -> OwnerRequestSnoozed(request, until, now)
-        else -> OwnerRequestCard(request, store, runner, open, now, discuss = discuss)
+        else -> OwnerRequestCard(request, store, runner, open, now, focusInput = focused, discuss = discuss)
     }
 }

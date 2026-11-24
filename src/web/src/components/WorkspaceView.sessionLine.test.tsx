@@ -157,8 +157,10 @@ describe('sessionLine', () => {
       text: 'Record as done…',
       tone: 'approval',
     });
-    expect(sessionLine({ ...parked, waitingKind: 'OWNER_REQUEST' }, true)).toEqual({
-      text: 'Waiting on you',
+    // An owner request says its kind's own word, never "Waiting on you".
+    const request = { ownerRequestId: 'r1', kind: 'MANUAL_STEP' as const, title: 'Sign in', since: '2026-11-14T00:00:00Z' };
+    expect(sessionLine({ ...parked, waitingKind: 'OWNER_REQUEST', ownerRequests: [request] }, true)).toEqual({
+      text: 'Steps for you',
       tone: 'approval',
     });
   });
@@ -264,7 +266,7 @@ describe('sessionLine', () => {
    */
   it('falls back to the run state word when there is nothing to preview', () => {
     expect(sessionLine({ status: 'SUCCEEDED' }, true)).toEqual({
-      text: 'Succeeded',
+      text: 'Finished',
       tone: 'preview',
     });
     expect(sessionLine({ status: 'FAILED' }, true)).toEqual({ text: 'Failed', tone: 'preview' });

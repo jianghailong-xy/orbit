@@ -122,7 +122,19 @@ export const FOLDER_COPY = {
   editHint: 'Enter to save · Esc to cancel',
   back: (workspace: string) => `Back to ${workspace}`,
   more: 'Folder actions',
+  /** The column's search field on a folder's page, which opens the palette scoped to the folder. */
+  searchIn: (folder: string) => `Search in ${folder}`,
+  /** The tag chip under it, and the empty page's way out of the filter. */
+  clearTag: (tag: string) => `Clear the “${tag}” filter`,
+  clearFilter: 'Clear filter',
 } as const;
+
+/** A folder's page with nothing to list, naming what narrowed it: the view when it is Completed, and
+ *  the tag when one filters it. */
+export const folderPageEmpty = (view: SessionListView, tag: string | null, place = 'this folder'): string => {
+  const what = view === 'completed' ? 'completed sessions' : 'sessions';
+  return tag ? `No ${what} with “${tag}” in ${place}.` : `No ${what} in ${place}.`;
+};
 
 /**
  * A workspace's Scheduled runs folder (owner 2026-11-18): built in, never filed into, listing the sessions this

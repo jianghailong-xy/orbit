@@ -276,6 +276,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     snippet: '// A landing session is not a conversation anyone can share (§2.9 LS6).',
     note: 'POST and PUT /sessions/:id/share',
   },
+  'ProjectHandoffService.decideBatch': {
+    file: 'projects/project-handoff.service.ts',
+    snippet: "// A move card is drawn in a conversation, never in the platform's landing container (§2.9 LS6).\n    assertEngineSession(session);",
+    note: 'POST /sessions/:id/task-moves/decision',
+  },
   'SessionGuestsService.ownedSession': {
     file: 'session-guests/session-guests.service.ts',
     snippet: '// Nobody is invited into the platform\'s landing record: it runs no engine turn (§2.9 LS6).\n    if (opts.write) assertEngineSession(session);',
@@ -335,7 +340,7 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
 
 /** Every derived door and the guard site that refuses a LANDING for it. */
 export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
-  // ── the user door (33) ────────────────────────────────────────────────────────────────────────
+  // ── the user door (37) ────────────────────────────────────────────────────────────────────────
   'PATCH /sessions/:id': 'SessionsService.rename',
   'DELETE /sessions/:id': 'SessionsService.transitionEnd',
   'DELETE /sessions/:id/purge': 'SessionsService.purge',
@@ -378,6 +383,7 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /sessions/:id/share': 'ShareLinksService.put',
   'PUT /sessions/:id/share': 'ShareLinksService.put',
   'DELETE /sessions/:id/share': 'ShareLinksService.turnOff',
+  'POST /sessions/:id/task-moves/decision': 'ProjectHandoffService.decideBatch',
   'POST /sessions/:id/guests': 'SessionGuestsService.ownedSession',
   'DELETE /sessions/:id/guests/:userId': 'SessionGuestsService.ownedSession',
 
@@ -406,6 +412,7 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /runner/sessions/:id/turn-complete': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/events': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/finalize': 'RunnerApiController.assertEngineSessionById',
+  'POST /runner/sessions/:id/release': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/import-result': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/merge-result': 'RunnerApiController.assertEngineSessionById',
   'POST /runner/sessions/:id/commit-result': 'RunnerApiController.assertEngineSessionById',

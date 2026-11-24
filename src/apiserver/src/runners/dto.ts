@@ -1,6 +1,7 @@
 import {
   ArrayUnique,
   IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
@@ -72,6 +73,12 @@ export class StartLoginDto {
  *  is added under (StartLoginDto.accountName). */
 export class RenameAccountDto {
   @IsString() @MaxLength(60) name!: string;
+}
+
+/** Sign out of an engine's Default on a runner (docs/default-sign-out-design.md). `force` goes ahead
+ *  although sessions are running on Default: the person confirmed after a refusal named them. */
+export class SignOutDefaultDto {
+  @IsOptional() @IsBoolean() force?: boolean;
 }
 
 /** Which CLI to install on the runner. Required — there is no historical default here. Cursor CLI's

@@ -415,6 +415,13 @@ private struct CompactSections: View {
             // and the line a rewrite floats (docs/wiki-chat-design.md §9).
             .wikiChatHost()
 
+        // DOCUMENTS — the phone's pages come with the iOS task; nothing in the drawer opens this section yet.
+        case .documents:
+            NavigationStack {
+                ContentUnavailableView(AppSection.documents.title, systemImage: AppSection.documents.systemImage)
+                    .drawerToggle(open: openDrawer)
+            }
+
         // SCHEDULED — the timeline and its bottom panel.
         case .scheduled:
             NavigationStack {
@@ -770,14 +777,12 @@ struct NavigationDrawer: View {
                     wiki: model.wiki?.shown == true,
                     // Scheduled (board 01 ①): account-wide, here and nowhere in a workspace's list; away while
                     // the server predates scheduled tasks.
-                    scheduled: model.scheduled.map { !$0.unsupported } ?? false,
-                    waitingOnYou: model.ownerRequests.map { !$0.unsupported } ?? false)) { row in
+                    scheduled: model.scheduled.map { !$0.unsupported } ?? false)) { row in
                     switch row {
                     case .projects:       projectsRow
                     case .wiki:           wikiRow
                     case .scheduled:      scheduledRow
                     case .section(let section): sectionRow(section)
-                    case .waitingOnYou:   waitingOnYouRow(model.ownerRequests)
                     case .workspacesHeader: workspacesHeader
                     case .agents:         agentsRows
                     case .openProjects:   projectRows
@@ -1056,38 +1061,6 @@ struct NavigationDrawer: View {
     /// Projects row writes and says its own, and nothing at all at zero. Opening the Wiki never clears
     /// it: only answering what waits does. Selected whenever the Wiki is what is showing, since the
     /// drawer has no rows below it for the Wiki's pages.
-    /// "Waiting on you": a sheet rather than a page, so a push's action can raise it over anything.
-    @ViewBuilder
-    private func waitingOnYouRow(_ requests: OwnerRequestsModel?) -> some View {
-        if let requests {
-            waitingOnYouButton(requests)
-        }
-    }
-
-    private func waitingOnYouButton(_ requests: OwnerRequestsModel) -> some View {
-        let waiting = requests.waitingCount
-        return Button {
-            requests.tab = .open
-            requests.inboxPresented = true
-        } label: {
-            pill(selected: false) {
-                HStack(spacing: 12) {
-                    Image(systemName: "hand.raised").frame(width: 24).foregroundStyle(.primary)
-                    Text(OwnerRequests.waitingOnYou).foregroundStyle(.primary)
-                    Spacer(minLength: 0)
-                    if waiting > 0 {
-                        Text("\(waiting)")
-                            .font(.orbitMeta.weight(.semibold))
-                            .foregroundStyle(.orange)
-                    }
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .drawerRow()
-        .accessibilityIdentifier("owner-request-inbox-entry")
-    }
-
     private var wikiRow: some View {
         let selected = model.drawerDestination == .section(.wiki)
         let waiting = model.wiki?.waiting ?? 0

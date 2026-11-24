@@ -1,4 +1,5 @@
 import { readSessionCoordinatorHandoffs } from '../projects/coordinator-handoff';
+import { CLEARED_RUN_FAILURE } from '../runner-api/run-failure-columns';
 import type { BackgroundJobStopResponse, BackgroundJobTailResponse, HelpAskMarker, SubagentRunView, WorkflowRunView } from '@orbit/shared';
 import { BG_JOB_STOPPED_BY_OWNER, BG_JOB_TAIL_MAX_BYTES, BG_OUTPUT_TAIL_V1, BG_OWNER_STOP_V1, cloneRootFor, newFolderPath } from '@orbit/shared';
 import { RunnerHints } from '../realtime/runner-hints';
@@ -49,6 +50,7 @@ import {
   SESSION_RUNNING_BG_JOB_WHERE,
 } from '../common/session-working';
 import { readSessionActivities, sessionActivitySql } from './task-work-carrier';
+import { readOneSessionPhaseFields, readSessionPhaseFields } from './session-phase';
 import { CLEARED_RUNNING_WORK, KEEP_BACKGROUND_WORK_END_CONTENT } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest, worktreeFileAnswerKey } from './worktree-artifact';
@@ -139,6 +141,7 @@ import {
   supportsSteerWithdraw,
   supportsTargetBoundCurrentWorkSteer,
   uuidToBase62,
+  toUuid,
   accountToMoveTo,
   isAccountEngine,
   planUsageBlockedUntil,
@@ -216,6 +219,8 @@ import { QueueService } from '../queue/queue.service';
 import { mergeDispatchGate } from '../projects/task-checkpoint.service';
 import {
   ownerItemsForRow,
+  ownerRequestsForRow,
+  taskMovesForRow,
   readOwnerDecisionSignals,
   readOwnerDecisionsBySession,
   sessionWaitingKind,
@@ -234,7 +239,7 @@ import { isCodelessTaskRun } from './codeless-checkout';
 import { readWikiChatContext, sameWikiChatContext, wikiContextOutsideChat } from '../wiki/wiki-chat-context';
 import { branchName } from '../projects/project-criterion-landing';
 import { settleDeliveredIdentityAfterFinish } from '../projects/project-integration-job';
-import { INTEGRATION_ITEM_KINDS, openItemOwed, openItemVisible } from '../projects/project-open-item';
+import { INTEGRATION_ITEM_KINDS, openItemInWorkSessionHands, openItemOwed, openItemVisible } from '../projects/project-open-item';
 import { landingContainerStatus, readSourceLanding } from '../projects/landing-session';
 import { readLandingIntegrationLog, type IntegrationLogSelectors } from '../projects/project-integration-log';
 import {
@@ -407,11 +412,14 @@ import {
   type WorkspaceAccountChoices,
 } from '../providers/plan-usage-accounts';
 import { countedAccountBeforeDispatch, withActiveSessions } from '../providers/active-sessions';
+import { withAccountHealth } from '../providers/account-health-blocked';
 import {
   ACCOUNT_CHOICE,
   ACCOUNT_PINNED,
   DEFAULT_ACCOUNT,
+  accountBlockOn,
   accountInPlaceOf,
+  accountsOn,
   defaultRemovedOn,
   remainingAccount,
   type AccountRunner,
@@ -429,7 +437,7 @@ import {
   terminalizePendingCurrentWorkSteers,
 } from './current-work-delivery';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
-import { returnQueuedTurns } from '../projects/project-open-item';
+import { handBackLandingFixesOfSession, returnQueuedTurns } from '../projects/project-open-item';
 import { type OpenListBase, OpenListDeltaStore } from './open-list-delta';
 import { type OpenListVersionParts, openListEtag, readOpenListVersion, readOpenListVersionParts } from './open-list-version';
 import {
@@ -437,6 +445,7 @@ import {
   SESSION_KIND_LANDING,
   assertEngineSession as assertEngineSessionRow,
 } from './engine-session';
+import { returnWaitingSessionsToOpen } from './return-to-open';
 import { readLandingView } from '../projects/landing-view';
 import {
   deriveSessionCapabilities,
@@ -460,6 +469,7 @@ import {
   runnerLastBeatSql,
   withRunnerLastBeat,
 } from '../runners/runner-presence';
+import { PULL_REQUEST_VIEW_SELECT, pullRequestViewOf } from '../projects/pull-request-landing';
 
 /**
  * A turn the control plane queued with no words of anybody's, whose content is written in at delivery:
@@ -1083,7 +1093,9 @@ type ReadSeed = AgentProviderSeed & Partial<Pick<AnchorSeed, 'anchor'>>;
  */
 function settledWorktreeStateCleared(session: Pick<Session, 'mergeStatus' | 'commitStatus'>): Prisma.SessionUncheckedUpdateInput {
   return {
-    ...(session.mergeStatus && session.mergeStatus !== 'pending'
+    // A Merge waiting on its pull request (`pull_request`, docs/design/protected-branch-landing.md §4.6) has not
+    // settled either: GitHub's merge of it is what the pull request door records against this row.
+    ...(session.mergeStatus && session.mergeStatus !== 'pending' && session.mergeStatus !== 'pull_request'
       ? {
           mergeStatus: null,
           mergeOperationId: null,
@@ -1772,14 +1784,16 @@ export class SessionsService {
     const signedInOn = (engine: AccountEngine) =>
       resolved.credential.kind === 'login' && resolved.credential.engine === engine;
     // Its runner's sessions are counted only when there is a pick to make, and the pick then keeps each
-    // account to its share of them.
+    // account to its share of them. An account that account health takes out is passed over as a paused one is
+    // (withAccountHealth, docs/routing-account-health-design.md §7.6).
     const automatic = async (engine: AccountEngine) => {
       if (!signedInOn(engine) || !targetRunner) return null;
       const workspace = { env: workspaceEnv, ...accountChoices };
       const now = new Date();
-      const pick = automaticAccount(engine, workspace, targetRunner, now);
+      const runner = await withAccountHealth(this.prisma, ownerId, assignedRunnerId, targetRunner, now);
+      const pick = automaticAccount(engine, workspace, runner, now);
       return pick && assignedRunnerId
-        ? automaticAccount(engine, workspace, await withActiveSessions(this.prisma, assignedRunnerId, targetRunner, now), now)
+        ? automaticAccount(engine, workspace, await withActiveSessions(this.prisma, assignedRunnerId, runner, now), now)
         : pick;
     };
     const picked = (engine: AccountEngine, account: string | undefined) =>
@@ -3427,6 +3441,47 @@ export class SessionsService {
   }
 
   /**
+   * Revision 42 (§12.5 W6, §12.7): a task's own work session reading its task's landing — `session_get` on the landing
+   * session id its landing-fix turn names, or on `task_get`'s `integration.landTask.landingSessionId` — whether or not
+   * the account has Session orchestration on. The landing is about the work this session wrote, and fixing it needs
+   * the record.
+   *
+   * Answers only when the calling session is a work session of this runner that is not deleted, the id is a landing of the project this session's task is in, and that landing's task is this session's task; then it
+   * is the same detail `getForOrchestration` serves for it. Null in every other case, which leaves the request to the
+   * orchestration door and its refusals unchanged.
+   */
+  async ownTaskLandingForWorkSession(
+    ownerId: string,
+    runnerId: string,
+    callingSessionId: string | undefined,
+    id: string,
+  ) {
+    const raw = callingSessionId?.trim();
+    if (!raw) return null;
+    let caller: string;
+    try {
+      caller = toUuid(raw);
+    } catch {
+      return null;
+    }
+    const session = await this.prisma.session.findFirst({
+      where: {
+        // Not `cancel_requested_at`: a session revived for its landing-fix round keeps the end its task's DONE asked
+        // for (R3 resumes it without clearing that), and this is exactly the session that must read its landing.
+        id: caller, ownerId, assignedRunnerId: runnerId, startsTaskWork: true, deletedAt: null, taskId: { not: null },
+      },
+      select: { taskId: true, task: { select: { projectId: true } } },
+    });
+    if (!session?.taskId || !session.task?.projectId) return null;
+    const landing = await this.prisma.projectLanding.findFirst({
+      where: { sessionId: id, ownerId, taskId: session.taskId, projectId: session.task.projectId },
+      select: { sessionId: true },
+    });
+    if (!landing) return null;
+    return this.getForOrchestration(ownerId, landing.sessionId);
+  }
+
+  /**
    * Owner-scoped detail returned to an orchestrating workspace. Keep this deliberately
    * narrower than the UI detail query: the full Workspace row contains injected env,
    * MCP config, prompts, and other configuration that must not become model output.
@@ -3542,18 +3597,21 @@ export class SessionsService {
    * Ordering is a score, not a tier ranking — see the `scored` CTE for why, and for the quota that
    * keeps the name tier from taking a page the palette has no way to scroll past. `total` reports
    * what the page left behind.
+   *
+   * `folderId` narrows every tier and the recents to the sessions filed in that folder: the palette
+   * opened from a folder's page searches that folder first.
    */
-  async search(ownerId: string, q: string | undefined, limit: number) {
+  async search(ownerId: string, q: string | undefined, limit: number, folderId?: string | null) {
     const take = Math.min(Math.max(limit || 20, 1), 50);
     // Both sides lose `*` and backticks, exactly as in-session find does: the corpus in SQL, the
     // query here. Stripping the query first also means a query of nothing but marks normalizes to
     // null and answers with recents, rather than matching every row.
     const norm = normalizeSearchQuery(stripEmphasis(q ?? ''));
     if (!norm) {
-      const recents = await this.searchRows(ownerId, null, take);
+      const recents = await this.searchRows(ownerId, null, take, folderId);
       return { q: '', contentSearched: false, total: recents.total, hits: recents.hits };
     }
-    const first = await this.searchRows(ownerId, norm, take);
+    const first = await this.searchRows(ownerId, norm, take, folderId);
     if (first.total > 0) {
       return { q: norm.raw, contentSearched: norm.searchContent, total: first.total, hits: first.hits };
     }
@@ -3564,7 +3622,7 @@ export class SessionsService {
     if (!wide) {
       return { q: norm.raw, contentSearched: norm.searchContent, total: 0, hits: [] };
     }
-    const { hits, total } = await this.searchRows(ownerId, wide, take);
+    const { hits, total } = await this.searchRows(ownerId, wide, take, folderId);
     return { q: norm.raw, contentSearched: wide.searchContent, total, hits };
   }
 
@@ -3579,7 +3637,11 @@ export class SessionsService {
     ownerId: string,
     norm: NormalizedSearchQuery | null,
     take: number,
+    folderId?: string | null,
   ): Promise<{ hits: SessionSearchHit[]; total: number }> {
+    // One folder's sessions only. Applied where the hits are scored (and to recents), so the count
+    // the palette reports is the folder's, not the whole account's.
+    const inFolder = folderId ? Prisma.sql`AND s.folder_id = ${folderId}::uuid` : Prisma.empty;
     type Row = {
       id: string;
       title: string;
@@ -3590,6 +3652,7 @@ export class SessionsService {
       taskId: string | null;
       taskTitle: string | null;
       lastTurnAt: Date | null;
+      listedAt: Date | null;
       createdAt: Date;
       completedAt: Date | null;
       archivedAt: Date | null;
@@ -3855,6 +3918,7 @@ export class SessionsService {
               s.task_id AS "taskId",
               t.title   AS "taskTitle",
               s.last_turn_at AS "lastTurnAt",
+              COALESCE(s.listed_at, s.created_at) AS "listedAt",
               s.created_at   AS "createdAt",
               COALESCE(s.completed_at, s.archived_at) AS "completedAt",
               COALESCE(s.completed_at, s.archived_at) AS "archivedAt",
@@ -3901,9 +3965,9 @@ export class SessionsService {
                  ELSE 1                  -- branch / agent / task: names of the container, not of this
                END)
               + (CASE
-                   WHEN COALESCE(s.last_turn_at, s.created_at) > now() - interval '1 day'  THEN 3
-                   WHEN COALESCE(s.last_turn_at, s.created_at) > now() - interval '7 days' THEN 2
-                   WHEN COALESCE(s.last_turn_at, s.created_at) > now() - interval '30 days' THEN 1
+                   WHEN COALESCE(s.listed_at, s.created_at) > now() - interval '1 day'  THEN 3
+                   WHEN COALESCE(s.listed_at, s.created_at) > now() - interval '7 days' THEN 2
+                   WHEN COALESCE(s.listed_at, s.created_at) > now() - interval '30 days' THEN 1
                    ELSE 0
                  END)
               -- Exactness, the one match-quality signal a substring search can afford. The length
@@ -3920,6 +3984,7 @@ export class SessionsService {
             JOIN session s ON s.id = h.session_id
             LEFT JOIN workspace a ON a.id = s.workspace_id
             LEFT JOIN task  t ON t.id = s.task_id
+            WHERE TRUE ${inFolder}
           ),
           ranked AS (
             SELECT
@@ -3929,13 +3994,13 @@ export class SessionsService {
               count(*) FILTER (WHERE is_conversation) OVER () AS conv_total,
               row_number() OVER (
                 PARTITION BY is_conversation
-                ORDER BY score DESC, "lastTurnAt" DESC NULLS LAST, "createdAt" DESC
+                ORDER BY score DESC, "listedAt" DESC, "createdAt" DESC
               ) AS group_rn
             FROM scored
           )
           SELECT
             id, title, status, "workspaceId", "workspaceName", "runnerId", "taskId", "taskTitle",
-            "lastTurnAt", "createdAt", "completedAt", "archivedAt", "deletedAt", "endReason",
+            "lastTurnAt", "listedAt", "createdAt", "completedAt", "archivedAt", "deletedAt", "endReason",
             "matchField", "snippet", total::int AS "total"
           FROM ranked
           -- The name tier cannot take the whole page. Weights alone don't prevent that: a common
@@ -3945,7 +4010,7 @@ export class SessionsService {
           -- name tier takes what's left, which is all of it when there is nothing to reserve for.
           WHERE is_conversation
              OR group_rn <= ${take}::int - LEAST(conv_total, ${take}::int / 2)
-          ORDER BY score DESC, "lastTurnAt" DESC NULLS LAST, "createdAt" DESC
+          ORDER BY score DESC, "listedAt" DESC, "createdAt" DESC
           LIMIT ${take}::int
         `)
       : await this.prisma.$queryRaw<Row[]>(Prisma.sql`
@@ -3957,6 +4022,7 @@ export class SessionsService {
             s.task_id AS "taskId",
             t.title   AS "taskTitle",
             s.last_turn_at AS "lastTurnAt",
+            COALESCE(s.listed_at, s.created_at) AS "listedAt",
             s.created_at   AS "createdAt",
             COALESCE(s.completed_at, s.archived_at) AS "completedAt",
             COALESCE(s.completed_at, s.archived_at) AS "archivedAt",
@@ -3970,7 +4036,9 @@ export class SessionsService {
           WHERE s.owner_id = ${ownerId}::uuid
             AND s.kind = 'CONVERSATION' AND s.run_source NOT IN ('SCHEDULE', 'SCHEDULE_CHANGE')
             AND s.deleted_at IS NULL
-          ORDER BY s.last_turn_at DESC NULLS LAST, s.created_at DESC
+            ${inFolder}
+          -- Recent is the list's own order (session.listed_at, session-listed-at.ts), not the liveness clock.
+          ORDER BY COALESCE(s.listed_at, s.created_at) DESC, s.created_at DESC
           LIMIT ${take}::int
         `);
 
@@ -3984,6 +4052,7 @@ export class SessionsService {
         taskId: r.taskId,
         taskTitle: r.taskTitle,
         lastTurnAt: r.lastTurnAt,
+        listedAt: r.listedAt,
         createdAt: r.createdAt,
         completedAt: r.completedAt,
         archivedAt: r.archivedAt,
@@ -4309,15 +4378,15 @@ export class SessionsService {
     // Completed orders by when the session was completed
     // (completed_at, newest first) — not by last activity — and deliberately ignores
     // pinning, which is an Open-list affordance. Every other view floats pinned
-    // sessions to the top and orders by last turn activity.
-    // A session that has never run has no last_turn_at, and the clients place it by when it
-    // was created (not last, as `NULLS LAST` would) — so order on the same key they sort by.
-    // With `limit` that stopped being cosmetic: a differently ordered page would cut exactly
+    // sessions to the top and orders by `listed_at` (migration 1434, session-listed-at.ts): the
+    // clock that moves only when the session changes for its owner, not with every event.
+    // The clients sort on the same key, read as created_at where an older server left it NULL.
+    // With `limit` that is not cosmetic: a differently ordered page would cut exactly
     // the rows the client then floats to the top.
     const orderBy: Prisma.Sql =
       view === 'completed'
         ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) DESC NULLS LAST, s.created_at DESC`
-        : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, COALESCE(s.last_turn_at, s.created_at) DESC, s.created_at DESC`;
+        : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, COALESCE(s.listed_at, s.created_at) DESC, s.created_at DESC`;
     // An Ask (migration 0850) is in no session list: it is listed under /help → Your questions (help/help-ask.ts).
     return { view, query: {
       scope: Prisma.sql`AND s.help_ask IS NULL ${runnerFilter} ${workspaceFilter} ${confinedFilter} ${tagFilter} ${projectFilter}`,
@@ -4851,6 +4920,7 @@ export class SessionsService {
       title: string;
       createdAt: Date;
       lastTurnAt: Date | null;
+      listedAt: Date | null;
       currentTurnStartedAt: Date | null;
       startedAt: Date | null;
       numTurns: number;
@@ -4959,6 +5029,9 @@ export class SessionsService {
         s.kind            AS "sessionKind",
         s.created_at      AS "createdAt",
         s.last_turn_at    AS "lastTurnAt",
+        -- The list's order key (migration 1434): moved only when the session changes for its owner. NULL only on a row
+        -- an older server inserted mid-deploy, which is read as its creation.
+        COALESCE(s.listed_at, s.created_at) AS "listedAt",
         -- When the turn now in flight was handed to the runner. last_turn_at cannot answer this:
         -- it is rewritten on every state move (turn delivered, awaiting input, the reaper's
         -- idle-clock reset), so on a running session it sits seconds behind now and a list of
@@ -5119,6 +5192,7 @@ export class SessionsService {
                    AND oi.kind IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
                    AND ${openItemOwed('oi')}
                    AND ${openItemVisible('oi')}
+                   AND NOT ${openItemInWorkSessionHands('oi')}
                    AND (oi.task_id = l.task_id
                         OR oi.promotion_id = l.promotion_id
                         OR EXISTS (
@@ -5132,6 +5206,20 @@ export class SessionsService {
                           SELECT j.promotion_id FROM project_integration_job j
                            WHERE j.landing_id = l.id AND j.promotion_id IS NOT NULL))
               ) THEN 'AWAITING_DECISION'
+              -- Revision 42 (§12.7): a failure of this segment in its task's own work session's hands is being fixed
+              -- there; no coordinator has it yet, and no decision is awaited.
+              WHEN EXISTS (
+                SELECT 1 FROM project_open_item oi
+                 WHERE oi.state = 'OPEN'
+                   AND oi.project_id = l.project_id
+                   AND oi.kind IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
+                   AND ${openItemOwed('oi')}
+                   AND ${openItemInWorkSessionHands('oi')}
+                   AND (oi.task_id = l.task_id
+                        OR EXISTS (
+                          SELECT 1 FROM project_integration_job j
+                           WHERE j.id = oi.integration_job_id AND j.landing_id = l.id))
+              ) THEN 'FIXING'
               ELSE 'IN_FLIGHT'
             END,
             'settledAs', l.settled_as,
@@ -5208,6 +5296,8 @@ export class SessionsService {
         title: r.title,
         createdAt: r.createdAt,
         lastTurnAt: r.lastTurnAt,
+        // Where the row sits: the clients sort by this, never by lastTurnAt, which moves with every event.
+        listedAt: r.listedAt,
         currentTurnStartedAt: r.currentTurnStartedAt,
         startedAt: r.startedAt,
         numTurns: r.numTurns,
@@ -5311,8 +5401,15 @@ export class SessionsService {
     const given = overlay ?? new Map<string, ListOverlay>();
     const missing = rows.filter((r) => !given.has(r.id));
     const read = missing.length === 0 ? new Map<string, ListOverlay>() : await this.listOverlay(ownerId, missing);
+    const overlays = new Map(rows.map((r) => [r.id, given.get(r.id) ?? read.get(r.id)!]));
+    // phase, released, lastTurnOutcome, waitingOn (sessions/session-phase.ts), over the approvals the overlay counted.
+    const phases = await readSessionPhaseFields(
+      this.prisma,
+      rows.map((r) => r.id),
+      new Map(rows.map((r) => [r.id, overlays.get(r.id)!.pendingApprovals])),
+    );
     // The release column was read for the capabilities; the row does not carry it.
-    return sessions.map(({ finishedAt: _released, ...s }) => ({ ...s, ...(given.get(s.id) ?? read.get(s.id)!) }));
+    return sessions.map(({ finishedAt: _released, ...s }) => ({ ...s, ...overlays.get(s.id)!, ...phases.get(s.id) }));
   }
 
   /**
@@ -5405,6 +5502,10 @@ export class SessionsService {
         // Which of the four owner items are waiting here, for the banner that has to name one and
         // open its card rather than only say that a number is not zero (§7.6 V13).
         ownerItems: ownerItemsForRow(waiting),
+        // The open owner requests this session asked and the task moves waiting on it, which the
+        // row's `OWNER_REQUEST` / `MOVE_REQUEST` words name; sent as [] to clear.
+        ownerRequests: ownerRequestsForRow(waiting),
+        taskMoves: taskMovesForRow(waiting),
         awaitingReplyFrom: peers?.awaitingReplyFrom ?? [],
         owesReplyTo: peers?.owesReplyTo ?? [],
       }];
@@ -5691,6 +5792,13 @@ export class SessionsService {
       lastUserFromOrbit: lastUserFromOrbitOf({ lastUserFromOrbit }),
       lastUserFromExternal: lastUserFromExternalOf({ lastUserFromExternalSource, lastUserFromExternalName }),
       sourceLanding,
+      // docs/design/protected-branch-landing.md §4.6, §8: the pull request this session's Merge waits on or landed
+      // through, for the merge row. Null for a merge that pushed directly, and for every session that never merged.
+      mergePullRequest: session.mergePullRequestId
+        ? await this.prisma.githubPullRequest.findFirst({
+          where: { id: session.mergePullRequestId, ownerId }, select: PULL_REQUEST_VIEW_SELECT,
+        }).then((row) => (row ? pullRequestViewOf(row) : null))
+        : null,
       // A coordinator's handoff (projects/coordinator-handoff.ts): `coordinatorHandoff` on the outgoing
       // one, `coordinatorHandoffReceived` on its successor, null on every other session.
       ...(await readSessionCoordinatorHandoffs(this.prisma, session.id)),
@@ -5700,6 +5808,8 @@ export class SessionsService {
       settings: sessionSettingsOf(session, session.workspace?.env, SessionsService.engineLive(session)),
       usage,
       engineVersion,
+      // phase, released, lastTurnOutcome, waitingOn (sessions/session-phase.ts), as every payload kind carries them.
+      ...(await readOneSessionPhaseFields(this.prisma, session.id)),
     });
   }
 
@@ -6025,6 +6135,7 @@ export class SessionsService {
     // A parked session can still be working (a self-driven turn, a sub-agent, a job, a wait that
     // wakes it): without this the page read its AWAITING_INPUT as idle and said "Awaiting reply".
     const activity = (await readSessionActivities(this.prisma, [session.id])).get(session.id) ?? null;
+    const phase = await readOneSessionPhaseFields(this.prisma, session.id);
     return {
       waitingOnOwner,
       title: session.title,
@@ -6036,6 +6147,7 @@ export class SessionsService {
       runState: stateful.runState,
       lifecycleState: stateful.lifecycleState,
       filingState: stateful.filingState,
+      ...phase,
       createdAt: session.createdAt,
     };
   }
@@ -7428,6 +7540,8 @@ export class SessionsService {
       /** Which client sent it (migration 0595), as `senderClientColumns` writes it. */
       senderClient?: string;
       senderClientDetail?: string | null;
+      /** A person sent it (migration 1434): its end, waiting for input, moves the session's `listedAt`. */
+      byPerson?: boolean;
       /** A wiki chat's page and selection (migration 0476), which delivery reads. */
       wikiContext?: Prisma.InputJsonValue;
       /** A held message under Settings › Translation (heldTurnColumns, migration 0532). */
@@ -7520,7 +7634,7 @@ export class SessionsService {
     if (copyOf.size === 0) return ids;
     // In the database, so the bytes are not carried through this process under the session lock. The
     // copy names the same stored bytes (sha256) as the row it copies, or carries `data` for a row from
-    // before Orbit Files.
+    // before Documents.
     await tx.$executeRaw`
       INSERT INTO "attachment" (id, owner_id, session_id, mime_type, size_bytes, file_name, sha256, data)
       SELECT c.copy_id, a.owner_id, a.session_id, a.mime_type, a.size_bytes, a.file_name, a.sha256, a.data
@@ -7609,14 +7723,16 @@ export class SessionsService {
           },
         })
       : null;
+    const now = new Date();
     const move = await countedAccountBeforeDispatch(
       tx,
       session.assignedRunnerId,
       engine,
       { account: session[ACCOUNT_CHOICE[engine]], pinned: session[ACCOUNT_PINNED[engine]] },
       workspace,
-      runner,
-      new Date(),
+      // An account that account health takes out is left as a paused one is (§7.6).
+      await withAccountHealth(this.prisma, session.ownerId, session.assignedRunnerId, runner, now, session.id),
+      now,
     );
     if (!move || (!move.defaultRemoved && !runnerCarriesAccounts(runner, engine))) return null;
     await this.insertTurnLocked(tx, session.id, {
@@ -7721,6 +7837,13 @@ export class SessionsService {
        * never a field of `dto`.
        */
       translated?: { content: string; from: TranslationLanguage };
+      /**
+       * A person sent this turn — the owner at one of their own doors, a guest, a Feishu sender — so the session moves
+       * to the top of the session list (`session.listed_at`, migration 1434). An option of this call and never a field
+       * of `dto`; every platform delivery (wake-ups, notifications, task briefs, re-sends) and every session-to-session
+       * door leaves it unset, which is what keeps a session busy with those where its owner left it.
+       */
+      listed?: boolean;
     },
   ) {
     assertPromptSize(dto.content, 'message');
@@ -7855,6 +7978,7 @@ export class SessionsService {
         return {
           turn: await this.insertHeldTurnLocked(
             tx, ownerId, session, dto, translateFrom, intent, wikiContext, opts?.clearSettledWorktreeState === true,
+            opts?.listed === true,
           ),
           placement: 'queued' as const,
           wakeQueue: false,
@@ -8028,6 +8152,7 @@ export class SessionsService {
       const turn = await this.insertTurnLocked(tx, id, {
         // Whitelist: this endpoint cannot manufacture control turns.
         kind,
+        ...(opts?.listed ? { byPerson: true } : {}),
         content: opts?.translated && dto.content ? opts.translated.content : dto.content,
         ...(opts?.translated && dto.content
           ? { displayPrompt: dto.content, translationState: 'DONE', translationLang: opts.translated.from }
@@ -8062,6 +8187,8 @@ export class SessionsService {
         data: {
           status: nextStatus,
           lastTurnAt: new Date(),
+          // A person's message moves the row; anything else that queues a turn leaves it where it is.
+          ...(opts?.listed ? { listedAt: new Date() } : {}),
           // The message the list previews while it waits to be answered. Written here, at
           // enqueue, rather than when the runner reports the user turn: between the two lies the
           // whole wait — for a runner slot, and for a message queued behind a running turn the
@@ -8166,6 +8293,7 @@ export class SessionsService {
     intent: SessionTurnIntent | undefined,
     wikiContext: WikiChatContext | null,
     clearSettledWorktreeState: boolean,
+    listed: boolean,
   ): Promise<ConversationTurn> {
     const content = dto.content!;
     const attachmentIds = await this.assertLinkableAttachments(ownerId, session.id, dto.clientTurnId, dto.attachmentIds, tx);
@@ -8174,6 +8302,7 @@ export class SessionsService {
       kind: 'message',
       content,
       clientTurnId: dto.clientTurnId,
+      ...(listed ? { byPerson: true } : {}),
       ...(intent === 'NEXT_TURN' ? { sendIntent: 'NEXT_TURN' as const } : {}),
       ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
       ...heldTurnColumns(content, from),
@@ -8183,6 +8312,7 @@ export class SessionsService {
       where: { id: session.id },
       data: {
         lastTurnAt: new Date(),
+        ...(listed ? { listedAt: new Date() } : {}),
         // The owner's own words, as they wrote them.
         ...pendingMessageColumns(content, null, null),
         // The owner took over, as in createTurn.
@@ -8466,6 +8596,8 @@ export class SessionsService {
       senderSessionId?: string;
       /** The owner's own door: the follow-up is held and translated, as `createTurn`'s `translate`. */
       translate?: boolean;
+      /** A person sent the follow-up — see `createTurn`'s own. A stop with no follow-up moves nothing. */
+      listed?: boolean;
     },
   ) {
     // Stopping a turn — or stopping one and replacing it — is an engine door (§2.9 LS6).
@@ -8644,6 +8776,7 @@ export class SessionsService {
         kind: 'message',
         content,
         clientTurnId: dto!.clientTurnId!,
+        ...(opts?.listed ? { byPerson: true } : {}),
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
         ...(heldFrom ? heldTurnColumns(content, heldFrom) : {}),
       });
@@ -8662,6 +8795,7 @@ export class SessionsService {
         data: {
           status: nextStatus,
           lastTurnAt: new Date(),
+          ...(opts?.listed ? { listedAt: new Date() } : {}),
           // The redirected message is what the session is waiting on now — previewed from here
           // exactly as in createTurn, with who sent it.
           ...(content ? pendingMessageColumns(content, sentBy, sentByOrbit) : {}),
@@ -9803,6 +9937,52 @@ export class SessionsService {
     return outcome;
   }
 
+  /**
+   * The target of a session's Merge moved under the pull request it waits on (docs/design/protected-branch-landing.md
+   * §4.6 step 4, J-T17): the merge is queued again through {@link queueMerge}, for whoever asked for the first one,
+   * and rebuilds on the new tip into the same landing branch, so the same pull request updates. A turn running now is
+   * waited out (`mergeAfterTurnAt`, which {@link mergeAfterOwnTurn} takes up when it ends). A session no longer waiting
+   * on this pull request is left alone; a refusal is recorded as a failed merge, because nobody is waiting on a
+   * response to read it from.
+   */
+  async mergeAgainForPullRequest(id: string, pullRequestId: string, target: string): Promise<'QUEUED' | 'AFTER_TURN' | 'MOVED_ON' | 'REFUSED'> {
+    let queuedOn: string | null = null;
+    const outcome = await withTransactionRetry(this.prisma, async (tx) => {
+      queuedOn = null;
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session" WHERE id = ${id}::uuid FOR UPDATE`;
+      if (locked.length === 0) return 'MOVED_ON' as const;
+      const session = await tx.session.findUniqueOrThrow({
+        where: { id },
+        select: {
+          ownerId: true, status: true, finishedAt: true, cancelRequestedAt: true, mergeStatus: true,
+          mergePullRequestId: true, mergeRequestedBy: true,
+        },
+      });
+      if (session.mergeStatus !== 'pull_request' || session.mergePullRequestId !== pullRequestId) return 'MOVED_ON' as const;
+      if (SessionsService.mergeWaitsForTurn(session)) {
+        await tx.session.update({ where: { id }, data: { mergeAfterTurnAt: new Date(), mergeAfterTurnTarget: target } });
+        return 'AFTER_TURN' as const;
+      }
+      const requestedBy = session.mergeRequestedBy === 'USER' || session.mergeRequestedBy === 'AGENT'
+        ? session.mergeRequestedBy as MergeRequester
+        : undefined;
+      try {
+        const queued = await this.queueMerge(tx, session.ownerId, id, target, { requestedBy });
+        queuedOn = queued.queuedOn;
+        return queued.operationId ? 'QUEUED' as const : 'MOVED_ON' as const;
+      } catch (error) {
+        // queueMerge refuses before it writes anything, so this transaction is still good to write in.
+        if (!(error instanceof HttpException)) throw error;
+        await tx.session.update({ where: { id }, data: { mergeStatus: 'error', mergeError: error.message } });
+        return 'REFUSED' as const;
+      }
+    }, loggedRetry(this.logger, 'sessions.mergeAgainForPullRequest'));
+    if (queuedOn) this.realtime.notifyRunnerWake(queuedOn);
+    this.realtime.publishSessionUpdated(id);
+    return outcome;
+  }
+
   /** Recoveries a preview may not replace: each is a landing being finished, by its own retry or sync. */
   private static readonly LANDING_UNFINISHED = ['LOCAL_SYNC_PENDING', 'PUSH_FAILED', 'REMOTE_NOT_VERIFIED'];
 
@@ -10333,7 +10513,25 @@ export class SessionsService {
     );
     await reprojectAfterSettledChecks(this.prisma, ended.checksSettled, this.logger);
     if (ended.settledProjectId) await this.routeSettledFacts(ended.settledProjectId);
+    if (ended.settledProjectId || (ended.changed && lifecycle === 'deletedAt')) {
+      await this.deliverLandingFixesAfterFinish(sessionId);
+    }
     return ended;
+  }
+
+  /**
+   * Revision 42 (§12.5 W7): an end that finished a work session here — one that never ran — or moved it to Trash may have
+   * handed back the failed landing it held (SESSION_ENDED); it is the coordinator's from that commit, and delivered now. Found by
+   * `ModuleRef` as `routeSettledFacts` finds its router; without one, the coordinator's next turn end delivers it.
+   */
+  private async deliverLandingFixesAfterFinish(sessionId: string): Promise<void> {
+    if (!this.moduleRef) return;
+    try {
+      const { ProjectOpenItemService } = await import('../projects/project-open-item.service.js');
+      await this.moduleRef.get(ProjectOpenItemService, { strict: false }).offerLandingFixesTo(sessionId);
+    } catch (e) {
+      this.logger.warn(`landing fixes handed back by an end not delivered: ${e instanceof Error ? e.message : e}`);
+    }
   }
 
   /**
@@ -10552,6 +10750,12 @@ export class SessionsService {
         clientTurnId: randomUUID(),
         ...(endTurnContent !== undefined ? { content: endTurnContent } : {}),
       });
+    }
+    // Revision 42 (§12.5 W7): a work session moved to Trash hands back the failed landing it holds, SESSION_ENDED, in
+    // this transaction (the items are rank 60, after this Session's rank 30). Its finish cannot decide it: a trashed
+    // session is no work a delivered identity is read from (`readDeliveredIdentity`), so no settlement reaches W7.
+    if (lifecycle === 'deletedAt' && session.startsTaskWork) {
+      await handBackLandingFixesOfSession(tx, sessionId, 'SESSION_ENDED');
     }
     return {
       changed: true,
@@ -11088,7 +11292,7 @@ export class SessionsService {
     dto: SessionResumeDto,
     taskId: string | null,
     workspaceId: string | null,
-    opts?: { routeToCurrentRun?: boolean; translate?: boolean },
+    opts?: { routeToCurrentRun?: boolean; translate?: boolean; listed?: boolean },
   ): Promise<SessionResumeAnswer> {
     if (taskId !== null) {
       // `NOT: { id }` is belt-and-braces — every path here arrives with THIS row terminal, so it
@@ -11144,7 +11348,7 @@ export class SessionsService {
           // attachment with a sentence about ids. Both are worse than the structured refusal this
           // door has always given, which at least names the run to open and re-send in.
           if (dto.attachmentIds?.length) throw inTheWay();
-          const delivered = await this.createTurn(ownerId, holder.id, dto, { translate: opts?.translate });
+          const delivered = await this.createTurn(ownerId, holder.id, dto, { translate: opts?.translate, listed: opts?.listed });
           return {
             ...delivered,
             revived: false as const,
@@ -11258,6 +11462,8 @@ export class SessionsService {
        *  branches — a revived session's message is held like any other (insertHeldOpeningLocked's rule:
        *  the claim does not hand out a session whose only work is held). */
       translate?: boolean;
+      /** A person sent the turn — see `createTurn`'s own. Carried onto both branches. */
+      listed?: boolean;
     },
   ): Promise<SessionResumeAnswer> {
     refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
@@ -11374,6 +11580,7 @@ export class SessionsService {
         onTurnWritten: opts?.onTurnWritten,
         requestFingerprint,
         translate: opts?.translate,
+        listed: opts?.listed,
       });
       // Nothing was revived: this turn joined a process that was already running. Said out loud
       // because the orchestration door offers resume as a fallback for `send`, and the caller
@@ -11676,6 +11883,7 @@ export class SessionsService {
         content: dto.content,
         clientTurnId: dto.clientTurnId,
         requestFingerprint,
+        ...(opts?.listed ? { byPerson: true } : {}),
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
         ...senderClientColumns(opts?.senderClient),
         ...externalSenderColumns(opts?.externalSender),
@@ -11728,8 +11936,11 @@ export class SessionsService {
           // Held again (design §4.2).
           finishedAt: null,
           error: null,
+          // The failure's classification goes with its error (routing-account-health-design §5.1).
+          ...CLEARED_RUN_FAILURE,
           result: null,
           lastTurnAt: new Date(),
+          ...(opts?.listed ? { listedAt: new Date() } : {}),
           // Previewed from enqueue, as in createTurn: a revive waits for a slot like any other
           // turn, and until the runner reports it the row would show the reply from before. With
           // its sender, as there.
@@ -11921,7 +12132,24 @@ export class SessionsService {
       ended.endReason,
       ended.lifecycleState,
     );
+    await this.returnIfStillWaiting(ownerId, [id]);
     return { ok: true };
+  }
+
+  /**
+   * After sessions were filed in Completed or Trash: one with a question still waiting on the owner
+   * (an owner request it asked, or a task move it asked or coordinates the target of) comes straight
+   * back to Open (`returnWaitingSessionsToOpen`), told as a restore is. Never a reason for the
+   * filing to fail: the periodic sweep brings back anything this misses.
+   */
+  private async returnIfStillWaiting(ownerId: string, ids: readonly string[]): Promise<void> {
+    if (ids.length === 0) return;
+    try {
+      const back = await returnWaitingSessionsToOpen(this.prisma, this.logger, { ownerId, sessionIds: ids });
+      for (const { id } of back) this.realtime.publishSessionCreated(id);
+    } catch (error) {
+      this.logger.warn(`could not bring waiting sessions back to Open: ${(error as Error).message}`);
+    }
   }
 
   /**
@@ -11972,6 +12200,7 @@ export class SessionsService {
       this.publishEndIntent(id, end);
       this.realtime.publishSessionLifecycleChanged(id, end.status, end.endReason, end.lifecycleState);
     }
+    await this.returnIfStillWaiting(ownerId, moved.map(({ id }) => id));
     return { completed: moved.length };
   }
 
@@ -12085,6 +12314,8 @@ export class SessionsService {
     const session = await tx.session.findUniqueOrThrow({
       where: { id },
       select: {
+        ownerId: true,
+        assignedRunnerId: true,
         numTurns: true,
         codexAccountPinned: true,
         claudeAccountPinned: true,
@@ -12108,7 +12339,10 @@ export class SessionsService {
       }
       const pinned = session[ACCOUNT_PINNED[engine]];
       if (account === undefined && pinned) return {};
-      const to = automaticAccountOnSwitch(session, engine, new Date());
+      const now = new Date();
+      // Automatic's pick passes over an account that account health takes out (§7.6).
+      const assignedRunner = runner && await withAccountHealth(this.prisma, session.ownerId, session.assignedRunnerId, runner, now);
+      const to = automaticAccountOnSwitch({ ...session, assignedRunner }, engine, now);
       if (to) return write(to, false);
       // Asked for by name, Automatic unpins even when it has nowhere to move the session yet.
       if (account === AUTOMATIC_ACCOUNT) return { [ACCOUNT_PINNED[engine]]: false };
@@ -12519,6 +12753,7 @@ export class SessionsService {
               env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
             },
           },
+          assignedRunnerId: true,
           assignedRunner: {
             select: { engines: true, accountNames: true, accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true },
           },
@@ -12557,17 +12792,24 @@ export class SessionsService {
           throw new BadRequestException("this session's workspace decides its account");
         }
         pinned = false;
+        // What account health says of the runner's accounts: Automatic passes over one it takes out as it
+        // passes over a paused one, and leaves one it is on (§7.6).
+        const healthy = await withAccountHealth(this.prisma, ownerId, session.assignedRunnerId, runner, now);
         // Off a Default its owner removed from Orbit, to the account Automatic picks among those left.
-        const offDefault = current === DEFAULT_ACCOUNT ? remainingAccount(engine, runner, now) : null;
+        const offDefault = current === DEFAULT_ACCOUNT ? remainingAccount(engine, healthy, now) : null;
         const paused = runnerAccountPausedUntil(runner.accountPauses, engine, current, now) !== null;
-        const spent = paused || planUsageBlockedUntil(usage, engine, now, current) != null;
-        const roomier = !offDefault && spent ? accountToMoveTo(engine, accounts, usage, now, current) : null;
+        const block = paused ? null : accountBlockOn(engine, healthy, current, now);
+        const spent = paused || block !== null || planUsageBlockedUntil(usage, engine, now, current) != null;
+        // Each with its pause, and an account health takes out read as paused (accountsOn).
+        const roomier = !offDefault && spent ? accountToMoveTo(engine, accountsOn(engine, healthy, now), usage, now, current) : null;
         if (offDefault) {
           to = offDefault.id;
           notice = accountSwitchNotice(engine, { from: current, to, defaultRemoved: true }, runner);
         } else if (roomier) {
           to = roomier;
-          notice = accountSwitchNotice(engine, { from: current, to, ...(paused ? { paused: true } : {}) }, runner);
+          notice = accountSwitchNotice(engine, {
+            from: current, to, ...(paused ? { paused: true } : block ? { blocked: block.reason } : {}),
+          }, runner);
         }
       } else {
         const row = accounts?.find((entry) => entry.id === account);
@@ -12649,6 +12891,7 @@ export class SessionsService {
             runtimeSessionId: true,
             engineTurnActive: true,
             poolSwitchNotice: true,
+            ownerId: true,
             codexAccount: true,
             claudeAccount: true,
             antigravityAccount: true,
@@ -12679,7 +12922,8 @@ export class SessionsService {
           return 'leaving' as const;
         }
         const now = new Date();
-        const to = accountInPlaceOf(engine, runner, account, now);
+        // Automatic's ranking, with an account that account health takes out passed over as a paused one is (§7.6).
+        const to = accountInPlaceOf(engine, await withAccountHealth(this.prisma, session.ownerId, runnerId, runner, now), account, now);
         if (!to) return 'stuck' as const;
         if (engine === AgentProvider.CURSOR ? cursorMoveRefusal(session, runner) : !runnerCarriesAccounts(runner, engine)) {
           return 'stuck' as const;
@@ -12911,6 +13155,7 @@ export class SessionsService {
       ended.endReason,
       ended.lifecycleState,
     );
+    await this.returnIfStillWaiting(ownerId, [id]);
     return { ok: true };
   }
 
