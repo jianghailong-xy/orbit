@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { api } from '../api';
 
 /**
@@ -52,6 +52,9 @@ let snapshot: DocumentsSync[] = [];
 let timer: ReturnType<typeof setInterval> | null = null;
 let reading = false;
 let readAgain = false;
+/** Whether a read of the list has answered, and how many times: what useDocumentsSync waits on before it reads by id. */
+let listRead = false;
+let listReads = 0;
 
 function readDismissed(): void {
   if (loadedDismissed) return;
@@ -89,6 +92,8 @@ export async function refreshDocumentsSyncs(): Promise<void> {
       // Between two reads that moved nothing, the last rate still stands.
       return { ...sync, rate: syncRunning(sync) ? (rate ?? (was && seconds <= 0 ? was.rate : null)) : null };
     });
+    listRead = true;
+    listReads += 1;
     publish();
   } catch {
     // The next event, focus or poll reads again.
@@ -155,4 +160,44 @@ export function resetDocumentsSyncs(): void {
   loadedDismissed = false;
   reading = false;
   readAgain = false;
+  listRead = false;
+  listReads = 0;
+}
+
+/**
+ * One sync, for the conversation's card at the call that started it (board docs/mocks/documents-sync-card): read from
+ * the tray's list, which `drive.sync` keeps current, whether or not the tray cleared it; a sync too old for that list
+ * (ended over a day ago) is read once by id. Null until it is known, and when it cannot be read.
+ */
+export function useDocumentsSync(id: string): DocumentsSync | null {
+  const listed = useSyncExternalStore(subscribe, () => syncs).find((sync) => sync.id === id) ?? null;
+  const [read, setRead] = useState<DocumentsSync | null>(null);
+  const [tried, setTried] = useState(false);
+  useEffect(() => {
+    if (listed || tried) return;
+    // The list is read as the store starts; only once it has answered without this sync is it read by id.
+    if (!listRead) return;
+    let gone = false;
+    setTried(true);
+    api<DocumentsSyncView>(`/documents/syncs/${encodeURIComponent(id)}`)
+      .then((sync) => !gone && setRead({ ...sync, rate: null }))
+      .catch(() => undefined);
+    return () => {
+      gone = true;
+    };
+  }, [id, listed, tried, listReads]);
+  return listed ?? read;
+}
+
+/** The MCP name of the tool an agent starts a sync with. */
+export const DOCUMENTS_SYNC_TOOL = 'mcp__orbit__documents_sync';
+
+/** The sync a documents_sync call's answer names, or null for one that names none (a runner from before the card). */
+export function documentsSyncIdOf(text: string): string | null {
+  try {
+    const answer = JSON.parse(text) as { syncId?: unknown };
+    return typeof answer.syncId === 'string' && answer.syncId ? answer.syncId : null;
+  } catch {
+    return null;
+  }
 }
