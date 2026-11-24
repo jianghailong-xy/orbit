@@ -97,6 +97,9 @@ func init() {
 		integrationObserveCapabilityV1,
 		integrationProgressV2Capability,
 		promotionAutomaticLandCapabilityV1,
+		integrationPullRequestCapabilityV1,
+		sessionMergePullRequestCapabilityV1,
+		pushAsMeCapabilityV1,
 		codexAccountLoginCapabilityV1,
 		antigravityGoogleLoginCapabilityV1,
 		codexAccountRemoveCapabilityV1,
@@ -138,7 +141,7 @@ func init() {
 		bgOwnerStopCapabilityV1,
 		bgOutputTailCapabilityV1,
 		overCapacityCapabilityV1,
-	}, cursorAccountCapabilities()...), declaredSteerCapabilities()...), ",")
+	}, append(cursorAccountCapabilities(), defaultSignOutCapabilities()...)...), declaredSteerCapabilities()...), ",")
 	// Where 0600 means something (secret_file_unix.go); a Windows runner is never handed a secret.
 	if secretFilesSupported {
 		runnerCapabilitiesV1 += "," + ownerSecretCapabilityV1

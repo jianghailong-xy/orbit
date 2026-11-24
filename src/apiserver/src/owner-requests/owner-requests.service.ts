@@ -14,6 +14,7 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { returnSessionsToOpen } from '../sessions/return-to-open';
 import { WatchDeliveryService } from '../watches/watch-delivery.service';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { WikiRefusalError, WikiService, normalizeRepoUrl } from '../wiki/wiki.service';
@@ -183,7 +184,8 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
      * finds it without this. Optional for the same reason as `push`.
      */
     @Optional() private readonly delivery?: WatchDeliveryService,
-    /** Tells the asking session's list row its needs-you count moved. Optional for the same reason as `push`. */
+    /** Tells the asking session's row that what waits on the owner there changed (its
+     *  `pendingApprovals`, `waitingKind` and `ownerRequests`). Optional for the same reason as `push`. */
     @Optional() private readonly realtime?: RealtimeService,
     /** What the owner's Create wiki on a WIKI_CREATE card makes the wiki through (`createWiki`). */
     @Optional() private readonly wiki?: WikiService,
@@ -280,9 +282,18 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       // The asking session is now waiting on its owner: its row moves to the top of their list (session.listed_at,
       // sessions/session-listed-at.ts), before the summary below is published.
       await this.prisma.session.updateMany({ where: { id: created.askedBySessionId }, data: { listedAt: new Date() } });
+      // The request's card is drawn in the session that asked, and only an Open row lights: one the
+      // owner had filed in Completed comes back (a Trash one cannot file, above). After the commit,
+      // and never a reason for the filing to fail.
+      const reopened = await returnSessionsToOpen(this.prisma, ownerId, [askingSessionId], this.logger)
+        .catch((error: unknown) => {
+          this.logger.warn(`could not bring session ${askingSessionId} back to Open: ${(error as Error).message}`);
+          return [] as string[];
+        });
+      for (const sessionId of reopened) this.realtime?.publishSessionCreated(sessionId);
       // Told after the row is committed, and never awaited: the request is the fact, the banner a reader of it.
       void this.push?.notifyOwnerRequest(created.id);
-      this.realtime?.publishSessionUpdated(created.askedBySessionId);
+      this.realtime?.publishOwnerSignalChanged(ownerId, [askingSessionId]);
       // And translated for the owner in the background, when their translation is on (decision 1A).
       void translationLanguages(this.prisma, ownerId)
         .then((langs) => { if (langs) this.queueTranslation(ownerId, created, langs); })
@@ -865,7 +876,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       const rows = await tx.ownerRequest.updateManyAndReturn({
         where: { state: 'PENDING', expiresAt: { lte: now } },
         data: { state: 'EXPIRED', resolvedAt: now },
-        select: { id: true, askedBySessionId: true },
+        select: { id: true, ownerId: true, askedBySessionId: true },
       });
       const ids = rows.map((row) => row.id);
       await enqueueResolutions(tx, ids);
@@ -873,9 +884,9 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       return rows;
     }, loggedRetry(this.logger, 'ownerRequests.expireDue'));
     if (expired.length > 0) this.delivery?.kick();
-    for (const sessionId of new Set(expired.map((row) => row.askedBySessionId))) {
-      this.realtime?.publishSessionUpdated(sessionId);
-    }
+    const byOwner = new Map<string, string[]>();
+    for (const row of expired) byOwner.set(row.ownerId, [...(byOwner.get(row.ownerId) ?? []), row.askedBySessionId]);
+    for (const [owner, sessions] of byOwner) this.realtime?.publishOwnerSignalChanged(owner, sessions);
     return expired.map((row) => row.id);
   }
 
@@ -914,7 +925,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     if (settled.count === 1) this.delivery?.kick();
     const request = await this.get(ownerId, id);
     if (settled.count === 1) {
-      this.realtime?.publishSessionUpdated(request.askedBySessionId);
+      this.realtime?.publishOwnerSignalChanged(ownerId, [request.askedBySessionId]);
       return request;
     }
     if (request.state === 'PENDING') {

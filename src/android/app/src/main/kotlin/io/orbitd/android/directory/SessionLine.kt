@@ -14,9 +14,11 @@ import io.orbitd.android.core.cards.CoordinatorDeliveryLine
 import io.orbitd.android.tasks.TaskDetailCopy
 import io.orbitd.android.watch.WatchSessionSummary
 import java.time.Instant
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 
 /**
  * The line under a session's title (OrbitKit `SessionLine`, a port of web's `sessionLine`): for a live session that is
@@ -170,6 +172,8 @@ internal object SessionLineCopy {
     /** A wait the server reports that will resume the session by itself (OrbitKit `Session.waitingToResume`). */
     const val waitingToResume = "Waiting to resume"
     const val succeeded = "Succeeded"
+    const val finished = "Finished"
+    const val onHold = "On hold"
     const val retrying = "Retrying"
     const val disconnected = "Disconnected"
     const val failed = "Failed"
@@ -181,10 +185,6 @@ internal object SessionLineCopy {
 
 /** OrbitKit `SessionHeader`'s two words the line falls back on. */
 internal object SessionHeader {
-    // Kept out of SessionLineCopy, whose words SessionLineCopyParityTest pins to the Swift line and header as they stand on this branch.
-    const val FINISHED = "Finished"
-    const val ON_HOLD = "On hold"
-
     /** The run's short state word; where the session is filed is not consulted. [watching]: parked with a live watch that
      * will resume it, it reads the watch's word. */
     fun statusWord(s: DirectorySession, watching: WatchSessionSummary? = null, now: Instant = Instant.now()): String {
@@ -207,7 +207,7 @@ internal object SessionHeader {
                 (s.runningBgCount ?: 0) > 0 -> SessionLineCopy.bgRunning(s.runningBgCount ?: 0)
                 else -> SessionLineCopy.waitingForReply
             }
-            RunState.SUCCEEDED -> if (s.releasedRunState == RunState.SUCCEEDED) SessionHeader.FINISHED else SessionLineCopy.succeeded
+            RunState.SUCCEEDED -> if (s.releasedRunState == RunState.SUCCEEDED) SessionLineCopy.finished else SessionLineCopy.succeeded
             // Not "Failed" while the server is still going to send it again.
             RunState.FAILED -> if (s.retryPending(now)) SessionLineCopy.retrying
                 else if (s.error.orEmpty().lowercase().contains("offline")) SessionLineCopy.disconnected else SessionLineCopy.failed
@@ -219,17 +219,35 @@ internal object SessionHeader {
     /** What a session waiting on you says, in the words of whatever is waiting: the kind the server named, when this build has
      * words for it, else the row's long-standing approval word. */
     fun waitingWord(s: DirectorySession): String =
-        waitingWord(s.waitingKind, NeedsYouLogic.ownerItems(s.ownerItems.orEmpty().filterIsInstance<JsonObject>()))
+        waitingWord(s.waitingKind, NeedsYouLogic.ownerItems(s.ownerItems.orEmpty().filterIsInstance<JsonObject>()), s.ownerRequests, s.taskMoves)
 
     /** The same words from the wire's own fields, for a reader holding the raw row (the needs-you notice). */
-    fun waitingWord(waitingKind: String?, ownerItems: List<OwnerItem>): String = when (waitingKind) {
+    fun waitingWord(waitingKind: String?, ownerItems: List<OwnerItem>, ownerRequests: JsonArray? = null,
+        taskMoves: JsonArray? = null): String = when (waitingKind) {
         "OWNER_CONFIRMATION" -> OwnerConfirmationCopy.waitingForConfirmation
         "OWNER_ITEM" -> NeedsYouLogic.oldestItemWord(ownerItems) ?: SessionLineCopy.unnamedWord
         "START_REQUEST" -> StartProjectCopy.readyToStart
         "DONE_REQUEST" -> ProjectDone.readyToClose
         "RECORD_AS_DONE" -> ProjectDone.recordAsDoneRow
-        "OWNER_REQUEST" -> OwnerRequests.waitingOnYou
+        "OWNER_REQUEST", "MOVE_REQUEST" -> OwnerRequestRowWords.word(waitingKind, ownerRequests, taskMoves) ?: SessionLineCopy.unnamedWord
         else -> SessionLineCopy.unnamedWord
+    }
+}
+
+/** What a row waiting on a session's own question says (`@orbit/shared` `ownerRequestRowWord`, held to it word for word by
+ * SessionLineTest): an open owner request by its kind, and task moves by how many wait. A row the server calls `OWNER_REQUEST` holds
+ * requests of one kind only; two kinds are a mix, which the server sends under another kind and the row keeps "Waiting for approval". */
+internal object OwnerRequestRowWords {
+    val requestWords = mapOf("DECISION" to "Decision for you", "SECRET" to "Key needed", "MANUAL_STEP" to "Steps for you",
+        "CONFIRM" to "Confirm for you", "WIKI_CREATE" to "Create wiki")
+    fun taskMoves(moves: Int) = if (moves == 1) "Approve task move" else "Approve $moves task moves"
+
+    /** The word, or null when the kind is neither or the list it needs is missing or empty (an older control plane). */
+    fun word(kind: String?, ownerRequests: JsonArray?, taskMoves: JsonArray?): String? = when (kind) {
+        "OWNER_REQUEST" -> ((ownerRequests?.firstOrNull() as? JsonObject)?.get("kind") as? JsonPrimitive)?.contentOrNull?.let(requestWords::get)
+        "MOVE_REQUEST" -> taskMoves.orEmpty().sumOf { ((it as? JsonObject)?.get("count") as? JsonPrimitive)?.intOrNull ?: 0 }
+            .takeIf { it > 0 }?.let(::taskMoves)
+        else -> null
     }
 }
 
@@ -272,7 +290,7 @@ internal val DirectorySession.displayRunState: RunState get() {
 }
 
 /** The queued word: "On hold" while the server says the turn is held (OrbitKit `Session.queueWord`). */
-internal val DirectorySession.queueWord: String get() = if (waitingOn == "HOLD") SessionHeader.ON_HOLD else SessionLineCopy.queued
+internal val DirectorySession.queueWord: String get() = if (waitingOn == "HOLD") SessionLineCopy.onHold else SessionLineCopy.queued
 
 /** Held for its runner's Claude region (docs/claude-region-check-contract.md §10, §11; web `claudeRegionHeld`): queued, with a region
  * refusal as its error. Its message waits, and nothing is working on it. */

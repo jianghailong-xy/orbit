@@ -530,7 +530,7 @@ export class RunnerSessionsController {
     if (!this.requests) {
       throw new Error('session_reply needs SessionRequestService, which this controller was built without');
     }
-    return this.requests.reply(runner.ownerId, caller, id, { message: dto?.message, option: dto?.option });
+    return this.requests.reply(runner.ownerId, caller, id, { message: dto?.message, option: dto?.option, answers: dto?.answers });
   }
 
   // The lifecycle verbs below have NO headless path by design. They are the most damaging

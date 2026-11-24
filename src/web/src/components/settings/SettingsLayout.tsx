@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
+import { useLiveTerminalRequests } from '../TerminalRequests';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -25,6 +26,7 @@ import {
   BlockOutlined,
   CloudOutlined,
   CodeOutlined,
+  DatabaseOutlined,
   FolderOutlined,
   HolderOutlined,
   KeyOutlined,
@@ -77,7 +79,6 @@ const PERSONAL_ICONS: Record<(typeof PERSONAL_PAGES)[number]['path'], ReactNode>
   '/settings/shared-links': <LinkOutlined />,
   '/settings/access-tokens': <KeyOutlined />,
   '/settings/secrets': <LockOutlined />,
-  '/settings/terminals': <CodeOutlined />,
 };
 
 /** Integrations' rows' icons, one per connected service. */
@@ -238,8 +239,11 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
   const { pathname } = useLocation();
   const keysPage = /^\/settings\/providers(\/(?!(new|keys|pools|routing)(\/|$))[^/]+)?\/?$/.test(pathname);
 
+  // A terminal on a machine asking to be approved lights that machine's dot (docs/mocks/waiting-on-you-removal/02 ①).
+  const terminalRequests = useLiveTerminalRequests();
   const stateOf = (runner: Runner): MachineState => {
     if (runnerIsOffline(runner, nowMs)) return 'offline';
+    if (terminalRequests.some((request) => routeId(request.runnerId) === routeId(runner.id))) return 'attention';
     const items = runnerAttention({
       runner,
       workspaces: workspaces.filter((workspace) => workspace.runnerId === runner.id),

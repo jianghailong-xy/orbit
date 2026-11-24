@@ -38,9 +38,9 @@ import io.orbitd.android.core.cards.OwnerRequest
 import io.orbitd.android.core.cards.OwnerRequestStep
 import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.core.cards.OwnerReview
-import io.orbitd.android.core.cards.TerminalRequest
+import io.orbitd.android.directory.DirectoryRunner
+import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.directory.rememberDirectoryData
-import io.orbitd.android.management.Terminals
 import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.text.MarkdownText
 import io.orbitd.android.translation.AnswerNotTranslated
@@ -57,11 +57,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * What a session asked the owner to do (web `OwnerRequestCard`), drawn the same in the conversation that asked and in the "Waiting on
- * you" inbox. Pending it is the whole request; once ended it is one line saying how, who and when ([OwnerRequestResolved]). [runner]
- * names a runner by the name the owner knows it by. [focusInput]: opened from a push's action, the card takes the focus on its input —
- * the key's field, the answer's words, or Mark done. [discuss]: the conversation's composer, which Chat about this hands the request
- * to; the inbox has none, so its cards offer no Chat about this.
+ * What a session asked the owner to do (web `OwnerRequestCard`), drawn in the conversation that asked. Pending it is the whole
+ * request; once ended it is one line saying how, who and when ([OwnerRequestResolved]). [runner] names a runner by the name the owner
+ * knows it by. [focusInput]: opened from a push's action, the card takes the focus on its input — the key's field, the answer's words,
+ * or Mark done. [discuss]: the conversation's composer, which Chat about this hands the request to.
  */
 @Composable
 fun OwnerRequestCard(asked: OwnerRequest, store: OwnerRequestStore, runner: (String?) -> String, open: (String) -> Unit,
@@ -368,48 +367,6 @@ private fun BrowserSignInActions(request: OwnerRequest, store: OwnerRequestStore
     }
 }
 
-/**
- * A terminal asking to be approved (docs/terminal-session-design.md, board 2 marker 7): the owner request card's frame, header and
- * buttons — no look of its own. Approve mints the terminal's credential for 30 days; Deny tells the terminal so. Either way the card
- * leaves once the door answers. iOS `TerminalApproveCard`, web `TerminalApproveCard.tsx`; the words are [Terminals]'.
- */
-@Composable
-fun TerminalApproveCard(request: TerminalRequest, store: OwnerRequestStore, now: Instant = Instant.now()) {
-    val scope = rememberCoroutineScope()
-    var busy by remember(request.id) { mutableStateOf(false) }
-    var failure by remember(request.id) { mutableStateOf<String?>(null) }
-    val tag = "terminal-request:${request.id}"
-    fun decide(approve: Boolean) {
-        busy = true; failure = null
-        scope.launch { failure = store.decideTerminal(request, approve); busy = false }
-    }
-    val tone = LocalOrbitColors.current.needsYou
-    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
-    Column(Modifier.fillMaxWidth().testTag(tag)
-        .background(tone.copy(alpha = 0.07f), RoundedCornerShape(14.dp)).border(1.dp, tone.copy(alpha = 0.28f), RoundedCornerShape(14.dp))
-        .padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Box(Modifier.size(8.dp).background(tone, RoundedCornerShape(50)))
-            Text(OwnerRequests.waitingOnYou, style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold), color = tone)
-            Spacer(Modifier.weight(1f))
-            Text("Asked ${OwnerRequests.ago(request.createdAt, now)}", Modifier.testTag("$tag:asked"), style = MaterialTheme.typography.labelSmall,
-                color = secondary)
-        }
-        Text(Terminals.APPROVE_TITLE, Modifier.testTag("$tag:title"), style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold))
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(Terminals.requestLine(request), Modifier.testTag("$tag:line"), style = MaterialTheme.typography.bodyMedium, color = secondary)
-            Text(Terminals.APPROVE_DETAIL, Modifier.testTag("$tag:detail"), style = MaterialTheme.typography.bodyMedium, color = secondary)
-        }
-        failure?.let { Text("${OwnerRequests.notRecorded}: $it", Modifier.testTag("$tag:error"), style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.error) }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { decide(approve = false) }, Modifier.weight(1f).testTag("$tag:deny"), enabled = !busy) { Text(Terminals.DENY) }
-            Button(onClick = { decide(approve = true) }, Modifier.weight(1f).testTag("$tag:approve"), enabled = !busy) { Text(Terminals.APPROVE) }
-        }
-        if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-    }
-}
-
 @Composable
 private fun Fact(label: String, tag: String, content: @Composable () -> Unit) {
     Row(Modifier.fillMaxWidth().testTag(tag), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -507,19 +464,33 @@ fun OwnerRequestSnoozed(request: OwnerRequest, until: Long, now: Instant = Insta
     }
 }
 
-/** One request where a conversation draws it: whole, folded for later, or as its summary. */
+/** A runner by the name the owner knows it by. */
+internal fun runnerNames(runners: List<DirectoryRunner>): (String?) -> String = { id ->
+    runners.firstOrNull { ObjectId.same(it.id, id) }?.let { io.orbitd.android.management.RunnerPage.nameOf(it.id, it.name, it.displayName, managed = it.managed) } ?: "this runner"
+}
+
+/** One request where a conversation draws it: whole, folded for later, or as its summary. The request a link opened [sessionId]'s
+ * conversation onto ([OwnerRequestLinks]) is shown whole even if it was put off, brought into view and its input focused. */
 @Composable
 fun OwnerRequestInConversation(request: OwnerRequest, store: OwnerRequestStore, runner: (String?) -> String, open: (String) -> Unit,
-    discuss: ((String) -> Unit)? = null) {
+    sessionId: String? = null, discuss: ((String) -> Unit)? = null) {
     val snoozes by OwnerRequestSnoozes.of(LocalContext.current).state.collectAsState()
+    val context = LocalContext.current
     // Drawn again when the reminder falls due.
     var due by remember(request.id) { mutableIntStateOf(0) }
+    var focused by remember(request.id) { mutableStateOf(false) }
+    val focus = sessionId?.let(CardFocus::pending)?.takeIf { it == CardFocus.ownerRequest(request.id) }
+    if (focus != null) LaunchedEffect(focus) {
+        OwnerRequestSnoozes.of(context).wake(request.id)
+        focused = true
+        CardFocus.spend(sessionId!!)
+    }
     val now = Instant.now()
     val until = snoozes[OwnerRequests.key(request.id)] ?: 0
     if (until > now.toEpochMilli()) LaunchedEffect(until, due) { delay(until - System.currentTimeMillis()); due++ }
     when {
         !request.pending -> OwnerRequestResolved(request, store, runner, now)
         until > now.toEpochMilli() -> OwnerRequestSnoozed(request, until, now)
-        else -> OwnerRequestCard(request, store, runner, open, now, discuss = discuss)
+        else -> OwnerRequestCard(request, store, runner, open, now, focusInput = focused, discuss = discuss)
     }
 }

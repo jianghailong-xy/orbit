@@ -72,13 +72,13 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 
 | Caller | Routes |
 | --- | --- |
-| `public` | 39 |
-| `user` | 529 |
+| `public` | 40 |
+| `user` | 534 |
 | `admin` | 31 |
 | `runner` | 231 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **834** |
+| **Total** | **840** |
 
 ## Public routes
 
@@ -105,6 +105,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/help/articles/:slug` | path `slug` | `HelpController.article` |
 | `GET` | `/api/help/search` | query `q` | `HelpController.search` |
 | `GET` | `/api/integrations/github/callback` | query `code`, `error`, `setup_action`, `state` | `GithubCallbackController.callback` |
+| `POST` | `/api/integrations/github/webhook` | — | `GithubWebhookController.receive` |
 | `POST` | `/api/runner/device/poll` | body `Object` | `RunnerApiController.devicePoll` |
 | `POST` | `/api/runner/device/start` | body `Object` | `RunnerApiController.deviceStart` |
 | `POST` | `/api/runner/register` | body `Object` | `RunnerApiController.register` |
@@ -134,6 +135,8 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/access-tokens/device/:userCode` | path `userCode` | `PatDeviceLoginController.lookup` |
 | `POST` | `/api/access-tokens/device/:userCode/approve` | path `userCode` | `PatDeviceLoginController.approve` |
 | `POST` | `/api/access-tokens/device/:userCode/deny` | path `userCode` | `PatDeviceLoginController.deny` |
+| `GET` | `/api/account-health` | — | `AccountHealthController.list` |
+| `POST` | `/api/account-health/:id/check` | path `id` | `AccountHealthController.check` |
 | `GET` | `/api/account-secrets` | — | `AccountSecretsController.list` |
 | `POST` | `/api/account-secrets` | body `CreateAccountSecretDto` | `AccountSecretsController.create` |
 | `DELETE` | `/api/account-secrets/:id` | path `id`; query `revokeCopies` | `AccountSecretsController.remove` |
@@ -372,6 +375,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `DELETE` | `/api/runners/:id/accounts/:engine/:account/set-default` | path `account`, `engine`, `id` | `RunnersController.dismissSetDefaultFailure` |
 | `POST` | `/api/runners/:id/accounts/:engine/:account/set-default` | path `account`, `engine`, `id` | `RunnersController.setDefaultAccount` |
 | `POST` | `/api/runners/:id/accounts/:engine/default/restore` | path `engine`, `id` | `RunnersController.restoreDefault` |
+| `POST` | `/api/runners/:id/accounts/:engine/default/sign-out` | body `SignOutDefaultDto`; path `engine`, `id` | `RunnersController.signOutDefault` |
 | `POST` | `/api/runners/:id/attention/:kind/fix` | body `Object`; path `id`, `kind` | `RunnerAttentionFixController.fix` |
 | `GET` | `/api/runners/:id/browser` | path `id` | `ManagedRunnerBrowserController.state` |
 | `POST` | `/api/runners/:id/browser/clear` | path `id` | `ManagedRunnerBrowserController.clear` |
@@ -493,6 +497,8 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `PUT` | `/api/sessions/:id/share` | body `PutShareLinkDto`; path `id` | `ShareLinksController.putSessionLink` |
 | `GET` | `/api/sessions/:id/subagents` | path `id` | `SessionsController.subagentRuns` |
 | `PUT` | `/api/sessions/:id/tags` | body `SetSessionTagsDto`; path `id` | `SessionsController.setTags` |
+| `GET` | `/api/sessions/:id/task-moves` | path `id` | `SessionTaskMovesController.list` |
+| `POST` | `/api/sessions/:id/task-moves/decision` | body `DecideTaskMoveBatchDto`; path `id` | `SessionTaskMovesController.decide` |
 | `GET` | `/api/sessions/:id/turns` | path `id`; query `view` | `SessionsController.queuedTurns` |
 | `POST` | `/api/sessions/:id/turns` | body `Object`; path `id` | `SessionsController.turn` |
 | `DELETE` | `/api/sessions/:id/turns/:turnId` | path `id`, `turnId` | `SessionsController.cancelTurn` |

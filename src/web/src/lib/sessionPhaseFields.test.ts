@@ -67,6 +67,11 @@ describe('send versus resume', () => {
     // Still held: the message waits for the End to settle instead of opening a new session beside it. An older
     // server's run state called it ended and fell through to a new session.
     ['ending after an interrupted turn', 'BLOCK', 'CREATE'],
+    ['a running turn', 'SEND', 'SEND'],
+    ['a queued turn', 'SEND', 'SEND'],
+    ['parked with the engine\'s own turn', 'SEND', 'SEND'],
+    ['parked with a sub-agent running', 'SEND', 'SEND'],
+    ['interrupted', 'SEND', 'SEND'],
   ];
   for (const [name, withFields, without] of cases) {
     it(`${name}: ${withFields} with the new fields, ${without} without them`, () => {
@@ -111,7 +116,7 @@ describe('the wait after End', () => {
   };
 
   const endingRunning: Payload = {
-    id: 's', status: 'RUNNING', runStatus: 'RUNNING', runState: 'RUNNING', endReason: 'ended',
+    id: 's', status: 'RUNNING', runStatus: 'RUNNING', runState: 'RUNNING', endReason: 'ended', activity: 'TURN',
     phase: 'RUNNING', released: false, lastTurnOutcome: null, waitingOn: null,
   };
 
