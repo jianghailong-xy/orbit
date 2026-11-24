@@ -110,6 +110,10 @@ type browserSupervisor struct {
 	// engineSignIn is the engine sign-in the owner is finishing in this browser (login_runner_browser.go): the
 	// attempt's id, "" when none. While it is set no session's browser call is taken, the holder's included.
 	engineSignIn string
+	// keptTabs are the tabs of engine sign-ins that did not succeed (login_runner_browser.go): the browser does not
+	// stop for idleness while one is open, so what the page said is still there when the owner looks. Each goes when
+	// the owner closes its tab, a later engine sign-in succeeds, or the browser stops or Chrome starts again anyway.
+	keptTabs map[string]bool
 }
 
 // newRunnerBrowser is this runner's browser supervisor: nil unless the managed image's entrypoint started it
@@ -338,6 +342,54 @@ func (b *browserSupervisor) EndEngineSignIn(attempt string) {
 	b.log("browser: the owner's engine sign-in ended")
 }
 
+// KeepSignInTab keeps the browser from stopping for idleness while tab, the tab of an engine sign-in that did not
+// succeed, is open.
+func (b *browserSupervisor) KeepSignInTab(tab string) {
+	if b == nil || tab == "" {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.procs == nil {
+		return // stopped already: the tab is gone
+	}
+	if b.keptTabs == nil {
+		b.keptTabs = map[string]bool{}
+	}
+	b.keptTabs[tab] = true
+	b.touchLocked()
+	b.log("browser: kept running while a sign-in that did not succeed has its tab open")
+}
+
+// KeepsSignInTab is whether tab still keeps the browser running.
+func (b *browserSupervisor) KeepsSignInTab(tab string) bool {
+	if b == nil {
+		return false
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.keptTabs[tab]
+}
+
+// ReleaseSignInTabs lets the browser stop for idleness again despite tabs ("" or none: every kept tab).
+func (b *browserSupervisor) ReleaseSignInTabs(tabs ...string) {
+	if b == nil {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.keptTabs) == 0 {
+		return
+	}
+	if len(tabs) == 0 {
+		b.keptTabs = nil
+	}
+	for _, tab := range tabs {
+		delete(b.keptTabs, tab)
+	}
+	b.touchLocked()
+}
+
 // SignInWaiting is the session waiting for the owner to sign in ("" when none).
 func (b *browserSupervisor) SignInWaiting() string {
 	if b == nil {
@@ -534,14 +586,14 @@ func (b *browserSupervisor) touchLocked() {
 		b.idle = nil
 	}
 	// Nor while the owner is asked to sign in: the page the agent was on waits for them.
-	if b.procs == nil || b.viewers > 0 || b.signIn != nil || b.engineSignIn != "" {
+	if b.procs == nil || b.viewers > 0 || b.signIn != nil || b.engineSignIn != "" || len(b.keptTabs) > 0 {
 		return
 	}
 	var t poolTimer
 	t = b.clock.AfterFunc(browserIdleStop, func() {
 		b.mu.Lock()
 		defer b.mu.Unlock()
-		if b.idle != t || b.viewers > 0 || b.signIn != nil || b.engineSignIn != "" {
+		if b.idle != t || b.viewers > 0 || b.signIn != nil || b.engineSignIn != "" || len(b.keptTabs) > 0 {
 			return
 		}
 		b.idle = nil
@@ -649,6 +701,7 @@ func (b *browserSupervisor) restartChromeLocked() {
 		return
 	}
 	b.procs[browserProgramChrome] = p
+	b.keptTabs = nil // the new Chrome has none of the old one's tabs
 	go b.watchProgram(p, browserProgramChrome)
 	b.log("browser: chrome ended, started it again for the open viewer")
 }
@@ -689,6 +742,7 @@ func (b *browserSupervisor) stopLocked(why string) {
 		b.procs[i].Stop()
 	}
 	b.procs = nil
+	b.keptTabs = nil
 	b.starter.Reap()
 	b.log("browser: stopped,", why)
 }

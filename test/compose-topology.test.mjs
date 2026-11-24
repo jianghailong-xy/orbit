@@ -603,6 +603,9 @@ const APPROVED_APISERVER_BLOCKS = [
   // existing deployment gains nothing on its disk.
   [
     '      ORBIT_MANAGED_RUNNERS_ENABLED: "${ORBIT_MANAGED_RUNNERS_ENABLED:-false}"',
+    // Approved by the account owner on 2026-11-24 (13:24:44Z, Orbit owner question item 353A3PcmP9bnqWpDCRayY, project
+    // 35370KiEBDnxlOS5Yyaxh), added by main commit 84eab3a5fb: the drive's switch, off unless the host's .env says true.
+    '      ORBIT_DOCUMENTS_ENABLED: "${ORBIT_DOCUMENTS_ENABLED:-false}"',
     '      ORBIT_MANAGED_RUNNER_BROWSER_ENABLED: "${ORBIT_MANAGED_RUNNER_BROWSER_ENABLED:-false}"',
     '      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-cloud-runners/profile.json',
     '    volumes:',
