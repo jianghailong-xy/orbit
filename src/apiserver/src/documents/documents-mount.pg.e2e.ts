@@ -718,7 +718,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
     assert.match(s.out, /cp-a rc=1/);
     assert.match(s.out, /copied/);
     assert.match(s.err, /preserving permissions for .*script\.sh.*Operation not permitted/);
-    assert.match(errorsLog(a), /EPERM chmod \/home\/orbit\/Files\/script\.sh to 0755: the drive keeps no modes/);
+    assert.match(errorsLog(a), /EPERM chmod \/home\/orbit\/Documents\/script\.sh to 0755: the drive keeps no modes/);
     d.push('contents copied; cp printed "preserving permissions … Operation not permitted", exit 1 both; errors.log has the chmod line');
   });
 
@@ -933,7 +933,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
     // regular file neither as a user nor with -p. The executable bit the drive cannot keep goes without tar seeing a
     // refusal, so §5.9's "Cannot change mode … exits 2" cannot happen; errors.log names each such file instead.
     assert.match(s.out, /rc=0\nsame\n644\nrc-p=0\nsame-p/);
-    assert.match(errorsLog(a), /INFO create \/home\/orbit\/Files\/x23\/run\.sh with mode 0755: the drive keeps no modes: the file is 0644 and cannot be executed/);
+    assert.match(errorsLog(a), /INFO create \/home\/orbit\/Documents\/x23\/run\.sh with mode 0755: the drive keeps no modes: the file is 0644 and cannot be executed/);
     d.push('every file\'s content matches; tar -x and tar -xp both exit 0 and run.sh shows 0644: GNU tar takes the mode it created a file with as set and chmods no regular file, so it meets no refusal (§5.9\'s "Cannot change mode … exit 2" does not happen with GNU tar 1.35); errors.log says run.sh was created executable and is kept 0644');
   });
 
@@ -1228,7 +1228,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
     assert.match(s.err, /No locks available/);
     assert.match(s.out, /flock rc=(1|71)\b/);
     assert.match(s.out, /sqlite rc=[1-9]/);
-    assert.match(errorsLog(a), /ENOLCK fcntl lock \/home\/orbit\/Files\/x40\.db: the drive has no file locks/);
+    assert.match(errorsLog(a), /ENOLCK fcntl lock \/home\/orbit\/Documents\/x40\.db: the drive has no file locks/);
     d.push(`flock: "No locks available", exit ${/flock rc=(\d+)/.exec(s.out)![1]} (util-linux exits EX_OSERR for ENOLCK); sqlite (the sqlite3 CLI is not on this host, so Python's sqlite3, the same library): "${(/sqlite3\.\w+: ([^\n]+)/.exec(s.err) ?? ['', 'fails'])[1]}", exit ≠ 0; errors.log says the drive has no file locks`);
   });
 
