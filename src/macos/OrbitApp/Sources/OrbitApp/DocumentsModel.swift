@@ -78,6 +78,12 @@ final class DocumentsModel {
     @ObservationIgnored var onToast: ((String, String?, ToastTone, (@MainActor () -> Void)?) -> Void)?
     /// Open a session (a writer's name, a sync's session).
     @ObservationIgnored var openSession: ((String) -> Void)?
+    /// Where Download puts a file, and whether Finder then shows it: the Downloads folder and yes, unless a harness
+    /// that must not touch the owner's folders says otherwise.
+    @ObservationIgnored var downloadsFolder: () throws -> URL = {
+        try FileManager.default.url(for: .downloadsDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+    }
+    @ObservationIgnored var showsDownloadsInFinder = true
 
     @ObservationIgnored private let api: APIClient
     @ObservationIgnored let baseURL: URL
@@ -390,13 +396,12 @@ final class DocumentsModel {
             if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
                 throw APIError.http(status: http.statusCode, body: nil)
             }
-            let folder = try FileManager.default.url(for: .downloadsDirectory, in: .userDomainMask,
-                                                     appropriateFor: nil, create: true)
+            let folder = try downloadsFolder()
             let file = Self.freeName(entry.name, in: folder)
             try FileManager.default.moveItem(at: temporary, to: file)
             try DownloadMark.apply(to: file)
-            NSWorkspace.shared.activateFileViewerSelecting([file])
-            toast("Downloaded \(entry.name)", "To Downloads")
+            if showsDownloadsInFinder { NSWorkspace.shared.activateFileViewerSelecting([file]) }
+            toast("Downloaded \(entry.name)", "To \(folder.lastPathComponent)")
         } catch {
             failed("Couldn't download \(entry.name)", error)
         }
