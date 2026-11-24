@@ -5,14 +5,17 @@ import { Link } from 'react-router-dom';
 import { documentsEntryQuery, formatSize } from '../../lib/documents';
 import { ApiError } from '../../api';
 
-export const DOCUMENTS_LINK_PREFIX = 'orbit-drive:';
+export const DOCUMENTS_LINK_PREFIX = 'orbit-document:';
+/** The scheme before the Documents rename, which stored transcripts carry and which still draws the same card. */
+const LEGACY_DOCUMENTS_LINK_PREFIX = 'orbit-drive:';
 
-/** The entry id in an `orbit-drive:<id>` link (design §4.5), or null when `href` is not one. */
+/** The entry id in an `orbit-document:<id>` or `orbit-drive:<id>` link (design §4.5), or null when `href` is not one. */
 export function documentsIdFromHref(href: unknown): string | null {
   if (typeof href !== 'string') return null;
   const trimmed = href.trim();
-  if (!trimmed.toLowerCase().startsWith(DOCUMENTS_LINK_PREFIX)) return null;
-  return trimmed.slice(DOCUMENTS_LINK_PREFIX.length).trim().split(/\s+/, 1)[0] || null;
+  const prefix = [DOCUMENTS_LINK_PREFIX, LEGACY_DOCUMENTS_LINK_PREFIX].find((p) => trimmed.toLowerCase().startsWith(p));
+  if (!prefix) return null;
+  return trimmed.slice(prefix.length).trim().split(/\s+/, 1)[0] || null;
 }
 
 /** The folder a path sits in, as the board's card writes it: `Files › Orbit UI migration`. */
@@ -22,7 +25,7 @@ function folderTrail(path: string | undefined): string {
 }
 
 /**
- * A reply's `orbit-drive:<id>` link drawn as that drive file (board 02-web frame 8): name, folder and size, read live so a
+ * A reply's `orbit-document:<id>` (or `orbit-drive:<id>`) link drawn as that drive file (board 02-web frame 8): name, folder and size, read live so a
  * later overwrite shows, and a click opens it on the Files page. A file that went to Trash or is gone says so instead.
  */
 export function DocumentsFileCard({ id, label }: { id: string; label?: string }) {

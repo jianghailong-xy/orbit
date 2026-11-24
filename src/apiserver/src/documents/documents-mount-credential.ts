@@ -20,7 +20,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 
 /**
  * The mount credential (docs/orbit-files-drive-technical-design.md §4.3, §8.2): what the mount daemon of one
- * managed-runner generation presents at /runner/drive/*, and nowhere else.
+ * managed-runner generation presents at /runner/documents/* (or its /runner/drive/* alias), and nowhere else.
  *
  *   - Issued per generation, beside that generation's runner credential; issuing one revokes every older generation's
  *     credential of the runner. Only the sha256 of the token is kept.
@@ -67,7 +67,7 @@ export function isDriveMountToken(token: string): boolean {
 export function driveMountCredentialOutsideDrive(): UnauthorizedException {
   return new UnauthorizedException({
     code: DRIVE_MOUNT_CREDENTIAL_OUTSIDE_DRIVE,
-    message: 'A drive mount credential is accepted only by /runner/drive/*.',
+    message: 'A drive mount credential is accepted only by /runner/documents/*.',
   });
 }
 

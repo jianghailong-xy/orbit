@@ -73,12 +73,12 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | Caller | Routes |
 | --- | --- |
 | `public` | 41 |
-| `user` | 561 |
+| `user` | 562 |
 | `admin` | 31 |
-| `runner` | 231 |
+| `runner` | 248 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **868** |
+| **Total** | **886** |
 
 ## Public routes
 
@@ -274,6 +274,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/outcomes/inbox` | query `limit` | `OutcomeSurfacesController.inbox` |
 | `GET` | `/api/owner-requests` | query `state` | `OwnerRequestsController.list` |
 | `GET` | `/api/owner-requests/:id` | path `id` | `OwnerRequestsController.get` |
+| `POST` | `/api/owner-requests/:id/apply` | body `ApplyOwnerRequestChangeDto`; path `id` | `OwnerRequestsController.applyChange` |
 | `POST` | `/api/owner-requests/:id/apply-settings` | path `id` | `OwnerRequestsController.applySettings` |
 | `POST` | `/api/owner-requests/:id/create-wiki` | path `id` | `OwnerRequestsController.createWiki` |
 | `POST` | `/api/owner-requests/:id/decline` | body `DeclineOwnerRequestDto`; path `id` | `OwnerRequestsController.decline` |
@@ -543,7 +544,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `GET` | `/api/sessions/imported` | query `workspaceId` | `SessionsController.importedCount` |
 | `GET` | `/api/sessions/project-placement` | query `projectIds`, `view` | `SessionsController.projectPlacement` |
 | `POST` | `/api/sessions/remove-imported` | body `Object` | `SessionsController.removeImported` |
-| `GET` | `/api/sessions/search` | query `limit`, `q` | `SessionsController.search` |
+| `GET` | `/api/sessions/search` | query `folderId`, `limit`, `q` | `SessionsController.search` |
 | `GET` | `/api/share-links` | query `kind` | `ShareLinksController.list` |
 | `POST` | `/api/share-links` | body `ShareDriveFileDto` | `ShareLinksController.shareDriveFile` |
 | `DELETE` | `/api/share-links/:id` | path `id` | `ShareLinksController.turnOff` |
@@ -750,6 +751,23 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/runner/cursor-key-check-result` | body `CursorKeyCheckResultDto` | `RunnerApiController.cursorKeyCheckResult` |
 | `POST` | `/api/runner/deregister` | — | `RunnerApiController.deregister` |
 | `POST` | `/api/runner/dir-probe-result` | body `Object` | `RunnerApiController.dirProbeResult` |
+| `GET` | `/api/runner/documents/changes` | query `since`, `wait` | `RunnerDocumentsController.changes` |
+| `GET` | `/api/runner/documents/chunks/:sha256` | path `sha256` | `RunnerDocumentsController.chunk` |
+| `POST` | `/api/runner/documents/commit` | body `RunnerDocumentsCommitDto` | `RunnerDocumentsController.commit` |
+| `GET` | `/api/runner/documents/commits/:commitId` | path `commitId` | `RunnerDocumentsController.commitStatus` |
+| `POST` | `/api/runner/documents/create` | body `RunnerDocumentsCreateDto` | `RunnerDocumentsController.create` |
+| `POST` | `/api/runner/documents/delete` | body `RunnerDocumentsDeleteDto` | `RunnerDocumentsController.remove` |
+| `GET` | `/api/runner/documents/list` | query `cursor`, `id`, `limit`, `path` | `RunnerDocumentsController.list` |
+| `GET` | `/api/runner/documents/manifest` | query `id`, `path` | `RunnerDocumentsController.manifest` |
+| `POST` | `/api/runner/documents/mkdir` | body `RunnerDocumentsMkdirDto` | `RunnerDocumentsController.mkdir` |
+| `POST` | `/api/runner/documents/rename` | body `RunnerDocumentsRenameDto` | `RunnerDocumentsController.rename` |
+| `POST` | `/api/runner/documents/stagings` | body `RunnerDocumentsStagingDto` | `RunnerDocumentsController.openStaging` |
+| `GET` | `/api/runner/documents/stagings/:id/chunks/:idx` | path `id`, `idx` | `RunnerDocumentsController.readChunk` |
+| `PUT` | `/api/runner/documents/stagings/:id/chunks/:idx` | path `id`, `idx` | `RunnerDocumentsController.putChunk` |
+| `POST` | `/api/runner/documents/stagings/:id/keepalive` | body `RunnerDocumentsKeepaliveDto`; path `id` | `RunnerDocumentsController.keepalive` |
+| `GET` | `/api/runner/documents/stat` | query `id`, `path` | `RunnerDocumentsController.stat` |
+| `GET` | `/api/runner/documents/usage` | — | `RunnerDocumentsController.usage` |
+| `POST` | `/api/runner/documents/utimens` | body `RunnerDocumentsUtimensDto` | `RunnerDocumentsController.utimens` |
 | `GET` | `/api/runner/drive/changes` | query `since`, `wait` | `RunnerDocumentsController.changes` |
 | `GET` | `/api/runner/drive/chunks/:sha256` | path `sha256` | `RunnerDocumentsController.chunk` |
 | `POST` | `/api/runner/drive/commit` | body `RunnerDocumentsCommitDto` | `RunnerDocumentsController.commit` |

@@ -293,6 +293,7 @@ var advertisedCapabilityFamilies = []struct {
 	{"providerCLICapabilities", providerCLICapabilities, false},
 	{"projectCLICapabilities", projectCLICapabilities, false},
 	{"notifyCLICapabilities", notifyCLICapabilities, false},
+	{"ownerRequestCLICapabilities", ownerRequestCLICapabilities, false},
 	{"mergeReceiptCLICapabilities", mergeReceiptCLICapabilities, false},
 	{"watchCLICapabilities", watchCLICapabilities, false},
 	// Ungated like the watch commands and SessionOnly for the same kind of reason: a wiki command
@@ -301,7 +302,7 @@ var advertisedCapabilityFamilies = []struct {
 	{"wikiImportCLICapabilities", wikiImportCLICapabilities, false},
 	// Ungated, for the same reason: keeping and reading back your own files.
 	{"fileCLICapabilities", fileCLICapabilities, false},
-	{"driveCLICapabilities", driveCLICapabilities, false},
+	{"documentsCLICapabilities", documentsCLICapabilities, false},
 	// Ungated too: any session of the account reads the Orbit Cloud browser (Q3 = A), behind the browser switch.
 	{"browserCLICapabilities", browserCLICapabilities, false},
 	{"subagentCLICapabilities", subagentCLICapabilities, false},
@@ -514,20 +515,25 @@ func TestOrbitDriveGuidanceMatchesRunnerKind(t *testing.T) {
 	for _, mounted := range []bool{false, true} {
 		name := "self-registered"
 		// What the instructions say in brief, and the guide's files topic in full (docs/orbit-files-drive-technical-design.md §4.6, §7.3).
-		brief := []string{"drive_put", "drive_get", "drive_list", "drive_move", "drive_delete", "orbit drive",
+		brief := []string{"documents_put", "documents_get", "documents_list", "documents_move", "documents_delete", "orbit documents",
 			"a Trash agents cannot see", "ORBIT_GUEST turns only read it"}
-		full := []string{"drive_put", "drive_get", "drive_list", "drive_move", "drive_delete", "orbit drive put|get|ls|mv|rm",
+		full := []string{"documents_put", "documents_get", "documents_list", "documents_move", "documents_delete", "orbit documents put|get|ls|mv|rm",
 			"owner's Trash, which agents cannot see", "no tool shares a drive file", "ORBIT_GUEST", "do not write it"}
 		if mounted {
 			name = "cloud"
 			brief = []string{"~/Documents", "permanent Documents drive", "link its files by path", "~/Documents/ (a symlink)", "cp -r",
-				"rsync -rt", "tar x", "locks", "in-place writes", "/run/orbit-files/errors.log", "ORBIT_GUEST turns only read it"}
-			full = []string{"/home/orbit/Documents", "/run/orbit-files/drive", "shared across sessions", "trailing slash", "cp -a",
+				"rsync -rt", "tar x", "locks", "in-place writes", "ORBIT_GUEST turns only read it"}
+			full = []string{"/home/orbit/Documents", "shared across sessions", "trailing slash", "cp -a",
 				"cp -p", "rsync -a", "tar x", "file locks", "writing inside an existing file", "executing a file", "errors.log",
 				"status.json", "unsent/", "ORBIT_GUEST", "do not write it"}
 		}
 		t.Run(name, func(t *testing.T) {
 			fakeDriveMount(t, mounted)
+			if mounted {
+				// Whichever root the Pod has (/run/orbit-documents, or /run/orbit-files of the old driver) is the one named.
+				brief = append(brief, driveParentPath+"/errors.log")
+				full = append(full, "mounted at "+driveMountPath+")", driveParentPath+"/errors.log")
+			}
 			long := "/home/a-long-account-name/.orbit/bin/versions/0.1.999/orbit"
 			instructions := orbitCLIInstructions(long, true, true, true, true)
 			t.Logf("%s: the longest instructions shape is %d of %d bytes", name, len(instructions), orbitInstructionsMaxBytes)

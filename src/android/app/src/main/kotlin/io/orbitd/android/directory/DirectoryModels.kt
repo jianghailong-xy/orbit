@@ -24,7 +24,9 @@ data class DirectoryWorkspace(val id: String, val name: String, val runnerId: St
 data class DirectoryRunner(val id: String, val name: String, val status: String? = null, val online: Boolean? = null,
     val displayName: String? = null, val lastHeartbeatAt: String? = null,
     /** True on the account's managed runner (Orbit Cloud); null from an older server (RunnerPage.isManaged). */
-    val managed: Boolean? = null)
+    val managed: Boolean? = null,
+    /** The runner's Max Concurrent and the sessions it runs now; null from an older server. */
+    val maxConcurrent: Int? = null, val activeSessions: Int? = null)
 @Serializable
 data class Folder(val id: String, val workspaceId: String, val name: String)
 @Serializable

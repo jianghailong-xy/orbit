@@ -13,16 +13,35 @@ import (
 	"time"
 )
 
+// The plain directory a runner Pod receives the drive in, and the one a Pod of the CSI driver from before the drive was
+// renamed Documents (files.orbit.dev) receives instead, until those Pods have drained (documents-csi/README.md).
+const (
+	driveRootPath       = "/run/orbit-documents"
+	driveLegacyRootPath = "/run/orbit-files"
+)
+
 var (
-	mountinfoPath  = "/proc/self/mountinfo"
-	driveMountPath = "/run/orbit-files/drive"
-	driveHomePath  = "/home/orbit/Documents"
+	mountinfoPath = "/proc/self/mountinfo"
+	// driveParentPath is the plain directory the daemon mounts below: whichever of the two roots this Pod has. A
+	// sandbox that binds paths is given this one: it receives a remount of drive/, where a bind of drive/ itself would
+	// keep the dead mount (design §7.2).
+	driveParentPath = pickDriveRoot(driveRootPath, driveLegacyRootPath)
+	driveMountPath  = filepath.Join(driveParentPath, "drive")
+	driveHomePath   = "/home/orbit/Documents"
 	// driveLegacyHomePath is where the drive was shown before it was renamed Documents; still accepted in paths.
 	driveLegacyHomePath = "/home/orbit/Files"
-	// driveParentPath is the plain directory the daemon mounts below. A sandbox that binds paths is given this one:
-	// it receives a remount of drive/, where a bind of drive/ itself would keep the dead mount (design §7.2).
-	driveParentPath = "/run/orbit-files"
 )
+
+// pickDriveRoot is root, or legacy when only legacy is a directory: a Pod of the old CSI driver.
+func pickDriveRoot(root, legacy string) string {
+	if info, err := os.Stat(root); err == nil && info.IsDir() {
+		return root
+	}
+	if info, err := os.Stat(legacy); err == nil && info.IsDir() {
+		return legacy
+	}
+	return root
+}
 
 // driveStatusPath is the daemon's status.json, in the plain parent directory beside the mount.
 var driveStatusPath = filepath.Join(driveParentPath, "status.json")
@@ -72,7 +91,8 @@ func driveMounted() bool {
 		if ok && len(fields) >= 6 && unescapeMountinfo(fields[4]) == driveMountPath {
 			// A later mount at the same point hides the earlier one.
 			fstype, _, _ := strings.Cut(filesystem, " ")
-			mounted = fstype == "fuse.orbit-files"
+			// fuse.orbit-files is the daemon's type before the rename, in a Pod of the old driver.
+			mounted = fstype == "fuse.orbit-documents" || fstype == "fuse.orbit-files"
 		}
 	}
 	return mounted
@@ -263,7 +283,7 @@ func (s localFileScope) open(path string) (*os.File, os.FileInfo, error) {
 	return s.openRegular(path, true)
 }
 
-// openRegular enforces the path rule for both attachments and drive_put.
+// openRegular enforces the path rule for both attachments and documents_put.
 func (s localFileScope) openRegular(path string, scanSecrets bool) (*os.File, os.FileInfo, error) {
 	real, err := filepath.EvalSymlinks(path)
 	if err != nil {

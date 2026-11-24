@@ -2417,7 +2417,7 @@ function groupToolRuns(nodes: Node[], chat = false): NodeListItem[] {
     run = [];
   };
   for (const node of nodes) {
-    // An agent's drive_put or drive_get calls are one transfer card, which only thinking may sit inside: the thinking
+    // An agent's documents_put or documents_get calls (drive_put / drive_get before the rename) are one transfer card, which only thinking may sit inside: the thinking
     // is drawn under the card, so the calls stay together.
     const transfer = node.kind === 'tool' && node.children.length === 0 ? documentsTransferKind(node.name) : null;
     if (transfer) {

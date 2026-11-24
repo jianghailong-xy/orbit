@@ -3637,6 +3637,7 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	// orchestration power, and the agents most likely to need one are the plain single-session
 	// ones this document is usually read by.
 	specs = append(specs, notifyCLICapabilities...)
+	specs = append(specs, ownerRequestCLICapabilities...)
 	// Same argument again (§13.7): recording that a merge happened is evidence about the caller's
 	// own work, not a power over somebody else's session.
 	specs = append(specs, mergeReceiptCLICapabilities...)
@@ -3661,7 +3662,7 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	// Ungated too: keeping and reading back your own files is no power over anybody else's session. Upload and fetch
 	// are SessionOnly, because a file stays with the session that uploads it.
 	specs = append(specs, fileCLICapabilities...)
-	specs = append(specs, driveCLICapabilities...)
+	specs = append(specs, documentsCLICapabilities...)
 	specs = append(specs, subagentCLICapabilities...)
 	// Ungated too, and SessionOnly: a proposal is a card in the session's conversation (settings_tools.go).
 	specs = append(specs, settingsCLICapabilities...)

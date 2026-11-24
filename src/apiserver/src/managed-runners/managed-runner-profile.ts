@@ -50,9 +50,9 @@ export interface ManagedRunnerProfile {
   };
   storage: { className: string; capacity: string };
   /**
-   * The Orbit Files drive (docs/orbit-files-drive-technical-design.md §6.1). Absent, runner Pods get no drive: the
-   * `files.orbit.dev` CSI plugin (deploy/managed-runner/files-csi) is not installed in this environment. Present, every
-   * runner Pod receives the drive at /run/orbit-files, and the manager writes each generation's mount credential into
+   * The Documents drive (docs/orbit-files-drive-technical-design.md §6.1). Absent, runner Pods get no drive: the
+   * `documents.orbit.dev` CSI plugin (deploy/managed-runner/documents-csi) is not installed in this environment. Present, every
+   * runner Pod receives the drive at /run/orbit-documents, and the manager writes each generation's mount credential into
    * Secret `mrf-<runner uuid>` of `namespace`, where only the plugin reads it.
    */
   files?: { namespace: string };

@@ -1,9 +1,10 @@
 /**
- * An agent's transfers to and from Orbit Files (`drive_put` / `drive_get`), as the chat's transfer card draws them
+ * An agent's transfers to and from Documents (`documents_put` / `documents_get`, `drive_put` / `drive_get` before the
+ * rename), as the chat's transfer card draws them
  * (DocumentsTransferCard, board docs/mocks/agent-drive-transfer).
  *
  * While a call runs, the runner sends its bytes as the call's live `tool_output`, one sentence restating the whole
- * count: "Uploaded 3355443 of 11954323 bytes" (runner-go drive_progress.go, documentsProgressLine). The durable
+ * count: "Uploaded 3355443 of 11954323 bytes" (runner-go documents_progress.go, documentsProgressLine). The durable
  * tool_result replaces it when the call ends, so a finished card is drawn from results alone.
  */
 import { formatSize } from './documents';
@@ -11,6 +12,9 @@ import { formatSize } from './documents';
 export type DocumentsTransferKind = 'put' | 'get';
 
 const TOOLS: Record<string, DocumentsTransferKind> = {
+  mcp__orbit__documents_put: 'put',
+  mcp__orbit__documents_get: 'get',
+  // Their names before the Documents rename, which stored transcripts carry.
   mcp__orbit__drive_put: 'put',
   mcp__orbit__drive_get: 'get',
 };
@@ -32,10 +36,11 @@ export function parseDocumentsProgress(content: unknown): { sent: number; size: 
   return { sent: Math.min(sent, size), size };
 }
 
-/** A drive path as the owner reads it in Files: `~/Files/a` and the mount's `/run/orbit-files/drive/a` are `/a`. */
+/** A drive path as the owner reads it in Files: `~/Files/a` and the mount's `/run/orbit-documents/drive/a` (or
+ * `/run/orbit-files/drive/a`, its root in a Pod of the CSI driver from before the rename) are `/a`. */
 export function documentsDisplayPath(raw: unknown): string {
   let p = typeof raw === 'string' ? raw.trim() : '';
-  for (const prefix of ['~/Files', '/run/orbit-files/drive']) {
+  for (const prefix of ['~/Files', '/run/orbit-documents/drive', '/run/orbit-files/drive']) {
     if (p === prefix || p.startsWith(`${prefix}/`)) p = p.slice(prefix.length);
   }
   if (!p.startsWith('/')) p = `/${p}`;
@@ -53,7 +58,7 @@ export type DocumentsTransferFile = {
   sent: number;
   /** Null until the call has said how big the file is. */
   size: number | null;
-  /** `orbit-drive:<id>` once an upload is in. */
+  /** `orbit-document:<id>` (`orbit-drive:<id>` before the rename) once an upload is in. */
   link?: string;
   error?: string;
   startedAt?: number;
@@ -89,7 +94,7 @@ export function documentsTransferFile(input: {
       status: 'done',
       sent: size ?? 0,
       size,
-      ...(typeof answer.link === 'string' && answer.link.startsWith('orbit-drive:') ? { link: answer.link } : {}),
+      ...(typeof answer.link === 'string' && /^orbit-(?:document|drive):/.test(answer.link) ? { link: answer.link } : {}),
     };
   }
   const progress = parseDocumentsProgress(input.progress);

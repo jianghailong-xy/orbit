@@ -5,9 +5,9 @@
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/files/files.pg.spec.ts
  *
- *   local  the files directory, a directory of this run's (ORBIT_FILES_DIR);
+ *   local  the files directory, a directory of this run's (ORBIT_DOCUMENTS_DIR);
  *   s3     a real S3-compatible server — VersityGW, the image pinned in test-support/s3-test-server.ts — started on Docker the way
- *          scripts/run-pg-spec.sh starts its PostgreSQL, with a bucket of the run's (ORBIT_FILES_BACKEND=s3). It checks
+ *          scripts/run-pg-spec.sh starts its PostgreSQL, with a bucket of the run's (ORBIT_DOCUMENTS_BACKEND=s3). It checks
  *          every request's signature and every PUT's payload hash, as AWS S3 does.
  *
  * The same cases with each store:
@@ -61,7 +61,7 @@ import { S3FileStore } from './s3-file-store';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
-const PROVIDER_SECRET_KEY = `orbit-files-${RUN}`;
+const PROVIDER_SECRET_KEY = `orbit-documents-${RUN}`;
 
 const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 const b62 = (id: string) => uuidToBase62(id);
@@ -126,7 +126,7 @@ async function get(server: Apiserver, route: string, bearer?: string): Promise<A
 
 /** A multipart/form-data body with the one `file` field the upload doors read. */
 function multipart(bytes: Buffer, fileName: string, type: string) {
-  const boundary = `orbit-files-${randomUUID()}`;
+  const boundary = `orbit-documents-${randomUUID()}`;
   const head = Buffer.from(
     `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: ${type}\r\n\r\n`,
   );
@@ -185,7 +185,7 @@ function storeCases(leg: Leg) {
       await db.$disconnect().catch(() => undefined);
       await sql.end().catch(() => undefined);
     });
-    const jwtSecret = `orbit-files-${randomUUID()}`;
+    const jwtSecret = `orbit-documents-${randomUUID()}`;
     const jwt = new JwtService({ secret: jwtSecret });
     server = await startApiserver(url, jwtSecret, {
       PROVIDER_SECRET_KEY,
@@ -206,7 +206,7 @@ function storeCases(leg: Leg) {
 
     // An owner with a runner, a session on it, a task and a link to each; and a second runner, not the session's.
     const ownerId = randomUUID();
-    const email = `files-${leg.storage}-${RUN}@orbit-files.invalid`;
+    const email = `files-${leg.storage}-${RUN}@orbit-documents.invalid`;
     await db.user.create({ data: { id: ownerId, email, name: `files ${leg.storage}`, passwordHash: 'x' } });
     const bearer = await jwt.signAsync({ sub: ownerId, email });
     const runner = async (name: string) => {
@@ -549,8 +549,8 @@ test('Orbit Files storage, on the local files directory and on an S3-compatible 
   }
   process.env.PROVIDER_SECRET_KEY = PROVIDER_SECRET_KEY;
 
-  const localDir = mkdtempSync(path.join(tmpdir(), 'orbit-files-local-'));
-  const s3Dir = mkdtempSync(path.join(tmpdir(), 'orbit-files-s3-'));
+  const localDir = mkdtempSync(path.join(tmpdir(), 'orbit-documents-local-'));
+  const s3Dir = mkdtempSync(path.join(tmpdir(), 'orbit-documents-s3-'));
   t.after(() => {
     rmSync(localDir, { recursive: true, force: true });
     rmSync(s3Dir, { recursive: true, force: true });
@@ -560,7 +560,7 @@ test('Orbit Files storage, on the local files directory and on an S3-compatible 
     storage: 'local',
     dir: localDir,
     config: { dir: localDir, storage: 'local' },
-    env: { ORBIT_FILES_BACKEND: 'local', ORBIT_FILES_DIR: localDir },
+    env: { ORBIT_DOCUMENTS_BACKEND: 'local', ORBIT_DOCUMENTS_DIR: localDir },
   }));
 
   const s3 = await startS3((fn) => t.after(fn));
@@ -569,13 +569,13 @@ test('Orbit Files storage, on the local files directory and on an S3-compatible 
     dir: s3Dir,
     config: { dir: s3Dir, storage: 's3', s3 },
     env: {
-      ORBIT_FILES_BACKEND: 's3',
-      ORBIT_FILES_DIR: s3Dir,
-      ORBIT_FILES_S3_ENDPOINT: s3.endpoint,
-      ORBIT_FILES_S3_BUCKET: s3.bucket,
-      ORBIT_FILES_S3_ACCESS_KEY_ID: s3.accessKeyId,
-      ORBIT_FILES_S3_SECRET_ACCESS_KEY: s3.secretAccessKey,
-      ORBIT_FILES_S3_REGION: s3.region,
+      ORBIT_DOCUMENTS_BACKEND: 's3',
+      ORBIT_DOCUMENTS_DIR: s3Dir,
+      ORBIT_DOCUMENTS_S3_ENDPOINT: s3.endpoint,
+      ORBIT_DOCUMENTS_S3_BUCKET: s3.bucket,
+      ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID: s3.accessKeyId,
+      ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY: s3.secretAccessKey,
+      ORBIT_DOCUMENTS_S3_REGION: s3.region,
     },
   }));
 });

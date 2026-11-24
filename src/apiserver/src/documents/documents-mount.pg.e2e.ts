@@ -1,11 +1,11 @@
 /**
  * The mount daemon's finish line (docs/orbit-files-drive-technical-design.md §5.9): every shell operation of the list,
- * run as uid 10001 through a real FUSE mount made the way the privileged parent makes it (src/drive-mount), against
+ * run as uid 10001 through a real FUSE mount made the way the privileged parent makes it (src/documents-mount), against
  * the production apiserver (`node build/main.js`) over a real PostgreSQL that `scripts/run-pg-spec.sh` migrates:
  *
  *   sudo RUN_PG_SPEC_TIMEOUT=7200 bash scripts/run-pg-spec.sh src/apiserver/src/documents/documents-mount.pg.e2e.ts
  *
- * Needs root (it mounts, as the CSI plugin does), a usable /dev/fuse, Go (it builds src/drive-mount unless
+ * Needs root (it mounts, as the CSI plugin does), a usable /dev/fuse, Go (it builds src/documents-mount unless
  * DRIVE_MOUNT_BIN names a binary) and the shell tools the rows use. Not in CI's pg roster, which takes *.pg.spec only.
  *
  *   - Runner A is a Cloud runner: a managed-runner mapping, its generation's mount credential, the instance headers,
@@ -51,7 +51,7 @@ const RUN = randomUUID().slice(0, 8);
 const REPO = path.resolve(__dirname, '..', '..', '..', '..');
 const FULL = process.env.DRIVE_MOUNT_E2E_SCALE === 'full';
 const ONLY = (process.env.DRIVE_MOUNT_E2E_ROWS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-const E2E_ROOT = process.env.DRIVE_MOUNT_E2E_ROOT ?? '/var/lib/orbit-files-e2e';
+const E2E_ROOT = process.env.DRIVE_MOUNT_E2E_ROOT ?? '/var/lib/orbit-documents-e2e';
 const AGENT_UID = 10001;
 const MiB = 1 << 20;
 
@@ -131,7 +131,7 @@ class FaultProxy {
       return;
     }
     if (this.mode === 'blackhole') return; // never answered
-    const isCommit = req.method === 'POST' && (req.url ?? '').startsWith('/api/runner/drive/commit');
+    const isCommit = req.method === 'POST' && /^\/api\/runner\/(documents|drive)\/commit/.test(req.url ?? '');
     if (isCommit) this.commits += 1;
     const up = http.request(
       { host: '127.0.0.1', port: this.target, method: req.method, path: req.url, headers: req.headers },
@@ -198,8 +198,8 @@ interface Runner {
   name: 'a' | 'b';
   id: string;
   dir: string;
-  root: string; // /run/orbit-files
-  drive: string; // /run/orbit-files/drive
+  root: string; // /run/orbit-documents
+  drive: string; // /run/orbit-documents/drive
   home: string; // /home/orbit
   F: string; // ~/Documents
   spool: string;
@@ -229,7 +229,7 @@ function mountpoints(): Array<{ point: string; type: string }> {
 }
 
 function mounted(point: string): boolean {
-  return mountpoints().some((m) => m.point === point && m.type === 'fuse.orbit-files');
+  return mountpoints().some((m) => m.point === point && m.type === 'fuse.orbit-documents');
 }
 
 test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9)', {
@@ -261,9 +261,9 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
   // ── the daemon ──
   let bin = process.env.DRIVE_MOUNT_BIN ?? '';
   if (!bin) {
-    bin = path.join(runDir, 'orbit-files-mount');
+    bin = path.join(runDir, 'orbit-documents-mount');
     const built = spawnSync('go', ['build', '-o', bin, '.'], {
-      cwd: path.join(REPO, 'src', 'drive-mount'), env: { ...process.env, CGO_ENABLED: '0' }, encoding: 'utf8',
+      cwd: path.join(REPO, 'src', 'documents-mount'), env: { ...process.env, CGO_ENABLED: '0' }, encoding: 'utf8',
     });
     assert.equal(built.status, 0, `go build: ${built.stderr}`);
   }
@@ -297,7 +297,7 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
     name: 'documents', scopes: ['documents'], expiresInDays: 1, createdVia: 'WEB', workspaceIds: [],
   })).token;
 
-  const server: Apiserver = await startApiserver(url, `drive-mount-${RUN}`, { ORBIT_FILES_DIR: filesDir });
+  const server: Apiserver = await startApiserver(url, `drive-mount-${RUN}`, { ORBIT_DOCUMENTS_DIR: filesDir });
   t.after(() => server.stop());
 
   // ── owner routes ──
@@ -404,7 +404,7 @@ test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9
     const home = path.join(dir, 'home', 'orbit');
     mkdirSync(home, { recursive: true });
     chownSync(home, AGENT_UID, AGENT_UID);
-    const root = path.join(dir, 'run', 'orbit-files');
+    const root = path.join(dir, 'run', 'orbit-documents');
     const proxy = new FaultProxy(server.port);
     await proxy.start();
     t.after(() => proxy.stop());
@@ -1149,7 +1149,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
   await row('36', `find $F/ | wc -l and grep -r over ${findFolders * 5} entries in ${findFolders} folders`, async (d) => {
     // Through the door, as a drive tool would write them, so every file has its own content; read cold on runner B.
     await ownerFolder('tree36');
-    const doorAs = (method: string, route: string, body?: unknown) => call(server, method, `/api/runner/drive${route}`, rb.token, body);
+    const doorAs = (method: string, route: string, body?: unknown) => call(server, method, `/api/runner/documents${route}`, rb.token, body);
     const work: Array<() => Promise<void>> = [];
     for (let i = 0; i < findFolders; i += 1) {
       work.push(async () => {
@@ -1162,7 +1162,7 @@ ms.sort(); print('%.1f %.1f' % (ms[100], ms[190]))"`), 'latency');
           assert.equal(created.status, 201, created.text);
           const staging = await doorAs('POST', '/stagings', { entryId: created.json.id });
           const put = await new Promise<number>((resolve, reject) => {
-            const req = http.request({ host: '127.0.0.1', port: server.port, method: 'PUT', path: `/api/runner/drive/stagings/${staging.json.id}/chunks/0`, headers: { authorization: `Bearer ${rb.token}`, 'x-orbit-chunk-sha256': sha256(bytes), 'content-length': String(bytes.length) } }, (res) => { res.resume(); res.on('end', () => resolve(res.statusCode ?? 0)); });
+            const req = http.request({ host: '127.0.0.1', port: server.port, method: 'PUT', path: `/api/runner/documents/stagings/${staging.json.id}/chunks/0`, headers: { authorization: `Bearer ${rb.token}`, 'x-orbit-chunk-sha256': sha256(bytes), 'content-length': String(bytes.length) } }, (res) => { res.resume(); res.on('end', () => resolve(res.statusCode ?? 0)); });
             req.on('error', reject);
             req.end(bytes);
           });
@@ -1418,7 +1418,7 @@ except OSError as e:
     const saved = spawnSync('ls', [unsent], { encoding: 'utf8' }).stdout.trim().split('\n').filter((f) => f.endsWith('w49.txt'));
     assert.equal(saved.length, 1, 'unsent/ holds its bytes');
     assert.equal(readFileSync(path.join(unsent, saved[0]), 'utf8'), 'kept bytes\n');
-    assert.match(errorsLog(a), new RegExp(`EIO close /home/orbit/Documents/w49\\.txt: .*kept in /run/orbit-files/unsent/${saved[0].replace(/[.]/g, '\\.')}`));
+    assert.match(errorsLog(a), new RegExp(`EIO close /home/orbit/Documents/w49\\.txt: .*kept in /run/orbit-documents/unsent/${saved[0].replace(/[.]/g, '\\.')}`));
     a.proxy.set('pass');
     await waitFor('back online', () => status(a).connected === true, 30_000);
     ok(await sh(a, 'echo after > $F/after49.txt && cat $F/after49.txt'), 'reads and writes work without a remount');

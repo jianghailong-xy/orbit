@@ -188,15 +188,16 @@ function refuseShape(why: string): never {
 }
 
 /**
- * Whether a FILE reference names a drive file (docs/orbit-files-drive-technical-design.md §4.5): an `orbit-drive:` link,
- * or a path by any of the drive's spellings on Orbit Cloud. The drive's content changes under its name (D17), so it is
+ * Whether a FILE reference names a drive file (docs/orbit-files-drive-technical-design.md §4.5): an `orbit-document:` link
+ * (or `orbit-drive:`, its scheme before the Documents rename), or a path by any of the drive's spellings on Orbit Cloud. The drive's content changes under its name (D17), so it is
  * never what evidence binds; `file_upload` of the path makes the evidence copy that is.
  */
 export function namesDriveFile(ref: string): boolean {
   const text = ref.trim();
-  return /^orbit-drive:/i.test(text)
+  return /^orbit-(?:document|drive):/i.test(text)
     || /^(?:~|\/home\/orbit)\/(?:Documents|Files)(?:\/|$)/.test(text)
-    || /^\/run\/orbit-files\/drive(?:\/|$)/.test(text);
+    // /run/orbit-files is the mount root of a Pod of the CSI driver from before the rename to Documents.
+    || /^\/run\/orbit-(?:documents|files)\/drive(?:\/|$)/.test(text);
 }
 
 function refuseCitation(code: string, message: string, requiredAction: string): never {
