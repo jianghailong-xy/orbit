@@ -19,15 +19,31 @@ export const WIKI_CHAT_RULES = {
   rewritesMax: 5,
   /** The most chats one read of a space lists, the one last spoken in first; the counts it carries are over all of them. */
   chatsListed: 50,
+  /**
+   * The most sections a space's rewrite cards write without a press in one UTC day (design §7.2, option A): counted when
+   * each card is drafted, never given back by an Undo. A card that would pass it stays a draft the owner applies.
+   */
+  chatAutoSectionsPerDay: 20,
 } as const;
 
 /** What a card drafts (contract `chat.drafts.kinds`): entry ops, a rewrite of sections from main, a plan change. */
 export const WIKI_CHAT_DRAFT_KINDS = ['entry', 'rewrite', 'plan'] as const;
 export type WikiChatDraftKind = (typeof WIKI_CHAT_DRAFT_KINDS)[number];
 
-/** Where a card stands (contract `chat.drafts.states`, design §7.3), derived on read by wikiChatDraftState. */
-export const WIKI_CHAT_DRAFT_STATES = ['draft', 'replaced', 'changed', 'applied', 'discarded', 'not_applied', 'undone'] as const;
+/**
+ * Where a card stands (contract `chat.drafts.states`, design §7.3), derived on read by wikiChatDraftState. `rewritten`
+ * is a rewrite card the server queued without a press (design §7.2, option A): written from main, never confirmed by you.
+ */
+export const WIKI_CHAT_DRAFT_STATES = ['draft', 'replaced', 'changed', 'applied', 'rewritten', 'discarded', 'not_applied', 'undone'] as const;
 export type WikiChatDraftState = (typeof WIKI_CHAT_DRAFT_STATES)[number];
+
+/**
+ * Why a rewrite card inside option A's other bounds waits for a press after all (contract `chat.drafts.held`, design
+ * §7.2): its chat read web content; the space's automatic rewrites for the day are used up; or another draft of the
+ * chat rewrites one of its sections, which it waits for — written once that draft is applied or discarded.
+ */
+export const WIKI_CHAT_REWRITE_HELD = ['web', 'budget', 'draft'] as const;
+export type WikiChatRewriteHeld = (typeof WIKI_CHAT_REWRITE_HELD)[number];
 
 /** How a card's rewrite stands (contract `chat.drafts.results`, design §8.3); `gone` is design §10's lost section. */
 export const WIKI_CHAT_REWRITE_RESULTS = ['rewriting', 'waiting', 'updated', 'same', 'failed', 'gone'] as const;
@@ -116,7 +132,8 @@ export const WIKI_CHAT_PROMPT = [
   'Before you change anything, decide where the request belongs: knowledge goes into an entry (wiki_propose); a section behind main is rewritten from main, and a change to how a document is organized or written goes into the plan (both wiki_draft); a change to the system itself is a change to the code, or to the design document it cites.',
   "The page the owner has open is a hint about what they mean, not the limit of what you may look at. The wiki's structure, every document and its sections, is in the Wiki contents note: read it to find the page a question belongs to, and never ask the owner to open a page or to ask again from another one.",
   "Ask the owner only what only they can answer, and when you ask, give your recommendation with it. Never cite a wiki-reading call in an answer: the owner sees the answer, not how you read.",
-  'Everything you propose or draft in this chat is a draft: nothing changes until the owner applies it. Say what each draft would change, never call one applied, and pass replaces with a draft\'s id when you revise it.',
+  'A rewrite from main of written sections (wiki_draft, kind rewrite) is written when you draft it, unless the chat read web content or the day\'s automatic rewrites are used up: its card says Rewritten from main, the owner can undo it, and its result comes with their next message.',
+  'Everything else you propose or draft in this chat is a draft: nothing changes until the owner applies it. Say what each draft would change, never call one applied, and pass replaces with a draft\'s id when you revise it.',
   '</orbit_wiki_chat>',
 ].join('\n');
 
@@ -171,6 +188,10 @@ export const WIKI_CHAT_COPY = {
     web: 'Based on web content',
     webNote: 'Read before you apply.',
     applied: 'Applied · Confirmed by you',
+    rewritten: 'Rewritten from main',
+    heldWeb: 'Apply to write: this chat read web content',
+    heldBudget: "Apply to write: today's automatic rewrites are used up",
+    heldDraft: 'Written once you apply or discard the draft that rewrites the same section',
     appliedInReview: 'Applied · In Review',
     appliedInReviewNote: 'Keep, amend or retire the entry in Review.',
     discarded: 'Discarded',
@@ -259,6 +280,8 @@ export const WIKI_CHAT_COPY = {
     edited: '{n} edited',
     discarded: '{n} discarded',
     undone: '{n} undone',
+    rewritten: '{n} rewritten',
+    settled: '{n} finished',
     outdated: 'Outdated',
   },
   waitingBanner: {
@@ -302,11 +325,14 @@ export interface WikiChatDraftFacts {
   chatOpen: boolean;
   /** An entry the draft changes moved off its baseRevision (or left active), or a section it rewrites was written since it was drafted. */
   baseMoved: boolean;
+  /** A rewrite card the server queued without a press (`auto_queued_at`, design §7.2 option A). Absent is false. */
+  autoQueued?: boolean;
 }
 
 /** Design §7.3, read top to bottom: the first that holds is the card's state, so no two can disagree. */
 export function wikiChatDraftState(facts: WikiChatDraftFacts): WikiChatDraftState {
   if (facts.decision === 'applied' || facts.decision === 'edited') return facts.undone ? 'undone' : 'applied';
+  if (facts.autoQueued) return facts.undone ? 'undone' : 'rewritten';
   if (facts.decision === 'discarded') return 'discarded';
   if (facts.replaced) return 'replaced';
   if (!facts.chatOpen) return 'not_applied';
@@ -361,6 +387,8 @@ export function wikiChatCardTitle(state: WikiChatDraftState, label: string, inRe
       return card.changed;
     case 'applied':
       return inReview ? card.appliedInReview : card.applied;
+    case 'rewritten':
+      return card.rewritten;
     case 'discarded':
       return card.discarded;
     case 'not_applied':
@@ -404,12 +432,14 @@ export interface WikiChatCard {
 export function wikiChatCardActions(card: WikiChatCard): WikiChatAction[] {
   switch (card.state) {
     case 'draft':
-      if (card.kind === 'rewrite') return ['rewrite', 'discard'];
+      // A rewrite card held out of option A's bounds is applied as any other (design §7.2): Apply, not Rewrite.
+      if (card.kind === 'rewrite') return ['apply', 'discard'];
       if (card.kind === 'plan') return ['apply_rebuild', 'open_in_plan', 'discard'];
       return ['apply', 'edit', 'discard'];
     case 'changed':
       return ['redo', 'discard'];
-    case 'applied': {
+    case 'applied':
+    case 'rewritten': {
       const actions: WikiChatAction[] = [];
       if (card.undoable) actions.push('undo');
       if (card.kind === 'entry') actions.push('open_entry');
@@ -427,12 +457,12 @@ export function wikiChatCardActions(card: WikiChatCard): WikiChatAction[] {
 }
 
 /**
- * Whether an applied card's rewrite waits on the owner, which is what the Wiki's waiting count (W) adds for it
+ * Whether an applied card's rewrite — or a card's written without a press — waits on the owner, which is what the Wiki's waiting count (W) adds for it
  * (contract `chat.waiting`): a rewrite held up waits until it is not; one that read the same or failed waits
  * until the owner has seen it, tried it again, or undone the card.
  */
 export function wikiChatRewriteWaits(card: WikiChatCard): boolean {
-  if (card.state !== 'applied' || !card.rewrite) return false;
+  if ((card.state !== 'applied' && card.state !== 'rewritten') || !card.rewrite) return false;
   const { result, seen } = card.rewrite;
   if (result === 'waiting') return true;
   return (result === 'same' || result === 'failed') && !seen;
@@ -451,7 +481,7 @@ export function wikiChatWaiting(cards: readonly WikiChatCard[]): number {
 /**
  * Whether Undo can take a card back (contract `chat.presses.undo`): an applied entry card every op of which is an add or
  * an amend — the two a revert takes back; a supersede and a retire end a lineage, and a reinforce or a challenge is
- * answered as any other, the challenge in Review — an applied rewrite card, and an applied plan card while the plan
+ * answered as any other, the challenge in Review — a rewrite card applied or written without a press, and an applied plan card while the plan
  * stands at the version its press made (C17): once another version is stored — a draft or a confirmed one — `planMoved`,
  * and the card says so (`wikiChatPlanMovedNote`).
  */
@@ -461,8 +491,8 @@ export function wikiChatDraftUndoable(
   ops: readonly WikiChatDraftOp[],
   planMoved = false,
 ): boolean {
+  if (kind === 'rewrite') return state === 'applied' || state === 'rewritten';
   if (state !== 'applied') return false;
-  if (kind === 'rewrite') return true;
   if (kind === 'plan') return !planMoved;
   return ops.length > 0 && ops.every((op) => op.op === 'add' || op.op === 'amend');
 }
@@ -474,6 +504,19 @@ export function wikiChatDraftUndoable(
  */
 export function wikiChatPlanMovedNote(card: Pick<WikiChatCard, 'kind' | 'state' | 'undoable'>): string | null {
   return card.kind === 'plan' && card.state === 'applied' && !card.undoable ? WIKI_CHAT_COPY.card.planMovedNote : null;
+}
+
+/**
+ * The line under a rewrite card held for a press (contract `chat.drafts.held`, design §7.2): `Apply to write: …` for a
+ * chat that read web content or a day's automatic rewrites used up; the wait for the other draft that rewrites the same
+ * section. Null for a card that is not held.
+ */
+export function wikiChatHeldLine(held: WikiChatRewriteHeld | null): string | null {
+  const { card } = WIKI_CHAT_COPY;
+  if (held === 'web') return card.heldWeb;
+  if (held === 'budget') return card.heldBudget;
+  if (held === 'draft') return card.heldDraft;
+  return null;
 }
 
 // ── A card as the user door and the drafting tools serve it ─────────────────────────────────────
@@ -533,6 +576,10 @@ export interface WikiChatDraftView {
   replacedBy: string | null;
   decision: 'applied' | 'edited' | 'discarded' | null;
   decidedAt: string | null;
+  /** When the server queued a rewrite card's sections without a press (design §7.2, option A); null for every other card. */
+  autoQueuedAt: string | null;
+  /** Why an open rewrite card inside option A's other bounds waits for a press (wikiChatHeldLine); null otherwise. */
+  held: WikiChatRewriteHeld | null;
   undoneAt: string | null;
   undoable: boolean;
   changesetId: string | null;
@@ -722,6 +769,13 @@ export interface WikiChatDraftToolAnswer {
   kind: WikiChatDraftKind;
   replayed: boolean;
   rewrites: WikiChatDraftSectionView[];
+  /**
+   * The card as it stood when drafted (design §7.2, option A): `rewritten` for a rewrite card queued without a press,
+   * `draft` for every other.
+   */
+  state: 'draft' | 'rewritten';
+  /** Why a rewrite card stayed a draft though it was inside option A's other bounds; null otherwise. */
+  held: WikiChatRewriteHeld | null;
 }
 
 // ── The round button ─────────────────────────────────────────────────────────────────────────────
@@ -755,7 +809,7 @@ export function wikiChatFabCounts(chats: readonly WikiChatFabChat[]): WikiChatFa
     }
     for (const card of chat.cards) {
       if (wikiChatCardNeedsYou(card)) needsYou += 1;
-      if (card.state !== 'applied' || !card.rewrite) continue;
+      if ((card.state !== 'applied' && card.state !== 'rewritten') || !card.rewrite) continue;
       if (card.rewrite.result === 'rewriting') working = true;
       if (card.rewrite.result === 'updated' && !card.rewrite.seen) updated += 1;
     }
@@ -886,6 +940,11 @@ export type WikiDocsFollowFact =
     /** The entries the card wrote, handed to each of its sections with their live sources. */
     entryIds: string[];
     at: string;
+    /**
+     * Queued without a press (contract `chat.drafts.auto`, design §7.2 option A): the chat's turns are no material for
+     * its sections, since nothing the owner pressed published them. Absent on a press.
+     */
+    auto?: true;
   }
   | {
     kind: 'merge' | 'landing';
@@ -1108,7 +1167,13 @@ export type WikiChatNote =
   | { kind: 'page'; of: 'entry'; title: string }
   | { kind: 'page'; of: 'plan'; doc: string; section?: number | string }
   | { kind: 'selection'; doc: string; section: number | string; toSection?: number | string; sentences: number; sources: number }
-  | { kind: 'drafts'; applied: number; edited: number; discarded: number; undone: number };
+  | { kind: 'drafts'; applied: number; edited: number; discarded: number; undone: number; rewritten: number; settled: number };
+
+/**
+ * The counts `<orbit_wiki_drafts>` carries, in its tag's order (contract `chat.notes.drafts`): the owner's presses; the
+ * rewrite cards written without a press; and the cards told before whose rewrite has finished since.
+ */
+export const WIKI_CHAT_DRAFTS_NOTE_COUNTS = ['applied', 'edited', 'discarded', 'undone', 'rewritten', 'settled'] as const;
 
 /** What the "Orbit attached:" line names a chat note (board 42 ②: "Wiki selection · 3.1 §3 · 1 sentence · 2 sources"). */
 export function wikiChatNoteLabel(note: WikiChatNote): string {
@@ -1134,7 +1199,7 @@ export function wikiChatNoteLabel(note: WikiChatNote): string {
       });
     }
     case 'drafts': {
-      const counts = (['applied', 'edited', 'discarded', 'undone'] as const)
+      const counts = WIKI_CHAT_DRAFTS_NOTE_COUNTS
         .filter((key) => note[key] > 0)
         .map((key) => fill(notes[key], { n: note[key] }));
       return fill(notes.drafts, { counts: counts.join(', ') });
@@ -1196,8 +1261,8 @@ export function parseWikiChatNoteTag(block: string): WikiChatNote | null {
       };
     }
     case WIKI_CHAT_NOTE_TAGS.drafts: {
-      const [applied, edited, discarded, undone] = (['applied', 'edited', 'discarded', 'undone'] as const).map((key) => count(key) ?? 0);
-      return { kind: 'drafts', applied: applied!, edited: edited!, discarded: discarded!, undone: undone! };
+      const [applied, edited, discarded, undone, rewritten, settled] = WIKI_CHAT_DRAFTS_NOTE_COUNTS.map((key) => count(key) ?? 0);
+      return { kind: 'drafts', applied: applied!, edited: edited!, discarded: discarded!, undone: undone!, rewritten: rewritten!, settled: settled! };
     }
     default:
       return null;

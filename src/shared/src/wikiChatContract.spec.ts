@@ -46,6 +46,9 @@ import {
   wikiChatNoteLabel,
   wikiChatPlanFace,
   wikiChatPlanMovedNote,
+  wikiChatHeldLine,
+  WIKI_CHAT_REWRITE_HELD,
+  type WikiChatRewriteHeld,
   wikiChatRewriteLinks,
   wikiChatResultLine,
   wikiChatRewrites,
@@ -105,6 +108,9 @@ describe('wiki chat contract', () => {
     expect(DESIGN).toContain('最多 20 句');
     expect(WIKI_CHAT_RULES.rewritesMax).toBe(5);
     expect(DESIGN).toContain('一张卡至多 5 节');
+    // Design §7.2, option A (owner 11-22): the automatic rewrites a space writes in a UTC day.
+    expect(WIKI_CHAT_RULES.chatAutoSectionsPerDay).toBe(20);
+    expect(DESIGN).toContain('`chatAutoSectionsPerDay` = 20');
     expect(CONTRACT.docs.follow.rules.sectionsPerDay).toBe(WIKI_DOCS_FOLLOW.sectionsPerDay);
     expect(WIKI_DOCS_FOLLOW.sectionsPerDay).toBe(40);
     expect(DESIGN).toContain('每个 space 每天至多 40 节（`followSectionsPerDay`）');
@@ -204,8 +210,13 @@ describe('wiki chat contract', () => {
     expect(draft.description).toMatch(/Works only in a wiki chat\.$/u);
     expect(draft.description).toMatch(/never call a draft applied/u);
     for (const tool of [draft.tool, ...surface.tools]) expect(tool).not.toMatch(/accept|confirm|decide|delete|doc/u);
-    // notTools is the sentence it was: no tool accepts, confirms, decides, hard-deletes or overwrites a page.
-    expect(surface.notTools).toBe('No tool accepts, confirms, decides, hard-deletes or overwrites a page. Confirmation exists only on the owner channel.');
+    // notTools: no tool accepts, confirms, decides, hard-deletes or overwrites a page; since option A (design §7.2) an
+    // agent can have the server rewrite the sections it names from main, never choose their words.
+    expect(surface.notTools).toBe('No tool accepts, confirms, decides, hard-deletes or overwrites a page: an agent can have the server rewrite from main the sections it names (wiki_draft, chat.drafts.auto), and never chooses the words. Confirmation exists only on the owner channel.');
+    // What wiki_draft answers says whether the card was written when drafted, and why one was held (option A).
+    expect(surface.chat.draft.returns).toContain('{ status: draft, draftId, kind, rewrites, state, held }');
+    expect(CONTRACT.chat.drafts.auto).toContain('rules.chatAutoSectionsPerDay');
+    for (const held of WIKI_CHAT_REWRITE_HELD) expect(CONTRACT.chat.drafts.auto).toMatch(new RegExp(`\\b${held}\\b`, 'u'));
     // In a chat every op drafts, the two that apply at once elsewhere included; a note's corrects drafts its challenge.
     for (const op of WIKI_OPS) expect(surface.chat.propose).toContain(op);
     expect(surface.chat.propose).toMatch(/In every space and every review mode alike/u);
@@ -515,6 +526,7 @@ describe('wiki chat vectors', () => {
     const v = vector as {
       facts: WikiChatDraftFacts; kind: WikiChatDraftKind; ops: Array<WikiChatDraftOp & { decision?: string }>; undoable: boolean; state: string;
       label: string; title: string; actions: string[]; needsYou: boolean; note?: string | null;
+      held?: WikiChatRewriteHeld | null; heldLine?: string | null;
     };
     const state = wikiChatDraftState(v.facts);
     expect(state).toBe(v.state);
@@ -525,6 +537,10 @@ describe('wiki chat vectors', () => {
     expect(wikiChatCardNeedsYou(card)).toBe(v.needsYou);
     // The line an applied plan card that can no longer be undone carries (C17); every other card carries none of it.
     expect(wikiChatPlanMovedNote(card)).toBe(v.note ?? null);
+    // The line a rewrite card held for a press carries (design §7.2, option A); a card not held carries none.
+    expect(wikiChatHeldLine(v.held ?? null)).toBe(v.heldLine ?? null);
+    // Written without a press is never confirmed by the owner.
+    if (state === 'rewritten') expect(wikiChatCardTitle(state, v.label)).not.toMatch(/Confirmed by you/u);
   });
 
   it.each(cases('results'))('result: %s', (_name, vector) => {

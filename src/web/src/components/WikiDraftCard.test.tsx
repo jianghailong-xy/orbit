@@ -265,12 +265,12 @@ describe('a card in each state the server reads (design §7.3)', () => {
     expect(!!document.querySelector('.wk-draft-kv')).toBe(open);
   });
 
-  it('draws a rewrite card with Rewrite, and a plan card with Apply & rebuild and Open in Plan', async () => {
+  it('draws a rewrite card held for a press with Apply (D7), and a plan card with Apply & rebuild and Open in Plan', async () => {
     await show(draft({ kind: 'rewrite', label: 'Rewrite from main', ops: [], similar: [], rewrites: [REWRITES[0]!] }));
     expect(text('.wk-draft-k')).toBe('Draft · Rewrite from main');
     expect(text('.wk-draft-ti')).toBe('3.1 §3 Turn delivery and inbox claims');
-    expect(buttons()).toEqual(['Rewrite', 'Discard']);
-    await press('Rewrite');
+    expect(buttons()).toEqual(['Apply', 'Discard']);
+    await press('Apply');
     expect(pressed()).toEqual(['apply']);
 
     await show(draft({ kind: 'plan', label: 'Plan change', ops: [], similar: [], rewrites: [] }));

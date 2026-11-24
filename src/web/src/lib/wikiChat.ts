@@ -818,6 +818,7 @@ const STATE_TONE: Record<WikiChatDraftView['state'], WikiChatTone> = {
   replaced: 'grey',
   changed: 'amber',
   applied: 'ok',
+  rewritten: 'ok',
   discarded: 'grey',
   not_applied: 'grey',
   undone: 'grey',
