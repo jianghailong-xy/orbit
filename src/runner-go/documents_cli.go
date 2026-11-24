@@ -96,9 +96,12 @@ func runDocumentsCLI(spec cliCapabilitySpec, args []string, out io.Writer) error
 		cursor = fs.String("cursor", "", "nextCursor from the previous page")
 	}
 	var deleteExtra, wait *bool
+	var syncID *string
 	if spec.Tool == "documents_sync" {
 		deleteExtra = fs.Bool("delete", false, "move Documents files the directory no longer has to Trash")
 		wait = fs.Bool("wait", false, "run the sync in the foreground")
+		// The record documents_sync opened for this job before starting it; not for people.
+		syncID = fs.String("sync-id", "", "the sync record to report into")
 	}
 	positionals, err := parseInterspersed(fs, args)
 	if err != nil {
@@ -108,7 +111,7 @@ func runDocumentsCLI(spec cliCapabilitySpec, args []string, out io.Writer) error
 		if len(positionals) != 2 {
 			return fmt.Errorf("usage: %s", spec.Usage)
 		}
-		return runDocumentsSyncCLI(positionals[0], positionals[1], *deleteExtra, *wait, *jsonOut, out)
+		return runDocumentsSyncCLI(positionals[0], positionals[1], *deleteExtra, *wait, *syncID, *jsonOut, out)
 	}
 	toolArgs := map[string]interface{}{}
 	switch spec.Tool {
@@ -149,10 +152,11 @@ func runDocumentsCLI(spec cliCapabilitySpec, args []string, out io.Writer) error
 // runDocumentsSyncCLI is `orbit documents sync`: without --wait it starts the background job and prints its receipt; with
 // it, it syncs here, printing a progress line every few seconds and the summary last. A signal ends it as STOPPED, which
 // the owner's tray shows.
-func runDocumentsSyncCLI(localDir, dest string, deleteExtra, wait, jsonOut bool, out io.Writer) error {
+func runDocumentsSyncCLI(localDir, dest string, deleteExtra, wait bool, syncID string, jsonOut bool, out io.Writer) error {
 	sessionID := strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID"))
 	if !wait {
-		raw, err := startDocumentsSyncJob(sessionID, localDir, dest, deleteExtra)
+		t, _ := cliTransport() // without one, the job opens its own record
+		raw, err := startDocumentsSyncJob(t, sessionID, localDir, dest, deleteExtra)
 		if err != nil {
 			return err
 		}
@@ -172,7 +176,7 @@ func runDocumentsSyncCLI(localDir, dest string, deleteExtra, wait, jsonOut bool,
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	summary, err := runDocumentsSync(ctx, t, documentsSyncOptions{sessionID: sessionID, source: source, dest: dest, deleteExtra: deleteExtra, out: out})
+	summary, err := runDocumentsSync(ctx, t, documentsSyncOptions{sessionID: sessionID, source: source, dest: dest, deleteExtra: deleteExtra, syncID: strings.TrimSpace(syncID), out: out})
 	raw, _ := json.Marshal(summary)
 	if writeErr := writeCLIRawJSON(out, raw, true); writeErr != nil {
 		return writeErr
