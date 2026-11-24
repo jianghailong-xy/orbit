@@ -2113,6 +2113,8 @@ type RunFinalizeRequest struct {
 	// WorktreeBranch: the worktree's actual HEAD branch at completion (see SessionLiveState); lets
 	// the server flag / offer "Adopt" for a session that finished on an in-worktree checkout -b branch.
 	WorktreeBranch string `json:"worktreeBranch,omitempty"`
+	// WorktreeDetached reports a verified detached HEAD without supplying an empty branch name.
+	WorktreeDetached bool `json:"worktreeDetached,omitempty"`
 	// BranchSha is the tip of the effective branch once finalizeWorktree has committed what the
 	// session left (see SessionLiveState.BranchSha): the commit a finished task's work is frozen as
 	// (contract §10.5 O-L4). Empty on a park checkpoint (a CANCELLED end), which the next resume
@@ -2121,8 +2123,8 @@ type RunFinalizeRequest struct {
 	// BranchCommits are the branch's commits from its base to BranchSha, newest first (branch_commits.go); null
 	// when the runner could not read them, which leaves the stored list as it was.
 	BranchCommits []BranchCommit `json:"branchCommits"`
-	// CaptureError is why the session's work did NOT reach its branch: finalizeWorktree could not
-	// stage or could not commit. Empty on every finalize that captured the work.
+	// CaptureError is why the session's work did not reach its branch, including a save on a
+	// detached HEAD. Empty on every finalize that captured the work on its branch.
 	//
 	// Without it the two outcomes are the same bytes on the wire — a run that changed nothing and a
 	// run whose whole output is still sitting uncommitted both send no changedFiles — and the only
@@ -2130,9 +2132,7 @@ type RunFinalizeRequest struct {
 	// an acceptance command that passed, with not one commit on its branch, and nothing anywhere
 	// says so.
 	CaptureError string `json:"captureError,omitempty"`
-	// WorktreeDirty is the checkout's measured `git status` after finalization, not the assumption
-	// that finalizing made it clean. False for a captured session; true means the checkout still
-	// holds the only copy of something, which is what re-opens the Commit door on the ended session.
+	// WorktreeDirty reports pending changes or detached work that still needs to reach the branch.
 	// No omitempty: a clean checkout has to say false, or a server reads the field as unreported.
 	WorktreeDirty bool `json:"worktreeDirty"`
 }
