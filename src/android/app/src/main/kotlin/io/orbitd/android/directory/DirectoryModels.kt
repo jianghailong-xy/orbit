@@ -19,7 +19,9 @@ import kotlinx.serialization.json.intOrNull
  * remote the workspace records, null with none and from a server that does not send it: what makes a wiki of it (mock 41). */
 @Serializable
 data class DirectoryWorkspace(val id: String, val name: String, val runnerId: String? = null,
-    val enabled: Boolean = true, val position: Int? = null, val createdAt: String? = null, val repoUrl: String? = null)
+    val enabled: Boolean = true, val position: Int? = null, val createdAt: String? = null, val repoUrl: String? = null,
+    /** `PULL_REQUEST` or `PUSH_AS_ME`; null with none chosen and from a server that does not send it. */
+    val landingMode: String? = null)
 @Serializable
 data class DirectoryRunner(val id: String, val name: String, val status: String? = null, val online: Boolean? = null,
     val displayName: String? = null, val lastHeartbeatAt: String? = null,

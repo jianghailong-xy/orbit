@@ -447,7 +447,8 @@ public enum ProjectPage {
                         outputMovedAt: inFlight.outputMovedAt, typicalMs: inFlight.typicalMs,
                         livenessWord: inFlight.liveness,
                         firstStartedAt: firstStartedAt(view, jobId: inFlight.jobId),
-                        blockingReason: inFlight.blockingReason)
+                        blockingReason: inFlight.blockingReason,
+                        heldOnPullRequest: inFlight.state == "PULL_REQUEST")
     }
 
     /// When the attempt behind a job FIRST started: the `landTask` row's own `startedAt` is the
@@ -529,7 +530,8 @@ public enum ProjectPage {
                            check: job.check, stepStartedAt: job.stepStartedAt, outputMovedAt: job.outputMovedAt,
                            typicalMs: job.typicalMs, livenessWord: job.liveness,
                            firstStartedAt: firstStartedAt(view, jobId: job.jobId),
-                           blockingReason: job.blockingReason)
+                           blockingReason: job.blockingReason,
+                           heldOnPullRequest: job.state == "PULL_REQUEST")
             return LandingJobLine(
                 jobId: job.jobId, taskId: job.taskId, line: line,
                 detail: landingJobDetail(job, main: main), retryable: job.retryable,
@@ -637,7 +639,8 @@ public enum ProjectPage {
                                  stepStartedAt: String? = nil, outputMovedAt: String? = nil,
                                  typicalMs: Int? = nil, livenessWord: String? = nil,
                                  firstStartedAt: String? = nil,
-                                 blockingReason: LandTaskBlockingReason? = nil) -> LandingLine {
+                                 blockingReason: LandTaskBlockingReason? = nil,
+                                 heldOnPullRequest: Bool = false) -> LandingLine {
         let lockWait = localLockWait(running: running, liveness: livenessWord, blockingReason: blockingReason)
         // A queued job's heartbeat and phase can be an earlier claim's: only a running job's count.
         let reported = heartbeatAt.flatMap(RelativeTime.parse)
@@ -669,7 +672,9 @@ public enum ProjectPage {
                            state: unavailable ? "Update unavailable"
                                : silent ? landingNoReport
                                    : running && lockWait != nil ? landingWaiting
-                                       : running ? (integrationPhaseWords(main)[phase ?? ""] ?? "running") : "queued",
+                                       : running ? (integrationPhaseWords(main)[phase ?? ""] ?? "running")
+                                           // Held on its pull request, not queued: GitHub is what it waits for (design §4.2).
+                                           : heldOnPullRequest ? "waiting for GitHub" : "queued",
                            clock: v6?.clock ?? landingClock(elapsed), word: word,
                            clockLabel: running ? "Elapsed" : "Queued for",
                            updated: report, wait: wait, liveness: v6)
@@ -814,6 +819,9 @@ public enum ProjectPage {
         /// says no "Nothing to do" (board v4 04 draws no body under that head). Read off
         /// `inFlight`, so a server that lists no jobs says it too.
         public let mergeJob: Bool
+        /// The pull request the landing waits on or ended in (design §8), read off `inFlight` while the card
+        /// holds one job; nil from a server that predates it.
+        public var pullRequest: LandingPullRequestView? = nil
 
         /// The head's two slots (`landingHead`) — the card's head is the landing row's: the same
         /// word, the same clock, the same state and freshness, in the merged row's anatomy.
@@ -866,7 +874,8 @@ public enum ProjectPage {
             skipNote: several ? nil
                 : lead?.skipCheck == "STOPPING" ? landingSkipCheckStopping
                 : lead?.skipCheck == "SKIPPED" ? landingSkipCheckSkipped : nil,
-            mergeJob: !several && ProjectMergeCard.isMergeJob(view.inFlight))
+            mergeJob: !several && ProjectMergeCard.isMergeJob(view.inFlight),
+            pullRequest: several ? nil : view.inFlight?.pullRequest)
     }
 
     /// The branch a job lands on, short, from the project's own landings — the field the task page's

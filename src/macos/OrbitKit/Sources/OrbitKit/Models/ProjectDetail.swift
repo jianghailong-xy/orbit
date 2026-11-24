@@ -438,6 +438,8 @@ public struct ProjectIntegrationInFlight: Codable, Equatable, Sendable {
     public let liveness: String?
     /// Why a queued job is not claimed, or why a claimed one waits on the runner's local lock.
     public let blockingReason: LandTaskBlockingReason?
+    /// The pull request this landing waits on or ended in (design §8); nil from a server that predates it.
+    public let pullRequest: LandingPullRequestView?
 
     public init(taskTitle: String? = nil, state: String, startedAt: String,
                 kind: String? = nil, phase: String? = nil, heartbeatAt: String? = nil,
@@ -446,7 +448,9 @@ public struct ProjectIntegrationInFlight: Codable, Equatable, Sendable {
                 claim: Int? = nil, round: Int? = nil, check: ProjectIntegrationCheck? = nil,
                 stepStartedAt: String? = nil, outputMovedAt: String? = nil,
                 progressProtocol: String? = nil, typicalMs: Int? = nil, liveness: String? = nil,
-                blockingReason: LandTaskBlockingReason? = nil) {
+                blockingReason: LandTaskBlockingReason? = nil,
+                pullRequest: LandingPullRequestView? = nil) {
+        self.pullRequest = pullRequest
         self.taskTitle = taskTitle
         self.kind = kind
         self.phase = phase
@@ -495,6 +499,7 @@ public struct ProjectIntegrationInFlight: Codable, Equatable, Sendable {
         typicalMs = try? c.decodeIfPresent(Int.self, forKey: .typicalMs)
         liveness = try? c.decodeIfPresent(String.self, forKey: .liveness)
         blockingReason = try? c.decodeIfPresent(LandTaskBlockingReason.self, forKey: .blockingReason)
+        pullRequest = try? c.decodeIfPresent(LandingPullRequestView.self, forKey: .pullRequest)
     }
 }
 
@@ -587,6 +592,8 @@ public struct LandTaskIntegrationView: Codable, Equatable, Sendable {
     public let liveness: String?
     /// The runner holding the claim, by name — sent beside `liveness` by the same servers.
     public let runnerName: String?
+    /// The pull request this landing waits on or ended in (design §8); nil from a server that predates it.
+    public var pullRequest: LandingPullRequestView? = nil
 
     public init(jobId: String, state: String, phase: String? = nil, targetRef: String,
                 blockingReason: LandTaskBlockingReason? = nil, startedAt: String? = nil,
@@ -633,6 +640,7 @@ public struct LandTaskIntegrationView: Codable, Equatable, Sendable {
         waitMs = try? c.decodeIfPresent(Int.self, forKey: .waitMs)
         liveness = try? c.decodeIfPresent(String.self, forKey: .liveness)
         runnerName = try? c.decodeIfPresent(String.self, forKey: .runnerName)
+        pullRequest = try? c.decodeIfPresent(LandingPullRequestView.self, forKey: .pullRequest)
     }
 }
 
