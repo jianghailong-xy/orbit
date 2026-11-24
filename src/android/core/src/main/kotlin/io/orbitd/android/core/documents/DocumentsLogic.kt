@@ -25,13 +25,13 @@ object DocumentsLogic {
 
     // ---- words
 
-    const val TITLE = "Documents"
+    const val TITLE = "Drive"
     const val TRASH = "Trash"
     const val STORAGE = "Storage"
     const val UPLOAD = "Upload"
     const val UPLOADS = "Uploads"
     const val NEW_FOLDER = "New folder"
-    const val SEARCH = "Search Documents"
+    const val SEARCH = "Search Drive"
     /** Rule 6: an agent wrote it and its session could not be checked — no link, since there is none to follow. */
     const val UNCHECKED_AGENT = "An agent on Orbit Cloud"
     const val YOU = "You"
@@ -162,7 +162,7 @@ object DocumentsLogic {
 
     /** A search result's folder: "Documents", "Documents/a/b". */
     fun searchFolder(folderPath: String?): String =
-        if (folderPath.isNullOrEmpty() || folderPath == "/") TITLE else "Documents" + (if (folderPath.startsWith("/")) folderPath else "/$folderPath")
+        if (folderPath.isNullOrEmpty() || folderPath == "/") TITLE else "Drive" + (if (folderPath.startsWith("/")) folderPath else "/$folderPath")
 
     /** A folder row's line: "14 items · today 14:02", or the time alone until its count is read. */
     fun folderLine(entry: DocumentsEntry, count: Int?, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String =
@@ -429,7 +429,7 @@ object DocumentsLogic {
 
     /** The legend under the bar: "Documents 10.9 GB", "Trash 1.3 GB", "Other 6.2 GB". */
     fun storageLegend(usage: DocumentsUsage): List<String> = listOf(
-        "Documents ${storageSize(maxOf(0L, usage.driveBytes - usage.trashBytes))}",
+        "Drive ${storageSize(maxOf(0L, usage.driveBytes - usage.trashBytes))}",
         "Trash ${storageSize(usage.trashBytes)}",
         "Other ${storageSize(usage.otherBytes)}")
 
@@ -439,7 +439,7 @@ object DocumentsLogic {
         val quota = usage.storeQuotaBytes ?: return null
         if (usage.nearQuota != true || quota <= 0) return null
         if (used >= quota) return "The drive's storage is full. Ask the operator to raise the limit."
-        return "Documents storage is ${used * 100 / quota}% full. Uploads stop at 100%. Ask the operator to raise the limit."
+        return "Drive storage is ${used * 100 / quota}% full. Uploads stop at 100%. Ask the operator to raise the limit."
     }
 
     const val OTHER_STORAGE = "Other storage"
@@ -617,9 +617,9 @@ object DocumentsLogic {
 
     // ---- the background-upload notification (board frame 6)
 
-    const val NOTIFICATION_APP = "Orbit · Documents"
-    const val CHANNEL_NAME = "Documents uploads"
-    const val CHANNEL_DESCRIPTION = "Shows your uploads to Documents while they run in the background."
+    const val NOTIFICATION_APP = "Orbit · Drive"
+    const val CHANNEL_NAME = "Drive uploads"
+    const val CHANNEL_DESCRIPTION = "Shows your uploads to Drive while they run in the background."
 
     /** What the one ongoing notification says, or null when it should go (nothing is going up or waiting). */
     data class Notice(val title: String, val text: String, val progress: Double?, val paused: Boolean)
@@ -633,7 +633,7 @@ object DocumentsLogic {
             val lost = live.any { it.error == DocumentsUploadQueue.CONNECTION_LOST }
             val title = if (live.size == 1) "${first.name} is paused" else "${live.size} uploads are paused"
             val kept = "${formatSize(live.sumOf { it.sentBytes })} of ${formatSize(live.sumOf { it.size })} is kept"
-            val text = if (lost) "No connection. $kept; it goes on from there when you're back online." else "$kept. Open Documents to resume."
+            val text = if (lost) "No connection. $kept; it goes on from there when you're back online." else "$kept. Open Drive to resume."
             return Notice(title, text, null, true)
         }
         // This run's batch: everything not yet cleared, so the count reads "2 of 3" while the third waits.
