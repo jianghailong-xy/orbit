@@ -46,6 +46,10 @@ import { DRIVE_DOWNLOAD_LINK_NOT_FOUND, DriveDownloadLinks } from './drive-downl
 import { DriveUploadsService } from './drive-uploads.service';
 import { DriveController, DriveDownloadController } from './drive.controller';
 import { DriveService, OWNER_WRITER } from './drive.service';
+import { DriveSyncsService } from './drive-syncs.service';
+
+// Drive is off unless switched on (drive-switch.ts); this harness mounts its controller, so it switches it on.
+process.env.ORBIT_DOCUMENTS_ENABLED = 'true';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -78,7 +82,7 @@ test('Documents drive: restore one item out of Trash, and the minted download UR
       { provide: ConfigService, useValue: new ConfigService({ JWT_SECRET: `secret-${RUN}` }) },
       { provide: PrismaService, useValue: db },
       { provide: FilesService, useValue: files },
-      DriveService, DriveChunksService, DriveUploadsService, DriveContentService, DriveDownloadLinks,
+      DriveService, DriveChunksService, DriveUploadsService, DriveContentService, DriveDownloadLinks, DriveSyncsService,
     ],
   })
   class DriveHarness {}

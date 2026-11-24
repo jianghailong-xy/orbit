@@ -49,6 +49,10 @@ import { DriveDownloadLinks } from './drive-download-links';
 import { DriveUploadsService } from './drive-uploads.service';
 import { DriveController, DriveDownloadController } from './drive.controller';
 import { DriveService } from './drive.service';
+import { DriveSyncsService } from './drive-syncs.service';
+
+// Drive is off unless switched on (drive-switch.ts); this harness mounts its controller, so it switches it on.
+process.env.ORBIT_DOCUMENTS_ENABLED = 'true';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -84,7 +88,7 @@ test('Documents drive: resumable upload and ranged download', { skip: !URL, conc
       { provide: FilesService, useValue: files },
       // The controller's download-link route needs its signer; this spec does not call it.
       { provide: ConfigService, useValue: new ConfigService({ JWT_SECRET: `secret-${RUN}` }) },
-      DriveService, DriveChunksService, DriveUploadsService, DriveContentService, DriveDownloadLinks,
+      DriveService, DriveChunksService, DriveUploadsService, DriveContentService, DriveDownloadLinks, DriveSyncsService,
     ],
   })
   class DriveHarness {}

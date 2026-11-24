@@ -48,6 +48,7 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { issueDriveMountCredential, fenceManagedInstance } from './drive-mount-credential';
 import { DriveService } from './drive.service';
+import { DriveEnabledGuard } from './drive-switch';
 import { RunnerDriveController } from './runner-drive.controller';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -290,7 +291,7 @@ test('Documents drive: the runner drive door — drive tools by path, no Trash o
       .map((name) => String(Reflect.getMetadata(PATH_METADATA, proto[name] as object)));
     assert.ok(routes.length >= 15, `the door's routes: ${routes.join(', ')}`);
     for (const route of routes) assert.doesNotMatch(route, /trash|share|restore|purge/i, route);
-    assert.deepEqual(Reflect.getMetadata(GUARDS_METADATA, RunnerDriveController), [RunnerAuthGuard]);
+    assert.deepEqual(Reflect.getMetadata(GUARDS_METADATA, RunnerDriveController), [RunnerAuthGuard, DriveEnabledGuard]);
 
     for (const [method, route] of [['GET', '/trash'], ['POST', '/trash/restore'], ['POST', '/share'], ['POST', '/share-links']]) {
       const reply = await as(aliceRunner.token, method, route, {});
