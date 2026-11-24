@@ -542,12 +542,21 @@ class TypeReader {
 
   private postfix(): TypeNode {
     let node = this.primary();
-    while (this.peek() === '[' && this.peek(1) === ']') {
-      this.take();
-      this.take();
-      node = { kind: 'array', of: node };
+    for (;;) {
+      if (this.peek() === '[' && this.peek(1) === ']') {
+        this.take();
+        this.take();
+        node = { kind: 'array', of: node };
+      } else if (this.peek() === '[' && /^['"]/.test(this.peek(1) ?? '') && this.peek(2) === ']') {
+        // An indexed access by one literal key, `Spec['name']`: one member of a named type, read as a leaf.
+        this.take();
+        this.take();
+        this.take();
+        node = { kind: 'leaf', text: 'indexed' };
+      } else {
+        return node;
+      }
     }
-    return node;
   }
 
   private primary(): TypeNode {

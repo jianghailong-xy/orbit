@@ -760,7 +760,7 @@ public final class APIClient: @unchecked Sendable {
         try await delete("access-tokens/\(id)")
     }
 
-    // MARK: terminals — the approve card and Settings → Terminals (docs/terminal-session-design.md)
+    // MARK: terminals — the approve card and the machine page's Terminals (docs/terminal-session-design.md)
 
     /// The terminal sign-ins waiting for this owner. Web parity: `terminalRequestsQuery`.
     public func terminalRequests() async throws -> [TerminalRequest] {
@@ -1085,6 +1085,11 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("owner-requests/\(id)/create-wiki")
     }
 
+    /// A CHANGE card's Apply: writes the runner's Max Concurrent and settles the card DONE.
+    public func applyOwnerRequestChange(_ id: String, _ body: OwnerRequestApplyBody) async throws -> OwnerRequest {
+        try await post("owner-requests/\(id)/apply", body: body)
+    }
+
     /// A SETTINGS_CHANGE card's Save changes (design §5.2): writes the proposed values and settles the card DONE. A value
     /// that moved since is refused 409 SETTINGS_STALE and nothing is written.
     public func applyOwnerRequestSettings(_ id: String) async throws -> OwnerRequest {
@@ -1288,6 +1293,24 @@ public final class APIClient: @unchecked Sendable {
                                       _ decision: ProjectCrossingDecision) async throws {
         try await postRaw("projects/\(projectID)/handoffs/\(ProjectCrossings.doorID(crossing))/decision",
                           body: ProjectCrossings.request(crossing, decision))
+    }
+
+    /// The task moves this conversation draws, as batches (`GET /sessions/:id/task-moves`): those
+    /// it asked for and those into a project it coordinates — every waiting batch, then the latest
+    /// answered ones. A session with none answers `[]`.
+    public func sessionTaskMoves(sessionID: String) async throws -> [TaskMoveBatch] {
+        try await get("sessions/\(sessionID)/task-moves")
+    }
+
+    /// Answer a whole batch of task moves with one press. Every move travels with the crossing key
+    /// the card read, and if any one names another crossing or is no longer waiting the server
+    /// writes nothing and refuses the batch (`APPROVAL_TARGET_MISMATCH` /
+    /// `HANDOFF_ALREADY_ANSWERED`). Answers the batch's rows as they stand now.
+    public func decideTaskMoveBatch(sessionID: String, moves: [ProjectCrossing],
+                                    _ decision: ProjectCrossingDecision) async throws -> [ProjectCrossing] {
+        let data = try await postRaw("sessions/\(sessionID)/task-moves/decision",
+                                     body: TaskMoves.answer(moves, decision))
+        return try decoder.decode([ProjectCrossing].self, from: data)
     }
 
     // MARK: projects — the index and one project's page
@@ -2226,6 +2249,16 @@ public final class APIClient: @unchecked Sendable {
         try await delete("runners/\(id)/accounts/\(engine.rawValue)/\(account)")
     }
 
+    /// Sign the machine's own Default login out (docs/default-sign-out-design.md): the runner deletes the
+    /// credential and nothing else. Answered `pending`, and the runner's word comes back in the list's
+    /// `accountRemove`; a runner refuses while sessions run on Default unless `force` — the person
+    /// confirmed after that refusal named them.
+    public func signOutRunnerDefault(_ id: String, engine: LoginEngine,
+                                     force: Bool = false) async throws -> RunnerAccountRemoveState {
+        try await post("runners/\(id)/accounts/\(engine.rawValue)/default/sign-out",
+                       body: SignOutDefaultRequest(force: force))
+    }
+
     /// Make an added Claude Code account the Default: the runner swaps its login with ~/.claude after
     /// any turn in progress on either account ends (docs/claude-default-swap-contract.md).
     public func setDefaultRunnerAccount(_ id: String, engine: LoginEngine,
@@ -2252,6 +2285,22 @@ public final class APIClient: @unchecked Sendable {
     public func fixRunnerAttention(_ id: String, kind: RunnerAttentionFixKind,
                                    body: RunnerAttentionFixRequest) async throws -> RunnerAttentionFixResult {
         try await post("runners/\(id)/attention/\(kind.rawValue)/fix", body: body)
+    }
+
+    /// Blocked accounts (`GET /account-health`): cool-downs and suspect accounts are not in it.
+    public func accountHealth() async throws -> [AccountHealthBlock] {
+        let answer: AccountHealthAnswer = try await get("account-health")
+        return answer.blocks ?? []
+    }
+
+    /// Check again: the owner says the account is fixed. A 404 means it was already cleared, which is
+    /// the state wanted, so it is not a failure.
+    public func checkAccountAgain(_ id: String) async throws {
+        do {
+            try await postRaw("account-health/\(id)/check", body: Optional<Empty>.none)
+        } catch APIError.http(let status, _) where status == 404 {
+            return
+        }
     }
 
     public func pauseRunnerAccount(_ id: String, engine: LoginEngine, account: String,
@@ -2614,6 +2663,182 @@ public final class APIClient: @unchecked Sendable {
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return false }
         return object["code"] as? String == taskRunRequestInProgress
+    }
+
+    // MARK: Documents (docs/documents-drive-technical-design.md §4.1, apiserver documents.controller.ts)
+
+    /// Every page of a folder (the root when `parentID` is nil): a folder is read whole, a thousand names a page.
+    public func documentsFolder(_ parentID: String?) async throws -> DocumentsListing {
+        var cursor: String?
+        var listing: DocumentsListing?
+        repeat {
+            var query = [URLQueryItem(name: "limit", value: "1000")]
+            if let parentID { query.append(URLQueryItem(name: "parentId", value: parentID)) }
+            if let cursor { query.append(URLQueryItem(name: "cursor", value: cursor)) }
+            let page: DocumentsListing = try await get("documents/entries", query: query)
+            listing = listing.map { DocumentsListing(folder: page.folder, entries: $0.entries + page.entries,
+                                                     nextCursor: page.nextCursor) } ?? page
+            cursor = page.nextCursor
+        } while cursor != nil
+        return listing!
+    }
+
+    /// Live entries anywhere in the drive whose name contains `q`, each with its folder (the first page, by name).
+    public func documentsSearch(_ q: String) async throws -> DocumentsSearchResult {
+        try await getCancellable("documents/search", query: [URLQueryItem(name: "q", value: q),
+                                                             URLQueryItem(name: "limit", value: "100")])
+    }
+
+    /// One entry, with its `path`.
+    public func documentsEntry(_ id: String) async throws -> DocumentsEntry { try await get("documents/entries/\(id)") }
+
+    public func documentsVersions(_ fileID: String) async throws -> DocumentsVersions {
+        try await get("documents/entries/\(fileID)/versions")
+    }
+
+    /// A new folder; a name already taken gets a suffix.
+    public func documentsCreateFolder(parentID: String?, name: String) async throws -> DocumentsEntry {
+        try await post("documents/folders", body: DocumentsFolderBody(parentId: parentID, name: name))
+    }
+
+    /// Rename; a taken name is refused, never overwritten.
+    public func documentsRename(_ id: String, to name: String) async throws -> DocumentsEntry {
+        try await patch("documents/entries/\(id)", body: DocumentsEntryPatch(name: name, parentId: nil))
+    }
+
+    public func documentsMove(_ id: String, to parentID: String) async throws -> DocumentsEntry {
+        try await patch("documents/entries/\(id)", body: DocumentsEntryPatch(name: nil, parentId: parentID))
+    }
+
+    /// Move to Trash; answers the group, which Undo restores.
+    public func documentsMoveToTrash(_ id: String) async throws -> DocumentsTrashed {
+        try await delete("documents/entries/\(id)")
+    }
+
+    /// Every group in Trash, newest first.
+    public func documentsTrash() async throws -> [DocumentsTrashGroup] {
+        var cursor: String?
+        var groups: [DocumentsTrashGroup] = []
+        repeat {
+            var query = [URLQueryItem(name: "limit", value: "200")]
+            if let cursor { query.append(URLQueryItem(name: "cursor", value: cursor)) }
+            let page: DocumentsTrashPage = try await get("documents/trash", query: query)
+            groups += page.groups
+            cursor = page.nextCursor
+        } while cursor != nil
+        return groups
+    }
+
+    @discardableResult
+    public func documentsRestoreGroup(_ groupID: String) async throws -> DocumentsRestored {
+        try await postEmpty("documents/trash/groups/\(groupID)/restore")
+    }
+
+    /// One item of a group back, and what hangs under it, leaving the rest in Trash (rule 3).
+    @discardableResult
+    public func documentsRestoreItem(groupID: String, entryID: String) async throws -> DocumentsRestored {
+        try await postEmpty("documents/trash/groups/\(groupID)/items/\(entryID)/restore")
+    }
+
+    /// Delete a group for good.
+    public func documentsDeleteGroup(_ groupID: String) async throws {
+        try await deleteRaw("documents/trash/groups/\(groupID)")
+    }
+
+    public func documentsEmptyTrash() async throws { try await deleteRaw("documents/trash") }
+
+    /// A replaced version back as the file's current one, or as a copy beside it.
+    public func documentsRestoreVersion(_ versionID: String, asCopy: Bool) async throws -> DocumentsEntry {
+        try await post("documents/versions/\(versionID)/restore", body: ["as": asCopy ? "COPY" : "CURRENT"])
+    }
+
+    /// The secret scan before sharing (§9): warns, never blocks.
+    public func documentsShareCheck(_ fileID: String) async throws -> DocumentsShareCheck {
+        try await postEmpty("documents/entries/\(fileID)/share-check")
+    }
+
+    /// Share the file's current version, or move its link there. Only the owner's login reaches it.
+    public func documentsShare(_ fileID: String) async throws -> DocumentsShareAnswer {
+        try await post("share-links", body: ["kind": "DRIVE_FILE", "driveEntryId": fileID])
+    }
+
+    /// The drive files' links that have not ended, asked for by name.
+    public func documentsShareLinks() async throws -> [DocumentsShareLink] {
+        let list: DocumentsShareLinkList = try await get("share-links", query: [URLQueryItem(name: "kind", value: "DRIVE_FILE")])
+        return list.links.filter { $0.kind == "DRIVE_FILE" && $0.state != "ENDED" }
+    }
+
+    public func documentsStopSharing(_ linkID: String) async throws { try await deleteRaw("share-links/\(linkID)") }
+
+    /// The drive's share of the account and the rest (Storage).
+    public func documentsUsage() async throws -> DocumentsUsage { try await get("documents/usage") }
+
+    /// What the account keeps besides, by project, task and week (Storage's other lists).
+    public func storageUsage() async throws -> StorageUsage { try await get("attachments/usage") }
+
+    /// Agents' directory syncs: running ones and those ended in the last day.
+    public func documentsSyncs() async throws -> [DocumentsSync] {
+        let list: DocumentsSyncList = try await get("documents/syncs")
+        return list.syncs
+    }
+
+    /// The first `maxBytes` of a file (or one version) for a preview, or all of it when nil. Never a download.
+    public func documentsContent(_ id: String, version: Bool = false, maxBytes: Int? = nil) async throws -> Data {
+        var req = try makeRequest("documents/\(version ? "versions" : "entries")/\(id)/content", method: "GET",
+                                  body: Optional<Empty>.none)
+        if let maxBytes { req.setValue("bytes=0-\(maxBytes - 1)", forHTTPHeaderField: "Range") }
+        return try await send(req)
+    }
+
+    /// A short-lived URL that downloads the current version (or `versionID`) with no login header, so a download
+    /// streams to disk however large the file is (D12).
+    public func documentsDownloadURL(_ fileID: String, versionID: String? = nil) async throws -> URL {
+        let link: DocumentsDownloadLink = try await post("documents/entries/\(fileID)/download-link",
+                                                         body: DocumentsDownloadBody(versionId: versionID))
+        let base = baseURL.absoluteString.hasSuffix("/") ? String(baseURL.absoluteString.dropLast()) : baseURL.absoluteString
+        guard let url = URL(string: base + (link.path.hasPrefix("/") ? link.path : "/" + link.path)) else {
+            throw URLError(.badURL)
+        }
+        return url
+    }
+
+    // Resumable uploads: open, send chunks of at most `chunkSize`, complete.
+
+    public func documentsOpenUpload(parentID: String?, name: String, size: Int, relativePath: String?,
+                                    dropRootID: String?) async throws -> DocumentsUploadOpened {
+        try await post("documents/uploads", body: DocumentsUploadBody(parentId: parentID, name: name, size: size,
+                                                                       relativePath: relativePath, dropRootId: dropRootID))
+    }
+
+    public func documentsUploadStatus(_ uploadID: String) async throws -> DocumentsUploadStatus {
+        try await get("documents/uploads/\(uploadID)")
+    }
+
+    /// One chunk as the raw body, with its sha256; sent again, it replaces.
+    public func documentsPutChunk(uploadID: String, index: Int, bytes: Data, sha256: String) async throws {
+        var req = try makeRequest("documents/uploads/\(uploadID)/chunks/\(index)", method: "PUT", body: Optional<Empty>.none)
+        req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        req.setValue(sha256, forHTTPHeaderField: "X-Orbit-Chunk-Sha256")
+        req.httpBody = bytes
+        _ = try await send(req, cancellationAware: true)
+    }
+
+    /// Create the file; sent again after it applied, it answers the same file.
+    public func documentsCompleteUpload(_ uploadID: String) async throws -> DocumentsEntry {
+        try await postEmpty("documents/uploads/\(uploadID)/complete")
+    }
+
+    public func documentsAbandonUpload(_ uploadID: String) async throws { try await deleteRaw("documents/uploads/\(uploadID)") }
+
+    private struct DocumentsFolderBody: Encodable { let parentId: String?; let name: String }
+    private struct DocumentsEntryPatch: Encodable { let name: String?; let parentId: String? }
+    private struct DocumentsDownloadBody: Encodable { let versionId: String? }
+    private struct DocumentsUploadBody: Encodable {
+        let parentId: String?
+        let name: String
+        let size: Int
+        let relativePath: String?
+        let dropRootId: String?
     }
 
     private struct Empty: Codable {}

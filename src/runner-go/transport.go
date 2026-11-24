@@ -97,8 +97,12 @@ func init() {
 		integrationObserveCapabilityV1,
 		integrationProgressV2Capability,
 		promotionAutomaticLandCapabilityV1,
+		integrationPullRequestCapabilityV1,
+		sessionMergePullRequestCapabilityV1,
+		pushAsMeCapabilityV1,
 		codexAccountLoginCapabilityV1,
 		antigravityGoogleLoginCapabilityV1,
+		antigravityGoogleLoginMacOSCapabilityV1,
 		codexAccountRemoveCapabilityV1,
 		codexAccountMoveCapabilityV1,
 		claudeAccountLoginCapabilityV1,
@@ -138,7 +142,7 @@ func init() {
 		bgOwnerStopCapabilityV1,
 		bgOutputTailCapabilityV1,
 		overCapacityCapabilityV1,
-	}, cursorAccountCapabilities()...), declaredSteerCapabilities()...), ",")
+	}, append(cursorAccountCapabilities(), defaultSignOutCapabilities()...)...), declaredSteerCapabilities()...), ",")
 	// Where 0600 means something (secret_file_unix.go); a Windows runner is never handed a secret.
 	if secretFilesSupported {
 		runnerCapabilitiesV1 += "," + ownerSecretCapabilityV1
@@ -267,6 +271,9 @@ type Transport struct {
 	// noTakeoverBatch is set once the control plane has answered the batch takeover 404 or 405: it
 	// predates it, and every takeover from then on is one request per session, as before it.
 	noTakeoverBatch atomic.Bool
+	// releaseOffered is what the latest successful heartbeat answer said of the session-release protocol
+	// (session_release.go): false until one says it, and on the first that does not.
+	releaseOffered atomic.Bool
 	// observer hears about every request and card of the tool call it was set for (transport_observe.go).
 	observerMu sync.Mutex
 	observer   func(transportEvent)

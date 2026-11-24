@@ -12,6 +12,7 @@ import {
   type LandingBranches,
   type LandingServingTask,
 } from './project-criterion-landing';
+import { IN_FLIGHT_JOB_STATES } from './in-flight-job-states';
 
 /**
  * WHY a criterion is not on the upstream by a receipt of its own — one word per criterion, so a card
@@ -62,9 +63,9 @@ export const CRITERION_LANDING_REASONS = [
   'CODELESS',
 ] as const satisfies readonly CriterionLandingReason[];
 
-/** The integration jobs that move work towards the upstream, and the two states they move in. */
+/** The integration jobs that move work towards the upstream, and the states they move in. */
 export const LANDING_JOB_KINDS = ['LAND_TASK', 'CHECK_PROMOTION', 'LAND_PROMOTION'] as const;
-export const IN_FLIGHT_JOB_STATES = ['QUEUED', 'RUNNING'] as const;
+export { IN_FLIGHT_JOB_STATES };
 
 /** One landing or merge into the upstream that is queued or running, as the queue holds it. */
 export interface InFlightLandingJob {

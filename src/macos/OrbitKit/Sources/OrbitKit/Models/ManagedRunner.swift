@@ -30,16 +30,21 @@ public struct ManagedRunnerCapability: Decodable, Equatable, Sendable {
 /// Reading it allocates nothing on the server.
 public struct ServerCapabilities: Decodable, Equatable, Sendable {
     public let managedRunners: ManagedRunnerCapability?
+    /// Documents (the drive, `/documents`), the deployment switch ORBIT_DOCUMENTS_ENABLED. A server from before
+    /// the switch omits it; `DocumentsLogic.shown` reads that as on.
+    public let documents: DocumentsCapability?
 
-    public init(managedRunners: ManagedRunnerCapability?) {
+    public init(managedRunners: ManagedRunnerCapability?, documents: DocumentsCapability? = nil) {
         self.managedRunners = managedRunners
+        self.documents = documents
     }
 
-    private enum CodingKeys: String, CodingKey { case managedRunners }
+    private enum CodingKeys: String, CodingKey { case managedRunners, documents }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         managedRunners = try? values.decode(ManagedRunnerCapability.self, forKey: .managedRunners)
+        documents = try? values.decode(DocumentsCapability.self, forKey: .documents)
     }
 }
 
@@ -115,14 +120,17 @@ public struct ManagedRunnerStatus: Decodable, Equatable, Sendable {
     public let actions: ManagedRunnerActions
 }
 
-/// One build of the managed runner image: its source commit, and when it was built, if known.
+/// One build of the managed runner image: its source commit, and when it was built, if known. `version` is the
+/// release it was published for (`0.1.261-beta.83`); absent for an image built from a checkout.
 public struct ManagedRunnerBuild: Decodable, Equatable, Sendable {
     public let sha: String
     public let builtAt: String?
+    public let version: String?
 
-    public init(sha: String, builtAt: String? = nil) {
+    public init(sha: String, builtAt: String? = nil, version: String? = nil) {
         self.sha = sha
         self.builtAt = builtAt
+        self.version = version
     }
 }
 

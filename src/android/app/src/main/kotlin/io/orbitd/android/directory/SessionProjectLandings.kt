@@ -60,7 +60,8 @@ data class LandingsWindowRow(val key: String, val sessionId: String?, val subjec
     val id: String get() = sessionId ?: key
 }
 
-/** One landing that has not settled: a card at the bottom of the window. [state] is `IN_FLIGHT` or `AWAITING_DECISION`; [title] the
+/** One landing that has not settled: a card at the bottom of the window. [state] is `IN_FLIGHT`, `AWAITING_DECISION` or `FIXING` (its
+ *  task's own session is fixing it, revision 42); [title] the
  *  task's name (a round's own title), the line the card adds under its head; [at] when it started, in epoch milliseconds. */
 data class LandingsWindowCard(val sessionId: String, val subject: String, val state: String, val title: String, val at: Long) {
     val id: String get() = sessionId
@@ -147,7 +148,8 @@ object SessionProjectLandings {
         // Oldest first, in the session list's day sections (the local calendar day): the window reads down to today, and `Now` under it.
         val today = now.atZone(zone).toLocalDate()
         val buckets = List(dayTitles.size) { mutableListOf<LandingsWindowRow>() }
-        settled.sortedWith(compareBy<Settled> { it.row.at }.thenByDescending { it.row.key })
+        // One row per landing: a landing a merge record names as its session is listed once, or the window's list repeats a key and crashes.
+        settled.distinctBy { it.row.key }.sortedWith(compareBy<Settled> { it.row.at }.thenByDescending { it.row.key })
             .forEach { buckets[recencyBucket(it.at, today, zone) - 1] += it.row }
         val days = buckets.withIndex().reversed().filter { it.value.isNotEmpty() }.map { LandingsWindowDay(dayTitles[it.index], it.value) }
         return LandingsWindow(days, cards.sortedWith(compareBy<LandingsWindowCard> { it.at }.thenBy { it.sessionId }))
@@ -200,7 +202,8 @@ object SessionProjectLandings {
         if (landings.isEmpty() && merges.none { it.obj("merged") != null }) return null
         val window = window(landings, merges, now, zone)
         val waiting = window.now.filter { it.state == "AWAITING_DECISION" }
-        val inFlight = window.now.filter { it.state == "IN_FLIGHT" }
+        // Revision 42 (§12.7): one its task's own session is fixing waits on nobody here, like one in flight.
+        val inFlight = window.now.filter { it.state == "IN_FLIGHT" || it.state == "FIXING" }
         val today = window.days.firstOrNull { it.title == dayTitles[0] }?.rows.orEmpty()
         val lastSettled = window.days.flatMap { it.rows }.maxOfOrNull { it.at } ?: Long.MIN_VALUE
         val time = if (waiting.isNotEmpty()) elapsed(waiting.minOf { it.at }, now)

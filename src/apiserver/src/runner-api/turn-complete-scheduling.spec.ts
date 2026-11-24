@@ -55,6 +55,8 @@ function makeController(
     // (`sessions/abandoned-approvals.ts`). These fixtures raise no approvals, so it collects none.
     approval: { updateMany: async () => ({ count: 0 }), findMany: async () => [] },
     sessionRequest: noSessionRequests(),
+    // Not an Orbit Cloud runner: an INTERRUPTED turn is not the owner's Update Now's (managed-runner-update-cut.ts).
+    managedRunner: { findUnique: async () => null },
     // No confirmation request was put to this session for review (owner-confirmation-review.ts T5).
     taskOwnerConfirmationReview: { findMany: async () => [] },
     conversationTurn: {
@@ -304,4 +306,41 @@ test('a failed task turn retires its inbox generation in the terminal transactio
   assert.equal(h.inboxWakes(), 0);
   assert.deepEqual(h.sessionUpdates, [h.sessionId]);
   assert.deepEqual(h.taskChanges, ['33333333-3333-4333-8333-333333333333']);
+});
+
+/**
+ * The failure's kind on the session, written with the error by the same terminal write (routing-account-health-design
+ * §5.1, §10 Mixed versions): a runner that classifies sends `failure` and `admission`; an older one sends neither.
+ */
+test('a failed turn from a new runner stores its failure kind beside the error', async () => {
+  const h = makeController(0);
+
+  await h.controller.turnComplete({ id: h.runnerId }, h.sessionId, {
+    turnId: 'turn-1',
+    status: SharedRunStatus.FAILED,
+    error: 'Cursor said: "Add a payment method to continue." The Cursor account needs this before the session can go on.',
+    failure: { kind: 'ACCOUNT_ACTION_REQUIRED' as never, said: 'Add a payment method to continue' },
+    admission: true,
+  });
+
+  assert.deepEqual(h.statusWrites, [RunStatus.FAILED]);
+  assert.equal(h.sessionWrites[0].failureKind, 'ACCOUNT_ACTION_REQUIRED');
+  assert.equal(h.sessionWrites[0].failureSaid, 'Add a payment method to continue');
+  assert.equal(h.sessionWrites[0].failureScope, null);
+  assert.equal(h.sessionWrites[0].admissionFailure, true);
+});
+
+test('a failed turn from an old runner stores no kind and fails as it did', async () => {
+  const h = makeController(0);
+
+  const result = await h.controller.turnComplete({ id: h.runnerId }, h.sessionId, {
+    turnId: 'turn-1',
+    status: SharedRunStatus.FAILED,
+    result: 'provider failed',
+  });
+
+  assert.deepEqual(result, { ok: true, status: RunStatus.FAILED });
+  assert.equal(h.sessionWrites[0].error, 'provider failed');
+  assert.equal(h.sessionWrites[0].failureKind, null);
+  assert.equal(h.sessionWrites[0].admissionFailure, null);
 });

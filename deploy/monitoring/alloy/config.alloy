@@ -1,0 +1,72 @@
+// Grafana Alloy (docs/self-hosting.md, "Logs"): this Compose project's container logs, read from Docker's json-file
+// logs under /var/lib/docker/containers (mounted read-only; no Docker socket), shipped to Loki.
+//
+// Which files: the ones log-targets.sh lists, this project's containers and never a managed runner's. Each stream is
+// labelled with its Compose service, container name and stdout/stderr, and an apiserver's with its level; those are
+// closed sets. The request id is never a label, one per request: it rides as structured metadata, request_id, on the
+// apiserver's JSON lines (requestId) and on the web gateway's access-log lines (their last field), so
+//   {service=~"gateway|apiserver.*"} | request_id="<id>"
+// finds both halves of one request.
+
+logging {
+  level  = "warn"
+  format = "logfmt"
+}
+
+discovery.file "containers" {
+  files            = ["/run/orbit-alloy/targets.json"]
+  refresh_interval = "5s"
+}
+
+loki.source.file "containers" {
+  targets    = discovery.file.containers.targets
+  forward_to = [loki.process.containers.receiver]
+}
+
+loki.process "containers" {
+  // Docker's json-file line: the line itself, its stream and its time.
+  stage.docker { }
+
+  // What a container wrote more than an hour ago is not sent: on its first start Alloy would otherwise send every
+  // log file from its beginning, up to 500 MB a container (x-logging in docker-compose.yml).
+  stage.drop {
+    older_than          = "1h"
+    drop_counter_reason = "older_than_1h"
+  }
+
+  // The apiserver's JSON line (src/apiserver/src/common/request-log.ts). A line that is not JSON, such as the
+  // migration's at boot, is sent as it is.
+  stage.match {
+    selector = "{service=~\"apiserver.*\"}"
+
+    stage.json {
+      expressions = { level = "level", request_id = "requestId" }
+    }
+    stage.labels {
+      values = { level = "" }
+    }
+    stage.structured_metadata {
+      values = { request_id = "" }
+    }
+  }
+
+  // The web gateway's access-log line ends with nginx's $request_id (gateway/nginx.conf).
+  stage.match {
+    selector = "{service=\"gateway\"}"
+
+    stage.regex {
+      expression = "(?P<request_id>[0-9a-f]{32})\\s*$"
+    }
+    stage.structured_metadata {
+      values = { request_id = "" }
+    }
+  }
+
+  forward_to = [loki.write.loki.receiver]
+}
+
+loki.write "loki" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

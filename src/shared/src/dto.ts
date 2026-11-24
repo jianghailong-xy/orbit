@@ -1,6 +1,7 @@
 import type { OwnerConfirmationNotReviewedReason } from './owner-confirmation-review';
 import type { MainCheckoutRunnerRequest } from './mainCheckoutGit';
 import type { ConditionProbe, ConditionSampleReport } from './condition';
+import type { RunFailure } from './runFailureKind';
 // The wire contract shared by the control plane, the Go runner, the web app and the native
 // clients.
 //
@@ -1489,9 +1490,22 @@ export interface RunnerGitCredentialRequest {
   host: string;
   /** The repository path git is asking about, `<owner>/<name>` with or without `.git`. */
   path: string;
+  /**
+   * `PUSH_AS_ME` (docs/design/protected-branch-landing.md §5.2): the owner's own GitHub token, for one landing's target
+   * push. It names the attempt it is for: an integration job (`jobId`, `claimGeneration`, `leaseOwner`) past its push
+   * boundary, or a session's Merge (`sessionId`, `mergeOperationId`, `leaseOwner`) this runner holds. Answered once
+   * per claim generation or merge operation. Absent: the App's installation token, as always.
+   */
+  purpose?: 'PUSH_AS_ME';
+  jobId?: string;
+  claimGeneration?: string;
+  leaseOwner?: string;
+  sessionId?: string;
+  mergeOperationId?: string;
 }
 
-/** The answer: an installation token for that repository alone, contents:write and metadata:read. Never stored. */
+/** The answer: an installation token for that repository alone, contents:write and metadata:read, or with
+ *  `purpose: 'PUSH_AS_ME'` the owner's own user token. Never stored. */
 export interface RunnerGitCredentialAnswer {
   username: 'x-access-token';
   password: string;
@@ -1691,6 +1705,10 @@ export interface RunnerHeartbeatResponse {
    *  which a runner draining for an update sends for the sessions whose engine is running a turn on it.
    *  Absent from an older server, to which such a runner sends no claim while it drains. */
   drainScopedClaims?: boolean;
+  /** This server's operator says every replica serves SESSION_RELEASE_V1 (the switch ORBIT_SESSION_RELEASE_V1): a runner
+   *  may declare it on its turn-complete and release reports. Absent from an older server and while the switch is
+   *  off; a runner that does not read it on its latest answer declares nothing. */
+  sessionReleaseV1?: boolean;
   /** The owner's Later (ISO time): stop draining for the waiting release now and put it off until
    *  then, when it waits for idle again under a fresh deferral limit. Set once per request and
    *  cleared as it is handed over, like `checkSelfUpdate`; only a runner that declares
@@ -2290,9 +2308,10 @@ export type AntigravityAuthSource = 'google' | 'env_key';
 
 /**
  * Whether Orbit can sign this runner's Antigravity into a Google account: `available`;
- * `needs_update`, a runner that does not declare `antigravity-google-login/v1`; or
- * `unsupported_platform`, one that reported an operating system other than Linux, which the
- * sign-in does not support yet (show it as not supported, with the Gemini key as the way in). A
+ * `needs_update`, a runner that does not declare `antigravity-google-login/v1`, or a Mac runner
+ * that does not also declare `antigravity-google-login-macos/v1`; or `unsupported_platform`, one
+ * that reported an operating system other than Linux and macOS, which the sign-in does not support
+ * (show it as not supported, with the Gemini key as the way in). A
  * runner that has not reported its OS is `available`: it refuses a platform it cannot do itself,
  * and the relay reports that as the sign-in's failure.
  */
@@ -2377,8 +2396,16 @@ export interface AccountRemoveCommand {
   /** The engine whose account store holds the slot: `codex`, `claude`. Absent on the codex-named
    *  field older control planes hand over, which only ever meant Codex. */
   engine?: LoginEngine;
-  /** `default`, or the id of a slot the runner added. */
+  /** `default`, or the id of a slot the runner added. A sign-out names `default`. */
   account: string;
+  /** `remove` (also absent) takes an added slot off the machine; `sign-out` deletes Default's login
+   *  credential and nothing else (docs/default-sign-out-design.md). Only a runner that declares
+   *  `<engine>-default-sign-out/v1` is handed a sign-out: an older one would read it as a removal of
+   *  Default, which it refuses. */
+  action?: AccountRemoveAction;
+  /** With `sign-out`: sign out although sessions are running on Default — the person confirmed after
+   *  a refusal named them. They fail on their next turn. */
+  force?: boolean;
   /** Identifies this removal (Runner.codexAccountRemoveAt), so a report can be matched to the
    *  request it answers. */
   attempt?: string;
@@ -2387,6 +2414,9 @@ export interface AccountRemoveCommand {
    *  rather than at its next claim. Absent otherwise. */
   moves?: AccountRemoveMove[];
 }
+
+/** What an AccountRemoveCommand asks of the account. */
+export type AccountRemoveAction = 'remove' | 'sign-out';
 
 /** One session of a removal under way and the account it was moved to. */
 export interface AccountRemoveMove {
@@ -2404,13 +2434,15 @@ export interface AccountRemoveResult {
   engine?: LoginEngine;
   account: string;
   /** `done` once the slot's directory and record are gone; `failed` with the machine's own reason
-   *  — Default, a slot a live session is in, or a directory that would not go away. */
+   *  — Default, a slot a live session is in, or a directory that would not go away. A sign-out is
+   *  `done` once Default's credential is gone, `failed` while sessions run on Default (unforced) or
+   *  when the credential stayed. */
   status: 'done' | 'failed';
   message?: string;
   /** The `attempt` of the request this reports on. */
   attempt?: string;
-  /** With `failed` because the account is in use: the sessions running in it, which the control
-   *  plane names by title in the message the page shows. */
+  /** With `failed` because the account is in use (a removal, or an unforced sign-out): the sessions
+   *  running in it, which the control plane names by title in the message the page shows. */
   sessionIds?: string[];
 }
 
@@ -2862,8 +2894,10 @@ export interface RunnerAccountRemoveState {
   /** The engine whose account store the removal is about (`codex` on a row written before
    *  accounts-per-engine). */
   engine: LoginEngine;
-  /** The slot being removed, or null when nothing is in flight. `default` only in the answer to
-   *  removing Default, which is removed from Orbit alone: `done` at once, never relayed to the runner. */
+  /** The slot being removed, or null when nothing is in flight. `default` in the answer to removing
+   *  Default, which is removed from Orbit alone: `done` at once, never relayed to the runner; and on a
+   *  sign-out of Default (`POST /runners/:id/accounts/:engine/default/sign-out`), which is relayed —
+   *  so a relayed state naming `default` is always a sign-out. */
   account: string | null;
   status: 'pending' | 'done' | 'failed' | null;
   /** The machine's own words when it failed: the account is in use by a session, the runner is too
@@ -2937,6 +2971,16 @@ export interface MergeCommand {
   recoveryAction?: import('./mergeRecovery').MergeRecoveryAction;
   recovery?: import('./mergeRecovery').MergeRecovery;
   check?: { command: string; timeoutSeconds: number };
+  /** How this merge reaches its target (docs/design/protected-branch-landing.md §3, §4.6). Sent only to a runner
+   *  that declared `session-merge-pull-request/v1`; absent, the runner pushes the target as it always did. */
+  landVia?: import('./pull-request-landing').LandVia;
+  /** With `landVia` PULL_REQUEST or PUSH_AS_ME: `refs/heads/orbit/land/<session id>`, the branch the replayed tip
+   *  goes to when GitHub refuses the target because of the branch's rules. */
+  landingRef?: string;
+  /** The commit Orbit last pushed to `landingRef`, for the push's lease; absent when Orbit has pushed none. */
+  landingRefSha?: string;
+  /** The session already has an open Orbit pull request for this target: push only the landing branch. */
+  pullRequestOpen?: true;
 }
 
 /** Control plane → runner: commit a live session's uncommitted worktree changes onto its
@@ -3038,10 +3082,12 @@ export interface SubagentCandidateTarget {
   level?: SubagentSize | null;
 }
 
-/** How one attempt of a SubAgent run ended: still running, a usage-limit, capacity or login failure it moved on from,
- *  or the run's end. */
+/** How one attempt of a SubAgent run ended: still running, a failure it moved on from (a usage limit, capacity, a
+ *  failed login, an account that needed action or denied the use, or an unclassified refusal before it started:
+ *  docs/routing-account-health-design.md §7.3), or the run's end. */
 export type SubagentAttemptOutcome =
-  'RUNNING' | 'USAGE_LIMIT' | 'AT_CAPACITY' | 'AUTH_FAILED' | Exclude<SubagentRunStatus, 'RUNNING'>;
+  | 'RUNNING' | 'USAGE_LIMIT' | 'AT_CAPACITY' | 'AUTH_FAILED' | 'ACCOUNT_ACTION_REQUIRED' | 'ACCESS_DENIED' | 'ADMISSION_FAILED'
+  | Exclude<SubagentRunStatus, 'RUNNING'>;
 
 /** One entry of `subagent_run.attempts`: a child process the run started, in order (§4.3). */
 export interface SubagentAttempt extends SubagentCandidateTarget {
@@ -3064,6 +3110,10 @@ export interface SubagentAttempt extends SubagentCandidateTarget {
 export interface SubagentFallbackRequest {
   /** The child's failure, in the engine's own words. Refused unless it reads as a usage-limit, capacity or login error. */
   error: string;
+  /** The child's failure as its engine adapter classified it (§5.1); absent from older runners or when unclassified. */
+  failure?: RunFailure;
+  /** True when the child ended before its engine produced any reply, tool call or billed token (§5.2). */
+  admission?: boolean;
   /** The definition's read-only flag and permission mode, as the start sent them. */
   readonly?: boolean;
   permissionMode?: string;
@@ -3288,6 +3338,9 @@ export interface RemoteSubagentClaim {
   prompt: string;
   /** How to run the child: the target workspace's own default engine and model, as a session claim hands it. */
   exec: AgentExecConfig;
+  /** The parent session's permission mode, which a read-only child's requests are answered by (§5.3); null from a
+   *  server that did not send it, when the runner reads the child's own mode instead. */
+  parentPermissionMode: string | null;
   /** The earlier run of this runner whose conversation this one continues, or null for a new conversation. */
   resumeOf: string | null;
 }
@@ -4063,6 +4116,18 @@ export interface OrchestrationCredentialResponse {
 }
 
 /**
+ * Runner capability (X-Orbit-Runner-Capabilities, read on each request): the runner reports a turn's outcome and the
+ * session's release as two reports (docs/session-three-state-plan.md step 6.1, design §3). On a turn-complete that
+ * declares it, a FAILED `status` is the turn's outcome and releases nothing: the turn and `last_turn_outcome` record
+ * FAILED with the error, the queue is drained and the task told as for the old protocol, and the session stays held
+ * (RUNNING, the runner's slot) with `cancelRequestedAt` set, the signal to tear its engine down; the runner then
+ * sends POST /runner/sessions/:id/release (RunReleaseRequest), which writes the release. A turn-complete without it is
+ * the old protocol: a FAILED turn releases the session in the same write. If no release follows, the reaper's
+ * cancel-grace sweep releases the held session as a failure.
+ */
+export const SESSION_RELEASE_V1 = 'session-release/v1';
+
+/**
  * Runner → control plane: a single interactive turn finished (the per-turn `result`),
  * distinct from /complete which finalizes the whole session. Carries per-turn billing.
  */
@@ -4070,13 +4135,20 @@ export interface TurnCompleteRequest {
   turnId: string;
   /** Stable UUID for the runner process completing this turn. Omitted only by legacy runners. */
   leaseOwner?: string;
-  /** Turn outcome: SUCCEEDED | INTERRUPTED | FAILED. */
+  /** Turn outcome: SUCCEEDED | INTERRUPTED | FAILED. A FAILED turn releases the session unless the request declares
+   *  SESSION_RELEASE_V1. */
   status: RunStatus;
   result?: string;
   /** What a FAILED turn failed with, when the runtime reported it as the turn's error rather than
    *  as a reply (Codex). `result` is then the reply the turn got to before it died. Omitted by older
    *  runners, which put the error in `result` only when there was no reply. */
   error?: string;
+  /** What a FAILED turn failed with, as the engine adapter classified it (docs/routing-account-health-design.md
+   *  §5.1). Absent: not classified, or an older runner, whose failure is read through the text markers. */
+  failure?: RunFailure;
+  /** On a FAILED turn: true when it ended before the engine produced any reply, tool call or billed token (§5.2).
+   *  Absent on other turns and from older runners. */
+  admission?: boolean;
   /** Present for a completed shell turn. The control plane consults it only for a
    *  server-generated taskAcceptance delivery. */
   shellExitCode?: number;
@@ -4122,6 +4194,9 @@ export interface TurnCompleteRequest {
   branchCommits?: BranchCommit[] | null;
   /** The worktree's actual current HEAD branch (see SessionLiveState.worktreeBranch). */
   worktreeBranch?: string;
+  /** SESSION_RELEASE_V1, declared in the body: how a runner on the runner link declares it per request, since the link
+   *  carries no request header. The same declaration as the capabilities header. */
+  releaseProtocol?: string;
 }
 
 /**
@@ -4271,6 +4346,11 @@ export interface RunFinalizeRequest {
   /** Claude Code result `subtype`. */
   subtype?: string;
   error?: string;
+  /** What a FAILED run failed with: its last failed turn's classification (§5.1). Absent: not classified, or an
+   *  older runner, whose failure is read through the text markers. */
+  failure?: RunFailure;
+  /** On a FAILED run: its last failed turn's admission flag (§5.2). Absent on other ends and from older runners. */
+  admission?: boolean;
   /** @deprecated Legacy alias for runtimeSessionId, still sent by older runners. Accepted only
    *  as a fallback when runtimeSessionId is absent; never stored separately. */
   claudeSessionId?: string;
@@ -4331,6 +4411,26 @@ export interface RunFinalizeResponse {
   keepCheckout: boolean;
 }
 
+/**
+ * Runner → control plane under SESSION_RELEASE_V1: POST /runner/sessions/:id/release. The runner's engine is gone and
+ * its checkout finalized; the session is released. It is the finalize report with no status word: the server reads
+ * what the release is from the facts it holds. An end somebody asked for settles as asked (`end_reason`); a release
+ * after a failed turn this hold reported is a failure (FAILED); any other release is a stop nobody asked for
+ * (CANCELLED, and the turn it cuts off ends CANCELLED). Answered with RunFinalizeResponse. Refused without the
+ * capability declared on the request.
+ */
+export interface RunReleaseRequest extends Omit<RunFinalizeRequest, 'status' | 'claudeSessionId'> {
+  /**
+   * The run failed with no turn the runner could report (an engine that died or never started before it read a turn
+   * from the inbox). Only 'FAILED': the turn the release cuts off (in flight, else the oldest queued, else the latest)
+   * records FAILED with `error`, and the release is a failure. Ignored when an end was asked for: an end somebody asked
+   * for is a stop, not a failure.
+   */
+  cutOffTurnOutcome?: 'FAILED';
+  /** SESSION_RELEASE_V1, declared in the body (see TurnCompleteRequest.releaseProtocol). */
+  releaseProtocol?: string;
+}
+
 /** @deprecated Compatibility type alias; use {@link RunFinalizeRequest}. */
 export type SessionCompleteRequest = RunFinalizeRequest;
 /** @deprecated Compatibility type alias; use {@link RunFinalizeResponse}. */
@@ -4384,8 +4484,21 @@ export interface SessionMergeResultRequest {
   /** Absent only for an in-flight command issued by a pre-fence control plane. */
   operationId?: string;
   leaseOwner?: string;
-  status: 'merged' | 'conflict' | 'error' | 'released';
+  /** `pull_request`: GitHub refused the target because of its rules, so the replayed tip was pushed to the
+   *  command's `landingRef` instead (`pushedSha`) and the control plane lands it through a pull request
+   *  (docs/design/protected-branch-landing.md §4.6). Only a runner handed `landVia` reports it. */
+  status: 'merged' | 'conflict' | 'error' | 'released' | 'pull_request';
   mergedSha?: string;
+  /** With `pull_request`: the commit the landing branch holds, read back from the remote. */
+  pushedSha?: string;
+  /** With `pull_request`: why the target was not pushed, in GitHub's words; absent when it was not tried. */
+  pushRefusal?: string;
+  /** The command's `landVia`, echoed: `PUSH_AS_ME` says the refused target push was the owner's (§5.4). */
+  landVia?: import('./pull-request-landing').LandVia;
+  /** With `merged`: the target push carried the owner's own GitHub token and GitHub took it (§5.2). */
+  pushedAs?: 'OWNER';
+  /** With `pushedAs`: the rules GitHub said the push bypassed, its "Bypassed rule violations" lines. */
+  bypassedRules?: string[];
   /** Exact source-branch tip replayed by this merge. Persisted so later worktree reports can
    *  detect new commits without relying on ancestry or patch-id equivalence. */
   sourceSha?: string;
@@ -4496,6 +4609,9 @@ export interface SessionSearchHit {
   taskId: string | null;
   taskTitle: string | null;
   lastTurnAt: string | Date | null;
+  /** The session list's order key (session.listed_at): moves only when the session changes for its owner. Absent from
+   *  an older control plane. */
+  listedAt?: string | Date | null;
   createdAt: string | Date;
   /** Set when the session has been moved to Completed. */
   completedAt: string | Date | null;
@@ -4577,7 +4693,10 @@ export type IntegrationJobKind = 'LAND_TASK' | 'CHECK_PROMOTION' | 'LAND_PROMOTI
  *  `OBSERVE_LANDING` job ends when it has looked (§10.6, 0453). */
 export type IntegrationJobState =
   | 'QUEUED' | 'RUNNING' | 'LANDED' | 'ALREADY_LANDED' | 'NOTHING_TO_LAND' | 'READY'
-  | 'CONFLICT' | 'CHECK_FAILED' | 'ERROR' | 'CANCELLED' | 'SUPERSEDED' | 'OBSERVED';
+  | 'CONFLICT' | 'CHECK_FAILED' | 'ERROR' | 'CANCELLED' | 'SUPERSEDED' | 'OBSERVED'
+  // The attempt's tested commit is on its landing branch and the landing waits for GitHub
+  // (docs/design/protected-branch-landing.md §4.2). In flight, not final, and not RUNNING: no runner holds it.
+  | 'PULL_REQUEST';
 
 /** The step the runner is on, or the one it stopped at. `OBSERVE` is an `OBSERVE_LANDING` job's
  *  step after its fetch (§10.6, 0453). */
@@ -4594,7 +4713,15 @@ export interface IntegrationCheckSpec {
 }
 
 /** What one check came to. `exitCode` is null when the command never produced one. */
-export interface IntegrationCheckResult extends Omit<IntegrationCheckSpec, 'timeoutSeconds'> {
+export interface IntegrationCheckResult extends Omit<IntegrationCheckSpec, 'timeoutSeconds' | 'name'> {
+  /**
+   * The runner's three checks, or GITHUB_CHECK: a required check GitHub ran on the landing's pull request and that
+   * failed (docs/design/protected-branch-landing.md §4.5 J-T16), written by the server, never reported by a runner.
+   * Its `command` is the check's name on GitHub, `outputTail` the clipped, redacted log, and `github` the rest.
+   */
+  name: IntegrationCheckSpec['name'] | 'GITHUB_CHECK';
+  /** Set on a GITHUB_CHECK only. */
+  github?: IntegrationGithubCheck;
   scope?: 'COMBINED' | 'BASELINE';
   /** The exact tree measured by the baseline check, before it ran (K4). */
   treeSha?: string;
@@ -4608,6 +4735,17 @@ export interface IntegrationCheckResult extends Omit<IntegrationCheckSpec, 'time
   durationMs: number;
   /** The last 16 KB of combined output — what a person reads to know why it is red. */
   outputTail: string;
+}
+
+/** A required check GitHub ran on a landing's pull request, as a GITHUB_CHECK result records it (§4.5). */
+export interface IntegrationGithubCheck {
+  /** GitHub's conclusion: failure, timed_out, cancelled, action_required, startup_failure, or a status's error. */
+  conclusion: string;
+  /** The check's page on GitHub. */
+  url: string | null;
+  pullRequest: { number: number; url: string };
+  /** The head the check ran on: the commit Orbit pushed. */
+  headSha: string;
 }
 
 /**
@@ -4680,6 +4818,18 @@ export interface IntegrationJobCommand {
    *  the commit its work was delivered as and the commit that work forked from. Sent only to a runner
    *  that declared `integration-observe/v1`; absent on every other kind. */
   observeTasks?: IntegrationObserveTask[];
+  /** LAND_TASK / LAND_PROMOTION: how this attempt reaches its target (docs/design/protected-branch-landing.md §3),
+   *  fixed when it was handed out. Sent only to a runner that declared `integration-pull-request/v1`; absent, the
+   *  runner pushes the target as it always did. */
+  landVia?: import('./pull-request-landing').LandVia;
+  /** With `landVia` PULL_REQUEST or PUSH_AS_ME: the branch the tested commit goes to when GitHub refuses the target
+   *  because of the branch's rules, `refs/heads/orbit/land/<landing session id>` (§4.1). */
+  landingRef?: string;
+  /** The commit Orbit last pushed to `landingRef`, for the push's lease; absent when Orbit has pushed none. */
+  landingRefSha?: string;
+  /** The landing subject already has an open Orbit pull request: push only the landing branch, never the target
+   *  (§3, §9 item 2). */
+  pullRequestOpen?: true;
 }
 
 /** One task an OBSERVE_LANDING looks for (§10.6 O-S2): its frozen delivered identity (O-L4). */
@@ -4865,6 +5015,17 @@ export interface IntegrationJobResultRequest {
   /** With OBSERVED, and only there (§10.6 O-S3): one observation per task the command named. The two
    *  tips it observed are `upstreamSha` (U) and `targetShaBefore` (T). */
   observations?: IntegrationObservation[];
+  /** With PULL_REQUEST, and only there (docs/design/protected-branch-landing.md §4.2 J-T14): the commit the
+   *  landing branch holds after the push, read back from the remote. It is `testedSha`. */
+  landingRefSha?: string | null;
+  /** With PULL_REQUEST: why the target was not pushed, in GitHub's words (clipped and redacted), or absent when
+   *  the subject already had an open pull request and the target was not tried. With `landVia` PUSH_AS_ME and the
+   *  owner's token not to be had, Orbit's reason instead. */
+  pushRefusal?: string | null;
+  /** With LANDED: the target push carried the owner's own GitHub token and GitHub took it (§5.2). */
+  pushedAs?: 'OWNER' | null;
+  /** With `pushedAs`: the rules GitHub said the push bypassed, its "Bypassed rule violations" lines. */
+  bypassedRules?: string[] | null;
 }
 
 /** The commits that moved the upstream under a landing, as the runner measured them on the

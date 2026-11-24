@@ -425,6 +425,8 @@ struct AgentPanes: View {
     @AppStorage("sessionList.pinnedCollapsed") private var pinnedCollapsed = false
     /// The last grouping drawn and its inputs (see `body`).
     @State private var listingMemo = SessionListingMemo<SessionListGrouping>()
+    /// The clock the session list's terminal line is filtered against.
+    @State private var terminalNow = Date()
     // Set true when the composer hands ↑/↓ back on Escape, so the session list can be arrow-navigated
     // without a click; the binding also tracks click-to-focus.
     @FocusState private var listFocused: Bool
@@ -458,6 +460,17 @@ struct AgentPanes: View {
             ScheduledRunsFolder.summary(agents.scheduledRuns(in: $0) ?? [], view: view, byTag: false)
         }
         List(selection: listSelection) {
+            #if os(macOS)
+            // The Mac has no capsule, so the waiting terminals are a Needs you section at the top
+            // of the list, in the capsule's own words and mark (board ③, choice 6 A).
+            if let terminal = app.terminalNeedsYou(now: terminalNow) {
+                TitledListSection {
+                    TerminalNeedsYouRow(line: terminal) { app.openTerminalNeedsYou(terminal) }
+                } title: {
+                    Text(MachinesAndModels.needsYou).textCase(nil)
+                }
+            }
+            #endif
             // Recency sections (Pinned / Today / Yesterday / 2–7 days ago / …), as web's list draws
             // them, on every platform. Bucketing is the pure, tested `SessionTimeGrouping`.
             // Optional "By Tag" grouping (one Section per tag + Untagged) or the default recency
@@ -494,6 +507,9 @@ struct AgentPanes: View {
         #endif
         .focused($listFocused)
         .onChange(of: app.sessionListFocusRequest) { _, _ in listFocused = true }
+        #if os(macOS)
+        .modifier(TerminalRequestsCurrent(now: $terminalNow))
+        #endif
         .overlay {
             if isSearching {
                 #if os(iOS)
@@ -2130,6 +2146,8 @@ struct AgentFormContent: View {
                 // holds what new sessions would no longer see.
                 WorktreeIsolationSwitch(workspace: agent)
             }
+
+            WorkspaceLandingSection(agent: agent)
 
             Section("Instructions") {
                 TextEditor(text: $instructions)

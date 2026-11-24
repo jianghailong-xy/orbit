@@ -18,6 +18,7 @@ import { assertCoordinatorPgUrlIsIsolated } from '../projects/coordinator-pg-tes
 import { readProjectPanorama } from '../projects/project-panorama';
 import { readProjectReadyToRun } from '../projects/project-ready-to-run';
 import { ProjectsService } from '../projects/projects.service';
+import { HOLD_NOTICE_ERRORS } from '../queue/hold-notice';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { TaskListsService } from '../task-lists/task-lists.service';
@@ -136,7 +137,7 @@ async function world(
   await db.runner.create({
     data: {
       id: w.runnerId, ownerId: w.ownerId, name: `${label}-runner`, tokenHash: `hash-${w.runnerId}`,
-      status: RunnerStatus.ONLINE, capabilities: [], capabilitiesReportedAt: new Date(),
+      status: RunnerStatus.ONLINE, capabilities: [], capabilitiesReportedAt: new Date(), lastHeartbeatAt: new Date(),
       maxConcurrent: 8,
     },
   });
@@ -437,6 +438,39 @@ test('a PENDING work session is still QUEUED, not RUNNING, wherever a row says w
       assert.equal(seen.withRunning.queued, true);
       assert.equal(seen.withRunning.running, false);
       assert.equal(seen.manualRunnable, false);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('a queued run that is held lists with queuedOnHold true; a plainly queued one false; queued and counts unchanged',
+  { skip, timeout: 120_000 }, async () => {
+    assertCoordinatorPgUrlIsIsolated(URL!);
+    const stack = connect();
+    try {
+      const plain = await world(stack.db, 'plain-queued', {}, RunStatus.PENDING);
+      const noticed = await world(stack.db, 'held-notice', { error: HOLD_NOTICE_ERRORS[0] }, RunStatus.PENDING);
+      const offline = await world(stack.db, 'held-offline', {}, RunStatus.PENDING);
+      await stack.db.runner.update({ where: { id: offline.runnerId }, data: { status: RunnerStatus.OFFLINE } });
+      // A leftover `error` that is not a hold notice is not a hold.
+      const leftover = await world(stack.db, 'leftover-error', { error: 'something went wrong once' }, RunStatus.PENDING);
+      const running = await world(stack.db, 'running', { error: HOLD_NOTICE_ERRORS[0] }, RunStatus.RUNNING);
+
+      for (const [w, held] of [[plain, false], [noticed, true], [offline, true], [leftover, false], [running, false]] as const) {
+        const [row] = await stack.tasks.withRunning(w.ownerId, [{ id: w.taskId }], true);
+        const isRunning = w === running;
+        assert.equal(row.queuedOnHold, held);
+        assert.equal(row.queued, !isRunning, 'a held queued task still reads queued');
+        assert.equal(row.running, isRunning);
+        const listed = await stack.tasks.listRow(w.ownerId, w.taskId);
+        assert.equal((listed as { queuedOnHold?: boolean }).queuedOnHold, held);
+        const page = await stack.tasks.listPage(w.ownerId, {});
+        const item = page.items.find((t) => t.id === w.taskId) as { queuedOnHold?: boolean; queued: boolean } | undefined;
+        assert.ok(item);
+        assert.equal(item.queuedOnHold, held);
+        assert.equal(item.queued, !isRunning);
+        assert.equal(page.counts?.queued, isRunning ? 0 : 1, 'the queued count counts a held run');
+      }
     } finally {
       await stack.db.$disconnect();
     }

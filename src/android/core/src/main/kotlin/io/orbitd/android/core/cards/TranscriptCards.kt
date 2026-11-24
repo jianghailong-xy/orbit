@@ -134,6 +134,12 @@ fun transcriptCards(event: RunEvent): List<InteractionCard> = buildList {
         backgroundWake(payload.text("controlPlaneNote").orEmpty())?.let { wake ->
             add(InteractionCard("record:${event.seq}:wake", CardFamily.BACKGROUND, "Background update", wake, "", objectId = "${event.seq}", binding = "", status = "Recorded"))
         }
+        // A failed landing handed to this task's own session (revision 42, W6): its card, never the reader's bubble. The server sends
+        // the turn's words alone, so the card is read back from them (`LandingFixTurns`).
+        payload.text("text")?.takeIf { LandingFixTurns.parse(it) != null }?.let { text ->
+            add(InteractionCard("record:${event.seq}:landingFix", CardFamily.SESSION_REQUEST, LandingFixCopy.FROM_ORBIT_LANDING,
+                buildJsonObject { put("text", text) }, "", objectId = "${event.seq}", binding = "", status = "Recorded"))
+        }
         addProjection("confirmationReviewRequest", "Review requested", CardFamily.REVIEW, listOf("requestId", "taskId", "title", "runSessionId"))
         addProjection("confirmationReturn", "Sent back by the reviewer", CardFamily.REVIEW, listOf("requestId", "reason"))
         // The owner's answers handed to the reviewer once they confirmed (contract §7 Q5): "You confirmed", with at least one answer.

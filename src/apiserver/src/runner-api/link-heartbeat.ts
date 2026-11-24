@@ -15,6 +15,7 @@ import { storableBranchSha } from '../tasks/owner-confirmation-review';
 import { mergeHeartbeatPlanUsage } from './codex-reset-plan-usage';
 import { runnerLinkHintsOf, runnerLinkHintsSql, type RunnerLinkHintColumns, type RunnerLinkHints } from './runner-link-hints';
 import { stripNul } from './strip-nul';
+import { RUNNER_JOB_STATES_SQL } from '../projects/in-flight-job-states';
 
 /**
  * A heartbeat the runner link's gateway forwarded, answered from runner_presence (docs/runner-link-design.md §5.7,
@@ -192,7 +193,11 @@ export const HEARTBEAT_DELIVERIES = {
     writers: ['runners/runners.service.ts#startLogin', 'runners/runners.service.ts#submitLoginCode', 'runners/runners.service.ts#cancelLogin'],
     pending: 'a sign-in in flight',
   },
-  accountRemoveRequest: { how: 'MARKED', writers: ['runners/runners.service.ts#removeAccount'], pending: 'a removal pending' },
+  accountRemoveRequest: {
+    how: 'MARKED',
+    writers: ['runners/runners.service.ts#removeAccount', 'runners/runners.service.ts#signOutDefault'],
+    pending: 'a removal or a Default sign-out pending',
+  },
   codexAccountRemoveRequest: { how: 'MARKED', writers: ['runners/runners.service.ts#removeAccount'], pending: 'a removal pending' },
   claudeAccountSwapRequest: { how: 'MARKED', writers: ['runners/runners.service.ts#setDefaultAccount'], pending: 'a Set as default swap pending' },
   installRequest: {
@@ -223,6 +228,10 @@ export const HEARTBEAT_DELIVERIES = {
   drainScopedClaims: {
     how: 'EVERY_BEAT',
     reads: "the beat's own draining flag: a word about this server, which the quiet answer to a draining beat carries as the full one does",
+  },
+  sessionReleaseV1: {
+    how: 'EVERY_BEAT',
+    reads: "the apiserver's switch ORBIT_SESSION_RELEASE_V1 (run-release.ts sessionReleaseOffered): a word about this server, which the quiet answer carries as the full one does",
   },
   postponeSelfUpdateUntil: { how: 'MARKED', writers: ['runners/runners.service.ts#postponeSelfUpdate'], pending: 'until a beat claims it' },
   selfUpdateNow: { how: 'MARKED', writers: ['runners/runners.service.ts#updateSelfNow'], pending: 'until a beat claims it' },
@@ -582,7 +591,7 @@ export function linkBeatVerdict(
  */
 export function quietHeartbeatAnswer(
   row: Pick<LinkBeatRow, 'maxConcurrent' | 'burstConcurrent' | 'minFreeDiskMb'>,
-  extra: Pick<RunnerHeartbeatResponse, 'cursorKeyChecks'> & { linkHints?: RunnerLinkHints; draining?: boolean },
+  extra: Pick<RunnerHeartbeatResponse, 'cursorKeyChecks'> & { linkHints?: RunnerLinkHints; draining?: boolean; sessionRelease?: boolean },
 ): RunnerHeartbeatResponse & { linkHints?: RunnerLinkHints } {
   return {
     cancelSessionIds: [],
@@ -596,6 +605,8 @@ export function quietHeartbeatAnswer(
     // As the full answer says it, to a draining beat: a runner draining for an update reads its absence as an
     // older server (runner-go drainClaimScope).
     ...(extra.draining ? { drainScopedClaims: true } : {}),
+    // As the full answer says it: a runner that reads no such word declares SESSION_RELEASE_V1 on nothing it sends.
+    ...(extra.sessionRelease ? { sessionReleaseV1: true } : {}),
     ...(extra.cursorKeyChecks && extra.cursorKeyChecks.length > 0 ? { cursorKeyChecks: extra.cursorKeyChecks } : {}),
     ...(extra.linkHints ? { linkHints: extra.linkHints } : {}),
   };
@@ -906,7 +917,7 @@ export async function readLinkReconcilePending(prisma: Pick<PrismaService, '$que
         SELECT 1 FROM "project_integration_job" j
           JOIN "session" s ON s."id" = j."session_id"
           JOIN "workspace" w ON w."id" = s."workspace_id"
-         WHERE w."runner_id" = ${runnerId}::uuid AND j."state" IN ('QUEUED', 'RUNNING')
+         WHERE w."runner_id" = ${runnerId}::uuid AND j."state" IN ${RUNNER_JOB_STATES_SQL}
       )
       OR EXISTS (
         SELECT 1 FROM "owner_request_secret" g

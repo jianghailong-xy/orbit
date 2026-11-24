@@ -132,4 +132,38 @@ public enum RunnerAccountCopy {
     /// What a former Default is called — the account a Set as default moved out of ~/.claude into an
     /// added folder — while the owner has not named it and no email is known for it.
     public static let RUNNER_ACCOUNT_FORMER_DEFAULT = "Former default"
+
+    /// The question in front of Default's Sign out…, which deletes its login from the machine.
+    public static func runnerDefaultSignOutTitle(name: String) -> String { "Sign out of \(name)?" }
+
+    /// What Sign out of Default does to the machine: the login goes, the history and settings stay.
+    public static func runnerDefaultSignOutDetail(runner: String) -> String {
+        "Its login is deleted from \(runner). Its history and settings stay."
+    }
+
+    /// Added for Claude Code and Codex, whose CLI shares Default's login; `command` is `claude` or `codex`.
+    public static func runnerDefaultSignOutTerminal(runner: String, command: String) -> String {
+        "\(command) in a terminal on \(runner) is signed out too."
+    }
+
+    public static let RUNNER_DEFAULT_SIGN_OUT_CONFIRM = "Sign out"
+
+    /// The menu item, and the row's state while the runner takes the login off the machine.
+    public static let RUNNER_DEFAULT_SIGN_OUT = "Sign out…"
+    public static let RUNNER_DEFAULT_SIGNING_OUT = "Signing out…"
+
+    /// The second question, after the runner refused because sessions are running on Default.
+    public static func runnerDefaultSignOutRunningOne(name: String) -> String {
+        "1 session is running on \(name). Sign out anyway?"
+    }
+
+    public static func runnerDefaultSignOutRunningMany(count: Int, name: String) -> String {
+        "\(count) sessions are running on \(name). Sign out anyway?"
+    }
+
+    public static let RUNNER_DEFAULT_SIGN_OUT_RUNNING_DETAIL = "They will stop working until you sign in again."
+
+    public static func runnerDefaultSignOutFailed(name: String) -> String {
+        "Couldn’t sign out of \(name)"
+    }
 }

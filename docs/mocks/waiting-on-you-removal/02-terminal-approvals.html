@@ -1,0 +1,409 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<!-- 2026-11-14 · 终端登录审批搬到机器页，needs-you 多一条 "Approve a terminal" · 图板。
+     英文是上线文案，中文是说明。手机套件借 ../needs-you-capsule（440×956pt）。
+     真实画面在 02-shots/：Web = main bec15d465 的生产构建 + ui-migration 夹具（"改后"的 Web 帧是同一个构建，
+     把它自己的 TerminalApproveCard 原样搬进机器页 / 会话列表，capture 时挪 DOM，不是手画）；
+     iOS 今天 = 05a08c479 的 iPhone 探针（macOS CI）；Android / macOS 今天 = main 上 docs/evidence 里的真机/模拟器截图。
+     iOS / Android / macOS 的"改后"帧是照这些真实画面手画的。 -->
+<link rel="stylesheet" href="../needs-you-capsule/kit.css">
+<script src="../needs-you-capsule/kit.js"></script>
+<style>
+  body { width: 1500px; padding: 0; }
+  code { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 12.5px; }
+  section.b-part { padding: 28px 32px 34px; background: #e6e6eb; }
+  .b-lede { color: #4f4f58; font-size: 15px; max-width: 1420px; margin: 0 0 18px; }
+  .b-lede b { color: #16161a; }
+  table.b-t { border-collapse: collapse; font-size: 14px; background: #fff; border-radius: 12px; overflow: hidden; width: 1436px; }
+  table.b-t th, table.b-t td { text-align: left; vertical-align: top; padding: 9px 14px; border-bottom: 1px solid #ececf0; }
+  table.b-t th { background: #f4f4f7; font-size: 13px; color: #4f4f58; font-weight: 650; }
+  table.b-t td.b-bad { color: #8f1d13; }
+  table.b-t td.b-ok { color: #14428f; }
+  .b-row { display: flex; gap: 22px 28px; align-items: flex-start; flex-wrap: wrap; }
+  .b-note { font-size: 13.5px; color: #4f4f58; line-height: 1.6; margin-top: 10px; }
+  .b-note b { color: #16161a; }
+  .b-pick { display: inline-block; font-size: 12px; font-weight: 700; background: #d6e4ff; color: #14428f; border-radius: 999px; padding: 1px 9px; margin-left: 6px; }
+  .b-real { display: inline-block; font-size: 11.5px; font-weight: 650; background: #fff; color: #3a3a40; border-radius: 999px; padding: 1px 8px; margin-left: 6px; border: 1px solid #d4d4da; }
+  .b-shot { display: block; border-radius: 10px; box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 10px 24px rgba(0,0,0,.10); background: #fff; }
+  .b-fr { position: relative; flex: none; }
+  .b-sub { font-size: 16px; font-weight: 700; margin: 26px 0 10px; color: #16161a; }
+
+  /* ── iOS：Settings 里的页（照 ios-today-settings / ios-today-machines 量） ── */
+  .b-sheet { position: absolute; left: 0; right: 0; top: 58px; bottom: 0; background: #F2F2F7; border-radius: 38px 38px 0 0; z-index: 2; overflow: hidden; }
+  .ph.light.b-dim { background: #c9c9cc; }
+  .b-sh-nav { position: absolute; left: 0; right: 0; top: 14px; height: 48px; z-index: 5; }
+  .b-sh-nav .gc { top: 2px; width: 44px; height: 44px; }
+  .b-sh-nav .t { position: absolute; left: 80px; right: 80px; top: 12px; text-align: center; font: 650 17px/22px "Inter"; }
+  .b-ios-body { position: absolute; left: 0; right: 0; top: 70px; padding: 0 16px; font-size: 16px; }
+  .b-hd { font-size: 14px; color: rgba(60,60,67,.6); padding: 14px 16px 6px; display: flex; }
+  .b-hd span { margin-left: auto; }
+  .b-grp { background: #fff; border-radius: 22px; overflow: hidden; }
+  .b-rr { display: flex; align-items: center; gap: 10px; padding: 11px 16px; min-height: 58px; position: relative; }
+  .b-rr + .b-rr::before { content: ""; position: absolute; left: 34px; right: 0; top: 0; height: .5px; background: rgba(60,60,67,.2); }
+  .b-rr .dt { width: 8px; height: 8px; border-radius: 50%; background: #34C759; flex: none; }
+  .b-rr .dt.off { background: #AEAEB2; }
+  .b-rr .dt.amb { background: #FF9500; }
+  .b-rr .m { flex: 1; min-width: 0; }
+  .b-rr .m b { display: block; font-weight: 500; font-size: 16.5px; }
+  .b-rr .m s { display: block; text-decoration: none; font-size: 14px; color: rgba(60,60,67,.6); }
+  .b-rr .m s.amb { color: #C96A00; }
+  .b-rr .v { color: rgba(60,60,67,.6); font-size: 15px; }
+  .b-rr .v.amb { color: #C96A00; }
+  .b-rr .chev { color: rgba(60,60,67,.3); }
+  .b-foot { font-size: 13px; color: rgba(60,60,67,.6); padding: 6px 16px 0; line-height: 1.4; }
+  /* 终端审批卡：今天 TerminalApproveCard 的样子（ios-today-inbox），原样 */
+  .b-tc { background: #FFFCF8; border: 1.2px solid #F8C995; border-radius: 22px; overflow: hidden; margin-bottom: 10px; position: relative; }
+  .b-tc .h { background: #FDF0E2; display: flex; align-items: center; gap: 9px; padding: 9px 16px; border-bottom: 1px solid #F6D9B8; font-size: 15.5px; }
+  .b-tc .h i { width: 8px; height: 8px; border-radius: 50%; background: #FF8A00; }
+  .b-tc .h b { color: #F08300; font-weight: 600; }
+  .b-tc .h span { margin-left: auto; color: rgba(60,60,67,.6); font-size: 14px; }
+  .b-tc .bd { padding: 12px 16px 14px; }
+  .b-tc .tt { font: 650 17.5px/1.3 "Inter"; margin-bottom: 6px; }
+  .b-tc .ln { color: rgba(60,60,67,.6); font-size: 15px; line-height: 1.38; }
+  .b-tc .ln + .ln { margin-top: 2px; }
+  .b-tc .bt { display: flex; gap: 10px; margin-top: 12px; }
+  .b-tc .bt span { flex: 1; height: 38px; border-radius: 19px; display: flex; align-items: center; justify-content: center; font-size: 16.5px; }
+  .b-tc .bt .dn { background: #E9E9EB; color: #2F6DF6; }
+  .b-tc .bt .ap { background: #2F6DF6; color: #fff; }
+  .b-tc .bt.busy span { opacity: .45; }
+  .b-tc .err { color: #E5302A; font-size: 14px; line-height: 1.38; margin-top: 10px; }
+  .b-tc.b-hl { box-shadow: 0 0 0 3px rgba(255,149,0,.55); }
+  .b-tc.b-compact .ln.long { display: none; }
+  .b-toast { position: absolute; left: 50%; transform: translateX(-50%); bottom: 54px; z-index: 20; background: rgba(30,30,32,.92); color: #fff; border-radius: 22px; padding: 11px 18px; font-size: 15px; white-space: nowrap; display: flex; gap: 8px; align-items: center; }
+  .b-toast i { width: 18px; height: 18px; border-radius: 50%; background: #34C759; color: #fff; font: 700 12px/18px "Inter"; text-align: center; font-style: normal; }
+
+  /* ── iOS 锁屏 / Android 通知 ── */
+  .b-lock { position: absolute; inset: 0; background: linear-gradient(160deg, #5d6f8f, #263247 60%, #151b28); }
+  .b-lock .clk { position: absolute; left: 0; right: 0; top: 118px; text-align: center; color: #fff; font: 700 86px/1 "Inter"; letter-spacing: -.03em; }
+  .b-lock .day { position: absolute; left: 0; right: 0; top: 92px; text-align: center; color: rgba(255,255,255,.85); font: 600 19px/1 "Inter"; }
+  .b-notif { position: absolute; left: 14px; right: 14px; border-radius: 24px; background: rgba(245,245,247,.94); padding: 12px 14px; display: flex; gap: 11px; z-index: 5; color: #000; }
+  .b-notif .ai { width: 38px; height: 38px; border-radius: 9px; background: #1f1f24; flex: none; display: flex; align-items: center; justify-content: center; }
+  .b-notif .tx2 { flex: 1; min-width: 0; font-size: 15px; line-height: 1.3; }
+  .b-notif .tx2 b { display: flex; font-weight: 650; }
+  .b-notif .tx2 b span { margin-left: auto; font-weight: 400; color: rgba(60,60,67,.6); font-size: 13.5px; }
+
+  /* ── Android（Material 3，照 android-today-machine 量；412dp 宽） ── */
+  .b-and { width: 412px; height: 880px; position: relative; overflow: hidden; background: #FDFBFF; border-radius: 30px; box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 18px 40px rgba(0,0,0,.14); font-family: "Inter", "Noto Sans SC", sans-serif; color: #1B1B1F; flex: none; }
+  .b-and .sb { height: 32px; display: flex; align-items: center; padding: 0 22px; font-size: 14px; color: #1B1B1F; }
+  .b-and .sb span { margin-left: auto; letter-spacing: 2px; }
+  .b-and .ab { height: 60px; display: flex; align-items: center; gap: 22px; padding: 0 18px; font-size: 21px; }
+  .b-and .ab .bk { font-size: 24px; }
+  .b-and .bd { padding: 0 16px; }
+  .b-and .fs { font-size: 14px; color: #3B5BA9; font-weight: 600; padding: 14px 4px 8px; display: flex; }
+  .b-and .fs span { margin-left: auto; color: #74777F; font-weight: 400; }
+  .b-and .cd { background: #F1F0F7; border-radius: 16px; overflow: hidden; }
+  .b-and .rw { display: flex; align-items: center; gap: 12px; padding: 13px 16px; position: relative; }
+  .b-and .rw + .rw { border-top: 1px solid #E2E1EC; }
+  .b-and .rw .dt { width: 9px; height: 9px; border-radius: 50%; background: #2E9E4F; }
+  .b-and .rw .dt.off { background: #9A9AA2; }
+  .b-and .rw .m { flex: 1; }
+  .b-and .rw .m b { display: block; font-weight: 500; font-size: 16px; }
+  .b-and .rw .m s { display: block; text-decoration: none; font-size: 13.5px; color: #44474F; }
+  .b-and .rw .v { color: #44474F; font-size: 14px; }
+  .b-and .rw .v.amb { color: #B25E00; }
+  /* Android 的审批卡（OwnerRequestViews.kt：同一框，Deny = OutlinedButton，Approve = Button） */
+  .b-atc { background: #FFF8F1; border: 1px solid #F3C99B; border-radius: 16px; overflow: hidden; margin-bottom: 10px; position: relative; }
+  .b-atc .h { background: #FCEBD7; display: flex; align-items: center; gap: 8px; padding: 8px 14px; font-size: 14px; }
+  .b-atc .h i { width: 8px; height: 8px; border-radius: 50%; background: #E57A00; }
+  .b-atc .h b { color: #B25E00; font-weight: 600; }
+  .b-atc .h span { margin-left: auto; color: #74777F; font-size: 13px; }
+  .b-atc .bd2 { padding: 10px 14px 12px; }
+  .b-atc .tt { font: 600 17px/1.3 "Inter"; margin-bottom: 5px; }
+  .b-atc .ln { color: #44474F; font-size: 14px; line-height: 1.4; }
+  .b-atc .bt { display: flex; gap: 10px; justify-content: flex-end; margin-top: 10px; }
+  .b-atc .bt span { height: 40px; border-radius: 20px; padding: 0 22px; display: flex; align-items: center; font-size: 14.5px; font-weight: 600; }
+  .b-atc .bt .dn { border: 1px solid #74777F; color: #3B5BA9; }
+  .b-atc .bt .ap { background: #3B5BA9; color: #fff; }
+  .b-atc.b-hl { box-shadow: 0 0 0 3px rgba(229,122,0,.5); }
+  .b-and .snack { position: absolute; left: 14px; right: 14px; bottom: 26px; background: #303034; color: #F2F0F4; border-radius: 6px; padding: 14px 16px; font-size: 14.5px; }
+  .b-and .bar { margin: 8px 12px 0; height: 56px; border-radius: 28px; background: #ECEBF2; display: flex; align-items: center; gap: 12px; padding: 0 16px 0 9px; }
+  .b-and .bar .tl { width: 36px; height: 36px; border-radius: 50%; background: rgba(229,122,0,.16); display: flex; align-items: center; justify-content: center; }
+  .b-and .bar .w { flex: 1; min-width: 0; }
+  .b-and .bar .w b { display: flex; font-size: 15px; font-weight: 600; }
+  .b-and .bar .w b em { margin-left: auto; font-style: normal; font-weight: 400; color: #74777F; font-size: 13px; }
+  .b-and .bar .w b i { font-style: normal; font-weight: 600; font-size: 12px; background: #E2E1EC; border-radius: 8px; padding: 0 6px; margin-left: 8px; }
+  .b-and .bar .w s { display: block; text-decoration: none; font-size: 13px; color: #44474F; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .b-and .srw { padding: 12px 18px; border-bottom: 1px solid #ECEBF2; }
+  .b-and .srw b { display: flex; font-weight: 500; font-size: 16px; }
+  .b-and .srw b span { margin-left: auto; font-weight: 400; font-size: 13px; color: #74777F; }
+  .b-and .srw s { display: block; text-decoration: none; font-size: 14px; color: #44474F; }
+  .b-and .srw s.amb { color: #B25E00; }
+  .b-and.b-shade { background: #2A2C33; color: #fff; }
+  .b-and .nt { margin: 10px 10px; background: #F4F2FA; color: #1B1B1F; border-radius: 22px; padding: 14px 16px; }
+  .b-and .nt .ap2 { font-size: 12.5px; color: #44474F; display: flex; gap: 6px; align-items: center; }
+  .b-and .nt b { display: block; font-size: 15.5px; margin-top: 4px; }
+  .b-and .nt s { display: block; text-decoration: none; font-size: 14px; color: #44474F; }
+
+  /* ── macOS（照 mac-today-list 量：1010×677 窗口，侧栏 225） ── */
+  .b-mac { width: 760px; height: 470px; position: relative; overflow: hidden; border-radius: 12px; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.12), 0 18px 40px rgba(0,0,0,.16); font-family: "Inter", "Noto Sans SC", sans-serif; font-size: 13px; color: #1d1d1f; flex: none; }
+  .b-mac .tb { height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 14px; border-bottom: 1px solid #e5e5e5; background: #f6f6f6; }
+  .b-mac .tl { display: flex; gap: 8px; }
+  .b-mac .tl i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; } .b-mac .tl i:nth-child(2) { background: #febc2e; } .b-mac .tl i:nth-child(3) { background: #28c840; }
+  .b-mac .tb .bb { margin-left: 70px; border: 1px solid #d2d2d7; background: #fff; border-radius: 6px; padding: 2px 10px; font-size: 12.5px; }
+  .b-mac .tb b { font-size: 14px; }
+  .b-mac .side { position: absolute; left: 0; top: 44px; bottom: 0; width: 225px; background: #f5f5f7; border-right: 1px solid #e5e5e5; padding: 10px 8px; }
+  .b-mac .side .sr { padding: 7px 10px 7px 30px; border-radius: 7px; position: relative; }
+  .b-mac .side .sr b { display: block; font-weight: 500; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .b-mac .side .sr s { display: block; text-decoration: none; font-size: 11.5px; color: #86868b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .b-mac .side .sr s.amb { color: #C96A00; }
+  .b-mac .side .sr .g { position: absolute; left: 8px; top: 10px; width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid #8e8e93; }
+  .b-mac .side .sr .g.amb { border: none; background: rgba(255,149,0,.18); display: flex; align-items: center; justify-content: center; }
+  .b-mac .side .hd2 { font-size: 11px; font-weight: 600; color: #86868b; padding: 6px 10px 2px; }
+  .b-mac .main { position: absolute; left: 0; right: 0; top: 44px; bottom: 0; background: #f2f2f7; padding: 14px 70px; overflow: hidden; }
+  .b-mac .main.side-on { left: 225px; background: #fff; display: flex; align-items: center; justify-content: center; color: #86868b; }
+  .b-mac .gh { font-size: 12px; color: #86868b; padding: 10px 8px 5px; display: flex; }
+  .b-mac .gh span { margin-left: auto; }
+  .b-mac .grp { background: #fff; border-radius: 10px; border: 1px solid #e5e5ea; }
+  .b-mac .grp .r { display: flex; align-items: center; gap: 10px; padding: 9px 12px; }
+  .b-mac .grp .r + .r { border-top: 1px solid #ededf0; }
+  .b-mac .grp .r .dt { width: 7px; height: 7px; border-radius: 50%; background: #34C759; }
+  .b-mac .grp .r .m { flex: 1; } .b-mac .grp .r .m b { display: block; font-weight: 500; } .b-mac .grp .r .m s { display: block; text-decoration: none; color: #86868b; font-size: 12px; }
+  .b-mac .mtc { background: #FFFCF8; border: 1px solid #F8C995; border-radius: 10px; overflow: hidden; margin-bottom: 8px; }
+  .b-mac .mtc .h { background: #FDF0E2; display: flex; gap: 7px; align-items: center; padding: 5px 12px; font-size: 12.5px; }
+  .b-mac .mtc .h i { width: 7px; height: 7px; border-radius: 50%; background: #FF8A00; }
+  .b-mac .mtc .h b { color: #E07A00; font-weight: 600; } .b-mac .mtc .h span { margin-left: auto; color: #86868b; }
+  .b-mac .mtc .bd3 { padding: 8px 12px 10px; }
+  .b-mac .mtc .tt { font-weight: 650; font-size: 14px; margin-bottom: 3px; }
+  .b-mac .mtc .ln { color: #6e6e73; font-size: 12.5px; line-height: 1.4; }
+  .b-mac .mtc .bt { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+  .b-mac .mtc .bt span { border-radius: 6px; padding: 3px 14px; font-size: 13px; border: 1px solid #d2d2d7; background: #fff; }
+  .b-mac .mtc .bt .ap { background: #2F6DF6; color: #fff; border-color: #2F6DF6; }
+  .b-mac .mtc.b-hl { box-shadow: 0 0 0 3px rgba(255,149,0,.5); }
+  .b-mac .mn { position: absolute; right: 12px; top: 54px; width: 330px; background: rgba(246,246,248,.97); border-radius: 14px; box-shadow: 0 8px 26px rgba(0,0,0,.2); padding: 10px 12px; display: flex; gap: 10px; z-index: 5; }
+</style>
+<body>
+
+<!-- ───────────────────── 1 · 总览 + 今天 ───────────────────── -->
+<section class="b-part" id="part-1">
+<h1>终端登录审批搬到机器页；needs-you 多一条 "Approve a terminal"</h1>
+<p class="b-lede">你定的方向（11-14）：在终端里敲 <code>orbit</code> 时弹出的 <b>"Approve a terminal?"</b> 不再待在 Waiting on you 里（这个汇总页本项目要删）。它搬到<b>机器页</b>，在那里批准或拒绝；有待批的时候，needs-you 胶囊（会话页、会话列表）和会话列表顶上多一条 <b>Approve a terminal</b>，点它直达那里；终端登录推送 <code>orbit://terminal-login/&lt;id&gt;</code> 也开到那里。<br>
+<b>审批本身不改</b>：同一张卡（<code>TerminalApproveCard</code>，四端同一套字）、同一对按钮、同一组接口（<code>POST /terminals/requests/:id/approve|deny</code>），一条请求活 10 分钟、每台机器最多 3 条待批、过期 / 已答的报错照服务端原样。改的只是<b>它在哪里出现、谁来提醒你</b>。</p>
+<table class="b-t">
+<tr><th style="width:110px">客户端</th><th style="width:400px">今天：卡在哪 · 谁提醒你</th><th>改后：卡在哪 · 谁提醒你 · 推送开到哪</th></tr>
+<tr><td>Web</td><td class="b-bad">只在 <code>/waiting</code> 的 Open 页签顶上；侧栏 Waiting on you 的数字把它算进去（<code>useWaitingOnYouCount</code>）。Web 没有推送</td><td class="b-ok">那台机器自己的页 <code>/settings/machines/:id</code>，标题下面一节 <b>Terminals to approve</b>；设置侧栏那台机器的点变琥珀（今天就有的 "Needs you" 点）；会话列表顶上一行 <b>Approve a terminal</b></td></tr>
+<tr><td>macOS</td><td class="b-bad">Waiting on you 的 sheet；推送 → 开 sheet。没有胶囊，也没有 Settings → Terminals 页</td><td class="b-ok">Settings → Machines &amp; models 的 <b>Needs you</b> 节（和 iOS 同一份 <code>RunnersListView</code>）+ 机器页；会话列表顶上一行；推送 → 开到这一节</td></tr>
+<tr><td>iOS</td><td class="b-bad">Waiting on you 的 sheet；推送 <code>.openTerminalRequests</code> → 开 sheet；胶囊不算它</td><td class="b-ok">同 macOS 的那一节 + 机器页；胶囊（列表、会话页）多一条；推送 → 开到这一节</td></tr>
+<tr><td>Android</td><td class="b-bad">Waiting on you 页；<code>orbit://terminal-login</code> → <code>Destination.WAITING_ON_YOU</code>；<code>NeedsYouBar</code> 不算它</td><td class="b-ok">跟 iOS：Machines &amp; models 的 <b>Needs you</b> 节 + 机器页；<code>NeedsYouBar</code> 多一条；推送 → 开到这一节</td></tr>
+</table>
+
+<div class="b-sub">今天的真实画面</div>
+<div class="b-row">
+  <div class="b-fr"><span class="tag now">Web · /waiting</span><span class="b-real">真实 · main 构建</span><img class="b-shot" src="02-shots/web-today-inbox-crop.png" style="width:470px"></div>
+  <div class="b-fr"><span class="tag now">iOS · Waiting on you</span><span class="b-real">真实 · 探针</span><img class="b-shot" src="02-shots/ios-today-inbox.png" style="width:200px"></div>
+  <div class="b-fr"><span class="tag now">iOS · Settings</span><span class="b-real">真实</span><img class="b-shot" src="02-shots/ios-today-settings.png" style="width:200px"></div>
+  <div class="b-fr"><span class="tag now">Android · 机器页</span><span class="b-real">真实</span><img class="b-shot" src="02-shots/android-today-machine.png" style="width:196px"></div>
+  <div class="b-fr"><span class="tag now">macOS · 会话列表</span><span class="b-real">真实</span><img class="b-shot" src="02-shots/mac-today-list.png" style="width:240px"></div>
+</div>
+<div class="b-row" style="margin-top:18px">
+  <div class="b-fr"><span class="tag now">Web · 机器页</span><span class="b-real">真实</span><img class="b-shot" src="02-shots/web-today-machine-crop.png" style="width:560px"></div>
+  <div class="b-fr"><span class="tag now">Web · 会话页</span><span class="b-real">真实</span><img class="b-shot" src="02-shots/web-today-session-crop.png" style="width:330px"></div>
+  <div class="b-fr"><span class="tag now">iOS · 胶囊（列表）</span><span class="b-real">真实</span><img class="b-shot" src="02-shots/ios-today-capsule-list.png" style="width:200px"></div>
+  <div class="b-fr"><span class="tag now">iOS · 机器列表</span><span class="b-real">真实 · 11-01</span><img class="b-shot" src="02-shots/ios-today-machines.png" style="width:200px"></div>
+</div>
+<p class="b-note">三张 Web 帧：<b>同一时刻有一条终端请求在等你</b>。Web 机器页、会话页上一个字都没提它，只有侧栏 Waiting on you 的 "1"（本项目要删掉的那一项）。iOS 胶囊只认会话（<code>NeedsYouBanner.target</code> 必须是一个会话），所以终端请求今天在胶囊里也看不到。iOS 机器列表那张是 11-01 的截图，标题当时还叫 Infrastructure，今天叫 Machines &amp; models，节的顺序没变。<br>
+今天没有可用的截图：Android 和 macOS 上这张审批卡本身（Android 卡的截图留在 3811a962b 那个任务的 Documents 里，本会话读不到；macOS 用的是和 iOS 同一份 <code>TerminalApproveCard</code> 视图）。下面画它们时照的是代码：<code>OwnerRequestViews.kt:254</code>、<code>OwnerRequestViews.swift:445</code>。</p>
+</section>
+
+<!-- ───────────────────── 2 · 机器页：0 / 1 / 多条 ───────────────────── -->
+<section class="b-part" id="part-2">
+<h2 style="margin-top:0">① 机器页上的待批区 · 0 / 1 / 多条</h2>
+<p class="b-lede"><b>Web</b>：没有机器列表页，每台机器就是设置侧栏 Machines 下的一行，各有自己的页。所以待批区放在<b>那台机器的页上</b>，在标题下面、Resources 前面，节名 <b>Terminals to approve</b>，右边注 <i>A request lasts 10 minutes</i>。<br>
+<b>iOS / macOS / Android</b>：已经有一个列表页 <b>Machines &amp; models</b>，它最上面本来就有一节 <b>Needs you</b>（今天放 "{machine} is offline" 这类事）。卡就放进这一节，所有机器的待批都在这里；Settings 首页那一行的数值照今天的规则变琥珀 "1 needs you"。每台机器自己的页也在标题下画它自己的那几张（同一份读取，按 <code>runnerId</code> 过滤）。<br>
+卡<b>原样搬</b>：<code>TerminalApproveCard</code> 不改字、不改按钮。<b>0 条时这一节整个不画</b>，和今天 Needs you 节、Web 的 Needs Attention 卡的规矩一样（不留一个永远空着的标题）。</p>
+
+<div class="b-sub">Web <span class="b-real">真实 · main 构建，卡是它自己的 TerminalApproveCard，capture 时挪进机器页</span></div>
+<div class="b-row">
+  <div class="b-fr"><span class="tag alt">0 条</span><br><img class="b-shot" src="02-shots/web-new-machine-0-crop.png" style="width:460px"><p class="b-note" style="width:460px">和今天的机器页一模一样；侧栏点是绿的。</p></div>
+  <div class="b-fr"><span class="tag rec">1 条</span><br><img class="b-shot" src="02-shots/web-new-machine-1-crop.png" style="width:460px"><p class="b-note" style="width:460px">标题下一节 <b>Terminals to approve</b>；侧栏 dev-laptop 的点变琥珀（<code>settings-dot--attention</code>，读作 "Needs you"，今天已有）。锚点 <code>#terminal-requests</code>，needs-you 那一条和链接都落到这里。</p></div>
+  <div class="b-fr"><span class="tag rec">多条（同一台机器 2 条）</span><br><img class="b-shot" src="02-shots/web-new-machine-2-crop.png" style="width:460px"><p class="b-note" style="width:460px">一条一张卡，最早的在上（照服务端 <code>createdAt</code> 顺序）。每台机器最多 3 条（<code>TERMINAL_LOGIN_OPEN_MAX</code>）。几台机器都有时，每台各在自己的页上，侧栏各自亮点。</p></div>
+</div>
+
+<div class="b-sub">iOS（手画，照上面真实的 Settings / 机器列表量）· macOS 同一份视图</div>
+<div class="b-row" id="ios-machines"></div>
+
+<div class="b-sub">Android（手画，跟 iOS）· macOS</div>
+<div class="b-row" id="and-machines" style="flex-wrap:wrap"></div>
+</section>
+
+<!-- ───────────────────── 3 · 批准 / 拒绝 / 过期 ───────────────────── -->
+<section class="b-part" id="part-3">
+<h2 style="margin-top:0">② 批准、拒绝、过期 · 按下去以后</h2>
+<p class="b-lede">行为照 main：<b>按一下就生效，没有确认框</b>，因为卡上的 code 要你和终端上那串比对，这一步本身就是确认（见待定 2）。按下后两个按钮变灰，等服务端答复。成功了卡就离开，这一节没别的卡就整节收起，Settings 首页那行回到 "1 of 1 online"。失败了卡留着，下面一行红字，用的是 main 的 "That was not recorded: …"。<br>
+要你拍板的是两件小事：按完要不要一句回执（待定 3），过期的卡要不要不等下一次读取、到点就收（待定 4）。下面按推荐画。</p>
+<div class="b-row" id="decide"></div>
+<div class="b-row" style="margin-top:20px">
+  <div class="b-fr"><span class="tag now">Web · 过期后再按 Approve</span><span class="b-real">真实 · 服务端 404 原文</span><br><img class="b-shot" src="02-shots/web-new-expired-crop.png" style="width:560px"><p class="b-note" style="width:560px">main 今天的样子，原样保留，用来兜底（比如手机时钟不准）。按推荐（待定 4 选 A），客户端到 <code>expiresAt</code> 就把卡收起，平时碰不到这一屏。</p></div>
+  <div class="b-fr"><span class="tag now">iOS · 今天批准以后</span><span class="b-real">真实 · 探针</span><br><img class="b-shot" src="02-shots/ios-today-after-approve.png" style="width:200px"><p class="b-note" style="width:200px">main：卡消失，没有回执（待定 3 的 B）。</p></div>
+<div class="b-fr"><span class="tag rec">Web · 批准以后，Settings → Terminals</span><span class="b-real">真实</span><br><img class="b-shot" src="02-shots/web-new-terminals-after.png" style="width:560px"><p class="b-note" style="width:560px">批准的结果在这里能看到：这台机器多了一个 "Never used" 的终端，可以 Revoke（这一页不改）。机器页上那一节收起，侧栏点回绿。</p></div>
+</div>
+</section>
+
+<!-- ───────────────────── 4 · needs-you 一条 ───────────────────── -->
+<section class="b-part" id="part-4">
+<h2 style="margin-top:0">③ needs-you 的一条 "Approve a terminal" · 点它落到哪</h2>
+<p class="b-lede">胶囊用的是今天的部件（<code>NeedsYouBanner</code> / <code>NeedsYouBar</code>，两行：第一行说是什么事，第二行说在哪）。这一条的第一行是 <b>Approve a terminal</b>，第二行是 <b>dev-laptop · code 7KQ-4MZ</b>（机器名和 code，code 让你在手机上就能先对一眼）。图标用 Settings 里 Terminals 那一行已有的 <code>terminal</code>（iOS SF Symbol；Android 用 <code>ic_terminal</code>）。<br>
+它<b>排在最前</b>（10 分钟就过期，比别的事急）。有别的事时照今天的规则显示 <code>+N</code>，点开展开列表。多条时第一行写 <b>Approve 2 terminals</b>（待定 5）。<br>
+<b>点它</b>：iOS / Android 打开 Settings → Machines &amp; models，滚到 Needs you 节，最早那张卡闪一下琥珀描边；Web 打开那台机器的页 <code>#terminal-requests</code>（几台机器都有时，开最早那条所在的机器）。<br>
+<b>Web 和 macOS 没有胶囊</b>：会话列表顶上加一节 <b>Needs you</b>，里面就这一行。行用的是 Web 会话列表里今天已有的那种"不是会话的行"（项目会话页的 Landings 行 <code>SessionProjectLandings</code>），不新造样子（待定 6）。</p>
+<div class="b-row" id="capsule"></div>
+<div class="b-row" style="margin-top:22px">
+  <div class="b-fr"><span class="tag rec">Web · 会话列表顶上 · 1 条</span><span class="b-real">真实构建 + 挪 DOM</span><br><img class="b-shot" src="02-shots/web-new-session-1-crop.png" style="width:400px"><p class="b-note" style="width:460px">"Needs you" 一节、一行：终端图标 + <b>Approve a terminal</b> + 等了多久，第二行琥珀 <i>dev-laptop · code 7KQ-4MZ</i>。侧栏不再有 Waiting on you（项目前面的任务删了它）。点它 → 右图。</p></div>
+  <div class="b-fr"><span class="tag rec">Web · 2 条</span><span class="b-real">真实构建 + 挪 DOM</span><br><img class="b-shot" src="02-shots/web-new-session-2-crop.png" style="width:400px"><p class="b-note" style="width:460px"><b>Approve 2 terminals</b>，第二行写机器（同一台就写 <i>dev-laptop · 2 waiting</i>，几台就写 <i>dev-laptop, build-box</i>）。</p></div>
+  <div class="b-fr"><span class="tag rec">Web · 点下去落到</span><span class="b-real">真实构建 + 挪 DOM</span><br><div style="position:relative"><img class="b-shot" src="02-shots/web-new-machine-1-crop.png" style="width:560px"><div class="mk" style="left:142px;top:40px;width:408px;height:212px"></div><div class="num" style="left:540px;top:32px">1</div></div><p class="b-note" style="width:560px"><span class="n">1</span><code>/settings/machines/&lt;runnerId&gt;#terminal-requests</code>，滚到这一节，卡描边闪一下（同 iOS）。批完回到会话列表，那一行没了。</p></div>
+</div>
+</section>
+
+<!-- ───────────────────── 5 · 推送落点 ───────────────────── -->
+<section class="b-part" id="part-5">
+<h2 style="margin-top:0">④ 终端登录推送 · 落点</h2>
+<p class="b-lede">推送的字不改（<code>push.service.ts</code>）：标题 <b>Approve a terminal?</b>，正文 <b>Terminal on dev-laptop · code 7KQ-4MZ</b>，链接 <code>orbit://terminal-login/&lt;id&gt;</code>。改的只是<b>点开以后去哪</b>：iOS / macOS / Android 都开到 Settings → Machines &amp; models 的 Needs you 节，卡上 id 等于链接里 id 的那张描边闪一下。<br>
+那条请求已经答过或已过期（Android 的 <code>PushAuthority</code> 本来就会把这种通知收掉，但用户可能抢先点开）：照样开这一页，节里有什么就是什么，没有就不画，不另加提示（照 main：请求一离开列表就不再出现）。Web 没有推送，靠会话列表顶上那一行。<br>
+代码里要改的地方：Apple 的 <code>DeepLink.swift</code> 今天不认 <code>terminal-login</code> 这个 host，要加上；<code>.openTerminalRequests</code> 改成开这一页，不再开 inbox。Android 的 <code>OrbitLinks</code> 把 <code>terminal-login</code> 从 <code>WAITING_ON_YOU</code> 改指到 machines-and-models 页。</p>
+<div class="b-row" id="push"></div>
+</section>
+
+<!-- ───────────────────── 6 · 待定 + 差异 + 落地 ───────────────────── -->
+<section class="b-part" id="part-6">
+<h2 style="margin-top:0">待定 · 要你拍板</h2>
+<table class="b-t">
+<tr><th style="width:250px">问题</th><th style="width:380px">方案 A</th><th style="width:380px">方案 B</th><th>建议</th></tr>
+<tr><td><b>1</b> iOS / Android / macOS：点那一条、点推送，落到哪</td><td><b>Machines &amp; models 列表的 Needs you 节</b>，所有机器的待批都在这里</td><td>落到那台机器自己的页</td><td>A<span class="b-pick">推荐</span>：几台机器都有时只有列表页一处能看全，而且这一节今天就叫 Needs you。机器自己的页照样画它自己那几张卡。Web 没有列表页，所以落到机器页（见 ③）</td></tr>
+<tr><td><b>2</b> 批准 / 拒绝前要不要再问一次</td><td><b>不问</b>，按一下就生效（同 main）</td><td>Approve 前弹 "Approve the terminal on dev-laptop?"，把 code 再显示一遍</td><td>A<span class="b-pick">推荐</span>：标准里写了"审批行为与 main 一致"。卡上的 code 要和终端上的比对，这一步本身就是确认。拒绝是安全的：终端再敲一次 <code>orbit</code> 就能重新请求</td></tr>
+<tr><td><b>3</b> 按完以后的回执</td><td>卡离开，再出一句短提示 <b>Terminal approved</b> / <b>Terminal denied</b>（iOS 用和 "Terminal revoked" 同一种 toast，Android 用 snackbar，Web 用 toast）</td><td>同 main：卡直接消失，不说话</td><td>A<span class="b-pick">推荐</span>：卡现在在一个长页面里，静悄悄消失容易被当成没按上。这两句和 Revoke 的 "Terminal revoked" 是一家，不新造样子</td></tr>
+<tr><td><b>4</b> 过期</td><td>客户端到 <code>expiresAt</code> 就把卡收起（规则同服务端 <code>GET /terminals/requests</code> 的 <code>expiresAt &gt; now</code>）；main 的 404 报错留着兜底</td><td>同 main：等下一次读取（20 s 轮询或 <code>terminals.changed</code>）才消失；在这之前按，得到 404 "terminal sign-in not found or expired — run `orbit` in the terminal again"</td><td>A<span class="b-pick">推荐</span>：服务端的规则和报错都不变，只是少一次"按了才知道过期了"。needs-you 那一条也按同一个时刻消失</td></tr>
+<tr><td><b>5</b> 多条时 needs-you 那一条怎么写</td><td><b>Approve 2 terminals</b>，第二行写机器</td><td><b>Approve a terminal</b> 加 <code>+1</code></td><td>A<span class="b-pick">推荐</span>：跟本项目定的 "Approve 8 task moves" 同一种写法；<code>+N</code> 留给"还有别的事"</td></tr>
+<tr><td><b>6</b> Web 和 macOS 没有胶囊，用什么提醒</td><td>会话列表顶上一节 <b>Needs you</b>，一行（Web 复用 Landings 行；macOS 复用会话行的琥珀字）</td><td>不加。Web 只靠设置侧栏机器上的琥珀点，macOS 只靠推送</td><td>A<span class="b-pick">推荐</span>：Waiting on you 删掉以后，B 在 Web 上等于没人提醒（设置侧栏平时看不到），而请求 10 分钟就过期</td></tr>
+<tr><td><b>7</b> 卡的头条 "Waiting on you"</td><td>卡<b>原样</b>，头条照旧写 Waiting on you · Asked 3m ago</td><td>放进 Needs you 节时去掉头条，只留标题、两行字、按钮</td><td>A<span class="b-pick">推荐</span>：同一张卡在会话里的请求卡上也有这个头条（本项目不改它）；原样搬四端都不用改卡和它的测试。若嫌和节名重复，B 也只是删一行</td></tr>
+</table>
+
+<h2>Android 和 iOS 的差异（都有平台理由）</h2>
+<table class="b-t">
+<tr><th style="width:300px">哪里</th><th>差异 · 理由</th></tr>
+<tr><td>卡的按钮</td><td>Android 的按钮靠右，Deny 是 <code>OutlinedButton</code>、Approve 是 <code>Button</code>；iOS 两个按钮各占一半宽。都是两端今天这张卡已有的样子（Material / iOS 各自的按钮），不改</td></tr>
+<tr><td>回执</td><td>Android 用 snackbar，iOS 用 toast：两端提示 "Terminal revoked" 的方式本来就不同</td></tr>
+<tr><td>Needs you 节里其它行</td><td>Android 那一节的行今天带一个 "Details" / "Manage" 按钮，iOS 是整行可点，两端照旧。终端卡在两端都是整张卡</td></tr>
+<tr><td>推送被收掉</td><td>Android 的 <code>PushAuthority</code> 在请求离开待批列表后会撤掉通知（51f16720a 已有）；iOS 的通知留在通知中心，点开落到同一页，那里已经没有这张卡</td></tr>
+<tr><td>macOS 和 iOS</td><td>macOS 没有胶囊，所以用会话列表顶上一行（待定 6）；macOS 也没有 Settings → Terminals 页，卡上 "revoke it in Settings → Terminals" 那句在 Mac 上没有对应的地方（今天就这样，不在本项目里改，记一笔）</td></tr>
+</table>
+
+<h2>落地（按代价排）</h2>
+<table class="b-t">
+<tr><th style="width:40px">#</th><th style="width:700px">做什么</th><th>代价</th></tr>
+<tr><td>1</td><td>服务端：不用改。读取还是 <code>GET /terminals/requests</code>（带 <code>runnerId</code>、<code>expiresAt</code>），批 / 拒还是那两个 POST，<code>terminals.changed</code> 照旧推</td><td>无</td></tr>
+<tr><td>2</td><td>四端：卡从 inbox 搬到 Needs you 节 / 机器页（Web 机器页一节 + 侧栏点；Apple <code>MachinesAndModelsNeedsYouSection</code>；Android <code>NeedsYouSection</code>），Settings 那一行的 needs-you 计数把它算进去</td><td>小–中</td></tr>
+<tr><td>3</td><td>胶囊 / 那一行：iOS <code>NeedsYouBanner</code> 和 Android 的同名类今天要求 <code>target</code> 是一个会话，要给"终端请求"开一个新的 target；新增图标 <code>terminal</code>；Web / macOS 列表顶上一行</td><td>中，四端各一份</td></tr>
+<tr><td>4</td><td>推送：Apple <code>DeepLink</code> 认 <code>terminal-login</code>，<code>.openTerminalRequests</code> 改指；Android <code>OrbitLinks</code> 改指</td><td>小</td></tr>
+<tr><td>5</td><td>（待定 3、4 若选 A）toast / snackbar 两句；到 <code>expiresAt</code> 收卡</td><td>小</td></tr>
+</table>
+</section>
+
+<script>
+// ───────── 部件 ─────────
+const CODE1 = '7KQ-4MZ', CODE2 = 'R2T-9PX', CODE3 = 'H8M-2QC';
+const DETAIL = 'It can start sessions in your workspaces on this machine and answer their approval cards for 30 days. You can revoke it in Settings → Terminals.';
+const tcard = (machine, code, asked, o = {}) => `<div class="b-tc${o.hl ? ' b-hl' : ''}${o.compact ? ' b-compact' : ''}"><div class="h"><i></i><b>Waiting on you</b><span>Asked ${asked} ago</span></div>
+<div class="bd"><div class="tt">Approve a terminal?</div><div class="ln">Terminal on ${machine} · code ${code}</div><div class="ln long">${DETAIL}</div>
+${o.err ? `<div class="err">That was not recorded: ${o.err}</div>` : ''}<div class="bt${o.busy ? ' busy' : ''}"><span class="dn">Deny</span><span class="ap">Approve</span></div></div></div>`;
+const iosSheet = (title, body, { back = true, dim = true, h = 800 } = {}) => phone('light', `${statusBar('9:41')}<div class="b-sheet">
+<div class="b-sh-nav">${back ? `<div class="gc l">${ic('chevl', 20, '#000', 2.4)}</div>` : ''}<div class="t">${title}</div><div class="gc r">${ic('plus', 0)}<span style="font:300 26px/1 Inter;transform:rotate(45deg);display:block">+</span></div></div>
+<div class="b-ios-body">${body}</div></div>`, { cls: 'b-dim', h });
+const machinesGroup = (rows) => `<div class="b-hd">Machines<span>${rows.length} machines · 1 / 6 slots busy</span></div><div class="b-grp">${rows.map(([n, l, off, amb]) => `<div class="b-rr"><i class="dt${off ? ' off' : ''}"></i><div class="m"><b>${n}</b><s class="${amb ? 'amb' : ''}">${l}</s></div><span class="chev">${ic('chevr', 14, 'rgba(60,60,67,.3)', 2.4)}</span></div>`).join('')}</div>
+<div class="b-foot">Subscriptions signed in here are spent only by sessions on that machine.</div>`;
+const M2 = [['dev-laptop', '1 / 2 running · All signed in'], ['build-box', '0 / 4 running · All signed in']];
+const needsYou = (cards) => `<div class="b-hd">Needs you</div>${cards}`;
+
+// ── ① iOS / macOS 机器页 ──
+const settingsRow = (val, amb) => `<div class="b-grp" style="margin-top:6px"><div class="b-rr"><span style="width:26px">${ic('term', 22, '#000', 1.6)}</span><div class="m"><b>Machines &amp; models</b></div><span class="v${amb ? ' amb' : ''}">${val}</span><span class="chev">${ic('chevr', 14, 'rgba(60,60,67,.3)', 2.4)}</span></div></div><div class="b-foot">Where your agents run, and whose model quota they spend.</div>`;
+document.getElementById('ios-machines').innerHTML = `
+<div class="b-fr"><span class="tag alt">Settings 首页那一行</span>${iosSheet('Settings', `${settingsRow('1 of 2 online')}<div style="height:22px"></div>${settingsRow('1 needs you', true)}
+<div class="b-foot" style="margin-top:30px;color:#4f4f58;font-size:14px;line-height:1.55">上：0 条（今天的样子）。<br>下：有 1 条待批。数值和颜色照今天的规则（<code>SettingsHome.swift:129</code>）：终端请求和 "offline" 一样算一件 needs you。</div>`, { back: false })}</div>
+<div class="b-fr"><span class="tag alt">Machines &amp; models · 0 条</span>${iosSheet('Machines &amp; models', machinesGroup(M2))}<p class="b-note" style="width:440px">没有 Needs you 节，和今天一样。</p></div>
+<div class="b-fr"><span class="tag rec">1 条</span>${iosSheet('Machines &amp; models', needsYou(tcard('dev-laptop', CODE1, '3m')) + machinesGroup([['dev-laptop', '1 / 2 running · 1 terminal to approve', 0, 1], M2[1]]))}<p class="b-note" style="width:440px">卡原样放进 Needs you 节。机器行的第三段在等待期间写 <i>1 terminal to approve</i>（琥珀，今天 <code>RunnerRow</code> 的提醒行就是放这类事的地方）。</p></div>`;
+document.getElementById('ios-machines').insertAdjacentHTML('afterend', `<div class="b-row" style="margin-top:20px">
+<div class="b-fr"><span class="tag rec">多条（两台机器 3 条）</span>${iosSheet('Machines &amp; models', needsYou(tcard('dev-laptop', CODE1, '6m', { compact: true }) + tcard('dev-laptop', CODE2, '4m', { compact: true }) + tcard('build-box', CODE3, '1m', { compact: true })) + machinesGroup([['dev-laptop', '2 terminals to approve', 0, 1], ['build-box', '1 terminal to approve', 0, 1]]))}
+<p class="b-note" style="width:440px">最早的在上。多张时第二张起<b>收掉那段 30 天说明</b>（每张都一样，只在第一张出现）。这是唯一对卡的改动，若不想动卡就整张重复（页更长）。</p></div>
+<div class="b-fr"><span class="tag rec">机器自己的页（dev-laptop）</span>${iosSheet('dev-laptop', `<div style="display:flex;align-items:center;gap:8px;padding:6px 4px 2px"><i style="width:9px;height:9px;border-radius:50%;background:#34C759"></i><span style="color:rgba(60,60,67,.6);font-size:15px">Online · 1 of 2 running</span></div>
+<div class="b-hd">Terminals to approve<span>A request lasts 10 minutes</span></div>${tcard('dev-laptop', CODE1, '3m')}
+<div class="b-hd">Capacity</div><div class="b-grp"><div class="b-rr"><div class="m"><b>Max Concurrent</b></div><span class="v">2</span></div><div class="b-rr"><div class="m"><b>Keep Free</b></div><span class="v">Off</span></div></div>
+<div class="b-hd">Engines</div><div class="b-grp"><div class="b-rr"><div class="m"><b>Claude Code</b><s>2.1.302 · Signed in</s></div></div></div>`)}
+<p class="b-note" style="width:440px">标题下一节，节名和 Web 一样（<b>Terminals to approve</b>）。只画这台机器的。在这里答，列表页那张同时消失（同一份读取）。</p></div>
+<div class="b-fr" style="width:460px"><span class="tag alt">macOS</span>
+<div class="b-mac" style="width:460px;height:420px"><div class="tb"><div class="tl"><i></i><i></i><i></i></div><span class="bb" style="margin-left:24px">‹ Settings</span><b>Machines &amp; models</b></div>
+<div class="main" style="padding:10px 26px"><div class="gh">Needs you</div>
+<div class="mtc"><div class="h"><i></i><b>Waiting on you</b><span>Asked 3m ago</span></div><div class="bd3"><div class="tt">Approve a terminal?</div><div class="ln">Terminal on dev-laptop · code 7KQ-4MZ</div><div class="ln">${DETAIL}</div><div class="bt"><span>Deny</span><span class="ap">Approve</span></div></div></div>
+<div class="gh">Machines<span>2 machines · 1 / 6 slots busy</span></div><div class="grp"><div class="r"><i class="dt"></i><div class="m"><b>dev-laptop</b><s style="color:#C96A00">1 / 2 running · 1 terminal to approve</s></div></div><div class="r"><i class="dt"></i><div class="m"><b>build-box</b><s>0 / 4 running · All signed in</s></div></div></div></div></div>
+<p class="b-note">Mac 的 Settings 窗口里 Machines &amp; models 用的是和 iOS <b>同一份</b> <code>RunnersListView</code>（<code>MainView.swift:613</code>），所以节和卡跟 iOS 一样，只是 Mac 的按钮样式。0 / 多条同 iOS。</p></div></div>`);
+
+// ── ① Android ──
+const andTop = (title) => `<div class="sb">9:41<span>▾◢▮</span></div><div class="ab"><span class="bk">←</span>${title}</div>`;
+const acard = (machine, code, asked, o = {}) => `<div class="b-atc${o.hl ? ' b-hl' : ''}"><div class="h"><i></i><b>Waiting on you</b><span>Asked ${asked} ago</span></div><div class="bd2"><div class="tt">Approve a terminal?</div><div class="ln">Terminal on ${machine} · code ${code}</div>${o.compact ? '' : `<div class="ln" style="margin-top:2px">${DETAIL}</div>`}${o.err ? `<div class="ln" style="color:#BA1A1A;margin-top:6px">That was not recorded: ${o.err}</div>` : ''}<div class="bt"${o.busy ? ' style="opacity:.45"' : ''}><span class="dn">Deny</span><span class="ap">Approve</span></div></div></div>`;
+const andMachines = (rows) => `<div class="fs">Machines<span>${rows.length} machines</span></div><div class="cd">${rows.map(([n, l, amb]) => `<div class="rw"><i class="dt"></i><div class="m"><b>${n}</b><s style="${amb ? 'color:#B25E00' : ''}">${l}</s></div><span class="v">⋮</span></div>`).join('')}</div>`;
+const andPage = (body, extra = '') => `<div class="b-and">${andTop('Machines &amp; models')}<div class="bd">${body}</div>${extra}</div>`;
+document.getElementById('and-machines').innerHTML = `
+<div class="b-fr"><span class="tag alt">Android · 0 条</span><br>${andPage(andMachines([['dev-laptop', '1 / 2 running · All signed in'], ['build-box', '0 / 4 running · All signed in']]))}</div>
+<div class="b-fr"><span class="tag rec">Android · 1 条</span><br>${andPage(`<div class="fs">Needs you</div>${acard('dev-laptop', CODE1, '3m')}` + andMachines([['dev-laptop', '1 terminal to approve', 1], ['build-box', '0 / 4 running · All signed in']]))}</div>
+<div class="b-fr"><span class="tag rec">Android · 多条</span><br>${andPage(`<div class="fs">Needs you</div>${acard('dev-laptop', CODE1, '6m', { compact: true })}${acard('dev-laptop', CODE2, '4m', { compact: true })}${acard('build-box', CODE3, '1m', { compact: true })}` + andMachines([['dev-laptop', '2 terminals to approve', 1], ['build-box', '1 terminal to approve', 1]]))}</div>
+</div><div style="width:100%"><p class="b-note" style="max-width:1300px;margin-top:0"><b>Android 跟 iOS</b>：同一节（<code>MachinesAndModelsScreen.kt</code> 的 <code>NeedsYouSection</code>）、同一张卡（<code>OwnerRequestViews.kt:254</code>）、同样的 0 / 1 / 多条规则。Settings 那一行的值照 <code>MachinesAndModels.settingsValue</code> 变琥珀。机器页（<code>RunnerDetail</code>）标题下同样一节 <b>Terminals to approve</b>。<br><br>差异见文末表：按钮靠右（Material），回执用 snackbar。</p></div>`;
+
+// ── ② 批准 / 拒绝 / 过期（iOS；Android 同，见 snackbar） ──
+const decideCol = (tag, cls, body, note, extra = '') => `<div class="b-fr"><span class="tag ${cls}">${tag}</span>${iosSheet('Machines &amp; models', body + extra.inner)}${extra.after || ''}<p class="b-note" style="width:440px">${note}</p></div>`;
+const toast = (t) => `<div class="b-toast"><i>✓</i>${t}</div>`;
+document.getElementById('decide').innerHTML = `
+${decideCol('按下 Approve', 'rec', needsYou(tcard('dev-laptop', CODE1, '3m', { busy: true })) + machinesGroup([['dev-laptop', '1 terminal to approve', 0, 1], M2[1]]), '两个按钮变灰，等服务端答复（同 main，<code>decideTerminal</code>）。没有确认框（待定 2）。', { inner: '' })}
+<div class="b-fr"><span class="tag rec">批准以后</span>${phone('light', `${statusBar('9:41')}<div class="b-sheet"><div class="b-sh-nav"><div class="gc l">${ic('chevl', 20, '#000', 2.4)}</div><div class="t">Machines &amp; models</div></div><div class="b-ios-body">${machinesGroup(M2)}</div>${toast('Terminal approved')}</div>`, { cls: 'b-dim' })}<p class="b-note" style="width:440px">卡离开；这一节没别的事，整节收起；机器行回到平常那句。底部一句 <b>Terminal approved</b>（待定 3），和 Revoke 后的 "Terminal revoked" 同一种 toast。终端那头这时拿到凭据，开始会话。</p></div>
+<div class="b-fr"><span class="tag rec">拒绝以后</span>${phone('light', `${statusBar('9:41')}<div class="b-sheet"><div class="b-sh-nav"><div class="gc l">${ic('chevl', 20, '#000', 2.4)}</div><div class="t">Machines &amp; models</div></div><div class="b-ios-body">${machinesGroup(M2)}</div>${toast('Terminal denied')}</div>`, { cls: 'b-dim' })}<p class="b-note" style="width:440px">同上，回执是 <b>Terminal denied</b>。终端那头显示被拒，想再试就再敲一次 <code>orbit</code>（main 的行为）。若同一条已在别的设备上答了，服务端答 409，这里显示 main 的 "That was not recorded: This terminal sign-in was already approved"，卡在下一次读取时离开。</p></div>`;
+document.getElementById('decide').insertAdjacentHTML('afterend', `<div class="b-row" style="margin-top:20px">
+<div class="b-fr"><span class="tag rec">过期 · 推荐（到点收起）</span>${iosSheet('Machines &amp; models', needsYou(tcard('build-box', CODE3, '1m')) + machinesGroup([['dev-laptop', '1 / 2 running · All signed in'], ['build-box', '1 terminal to approve', 0, 1]]))}<p class="b-note" style="width:440px">dev-laptop 那条到了 <code>expiresAt</code>（10 分钟），客户端当场收起，不等下一次读取。还剩 build-box 那条。needs-you 那一条同时变成 "Approve a terminal · build-box"。终端那头 main 已经告诉用户过期了，要重来就再敲一次。</p></div>
+<div class="b-fr"><span class="tag alt">过期 · 兜底（main 原样）</span>${iosSheet('Machines &amp; models', needsYou(tcard('dev-laptop', CODE1, '10m', { err: 'terminal sign-in not found or expired — run `orbit` in the terminal again' })) + machinesGroup(M2))}<p class="b-note" style="width:440px">在收起之前按到（或时钟偏差）：服务端答 404，红字是 main 的原句，卡在下一次读取时离开。与上面 Web 的真实帧是同一件事。</p></div>
+<div class="b-fr"><span class="tag rec">Android · 批准以后</span><br>${andPage(andMachines([['dev-laptop', '1 / 2 running · All signed in'], ['build-box', '0 / 4 running · All signed in']]), '<div class="snack">Terminal approved</div>')}<p class="b-note" style="width:412px">Android 的回执用 snackbar（和它的 "Terminal revoked" 一样）。</p></div></div>`);
+
+// ── ③ needs-you 胶囊 ──
+const listNav = `<div class="nav"><div class="gc l">${ic('ham', 21, 'var(--l1)', 2)}</div><div class="gc" style="right:20px;width:92px;border-radius:22px;justify-content:space-around;padding:0 10px">${ic('filter', 21, 'var(--l1)', 2)}${ic('pen', 20, 'var(--l1)', 2)}</div></div>`;
+const rows = [
+  { t: 'Rebuild the wiki articles report', s: '<span class="dt"></span><span>Waiting for approval</span>', tm: '9m' },
+  { t: 'Android client: session page and project page', s: 'Running · gradle testDebugUnitTest', tm: '6m' },
+  { t: 'Ship the 0.1.252 release', s: 'Completed · tagged v0.1.252', tm: '1h' },
+];
+const list = (cap, marks = '') => phone('light', `${statusBar('9:41')}${listNav}<div class="ltitle">orbit-develop</div>
+<div class="search">${ic('search', 18, 'var(--l2)', 2.2)}<span>Search sessions</span></div>
+${capA({ ...cap, top: 220, style: 'left:16px;right:16px' })}
+<div class="sec" style="top:284px">Today</div>
+${rows.map((r, i) => `<div class="srow${i < rows.length - 1 ? ' sep' : ''}" style="top:${314 + i * 70}px"><div class="a"><b>${r.t}</b><span class="tm">${r.tm}</span></div><div class="s">${r.s}</div></div>`).join('')}${marks}`, { h: 560, cls: 'crop' });
+const landing = phone('light', `${statusBar('9:41')}<div class="b-sheet"><div class="b-sh-nav"><div class="gc l">${ic('chevl', 20, '#000', 2.4)}</div><div class="t">Machines &amp; models</div></div><div class="b-ios-body">${needsYou(tcard('dev-laptop', CODE1, '3m', { hl: true }))}${machinesGroup([['dev-laptop', '1 terminal to approve', 0, 1], M2[1]])}</div></div>`, { cls: 'b-dim', h: 700 }) ;
+document.getElementById('capsule').innerHTML = `
+<div class="b-fr"><span class="tag rec">iOS · 列表 · 只有它</span>${list({ glyph: 'term', title: 'Approve a terminal', sub: 'dev-laptop · code 7KQ-4MZ', age: '3m' }, mk(10, 214, 420, 56, 'round') + num(1, 418, 206))}
+<p class="b-note" style="width:440px"><span class="n">1</span>今天的胶囊（<code>NeedsYouBannerView</code>），图标换成 <code>terminal</code>。没有 chevron：整枚就是按钮（跨会话的那种照今天的规则）。</p></div>
+<div class="b-fr"><span class="tag rec">iOS · 和别的事一起 / 多条</span>${list({ glyph: 'term', title: 'Approve 2 terminals', sub: 'dev-laptop, build-box', age: '6m', more: '+1' }, mk(10, 214, 420, 56, 'round') + num(2, 418, 206))}
+<p class="b-note" style="width:440px"><span class="n">2</span>两条终端请求，外加一个会话在等工具审批：终端排最前，<code>+1</code> 是那个会话。点它展开（今天的展开），第一行就是终端这一条，点它落到右边那一页。</p></div>
+<div class="b-fr"><span class="tag rec">iOS · 点下去落到</span>${landing}
+<p class="b-note" style="width:440px">Settings 打开到 Machines &amp; models，滚到 Needs you，最早那张卡描边闪一下（不常驻）。会话页（console）上的胶囊和 Android 的 <code>NeedsYouBar</code> 落到同一处。</p></div>`;
+document.getElementById('capsule').insertAdjacentHTML('afterend', `<div class="b-row" style="margin-top:22px">
+<div class="b-fr"><span class="tag rec">iOS · 会话页上的胶囊</span>${phone('light', `${statusBar('9:41')}${navCircles()}${capA({ glyph: 'term', title: 'Approve a terminal', sub: 'dev-laptop · code 7KQ-4MZ', age: '3m', top: 112 })}
+<div class="tx" style="top:178px"><p>Done — the three crossing rows now read their criterion by number. Running the Android unit tests next.</p></div>`, { h: 330, cls: 'crop' })}
+<p class="b-note" style="width:440px">会话页的胶囊今天只显示<b>别的</b>会话在等你的事（<code>excluding:</code> 当前会话），终端请求不属于任何会话，所以在每个会话页都会出现。</p></div>
+<div class="b-fr"><span class="tag rec">Android · 列表 · NeedsYouBar</span><br><div class="b-and" style="height:330px">${andTop('orbit-develop').replace('←', '☰')}
+<div class="bar"><span class="tl">${ic('term', 18, '#E57A00', 2)}</span><span class="w"><b>Approve a terminal<em>3m</em></b><s>dev-laptop · code 7KQ-4MZ</s></span></div>
+<div style="padding-top:8px"><div class="srw"><b>Rebuild the wiki articles report<span>9m</span></b><s class="amb">Waiting for approval</s></div><div class="srw"><b>Ship the 0.1.252 release<span>1h</span></b><s>Completed · tagged v0.1.252</s></div></div></div>
+<p class="b-note" style="width:412px">跟 iOS：同样两行，图标用已有的 <code>ic_terminal</code>（新的 <code>NeedsYouGlyph.TERMINAL</code>）。点它开 Settings → machines-and-models，滚到 Needs you。读者页（reader）上的那条同理。</p></div>
+<div class="b-fr"><span class="tag rec">macOS · 会话列表顶上一行</span><br>
+<div class="b-mac" style="width:520px;height:330px"><div class="tb"><div class="tl"><i></i><i></i><i></i></div><b style="margin-left:60px">orbit-macos</b></div>
+<div class="side" style="width:250px"><div class="hd2">Needs you</div><div class="sr" style="background:#fff3e3"><span class="g amb">${ic('term', 11, '#E07A00', 2.2)}</span><b>Approve a terminal</b><s class="amb">dev-laptop · code 7KQ-4MZ</s></div>
+<div class="hd2" style="margin-top:6px">Today</div><div class="sr"><span class="g"></span><b>Rebuilding the transcript page</b><s>Running Bash…</s></div><div class="sr"><span class="g"></span><b>Recap on the session list row</b><s>Recap · 10:09 PM Moved the recap on…</s></div><div class="sr"><span class="g"></span><b>Drawer shadow fix</b><s>Pushed the drawer fix.</s></div></div>
+<div class="main side-on" style="left:250px">Select a session</div></div>
+<p class="b-note" style="width:520px">Mac 没有胶囊，照 Web：列表顶上一节 <b>Needs you</b>、一行，字和图标同 iOS 胶囊，琥珀字是今天会话行"在等你"的颜色。点它打开 Settings → Machines &amp; models 的 Needs you。</p></div></div>`);
+
+// ── ④ 推送 ──
+const lock = phone('dark', `<div class="b-lock"></div>${statusBar('9:41')}<div class="b-lock" style="background:none"><div class="day">Saturday, November 14</div><div class="clk">23:41</div></div>
+<div class="b-notif" style="top:330px"><span class="ai">${ic('term', 20, '#fff', 2)}</span><span class="tx2"><b>Approve a terminal?<span>now</span></b>Terminal on dev-laptop · code 7KQ-4MZ</span></div>`, { h: 520, cls: 'crop' });
+document.getElementById('push').innerHTML = `
+<div class="b-fr"><span class="tag alt">iOS · 推送（字不改）</span>${lock}<p class="b-note" style="width:440px">"ORBIT" 的通知，main 的标题和正文。</p></div>
+<div class="b-fr"><span class="tag now">iOS · 今天点开</span><span class="b-real">真实</span><br><img class="b-shot" src="02-shots/ios-today-inbox.png" style="width:300px;margin-top:4px"></div>
+<div class="b-fr"><span class="tag rec">iOS · 改后点开</span>${landing}<p class="b-note" style="width:440px">今天：开 Waiting on you 的 sheet。改后：开 Settings → Machines &amp; models，滚到 Needs you，id 等于链接里那个的卡描边闪一下。和点胶囊落到同一处。</p></div>
+<div class="b-fr"><span class="tag rec">Android · 通知 → 点开</span><br><div class="b-and b-shade" style="height:300px"><div class="sb" style="color:#fff">9:41</div>
+<div class="nt"><div class="ap2">${ic('term', 13, '#3B5BA9', 2.2)} Orbit · Needs you · now</div><b>Approve a terminal?</b><s>Terminal on dev-laptop · code 7KQ-4MZ</s></div></div>
+<p class="b-note" style="width:412px">needs-you 通道照旧（51f16720a）。点开 → <code>orbit://terminal-login/&lt;id&gt;</code> → 今天落到 <code>WAITING_ON_YOU</code>，改后落到 machines-and-models 页，卡描边（同上图的 Android 版：Needs you 节第一张）。</p></div>
+<div class="b-fr"><span class="tag rec">macOS · 通知 → 点开</span><br><div class="b-mac" style="width:400px;height:300px"><div class="tb"><div class="tl"><i></i><i></i><i></i></div><span class="bb" style="margin-left:18px">‹ Settings</span><b>Machines &amp; models</b></div>
+<div class="main" style="padding:10px 18px"><div class="gh">Needs you</div><div class="mtc b-hl"><div class="h"><i></i><b>Waiting on you</b><span>Asked now</span></div><div class="bd3"><div class="tt">Approve a terminal?</div><div class="ln">Terminal on dev-laptop · code 7KQ-4MZ</div><div class="bt"><span>Deny</span><span class="ap">Approve</span></div></div></div></div>
+<div class="mn"><span style="width:30px;height:30px;border-radius:7px;background:#1f1f24;display:flex;align-items:center;justify-content:center;flex:none">${ic('term', 16, '#fff', 2)}</span><span style="font-size:12.5px;line-height:1.35"><b style="display:block">Approve a terminal?</b>Terminal on dev-laptop · code 7KQ-4MZ</span></div></div>
+<p class="b-note" style="width:400px">右上是 Mac 的通知横幅；点开 → Settings 窗口的 Machines &amp; models，卡描边。</p></div>`;
+</script>
+</body></html>

@@ -614,6 +614,7 @@ func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDi
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
 		envWatches+"="+watchesEnv(job.WatchesDisabled),
 		envWiki+"="+wikiEnv(job.WikiDisabled),
+		envDocuments+"="+documentsEnv(job.DocumentsDisabled),
 		envBrowser+"="+browserEnv(job.BrowserEnabled),
 		envWorkflows+"="+workflowsEnv(job.WorkflowsDisabled),
 		envScheduleRun+"="+scheduleRunEnv(job.ScheduleRun),
@@ -1480,8 +1481,10 @@ type kimiTurnOutcome struct {
 	// ran is true when a turn opened for this prompt reached its end record. False with read true is
 	// the prompt Kimi never ran (kimiNoTurn).
 	ran bool
-	// failure is the sentence the turn failed with, "" when it did not fail.
-	failure string
+	// failure is the sentence the turn failed with, "" when it did not fail; classified is what its
+	// error's name says it was (kimiFailureRules), zero when it did not fail or the name is not mapped.
+	failure    string
+	classified engineFailure
 	// compactionDropped is true when the turn failed because Kimi dropped the compaction it was
 	// waiting on, before its model was asked anything (kimiTurnRecord.compactionDropped).
 	compactionDropped bool
@@ -1506,7 +1509,7 @@ func readKimiTurnOutcome(ctx context.Context, wire string, from int64, turns *ki
 			if ended.Reason != "failed" {
 				return kimiTurnOutcome{read: true, ran: true, text: ended.text}
 			}
-			return kimiTurnOutcome{read: true, ran: true, failure: kimiFailureSentence(ended.Error), compactionDropped: ended.compactionDropped, text: ended.text}
+			return kimiTurnOutcome{read: true, ran: true, failure: kimiFailureSentence(ended.Error), classified: kimiTurnFailureOf(ended.Error), compactionDropped: ended.compactionDropped, text: ended.text}
 		}
 		if turns.running() && time.Since(began) < kimiQueuedTurnWait {
 			deadline = time.Now().Add(kimiTurnOutcomeWait)
@@ -1559,12 +1562,44 @@ func kimiFailureSentence(err *kimiTurnError) string {
 	return sentence
 }
 
+// kimiFailureRules is Kimi Code's table (§5.3): matched by the error's name, which Kimi records as data, never
+// by its words. Each row's recorded sample is in kimi_failure_test.go. Not mapped, for want of a recorded turn:
+// APIProviderOverloadedError, APIConnectionError, APIProviderRateLimitError.
+var kimiFailureRules = []failureRule{
+	{Code: kimiQuotaExhaustedError, Kind: failureUsageLimit, Text: func(said string) string {
+		return kimiFailureSentence(&kimiTurnError{Name: kimiQuotaExhaustedError, Message: said})
+	}},
+}
+
+// kimiTurnFailureOf is what a turn Kimi recorded as failed failed with, by its error's name; zero when the name is
+// not mapped. Its Text is kimiFailureSentence's.
+func kimiTurnFailureOf(err *kimiTurnError) engineFailure {
+	if err == nil {
+		return engineFailure{}
+	}
+	failure := matchFailure(kimiFailureRules, err.Message, err.Name)
+	if failure.Kind == "" {
+		return engineFailure{}
+	}
+	failure.Text = kimiFailureSentence(err)
+	return failure
+}
+
 // kimiTurnError is the error a turn.ended record carries when the turn failed: the engine's own
 // name for it and the provider's sentence.
 type kimiTurnError struct {
 	Name    string `json:"name"`
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+
+// kimiFinishedFailure is the classification of a turn that failed with errorText: the record's, when that is
+// the sentence the turn failed with, else none (a refusal, a prompt that failed, a turn that never opened).
+func kimiFinishedFailure(errorText string, outcome kimiTurnOutcome) engineFailure {
+	if errorText == "" || errorText != outcome.failure {
+		return engineFailure{}
+	}
+	return outcome.classified
 }
 
 // kimiTurnSaidNothing: whether the turn's stream carried no text, no reasoning, no tool call and no
@@ -1881,6 +1916,11 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 		}
 		// A prompt Kimi queued behind a turn of its own ran with nothing streamed (kimiTurnLedger):
 		// its answer is the one its record holds.
+		// §5.2: measured before the record's answer is added to the turn below.
+		var admission *bool
+		if status == stFailed {
+			admission = turnAdmission(!kimiTurnSaidNothing(turn), nil, 0)
+		}
 		if done.outcome.ran && done.outcome.text != "" && kimiTurnSaidNothing(turn) {
 			turn.text.WriteString(done.outcome.text)
 			resultText = done.outcome.text
@@ -1911,7 +1951,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 			BranchSha:        effectiveBranchSha(job.WT), BranchCommits: branchCommits(job.WT),
 			BranchMerged:   branchMergedInto(job.WT),
 			WorktreeBranch: currentBranch(job.WT),
-		}); completeErr != nil {
+		}.withFailure(kimiFinishedFailure(errorText, done.outcome), admission)); completeErr != nil {
 			logln("turn-complete failed for", job.SessionID+":", completeErr)
 		}
 		inbox.clearInflight(done.turnID)
@@ -2431,6 +2471,9 @@ func kimiAutomaticPermissionOption(job *ClaimedSession, toolName string, input i
 			return selectDecision(false)
 		}
 	}
+	if readonlySubagentRefusesEdit(job, toolName) {
+		return selectDecision(false)
+	}
 	// The Files drive is read-only in Plan: Kimi's plan mode asks about every shell call, and one that writes the
 	// drive is refused here rather than put on a card or allowed by a rule (plan_drive.go).
 	if job.Agent.PermissionMode == "plan" && planDriveWrite(toolName, mapValue(input)) {
@@ -2447,8 +2490,8 @@ func kimiAutomaticPermissionOption(job *ClaimedSession, toolName string, input i
 			return selectDecision(true)
 		}
 	}
-	if kimiReadonlyShellFollowsParent(job, toolName) {
-		return selectDecision(true)
+	if allowed, decided := readonlySubagentAnswer(job, toolName); decided {
+		return selectDecision(allowed)
 	}
 	if job.Agent.PermissionMode == "acceptEdits" && (toolName == "Edit" || toolName == "Write") {
 		return selectDecision(true)
@@ -2457,23 +2500,6 @@ func kimiAutomaticPermissionOption(job *ClaimedSession, toolName string, input i
 		return selectDecision(false)
 	}
 	return "", false
-}
-
-// kimiReadonlyShellFollowsParent reports whether a read-only SubAgent's shell request is answered without a card:
-// its plan mode keeps Kimi's edit tools off but asks about every shell call, so a parent session that runs
-// without asking (Auto, Bypass) would get a card for each `git grep` its read-only helper makes. The owner chose,
-// on 2026-11-20, that such a request follows the parent's mode. Nothing here checks the command: a shell call
-// that writes runs too, so a read-only Kimi child is read-only by its plan-mode instructions alone, under those
-// two parent modes. Under any other parent mode the card is filed as before.
-func kimiReadonlyShellFollowsParent(job *ClaimedSession, toolName string) bool {
-	if !job.readonlySubagent || job.readonlyParentMode == nil || (toolName != "Bash" && toolName != "Terminal") {
-		return false
-	}
-	switch job.readonlyParentMode() {
-	case "auto", "bypassPermissions":
-		return true
-	}
-	return false
 }
 
 // kimiToolMatchesRule recognizes the conservative subset shared by Orbit's

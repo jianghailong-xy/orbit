@@ -21,6 +21,25 @@ class NeedsYouLogicTest {
         agentName?.let { name -> putJsonObject("agent") { put("id", agentId ?: "a"); put("name", name) } }
     }
 
+    private fun ask(id: String, state: String) = OwnerRequest(id = id, kind = "DECISION", state = state, title = "t", createdAt = "2026-11-20T10:00:00Z")
+
+    @Test fun `a pending owner request this session filed counts first and is not a question`() {
+        val placed = mapOf(3 to listOf(ask("r2", "PENDING")), -1 to listOf(ask("r1", "PENDING"), ask("done", "DONE")))
+        val owner = NeedsYouLogic.ownerRequestRows(placed)
+        assertEquals(listOf("owner-request:r1", "owner-request:r2"), owner.map { it.rowId })
+        assertTrue(owner.none { it.isQuestion })
+        val here = NeedsYouLogic.here(owner + BelowRow("q1", true), emptyList(), ReaderSide.ABOVE)!!
+        assertEquals(3, here.count)
+        assertEquals("owner-request:r1", here.rowId)
+        assertEquals("3 waiting above", here.text)
+        assertEquals("1 waiting above", NeedsYouLogic.here(owner.take(1), emptyList(), ReaderSide.ABOVE)?.text)
+    }
+
+    @Test fun `a request that is not pending, or sits ahead of older unloaded rows, does not count`() {
+        assertTrue(NeedsYouLogic.ownerRequestRows(mapOf(0 to listOf(ask("a", "DONE"), ask("b", "DECLINED")))).isEmpty())
+        assertTrue(NeedsYouLogic.ownerRequestRows(mapOf(-1 to listOf(ask("c", "PENDING"))), hasOlder = true).isEmpty())
+    }
+
     // the conversation's own capsule (the owner, 2026-11-15, docs/mocks/needs-you-capsule/07-console-one-capsule; OrbitKit's twin)
 
     /** Its cards first, in their words and direction; its approvals after them, at its tail — so alone they say "below". */
@@ -58,7 +77,7 @@ class NeedsYouLogicTest {
         assertTrue("the conversation on screen has its own card", NeedsYouLogic.newlyWaiting(listOf(a, b), seen, "b").isEmpty())
     }
 
-    /** An owner request stops no turn: the turns after it are the same wait, and the notice says the request's words (OrbitKit's
+    /** An owner request stops no turn: the turns after it are the same wait, and the notice says the row's words (OrbitKit's
      * twin). */
     @Test fun anOwnerRequestIsNoticedOnceWhateverTurnsFollow() {
         fun filed(lastTurnAt: String) = buildJsonObject {
@@ -66,7 +85,12 @@ class NeedsYouLogicTest {
             put("title", "Task: Walkthrough"); put("lastTurnAt", lastTurnAt)
             putJsonObject("agent") { put("id", "w"); put("name", "orbit-develop") }
         }
-        assertEquals("Waiting on you · orbit-develop", NeedsYouLogic.newlyWaiting(listOf(filed("2026-11-17T22:36:15Z")), emptySet()).single().line)
+        // The row's own words (docs/mocks/waiting-on-you-removal): the long-standing approval word with no request listed beside it,
+        // the request kind's word with one.
+        assertEquals("Waiting for approval · orbit-develop", NeedsYouLogic.newlyWaiting(listOf(filed("2026-11-17T22:36:15Z")), emptySet()).single().line)
+        val decision = JsonObject(filed("2026-11-17T22:36:15Z") + ("ownerRequests" to buildJsonArray { addJsonObject {
+            put("ownerRequestId", "r"); put("kind", "DECISION"); put("title", "Pick one"); put("since", "2026-11-17T22:36:15Z") } }))
+        assertEquals("Decision for you · orbit-develop", NeedsYouLogic.newlyWaiting(listOf(decision), emptySet()).single().line)
         val seen = setOf(NeedsYouLogic.waitKey(filed("2026-11-17T22:36:15Z")))
         assertTrue("a later turn is the same wait", NeedsYouLogic.newlyWaiting(listOf(filed("2026-11-17T22:52:34Z")), seen).isEmpty())
     }
@@ -100,6 +124,46 @@ class NeedsYouLogicTest {
         notices.dismiss("n3|2026-11-15T04:00:00Z")
         assertTrue(notices.toasts.isEmpty())
         assertEquals(0, notices.more)
+    }
+
+    /** A terminal asking to be approved is noticed once (the owner, 2026-11-16, under 12-once): the first look takes stock, a new
+     * request id draws "Approve a terminal" with its machine and code at the head of the column, the same id never draws a second
+     * notice — not on the next look, not after it is flicked away, not back from the background — and an answered one's goes. */
+    @Test fun aNewTerminalRequestIsNoticedOnceByItsId() {
+        fun r(id: String, machine: String = "dev-laptop", code: String = "7KQ-4MZ") = io.orbitd.android.core.cards.TerminalRequest(
+            id, userCode = code, machineName = machine, runnerId = "run-1", createdAt = "2026-11-16T10:00:00Z", expiresAt = "2026-11-16T10:10:00Z")
+        val notices = NeedsYouNotices()
+        notices.lookTerminals(listOf(r("old")))
+        assertTrue("the first look only takes stock", notices.toasts.isEmpty())
+
+        notices.lookTerminals(listOf(r("old"), r("req-1")))
+        val toast = notices.toasts.single()
+        assertEquals("terminal:req-1", toast.id)
+        assertEquals("req-1", toast.terminalRequest)
+        assertEquals("Approve a terminal", toast.title)
+        assertEquals("dev-laptop · code 7KQ-4MZ", toast.line)
+        assertEquals(NeedsYouGlyph.TERMINAL, toast.glyph)
+
+        notices.lookTerminals(listOf(r("old"), r("req-1")))
+        assertEquals("the same request: still one notice", 1, notices.toasts.size)
+        notices.dismiss(toast.id)
+        notices.lookTerminals(listOf(r("old"), r("req-1")))
+        assertTrue("flicked away, the same id is not noticed again", notices.toasts.isEmpty())
+        notices.retake()
+        notices.lookTerminals(listOf(r("old"), r("req-1")))
+        notices.lookTerminals(listOf(r("old"), r("req-1")))
+        assertTrue("nor back from the background", notices.toasts.isEmpty())
+
+        // A session waiting does not take a terminal's notice away, and a terminal's leads the column.
+        val a = session("a", approvals = 1, lastTurnAt = "2026-11-16T10:01:00Z")
+        notices.look(emptyList(), null)
+        notices.look(listOf(a), null)
+        notices.lookTerminals(listOf(r("old"), r("req-1"), r("req-2", "build-box", "R2T-9PX")))
+        assertEquals(listOf("terminal:req-2", "a|2026-11-16T10:01:00Z"), notices.toasts.map { it.id })
+        notices.look(listOf(a), null)
+        assertEquals(2, notices.toasts.size)
+        notices.lookTerminals(listOf(r("old")))
+        assertEquals("answered or expired: its notice goes", listOf("a|2026-11-16T10:01:00Z"), notices.toasts.map { it.id })
     }
 
     // banner

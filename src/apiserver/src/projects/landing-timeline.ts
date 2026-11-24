@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import type {
   IntegrationJobKind,
+  IntegrationTimelineActor,
   IntegrationTimelineEntry,
   IntegrationTimelineFact,
   IntegrationTimelineSection,
@@ -139,7 +140,7 @@ export async function readLandingTimeline(
     subject.promotionId,
   ].filter((id): id is string => id != null))];
 
-  const [events, handledItems, promotions, task] = await Promise.all([
+  const [events, handledItems, promotions, task, offeredItems] = await Promise.all([
     readSubjectEvents(prisma, jobIds, MAX_ENTRIES_PER_SECTION),
     jobIds.length > 0
       ? prisma.projectOpenItem.findMany({
@@ -164,7 +165,29 @@ export async function readLandingTimeline(
         select: { fixesOpenItemId: true, deliveredSha: true },
       })
       : Promise.resolve(null),
+    // Revision 42 (§12.7): the failures of these attempts that went first to the task's own work session.
+    jobIds.length > 0
+      ? prisma.projectOpenItem.findMany({
+        where: {
+          ownerId: subject.ownerId, projectId: subject.projectId,
+          integrationJobId: { in: jobIds }, workSessionOfferedAt: { not: null },
+        },
+        select: {
+          id: true, integrationJobId: true, workSessionId: true, workSessionOfferedAt: true,
+          workSessionReturnedAt: true, workSessionReturnReason: true, payload: true,
+        },
+        orderBy: [{ workSessionOfferedAt: 'asc' }, { id: 'asc' }],
+      })
+      : Promise.resolve([]),
   ]);
+  const offeredByJob = new Map<string, typeof offeredItems>();
+  for (const item of offeredItems) {
+    if (!item.integrationJobId) continue;
+    offeredByJob.set(item.integrationJobId, [...(offeredByJob.get(item.integrationJobId) ?? []), item]);
+  }
+  // The task's own work sessions a failure of this subject went to: a rerun one of them asked for is its fix landing
+  // again (W7), not a coordinator's rerun.
+  const fixingSessions = new Set(offeredItems.map((item) => item.workSessionId).filter((id): id is string => id != null));
   const promotionById = new Map(promotions.map((row) => [row.id, row]));
   // The round's CURRENT candidate: the one the newest attempt names, else the one the subject
   // opened with. Only its state is the round's; an earlier candidate's is history on its attempts.
@@ -215,8 +238,32 @@ export async function readLandingTimeline(
     const entries: IntegrationTimelineEntry<Date>[] = [];
     const claim = Number(job.claimGeneration);
     const promotion = job.promotionId ? promotionById.get(job.promotionId) ?? null : null;
+    // What this attempt carries: the source its runner reported, else — for a task's newest attempt not reported
+    // yet — the commit the task delivered.
+    const newestTaskAttempt = job.kind === 'LAND_TASK' && job.id === jobs.at(-1)?.id;
+    const sourceSha = job.sourceSha
+      ?? (job.kind === 'LAND_TASK' ? (newestTaskAttempt ? task?.deliveredSha ?? null : null) : promotion?.sourceSha ?? null);
+    // Revision 42 (W7): the task's own work session fixed the failure on its branch, and this is its fix landing again.
+    const fixedBySession = job.retryOfJobId != null && job.retryRequestedBySessionId != null
+      && fixingSessions.has(job.retryRequestedBySessionId);
+    if (fixedBySession) {
+      entries.push(derivedEntry({
+        kind: 'FIXED_BY_SESSION',
+        at: job.createdAt,
+        claim: 0,
+        actor: { type: 'TASK_SESSION', sessionId: job.retryRequestedBySessionId },
+        reason: job.retryReason,
+        data: {
+          retryOfJobId: job.retryOfJobId,
+          failureClass: job.retryFailureClass,
+          sessionId: job.retryRequestedBySessionId,
+          sourceSha,
+        },
+        text: fixedBySessionText(sourceSha),
+      }));
+    }
     // LS4: the rerun's requester and reason are read off the generation's own columns.
-    if (job.retryOfJobId) {
+    if (job.retryOfJobId && !fixedBySession) {
       const requestedBy = job.retryRequestedBySessionId ? 'COORDINATOR'
         : job.retryRequestedByUserId ? 'OWNER' : null;
       entries.push(derivedEntry({
@@ -382,13 +429,42 @@ export async function readLandingTimeline(
       }));
     }
     entries.sort(compareEntries);
+    // Revision 42 (§12.7): where this attempt's failure went once it had ended — to the task's own work session, and,
+    // if that session could not land it, back to the coordinator. Both follow the attempt's own end, which is what
+    // they are about, so they close its section in the order they happened.
+    for (const item of offeredByJob.get(job.id) ?? []) {
+      const returnedAt = item.workSessionReturnedAt;
+      // W8: a failure the session's rounds no longer cover opens already the coordinator's; it was never handed over.
+      const neverHeld = returnedAt != null && item.workSessionReturnReason === 'ROUNDS_EXHAUSTED'
+        && returnedAt.getTime() === item.workSessionOfferedAt!.getTime();
+      if (!neverHeld) {
+        entries.push(derivedEntry({
+          kind: 'HANDED_TO_SESSION',
+          at: item.workSessionOfferedAt!,
+          claim,
+          actor: { type: 'PLATFORM' },
+          data: { itemId: item.id, sessionId: item.workSessionId },
+          text: HANDED_TO_SESSION_TEXT,
+        }));
+      }
+      if (returnedAt) {
+        entries.push(derivedEntry({
+          kind: 'RETURNED_TO_COORDINATOR',
+          at: returnedAt,
+          claim,
+          actor: { type: 'PLATFORM' },
+          reason: item.workSessionReturnReason,
+          data: {
+            itemId: item.id, sessionId: item.workSessionId, returnReason: item.workSessionReturnReason,
+            lastMessage: handBackLastMessage(item.payload),
+          },
+          text: returnedToCoordinatorText(item.workSessionReturnReason),
+        }));
+      }
+    }
     const ordinal = (sectionOrdinals.get(job.kind) ?? 0) + 1;
     sectionOrdinals.set(job.kind, ordinal);
-    // What queued it — the turn's opening message in a client. The commit is the source its runner
-    // reported; a task's newest attempt not reported yet names the commit the task delivered.
-    const newestTaskAttempt = job.kind === 'LAND_TASK' && job.id === jobs.at(-1)?.id;
-    const sourceSha = job.sourceSha
-      ?? (job.kind === 'LAND_TASK' ? (newestTaskAttempt ? task?.deliveredSha ?? null : null) : promotion?.sourceSha ?? null);
+    // What queued it — the turn's opening message in a client.
     return {
       title: sectionTitle(job.kind, ordinal),
       jobId: job.id,
@@ -396,7 +472,7 @@ export async function readLandingTimeline(
       generation: ordinal,
       state: job.state,
       entries,
-      trigger: sectionTrigger(job, events.get(job.id) ?? [], sourceSha),
+      trigger: sectionTrigger(job, events.get(job.id) ?? [], sourceSha, fixedBySession),
     };
   });
 
@@ -429,8 +505,13 @@ function sectionTrigger(
   job: TimelineJob,
   entries: readonly IntegrationTimelineEntry<Date>[],
   sourceSha: string | null,
+  fixedBySession = false,
 ): IntegrationTimelineTrigger<Date> {
   const base = { at: job.createdAt, sourceRef: job.sourceRef, sourceSha, sessionId: null, reason: null };
+  // Revision 42 (W7): the task's own work session's fix, landing again — the task's, not a coordinator's.
+  if (fixedBySession) {
+    return { ...base, cause: 'RETRY', by: 'TASK', sessionId: job.retryRequestedBySessionId, reason: job.retryReason };
+  }
   if (job.retryOfJobId) {
     const coordinator = job.retryRequestedBySessionId;
     return {
@@ -461,6 +542,29 @@ function sectionTrigger(
   return { ...base, cause: 'DONE', by: 'TASK', sessionId: job.sessionId };
 }
 
+/** Revision 42 (§12.7): the failure went to the task's own work session first (W5). */
+export const HANDED_TO_SESSION_TEXT = "Handed to the task's session";
+
+/** Revision 42 (§12.7, W7): the next generation is the task's own work session's fix, at its commit. */
+export function fixedBySessionText(sourceSha: string | null): string {
+  return sourceSha ? `Fixed in ${sourceSha.slice(0, 7)} · landing again` : 'Fixed · landing again';
+}
+
+/** What each hand-back reason says on the timeline (§12.4 `work_session_return_reason`). */
+const RETURN_REASON_TEXT: Readonly<Record<string, string>> = {
+  NO_NEW_COMMIT: 'no new commit',
+  TURN_FAILED: 'its fix turn failed',
+  SESSION_ENDED: 'the session ended',
+  ROUNDS_EXHAUSTED: 'its rounds of fixes are used up',
+  TASK_MOVED_ON: 'the task moved on',
+};
+
+/** Revision 42 (§12.7, W7): the task's own work session could not land it, and the coordinator has it now. */
+export function returnedToCoordinatorText(reason: string | null): string {
+  const words = reason ? RETURN_REASON_TEXT[reason] ?? reason : null;
+  return words ? `Returned to the coordinator: ${words}` : 'Returned to the coordinator';
+}
+
 /** A line derived at read time: no event row, and the flag says so. */
 function derivedEntry(input: {
   kind: IntegrationTimelineEntry<Date>['kind'];
@@ -468,7 +572,8 @@ function derivedEntry(input: {
   claim: number;
   round?: number | null;
   phase?: string | null;
-  actor?: IntegrationTimelineActorInput | null;
+  /** A derived line is stored nowhere, so it may name an actor no event row records: the task's own work session. */
+  actor?: IntegrationTimelineActorInput | IntegrationTimelineActor | null;
   reason?: string | null;
   data?: Record<string, unknown> | null;
   text: string;
@@ -563,4 +668,10 @@ async function readAutomaticAttempts(
     out.set(job.id, { attempt: earlier + 1, limit: AUTOMATIC_MERGE_ATTEMPTS });
   }
   return out;
+}
+
+/** The work session's last words a hand-back froze on the item's payload (§12.5 W7), or null when it said none. */
+function handBackLastMessage(payload: unknown): string | null {
+  const last = (payload as { workSession?: { lastMessage?: unknown } } | null)?.workSession?.lastMessage;
+  return typeof last === 'string' && last !== '' ? last : null;
 }

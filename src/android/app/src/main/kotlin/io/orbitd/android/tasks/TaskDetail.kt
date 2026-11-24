@@ -345,6 +345,8 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                         conflict.taskId?.let { { patch(buildJsonObject { put("provider", JsonNull); put("model", JsonNull) }) } }) { data.conflict = null } }
                     // A task that starts when its condition holds says so where a task says why it has not started
                     // (docs/condition-triggers-design.md §6.2): "Waiting for: 3 or more OSDs are in", and the newest reading.
+                    // No account that could run it can run now: the fuller block, with the way to the account.
+                    TaskAccountHold.of(task)?.takeIf { task["hold"].let { h -> h == null || h is JsonNull } }?.let { TaskAccountHoldNote(it, open) }
                     io.orbitd.android.schedule.TaskWaitingLine(io.orbitd.android.core.schedule.TaskStartWhenView.parse(task["startWhen"]))
                     ActionRow(row, canStart, enabled, task, assigneeHasRunner, open, run = ::runTask,
                         confirmDone = { mutate { api.confirmOwner(id, revisionOf(task)) } })
@@ -468,7 +470,11 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
             items(TaskDetailLogic.activity(task, data.evidence), key = { "activity:${it.key}" }) { entry ->
                 when (entry) {
                     is TaskActivityItem.Filed -> FiledRow(task, entry.at, workspaces, open)
-                    is TaskActivityItem.Run -> RunRow(entry.session, task, data, open) { sheet = "why:${entry.session.text("id")}" }
+                    is TaskActivityItem.Run -> {
+                        RunRow(entry.session, task, data, open) { sheet = "why:${entry.session.text("id")}" }
+                        // A pinned task that ran elsewhere says which pin, where it ran and why.
+                        entry.session.obj("route")?.text("relaxedRun")?.takeIf { it.isNotEmpty() }?.let { RelaxedRunNote(it, Modifier.padding(start = 18.dp, bottom = 4.dp)) }
+                    }
                     is TaskActivityItem.Comment -> CommentRow(entry.comment, link)
                     else -> Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(TaskDetailLogic.activityText(entry).orEmpty(), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
@@ -621,6 +627,7 @@ private fun LandingSection(status: TaskLandingStatus, open: (OrbitRoute) -> Unit
         }
         status.noReport?.let { Text(it, Modifier.testTag("task-landing-no-report"), style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold, color = LocalOrbitColors.current.needsYou) }
+        status.pullRequest?.let { io.orbitd.android.reader.LandingPullRequestCard(it, TaskLandingLogic.branch(status.targetRef).ifEmpty { "main" }, status.landingSessionId) }
         status.reason?.let { Text(it, Modifier.testTag("task-landing-reason"), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant) }
         status.receipt?.let { Text(it, Modifier.testTag("task-landing-receipt"), style = MaterialTheme.typography.bodySmall,
@@ -977,7 +984,7 @@ private fun modelName(id: String, task: JsonObject, data: TaskDetailData): Strin
 private fun RunRow(run: JsonObject, task: JsonObject, data: TaskDetailData, open: (OrbitRoute) -> Unit, why: () -> Unit) {
     val state = resolvedRunState(run)
     val color = when (state) { "RUNNING" -> LocalOrbitColors.current.running; "QUEUED", "AWAITING_INPUT" -> LocalOrbitColors.current.needsYou
-        "SUCCEEDED" -> LocalOrbitColors.current.success; "FAILED" -> MaterialTheme.colorScheme.error; else -> MaterialTheme.colorScheme.onSurfaceVariant }
+        "SUCCEEDED", "FINISHED" -> LocalOrbitColors.current.success; "FAILED" -> MaterialTheme.colorScheme.error; else -> MaterialTheme.colorScheme.onSurfaceVariant }
     val smartSelection = LocalSmartSelection.current
     val route = TaskDetailLogic.runRoute(run, smartSelection)
     val name: (String) -> String = { modelName(it, task, data) }

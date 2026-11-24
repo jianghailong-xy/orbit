@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/coder/websocket"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -19,19 +20,32 @@ import (
 
 const runnerBrowserClaudeURL = "https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback&scope=user%3Ainference&code_challenge=abc&code_challenge_method=S256&state=STATE-1"
 
-func TestClaudeCodeCallbackAndItsCode(t *testing.T) {
-	callback, state, ok := claudeCodeCallback(providerClaude, runnerBrowserClaudeURL)
-	if !ok || callback.String() != "https://platform.claude.com/oauth/code/callback" || state != "STATE-1" {
-		t.Fatalf("callback %v state %q ok %v", callback, state, ok)
+const runnerBrowserAntigravityURL = "https://accounts.google.com/o/oauth2/auth?access_type=offline&client_id=fixture.apps.googleusercontent.com&code_challenge=c&code_challenge_method=S256&redirect_uri=https%3A%2F%2Fantigravity.google%2Foauth-callback&response_type=code&scope=openid&state=G-STATE"
+
+func TestCodeCallbackAndItsCode(t *testing.T) {
+	callback, state, paste, ok := codeCallback(providerClaude, runnerBrowserClaudeURL)
+	if !ok || callback.String() != "https://platform.claude.com/oauth/code/callback" || state != "STATE-1" || paste("C") != "C#STATE-1" {
+		t.Fatalf("claude: callback %v state %q ok %v", callback, state, ok)
 	}
-	// Only Claude Code's sign-in is captured; the others keep what they had.
-	for _, engine := range []string{providerCodex, providerKimi, providerAntigravity, providerCursor} {
-		if _, _, ok := claudeCodeCallback(engine, runnerBrowserClaudeURL); ok {
+	// Antigravity's page shows the code alone, and that is what agy takes.
+	gcb, gstate, gpaste, ok := codeCallback(providerAntigravity, runnerBrowserAntigravityURL)
+	if !ok || gcb.String() != "https://antigravity.google/oauth-callback" || gstate != "G-STATE" || gpaste("4/0AUn6Hd") != "4/0AUn6Hd" {
+		t.Fatalf("antigravity: callback %v state %q ok %v", gcb, gstate, ok)
+	}
+	if got := callbackCode("https://antigravity.google/oauth-callback?state=G-STATE&code=4%2F0AUn6Hd__KS36&scope=openid", gcb, gstate); got != "4/0AUn6Hd__KS36" {
+		t.Fatalf("antigravity code = %q", got)
+	}
+	// The device flows need no code back; nothing is taken for them.
+	for _, engine := range []string{providerCodex, providerKimi, providerCursor} {
+		if _, _, _, ok := codeCallback(engine, runnerBrowserClaudeURL); ok {
 			t.Errorf("%s's link was taken for a callback", engine)
 		}
 	}
-	if _, _, ok := claudeCodeCallback(providerClaude, "https://claude.com/cai/oauth/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A1%2Fcb&state=S"); ok {
+	if _, _, _, ok := codeCallback(providerClaude, "https://claude.com/cai/oauth/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A1%2Fcb&state=S"); ok {
 		t.Error("a localhost callback was taken")
+	}
+	if _, _, _, ok := codeCallback(providerAntigravity, "https://accounts.google.com/o/oauth2/auth?redirect_uri=https%3A%2F%2Fantigravity.google%2Foauth-callback"); ok {
+		t.Error("a link without a state was taken")
 	}
 	for address, want := range map[string]string{
 		"https://platform.claude.com/oauth/code/callback?code=CODE-9&state=STATE-1": "CODE-9",
@@ -95,6 +109,8 @@ type runnerBrowserRig struct {
 	opened  []string
 	closed  []string
 	pages   []browserTarget
+	// navigated hands an address to the sign-in tab's navigation watch, as Chrome reports a navigation.
+	navigated func(address string)
 }
 
 func newRunnerBrowserRig(t *testing.T, engine string, published LoginResultRequest) *runnerBrowserRig {
@@ -114,7 +130,13 @@ func newRunnerBrowserRig(t *testing.T, engine string, published LoginResultReque
 	run.published = &published
 	rig.run = run
 	rig.relay = &loginRelay{runs: map[string]*loginRun{run.key: run}}
-	oldOpen, oldClose, oldTargets, oldReady := loginBrowserOpenTab, loginBrowserCloseTab, loginBrowserTargets, browserDevToolsReady
+	oldOpen, oldClose, oldTargets, oldReady, oldWatch := loginBrowserOpenTab, loginBrowserCloseTab, loginBrowserTargets, browserDevToolsReady, loginBrowserWatchTab
+	loginBrowserWatchTab = func(ctx context.Context, _ string, _ string, seen func(string)) {
+		rig.mu.Lock()
+		rig.navigated = seen
+		rig.mu.Unlock()
+		<-ctx.Done()
+	}
 	loginBrowserOpenTab = func(_ context.Context, _ string, target string) (string, error) {
 		rig.mu.Lock()
 		defer rig.mu.Unlock()
@@ -136,7 +158,7 @@ func newRunnerBrowserRig(t *testing.T, engine string, published LoginResultReque
 	t.Cleanup(func() {
 		cancel()
 		_ = stdinR.Close()
-		loginBrowserOpenTab, loginBrowserCloseTab, loginBrowserTargets, browserDevToolsReady = oldOpen, oldClose, oldTargets, oldReady
+		loginBrowserOpenTab, loginBrowserCloseTab, loginBrowserTargets, browserDevToolsReady, loginBrowserWatchTab = oldOpen, oldClose, oldTargets, oldReady, oldWatch
 	})
 	return rig
 }
@@ -486,5 +508,134 @@ func TestCloseSignInTab(t *testing.T) {
 				t.Errorf("the blank tab came after the close: %s", joined)
 			}
 		})
+	}
+}
+
+// Antigravity's sign-in: agy is handed the code its callback page shows, as a paste is (submitAntigravityGoogleCode).
+func TestLoginTakesAntigravitysCodeFromTheRunnersBrowser(t *testing.T) {
+	rig := newRunnerBrowserRig(t, providerAntigravity, LoginResultRequest{Status: loginAwaitingCode, URL: runnerBrowserAntigravityURL})
+	rig.relay.mu.Lock()
+	rig.run.google = &antigravityGoogleLoginOutput{url: runnerBrowserAntigravityURL}
+	rig.relay.mu.Unlock()
+	rig.relay.openInLoginBrowser(context.Background(), LoginCommand{Action: "browser", Engine: providerAntigravity, Attempt: "A1"}, &fakeLoginBrowser{})
+	rig.showPage("https://antigravity.google/oauth-callback?state=OTHER&code=WRONG")
+	rig.showPage("https://antigravity.google/oauth-callback?state=G-STATE&code=4%2F0AUn6Hd__KS36&scope=openid")
+	typed := make(chan string, 1)
+	go func() {
+		buf := make([]byte, 256)
+		n, _ := rig.stdin.Read(buf)
+		typed <- string(buf[:n])
+	}()
+	select {
+	case got := <-typed:
+		if got != "4/0AUn6Hd__KS36\r" {
+			t.Fatalf("agy was handed %q", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the code was never handed to agy")
+	}
+}
+
+// Antigravity's callback page strips the code from its address once it loads: every page's address shows only
+// antigravity.google/oauth-callback. The sign-in tab's navigation still carries it, and agy is handed the code.
+func TestLoginTakesTheCodeFromTheTabsNavigationWhenThePageStripsItsAddress(t *testing.T) {
+	rig := newRunnerBrowserRig(t, providerAntigravity, LoginResultRequest{Status: loginAwaitingCode, URL: runnerBrowserAntigravityURL})
+	rig.relay.mu.Lock()
+	rig.run.google = &antigravityGoogleLoginOutput{url: runnerBrowserAntigravityURL}
+	rig.relay.mu.Unlock()
+	rig.relay.openInLoginBrowser(context.Background(), LoginCommand{Action: "browser", Engine: providerAntigravity, Attempt: "A1"}, &fakeLoginBrowser{})
+	rig.showPage("https://antigravity.google/oauth-callback")
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		rig.mu.Lock()
+		seen := rig.navigated
+		rig.mu.Unlock()
+		if seen != nil {
+			seen("https://accounts.google.com/signin/oauth/consent?authuser=0")
+			seen("https://antigravity.google/oauth-callback?state=G-STATE&code=4%2F0AUn6Hd9p1ZU5&scope=openid")
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the sign-in tab's navigations were never watched")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	typed := make(chan string, 1)
+	go func() {
+		buf := make([]byte, 256)
+		n, _ := rig.stdin.Read(buf)
+		typed <- string(buf[:n])
+	}()
+	select {
+	case got := <-typed:
+		if got != "4/0AUn6Hd9p1ZU5\r" {
+			t.Fatalf("agy was handed %q", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the code was never handed to agy")
+	}
+}
+
+// watchTabNavigations against a stand-in for Chrome's DevTools: it asks the tab for its page events and hands on every
+// main-frame navigation, not a frame's inside the page.
+func TestWatchTabNavigationsHandsOnTheTabsNavigations(t *testing.T) {
+	var srvURL string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/json/list", func(w http.ResponseWriter, r *http.Request) {
+		ws := "ws" + strings.TrimPrefix(srvURL, "http") + "/devtools/page/TAB1"
+		_ = json.NewEncoder(w).Encode([]map[string]string{
+			{"id": "OTHER", "type": "page", "url": "https://b", "webSocketDebuggerUrl": "ws://unused"},
+			{"id": "TAB1", "type": "page", "url": "https://a", "webSocketDebuggerUrl": ws},
+		})
+	})
+	enabled := make(chan struct{}, 1)
+	mux.HandleFunc("/devtools/page/TAB1", func(w http.ResponseWriter, r *http.Request) {
+		c, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer c.CloseNow()
+		_, data, err := c.Read(r.Context())
+		if err != nil || !strings.Contains(string(data), `"Page.enable"`) {
+			return
+		}
+		enabled <- struct{}{}
+		for _, msg := range []string{
+			`{"id":1,"result":{}}`,
+			`{"method":"Page.frameNavigated","params":{"frame":{"id":"F2","parentId":"F1","url":"https://ads.example/x?code=NOPE"}}}`,
+			`{"method":"Page.frameNavigated","params":{"frame":{"id":"F1","url":"https://antigravity.google/oauth-callback?state=S&code=C"}}}`,
+		} {
+			_ = c.Write(r.Context(), websocket.MessageText, []byte(msg))
+		}
+		<-r.Context().Done()
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	srvURL = srv.URL
+	oldTargets := loginBrowserTargets
+	loginBrowserTargets = browserTargets
+	defer func() { loginBrowserTargets = oldTargets }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	got := make(chan string, 4)
+	go watchTabNavigations(ctx, srv.URL, "TAB1", func(address string) { got <- address })
+	select {
+	case <-enabled:
+	case <-ctx.Done():
+		t.Fatal("the tab's page events were never asked for")
+	}
+	select {
+	case address := <-got:
+		if address != "https://antigravity.google/oauth-callback?state=S&code=C" {
+			t.Fatalf("handed %q", address)
+		}
+	case <-ctx.Done():
+		t.Fatal("no navigation was handed on")
+	}
+	select {
+	case address := <-got:
+		t.Fatalf("also handed %q", address)
+	case <-time.After(200 * time.Millisecond):
 	}
 }

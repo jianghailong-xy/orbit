@@ -72,6 +72,9 @@ test('an approval reaches Feishu with no device: one card for the stretch, its a
       findFirst: async () => ({ title: 'Fix the build', ownerId: OWNER }),
       findMany: async () => [{ id: sessionId }],
     },
+    // The open owner requests and waiting task moves the same row counts (none here).
+    ownerRequest: { findMany: async () => [] },
+    projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: { findMany: async () => [] },
     $queryRaw: async () => [],
     approval: {
@@ -206,6 +209,9 @@ test('an owner item reaches Feishu: one card per item, announced again into the 
   const projectId = randomUUID();
   const coordinator = randomUUID();
   const prisma = {
+    // The open owner requests and waiting task moves the same row counts (none here).
+    ownerRequest: { findMany: async () => [] },
+    projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: {
       findUnique: async () => ({
         kind: 'COORDINATOR_QUESTION', state: 'OPEN', assignee: 'OWNER', assigneeReason: 'DEFAULT',

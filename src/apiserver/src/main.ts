@@ -7,15 +7,19 @@ import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { drainable, type DrainableServer, DRAIN_MS, endStreams, LINGER_MS, STOP_MS } from './common/graceful-stop';
 import { holdIdleConnections } from './common/idle-connections';
+import { httpRequestMetrics } from './common/http-request-metrics';
 import { PublicIdExceptionFilter } from './common/public-id.filter';
 import { publicIdHeaders } from './common/public-id-headers';
 import { PublicIdInterceptor } from './common/public-id.interceptor';
+import { apiserverLogger, requestIdContext } from './common/request-log';
 import { RunnerLinkErrorFilter } from './common/runner-link-error.filter';
 import { SlowRequestInterceptor } from './common/slow-request.interceptor';
 import { TransientDbConflictFilter } from './common/transient-db-conflict.filter';
 import { WorkspaceAliasInterceptor } from './common/workspace-alias.interceptor';
 import { outsideThePoolGateway } from './providers/pool-gateway.controller';
+import { listenForMetricsScrapes } from './metrics/metrics-listener';
 import { listenForRunnerLinkCalls } from './runner-api/runner-link-call';
+import { GITHUB_WEBHOOK_PATH, type RawBodyRequest } from './github/github-webhook';
 
 declare global {
   interface BigInt {
@@ -37,13 +41,27 @@ async function bootstrap() {
   const ready = new Promise<{ app: INestApplication; listeners: DrainableServer[] }>((resolve) => (started = resolve));
   stopOnSignals(ready);
 
-  const app = await NestFactory.create(AppModule, { bodyParser: false });
+  // JSON lines with each request's id under ORBIT_LOG_FORMAT=json, as Compose runs it (common/request-log.ts).
+  const app = await NestFactory.create(AppModule, { bodyParser: false, logger: apiserverLogger() });
   const config = app.get(ConfigService);
+
+  // Before everything else, so every line written for a request carries the id the web gateway gave it.
+  app.use(requestIdContext);
+
+  // First, so its clock covers everything below: the request histogram, recorded when the answer has been written,
+  // which is when its status is known (common/http-request-metrics.ts).
+  app.use(httpRequestMetrics);
 
   // Pasted-image turns carry base64 in the JSON body; Nest's default 100kb express
   // limit rejects them with 413. Match the gateway/web nginx client_max_body_size (10m).
   // Not for the shared pools' gateway, which forwards the body codex sent unread (pool-gateway.controller.ts).
-  app.use(outsideThePoolGateway(json({ limit: '10mb' })));
+  app.use(outsideThePoolGateway(json({
+    limit: '10mb',
+    // GitHub signs a webhook delivery's bytes (docs/design/protected-branch-landing.md §4.7): that one route keeps them.
+    verify: (req, _res, buf) => {
+      if ((req as { url?: string }).url?.startsWith(GITHUB_WEBHOOK_PATH)) (req as RawBodyRequest).rawBody = Buffer.from(buf);
+    },
+  })));
   app.use(outsideThePoolGateway(urlencoded({ extended: true, limit: '10mb' })));
 
   // The session-context headers carry public ids like every other id position. Before the guards,
@@ -101,14 +119,19 @@ async function bootstrap() {
   holdIdleConnections(app.getHttpServer());
   const listeners = [drainable(app.getHttpServer())];
   await app.listen(port);
-  // eslint-disable-next-line no-console
-  console.log(`orbit control plane listening on :${port}`);
+  new Logger('Main').log(`orbit control plane listening on :${port}`);
   // The link gateway's own door to the same routes, when the runner link is on (runner-link-call.ts).
   const linkServer = await listenForRunnerLinkCalls(app, {
     port: config.get<string>('RUNNER_LINK_INTERNAL_PORT'),
     host: config.get<string>('RUNNER_LINK_INTERNAL_HOST'),
   });
   if (linkServer) listeners.push(drainable(linkServer));
+  // Prometheus's door to GET /api/metrics, serving /metrics alone, inside the project's network (metrics/metrics-listener.ts).
+  const metricsServer = await listenForMetricsScrapes(app, {
+    port: config.get<string>('METRICS_INTERNAL_PORT'),
+    host: config.get<string>('METRICS_INTERNAL_HOST'),
+  });
+  if (metricsServer) listeners.push(drainable(metricsServer));
   started({ app, listeners });
 }
 

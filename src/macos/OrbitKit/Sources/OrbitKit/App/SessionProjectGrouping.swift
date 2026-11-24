@@ -16,6 +16,8 @@ public struct SessionProjectRow: Identifiable, Equatable, Sendable {
     public let pinnedAt: String?
     public let lastTurnAt: String?
     public let createdAt: String?
+    /// The newest member's list-order key (`listedAt`, else `createdAt`): where the row sits.
+    public var listedAt: String? = nil
     public let needsYou: Bool
     public let running: Bool
     public let jobs: Bool
@@ -135,6 +137,13 @@ public enum SessionProjectEntry: Identifiable, Equatable, Sendable {
         switch self {
         case .session(let session): return session.lastTurnAt
         case .project(let project): return project.lastTurnAt
+        }
+    }
+    /// The list-order key: a session's `listedAt`, a project row's newest member's.
+    public var listedAt: String? {
+        switch self {
+        case .session(let session): return session.listedAt
+        case .project(let project): return project.listedAt
         }
     }
     public var createdAt: String? {
@@ -341,18 +350,24 @@ public enum SessionProjectGrouping {
                 sessionCount: content.count, coordinator: coordinator, folderId: folderID,
                 pinnedAt: coordinator?.pinnedAt, lastTurnAt: latest.lastTurnAt ?? latest.createdAt,
                 createdAt: coordinator?.createdAt ?? latest.createdAt,
+                listedAt: members.map { $0.listedAt ?? $0.createdAt }
+                    .max { instant($0) < instant($1) } ?? nil,
                 needsYou: needsYou, running: running, jobs: jobs,
                 indicator: needsYou ? .needsYou : running ? .running : jobs ? .jobs : nil,
                 line: selectedLine, target: target, taskCounts: summary?.taskCounts,
                 runningCount: summary?.buckets.running ?? runningCount,
                 started: summary?.started == true, pause: SessionProjectPause(summary)))
         }
+        // The shared list order (contracts/session-list-order.fixtures.json): `listedAt` (`createdAt`
+        // when null), then `createdAt`, then id. `lastTurnAt` is liveness and never moves a row.
         // Each entry's time is parsed once, not twice per comparison.
         let entries = (loose.map(SessionProjectEntry.session) + rows.map(SessionProjectEntry.project))
-            .map { ($0, instant($0.lastTurnAt ?? $0.createdAt)) }
+            .map { ($0, instant($0.listedAt ?? $0.createdAt), instant($0.createdAt)) }
             .sorted { a, b in
                 if view == .open, (a.0.pinnedAt != nil) != (b.0.pinnedAt != nil) { return a.0.pinnedAt != nil }
-                return a.1 > b.1
+                if a.1 != b.1 { return a.1 > b.1 }
+                if a.2 != b.2 { return a.2 > b.2 }
+                return a.0.id < b.0.id
             }
             .map(\.0)
         return SessionProjectListing(folders: folderID == nil ? folderListing.folders : [],

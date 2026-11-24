@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   Param,
@@ -62,6 +63,14 @@ export class WorkspacesController {
   @PatScope('workspaces:write', { workspaceConfinable: { params: { id: 'workspace' } } })
   @Patch(':id')
   update(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateWorkspaceDto) {
+    // docs/design/protected-branch-landing.md §8, §12: Push as me lends the workspace the owner's GitHub identity, so
+    // only the owner signed in to a client chooses it — not a token an agent or a script could hold.
+    if (dto.landingMode !== undefined && user.credential?.kind !== 'LOGIN') {
+      throw new ForbiddenException({
+        code: 'LANDING_MODE_OWNER_ONLY',
+        message: "Only the workspace's owner, signed in to Orbit, can choose how landings reach GitHub.",
+      });
+    }
     return this.workspaces.update(user.userId, id, dto);
   }
 

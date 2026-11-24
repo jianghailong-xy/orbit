@@ -13,6 +13,29 @@ public enum SidebarSelection: Hashable, Sendable {
     case project(String)
     /// A session someone shared with this account, in the Shared with me group: its guest view.
     case guestSession(String)
+    /// Trash or Storage, the rows under Documents (`.section(.documents)` is the drive itself).
+    case documents(DocumentsPlace)
+}
+
+/// Which of Documents' pages is showing: the drive's folders, Trash or Storage (docs/mocks/documents, 03-mac ③).
+public enum DocumentsPlace: String, Hashable, Sendable, CaseIterable {
+    case drive, trash, storage
+
+    public var title: String {
+        switch self {
+        case .drive: return DocumentsLogic.title
+        case .trash: return DocumentsLogic.trash
+        case .storage: return DocumentsLogic.storage
+        }
+    }
+
+    public var systemImage: String {
+        switch self {
+        case .drive: return "folder"
+        case .trash: return "trash"
+        case .storage: return "chart.bar"
+        }
+    }
 }
 
 /// What a stored selection asks the navigation model to do. Kept as its own value so the view can run
@@ -23,6 +46,7 @@ public enum SidebarTarget: Equatable, Sendable {
     case machine(String)
     case project(String)
     case guestSession(String)
+    case documents(DocumentsPlace)
     /// Nothing is selected (a cleared selection): nothing to do.
     case none
 }
@@ -33,7 +57,9 @@ public enum SidebarLogic {
     /// section — the same precedence the old computed binding had.
     public static func selection(section: AppSection, agentID: String?,
                                  machineDraftRunnerID: String?, projectID: String?,
-                                 guestSessionID: String? = nil) -> SidebarSelection {
+                                 guestSessionID: String? = nil,
+                                 documentsPlace: DocumentsPlace = .drive) -> SidebarSelection {
+        if section == .documents, documentsPlace != .drive { return .documents(documentsPlace) }
         if section == .agents, let guestSessionID { return .guestSession(guestSessionID) }
         if let runnerID = machineDraftRunnerID { return .machine(runnerID) }
         if section == .agents, let projectID { return .project(projectID) }
@@ -49,6 +75,7 @@ public enum SidebarLogic {
         case .machine(let runnerID)?: return .machine(runnerID)
         case .project(let id)?: return .project(id)
         case .guestSession(let id)?: return .guestSession(id)
+        case .documents(let place)?: return .documents(place)
         case nil: return .none
         }
     }

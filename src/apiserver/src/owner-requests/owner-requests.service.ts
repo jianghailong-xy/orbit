@@ -14,6 +14,7 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { returnSessionsToOpen } from '../sessions/return-to-open';
 import { WatchDeliveryService } from '../watches/watch-delivery.service';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { WikiRefusalError, WikiService, normalizeRepoUrl } from '../wiki/wiki.service';
@@ -23,7 +24,16 @@ import { translationLanguages, type TranslationLanguages } from '../sessions/tur
 import { ownerWordsForAgent } from '../sessions/reply-translation';
 import { isConditionItemKind } from '../conditions/condition-attention';
 import { answerStillWaiting } from '../conditions/condition-still-waiting';
-import { CONDITION_STILL_WAITING_KIND } from '@orbit/shared';
+import {
+  CONDITION_STILL_WAITING_KIND,
+  OWNER_REQUEST_CHANGE_NOOP,
+  OWNER_REQUEST_CHANGE_REPLACED_NOTE,
+  toUuid,
+  type OwnerRequestChangeAnswer,
+  type OwnerRequestChangeFiling,
+  type OwnerRequestChangeSpec,
+} from '@orbit/shared';
+import { runnerSettingsData } from '../runners/runner-settings';
 import { endUndeliveredGrants, enqueueResolutions } from './owner-request-endings';
 import { OwnerSecretsService, type OwnerSecretGrantView } from './owner-secrets.service';
 import { settingOwnerOnlyBody, settingsChangeTitle } from '@orbit/shared';
@@ -111,6 +121,8 @@ const VIEW = {
   // BROWSER_SIGN_IN (migration 1393): the site the agent named and the Orbit Cloud runner whose browser it is.
   browserSite: true,
   browserRunnerId: true,
+  // CHANGE (migration 1538): `{ runnerId, field, requested, before }`, which the card draws beside the live value.
+  changeSpec: true,
   expiresAt: true,
   clientRequestId: true,
   askedBySessionId: true,
@@ -183,7 +195,8 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
      * finds it without this. Optional for the same reason as `push`.
      */
     @Optional() private readonly delivery?: WatchDeliveryService,
-    /** Tells the asking session's list row its needs-you count moved. Optional for the same reason as `push`. */
+    /** Tells the asking session's row that what waits on the owner there changed (its
+     *  `pendingApprovals`, `waitingKind` and `ownerRequests`). Optional for the same reason as `push`. */
     @Optional() private readonly realtime?: RealtimeService,
     /** What the owner's Create wiki on a WIKI_CREATE card makes the wiki through (`createWiki`). */
     @Optional() private readonly wiki?: WikiService,
@@ -234,8 +247,11 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
         where: { ownerId, askedBySessionId: askingSessionId, clientRequestId: request.clientRequestId },
         select: { kind: true },
       });
-      // A WIKI_CREATE retried after it was answered is that answer, not a refusal of the repository it now has a wiki for.
-      if (filed?.kind === 'WIKI_CREATE') return this.filedBefore(ownerId, askingSessionId, request.clientRequestId);
+      // A WIKI_CREATE retried after it was answered is that answer, not a refusal of the repository it now has a wiki for;
+      // a CHANGE retried after it was applied is that request, not a refusal of a value that is now the runner's own.
+      if (filed?.kind === 'WIKI_CREATE' || filed?.kind === 'CHANGE') {
+        return this.filedBefore(ownerId, askingSessionId, request.clientRequestId);
+      }
     }
     const wikiCreate = request.kind === 'WIKI_CREATE' ? await this.wikiCreateFiling(ownerId, session.workspaceId) : null;
     const blocks = request.blocksTaskIds ?? [];
@@ -251,35 +267,48 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     const secretSpec = request.secretSpec
       ? { ...request.secretSpec, runnerId: await this.secrets.runnerForFiling(ownerId, askingSessionId, request.secretSpec.runnerId) }
       : undefined;
+    const changeSpec = request.kind === 'CHANGE' ? await this.changeFiling(ownerId, request.change!) : undefined;
 
-    const [created] = await this.prisma.ownerRequest.createManyAndReturn({
-      data: [{
-        ownerId,
-        askedBySessionId: askingSessionId,
-        projectId: request.projectId ?? null,
-        kind: request.kind,
-        state: 'PENDING',
-        title: wikiCreate?.title ?? request.title!,
-        why: request.why,
-        blocksTaskIds: blocks,
-        ifUnanswered: request.ifUnanswered ?? null,
-        options: json(request.options),
-        recommendedOption: request.recommendedOption ?? null,
-        steps: json(request.steps),
-        secretSpec: json(secretSpec),
-        verifyHint: request.verifyHint ?? null,
-        repoUrlNorm: wikiCreate?.repoUrlNorm ?? null,
-        workspaceId: wikiCreate?.workspaceId ?? null,
-        expiresAt: request.expiresAtDate,
-        clientRequestId: request.clientRequestId ?? null,
-      }],
-      skipDuplicates: true,
-      select: VIEW,
-    });
+    const data = {
+      ownerId,
+      askedBySessionId: askingSessionId,
+      projectId: request.projectId ?? null,
+      kind: request.kind,
+      state: 'PENDING',
+      title: wikiCreate?.title ?? request.title!,
+      why: request.why,
+      blocksTaskIds: blocks,
+      ifUnanswered: request.ifUnanswered ?? null,
+      options: json(request.options),
+      recommendedOption: request.recommendedOption ?? null,
+      steps: json(request.steps),
+      secretSpec: json(secretSpec),
+      verifyHint: request.verifyHint ?? null,
+      repoUrlNorm: wikiCreate?.repoUrlNorm ?? null,
+      workspaceId: wikiCreate?.workspaceId ?? null,
+      changeSpec: json(changeSpec),
+      expiresAt: request.expiresAtDate,
+      clientRequestId: request.clientRequestId ?? null,
+    } satisfies Prisma.OwnerRequestCreateManyInput;
+    const [created] = changeSpec
+      ? await this.insertChange(data, changeSpec)
+      : await this.prisma.ownerRequest.createManyAndReturn({ data: [data], skipDuplicates: true, select: VIEW });
     if (created) {
+      // The asking session is now waiting on its owner: its row moves to the top of their list (session.listed_at,
+      // sessions/session-listed-at.ts), before the summary below is published.
+      await this.prisma.session.updateMany({ where: { id: created.askedBySessionId }, data: { listedAt: new Date() } });
+      // The request's card is drawn in the session that asked, and only an Open row lights: one the
+      // owner had filed in Completed comes back (a Trash one cannot file, above). After the commit,
+      // and never a reason for the filing to fail.
+      const reopened = await returnSessionsToOpen(this.prisma, ownerId, [askingSessionId], this.logger)
+        .catch((error: unknown) => {
+          this.logger.warn(`could not bring session ${askingSessionId} back to Open: ${(error as Error).message}`);
+          return [] as string[];
+        });
+      for (const sessionId of reopened) this.realtime?.publishSessionCreated(sessionId);
       // Told after the row is committed, and never awaited: the request is the fact, the banner a reader of it.
       void this.push?.notifyOwnerRequest(created.id);
-      this.realtime?.publishSessionUpdated(created.askedBySessionId);
+      this.realtime?.publishOwnerSignalChanged(ownerId, [askingSessionId]);
       // And translated for the owner in the background, when their translation is on (decision 1A).
       void translationLanguages(this.prisma, ownerId)
         .then((langs) => { if (langs) this.queueTranslation(ownerId, created, langs); })
@@ -312,6 +341,89 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       : null;
     if (!already) throw new ConflictException('the request under this clientRequestId could not be read back; try again');
     return { ...(await this.get(ownerId, already.id)), created: false };
+  }
+
+  /**
+   * What a CHANGE is for, or why it may not be filed (docs/design/owner-request-change.md §2): one of the owner's runners,
+   * whose setting does not already have the value asked for. Any runner that is not the owner's is not found, the answer
+   * `GET /runners/:id` gives. `before` is read here, never taken from the caller.
+   */
+  private async changeFiling(ownerId: string, change: OwnerRequestChangeFiling): Promise<OwnerRequestChangeSpec> {
+    let runnerId: string;
+    try {
+      runnerId = toUuid(change.runnerId);
+    } catch {
+      throw new NotFoundException('runner not found');
+    }
+    const runner = await this.prisma.runner.findFirst({ where: { id: runnerId, ownerId }, select: { maxConcurrent: true } });
+    if (!runner) throw new NotFoundException('runner not found');
+    if (runner.maxConcurrent === change.maxConcurrent) {
+      throw new ConflictException({
+        code: OWNER_REQUEST_CHANGE_NOOP,
+        message: `This runner's Max Concurrent is already ${runner.maxConcurrent}; nothing was filed.`,
+      });
+    }
+    return { runnerId, field: 'maxConcurrent', requested: change.maxConcurrent, before: runner.maxConcurrent };
+  }
+
+  /**
+   * A CHANGE's insert (design §2, "one pending change per runner setting"): in one transaction, every PENDING CHANGE of
+   * the owner for the same runner and field ends WITHDRAWN with the note `Replaced by a newer request`, each with its
+   * delivery to the session that asked, and the new request is inserted. `owner_request_change_pending_key` holds the
+   * rest: two filings that race cannot both stay pending — the second's INSERT waits for the first and is refused on the
+   * key once it commits, and is filed again (at most three times), when its UPDATE withdraws the first.
+   *
+   * A filing retried under a clientRequestId this session already used inserts nothing and withdraws nothing: the caller
+   * reads back the request filed before. Answers the row it inserted, or none.
+   */
+  private async insertChange(
+    data: Prisma.OwnerRequestCreateManyInput,
+    spec: OwnerRequestChangeSpec,
+  ): Promise<OwnerRequestView[]> {
+    const fileOnce = () => withTransactionRetry(this.prisma, async (tx) => {
+      if (data.clientRequestId) {
+        const filed = await tx.ownerRequest.findFirst({
+          where: { askedBySessionId: data.askedBySessionId, clientRequestId: data.clientRequestId },
+          select: { id: true },
+        });
+        if (filed) return { created: [], replaced: [] };
+      }
+      const now = new Date();
+      const replaced = await tx.ownerRequest.updateManyAndReturn({
+        where: {
+          ownerId: data.ownerId,
+          kind: 'CHANGE',
+          state: 'PENDING',
+          AND: [
+            { changeSpec: { path: ['runnerId'], equals: spec.runnerId } },
+            { changeSpec: { path: ['field'], equals: spec.field } },
+          ],
+        },
+        data: {
+          state: 'WITHDRAWN',
+          resolvedAt: now,
+          resolvedBySessionId: data.askedBySessionId,
+          resolutionNote: OWNER_REQUEST_CHANGE_REPLACED_NOTE,
+        },
+        select: { id: true, askedBySessionId: true },
+      });
+      await enqueueResolutions(tx, replaced.map((row) => row.id));
+      const created = await tx.ownerRequest.create({ data, select: VIEW });
+      return { created: [created], replaced };
+    }, loggedRetry(this.logger, 'ownerRequests.insertChange'));
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        const { created, replaced } = await fileOnce();
+        if (replaced.length > 0) this.delivery?.kick();
+        for (const sessionId of new Set(replaced.map((row) => row.askedBySessionId))) {
+          this.realtime?.publishSessionUpdated(sessionId);
+        }
+        return created;
+      } catch (error) {
+        const pendingTaken = error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+        if (!pendingTaken || attempt >= 3) throw error;
+      }
+    }
   }
 
   /**
@@ -644,6 +756,9 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     if (request.kind === SETTINGS_CHANGE) {
       throw new BadRequestException('a SETTINGS_CHANGE request is done when the owner saves its changes, which writes them; it is not marked done by hand');
     }
+    if (request.kind === 'CHANGE') {
+      throw new BadRequestException('a CHANGE request is done when the owner applies it, which writes the setting: POST /owner-requests/:id/apply');
+    }
     this.refuseAnsweredElsewhere(request.kind);
     const text = given.text?.trim();
     const option = given.option ?? undefined;
@@ -782,6 +897,76 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * The owner's Apply on a CHANGE card (docs/design/owner-request-change.md §4): in one transaction, the request locked
+   * FOR UPDATE and refused unless it is PENDING and before its deadline; its runner locked FOR UPDATE, 404 when it is
+   * gone (the owner can still decline); the runner's value read as `actualBefore` and `maxConcurrent` written through
+   * the rules `PATCH /runners/:id` writes it with (runnerSettingsData); the request ended DONE with
+   * `answer = { applied, actualBefore }`, and its delivery to the asking session written. The value is the owner's: the
+   * requested one or one they typed (decision 1), and it is written even when the runner's value moved since the request
+   * was filed (decision 3) — `actualBefore` says so. The owner's own sign-in only: the door is @PatForbidden('RUNNER_CONTROL').
+   */
+  async applyChange(
+    ownerId: string,
+    id: string,
+    maxConcurrent: number,
+    client: OwnerRequestClient | null = null,
+  ): Promise<OwnerRequestView> {
+    const askedBySessionId = await withTransactionRetry(this.prisma, async (tx) => {
+      const now = new Date();
+      const [request] = await tx.$queryRaw<Array<{
+        kind: string; state: string; expiresAt: Date | null; changeSpec: unknown; askedBySessionId: string;
+      }>>`
+        SELECT "kind", "state", "expires_at" AS "expiresAt", "change_spec" AS "changeSpec",
+               "asked_by_session_id" AS "askedBySessionId"
+          FROM "owner_request"
+         WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+           FOR UPDATE`;
+      if (!request) throw new NotFoundException('owner request not found');
+      if (request.kind !== 'CHANGE') throw new BadRequestException('only a CHANGE request is applied');
+      if (request.state !== 'PENDING') {
+        throw new ConflictException({
+          code: OWNER_REQUEST_NOT_PENDING,
+          state: request.state,
+          message: `this request is already ${request.state}; an ended request is final and nothing was written`,
+        });
+      }
+      if (request.expiresAt && request.expiresAt.getTime() <= now.getTime()) {
+        throw new ConflictException({
+          code: OWNER_REQUEST_EXPIRED,
+          message: 'this request passed its deadline and has expired; nothing was written',
+        });
+      }
+      const spec = request.changeSpec as OwnerRequestChangeSpec;
+      const [runner] = await tx.$queryRaw<Array<{ maxConcurrent: number }>>`
+        SELECT "max_concurrent" AS "maxConcurrent"
+          FROM "runner"
+         WHERE "id" = ${spec.runnerId}::uuid AND "owner_id" = ${ownerId}::uuid
+           FOR UPDATE`;
+      if (!runner) {
+        throw new NotFoundException('runner not found: it was removed after this request was filed; decline the request instead');
+      }
+      await tx.runner.update({ where: { id: spec.runnerId }, data: runnerSettingsData({ maxConcurrent }), select: { id: true } });
+      const answer: OwnerRequestChangeAnswer = { applied: maxConcurrent, actualBefore: runner.maxConcurrent };
+      await tx.ownerRequest.update({
+        where: { id },
+        data: {
+          state: 'DONE',
+          resolvedAt: now,
+          resolvedByUserId: ownerId,
+          resolvedClient: client,
+          answer: answer as unknown as Prisma.InputJsonValue,
+        },
+        select: { id: true },
+      });
+      await enqueueResolutions(tx, [id]);
+      return request.askedBySessionId;
+    }, loggedRetry(this.logger, 'ownerRequests.applyChange'));
+    this.delivery?.kick();
+    this.realtime?.publishSessionUpdated(askedBySessionId);
+    return this.get(ownerId, id);
+  }
+
+  /**
    * Every PENDING WIKI_CREATE whose repository now has a wiki in use, however it was made, settled DONE with that wiki
    * (design §3.6: "the card reads DONE once the repository has an in-use space"), each with its delivery to the asking
    * session — the owner's list and reads and the expiry sweep call it, so a card whose wiki came from the Create wiki
@@ -862,7 +1047,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       const rows = await tx.ownerRequest.updateManyAndReturn({
         where: { state: 'PENDING', expiresAt: { lte: now } },
         data: { state: 'EXPIRED', resolvedAt: now },
-        select: { id: true, askedBySessionId: true },
+        select: { id: true, ownerId: true, askedBySessionId: true },
       });
       const ids = rows.map((row) => row.id);
       await enqueueResolutions(tx, ids);
@@ -870,9 +1055,9 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       return rows;
     }, loggedRetry(this.logger, 'ownerRequests.expireDue'));
     if (expired.length > 0) this.delivery?.kick();
-    for (const sessionId of new Set(expired.map((row) => row.askedBySessionId))) {
-      this.realtime?.publishSessionUpdated(sessionId);
-    }
+    const byOwner = new Map<string, string[]>();
+    for (const row of expired) byOwner.set(row.ownerId, [...(byOwner.get(row.ownerId) ?? []), row.askedBySessionId]);
+    for (const [owner, sessions] of byOwner) this.realtime?.publishOwnerSignalChanged(owner, sessions);
     return expired.map((row) => row.id);
   }
 
@@ -911,7 +1096,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     if (settled.count === 1) this.delivery?.kick();
     const request = await this.get(ownerId, id);
     if (settled.count === 1) {
-      this.realtime?.publishSessionUpdated(request.askedBySessionId);
+      this.realtime?.publishOwnerSignalChanged(ownerId, [request.askedBySessionId]);
       return request;
     }
     if (request.state === 'PENDING') {

@@ -60,8 +60,11 @@ iOS 会话详情右上角使用 `⋯` 菜单：Share… / Copy Link；Rename… 
 
 - 标题是文件夹名，下面一行小字是 Workspace 名；返回回到这个 Workspace 的列表。
 - 右上角 `⋯` 里是 `Rename…`、`Delete Folder…`；`✎` 新建的会话直接落在这个文件夹（新建请求带 `folderId`）。
+- `⋯` 左边是和 Workspace 列表同一个范围菜单（触发器写当前视图，如 `Open ▾`）：Open / Completed 在页内切换，仍停在这个文件夹页；Trash 没有文件夹，选它就回到 Workspace 的 Trash；Filter by Tag、Group by Tag 只作用于这个文件夹的会话（平铺，不显示项目行）；没有 `New Folder…`（文件夹不嵌套）。owner 2026-11-22，`docs/mocks/session-folder-page-filter`。
+- 标签筛选开着时，搜索框下面有一个标签 chip，点一下清掉；空页写清范围，如 `No completed sessions with “runner” in this folder.`，下面一个 `Clear filter`。
+- 标签筛选和 Group by Tag 属于设置它的那一页：进文件夹页时没有，返回 Workspace 列表时清掉（列表照旧显示文件夹）；Open / Completed 两边共用。
 - 列表和外面一样：Pinned 在前，然后按时间分组；行、左右滑、长按都相同。
-- 文件夹页沿用打开它时列表的范围：从 Open 进来看 Open 的会话，从 Completed 进来看已完成的。
+- 文件夹页沿用打开它时列表的范围：从 Open 进来看 Open 的会话，从 Completed 进来看已完成的；之后可以用页头的范围菜单切换。
 - iPhone：推到 Agents 那一栏的导航栈上（`NavNode` 新增一种页面），系统返回键和左缘右滑返回都可用；在文件夹页里点开会话，返回时回到文件夹页。
 - iPad（三栏）：中间栏现在没有自己的导航栈。进文件夹时中间栏换成这个文件夹的列表，栏顶有返回按钮；右侧详情栏照旧跟着选中的会话走。中间栏和 iPhone 用同一个列表视图，只是进出方式不同。
 - 被选中的会话搬出了当前文件夹（或文件夹被删）时，页面不跳走，列表里那一行消失即可；文件夹被删时退回 Workspace 列表。
@@ -70,8 +73,9 @@ iOS 会话详情右上角使用 `⋯` 菜单：Share… / Copy Link；Rename… 
 其他规则：
 
 - Open 显示全部文件夹（包括空的）；Completed 只显示里面有已完成会话的文件夹；Trash 平铺，不显示文件夹。
-- 按标签筛选或 Group by Tag 时不显示文件夹，列表平铺，避免两套分组叠在一起。
-- 搜索结果本来就是跨 Workspace 平铺的，不变。
+- Workspace 列表按标签筛选或 Group by Tag 时不显示文件夹，列表平铺，避免两套分组叠在一起。文件夹页里没有文件夹行，所以标签在文件夹页里照常可用（见上）。
+- 搜索结果跨 Workspace 平铺。从文件夹页打开 ⌘K 时，搜索框里先带一个 `In <folder>` chip，只搜这个文件夹的会话（`GET /sessions/search?folderId=`，Wiki 不搜）；点 chip 的 ✕、在空输入框里按 Backspace、或空结果里的 `Search everywhere`，都会去掉范围、回到全局搜索。
+- 以上文件夹页的范围菜单、标签和带范围的搜索先在 web 上做；iOS / Android 跟进。
 - 文件夹的分组在客户端算：Open / Completed 列表本来就是整页拉取再按 Workspace 过滤（`AgentsModel.loadSessions`），按 `folderId` 再分一次即可。纯函数放 OrbitKit，带单测。
 
 ### 3.4 管理

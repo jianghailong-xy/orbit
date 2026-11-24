@@ -21,6 +21,7 @@ import {
   type OpenItemFacts,
   type OpenItemHandling,
   type OpenItemOutcome,
+  type OpenItemWorkSession,
   type ProjectDoneNotReadyBody,
   type ProjectClosedQuestion,
   type ProjectDoneRequestDeclineBody,
@@ -35,6 +36,7 @@ import {
   type ProjectRulingView,
   type RequestProjectDoneBody,
   type OwnerCardTranslation,
+  type ProjectAccountWait,
   type ProjectSignInWait,
   type TaskSignInHold,
   RunEventType,
@@ -93,6 +95,12 @@ import {
   landingLineOf,
   openItemMessage,
   openItemOwed,
+  inWorkSessionHands,
+  readOpenItemWorkSessions,
+  handBackLandingFix,
+  type LandingFixReturnReason,
+  OPEN_ITEM_WITH_WORK_SESSION,
+  OPEN_ITEM_WITH_WORK_SESSION_MESSAGE,
   openItemVisible,
   openItemTurnId,
   openItemsNoLongerOwed,
@@ -105,7 +113,10 @@ import { escalatesAt } from './open-item-escalation.service';
 import { COORDINATOR_PAUSE_SELECT, conversationIsPaused } from './coordinator-evidence-queue';
 import { canonicalJson } from './canonical-json';
 import { mainBranchOf, taskLandingSql } from './project-criterion-landing';
+import { landingFixMessage, landingFixTurnId, readLandingFixFacts } from './landing-fix-turn';
+import { platformTurnRevives } from '../sessions/platform-turn-revival';
 import {
+  DELIVERED_IDENTITY_CLEARED,
   LandingRetryFailureClass,
   SkippedMergeCheckRecord,
   endTimedOutLanding,
@@ -187,6 +198,7 @@ import {
   supersedeStaleDoneRequest,
 } from './project-done-request';
 import { sessionHeldSql } from '../common/session-release';
+import { IN_FLIGHT_JOB_STATES, IN_FLIGHT_JOB_STATES_SQL, isInFlightJobState } from './in-flight-job-states';
 
 /**
  * Who is asking for an item to be put in front of the project's coordinator conversation.
@@ -286,6 +298,11 @@ const HAND_CLOSABLE_RESOLUTIONS: Readonly<Record<string, 'HANDLED' | 'WITHDRAWN'
  * takes it, so the set drains itself; the next binding, or the next turn end, picks up the rest.
  */
 const ANSWERS_RECONSIDERED_PER_BINDING = 50;
+
+/** Revision 42 (§12.7): the row is in its task's own work session's hands — offered and not handed back. */
+function heldBySession(row: Pick<OpenItemRow, 'workSession'>): boolean {
+  return row.workSession != null && row.workSession.returnedAt === undefined;
+}
 
 /** One exception item, as a reader of the project sees it (§4.8). */
 export interface OpenItemRow {
@@ -396,6 +413,9 @@ export interface OpenItemRow {
    *  of "no one acted on this". False on a settled row: nothing is asked of one. Optional for
    *  rolling-version readers, which read its absence as false. */
   coordinatorUnreachable?: boolean;
+  /** The task's own work session the failure went to first (revision 42, §12.7), whether it still holds it or
+   *  handed it back; null for an item never offered to one. */
+  workSession: OpenItemWorkSession<Date> | null;
 }
 
 /** A question filed, as `ask_owner` answers its caller (§5.2 R7). */
@@ -558,6 +578,9 @@ export interface TaskIntegrationStop {
 export interface ProjectOpenItems {
   needsYou: OpenItemRow[];
   withCoordinator: OpenItemRow[];
+  /** "Being fixed by its session" (revision 42, §12.7): the landing failures in their task's own work session's
+   *  hands — nobody's Needs you, and not the coordinator's yet. */
+  withWorkSession: OpenItemRow[];
   startRequest: OpenItemRow | null;
   doneRequest: OpenItemRow | null;
   latestDoneRequestDecline: { note: string; declinedAt: Date } | null;
@@ -568,6 +591,31 @@ export interface ProjectOpenItems {
   mainBranch: string | null;
   /** The sign-ins the project's held tasks wait for, one per runner and engine (`projectSignInWaits`). */
   signIns: ProjectSignInWait[];
+  /** The tasks held because no account can run them, as one row (`projectAccountWait`). */
+  accountWait: ProjectAccountWait<Date> | null;
+}
+
+/** The hold of one task, as the project row needs it (TasksService.accountHolds). */
+import type { ModelRoutingHold } from '../tasks/model-routing';
+export interface AccountHoldRead {
+  reason: string;
+  until: string;
+}
+
+/**
+ * The project's account holds as its one Needs you row: "N tasks wait for an account" over the sentence of the hold that
+ * lifts first. Null when no task is held.
+ */
+export function projectAccountWait(holds: ReadonlyMap<string, AccountHoldRead>): ProjectAccountWait<Date> | null {
+  if (holds.size === 0) return null;
+  const first = [...holds.values()].sort((a, b) => a.until.localeCompare(b.until))[0];
+  const n = holds.size;
+  return {
+    taskIds: [...holds.keys()],
+    title: n === 1 ? '1 task waits for an account' : `${n} tasks wait for an account`,
+    detailLine: first.reason,
+    until: new Date(first.until),
+  };
 }
 
 /** The one read of TasksService this service makes: the sweep's signed-out holds (TasksService.signInHolds). */
@@ -617,6 +665,37 @@ const CLOSED_QUESTIONS_SHOWN = 50;
 /** The item stopped being owed to the coordinator while its turn was being written. */
 class OpenItemNoLongerOwed extends Error {}
 
+/** The item left the work session's hands, or its task left DONE, while the landing-fix turn was being
+ *  written: nothing is delivered, and whatever moved it decides what happens next. */
+class LandingFixNoLongerOwed extends Error {}
+
+/** The work session ended some other way than with its task's DONE (§12.5 W6, R3): it is not revived. */
+class LandingFixSessionEnded extends Error {}
+
+export type { LandingFixReturnReason } from './project-open-item';
+
+/**
+ * The resume refusals (`session-recovery.ts`) that say the session cannot get its runner, or cannot be run again at all
+ * (R3: the same runner or none): the round fails, TURN_FAILED. Trash and an end in progress are a person's, SESSION_ENDED.
+ */
+const RESUME_REFUSED_TURN_FAILED: ReadonlySet<string> = new Set([
+  'NO_RUNNER', 'RUNNER_OFFLINE', 'NOT_STARTED', 'MISSING_CONTEXT', 'NOT_TERMINAL',
+]);
+
+/** Which hand-back a refused landing-fix delivery is (W7, R3), or null for a refusal that is no answer about the
+ *  session — a lock held a moment, a key with other words — which the backstop delivers again. */
+function landingFixRefusalReturn(error: unknown): LandingFixReturnReason | null {
+  if (error instanceof LandingFixSessionEnded || error instanceof SessionNotSendable || error instanceof NotFoundException) {
+    return 'SESSION_ENDED';
+  }
+  if (!(error instanceof HttpException)) return null;
+  const body = error.getResponse() as { code?: unknown; resumeBlockedReason?: unknown } | string;
+  if (typeof body !== 'object' || body === null) return null;
+  if (body.code === 'MANAGED_RUNNER_FAILED') return 'TURN_FAILED';
+  if (typeof body.resumeBlockedReason !== 'string') return null;
+  return RESUME_REFUSED_TURN_FAILED.has(body.resumeBlockedReason) ? 'TURN_FAILED' : 'SESSION_ENDED';
+}
+
 /** The open-item kinds whose card is translated for the owner (Settings › Translation), and which of the payload's
  *  fields are the agent's words (sessions/card-translation.ts). */
 const TRANSLATED_ITEM_FIELDS: Readonly<Partial<Record<string, CardFields>>> = {
@@ -632,6 +711,17 @@ function itemTranslatedFields(kind: string, handoverNote: string | null | undefi
   if (!handoverNote?.trim()) return fields;
   return { ...fields, handoverNote: true };
 }
+
+/** W9 (revision 42, §12.5): the coordinator's and owner's resolve and retry doors refuse an item in its
+ *  task's own work session's hands. */
+function withWorkSession(): ConflictException {
+  return new ConflictException({ code: OPEN_ITEM_WITH_WORK_SESSION, message: OPEN_ITEM_WITH_WORK_SESSION_MESSAGE });
+}
+
+/** The rows a hand-close may write: not offered to a work session, or handed back from it (W9). */
+const NOT_WITH_WORK_SESSION = {
+  OR: [{ workSessionOfferedAt: null }, { workSessionReturnedAt: { not: null } }],
+} satisfies Prisma.ProjectOpenItemWhereInput;
 
 /**
  * Exception items after the fact that opened them has committed: delivering them to the project's
@@ -690,6 +780,28 @@ export class ProjectOpenItemService {
     return reader ? reader.signInHolds(ownerId, scope) : new Map();
   }
 
+  /** `accountHold` of each of these tasks (TasksService.accountHoldsFor), for a project's task rows; none without a reader. */
+  async accountHoldsFor(ownerId: string, taskIds: readonly string[]): Promise<Map<string, ModelRoutingHold>> {
+    try {
+      const { TasksService } = await import('../tasks/tasks.service.js');
+      const tasks = this.moduleRef?.get(TasksService, { strict: false });
+      return tasks ? await tasks.accountHoldsFor(ownerId, taskIds) : new Map();
+    } catch {
+      return new Map();
+    }
+  }
+
+  /** The project's tasks held for an account (TasksService.accountHolds), one row; none when no reader is reachable. */
+  private async accountWait(ownerId: string, projectId: string): Promise<ProjectAccountWait<Date> | null> {
+    try {
+      const { TasksService } = await import('../tasks/tasks.service.js');
+      const tasks = this.moduleRef?.get(TasksService, { strict: false });
+      return tasks ? projectAccountWait(await tasks.accountHolds(ownerId, projectId)) : null;
+    } catch {
+      return null;
+    }
+  }
+
   /** The project's sign-in waits, one per runner and engine. */
   private async signInWaits(ownerId: string, projectId: string): Promise<ProjectSignInWait[]> {
     return projectSignInWaits(await this.signInHolds(ownerId, Prisma.sql`t.project_id = ${projectId}::uuid`));
@@ -722,6 +834,8 @@ export class ProjectOpenItemService {
       const mine = await this.prisma.projectOpenItem.findMany({
         where: {
           taskId: { in: ids }, state: 'OPEN', assignee: 'OWNER', kind: { not: LANDED_WITHOUT_CONFIRMATION_KIND },
+          // W5: an item in the task's own work session's hands asks nothing of the owner yet.
+          OR: [{ workSessionOfferedAt: null }, { workSessionReturnedAt: { not: null } }],
         },
         select: { id: true },
         orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
@@ -743,7 +857,12 @@ export class ProjectOpenItemService {
     if (ids.length === 0) return;
     await this.guarded('deliverForItems', async () => {
       const owed = await this.prisma.projectOpenItem.findMany({
-        where: { id: { in: ids }, state: 'OPEN', assignee: 'COORDINATOR' },
+        where: {
+          id: { in: ids },
+          state: 'OPEN',
+          // W5: an item handed to its task's own work session goes to that session (`deliver`'s seam).
+          OR: [{ assignee: 'COORDINATOR' }, { workSessionOfferedAt: { not: null }, workSessionReturnedAt: null }],
+        },
         select: { id: true },
         orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
       });
@@ -811,6 +930,221 @@ export class ProjectOpenItemService {
   }
 
   /**
+   * W6 (§12.5, revision 42, ruling R3): deliver the `landing-fix:v1:<jobId>` turn to the work session an
+   * item was handed to. Reached after the hand-off's J-T7 transaction has committed, through every
+   * delivery entry point (`deliverForItems` from the result route, `deliverOwed` as the backstop, and the
+   * session's own finish, `offerLandingFixesTo`), in place of the coordinator's delivery.
+   *
+   * The turn is the carrier G6 names: `createTurn` with NEXT_TURN for a session that is still open, and
+   * for one that ended because its task was done, the resume path `session_send`'s `resumeIfEnded` takes
+   * (`SessionsService.resume`), which revives it first — `createTurn` refuses an ended session before its
+   * hook runs. That is G6's one exception (`platformTurnRevives`): a session that ended any other way is
+   * not revived, and the item is handed back with SESSION_ENDED (W7, `returnLandingFix`).
+   *
+   * In the transaction that writes the turn (`acceptLandingFix`), R2: the task's delivered identity is
+   * cleared the way `task_reopen` clears it, so the finish of this session freezes it again from the work
+   * as it then stands (§10.5 O-L4 3). The task stays DONE: no epoch, no attempt generation, no evidence,
+   * no acceptance. The turn runs outside the project's task budget, which counts only tasks that are not
+   * DONE; and it is the work session's, so none of the coordinator's spend (§6.1) moves for it.
+   *
+   * Once: the turn row under its key is the receipt, so a delivery that finds it writes nothing — a
+   * session the turn revived, that ended again when its turn did, is not revived a second time.
+   */
+  async offerLandingFix(itemId: string): Promise<void> {
+    const item = await this.prisma.projectOpenItem.findUnique({
+      where: { id: itemId },
+      select: {
+        id: true, state: true, ownerId: true, projectId: true, taskId: true, title: true, payload: true,
+        integrationJobId: true, workSessionId: true, workSessionOfferedAt: true, workSessionReturnedAt: true,
+      },
+    });
+    if (!item || item.state !== 'OPEN' || !inWorkSessionHands(item)) return;
+    if (!item.workSessionId || !item.integrationJobId) return;
+    const sessionId = item.workSessionId;
+    // W7: a task reopened, cancelled, replaced or moved to another project since is TASK_MOVED_ON, whichever door
+    // moved it — the task-update transaction hands back what it sees, and this read is the backstop for the rest.
+    if (await this.taskMovedOn(item.projectId, sessionId)) {
+      await this.returnLandingFix(item.id, 'TASK_MOVED_ON');
+      return;
+    }
+    const clientTurnId = landingFixTurnId(item.integrationJobId);
+    const delivered = await this.prisma.conversationTurn.findUnique({
+      where: { sessionId_clientTurnId: { sessionId, clientTurnId } },
+      select: { id: true },
+    });
+    if (delivered) return;
+    const facts = await readLandingFixFacts(this.prisma, {
+      integrationJobId: item.integrationJobId, title: item.title, payload: item.payload,
+    });
+    if (!facts) return;
+    const content = landingFixMessage(facts);
+
+    // The task is the work session's (W4 held it to the job's), which a MAIN line's candidate item names
+    // only through its candidate.
+    const session = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { taskId: true, finishedAt: true, endReason: true, deletedAt: true, cancelRequestedAt: true },
+    });
+    if (!session) {
+      await this.returnLandingFix(item.id, 'SESSION_ENDED');
+      return;
+    }
+    if (!session.taskId || (item.taskId !== null && item.taskId !== session.taskId)) return;
+    const taskId = session.taskId;
+    // Ending because its task is done (parked-session-end.ts): its finish is a moment away, and the
+    // finish delivers this (`offerLandingFixesTo`), reviving it then.
+    if (this.endingForItsDone(session)) return;
+    const ended = session.finishedAt !== null || session.cancelRequestedAt !== null || session.deletedAt !== null;
+    if (ended && !platformTurnRevives(clientTurnId, session)) {
+      await this.returnLandingFix(item.id, 'SESSION_ENDED');
+      return;
+    }
+    const turn = { clientTurnId, content, intent: 'NEXT_TURN' as const };
+    const participateSendTransaction = (tx: Prisma.TransactionClient) =>
+      this.acceptLandingFix(tx, { itemId: item.id, sessionId, taskId, clientTurnId });
+    try {
+      if (session.finishedAt !== null) {
+        await this.sessions.resume(item.ownerId, sessionId, turn, { participateSendTransaction });
+      } else {
+        await this.sessions.createTurn(item.ownerId, sessionId, turn, { participateSendTransaction });
+      }
+    } catch (error) {
+      if (error instanceof LandingFixNoLongerOwed) {
+        // Its task left DONE while the turn was being written, or the item left the session's hands.
+        if (await this.taskMovedOn(item.projectId, sessionId)) await this.returnLandingFix(item.id, 'TASK_MOVED_ON');
+        return;
+      }
+      // R3: a session ended some other way, or in Trash, is SESSION_ENDED; one whose runner it cannot get, or that
+      // cannot be run again, is TURN_FAILED. The identity was not cleared (the hook's write rolled back with the turn).
+      const reason = landingFixRefusalReturn(error);
+      if (reason) {
+        // Read again: a session caught on its way to its DONE's end is revived at its finish instead.
+        const now = await this.prisma.session.findUnique({
+          where: { id: sessionId },
+          select: { finishedAt: true, endReason: true, deletedAt: true, cancelRequestedAt: true },
+        });
+        if (now && this.endingForItsDone(now)) return;
+        await this.returnLandingFix(item.id, now ? reason : 'SESSION_ENDED');
+        return;
+      }
+      if (error instanceof ConflictException) {
+        // A row being written right now, or a key already holding other words: the backstop delivers again.
+        this.logger.warn(`landing fix ${clientTurnId} was not delivered to ${sessionId}: ${error.message}`);
+        return;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * After a work session's finish has committed: every item in its hands, offered again — its finish is where an end in
+   * progress is over — and every item the finish handed back from it (W7), delivered to the coordinator at once. A MAIN
+   * line's item names no task, so `deliverForTasks` would not find it. TASK_MOVED_ON is delivered to nobody.
+   */
+  async offerLandingFixesTo(sessionId: string): Promise<void> {
+    await this.guarded('offerLandingFixesTo', async () => {
+      const items = await this.prisma.projectOpenItem.findMany({
+        where: {
+          state: 'OPEN', workSessionId: sessionId, workSessionOfferedAt: { not: null },
+          OR: [
+            { workSessionReturnedAt: null },
+            { assignee: 'COORDINATOR', workSessionReturnReason: { not: 'TASK_MOVED_ON' } },
+          ],
+        },
+        select: { id: true, assignedAt: true, workSessionReturnedAt: true },
+        orderBy: { id: 'asc' },
+      });
+      for (const item of items) {
+        if (item.workSessionReturnedAt === null) {
+          await this.offerLandingFix(item.id);
+          continue;
+        }
+        const sent = await this.prisma.projectOpenItemDelivery.findFirst({
+          where: { itemId: item.id, purpose: 'ITEM', clientTurnId: openItemTurnId(item.id, item.assignedAt) },
+          select: { itemId: true },
+        });
+        if (!sent) await this.deliver(item.id);
+      }
+    });
+  }
+
+  /**
+   * Whether the task this work session ran has moved on from the failed landing it holds (W7, TASK_MOVED_ON): no longer
+   * DONE (reopened, cancelled, failed), replaced by a successor, or no longer in the item's project.
+   */
+  private async taskMovedOn(projectId: string, sessionId: string): Promise<boolean> {
+    const session = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { task: { select: { status: true, supersededByTaskId: true, projectId: true } } },
+    });
+    const task = session?.task;
+    if (!task) return false;
+    return task.status !== 'DONE' || task.supersededByTaskId !== null || task.projectId !== projectId;
+  }
+
+  private endingForItsDone(session: { finishedAt: Date | null; endReason: string | null; cancelRequestedAt: Date | null; deletedAt: Date | null }): boolean {
+    return session.finishedAt === null && session.cancelRequestedAt !== null && session.deletedAt === null
+      && session.endReason === 'task_done';
+  }
+
+  /**
+   * The landing-fix turn's own write, inside `createTurn`'s (or `resume`'s) transaction, under the session
+   * lock it holds and before the turn row: the item still in this session's hands and its task still DONE,
+   * the session not ended some other way (R3: `resume` would revive those too), and R2 — the task's
+   * delivered identity cleared, as `task_reopen` clears it, in the transaction the turn is written in. A
+   * refusal rolls the revive and the turn back with it.
+   */
+  private async acceptLandingFix(
+    tx: Prisma.TransactionClient,
+    input: { itemId: string; sessionId: string; taskId: string; clientTurnId: string },
+  ): Promise<void> {
+    const session = await tx.session.findUniqueOrThrow({
+      where: { id: input.sessionId },
+      select: { finishedAt: true, endReason: true, deletedAt: true, cancelRequestedAt: true },
+    });
+    if (session.deletedAt !== null) throw new LandingFixSessionEnded();
+    if (session.finishedAt !== null && !platformTurnRevives(input.clientTurnId, session)) {
+      throw new LandingFixSessionEnded();
+    }
+    // The task row (rank 50) before the item (rank 60), after the session this transaction holds (rank 30).
+    const cleared = await tx.task.updateMany({
+      where: { id: input.taskId, status: 'DONE' },
+      data: DELIVERED_IDENTITY_CLEARED,
+    });
+    if (cleared.count === 0) throw new LandingFixNoLongerOwed();
+    const [held] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT "id" FROM "project_open_item"
+       WHERE "id" = ${input.itemId}::uuid
+         AND "state" = 'OPEN'
+         AND "work_session_id" = ${input.sessionId}::uuid
+         AND "work_session_offered_at" IS NOT NULL
+         AND "work_session_returned_at" IS NULL
+       FOR NO KEY UPDATE`);
+    if (!held) throw new LandingFixNoLongerOwed();
+  }
+
+  /**
+   * W7's hand-back (§12.5, W-T5) for the facts that are no session's finish: W6's delivery refused — SESSION_ENDED for
+   * a session gone, in Trash or ended some other way than with its task's DONE; TURN_FAILED for one whose runner it
+   * cannot get (R3) — and a task that moved on, TASK_MOVED_ON. The item leaves the work session's hands
+   * (`handBackLandingFix`: `work_session_returned_at`, the reason, `workSession` on the payload, `waiting_since` and
+   * `escalate_at` from now) and is delivered to the coordinator by X-D4 at once — except TASK_MOVED_ON, which §4.2's
+   * facts answer and nobody is told about.
+   *
+   * No identity to freeze again here: W6 clears it only in the transaction that writes the turn, so a refused delivery
+   * never cleared it, and a session that got the turn hands back at its finish, whose settlement freezes it first
+   * (`landAgainAfterLandingFix`).
+   */
+  async returnLandingFix(itemId: string, reason: LandingFixReturnReason): Promise<void> {
+    const written = await withTransactionRetry(
+      this.prisma,
+      (tx) => handBackLandingFix(tx, { itemId, reason }),
+      loggedRetry(this.logger, 'projectOpenItem.returnLandingFix'),
+    );
+    if (written && reason !== 'TASK_MOVED_ON') await this.deliver(itemId);
+  }
+
+  /**
    * Queue one item on the conversation that coordinates its project (§4.4 X-D1, X-D2).
    *
    * The conversation is read at THIS moment rather than when the item was opened: a project that
@@ -836,10 +1170,24 @@ export class ProjectOpenItemService {
         ownerId: true,
         handlingJobId: true,
         integrationJobId: true,
+        workSessionOfferedAt: true,
+        workSessionReturnedAt: true,
+        workSessionReturnReason: true,
         project: { select: { coordinatorEnabled: true, coordinatorSessionId: true } },
       },
     });
-    if (!item || item.state !== 'OPEN' || item.assignee !== 'COORDINATOR') return;
+    if (!item || item.state !== 'OPEN') return;
+    // W7: handed back because its task moved on — reopened, cancelled or replaced. §4.2's facts answer it, and nobody
+    // is told about it in the meantime.
+    if (item.workSessionReturnReason === 'TASK_MOVED_ON') return;
+    // Revision 42 (§12.5 W5, X-D4): an item in its task's own work session's hands is that session's,
+    // not the coordinator's, until it is handed back (W7) — whoever asks, and whichever assignee the
+    // item will have once it is handed back (W10: the hand-off does not read the Automatic switch).
+    if (inWorkSessionHands(item)) {
+      await this.offerLandingFix(item.id);
+      return;
+    }
+    if (item.assignee !== 'COORDINATOR') return;
     // H1 is a live hand-off, not a second delivery. A terminal handling job deliberately falls
     // through (the item may need a fresh decision), but QUEUED/RUNNING rows stay out of every
     // coordinator delivery entry point, including an owner's explicit "ask again" press.
@@ -848,7 +1196,7 @@ export class ProjectOpenItemService {
         where: { id: item.handlingJobId },
         select: { state: true },
       });
-      if (handling && (handling.state === 'QUEUED' || handling.state === 'RUNNING')) return;
+      if (handling && isInFlightJobState(handling.state)) return;
     }
     // THE SWITCH DECIDES AUTOMATIC HAND-OVERS, AND ONLY THOSE. `coordinatorEnabled` is the owner
     // saying the coordinator may not act on its own, and an item handed over by the platform is
@@ -895,6 +1243,7 @@ export class ProjectOpenItemService {
           payload: item.payload,
           landedFixes: fixed.landedFixes,
           failedSourceSha: fixed.failedSourceSha,
+          workSessionReturnReason: item.workSessionReturnReason,
         }),
         intent: 'NEXT_TURN',
       }, {
@@ -1995,6 +2344,8 @@ export class ProjectOpenItemService {
         // The cell the refusals below name the doors of, and what O-X1 asks about.
         promotionId: true,
         payload: true,
+        workSessionOfferedAt: true,
+        workSessionReturnedAt: true,
         project: { select: { coordinatorSessionId: true } },
       },
     });
@@ -2006,6 +2357,8 @@ export class ProjectOpenItemService {
         + 'answered by a fact or by somebody else, and a second press would write over that.',
     });
     if (item.state !== 'OPEN') throw notOpen();
+    // W9 (revision 42): while the task's own work session is fixing it, nobody closes it by hand.
+    if (inWorkSessionHands(item)) throw withWorkSession();
     const resolution = HAND_CLOSABLE_RESOLUTIONS[item.kind];
     if (!resolution) {
       throw new ConflictException({ code: OPEN_ITEM_HAS_ITS_OWN_DOOR, message: ownDoorRefusal(item) });
@@ -2079,7 +2432,7 @@ export class ProjectOpenItemService {
     }
 
     const settled = await this.prisma.projectOpenItem.updateMany({
-      where: { id: itemId, state: 'OPEN' },
+      where: { id: itemId, state: 'OPEN', ...NOT_WITH_WORK_SESSION },
       data: {
         state: 'RESOLVED',
         resolution,
@@ -2350,9 +2703,15 @@ export class ProjectOpenItemService {
         : [];
       const openItems = await tx.projectOpenItem.findMany({
         where: { projectId, taskId, kind: { in: [...INTEGRATION_ITEM_KINDS] }, state: 'OPEN' },
-        select: { id: true, kind: true, assignee: true, assigneeReason: true, integrationJobId: true, payload: true },
+        select: {
+          id: true, kind: true, assignee: true, assigneeReason: true, integrationJobId: true, payload: true,
+          workSessionOfferedAt: true, workSessionReturnedAt: true,
+        },
         orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
       });
+      // W9 (revision 42): the task's own work session is fixing this landing; a rerun beside it would
+      // be a second fixer of the same failure.
+      if (openItems.some(inWorkSessionHands)) throw withWorkSession();
       const ownerBlockers = await tx.projectBlocker.findMany({
         where: { projectId, subjectType: 'TASK', subjectId: taskId, owner: 'USER', resolvedAt: null },
         select: { id: true, kind: true },
@@ -2570,7 +2929,7 @@ export class ProjectOpenItemService {
       // J3 allows at most one in-flight LAND_TASK per task; the newest is the one that would be
       // stopped, and a task with none has nothing for this door.
       const landing = await tx.projectIntegrationJob.findFirst({
-        where: { projectId, taskId, kind: 'LAND_TASK', state: { in: ['QUEUED', 'RUNNING'] } },
+        where: { projectId, taskId, kind: 'LAND_TASK', state: { in: [...IN_FLIGHT_JOB_STATES] } },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         select: {
           id: true, state: true, phase: true, progressProtocol: true,
@@ -2751,7 +3110,7 @@ export class ProjectOpenItemService {
         select: { id: true, generation: true, state: true, checks: true, phase: true },
       });
       if (ownerRequester && newestLanding
-        && (newestLanding.state === 'QUEUED' || newestLanding.state === 'RUNNING')) {
+        && isInFlightJobState(newestLanding.state)) {
         return this.skipInFlightLandingCheck(tx, {
           ownerId, projectId, taskId, taskStatus: locked.status, jobId: newestLanding.id, reason,
         });
@@ -3052,9 +3411,14 @@ export class ProjectOpenItemService {
         : [];
       const openItems = await tx.projectOpenItem.findMany({
         where: { projectId, promotionId, kind: { in: [...INTEGRATION_ITEM_KINDS] }, state: 'OPEN' },
-        select: { id: true, kind: true, assignee: true, assigneeReason: true },
+        select: {
+          id: true, kind: true, assignee: true, assigneeReason: true,
+          workSessionOfferedAt: true, workSessionReturnedAt: true,
+        },
         orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
       });
+      // W9 (revision 42): a MAIN line's task-branch candidate whose failure its task's session is fixing.
+      if (openItems.some(inWorkSessionHands)) throw withWorkSession();
       const decision = decidePromotionRetry({
         requester: ownerRequester ? 'OWNER' : 'COORDINATOR',
         coordinatorEnabled: current.coordinatorEnabled,
@@ -3571,6 +3935,10 @@ export class ProjectOpenItemService {
         fuseEpisodeId: true,
         assignedAt: true,
         translation: true,
+        workSessionId: true,
+        workSessionOfferedAt: true,
+        workSessionReturnedAt: true,
+        workSessionReturnReason: true,
         ...HANDLING_SELECT,
         deliveries: {
           where: { purpose: 'ITEM' },
@@ -3585,7 +3953,10 @@ export class ProjectOpenItemService {
       ? new Set((await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
           SELECT item."id" FROM "project_open_item" item
            WHERE item."project_id" = ${projectId}::uuid AND item."state" = 'OPEN'
-             AND NOT ${openItemVisible('item')}`)).map((row) => row.id))
+             AND NOT ${openItemVisible('item')}
+             -- W9 (revision 42): an item in its task's own work session's hands is never delivered to
+             -- the coordinator, and the coordinator and the owner still see it here, with Chat about this.
+             AND NOT (item."work_session_offered_at" IS NOT NULL AND item."work_session_returned_at" IS NULL)`)).map((row) => row.id))
       : new Set<string>();
     const rows = open.filter((row) => !settled.has(row.id) && !hidden.has(row.id));
     const keys = rows.flatMap((row) => row.deliveries);
@@ -3632,15 +4003,22 @@ export class ProjectOpenItemService {
         resolvedByJobId: true,
         resolutionNote: true,
         supersededByItemId: true,
+        integrationJobId: true,
+        workSessionId: true,
+        workSessionOfferedAt: true,
+        workSessionReturnedAt: true,
+        workSessionReturnReason: true,
       },
     });
+    // Revision 42 (§12.7): the task's own work session each offered item went to, and the rounds it asked for.
+    const workSessions = await readOpenItemWorkSessions(this.prisma, [...rows, ...closed]);
     // Which reruns are still in flight: an item is being handled only while the job its coordinator
     // queued is QUEUED or RUNNING (§4.7 H1). A job that ended without a verdict on it — cancelled with
     // its candidate, or answered "nothing to land" — leaves the item open and no longer handled.
     const handlingJobIds = unique(rows.map((row) => row.handlingJobId));
     const inFlight = new Map((handlingJobIds.length > 0
       ? await this.prisma.projectIntegrationJob.findMany({
-          where: { id: { in: handlingJobIds }, state: { in: ['QUEUED', 'RUNNING'] } },
+          where: { id: { in: handlingJobIds }, state: { in: [...IN_FLIGHT_JOB_STATES] } },
           select: { id: true, kind: true, generation: true, state: true },
         })
       : []).map((job) => [job.id, job]));
@@ -3779,6 +4157,8 @@ export class ProjectOpenItemService {
           fuseEpisodeId: row.fuseEpisodeId,
           askable,
           payload: row.payload,
+          // W9: an item its task's own session holds offers no press here (`OPEN_ITEM_WORK_SESSION_DOOR_TABLE`).
+          workSession: inWorkSessionHands(row),
         }),
         requiredAction: openItemRequiredAction({
           kind: row.kind,
@@ -3804,6 +4184,7 @@ export class ProjectOpenItemService {
           state: 'OPEN',
           handledBy: handledBy.get(row.id) ?? [],
           handoverNote: row.handoverNote,
+          workSession: inWorkSessionHands(row),
         }),
         handling,
         outcome: null,
@@ -3814,6 +4195,7 @@ export class ProjectOpenItemService {
           coordinator,
         }),
         coordinatorUnreachable: unreachable,
+        workSession: workSessions.get(row.id) ?? null,
       };
     });
     const settledView = closed.map((row): OpenItemRow => {
@@ -3881,6 +4263,7 @@ export class ProjectOpenItemService {
           resolution: row.resolution as OpenItemOutcome['resolution'],
           coordinator,
         }),
+        workSession: workSessions.get(row.id) ?? null,
       };
     });
     const latestRequest = await this.prisma.projectOpenItem.findFirst({
@@ -3898,15 +4281,19 @@ export class ProjectOpenItemService {
         && latestRequest.resolution === 'DECLINED' && latestRequest.resolvedAt
         ? { note: latestRequest.resolutionNote!, declinedAt: latestRequest.resolvedAt }
         : null,
-      needsYou: view.filter((row) => row.assignee === 'OWNER'
+      // Revision 42 (§12.7): an item in its task's own work session's hands is nobody's to act on yet — not the
+      // owner's Needs you, and not among what the coordinator is handling — and is listed apart.
+      needsYou: view.filter((row) => row.assignee === 'OWNER' && !heldBySession(row)
         && row.kind !== START_REQUEST_KIND && row.kind !== DONE_REQUEST_KIND),
-      withCoordinator: view.filter((row) => row.assignee === 'COORDINATOR'),
+      withCoordinator: view.filter((row) => row.assignee === 'COORDINATOR' && !heldBySession(row)),
+      withWorkSession: view.filter(heldBySession),
       startRequest: view.find((row) => row.kind === START_REQUEST_KIND) ?? null,
       doneRequest: view.find((row) => row.kind === DONE_REQUEST_KIND) ?? null,
       settled: settledView,
       closedQuestions: await this.closedQuestions(projectId),
       mainBranch,
       signIns: await this.signInWaits(ownerId, projectId),
+      accountWait: await this.accountWait(ownerId, projectId),
     };
   }
 
@@ -4025,7 +4412,7 @@ export class ProjectOpenItemService {
            SELECT 1
              FROM "project_integration_job" handling
             WHERE handling."id" = item."handling_job_id"
-              AND handling."state" IN ('QUEUED', 'RUNNING')
+              AND handling."state" IN ${IN_FLIGHT_JOB_STATES_SQL}
          )`);
     if ((owed?.count ?? 0) === 0) throw new OpenItemNoLongerOwed();
     // One row per item per conversation. A row that was taken back unrun is re-armed rather than

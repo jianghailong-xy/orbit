@@ -61,7 +61,9 @@ data class LandingHead(val right: String, val isClock: Boolean, val detail: Stri
 data class LandingCard(val word: String, val title: String, val state: String, val running: Boolean, val timedOut: Boolean, val what: String?,
     val jobs: List<Job>, val target: String?, val clock: String, val clockLabel: String, val wait: String?, val updated: String?,
     val liveness: LandingLiveness?, val detail: String?, val retryJobId: String?, val mergeJob: Boolean = false,
-    val skipTaskId: String? = null, val skipNote: String? = null) {
+    val skipTaskId: String? = null, val skipNote: String? = null,
+    /** The `pullRequest` block of the one job in flight, when the landing waits on GitHub (design §8). */
+    val pullRequest: JsonObject? = null) {
     /** One job in flight, as the card's body draws it: its task's title (null for a job that lands no task) and its own state.
      * `landingSessionId` is the landing it belongs to (§2.9), or null where the server named none; `mergeJob` is a round of
      * merging into main, whose way in is the merge card — its row carries no "Open landing ›". */
@@ -238,7 +240,7 @@ object ProjectPage {
         return liveLine(word, what, running, inFlight.text("phase"), inFlight.text("startedAt"), inFlight.text("heartbeatAt"), now, updatedAt, unavailable, main,
             silent, wait, inFlight.text("runner"), inFlight.text("kind"), inFlight.number("claim"), inFlight.number("round"), inFlight.obj("check"),
             inFlight.text("stepStartedAt"), inFlight.text("outputMovedAt"), inFlight.number("typicalMs"), inFlight.text("liveness"),
-            firstStartedAt(view, inFlight.text("jobId")), inFlight.obj("blockingReason"))
+            firstStartedAt(view, inFlight.text("jobId")), inFlight.obj("blockingReason"), inFlight.text("state") == "PULL_REQUEST")
     }
 
     /** When the attempt behind a job FIRST started: the `landTask` row's own `startedAt` is the column a claim leaves alone across
@@ -285,7 +287,8 @@ object ProjectPage {
         return LandingCard(line.word, if (several) listOfNotNull(line.word, line.what).joinToString(" ") else line.word, line.state, line.running,
             line.timedOut, if (several) null else line.what, jobs, lead?.let { landingTarget(view, it.jobId) }, line.clock, line.clockLabel, line.wait,
             line.updated, line.liveness, if (line.timedOut) lead?.detail else null, lead?.takeIf { it.retryable }?.jobId,
-            !several && ProjectMergeCard.isMergeJob(view.obj("inFlight")), skipTaskId, skipNote)
+            !several && ProjectMergeCard.isMergeJob(view.obj("inFlight")), skipTaskId, skipNote,
+            if (several) null else LandingPullRequest.of(view.obj("inFlight")))
     }
 
     /** The branch a job lands on, short, off the project's own landings (`landTasks[].integration.landTask`) — the task page's Target
@@ -310,7 +313,7 @@ object ProjectPage {
                     job.text("heartbeatAt"), now, updatedAt, unavailable, main, runner = job.text("runnerName"), kind = job.text("kind"),
                     claim = job.number("claim"), round = job.number("round"), check = job.obj("check"), stepStartedAt = job.text("stepStartedAt"),
                     outputMovedAt = job.text("outputMovedAt"), typicalMs = job.number("typicalMs"), livenessWord = job.text("liveness"),
-                    firstStartedAt = firstStartedAt(view, job.text("jobId")), blockingReason = job.obj("blockingReason"))
+                    firstStartedAt = firstStartedAt(view, job.text("jobId")), blockingReason = job.obj("blockingReason"), onPullRequest = job.text("state") == "PULL_REQUEST")
             LandingJobLine(job.text("jobId").orEmpty(), job.text("taskId"), line, landingJobDetail(job, zone, main), job.flag("retryable"),
                 job.text("landingSessionId")?.takeIf { it.isNotEmpty() }, mergeJob, job.flag("skippable"), job.text("skipCheck"))
         }
@@ -388,7 +391,7 @@ object ProjectPage {
     private fun liveLine(word: String, what: String?, running: Boolean, phase: String?, startedAt: String?, heartbeatAt: String?, now: Instant,
         updatedAt: Instant?, unavailable: Boolean, main: String, silent: Boolean = false, wait: String? = null, runner: String? = null,
         kind: String? = null, claim: Int? = null, round: Int? = null, check: JsonObject? = null, stepStartedAt: String? = null, outputMovedAt: String? = null,
-        typicalMs: Int? = null, livenessWord: String? = null, firstStartedAt: String? = null, blockingReason: JsonObject? = null): LandingLine {
+        typicalMs: Int? = null, livenessWord: String? = null, firstStartedAt: String? = null, blockingReason: JsonObject? = null, onPullRequest: Boolean = false): LandingLine {
         val lockWait = localLockWait(running, livenessWord, blockingReason)
         // A queued job's heartbeat and phase can be an earlier claim's: only a running job's count.
         val reported = heartbeatAt?.let(ProjectTime::parse)
@@ -399,7 +402,9 @@ object ProjectPage {
         val report = if (silent) (if (reported != null) age?.let { landingNoReportFor(it) } else null) ?: landingNoReportYet
             else age?.let { if (it == 0) "Updated just now" else "Updated ${it}m ago" }
         val state = when { unavailable -> "Update unavailable"; silent -> landingNoReport; running && lockWait != null -> landingWaiting
-            running -> phaseWords(main)[phase] ?: "running"; else -> "queued" }
+            running -> phaseWords(main)[phase] ?: "running"
+            // Held on its pull request, not queued: GitHub is what it waits for (design §4.2).
+            onPullRequest -> "waiting for GitHub"; else -> "queued" }
         val v6 = if (unavailable) null else landingLiveness(livenessWord, running, startedAt, heartbeatAt, kind, claim, round, check, stepStartedAt,
             outputMovedAt, typicalMs, runner, firstStartedAt, now, updatedAt, lockWait)
         // A legacy claim's runner reports only between steps, so its quiet is not a stall: the ring keeps turning and the line says
@@ -650,7 +655,9 @@ object ProjectPage {
     }
     fun waitsForLanding(t: JsonObject) = t.text("dependencyState") != "READY" && (t.number("landingWaitCount") ?: 0) > 0
     /** An AGENT_PUSH task not yet seen on its line (§10.9) has no receipt either, so it waits with the work still landing. */
-    private val integratingStates = setOf("QUEUED", "RUNNING", "CONFLICT", "CHECK_FAILED", "ERROR", "AWAITING_OWNER", "AWAITING_OBSERVATION")
+    private val integratingStates = setOf("QUEUED", "RUNNING", "CONFLICT", "CHECK_FAILED", "ERROR", "FIXING", "AWAITING_OWNER", "AWAITING_OBSERVATION")
+    /** The task's own work session that is fixing its landing (revision 42, §12.7: `integration.state = FIXING`), which its row opens. */
+    fun fixingSession(t: JsonObject): String? = t.obj("integration")?.takeIf { it.text("state") == "FIXING" }?.text("workSessionId")?.takeIf { it.isNotEmpty() }
     private val landedStates = setOf("ON_INTEGRATION_LINE", "ON_UPSTREAM")
     /** "integrating" / "landed" for a done task, by its integration state. */
     fun integrationStage(t: JsonObject): String? {
@@ -701,6 +708,8 @@ object ProjectPage {
             "CONFLICT" -> Tag("Conflict · $who", TagTone.DANGER)
             "CHECK_FAILED" -> Tag("Checks failed · $who", TagTone.DANGER)
             "ERROR" -> Tag("Integration error · $who", TagTone.DANGER)
+            // Revision 42 (board ④ e ②): its own session is fixing it, which asks nothing of anyone else.
+            "FIXING" -> Tag(io.orbitd.android.reader.LandingFixWindowCopy.LANDING_FIXING, TagTone.VERIFICATION)
             "AWAITING_OWNER" -> Tag("Awaiting your approval", TagTone.WARNING)
             "AWAITING_OBSERVATION" -> Tag(waitingToBeSeenOn(upstreamRef ?: "main", integration.text("deliveredSha")), TagTone.NEUTRAL)
             "ON_INTEGRATION_LINE" -> Tag("On ${ref ?: "the project branch"}", TagTone.SUCCESS)

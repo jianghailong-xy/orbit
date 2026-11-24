@@ -132,6 +132,8 @@ export interface KubeWatch {
 export interface KubeDeleteOptions {
   /** Delete only the object with this UID: a successor under the same name is never deleted. */
   uid?: string;
+  /** How long the kubelet gives the Pod's containers between SIGTERM and SIGKILL. Absent: the object's own. */
+  gracePeriodSeconds?: number;
 }
 
 export interface KubeCreateOptions {
@@ -176,7 +178,7 @@ export interface ManagedKubeClient {
   readonly secrets: KubeResource<Secret>;
   /**
    * The Secrets of the profile's files namespace (`files.namespace`), where the manager writes each generation's
-   * mount credential for the Orbit Files CSI plugin; absent when the profile has no drive.
+   * mount credential for the Documents CSI plugin; absent when the profile has no drive.
    */
   readonly driveSecrets?: Pick<KubeResource<Secret>, 'get' | 'create' | 'delete'>;
   readonly pods: KubePods;

@@ -65,6 +65,11 @@ export function toUuid(idOrPublicId: string): string {
  *  and every foreign key to one. Accepted in either spelling on the way in (`PublicIdPipe` /
  *  `IsPublicId`); to be rendered base62 on the way out. */
 export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
+  // `account_health.last_session_id`, `account_health.trial_session_id` (1494): the session whose failure last wrote an
+  // account's health, and the one run testing it now (docs/routing-account-health-design.md §6.2). Addresses the
+  // owner surface links to, never fences.
+  'lastSessionId',
+  'trialSessionId',
   'consumedByPromotionId',
   'promotionRequestId',
   // `condition_sample.condition_id`, `condition_event.condition_id` (1030): the condition a sample or an event belongs
@@ -133,6 +138,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'handlingJobId',
   'handlingSessionId',
   'handlingUserId',
+  // The task's own work session a landing failure was handed to first (migration 1501, §12.4 W5): an
+  // address a reader follows to that session. History with no foreign key, never a fence.
+  'workSessionId',
   'resolvedByJobId',
   // Who caused a landing-timeline fact (migration 0438): the coordinator conversation or the owner
   // a line is signed with — the same two addresses a rerun and a handling row carry. A reader
@@ -156,6 +164,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // the attempt to the session and its record. Not a fence — a job's own claim is fenced by
   // `claimGeneration` and `claimLeaseOwner`.
   'landingId',
+  // The pull request a landing or a session's Merge waits on or landed through (migration 1527).
+  'pullRequestId',
+  'mergePullRequestId',
   // The session a task's delivery identity was read from (migration 0453, contract §10.4): an
   // address a reader follows from the task to the work session. A history reference with no foreign
   // key, so it may 404 — never a fence: nothing echoes it back to be compared.
@@ -370,6 +381,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // The recorded answer itself, named in the refusal a declared crossing gets: the caller polls it
   // and a person opens it, so it is an address like every other id in an error body.
   'handoffId',
+  // The waiting crossings of one task-move group on a session row (`SessionTaskMoveGroup`).
+  'handoffIds',
   'parentTaskId',
   'batchId',
   'listId',
@@ -699,9 +712,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // and this column is that same address on the fragment rows. Never a fence: the stop-the-old-
   // claim comparison is on (`lease_owner`, `claim_generation`), not on this.
   'opId',
-  // The folder bundle an attachment belongs to (migration 0462, docs/orbit-files-design.md §2.2): the
+  // The folder bundle an attachment belongs to (migration 0462, docs/documents-design.md §2.2): the
   // bundle a reader opens to browse the upload it came with. An address, never a fence. Named for
-  // Orbit Files because `bundleId` on the wire is a push device's app bundle (`io.orbitd.app`).
+  // Documents because `bundleId` on the wire is a push device's app bundle (`io.orbitd.app`).
   'fileBundleId',
   // The versions a section keeps (migration 0475, contract `docs.versions`): a version's id as the document read,
   // Activity's Docs rows and a write's answer name it (`versionId`), the version a restore put back
@@ -724,10 +737,10 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // reference with no foreign key). Addresses a reader follows — never a fence: a press is decided on the card's row.
   'draftId',
   'replacesId',
-  // An Orbit Files drive write not committed yet (migration 1283, docs/orbit-files-drive-technical-design.md §1.1): the
+  // An Documents drive write not committed yet (migration 1283, docs/documents-drive-technical-design.md §1.1): the
   // upload or handle a chunk row belongs to, which the upload and door routes address. Never a fence.
   'stagingId',
-  // The drive's name layer (migration 1327, docs/orbit-files-drive-technical-design.md §1.1): an entry's current version,
+  // The drive's name layer (migration 1327, docs/documents-drive-technical-design.md §1.1): an entry's current version,
   // the Trash group holding an entry or a version, and who last wrote an entry, made a version or deleted into a group
   // (the session and the runner, §3.6). Addresses the owner's routes answer and accept. Never a fence.
   'currentVersionId',
@@ -737,8 +750,11 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'writerSessionId',
   'writerRunnerId',
   'actorRunnerId',
+  // An agent's directory sync (migration 1560): the Documents folder it copies into, an address the tray opens; a
+  // history column with no foreign key, so it may 404.
+  'destEntryId',
   // A file a rename onto an existing file removed (migration 1438, §3.2): the entry its handle's first later commit made
-  // in Trash (`drive_removed_entry.successor_id`), read by id and checked. An entry's address like `entryId`, with no
+  // in Trash (`document_removed_entry.successor_id`), read by id and checked. An entry's address like `entryId`, with no
   // foreign key on purpose, so it may name a file since purged. Never a fence.
   'successorId',
 ]);

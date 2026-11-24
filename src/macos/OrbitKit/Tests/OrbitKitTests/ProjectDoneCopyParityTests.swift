@@ -760,11 +760,13 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         }
         XCTAssertEqual(SessionHeader.waitingWord(for: session(.doneRequest)), ProjectDone.readyToClose)
         XCTAssertEqual(SessionHeader.waitingWord(for: session(.recordAsDone)), ProjectDone.recordAsDoneRow)
-        // An owner request the session filed: the web row's word, and its card's.
-        XCTAssertTrue(workspace.contains("if (s.waitingKind === 'OWNER_REQUEST') return WAITING_ON_YOU;"),
-                      "the web session row no longer says Waiting on you for an owner request")
+        // An owner request the session filed: the web row says the request kind's word (the shared
+        // `ownerRequestRowWord`); with no requests listed beside the kind, both fall back, never to
+        // "Waiting on you".
+        XCTAssertTrue(workspace.contains("return ownerRequestRowWord(s) ?? 'Waiting for approval';"),
+                      "the web session row no longer says the owner request kind's word")
         XCTAssertEqual(SessionLine.make(for: session(.ownerRequest), live: true),
-                       SessionLine(text: "Waiting on you", tone: .approval))
+                       SessionLine(text: "Waiting for approval", tone: .approval))
         XCTAssertEqual(SessionLine.make(for: session(.doneRequest), live: true),
                        SessionLine(text: "Ready to close", tone: .approval))
 

@@ -6,8 +6,10 @@ import java.time.Instant
 import java.time.ZoneId
 import kotlinx.serialization.json.*
 
-/** One card's worth of crossings: rows from one project, of one kind, asked while the card was still open (`CrossingCards.batches`). */
-data class CrossingBatch(val rows: List<JsonObject>) {
+/** One card's worth of crossings: rows from one project, of one kind, asked while the card was still open (`CrossingCards.batches`).
+ * [inTarget] is false in the session that ASKED for a move batch (`CrossingCards.batch(read)`): there "here" is not the project the
+ * tasks go into, and the copy names it instead. */
+data class CrossingBatch(val rows: List<JsonObject>, val inTarget: Boolean = true) {
     val first get() = rows.first()
     /** `crossing-batch-` + the first row's id, the same on every client. */
     val id get() = "crossing-batch-" + ProjectCrossings.doorId(first)
@@ -60,7 +62,9 @@ object CrossingCards {
      * batch was still open when the row was asked (a member unanswered then, or answered after it). */
     fun batches(rows: List<JsonObject>, projectId: String): List<CrossingBatch> {
         val asked = rows.filter { ObjectId.same(it.text("toProjectId"), projectId) || ObjectId.same(it.text("toProjectPublicId"), projectId) }
-        return asked.groupBy { (ObjectId.canonical(it.text("fromProjectId").orEmpty()) ?: it.text("fromProjectId")) to it.text("kind") }.values.flatMap { group ->
+        // A move batch is answered through the session's batch door, which takes one asker's moves out of one project into another:
+        // grouping moves by asker as well keeps one card one answer (iOS `CrossingBatches.batches`).
+        return asked.groupBy { Triple(ObjectId.canonical(it.text("fromProjectId").orEmpty()) ?: it.text("fromProjectId"), it.text("kind"), asker(it)) }.values.flatMap { group ->
             val batches = mutableListOf<MutableList<JsonObject>>()
             group.sortedWith(compareBy(byTime) { it.text("requestedAt").orEmpty() }).forEach { row ->
                 val at = row.text("requestedAt").orEmpty()
@@ -71,9 +75,41 @@ object CrossingCards {
         }.sortedWith(compareBy(byTime) { it.moment.orEmpty() })
     }
 
+    /** Who asked a move, as one id however it is spelled; null for every other kind. */
+    private fun asker(row: JsonObject): String? = if (row.text("kind") != ProjectCrossings.moveKind) null else
+        (row.obj("requestedBySession")?.text("id") ?: row.text("requestedBySessionId"))?.let { ObjectId.canonical(it) ?: it }
+
+    /** The same card for a batch a session is served directly (`GET /sessions/:id/task-moves`): the moves it asked for, or the moves
+     * into a project it coordinates. Its id is the first row's door, as the project read spells the same batch, so a session at both
+     * ends draws ONE card. Null for a read with no moves, and for anything that is not a move (iOS `CrossingBatches.batch(from:)`). */
+    fun batch(read: JsonObject): CrossingBatch? {
+        val rows = ProjectCrossings.rows(read["moves"] ?: JsonNull)?.takeIf { it.isNotEmpty() } ?: return null
+        if (rows.any { it.text("kind") != ProjectCrossings.moveKind }) return null
+        return CrossingBatch(rows.sortedWith(compareBy(byTime) { it.text("requestedAt").orEmpty() }),
+            inTarget = "TARGET_COORDINATOR" in read.strings("drawnAs"))
+    }
+
+    /** The cards a conversation draws, oldest first: the crossings into the project it coordinates ([project]), and the move batches
+     * the session read serves ([session]). A batch both reads serve is one card, the project read's: same id, or the same waiting rows
+     * in a card the project read grouped from an earlier first row (iOS `ConsoleModel.crossingBatches`). */
+    fun merged(project: List<CrossingBatch>, session: List<CrossingBatch>): List<CrossingBatch> {
+        val seen = project.map { it.id }.toSet()
+        val drawn = project.flatMap { batch -> batch.pending.map(ProjectCrossings::doorId) }.toSet()
+        val extra = session.filter { batch -> batch.id !in seen && (batch.pending.isEmpty() || !batch.pending.map(ProjectCrossings::doorId).all(drawn::contains)) }
+        return (project + extra).sortedWith(compareBy(byTime) { it.moment.orEmpty() })
+    }
+
     private fun many(batch: CrossingBatch) = batch.rows.size != 1
 
-    fun title(batch: CrossingBatch) = when (batch.kind) {
+    /** The project the batch goes into, by name: what the asking session's card says where the target's conversation says "this project". */
+    fun targetTitle(batch: CrossingBatch) = batch.first.obj("toProject")?.text("title")?.takeIf { it.isNotBlank() } ?: ProjectCrossings.unnamedProject
+    /** "this project" in the target's conversation; the target's name in the asking session. */
+    fun toText(batch: CrossingBatch) = if (batch.inTarget) thisProject else targetTitle(batch)
+    const val thisProject = "this project"
+
+    fun title(batch: CrossingBatch) = if (batch.kind == ProjectCrossings.moveKind && !batch.inTarget)
+        (if (many(batch)) "Move these tasks into ${targetTitle(batch)}?" else "Move this task into ${targetTitle(batch)}?")
+    else when (batch.kind) {
         ProjectCrossings.moveKind -> if (many(batch)) "Move these tasks here?" else "Move this task here?"
         "DEPEND_ON_TASK" -> if (many(batch)) "Allow these dependencies?" else "Allow this dependency?"
         else -> if (many(batch)) "File these tasks here?" else "File this task here?"
@@ -97,17 +133,31 @@ object CrossingCards {
 
     fun sourceTitle(batch: CrossingBatch) = batch.first.obj("fromProject")?.text("title")?.takeIf { it.isNotBlank() } ?: ProjectCrossings.unnamedProject
 
-    /** "for criteria 4–11", "for criteria 4, 6, 9", "for criterion 4", or null when no row asks for a criterion. */
+    /** A criterion's 1-based position in its project's list, as the server numbers it; null from an older server or once it is gone. */
+    private fun ordinal(criterion: JsonObject) = (criterion["ordinal"] as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull
+
+    /** What a person calls a criterion: "Criterion 4", or its words when the server sends no number. Never its key, which is an
+     *  opaque id. Null when it has neither (deleted). */
+    fun criterionName(criterion: JsonObject): String? =
+        ordinal(criterion)?.let { "Criterion $it" } ?: criterion.text("text")?.trim()?.takeIf { it.isNotEmpty() }
+
+    /** "4–11" when the numbers are a run, else "4, 6, 9". */
+    fun criteriaRange(ordinals: Collection<Int>): String {
+        val sorted = ordinals.distinct().sorted()
+        return if (sorted.size > 1 && sorted.zipWithNext().all { (a, b) -> b == a + 1 }) "${sorted.first()}–${sorted.last()}"
+        else sorted.joinToString(", ")
+    }
+
+    /** "for criteria 4–11", "for criteria 4, 6, 9", "for criterion 4" — by number, falling back to a criterion's words where the
+     *  number is missing — or null when no row asks for a criterion it can name. */
     fun criteria(batch: CrossingBatch): String? {
-        val keys = batch.rows.mapNotNull { it.obj("requestedCriterion")?.text("key") }.distinct()
-        if (keys.isEmpty()) return null
-        if (keys.size == 1) return "for criterion ${keys.single()}"
-        val numbers = keys.map { it.toIntOrNull() }
-        val range = if (numbers.all { it != null }) {
-            val sorted = numbers.filterNotNull().sorted()
-            if (sorted.zipWithNext().all { (a, b) -> b == a + 1 }) "${sorted.first()}–${sorted.last()}" else sorted.joinToString(", ")
-        } else keys.sorted().joinToString(", ")
-        return "for criteria $range"
+        val criteria = batch.rows.mapNotNull { it.obj("requestedCriterion") }.distinctBy { it.text("key") }
+        val ordinals = criteria.mapNotNull(::ordinal).distinct()
+        val words = criteria.filter { ordinal(it) == null }.mapNotNull { it.text("text")?.trim()?.takeIf(String::isNotEmpty) }.map { "“$it”" }
+        val named = ordinals.size + words.size
+        if (named == 0) return null
+        val parts = listOfNotNull(ordinals.takeIf { it.isNotEmpty() }?.let(::criteriaRange)) + words
+        return "for ${if (named == 1) "criterion" else "criteria"} ${parts.joinToString(", ")}"
     }
 
     /** "8 tasks from Runner v1 · for criteria 4–11". */
@@ -125,10 +175,9 @@ object CrossingCards {
     /** The lines under a row's subject: the criteria it asks for and serves now, and where it stands once answered. */
     fun rowNotes(row: JsonObject): List<String> = buildList {
         row.obj("requestedCriterion")?.let { criterion ->
-            add("${ProjectCrossings.moveRequestedCriterionLabel}: ${criterion.text("key").orEmpty()}" +
-                if (criterion.text("text") == null) " — ${ProjectCrossings.moveCriterionGone}" else "")
+            add("${ProjectCrossings.moveRequestedCriterionLabel}: ${criterionName(criterion) ?: ProjectCrossings.moveCriterionGone}")
         }
-        row.obj("withdrawnCriterion")?.let { add("${ProjectCrossings.moveWithdrawnCriterionLabel}: ${it.text("key").orEmpty()}") }
+        row.obj("withdrawnCriterion")?.let(::criterionName)?.let { add("${ProjectCrossings.moveWithdrawnCriterionLabel}: $it") }
         row.text("state")?.takeUnless(ProjectCrossings::isAnswerable)?.let { add(ProjectCrossings.label(it)) }
     }
 
@@ -150,6 +199,15 @@ object CrossingCards {
 
     /** "1 answer was not recorded", "3 answers were not recorded". */
     fun notRecorded(count: Int) = if (count == 1) "1 answer was not recorded" else "$count answers were not recorded"
+
+    /** The ONE body a move batch's Approve or Refuse sends to `POST /sessions/:id/task-moves/decision`: every move still waiting, each
+     * with the crossing key the card read. The server writes nothing if any key names another crossing. */
+    fun moveRequest(batch: CrossingBatch, approve: Boolean) = buildJsonObject {
+        put("decision", if (approve) "APPROVE" else "DENY")
+        putJsonArray("moves") { batch.pending.forEach { row -> addJsonObject {
+            put("handoffId", ProjectCrossings.doorId(row)); put("crossingKey", row.text("crossingKey").orEmpty())
+        } } }
+    }
 
     /** One body per row still waiting, each with its own crossing key: what Approve or Refuse sends. */
     fun requests(batch: CrossingBatch, approve: Boolean) = batch.pending.map { ProjectCrossings.doorId(it) to ProjectCrossings.request(it, approve) }

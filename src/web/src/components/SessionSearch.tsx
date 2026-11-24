@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { SearchOutlined } from '@ant-design/icons';
+import { CloseOutlined, FolderOutlined, SearchOutlined } from '@ant-design/icons';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type { SessionSearchHit, WikiSearchRow } from '@orbit/shared';
 import { encodeId } from '../lib/idCodec';
@@ -38,6 +38,18 @@ export const openSessionSearch = (): void => {
   window.dispatchEvent(new Event(OPEN_EVENT));
 };
 
+/** The folder whose page the session list is on. The palette opens scoped to it, however it is
+ *  opened (the column's field or ⌘K), and a chip in its field says so until it is taken off. */
+export interface SessionSearchScope {
+  folderId: string;
+  name: string;
+}
+let listScope: SessionSearchScope | null = null;
+/** Set by the session list while a folder's page is open, and cleared when it closes. */
+export const setSessionSearchScope = (scope: SessionSearchScope | null): void => {
+  listScope = scope;
+};
+
 /** Where a hit lives, when that isn't the normal Open list — so a result the user can't find in
  *  the sidebar explains itself instead of looking like a ghost. */
 export const scopeBadge = (hit: SessionSearchHit): string | null => {
@@ -63,6 +75,17 @@ export const SEARCH_PLACEHOLDER = 'Search sessions and the wiki…';
 export const SEARCH_PLACEHOLDER_SESSIONS = 'Search sessions…';
 /** The foot, when nothing is typed. */
 export const SEARCH_FOOT_IDLE = 'Recent sessions';
+/** The same, scoped to a folder. */
+export const searchFootIdleIn = (folder: string): string => `Recent sessions in ${folder}`;
+/** The placeholder, scoped to a folder: the wiki is not in a folder, so only sessions are searched. */
+export const searchPlaceholderIn = (folder: string): string => `Search in ${folder}…`;
+/** The scope chip's remove button, and the empty answer's way out of the folder. */
+export const SEARCH_SCOPE_REMOVE = 'Search everywhere';
+/** What the field's Backspace does to the scope, said in the foot while it is on. */
+export const SEARCH_SCOPE_HINT = '⌫ removes the folder';
+/** A scoped search that found nothing. */
+export const searchEmptyIn = (folder: string, q: string): string =>
+  q ? `No sessions in ${folder} match “${q}”.` : `No sessions in ${folder}.`;
 /** The foot, when something is. Says which side is being searched first. */
 export const SEARCH_FOOT_SEARCHING = 'Searching the wiki, then session titles, messages, workspaces and tasks';
 /** The same, without the wiki. */
@@ -148,6 +171,8 @@ export function SessionSearch() {
   const [q, setQ] = useState('');
   const [debounced, setDebounced] = useState('');
   const [active, setActive] = useState(0);
+  // The folder this search is narrowed to, taken from the list when the palette opens.
+  const [scope, setScope] = useState<SessionSearchScope | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -194,7 +219,12 @@ export function SessionSearch() {
     setQ('');
     setDebounced('');
     setActive(0);
+    setScope(listScope);
   }, [open]);
+  const unscope = (): void => {
+    setScope(null);
+    inputRef.current?.focus();
+  };
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(q), DEBOUNCE_MS);
@@ -202,7 +232,7 @@ export function SessionSearch() {
   }, [q]);
 
   const search = useQuery({
-    ...sessionSearchQuery(debounced.trim()),
+    ...sessionSearchQuery(debounced.trim(), scope?.folderId ?? null),
     enabled: open,
     // Hold the previous results while the next query is in flight, so the list doesn't blank out
     // between keystrokes.
@@ -212,7 +242,8 @@ export function SessionSearch() {
   // The wiki answers the same keystrokes: one debounce, two requests, two draws. Without a query
   // there is nothing to look up, and the palette stays the session switcher it has always been —
   // as it does for an account the server has not switched the wiki on for, which is never asked.
-  const wikiOn = useWikiShown();
+  // Scoped to a folder, the palette searches that folder's sessions alone: the wiki has no folders.
+  const wikiOn = useWikiShown() && !scope;
   const wiki = useQuery({
     ...wikiSearchQuery(debounced.trim()),
     enabled: open && debounced.trim() !== '' && wikiOn,
@@ -256,7 +287,10 @@ export function SessionSearch() {
   };
 
   const onInputKey = (e: React.KeyboardEvent<HTMLInputElement>): void => {
-    if (e.key === 'ArrowDown') {
+    if (e.key === 'Backspace' && scope && q === '') {
+      e.preventDefault();
+      setScope(null);
+    } else if (e.key === 'ArrowDown') {
       e.preventDefault();
       setActive((i) => Math.min(i + 1, rows.length - 1));
     } else if (e.key === 'ArrowUp') {
@@ -300,6 +334,23 @@ export function SessionSearch() {
     >
       <div className="ssearch-head">
         <SearchOutlined className="ssearch-head-icon" />
+        {scope && (
+          <span className="ssearch-scope">
+            <FolderOutlined />
+            <span className="ssearch-scope-name">{scope.name}</span>
+            <button
+              type="button"
+              className="ssearch-scope-remove"
+              aria-label={SEARCH_SCOPE_REMOVE}
+              title={SEARCH_SCOPE_REMOVE}
+              // Keeps the field's focus, whose blur would close the palette.
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={unscope}
+            >
+              <CloseOutlined />
+            </button>
+          </span>
+        )}
         <input
           ref={inputRef}
           className="ssearch-input"
@@ -307,7 +358,7 @@ export function SessionSearch() {
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={onInputKey}
           onBlur={onInputBlur}
-          placeholder={wikiOn ? SEARCH_PLACEHOLDER : SEARCH_PLACEHOLDER_SESSIONS}
+          placeholder={scope ? searchPlaceholderIn(scope.name) : wikiOn ? SEARCH_PLACEHOLDER : SEARCH_PLACEHOLDER_SESSIONS}
           spellCheck={false}
           autoComplete="off"
         />
@@ -338,7 +389,19 @@ export function SessionSearch() {
         )}
         {hits.length === 0 && wikiHits.length === 0 && !search.isFetching && !wiki.isFetching && (
           <div className="ssearch-empty">
-            {trimmed ? `No sessions match “${trimmed}”.` : 'No sessions yet.'}
+            {scope ? (
+              <>
+                {searchEmptyIn(scope.name, trimmed)}
+                <button
+                  type="button"
+                  className="ssearch-empty-widen"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={unscope}
+                >
+                  {SEARCH_SCOPE_REMOVE}
+                </button>
+              </>
+            ) : trimmed ? `No sessions match “${trimmed}”.` : 'No sessions yet.'}
           </div>
         )}
         {hits.map((hit, i) => {
@@ -396,7 +459,7 @@ export function SessionSearch() {
         ) : (
           <span>
             {!trimmed
-              ? SEARCH_FOOT_IDLE
+              ? scope ? searchFootIdleIn(scope.name) : SEARCH_FOOT_IDLE
               : capped
                 ? `Top ${hits.length} of ${total} matching sessions`
                 : wikiOn
@@ -405,6 +468,7 @@ export function SessionSearch() {
           </span>
         )}
         <span className="ssearch-keys">
+          {scope && <span className="ssearch-scope-hint">{SEARCH_SCOPE_HINT}</span>}
           <kbd>↑↓</kbd> navigate <kbd>↵</kbd> open <kbd>esc</kbd> close
         </span>
       </div>

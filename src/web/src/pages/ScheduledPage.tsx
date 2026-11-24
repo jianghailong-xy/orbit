@@ -48,7 +48,11 @@ import {
   viewerTimezone,
 } from '../lib/schedules';
 import type { SessionReach } from '../lib/sessionReach';
+import { ownerRequestsQuery } from '../lib/queries';
 import { sameResourceId } from '../lib/watches';
+import { OwnerRequestCard } from '../components/OwnerRequestCard';
+import { isScheduleWaitingKind } from '../components/ScheduleWaitingCard';
+import { isConditionWaitingKind } from '../components/ConditionWaitingCard';
 import {
   CONDITION_COPY,
   conditionCantRead,
@@ -222,6 +226,18 @@ export function ScheduledPage(): JSX.Element {
   // A sentence's draft row stands until the agent's card for it comes back.
   const pendingRows = pending.filter((p) =>
     !(drafts.data?.drafts ?? []).some((card) => card.askedBySessionId && sameResourceId(card.askedBySessionId, p.sessionId)));
+
+  // A scheduled task's items (failed, held, a run's approval, a run's wider envelope) and a condition's (it cannot be
+  // read, or a task's has not held in 30 days) are drawn whole here, newest first, each a card with its own doors
+  // (board docs/mocks/scheduled-tasks/web/02-board.png ④). There is no Waiting on you page
+  // (docs/mocks/waiting-on-you-removal); the run's session draws the same card where it was filed.
+  const openRequests = useQuery(ownerRequestsQuery('open'));
+  const scheduleItems = (openRequests.data?.requests ?? [])
+    .filter((request) => (isScheduleWaitingKind(request.kind) || isConditionWaitingKind(request.kind)) && request.state === 'PENDING')
+    .filter((request) => !workspaceFilter
+      || schedules.some((schedule) => request.scheduleId && sameResourceId(schedule.id, request.scheduleId))
+      || (isConditionWaitingKind(request.kind) && !!request.workspaceId && sameResourceId(request.workspaceId, workspaceFilter)))
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 
   const now = new Date();
   const runs = list.data?.runs ?? [];
@@ -456,6 +472,11 @@ export function ScheduledPage(): JSX.Element {
                 {C.page.showPastRuns}
               </label>
             </div>
+            {scheduleItems.length > 0 ? (
+              <div className="sched-waiting-list" data-schedule-waiting="">
+                {scheduleItems.map((request) => <OwnerRequestCard key={request.id} request={request} now={now.getTime()} />)}
+              </div>
+            ) : null}
             {sections.map((section) => (
               <section key={`${section.key}:${section.title}`} className="sched-group" data-group={section.key}>
                 <h2>{section.title}{section.subtitle ? <small>{section.subtitle}</small> : null}</h2>

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -40,6 +41,7 @@ func cmdMcp() {
 		allowOrchestration:    mcpOrchestrationEnabled(),
 		watchesOff:            !watchesEnabledFromEnv(),
 		wikiOff:               !wikiEnabledFromEnv(),
+		documentsOff:          !documentsEnabledFromEnv(),
 		browserOn:             browserToolsEnabledFromEnv(),
 		workflowsOff:          !workflowsEnabledFromEnv(),
 		scheduleRun:           scheduleRunFromEnv(),
@@ -60,6 +62,7 @@ type mcpServer struct {
 	allowOrchestration    bool   // L3: expose session_* tools (the account's orchestration switch)
 	watchesOff            bool   // spawned with ORBIT_WATCHES=off: no watch tools (watch_rollout.go)
 	wikiOff               bool   // spawned with ORBIT_WIKI=off: no wiki tools (wiki_tools.go)
+	documentsOff          bool   // spawned with ORBIT_DOCUMENTS=off: no drive tools (documents_switch.go)
 	browserOn             bool   // spawned with ORBIT_BROWSER=on: the browser tools (browser_tools.go)
 	workflowsOff          bool   // spawned with ORBIT_WORKFLOWS=off: no workflow tool (subagent_workflow.go)
 	scheduleRun           bool   // spawned with ORBIT_SCHEDULE_RUN=1: a scheduled run's session (schedule_tools.go)
@@ -72,6 +75,10 @@ type mcpServer struct {
 	// helpAsk: spawned with ORBIT_HELP_ASK=1 for the help center's Ask, it serves the four help reads and nothing else
 	// (mcp_help_ask.go).
 	helpAsk bool
+	// callToolUseID is the engine's id for the tool call being answered (Claude Code's `claudecode/toolUseId`), so a
+	// drive transfer's progress lands on its card; "" outside one, or when the engine names none. Calls are served
+	// one at a time (serve), as rec is.
+	callToolUseID string
 	// rec is what the tool call being answered did, for its receipt (tool_receipt.go); nil outside one.
 	rec *callRecord
 	// Reads the session's live permission mode for Orbit's Plan gate (plan_gate.go); nil reads it from the runner
@@ -122,7 +129,7 @@ func mcpToolsFromEnv() map[string]bool {
 	only := map[string]bool{}
 	for _, name := range strings.Split(raw, ",") {
 		if name = strings.TrimSpace(name); name != "" {
-			only[name] = true
+			only[canonicalToolName(name)] = true
 		}
 	}
 	return only
@@ -264,6 +271,8 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		if json.Unmarshal(req.Params, &p) != nil {
 			return s.err(req.ID, -32602, "invalid params"), true
 		}
+		// A Documents tool called by its name before the rename is served as the tool it is now (documents_tools.go).
+		p.Name = canonicalToolName(p.Name)
 		if s.helpAsk {
 			return s.ok(req.ID, s.callHelpAskTool(p.Name)), true
 		}
@@ -279,6 +288,8 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 			// Its calls' events nest under this id, as a delegate call's do.
 			return s.ok(req.ID, s.callWorkflow(p.Arguments, asString(p.Meta["claudecode/toolUseId"]))), true
 		}
+		s.callToolUseID = asString(p.Meta["claudecode/toolUseId"])
+		defer func() { s.callToolUseID = "" }()
 		return s.ok(req.ID, s.invokeTool(p.Name, p.Arguments)), true
 	default:
 		if isNotification {
@@ -383,6 +394,7 @@ const maxProjectAcceptanceVerificationMethodChars = 4000
 
 // callTool runs one tool. A failed call also carries the recovery report (recovery_render.go).
 func (s *mcpServer) callTool(name string, args map[string]interface{}) map[string]interface{} {
+	name = canonicalToolName(name)
 	// A session in Plan mode changes nothing until the plan is approved, whichever engine it runs on: a call Plan
 	// refuses is answered with what to do instead, before anything is filed or written (plan_gate.go). Ahead of the
 	// hand-off below too, whose job carries no socket to read the mode from.
@@ -393,13 +405,14 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	return s.withRecovery(name, args, mark, s.runTool(name, args))
 }
 
-func driveToolDescriptors(obj func(map[string]interface{}, ...string) map[string]interface{}) []map[string]interface{} {
-	drivePath := map[string]interface{}{"type": "string", "description": "A drive path such as /Proj/r.md or ~/Files/Proj/r.md."}
+func documentsToolDescriptors(obj func(map[string]interface{}, ...string) map[string]interface{}) []map[string]interface{} {
+	drivePath := map[string]interface{}{"type": "string", "description": "A drive path such as /Proj/r.md or ~/Documents/Proj/r.md."}
 	return []map[string]interface{}{
 		{
-			"name": "drive_put",
-			"description": "Copy a local file into the owner's Orbit Files drive. Creates missing parent folders and " +
-				"keeps the previous version when overwriting a file. Returns an orbit-drive: link for replies.",
+			"name": "documents_put",
+			"description": "Copy a local file into the owner's Documents drive. Creates missing parent folders and " +
+				"keeps the previous version when overwriting a file. Returns an orbit-document: link for replies. The file is " +
+				"sent in 8 MiB chunks and has no size limit: file_upload's 25 MiB cap does not apply here.",
 			"inputSchema": obj(map[string]interface{}{
 				"localPath": map[string]interface{}{"type": "string", "description": "A file in this session's checkout or uploads directory."},
 				"path":      drivePath,
@@ -407,13 +420,13 @@ func driveToolDescriptors(obj func(map[string]interface{}, ...string) map[string
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
 		},
 		{
-			"name":        "drive_get",
+			"name":        "documents_get",
 			"description": "Download a drive file into this session's uploads directory and return its local path and size.",
 			"inputSchema": obj(map[string]interface{}{"path": drivePath}, "path"),
 			"annotations": map[string]interface{}{"readOnlyHint": true},
 		},
 		{
-			"name":        "drive_list",
+			"name":        "documents_list",
 			"description": "List one page of a drive folder with each entry's path, kind, size and modification time.",
 			"inputSchema": obj(map[string]interface{}{
 				"path":   map[string]interface{}{"type": "string", "description": "The folder's drive path. Omit it to list the root."},
@@ -422,14 +435,27 @@ func driveToolDescriptors(obj func(map[string]interface{}, ...string) map[string
 			"annotations": map[string]interface{}{"readOnlyHint": true},
 		},
 		{
-			"name":        "drive_move",
+			"name":        "documents_move",
 			"description": "Move or rename a drive entry. This overwrites an existing file at the destination.",
 			"inputSchema": obj(map[string]interface{}{"from": drivePath, "to": drivePath}, "from", "to"),
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
 		},
 		{
-			"name":        "drive_delete",
-			"description": "Move a drive entry to the owner's Trash. The owner can restore it from the Files page. Agents cannot see Trash.",
+			"name": "documents_sync",
+			"description": "Copy a local directory into a Documents folder, once, in the background. Answers at once with a " +
+				"background job id; you are woken when it ends, and its last output line is the summary (uploaded, unchanged, " +
+				"deleted, failed). Files already the same in Documents are skipped, so a second sync only sends what changed. " +
+				"One way: nothing comes down. The owner watches it in the Documents page's upload tray.",
+			"inputSchema": obj(map[string]interface{}{
+				"localPath": map[string]interface{}{"type": "string", "description": "A directory in this session's checkout or uploads directory."},
+				"path":      map[string]interface{}{"type": "string", "description": "The Documents folder to copy into, such as /Reports/out."},
+				"delete":    map[string]interface{}{"type": "boolean", "description": "Move Documents files under path that the directory no longer has to the owner's Trash."},
+			}, "localPath", "path"),
+			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
+		},
+		{
+			"name":        "documents_delete",
+			"description": "Move a drive entry to the owner's Trash. The owner can restore it from the Documents page. Agents cannot see Trash.",
 			"inputSchema": obj(map[string]interface{}{"path": drivePath}, "path"),
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": true},
 		},
@@ -460,8 +486,8 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 	if result, handled := s.callFileTool(name, args); handled {
 		return result
 	}
-	// The Orbit Files drive's tools: `orbit drive` runs the same runDriveTool (drive_tools.go).
-	if result, handled := s.callDriveTool(name, args); handled {
+	// The Documents tools: `orbit documents` runs the same runDocumentsTool (documents_tools.go).
+	if result, handled := s.callDocumentsTool(name, args); handled {
 		return result
 	}
 	// The owner's Settings: `orbit settings` runs the same runSettingsTool (settings_tools.go).
@@ -1780,14 +1806,22 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 		return toolResult(prettyJSON(raw), false)
 
 	case "session_get":
-		if !s.orchestrationEnabled() {
+		// Revision 42 (own_landing.go): a task's work session reads its task's landing with orchestration off.
+		ownLanding := s.readsOwnTaskLanding()
+		if !s.orchestrationEnabled() && !ownLanding {
 			return toolResult(orchestrationOffMsg, true)
 		}
 		id := getString(args, "sessionId")
 		if id == "" {
 			return toolResult("sessionId is required", true)
 		}
-		raw, err := s.t.getSession(s.sessionID, s.orchestrationToken, id)
+		var raw json.RawMessage
+		var err error
+		if ownLanding {
+			raw, err = s.t.getOwnTaskLanding(s.sessionID, id)
+		} else {
+			raw, err = s.t.getSession(s.sessionID, s.orchestrationToken, id)
+		}
 		if err != nil {
 			return toolResult("get session failed: "+err.Error(), true)
 		}
@@ -3666,6 +3700,13 @@ func ownerRequestBody(args map[string]interface{}, now time.Time) (map[string]in
 		return nil, errors.New("title is required for every kind but WIKI_CREATE")
 	}
 	copyIfPresent(body, args, "ifUnanswered", "steps", "secretSpec", "options", "recommendedOption", "clientRequestId")
+	change, err := ownerRequestChange(kind, args)
+	if err != nil {
+		return nil, err
+	}
+	if change != nil {
+		body["change"] = change
+	}
 	if blocked := getStringSlice(args, "blocksTaskIds"); len(blocked) > 0 {
 		body["blocksTaskIds"] = blocked
 	}
@@ -3677,6 +3718,42 @@ func ownerRequestBody(args map[string]interface{}, now time.Time) (map[string]in
 		body["expiresAt"] = now.Add(time.Duration(expiresIn) * time.Second).UTC().Format(time.RFC3339)
 	}
 	return body, nil
+}
+
+// ownerRequestChange is the `change` of a CHANGE request, { runnerId, maxConcurrent }, or nil for every other kind.
+// `change` names a setting the owner applies, so it is refused for a kind that has none and required for the one that
+// does; the server checks that the runner is the owner's and that the value differs from the current one.
+func ownerRequestChange(kind string, args map[string]interface{}) (map[string]interface{}, error) {
+	raw, present := args["change"]
+	if kind != "CHANGE" {
+		if present && raw != nil {
+			return nil, errors.New("change is only for kind CHANGE")
+		}
+		return nil, nil
+	}
+	change, ok := raw.(map[string]interface{})
+	if !ok {
+		return nil, errors.New("kind CHANGE needs change: { runnerId, maxConcurrent }")
+	}
+	runnerID := strings.TrimSpace(getString(change, "runnerId"))
+	if runnerID == "" {
+		return nil, errors.New("change.runnerId is required")
+	}
+	for key := range change {
+		if key != "runnerId" && key != "maxConcurrent" {
+			return nil, fmt.Errorf("change takes only runnerId and maxConcurrent, not %q", key)
+		}
+	}
+	maxConcurrent, ok := change["maxConcurrent"].(float64)
+	if !ok {
+		if i, isInt := change["maxConcurrent"].(int); isInt {
+			maxConcurrent, ok = float64(i), true
+		}
+	}
+	if !ok || maxConcurrent != math.Trunc(maxConcurrent) || maxConcurrent < 1 || maxConcurrent > math.MaxInt32 {
+		return nil, errors.New("change.maxConcurrent must be an integer of at least 1")
+	}
+	return map[string]interface{}{"runnerId": runnerID, "maxConcurrent": int(maxConcurrent)}, nil
 }
 
 func prettyJSON(raw json.RawMessage) string {

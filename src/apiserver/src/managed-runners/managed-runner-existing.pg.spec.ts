@@ -177,7 +177,9 @@ test('managed runners switched off with existing state: nothing is stopped, dele
       title: 'earlier work', prompt: 'the opening prompt', provider: 'claude', provider_builtin: true, status, num_turns: 1,
       runtime_session_id: randomUUID(),
       ...(isReleasedStatus(status) ? {
-        finished_at: new Date(), 
+        finished_at: new Date(),
+        // A failure release carries FAILED on its turn (removal step R2), which is what reads it as one since R7.
+        ...(status === 'FAILED' ? { last_turn_outcome: 'FAILED' } : {}),
       } : {}),
       ...extra,
     };
@@ -228,7 +230,7 @@ test('managed runners switched off with existing state: nothing is stopped, dele
       const owner = await login(ready.ownerId);
 
       const capabilities = await call(server, 'GET', '/api/auth/capabilities', owner);
-      assert.deepEqual(capabilities.json, { managedRunners: { enabled: false, contractVersion: 1 } });
+      assert.deepEqual(capabilities.json, { managedRunners: { enabled: false, contractVersion: 1 }, documents: { enabled: false } });
       const status = await call(server, 'GET', '/api/managed-runner', owner);
       assert.equal(status.status, 200, status.text);
       assert.equal(status.json.enabled, false);

@@ -53,7 +53,7 @@ const OWNER_ITEM_WRITERS: Record<string, string> = {
   'runner-api/integration-job-relay.ts':
     'no item of its own: the string labels the timeline fact (`HANDED_TO`, §2.9 LS2) that this '
     + 'result handed the owner the card `recordPromotionApproval` opened in the same transaction — '
-    + 'the writer is project-open-item.ts, announced by runner-api.controller.ts after the commit',
+    + 'the writer is project-open-item.ts, announced by integration-aftermath.ts after the commit',
   'projects/project-done-request.ts':
     'a READ: the done check reads the owner’s open items to refuse over them, it opens none',
   'auth/tenant-isolation-fixtures.ts':
@@ -70,7 +70,9 @@ const ANNOUNCERS: Record<string, string> = {
   'projects/open-item-escalation.service.ts':
     'the clock handing an item over (X-E1), and the one it opens for a claim whose runner stopped '
     + 'reporting (X-E5)',
-  'runner-api/runner-api.controller.ts': 'the merge approval an integration result opened (M-T2)',
+  'runner-api/integration-aftermath.ts':
+    'the merge approval an integration result opened (M-T2), after a runner\'s result or the pull request door\'s '
+    + 'landing (docs/design/protected-branch-landing.md §4.2)',
 };
 
 function sources(): Array<{ path: string; text: string }> {

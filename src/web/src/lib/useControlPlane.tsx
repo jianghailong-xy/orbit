@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient, type Query, type QueryFilters } from '@tanstack/react-query';
-import { CONTROL_HINT_DRIVE_CHANGED, CONTROL_HINT_LIST_SCOPES, type WatchView } from '@orbit/shared';
+import { CONTROL_HINT_DRIVE_CHANGED, CONTROL_HINT_DRIVE_SYNCS, CONTROL_HINT_LIST_SCOPES, type WatchView } from '@orbit/shared';
 import { getToken } from '../api';
 import { streamReport } from './listBudget';
 import { cloneEventOf, hearClone, sameWorkspace } from './workspaceClone';
@@ -14,6 +14,7 @@ import {
   type TaskReachDeclaration,
 } from './sessionReach';
 import type { ProjectPlacement } from './queries';
+import { refreshDocumentsSyncs } from './documentsSyncs';
 
 // Coalesce a burst of control events (a turn end fires status + approval back-to-back) into a
 // single refetch per list. A second, as the list budget asks (docs/list-freshness-design.md R1): a
@@ -143,7 +144,7 @@ const taskIdsOf = (data: { taskId?: unknown; taskIds?: unknown } | null | undefi
  * RUNNING, AWAITING_INPUT, INTERRUPTED): a released one has them cleared. So those two can move only with that class,
  * or with a process starting or ending (`background.task`), and the rest waits for the safety read.
  */
-type TallyFacts = { workspace: string; open: boolean; status: string; needsYou: boolean };
+type TallyFacts = { workspace: string; open: boolean; status: string; released: boolean | null; needsYou: boolean };
 /** The fields of a summary, or of a session row this tab read, that `TallyFacts` is made from. */
 type TallyRow = {
   id?: unknown;
@@ -155,14 +156,18 @@ type TallyRow = {
   agent?: { id?: unknown } | null;
   pendingApprovals?: unknown;
   waitingKind?: unknown;
+  /** The release fact (contracts/session-state.contract.json); absent from an older control plane. */
+  released?: unknown;
 } | null | undefined;
-/** The statuses whose session holds no process and whose turn is over. */
+/** The statuses whose session holds no process and whose turn is over: the reading of a row without `released`. */
 const RELEASED_STATUSES = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED']);
 /** The `background.task` statuses that end a process (runner-api's bgEnded). */
 const PROCESS_ENDED = new Set(['completed', 'failed', 'killed', 'stopped']);
 /** Statuses that count alike: AWAITING_INPUT and INTERRUPTED are counted by the same rules, and so are the released. */
-const tallyClass = (status: string): string =>
-  status === 'AWAITING_INPUT' || status === 'INTERRUPTED' ? 'held' : RELEASED_STATUSES.has(status) ? 'released' : status;
+const tallyClass = (status: string, released: boolean | null): string =>
+  released === true || (released === null && RELEASED_STATUSES.has(status))
+    ? 'released'
+    : status === 'AWAITING_INPUT' || status === 'INTERRUPTED' ? 'held' : status;
 /** A start request lights no tally (owner-decision-signal.ts START_REQUEST), as the Session list's bar leaves it out. */
 const needsYouOf = (pendingApprovals: unknown, waitingKind: unknown): boolean =>
   Number(pendingApprovals ?? 0) > 0 && waitingKind !== 'START_REQUEST';
@@ -174,13 +179,14 @@ const tallyFactsOf = (row: TallyRow, workspaceId: string): TallyFacts => {
     // A landing is in no tally, and neither is a session outside the Open list.
     open: (row?.lifecycleState ?? 'OPEN') === 'OPEN' && row?.sessionKind !== 'LANDING',
     status: String(row?.runStatus ?? row?.status ?? ''),
+    released: typeof row?.released === 'boolean' ? row.released : null,
     needsYou: needsYouOf(row?.pendingApprovals, row?.waitingKind),
   };
 };
 /** A session's share of its workspace's tallies, '' when it is in none. Two facts with the same share move no tally. */
 const tallyShare = (facts: TallyFacts): string => {
   if (!facts.open || !facts.workspace) return '';
-  const counted = tallyClass(facts.status);
+  const counted = tallyClass(facts.status, facts.released);
   if (counted === 'released' && !facts.needsYou) return '';
   return `${facts.workspace} ${counted}${facts.needsYou ? ' needs-you' : ''}`;
 };
@@ -393,12 +399,12 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       const next: TallyFacts | undefined = summary
         ? tallyFactsOf(data as TallyRow, workspaceId)
         : type === 'session.ended'
-          ? { workspace: before?.workspace ?? workspaceId, open: false, status: before?.status ?? '', needsYou: false }
+          ? { workspace: before?.workspace ?? workspaceId, open: false, status: before?.status ?? '', released: before?.released ?? null, needsYou: false }
           : before && { ...before, needsYou: needsYouOf(approval?.pendingApprovals, approval?.waitingKind) };
       if (!next) return;
       tallies.set(sessionId, next);
       // A session that ended or left the Open list had its processes taken off it (sessions/running-work.ts).
-      if (!next.open || tallyClass(next.status) === 'released') processes.delete(sessionId);
+      if (!next.open || tallyClass(next.status, next.released) === 'released') processes.delete(sessionId);
     };
     // Whether this window moved a tally; it starts the next window afresh.
     const talliesMoved = (): boolean => {
@@ -720,7 +726,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       // `realtime.publishedWhen`).
       if (type.startsWith('wiki.')) return ['wiki'];
       // The owner's terminals: one asked to be approved, a request was decided or collected, or one was revoked
-      // (`terminals.changed`). The approve card and Settings → Terminals both declare `terminal`.
+      // (`terminals.changed`). The approve cards and each machine's Terminals both declare `terminal`.
       if (type === 'terminals.changed') return ['terminal'];
       // The owner's drive: a write committed (`drive.changed`, asked for with `hints=drive_changed`). The Files page's
       // reads declare `drive`; the feed's seq it carries is not needed to re-read what is on screen.
@@ -945,7 +951,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       // `list_changed` opts into Open-list hints (§4.8), and `list_scopes` adds their workspace scopes.
       // The other opt-ins enable notifications for owner requests, schedule cards and committed drive writes.
       es = new EventSource(
-        `/api/events?access_token=${encodeURIComponent(getToken() ?? '')}&hints=list_changed,owner_requests,schedule_cards,${CONTROL_HINT_LIST_SCOPES},${CONTROL_HINT_DRIVE_CHANGED}`,
+        `/api/events?access_token=${encodeURIComponent(getToken() ?? '')}&hints=list_changed,owner_requests,schedule_cards,${CONTROL_HINT_LIST_SCOPES},${CONTROL_HINT_DRIVE_CHANGED},${CONTROL_HINT_DRIVE_SYNCS}`,
       );
       es.onopen = () => {
         lastMsgAt = Date.now();
@@ -955,6 +961,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         // it surface too. A tab that is hidden reads it when it is back in view (`pump`).
         if (missedEvents) {
           missedEvents = false;
+          void refreshDocumentsSyncs();
           reconcile();
         }
       };
@@ -993,6 +1000,8 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         // events (tag/provider/task-list) legitimately carry none.
         if (!ev?.type || ev.type === 'ping') return;
         if (ev.type === 'sessions.list_changed') hinted = true;
+        // An agent's directory sync moved (`hints=drive_syncs`): the Documents tray reads its list again.
+        if (ev.type === 'drive.sync') void refreshDocumentsSyncs();
         const projectId = ev.data?.projectMembership?.projectId;
         const id = ev.data?.id;
         if (ev.type === 'session.updated' || ev.type === 'session.created' || ev.type === 'session.ended') {

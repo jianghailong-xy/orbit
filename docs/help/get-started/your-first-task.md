@@ -2,11 +2,11 @@
 title: Your first task, start to merge
 summary: From a request to a change on main, and what you are asked along the way.
 category: get-started
-routes: [/tasks, /tasks/:id, /projects/:id, /waiting]
+routes: [/tasks, /tasks/:id, /projects/:id]
 errors: []
 platforms: [web, macos, ios, android]
 common: false
-updated: 2026-11-14
+updated: 2026-11-17
 ---
 
 A task is a piece of work with a definition of done. Here is the whole path once.
@@ -21,7 +21,7 @@ A task runs as a session on the workspace's machine. Open it from **Tasks** or f
 
 ## 3. Check the evidence
 
-When the agent says it is done, it attaches evidence: the commands it ran, test output, screenshots. A task that needs your confirmation shows up in [Waiting on you](orbit:/waiting) with a **Review** button.
+When the agent says it is done, it attaches evidence: the commands it ran, test output, screenshots. A task that needs your confirmation shows its card in the task's session, and that session's row in the session list says **Confirm for you**. See [Find what needs you](orbit:/help/projects-and-tasks/find-what-needs-you).
 
 - **Confirm done** when the evidence shows what the task asked for.
 - **Chat about this** when something is missing. Your next message goes to the agent, and the task stays open.

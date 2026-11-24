@@ -269,8 +269,12 @@ export function AdminGithubPage() {
               <b>Webhook:</b> turn it off. Orbit doesn’t need one.
             </li>
             <li>
-              <b>Repository permissions:</b> <code>Contents: Read and write</code> <code>Metadata: Read-only</code>. Nothing else — no
-              account or organization permissions.
+              <b>Repository permissions:</b> <code>Contents: Read and write</code> <code>Metadata: Read-only</code>{' '}
+              <code>Pull requests: Read and write</code> <code>Checks: Read-only</code> <code>Commit statuses: Read-only</code>{' '}
+              <code>Actions: Read-only</code> <code>Workflows: Read and write</code>. Nothing else — no account or organization
+              permissions. <b>Workflows: Read and write</b> lets Orbit push changes to CI workflow files, and workflows can read the
+              repository’s secrets. Leave it out if you don’t want that. A landing that changes a workflow file is then refused by
+              GitHub.
             </li>
             <li>
               <b>Where can this app be installed:</b> Any account, so people can install it on their own repositories.

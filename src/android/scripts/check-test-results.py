@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Reject empty, skipped, or failing local-test runs in either Android module."""
+"""Reject empty, skipped, or failing local-test runs in either Android module.
+
+Usage: check-test-results.py <android-dir> [module:task ...]; with no tasks named, all three are read.
+"""
 
 import sys
 import xml.etree.ElementTree as ET
@@ -8,12 +11,9 @@ from pathlib import Path
 
 def main():
     android_dir = Path(sys.argv[1])
+    names = sys.argv[2:] or ["core:test", "app:testDebugUnitTest", "app:testReleaseUnitTest"]
     total = 0
-    for module, task in (
-        ("core", "test"),
-        ("app", "testDebugUnitTest"),
-        ("app", "testReleaseUnitTest"),
-    ):
+    for module, task in (name.split(":", 1) for name in names):
         reports = sorted((android_dir / module / "build/test-results" / task).glob("TEST-*.xml"))
         if not reports:
             raise ValueError(f":{module}:{task}: no JUnit XML reports")
