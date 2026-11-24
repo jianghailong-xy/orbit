@@ -213,6 +213,20 @@ export interface TenantCase {
 /** The path parameters a route template names: `GET /tasks/:id/comments/:commentId` → id, commentId. */
 export const paramsOf = (route: string): string[] => [...route.matchAll(/:(\w+)/g)].map((m) => m[1]);
 
+/**
+ * The /drive aliases of the Documents cases that spend a spare of A's: a delete or a restore that A's own request uses
+ * up, so a second run of it under /drive finds nothing left to answer. Read by hand instead (TENANT_ISOLATION_BY_HAND).
+ */
+const DOCUMENTS_SPARE_SPENDING_ALIASES: Readonly<Record<string, string>> = {
+  'DELETE /drive/entries/:id': 'documents/documents.service.ts:1097 (moveToTrash)',
+  'POST /drive/uploads/:id/complete': 'documents/documents-uploads.service.ts:92 (complete)',
+  'DELETE /drive/uploads/:id': 'documents/documents-uploads.service.ts:153 (abandon)',
+  'DELETE /drive/versions/:id': 'documents/documents.service.ts:1386 (deleteVersion)',
+  'POST /drive/trash/groups/:id/restore': 'documents/documents.service.ts:1203 (restoreGroup)',
+  'DELETE /drive/trash/groups/:id': 'documents/documents.service.ts:1364 (deleteGroup)',
+  'POST /drive/trash/groups/:id/items/:entryId/restore': 'documents/documents.service.ts:1278 (restoreItem)',
+};
+
 /** Cases keyed `METHOD /documents/…`, each held under /documents and under its /drive alias (documents/documents-routes.ts). */
 const documentsUnderEveryPrefix = <T>(cases: Record<string, T>): Record<string, T> =>
   Object.fromEntries(Object.entries(cases).flatMap(([key, c]) => underEveryDocumentsPrefix(key).map((route) => [route, c])));
@@ -317,7 +331,6 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   ...documentsUnderEveryPrefix({
     'GET /documents/entries/:id': { request: (of) => ({ params: { id: of.driveFileId } }) },
     'PATCH /documents/entries/:id': { request: (of) => ({ params: { id: of.driveFileId }, body: { name: 'renamed by the census.txt' } }) },
-    'DELETE /documents/entries/:id': { request: (of) => ({ params: { id: of.spare.driveEntryId } }) },
     'POST /documents/entries/:id/share-check': { request: (of) => ({ params: { id: of.driveFileId } }) },
     'GET /documents/entries/:id/versions': { request: (of) => ({ params: { id: of.driveFileId } }) },
     'GET /documents/entries/:id/content': { request: (of) => ({ params: { id: of.driveFileId } }) },
@@ -327,20 +340,23 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     'PUT /documents/uploads/:id/chunks/:idx': {
       request: (of) => ({ params: { id: of.driveUploadId, idx: 0 }, headers: { 'x-orbit-chunk-sha256': 'a'.repeat(64) } }),
     },
-    'POST /documents/uploads/:id/complete': { request: (of) => ({ params: { id: of.spare.driveCompleteUploadId } }) },
-    'DELETE /documents/uploads/:id': { request: (of) => ({ params: { id: of.spare.driveAbandonUploadId } }) },
     // As a copy: the owner's own restore leaves the version in Trash for the cases after it.
     'POST /documents/versions/:id/restore': { request: (of) => ({ params: { id: of.driveVersionId }, body: { as: 'COPY' } }) },
-    'DELETE /documents/versions/:id': { request: (of) => ({ params: { id: of.spare.driveVersionId } }) },
     'GET /documents/trash/groups/:id': { request: (of) => ({ params: { id: of.driveTrashGroupId } }) },
-    'POST /documents/trash/groups/:id/restore': { request: (of) => ({ params: { id: of.spare.driveRestoreGroupId } }) },
-    'DELETE /documents/trash/groups/:id': { request: (of) => ({ params: { id: of.spare.driveTrashGroupId } }) },
-    'POST /documents/trash/groups/:id/items/:entryId/restore': {
-      request: (of) => ({ params: { id: of.spare.driveRestoreItemGroupId, entryId: of.spare.driveRestoreItemEntryId } }),
-      nested: ['entryId'],
-    },
     'POST /documents/entries/:id/download-link': { request: (of) => ({ params: { id: of.driveFileId } }) },
   }),
+  // Each of these spends a spare of A's, so it is held under /documents alone; its /drive alias is read by hand
+  // (DOCUMENTS_SPARE_SPENDING_ALIASES).
+  'DELETE /documents/entries/:id': { request: (of) => ({ params: { id: of.spare.driveEntryId } }) },
+  'POST /documents/uploads/:id/complete': { request: (of) => ({ params: { id: of.spare.driveCompleteUploadId } }) },
+  'DELETE /documents/uploads/:id': { request: (of) => ({ params: { id: of.spare.driveAbandonUploadId } }) },
+  'DELETE /documents/versions/:id': { request: (of) => ({ params: { id: of.spare.driveVersionId } }) },
+  'POST /documents/trash/groups/:id/restore': { request: (of) => ({ params: { id: of.spare.driveRestoreGroupId } }) },
+  'DELETE /documents/trash/groups/:id': { request: (of) => ({ params: { id: of.spare.driveTrashGroupId } }) },
+  'POST /documents/trash/groups/:id/items/:entryId/restore': {
+    request: (of) => ({ params: { id: of.spare.driveRestoreItemGroupId, entryId: of.spare.driveRestoreItemEntryId } }),
+    nested: ['entryId'],
+  },
 
   // ── projects ─────────────────────────────────────────────────────────────────────────────────
   'GET /projects/:id': { request: (of) => ({ params: { id: of.projectId } }) },
@@ -959,6 +975,12 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
  * that shows the route finds its object only under the caller's own account. Kept as short as it can be.
  */
 export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  // ── Documents' /drive alias, where its case spends a spare (DOCUMENTS_SPARE_SPENDING_ALIASES) ──────────────────────
+  ...Object.fromEntries(Object.entries(DOCUMENTS_SPARE_SPENDING_ALIASES).map(([route, scoped]) => [route,
+    `the same handler as ${route.replace(' /drive/', ' /documents/')}, whose case above holds it across accounts: `
+    + 'DocumentsController is one class mounted under both prefixes (documents/documents.controller.ts:31, '
+    + `@Controller(DOCUMENTS_ROUTE_PREFIXES)), so the alias reaches the same lookup by (id, owner), ${scoped}; the case `
+    + "spends a spare of A's, which a second run under /drive would find already spent"])),
   // ── the owner's tier for a built-in engine's model (docs/subagent-design.md §7) ─────────────────────────
   'PATCH /providers/builtin/:engine/model-tier':
     'the path names an engine (claude, cursor, …), which every account shares, not an object of any account: the write '
