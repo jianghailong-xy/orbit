@@ -1123,6 +1123,26 @@ export async function queueBaselineHeld(
 }
 
 /**
+ * docs/design/project-line-upstream-sync.md §4.2: a landing that stopped at MAIN_SYNC is held, not failed. The result
+ * transaction queues the same delivery again behind the line-sync item (`lineSyncHoldSql`), without a retry decision,
+ * the twin of K5's `queueBaselineHeld`. The task stays DONE; nothing about its branch, session or identity changes.
+ */
+export async function queueMainSyncHeld(
+  tx: Prisma.TransactionClient,
+  input: { ownerId: string; projectId: string; taskId: string; sessionId: string; sourceRef: string; runnerId: string | null },
+): Promise<void> {
+  const codebase = await tx.projectCodebase.findFirstOrThrow({
+    where: { projectId: input.projectId, slot: 'primary' },
+    select: { id: true, canonicalRepoUrl: true, integrationRef: true, upstreamRef: true },
+  });
+  await queueLandTask(tx, {
+    ...input, codebase,
+    session: { id: input.sessionId, branch: shortBranchName(input.sourceRef), runnerId: input.runnerId },
+    cause: 'MAIN_SYNC_HELD',
+  });
+}
+
+/**
  * Queue the next generation of a task's landing because its coordinator asked for it (§2.3 J-T1b) —
  * the explicit retry door for a stopped landing (J5) — or because the task's own work session fixed
  * it (§12.5 W7, `landAgainAfterLandingFix`); K5 queues baseline-held work in its result transaction.
@@ -1239,9 +1259,14 @@ export async function landingFixWorkSession(
     candidateSourceKind: string | null;
     /** The generation this job reruns, when it is one: the landing-fix round the session's last words are from. */
     retryOfJobId?: string | null;
+    /** The phase the job stopped in. */
+    phase?: string | null;
   },
 ): Promise<{ sessionId: string; roundsExhausted: LandingFixHandBack | null } | null> {
   if (!input.failureClass || !HANDED_OFF_FAILURE_CLASSES.has(input.failureClass)) return null;
+  // docs/design/project-line-upstream-sync.md §4.2: a task landing's MAIN_SYNC conflict is the line's, not the work's.
+  // It opens the line-sync item for the coordinator, and the finished task's session is not revived for it.
+  if (input.jobKind === 'LAND_TASK' && input.phase === 'MAIN_SYNC') return null;
   const promotion = input.jobKind === 'CHECK_PROMOTION' || input.jobKind === 'LAND_PROMOTION';
   if (!(input.jobKind === 'LAND_TASK' || (promotion && input.candidateSourceKind === 'TASK_BRANCH'))) return null;
   if (!input.sessionId || !input.taskId) return null;

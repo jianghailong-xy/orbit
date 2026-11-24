@@ -14,6 +14,7 @@ import { runnerOfflineSql } from '../runners/runner-presence';
 import { branchNameSql, hasWorkToLandSql, lineStartedSql, taskLandingSql } from './project-criterion-landing';
 import { INTEGRATION_JOB_CLAIM } from './project-integration-job';
 import { baselineHoldSql } from './baseline-hold';
+import { lineSyncHoldSql } from './line-sync-hold';
 import { IN_FLIGHT_JOB_STATES, IN_FLIGHT_JOB_STATES_SQL } from './in-flight-job-states';
 import { pullRequestBlockingCode, pullRequestViewOf, pullRequestWaitSummary } from './pull-request-landing';
 import { isInFlightJobState } from './in-flight-job-states';
@@ -607,6 +608,7 @@ export async function readTaskIntegrationViews(
       -- M2: an OPEN item about another task's failed absorb of upstream into the same target holds
       -- every later landing on it; the conflicted task's own later generations are exempt (§3.1 M3),
       -- and so are the landings of a task filed to fix that item (fixes_open_item_id), as in claimOne.
+      -- The line-sync item (docs/design/project-line-upstream-sync.md §4.3) has no same-task exemption: lineSyncHoldSql.
       -- Read through the item rather than the failed job, so closing it is what lets the queue move.
       -- H1 does NOT exempt an item a new generation is handling: claimOne reads this same condition
       -- and holds those landings too, so the reader says what the claim does with the row
@@ -614,20 +616,15 @@ export async function readTaskIntegrationViews(
       -- queue that would take it on the next heartbeat and will not.
       LEFT JOIN LATERAL (
         SELECT f."id" AS "jobId", i."id" AS "openItemId", i."owner_id" AS "ownerId",
-               ft."title" AS "taskTitle",
+               -- The line-sync item is about the line, not the task that happened to land next.
+               CASE WHEN i."task_id" IS NOT NULL THEN ft."title" END AS "taskTitle",
                CASE WHEN handling."id" IS NOT NULL AND handling."state" IN ${IN_FLIGHT_JOB_STATES_SQL}
                     THEN handling."generation" END AS "handlingGeneration"
           FROM "project_open_item" i
           JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
           LEFT JOIN "task" ft ON ft."id" = f."task_id"
           LEFT JOIN "project_integration_job" handling ON handling."id" = i."handling_job_id"
-         WHERE newest_job."state" = 'QUEUED'
-           AND f."serial_key" = newest_job."serial_key" AND f."phase" = 'MAIN_SYNC'
-           AND i."kind" = 'INTEGRATION_CONFLICT' AND i."state" = 'OPEN'
-           AND f."task_id" IS DISTINCT FROM newest_job."task_id"
-           AND NOT EXISTS (
-             SELECT 1 FROM "task" fix
-              WHERE fix."id" = newest_job."task_id" AND fix."fixes_open_item_id" = i."id")
+         WHERE newest_job."state" = 'QUEUED' AND ${lineSyncHoldSql('newest_job')}
          ORDER BY i."created_at", i."id" LIMIT 1
       ) sync_block ON true
       LEFT JOIN LATERAL (

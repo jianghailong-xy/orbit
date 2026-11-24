@@ -198,7 +198,7 @@ const FIX_JOB_ID = '0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a73';
  *  two (§10.7) — each about one task's work. An observation's failure (§10.6 O-J4) is the project's:
  *  `IE:observe:<projectId>` names no task, so its cell's row does not either. */
 function aboutATask(todoType: string, sourceJob?: string): boolean {
-  if (sourceJob === 'OBSERVE_LANDING') return false;
+  if (sourceJob === 'OBSERVE_LANDING' || sourceJob === 'LINE_SYNC') return false;
   return todoType.startsWith('INTEGRATION_') || todoType === 'TASK_FAILED' || todoType === 'DELIVERY_REVIEW'
     || todoType === 'LANDING_UNOBSERVED' || todoType === 'LANDED_WITHOUT_CONFIRMATION';
 }
@@ -234,11 +234,11 @@ function sampleFor(cell: OpenItemDoorCell) {
     askable: true,
     sourceJob: cell.sourceJob,
     failureClass: cell.failureClass,
-    phase: cell.sourceJob === 'MAIN_SYNC' ? 'MAIN_SYNC' : null,
-    jobKind: cell.sourceJob === 'MAIN_SYNC' ? 'LAND_TASK' : cell.sourceJob,
+    phase: (cell.sourceJob === 'MAIN_SYNC' || cell.sourceJob === 'LINE_SYNC') ? 'MAIN_SYNC' : null,
+    jobKind: (cell.sourceJob === 'MAIN_SYNC' || cell.sourceJob === 'LINE_SYNC') ? 'LAND_TASK' : cell.sourceJob,
     payload: {
-      jobKind: cell.sourceJob === 'MAIN_SYNC' ? 'LAND_TASK' : cell.sourceJob,
-      phase: cell.sourceJob === 'MAIN_SYNC' ? 'MAIN_SYNC' : undefined,
+      jobKind: (cell.sourceJob === 'MAIN_SYNC' || cell.sourceJob === 'LINE_SYNC') ? 'LAND_TASK' : cell.sourceJob,
+      phase: (cell.sourceJob === 'MAIN_SYNC' || cell.sourceJob === 'LINE_SYNC') ? 'MAIN_SYNC' : undefined,
       failureClass: cell.failureClass,
       files: cell.failureClass === 'CONFLICT' ? ['src/conflicted.ts'] : undefined,
       reason: cell.todoType === 'DELIVERY_REVIEW' ? 'OUTSIDE_DECLARED_SCOPE' : undefined,
