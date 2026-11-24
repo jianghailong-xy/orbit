@@ -32,8 +32,10 @@ func TestNotifyIsLoadedUpFrontAndNamedInTheInstructions(t *testing.T) {
 	for _, form := range []struct{ inside, watches, delegates bool }{
 		{false, true, true}, {true, true, true}, {false, false, true}, {true, false, false},
 	} {
-		if text := orbitCLIInstructions("/usr/local/bin/orbit", form.inside, form.watches, form.delegates, true); !strings.Contains(text, orbitNotifyInstructions) {
-			t.Errorf("instructions %+v do not say when to notify", form)
+		// A SubAgent has no person to tell: its parent hears from it, and notify is not in its instructions.
+		text := orbitCLIInstructions("/usr/local/bin/orbit", form.inside, form.watches, form.delegates, true)
+		if got := strings.Contains(text, orbitNotifyInstructions); got != form.delegates {
+			t.Errorf("instructions %+v: say when to notify = %v, want %v", form, got, form.delegates)
 		}
 	}
 }

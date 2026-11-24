@@ -62,7 +62,7 @@ func instructionSnapshotShapes() []instructionSnapshotShape {
 func (shape instructionSnapshotShape) job(t *testing.T) *ClaimedSession {
 	t.Helper()
 	job := &ClaimedSession{SessionID: "s-snapshot", SessionUUID: "11111111-2222-3333-4444-555555555555",
-		WT:    &Worktree{Path: t.TempDir(), RepoDir: t.TempDir()},
+		WT:    &Worktree{Path: t.TempDir(), RepoDir: t.TempDir(), Branch: "orbit/task-snapshot"},
 		Agent: AgentExecConfig{AppendSystemPrompt: "Owner instructions.", Model: "test-model", PermissionMode: "default", Env: map[string]string{}}}
 	if shape.task {
 		job.TaskID = "task-1"

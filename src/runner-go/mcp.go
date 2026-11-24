@@ -188,6 +188,7 @@ func (s *mcpServer) sessionShape() SessionShape {
 		role = roleTaskRun
 	}
 	return SessionShape{
+		Tools:              toolNameSet(s.listedToolDescriptors()),
 		Role:               role,
 		InsideRecordedWork: s.taskID != "",
 		Watches:            !s.watchesOff,

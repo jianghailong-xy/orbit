@@ -401,7 +401,7 @@ func primerCarriers(t *testing.T, job *ClaimedSession) map[string]string {
 		return strings.Join(values, "\n\n")
 	}
 	developerMessage := func() string {
-		items := codexInjectedAgentItemsOf(job.instructionAgent(), exe, job.insideRecordedWork(), job.watchesOn(), true)
+		items := codexInjectedAgentItems(job.instructionAgent(), job.sessionShape(exe))
 		return items[0]["content"].([]map[string]interface{})[0]["text"].(string)
 	}
 	turnInput := func() string {
@@ -437,6 +437,16 @@ func primerCarriers(t *testing.T, job *ClaimedSession) map[string]string {
 	}
 }
 
+// primerFor is the primer as a carrier is given it: Claude Code and Codex are not told the re-read-after-compaction
+// paragraph up front (their next message after a reset carries the note, context_reset_note.go), so it is missing
+// from their own instructions, and every other carrier, and `orbit mcp` initialize, keeps it.
+func primerFor(carrier string) string {
+	if strings.HasPrefix(carrier, "claude") || strings.HasPrefix(carrier, "codex") {
+		return strings.Replace(agentPrimer, "\n\n"+agentPrimerRederive, "", 1)
+	}
+	return agentPrimer
+}
+
 func mcpInitializeInstructions(t *testing.T) string {
 	t.Helper()
 	resp, _ := (&mcpServer{}).handle(&rpcRequest{JSONRPC: "2.0", ID: json.RawMessage("1"), Method: "initialize"})
@@ -455,7 +465,7 @@ func TestEveryEngineIsGivenTheSamePrimer(t *testing.T) {
 			job.TaskID = "task-1"
 		}
 		for carrier, text := range primerCarriers(t, job) {
-			if !strings.Contains(text, agentPrimer) {
+			if !strings.Contains(text, primerFor(carrier)) {
 				t.Errorf("%s (inside recorded work: %v) is not given the primer:\n%s", carrier, inside, text)
 			}
 			if carrier != "orbit mcp initialize (every engine)" && !strings.Contains(text, "Owner instructions.") {
@@ -495,7 +505,7 @@ func TestCodexPutsThePrimerBackAfterCompaction(t *testing.T) {
 		}
 		return nil
 	})
-	if len(injected) != 1 || !strings.Contains(injected[0], agentPrimer) {
+	if len(injected) != 1 || !strings.Contains(injected[0], primerFor("codex")) {
 		t.Errorf("the developer message re-injected after a compaction = %q, want the primer in it", injected)
 	}
 
@@ -503,7 +513,7 @@ func TestCodexPutsThePrimerBackAfterCompaction(t *testing.T) {
 	for turn := 1; turn <= 2; turn++ {
 		input := codexTurnParams("thread-1", job, "/repo", "/tmp/up", fmt.Sprintf("turn-%d", turn), "hi", nil,
 			codexTurnContextOptions{Executable: exe, Mode: codexInstructionsUserInput})["input"].([]map[string]interface{})
-		if !strings.Contains(input[0]["text"].(string), agentPrimer) {
+		if !strings.Contains(input[0]["text"].(string), primerFor("codex")) {
 			t.Errorf("turn %d of a Codex before 0.125 does not carry the primer: %#v", turn, input)
 		}
 	}
@@ -532,7 +542,7 @@ func TestThePrimerDoesNotComeFromTheRepository(t *testing.T) {
 		if text != without[carrier] {
 			t.Errorf("%s changed when the checkout gained a CLAUDE.md and an AGENTS.md", carrier)
 		}
-		if !strings.Contains(text, agentPrimer) {
+		if !strings.Contains(text, primerFor(carrier)) {
 			t.Errorf("%s is not given the primer", carrier)
 		}
 	}

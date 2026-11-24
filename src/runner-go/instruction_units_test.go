@@ -118,6 +118,9 @@ func TestComposedMCPInstructionsAreThePrimer(t *testing.T) {
 	for _, profile := range append(engineProfiles, unknownEngineProfile) {
 		for _, shape := range instructionTestShapes() {
 			want := agentPrimer
+			if shape.Orchestration {
+				want = strings.Replace(want, agentPrimerOrchestration+"\n\n", "", 1)
+			}
 			if shape.Role == roleHelpAsk {
 				want = helpAskInstructions
 			}
@@ -201,5 +204,67 @@ func TestNoCarrierPatchesInstructionText(t *testing.T) {
 				return true
 			})
 		}
+	}
+}
+
+// Each session shape is given only the units that apply to it (design §2 item 3): a SubAgent gets no project or
+// notify paragraph and no branch-commit instruction, which would contradict its "Do not commit"; the
+// orchestration-off paragraph goes only with orchestration off; the wiki line only with wiki_search served; evidence
+// and progress only to a task's run; a check-only run none of the writes Plan refuses.
+func TestEachShapeIsGivenOnlyTheUnitsThatApplyToIt(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	job := func(mutate func(*ClaimedSession)) *ClaimedSession {
+		j := &ClaimedSession{SessionID: "s-shape", TaskID: "task-1", WT: &Worktree{Path: t.TempDir(), RepoDir: t.TempDir(), Branch: "orbit/x"},
+			Agent: AgentExecConfig{Env: map[string]string{}}}
+		mutate(j)
+		return j
+	}
+	system := func(j *ClaimedSession) string {
+		return withOrbitInstructions(j.appendSystemPrompt(), compose(j.sessionShape("/usr/local/bin/orbit"), claudeCodeProfile).System)
+	}
+	has := func(text string, paragraphs ...string) bool {
+		for _, p := range paragraphs {
+			if strings.Contains(text, p) {
+				return true
+			}
+		}
+		return false
+	}
+	projects := []string{orbitProjectInsideInstructions, orbitProjectProposeInstructions}
+
+	task := system(job(func(*ClaimedSession) {}))
+	for name, p := range map[string]string{"project": orbitProjectInsideInstructions, "notify": orbitNotifyInstructions,
+		"commit": "Commit each logical step", "evidence": orbitEvidenceFileInstructions, "progress": orbitProgressInstructions,
+		"orchestration-off": agentPrimerOrchestration, "wiki": orbitWikiPathInstructions} {
+		if !strings.Contains(task, p) {
+			t.Errorf("a task's run is not given the %s text", name)
+		}
+	}
+
+	sub := system(job(func(j *ClaimedSession) { j.Agent.Env[envSubagentRunID] = "run-1" }))
+	if has(sub, projects...) || has(sub, orbitNotifyInstructions, "Commit each logical step", orbitEvidenceFileInstructions, orbitProgressInstructions, orbitDelegateInstructions) {
+		t.Errorf("a SubAgent is given project, notify, commit, evidence, progress or delegate text:\n%s", sub)
+	}
+
+	check := system(job(func(j *ClaimedSession) { j.Agent.ScheduledCheckOnly = true }))
+	if has(check, projects...) || has(check, "Commit each logical step", orbitEvidenceFileInstructions, orbitProgressInstructions, orbitDelegateInstructions) {
+		t.Errorf("a check-only run is given a write instruction it cannot use:\n%s", check)
+	}
+
+	free := system(job(func(j *ClaimedSession) { j.TaskID = "" }))
+	if has(free, orbitEvidenceFileInstructions, orbitProgressInstructions) {
+		t.Error("a session that runs no task is given the evidence or progress text")
+	}
+
+	orch := system(job(func(j *ClaimedSession) { j.AllowOrchestration = true }))
+	if has(orch, agentPrimerOrchestration) {
+		t.Error("a session with orchestration on is given the orchestration-off paragraph")
+	}
+	nowiki := system(job(func(j *ClaimedSession) { j.WikiDisabled = true }))
+	if has(nowiki, orbitWikiPathInstructions) {
+		t.Error("a session with the wiki off is given the wiki line")
+	}
+	if strings.Contains(orbitWikiPathInstructions, "if your tool list has it") {
+		t.Error("the wiki line hedges on the tool list")
 	}
 }

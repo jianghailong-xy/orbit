@@ -49,6 +49,8 @@ type instructionUnit struct {
 	guardedBy []string
 	// conflicts are units that must not be delivered with this one.
 	conflicts []string
+	// skipOnProfile drops the unit for an engine whose profile it says so of: the engine has a better channel for it.
+	skipOnProfile func(EngineProfile) bool
 }
 
 // sessionRole is what a session is there to do.
@@ -88,6 +90,14 @@ type SessionShape struct {
 // delegates reports whether the session is offered delegate: every one but a SubAgent's.
 func (s SessionShape) delegates() bool { return s.Role != roleSubAgent }
 
+// writesOrbit reports whether the session may write to Orbit and starts others' work: neither a SubAgent, which
+// cannot ask or hand work on, nor a scheduled check-only run, which is in Plan and whose writes are all refused.
+func (s SessionShape) writesOrbit() bool { return s.Role != roleSubAgent && s.Role != roleCheckOnly }
+
+// commitsOwnBranch reports whether the session is told to commit its branch itself (branchCommitInstructions): a
+// SubAgent works in its parent's tree and is told not to commit, and a check-only run changes nothing.
+func (s SessionShape) commitsOwnBranch() bool { return s.writesOrbit() }
+
 func (s SessionShape) serves(tools []string) bool {
 	if s.Tools == nil || len(tools) == 0 {
 		return true
@@ -114,7 +124,7 @@ func (s *ClaimedSession) sessionShape(cli string) SessionShape {
 	case s.TaskID != "":
 		role = roleTaskRun
 	}
-	return SessionShape{
+	shape := SessionShape{
 		Role:               role,
 		InsideRecordedWork: s.insideRecordedWork(),
 		Watches:            s.watchesOn(),
@@ -125,6 +135,26 @@ func (s *ClaimedSession) sessionShape(cli string) SessionShape {
 		DriveMounted:       driveMounted(),
 		CLI:                cli,
 	}
+	// The tools the session is served: what its `orbit mcp` lists, built from the same switches it is spawned with.
+	server := &mcpServer{
+		sessionID: s.SessionID, taskID: s.TaskID, allowPermissionPrompt: true,
+		allowOrchestration: s.AllowOrchestration, watchesOff: !s.watchesOn(), wikiOff: s.WikiDisabled,
+		documentsOff: !documentsEnabledFromEnv(), browserOn: s.BrowserEnabled, workflowsOff: !s.workflowsOn(),
+		scheduleRun: s.ScheduleRun,
+	}
+	shape.Tools = toolNameSet(server.toolDescriptorsFor(role == roleSubAgent))
+	return shape
+}
+
+// toolNameSet is the names of tool descriptors.
+func toolNameSet(tools []map[string]interface{}) map[string]bool {
+	names := make(map[string]bool, len(tools))
+	for _, tool := range tools {
+		if name, _ := tool["name"].(string); name != "" {
+			names[name] = true
+		}
+	}
+	return names
 }
 
 // probe is an engine fact as far as it has been measured.
@@ -309,14 +339,16 @@ var instructionUnits = []instructionUnit{
 		appliesTo: orbitSession, channels: bothChannels, core: agentPrimerReceipts,
 		detail: "receipt error.retry", guardedBy: []string{"X4-lost-answer-retry"}},
 	{id: "primer.orchestration", owner: "primer: session orchestration", kind: kindSituation,
-		appliesTo: orbitSession, channels: bothChannels, core: agentPrimerOrchestration,
+		appliesTo: func(s SessionShape) bool { return orbitSession(s) && !s.Orchestration }, channels: bothChannels, core: agentPrimerOrchestration,
 		detail: "guide", guardedBy: []string{"E7-no-orchestration"}},
 	{id: "primer.settings", owner: "primer: settings_get, settings_propose", kind: kindSelection,
 		appliesTo: orbitSession, channels: bothChannels, core: agentPrimerSettings,
 		detail: "settings_propose description", guardedBy: []string{"I8-settings-propose"}},
 	{id: "primer.rederive", owner: "primer: task_get after a reset", kind: kindSituation,
 		appliesTo: orbitSession, channels: bothChannels, core: agentPrimerRederive,
-		detail: "context reset note (context_reset_note.go)", guardedBy: []string{"E8-compaction-recovery"}},
+		detail: "context reset note (context_reset_note.go)", guardedBy: []string{"E8-compaction-recovery"},
+		// The next message after a compaction or resume carries the note, so these engines are not also told it up front.
+		skipOnProfile: func(p EngineProfile) bool { return p.ResetNote }},
 	{id: "help.ask", owner: "help center Ask: the help reads", kind: kindEnvironment,
 		appliesTo: func(s SessionShape) bool { return s.Role == roleHelpAsk }, channels: []instructionChannel{channelMCP},
 		core: helpAskInstructions, detail: "help tool descriptions"},
@@ -328,7 +360,7 @@ var instructionUnits = []instructionUnit{
 		appliesTo: orbitSession, channels: []instructionChannel{channelSystem}, core: orbitReplyFileInstructions,
 		detail: "guide topic files", guardedBy: []string{"I4-reply-file-link"}},
 	{id: "files.evidence", owner: "evidence files: file_upload", kind: kindDisposition,
-		appliesTo: orbitSession, channels: []instructionChannel{channelSystem}, core: orbitEvidenceFileInstructions,
+		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.Role == roleTaskRun }, channels: []instructionChannel{channelSystem}, core: orbitEvidenceFileInstructions,
 		tools: []string{"file_upload"}, detail: "file_upload description", guardedBy: []string{"I5-evidence-file-upload"}},
 	{id: "drive.tools", owner: "Documents drive: documents_*", kind: kindEnvironment,
 		appliesTo: func(s SessionShape) bool { return orbitSession(s) && orbitDocumentsShown() && !s.DriveMounted }, channels: []instructionChannel{channelSystem},
@@ -337,29 +369,29 @@ var instructionUnits = []instructionUnit{
 		appliesTo: func(s SessionShape) bool { return orbitSession(s) && orbitDocumentsShown() && s.DriveMounted }, channels: []instructionChannel{channelSystem},
 		core: orbitDriveMountInstructions, detail: "guide topic files (orbitDriveGuide)", conflicts: []string{"drive.tools"}},
 	{id: "project.inside-recorded-work", owner: "projects: task_create, project_create", kind: kindSelection,
-		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.InsideRecordedWork }, channels: []instructionChannel{channelSystem},
+		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.writesOrbit() && s.InsideRecordedWork }, channels: []instructionChannel{channelSystem},
 		core: orbitProjectInsideInstructions, detail: "project_create description", conflicts: []string{"project.propose"}},
 	{id: "project.propose", owner: "projects: project_create", kind: kindSelection,
-		appliesTo: func(s SessionShape) bool { return orbitSession(s) && !s.InsideRecordedWork }, channels: []instructionChannel{channelSystem},
+		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.writesOrbit() && !s.InsideRecordedWork }, channels: []instructionChannel{channelSystem},
 		core: orbitProjectProposeInstructions, detail: "project_create description", guardedBy: []string{"I9-no-project-for-ordinary-work"}, conflicts: []string{"project.inside-recorded-work"}},
 	{id: "progress.report", owner: "progress: task_progress_report", kind: kindDisposition,
-		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.InsideRecordedWork }, channels: []instructionChannel{channelSystem},
+		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.Role == roleTaskRun }, channels: []instructionChannel{channelSystem},
 		core: orbitProgressInstructions, tools: []string{"task_progress_report"}, detail: "task_progress_report description", guardedBy: []string{"I6-progress-report"}},
 	{id: "wait.use-await", owner: "watches: task_await, session_await, watch_create", kind: kindDisposition,
 		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.Watches }, channels: []instructionChannel{channelSystem},
 		core: orbitWaitInstructions, tools: []string{"task_await", "session_await", "watch_create"}, detail: "task_await description", guardedBy: []string{"I1-wait-await"}},
 	{id: "notify.when-asked", owner: "notify", kind: kindDisposition,
-		appliesTo: orbitSession, channels: []instructionChannel{channelSystem}, core: orbitNotifyInstructions,
+		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.Role != roleSubAgent }, channels: []instructionChannel{channelSystem}, core: orbitNotifyInstructions,
 		tools: []string{"notify"}, detail: "notify description", guardedBy: []string{"I2-notify-when-done"}},
 	{id: "delegate.use-delegate", owner: "SubAgents: delegate", kind: kindDisposition,
-		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.delegates() }, channels: []instructionChannel{channelSystem},
+		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.writesOrbit() }, channels: []instructionChannel{channelSystem},
 		core: orbitDelegateInstructions, tools: []string{"delegate"}, detail: "delegate description",
 		guardedBy: []string{"I3-delegate-subagent", "I3-delegate-subagent/background"}},
 	{id: "workflow.use-workflow", owner: "SubAgents: workflow", kind: kindDisposition,
-		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.delegates() && s.Workflows }, channels: []instructionChannel{channelSystem},
+		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.writesOrbit() && s.Workflows }, channels: []instructionChannel{channelSystem},
 		core: orbitWorkflowInstructions, tools: []string{"workflow"}, detail: "workflow description"},
 	{id: "wiki.search-by-path", owner: "wiki: wiki_search", kind: kindSelection,
-		appliesTo: orbitSession, channels: []instructionChannel{channelSystem}, core: orbitWikiPathInstructions,
+		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.Wiki }, channels: []instructionChannel{channelSystem}, core: orbitWikiPathInstructions,
 		tools: []string{"wiki_search"}, detail: "wiki_search description", guardedBy: []string{"I7-wiki-path-search"}},
 	{id: "cli.prefer-mcp", owner: "the Orbit CLI: guide, capabilities", kind: kindEnvironment,
 		appliesTo: orbitSession, channels: []instructionChannel{channelSystem}, core: orbitCLIPreferMCPInstructions,
@@ -394,6 +426,9 @@ func composeChannel(shape SessionShape, profile EngineProfile, channel instructi
 	var paragraphs []string
 	for _, unit := range instructionUnits {
 		if instructionUnitsLeftOut[unit.id] {
+			continue
+		}
+		if channel == channelSystem && unit.skipOnProfile != nil && unit.skipOnProfile(profile) {
 			continue
 		}
 		if unit.deliveredOn(channel) && unit.appliesTo(shape) && shape.serves(unit.tools) {

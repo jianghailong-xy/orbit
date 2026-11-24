@@ -248,7 +248,7 @@ func TestOrbitInstructionsSayWhichLinkedFilesReachTheUser(t *testing.T) {
 // not a path. Each form carries it, because an agent in no project and one in a task both produce evidence.
 func TestOrbitInstructionsKeepEvidenceOutOfTheRepository(t *testing.T) {
 	exe := "/usr/local/bin/orbit"
-	for _, form := range []struct{ inside, watches bool }{{false, true}, {true, true}, {false, false}, {true, false}} {
+	for _, form := range []struct{ inside, watches bool }{{true, true}, {true, false}} {
 		got := orbitCLIInstructions(exe, form.inside, form.watches, true, true)
 		for _, phrase := range []string{
 			"cite a command's output by its tool call",
@@ -265,6 +265,11 @@ func TestOrbitInstructionsKeepEvidenceOutOfTheRepository(t *testing.T) {
 		if reply < 0 || evidence != reply+len(orbitReplyFileInstructions+"\n\n") {
 			t.Errorf("the evidence paragraph must follow the reply paragraph it leans on: reply at %d, evidence at %d", reply, evidence)
 		}
+	}
+	// Only a task's run produces evidence: a session in no task, and a SubAgent, are not told where it goes.
+	if strings.Contains(orbitCLIInstructions(exe, false, true, true, true), orbitEvidenceFileInstructions) ||
+		strings.Contains(orbitCLIInstructions(exe, true, true, false, true), orbitEvidenceFileInstructions) {
+		t.Error("a session that runs no task is given the evidence paragraph")
 	}
 	if strings.Contains(orbitEvidenceFileInstructions, "artifact") {
 		t.Error("file_* is the name: artifact already means three other things here")
