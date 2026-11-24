@@ -34,7 +34,7 @@
   padding: 10px 14px;
   border: 1px solid var(--brand-border);
   border-radius: 10px;
-  background: var(--brand-bg, var(--bg-sunken));
+  background: var(--brand-tint);
 }
 .project-reopen-row-text {
   display: flex;
@@ -61,4 +61,7 @@
 .project-reopen-review:hover {
   border-color: var(--brand);
   color: var(--brand);
+}
+.project-reopen-since a {
+  color: var(--text-2);
 }
