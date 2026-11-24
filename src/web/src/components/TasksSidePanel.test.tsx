@@ -113,8 +113,8 @@ describe('TasksSidePanel nav', () => {
     // models, moved to Settings and the account menu (docs/mocks/machines-and-models, 02). Waiting on
     // you left (docs/mocks/waiting-on-you-removal): a request lights the row of the session that filed it.
     // Scheduled keeps its own entry and count. Files, the account's drive, went in directly under the
-    // Wiki (docs/mocks/orbit-files/02-web, frame 1).
-    expect(keys).toEqual(['projects', 'tasks', 'scheduled', 'wiki', 'files']);
+    // Wiki (docs/mocks/documents/02-web, frame 1).
+    expect(keys).toEqual(['projects', 'tasks', 'scheduled', 'wiki', 'documents']);
     // The rows' own group head (WorkspacesHead) names them the way Projects names its rows; it is
     // no destination, so it is no TOP entry either.
     expect(source).not.toContain('tp-workspaces-head');
@@ -125,7 +125,9 @@ describe('TasksSidePanel nav', () => {
     // account the server has not switched it on for — so a TOP entry reaches both surfaces without
     // either render site needing its own list. Nothing is appended for admins: Admin is a row of the
     // account menu (TasksSidePanel.admin.test.tsx).
-    expect(source).toContain("const topItems = wikiShown(wikiSpaces) ? TOP : TOP.filter((t) => t.key !== 'wiki');");
+    expect(source).toContain(
+      "const topItems = TOP.filter((t) => (t.key !== 'wiki' || wikiShown(wikiSpaces)) && (t.key !== 'documents' || documents.enabled));",
+    );
     expect(source.match(/\{topItems\.map\(\(t\) => \(/g)).toHaveLength(2);
   });
 

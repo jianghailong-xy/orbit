@@ -8,9 +8,9 @@ const STATUS_PILL: Record<string, { cls: string; label: string }> = {
   CANCELLED: { cls: 'cancelled', label: 'Cancelled' },
 };
 
-export function taskStatusLabel(status: string, running?: boolean, queued?: boolean): string {
+export function taskStatusLabel(status: string, running?: boolean, queued?: boolean, queuedOnHold?: boolean): string {
   if (running) return 'Running';
-  if (queued) return 'Queued';
+  if (queued) return queuedOnHold ? 'On hold' : 'Queued';
   return STATUS_PILL[status]?.label ?? status;
 }
 
@@ -22,10 +22,13 @@ export function TaskStatusPill({
   status,
   running,
   queued,
+  queuedOnHold,
 }: {
   status: string;
   running?: boolean;
   queued?: boolean;
+  /** The queued run is held (the server's `queuedOnHold`); absent from an older server, which reads "Queued". */
+  queuedOnHold?: boolean;
 }) {
   if (running) {
     return (
@@ -39,7 +42,7 @@ export function TaskStatusPill({
     return (
       <span className="status-pill queued">
         <span className="status-dot" />
-        Queued
+        {queuedOnHold ? 'On hold' : 'Queued'}
       </span>
     );
   }

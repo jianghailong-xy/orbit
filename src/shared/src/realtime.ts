@@ -98,12 +98,18 @@ export enum ControlEventType {
    *  above), sent to every user. `data` is a `ControlResourceChanged` whose id is `translation` and nothing
    *  else: a nudge to read `GET /users/me` again. Shipped clients treat it as an unknown type. */
   TRANSLATION_STATUS_CHANGED = 'translation.status_changed',
-  /** The owner's drive changed: a write added rows to its change feed (docs/orbit-files-drive-technical-design.md §5.4).
+  /** The owner's drive changed: a write added rows to its change feed (docs/documents-drive-technical-design.md §5.4).
    *  USER-SCOPED (see above). `data` is a `ControlDriveChanged`: the feed's seq and nothing else, a nudge to read
    *  `GET /drive/changes`. Sent ONLY to a stream that declared it with `GET /api/events?hints=drive_changed`
    *  (`CONTROL_HINT_DRIVE_CHANGED`): an agent writing through the mount commits often, and a shipped client re-reads
    *  everything on a type it does not know. */
   DRIVE_CHANGED = 'drive.changed',
+  /** An agent's directory sync into the owner's Documents started, reported progress or ended
+   *  (docs/documents-directory-sync-design.md S4). USER-SCOPED (see above). `data` is a `ControlDriveSync`: the sync's
+   *  id and nothing else, a nudge to read `GET /drive/syncs`. Sent ONLY to a stream that declared it with
+   *  `GET /api/events?hints=drive_syncs` (`CONTROL_HINT_DRIVE_SYNCS`): a running sync reports every two seconds, and a
+   *  shipped client re-reads everything on a type it does not know. */
+  DRIVE_SYNC = 'drive.sync',
   /** The owner's Open list may read differently than it did. USER-SCOPED (see above). `data` is a
    *  `ControlListChanged`. Sent ONLY to a stream that declared it with
    *  `GET /api/events?hints=list_changed` (`CONTROL_HINT_LIST_CHANGED`): shipped clients treat a type
@@ -170,6 +176,14 @@ export const CONTROL_HINT_DRIVE_CHANGED = 'drive_changed';
 /** `data` for `drive.changed`: the change feed's seq when the write committed, as a decimal string. */
 export interface ControlDriveChanged {
   seq: string;
+}
+
+/** The `hints=` value a `GET /api/events` connection declares to receive `drive.sync`. */
+export const CONTROL_HINT_DRIVE_SYNCS = 'drive_syncs';
+
+/** `data` for `drive.sync`: the sync that moved. */
+export interface ControlDriveSync {
+  syncId: string;
 }
 
 /** The `hints=` value a `GET /api/events` connection declares to receive `owner_requests.changed`. */

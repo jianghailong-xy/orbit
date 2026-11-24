@@ -180,7 +180,7 @@ export interface ManagedKubeClient {
   readonly secrets: KubeResource<Secret>;
   /**
    * The Secrets of the profile's files namespace (`files.namespace`), where the manager writes each generation's
-   * mount credential for the Orbit Files CSI plugin; absent when the profile has no drive.
+   * mount credential for the Documents CSI plugin; absent when the profile has no drive.
    */
   readonly driveSecrets?: Pick<KubeResource<Secret>, 'get' | 'create' | 'delete'>;
   readonly pods: KubePods;

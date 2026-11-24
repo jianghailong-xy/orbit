@@ -148,7 +148,8 @@ object SessionProjectLandings {
         // Oldest first, in the session list's day sections (the local calendar day): the window reads down to today, and `Now` under it.
         val today = now.atZone(zone).toLocalDate()
         val buckets = List(dayTitles.size) { mutableListOf<LandingsWindowRow>() }
-        settled.sortedWith(compareBy<Settled> { it.row.at }.thenByDescending { it.row.key })
+        // One row per landing: a landing a merge record names as its session is listed once, or the window's list repeats a key and crashes.
+        settled.distinctBy { it.row.key }.sortedWith(compareBy<Settled> { it.row.at }.thenByDescending { it.row.key })
             .forEach { buckets[recencyBucket(it.at, today, zone) - 1] += it.row }
         val days = buckets.withIndex().reversed().filter { it.value.isNotEmpty() }.map { LandingsWindowDay(dayTitles[it.index], it.value) }
         return LandingsWindow(days, cards.sortedWith(compareBy<LandingsWindowCard> { it.at }.thenBy { it.sessionId }))

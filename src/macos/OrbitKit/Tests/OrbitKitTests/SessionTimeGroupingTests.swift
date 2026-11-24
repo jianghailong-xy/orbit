@@ -92,4 +92,28 @@ final class SessionTimeGroupingTests: XCTestCase {
         ]
         XCTAssertEqual(sections(s).map(\.title), ["2–7 days ago", "8–30 days ago", "Older"])
     }
+
+    // MARK: Needs you reads a failure from the session facts
+
+    private func failed(_ fields: String) throws -> Session {
+        try JSONDecoder().decode(Session.self, from: Data(#"{"id":"s","title":"s","status":"FAILED","runStatus":"FAILED","createdAt":"2026-07-08T09:00:00Z",\#(fields)}"#.utf8))
+    }
+    private func needsYou(_ fields: String) throws -> Bool {
+        sections([try failed(fields)]).first?.title == "Needs you"
+    }
+    private let released = #""phase":"IDLE","released":true,"lastTurnOutcome":"FAILED""#
+
+    func testEndNeverConfirmedIsNotUnderNeedsYou() throws {
+        XCTAssertFalse(try needsYou(released + #","endReason":"user_ended""#))
+    }
+    func testRealFailureIsUnderNeedsYou() throws {
+        XCTAssertTrue(try needsYou(released))
+    }
+    func testFailureBeingRetriedIsNotUnderNeedsYou() throws {
+        XCTAssertFalse(try needsYou(released + #","retryAt":"2026-07-08T13:00:00Z""#))
+    }
+    func testFactsAbsentGroupsAsBefore() throws {
+        XCTAssertTrue(try needsYou(#""endReason":"user_ended""#))
+        XCTAssertFalse(try needsYou(#""retryAt":"2026-07-08T13:00:00Z""#))
+    }
 }

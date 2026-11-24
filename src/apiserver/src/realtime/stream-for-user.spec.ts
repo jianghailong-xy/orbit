@@ -931,3 +931,31 @@ test('lifecycle signals never enter a per-session transcript stream', async () =
   assert.equal(transcript.length, 1);
   assert.equal((transcript[0] as { type: string }).type, 'status');
 });
+
+/**
+ * An agent's directory sync reports every two seconds, and a shipped client re-reads everything on a type it does not
+ * know, so `drive.sync` reaches only a stream that declared `hints=drive_syncs`, and only its owner's
+ * (docs/documents-directory-sync-design.md S4).
+ */
+test('drive.sync reaches only its owner\'s streams that declared drive_syncs, carrying the sync id and nothing else', async () => {
+  const svc = svcWith({}, 0);
+  const declared: ControlEvent[] = [];
+  const undeclared: ControlEvent[] = [];
+  const theirs: ControlEvent[] = [];
+  const subs = [
+    svc.streamForUser('userA', { driveSyncs: true }).subscribe((e) => declared.push(e)),
+    svc.streamForUser('userA', { driveChanged: true }).subscribe((e) => undeclared.push(e)),
+    svc.streamForUser('userB', { driveSyncs: true }).subscribe((e) => theirs.push(e)),
+  ];
+
+  svc.publishDriveSync('userA', 'sync-1');
+  await delay(30);
+  for (const sub of subs) sub.unsubscribe();
+
+  assert.equal(declared.length, 1);
+  assert.equal(declared[0].type, 'drive.sync');
+  assert.deepEqual(declared[0].data, { syncId: 'sync-1' });
+  assert.equal(declared[0].sessionId, '');
+  assert.equal(undeclared.length, 0);
+  assert.equal(theirs.length, 0);
+});

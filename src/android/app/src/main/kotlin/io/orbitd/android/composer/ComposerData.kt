@@ -656,6 +656,9 @@ private val KNOWN_RUN_STATUSES = setOf("PENDING", "RUNNING", "SUCCEEDED", "FAILE
 internal fun sendEndpoint(detail: JsonObject): String {
     val caps = detail["capabilities"] as? JsonObject
     if (caps != null) {
+        // The server sends canSend AND canResume for a released resumable session, so the release decides first (OrbitKit
+        // `ComposerLogic.shouldResume`; web `sessionSendDispositionOf`). An older server sends no `released`: capabilities decide, as before.
+        if (SessionFacts.released(detail) == true && caps.flag("canResume") == true && caps.flag("canSend") == true) return "resume"
         if (caps.flag("canSend") == true) return "turns"
         if (caps.flag("canResume") == true) return "resume"
         error(caps.text("resumeBlockedReason") ?: "This session cannot receive messages.")

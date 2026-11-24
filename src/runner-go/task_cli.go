@@ -3662,7 +3662,10 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	// Ungated too: keeping and reading back your own files is no power over anybody else's session. Upload and fetch
 	// are SessionOnly, because a file stays with the session that uploads it.
 	specs = append(specs, fileCLICapabilities...)
-	specs = append(specs, driveCLICapabilities...)
+	// Not listed in a session spawned with Documents off (documents_switch.go).
+	if documentsEnabledFromEnv() {
+		specs = append(specs, documentsCLICapabilities...)
+	}
 	specs = append(specs, subagentCLICapabilities...)
 	// Ungated too, and SessionOnly: a proposal is a card in the session's conversation (settings_tools.go).
 	specs = append(specs, settingsCLICapabilities...)

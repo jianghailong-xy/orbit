@@ -276,7 +276,7 @@ base backups and archived WAL to `./data/pg-archive`.
   anything else there. A same-disk backup does not protect against disk or host loss.
 - The same setting copies `./data/files` to the directory beside the target, `<target>-files`, leaving out `tmp/`.
   With no target, `./data/files` is the only copy of those bytes: they are not in Postgres or
-  in any local backup. With `ORBIT_FILES_BACKEND=s3` the bucket holds them, and its versioning or replication is what
+  in any local backup. With `ORBIT_DOCUMENTS_BACKEND=s3` the bucket holds them, and its versioning or replication is what
   protects them. See [Attachment files](postgres-backup-restore.md#attachment-files).
 - The sidecar reads the target before mirroring, and refuses one holding another cluster's archive, with the reason in
   its log, rather than replace it: [The off-host mirror](postgres-backup-restore.md#the-off-host-mirror).
@@ -321,7 +321,7 @@ takes the session and its rows, an expired file's included, though that file's b
 Deleting a session from Trash by hand takes its files with it, pinned or cited. Whichever way a row goes, evidence that cited it
 keeps only the sha256 it recorded, and its card shows an expired placeholder: the name and test summary went with the row.
 
-Settings shows an account's storage, its largest projects and tasks, and what each week added. Set `ORBIT_FILES_QUOTA_BYTES` in
+Settings shows an account's storage, its largest projects and tasks, and what each week added. Set `ORBIT_DOCUMENTS_QUOTA_BYTES` in
 `.env` to limit what one account may keep; past it an upload is refused with `413` and the code `FILE_QUOTA_EXCEEDED`. A
 self-hosted deployment needs no limit, and has none unless you set one. Each content counts once, an expired file no longer
 counts, and uploads racing at the limit can pass it by at most 25 MiB each.
@@ -909,6 +909,26 @@ pasted again.
 The apiserver logs a `401` or `403` from Resend under `EmailOutbox`
 (`docker compose logs apiserver | grep EmailOutbox`). The line names the account's id and Resend's message,
 never the key.
+
+## Documents
+
+Documents is the drive every account keeps files in, which its agents read and write with the drive tools. A
+self-deployed server has it **off** until you turn it on:
+
+```sh
+# in .env
+ORBIT_DOCUMENTS_ENABLED=true
+```
+
+then `docker compose up -d apiserver`. Turning it off again hides it: the drive's routes answer
+`404 DOCUMENTS_DISABLED`, share links to drive files stop opening, the clients show no Documents entry and new
+sessions are started without the drive tools. What the drive holds stays on disk and in the database, and is all
+there again when you turn it back on.
+
+A fresh install writes `ORBIT_DOCUMENTS_ENABLED=false`. A deployment that predates the switch had Documents on, so
+the first upgrade that knows the switch writes the line once: `true` if the drive already holds a file or folder
+(or if the upgrade cannot ask postgres), `false` otherwise. After that an upgrade never changes the value you set.
+A two-stage release (`ORBIT_REGISTRY`) does not write it: set it in the deployment host's `.env` yourself.
 
 ## Wiki System model
 
@@ -2584,7 +2604,7 @@ you: no install, upgrade or Compose default sets it.
 ### Moving old attachments out of Postgres
 
 Attachments uploaded before the `./data/files` mount existed keep their bytes in Postgres. They move to the file store
-(`./data/files`, or the bucket with `ORBIT_FILES_BACKEND=s3`) in two steps: a copy that runs by itself and can be undone,
+(`./data/files`, or the bucket with `ORBIT_DOCUMENTS_BACKEND=s3`) in two steps: a copy that runs by itself and can be undone,
 and a clear that you run yourself and cannot undo. Attachments stay readable and uploads keep working during both, so
 neither needs downtime.
 
@@ -2676,7 +2696,7 @@ to the host, run `VACUUM FULL attachment` in `psql` at a quiet time. Attachments
 ### Going back to an older version
 
 An apiserver with the `./data/files` mount keeps each new attachment's bytes there (or in the bucket, with
-`ORBIT_FILES_BACKEND=s3`), and Postgres only names them. An older apiserver reads attachment bytes from Postgres alone,
+`ORBIT_DOCUMENTS_BACKEND=s3`), and Postgres only names them. An older apiserver reads attachment bytes from Postgres alone,
 so what it can read after you go back depends on where the bytes are:
 
 - **Until the clear, attachments from before the upgrade work on both versions**, whether or not the copy has reached

@@ -41,6 +41,7 @@ func cmdMcp() {
 		allowOrchestration:    mcpOrchestrationEnabled(),
 		watchesOff:            !watchesEnabledFromEnv(),
 		wikiOff:               !wikiEnabledFromEnv(),
+		documentsOff:          !documentsEnabledFromEnv(),
 		browserOn:             browserToolsEnabledFromEnv(),
 		workflowsOff:          !workflowsEnabledFromEnv(),
 		scheduleRun:           scheduleRunFromEnv(),
@@ -61,6 +62,7 @@ type mcpServer struct {
 	allowOrchestration    bool   // L3: expose session_* tools (the account's orchestration switch)
 	watchesOff            bool   // spawned with ORBIT_WATCHES=off: no watch tools (watch_rollout.go)
 	wikiOff               bool   // spawned with ORBIT_WIKI=off: no wiki tools (wiki_tools.go)
+	documentsOff          bool   // spawned with ORBIT_DOCUMENTS=off: no drive tools (documents_switch.go)
 	browserOn             bool   // spawned with ORBIT_BROWSER=on: the browser tools (browser_tools.go)
 	workflowsOff          bool   // spawned with ORBIT_WORKFLOWS=off: no workflow tool (subagent_workflow.go)
 	scheduleRun           bool   // spawned with ORBIT_SCHEDULE_RUN=1: a scheduled run's session (schedule_tools.go)
@@ -127,7 +129,7 @@ func mcpToolsFromEnv() map[string]bool {
 	only := map[string]bool{}
 	for _, name := range strings.Split(raw, ",") {
 		if name = strings.TrimSpace(name); name != "" {
-			only[name] = true
+			only[canonicalToolName(name)] = true
 		}
 	}
 	return only
@@ -269,6 +271,8 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		if json.Unmarshal(req.Params, &p) != nil {
 			return s.err(req.ID, -32602, "invalid params"), true
 		}
+		// A Documents tool called by its name before the rename is served as the tool it is now (documents_tools.go).
+		p.Name = canonicalToolName(p.Name)
 		if s.helpAsk {
 			return s.ok(req.ID, s.callHelpAskTool(p.Name)), true
 		}
@@ -390,6 +394,7 @@ const maxProjectAcceptanceVerificationMethodChars = 4000
 
 // callTool runs one tool. A failed call also carries the recovery report (recovery_render.go).
 func (s *mcpServer) callTool(name string, args map[string]interface{}) map[string]interface{} {
+	name = canonicalToolName(name)
 	// A session in Plan mode changes nothing until the plan is approved, whichever engine it runs on: a call Plan
 	// refuses is answered with what to do instead, before anything is filed or written (plan_gate.go). Ahead of the
 	// hand-off below too, whose job carries no socket to read the mode from.
@@ -400,13 +405,13 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	return s.withRecovery(name, args, mark, s.runTool(name, args))
 }
 
-func driveToolDescriptors(obj func(map[string]interface{}, ...string) map[string]interface{}) []map[string]interface{} {
-	drivePath := map[string]interface{}{"type": "string", "description": "A drive path such as /Proj/r.md or ~/Files/Proj/r.md."}
+func documentsToolDescriptors(obj func(map[string]interface{}, ...string) map[string]interface{}) []map[string]interface{} {
+	drivePath := map[string]interface{}{"type": "string", "description": "A drive path such as /Proj/r.md or ~/Documents/Proj/r.md."}
 	return []map[string]interface{}{
 		{
-			"name": "drive_put",
-			"description": "Copy a local file into the owner's Orbit Files drive. Creates missing parent folders and " +
-				"keeps the previous version when overwriting a file. Returns an orbit-drive: link for replies. The file is " +
+			"name": "documents_put",
+			"description": "Copy a local file into the owner's Documents drive. Creates missing parent folders and " +
+				"keeps the previous version when overwriting a file. Returns an orbit-document: link for replies. The file is " +
 				"sent in 8 MiB chunks and has no size limit: file_upload's 25 MiB cap does not apply here.",
 			"inputSchema": obj(map[string]interface{}{
 				"localPath": map[string]interface{}{"type": "string", "description": "A file in this session's checkout or uploads directory."},
@@ -415,13 +420,13 @@ func driveToolDescriptors(obj func(map[string]interface{}, ...string) map[string
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
 		},
 		{
-			"name":        "drive_get",
+			"name":        "documents_get",
 			"description": "Download a drive file into this session's uploads directory and return its local path and size.",
 			"inputSchema": obj(map[string]interface{}{"path": drivePath}, "path"),
 			"annotations": map[string]interface{}{"readOnlyHint": true},
 		},
 		{
-			"name":        "drive_list",
+			"name":        "documents_list",
 			"description": "List one page of a drive folder with each entry's path, kind, size and modification time.",
 			"inputSchema": obj(map[string]interface{}{
 				"path":   map[string]interface{}{"type": "string", "description": "The folder's drive path. Omit it to list the root."},
@@ -430,14 +435,27 @@ func driveToolDescriptors(obj func(map[string]interface{}, ...string) map[string
 			"annotations": map[string]interface{}{"readOnlyHint": true},
 		},
 		{
-			"name":        "drive_move",
+			"name":        "documents_move",
 			"description": "Move or rename a drive entry. This overwrites an existing file at the destination.",
 			"inputSchema": obj(map[string]interface{}{"from": drivePath, "to": drivePath}, "from", "to"),
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
 		},
 		{
-			"name":        "drive_delete",
-			"description": "Move a drive entry to the owner's Trash. The owner can restore it from the Files page. Agents cannot see Trash.",
+			"name": "documents_sync",
+			"description": "Copy a local directory into a Documents folder, once, in the background. Answers at once with a " +
+				"background job id; you are woken when it ends, and its last output line is the summary (uploaded, unchanged, " +
+				"deleted, failed). Files already the same in Documents are skipped, so a second sync only sends what changed. " +
+				"One way: nothing comes down. The owner watches it in the Documents page's upload tray.",
+			"inputSchema": obj(map[string]interface{}{
+				"localPath": map[string]interface{}{"type": "string", "description": "A directory in this session's checkout or uploads directory."},
+				"path":      map[string]interface{}{"type": "string", "description": "The Documents folder to copy into, such as /Reports/out."},
+				"delete":    map[string]interface{}{"type": "boolean", "description": "Move Documents files under path that the directory no longer has to the owner's Trash."},
+			}, "localPath", "path"),
+			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": false},
+		},
+		{
+			"name":        "documents_delete",
+			"description": "Move a drive entry to the owner's Trash. The owner can restore it from the Documents page. Agents cannot see Trash.",
 			"inputSchema": obj(map[string]interface{}{"path": drivePath}, "path"),
 			"annotations": map[string]interface{}{"readOnlyHint": false, "destructiveHint": true},
 		},
@@ -468,8 +486,8 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 	if result, handled := s.callFileTool(name, args); handled {
 		return result
 	}
-	// The Orbit Files drive's tools: `orbit drive` runs the same runDriveTool (drive_tools.go).
-	if result, handled := s.callDriveTool(name, args); handled {
+	// The Documents tools: `orbit documents` runs the same runDocumentsTool (documents_tools.go).
+	if result, handled := s.callDocumentsTool(name, args); handled {
 		return result
 	}
 	// The owner's Settings: `orbit settings` runs the same runSettingsTool (settings_tools.go).

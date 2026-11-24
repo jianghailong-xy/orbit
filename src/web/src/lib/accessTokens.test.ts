@@ -39,7 +39,7 @@ describe('the scopes a token can be granted', () => {
     expect(scopeSummary([...ALL_SCOPES].reverse())).toBe('Read & write · everything');
     expect(scopeSummary(READ_SCOPES)).toBe('Read-only · everything');
     expect(scopeSummary(['tasks:read', 'wiki:write', 'tasks:write', 'events:read', 'files'])).toBe(
-      'Tasks: read & write · Wiki: write · Events: read · Files: read & write',
+      'Tasks: read & write · Wiki: write · Events: read · Documents: read & write',
     );
     // The token a monitoring system holds: it sends notifications and reaches nothing else.
     expect(scopeSummary(['notify'])).toBe('Notifications: send');

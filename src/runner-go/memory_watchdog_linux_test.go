@@ -5,6 +5,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -16,6 +17,94 @@ import (
 	"testing"
 	"time"
 )
+
+func TestMemoryWatchdogIgnoresFileCacheAndStopsOneToolUnderPressure(t *testing.T) {
+	const mib uint64 = 1 << 20
+	dir := t.TempDir()
+	write := func(name, data string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("memory.max", fmt.Sprintln(4096*mib))
+	write("memory.current", fmt.Sprintln(4050*mib))
+	setStat := func(anon, shmem, file, active, inactive, kernel, reclaimable uint64) {
+		write("memory.stat", fmt.Sprintf(
+			"anon %d\nshmem %d\nfile %d\nactive_file %d\ninactive_file %d\nkernel %d\nslab_reclaimable %d\n",
+			anon*mib, shmem*mib, file*mib, active*mib, inactive*mib, kernel*mib, reclaimable*mib))
+	}
+	build, sibling := memoryProcessID{20, 1}, memoryProcessID{21, 1}
+	processes := map[int]memoryProcess{
+		20: {memoryProcessID: build, rss: 1800 * mib},
+		21: {memoryProcessID: sibling, rss: 700 * mib},
+	}
+	var victims []memoryProcessID
+	w := &memoryWatchdog{
+		readMemory:   func() (uint64, uint64, bool) { return watchdogCgroupMemory(dir) },
+		readOOMKills: func() (uint64, bool) { return 0, true },
+		processes:    func() map[int]memoryProcess { return processes },
+		processSize:  func(p memoryProcess) uint64 { return p.rss },
+		raiseScore:   func(memoryProcessID) bool { return true },
+		kill: func(id memoryProcessID) bool {
+			victims = append(victims, id)
+			delete(processes, id.pid)
+			return true
+		},
+		notify: func(string, string) {},
+		roots:  map[memoryProcessID]memoryRoot{build: {"build", true}, sibling: {"sibling", true}},
+		raised: make(map[memoryProcessID]bool),
+	}
+	now := time.Now()
+	setStat(256, 0, 3500, 3400, 100, 294, 250)
+	sampleMemoryWatchdogAt(w, now)
+	if len(victims) != 0 {
+		t.Fatalf("active file cache triggered a kill: %v", victims)
+	}
+
+	setStat(2400, 1000, 1350, 250, 100, 300, 100)
+	sampleMemoryWatchdogAt(w, now.Add(time.Second))
+	if len(victims) != 0 {
+		t.Fatalf("memory below threshold triggered a kill: %v", victims)
+	}
+
+	setStat(2400, 1300, 1550, 150, 100, 300, 100)
+	sampleMemoryWatchdogAt(w, now.Add(2*time.Second))
+	if !reflect.DeepEqual(victims, []memoryProcessID{build}) {
+		t.Fatalf("victims = %v, want only the larger build after shmem grew", victims)
+	}
+	sampleMemoryWatchdogAt(w, now.Add(3*time.Second))
+	// The victim's memory has been released and file cache has grown again.
+	setStat(700, 100, 3100, 2900, 100, 250, 100)
+	sampleMemoryWatchdogAt(w, now.Add(4*time.Second))
+	sampleMemoryWatchdogAt(w, now.Add(4*time.Second+memoryWatchdogSettleWindow))
+	if !reflect.DeepEqual(victims, []memoryProcessID{build}) {
+		t.Fatalf("the sibling was killed after pressure subsided: %v", victims)
+	}
+}
+
+func TestMemoryWatchdogDefaultsGoGCOnlyForSmallManagedRunners(t *testing.T) {
+	previous := activeMemoryWatchdog.Swap(nil)
+	t.Cleanup(func() { activeMemoryWatchdog.Store(previous) })
+	for _, tc := range []struct {
+		name     string
+		watchdog *memoryWatchdog
+		env      []string
+		want     string
+	}{
+		{name: "unmanaged"},
+		{name: "larger runner", watchdog: &memoryWatchdog{}},
+		{name: "small runner", watchdog: &memoryWatchdog{smallRunner: true}, want: "50"},
+		{name: "explicit setting", watchdog: &memoryWatchdog{smallRunner: true}, env: []string{"GOGC=80"}, want: "80"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			activeMemoryWatchdog.Store(tc.watchdog)
+			if got := envValue(runnerChildEnv(tc.env), "GOGC"); got != tc.want {
+				t.Fatalf("GOGC = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
 
 func TestMemoryWatchdogProtectsOrbitHelpers(t *testing.T) {
 	// The test binary stands in for Orbit. Launch both helpers through an
@@ -186,7 +275,7 @@ func TestMemoryWatchdogKillsLargestToolGroup(t *testing.T) {
 	if len(kills) != 2 || !containsMemoryIDs(kills, build, worker) {
 		t.Fatalf("killed %v, want only the largest build and its compiler", kills)
 	}
-	if len(notices) != 1 || !strings.Contains(notices[0], `build-session: The runner stopped the "build" tool process group (PID 20) because the container was using 934 MiB of its 1024 MiB memory limit.`) {
+	if len(notices) != 1 || !strings.Contains(notices[0], `build-session: The runner stopped the "build" tool process group (PID 20) because memory excluding reclaimable cache reached 934 MiB of the container's 1024 MiB limit.`) {
 		t.Fatalf("notices: %v", notices)
 	}
 	t.Log(notices[0])
