@@ -202,6 +202,10 @@ What a unit is worth is the difference between its scenario's pass rate with it 
 of each: three runs at a two-thirds bar cannot see a removal that moves failure from 0% to 20%
 (`docs/agent-instructions-design.md` §6).
 
+The step-0 baseline of every scenario, and of each I scenario with and without its unit, is
+[`agent-instructions-eval-baseline.md`](./agent-instructions-eval-baseline.md), with its reports under
+`agent-eval/instructions-step0/`.
+
 ## Metrics
 
 | Metric | Definition |
