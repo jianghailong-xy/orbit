@@ -1,4 +1,4 @@
-=== antigravity (6400 bytes)
+=== antigravity (6445 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -35,10 +35,10 @@ When the person asked to hear once something is done, tell them with notify when
 
 Use delegate whenever you would start a subagent or run an independent piece in the background, in place of your engine's built-in subagent or Agent tool: Orbit picks the model, records the cost and brings the result back even if this engine is recycled. Use it too to hand work to a cheaper or stronger model than yours, or to run it on another machine (needs: ["os:darwin"], or workspace: another agent's name from agent_list). Prefer it to session_create when you only need that piece's result back. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
 
-Before changing a file, use wiki_search with its path to look up known pitfalls.
+Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 Prefer the tools of the `orbit` MCP server (call_mcp_tool with ServerName "orbit") (schema-checked, no shell). Inside a session the CLI at `'<orbit-cli>'` takes the same approvals and attributes work to you: `'<orbit-cli>' guide [topic] --json` or `'<orbit-cli>' capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt its MCP tool answers with; `--json` prints the entity alone. Do not run `'<orbit-cli>' mcp` directly.
-=== claude (6172 bytes)
+=== claude (6217 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -73,11 +73,11 @@ When the person asked to hear once something is done, tell them with notify when
 
 Use delegate whenever you would start a subagent or run an independent piece in the background, in place of your engine's built-in subagent or Agent tool: Orbit picks the model, records the cost and brings the result back even if this engine is recycled. Use it too to hand work to a cheaper or stronger model than yours, or to run it on another machine (needs: ["os:darwin"], or workspace: another agent's name from agent_list). Prefer it to session_create when you only need that piece's result back. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
 
-Before changing a file, use wiki_search with its path to look up known pitfalls.
+Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 Prefer the `mcp__orbit__*` tools (schema-checked, no shell). Inside a session the CLI at `'<orbit-cli>'` takes the same approvals and attributes work to you: `'<orbit-cli>' guide [topic] --json` or `'<orbit-cli>' capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt its MCP tool answers with; `--json` prints the entity alone. Do not run `'<orbit-cli>' mcp` directly.
 === claude, resumed: same as claude
-=== codex 0.125-0.134 developer message (6892 bytes)
+=== codex 0.125-0.134 developer message (6937 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -114,12 +114,12 @@ When the person asked to hear once something is done, tell them with notify when
 
 Use delegate whenever you would start a subagent or run an independent piece in the background, in place of your engine's built-in subagent or Agent tool: Orbit picks the model, records the cost and brings the result back even if this engine is recycled. Use it too to hand work to a cheaper or stronger model than yours, or to run it on another machine (needs: ["os:darwin"], or workspace: another agent's name from agent_list). Prefer it to session_create when you only need that piece's result back. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
 
-Before changing a file, use wiki_search with its path to look up known pitfalls.
+Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 Prefer the `mcp__orbit__*` tools (schema-checked, no shell). Inside a session the CLI at `'<orbit-cli>'` takes the same approvals and attributes work to you: `'<orbit-cli>' guide [topic] --json` or `'<orbit-cli>' capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt its MCP tool answers with; `--json` prints the entity alone. Do not run `'<orbit-cli>' mcp` directly.
 
 After generating an image, preserve the original file. Do not regenerate it solely because Orbit could not attach or upload it. Only claim that the image is attached or delivered when Orbit explicitly confirms attachment delivery; successful generation alone is not delivery confirmation. If delivery fails, report that the image was generated but delivery failed, keep the original file available, and let Orbit retry delivery. If delivery status is unavailable, report only generation success without claiming delivery success or failure.
-=== codex < 0.125 turn input (6949 bytes)
+=== codex < 0.125 turn input (6994 bytes)
 <orbit_application_context>
 Owner instructions.
 
@@ -157,7 +157,7 @@ When the person asked to hear once something is done, tell them with notify when
 
 Use delegate whenever you would start a subagent or run an independent piece in the background, in place of your engine's built-in subagent or Agent tool: Orbit picks the model, records the cost and brings the result back even if this engine is recycled. Use it too to hand work to a cheaper or stronger model than yours, or to run it on another machine (needs: ["os:darwin"], or workspace: another agent's name from agent_list). Prefer it to session_create when you only need that piece's result back. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
 
-Before changing a file, use wiki_search with its path to look up known pitfalls.
+Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 Prefer the `mcp__orbit__*` tools (schema-checked, no shell). Inside a session the CLI at `'<orbit-cli>'` takes the same approvals and attributes work to you: `'<orbit-cli>' guide [topic] --json` or `'<orbit-cli>' capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt its MCP tool answers with; `--json` prints the entity alone. Do not run `'<orbit-cli>' mcp` directly.
 
@@ -166,7 +166,7 @@ After generating an image, preserve the original file. Do not regenerate it sole
 === codex >= 0.135 additional context: same as codex 0.125-0.134 developer message
 === codex >= 0.135, after compaction: same as codex 0.125-0.134 developer message
 === codex >= 0.135, resumed thread: same as codex 0.125-0.134 developer message
-=== cursor (6272 bytes)
+=== cursor (6317 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -203,10 +203,10 @@ When the person asked to hear once something is done, tell them with notify when
 
 Use delegate whenever you would start a subagent or run an independent piece in the background, in place of your engine's built-in subagent or Agent tool: Orbit picks the model, records the cost and brings the result back even if this engine is recycled. Use it too to hand work to a cheaper or stronger model than yours, or to run it on another machine (needs: ["os:darwin"], or workspace: another agent's name from agent_list). Prefer it to session_create when you only need that piece's result back.
 
-Before changing a file, use wiki_search with its path to look up known pitfalls.
+Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 Prefer the tools of the `orbit` MCP server (schema-checked, no shell). Inside a session the CLI at `'<orbit-cli>'` takes the same approvals and attributes work to you: `'<orbit-cli>' guide [topic] --json` or `'<orbit-cli>' capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt its MCP tool answers with; `--json` prints the entity alone. Do not run `'<orbit-cli>' mcp` directly.
-=== deepseek harness (6350 bytes)
+=== deepseek harness (6395 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -243,10 +243,10 @@ When the person asked to hear once something is done, tell them with notify when
 
 Use delegate whenever you would start a subagent or run an independent piece in the background, in place of your engine's built-in subagent or Agent tool: Orbit picks the model, records the cost and brings the result back even if this engine is recycled. Use it too to hand work to a cheaper or stronger model than yours, or to run it on another machine (needs: ["os:darwin"], or workspace: another agent's name from agent_list). Prefer it to session_create when you only need that piece's result back. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
 
-Before changing a file, use wiki_search with its path to look up known pitfalls.
+Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 Prefer the `mcp__orbit__*` tools (schema-checked, no shell). Inside a session the CLI at `'<orbit-cli>'` takes the same approvals and attributes work to you: `'<orbit-cli>' guide [topic] --json` or `'<orbit-cli>' capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt its MCP tool answers with; `--json` prints the entity alone. Do not run `'<orbit-cli>' mcp` directly.
-=== kimi (6431 bytes)
+=== kimi (6476 bytes)
 [map[text:<orbit-agent-instructions>
 Owner instructions.
 
@@ -284,13 +284,13 @@ When the person asked to hear once something is done, tell them with notify when
 
 Use delegate whenever you would start a subagent or run an independent piece in the background, in place of your engine's built-in subagent or Agent tool: Orbit picks the model, records the cost and brings the result back even if this engine is recycled. Use it too to hand work to a cheaper or stronger model than yours, or to run it on another machine (needs: ["os:darwin"], or workspace: another agent's name from agent_list). Prefer it to session_create when you only need that piece's result back. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
 
-Before changing a file, use wiki_search with its path to look up known pitfalls.
+Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 Prefer the `mcp__orbit__*` tools (schema-checked, no shell). Inside a session the CLI at `'<orbit-cli>'` takes the same approvals and attributes work to you: `'<orbit-cli>' guide [topic] --json` or `'<orbit-cli>' capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt its MCP tool answers with; `--json` prints the entity alone. Do not run `'<orbit-cli>' mcp` directly.
 </orbit-agent-instructions>
 
 hi type:text]]
-=== opencode (6344 bytes)
+=== opencode (6389 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -327,7 +327,7 @@ When the person asked to hear once something is done, tell them with notify when
 
 Use delegate whenever you would start a subagent or run an independent piece in the background, in place of your engine's built-in subagent or Agent tool: Orbit picks the model, records the cost and brings the result back even if this engine is recycled. Use it too to hand work to a cheaper or stronger model than yours, or to run it on another machine (needs: ["os:darwin"], or workspace: another agent's name from agent_list). Prefer it to session_create when you only need that piece's result back. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
 
-Before changing a file, use wiki_search with its path to look up known pitfalls.
+Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 Prefer the `orbit_*` tools (schema-checked, no shell). Inside a session the CLI at `'<orbit-cli>'` takes the same approvals and attributes work to you: `'<orbit-cli>' guide [topic] --json` or `'<orbit-cli>' capabilities --id <id> --json` gives the argv to run by that exact path. Pass `--receipt` to read the receipt its MCP tool answers with; `--json` prints the entity alone. Do not run `'<orbit-cli>' mcp` directly.
 === orbit mcp initialize (every other engine) (3060 bytes)

@@ -187,7 +187,7 @@ func orbitDriveGuide() string {
 // path found nothing 3 times in 21 up to 2026-11-02, where multi-word ones did 124 times in 188
 // (docs/wiki-memory-claims-design.md). "If your tool list has it" because this text goes to every session, and
 // an account with the wiki off has no such tool (wikiToolDescriptors). ASCII like the rest of the paragraph.
-const orbitWikiPathInstructions = "Before changing a file, use wiki_search with its path to look up known pitfalls."
+const orbitWikiPathInstructions = "Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`."
 
 // orbitWaitInstructions routes a wait on Orbit's own work to a watch. An agent told to "wait for these
 // tasks" otherwise writes the loop it knows, sleep plus task_get or `orbit task get`, which holds its turn

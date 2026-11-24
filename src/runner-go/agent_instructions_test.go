@@ -40,12 +40,12 @@ func TestWithOrbitCLIInstructions(t *testing.T) {
 		// about to be created is what keeps that card from arriving unannounced.
 		"writes nothing until they confirm it",
 		"first say in a sentence or two what you will create",
-		"do not create it another way",
+		"A refusal or a declined card is final on every surface",
 		"Its confirmation card is the user's answer",
 		"from this same session",
 		// A reply names Orbit things by a link the clients draw as the title, not by a bare id.
 		"`[Fix login redirect](orbit-task:<id>)`",
-		"orbit-session:<id>",
+		"by its receipt's link, never a bare id",
 	} {
 		if !strings.Contains(got, phrase) {
 			t.Errorf("merged instructions do not contain %q", phrase)

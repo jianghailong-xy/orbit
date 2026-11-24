@@ -1751,10 +1751,14 @@ func TestWikiInstructionsLinkEntriesAndPreApproveTheCommands(t *testing.T) {
 			t.Errorf("orbit wiki %s is pre-approved, and this build has no such command: %q", action, rules)
 		}
 	}
-	// The entry links join the ones the instruction paragraph already names, and none of those went.
-	for _, link := range []string{"orbit-task:<id>", "orbit-session:<id>", "orbit-project:<id>", "orbit-list:<id>"} {
-		if !strings.Contains(instructions, link) {
-			t.Errorf("the link paragraph lost %s", link)
+	// The entry links join the ones a receipt hands over ready-made (receiptLink, primer 1.5.0): the instructions
+	// show the task form and send the agent to the receipt for the rest.
+	if !strings.Contains(instructions, "orbit-task:<id>") || !strings.Contains(instructions, "by its receipt's link") {
+		t.Errorf("the link paragraph lost the task link or the receipt's: %q", instructions)
+	}
+	for kind, scheme := range map[operationObject]string{objectTask: "orbit-task:", objectSession: "orbit-session:", objectProject: "orbit-project:", objectTaskList: "orbit-list:"} {
+		if receiptLinkSchemes[string(kind)] != scheme {
+			t.Errorf("a %s's receipt links it as %q, want %q", kind, receiptLinkSchemes[string(kind)], scheme)
 		}
 	}
 }
