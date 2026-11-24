@@ -149,7 +149,7 @@ quotas; folder share links; HTML, log and test-report preview; replacing git for
   agent's container and passed in, on both the Kubernetes and the Docker backend (the Docker channel allows only its
   own data volume today), and that design must reopen §3 on purpose. If neither works, D1 needs another answer (for
   example a sync folder), and rules 1 and 3 change with it. **Settled:** §3 now names the one exception, the mount
-  the `documents.orbit.dev` CSI driver passes in at `/run/orbit-documents` (deploy/managed-runner/drive-csi/).
+  the `drive.orbit.dev` CSI driver passes in at `/run/orbit-drive` (deploy/managed-runner/drive-csi/).
 - **Engine grants (D16).** Each engine's sandbox must list `/home/orbit/Files` as writable outside Plan mode (today
   Claude gets `--add-dir` for the uploads folder, `src/runner-go/claude_spawn.go:151`; Codex Auto's writable roots are
   in `src/runner-go/codex_auto_policy.go:31`), and as readable in Plan mode.
