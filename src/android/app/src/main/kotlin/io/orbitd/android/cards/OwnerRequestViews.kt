@@ -310,6 +310,9 @@ fun OwnerRequestCard(asked: OwnerRequest, store: OwnerRequestStore, runner: (Str
     }
 }
 
+/** The runner rows a CHANGE card reads its live value from, when a host supplies them (tests); null reads the directory. */
+internal val LocalChangeRunners = compositionLocalOf<List<DirectoryRunner>?> { null }
+
 /** A CHANGE card's setting block (web `ChangeSetting`): the runner's live value → a − / + stepper holding the number to apply (no
  * keyboard), what is running now, and what that number would do. */
 @Composable
@@ -317,26 +320,26 @@ private fun ChangeSetting(spec: io.orbitd.android.core.cards.OwnerRequestChangeS
     enabled: Boolean, tag: String, store: OwnerRequestStore) {
     val app = LocalContext.current.applicationContext as OrbitApplication
     val data by rememberDirectoryData(app, store.handle)
-    val row = data.runners.firstOrNull { ObjectId.same(it.id, spec.runnerId) }
+    val row = (LocalChangeRunners.current ?: data.runners).firstOrNull { ObjectId.same(it.id, spec.runnerId) }
     val current = row?.maxConcurrent ?: spec.before
     val running = row?.activeSessions
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
-    Column(Modifier.testTag("$tag:change"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(ChangeCopy.setting(runnerName), Modifier.testTag("$tag:change-setting"), style = MaterialTheme.typography.bodySmall, color = secondary)
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("$current", Modifier.testTag("$tag:change-live"), style = MaterialTheme.typography.titleMedium)
+    Column(Modifier.fillMaxWidth().testTag("$tag:change").background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+        .padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(ChangeCopy.setting(runnerName), Modifier.testTag("$tag:change-setting"), style = MaterialTheme.typography.bodyMedium, color = secondary)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("$current", Modifier.testTag("$tag:change-live"), style = MaterialTheme.typography.headlineMedium, color = secondary)
             Text("→", color = secondary)
-            Row(Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp)), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { onValue(value - 1) }, enabled = enabled && value > 1, modifier = Modifier.testTag("$tag:change-minus")
-                    .semantics { contentDescription = "${ChangeCopy.numberLabel}: fewer" }) { Text("−") }
-                Text("$value", Modifier.testTag("$tag:change-value"), style = MaterialTheme.typography.titleMedium)
-                TextButton(onClick = { onValue(value + 1) }, enabled = enabled, modifier = Modifier.testTag("$tag:change-plus")
-                    .semantics { contentDescription = "${ChangeCopy.numberLabel}: more" }) { Text("+") }
-            }
-            running?.let { Text(ChangeCopy.runningNow(it), Modifier.testTag("$tag:change-running"), style = MaterialTheme.typography.bodySmall, color = secondary) }
+            Spacer(Modifier.weight(1f))
+            OutlinedIconButton(onClick = { onValue(value - 1) }, enabled = enabled && value > 1, modifier = Modifier.size(36.dp).testTag("$tag:change-minus")
+                .semantics { contentDescription = "${ChangeCopy.numberLabel}: fewer" }) { Text("−") }
+            Text("$value", Modifier.testTag("$tag:change-value"), style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold))
+            OutlinedIconButton(onClick = { onValue(value + 1) }, enabled = enabled, modifier = Modifier.size(36.dp).testTag("$tag:change-plus")
+                .semantics { contentDescription = "${ChangeCopy.numberLabel}: more" }) { Text("+") }
         }
+        running?.let { Text(ChangeCopy.runningNow(it), Modifier.testTag("$tag:change-running"), style = MaterialTheme.typography.bodySmall, color = secondary) }
         if (current != spec.before) Text(ChangeCopy.wasWhenAsked(spec.before), Modifier.testTag("$tag:change-was"), style = MaterialTheme.typography.bodySmall, color = secondary)
-        OwnerRequests.changeEffect(value, current)?.let { Text(it, Modifier.testTag("$tag:change-effect"), style = MaterialTheme.typography.bodySmall) }
+        OwnerRequests.changeEffect(value, current)?.let { Text(it, Modifier.testTag("$tag:change-effect"), style = MaterialTheme.typography.bodySmall, color = secondary) }
     }
 }
 

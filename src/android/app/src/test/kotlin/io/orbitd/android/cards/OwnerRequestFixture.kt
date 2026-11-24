@@ -27,6 +27,8 @@ internal class OwnerRequestFixture {
     @Volatile var refuseUntranslated = false
     /** SETTINGS_CHANGE: Save changes is refused 409 SETTINGS_STALE, and `GET /users/me` as the account answers (with its `changedBy`). */
     @Volatile var staleApply = false
+    /** CHANGE: the apply door's reply, verbatim, when a test holds one from a real server. */
+    @Volatile var applyReply: String? = null
     @Volatile var me: JsonObject = buildJsonObject { put("id", "u"); put("email", "u@example.test"); put("name", "U") }
 
     private val server = MockWebServer().apply {
@@ -68,7 +70,8 @@ internal class OwnerRequestFixture {
                             "done" -> ended("DONE") { put("answer", body) }
                             "apply-settings" -> if (staleApply) return json(409, """{"code":"SETTINGS_STALE","message":"SETTINGS_STALE"}""")
                                 else ended("DONE") {}
-                            "apply" -> ended("DONE") { putJsonObject("answer") { put("applied", body["maxConcurrent"]!!); put("actualBefore", 4) } }
+                            "apply" -> applyReply?.let { reply -> return json(200, reply).also { held[id] = Json.parseToJsonElement(reply).jsonObject } }
+                                ?: ended("DONE") { putJsonObject("answer") { put("applied", body["maxConcurrent"]!!); put("actualBefore", 4) } }
                             "decline" -> ended("DECLINED") { put("resolutionNote", body["reason"]!!) }
                             "secret" -> refuseSecret?.let { return json(400, buildJsonObject { put("message", it) }.toString()) }
                                 ?: JsonObject(row + buildJsonObject { putJsonObject("secretGrant") {
@@ -159,13 +162,6 @@ internal class OwnerRequestFixture {
                 addJsonObject { put("key", "translationLanguage"); put("from", "en"); put("to", "zh-Hans"); put("tier", 1) }
                 addJsonObject { put("key", "defaultPermissionMode"); put("from", "default"); put("to", "plan"); put("tier", 2) }
             } }
-        }
-
-        const val CHANGE_ID = "01a0d6a9-d763-70e1-b4cf-8793e971b506"
-
-        /** An agent asking to raise a runner's Max Concurrent from 4 to 6. */
-        fun change() = request(CHANGE_ID, "CHANGE", "Raise Max Concurrent on mac-mini", "The queue has been backed up for an hour.", 3) {
-            putJsonObject("changeSpec") { put("runnerId", RUNNER); put("field", "maxConcurrent"); put("requested", 6); put("before", 4) }
         }
 
         fun confirm() = request(CONFIRM_ID, "CONFIRM", "Confirm the DNS change", "The new records point the app at the new load balancer.", 45) {}
