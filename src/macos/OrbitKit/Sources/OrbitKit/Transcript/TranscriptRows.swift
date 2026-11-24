@@ -500,6 +500,10 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
     /// Two or more Agents (`mcp__orbit__delegate`) started one after another with nothing between them,
     /// drawn as one group (`SubagentGroup`, `TranscriptRows.groupAgents`).
     case agents([ToolCard])
+    /// An agent's run of Documents transfers — `documents_put` or `documents_get` calls with nothing but settled
+    /// thinking between them — drawn as one card with a bar, the speed and a row per file
+    /// (`DocumentsTransfer`, `TranscriptRows.groupTransfers`; web parity: the `drive` item of `groupToolRuns`).
+    case transfer(DocumentsTransfer.Kind, [ToolCard])
     /// Turns Orbit opened, each with everything drawn under it, folded into one row — a run of them
     /// into one group row (`OrbitExchangeFold`; web parity: `OrbitExchangeSolo` / `OrbitExchangeGroup`).
     case exchanges([OrbitExchange])
@@ -530,6 +534,8 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
         case .steps(let items):      return items.first?.id ?? "steps-empty"
         // The bare id of its first call, for the steps line's reason.
         case .agents(let cards):     return cards.first?.id ?? "agents-empty"
+        // The bare id of its first call, for the same reason.
+        case .transfer(_, let cards): return cards.first?.id ?? "transfer-empty"
         // The bare id of the first turn's opening bubble, for `.steps`' reason: it replaces that
         // bubble's own row, and a scroll aimed at it must still land somewhere.
         case .exchanges(let turns):  return turns.first?.id ?? "exchanges-empty"
@@ -713,7 +719,7 @@ public enum TranscriptRows {
         // Ids are unique by construction above; a repeat could only come from a malformed stream
         // (two events sharing a tool_use id). Drop it rather than hand the List a diff that aborts.
         var seen = Set<String>()
-        let grouped = groupAgents(groupToolRuns(rows))
+        let grouped = groupAgents(groupTransfers(groupToolRuns(rows)))
         // The turns Orbit opened, folded with their answers (`OrbitExchangeFold`), unless the caller
         // draws every row as it is — a static export, a sub-agent's own transcript.
         let folded = foldExchanges ? OrbitExchangeFold.fold(grouped, watchName: watchName) : grouped
@@ -738,6 +744,39 @@ public enum TranscriptRows {
         for row in rows {
             if case .item(let item) = row, isStep(item) {
                 run.append(item)
+            } else {
+                flush()
+                out.append(row)
+            }
+        }
+        flush()
+        return out
+    }
+
+    /// Fold an agent's Documents transfers into one card: consecutive `documents_put` (or `documents_get`) calls, which
+    /// `isGroupable` keeps out of the steps lines, with nothing between them but steps lines of settled thinking. That
+    /// thinking is drawn under the card, so the calls stay together; anything else between two calls — a sentence, a
+    /// shell command — starts a new card (web parity: `groupToolRuns`' `drive` item).
+    static func groupTransfers(_ rows: [TranscriptRow]) -> [TranscriptRow] {
+        var out: [TranscriptRow] = []
+        var kind: DocumentsTransfer.Kind?
+        var run: [ToolCard] = []
+        var held: [TranscriptRow] = []
+        func flush() {
+            if let kind, !run.isEmpty { out.append(.transfer(kind, run)) }
+            out.append(contentsOf: held)
+            kind = nil
+            run.removeAll()
+            held.removeAll()
+        }
+        for row in rows {
+            if case .item(.toolCall(let card)) = row, let next = DocumentsTransfer.kind(card.name) {
+                if next != kind { flush() }
+                kind = next
+                run.append(card)
+            } else if !run.isEmpty, case .steps(let items) = row,
+                      items.allSatisfy({ if case .thinking = $0 { return true } else { return false } }) {
+                held.append(row)
             } else {
                 flush()
                 out.append(row)
@@ -796,7 +835,7 @@ public enum TranscriptRows {
                      foldExchanges: false)
             .filter {
                 switch $0 {
-                case .item, .steps, .agents: return true
+                case .item, .steps, .agents, .transfer: return true
                 default: return false
                 }
             }
@@ -819,7 +858,8 @@ public enum TranscriptRows {
              DocumentsSyncCard.toolName:
             return false
         default:
-            return true
+            // A Documents transfer is its run's card (`groupTransfers`).
+            return DocumentsTransfer.kind(card.name) == nil
         }
     }
 }
