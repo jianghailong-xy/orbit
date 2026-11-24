@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 import { TaskStatus } from '@orbit/shared';
+import { RUNNER_OFFLINE_AFTER_MS } from '../runners/runner-presence';
 import { TasksService } from './tasks.service';
 import { recordingQueryRaw } from './query-raw-test-helper';
 import { everyPrerequisiteDoneOrRetiredSql } from './task-dependencies';
@@ -37,10 +38,11 @@ test('legacy list handles more than PostgreSQL bind limit without a giant task-i
   const result = await service.list(OWNER_ID);
 
   assert.equal(result.length, 40_001);
-  // The live overlay is the owner's carriers, bound to the owner alone — never to 40,001 ids.
+  // The live overlay is the owner's carriers, bound to the owner alone — never to 40,001 ids. The one
+  // other bind is the runner offline window the held-run join reads (runnerUnavailableSql), a constant.
   assert.equal(raw.statements.length, 1);
-  assert.deepEqual(raw.statements[0].values, [OWNER_ID]);
-  assert.match(raw.statements[0].text, /carrier\."owner_id" = \$1::uuid/);
+  assert.deepEqual(raw.statements[0].values, [RUNNER_OFFLINE_AFTER_MS, OWNER_ID]);
+  assert.match(raw.statements[0].text, /carrier\."owner_id" = \$2::uuid/);
   assert.equal(dependencyChunks.length, 9);
   assert.equal(dependencyChunks.flat().length, 40_001);
   assert.ok(dependencyChunks.every((chunk) => chunk.length <= 5_000));

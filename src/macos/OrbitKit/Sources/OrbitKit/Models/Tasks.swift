@@ -334,6 +334,7 @@ public struct SessionRef: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let title: String?
     public let status: RunStatus?
+    public let runStatus: RunStatus?
     public let runState: SessionRunState?
     public let sessionState: SessionState?
     public let endReason: String?
@@ -349,11 +350,26 @@ public struct SessionRef: Codable, Equatable, Sendable, Identifiable {
     public let costUsd: Double?
     /// The routing decision this run was planned with (§7.5); nil on any other session.
     public let route: TaskRunRoute?
+    /// The session facts beside `status` (contracts/session-state.contract.json); absent from an older server.
+    @LenientSessionField public private(set) var phase: SessionPhase?
+    @LenientSessionField public private(set) var released: Bool?
+    @LenientSessionField public private(set) var lastTurnOutcome: SessionTurnOutcome?
+    @LenientSessionField public private(set) var workFinished: Bool?
+    @LenientSessionField public private(set) var waitingOn: SessionWaitingOn?
+    public let activity: String?
+    public let sessionKind: String?
 
-    /// Resolve the task detail's modern run state first, retaining compatibility with older
-    /// servers that only returned the raw runner status or the legacy mixed session state.
+    /// Resolve the task detail's run state from the session facts when sent, as web's task panel does
+    /// (the run state function), else the modern run state, retaining
+    /// compatibility with older servers that only returned the raw runner status or the legacy mixed state.
     public var resolvedRunState: SessionRunState? {
-        SessionRunState.resolveOptional(runState, legacy: sessionState,
+        if let fromFields = SessionRunState.fromPhaseFields(
+            phase: phase, released: released, lastTurnOutcome: lastTurnOutcome, endReason: endReason,
+            workFinished: workFinished, activity: activity, isLanding: sessionKind == "LANDING",
+            legacyStatus: runStatus.flatMap { $0 == .unknown ? nil : $0 } ?? status) {
+            return fromFields
+        }
+        return SessionRunState.resolveOptional(runState, legacy: sessionState,
                                         status: status, endReason: endReason)
     }
 }

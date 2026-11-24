@@ -62,7 +62,10 @@ public enum SessionTimeGrouping {
     /// Needs the owner: something is waiting on them, or the run failed and no retry is armed.
     private static func needsOwner(_ s: Session) -> Bool {
         if (s.pendingApprovals ?? 0) > 0 { return true }
-        return s.effectiveRunState == .failed && s.retryAt == nil
+        // With the session facts, the state word's own reading (an end the runner never confirmed is Ended, not
+        // Failed); from an older server, the legacy run state.
+        let failed = s.phase != nil && s.released != nil ? s.displayRunState == .failed : s.effectiveRunState == .failed
+        return failed && s.retryAt == nil
     }
 
     /// Running or queued, or failed with a retry armed (the server is retrying it).

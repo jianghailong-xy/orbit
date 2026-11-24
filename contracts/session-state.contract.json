@@ -73,7 +73,8 @@
     "sessionEnded": { "event": "session.ended", "sharedType": "ControlSessionEnded", "fields": ["phase", "released", "lastTurnOutcome", "waitingOn", "endReason", "workFinished"] },
     "linkPreview": { "route": "POST /link-previews", "sharedType": "LinkPreviewSession", "fields": ["phase", "released", "lastTurnOutcome", "waitingOn", "endReason", "workFinished"] },
     "guestRow": { "route": "GET /guest-sessions", "sharedType": "GuestSessionSummary", "fields": ["phase", "released", "lastTurnOutcome", "waitingOn", "endReason", "workFinished"] },
-    "sharedHead": { "route": "GET /shared/:token, the guest page root", "sharedType": null, "fields": ["phase", "released", "lastTurnOutcome", "waitingOn", "endReason", "workFinished"] }
+    "sharedHead": { "route": "GET /shared/:token, the guest page root", "sharedType": null, "fields": ["phase", "released", "lastTurnOutcome", "waitingOn", "endReason", "workFinished"] },
+    "taskRun": { "route": "GET /tasks/:id, each run in sessions[]", "sharedType": null, "fields": ["phase", "released", "lastTurnOutcome", "waitingOn", "endReason", "workFinished"] }
   },
   "vectors": [
     { "id": "PENDING", "given": { "status": "PENDING" }, "expect": { "phase": "PENDING", "released": false, "lastTurnOutcome": null, "waitingOn": null, "endReason": null, "workFinished": false } },

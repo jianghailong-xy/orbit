@@ -3448,8 +3448,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1537 adds a nullable managed_runner.current_image_version (no default); `managed_runner` is none of the
       // preserved relations, no row is written, and no trigger, function or DONE fence changes.
       '1537_managed_runner_current_image_version',
-      // 1547 adds a nullable github_pull_request.review_announced_at (no default); `github_pull_request` is none of the
-      // preserved relations, no row is written, and no trigger, function or DONE fence changes.
+      // 1538 adds nullable owner_request.change_spec, two CHECKs and a partial unique index on owner_request; 1547 adds
+      // a nullable github_pull_request.review_announced_at. Neither table is a preserved relation, no row is
+      // written, and no trigger, function or DONE fence changes.
+      '1538_owner_request_change',
       '1547_pull_request_review_announced',
       // 1550 rewrites the access token scope `files` to `documents` in personal_access_token.scopes and
       // pat_device_login.scopes: two UPDATEs of those tables only, none of the preserved relations, no row added or

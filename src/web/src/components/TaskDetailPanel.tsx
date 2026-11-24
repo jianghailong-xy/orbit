@@ -2040,7 +2040,9 @@ export function TaskDetailPanel({
                     <div className="tdp-now-title">
                       {liveRunning
                         ? `${liveRun.workspace?.name ?? task?.assignee?.name ?? 'The agent'} is working`
-                        : QUEUED_LABEL}
+                        : sessionRunStateOf(liveRun) === 'QUEUED'
+                          ? sessionStatusMeta(liveRun).label
+                          : QUEUED_LABEL}
                     </div>
                     <div className="tdp-now-sub">
                       {[

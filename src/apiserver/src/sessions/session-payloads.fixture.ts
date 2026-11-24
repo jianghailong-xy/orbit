@@ -26,7 +26,7 @@ import { SessionsService } from './sessions.service';
 
 /** The payload kinds, by the names contracts/session-state.contract.json gives them. */
 export const PAYLOAD_KINDS = [
-  'listRow', 'detail', 'sessionSummary', 'sessionEnded', 'linkPreview', 'guestRow', 'sharedHead',
+  'listRow', 'detail', 'sessionSummary', 'sessionEnded', 'linkPreview', 'guestRow', 'sharedHead', 'taskRun',
 ] as const;
 export type PayloadKind = (typeof PAYLOAD_KINDS)[number];
 
@@ -98,6 +98,7 @@ export interface Stack {
   sessions: SessionsService;
   guests: SessionGuestsService;
   previews: LinkPreviewsService;
+  tasks: TasksService;
   realtime: RealtimeService;
 }
 
@@ -114,6 +115,7 @@ export function connect(url: string): Stack {
     sessions,
     guests: new SessionGuestsService(prisma, sessions, {} as AttachmentsService),
     previews: new LinkPreviewsService(prisma, sessions, tasks),
+    tasks,
     realtime,
   };
 }
@@ -123,11 +125,13 @@ export interface World {
   guestId: string;
   /** Session id by case label. */
   ids: Map<string, string>;
+  /** The task each case's session is the run of, by case label (the task detail's `sessions[]`): one live run per task. */
+  taskIds: Map<string, string>;
 }
 
 /** The owner, an online runner, a workspace, a guest, and one shared conversation per case. */
 export async function buildWorld(db: PrismaClient, run: string): Promise<World> {
-  const w: World = { ownerId: randomUUID(), guestId: randomUUID(), ids: new Map() };
+  const w: World = { ownerId: randomUUID(), guestId: randomUUID(), ids: new Map(), taskIds: new Map() };
   const runnerId = randomUUID();
   const workspaceId = randomUUID();
   for (const [id, who] of [[w.ownerId, 'owner'], [w.guestId, 'guest']] as const) {
@@ -144,14 +148,20 @@ export async function buildWorld(db: PrismaClient, run: string): Promise<World> 
     },
   });
   await db.workspace.create({ data: { id: workspaceId, ownerId: w.ownerId, runnerId, name: 'payloads-agent', enabled: true } });
+  const taskIdOf = (label: string) => {
+    if (!w.taskIds.has(label)) w.taskIds.set(label, randomUUID());
+    return w.taskIds.get(label)!;
+  };
+  const makeTask = (label: string) => db.task.create({ data: { id: taskIdOf(label), ownerId: w.ownerId, creatorId: w.ownerId, creatorType: 'USER', completionCriterion: 'EVIDENCE_JUDGMENT', title: `payloads task ${label} ${run}`, autoRunWhenReady: false } });
   let n = 0;
   for (const c of FIXTURE_CASES) {
     const id = randomUUID();
     n += 1;
+    await makeTask(c.label);
     await db.session.create({
       data: {
         id, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId, assignedRunnerId: runnerId,
-        title: `payloads ${c.label}`, prompt: 'hello', provider: 'claude', status: c.status,
+        title: `payloads ${c.label}`, taskId: taskIdOf(c.label), prompt: 'hello', provider: 'claude', status: c.status,
         dispatchOrigin: SessionDispatchOrigin.USER, startedAt: new Date(Date.now() - 60 * MINUTE), numTurns: 1,
         createdAt: new Date(Date.now() - n * MINUTE),
         ...(RELEASED.has(c.status) ? { finishedAt: new Date() } : {}),
@@ -185,6 +195,7 @@ export async function readPayloads(stack: Stack, w: World): Promise<Map<string, 
   const out = new Map<string, Record<PayloadKind, Payload>>();
   for (const [label, id] of w.ids) {
     const row = await stack.db.session.findUniqueOrThrow({ where: { id }, select: { status: true, endReason: true } });
+    const taskDetail = (await stack.tasks.get(w.ownerId, w.taskIds.get(label)!)) as unknown as { sessions: Payload[] };
     const need = <T>(value: T | null | undefined, kind: string): T => {
       if (value == null) throw new Error(`${label}: no ${kind} payload`);
       return value;
@@ -200,6 +211,8 @@ export async function readPayloads(stack: Stack, w: World): Promise<Map<string, 
       linkPreview: need(previewOf(id), 'linkPreview'),
       guestRow: need(shared.get(id), 'guestRow'),
       sharedHead: (await stack.sessions.sharedHead(id)) as unknown as Payload,
+      // A run in the task detail's `sessions[]`.
+      taskRun: need(taskDetail.sessions.find((run) => run.id === id), 'taskRun'),
     });
   }
   return out;
