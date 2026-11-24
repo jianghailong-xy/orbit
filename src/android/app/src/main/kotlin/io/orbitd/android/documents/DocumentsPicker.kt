@@ -61,7 +61,7 @@ fun DocumentsPickerSheet(store: DocumentsStore, projectTitle: String?, onDismiss
         found = runCatching { store.api.search(query.trim()).entries.filter { it.isFile } }.getOrNull() ?: emptyList()
     }
     val folderPath = (listOf(DOCUMENTS_MOUNT) + trail.orEmpty().drop(1).map { it.second }).joinToString("/")
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = sheetColor(), modifier = Modifier.testTag("documents-picker")) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = sheetColor(), modifier = Modifier.testTag("documents-picker")) {
         Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Add from Documents", Modifier.weight(1f), fontSize = 16.sp, fontWeight = FontWeight.Medium)
             TextButton(enabled = picked.isNotEmpty(), onClick = { onPick(picked.values.toList()) }, modifier = Modifier.testTag("documents-picker-add")) {

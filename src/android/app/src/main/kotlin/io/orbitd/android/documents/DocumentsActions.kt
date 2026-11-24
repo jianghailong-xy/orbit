@@ -140,7 +140,7 @@ internal class DocumentsActions(
 @Composable
 internal fun RowActionsSheet(store: DocumentsStore, entry: DocumentsEntry, onDismiss: () -> Unit, rename: () -> Unit, move: () -> Unit,
                              download: () -> Unit, sendCopy: () -> Unit, share: () -> Unit, trash: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = sheetColor(), modifier = Modifier.testTag("documents-row-sheet")) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = sheetColor(), modifier = Modifier.testTag("documents-row-sheet")) {
         val line = writerLine(store, entry.lastWriter, if (entry.isFile) DocumentsLogic.formatSize(entry.sizeBytes) else null) {}
         Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -165,6 +165,7 @@ internal fun RowActionsSheet(store: DocumentsStore, entry: DocumentsEntry, onDis
 }
 
 /** Rename and New folder: a Material dialog with the name selected up to its extension. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun NameDialog(title: String, initial: String, confirm: String, onDismiss: () -> Unit, onDone: (String) -> Unit) {
     val stem = initial.lastIndexOf('.').takeIf { it > 0 } ?: initial.length
@@ -172,14 +173,21 @@ internal fun NameDialog(title: String, initial: String, confirm: String, onDismi
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
     val problem = DocumentsLogic.nameProblem(value.text).takeIf { value.text.isNotEmpty() }
-    AlertDialog(onDismissRequest = onDismiss, containerColor = dialogColor(), title = { Text(title) },
-        text = {
-            OutlinedTextField(value, { value = it }, Modifier.fillMaxWidth().focusRequester(focus).testTag("documents-name-field"), singleLine = true,
-                isError = problem != null, supportingText = problem?.let { { Text(it) } },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done))
-        },
-        confirmButton = { TextButton(enabled = DocumentsLogic.nameProblem(value.text) == null, onClick = { onDone(value.text.trim()) }) { Text(confirm) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(DocumentsLogic.CANCEL) } })
+    BasicAlertDialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(28.dp), color = dialogColor()) {
+            Column(Modifier.padding(24.dp)) {
+                Text(title, fontSize = 22.sp, modifier = Modifier.padding(bottom = 16.dp))
+                OutlinedTextField(value, { value = TextFieldValue(it.text.replace("\n", ""), it.selection, it.composition) },
+                    Modifier.fillMaxWidth().focusRequester(focus).testTag("documents-name-field"), label = { Text("Name") }, isError = problem != null)
+                problem?.let { Text(it, Modifier.padding(top = 6.dp), color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
+                Row(Modifier.fillMaxWidth().padding(top = 20.dp), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) { Text(DocumentsLogic.CANCEL) }
+                    TextButton(enabled = DocumentsLogic.nameProblem(value.text) == null, onClick = { onDone(value.text.trim()) },
+                        modifier = Modifier.testTag("documents-name-confirm")) { Text(confirm) }
+                }
+            }
+        }
+    }
 }
 
 /**

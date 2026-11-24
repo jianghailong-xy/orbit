@@ -41,7 +41,7 @@ import io.orbitd.android.core.documents.DocumentsUploadState
 internal fun UploadsSheet(store: DocumentsStore, openSession: (String) -> Unit, openFolder: (String?, String) -> Unit, onDismiss: () -> Unit) {
     val uploads by store.uploads.items.collectAsState()
     var details by remember { mutableStateOf<DocumentsSync?>(null) }
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = sheetColor(), modifier = Modifier.testTag("documents-uploads-sheet")) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = sheetColor(), modifier = Modifier.testTag("documents-uploads-sheet")) {
         Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(DocumentsLogic.UPLOADS, Modifier.weight(1f), fontSize = 16.sp, fontWeight = FontWeight.Medium)
             TextButton(onClick = { store.clearFinished() }, enabled = uploads.any { it.state == DocumentsUploadState.DONE } || store.syncs.any { !it.running }) {

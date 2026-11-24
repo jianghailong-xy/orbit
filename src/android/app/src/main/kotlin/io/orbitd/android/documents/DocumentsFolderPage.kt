@@ -84,9 +84,14 @@ internal fun DocumentsFolderPage(store: DocumentsStore, route: OrbitRoute, open:
         delay(250)
         found = runCatching { store.api.search(words).entries }.getOrNull() ?: emptyList()
     }
-    // The agents' syncs, read every few seconds while a Documents page is up: fast while one runs.
+    // The agents' syncs, read every few seconds while a Documents page is up: fast while one runs. The wait is wall-clock time, off
+    // the frame clock, which a test may run ahead.
     LaunchedEffect(store) {
-        while (true) { store.readSyncs(); delay(if (store.syncs.any { it.running }) 2_000 else 10_000) }
+        while (true) {
+            store.readSyncs()
+            val wait = if (store.syncs.any { it.running }) 2_000L else 10_000L
+            withContext(Dispatchers.Default) { delay(wait) }
+        }
     }
     val title = if (root) DocumentsLogic.TITLE else listing?.folder?.name ?: route.recordId ?: DocumentsLogic.TITLE
     var sheetFor by remember { mutableStateOf<DocumentsEntry?>(null) }
@@ -202,7 +207,7 @@ internal fun DocumentsFolderPage(store: DocumentsStore, route: OrbitRoute, open:
     if (naming) NameDialog(DocumentsLogic.NEW_FOLDER, DocumentsLogic.NEW_FOLDER, "Create", { naming = false }) { name ->
         naming = false; actions.newFolder(target, name)
     }
-    if (uploadSheet) ModalBottomSheet(onDismissRequest = { uploadSheet = false }, containerColor = sheetColor(), modifier = Modifier.testTag("documents-upload-sheet")) {
+    if (uploadSheet) ModalBottomSheet(onDismissRequest = { uploadSheet = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = sheetColor(), modifier = Modifier.testTag("documents-upload-sheet")) {
         Text(DocumentsLogic.uploadTo(folderName), Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp), fontSize = 16.sp, fontWeight = FontWeight.Medium)
         SheetItem(R.drawable.ic_doc, DocumentsLogic.PICK_FILES, tag = "documents-pick-files") { uploadSheet = false; files.launch(arrayOf("*/*")) }
         SheetItem(R.drawable.ic_image, DocumentsLogic.PICK_PHOTOS, tag = "documents-pick-photos") {
