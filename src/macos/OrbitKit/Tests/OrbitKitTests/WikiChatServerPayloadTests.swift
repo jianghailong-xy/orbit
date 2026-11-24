@@ -67,4 +67,20 @@ final class WikiChatServerPayloadTests: XCTestCase {
         let note = try XCTUnwrap(WikiChatLogic.parseNoteTag(block))
         XCTAssertEqual(WikiChatLogic.noteLabel(note), "Wiki contents")
     }
+
+    /// The turn the server delivered with the owner's words: split where the recorded note begins, the note is named by
+    /// `describeNote` as web names it ("Wiki contents" first), and a turn with typed words stays the owner's bubble —
+    /// the generic Orbit line is only for a turn with nothing typed (`OrbitEvent.draws`), as on web.
+    func testTheDeliveredTurnSplitsIntoTheOwnersWordsAndANoteNamedWikiContents() throws {
+        let text = String(decoding: try raw("chat.delivered.contents"), as: UTF8.self)
+        let start = try XCTUnwrap(text.range(of: "\n\n<orbit_wiki_chat>"))
+        let note = String(text[start.lowerBound...])
+        let split = try XCTUnwrap(splitRecordedNote(text, note: note))
+        XCTAssertEqual(split.text, String(text[..<start.lowerBound]))
+        XCTAssertTrue(split.text.hasPrefix("Is the lease really ninety seconds?"))
+        XCTAssertTrue(describeNote(split.note).hasPrefix("Wiki contents"), describeNote(split.note))
+        XCTAssertFalse(OrbitEvent.draws(text: split.text, note: split.note))
+        XCTAssertTrue(OrbitEvent.draws(text: "", note: split.note))
+        XCTAssertTrue(OrbitEvent.name(split.note).hasPrefix("Wiki contents"))
+    }
 }
