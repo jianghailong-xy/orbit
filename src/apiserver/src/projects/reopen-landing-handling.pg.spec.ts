@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { asLegacyMainSyncItem } from '../test-support/legacy-main-sync';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
@@ -391,6 +392,9 @@ async function failFirst(
   await completeTask(stack, w, taskId, `${label}-first`);
   const first = await claim(stack, w);
   assert.equal((await report(stack, w, first, result)).accepted, true);
+  // Revision 45: a MAIN_SYNC conflict now opens the task-less line-sync item. This file pins the LEGACY task-level
+  // item's handling (docs/design/project-line-upstream-sync.md §4.6 item 7), so it is narrowed to one.
+  if (result.phase === 'MAIN_SYNC') await asLegacyMainSyncItem(stack.db, { projectId: w.projectId, taskId });
   const item = await stack.db.projectOpenItem.findFirstOrThrow({
     where: { taskId, kind: { in: ['INTEGRATION_CONFLICT', 'INTEGRATION_CHECK_FAILED', 'INTEGRATION_ERROR'] } },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
