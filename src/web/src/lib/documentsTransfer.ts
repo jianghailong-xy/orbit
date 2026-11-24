@@ -36,11 +36,12 @@ export function parseDocumentsProgress(content: unknown): { sent: number; size: 
   return { sent: Math.min(sent, size), size };
 }
 
-/** A drive path as the owner reads it in Files: `~/Files/a` and the mount's `/run/orbit-documents/drive/a` (or
- * `/run/orbit-files/drive/a`, its root in a Pod of the CSI driver from before the rename) are `/a`. */
+/** A drive path as the owner reads it in Documents: `~/Documents/a`, `/home/orbit/Documents/a` and the mount's
+ * `/run/orbit-documents/drive/a` are `/a`, as are the spellings from before the rename (`~/Files/a`, `/home/orbit/Files/a`,
+ * `/run/orbit-files/drive/a`), which the runner still accepts. */
 export function documentsDisplayPath(raw: unknown): string {
   let p = typeof raw === 'string' ? raw.trim() : '';
-  for (const prefix of ['~/Files', '/run/orbit-documents/drive', '/run/orbit-files/drive']) {
+  for (const prefix of ['~/Documents', '/home/orbit/Documents', '~/Files', '/home/orbit/Files', '/run/orbit-documents/drive', '/run/orbit-files/drive']) {
     if (p === prefix || p.startsWith(`${prefix}/`)) p = p.slice(prefix.length);
   }
   if (!p.startsWith('/')) p = `/${p}`;
@@ -208,7 +209,7 @@ export function transferRate(samples: ReadonlyArray<{ at: number; bytes: number 
   return Math.max(0, (last.bytes - first.bytes) / (span / 1000));
 }
 
-/** As the Files page's upload tray says it (DocumentsUploadTray). */
+/** As the Documents page's upload tray says it (DocumentsUploadTray). */
 export function timeLeftText(leftBytes: number, rate: number): string | null {
   if (!rate) return null;
   const seconds = leftBytes / rate;
