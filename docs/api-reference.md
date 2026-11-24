@@ -75,10 +75,10 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `public` | 41 |
 | `user` | 567 |
 | `admin` | 31 |
-| `runner` | 253 |
+| `runner` | 254 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **896** |
+| **Total** | **897** |
 
 ## Public routes
 
@@ -977,6 +977,7 @@ it is answered `429` and nothing is sent. Otherwise the answer is `200` and says
 | `POST` | `/api/runner/wiki/drafts` | body `Object` | `RunnerWikiController.draft` |
 | `GET` | `/api/runner/wiki/entries/:id` | path `id`; query `include` | `RunnerWikiController.getEntry` |
 | `POST` | `/api/runner/wiki/notes` | body `WikiSessionNoteDto` | `RunnerWikiController.note` |
+| `GET` | `/api/runner/wiki/read` | query `doc`, `draft`, `more`, `q`, `section` | `RunnerWikiController.read` |
 | `POST` | `/api/runner/wiki/repo-ops/:id/fragments` | body `Object`; path `id` | `RunnerApiController.wikiRepoOpFragment` |
 | `POST` | `/api/runner/wiki/repo-ops/:id/progress` | body `Object`; path `id` | `RunnerApiController.wikiRepoOpProgress` |
 | `POST` | `/api/runner/wiki/repo-ops/:id/result` | body `Object`; path `id` | `RunnerApiController.wikiRepoOpResult` |
