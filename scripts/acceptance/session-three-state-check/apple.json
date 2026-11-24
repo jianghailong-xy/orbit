@@ -146,7 +146,7 @@
   {
     "name" : "on hold (queued, account paused)",
     "newFields" : true,
-    "run" : "Queued",
+    "run" : "On hold",
     "send" : "SEND",
     "waitOver" : false,
     "word" : "On hold"
@@ -162,7 +162,7 @@
   {
     "name" : "ended, runner never confirmed",
     "newFields" : true,
-    "run" : "Failed",
+    "run" : "Ended",
     "send" : "RESUME",
     "waitOver" : true,
     "word" : "Ended"
@@ -178,7 +178,7 @@
   {
     "name" : "old plain row stored SUCCEEDED",
     "newFields" : true,
-    "run" : "Finished",
+    "run" : "Ended",
     "send" : "RESUME",
     "waitOver" : true,
     "word" : "Ended"
@@ -194,7 +194,7 @@
   {
     "name" : "ending after an interrupted turn",
     "newFields" : true,
-    "run" : "Ended",
+    "run" : "Interrupted",
     "send" : "BLOCK",
     "waitOver" : false,
     "word" : "Interrupted"
@@ -258,10 +258,10 @@
   {
     "name" : "unknown status, no capabilities, held",
     "newFields" : true,
-    "run" : "Ended",
+    "run" : "Awaiting reply",
     "send" : "SEND",
     "waitOver" : false,
-    "word" : "Ended"
+    "word" : "Waiting for your reply"
   },
   {
     "name" : "unknown status, no capabilities, held",

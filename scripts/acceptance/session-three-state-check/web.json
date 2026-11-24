@@ -20,8 +20,8 @@
   "newFields": true,
   "send": "SEND",
   "waitOver": false,
-  "word": "Waiting for your reply",
-  "run": "Awaiting reply"
+  "word": "Running",
+  "run": "Running"
  },
  {
   "name": "status RUNNING",
@@ -133,7 +133,7 @@
   "send": "SEND",
   "waitOver": false,
   "word": "Waiting for approval",
-  "run": "Awaiting reply"
+  "run": "Running"
  },
  {
   "name": "waiting on an approval",
@@ -149,7 +149,7 @@
   "send": "SEND",
   "waitOver": false,
   "word": "On hold",
-  "run": "Queued"
+  "run": "On hold"
  },
  {
   "name": "on hold (queued, account paused)",

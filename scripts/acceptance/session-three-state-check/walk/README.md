@@ -27,6 +27,7 @@ It reads each seeded session's six fields (`phase`, `released`, `lastTurnOutcome
 - `walk-task.mjs <walk> <origin> <out>`: opens each seeded task's panel (`/tasks/<id>`) and reads every run's badge (`a.tdp-session .tdp-badge`), matched to a run by its link.
 - `walk-approve.mjs <walk> <origin> <out>` (`WALK_CASE=<case>`, default `approval`): presses Approve on the card and waits up to 30 s for the word to change. It records the decision request, the DOM before and after, and the approval and session from the API before and after. It changes state, so run it last.
 - `make-table.mjs <api.json> <dom.json> <ab.json> <out.md>`: the F7 table.
+- `make-table-b.mjs <walk dir> <out.md>`: round B's table. It reads `api.json`, `run/dom.json` and `task/task.json`, and quotes the held run's `GET /api/tasks/:id` JSON.
 - `make-table-fix.mjs <walk dir> <out.md>`: the fix walk's table. It reads `api-before-press.json`, `run2/dom.json`, `task/task.json`, `ab/ab.json` and `approve2/approve-*.json` under `<walk dir>`.
 - `down.sh <walk>`: stops the processes by their pid files and removes only the walk's own container.
 
@@ -45,7 +46,7 @@ node $K/make-table.mjs $R/api.json $R/run/dom.json $R/ab/ab.json $R/table.md
 $K/down.sh $R
 ```
 
-Playwright comes from `/root/orbit/node_modules/playwright` (1.63, Chromium 1243). Pass another module path as the scripts' last argument if it lives elsewhere.
+Playwright 1.63 (Chromium 1243) is the default module, `/root/orbit/node_modules/playwright`. Since 2026-11-24 that checkout no longer has it, so pass `/tmp/p3/tip/node_modules/playwright` (or wherever it lives) as the scripts' last argument.
 
 ## Result (2026-11-24)
 
@@ -66,4 +67,18 @@ The fix console was built in its own checkout (`cd /tmp/p3/fix/src/web && npx vi
 All the session words, Stop, the spinner or terminal glyph, and the approval card now read as expected, and pressing Approve leaves a running turn with Stop.
 
 Still wrong: the task panel's badge for a run on hold says "Queued". The tip server's task detail sends each run with `status`, `runState` and `endReason` but no `waitingOn` (`TasksService.loadDetail`), and the panel's new "On hold" reading needs `waitingOn`.
+
+## Round B (2026-11-24): console and apiserver both from the merged tip 941551f956
+
+This round used the same recipe on ports 55771-55773 with the tip's own console build. The scripts were `seed.cjs`, `seed-control.cjs`, `seed-task-runs.cjs`, `api-read.mjs`, `walk.mjs` (which now also reads each row's list group), `walk-task.mjs` and `make-table-b.mjs`. There was no A/B and no press: every payload was the server's own answer.
+
+Everything asked for matched:
+- a running turn reads "Running" with Stop;
+- an approval reads "Waiting for approval" with Approve enabled;
+- a job-only session shows the background word and the terminal glyph, under Working;
+- a parked session reads "Waiting for your reply" with no Stop;
+- Failed and Ended read as before;
+- the task panel shows "On hold" and "Finished" from the facts in the task detail's `sessions[]`.
+
+Two task-level words still say "Queued" for a held run: the panel's Now card (TaskDetailPanel.tsx:2040-2043) and the Tasks list pill (TaskStatusPill.tsx:13).
 

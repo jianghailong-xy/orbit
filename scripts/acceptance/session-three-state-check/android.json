@@ -66,7 +66,7 @@
     {
         "name": "status SUCCEEDED (task run finished)",
         "newFields": true,
-        "send": "turns",
+        "send": "resume",
         "waitOver": true,
         "word": "Finished",
         "run": "Finished"
@@ -82,7 +82,7 @@
     {
         "name": "status FAILED (released by a failed turn)",
         "newFields": true,
-        "send": "turns",
+        "send": "resume",
         "waitOver": true,
         "word": "Failed",
         "run": "Failed"
@@ -98,7 +98,7 @@
     {
         "name": "status CANCELLED (released by End)",
         "newFields": true,
-        "send": "turns",
+        "send": "resume",
         "waitOver": true,
         "word": "Ended",
         "run": "Ended"
@@ -117,7 +117,7 @@
         "send": "turns",
         "waitOver": false,
         "word": "Background process running",
-        "run": "Running"
+        "run": "Awaiting reply"
     },
     {
         "name": "running a job with no turn",
@@ -162,7 +162,7 @@
     {
         "name": "ended, runner never confirmed",
         "newFields": true,
-        "send": "turns",
+        "send": "resume",
         "waitOver": true,
         "word": "Ended",
         "run": "Ended"
@@ -178,7 +178,7 @@
     {
         "name": "old plain row stored SUCCEEDED",
         "newFields": true,
-        "send": "turns",
+        "send": "resume",
         "waitOver": true,
         "word": "Ended",
         "run": "Ended"
@@ -213,7 +213,7 @@
         "send": "turns",
         "waitOver": false,
         "word": "Waiting for your reply",
-        "run": "Running"
+        "run": "Awaiting reply"
     },
     {
         "name": "parked, engine started its own turn",
@@ -229,7 +229,7 @@
         "send": "turns",
         "waitOver": false,
         "word": "Running Agent",
-        "run": "Running"
+        "run": "Awaiting reply"
     },
     {
         "name": "parked, sub-agent running",
@@ -260,7 +260,7 @@
         "newFields": true,
         "send": "turns",
         "waitOver": false,
-        "word": "Ended",
+        "word": "Waiting for your reply",
         "run": "Awaiting reply"
     },
     {

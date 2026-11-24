@@ -63,6 +63,8 @@ for (const [key, t] of Object.entries(seed.tasks ?? {})) {
     runs[runKey] = {
       ...(await readSession(run)),
       taskDetail: inTask ? Object.fromEntries(TASK_RUN_FIELDS.map((k) => [k, has(inTask, k)])) : null,
+      // The run exactly as GET /api/tasks/:id answered it, to quote.
+      taskDetailRaw: inTask,
     };
   }
   result.tasks[key] = { id: t.id, publicId: task.body?.id ?? null, title: t.title, httpStatus: task.status, taskStatus: task.body?.status ?? null, runs };

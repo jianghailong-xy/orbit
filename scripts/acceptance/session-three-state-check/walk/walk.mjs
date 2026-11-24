@@ -73,6 +73,8 @@ async function readCase(title) {
         })(),
         rowGlyph: row?.querySelector('.session-icon .anticon')?.getAttribute('class') ?? row?.querySelector('.session-icon > *')?.getAttribute('class') ?? null,
         rowSpinner: !!row?.querySelector('.session-icon .anticon-spin, .session-icon .anticon-loading'),
+        // The list group the row sits in: its <section>'s head (sessionTimeSections: Needs you, Working, Today, ...).
+        rowSection: row?.closest('section')?.querySelector(':scope > .session-section-head')?.textContent?.trim() ?? null,
       };
     }, title);
     const key = JSON.stringify(now);
