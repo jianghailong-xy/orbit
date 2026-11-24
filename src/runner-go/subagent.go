@@ -181,10 +181,15 @@ func delegateToolDescriptor(obj func(map[string]interface{}, ...string) map[stri
 		"name": delegateToolName,
 		// Not alwaysLoad since design D2 (step 6): behind ToolSearch, delegate and its one-line rule passed I3 10/10 and 10/10
 		// without the mark (it had cost about 692 o200k tokens per request on Claude Code 2.1.325).
+		// It says delegate needs no Session orchestration: since step 5 left the orchestration-off paragraph saying only to
+		// name the switch and claim no delegation, Codex 0.172.0 read it as covering delegate and answered "the background
+		// investigation can't start" in I3-delegate-subagent/background (84/100 from step 5 on, against 40/40 before it;
+		// 20/20 with this sentence, 2026-11-25).
 		"description": "Hand a self-contained piece of work to a SubAgent: another coding engine that Orbit starts in this" +
 			" session's own working directory. Use it instead of your engine's built-in subagent or Agent tool whenever" +
 			" you would start a subagent or run work in the background: Orbit picks its model (or runs the one you name)," +
-			" records its cost and brings its result back even if this engine is recycled." +
+			" records its cost and brings its result back even if this engine is recycled. It needs no Session" +
+			" orchestration: it is served, and works, with the session_* tools off." +
 			" It sees your uncommitted changes, edits files directly and never commits;" +
 			" its edits stay in your working tree for you to review and commit. Its progress is shown nested under this" +
 			" call. In the foreground (the default) the call returns { runId, status, result, changedFiles, model, costUsd, rate }" +
