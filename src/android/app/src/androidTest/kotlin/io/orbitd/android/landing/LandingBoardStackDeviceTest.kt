@@ -61,7 +61,7 @@ class LandingBoardStackDeviceTest {
         }
     }
     private fun link(uri: String) {
-        compose.activityRule.scenario.onActivity { it.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri)).setPackage(it.packageName)) }
+        compose.activityRule.scenario.onActivity { it.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri)).setPackage(it.packageName).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)) }
         compose.waitForIdle()
     }
     private fun shownAfter(text: String): Boolean { try { await(text, 8_000) } catch (_: AssertionError) { return false }; return true }
