@@ -147,6 +147,8 @@ export interface Tenant {
   driveTrashGroupId: string;
   /** An upload in progress (OWNER_UPLOAD staging) with no chunks yet. */
   driveUploadId: string;
+  /** An agent's directory sync this account's runner opened. */
+  driveSyncId: string;
   /** Objects a destructive route takes away, one each, so that no other case loses its own. */
   spare: {
     accessTokenId: string;
@@ -330,6 +332,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   // ── Documents (docs/documents-drive-technical-design.md §4.1, §4.4): every read and write by (id, owner) ──────────
   ...documentsUnderEveryPrefix({
     'GET /documents/entries/:id': { request: (of) => ({ params: { id: of.driveFileId } }) },
+    'GET /documents/syncs/:id': { request: (of) => ({ params: { id: of.driveSyncId } }) },
     'PATCH /documents/entries/:id': { request: (of) => ({ params: { id: of.driveFileId }, body: { name: 'renamed by the census.txt' } }) },
     'POST /documents/entries/:id/share-check': { request: (of) => ({ params: { id: of.driveFileId } }) },
     'GET /documents/entries/:id/versions': { request: (of) => ({ params: { id: of.driveFileId } }) },

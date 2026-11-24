@@ -1066,6 +1066,7 @@ macOS runner 也能用 Google 登录 Antigravity，凭据模型和 Linux 相同�
 - `<appDataDir>/cache/antigravity-keyring-unavailable` 之类的空标记文件不会让它切到文件模式。
 - 1.5.16 的 token 文件是 `{"token":{…},"auth_method":…}`（1.2.16 的扁平形状会被静默读成空凭据）。runner 只整份复制，不解析，不受影响。
 - 全程 `security find-generic-password -s gemini -a antigravity` 都是 44（没有条目），实验前后没有变化。
+- **终端身份查询（2026-11-24 补测）**：macOS 上 agy 1.5.16 的 TUI 启动时先发 `ESC[>c`（secondary Device Attributes）等一串终端能力查询，**在收到合法的 DA2 回答之前什么都不画**：runner 的 PTY 里 25 秒只输出这 4 个字节，登录卡一直停在「Starting sign-in on the runner…」，直到 relay 的 10 分钟超时。回 `ESC[>0;95;0c`（任何合法的 `CSI > Ps;Pv;Pc c` 都行）后立即画出菜单和带 OSC 8 链接的授权页；回 DA1、回车或别的字节都不行。窗口 200 列和 4096 列没有区别；`TERM=dumb` 虽然不等，但不再输出 OSC 8 链接，所以不能用。runner 在登录输出里看到 `ESC[>c` 就回答一次（`antigravityGoogleDA2Reply`），Linux 上同样回答，行为与真实终端一致。
 - 登录界面（PTY + `SSH_CONNECTION`）：`Select login method:` / `> 1. Google OAuth` / `2. Use a Google Cloud project`，回车后是与 Linux 相同的 `Open the URL below in your browser:` 和授权码提示；1.5.16 在新目录上没有出现主题/条款/信任页。
 
 **runner 的做法：**

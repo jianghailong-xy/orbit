@@ -62,6 +62,9 @@ type documentsSyncOptions struct {
 	// The destination's drive path, normalized.
 	dest        string
 	deleteExtra bool
+	// The sync's record, when whoever started the job opened it already (documents_sync does, so that its answer
+	// names the sync for the conversation's card); empty, the sync opens its own.
+	syncID string
 	// Where progress lines go; nil prints none.
 	out io.Writer
 }
@@ -230,18 +233,43 @@ type documentsSyncReporter struct {
 }
 
 func openDocumentsSyncReport(ctx context.Context, t *Transport, opts documentsSyncOptions, progress *documentsSyncProgress) *documentsSyncReporter {
-	body := map[string]interface{}{"sourceName": filepath.Base(opts.source), "destPath": opts.dest}
-	if opts.sessionID != "" {
-		body["sessionId"] = decodeSessionID(opts.sessionID)
+	if opts.syncID != "" {
+		return &documentsSyncReporter{t: t, id: opts.syncID, progress: progress, sent: -1}
+	}
+	id, err := openDocumentsSync(ctx, t, opts.sessionID, opts.source, opts.dest)
+	if err != nil {
+		logln("documents sync: could not open its progress report, the Documents page will not show it:", err)
+		return nil
+	}
+	return &documentsSyncReporter{t: t, id: id, progress: progress, sent: -1}
+}
+
+// openDocumentsSync makes the sync's record on the server, which the owner's tray and the conversation's card read.
+func openDocumentsSync(ctx context.Context, t *Transport, sessionID, source, dest string) (string, error) {
+	body := map[string]interface{}{"sourceName": filepath.Base(source), "destPath": dest}
+	if sessionID != "" {
+		body["sessionId"] = decodeSessionID(sessionID)
 	}
 	var opened struct {
 		ID string `json:"id"`
 	}
-	if err := t.do(ctx, http.MethodPost, documentsSyncSyncsRoute, body, &opened, documentsTimeout); err != nil || opened.ID == "" {
-		logln("documents sync: could not open its progress report, the Documents page will not show it:", err)
-		return nil
+	if err := t.do(ctx, http.MethodPost, documentsSyncSyncsRoute, body, &opened, documentsTimeout); err != nil {
+		return "", err
 	}
-	return &documentsSyncReporter{t: t, id: opened.ID, progress: progress, sent: -1}
+	if opened.ID == "" {
+		return "", errors.New("the server answered no sync id")
+	}
+	return opened.ID, nil
+}
+
+// endDocumentsSync ends a sync whose job never started, so neither the tray nor the card waits on it.
+func endDocumentsSync(t *Transport, id, reason string) {
+	ctx, cancel := context.WithTimeout(context.Background(), documentsTimeout)
+	defer cancel()
+	body := map[string]interface{}{"status": "FAILED", "error": reason}
+	if err := t.do(ctx, http.MethodPatch, documentsSyncSyncsRoute+"/"+url.PathEscape(id), body, nil, documentsTimeout); err != nil {
+		logln("documents sync: could not end the sync whose job did not start:", err)
+	}
 }
 
 // send reports when anything moved since the last report, or always when final.
@@ -693,9 +721,11 @@ func walkDocumentsSyncSource(root string, scope localFileScope, progress *docume
 	return files, dirs, skipped, err
 }
 
-// startDocumentsSyncJob starts `orbit documents sync --wait` as this session's runner-hosted background job, which wakes the
-// agent when it ends. The checks run first, here, so a bad path is this call's error.
-func startDocumentsSyncJob(sessionID, localPath, dest string, deleteExtra bool) (json.RawMessage, error) {
+// startDocumentsSyncJob starts `orbit documents sync --wait` as this session's runner-hosted background job, which wakes
+// the agent when it ends. The checks run first, here, so a bad path is this call's error. The sync's record is opened
+// here too, before the job, so the answer names it (syncId) and the conversation draws the call as that sync's card; a
+// server that cannot open it leaves the job to open its own, and the call draws as a plain tool call.
+func startDocumentsSyncJob(t *Transport, sessionID, localPath, dest string, deleteExtra bool) (json.RawMessage, error) {
 	source, err := documentsSyncSource(sessionID, localPath)
 	if err != nil {
 		return nil, err
@@ -713,22 +743,42 @@ func startDocumentsSyncJob(sessionID, localPath, dest string, deleteExtra bool) 
 	if err != nil {
 		return nil, err
 	}
+	syncID := ""
+	if t != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), documentsTimeout)
+		syncID, err = openDocumentsSync(ctx, t, sessionID, source, dest)
+		cancel()
+		if err != nil {
+			logln("documents sync: could not open its record before the job; the job opens its own:", err)
+			syncID = ""
+		}
+	}
 	command := strings.Join([]string{shellQuote(exe), "documents", "sync", "--wait", shellQuote(source), shellQuote(dest)}, " ")
 	if deleteExtra {
 		command += " --delete"
+	}
+	if syncID != "" {
+		command += " --sync-id " + shellQuote(syncID)
 	}
 	raw, err := bgSocketCall(socket, token, "run", map[string]interface{}{
 		"command": command, "kind": "job", "wakeOnExit": true,
 		"description": fmt.Sprintf("Sync %s/ to Documents %s", filepath.Base(source), dest),
 	})
 	if err != nil {
+		if syncID != "" {
+			endDocumentsSync(t, syncID, "The background job did not start: "+err.Error())
+		}
 		return nil, fmt.Errorf("documents_sync: %w", err)
 	}
 	var job map[string]interface{}
 	if err := json.Unmarshal(raw, &job); err != nil {
 		return nil, err
 	}
-	job["note"] = "The sync runs in the background and the owner sees it in the Documents page's upload tray. You are woken " +
-		"when it ends; its last output line is the summary. bg_output shows its progress and bg_kill stops it."
+	if syncID != "" {
+		job["syncId"] = syncID
+	}
+	job["note"] = "The sync runs in the background; the owner sees it in this conversation and in the Documents page's " +
+		"upload tray. You are woken when it ends; its last output line is the summary. bg_output shows its progress and " +
+		"bg_kill stops it."
 	return json.Marshal(job)
 }

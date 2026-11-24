@@ -152,6 +152,19 @@ export class DocumentsSyncsService {
     return { ok: true };
   }
 
+  /**
+   * One sync, whatever its age: what the conversation's sync card reads for the call that started it. Another
+   * account's sync is not found, as a sync that never was.
+   */
+  async get(ownerId: string, id: string, now = new Date()): Promise<DocumentsSyncView> {
+    const row = await this.prisma.documentSync.findFirst({ where: { id, ownerId } });
+    if (!row) throw refusal(HttpStatus.NOT_FOUND, 'DOCUMENTS_SYNC_NOT_FOUND', 'No such sync.');
+    const session = row.sessionId
+      ? await this.prisma.session.findFirst({ where: { id: row.sessionId, ownerId }, select: { id: true, title: true } })
+      : null;
+    return viewOf(row, new Map(session ? [[session.id, session.title]] : []), now);
+  }
+
   /** What the tray shows: running syncs and those that ended in the last day, newest first. */
   async list(ownerId: string, now = new Date()): Promise<{ syncs: DocumentsSyncView[] }> {
     const rows = await this.prisma.documentSync.findMany({

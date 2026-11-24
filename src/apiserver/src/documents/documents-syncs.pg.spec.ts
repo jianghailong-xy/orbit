@@ -8,7 +8,7 @@
  *   (1) a runner opens a sync, reports into it and ends it; the owner's list reads each step, with the session's title;
  *   (2) only the runner that opened a sync reports into it: another runner of the same account and another account's
  *       runner are answered 404, and an ended sync 409, each writing nothing;
- *   (3) the owner's list: another account's syncs never, a session of another account by no title, a running sync with
+ *   (3) the owner's list and read by id: another account's syncs never, a session of another account by no title, a running sync with
  *       no report for two minutes as STOPPED, a sync ended over a day ago not at all (and pruned by the next open);
  *   (4) the body: a source name with a slash, an unknown status and more than 100 failed paths are refused.
  *
@@ -127,6 +127,9 @@ test('Documents: an agent directory sync reported for the upload tray', { skip: 
   await t.test('(3) the owner list: own syncs only, own sessions only, stale reads STOPPED, a day-old end is gone', async () => {
     const bobs = opened(await as(bobRunner.token, 'POST', '', { sourceName: 'secret', destPath: '/Private' }), 'bob opens');
     assert.equal(await listed(alice, bobs), undefined);
+    // Read by id, as the conversation's card does: the owner's own, and another account's as not found.
+    assert.equal((await syncs.get(bob, bobs)).sourceName, 'secret');
+    await assert.rejects(syncs.get(alice, bobs), (error: { getStatus?: () => number }) => error.getStatus?.() === 404);
     const foreign = opened(await as(aliceRunner.token, 'POST', '', { sourceName: 'x', destPath: '/X', sessionId: bobSession }), 'open');
     assert.equal((await listed(alice, foreign))?.session, null, "another account's session is neither kept nor named");
 
