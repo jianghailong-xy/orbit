@@ -11,8 +11,11 @@ import {
   FileImageOutlined,
   FileMarkdownOutlined,
   FileOutlined,
+  FilePdfOutlined,
+  FileTextOutlined,
   FolderAddOutlined,
   FolderFilled,
+  Html5Outlined,
   LinkOutlined,
   RightOutlined,
   UploadOutlined,
@@ -38,14 +41,18 @@ import {
   driveVersionsQuery,
   formatSize,
   formatWhen,
+  isHtml,
   isMarkdown,
-  MARKDOWN_PREVIEW_BYTES,
+  isPdf,
+  isText,
   messageOf,
+  PDF_PREVIEW_BYTES,
   PICTURE_PREVIEW_BYTES,
   pictureType,
   renameDriveEntry,
   restoreDriveGroup,
   restoreDriveVersion,
+  TEXT_PREVIEW_BYTES,
   trashDriveEntry,
   type DriveEntry,
   type DriveShareLink,
@@ -202,11 +209,17 @@ function EntryIcon({ entry }: { entry: Pick<DriveEntry, 'kind' | 'name'> }) {
   if (entry.kind === 'FOLDER') return <FolderFilled className="files-folder-icon" aria-hidden="true" />;
   if (pictureType(entry.name)) return <FileImageOutlined className="files-file-icon picture" aria-hidden="true" />;
   if (isMarkdown(entry.name)) return <FileMarkdownOutlined className="files-file-icon" aria-hidden="true" />;
+  if (isPdf(entry.name)) return <FilePdfOutlined className="files-file-icon" aria-hidden="true" />;
+  if (isHtml(entry.name)) return <Html5Outlined className="files-file-icon" aria-hidden="true" />;
+  if (isText(entry.name)) return <FileTextOutlined className="files-file-icon" aria-hidden="true" />;
   return <FileOutlined className="files-file-icon" aria-hidden="true" />;
 }
 
-/** A picture drawn from its bytes (the content route is login-only, so no `<img src>` can point at it). */
-function PicturePreview({ file }: { file: DriveEntry }) {
+/**
+ * A URL for a file's whole bytes labelled as `type` (the content route is login-only, so no `<img src>` or frame can
+ * point at it): null while it loads, 'failed' when it could not be read.
+ */
+function useFileUrl(file: DriveEntry, type: string): string | null | 'failed' {
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -215,7 +228,7 @@ function PicturePreview({ file }: { file: DriveEntry }) {
     setUrl(null);
     setFailed(false);
     void driveBlob('entries', file.id)
-      .then((blob) => userFileUrl(new Blob([blob], { type: pictureType(file.name)! })))
+      .then((blob) => userFileUrl(new Blob([blob], { type })))
       .then((next) => {
         made = next;
         if (stale) URL.revokeObjectURL(next);
@@ -226,18 +239,76 @@ function PicturePreview({ file }: { file: DriveEntry }) {
       stale = true;
       if (made?.startsWith('blob:')) URL.revokeObjectURL(made);
     };
-  }, [file.id, file.name, file.currentVersionId, file.seq]);
-  if (failed) return <div className="files-preview-none">Couldn't load the preview.</div>;
+  }, [file.id, type, file.currentVersionId, file.seq]);
+  return failed ? 'failed' : url;
+}
+
+/** A picture drawn from its bytes. */
+function PicturePreview({ file }: { file: DriveEntry }) {
+  const url = useFileUrl(file, pictureType(file.name)!);
+  if (url === 'failed') return <div className="files-preview-none">Couldn't load the preview.</div>;
   if (!url) return <div className="files-preview-loading">Loading preview…</div>;
   return <img className="files-preview-picture" src={url} alt={file.name} />;
 }
 
-function MarkdownPreview({ file }: { file: DriveEntry }) {
-  const text = useQuery({
+/** A PDF in the browser's own viewer, in a frame of the pane (nginx.conf's frame-src admits the blob: URL). */
+function PdfPreview({ file }: { file: DriveEntry }) {
+  const url = useFileUrl(file, 'application/pdf');
+  if (url === 'failed') return <div className="files-preview-none">Couldn't load the preview.</div>;
+  if (!url) return <div className="files-preview-loading">Loading preview…</div>;
+  return <iframe className="files-preview-pdf" src={url} title={file.name} />;
+}
+
+/** What a preview cut at `TEXT_PREVIEW_BYTES` says under itself. */
+function CutNote({ file }: { file: DriveEntry }) {
+  if (file.sizeBytes <= TEXT_PREVIEW_BYTES) return null;
+  return (
+    <div className="files-preview-note">
+      Showing the first {formatSize(TEXT_PREVIEW_BYTES)} of {formatSize(file.sizeBytes)}.
+    </div>
+  );
+}
+
+/** Plain text or code as it is written. */
+function TextPreview({ file }: { file: DriveEntry }) {
+  const text = useFileText(file);
+  if (text.isError) return <div className="files-preview-none">Couldn't load the preview.</div>;
+  if (text.data === undefined) return <div className="files-preview-loading">Loading preview…</div>;
+  return (
+    <>
+      <pre className="files-preview-text">{text.data}</pre>
+      <CutNote file={file} />
+    </>
+  );
+}
+
+/**
+ * A web page drawn in a frame with every sandbox permission off: it runs no script, has no origin (so it reaches
+ * neither the login nor this page), submits no form and navigates nowhere.
+ */
+function HtmlPreview({ file }: { file: DriveEntry }) {
+  const text = useFileText(file);
+  if (text.isError) return <div className="files-preview-none">Couldn't load the preview.</div>;
+  if (text.data === undefined) return <div className="files-preview-loading">Loading preview…</div>;
+  return (
+    <>
+      <iframe className="files-preview-page" sandbox="" srcDoc={text.data} title={file.name} />
+      <CutNote file={file} />
+    </>
+  );
+}
+
+/** The start of a text file: `TEXT_PREVIEW_BYTES` read with a Range. */
+function useFileText(file: DriveEntry) {
+  return useQuery({
     queryKey: ['drive', 'preview-text', file.id, file.currentVersionId, file.seq],
     meta: { entities: ['drive'] },
-    queryFn: async () => (await driveBlob('entries', file.id, MARKDOWN_PREVIEW_BYTES)).text(),
+    queryFn: async () => (await driveBlob('entries', file.id, TEXT_PREVIEW_BYTES)).text(),
   });
+}
+
+function MarkdownPreview({ file }: { file: DriveEntry }) {
+  const text = useFileText(file);
   if (text.isError) return <div className="files-preview-none">Couldn't load the preview.</div>;
   if (text.data === undefined) return <div className="files-preview-loading">Loading preview…</div>;
   return (
@@ -250,6 +321,14 @@ function MarkdownPreview({ file }: { file: DriveEntry }) {
 function Preview({ file }: { file: DriveEntry }) {
   if (pictureType(file.name) && file.sizeBytes <= PICTURE_PREVIEW_BYTES) return <PicturePreview file={file} />;
   if (isMarkdown(file.name)) return <MarkdownPreview file={file} />;
+  if (isPdf(file.name)) {
+    if (file.sizeBytes > PDF_PREVIEW_BYTES) {
+      return <div className="files-preview-none">Too large to preview ({formatSize(file.sizeBytes)}). Download it to open.</div>;
+    }
+    return <PdfPreview file={file} />;
+  }
+  if (isHtml(file.name)) return <HtmlPreview file={file} />;
+  if (isText(file.name)) return <TextPreview file={file} />;
   return null;
 }
 
