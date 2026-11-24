@@ -331,7 +331,7 @@ var bothChannels = []instructionChannel{channelSystem, channelMCP}
 var instructionUnits = []instructionUnit{
 	{id: "primer.lead", owner: "primer: task_create, task_create_batch, project_create", kind: kindDisposition,
 		appliesTo: orbitSession, channels: bothChannels, core: agentPrimerLead,
-		detail: "guide", guardedBy: []string{"E1-record-task", "E2-private-plan", "I9-no-project-for-ordinary-work"},
+		detail: "guide", guardedBy: []string{"E1-record-task", "E2-private-plan"},
 		// The one paragraph initialize keeps everywhere: it says what Orbit is for, and carries the primer's version.
 		safety: true},
 	{id: "primer.objects", owner: "primer: guide", kind: kindSelection,
@@ -380,7 +380,10 @@ var instructionUnits = []instructionUnit{
 		core: orbitDriveMountInstructions, detail: "guide topic files (orbitDriveGuide)", conflicts: []string{"drive.tools"}},
 	{id: "project.inside-recorded-work", owner: "projects: task_create, project_create", kind: kindSelection,
 		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.writesOrbit() && s.InsideRecordedWork }, channels: []instructionChannel{channelSystem},
-		core: orbitProjectInsideInstructions, detail: "project_create description"},
+		core: orbitProjectInsideInstructions, detail: "project_create description", conflicts: []string{"project.propose"}},
+	{id: "project.propose", owner: "projects: project_create", kind: kindSelection,
+		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.writesOrbit() && !s.InsideRecordedWork }, channels: []instructionChannel{channelSystem},
+		core: orbitProjectProposeInstructions, detail: "project_create description", guardedBy: []string{"I9-no-project-for-ordinary-work"}, conflicts: []string{"project.inside-recorded-work"}},
 	{id: "progress.report", owner: "progress: task_progress_report", kind: kindDisposition,
 		appliesTo: func(s SessionShape) bool { return orbitSession(s) && s.Role == roleTaskRun }, channels: []instructionChannel{channelSystem},
 		core: orbitProgressInstructions, tools: []string{"task_progress_report"}, detail: "task_progress_report description", guardedBy: []string{"I6-progress-report"}},

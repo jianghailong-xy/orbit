@@ -30,12 +30,18 @@ func TestWithOrbitCLIInstructions(t *testing.T) {
 		"Never run `'/opt/orbit runner/bin/orbit' mcp`",
 		"durable record",
 		"No returned id, no claim.",
+		"Most newly discovered work is one task",
+		"4 or more steps that depend on one another",
+		"you may propose recording it as an Orbit Project",
+		"do not propose the same body of work twice",
 		// The owner's rule: nothing is created on their behalf without a yes, and the yes is the
 		// card the create raises, never the model deciding the shape qualifies. Saying first what is
 		// about to be created is what keeps that card from arriving unannounced.
 		"writes nothing until they confirm it",
 		"first say in a sentence or two what you will create",
 		"A refusal or a declined card is final on every surface",
+		"Its confirmation card is the user's answer",
+		"from this same session",
 		// A reply names Orbit things by a link the clients draw as the title, not by a bare id.
 		"`[Fix login redirect](orbit-task:<id>)`",
 		"by its receipt's link, never a bare id",
@@ -154,44 +160,55 @@ func TestOrbitCLIAllowedToolsAddsSessionRulesOnlyForOrchestrators(t *testing.T) 
 	}
 }
 
-// The project line, and the fact that ONLY it differs between a task's run and a free conversation: both are still
-// told what an Orbit task is for and that nothing is created without a yes. Since design step 5d the bar a project has
-// to clear, that the card is the only yes and that a yes binds this conversation as coordinator are project_create's
-// description, so a free conversation is given no project text, and a task's run one line.
+// The two forms of the project paragraph, and the fact that ONLY that paragraph differs: a task
+// session must still be told what an Orbit task is for and which tool writes one. Asserted in both
+// directions, because the split is a difference of emphasis rather than of permission — a task
+// form that had lost the task default, or an open form that had gained it, would each pass a
+// one-sided check. What a task session is NOT told is the open form's bar; it starts from the home
+// the work already has and says what agreeing costs.
 func TestOrbitProjectInstructionsDifferInsideRecordedWork(t *testing.T) {
 	exe := "/usr/local/bin/orbit"
 	open := orbitCLIInstructions(exe, false, true, true, true)
 	inside := orbitCLIInstructions(exe, true, true, true, true)
-	if !strings.Contains(inside, orbitProjectInsideInstructions) {
-		t.Fatal("a session inside recorded work is not given the project line")
+	if open == inside {
+		t.Fatal("a session inside recorded work receives the same project paragraph as a free conversation")
 	}
-	for _, shared := range []string{"durable record", "No returned id, no claim.", "orbit-task:<id>", "--receipt", "guide [topic] --json",
-		"mcp__orbit__*", "writes nothing until they confirm it", "the smaller wins"} {
+	for _, shared := range []string{"durable record", "No returned id, no claim.", "orbit-task:<id>", "--receipt", "guide [topic] --json", "mcp__orbit__*"} {
 		if !strings.Contains(open, shared) || !strings.Contains(inside, shared) {
 			t.Errorf("both forms must keep %q", shared)
 		}
 	}
-	for _, want := range []string{"as a task, saying first what you are filing", "it lands in this task's project",
-		"A separate undertaking is the user's to start", "project_create"} {
+	for _, want := range []string{
+		"you may propose recording it as an Orbit Project",
+		"4 or more steps that depend on one another",
+	} {
+		if !strings.Contains(open, want) {
+			t.Errorf("open form does not contain %q", want)
+		}
+		if strings.Contains(inside, want) {
+			t.Errorf("a session inside recorded work is still offered %q", want)
+		}
+	}
+	for _, want := range []string{
+		"file it as a task",
+		"lands under the same project this one belongs to",
+		// The proposal is not withheld from a task session any more; what the form carries is the
+		// default it trades away and the thing agreeing costs — this conversation becomes the new
+		// project's coordinator.
+		"you may put it in front of them",
+		"this conversation becomes that project's coordinator",
+	} {
 		if !strings.Contains(inside, want) {
 			t.Errorf("task form does not contain %q", want)
 		}
-	}
-	if strings.Contains(open, orbitProjectInsideInstructions) || strings.Contains(open, "Orbit Project") {
-		t.Error("a free conversation is given project text")
-	}
-	var create string
-	for _, tool := range catalogToolDescriptors(false, false) {
-		if tool["name"] == "project_create" {
-			create, _ = tool["description"].(string)
+		if strings.Contains(open, want) {
+			t.Errorf("free conversation is told %q", want)
 		}
 	}
-	for _, want := range []string{"most work that comes up is one task", "4 or more steps that depend on one another",
-		"do not ask twice about the same body of work", "The card is the only yes", "never create a project another way",
-		"from this same session", "Inside a task's run, work you discover is a task of that task's project",
-		"bound to THIS session as its coordinator"} {
-		if !strings.Contains(create, want) {
-			t.Errorf("project_create's description does not say %q", want)
+	// The one clause neither form may drop: nothing is created without the user's yes, in either shape.
+	for _, form := range []string{open, inside} {
+		if !strings.Contains(form, "writes nothing until they confirm it") {
+			t.Errorf("form does not keep the confirm-first rule: %q", form)
 		}
 	}
 }

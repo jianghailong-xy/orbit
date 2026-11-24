@@ -1416,10 +1416,7 @@ func buildOperationCatalog() []*operation {
 				"plan is still there and whoever picks it up next does not have to re-derive it. " +
 				"This call is how you ask: it puts a confirmation card in front of the user and BLOCKS " +
 				"until they answer, and nothing is created if they decline — then a task is the right " +
-				"record, and do not ask twice about the same body of work. The card is the only yes: " +
-				"never create a project another way, and call this from this same session rather than " +
-				"switching or opening one for it. Inside a task's run, work you discover is a task of " +
-				"that task's project; propose a project only for a separate undertaking. The " +
+				"record, and do not ask twice about the same body of work. The " +
 				"project starts OPEN and holds no tasks — file them afterwards with task_create / " +
 				"task_create_batch passing its projectId, which is what connects the work to what " +
 				"it is for. Created from inside a session, the project is bound to THIS session " +

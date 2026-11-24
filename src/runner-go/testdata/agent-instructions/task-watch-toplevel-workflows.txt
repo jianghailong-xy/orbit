@@ -1,4 +1,4 @@
-=== antigravity (6218 bytes)
+=== antigravity (6758 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -25,7 +25,7 @@ Evidence: cite a command's output by its tool call rather than saving a log; kee
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
-File work you discover in this task's run as a task, saying first what you are filing: it lands in this task's project. A separate undertaking is the user's to start, which project_create can propose to them on its card.
+You are running one task Orbit has already recorded, so newly discovered work has somewhere to go: file it as a task, saying first what you are filing. It lands under the same project this one belongs to, without your naming it. Work that is a separate undertaking is the user's to start, and you may put it in front of them rather than starting it yourself: project_create raises a confirmation card and waits for the answer, and on a yes this conversation becomes that project's coordinator -- opening the project later comes back here rather than starting a stranger. Filing the task is still the default, and the cheaper one. Nothing is created without the user's yes, and the card is the only place that yes comes from: never create a project another way.
 
 When this task's position changes -- a new phase, or another item of a known total done -- report it with task_progress_report: Orbit reads progress from that report alone, not from your output or replies.
 
@@ -40,7 +40,7 @@ To fan out several SubAgents, in parallel or in phases, whose results you only n
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the tools of the `orbit` MCP server (call_mcp_tool with ServerName "orbit"). Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
-=== claude (5990 bytes)
+=== claude (6530 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -65,7 +65,7 @@ Evidence: cite a command's output by its tool call rather than saving a log; kee
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
-File work you discover in this task's run as a task, saying first what you are filing: it lands in this task's project. A separate undertaking is the user's to start, which project_create can propose to them on its card.
+You are running one task Orbit has already recorded, so newly discovered work has somewhere to go: file it as a task, saying first what you are filing. It lands under the same project this one belongs to, without your naming it. Work that is a separate undertaking is the user's to start, and you may put it in front of them rather than starting it yourself: project_create raises a confirmation card and waits for the answer, and on a yes this conversation becomes that project's coordinator -- opening the project later comes back here rather than starting a stranger. Filing the task is still the default, and the cheaper one. Nothing is created without the user's yes, and the card is the only place that yes comes from: never create a project another way.
 
 When this task's position changes -- a new phase, or another item of a known total done -- report it with task_progress_report: Orbit reads progress from that report alone, not from your output or replies.
 
@@ -81,7 +81,7 @@ Before changing a file, use wiki_search with its path to look up known pitfalls.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the `mcp__orbit__*` tools. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
 === claude, resumed: same as claude
-=== codex 0.125-0.134 developer message (6710 bytes)
+=== codex 0.125-0.134 developer message (7250 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -108,7 +108,7 @@ Evidence: cite a command's output by its tool call rather than saving a log; kee
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
-File work you discover in this task's run as a task, saying first what you are filing: it lands in this task's project. A separate undertaking is the user's to start, which project_create can propose to them on its card.
+You are running one task Orbit has already recorded, so newly discovered work has somewhere to go: file it as a task, saying first what you are filing. It lands under the same project this one belongs to, without your naming it. Work that is a separate undertaking is the user's to start, and you may put it in front of them rather than starting it yourself: project_create raises a confirmation card and waits for the answer, and on a yes this conversation becomes that project's coordinator -- opening the project later comes back here rather than starting a stranger. Filing the task is still the default, and the cheaper one. Nothing is created without the user's yes, and the card is the only place that yes comes from: never create a project another way.
 
 When this task's position changes -- a new phase, or another item of a known total done -- report it with task_progress_report: Orbit reads progress from that report alone, not from your output or replies.
 
@@ -125,7 +125,7 @@ Before changing a file, use wiki_search with its path to look up known pitfalls.
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the `mcp__orbit__*` tools. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
 
 After generating an image, preserve the original file. Do not regenerate it solely because Orbit could not attach or upload it. Only claim that the image is attached or delivered when Orbit explicitly confirms attachment delivery; successful generation alone is not delivery confirmation. If delivery fails, report that the image was generated but delivery failed, keep the original file available, and let Orbit retry delivery. If delivery status is unavailable, report only generation success without claiming delivery success or failure.
-=== codex < 0.125 turn input (6767 bytes)
+=== codex < 0.125 turn input (7307 bytes)
 <orbit_application_context>
 Owner instructions.
 
@@ -153,7 +153,7 @@ Evidence: cite a command's output by its tool call rather than saving a log; kee
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
-File work you discover in this task's run as a task, saying first what you are filing: it lands in this task's project. A separate undertaking is the user's to start, which project_create can propose to them on its card.
+You are running one task Orbit has already recorded, so newly discovered work has somewhere to go: file it as a task, saying first what you are filing. It lands under the same project this one belongs to, without your naming it. Work that is a separate undertaking is the user's to start, and you may put it in front of them rather than starting it yourself: project_create raises a confirmation card and waits for the answer, and on a yes this conversation becomes that project's coordinator -- opening the project later comes back here rather than starting a stranger. Filing the task is still the default, and the cheaper one. Nothing is created without the user's yes, and the card is the only place that yes comes from: never create a project another way.
 
 When this task's position changes -- a new phase, or another item of a known total done -- report it with task_progress_report: Orbit reads progress from that report alone, not from your output or replies.
 
@@ -174,7 +174,7 @@ After generating an image, preserve the original file. Do not regenerate it sole
 === codex >= 0.135 additional context: same as codex 0.125-0.134 developer message
 === codex >= 0.135, after compaction: same as codex 0.125-0.134 developer message
 === codex >= 0.135, resumed thread: same as codex 0.125-0.134 developer message
-=== cursor (6002 bytes)
+=== cursor (6542 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -201,7 +201,7 @@ Evidence: cite a command's output by its tool call rather than saving a log; kee
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
-File work you discover in this task's run as a task, saying first what you are filing: it lands in this task's project. A separate undertaking is the user's to start, which project_create can propose to them on its card.
+You are running one task Orbit has already recorded, so newly discovered work has somewhere to go: file it as a task, saying first what you are filing. It lands under the same project this one belongs to, without your naming it. Work that is a separate undertaking is the user's to start, and you may put it in front of them rather than starting it yourself: project_create raises a confirmation card and waits for the answer, and on a yes this conversation becomes that project's coordinator -- opening the project later comes back here rather than starting a stranger. Filing the task is still the default, and the cheaper one. Nothing is created without the user's yes, and the card is the only place that yes comes from: never create a project another way.
 
 When this task's position changes -- a new phase, or another item of a known total done -- report it with task_progress_report: Orbit reads progress from that report alone, not from your output or replies.
 
@@ -216,7 +216,7 @@ To fan out several SubAgents, in parallel or in phases, whose results you only n
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the tools of the `orbit` MCP server. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
-=== deepseek harness (6168 bytes)
+=== deepseek harness (6708 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -243,7 +243,7 @@ Evidence: cite a command's output by its tool call rather than saving a log; kee
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
-File work you discover in this task's run as a task, saying first what you are filing: it lands in this task's project. A separate undertaking is the user's to start, which project_create can propose to them on its card.
+You are running one task Orbit has already recorded, so newly discovered work has somewhere to go: file it as a task, saying first what you are filing. It lands under the same project this one belongs to, without your naming it. Work that is a separate undertaking is the user's to start, and you may put it in front of them rather than starting it yourself: project_create raises a confirmation card and waits for the answer, and on a yes this conversation becomes that project's coordinator -- opening the project later comes back here rather than starting a stranger. Filing the task is still the default, and the cheaper one. Nothing is created without the user's yes, and the card is the only place that yes comes from: never create a project another way.
 
 When this task's position changes -- a new phase, or another item of a known total done -- report it with task_progress_report: Orbit reads progress from that report alone, not from your output or replies.
 
@@ -258,7 +258,7 @@ To fan out several SubAgents, in parallel or in phases, whose results you only n
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the `mcp__orbit__*` tools. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
-=== kimi (6249 bytes)
+=== kimi (6789 bytes)
 [map[text:<orbit-agent-instructions>
 Owner instructions.
 
@@ -286,7 +286,7 @@ Evidence: cite a command's output by its tool call rather than saving a log; kee
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
-File work you discover in this task's run as a task, saying first what you are filing: it lands in this task's project. A separate undertaking is the user's to start, which project_create can propose to them on its card.
+You are running one task Orbit has already recorded, so newly discovered work has somewhere to go: file it as a task, saying first what you are filing. It lands under the same project this one belongs to, without your naming it. Work that is a separate undertaking is the user's to start, and you may put it in front of them rather than starting it yourself: project_create raises a confirmation card and waits for the answer, and on a yes this conversation becomes that project's coordinator -- opening the project later comes back here rather than starting a stranger. Filing the task is still the default, and the cheaper one. Nothing is created without the user's yes, and the card is the only place that yes comes from: never create a project another way.
 
 When this task's position changes -- a new phase, or another item of a known total done -- report it with task_progress_report: Orbit reads progress from that report alone, not from your output or replies.
 
@@ -304,7 +304,7 @@ The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few op
 </orbit-agent-instructions>
 
 hi type:text]]
-=== opencode (6162 bytes)
+=== opencode (6702 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -331,7 +331,7 @@ Evidence: cite a command's output by its tool call rather than saving a log; kee
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
-File work you discover in this task's run as a task, saying first what you are filing: it lands in this task's project. A separate undertaking is the user's to start, which project_create can propose to them on its card.
+You are running one task Orbit has already recorded, so newly discovered work has somewhere to go: file it as a task, saying first what you are filing. It lands under the same project this one belongs to, without your naming it. Work that is a separate undertaking is the user's to start, and you may put it in front of them rather than starting it yourself: project_create raises a confirmation card and waits for the answer, and on a yes this conversation becomes that project's coordinator -- opening the project later comes back here rather than starting a stranger. Filing the task is still the default, and the cheaper one. Nothing is created without the user's yes, and the card is the only place that yes comes from: never create a project another way.
 
 When this task's position changes -- a new phase, or another item of a known total done -- report it with task_progress_report: Orbit reads progress from that report alone, not from your output or replies.
 

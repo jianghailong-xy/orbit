@@ -239,7 +239,7 @@ func TestEachShapeIsGivenOnlyTheUnitsThatApplyToIt(t *testing.T) {
 		}
 		return false
 	}
-	projects := []string{orbitProjectInsideInstructions}
+	projects := []string{orbitProjectInsideInstructions, orbitProjectProposeInstructions}
 
 	task := system(job(func(*ClaimedSession) {}))
 	for name, p := range map[string]string{"project": orbitProjectInsideInstructions, "notify": orbitNotifyInstructions,

@@ -1,4 +1,4 @@
-=== antigravity (5230 bytes)
+=== antigravity (5845 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -25,6 +25,8 @@ Evidence: cite a command's output by its tool call rather than saving a log; kee
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
+Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then call project_create from this same session so the conversation becomes its coordinator; do not switch or open a session for it. Its confirmation card is the user's answer: if they decline, a task is the right record, and do not propose the same body of work twice.
+
 When the person asked to hear once something is done, tell them with notify when it is: an answer in this conversation reaches them only when they next look.
 
 Hand work to another agent through Orbit, never your engine's own sub-agents or Agent tool, which are as private as its plan. Look with task_list first: task_start work already recorded, never file it twice. Otherwise use delegate for a piece whose result you need back, in the background, on a cheaper or stronger model or on another machine (needs: ["os:darwin"], or workspace: an agent's name from agent_list); new work of its own is task_create with startNow. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
@@ -32,7 +34,7 @@ Hand work to another agent through Orbit, never your engine's own sub-agents or 
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the tools of the `orbit` MCP server (call_mcp_tool with ServerName "orbit"). Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
-=== claude (5002 bytes)
+=== claude (5617 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -56,6 +58,8 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one in
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
+
+Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then call project_create from this same session so the conversation becomes its coordinator; do not switch or open a session for it. Its confirmation card is the user's answer: if they decline, a task is the right record, and do not propose the same body of work twice.
 
 When the person asked to hear once something is done, tell them with notify when it is: an answer in this conversation reaches them only when they next look.
 
@@ -65,7 +69,7 @@ Before changing a file, use wiki_search with its path to look up known pitfalls.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the `mcp__orbit__*` tools. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
 === claude, resumed: same as claude
-=== codex 0.125-0.134 developer message (5722 bytes)
+=== codex 0.125-0.134 developer message (6337 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -91,6 +95,8 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one in
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
+
+Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then call project_create from this same session so the conversation becomes its coordinator; do not switch or open a session for it. Its confirmation card is the user's answer: if they decline, a task is the right record, and do not propose the same body of work twice.
 
 When the person asked to hear once something is done, tell them with notify when it is: an answer in this conversation reaches them only when they next look.
 
@@ -101,7 +107,7 @@ Before changing a file, use wiki_search with its path to look up known pitfalls.
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the `mcp__orbit__*` tools. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
 
 After generating an image, preserve the original file. Do not regenerate it solely because Orbit could not attach or upload it. Only claim that the image is attached or delivered when Orbit explicitly confirms attachment delivery; successful generation alone is not delivery confirmation. If delivery fails, report that the image was generated but delivery failed, keep the original file available, and let Orbit retry delivery. If delivery status is unavailable, report only generation success without claiming delivery success or failure.
-=== codex < 0.125 turn input (5779 bytes)
+=== codex < 0.125 turn input (6394 bytes)
 <orbit_application_context>
 Owner instructions.
 
@@ -129,6 +135,8 @@ Evidence: cite a command's output by its tool call rather than saving a log; kee
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
+Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then call project_create from this same session so the conversation becomes its coordinator; do not switch or open a session for it. Its confirmation card is the user's answer: if they decline, a task is the right record, and do not propose the same body of work twice.
+
 When the person asked to hear once something is done, tell them with notify when it is: an answer in this conversation reaches them only when they next look.
 
 Hand work to another agent through Orbit, never your engine's own sub-agents or Agent tool, which are as private as its plan. Look with task_list first: task_start work already recorded, never file it twice. Otherwise use delegate for a piece whose result you need back, in the background, on a cheaper or stronger model or on another machine (needs: ["os:darwin"], or workspace: an agent's name from agent_list); new work of its own is task_create with startNow. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
@@ -142,7 +150,7 @@ After generating an image, preserve the original file. Do not regenerate it sole
 === codex >= 0.135 additional context: same as codex 0.125-0.134 developer message
 === codex >= 0.135, after compaction: same as codex 0.125-0.134 developer message
 === codex >= 0.135, resumed thread: same as codex 0.125-0.134 developer message
-=== cursor (5102 bytes)
+=== cursor (5717 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -168,6 +176,8 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one in
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
+
+Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then call project_create from this same session so the conversation becomes its coordinator; do not switch or open a session for it. Its confirmation card is the user's answer: if they decline, a task is the right record, and do not propose the same body of work twice.
 
 When the person asked to hear once something is done, tell them with notify when it is: an answer in this conversation reaches them only when they next look.
 
@@ -176,7 +186,7 @@ Hand work to another agent through Orbit, never your engine's own sub-agents or 
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the tools of the `orbit` MCP server. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
-=== deepseek harness (5180 bytes)
+=== deepseek harness (5795 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -203,6 +213,8 @@ Evidence: cite a command's output by its tool call rather than saving a log; kee
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
+Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then call project_create from this same session so the conversation becomes its coordinator; do not switch or open a session for it. Its confirmation card is the user's answer: if they decline, a task is the right record, and do not propose the same body of work twice.
+
 When the person asked to hear once something is done, tell them with notify when it is: an answer in this conversation reaches them only when they next look.
 
 Hand work to another agent through Orbit, never your engine's own sub-agents or Agent tool, which are as private as its plan. Look with task_list first: task_start work already recorded, never file it twice. Otherwise use delegate for a piece whose result you need back, in the background, on a cheaper or stronger model or on another machine (needs: ["os:darwin"], or workspace: an agent's name from agent_list); new work of its own is task_create with startNow. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
@@ -210,7 +222,7 @@ Hand work to another agent through Orbit, never your engine's own sub-agents or 
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the `mcp__orbit__*` tools. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
-=== kimi (5261 bytes)
+=== kimi (5876 bytes)
 [map[text:<orbit-agent-instructions>
 Owner instructions.
 
@@ -238,6 +250,8 @@ Evidence: cite a command's output by its tool call rather than saving a log; kee
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
 
+Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then call project_create from this same session so the conversation becomes its coordinator; do not switch or open a session for it. Its confirmation card is the user's answer: if they decline, a task is the right record, and do not propose the same body of work twice.
+
 When the person asked to hear once something is done, tell them with notify when it is: an answer in this conversation reaches them only when they next look.
 
 Hand work to another agent through Orbit, never your engine's own sub-agents or Agent tool, which are as private as its plan. Look with task_list first: task_start work already recorded, never file it twice. Otherwise use delegate for a piece whose result you need back, in the background, on a cheaper or stronger model or on another machine (needs: ["os:darwin"], or workspace: an agent's name from agent_list); new work of its own is task_create with startNow. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
@@ -248,7 +262,7 @@ The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few op
 </orbit-agent-instructions>
 
 hi type:text]]
-=== opencode (5174 bytes)
+=== opencode (5789 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -274,6 +288,8 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`. Only one in
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
 The owner's Documents: documents_put, documents_get, documents_list, documents_move, documents_delete (`orbit documents`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
+
+Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then call project_create from this same session so the conversation becomes its coordinator; do not switch or open a session for it. Its confirmation card is the user's answer: if they decline, a task is the right record, and do not propose the same body of work twice.
 
 When the person asked to hear once something is done, tell them with notify when it is: an answer in this conversation reaches them only when they next look.
 
