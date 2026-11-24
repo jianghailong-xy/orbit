@@ -225,6 +225,52 @@ Reports: [`agent-eval/instructions-step3/step3-claude.json`](agent-eval/instruct
   change. Whatever lowered these two cells landed before step 3. Both cells were already the weakest at step 0
   ("Low pass rates with the paragraph present").
 
+## I4 and I6 after step 3: the cause and the fix
+
+Played on 2026-11-24 with the same Claude Code 2.1.331 (`claude-sonnet-5-5`) and Codex 0.172.0 as step 0. The
+step-0 commit was rerun as `ab56654795`, whose instructions are byte for byte those of `dccc711c83` (it changes only a
+delegate grader). Reports: [`agent-eval/instructions-i4-i6/`](agent-eval/instructions-i4-i6/).
+
+**What each session was given.** The Claude Code appended prompt of each scenario's own session, built by
+`claudeCommandArgs` from the eval's `newEvalSession`, with paths replaced by placeholders (sha256, first 12):
+
+| Scenario | `dccc711c83` | project tip `67e4f8382a` | fix `2e456179d1` |
+| --- | --- | --- | --- |
+| I4 (top-level session) | `5feabaa0a0fe` | `1569c8a60895` | `e39d31f3da6a` |
+| I6 (task run) | `2bdb75974468` | `8fd3bbd77365` | `8fd3bbd77365` |
+
+`files.reply-links` and `progress.report` are byte-identical in all of them, and both scenarios play the shape their
+paragraph targets (I4 a top-level session, I6 a task run). No `appliesTo` predicate drops either one. What changed
+around them:
+
+- **I4: step 2 took `files.evidence` away from every session but a task run.** Its file_upload sentence ("it reads
+  those same two directories and returns a reply link") is the other half of how a reply hands over a file. Without
+  it, I4 on Claude Code passed 2/30 (0/10 step 3, 0/10 its parent, 2/10 the tip today). With it, 15/30 (4/10 step 0,
+  3/10 the step-0 commit today, 8/10 the tip with only that predicate changed). Fix `b53d7ae685`: the paragraph goes
+  to every session that writes to Orbit (top-level, coordinator, task run). A SubAgent or a check-only run still does
+  not get it.
+- **I6: step 3 took the re-read paragraph away from Claude Code entirely.** Step 2 skipped `primer.rederive` in
+  Claude Code's appended prompt, and initialize still carried it. Step 3 then dropped from initialize every unit the
+  carrier "already has", and that one it does not have. Without "task_get with no id reads this session's task", 13
+  of 20 I6 runs at the tip asked which task was meant instead of reading it (`task_get` in 5 of 20). The step-0
+  commit read it in 40 of 40, and the parent of step 3 in 10 of 10. Fix `2e456179d1`: initialize keeps a unit the
+  engine's carrier skips. Claude Code's initialize is now the lead plus that paragraph (684 bytes), and every primer
+  paragraph still reaches the session once. After the fix, `task_get` is back in 40 of 40 runs, with no question asked.
+- **I6's pass rate is a floor, not a drop.** Even when the task is read, Sonnet on Claude Code almost never calls
+  `task_progress_report`. The step-0 commit passes it 1/40 today, and the fix passes it 1/40. Step 0's 1/10 was one
+  pass in ten. **The new reference for I6 on Claude Code is 1/40** (step-0 commit, 2026-11-24), and later steps
+  compare with that, not with 1/10.
+
+| Cell | Step 0 (report above) | Step-0 commit today | Tip before the fix | Fix |
+| --- | --- | --- | --- | --- |
+| I4, Claude Code | 4/10 | 3/10 | 2/10 | 7/10 (and 7/10 on `b53d7ae685`) |
+| I6, Claude Code | 1/10 | 1/40 | 0/20 | 1/40 |
+| I4, Codex | 10/10 | | | 10/10 |
+| I6, Codex | 10/10 | | | 10/10 |
+
+Codex's runs were played on `b53d7ae685`. The second fix changes only Claude Code's initialize text (the snapshots'
+`orbit mcp initialize, claude` section, and nothing else), so they stand for the fix.
+
 ## Kimi Code smoke run (step 3)
 
 Step 3 may change Kimi's carrier (the whole instruction block in every prompt) only after a smoke run of E1, E3 and
