@@ -1,6 +1,6 @@
 /**
  * Where the owner's Drive routes answer (drive.controller.ts): /drive, and /documents as an alias of the very same
- * handlers, because runners and web bundles deployed while Drive was called Documents call /documents. Callers in this
+ * handlers, because runners and web bundles deployed while Drive was called Drive call /documents. Callers in this
  * tree use /drive.
  */
 export const DRIVE_ROUTE_PREFIXES = ['drive', 'documents'];
@@ -14,7 +14,7 @@ export const underEveryDrivePrefix = (route: string): string[] =>
 
 /**
  * Where the runner drive door answers (runner-drive.controller.ts): /runner/drive, and /runner/documents as an alias of
- * the very same handlers, because runners and mount daemons deployed while Drive was called Documents call
+ * the very same handlers, because runners and mount daemons deployed while Drive was called Drive call
  * /runner/documents. Callers in this tree use /runner/drive.
  */
 export const RUNNER_DRIVE_ROUTE_PREFIXES = ['runner/drive', 'runner/documents'];

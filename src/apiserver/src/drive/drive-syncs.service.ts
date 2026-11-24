@@ -4,9 +4,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 
 /**
- * An agent's directory sync into the owner's Documents, as the upload tray shows it
- * (docs/documents-directory-sync-design.md S4, "How the progress gets there"). The runner running `orbit documents sync`
- * opens one row and reports into it at most every two seconds; the owner's Documents page reads the list and re-reads it
+ * An agent's directory sync into the owner's Drive, as the upload tray shows it
+ * (docs/drive-directory-sync-design.md S4, "How the progress gets there"). The runner running `orbit documents sync`
+ * opens one row and reports into it at most every two seconds; the owner's Drive page reads the list and re-reads it
  * on `drive.sync`. Nothing here moves a byte: the copy itself goes through the runner drive door like any drive write.
  */
 

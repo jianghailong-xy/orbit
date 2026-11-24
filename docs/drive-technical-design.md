@@ -7,15 +7,15 @@ Revision 2 answers the independent review of revision 1 (task comment `350aNYQGB
 
 Inputs:
 
-- `docs/documents-drive-design.md`: the product decisions D1–D23 and rules 1–8. Referred to below as "the product".
+- `docs/drive-product-design.md`: the product decisions D1–D23 and rules 1–8. Referred to below as "the product".
 - The feasibility report of [can Orbit Cloud runners get a FUSE mount at /home/orbit/Files?](orbit-task:350KDMTso7g0wYwYRpU7y)
   (file `350SDm87q1Sxg2WzOEQXB`), cited as "the report" with its check names (D-1 … D-7, K-1 … K-4).
-- `docs/documents-design.md`: today's sha256 store, retention sweep and evidence files.
+- `docs/drive-design.md`: today's sha256 store, retention sweep and evidence files.
 - The owner's rulings on this task (2026-11-19): G0, a node-level CSI driver on Kubernetes and a per-runner mounter
   container on Docker, parent-directory layout; storage, Ceph RGW (S3) for Orbit Cloud, local disk or any S3 for
   self-hosted; drive layer **option C**, our own name layer in Postgres with chunks as sha256 blobs through the existing
   `FileStore`, a Go mount daemon on go-fuse, and a node-only CSI plugin. No JuiceFS.
-- The board `docs/mocks/documents/` and its four choices, settled as drawn: Trash and Storage are reached from inside
+- The board `docs/mocks/drive/` and its four choices, settled as drawn: Trash and Storage are reached from inside
   Files; Move to Trash asks nothing and web offers undo; an earlier version restores as the current version or as a
   copy; an owner upload whose name is taken gets a suffix and never overwrites.
 
@@ -30,7 +30,7 @@ Line numbers refer to `58e176a1be`.
 | Owner routes | `/drive/*` under the owner's login, resumable chunked upload, ranged download | apiserver |
 | Runner drive door | `/runner/drive/*`, taking the runner credential (drive tools) or a mount credential bound to one runner generation (the mount daemon) | apiserver |
 | Mount daemon | `orbit-documents-mount`, Go on go-fuse, one process per runner; handles bound to entry ids, idempotent commits, commit-on-close plus periodic commits, chunk cache, evict-and-refetch spool, change feed | new `src/documents-mount/` |
-| Kubernetes | CSI node plugin `documents.orbit.dev` (privileged DaemonSet, namespace `orbit-documents-system`), remounting its runners' drives on restart; the runner Pod gains one `csi:` volume | `deploy/managed-runner/documents-csi/`, `managed-runner-resources.ts`, `managed-runner-admission.ts`, one cluster-wide admission policy |
+| Kubernetes | CSI node plugin `documents.orbit.dev` (privileged DaemonSet, namespace `orbit-documents-system`), remounting its runners' drives on restart; the runner Pod gains one `csi:` volume | `deploy/managed-runner/drive-csi/`, `managed-runner-resources.ts`, `managed-runner-admission.ts`, one cluster-wide admission policy |
 | Docker (optional) | Per-runner `mrf-<uuid>` mounter container; the runner container gains one `rslave` bind. Production runs on Kubernetes; this is built only if a Docker deployment needs the drive | `deploy/managed-runner/docker-channel/channel.py` |
 | Engines | `/run/orbit-documents` (the parent) and `/home/orbit/Files` are workspace roots for every engine in every write mode; Plan mode reads only | `src/runner-go/` |
 | Sleep, fencing | A drive write with uncommitted bytes is a reason not to sleep; a mount credential works only for the generation and instance it was issued for | apiserver `managed-runner-work.ts` |
@@ -221,7 +221,7 @@ file, and uploads are capped at 25 MiB (`attachments.media.ts:9`). **Both stay**
    per-blob `storage` column work unchanged, so a deployment may move its target store (production moves to RGW,
    §12 decision 3) with older blobs still read from where they are.
 
-The default target is the deployment's `ORBIT_DOCUMENTS_BACKEND`. Self-hosted keeps local disk or any S3 (D23).
+The default target is the deployment's `ORBIT_DRIVE_BACKEND`. Self-hosted keeps local disk or any S3 (D23).
 
 ### 2.4 The retention sweep treats drive content as held
 
@@ -256,7 +256,7 @@ Changes, in the sweep's own terms:
 ### 2.5 Usage, without changing the attachment quota
 
 `storedTotals` (`files.service.ts:849`) and `assertWithinQuota` (`:866`–`:876`) **stay exactly as they are**, so
-`ORBIT_DOCUMENTS_QUOTA_BYTES` keeps limiting attachment uploads by attachment bytes, and drive bytes can never make an
+`ORBIT_DRIVE_QUOTA_BYTES` keeps limiting attachment uploads by attachment bytes, and drive bytes can never make an
 attachment upload fail. Drive writes are not limited (D12; quotas are the cleanup design's).
 
 Storage (D13) uses a **separate query**, `driveUsage(ownerId)`, that counts each distinct sha256 once across live
@@ -854,7 +854,7 @@ the managed namespace (`managed-runner-admission.ts:176`–`180`), so it cannot 
 - The manager: issue the generation's mount credential with its runner credential and write Secret `mrf-<runner uuid>`
   in `orbit-documents-system` before it creates the Pod; delete it when the generation is retired or the mapping deleted.
   One new Role for the manager: `create`, `update`, `delete` on Secrets in `orbit-documents-system`.
-- `deploy/managed-runner/documents-csi/`: CSIDriver, DaemonSet, namespace, RBAC, the admission policy, README; image build
+- `deploy/managed-runner/drive-csi/`: CSIDriver, DaemonSet, namespace, RBAC, the admission policy, README; image build
   next to the runner image's, with the same local-import caveat as the deployment record.
 
 **Ceph RGW** is not deployed on `.3` (`docs/managed-runner-k3s-xfs-deployment.md` lists Ceph without RGW). Provisioning
@@ -909,14 +909,14 @@ This design relaxes it, on purpose, for one thing. The replacement text, from th
 > **Managed container hardening is fixed.** The channel (`deploy/managed-runner/docker-channel/channel.py`) refuses
 > privileged mode, added capabilities, devices, host binds and user-namespace modes for the runner container, and the
 > Pod template drops every capability. So the runner container cannot mount anything, use FUSE or loop devices, or
-> load kernel modules. **One exception, decided for Documents (docs/documents-drive-design.md,
-> docs/documents-drive-technical-design.md §6):** the runner container may *receive* exactly one mount made outside
+> load kernel modules. **One exception, decided for Documents (docs/drive-product-design.md,
+> docs/drive-technical-design.md §6):** the runner container may *receive* exactly one mount made outside
 > it, `/run/orbit-documents` (a plain per-runner directory with slave propagation; the drive's FUSE mount sits below it),
 > from an Orbit-owned mounter: on Kubernetes the `documents.orbit.dev` CSI node driver; on Docker the per-runner
 > `mrf-<uuid>` container, the only container the channel creates with `SYS_ADMIN`, `/dev/fuse` and the
 > `orbit-documents-mounter` AppArmor profile. Nothing else in this design may relax the runner container's hardening.
 
-The product's "Feasibility first" risk in `docs/documents-drive-design.md` (around line 146), which quotes §3, then
+The product's "Feasibility first" risk in `docs/drive-product-design.md` (around line 146), which quotes §3, then
 points at the new wording.
 
 ## 7. Engine sandbox grants (D16)
@@ -1077,7 +1077,7 @@ Before the drive opens to accounts on production:
    the daemon fails the `write` with `ENOSPC` ("No space left on device") and a line in `errors.log`.
 2. **An off-host mirror of the bucket**: a periodic one-way copy of new objects under `files/` to the backup target
    (`rclone copy` or equivalent, never `sync`), cheap because names are sha256 and never rewritten. The retention sweep
-   then sets `off_host_prune_at` for `s3` blobs too when the deployment declares the mirror (`ORBIT_DOCUMENTS_S3_MIRROR=1`),
+   then sets `off_host_prune_at` for `s3` blobs too when the deployment declares the mirror (`ORBIT_DRIVE_S3_MIRROR=1`),
    and the backup sidecar prunes the mirror by that column, as it prunes the local copy today. The sweep's comment
    "only the local store's bytes are in the off-host copy" (`file-retention-sweep.ts:234`) changes with it. The backup
    target's capacity must be sized for the drive, which has no limit.
@@ -1135,7 +1135,7 @@ the rows of Trash the owner emptied after that backup: those items reappear in T
 1. **Provision Ceph RGW on production** (§6.1, §10.2): the pool with its quota and 80 % alert, the bucket and its
    credentials, the apiserver's route to RGW with a measured bandwidth (§5.5), and the bucket's off-host mirror with the
    backup target sized for it. Owner-approved. **Blocks the Kubernetes walk** and production use.
-2. **Backup sidecar for S3** (§10.2): `off_host_prune_at` for `s3` blobs when `ORBIT_DOCUMENTS_S3_MIRROR=1`, and the sidecar
+2. **Backup sidecar for S3** (§10.2): `off_host_prune_at` for `s3` blobs when `ORBIT_DRIVE_S3_MIRROR=1`, and the sidecar
    pruning the bucket mirror by it.
 3. **`files orphans` and `files verify` for drive chunks and S3** (§10.3), with the weekly report-only scrub.
 4. **Native clients**: Files on iOS, macOS and Android (the product: "web first"), and, before that, the released clients
@@ -1155,7 +1155,7 @@ Items the review listed as unowned that this revision **places in existing tasks
    would in the checkout, and nothing asks about leaving the workspace (§7.2). Alternative: allow drive edits without a
    card in every write mode, which would make the drive looser than the checkout.
 3. **Production store.** Recommended, provided the pool quota and the mirror of §10.2 are in place:
-   `ORBIT_DOCUMENTS_BACKEND=s3` on RGW for all new bytes (drive and attachments alike), one store and one mirror; older local
+   `ORBIT_DRIVE_BACKEND=s3` on RGW for all new bytes (drive and attachments alike), one store and one mirror; older local
    bytes stay readable where they are. Alternative: a separate target for drive chunks only, at the cost of a second
    store configuration.
 4. **Attribution on Docker.** Recommended: none, keeping the optional `mrf` without host pid access. Alternative:

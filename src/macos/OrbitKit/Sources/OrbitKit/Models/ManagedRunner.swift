@@ -30,7 +30,7 @@ public struct ManagedRunnerCapability: Decodable, Equatable, Sendable {
 /// Reading it allocates nothing on the server.
 public struct ServerCapabilities: Decodable, Equatable, Sendable {
     public let managedRunners: ManagedRunnerCapability?
-    /// Documents (the drive, `/documents`), the deployment switch ORBIT_DOCUMENTS_ENABLED. A server from before
+    /// Drive (the drive, `/drive`), the deployment switch ORBIT_DRIVE_ENABLED. A server from before
     /// the switch omits it; `DriveLogic.shown` reads that as on.
     public let documents: DriveCapability?
 

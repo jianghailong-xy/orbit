@@ -423,7 +423,7 @@ function DetailsPane({
           <DriveWriterName writer={entry.lastWriter} />
         </dd>
         <dt>Path</dt>
-        <dd className="files-pane-path">{detail.data?.path ? `/Documents${detail.data.path}` : '…'}</dd>
+        <dd className="files-pane-path">{detail.data?.path ? `/Drive${detail.data.path}` : '…'}</dd>
         {isFile && (
           <>
             <dt>Earlier versions</dt>
@@ -475,9 +475,9 @@ type Dialog =
   | null;
 
 /**
- * Documents (board docs/mocks/documents/02-web): the account's drive in a wide window — the folder tree, the list with
+ * Drive (board docs/mocks/drive/02-web): the account's drive in a wide window — the folder tree, the list with
  * who last wrote each file, and the picked file's preview and details. Trash and earlier versions are reached from in
- * here (board choice a). `/documents/trash` is its Trash.
+ * here (board choice a). `/drive/trash` is its Trash.
  */
 export function DrivePage({ view = 'files' }: { view?: 'files' | 'trash' }) {
   if (view === 'trash') return <DriveTrash />;

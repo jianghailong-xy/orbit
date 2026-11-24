@@ -38,7 +38,7 @@ function UsageSection({ title, rows }: { title: string; rows: { key: string; nam
   );
 }
 
-/** Files → Storage: what this account keeps in Documents, the drive and everything else, each byte once. Read when the page opens. */
+/** Files → Storage: what this account keeps in Drive, the drive and everything else, each byte once. Read when the page opens. */
 export function StorageSettingsPage() {
   const { data: usage, isError } = useQuery(storageUsageQuery());
   const { data: drive } = useQuery(driveUsageQuery());

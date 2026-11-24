@@ -153,7 +153,7 @@ describe('the composer + menu', { timeout: 60_000 }, () => {
     return found;
   };
 
-  // What /auth/capabilities answers: the Documents switch (ORBIT_DOCUMENTS_ENABLED).
+  // What /auth/capabilities answers: the Documents switch (ORBIT_DRIVE_ENABLED).
   let capabilities: unknown = { managedRunners: { enabled: false }, documents: { enabled: true } };
 
   beforeEach(() => {

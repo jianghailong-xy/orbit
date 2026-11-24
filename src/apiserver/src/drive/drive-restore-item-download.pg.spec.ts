@@ -1,5 +1,5 @@
 /**
- * Two owner routes of the Files page (docs/documents-drive-technical-design.md §3.5, §4.1; board 02-web frame 6, D12),
+ * Two owner routes of the Files page (docs/drive-technical-design.md §3.5, §4.1; board 02-web frame 6, D12),
  * over a real PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty, with chunks on a files directory of this run's:
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/drive/drive-restore-item-download.pg.spec.ts
@@ -49,7 +49,7 @@ import { DriveService, OWNER_WRITER } from './drive.service';
 import { DriveSyncsService } from './drive-syncs.service';
 
 // Drive is off unless switched on (drive-switch.ts); this harness mounts its controller, so it switches it on.
-process.env.ORBIT_DOCUMENTS_ENABLED = 'true';
+process.env.ORBIT_DRIVE_ENABLED = 'true';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);

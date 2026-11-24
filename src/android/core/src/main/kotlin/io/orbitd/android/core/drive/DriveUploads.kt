@@ -21,8 +21,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 
-// Resumable uploads into Documents (docs/documents-drive-technical-design.md §4.1, D3, D12; board 04-android frames 6, 7 and 13).
-// Each file is opened with `POST /documents/uploads`, sent as chunks of at most the size the server answers (8 MiB) and completed.
+// Resumable uploads into Drive (docs/drive-technical-design.md §4.1, D3, D12; board 04-android frames 6, 7 and 13).
+// Each file is opened with `POST /drive/uploads`, sent as chunks of at most the size the server answers (8 MiB) and completed.
 // What has arrived is asked of the server, never assumed, so an upload goes on from where it stopped: after a lost connection on
 // its own, and after the app was closed, from the file the phone still grants it. The twin of OrbitKit's DriveUploads.swift.
 
@@ -123,7 +123,7 @@ object DriveChunkPlan {
 
 /**
  * The owner's uploads, one file at a time, in the order they were added. Lives as long as the app's process, not the page: leaving
- * Documents does not stop it, and the background work (the app's upload worker) drives it with the app closed.
+ * Drive does not stop it, and the background work (the app's upload worker) drives it with the app closed.
  */
 class DriveUploadQueue(
     private val transport: DriveUploadTransport,

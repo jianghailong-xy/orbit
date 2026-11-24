@@ -1442,7 +1442,7 @@ public struct TranscriptReducer: Sendable, Codable {
             card.result = snapshot.content
         } else if DriveTransfer.kind(name) != nil, !suppressedLiveToolIDs.contains(id),
                   let snapshot = liveToolOutputs[id], DriveTransfer.progress(snapshot.content) != nil {
-            // A Documents transfer's byte count that crossed replicas ahead of its call (`applyToolOutput`).
+            // A Drive transfer's byte count that crossed replicas ahead of its call (`applyToolOutput`).
             card.result = snapshot.content
         } else if id.hasPrefix("shell-"), !foregroundShell {
             liveToolOutputs.removeValue(forKey: id)
@@ -1505,7 +1505,7 @@ public struct TranscriptReducer: Sendable, Codable {
     /// calls keep using `background_output` + `BackgroundProc`; requiring a `shell-…` id while
     /// excluding `run_in_background` preserves that separate tray behavior.
     private mutating func applyToolOutput(_ ev: RunEvent) {
-        // A foreground shell's output, or a Documents transfer's byte count: the runner sends the latter for a
+        // A foreground shell's output, or a Drive transfer's byte count: the runner sends the latter for a
         // documents_put / documents_get call as one sentence (`DriveTransfer.progress`), and the card it lands on
         // must be a transfer — checked below once the card is found.
         guard let id = str(ev, "toolUseId") ?? str(ev, "tool_use_id"),

@@ -3,8 +3,8 @@ import Foundation
 import CryptoKit
 #endif
 
-// Resumable uploads into Documents (docs/documents-drive-technical-design.md §4.1, D3, D12; board 03-mac frames 1 and
-// 4). Each file is opened with `POST /documents/uploads`, sent as chunks of at most the size the server answers
+// Resumable uploads into Drive (docs/drive-technical-design.md §4.1, D3, D12; board 03-mac frames 1 and
+// 4). Each file is opened with `POST /drive/uploads`, sent as chunks of at most the size the server answers
 // (8 MiB) and completed. What has arrived is asked of the server, never assumed, so an upload goes on from where it
 // stopped: after a lost connection on its own, and after the app quits, from the file still on disk (unlike the web,
 // a Mac app keeps the file's path). The web's twin is src/web/src/lib/driveUploads.ts.
@@ -184,7 +184,7 @@ public enum DriveChunkPlan {
 }
 
 /// The owner's uploads, one file at a time, in the order they were added. Lives as long as the app, not the page:
-/// leaving Documents does not stop it, and the popover shows it again on return.
+/// leaving Drive does not stop it, and the popover shows it again on return.
 @MainActor
 public final class DriveUploadQueue {
     public private(set) var items: [DriveUploadItem] = []

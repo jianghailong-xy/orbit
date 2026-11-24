@@ -368,7 +368,7 @@ func TestDriveCLIListsMovesDeletesAndOverwrites(t *testing.T) {
 	checkout := t.TempDir()
 	chdirForTest(t, checkout)
 	writeTestFile(t, filepath.Join(checkout, "empty"), "")
-	// `orbit drive`, and `orbit documents`, its name while Drive was called Documents, which still works.
+	// `orbit drive`, and `orbit documents`, its name while Drive was called Drive, which still works.
 	for _, command := range []string{"drive", "documents"} {
 		t.Setenv("ORBIT_SESSION_ID", fileTestSession)
 		for _, call := range []struct {

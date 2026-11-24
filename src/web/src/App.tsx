@@ -344,7 +344,7 @@ export function App() {
             <Route path="general" element={<GeneralSettingsPage />} />
             <Route path="notifications" element={<NotificationsSettingsPage />} />
             <Route path="appearance" element={<AppearanceSettingsPage />} />
-            {/* Storage moved into Drive (docs/mocks/documents, board choice a): the old addresses lead there. */}
+            {/* Storage moved into Drive (docs/mocks/drive, board choice a): the old addresses lead there. */}
             <Route path="storage" element={<DriveGate notFound={notFound}><Navigate to="/drive/storage" replace /></DriveGate>} />
             <Route path="storage/:kind/:id" element={<DriveGate notFound={notFound}><StorageSettingsRedirect /></DriveGate>} />
             <Route path="profile" element={<ProfilePage />} />
@@ -418,7 +418,7 @@ export function App() {
                 </FlushView>
               }
             />
-            {/* Drive, the account's drive (docs/mocks/documents/02-web): `?folder=` opens a folder and `?file=`
+            {/* Drive, the account's drive (docs/mocks/drive/02-web): `?folder=` opens a folder and `?file=`
                 picks a file in it; its Trash is reached from inside it. */}
             <Route
               path="drive"

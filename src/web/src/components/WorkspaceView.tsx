@@ -12506,9 +12506,9 @@ export function SessionComposer({
   const lastComposerTap = useRef<{ at: number; x: number; y: number; held?: number } | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // The `+` menu's Documents picker (board docs/mocks/documents, 02-web frame 8).
+  // The `+` menu's Drive picker (board docs/mocks/drive, 02-web frame 8).
   const [drivePickerOpen, setDrivePickerOpen] = useState(false);
-  // No Documents item on a server without Documents (ORBIT_DOCUMENTS_ENABLED), nor until that is read.
+  // No Drive item on a server without Drive (ORBIT_DRIVE_ENABLED), nor until that is read.
   const driveEnabled = useDriveEnabled().enabled;
   // Manual composer height (px). null = autoSize auto-grow (up to maxRows); once the user
   // drags the top handle, that height wins over autoSize until they double-click to reset.
@@ -13201,7 +13201,7 @@ export function SessionComposer({
           // WorkspaceView.composerMenu.test.tsx, drawn in
           // docs/mocks/composer-attach-menu-phone.html.
           items={[
-              // This device's File and Image, then the account's Documents.
+              // This device's File and Image, then the account's Drive.
               {
                 key: 'file',
                 icon: <PaperClipOutlined />,
@@ -13280,7 +13280,7 @@ export function SessionComposer({
             onOpenChange={setDrivePickerOpen}
             disabled={composerDisabled}
             popupClassName="drive-picker-popover"
-            // No chip of its own: the picker opens from the `+` menu's Documents, and this
+            // No chip of its own: the picker opens from the `+` menu's Drive, and this
             // zero-width, unfocusable button only anchors it beside the `+`.
             trigger={<button type="button" className="composer-drive-anchor" tabIndex={-1} aria-hidden="true" />}
           >

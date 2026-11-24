@@ -5,13 +5,13 @@ import PhotosUI
 import UniformTypeIdentifiers
 import OrbitKit
 
-// Documents on the iPhone (board docs/mocks/documents/01-ios.png, the reference design for every client): the drive's
+// Drive on the iPhone (board docs/mocks/drive/01-ios.png, the reference design for every client): the drive's
 // top level with Trash and Storage as its last rows, a page per folder pushed on the section's stack, a file's page
 // with its preview and who last wrote it, the Move sheet, the share-link sheet with the secret warning, Trash with
 // earlier versions, Storage, and the uploads sheet with the agents' directory syncs. The words are OrbitKit's
 // (`DriveLogic`); the reads and writes are `DriveModel`'s, shared with the Mac.
 
-/// The pages Documents pushes on its section's stack (`NavNode`), one switch for the phone's shell and the iPad's
+/// The pages Drive pushes on its section's stack (`NavNode`), one switch for the phone's shell and the iPad's
 /// column.
 struct DriveDestination: View {
     let node: NavNode
@@ -1604,7 +1604,7 @@ struct DriveStoragePage: View {
 
 // MARK: - the composer's picker (frame 14, D21, D22)
 
-/// Add from Documents: browse the drive (opening on the session's project folder when there is one) and pick files;
+/// Add from Drive: browse the drive (opening on the session's project folder when there is one) and pick files;
 /// what goes into the message is each file's path on the agent's mount.
 struct DrivePickerSheet: View {
     @Environment(AppModel.self) private var app

@@ -9,7 +9,7 @@ import java.util.Locale
 import kotlin.math.roundToLong
 
 /**
- * How the Documents pages read (board docs/mocks/documents/04-android, with 01-ios for what it does not draw): the switch, sizes and
+ * How the Drive pages read (board docs/mocks/drive/04-android, with 01-ios for what it does not draw): the switch, sizes and
  * dates, who wrote a file, which preview a file gets, Trash's groups, Storage's rows, the uploads sheet's lines and the upload
  * notification. The twin of OrbitKit's DriveLogic.swift (the Mac and the phone), so every client says it the same way; the
  * Android board's own wording (rows, the notification, Trash's lines) is added here.
@@ -18,7 +18,7 @@ object DriveLogic {
 
     // ---- the switch
 
-    /** Whether the drawer has a Documents row. [enabled] is `documents.enabled` once the capabilities read has finished; [failed] the
+    /** Whether the drawer has a Drive row. [enabled] is `documents.enabled` once the capabilities read has finished; [failed] the
      * read failed. A server from before the switch omits it, and a failed read says nothing: both read as on. Only a server that says
      * `documents.enabled == false` hides it. Until the read finishes the row stays out ([read] false), rather than flashing in and out. */
     fun shown(read: Boolean, enabled: Boolean?, failed: Boolean = false): Boolean = read && (failed || enabled != false)
@@ -151,16 +151,16 @@ object DriveLogic {
         else compareNames(a.name, b.name).takeIf { it != 0 } ?: a.id.compareTo(b.id)
     }
 
-    /** A folder's name in the bar: the drive's root is "Documents". */
+    /** A folder's name in the bar: the drive's root is "Drive". */
     fun folderTitle(folder: DriveEntry?): String = if (folder == null || folder.parentId == null) TITLE else folder.name
 
-    /** "Orbit UI migration": the folder a path ends in; the drive's root (`/`) is "Documents". */
+    /** "Orbit UI migration": the folder a path ends in; the drive's root (`/`) is "Drive". */
     fun folderLabel(path: String): String = path.split("/").lastOrNull { it.isNotEmpty() } ?: TITLE
 
-    /** The trail under the bar: "Documents › Orbit UI migration". */
+    /** The trail under the bar: "Drive › Orbit UI migration". */
     fun crumb(names: List<String>): String = (listOf(TITLE) + names).joinToString(" › ")
 
-    /** A search result's folder: "Documents", "Documents/a/b". */
+    /** A search result's folder: "Drive", "Drive/a/b". */
     fun searchFolder(folderPath: String?): String =
         if (folderPath.isNullOrEmpty() || folderPath == "/") TITLE else "Drive" + (if (folderPath.startsWith("/")) folderPath else "/$folderPath")
 
@@ -393,7 +393,7 @@ object DriveLogic {
         return "${items(n)} (${formatSize(groups.sumOf { it.sizeBytes })}) ${if (n == 1) "is" else "are"} deleted for good. This can't be undone."
     }
 
-    /** The snackbar after a restore: "Restored 18 items to Orbit UI migration", "Restored brief.md to Documents". */
+    /** The snackbar after a restore: "Restored 18 items to Orbit UI migration", "Restored brief.md to Drive". */
     fun restored(what: String, group: DriveTrashGroup) = "Restored $what to ${folderLabel(group.folderPath)}"
 
     /** Whether deleting a group for good ends a file's link (§9). */
@@ -427,7 +427,7 @@ object DriveLogic {
 
     const val IN_THIS_ACCOUNT = "in this account"
 
-    /** The legend under the bar: "Documents 10.9 GB", "Trash 1.3 GB", "Other 6.2 GB". */
+    /** The legend under the bar: "Drive 10.9 GB", "Trash 1.3 GB", "Other 6.2 GB". */
     fun storageLegend(usage: DriveUsage): List<String> = listOf(
         "Drive ${storageSize(maxOf(0L, usage.driveBytes - usage.trashBytes))}",
         "Trash ${storageSize(usage.trashBytes)}",

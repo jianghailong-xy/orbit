@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// The Documents switch (documents_switch.go): a session spawned with ORBIT_DOCUMENTS=off has no drive tools at
+// The Documents switch (drive_switch.go): a session spawned with ORBIT_DOCUMENTS=off has no drive tools at
 // all, the way ORBIT_WIKI=off leaves out the wiki tools.
 func TestDocumentsOffLeavesOutTheDriveTools(t *testing.T) {
 	t.Setenv(envDocuments, "off")
@@ -44,8 +44,8 @@ func TestDocumentsOffLeavesOutTheDriveTools(t *testing.T) {
 		t.Errorf("capabilities offer drive_put with Drive off: %v", ids)
 	}
 	err := cmdDriveCLI([]string{"ls"}, &strings.Builder{})
-	if err == nil || !strings.Contains(err.Error(), "ORBIT_DOCUMENTS_ENABLED") {
-		t.Errorf("orbit drive ls with Drive off = %v, want the refusal that names ORBIT_DOCUMENTS_ENABLED", err)
+	if err == nil || !strings.Contains(err.Error(), "ORBIT_DRIVE_ENABLED") {
+		t.Errorf("orbit drive ls with Drive off = %v, want the refusal that names ORBIT_DRIVE_ENABLED", err)
 	}
 	t.Setenv(envDocuments, "on")
 	if ids := capabilityIDs(buildCLICapabilities("/usr/local/bin/orbit")); !contains(ids, "drive_put") {
@@ -60,7 +60,7 @@ func TestDocumentsOffRefusesADriveCallWithoutTouchingTheServer(t *testing.T) {
 	for name := range driveToolNames {
 		result := off.callTool(name, map[string]interface{}{"path": "/a.md", "localPath": "a.md", "from": "/a", "to": "/b"})
 		text := wikiToolText(t, result)
-		if result["isError"] != true || !strings.Contains(text, "Drive is not enabled on this Orbit server (ORBIT_DOCUMENTS_ENABLED)") ||
+		if result["isError"] != true || !strings.Contains(text, "Drive is not enabled on this Orbit server (ORBIT_DRIVE_ENABLED)") ||
 			!strings.Contains(text, "Nothing was read or written") {
 			t.Errorf("%s with Drive off = %s", name, text)
 		}
@@ -81,7 +81,7 @@ func TestDocumentsDisabledAnswerFromTheServerReadsAsTheSwitch(t *testing.T) {
 		t.Error("an ordinary 404 reads as the switch")
 	}
 	got := driveToolError("drive_list", err)
-	if !strings.Contains(got.Error(), "ORBIT_DOCUMENTS_ENABLED") || !strings.Contains(got.Error(), "drive_list") {
+	if !strings.Contains(got.Error(), "ORBIT_DRIVE_ENABLED") || !strings.Contains(got.Error(), "drive_list") {
 		t.Errorf("driveToolError = %v", got)
 	}
 }

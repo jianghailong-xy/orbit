@@ -6,7 +6,7 @@ import { driveEntryQuery, formatSize } from '../../lib/drive';
 import { ApiError } from '../../api';
 
 export const DRIVE_LINK_PREFIX = 'orbit-drive:';
-/** The scheme while Drive was called Documents, which stored transcripts carry and which still draws the same card. */
+/** The scheme while Drive was called Drive, which stored transcripts carry and which still draws the same card. */
 const LEGACY_DRIVE_LINK_PREFIX = 'orbit-document:';
 
 /** The entry id in an `orbit-drive:<id>` or `orbit-document:<id>` link (design §4.5), or null when `href` is not one. */

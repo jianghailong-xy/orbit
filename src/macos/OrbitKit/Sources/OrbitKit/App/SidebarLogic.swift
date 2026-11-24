@@ -13,11 +13,11 @@ public enum SidebarSelection: Hashable, Sendable {
     case project(String)
     /// A session someone shared with this account, in the Shared with me group: its guest view.
     case guestSession(String)
-    /// Trash or Storage, the rows under Documents (`.section(.drive)` is the drive itself).
+    /// Trash or Storage, the rows under Drive (`.section(.drive)` is the drive itself).
     case drive(DrivePlace)
 }
 
-/// Which of Documents' pages is showing: the drive's folders, Trash or Storage (docs/mocks/documents, 03-mac ③).
+/// Which of Drive' pages is showing: the drive's folders, Trash or Storage (docs/mocks/drive, 03-mac ③).
 public enum DrivePlace: String, Hashable, Sendable, CaseIterable {
     case drive, trash, storage
 

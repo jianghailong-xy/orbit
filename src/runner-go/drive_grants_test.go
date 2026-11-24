@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// The engine grants of the Documents drive (docs/documents-drive-technical-design.md §7): every launch names the
+// The engine grants of the drive (docs/drive-technical-design.md §7): every launch names the
 // parent /run/orbit-drive and both spellings of the drive in every write mode, Plan mode only reads it, and a runner
 // with no drive mounted is launched exactly as before.
 

@@ -1,4 +1,4 @@
-# The Drive CSI plugin's own namespace (docs/documents-drive-technical-design.md §6.1): the privileged node
+# The Drive CSI plugin's own namespace (docs/drive-technical-design.md §6.1): the privileged node
 # plugin and each runner's mount credential (Secret mrf-<runner uuid>) live here, never in the managed-runner
 # namespace, whose Pod Security level is unchanged.
 apiVersion: v1

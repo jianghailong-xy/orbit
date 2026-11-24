@@ -59,7 +59,7 @@ function RouterProbe() {
   return null;
 }
 
-// What /auth/capabilities answers: the Documents switch (ORBIT_DOCUMENTS_ENABLED).
+// What /auth/capabilities answers: the Documents switch (ORBIT_DRIVE_ENABLED).
 let capabilities: unknown = { managedRunners: { enabled: false }, documents: { enabled: true } };
 
 function serve() {
@@ -340,7 +340,7 @@ describe('Machines & models, which has no sidebar row (docs/mocks/machines-and-m
   });
 });
 
-// Documents (docs/mocks/documents/02-web, frame 1): the row directly under the Wiki, with no count and no shortcut.
+// Documents (docs/mocks/drive/02-web, frame 1): the row directly under the Wiki, with no count and no shortcut.
 describe('Files, the row under the Wiki', () => {
   const litTopEntries = () =>
     [...container!.querySelectorAll<HTMLElement>('.tp-section .tp-item.active .tp-label')].map((label) => label.textContent);

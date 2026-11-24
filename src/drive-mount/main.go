@@ -1,5 +1,4 @@
-// Command orbit-drive-mount presents the account's Drive at /run/orbit-drive/drive (docs/documents-
-// drive-technical-design.md §5), which the runner shows its agents as /home/orbit/Drive.
+// Command orbit-drive-mount presents the account's Drive at /run/orbit-drive/drive (docs/drive-technical-design.md §5), which the runner shows its agents as /home/orbit/Drive.
 //
 //	orbit-drive-mount mount --root /run/orbit-drive --spool /var/lib/orbit-drive-spool/<runner> --server URL \
 //	    --token-file FILE --generation N --pod-uid UID [serve flags...]
@@ -57,13 +56,15 @@ func main() {
 	}
 }
 
-// mountTokenFromEnv is $ORBIT_DOCUMENTS_MOUNT_TOKEN, or $ORBIT_FILES_MOUNT_TOKEN, its name before the drive was
-// renamed Documents, when the new one is unset.
+// mountTokenFromEnv is $ORBIT_DRIVE_MOUNT_TOKEN, or $ORBIT_DOCUMENTS_MOUNT_TOKEN and then $ORBIT_FILES_MOUNT_TOKEN, its
+// names before the drive was renamed back to Drive, when the new one is unset.
 func mountTokenFromEnv() string {
-	if token := strings.TrimSpace(os.Getenv("ORBIT_DOCUMENTS_MOUNT_TOKEN")); token != "" {
-		return token
+	for _, name := range []string{"ORBIT_DRIVE_MOUNT_TOKEN", "ORBIT_DOCUMENTS_MOUNT_TOKEN", "ORBIT_FILES_MOUNT_TOKEN"} {
+		if token := strings.TrimSpace(os.Getenv(name)); token != "" {
+			return token
+		}
 	}
-	return strings.TrimSpace(os.Getenv("ORBIT_FILES_MOUNT_TOKEN"))
+	return ""
 }
 
 func usage() {
@@ -88,7 +89,7 @@ func (f *serveFlags) register(fs *flag.FlagSet) {
 	fs.IntVar(&f.fuseFD, "fuse-fd", -1, "an open /dev/fuse descriptor, mounted by the privileged parent")
 	fs.StringVar(&f.mountpoint, "mountpoint", "", "for development: mount this directory itself instead")
 	fs.StringVar(&f.server, "server", "", "the Orbit server's root URL")
-	fs.IntVar(&f.tokenFD, "token-fd", -1, "a descriptor to read the mount credential from (else $ORBIT_DOCUMENTS_MOUNT_TOKEN)")
+	fs.IntVar(&f.tokenFD, "token-fd", -1, "a descriptor to read the mount credential from (else $ORBIT_DRIVE_MOUNT_TOKEN)")
 	fs.StringVar(&f.generation, "generation", "", "the managed-runner generation the credential was issued for")
 	fs.StringVar(&f.podUID, "pod-uid", "", "the runner instance's UID (the Pod UID on Kubernetes)")
 	fs.StringVar(&f.stateDir, "state-dir", "", "the plain parent directory holding errors.log, status.json and unsent/")
@@ -249,7 +250,7 @@ func mount(args []string) int {
 	var f serveFlags
 	flags := flag.NewFlagSet("mount", flag.ExitOnError)
 	root := flags.String("root", "/run/orbit-drive", "the plain per-runner directory; the drive is mounted at <root>/drive")
-	tokenFile := flags.String("token-file", "", "the mount credential (else $ORBIT_DOCUMENTS_MOUNT_TOKEN)")
+	tokenFile := flags.String("token-file", "", "the mount credential (else $ORBIT_DRIVE_MOUNT_TOKEN)")
 	uid := flags.Int("daemon-uid", 65532, "the daemon's uid")
 	gid := flags.Int("daemon-gid", 65532, "the daemon's gid")
 	watchdog := flags.Duration("watchdog", 10*time.Second, "how often the mount is checked")

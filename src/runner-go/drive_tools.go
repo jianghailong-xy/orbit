@@ -49,11 +49,11 @@ type driveWriter struct {
 	SessionID string `json:"sessionId,omitempty"`
 }
 
-// driveLink is a Drive file's link for a reply. Transcripts written while Drive was called Documents carry
+// driveLink is a Drive file's link for a reply. Transcripts written while Drive was called Drive carry
 // orbit-document:<id>, which every client still reads.
 func driveLink(id string) string { return "orbit-drive:" + id }
 
-// driveToolAliases are the Drive tools' names while Drive was called Documents. They are still served, so an engine, a
+// driveToolAliases are the Drive tools' names while Drive was called Drive. They are still served, so an engine, a
 // saved prompt or a schedule that calls documents_put keeps working, and never listed.
 var driveToolAliases = map[string]string{
 	"documents_put":    "drive_put",
@@ -64,7 +64,7 @@ var driveToolAliases = map[string]string{
 	"documents_sync":   "drive_sync",
 }
 
-// canonicalToolName is the name a call is served under: a Drive tool's Documents name is its Drive one.
+// canonicalToolName is the name a call is served under: a Drive tool's Drive name is its Drive one.
 func canonicalToolName(name string) string {
 	if current, ok := driveToolAliases[name]; ok {
 		return current
@@ -251,9 +251,9 @@ func putDriveFile(ctx context.Context, t *Transport, tool fileToolContext, local
 	}{result.EntryID, entryPath, driveLink(result.EntryID), result.SizeBytes, result.VersionID, result.NewVersion}, nil
 }
 
-// sendDriveFile writes an open local file to Documents path p, which drive_put and drive_sync share: the
+// sendDriveFile writes an open local file to Drive path p, which drive_put and drive_sync share: the
 // folder made first, the file created or overwritten (the previous version kept), its 8 MiB chunks staged, one commit.
-// A non-nil progress counts the bytes as they go up. It answers the commit and the entry's Documents path.
+// A non-nil progress counts the bytes as they go up. It answers the commit and the entry's Drive path.
 func sendDriveFile(ctx context.Context, t *Transport, file io.Reader, p string, writer driveWriter, progress *driveProgress) (driveCommitResult, string, error) {
 	handleID, err := randomUUID()
 	if err != nil {

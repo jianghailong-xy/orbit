@@ -133,7 +133,7 @@ const orbitReplyFileInstructions = "Hand the user a file as `[name](path)`, an i
 	"uploads directory or a git-ignored path.\n\n"
 
 // orbitEvidenceFileInstructions is where the evidence of a piece of work goes, which is what the repository was for
-// until file_upload (docs/documents-design.md §2.3): 96% of its history was evidence and mocks. It follows
+// until file_upload (docs/drive-design.md §2.3): 96% of its history was evidence and mocks. It follows
 // orbitReplyFileInstructions and repeats its rule: file_upload reads from the same two directories a reply links from
 // (localFileScope), which is why this sentence can lean on the one before it. A log is named as well as the screenshot,
 // because the tool call that printed it is already stored. The FILE check is what spares the file a commit: it binds the
@@ -142,7 +142,7 @@ const orbitEvidenceFileInstructions = "Evidence: cite a command's output by its 
 	"keep screenshots and reports with file_upload rather than in the repository: it reads those same two " +
 	"directories and returns a reply link and the id a FILE check cites.\n\n"
 
-// orbitDriveInstructions is the owner's Documents drive, per runner kind (docs/documents-drive-technical-design.md
+// orbitDriveInstructions is the owner's drive, per runner kind (docs/drive-technical-design.md
 // §4.6, §7.3). On Orbit Cloud the drive is mounted at ~/Drive and is used with the shell, so the paragraph says what the
 // mount does not support and where it reports; on every other runner the drive is reached only through the drive tools.
 // Either way agents never see Trash (D11), and verification, judgment and guest-driven turns only read (D9). Kept short:

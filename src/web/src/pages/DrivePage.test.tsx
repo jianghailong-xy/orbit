@@ -9,7 +9,7 @@ import { ToastViewport } from '../components/ToastViewport';
 import { clearToasts } from '../lib/toastStore';
 
 /**
- * The Files page (docs/mocks/documents/02-web) against a drive held in memory, answered the way the owner's routes
+ * The Files page (docs/mocks/drive/02-web) against a drive held in memory, answered the way the owner's routes
  * answer (apiserver drive/drive.controller.ts, share-links.controller.ts): what each press sends, and what the page
  * shows of what comes back.
  */

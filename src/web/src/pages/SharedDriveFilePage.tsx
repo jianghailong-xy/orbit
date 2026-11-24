@@ -8,7 +8,7 @@ import { userFileUrl } from '../lib/userFile';
 import './SharedDriveFilePage.css';
 
 /**
- * `/s/<token>` for a Documents file link (docs/documents-drive-technical-design.md §9): the file's name and size,
+ * `/s/<token>` for a Drive file link (docs/drive-technical-design.md §9): the file's name and size,
  * Download, and the file itself when the browser can show it as it is — a picture, or a PDF in the browser's own
  * viewer. The bytes are the version the link was pinned to, served without a login.
  */

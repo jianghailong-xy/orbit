@@ -9,7 +9,7 @@ import { RunnerDriveController } from './runner-drive.controller';
 import { RunnerDriveSyncsController } from './runner-drive-syncs.controller';
 import { DriveSyncsService } from './drive-syncs.service';
 
-// The drive (docs/documents-drive-technical-design.md): the chunk door and the name layer, with the owner's routes and
+// The drive (docs/drive-technical-design.md): the chunk door and the name layer, with the owner's routes and
 // the runner drive door.
 // PrismaService, FilesService and RealtimeService come from their global modules.
 @Module({

@@ -2,7 +2,7 @@
 
 > 状态：已定稿。所有者 2026-11-02「按建议」两次：先定了五项默认（自托管默认存本地卷；被取代的证据 30 天、探针和临时输出 14 天后过期；先做显式上传；提交闸门先拦再问；设计稿批准先做提示），再把第 6 节四项都定为 A。本稿覆盖第一、二阶段（M1 存储、M2 证据引用），实现见项目 34qIISTdcSurVokwRlp4w。
 > 起因：2026-11-02 的仓库体积分析。GitHub 显示 1.91 GiB，历史里 96% 是证据、设计稿和 CI 截图，代码和文档不到 4%。
-> 效果图：`docs/mocks/documents/`（`1-today.png` … `5-landing.png`）。代码基线：main `01d68ff4a`，下文行号都指这一版。
+> 效果图：`docs/mocks/drive/`（`1-today.png` … `5-landing.png`）。代码基线：main `01d68ff4a`，下文行号都指这一版。
 
 ## 0. 一页结论
 
@@ -129,7 +129,7 @@
 
 ### 2.10 部署、备份、用量
 
-- **compose**：apiserver 加一个绑定挂载 `./data/files:/var/lib/orbit/files`，和 Postgres 的 `./data/postgres` 同一个做法。存储后端用 `ORBIT_DOCUMENTS_BACKEND=local`（默认）或 `s3`；用 S3 时还要配 endpoint、bucket 和 key。
+- **compose**：apiserver 加一个绑定挂载 `./data/files:/var/lib/orbit/files`，和 Postgres 的 `./data/postgres` 同一个做法。存储后端用 `ORBIT_DRIVE_BACKEND=local`（默认）或 `s3`；用 S3 时还要配 endpoint、bucket 和 key。
 - **备份**：pgbackup 侧车已经把 `./data/pg-archive` 同步到 `ORBIT_BACKUP_SYNC_TARGET`（`docker-compose.yml:147`），把 `./data/files` 也加进去一起同步。文件按 sha256 命名、只增不改，增量同步很便宜。恢复时先恢复 Postgres，再恢复文件；有删字节的宽限期，恢复出来的元数据就找得到对应的字节。
 - **用量**：Settings 里显示本账户的存储量、按项目和任务的排行，以及每周增长。自托管默认不设配额；托管实例用环境变量设每个账户的配额，超出时上传返回明确的错误。
 - **单文件上限**：沿用 25 MiB（第 6 节第 4 项）。

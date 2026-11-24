@@ -43,7 +43,7 @@ import {
  *   - every container runs the profile's pinned image, it has no ephemeral containers, and its
  *     volumes are only that claim, emptyDirs, its own bootstrap Secret and at most one Drive
  *     volume — no host namespaces, host paths or privileged containers. The drive volume
- *     (docs/documents-drive-technical-design.md §6.1, B13) is a `csi` volume of `drive.orbit.dev`
+ *     (docs/drive-technical-design.md §6.1, B13) is a `csi` volume of `drive.orbit.dev`
  *     whose attributes are exactly `{ runnerId }` of this mapping, mounted only by the `runner`
  *     container, only at /run/orbit-drive, only with HostToContainer, writable. While Pods of the
  *     older drivers drain, `documents.orbit.dev` mounted at /run/orbit-documents and

@@ -1,7 +1,7 @@
 <!-- DESIGN MOCK (2026-11-24). An agent's directory sync in the Documents page's upload tray (web), from
-     docs/documents-directory-sync-design.md (S1-S4, "Progress on the Documents page"). Reuses the Orbit Files board's
+     docs/drive-directory-sync-design.md (S1-S4, "Progress on the Documents page"). Reuses the Orbit Files board's
      styles, icons and marks. File names, sessions, sizes and times are demo data.
-     Render: node docs/mocks/documents/render.mjs $PWD/docs/mocks/documents-sync-tray/board.html $PWD/docs/mocks/documents-sync-tray/board.png -->
+     Render: node docs/mocks/drive/render.mjs $PWD/docs/mocks/drive-sync-tray/board.html $PWD/docs/mocks/drive-sync-tray/board.png -->
 <!doctype html><html lang="en"><meta charset="utf-8">
 <title>Documents - agent sync in the upload tray</title>
 <link rel="stylesheet" href="../documents/board.css">
@@ -37,7 +37,7 @@
 <h1>Documents · an agent's directory sync in the upload tray</h1>
 <p class="lede">An agent runs <code>orbit documents sync ./out /Reports/out</code> (or the <code>documents_sync</code> tool). The copy happens once, in the
 background, from the runner up to Documents (S1, S2). The owner watches it in the same bottom-right tray that shows their own uploads (S4).
-One row per sync, not per file. Labels in green name the decisions from <code>docs/documents-directory-sync-design.md</code>. All names,
+One row per sync, not per file. Labels in green name the decisions from <code>docs/drive-directory-sync-design.md</code>. All names,
 sessions, sizes and times are demo data.</p>
 
 <!-- F1 -->

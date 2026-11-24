@@ -1,6 +1,6 @@
 # Drive CSI plugin (`drive.orbit.dev`)
 
-The node plugin that gives each managed runner Pod its Drive (docs/documents-drive-technical-design.md
+The node plugin that gives each managed runner Pod its Drive (docs/drive-technical-design.md
 §6.1). The runner container receives one plain directory, `/run/orbit-drive`, with HostToContainer propagation; the
 drive's FUSE mount sits below it at `drive/`, made by the plugin, never in the container. The runner makes
 `/home/orbit/Drive` a link to it (`src/runner-go/drive_link.go`). Source: `src/drive-mount` (the `csi` command and

@@ -2671,7 +2671,7 @@ public final class APIClient: @unchecked Sendable {
         return object["code"] as? String == taskRunRequestInProgress
     }
 
-    // MARK: Documents (docs/documents-drive-technical-design.md §4.1, apiserver drive/drive.controller.ts)
+    // MARK: Drive (docs/drive-technical-design.md §4.1, apiserver drive/drive.controller.ts)
 
     /// Every page of a folder (the root when `parentID` is nil): a folder is read whole, a thousand names a page.
     public func driveFolder(_ parentID: String?) async throws -> DriveListing {

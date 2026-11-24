@@ -4950,7 +4950,7 @@ function ToolView({ node, live, startOpen }: { node: ToolNode; live?: boolean; s
     }
   }
   // A drive_sync (or documents_sync) call is its sync's card once its answer names the sync; an older runner's answer
-  // names none and stays a call (board docs/mocks/documents-sync-card).
+  // names none and stays a call (board docs/mocks/drive-sync-card).
   if (isDriveSyncTool(node.name) && node.result && !node.result.isError) {
     const syncId = driveSyncIdOf(resultText(resultContent));
     if (syncId) return <DriveSyncCard syncId={syncId} />;

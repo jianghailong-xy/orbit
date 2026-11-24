@@ -7,7 +7,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { DRIVE_CHUNK_MAX } from './drive-chunks.service';
 
 /**
- * The drive's name layer (docs/documents-drive-technical-design.md §1, §3, §5.4): folders and files over the chunk
+ * The drive's name layer (docs/drive-technical-design.md §1, §3, §5.4): folders and files over the chunk
  * store, versions, Trash and the change feed. Every rule here holds whichever door a write came through: the owner's
  * routes (drive.controller.ts), and the runner drive door and the mount daemon, which belong to their own tasks.
  *

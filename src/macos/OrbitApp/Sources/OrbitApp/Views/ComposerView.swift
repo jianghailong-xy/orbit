@@ -243,7 +243,7 @@ struct ComposerView: View {
     @State private var showPhotoPicker = false
     @State private var showFileImporter = false
     @State private var pickedPhotos: [PhotosPickerItem] = []
-    /// The + menu's Documents: Add from Documents (docs/mocks/documents, 01-ios ⑭).
+    /// The + menu's Drive: Add from Drive (docs/mocks/drive, 01-ios ⑭).
     @State private var showDrivePicker = false
     #endif
 
@@ -1401,7 +1401,7 @@ struct ComposerView: View {
                 #endif
             } label: { Label("File", systemImage: "paperclip") }
             #if os(iOS)
-            // A drive file by its path (D21): offered while the server has Documents on, as the web's `drive` item.
+            // A drive file by its path (D21): offered while the server has Drive on, as the web's `drive` item.
             if app.drive?.shown == true {
                 Button { showDrivePicker = true } label: {
                     Label("Drive", systemImage: "folder")

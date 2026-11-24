@@ -98,7 +98,7 @@ export interface ManagedRunnerWorkload {
   operations: number;
   /** Events buffered for the control plane and not yet acknowledged by it. */
   unflushedEvents: number;
-  /** Documents drive handles holding bytes no commit has taken yet; absent from a runner that has no drive. */
+  /** drive handles holding bytes no commit has taken yet; absent from a runner that has no drive. */
   driveWrites?: number;
   /** How long, in whole seconds, all four have been zero; 0 while any is not. */
   idleSeconds: number;
@@ -165,7 +165,7 @@ export interface ManagedRunnerCapability {
   contractVersion: number;
 }
 
-/** `GET /api/auth/capabilities` → `documents`: whether this server offers the Documents drive (ORBIT_DOCUMENTS_ENABLED,
+/** `GET /api/auth/capabilities` → `documents`: whether this server offers the Drive (ORBIT_DRIVE_ENABLED,
  *  off by default). A server that predates the field always had it on. */
 export interface DocumentsCapability {
   enabled: boolean;

@@ -6,7 +6,7 @@ import java.time.ZoneId
 import org.junit.Assert.*
 import org.junit.Test
 
-/** The Documents reading rules (board 04-android; OrbitKit DriveLogicTests for the shared ones). */
+/** The Drive reading rules (board 04-android; OrbitKit DriveLogicTests for the shared ones). */
 class DriveLogicTest {
     private val utc = ZoneId.of("UTC")
     private val now = Instant.parse("2026-11-24T15:00:00Z")

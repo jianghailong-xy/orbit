@@ -1,7 +1,7 @@
 import XCTest
 @testable import OrbitKit
 
-/// Documents' reading rules (board docs/mocks/documents 03-mac, 01-ios), held to the web's src/web/src/lib/drive.ts,
+/// Drive' reading rules (board docs/mocks/drive 03-mac, 01-ios), held to the web's src/web/src/lib/drive.ts,
 /// driveSwitch.ts, the upload tray and Trash.
 final class DriveLogicTests: XCTestCase {
     private var utc: Calendar {
@@ -53,7 +53,7 @@ final class DriveLogicTests: XCTestCase {
         XCTAssertEqual(AppSection.drive.systemImage, "folder")
     }
 
-    /// The Trash and Storage rows under Documents are their own selections, and select back to themselves.
+    /// The Trash and Storage rows under Drive are their own selections, and select back to themselves.
     func testTrashAndStorageAreSidebarSelectionsOfTheirOwn() {
         XCTAssertEqual(SidebarLogic.selection(section: .drive, agentID: nil, machineDraftRunnerID: nil,
                                               projectID: nil, drivePlace: .trash), .drive(.trash))
@@ -122,7 +122,7 @@ final class DriveLogicTests: XCTestCase {
     func testFolderNamesAndPaths() {
         XCTAssertEqual(DriveLogic.folderLabel("/"), "Drive")
         XCTAssertEqual(DriveLogic.folderLabel("/Projects/Orbit UI migration"), "Orbit UI migration")
-        XCTAssertEqual(DriveLogic.displayPath("/a/b.png"), "/Documents/a/b.png")
+        XCTAssertEqual(DriveLogic.displayPath("/a/b.png"), "/Drive/a/b.png")
         XCTAssertEqual(DriveLogic.searchFolder("/"), "Drive")
         XCTAssertEqual(DriveLogic.searchFolder("/a/b"), "Drive/a/b")
         let root = DriveEntry(id: "r", parentId: nil, kind: "FOLDER", name: "")

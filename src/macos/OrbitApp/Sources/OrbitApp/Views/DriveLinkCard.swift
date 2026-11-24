@@ -1,8 +1,8 @@
 import SwiftUI
 import OrbitKit
 
-/// A reply's `orbit-document:<id>` link drawn as the drive file it names (docs/mocks/documents, 01-ios ⑮, D21): its
-/// icon, name, folder and size, read live so a later overwrite shows, and a tap opens it in Documents. A file that has
+/// A reply's `orbit-document:<id>` link drawn as the drive file it names (docs/mocks/drive, 01-ios ⑮, D21): its
+/// icon, name, folder and size, read live so a later overwrite shows, and a tap opens it in Drive. A file that has
 /// since moved to Trash or gone says so instead of breaking. Not evidence: an agent still cites a file by file_upload.
 struct DriveLinkCard: View {
     @Environment(AppModel.self) private var app: AppModel?

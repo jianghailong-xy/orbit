@@ -8,13 +8,13 @@ import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.Origin
 import io.orbitd.android.navigation.OrbitRoute
 
-/** The drawer's key for the Documents destination, and the link the upload notification's Show opens. */
+/** The drawer's key for the Drive destination, and the link the upload notification's Show opens. */
 const val DRIVE_SECTION = "Drive"
 const val DRIVE_UPLOADS_RECORD = "uploads"
 
 val OrbitRoute.isDrive get() = destination.name.startsWith("DRIVE")
 
-/** Documents' pages (board 04-android): a folder, a file, Trash and Storage. */
+/** Drive' pages (board 04-android): a folder, a file, Trash and Storage. */
 @Composable
 fun DriveDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, open: (OrbitRoute) -> Unit, back: () -> Unit) {
     val store = DriveStore.of(app, handle)
@@ -29,7 +29,7 @@ fun DriveDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitR
     }
 }
 
-/** Whether the drawer has the Documents row: once the capabilities read finished and did not say `documents.enabled: false`. */
+/** Whether the drawer has the Drive row: once the capabilities read finished and did not say `documents.enabled: false`. */
 @Composable
 fun driveShown(app: OrbitApplication, handle: SessionHandle): Boolean {
     val store = DriveStore.of(app, handle)

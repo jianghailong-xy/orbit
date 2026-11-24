@@ -1,6 +1,6 @@
 import Foundation
 
-/// How the Documents page reads (board docs/mocks/documents, 03-mac with 01-ios for what the Mac board does not draw):
+/// How the Drive page reads (board docs/mocks/drive, 03-mac with 01-ios for what the Mac board does not draw):
 /// the switch, sizes and dates, who wrote a file, which preview a file gets, Trash's groups, Storage's rows, and the
 /// uploads popover's lines. Mirrors the web's src/web/src/lib/drive.ts, driveSwitch.ts, the upload tray and
 /// Trash (src/web/src/components/drive). Shared by the Mac and the phone; every sentence is here so both say it
@@ -9,7 +9,7 @@ public enum DriveLogic {
 
     // MARK: the switch
 
-    /// Whether the sidebar has a Documents row. `read` is the capabilities read once it has finished: nil while it has
+    /// Whether the sidebar has a Drive row. `read` is the capabilities read once it has finished: nil while it has
     /// not. A server from before the switch omits `documents`, and a failed read (`.failure`) says nothing: both read as
     /// on. Only a server that says `documents.enabled == false` hides it. Until the read finishes the row stays out,
     /// rather than flashing in and out.
@@ -136,24 +136,24 @@ public enum DriveLogic {
         }
     }
 
-    /// A folder's name in the window's title: the drive's root is "Documents".
+    /// A folder's name in the window's title: the drive's root is "Drive".
     public static func folderTitle(_ folder: DriveEntry?) -> String {
         guard let folder, folder.parentId != nil else { return title }
         return folder.name
     }
 
-    /// "Orbit UI migration": the folder a path ends in; the drive's root (`/`) is "Documents".
+    /// "Orbit UI migration": the folder a path ends in; the drive's root (`/`) is "Drive".
     public static func folderLabel(_ path: String) -> String {
         path.split(separator: "/").last.map(String.init) ?? title
     }
 
-    /// The inspector's Path: `/Documents/a/b/name`.
+    /// The inspector's Path: `/Drive/a/b/name`.
     public static func displayPath(_ path: String?) -> String? {
         guard let path else { return nil }
-        return "/Documents" + (path.hasPrefix("/") ? path : "/" + path)
+        return "/Drive" + (path.hasPrefix("/") ? path : "/" + path)
     }
 
-    /// A search result's folder: "Documents", "Documents/a/b".
+    /// A search result's folder: "Drive", "Drive/a/b".
     public static func searchFolder(_ folderPath: String?) -> String {
         guard let folderPath, folderPath != "/", !folderPath.isEmpty else { return title }
         return "Drive" + (folderPath.hasPrefix("/") ? folderPath : "/" + folderPath)
@@ -406,7 +406,7 @@ public enum DriveLogic {
     /// Storage's sizes, as the web's Storage page writes them (`formatFileSize`, in 1024s).
     public static func storageSize(_ bytes: Int) -> String { EvidenceFiles.fileSize(bytes) }
 
-    /// The legend under the bar: "Documents 10.9 GB", "Trash 1.3 GB", "Other 6.2 GB".
+    /// The legend under the bar: "Drive 10.9 GB", "Trash 1.3 GB", "Other 6.2 GB".
     public static func storageLegend(_ usage: DriveUsage) -> [String] {
         ["Drive \(storageSize(max(0, usage.driveBytes - usage.trashBytes)))",
          "Trash \(storageSize(usage.trashBytes))",

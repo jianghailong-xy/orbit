@@ -22,7 +22,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /**
- * What the Documents pages share for one signed-in account, kept for the process (the uploads outlive the page): whether the drawer
+ * What the Drive pages share for one signed-in account, kept for the process (the uploads outlive the page): whether the drawer
  * has the row, the sessions' titles that name a writer, each subfolder's count, the files' share links, the agents' syncs and the
  * owner's upload queue. The page's own folder, Trash and Storage reads are the pages' own.
  */
@@ -30,7 +30,7 @@ class DriveStore private constructor(val app: OrbitApplication, val handle: Sess
     val api = DriveApi(app.session, handle)
     val uploads: DriveUploadQueue get() = DriveUploads.queue(app, handle)
 
-    /** The capabilities read: null until it has finished; then whether the drawer shows Documents. */
+    /** The capabilities read: null until it has finished; then whether the drawer shows Drive. */
     var shown by mutableStateOf<Boolean?>(null)
         private set
 
@@ -44,7 +44,7 @@ class DriveStore private constructor(val app: OrbitApplication, val handle: Sess
     val syncs = mutableStateListOf<DriveSync>()
     val syncRates = mutableStateMapOf<String, Double>()
     private val cleared = mutableSetOf<String>()
-    /** Set by the upload notification's Show: the next Documents page opens its uploads sheet. */
+    /** Set by the upload notification's Show: the next Drive page opens its uploads sheet. */
     var showUploads by mutableStateOf(false)
     /** Bumped after every write a page made, so every page showing re-reads. */
     var revision by mutableStateOf(0)
@@ -89,7 +89,7 @@ class DriveStore private constructor(val app: OrbitApplication, val handle: Sess
 
     fun linkOf(entryId: String): DriveShareLink? = links.firstOrNull { ObjectId.same(it.root.id, entryId) && it.state == "ACTIVE" }
 
-    /** Read the agents' syncs again; called every few seconds while a Documents page is up. */
+    /** Read the agents' syncs again; called every few seconds while a Drive page is up. */
     suspend fun readSyncs() {
         val read = runCatching { api.syncs() }.getOrNull() ?: return
         val before = syncs.associateBy { it.id }

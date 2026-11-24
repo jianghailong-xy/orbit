@@ -22,7 +22,7 @@ import type { ManagedRunnerProfile } from './managed-runner-profile';
  * ORBIT_MANAGED_RUNNER_POD_UID, which the image entrypoint checks against the Secret and the runner
  * sends with every request (managed-runner-instance.ts).
  *
- * With the profile's `files` section the Pod also receives the Drive (docs/documents-drive-technical-design.md
+ * With the profile's `files` section the Pod also receives the Drive (docs/drive-technical-design.md
  * §6.1): one inline CSI volume of the `drive.orbit.dev` node plugin, naming only the runner, mounted in the runner
  * container at /run/orbit-drive with HostToContainer propagation. Nothing else of the Pod changes: the runner
  * container's security context is the same with or without it. The plugin reads that generation's mount credential

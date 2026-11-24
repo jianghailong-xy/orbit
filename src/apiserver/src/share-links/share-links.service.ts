@@ -298,7 +298,7 @@ export class ShareLinksService {
 
   /**
    * Share one drive file, pinned to `versionId` (the version the owner's share check just read): open its link, or move the
-   * link it has to that version (docs/documents-drive-technical-design.md §9). Only the owner's routes call this. The same
+   * link it has to that version (docs/drive-technical-design.md §9). Only the owner's routes call this. The same
    * version twice changes nothing. A file in Trash cannot be shared.
    */
   async putDriveFile(ownerId: string, entryId: string, versionId: string, expiresAtRaw?: string | null): Promise<ShareLinkView> {
@@ -480,7 +480,7 @@ export class ShareLinksService {
    *  public door's `content` route; nothing the file has since been given reaches here. */
   async driveFilePage(link: OpenLink): Promise<{ name: string; sizeBytes: number; versionId: string }> {
     const entryId = this.rootOf(link, 'DRIVE_FILE');
-    // A link made while Documents was on reads, while it is off, as one naming nothing (drive-switch.ts).
+    // A link made while Drive was on reads, while it is off, as one naming nothing (drive-switch.ts).
     if (!documentsEnabled()) throw linkNotFound();
     const version = link.driveVersionId
       ? await this.prisma.driveVersion.findFirst({

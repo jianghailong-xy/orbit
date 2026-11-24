@@ -365,7 +365,7 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                             DropdownMenu(menu, onDismissRequest = { menu = false }) {
                                 DropdownMenuItem(text = { Text("Image") }, onClick = { menu = false; photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) })
                                 DropdownMenuItem(text = { Text("File") }, onClick = { menu = false; files.launch(arrayOf("*/*")) })
-                                // From Documents (board 04-android ⑭, D21): a drive file's path goes in the message; nothing is uploaded again.
+                                // From Drive (board 04-android ⑭, D21): a drive file's path goes in the message; nothing is uploaded again.
                                 if (driveOffered) DropdownMenuItem(text = { Text("Drive") }, onClick = { menu = false; drivePicker = true },
                                     modifier = Modifier.testTag("composer-from-drive"))
                                 val clip = clipboard.primaryClip

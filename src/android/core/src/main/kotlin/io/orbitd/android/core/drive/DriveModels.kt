@@ -2,8 +2,8 @@ package io.orbitd.android.core.drive
 
 import kotlinx.serialization.Serializable
 
-// Documents: the account's drive as the owner's routes answer it (docs/documents-drive-technical-design.md §4.1, apiserver
-// drive/drive.controller.ts, at its `documents` alias prefix). The twin of OrbitKit's Models/Documents.swift. Kinds and states are
+// Drive: the account's drive as the owner's routes answer it (docs/drive-technical-design.md §4.1, apiserver
+// drive/drive.controller.ts, at its `drive` prefix). The twin of OrbitKit's Models/Drive.swift. Kinds and states are
 // Strings where a newer server may add one, so an answer still decodes; the reading rules live in `DriveLogic`.
 
 /** Who last wrote an entry or a version (§3.6). An agent's session is kept only where the door could check it. */
@@ -45,11 +45,11 @@ data class DriveEntry(
     val isFile get() = kind == "FILE"
 }
 
-/** `GET /documents/entries`: one page of a folder (the root when no `parentId`). */
+/** `GET /drive/entries`: one page of a folder (the root when no `parentId`). */
 @Serializable
 data class DriveListing(val folder: DriveEntry, val entries: List<DriveEntry> = emptyList(), val nextCursor: String? = null)
 
-/** `GET /documents/search`: the first page of live entries whose name contains the words. */
+/** `GET /drive/search`: the first page of live entries whose name contains the words. */
 @Serializable
 data class DriveSearchResult(val entries: List<DriveEntry> = emptyList(), val nextCursor: String? = null)
 
@@ -66,7 +66,7 @@ data class DriveVersion(
     val trashGroupId: String? = null,
 )
 
-/** `GET /documents/entries/:id/versions`. */
+/** `GET /drive/entries/:id/versions`. */
 @Serializable
 data class DriveVersions(val entry: DriveEntry, val versions: List<DriveVersion> = emptyList())
 
@@ -97,7 +97,7 @@ data class DriveTrashGroup(
     val version: DriveTrashVersion? = null,
 )
 
-/** `GET /documents/trash`: one page of groups, newest first. */
+/** `GET /drive/trash`: one page of groups, newest first. */
 @Serializable
 data class DriveTrashPage(val groups: List<DriveTrashGroup> = emptyList(), val nextCursor: String? = null)
 
@@ -105,7 +105,7 @@ data class DriveTrashPage(val groups: List<DriveTrashGroup> = emptyList(), val n
 @Serializable
 data class DriveRestored(val entryIds: List<String> = emptyList())
 
-/** `DELETE /documents/entries/:id`: the group the entry went in, which Undo restores. */
+/** `DELETE /drive/entries/:id`: the group the entry went in, which Undo restores. */
 @Serializable
 data class DriveTrashed(val trashGroupId: String)
 
@@ -113,7 +113,7 @@ data class DriveTrashed(val trashGroupId: String)
 @Serializable
 data class DriveShareWarning(val kind: String, val line: Int = 0)
 
-/** `POST /documents/entries/:id/share-check`. */
+/** `POST /drive/entries/:id/share-check`. */
 @Serializable
 data class DriveShareCheck(
     val versionId: String? = null,
@@ -147,7 +147,7 @@ data class DriveShareAnswer(
     val partial: Boolean = false,
 )
 
-/** `GET /documents/usage`: the drive's share of the account and the rest, each content once (§2.5). */
+/** `GET /drive/usage`: the drive's share of the account and the rest, each content once (§2.5). */
 @Serializable
 data class DriveUsage(
     val totalBytes: Long = 0,
@@ -176,7 +176,7 @@ data class StorageUsage(
     @Serializable data class Week(val weekStart: String, val bytes: Long = 0)
 }
 
-/** An agent's directory sync into Documents (docs/documents-directory-sync-design.md, S4). */
+/** An agent's directory sync into Drive (docs/drive-directory-sync-design.md, S4). */
 @Serializable
 data class DriveSync(
     val id: String,
@@ -210,7 +210,7 @@ data class DriveSync(
 @Serializable
 data class DriveSyncList(val syncs: List<DriveSync> = emptyList())
 
-/** `POST /documents/uploads`: the staging id, and the size every chunk but the last must have. */
+/** `POST /drive/uploads`: the staging id, and the size every chunk but the last must have. */
 @Serializable
 data class DriveUploadOpened(
     val id: String,
@@ -219,7 +219,7 @@ data class DriveUploadOpened(
     val dropRootId: String? = null,
 )
 
-/** `GET /documents/uploads/:id`: which chunks have arrived, so an upload goes on from where it stopped. */
+/** `GET /drive/uploads/:id`: which chunks have arrived, so an upload goes on from where it stopped. */
 @Serializable
 data class DriveUploadStatus(
     val chunkSize: Int,
@@ -230,6 +230,6 @@ data class DriveUploadStatus(
     @Serializable data class Chunk(val idx: Int, val sizeBytes: Long)
 }
 
-/** `POST /documents/entries/:id/download-link`: a URL under /api that downloads without a login header. */
+/** `POST /drive/entries/:id/download-link`: a URL under /api that downloads without a login header. */
 @Serializable
 data class DriveDownloadLink(val path: String, val expiresAt: String = "")

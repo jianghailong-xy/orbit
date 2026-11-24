@@ -499,7 +499,7 @@ final class AppModel {
     private static let lastAgentKey = "orbit.lastAgent"
 
 #if DEBUG
-    /// Test-only: a screenshot gallery's Documents model.
+    /// Test-only: a screenshot gallery's Drive model.
     func seedDriveForTesting(_ model: DriveModel) { drive = model }
 #endif
 
@@ -553,8 +553,8 @@ final class AppModel {
     /// The account's scheduled tasks: the Scheduled section, the drawer's Scheduled row, the cards a
     /// conversation asks and the Waiting on you items (docs/scheduled-tasks-design.md §9.2).
     private(set) var scheduled: ScheduledModel?
-    /// The account's Documents (the drive): the Documents section, its sidebar rows and the uploads that outlive the
-    /// page (docs/mocks/documents, 03-mac).
+    /// The account's Drive (the drive): the Drive section, its sidebar rows and the uploads that outlive the
+    /// page (docs/mocks/drive, 03-mac).
     private(set) var drive: DriveModel?
     /// The wiki chat beside every wiki page: its round button, its panel and the cards it draws
     /// (docs/wiki-chat-design.md §9).
@@ -1194,8 +1194,8 @@ final class AppModel {
     /// One schedule's detail panel, over the Scheduled page, from anywhere: a change line's Open, a scheduled
     /// task's card, a push that names the schedule.
     #if os(macOS)
-    /// A file an agent put in Documents, opened where it lives with it selected (a transfer card's "Show in
-    /// Documents", `DriveTransferCardView`).
+    /// A file an agent put in Drive, opened where it lives with it selected (a transfer card's "Show in
+    /// Drive", `DriveTransferCardView`).
     func revealDocument(_ entryID: String) {
         guard let drive else { return }
         selectedSection = .drive
@@ -1523,7 +1523,7 @@ final class AppModel {
         // space and nothing else, so the loaded Wiki re-reads what it shows (the drawer's number
         // included). It moves no session row: falling through to the snapshot below would be the web's
         // `groupsFor` default of `['sessions']`, a list refetch for an event about something else.
-        // A write to the drive committed, or an agent's directory sync moved: what Documents has loaded.
+        // A write to the drive committed, or an agent's directory sync moved: what Drive has loaded.
         case .drive(let syncs):
             if syncs {
                 drive?.nudge(syncs: true)
@@ -4202,7 +4202,7 @@ final class AppModel {
         nav.path = [.wikiEntry(entryID: id)]
     }
 
-    /// A drive file (or folder) a reply links, opened in Documents (docs/mocks/documents, 01-ios ⑮): on the phone and
+    /// A drive file (or folder) a reply links, opened in Drive (docs/mocks/drive, 01-ios ⑮): on the phone and
     /// the iPad its page on the section's stack, on the Mac its folder with it selected.
     func openDriveEntry(_ entry: DriveEntry) {
         selectedSection = .drive

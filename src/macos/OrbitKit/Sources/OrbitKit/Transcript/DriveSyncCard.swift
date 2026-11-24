@@ -1,15 +1,15 @@
 import Foundation
 
-/// An agent's `drive_sync` call, as its sync's card in the transcript (board docs/mocks/documents-sync-card): the same
-/// live progress as the Documents popover, kept current after the agent's turn ends, since the sync runs in the
+/// An agent's `drive_sync` call, as its sync's card in the transcript (board docs/mocks/drive-sync-card): the same
+/// live progress as the Drive popover, kept current after the agent's turn ends, since the sync runs in the
 /// background. A sync that ends cleanly folds to one line; failures, a stop and a failed sync stay open.
 ///
 /// Web parity: `src/web/src/lib/driveSyncs.ts` (`driveSyncIdOf`) and
-/// `components/documents/DriveSyncCard.tsx`, whose words these are.
+/// `components/drive/DriveSyncCard.tsx`, whose words these are.
 public enum DriveSyncCard {
     /// Orbit's sync tool, as every engine's MCP name for it reaches the transcript.
     public static let toolName = "mcp__orbit__drive_sync"
-    /// Its name while Drive was called Documents, which stored transcripts and runners already deployed carry.
+    /// Its name while Drive was called Drive, which stored transcripts and runners already deployed carry.
     public static let documentsToolName = "mcp__orbit__documents_sync"
 
     /// The sync a call's answer names, or nil for one that names none (a runner from before the card). A runner

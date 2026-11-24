@@ -421,7 +421,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
    * path that actually removes session data — soft-delete just hides it.
    *
    * A session holding a file somebody pinned or evidence cites waits in Trash until that stops, with everything else in it
-   * (docs/documents-design.md §2.8): the row would go with the session, and nobody asked for that. A person who empties
+   * (docs/drive-design.md §2.8): the row would go with the session, and nobody asked for that. A person who empties
    * Trash by hand (`SessionsService.purge`) is asking for exactly that, and gets it.
    */
   private async purgeTrash(): Promise<void> {

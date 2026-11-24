@@ -21,15 +21,15 @@ import io.orbitd.android.core.drive.DriveEntry
 import io.orbitd.android.core.drive.DriveLogic
 import kotlinx.coroutines.delay
 
-/** Where the drive is mounted for an agent (design §4.5): a file's path in a message is this plus its place in Documents. */
-const val DRIVE_MOUNT = "/home/orbit/Documents"
+/** Where the drive is mounted for an agent (design §4.5): a file's path in a message is this plus its place in Drive. */
+const val DRIVE_MOUNT = "/home/orbit/Drive"
 
-/** The project's folder name in Documents (D22): no `/`, at most 60 characters (the web's `projectFolderName`). */
+/** The project's folder name in Drive (D22): no `/`, at most 60 characters (the web's `projectFolderName`). */
 fun projectFolderName(title: String): String = title.replace('/', '-').trim().take(60)
 
 /**
- * Add from Documents (board frame 14; D21, D22): the composer's From Documents opens this sheet on the session's project folder when it
- * has one, else on the drive's root. Folders open, files toggle; Add hands back the picked files' `/home/orbit/Documents/…` paths — the
+ * Add from Drive (board frame 14; D21, D22): the composer's From Drive opens this sheet on the session's project folder when it
+ * has one, else on the drive's root. Folders open, files toggle; Add hands back the picked files' `/home/orbit/Drive/…` paths — the
  * agent reads them from its mount, and nothing is uploaded again.
  */
 @OptIn(ExperimentalMaterial3Api::class)

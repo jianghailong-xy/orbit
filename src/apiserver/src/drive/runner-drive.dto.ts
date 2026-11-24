@@ -20,7 +20,7 @@ import { IsPublicId } from '../common/public-id';
 import { DRIVE_SYNC_FAILED_MAX, DRIVE_SYNC_STATUSES, type DriveSyncStatus } from './drive-syncs.service';
 
 /**
- * The bodies of the runner drive door (docs/documents-drive-technical-design.md §4.2). An entry is named by its drive
+ * The bodies of the runner drive door (docs/drive-technical-design.md §4.2). An entry is named by its drive
  * path (`/Proj/r.md`, from the drive's root) or by its id; the owner is always the credential's.
  */
 
@@ -92,7 +92,7 @@ export class RunnerDriveUtimensDto extends NamesEntry {
   @IsDateString() mtime!: string;
 }
 
-/** `POST /runner/drive/syncs`: an agent's directory sync starts (docs/documents-directory-sync-design.md S4). */
+/** `POST /runner/drive/syncs`: an agent's directory sync starts (docs/drive-directory-sync-design.md S4). */
 export class RunnerDriveSyncOpenDto {
   /** The local directory's last segment, never a whole runner path. */
   @IsString() @MaxLength(255) @Matches(/^[^/]+$/, { message: 'sourceName is one path segment' }) sourceName!: string;

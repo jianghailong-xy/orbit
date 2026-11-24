@@ -7,20 +7,20 @@ import AppKit
 import UIKit
 #endif
 
-/// Documents, the account's drive (docs/documents-drive-design.md; board docs/mocks/documents, 03-mac): the folder on
+/// Drive, the account's drive (docs/drive-product-design.md; board docs/mocks/drive, 03-mac): the folder on
 /// screen, its inspector's reads, Trash, Storage, the share links, the agents' directory syncs and the owner's uploads.
 /// Owned by `AppModel` and rebuilt per instance, like the other section stores; the uploads outlive the page, so leaving
-/// Documents does not stop them. What the server answered is what is drawn; every press reads its answer back. The words
+/// Drive does not stop them. What the server answered is what is drawn; every press reads its answer back. The words
 /// and the rules are OrbitKit's (`DriveLogic`, `DriveUploadQueue`).
 @MainActor
 @Observable
 final class DriveModel {
     /// The capabilities read once it has finished; nil before (`DriveLogic.shown`).
     private(set) var capabilityRead: Result<ServerCapabilities?, Error>?
-    /// Whether the sidebar has a Documents row.
+    /// Whether the sidebar has a Drive row.
     var shown: Bool { DriveLogic.shown(capabilityRead) }
 
-    /// Which page is up: the drive, Trash or Storage (the sidebar's rows under Documents).
+    /// Which page is up: the drive, Trash or Storage (the sidebar's rows under Drive).
     var place: DrivePlace = .drive
 
     /// Counts every write this app made or heard of (`drive.changed`, an upload landing). The phone's pages, each
@@ -122,7 +122,7 @@ final class DriveModel {
 
     // MARK: the switch
 
-    /// `GET /auth/capabilities`, once per sign-in; answers whether Documents is on. Also starts what a relaunch left.
+    /// `GET /auth/capabilities`, once per sign-in; answers whether Drive is on. Also starts what a relaunch left.
     func loadCapabilities() async {
         do {
             capabilityRead = .success(try await api.serverCapabilities())
@@ -785,7 +785,7 @@ final class DriveModel {
 
     // MARK: syncs
 
-    /// `GET /documents/syncs`; while one runs, again every 5 s the app can be seen.
+    /// `GET /drive/syncs`; while one runs, again every 5 s the app can be seen.
     func loadSyncs() async {
         guard let read = try? await api.driveSyncs() else { return }
         let before = Dictionary(allSyncs.map { ($0.id, $0) }, uniquingKeysWith: { $1 })

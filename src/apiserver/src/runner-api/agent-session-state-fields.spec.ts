@@ -35,7 +35,7 @@ test('the seven-value status filter is unchanged on the tool and the CLI', () =>
 });
 
 test('the contract version moved to 1.12.0 or later, and every place that states it agrees', () => {
-  // The fields arrived in 1.12.0; later versions (1.13.0, the Documents rename) keep them, so this
+  // The fields arrived in 1.12.0; later versions (1.13.0, the Drive rename) keep them, so this
   // pins the floor and the agreement rather than one release.
   const json = JSON.parse(read('contracts/orbit-agent.contract.json')) as { contractVersion: string };
   const version = json.contractVersion;

@@ -42,7 +42,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * A folder of Documents (board 04-android frames 2, 3, 5, 7 and 13): full-width Material rows, folders first, each file with who last
+ * A folder of Drive (board 04-android frames 2, 3, 5, 7 and 13): full-width Material rows, folders first, each file with who last
  * wrote it (rule 6); at the top level the search field and, last, Trash and Storage; an extended Upload button that shrinks while the
  * list scrolls; New folder in the bar. [route]'s id is the folder (null: the drive's root) and its recordId the folder's name.
  */
@@ -84,7 +84,7 @@ internal fun DriveFolderPage(store: DriveStore, route: OrbitRoute, open: (OrbitR
         delay(250)
         found = runCatching { store.api.search(words).entries }.getOrNull() ?: emptyList()
     }
-    // The agents' syncs, read every few seconds while a Documents page is up: fast while one runs. The wait is wall-clock time, off
+    // The agents' syncs, read every few seconds while a Drive page is up: fast while one runs. The wait is wall-clock time, off
     // the frame clock, which a test may run ahead.
     LaunchedEffect(store) {
         while (true) {

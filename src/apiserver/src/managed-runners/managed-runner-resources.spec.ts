@@ -34,7 +34,7 @@ const RUNNER = '0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b';
 const OWNER = '0199a1b2-0000-7000-8000-000000000001';
 const PVC_UID = '9b1f3c2e-1111-4222-8333-444455556666';
 const profile = testManagedRunnerProfile();
-/** The profile with the Documents drive: the example shows the Pod with it. */
+/** The profile with the drive: the example shows the Pod with it. */
 const filesProfile = testManagedRunnerProfile({ files: true });
 const identity = { ownerId: OWNER, runnerId: RUNNER, generation: 1, namespace: profile.kubernetes.namespace };
 

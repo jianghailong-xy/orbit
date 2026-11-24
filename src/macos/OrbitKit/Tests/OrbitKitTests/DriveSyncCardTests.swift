@@ -1,7 +1,7 @@
 import XCTest
 @testable import OrbitKit
 
-/// An agent's drive_sync call as its sync's card (board docs/mocks/documents-sync-card), in the words of the web's
+/// An agent's drive_sync call as its sync's card (board docs/mocks/drive-sync-card), in the words of the web's
 /// `DriveSyncCard.tsx`: which calls draw it, read off the receipt a runner really answers with, and each state's lines.
 final class DriveSyncCardTests: XCTestCase {
     private func receipt(_ entity: String, ok: Bool = true) -> String {

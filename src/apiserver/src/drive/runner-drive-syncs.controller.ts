@@ -9,8 +9,8 @@ import { DriveSyncsService } from './drive-syncs.service';
 import { RunnerDriveSyncOpenDto, RunnerDriveSyncReportDto } from './runner-drive.dto';
 
 /**
- * Where `orbit documents sync` reports how far it has got (docs/documents-directory-sync-design.md S4), for the owner's
- * upload tray. The runner credential only: unlike the runner Documents door, a mount credential reaches none of it, since a mount
+ * Where `orbit documents sync` reports how far it has got (docs/drive-directory-sync-design.md S4), for the owner's
+ * upload tray. The runner credential only: unlike the runner Drive door, a mount credential reaches none of it, since a mount
  * never syncs. The owner is the credential's, and a sync is reported into only by the runner that opened it.
  */
 @UseGuards(RunnerAuthGuard, DriveEnabledGuard)

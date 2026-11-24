@@ -1,5 +1,5 @@
 /**
- * An agent's directory sync as the upload tray shows it (docs/documents-directory-sync-design.md S4;
+ * An agent's directory sync as the upload tray shows it (docs/drive-directory-sync-design.md S4;
  * drive/drive-syncs.service.ts, drive/runner-drive-syncs.controller.ts), through the production apiserver over a real
  * PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty:
  *

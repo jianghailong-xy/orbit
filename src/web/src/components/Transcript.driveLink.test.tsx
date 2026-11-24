@@ -11,7 +11,7 @@ import { materializeReferences } from '../lib/composerRefs';
 /**
  * A reply that links a drive file (`orbit-drive:<id>`, which the runner writes for a path under /home/orbit/Drive, or
  * `orbit-document:<id>`, its scheme while Drive was called Documents, which stored transcripts carry) draws that file — name, folder, size — and opens it on the Files page; one that is trashed or gone says so. The composer's
- * Add from Files picker hands back the paths of the files picked (board docs/mocks/documents/02-web frame 8).
+ * Add from Files picker hands back the paths of the files picked (board docs/mocks/drive/02-web frame 8).
  */
 
 vi.mock('../api', async (importOriginal) => ({ ...(await importOriginal<typeof import('../api')>()), api: vi.fn() }));

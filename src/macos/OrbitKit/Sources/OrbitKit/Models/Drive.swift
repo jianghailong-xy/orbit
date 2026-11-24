@@ -1,6 +1,6 @@
 import Foundation
 
-// Documents: the account's drive as the owner's routes answer it (docs/documents-drive-technical-design.md §4.1,
+// Drive: the account's drive as the owner's routes answer it (docs/drive-technical-design.md §4.1,
 // apiserver drive/drive.controller.ts, prefix `drive`). Mirrors the web's src/web/src/lib/drive.ts,
 // driveSyncs.ts and driveUploads.ts. Kinds and states are Strings where a newer server may add one, so an
 // answer still decodes; the reading rules live in `DriveLogic`.
@@ -109,7 +109,7 @@ public struct DriveEntry: Codable, Equatable, Hashable, Sendable, Identifiable {
     }
 }
 
-/// `GET /documents/entries`: one page of a folder (the root when no `parentId`).
+/// `GET /drive/entries`: one page of a folder (the root when no `parentId`).
 public struct DriveListing: Codable, Equatable, Sendable {
     public let folder: DriveEntry
     public let entries: [DriveEntry]
@@ -122,7 +122,7 @@ public struct DriveListing: Codable, Equatable, Sendable {
     }
 }
 
-/// `GET /documents/search`: the first page of live entries whose name contains the words.
+/// `GET /drive/search`: the first page of live entries whose name contains the words.
 public struct DriveSearchResult: Codable, Equatable, Sendable {
     public let entries: [DriveEntry]
     public let nextCursor: String?
@@ -152,7 +152,7 @@ public struct DriveVersion: Codable, Equatable, Hashable, Sendable, Identifiable
     }
 }
 
-/// `GET /documents/entries/:id/versions`.
+/// `GET /drive/entries/:id/versions`.
 public struct DriveVersions: Codable, Equatable, Sendable {
     public let entry: DriveEntry
     public let versions: [DriveVersion]
@@ -208,7 +208,7 @@ public struct DriveTrashGroup: Codable, Equatable, Hashable, Sendable, Identifia
     }
 }
 
-/// `GET /documents/trash`: one page of groups, newest first.
+/// `GET /drive/trash`: one page of groups, newest first.
 public struct DriveTrashPage: Codable, Equatable, Sendable {
     public let groups: [DriveTrashGroup]
     public let nextCursor: String?
@@ -219,7 +219,7 @@ public struct DriveRestored: Codable, Equatable, Sendable {
     public let entryIds: [String]
 }
 
-/// `DELETE /documents/entries/:id`: the group the entry went in, which Undo restores.
+/// `DELETE /drive/entries/:id`: the group the entry went in, which Undo restores.
 public struct DriveTrashed: Codable, Equatable, Sendable {
     public let trashGroupId: String
 }
@@ -235,7 +235,7 @@ public struct DriveShareWarning: Codable, Equatable, Hashable, Sendable {
     }
 }
 
-/// `POST /documents/entries/:id/share-check`.
+/// `POST /drive/entries/:id/share-check`.
 public struct DriveShareCheck: Codable, Equatable, Sendable {
     public let versionId: String?
     public let warnings: [DriveShareWarning]
@@ -318,7 +318,7 @@ public struct DriveShareAnswer: Decodable, Equatable, Sendable {
     public let partial: Bool
 }
 
-/// `GET /documents/usage`: the drive's share of the account and the rest, each content once (§2.5).
+/// `GET /drive/usage`: the drive's share of the account and the rest, each content once (§2.5).
 public struct DriveUsage: Codable, Equatable, Sendable {
     public let totalBytes: Int
     public let driveBytes: Int
@@ -396,7 +396,7 @@ public struct StorageUsage: Codable, Equatable, Sendable {
     }
 }
 
-/// An agent's directory sync into Documents (docs/documents-directory-sync-design.md, S4).
+/// An agent's directory sync into Drive (docs/drive-directory-sync-design.md, S4).
 public struct DriveSync: Codable, Equatable, Sendable, Identifiable {
     public struct Session: Codable, Equatable, Sendable {
         public let id: String
@@ -468,12 +468,12 @@ public struct DriveSync: Codable, Equatable, Sendable, Identifiable {
     public var running: Bool { status == "CHECKING" || status == "UPLOADING" }
 }
 
-/// `GET /documents/syncs`.
+/// `GET /drive/syncs`.
 public struct DriveSyncList: Codable, Equatable, Sendable {
     public let syncs: [DriveSync]
 }
 
-/// `POST /documents/uploads`: the staging id, and the size every chunk but the last must have.
+/// `POST /drive/uploads`: the staging id, and the size every chunk but the last must have.
 public struct DriveUploadOpened: Codable, Equatable, Sendable {
     public let id: String
     public let chunkSize: Int
@@ -487,7 +487,7 @@ public struct DriveUploadOpened: Codable, Equatable, Sendable {
     }
 }
 
-/// `GET /documents/uploads/:id`: which chunks have arrived, so an upload goes on from where it stopped.
+/// `GET /drive/uploads/:id`: which chunks have arrived, so an upload goes on from where it stopped.
 public struct DriveUploadStatus: Codable, Equatable, Sendable {
     public struct Chunk: Codable, Equatable, Sendable {
         public let idx: Int
@@ -521,7 +521,7 @@ public struct DriveUploadStatus: Codable, Equatable, Sendable {
     }
 }
 
-/// `POST /documents/entries/:id/download-link`: a URL under /api that downloads without a login header.
+/// `POST /drive/entries/:id/download-link`: a URL under /api that downloads without a login header.
 public struct DriveDownloadLink: Codable, Equatable, Sendable {
     public let path: String
     public let expiresAt: String

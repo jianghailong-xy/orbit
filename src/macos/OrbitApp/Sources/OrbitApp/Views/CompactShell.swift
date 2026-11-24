@@ -416,7 +416,7 @@ private struct CompactSections: View {
             .wikiChatHost()
 
         // DOCUMENTS — the drive's top level → a folder, a file's page, its earlier versions, Trash or Storage
-        // (docs/mocks/documents, 01-ios). The path is the section's stack, like every section here.
+        // (docs/mocks/drive, 01-ios). The path is the section's stack, like every section here.
         case .drive:
             NavigationStack(path: $model.nav.path) {
                 DriveFolderPage(folderID: nil, name: DriveLogic.title)
@@ -814,7 +814,7 @@ struct NavigationDrawer: View {
             .task { await model.wiki?.loadSpaces() }
             // Scheduled's number — the schedules failing or held — read with the drawer like the others.
             .task { await model.scheduled?.load() }
-            // Whether the Documents row is drawn is the capabilities read's answer (`DriveLogic.shown`).
+            // Whether the Drive row is drawn is the capabilities read's answer (`DriveLogic.shown`).
             .task { await model.drive?.loadCapabilities() }
             // Shared with me, the rail's last group: read with the drawer, then every minute.
             .task { await model.followSharedWithMe() }

@@ -1,8 +1,8 @@
 import Foundation
 
-// How the phone's Documents pages read (board docs/mocks/documents/01-ios.png, frames 1-18): the second line of a
+// How the phone's Drive pages read (board docs/mocks/drive/01-ios.png, frames 1-18): the second line of a
 // row, the preview's heading, Trash's rows, the share sheet's outcome, the uploads sheet's notes, the composer's
-// From Documents picker and a reply's link to a drive file. The rules shared with the Mac stay in `DriveLogic`;
+// From Drive picker and a reply's link to a drive file. The rules shared with the Mac stay in `DriveLogic`;
 // what only the phone's layout says is here, so the iOS views hold no sentence of their own.
 extension DriveLogic {
 
@@ -87,18 +87,18 @@ extension DriveLogic {
         names.count == 1 ? "Move “\(names[0])”" : "Move \(items(names.count))"
     }
 
-    /// The Move sheet's button: "Move to Notes", "Move to Documents".
+    /// The Move sheet's button: "Move to Notes", "Move to Drive".
     public static func moveHere(_ folder: String) -> String { "Move to \(folder)" }
 
     public static let moveFoot = "Only folders are listed. A name already taken in the folder you move to gets a suffix, " +
         "as “migration-notes 2.md”."
 
-    /// The Move sheet's trail: "Documents › Drive service".
+    /// The Move sheet's trail: "Drive › Drive service".
     public static func trail(_ names: [String]) -> String { names.joined(separator: " › ") }
 
     // MARK: the drive's top level (frame 2)
 
-    public static let driveFoot = "Agents on Orbit Cloud see this drive as ~/Documents. What is here is kept until someone deletes it."
+    public static let driveFoot = "Agents on Orbit Cloud see this drive as ~/Drive. What is here is kept until someone deletes it."
     public static let moreHeading = "More"
     public static let searchPrompt = "Search Drive"
     public static let emptyFolder = "Nothing here yet"
@@ -172,11 +172,11 @@ extension DriveLogic {
     // MARK: the composer's picker (frame 14, D21, D22)
 
     /// Where the drive is mounted for an agent (design §4.5): a picked file's path in a message starts here.
-    public static let agentMount = "/home/orbit/Documents"
+    public static let agentMount = "/home/orbit/Drive"
 
     public static let pickerTitle = "Add from Drive"
     public static let pickerFoot = "The file is not uploaded again: its path goes into your message, and the agent reads it " +
-        "from ~/Documents."
+        "from ~/Drive."
     public static let fromDrive = "Drive"
 
     /// "Add", "Add 1", "Add 3".
@@ -247,13 +247,13 @@ extension DriveLogic {
         }
     }
 
-    /// The folder a linked file sits in: "Documents › Orbit UI migration".
+    /// The folder a linked file sits in: "Drive › Orbit UI migration".
     public static func cardTrail(_ path: String?) -> String {
         let parts = (path ?? "").split(separator: "/").map(String.init)
         return trail([title] + parts.dropLast())
     }
 
-    /// A linked file's second line: "Documents › Orbit UI migration · 1.2 MB"; a folder's trail alone.
+    /// A linked file's second line: "Drive › Orbit UI migration · 1.2 MB"; a folder's trail alone.
     public static func cardLine(_ entry: DriveEntry) -> String {
         entry.isFolder ? cardTrail(entry.path) : "\(cardTrail(entry.path)) · \(formatSize(entry.sizeBytes))"
     }

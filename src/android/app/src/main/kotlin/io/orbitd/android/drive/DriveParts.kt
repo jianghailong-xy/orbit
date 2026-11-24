@@ -174,7 +174,7 @@ internal fun SectionHeading(text: String, modifier: Modifier = Modifier, action:
     }
 }
 
-/** The trail under the bar (`.crumb2`): "Documents › Orbit UI migration". */
+/** The trail under the bar (`.crumb2`): "Drive › Orbit UI migration". */
 @Composable
 internal fun Crumb(text: String, modifier: Modifier = Modifier) {
     Text(text, modifier.fillMaxWidth().padding(start = DriveMetrics.side, end = DriveMetrics.side, bottom = 8.dp), fontSize = 13.sp,

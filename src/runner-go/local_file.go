@@ -73,7 +73,7 @@ func driveUncommittedHandles() int {
 	return status.UncommittedHandles
 }
 
-// driveGrantRoots is what an engine's sandbox or working-directory grant names for the Documents drive: the parent
+// driveGrantRoots is what an engine's sandbox or working-directory grant names for the drive: the parent
 // and both spellings of the drive, or nothing on a runner that has no drive mounted (design §7.1, §7.2).
 func driveGrantRoots() []string {
 	if !driveMounted() {

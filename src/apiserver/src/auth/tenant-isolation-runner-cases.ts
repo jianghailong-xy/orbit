@@ -158,7 +158,7 @@ export interface RunnerObjects {
   /** An import job of the space (server execution P5, contract `import.server`), ended, to be read back. */
   wikiImportJobId: string;
   /**
-   * The drive door (docs/documents-drive-technical-design.md §4.2): a staging of this machine's on the account's drive
+   * The drive door (docs/drive-technical-design.md §4.2): a staging of this machine's on the account's drive
    * file holding chunk 0 (`driveChunkSha256`, content of this account's alone); another staging with nothing in it, which
    * a commit names; a commit's id; and two files of the drive folder, one to move and one to delete.
    */
@@ -168,7 +168,7 @@ export interface RunnerObjects {
   driveCommitId: string;
   driveMoveFileId: string;
   driveDeleteFileId: string;
-  /** An agent's directory sync this machine opened and is still reporting into (docs/documents-directory-sync-design.md S4). */
+  /** An agent's directory sync this machine opened and is still reporting into (docs/drive-directory-sync-design.md S4). */
   driveSyncId: string;
   /** Shared: a session link's root with a file in it; a task link's root with a run and a file; a project link's. */
   sharedSessionId: string;
@@ -789,7 +789,7 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     nested: ['jobId'],
   },
   'GET /runner/wiki/entries/:id': { as: RUNNER, request: (of, mine) => ({ params: { id: of.wikiEntryId }, headers: calling(mine.runner.wikiSessionId) }) },
-  // ── the runner drive door (docs/documents-drive-technical-design.md §4.2, §4.4) ───────────────
+  // ── the runner drive door (docs/drive-technical-design.md §4.2, §4.4) ───────────────
   // A chunk only by a sha256 the caller's own versions or stagings name; a staging only of the caller's runner; a commit
   // id only within the caller's account.
   // Under /runner/drive and its /runner/documents alias.
@@ -1920,31 +1920,31 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
       + "so another account's commit id names nothing of anybody's here",
     // ── the runner drive door: who a write is recorded as coming from ─────────────────────────────
     'POST /runner/drive/create body writer.sessionId':
-      "a drive write's attribution (docs/documents-drive-technical-design.md §3.6): kept only when it is a session of the "
+      "a drive write's attribution (docs/drive-technical-design.md §3.6): kept only when it is a session of the "
       + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
       + "stored as null otherwise (drive/drive.service.ts:1226); no session is read beyond that, written or authorized by it",
     'POST /runner/drive/mkdir body writer.sessionId':
-      "a drive write's attribution (docs/documents-drive-technical-design.md §3.6): kept only when it is a session of the "
+      "a drive write's attribution (docs/drive-technical-design.md §3.6): kept only when it is a session of the "
       + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
       + "stored as null otherwise (drive/drive.service.ts:1226); no session is read beyond that, written or authorized by it",
     'POST /runner/drive/commit body writer.sessionId':
-      "a drive write's attribution (docs/documents-drive-technical-design.md §3.6): kept only when it is a session of the "
+      "a drive write's attribution (docs/drive-technical-design.md §3.6): kept only when it is a session of the "
       + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
       + "stored as null otherwise (drive/drive.service.ts:1226); no session is read beyond that, written or authorized by it",
     'POST /runner/drive/rename body writer.sessionId':
-      "a drive write's attribution (docs/documents-drive-technical-design.md §3.6): kept only when it is a session of the "
+      "a drive write's attribution (docs/drive-technical-design.md §3.6): kept only when it is a session of the "
       + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
       + "stored as null otherwise (drive/drive.service.ts:1226); no session is read beyond that, written or authorized by it",
     'POST /runner/drive/delete body writer.sessionId':
-      "a drive write's attribution (docs/documents-drive-technical-design.md §3.6): kept only when it is a session of the "
+      "a drive write's attribution (docs/drive-technical-design.md §3.6): kept only when it is a session of the "
       + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
       + "stored as null otherwise (drive/drive.service.ts:1226); no session is read beyond that, written or authorized by it",
     'POST /runner/drive/utimens body writer.sessionId':
-      "a drive write's attribution (docs/documents-drive-technical-design.md §3.6): kept only when it is a session of the "
+      "a drive write's attribution (docs/drive-technical-design.md §3.6): kept only when it is a session of the "
       + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
       + "stored as null otherwise (drive/drive.service.ts:1226); no session is read beyond that, written or authorized by it",
   }),
-  // ── an agent's directory sync, reported for the owner's upload tray (docs/documents-directory-sync-design.md S4) ──
+  // ── an agent's directory sync, reported for the owner's upload tray (docs/drive-directory-sync-design.md S4) ──
   ...underEveryDoorPrefix({
     'POST /runner/drive/syncs body sessionId':
       "the session a sync is shown under: kept only when it is a session of the runner's owner, read by (id, owner), and "

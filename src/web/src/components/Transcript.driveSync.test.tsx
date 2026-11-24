@@ -13,7 +13,7 @@ import { type RunEvent, Transcript } from './Transcript';
 import { resetDriveSyncs } from '../lib/driveSyncs';
 
 /**
- * A drive_sync call is its sync's card, a row of its own rather than a step (board docs/mocks/documents-sync-card), and
+ * A drive_sync call is its sync's card, a row of its own rather than a step (board docs/mocks/drive-sync-card), and
  * so is a documents_sync call, its name while Drive was called Documents; an answer that names no sync, from a runner
  * before the card, stays a call in the steps line.
  */

@@ -1,8 +1,8 @@
 import Foundation
 
-/// An agent's transfers to and from Documents (`documents_put` / `documents_get`, `drive_put` / `drive_get` before the
-/// rename), as one transfer card in the conversation (board docs/mocks/agent-drive-transfer). Web parity:
-/// `src/web/src/lib/driveTransfer.ts` and `components/documents/DriveTransferCard.tsx`.
+/// An agent's transfers to and from Drive (`drive_put` / `drive_get`, `documents_put` / `documents_get` while it was
+/// called Documents), as one transfer card in the conversation (board docs/mocks/agent-drive-transfer). Web parity:
+/// `src/web/src/lib/driveTransfer.ts` and `components/drive/DriveTransferCard.tsx`.
 ///
 /// While a call runs, the runner sends its bytes as the call's live `tool_output`, one sentence restating the whole
 /// count: "Uploaded 3355443 of 11954323 bytes" (runner-go documents_progress.go). The reducer keeps that line in the
@@ -37,12 +37,12 @@ public enum DriveTransfer {
 
     // MARK: one file
 
-    /// A Documents path as the owner reads it: `~/Documents/a`, `/home/orbit/Documents/a` and the mount's
+    /// A Drive path as the owner reads it: `~/Drive/a`, `/home/orbit/Drive/a` and the mount's
     /// `/run/orbit-drive/drive/a` are `/a`, as are the spellings from before the renames (the mount at
     /// `/run/orbit-documents` and `/run/orbit-files` in an older Pod).
     public static func displayPath(_ raw: String?) -> String {
         var p = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        for prefix in ["~/Documents", "/home/orbit/Documents", "~/Files", "/home/orbit/Files",
+        for prefix in ["~/Drive", "/home/orbit/Drive",
                        "/run/orbit-drive/drive", "/run/orbit-documents/drive", "/run/orbit-files/drive"] where p == prefix || p.hasPrefix(prefix + "/") {
             p = String(p.dropFirst(prefix.count))
         }
@@ -55,14 +55,14 @@ public enum DriveTransfer {
 
     public struct File: Equatable, Sendable, Identifiable {
         public let id: String
-        /// The file's Documents path.
+        /// The file's Drive path.
         public let path: String
         public let status: Status
         /// Bytes moved so far; for a finished file, its size.
         public let sent: Int
         /// Nil until the call has said how big the file is.
         public let size: Int?
-        /// The Documents entry an upload made, once it is in.
+        /// The Drive entry an upload made, once it is in.
         public let entryID: String?
         public let error: String?
         public let startedAt: Date?

@@ -692,7 +692,7 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         source: 'OWNER_UPLOAD', parentId: driveFolder.id, name: 'upload.bin', declaredSize,
       })).id;
     const driveUploadId = await driveUpload(10);
-    // An agent's directory sync of this account's runner (docs/documents-directory-sync-design.md S4).
+    // An agent's directory sync of this account's runner (docs/drive-directory-sync-design.md S4).
     const driveSyncId = (await db.driveSync.create({ data: { ownerId, runnerId, sourceName: 'census', destPath: '/census' } })).id;
     const spareDriveCompleteUploadId = await driveUpload(0);
     const spareDriveAbandonUploadId = await driveUpload(10);

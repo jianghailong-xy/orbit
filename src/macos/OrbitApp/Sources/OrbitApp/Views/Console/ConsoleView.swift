@@ -1705,8 +1705,8 @@ struct TranscriptView: View {
         }
     }
 
-    /// Where a transfer card's "Show in Drive" goes: the file in its folder on the Mac's Documents page. The phone
-    /// has no Documents page, so its card has no such press.
+    /// Where a transfer card's "Show in Drive" goes: the file in its folder on the Mac's Drive page. The phone
+    /// has no Drive page, so its card has no such press.
     private var showInDrive: ((String) -> Void)? {
         #if os(macOS)
         guard app.drive?.shown == true else { return nil }
@@ -2682,7 +2682,7 @@ struct TranscriptItemView: View {
             // names no job, stays a call.
             JobCardView(card: c)
         case .toolCall(let c) where DriveSyncCard.drawsCard(c):
-            // A drive_sync call is its sync's card, live after the turn ends (board documents-sync-card); an
+            // A drive_sync call is its sync's card, live after the turn ends (board drive-sync-card); an
             // answer that names no sync, from an older runner, stays a call.
             DriveSyncCardView(syncID: DriveSyncCard.syncID(c.result) ?? "")
         case .toolCall(let c):

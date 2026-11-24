@@ -183,7 +183,7 @@ test('the manager itself is refused for anything but the reserved generation’s
 });
 
 test('the Drive is the one addition: exactly its CSI volume, mounted only by the runner as designed', () => {
-  // docs/documents-drive-technical-design.md §6.1 (B13): the Pod of a profile with the drive.
+  // docs/drive-technical-design.md §6.1 (B13): the Pod of a profile with the drive.
   const drivePod = (generation = 3) =>
     buildManagedPod({ ownerId: OWNER, runnerId: RUNNER, generation, namespace: NS }, PVC_UID, testManagedRunnerProfile({ files: true }));
   assert.deepEqual(decide(create(drivePod())), { allowed: true, reason: 'AUTHORIZED' });
@@ -225,7 +225,7 @@ test('the Drive is the one addition: exactly its CSI volume, mounted only by the
 });
 
 // deploy/managed-runner/drive-csi/README.md, "Moving from an older driver": a Pod an apiserver from before the rename
-// to Drive creates has documents.orbit.dev at /run/orbit-documents, and one from before the rename to Documents has
+// to Drive creates has documents.orbit.dev at /run/orbit-documents, and one from before the rename to Drive has
 // files.orbit.dev at /run/orbit-files. Each is admitted while it drains, as strictly the template as a new one.
 for (const [driver, volumeName, mountPath] of [
   ['documents.orbit.dev', 'orbit-documents', '/run/orbit-documents'],

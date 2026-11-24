@@ -4,8 +4,8 @@ import AppKit
 import UniformTypeIdentifiers
 import OrbitKit
 
-// Documents on the Mac (board docs/mocks/documents/03-mac.png; 01-ios.png for what it does not draw): a Finder-like
-// list with an inspector, the Share Link sheet with the secret warning, Trash and Storage under Documents in the
+// Drive on the Mac (board docs/mocks/drive/03-mac.png; 01-ios.png for what it does not draw): a Finder-like
+// list with an inspector, the Share Link sheet with the secret warning, Trash and Storage under Drive in the
 // sidebar, and the toolbar's uploads ring and popover with the agents' directory syncs. The words are OrbitKit's
 // `DriveLogic`; the reads and writes are `DriveModel`'s.
 

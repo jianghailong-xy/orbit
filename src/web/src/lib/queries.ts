@@ -1922,7 +1922,7 @@ export const linkPreviewsQuery = (refs: readonly LinkPreviewRef[]) =>
     enabled: refs.length > 0,
   });
 
-/** What `GET /documents/usage` answers: the account's total split into the drive's share (Trash included) and the rest, each byte once. */
+/** What `GET /drive/usage` answers: the account's total split into the drive's share (Trash included) and the rest, each byte once. */
 export interface DriveUsage {
   totalBytes: number;
   driveBytes: number;

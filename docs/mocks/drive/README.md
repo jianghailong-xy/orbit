@@ -1,6 +1,6 @@
 # Documents · design board
 
-The account's drive, drawn from [`docs/documents-drive-design.md`](../../documents-drive-design.md) (D1–D23 and rules 1–8, settled 2026-11-19).
+The account's drive, drawn from [`docs/drive-product-design.md`](../../drive-product-design.md) (D1–D23 and rules 1–8, settled 2026-11-19).
 iPhone is the reference design; web, Mac and Android follow it. Start with the index.
 
 | Board | What it holds |

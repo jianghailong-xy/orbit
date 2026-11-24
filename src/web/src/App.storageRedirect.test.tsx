@@ -8,8 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 
 /**
- * Storage moved into Documents (docs/mocks/documents, board choice a): /settings/storage, and the address of one of its
- * rows' files, lead to Documents → Storage, with the address bar left at the new address.
+ * Storage moved into Drive (docs/mocks/drive, board choice a): /settings/storage, and the address of one of its
+ * rows' files, lead to Drive → Storage, with the address bar left at the new address.
  */
 
 vi.mock('./api', async (original) => ({ ...(await original<typeof import('./api')>()), api: vi.fn() }));

@@ -183,7 +183,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             if (OrbitLinks.ownerRequest(raw) != null) { ownerRequestLink = incoming; return@LaunchedEffect }
             OrbitLinks.parse(raw, signedIn?.handle?.account?.server, Origin.EXTERNAL)?.let { route ->
                 if (navigation.current != route) LastPageMarks.arrived(route, raw)
-                // The upload notification's Show lands on Documents, its uploads sheet open, whatever was showing.
+                // The upload notification's Show lands on Drive, its uploads sheet open, whatever was showing.
                 navigation = if (route.isDrive && navigation.account != null) navigation.land(DRIVE_SECTION, route) else navigation.receive(route)
             }
         }
@@ -509,7 +509,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         // A workspace's new session page has back alone in its bar, as iOS's draft does, and a session page back and
                         // its own ⋯ (iOS `ConsoleView`'s toolbar): neither carries the drawer or a refresh.
                         val draftPage = route.destination == Destination.DRAFT && route.workspaceId != null || route.destination == Destination.SESSION ||
-                            // Documents' pages carry their own buttons (board 04-android ② ③): New folder and ⋮, nothing of the shell's.
+                            // Drive' pages carry their own buttons (board 04-android ② ③): New folder and ⋮, nothing of the shell's.
                             route.isDrive
                         if (navigation.canGoBack && !draftPage) IconButton(onClick = { scope.launch { focus.clearFocus(); drawer.open() } }) { NeedsYouMenuIcon(app, "Open navigation") }
                         // iOS: a session list is refreshed by pulling it.

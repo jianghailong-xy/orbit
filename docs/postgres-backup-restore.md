@@ -186,10 +186,10 @@ commits: a round that finishes leaves the copy with the bytes of every row in th
 
 #### S3 bucket mirror
 
-Set `ORBIT_DOCUMENTS_S3_MIRROR=1` in the deployment's `.env` and recreate `apiserver` and `pgbackup`.
+Set `ORBIT_DRIVE_S3_MIRROR=1` in the deployment's `.env` and recreate `apiserver` and `pgbackup`.
 Set `ORBIT_BACKUP_SYNC_TARGET` to the off-host archive destination. The sidecar uses
-`ORBIT_DOCUMENTS_S3_ENDPOINT`, `ORBIT_DOCUMENTS_S3_BUCKET`, `ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID`,
-`ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY` and `ORBIT_DOCUMENTS_S3_REGION` (default `us-east-1`).
+`ORBIT_DRIVE_S3_ENDPOINT`, `ORBIT_DRIVE_S3_BUCKET`, `ORBIT_DRIVE_S3_ACCESS_KEY_ID`,
+`ORBIT_DRIVE_S3_SECRET_ACCESS_KEY` and `ORBIT_DRIVE_S3_REGION` (default `us-east-1`).
 The backup host must provide SFTP using the same SSH settings as the archive, and the SSH user must
 be able to write to the archive's sibling directory, `<target>-bucket`.
 
@@ -212,7 +212,7 @@ old ones longer than that. Restoring one of those can find rows without their by
 | --- | --- |
 | The file's date | A tombstone on its row (`expired_at`). Name, size, sha256 and test summary stay, and so do the bytes, here and in the copy |
 | One grace period after the last row naming those bytes got its tombstone | The bytes go from the live store (`file_blob.bytes_deleted_at`) |
-| One grace period after that | The bytes go from the off-host copy (`file_blob.off_host_prune_at`; for a bucket-stored blob only when `ORBIT_DOCUMENTS_S3_MIRROR=1`, from the `<target>-bucket` mirror) |
+| One grace period after that | The bytes go from the off-host copy (`file_blob.off_host_prune_at`; for a bucket-stored blob only when `ORBIT_DRIVE_S3_MIRROR=1`, from the `<target>-bucket` mirror) |
 
 The sidecar prunes each copy at most once per base backup interval, and only in a round where the mirror took this archive.
 Bucket pruning also requires a successful bucket copy in that round. The sidecar asks the database which names are due
@@ -228,7 +228,7 @@ moment. Neither attachment rows nor `file_blob` rows are deleted by any of this.
 
 - **With no target,** `./data/files` is the only copy of those bytes. Postgres does not hold them and no
   local backup does, so they are lost with the disk.
-- **With `ORBIT_DOCUMENTS_BACKEND=s3` and the mirror disabled,** use the bucket's own versioning or replication.
+- **With `ORBIT_DRIVE_BACKEND=s3` and the mirror disabled,** use the bucket's own versioning or replication.
   Uploads pass through `./data/files/tmp`. The sidecar still copies any local blobs left from before a move to a bucket.
 
 The sidecar gets its read-only mount of `./data/files` when its container is recreated, and until then
@@ -348,7 +348,7 @@ adds them without touching anything else. Such a file already read as expired at
 depends on them.
 
 The copy has no `tmp/`, and the apiserver makes it again at the next upload. With
-`ORBIT_DOCUMENTS_BACKEND=s3` there is nothing to copy back: start the deployment on the same bucket, whose
+`ORBIT_DRIVE_BACKEND=s3` there is nothing to copy back: start the deployment on the same bucket, whose
 own versioning or replication is what brings back any object that was lost.
 
 ### Verify a backup without touching production

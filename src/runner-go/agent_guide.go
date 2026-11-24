@@ -415,7 +415,7 @@ type guideContext struct {
 	Orchestration bool   `json:"orchestration"`
 	Watches       bool   `json:"watches"`
 	Wiki          bool   `json:"wiki"`
-	DocumentsOff  bool   `json:"documentsOff,omitempty"` // the server has Drive off: no drive tools (documents_switch.go)
+	DocumentsOff  bool   `json:"documentsOff,omitempty"` // the server has Drive off: no drive tools (drive_switch.go)
 }
 
 // guideFacts is a guide's context plus what it reads availability from: the MCP server's own switches,

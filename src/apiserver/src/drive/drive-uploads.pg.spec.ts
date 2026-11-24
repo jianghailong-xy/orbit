@@ -1,5 +1,5 @@
 /**
- * The owner's resumable upload and ranged download (docs/documents-drive-technical-design.md §4.1;
+ * The owner's resumable upload and ranged download (docs/drive-technical-design.md §4.1;
  * drive/drive-uploads.service.ts, drive-content.service.ts, drive.controller.ts), over a real PostgreSQL that
  * `scripts/run-pg-spec.sh` migrates from empty, with the chunks on a files directory of this run's:
  *
@@ -52,7 +52,7 @@ import { DriveService } from './drive.service';
 import { DriveSyncsService } from './drive-syncs.service';
 
 // Drive is off unless switched on (drive-switch.ts); this harness mounts its controller, so it switches it on.
-process.env.ORBIT_DOCUMENTS_ENABLED = 'true';
+process.env.ORBIT_DRIVE_ENABLED = 'true';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);

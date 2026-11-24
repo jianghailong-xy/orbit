@@ -151,7 +151,7 @@ object DriveUploads {
     const val CHANNEL = "drive-uploads"
     const val NOTIFICATION_ID = 0x0D0C
     const val PAUSE_ACTION = "io.orbitd.android.drive.PAUSE"
-    /** The notification's Show: Documents with its uploads sheet open. */
+    /** The notification's Show: Drive with its uploads sheet open. */
     const val SHOW_LINK = "orbit://drive/uploads"
 
     fun channel(context: Context) {

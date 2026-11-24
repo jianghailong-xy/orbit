@@ -75,7 +75,7 @@ internal object DriveFake {
             else ok("""{"links":[]}""")
         }
         if (p == listOf("attachments", "usage")) return ok("""{"totalBytes":1932735283,"fileCount":1204,"projects":[],"tasks":[],"weeks":[{"weekStart":"2026-11-16","bytes":1288490188}]}""")
-        if (p.firstOrNull() != "documents") return null
+        if (p.firstOrNull() != "drive") return null
         val live = nodes.filter { it.trashed == null }
         calls += "$method ${p.drop(1).joinToString("/")}" + (api.query.toMap()["parentId"]?.let { "?parentId=$it" } ?: "")
         val rest = p.drop(1)
@@ -127,7 +127,7 @@ internal object DriveFake {
 }
 
 /**
- * Documents in the Android shell (board docs/mocks/documents/04-android): the drawer row and its switch, browsing with who wrote each
+ * Drive in the Android shell (board docs/mocks/drive/04-android): the drawer row and its switch, browsing with who wrote each
  * file, a folder's writes (rename, new folder, move, Move to Trash with Undo), the share link with the secret warning, Trash's
  * restore, Storage, the uploads sheet's agent sync and its details, and the upload notification's link.
  */
@@ -310,7 +310,7 @@ class DriveShellTest {
         compose.onNodeWithText("Add 1").performClick()
         await { !exists("drive-picker") }
         val handle = (app().session.state.value as AuthState.SignedIn).handle
-        assertEquals("/home/orbit/Documents/Orbit UI migration/migration-notes.md ", app().composer(handle, NavShell.SESSION).state.value.draft.text)
+        assertEquals("/home/orbit/Drive/Orbit UI migration/migration-notes.md ", app().composer(handle, NavShell.SESSION).state.value.draft.text)
     }
 
     @Test fun theUploadNotificationsShowLinkOpensDrive() {

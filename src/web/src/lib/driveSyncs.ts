@@ -2,7 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { api } from '../api';
 
 /**
- * An agent's directory syncs into Documents (docs/documents-directory-sync-design.md, S4): `GET /drive/syncs` is the
+ * An agent's directory syncs into Drive (docs/drive-directory-sync-design.md, S4): `GET /drive/syncs` is the
  * running ones and those that ended in the last 24 h. The store reads it when the page opens, when the control plane hears
  * `drive.sync`, on focus and after a reconnect, and every 5 s while one is running and the page is visible. "Clear finished"
  * only hides ended syncs on this browser (their ids are kept in localStorage).
@@ -165,7 +165,7 @@ export function resetDriveSyncs(): void {
 }
 
 /**
- * One sync, for the conversation's card at the call that started it (board docs/mocks/documents-sync-card): read from
+ * One sync, for the conversation's card at the call that started it (board docs/mocks/drive-sync-card): read from
  * the tray's list, which `drive.sync` keeps current, whether or not the tray cleared it; a sync too old for that list
  * (ended over a day ago) is read once by id. Null until it is known, and when it cannot be read.
  */
@@ -191,7 +191,7 @@ export function useDriveSync(id: string): DriveSync | null {
 
 /**
  * Whether an MCP tool name is the tool an agent starts a sync with: drive_sync, or documents_sync, its name while Drive
- * was called Documents, which stored transcripts and runners already deployed carry.
+ * was called Drive, which stored transcripts and runners already deployed carry.
  */
 export const isDriveSyncTool = (name: string): boolean =>
   name === 'mcp__orbit__drive_sync' || name === 'mcp__orbit__documents_sync';

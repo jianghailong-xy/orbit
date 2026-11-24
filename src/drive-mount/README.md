@@ -1,6 +1,6 @@
 # orbit-drive-mount
 
-The Drive mount daemon (docs/documents-drive-technical-design.md §5): the account's drive as a FUSE file
+The Drive mount daemon (docs/drive-technical-design.md §5): the account's drive as a FUSE file
 system, at `/run/orbit-drive/drive` on an Orbit Cloud runner, which the runner shows its agents as `~/Drive`
 (`/home/orbit/Drive`, a symlink `orbit run` makes). Go on go-fuse's raw protocol, speaking the runner drive door
 (`/api/runner/drive/*`, `src/apiserver/src/drive/runner-drive.controller.ts`).

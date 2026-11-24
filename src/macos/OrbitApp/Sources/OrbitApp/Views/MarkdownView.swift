@@ -139,7 +139,7 @@ enum MarkdownRenderBlock: Equatable {
     case card(OrbitLinkRef)
     case file(MarkdownFileRef)
     case settings(SettingPlace)
-    /// A drive file a reply links (`orbit-document:<id>`), drawn as that file (docs/mocks/documents, 01-ios ⑮).
+    /// A drive file a reply links (`orbit-document:<id>`), drawn as that file (docs/mocks/drive, 01-ios ⑮).
     case document(entryID: String, label: String)
 }
 

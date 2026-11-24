@@ -1000,7 +1000,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         // events (tag/provider/task-list) legitimately carry none.
         if (!ev?.type || ev.type === 'ping') return;
         if (ev.type === 'sessions.list_changed') hinted = true;
-        // An agent's directory sync moved (`hints=drive_syncs`): the Documents tray reads its list again.
+        // An agent's directory sync moved (`hints=drive_syncs`): the Drive tray reads its list again.
         if (ev.type === 'drive.sync') void refreshDriveSyncs();
         const projectId = ev.data?.projectMembership?.projectId;
         const id = ev.data?.id;

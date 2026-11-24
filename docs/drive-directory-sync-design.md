@@ -124,7 +124,7 @@ drive path" (shared with the sync). `drive_put` behaves exactly as before.
 
 ## Progress on the Documents page (S4)
 
-Board: [`docs/mocks/documents-sync-tray/board.png`](mocks/documents-sync-tray/board.png) (three frames: a sync next to an owner
+Board: [`docs/mocks/drive-sync-tray/board.png`](mocks/drive-sync-tray/board.png) (three frames: a sync next to an owner
 upload, every row state, the Details dialog).
 
 The Documents page already has an upload tray in the bottom-right corner (`src/web/src/components/files/FilesUploadTray.tsx`,

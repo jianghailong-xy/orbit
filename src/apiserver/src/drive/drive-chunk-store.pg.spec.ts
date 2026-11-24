@@ -1,5 +1,5 @@
 /**
- * The drive's chunked, streamed store (docs/documents-drive-technical-design.md §2.2–§2.4; migration 1283;
+ * The drive's chunked, streamed store (docs/drive-technical-design.md §2.2–§2.4; migration 1283;
  * drive/drive-chunks.service.ts, files/file-store.ts, files/s3-file-store.ts, files/file-retention-sweep.ts), over a real
  * PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty, once with each store:
  *

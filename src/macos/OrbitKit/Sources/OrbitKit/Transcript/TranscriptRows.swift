@@ -500,7 +500,7 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
     /// Two or more Agents (`mcp__orbit__delegate`) started one after another with nothing between them,
     /// drawn as one group (`SubagentGroup`, `TranscriptRows.groupAgents`).
     case agents([ToolCard])
-    /// An agent's run of Documents transfers — `documents_put` or `documents_get` calls with nothing but settled
+    /// An agent's run of Drive transfers — `documents_put` or `documents_get` calls with nothing but settled
     /// thinking between them — drawn as one card with a bar, the speed and a row per file
     /// (`DriveTransfer`, `TranscriptRows.groupTransfers`; web parity: the `drive` item of `groupToolRuns`).
     case transfer(DriveTransfer.Kind, [ToolCard])
@@ -753,7 +753,7 @@ public enum TranscriptRows {
         return out
     }
 
-    /// Fold an agent's Documents transfers into one card: consecutive `documents_put` (or `documents_get`) calls, which
+    /// Fold an agent's Drive transfers into one card: consecutive `documents_put` (or `documents_get`) calls, which
     /// `isGroupable` keeps out of the steps lines, with nothing between them but steps lines of settled thinking. That
     /// thinking is drawn under the card, so the calls stay together; anything else between two calls — a sentence, a
     /// shell command — starts a new card (web parity: `groupToolRuns`' `drive` item).
@@ -858,7 +858,7 @@ public enum TranscriptRows {
              DriveSyncCard.toolName:
             return false
         default:
-            // A Documents transfer is its run's card (`groupTransfers`).
+            // A Drive transfer is its run's card (`groupTransfers`).
             return DriveTransfer.kind(card.name) == nil
         }
     }

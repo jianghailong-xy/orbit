@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Documents on a real Orbit server (board docs/mocks/documents/04-android): DriveDeviceTest on the shared API 36 emulator, signed in
+# Drive on a real Orbit server (board docs/mocks/drive/04-android): DriveDeviceTest on the shared API 36 emulator, signed in
 # through the login page. The account comes from ACCOUNT_JSON ({"email","password"}), never from the command line; SERVER is the
 # address the emulator reaches (http://10.0.2.2:<port> for a server on this host). DOCS_TEST picks the journey
 # (io.orbitd.android.drive.DriveDeviceTest#screens|writes|off); DOCS_NIGHT=yes draws the dark theme; DOCS_DISPLAY sets the

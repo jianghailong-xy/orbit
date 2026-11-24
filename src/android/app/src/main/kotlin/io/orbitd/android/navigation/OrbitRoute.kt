@@ -24,10 +24,10 @@ enum class Destination { WORKSPACES, WORKSPACE, FOLDER, SEARCH, SESSION, DRAFT, 
     /** A session someone shared with this account (docs/session-guests-design.md §4): `id` the session, drawn as the guest view. A
      *  Shared with me row opens it; a session link the owner's read answers 404 for draws the same view through `SESSION`. */
     GUEST_SESSION,
-    /** Documents, the account's drive (board docs/mocks/documents/04-android): `id` the folder (null: the drive's root), `recordId` its
+    /** Drive, the account's drive (board docs/mocks/drive/04-android): `id` the folder (null: the drive's root), `recordId` its
      * name for the bar until the folder is read — or `uploads`, the upload notification's Show, which opens the uploads sheet. */
     DRIVE,
-    /** A Documents file's preview: `id` the file, `folderId` the folder it is in, `recordId` its name. */
+    /** A Drive file's preview: `id` the file, `folderId` the folder it is in, `recordId` its name. */
     DRIVE_FILE, DRIVE_TRASH, DRIVE_STORAGE }
 enum class Origin { DRAWER, LIST, SEARCH, LINK, EXTERNAL }
 

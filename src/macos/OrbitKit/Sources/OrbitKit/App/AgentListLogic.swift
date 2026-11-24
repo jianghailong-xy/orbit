@@ -133,7 +133,7 @@ public enum AgentListLogic {
     /// schedules failing or held (`scheduledNeedsYou`). Account-wide: it is never a row of a workspace's list.
     ///
     /// Documents (`documents`, the server's switch) goes right under the Wiki, or where the Wiki would be, with no
-    /// count (docs/mocks/documents, 03-mac ①).
+    /// count (docs/mocks/drive, 03-mac ①).
     public static func sidebarSections(_ sections: [AppSection], wiki: Bool,
                                        projectsWaiting: Int, wikiWaiting: Int,
                                        scheduled: Bool = false, scheduledNeedsYou: Int = 0,

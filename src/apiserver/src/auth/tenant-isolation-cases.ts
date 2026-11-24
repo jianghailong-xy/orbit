@@ -138,7 +138,7 @@ export interface Tenant {
   adminSubjectTokenId: string;
   adminProviderId: string;
   /**
-   * The account's drive (docs/documents-drive-technical-design.md §4.1): a folder, a file in it with a replaced
+   * The account's drive (docs/drive-technical-design.md §4.1): a folder, a file in it with a replaced
    * version in Trash, and a Trash group of a deleted file.
    */
   driveFolderId: string;
@@ -329,7 +329,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /attachments/usage/tasks/:id/files': { request: (of) => ({ params: { id: of.taskId } }) },
   'DELETE /attachments/:id/everywhere': { request: (of) => ({ params: { id: of.spare.storedFileId } }) },
 
-  // ── Documents (docs/documents-drive-technical-design.md §4.1, §4.4): every read and write by (id, owner) ──────────
+  // ── Drive (docs/drive-technical-design.md §4.1, §4.4): every read and write by (id, owner) ──────────
   ...driveUnderEveryPrefix({
     'GET /drive/entries/:id': { request: (of) => ({ params: { id: of.driveFileId } }) },
     'GET /drive/syncs/:id': { request: (of) => ({ params: { id: of.driveSyncId } }) },
@@ -1060,7 +1060,7 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     "the request is read FOR UPDATE by (id, the caller as its owner) and nothing else, 404 SCHEDULE_REQUEST_NOT_FOUND for another account's (schedules/schedules.service.ts:427)",
   'GET /sessions/:id/schedule-cards':
     "the session is read by (id, the caller) first, 404 for another account's (schedules/schedule-reads.service.ts:183), and the cards and records are read by the caller as owner",
-  // Settings → Storage's file lists (docs/documents-design.md §2.10).
+  // Settings → Storage's file lists (docs/drive-design.md §2.10).
   'GET /attachments/usage/weeks/:week/files':
     'the week is a date, not an object: every row the list reads is filtered by the caller\'s owner_id, in the scope, in what is counted as holding it and in its totals, so another account\'s files never reach it (files/files.service.ts:963, :965, :1011); it writes nothing',
   // ── main checkout (0534) ──
@@ -1349,7 +1349,7 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
     request: (of, mine) => ({ params: { id: mine.projectId }, query: { parentId: of.projectTaskId } }),
   },
 
-  // ── Documents: a folder named in B's own request ─────────────────────────────────────────────
+  // ── Drive: a folder named in B's own request ─────────────────────────────────────────────
   'POST /share-links body driveEntryId': {
     request: (of) => ({ params: {}, body: { kind: 'DRIVE_FILE', driveEntryId: of.driveFileId } }),
   },

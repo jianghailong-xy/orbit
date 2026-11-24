@@ -62,7 +62,7 @@ type mcpServer struct {
 	allowOrchestration    bool   // L3: expose session_* tools (the account's orchestration switch)
 	watchesOff            bool   // spawned with ORBIT_WATCHES=off: no watch tools (watch_rollout.go)
 	wikiOff               bool   // spawned with ORBIT_WIKI=off: no wiki tools (wiki_tools.go)
-	documentsOff          bool   // spawned with ORBIT_DOCUMENTS=off: no drive tools (documents_switch.go)
+	documentsOff          bool   // spawned with ORBIT_DOCUMENTS=off: no drive tools (drive_switch.go)
 	browserOn             bool   // spawned with ORBIT_BROWSER=on: the browser tools (browser_tools.go)
 	workflowsOff          bool   // spawned with ORBIT_WORKFLOWS=off: no workflow tool (subagent_workflow.go)
 	scheduleRun           bool   // spawned with ORBIT_SCHEDULE_RUN=1: a scheduled run's session (schedule_tools.go)
@@ -271,7 +271,7 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		if json.Unmarshal(req.Params, &p) != nil {
 			return s.err(req.ID, -32602, "invalid params"), true
 		}
-		// A Drive tool called by its Documents name is served as the tool it is now (drive_tools.go).
+		// A Drive tool called by its Drive name is served as the tool it is now (drive_tools.go).
 		p.Name = canonicalToolName(p.Name)
 		if s.helpAsk {
 			return s.ok(req.ID, s.callHelpAskTool(p.Name)), true

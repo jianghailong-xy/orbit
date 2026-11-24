@@ -129,7 +129,7 @@ public enum NavNode: Hashable, Sendable {
     case wikiPlanDoc(slug: String, version: Int?)
     /// One of its sections — what it covers and where its material comes from (mock 22 ④⑤): 0-based.
     case wikiPlanSection(slug: String, index: Int, version: Int?)
-    /// A folder of Documents on a phone (docs/mocks/documents, 01-ios ③), pushed from its row; its name rides along
+    /// A folder of Drive on a phone (docs/mocks/drive, 01-ios ③), pushed from its row; its name rides along
     /// so the title is there before the folder's read.
     case driveFolder(entryID: String, name: String)
     /// A file's page: its preview, who last wrote it and what can be done with it (01-ios ④⑤).

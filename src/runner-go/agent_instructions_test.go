@@ -514,7 +514,7 @@ func TestOnlyATopLevelSessionIsToldWhenToDelegate(t *testing.T) {
 func TestOrbitDriveGuidanceMatchesRunnerKind(t *testing.T) {
 	for _, mounted := range []bool{false, true} {
 		name := "self-registered"
-		// What the instructions say in brief, and the guide's files topic in full (docs/documents-drive-technical-design.md §4.6, §7.3).
+		// What the instructions say in brief, and the guide's files topic in full (docs/drive-technical-design.md §4.6, §7.3).
 		brief := []string{"drive_put", "drive_get", "drive_list", "drive_move", "drive_delete", "orbit drive",
 			"a Trash agents cannot see", "ORBIT_GUEST turns only read it"}
 		full := []string{"drive_put", "drive_get", "drive_list", "drive_move", "drive_delete", "orbit drive put|get|ls|mv|rm",

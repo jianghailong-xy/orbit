@@ -1,7 +1,7 @@
 import XCTest
 @testable import OrbitKit
 
-/// How the phone's Documents pages read (board docs/mocks/documents/01-ios.png): the drawer row, a row's second line,
+/// How the phone's Drive pages read (board docs/mocks/drive/01-ios.png): the drawer row, a row's second line,
 /// a file's page, Trash's rows, the composer's picker paths and a reply's link to a drive file.
 final class DrivePhoneLogicTests: XCTestCase {
     private var utc: Calendar {
@@ -95,11 +95,11 @@ final class DrivePhoneLogicTests: XCTestCase {
     /// What goes into the message is the file's path on the agent's mount; the picker opens on the project's folder.
     func testAPickedFileIsItsPathOnTheAgentsMount() {
         XCTAssertEqual(DriveLogic.agentPath(folders: ["Orbit UI migration"], name: "migration-notes.md"),
-                       "/home/orbit/Documents/Orbit UI migration/migration-notes.md")
-        XCTAssertEqual(DriveLogic.agentPath(folders: [], name: "brief.md"), "/home/orbit/Documents/brief.md")
+                       "/home/orbit/Drive/Orbit UI migration/migration-notes.md")
+        XCTAssertEqual(DriveLogic.agentPath(folders: [], name: "brief.md"), "/home/orbit/Drive/brief.md")
         XCTAssertEqual(DriveLogic.agentPath(entryPath: "/Datasets/labels.csv", name: "labels.csv"),
-                       "/home/orbit/Documents/Datasets/labels.csv")
-        XCTAssertEqual(DriveLogic.agentPath(entryPath: nil, name: "x.md"), "/home/orbit/Documents/x.md")
+                       "/home/orbit/Drive/Datasets/labels.csv")
+        XCTAssertEqual(DriveLogic.agentPath(entryPath: nil, name: "x.md"), "/home/orbit/Drive/x.md")
         XCTAssertEqual(DriveLogic.projectFolderName("Docs/site redesign "), "Docs-site redesign")
         let entries = [DriveEntry(id: "a", parentId: "r", kind: "FOLDER", name: "Orbit UI migration-35a1"),
                        DriveEntry(id: "b", parentId: "r", kind: "FILE", name: "Orbit UI migration")]

@@ -26,7 +26,7 @@ import { DriveWriterName } from './DriveWriterName';
 /** Said in the confirmation of a delete for good that ends a link (§9). */
 export const ENDS_A_SHARE_LINK = 'This ends a share link.';
 
-/** "Orbit UI migration": the folder a group was deleted from, by its last name; the drive's root is "Documents". */
+/** "Orbit UI migration": the folder a group was deleted from, by its last name; the drive's root is "Drive". */
 const folderLabel = (path: string) => path.split('/').filter(Boolean).pop() ?? 'Drive';
 
 const items = (n: number) => `${n} ${n === 1 ? 'item' : 'items'}`;

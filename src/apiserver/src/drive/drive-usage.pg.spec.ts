@@ -1,5 +1,5 @@
 /**
- * Files → Storage's total (docs/documents-drive-technical-design.md §2.5; files/files.service.ts#driveUsage), over a real
+ * Files → Storage's total (docs/drive-technical-design.md §2.5; files/files.service.ts#driveUsage), over a real
  * PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty:
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/drive/drive-usage.pg.spec.ts

@@ -3662,7 +3662,7 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	// Ungated too: keeping and reading back your own files is no power over anybody else's session. Upload and fetch
 	// are SessionOnly, because a file stays with the session that uploads it.
 	specs = append(specs, fileCLICapabilities...)
-	// Not listed in a session spawned with Documents off (documents_switch.go).
+	// Not listed in a session spawned with Drive off (drive_switch.go).
 	if documentsEnabledFromEnv() {
 		specs = append(specs, driveCLICapabilities...)
 	}

@@ -411,7 +411,7 @@ model User {
   feishuOutbox     FeishuOutbox[]
   /// What Orbit has learned about its accounts from the runs it sent there (migration 1494).
   accountHealth         AccountHealth[]
-  /// Its agents' directory syncs into Documents, as the upload tray shows them (migration 1560).
+  /// Its agents' directory syncs into Drive, as the upload tray shows them (migration 1560).
   driveSyncs         DriveSync[]
 
   @@map("user")
@@ -1291,7 +1291,7 @@ model Runner {
   driveMountCredentials DriveMountCredential[]
   // Account health of the sign-ins on this runner (migration 1494).
   accountHealth     AccountHealth[]
-  // The directory syncs into Documents this runner runs (migration 1560).
+  // The directory syncs into Drive this runner runs (migration 1560).
   driveSyncs     DriveSync[]
 
   @@index([ownerId])
@@ -2839,7 +2839,7 @@ model ShareLink {
   wikiSpace   WikiSpace? @relation(fields: [wikiSpaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "share_link_wiki_space_fkey")
 
   /// One drive file (1340) and the version of it the link was pinned to: the link serves that version's bytes whatever is
-  /// written to the file later, until its owner moves it (docs/documents-drive-technical-design.md §9). Both are reached
+  /// written to the file later, until its owner moves it (docs/drive-technical-design.md §9). Both are reached
   /// through the (id, owner_id) keys of the drive tables, so a link is only ever rooted at its owner's file.
   driveEntryId   String?       @map("drive_entry_id") @db.Uuid
   driveEntry     DriveEntry?   @relation("ShareLinkDriveEntry", fields: [driveEntryId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "share_link_drive_entry_fkey")
@@ -3690,11 +3690,11 @@ model Attachment {
   // Original upload filename. The runner writes a non-image/-PDF upload to the worktree
   // under this name and references it to claude. Null for legacy rows and pasted images.
   fileName  String?           @map("file_name")
-  // Raw bytes (bytea) of a row written before Documents (0462). NULL on a row whose bytes are only
+  // Raw bytes (bytea) of a row written before Drive (0462). NULL on a row whose bytes are only
   // in the file store under `sha256`; attachment_bytes_present holds every row to one of the two.
   // A row the copy has reached has both, until the clear (files/attachment-migration.ts).
   data      Bytes?
-  /// The bytes' sha256, 64 lowercase hex (0462, docs/documents-design.md §2.1): this row's bytes
+  /// The bytes' sha256, 64 lowercase hex (0462, docs/drive-design.md §2.1): this row's bytes
   /// are the file_blob of that name, kept once however many rows name them (files/files.service.ts).
   /// NULL on a row whose bytes are only in `data`.
   sha256    String?
@@ -3733,10 +3733,10 @@ model Attachment {
   @@map("attachment")
 }
 
-/// The bytes of Documents (0462, docs/documents-design.md §2.1): one row per distinct content,
+/// The bytes of Drive (0462, docs/drive-design.md §2.1): one row per distinct content,
 /// named by its sha256, however many attachment rows name it. The bytes themselves are in the store
-/// `storage` names — `local`, the files directory (ORBIT_DOCUMENTS_DIR, `<sha256[0:2]>/<sha256>`), or `s3`
-/// (`files/<sha256[0:2]>/<sha256>` in ORBIT_DOCUMENTS_S3_BUCKET) — and never in Postgres.
+/// `storage` names — `local`, the files directory (ORBIT_DRIVE_DIR, `<sha256[0:2]>/<sha256>`), or `s3`
+/// (`files/<sha256[0:2]>/<sha256>` in ORBIT_DRIVE_S3_BUCKET) — and never in Postgres.
 model FileBlob {
   sha256           String       @id
   sizeBytes        Int          @map("size_bytes")
@@ -3753,7 +3753,7 @@ model FileBlob {
   /// From when the backup sidecar may remove them from the off-host copy (scripts/pg-backup.sh).
   offHostPruneAt   DateTime?    @map("off_host_prune_at")
   attachments      Attachment[]
-  /// The drive's holders (1283, docs/documents-drive-technical-design.md §2.4): a chunk of a drive version, and a
+  /// The drive's holders (1283, docs/drive-technical-design.md §2.4): a chunk of a drive version, and a
   /// chunk of a write not committed yet. Either holds the bytes while its row exists.
   driveVersionChunks DriveVersionChunk[]
   driveStagingChunks DriveStagingChunk[]
@@ -3761,7 +3761,7 @@ model FileBlob {
   @@map("file_blob")
 }
 
-/// A drive write not committed yet (1283, docs/documents-drive-technical-design.md §1.1): an owner's resumable upload,
+/// A drive write not committed yet (1283, docs/drive-technical-design.md §1.1): an owner's resumable upload,
 /// a write through the mount, or a drive tool's put. Its chunks hold their bytes until a commit names them; one untouched
 /// for 7 days is removed by the retention sweep (files/file-retention-sweep.ts, step 0). `entry_id` and `parent_id` name
 /// drive_entry rows, whose foreign keys the name layer's migration adds.
@@ -3815,7 +3815,7 @@ model DriveStagingChunk {
   @@map("drive_staging_chunk")
 }
 
-/// The ordered chunks of one drive version (1283, docs/documents-drive-technical-design.md §1.2): a file's bytes are
+/// The ordered chunks of one drive version (1283, docs/drive-technical-design.md §1.2): a file's bytes are
 /// their concatenation in `idx` order, and `offset` finds the chunk for any byte. The name layer's migration adds the
 /// foreign key (version_id, owner_id) -> drive_version ON DELETE CASCADE.
 model DriveVersionChunk {
@@ -3834,7 +3834,7 @@ model DriveVersionChunk {
   @@map("drive_version_chunk")
 }
 
-/// What one deletion (`DELETE`) or one overwrite (`VERSION`) put in Trash (1327, docs/documents-drive-technical-design.md
+/// What one deletion (`DELETE`) or one overwrite (`VERSION`) put in Trash (1327, docs/drive-technical-design.md
 /// §1.1, §3.3–§3.5). A `DELETE` group from the mount stays open for a burst of deletes (`burst_key`, joined while
 /// `last_added_at` is under 10 s old); an owner's deletion is closed at once. `folder_id` has no foreign key: it is the
 /// folder the items were deleted from, for display, and `folder_path` keeps its path as it was.
@@ -3868,7 +3868,7 @@ model DriveTrashGroup {
   @@map("drive_trash_group")
 }
 
-/// One folder or file of an account's drive, live or in Trash (1327, docs/documents-drive-technical-design.md §1.1).
+/// One folder or file of an account's drive, live or in Trash (1327, docs/drive-technical-design.md §1.1).
 /// The root is the one row with no parent, named ''. A file always has a current version (drive_entry_version_chk; the
 /// foreign key to it is DEFERRABLE INITIALLY DEFERRED, so a file and its first version are written in one transaction).
 /// A folder in Trash marks every descendant with the same `trashed_at` and `trash_group_id`.
@@ -3998,7 +3998,7 @@ model DriveChange {
 }
 
 /// What the mount daemon of one managed-runner generation presents at /runner/drive/* (1339,
-/// docs/documents-drive-technical-design.md §4.3): only the token's sha256 is kept. Refused by every other route, and
+/// docs/drive-technical-design.md §4.3): only the token's sha256 is kept. Refused by every other route, and
 /// accepted only while its generation is the mapping's and its instance the one the manager recorded (§8.2).
 model DriveMountCredential {
   id         String    @id @default(uuid(7)) @db.Uuid
@@ -11190,8 +11190,8 @@ model AccountHealth {
   @@map("account_health")
 }
 
-/// One agent's directory sync into the owner's Documents, as the upload tray shows it (migration 1560,
-/// docs/documents-directory-sync-design.md S4). The runner running it opens and reports into the row; the owner reads it.
+/// One agent's directory sync into the owner's Drive, as the upload tray shows it (migration 1560,
+/// docs/drive-directory-sync-design.md S4). The runner running it opens and reports into the row; the owner reads it.
 model DriveSync {
   id           String    @id @default(uuid(7)) @db.Uuid
   ownerId      String    @map("owner_id") @db.Uuid

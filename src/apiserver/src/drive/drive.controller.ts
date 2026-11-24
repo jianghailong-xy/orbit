@@ -24,7 +24,7 @@ export const DRIVE_PAT = () => PatScope('drive', { workspaceConfinable: false })
 const limitOf = (limit?: string) => (limit === undefined ? undefined : Number.parseInt(limit, 10));
 
 /**
- * The owner's drive routes (docs/documents-drive-technical-design.md §4.1), under the owner's login: folders and files,
+ * The owner's drive routes (docs/drive-technical-design.md §4.1), under the owner's login: folders and files,
  * versions, Trash and the change feed. The owner is always the credential's; another account's entry, version or group
  * is not found. Usage and the share check are their own tasks' routes. A token reaches them with the
  * `drive` scope (DRIVE_PAT), declared on each handler like every scope; without it the guard refuses with the scope's 403.

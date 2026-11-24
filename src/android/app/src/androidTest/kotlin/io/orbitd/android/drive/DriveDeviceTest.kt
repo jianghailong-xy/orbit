@@ -28,11 +28,11 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Documents on a real Orbit server (board docs/mocks/documents/04-android), signed in through the login page as a person does: the
+ * Drive on a real Orbit server (board docs/mocks/drive/04-android), signed in through the login page as a person does: the
  * server, account and password come as instrumentation arguments (`docs_server`, `docs_email`, `docs_password`) and are never
  * written down. [screens] walks the board's frames and captures each; [writes] does what the owner does — upload, download, rename,
  * move, new folder, Move to Trash and restore, a share link — and checks each through the server's own answer; [off] is the
- * server with Documents off, where the drawer has no row.
+ * server with Drive off, where the drawer has no row.
  */
 class DriveDeviceTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()

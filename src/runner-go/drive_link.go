@@ -7,11 +7,10 @@ import (
 	"time"
 )
 
-// ensureDriveLink makes ~/Drive the Documents drive on a runner that receives it (docs/documents-drive-technical-
-// design.md §6.1): /home/orbit/Drive a symlink to /run/orbit-drive/drive, the mount the CSI plugin keeps below the
+// ensureDriveLink makes ~/Drive the drive on a runner that receives it (docs/drive-technical-design.md §6.1): /home/orbit/Drive a symlink to /run/orbit-drive/drive, the mount the CSI plugin keeps below the
 // plain /run/orbit-drive directory (/run/orbit-documents or /run/orbit-files in a Pod of an older driver: driveParentPath).
 // Made at every start, so a link an agent removed is back after the runner restarts (§5.9 row 61). Whatever else is at
-// that name is kept, as Documents.local-<time>, and the move logged. A runner without any of these directories (every
+// that name is kept, as Drive.local-<time>, and the move logged. A runner without any of these directories (every
 // self-registered one) is not touched.
 func ensureDriveLink(logf func(format string, args ...interface{})) {
 	if info, err := os.Stat(filepath.Dir(driveMountPath)); err != nil || !info.IsDir() {

@@ -1,8 +1,8 @@
 # Documents: the account's drive (product proposal)
 
 Status: **product decisions settled, round 4** (owner, 2026-11-19), after two reviews by a second model. Next: the
-feasibility check for the mount, then the board under `docs/mocks/documents/`, then the technical design. This
-builds on `docs/documents-design.md` (sha256-addressed bytes, `file_upload`, `FILE` evidence) and adds a drive the
+feasibility check for the mount, then the board under `docs/mocks/drive/`, then the technical design. This
+builds on `docs/drive-design.md` (sha256-addressed bytes, `file_upload`, `FILE` evidence) and adds a drive the
 owner and agents share.
 
 ## One sentence
@@ -149,7 +149,7 @@ quotas; folder share links; HTML, log and test-report preview; replacing git for
   agent's container and passed in, on both the Kubernetes and the Docker backend (the Docker channel allows only its
   own data volume today), and that design must reopen §3 on purpose. If neither works, D1 needs another answer (for
   example a sync folder), and rules 1 and 3 change with it. **Settled:** §3 now names the one exception, the mount
-  the `documents.orbit.dev` CSI driver passes in at `/run/orbit-documents` (deploy/managed-runner/documents-csi/).
+  the `documents.orbit.dev` CSI driver passes in at `/run/orbit-documents` (deploy/managed-runner/drive-csi/).
 - **Engine grants (D16).** Each engine's sandbox must list `/home/orbit/Files` as writable outside Plan mode (today
   Claude gets `--add-dir` for the uploads folder, `src/runner-go/claude_spawn.go:151`; Codex Auto's writable roots are
   in `src/runner-go/codex_auto_policy.go:31`), and as readable in Plan mode.
@@ -176,7 +176,7 @@ quotas; folder share links; HTML, log and test-report preview; replacing git for
 
 1. Feasibility check: one read-write mount per Cloud runner, made outside the agent's container and passed in, on
    Kubernetes and on Docker.
-2. Board `docs/mocks/documents/`: the left menu entry, the Files page (folders, preview, upload, share with the
+2. Board `docs/mocks/drive/`: the left menu entry, the Files page (folders, preview, upload, share with the
    secret warning, grouped Trash, Storage, who wrote it), the composer's drive picker, a reply linking a drive file, and
    the phone layout.
 3. Technical design.

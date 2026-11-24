@@ -1,8 +1,8 @@
 import SwiftUI
 import OrbitKit
 
-/// An agent's run of Documents transfers as one card (board docs/mocks/agent-drive-transfer; web parity:
-/// `components/documents/DriveTransferCard.tsx`): while it goes, a bar, the bytes, the speed and the time left, and
+/// An agent's run of Drive transfers as one card (board docs/mocks/agent-drive-transfer; web parity:
+/// `components/drive/DriveTransferCard.tsx`): while it goes, a bar, the bytes, the speed and the time left, and
 /// a row per file grouped by folder; a stall after 20 s with no new byte turns the bar amber. A finished run stays a
 /// card, its bar green, with its totals and its files. One file is a line, not a card. The words are OrbitKit's
 /// `DriveTransfer`.
@@ -11,7 +11,7 @@ struct DriveTransferCardView: View {
     let cards: [ToolCard]
     /// Whether the session's turn is at work: a call with no answer in one that is not was cut off.
     let live: Bool
-    /// Opens a file an upload made where it lives in Documents; nil where there is no Documents page to open.
+    /// Opens a file an upload made where it lives in Drive; nil where there is no Drive page to open.
     var showInDrive: ((String) -> Void)? = nil
 
     private struct Sample: Equatable {

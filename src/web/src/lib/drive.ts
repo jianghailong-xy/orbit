@@ -3,7 +3,7 @@ import { queryOptions } from '@tanstack/react-query';
 import { api, ApiError, authedFetch, type ShareLink } from '../api';
 
 /**
- * Documents: the account's drive as the owner's routes answer it (docs/documents-drive-technical-design.md §4.1,
+ * Drive: the account's drive as the owner's routes answer it (docs/drive-technical-design.md §4.1,
  * apiserver drive/drive.controller.ts). Every read here declares `meta.entities: ['drive']`, so the control plane's
  * `drive.changed` (one write committed) re-reads what the page shows.
  */

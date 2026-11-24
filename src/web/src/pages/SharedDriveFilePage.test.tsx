@@ -8,7 +8,7 @@ import type { SharedDriveFile } from '../api';
 import { SharedLinkPage } from './SharedLinkPage';
 
 /**
- * A Documents file link's page (`/s/<token>`, kind DRIVE_FILE): it used to be drawn as a session's conversation and
+ * A Drive file link's page (`/s/<token>`, kind DRIVE_FILE): it used to be drawn as a session's conversation and
  * crash. It shows the file's name and size and a Download of the link's bytes; a PDF in a frame of the browser's
  * viewer from a blob: URL, a picture from the content route, and anything else as a note to download it.
  */

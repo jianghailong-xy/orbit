@@ -491,7 +491,7 @@ func runOrbitCLI(args []string, in io.Reader, out, errW io.Writer) error {
 	case "file":
 		return runCLICommand("orbit file", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdFileCLI(args[1:], out) })
 	case "drive", "documents":
-		// `orbit documents` is the command's name while Drive was called Documents, still served and not listed.
+		// `orbit documents` is the command's name while Drive was called Drive, still served and not listed.
 		return runCLICommand("orbit "+args[0], args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdDriveCLI(args[1:], out) })
 	case "subagent":
 		return runCLICommand("orbit subagent", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdSubagentCLI(args[1:], out) })
@@ -982,7 +982,7 @@ func cmdRun() {
 		fmt.Fprintln(os.Stderr, "managed runner instance:", err)
 		os.Exit(1)
 	}
-	// A runner that receives the Documents drive shows it to its agents as ~/Drive (drive_link.go).
+	// A runner that receives the drive shows it to its agents as ~/Drive (drive_link.go).
 	ensureDriveLink(func(format string, args ...interface{}) { fmt.Fprintf(os.Stderr, format+"\n", args...) })
 	// A managed runner's volume has to survive its node's power loss (volume_durability.go): before
 	// anything runs Git there, it looks at what the last stop left.

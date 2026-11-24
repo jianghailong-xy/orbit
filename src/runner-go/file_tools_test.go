@@ -960,7 +960,7 @@ func TestFileFetchSavesNothingWhenTheBytesAreNotTheOnesOrbitHolds(t *testing.T) 
 	}
 }
 
-// A row from before Documents has no sha256 yet: its bytes are still read, and hashed here.
+// A row from before Drive has no sha256 yet: its bytes are still read, and hashed here.
 func TestFileFetchHashesARowWithNoSha256(t *testing.T) {
 	api := newFakeFileServer(t)
 	s := api.mcp(t)

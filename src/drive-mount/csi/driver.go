@@ -1,6 +1,6 @@
 //go:build linux
 
-// Package csi is drive.orbit.dev, the Drive CSI node plugin (docs/documents-drive-technical-design.md §6.1): it
+// Package csi is drive.orbit.dev, the Drive CSI node plugin (docs/drive-technical-design.md §6.1): it
 // gives a managed runner Pod its drive as one inline CSI volume. Identity and Node services only, no controller.
 //
 //   - NodePublishVolume refuses unless the Pod is in the managed-runner namespace (the kubelet's pod info) and the

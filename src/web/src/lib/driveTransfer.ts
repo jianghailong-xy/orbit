@@ -1,6 +1,6 @@
 /**
  * An agent's transfers to and from Drive (`drive_put` / `drive_get`, `documents_put` / `documents_get` while Drive was
- * called Documents), as the chat's transfer card draws them
+ * called Drive), as the chat's transfer card draws them
  * (DriveTransferCard, board docs/mocks/agent-drive-transfer).
  *
  * While a call runs, the runner sends its bytes as the call's live `tool_output`, one sentence restating the whole
@@ -14,7 +14,7 @@ export type DriveTransferKind = 'put' | 'get';
 const TOOLS: Record<string, DriveTransferKind> = {
   mcp__orbit__drive_put: 'put',
   mcp__orbit__drive_get: 'get',
-  // Their names while Drive was called Documents, which stored transcripts carry.
+  // Their names while Drive was called Drive, which stored transcripts carry.
   mcp__orbit__documents_put: 'put',
   mcp__orbit__documents_get: 'get',
 };
@@ -58,7 +58,7 @@ export type DriveTransferFile = {
   sent: number;
   /** Null until the call has said how big the file is. */
   size: number | null;
-  /** `orbit-drive:<id>` (`orbit-document:<id>` while Drive was called Documents) once an upload is in. */
+  /** `orbit-drive:<id>` (`orbit-document:<id>` while Drive was called Drive) once an upload is in. */
   link?: string;
   error?: string;
   startedAt?: number;
@@ -208,7 +208,7 @@ export function transferRate(samples: ReadonlyArray<{ at: number; bytes: number 
   return Math.max(0, (last.bytes - first.bytes) / (span / 1000));
 }
 
-/** As the Documents page's upload tray says it (DriveUploadTray). */
+/** As the Drive page's upload tray says it (DriveUploadTray). */
 export function timeLeftText(leftBytes: number, rate: number): string | null {
   if (!rate) return null;
   const seconds = leftBytes / rate;

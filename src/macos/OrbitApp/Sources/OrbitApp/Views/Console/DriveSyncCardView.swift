@@ -1,11 +1,11 @@
 import SwiftUI
 import OrbitKit
 
-/// An agent's `documents_sync` call as its sync's card (board docs/mocks/documents-sync-card): the same live numbers as
-/// the Documents popover, kept current after the agent's turn ends, since the sync runs in the background. A sync that
+/// An agent's `documents_sync` call as its sync's card (board docs/mocks/drive-sync-card): the same live numbers as
+/// the Drive popover, kept current after the agent's turn ends, since the sync runs in the background. A sync that
 /// ends cleanly folds to one line; failures, a stop and a failed sync stay open. The words are `DriveSyncCard`'s.
 ///
-/// Web parity: `src/web/src/components/documents/DriveSyncCard.tsx`.
+/// Web parity: `src/web/src/components/drive/DriveSyncCard.tsx`.
 struct DriveSyncCardView: View {
     let syncID: String
     @Environment(AppModel.self) private var app
@@ -160,7 +160,7 @@ struct DriveSyncCardView: View {
             .disabled(sync.destEntryId == nil)
     }
 
-    /// The destination in Documents, from wherever the conversation is.
+    /// The destination in Drive, from wherever the conversation is.
     private func openFolder(_ sync: DriveSync) {
         guard let id = sync.destEntryId, let drive else { return }
         drive.open(folder: id)

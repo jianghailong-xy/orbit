@@ -1,7 +1,7 @@
 import XCTest
 @testable import OrbitKit
 
-/// The resumable uploads (docs/documents-drive-technical-design.md §4.1, D3, D12): chunks of the server's size, what has
+/// The resumable uploads (docs/drive-technical-design.md §4.1, D3, D12): chunks of the server's size, what has
 /// arrived asked of the server, a lost connection tried again and then paused, a folder's files under one top folder,
 /// and the queue kept across a relaunch. The web's twin is src/web/src/lib/driveUploads.ts.
 @MainActor

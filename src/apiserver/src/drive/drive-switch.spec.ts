@@ -9,9 +9,10 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import {
   DOCUMENTS_DISABLED,
-  DOCUMENTS_ENABLED_ENV,
+  DRIVE_ENABLED_ENV,
   documentsClaimFields,
   documentsEnabled,
+  driveEnabledEnvName,
   DriveEnabledGuard,
   readDriveSwitch,
 } from './drive-switch';
@@ -20,14 +21,14 @@ import { RunnerDriveController } from './runner-drive.controller';
 
 /** Runs `fn` with the switch set to `value` (undefined: absent), and puts the environment back. */
 function withSwitch<T>(value: string | undefined, fn: () => T): T {
-  const before = process.env[DOCUMENTS_ENABLED_ENV];
-  if (value === undefined) delete process.env[DOCUMENTS_ENABLED_ENV];
-  else process.env[DOCUMENTS_ENABLED_ENV] = value;
+  const before = process.env[DRIVE_ENABLED_ENV];
+  if (value === undefined) delete process.env[DRIVE_ENABLED_ENV];
+  else process.env[DRIVE_ENABLED_ENV] = value;
   try {
     return fn();
   } finally {
-    if (before === undefined) delete process.env[DOCUMENTS_ENABLED_ENV];
-    else process.env[DOCUMENTS_ENABLED_ENV] = before;
+    if (before === undefined) delete process.env[DRIVE_ENABLED_ENV];
+    else process.env[DRIVE_ENABLED_ENV] = before;
   }
 }
 
@@ -72,4 +73,15 @@ test('the capability route says what the switch says', () => {
   assert.deepEqual(withSwitch(undefined, route), { enabled: false });
   assert.deepEqual(withSwitch('true', route), { enabled: true });
   assert.equal(withSwitch('true', () => documentsEnabled()), true);
+});
+
+test('ORBIT_DOCUMENTS_ENABLED and then ORBIT_FILES_ENABLED are read while ORBIT_DRIVE_ENABLED is unset', () => {
+  assert.equal(documentsEnabled({}), false);
+  assert.equal(documentsEnabled({ ORBIT_FILES_ENABLED: 'true' }), true);
+  assert.equal(documentsEnabled({ ORBIT_DOCUMENTS_ENABLED: 'true' }), true);
+  assert.equal(documentsEnabled({ ORBIT_DRIVE_ENABLED: '', ORBIT_DOCUMENTS_ENABLED: 'true' }), true);
+  assert.equal(documentsEnabled({ ORBIT_DOCUMENTS_ENABLED: 'false', ORBIT_FILES_ENABLED: 'true' }), false);
+  assert.equal(documentsEnabled({ ORBIT_DRIVE_ENABLED: 'false', ORBIT_DOCUMENTS_ENABLED: 'true' }), false);
+  assert.equal(driveEnabledEnvName({ ORBIT_FILES_ENABLED: 'true' }), 'ORBIT_FILES_ENABLED');
+  assert.equal(driveEnabledEnvName({}), 'ORBIT_DRIVE_ENABLED');
 });

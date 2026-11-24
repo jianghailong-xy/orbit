@@ -22,10 +22,10 @@ import (
 )
 
 // drive_sync / `orbit drive sync`: one directory copied into the owner's drive once, in the background, local to drive
-// only (docs/documents-directory-sync-design.md, S1-S4). The tool and the command without --wait start a runner-hosted
+// only (docs/drive-directory-sync-design.md, S1-S4). The tool and the command without --wait start a runner-hosted
 // background job that runs `orbit drive sync --wait`, so the copy outlives the engine and the job's wake tells the agent
 // when it ends; --wait is the copy itself. While it runs it reports its counts to the server, which shows them in the
-// upload tray of the owner's Documents page.
+// upload tray of the owner's Drive page.
 
 const (
 	driveSyncWorkers       = 4
@@ -208,7 +208,7 @@ func (p *driveSyncProgress) line() string {
 	return fmt.Sprintf("Synced %d of %d files, %s of %s", p.done, *p.total, humanBytes(p.sentLocked()), humanBytes(*p.bytesTotal))
 }
 
-// humanBytes is a size in decimal units, as the Documents page shows it (lib/documents.ts formatSize).
+// humanBytes is a size in decimal units, as the Drive page shows it (lib/drive.ts formatSize).
 func humanBytes(n int64) string {
 	const unit = 1000
 	if n < unit {
@@ -392,7 +392,7 @@ func driveSyncPass(ctx context.Context, t *Transport, opts driveSyncOptions, wri
 		}
 	}
 
-	// The destination and every local folder Documents lacks, so empty folders come across too.
+	// The destination and every local folder Drive lacks, so empty folders come across too.
 	if err := driveWrite(ctx, t, "/mkdir", map[string]interface{}{"path": opts.dest, "parents": true, "writer": writer}, nil); err != nil {
 		return summary, err
 	}
@@ -673,7 +673,7 @@ func listDriveTree(ctx context.Context, t *Transport, dest string) (map[string]d
 
 // walkDriveSyncSource is the directory's regular files and folders, each by its path relative to it with / between
 // parts. It follows no link (a link in a directory can name anything on this machine), skips .git, and holds each entry
-// to the session's scope by itself. What it leaves out is returned too, so --delete keeps those names in Documents.
+// to the session's scope by itself. What it leaves out is returned too, so --delete keeps those names in Drive.
 func walkDriveSyncSource(root string, scope localFileScope, progress *driveSyncProgress) ([]driveSyncLocal, []string, []string, error) {
 	var files []driveSyncLocal
 	var dirs, skipped []string

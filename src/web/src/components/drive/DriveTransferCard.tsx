@@ -28,7 +28,7 @@ const WORDS = {
 
 const baseName = (p: string) => p.split('/').pop() || p;
 
-/** A link to a file the transfer put in Documents: its folder opens with it selected. */
+/** A link to a file the transfer put in Drive: its folder opens with it selected. */
 function DriveEntryLink({ link, children }: { link?: string; children: ReactNode }) {
   const client = useQueryClient();
   const navigate = useNavigate();

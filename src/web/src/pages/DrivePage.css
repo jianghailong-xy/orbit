@@ -1,4 +1,4 @@
-/* Documents (board docs/mocks/documents/02-web). */
+/* Drive (board docs/mocks/drive/02-web). */
 
 .files-page {
   display: flex;
@@ -436,7 +436,7 @@
   color: var(--success);
 }
 
-/* An agent's directory sync in the tray (board documents-sync-tray). */
+/* An agent's directory sync in the tray (board drive-sync-tray). */
 .files-tray-sync.clickable {
   cursor: pointer;
 }
@@ -989,7 +989,7 @@
   color: var(--brand);
 }
 
-/* An agent's drive_sync call in the conversation (board docs/mocks/documents-sync-card), on the transfer card above. */
+/* An agent's drive_sync call in the conversation (board docs/mocks/drive-sync-card), on the transfer card above. */
 .drive-sync-chip {
   font-size: 11px;
   font-weight: 600;

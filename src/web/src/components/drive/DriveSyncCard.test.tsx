@@ -11,7 +11,7 @@ import { driveSyncIdOf, resetDriveSyncs, type DriveSyncView } from '../../lib/dr
 import { DriveSyncCard } from './DriveSyncCard';
 
 /**
- * An agent's drive_sync call drawn as its sync's card (board docs/mocks/documents-sync-card): every state, the fold
+ * An agent's drive_sync call drawn as its sync's card (board docs/mocks/drive-sync-card): every state, the fold
  * of a clean end, the failed paths, and a sync read by id once it is too old for the tray's list.
  */
 

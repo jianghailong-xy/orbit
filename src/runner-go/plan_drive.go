@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// The Documents drive is read-only in Plan mode (docs/documents-drive-design.md D9, D16; technical design §7.2).
+// The drive is read-only in Plan mode (docs/drive-product-design.md D9, D16; technical design §7.2).
 // Claude Code's Plan does not keep a write there from running: it asks its permission prompt about every Write, Edit
 // and Bash call, and an Allow on that card wrote the drive. Kimi's Plan asks about every shell call the same way. So
 // where the runner answers an engine's permission request, a Plan-mode call that would write under the drive is

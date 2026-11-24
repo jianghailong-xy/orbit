@@ -1,5 +1,5 @@
 /**
- * The runner drive door (docs/documents-drive-technical-design.md §4.2, §4.3, §4.6, §8.2; drive/runner-drive.controller.ts,
+ * The runner drive door (docs/drive-technical-design.md §4.2, §4.3, §4.6, §8.2; drive/runner-drive.controller.ts,
  * drive/drive-mount-credential.ts), through the production apiserver (`node build/main.js`, every guard and pipe) over a
  * real PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty:
  *
@@ -135,7 +135,7 @@ test('Documents drive: the runner drive door — drive tools by path, no Trash o
   const aliceRunner = await runnerOf(alice, 'alice-laptop');
   const bobRunner = await runnerOf(bob, 'bob-laptop');
 
-  const server = await startApiserver(url, `runner-drive-${RUN}`, { ORBIT_DOCUMENTS_DIR: filesDir });
+  const server = await startApiserver(url, `runner-drive-${RUN}`, { ORBIT_DRIVE_DIR: filesDir });
   t.after(() => server.stop());
   /** A door request under `prefix`: /runner/drive, or the /runner/documents alias deployed runners call. */
   const at = (prefix: string) => (token: string, method: string, route: string, body?: unknown, headers: Record<string, string> = {}) =>

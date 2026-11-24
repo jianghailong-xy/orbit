@@ -53,7 +53,7 @@ struct MainView: View {
                 #else
                 // Scheduled's timeline is the web board's page, with the long row line, so it takes the width a
                 // list column does not; its right-hand panel is the detail column (web board 01 ②).
-                // Documents' list is Finder's, four columns wide; the inspector is the detail column (03-mac ①).
+                // Drive' list is Finder's, four columns wide; the inspector is the detail column (03-mac ①).
                 .navigationSplitViewColumnWidth(min: Self.contentWidth(model.selectedSection).min,
                                                 ideal: Self.contentWidth(model.selectedSection).ideal,
                                                 max: Self.contentWidth(model.selectedSection).max)
@@ -112,7 +112,7 @@ struct MainView: View {
         .toastHost()
     }
 
-    /// The middle column's width for a section: Scheduled's timeline and Documents' list take the width a list does not.
+    /// The middle column's width for a section: Scheduled's timeline and Drive' list take the width a list does not.
     private static func contentWidth(_ section: AppSection) -> (min: CGFloat, ideal: CGFloat, max: CGFloat) {
         switch section {
         case .scheduled: return (400, 520, 760)
@@ -211,7 +211,7 @@ struct SectionSidebar: View {
             scheduledNeedsYou: model.scheduled?.needsYouCount ?? 0,
             // Documents under the Wiki, no count (board 03-mac ①), only while the server has it on.
             drive: model.drive?.shown == true)
-        // Trash and Storage, the rows under Documents (③): data too, one flat row array.
+        // Trash and Storage, the rows under Drive (③): data too, one flat row array.
         let drivePlaces: [DrivePlace] = model.drive?.shown == true ? [.trash, .storage] : []
         let openProjects = model.projects?.drawerProjects(coordinators: model.projectCoordinators) ?? []
         let projects = AgentListLogic.sidebarProjects(openProjects, coordinators: model.projectCoordinators)
@@ -294,7 +294,7 @@ struct SectionSidebar: View {
         .task { await model.wiki?.loadSpaces() }
         // The Projects row counts the projects waiting on you, and the last group lists the open ones.
         .task { await model.projects?.load() }
-        // Whether the Documents row is drawn is the capabilities read's answer (`DriveLogic.shown`).
+        // Whether the Drive row is drawn is the capabilities read's answer (`DriveLogic.shown`).
         .task { await model.drive?.loadCapabilities() }
         // Scheduled's number — the schedules failing or held — read with the rail like the others.
         .task { await model.scheduled?.load() }
@@ -347,7 +347,7 @@ struct SectionSidebar: View {
         .accessibilityIdentifier("sidebar-\(row.section.rawValue)")
     }
 
-    /// Trash or Storage, indented under Documents.
+    /// Trash or Storage, indented under Drive.
     private func drivePlaceRow(_ place: DrivePlace) -> some View {
         Label(place.title, systemImage: place.systemImage)
             .padding(.leading, 14)

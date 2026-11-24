@@ -82,7 +82,7 @@ import { ImagePreview } from './ui/ImagePreview';
 import './EvidenceFiles.css';
 
 /**
- * What a version of evidence cites, on its card (docs/documents-design.md §2.6): the file area under
+ * What a version of evidence cites, on its card (docs/drive-design.md §2.6): the file area under
  * the standard, the Evidence files page it opens, and the viewer a thumbnail opens.
  *
  * ONLY A RASTER IMAGE IS EVER DRAWN

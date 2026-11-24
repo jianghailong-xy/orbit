@@ -205,7 +205,7 @@ function SyncDetailsDialog({ sync, onClose }: { sync: DriveSync; onClose: () => 
   );
 }
 
-/** One agent's directory sync (board documents-sync-tray). It has no Pause or Cancel: the agent owns the run. */
+/** One agent's directory sync (board drive-sync-tray). It has no Pause or Cancel: the agent owns the run. */
 function SyncRow({ sync }: { sync: DriveSync }) {
   const navigate = useNavigate();
   const [details, setDetails] = useState(false);

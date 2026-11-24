@@ -1,5 +1,5 @@
 /**
- * The drive's name layer (docs/documents-drive-technical-design.md §1, §3, §5.4; migration 1327; drive/drive.service.ts),
+ * The drive's name layer (docs/drive-technical-design.md §1, §3, §5.4; migration 1327; drive/drive.service.ts),
  * over a real PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty, with chunks kept on a files directory of this
  * run's through the chunk door:
  *
