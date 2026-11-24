@@ -90,6 +90,7 @@ import { type TaskDependencyGraphResponse } from '../lib/taskDependencyGraph';
 import { scheduledStart } from '../lib/taskSchedule';
 import { ProjectTasksGraph } from '../components/ProjectTasksGraph';
 import { ProjectTaskLink } from '../components/ProjectTaskLink';
+import { ProjectReopenRow } from '../components/ProjectReopenCard';
 import { Alert } from '../components/ui/Alert';
 import { Badge, type BadgeProps } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -1209,6 +1210,7 @@ export function ProjectDetailPage() {
               />
             </div>
           </header>
+          {p.status === 'DONE' || p.status === 'CANCELLED' ? <ProjectReopenRow projectId={id!} /> : null}
 
           {/* Where this project's finished work goes, directly under the title that names it: the
               branch, how far ahead of main it is, when main last came in, what the queue has in
