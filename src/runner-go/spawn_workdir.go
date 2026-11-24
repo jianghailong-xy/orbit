@@ -28,6 +28,15 @@ func startSessionProcess(cmd *exec.Cmd) error {
 	return nil
 }
 
+// startSessionEngine registers the process as the protected root of its session's tools.
+func startSessionEngine(cmd *exec.Cmd, sessionID string) error {
+	if err := startSessionProcess(cmd); err != nil {
+		return err
+	}
+	trackMemoryRoots(sessionID, false, cmd.Process.Pid)
+	return nil
+}
+
 // explainSpawnError rewrites a spawn ENOENT or ENOTDIR that is really about the working
 // directory. Everything else is returned untouched — including a genuinely missing binary, where
 // the path already in the error IS the thing that's missing and the message is honest.

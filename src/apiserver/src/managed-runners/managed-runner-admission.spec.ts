@@ -112,6 +112,31 @@ test('the authorized Pod is admitted: the manager, the fixed name, the reserved 
   assert.deepEqual(decide(create(unlabelled)), { allowed: true, reason: 'AUTHORIZED' });
 });
 
+test('the template with /tmp on the data volume is admitted, and a running Pod of the earlier emptyDir template still updates', () => {
+  const pod = authorizedPod();
+  assert.ok((pod.spec.containers as Array<{ volumeMounts: Array<{ subPath?: string }> }>)[0].volumeMounts.some((m) => m.subPath === '.orbit-tmp'));
+  assert.deepEqual(decide(create(pod)), { allowed: true, reason: 'AUTHORIZED' });
+  // A Pod made before the change keeps its emptyDir /tmp until it stops; the next generation is the new template.
+  const earlier = structuredClone(pod);
+  earlier.metadata.uid = 'pod-uid';
+  earlier.spec.volumes = [...earlier.spec.volumes!, { name: 'temporary', emptyDir: { sizeLimit: '1Gi' } }];
+  for (const c of [...(earlier.spec.initContainers as Array<{ volumeMounts: Array<{ name: string; mountPath: string }> }>),
+    ...(earlier.spec.containers as Array<{ volumeMounts: Array<{ name: string; mountPath: string }> }>)]) {
+    c.volumeMounts = c.volumeMounts.map((m) => (m.mountPath === '/tmp' ? { name: 'temporary', mountPath: '/tmp' } : m));
+  }
+  const relabelled = structuredClone(earlier);
+  relabelled.metadata.labels = { ...relabelled.metadata.labels, extra: 'x' };
+  const recorded = reserved({ podUid: 'pod-uid', managementState: 'READY', resourceOperationState: 'COMPLETED' });
+  assert.deepEqual(
+    decide({ ...create(relabelled, 'system:serviceaccount:kube-system:generic-garbage-collector'), operation: 'UPDATE', oldObject: earlier }, recorded),
+    { allowed: true, reason: 'UNCHANGED' },
+  );
+  // A volume of its own mounted at /tmp, a hostPath, is still no managed runner's.
+  const hostTmp = structuredClone(pod);
+  hostTmp.spec.volumes = [...hostTmp.spec.volumes!, { name: 'host-tmp', hostPath: { path: '/tmp' } }];
+  refusedWith(decide(create(hostTmp)), 'NOT_THE_TEMPLATE', 'a hostPath /tmp');
+});
+
 test('any other Pod using the volume is refused: another name, no labels, a Job, a read-only mount, on the same node or another', () => {
   const tenant = 'system:serviceaccount:orbit-cloud-test:default';
   const cases: Array<[string, PodAdmissionRequest, string]> = [

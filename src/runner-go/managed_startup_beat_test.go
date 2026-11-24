@@ -202,6 +202,13 @@ func TestRunLoopBeatsBeforeAManagedInstanceClaims(t *testing.T) {
 	body = body[strings.Index(body, "func runLoop("):]
 	body = body[:strings.Index(body, "\n}\n")]
 
+	// Startup reclaim may already have work before the first successful beat supplies the cap.
+	seed := strings.Index(body, "startupConcurrency := cfg.MaxConcurrent")
+	pool := strings.Index(body, "pool := newSessionPool(startupConcurrency)")
+	if seed < 0 || pool < seed || !strings.Contains(body[seed:pool], "startupConcurrency = 1\n") {
+		t.Error("the managed instance can reclaim more than one turn before it learns the cap")
+	}
+
 	// The beat is counted taken only past its failure path.
 	failure := strings.Index(body, `logln("heartbeat failed:", err)`)
 	taken := strings.Index(body, "beatTaken = true")
