@@ -179,9 +179,12 @@ class DocumentsDeviceTest {
         compose.onNodeWithTag("documents-more:labels-v2.csv").performClick()
         await { exists("documents-action-move") }
         compose.onNodeWithTag("documents-action-move").performClick()
+        // The dialog opens at the drive's root: into Datasets, then Device run.
+        await { exists("documents-move-folder:Datasets") }
+        compose.onNodeWithTag("documents-move-folder:Datasets").performClick()
         await { exists("documents-move-folder:Device run") }
         compose.onNodeWithTag("documents-move-folder:Device run").performClick()
-        await { exists("documents-move-up") }
+        await { exists("documents-move-folder:Device run").not() && exists("documents-move-up") }
         compose.onNodeWithText("Move to Device run").performClick()
         await { !exists("documents-entry:labels-v2.csv") }
         val folder = find(datasets.id, "Device run")!!
