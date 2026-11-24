@@ -1875,14 +1875,18 @@ test('a task filed to fix the MAIN_SYNC conflict lands past it, and nothing else
       const after = await itemNow(stack, w, item.id);
       assert.equal(after.state, 'OPEN');
       assert.ok(after.assignedAt.getTime() > before.assignedAt.getTime(), 'the item was handed back');
-      assert.deepEqual(await heartbeat('lease-still-held'), [],
-        'the line stays held until the coordinator answers the item');
-
-      // The coordinator closes it, and the line moves on its own: both held landings are claimed in
-      // turn, the oldest first.
-      await stack.openItems.resolveOpenItem(w.ownerId, w.projectId, item.id,
-        { note: 'the fix carried the conflicted task\'s work' },
-        { kind: 'SESSION', sessionId: w.coordinatorSessionId! });
+      // Revision 45's bridge for legacy items (docs/design/project-line-upstream-sync.md §4.6 item 7): the fix's
+      // landing gave the line main, so the conflicted task's own landing is queued again in that transaction — no
+      // reopen — and, exempt from its own item, it is the only landing the next beat hands out.
+      const bridged = await heartbeat('lease-bridged');
+      assert.deepEqual(
+        await Promise.all(bridged.map((row) => taskOf(row.jobId))),
+        [conflicted.taskId],
+        `the conflicted task's landing is queued again by the bridge, and only it is claimed — ${await jobsOf(stack.db, w.projectId)}`,
+      );
+      // Its landing answers the item (J-T5), and the line moves on its own: the oldest held landing is next.
+      assert.equal((await reportLanding(stack, w, bridged[0]!)).accepted, true);
+      assert.equal((await itemNow(stack, w, item.id)).resolution, 'LANDED');
       const next = await heartbeat('lease-after');
       assert.deepEqual(
         await Promise.all(next.map((row) => taskOf(row.jobId))),

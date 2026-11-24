@@ -695,7 +695,8 @@ test('P1: main moves and conflicts — one task-less line-sync item for the coor
       await report(stack, w, next!, LANDED);
     }
     assert.deepEqual(order, [y.taskId, x.taskId]);
-    assert.equal((await claim(stack, w, 'p1-drained')).length, 0);
+    const drained = await claim(stack, w, 'p1-drained');
+    assert.deepEqual(drained.filter((job) => job.kind === 'LAND_TASK'), [], 'no landing is left (a promotion check may be)');
     const after = await doneShape(stack.db, x.taskId, x.sessionId);
     assert.equal(after.task.status, TaskStatus.DONE);
     assert.deepEqual({ ...after, task: { ...after.task } }, before, 'X was never reopened, revived or re-identified');
@@ -737,7 +738,13 @@ test('P2: the sync task\'s landing conflicts against a newer main — no second 
     assert.ok(again.assignedAt.getTime() > item!.assignedAt.getTime(), 'delivered again under a new key');
     assert.equal(again.waitingSince.getTime(), item!.waitingSince.getTime(), 'the wait goes on from the first conflict');
     assert.equal(again.escalateAt?.getTime(), item!.escalateAt?.getTime());
-    assert.equal((await deliveries(stack.db, item!.id)).length, 2);
+    // One delivery row per item and conversation, moved to the new key (`open-item:v1:<id>:<assignedAtMs>`), and a
+    // second turn queued on the coordinator under it.
+    const [redelivered] = await deliveries(stack.db, item!.id);
+    assert.ok(redelivered!.clientTurnId.endsWith(`:${again.assignedAt.getTime()}`), redelivered!.clientTurnId);
+    assert.equal(await stack.db.conversationTurn.count({
+      where: { sessionId: w.coordinatorSessionId, clientTurnId: { startsWith: `open-item:v1:${item!.id}:` } },
+    }), 2, 'the coordinator was told twice: at the first conflict and at the sync task\'s');
     assert.deepEqual((await landings(stack.db, sync.taskId)).map((job) => job.state), ['CONFLICT'],
       'nothing is queued for the sync task: its branch cannot change without a new commit');
     assert.equal((await claim(stack, w, 'p2-held')).length, 0, 'nothing is claimable: no spin');
@@ -924,8 +931,11 @@ test('T4 with a line-sync item: no sync task filed past the threshold tells the 
     assert.equal((await notices()).length, 0);
     // Past it, with no sync task filed: one notice, saying so, about the held line.
     const past = new Date(opened + LINE_BLOCKED_THRESHOLD_MS + 60_000);
-    assert.equal((await stack.lineBlocked.tick(past)).coordinator, 1);
-    assert.equal((await stack.lineBlocked.tick(past)).coordinator, 0, 'once per item');
+    // (The sweep reads every project of this database, so this case counts its own project's notices.)
+    await stack.lineBlocked.tick(past);
+    assert.equal((await notices()).length, 1);
+    await stack.lineBlocked.tick(past);
+    assert.equal((await notices()).length, 1, 'once per item');
     const [notice] = await notices();
     const detail = notice!.detail as { awaitingSyncTask?: boolean; blockedLine?: { held?: Array<{ taskId: string }> } };
     assert.equal(detail.awaitingSyncTask, true);

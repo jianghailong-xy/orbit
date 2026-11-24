@@ -4776,6 +4776,10 @@ export const EXCLUDED_SOURCES: readonly ExcludedSource[] = [
     why: 'Disposable PostgreSQL fixtures for pre-K7 promotion transitions seed a committed historical request; imported only by specs. The K7 tests separately exercise the real coordinator request door.',
   },
   {
+    path: 'test-support/legacy-main-sync.ts',
+    why: 'A PostgreSQL-spec fixture helper imported only by specs. It reshapes a line-sync item into the task-level MAIN_SYNC item the code before docs/design/project-line-upstream-sync.md wrote, so the specs that pin those legacy items still exercise them; no application module or HTTP route reaches it.',
+  },
+  {
     path: 'common/transaction-retry.ts',
     why: 'The retry loop itself. Its `$transaction` call IS the mechanism this inventory is about; listing it as a unit of work would make the loop a member of the set it implements.',
   },
