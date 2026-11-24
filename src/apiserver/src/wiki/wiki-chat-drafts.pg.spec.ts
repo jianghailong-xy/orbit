@@ -51,7 +51,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import type { PushService } from '../push/push.service';
 import type { RealtimeService } from '../realtime/realtime.service';
-import { appendWikiChatNotes } from './wiki-chat-notes';
+import { appendWikiChatNotes, WIKI_CHAT_PROMPT_DIGEST } from './wiki-chat-notes';
 import { WikiDocs, wikiDocsBuildJobPrincipal } from './wiki-docs';
 import { WikiService } from './wiki.service';
 import '../test-support/daemon-routes-over-http';
@@ -701,6 +701,12 @@ test('a wiki chat drafts cards, and only the owner presses them', { skip: !URL_,
 
   // ── 11 ────────────────────────────────────────────────────────────────────────────────────────────────────────
   await t.test('11. the next message tells the agent what the owner pressed, once', async () => {
+    // These chats were told the rules and the contents already; what is left to tell is what the owner pressed.
+    await sql.query(
+      `UPDATE "session" SET "wiki_chat_prompt_digest" = $2,
+         "wiki_chat_contents_version" = (SELECT "version" FROM "wiki_plan" WHERE "space_id" = $3::uuid AND "status" = 'confirmed')
+       WHERE "id" = ANY($1::uuid[])`,
+      [[chats.manual, chats.automatic], WIKI_CHAT_PROMPT_DIGEST, spaceId]);
     // What delivery appends, in a transaction of the delivery's own (runner-api.controller.ts dequeueTurn's).
     const notes = (sessionId: string) => prisma.$transaction(async (tx) => appendWikiChatNotes(tx as never, {
       ownerId: owner.id, spaceId, sessionId, turn: { seq: 99, kind: 'message', wikiContext: null },
