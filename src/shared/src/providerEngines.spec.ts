@@ -101,10 +101,23 @@ describe('credentialEngines', () => {
     // Off, or not passed: the table as it was.
     expect(credentialEngines(openai, { anthropicGateway: false })).toEqual(['codex', 'opencode']);
     expect(isEngineCompatible('claude', openai)).toBe(false);
-    // No other dialect gains anything, and a subscription token still runs nowhere on an OpenAI row.
+    // No other dialect but the Chat Completions one gains anything, and a subscription token still runs nowhere
+    // on an OpenAI row.
     expect(credentialEngines(GLM, on)).toEqual(['claude', 'opencode']);
-    expect(credentialEngines(key('kimi', 'moonshot', 'https://api.moonshot.ai/v1'), on)).toEqual(['kimi', 'opencode']);
+    expect(credentialEngines(key('antigravity', 'gemini', 'https://generativelanguage.googleapis.com'), on)).toEqual(['antigravity', 'opencode']);
     expect(credentialEngines(key('codex', 'openai', 'https://api.openai.com/v1', true), on)).toEqual([]);
+  });
+
+  it('adds Claude Code for an OpenAI-compatible (Chat Completions) key only with the gateway on, after Kimi', () => {
+    // Whether the gateway may call the endpoint is the server's to say (engineTableOptions): it passes the
+    // option only for one that passes the upstream rule.
+    const compatible = key('kimi', null, 'https://llm.example.com/v1');
+    const on = { anthropicGateway: true };
+    expect(credentialEngines(compatible, on)).toEqual(['kimi', 'claude', 'opencode']);
+    expect(defaultEngineOf(compatible, on)).toBe('kimi');
+    expect(credentialEngines(compatible)).toEqual(['kimi', 'opencode']);
+    expect(isEngineCompatible('claude', compatible)).toBe(false);
+    expect(credentialEngines(key('kimi', 'moonshot', 'https://api.moonshot.ai/v1', true), on)).toEqual([]);
   });
 
   it('runs a key on a protocol no engine speaks nowhere', () => {

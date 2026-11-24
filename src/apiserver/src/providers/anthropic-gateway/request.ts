@@ -33,7 +33,7 @@ export interface TranslatedRequest {
 /** The system block the CLI adds for Anthropic's billing (basic.json `system[0]`); not an instruction. */
 const BILLING_HEADER = 'x-anthropic-billing-header:';
 /** The tool the CLI declares only to keep deferred loading on; it is never to be called (basic.json). */
-const DEFERRED_PLACEHOLDER = 'DeferredToolPlaceholder';
+export const DEFERRED_PLACEHOLDER = 'DeferredToolPlaceholder';
 
 export function toResponsesRequest(body: Json, ctx: TranslateContext): TranslatedRequest {
   const messages = Array.isArray(body.messages) ? (body.messages as Json[]) : [];
@@ -82,7 +82,7 @@ export function estimateInputTokens(body: Json): number {
   return Math.ceil(JSON.stringify({ messages, system, tools }).length / 4);
 }
 
-function translateSystem(system: unknown): string {
+export function translateSystem(system: unknown): string {
   if (typeof system === 'string') return system;
   if (!Array.isArray(system)) return '';
   return (system as Json[])
@@ -117,7 +117,7 @@ function translateMessages(messages: Json[]): Json[] {
  * the preceding assistant turn are put in that turn's call order, in the slots such results already held;
  * every other block (text, results for any other call) keeps its place.
  */
-function inCallOrder(blocks: Json[], callOrder: string[]): Json[] {
+export function inCallOrder(blocks: Json[], callOrder: string[]): Json[] {
   const rank = (b: Json) => (b.type === 'tool_result' ? callOrder.indexOf(String(b.tool_use_id ?? '')) : -1);
   const answered = blocks.filter((b) => rank(b) >= 0);
   if (answered.length < 2) return blocks;
@@ -166,7 +166,7 @@ function inputPart(block: Json): Json | null {
   return null;
 }
 
-function imageUrl(source: Json | undefined): string | null {
+export function imageUrl(source: Json | undefined): string | null {
   if (!source) return null;
   if (source.type === 'base64' && typeof source.data === 'string' && typeof source.media_type === 'string') {
     return `data:${source.media_type};base64,${source.data}`;
@@ -248,7 +248,7 @@ function translateAssistant(blocks: Json[], input: Json[]): void {
 }
 
 /** The deferred tools a ToolSearch result has loaded: they are declared from then on. */
-function referencedTools(messages: Json[]): Set<string> {
+export function referencedTools(messages: Json[]): Set<string> {
   const names = new Set<string>();
   for (const message of messages) {
     if (!Array.isArray(message.content)) continue;
