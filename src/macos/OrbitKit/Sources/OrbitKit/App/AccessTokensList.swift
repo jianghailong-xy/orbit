@@ -86,7 +86,7 @@ public enum AccessTokensList {
     /// Both as the web's accessTokens.ts has them (FILES_SCOPE, NOTIFY_SCOPE).
     static let filesScope = "documents"
     static let notifyScope = "notify"
-    static let filesGroup = ScopeGroup(resource: "Documents", read: filesScope, write: filesScope)
+    static let filesGroup = ScopeGroup(resource: "Drive", read: filesScope, write: filesScope)
 
     static var readScopes: [String] { scopeGroups.map(\.read) }
     static var allScopes: [String] {

@@ -71,7 +71,7 @@ final class DocumentsPhoneLogicTests: XCTestCase {
         XCTAssertEqual(DocumentsLogic.moveTitle(["migration-notes.md"]), "Move “migration-notes.md”")
         XCTAssertEqual(DocumentsLogic.moveTitle(["a", "b", "c"]), "Move 3 items")
         XCTAssertEqual(DocumentsLogic.moveHere("Notes"), "Move to Notes")
-        XCTAssertEqual(DocumentsLogic.trail(["Documents", "Drive service"]), "Documents › Drive service")
+        XCTAssertEqual(DocumentsLogic.trail(["Drive", "Drive service"]), "Drive › Drive service")
     }
 
     // MARK: Trash (frame 11)
@@ -120,12 +120,12 @@ final class DocumentsPhoneLogicTests: XCTestCase {
         XCTAssertNil(DocumentsLogic.linkedEntryID("https://example.com"))
         let file = DocumentsEntry(id: "e", parentId: "f", kind: "FILE", name: "sign-in-v3.png", sizeBytes: 1_200_000,
                                   path: "/Orbit UI migration/sign-in-v3.png")
-        XCTAssertEqual(DocumentsLogic.cardLine(file), "Documents › Orbit UI migration · 1.2 MB")
+        XCTAssertEqual(DocumentsLogic.cardLine(file), "Drive › Orbit UI migration · 1.2 MB")
         let top = DocumentsEntry(id: "t", parentId: "r", kind: "FILE", name: "a.md", sizeBytes: 3_000, path: "/a.md")
-        XCTAssertEqual(DocumentsLogic.cardLine(top), "Documents · 3 KB")
+        XCTAssertEqual(DocumentsLogic.cardLine(top), "Drive · 3 KB")
         let folder = DocumentsEntry(id: "d", parentId: "r", kind: "FOLDER", name: "Datasets", path: "/Reports/Datasets")
-        XCTAssertEqual(DocumentsLogic.cardLine(folder), "Documents › Reports")
-        XCTAssertEqual(DocumentsLogic.cardGone(trashed: false), "No longer in Documents · moved or deleted")
+        XCTAssertEqual(DocumentsLogic.cardLine(folder), "Drive › Reports")
+        XCTAssertEqual(DocumentsLogic.cardGone(trashed: false), "No longer in Drive · moved or deleted")
     }
 
     /// A paragraph's drive links are found with their words; an image, a task link and a plain URL are not.

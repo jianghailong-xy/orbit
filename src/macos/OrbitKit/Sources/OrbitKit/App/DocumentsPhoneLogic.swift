@@ -100,7 +100,7 @@ extension DocumentsLogic {
 
     public static let driveFoot = "Agents on Orbit Cloud see this drive as ~/Documents. What is here is kept until someone deletes it."
     public static let moreHeading = "More"
-    public static let searchPrompt = "Search Documents"
+    public static let searchPrompt = "Search Drive"
     public static let emptyFolder = "Nothing here yet"
     public static let emptyFolderNote = "Upload files, photos or a folder with +."
 
@@ -174,10 +174,10 @@ extension DocumentsLogic {
     /// Where the drive is mounted for an agent (design §4.5): a picked file's path in a message starts here.
     public static let agentMount = "/home/orbit/Documents"
 
-    public static let pickerTitle = "Add from Documents"
+    public static let pickerTitle = "Add from Drive"
     public static let pickerFoot = "The file is not uploaded again: its path goes into your message, and the agent reads it " +
         "from ~/Documents."
-    public static let fromDocuments = "Documents"
+    public static let fromDocuments = "Drive"
 
     /// "Add", "Add 1", "Add 3".
     public static func pickerAdd(_ count: Int) -> String { count == 0 ? "Add" : "Add \(count)" }
@@ -260,6 +260,6 @@ extension DocumentsLogic {
 
     /// What a link to a file that has gone says instead of breaking.
     public static func cardGone(trashed: Bool) -> String {
-        trashed ? "In Trash · moved or deleted" : "No longer in Documents · moved or deleted"
+        trashed ? "In Trash · moved or deleted" : "No longer in Drive · moved or deleted"
     }
 }
