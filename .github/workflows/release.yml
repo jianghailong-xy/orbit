@@ -538,7 +538,7 @@ jobs:
             --tag "$GITHUB_REF_NAME" --source-sha "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY" \
             --tree . --require-ci
       - name: Attest the bundle
-        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: ${{ runner.temp }}/supply-chain/bundle/*
       - name: Keep the verified bundle
