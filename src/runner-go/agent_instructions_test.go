@@ -189,15 +189,6 @@ func TestOrbitProjectInstructionsDifferInsideRecordedWork(t *testing.T) {
 			t.Errorf("a session inside recorded work is still offered %q", want)
 		}
 	}
-	for _, want := range []string{"as a task, saying first what you are filing", "it lands in this task's project",
-		"A separate undertaking is the user's to start", "project_create"} {
-		if !strings.Contains(inside, want) {
-			t.Errorf("task form does not contain %q", want)
-		}
-		if strings.Contains(open, want) && want != "project_create" {
-			t.Errorf("free conversation is told %q", want)
-		}
-	}
 	// Since design step 5d what the task form said at length is project_create's description.
 	var create string
 	for _, tool := range catalogToolDescriptors(false, false) {
@@ -451,8 +442,8 @@ func TestClaudeInstructionArgsFollowTheSessionShape(t *testing.T) {
 	if got := appendPromptFor(&ClaimedSession{}); !strings.Contains(got, "you may propose recording it") {
 		t.Errorf("free conversation did not get the open form: %q", got)
 	}
-	if got := appendPromptFor(&ClaimedSession{TaskID: "task-1"}); !strings.Contains(got, "as a task, saying first what you are filing") {
-		t.Errorf("task session did not get the task form: %q", got)
+	if got := appendPromptFor(&ClaimedSession{TaskID: "task-1"}); strings.Contains(got, "you may propose recording it") {
+		t.Errorf("task session was given the open form: %q", got)
 	}
 }
 
@@ -541,7 +532,6 @@ func TestOrbitDriveGuidanceMatchesRunnerKind(t *testing.T) {
 			fakeDriveMount(t, mounted)
 			if mounted {
 				// Whichever root the Pod has (/run/orbit-drive, or /run/orbit-documents or /run/orbit-files of an older driver) is the one named.
-				brief = append(brief, driveParentPath+"/errors.log")
 				full = append(full, "mounted at "+driveMountPath+")", driveParentPath+"/errors.log")
 			}
 			long := "/home/a-long-account-name/.orbit/bin/versions/0.1.999/orbit"
@@ -555,9 +545,10 @@ func TestOrbitDriveGuidanceMatchesRunnerKind(t *testing.T) {
 					t.Errorf("%d paragraph bytes exceed budget %d", len(p), codexContextValueMaxBytes)
 				}
 			}
-			for _, phrase := range brief {
-				if !strings.Contains(instructions, phrase) {
-					t.Errorf("instructions omit %q", phrase)
+			// No eval case guards a drive paragraph (step 7a): the guide's files topic carries the rule, the instructions none.
+			for _, phrase := range brief[:1] {
+				if strings.Contains(instructions, phrase) {
+					t.Errorf("instructions carry %q", phrase)
 				}
 			}
 			doc, err := guideAnswer(guideFacts{context: guideContext{Surface: "mcp"}}, "files")
@@ -570,31 +561,20 @@ func TestOrbitDriveGuidanceMatchesRunnerKind(t *testing.T) {
 					t.Errorf("the files guide omits %q", phrase)
 				}
 			}
-			if got := strings.Contains(instructions, "~/Drive is the owner's"); got != mounted {
+			if got := strings.Contains(instructions, "~/Drive is the owner's"); got {
 				t.Errorf("shell mount instructions present = %t, mounted = %t", got, mounted)
 			}
 		})
 	}
 }
 
-// The workflow paragraph is given exactly when the session is offered the workflow tool: a top-level session whose
-// Agent has Workflows (and SubAgents) on. It never names a tool the session lacks.
-func TestOrbitWorkflowInstructionsFollowTheTool(t *testing.T) {
+// The workflow tool's guidance lives in its description since step 7a (no eval case guarded a paragraph about it):
+// the instructions never name the tool, and its description says when to use it.
+func TestOrbitWorkflowGuidanceIsInTheToolDescription(t *testing.T) {
 	const exe = "/usr/local/bin/orbit"
-	on := orbitCLIInstructions(exe, false, true, true, true)
-	for _, want := range []string{
-		"mcp__orbit__workflow", "ToolSearch select:mcp__orbit__workflow", "wakes this session once with its return value",
-		"delegate stays the tool for one independent piece", "in parallel or in phases", "needs no user opt-in",
-		"unlike Claude Code's built-in Workflow tool",
-	} {
-		if !strings.Contains(on, want) {
-			t.Errorf("Workflows on: the instructions lack %q", want)
-		}
-	}
 	for name, got := range map[string]string{
-		"Workflows off":      orbitCLIInstructions(exe, false, true, true, false),
-		"SubAgent session":   orbitCLIInstructions(exe, false, true, false, true),
-		"Workflows and more": orbitCLIInstructions(exe, true, false, false, false),
+		"Workflows on":  orbitCLIInstructions(exe, false, true, true, true),
+		"Workflows off": orbitCLIInstructions(exe, false, true, true, false),
 	} {
 		if strings.Contains(got, "workflow") || strings.Contains(got, "Workflow") {
 			t.Errorf("%s: the instructions name the workflow tool:\n%s", name, got)
@@ -603,14 +583,16 @@ func TestOrbitWorkflowInstructionsFollowTheTool(t *testing.T) {
 	if (&ClaimedSession{WorkflowsDisabled: true}).workflowsOn() || !(&ClaimedSession{}).workflowsOn() {
 		t.Error("workflowsOn does not follow WorkflowsDisabled")
 	}
-	for i := 0; i < len(orbitWorkflowInstructions); i++ {
-		if orbitWorkflowInstructions[i] > 127 {
-			t.Fatalf("the workflow paragraph must stay ASCII; byte %d is %q", i, orbitWorkflowInstructions[i])
+	obj := func(props map[string]interface{}, _ ...string) map[string]interface{} { return props }
+	description, _ := workflowToolDescriptor(obj)["description"].(string)
+	for _, want := range []string{"fan out several SubAgents", "in parallel or in phases", "delegate stays the tool for one independent piece",
+		"needs no user opt-in", "built-in Workflow tool"} {
+		if !strings.Contains(description, want) {
+			t.Errorf("the workflow description lacks %q", want)
 		}
 	}
 	cursor := cursorAgentInstructions(&ClaimedSession{})
 	if strings.Contains(cursor, "ToolSearch") {
 		t.Errorf("cursor is told how to load a tool in Claude Code:\n%s", cursor)
 	}
-	t.Logf("workflow paragraph: %d characters", len(strings.TrimSuffix(orbitWorkflowInstructions, "\n\n")))
 }

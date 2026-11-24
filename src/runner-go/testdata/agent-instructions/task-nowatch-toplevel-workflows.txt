@@ -1,4 +1,4 @@
-=== antigravity (5717 bytes)
+=== antigravity (4885 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -23,22 +23,16 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`: copy it int
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
-The owner's Drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
-
-File work you discover in this task's run as a task, saying first what you are filing: it lands in this task's project. A separate undertaking is the user's to start, which project_create can propose to them on its card.
-
 When this task's position changes -- a new phase, or another item of a known total done -- report it with task_progress_report: Orbit reads progress from that report alone, not from your output or replies.
 
 When the person asked to hear once something is done, tell them with notify when it is: an answer in this conversation reaches them only when they next look.
 
 Hand work to another agent through Orbit, never your engine's own sub-agents or Agent tool, which are as private as its plan. Look with task_list first: task_start work already recorded, never file it twice. Otherwise use delegate for a piece whose result you need back, in the background, on a cheaper or stronger model or on another machine (needs: ["os:darwin"], or workspace: an agent's name from agent_list); new work of its own is task_create with startNow. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
 
-To fan out several SubAgents, in parallel or in phases, whose results you only need combined, use workflow: one script runs them all and wakes this session once with its return value; delegate stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's built-in Workflow tool. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__workflow.
-
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the tools of the `orbit` MCP server (call_mcp_tool with ServerName "orbit"). Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
-=== claude (5405 bytes)
+=== claude (4573 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -60,10 +54,6 @@ When a person's problem is one of their own Settings, call settings_get, then se
 Hand the user a file as `[name](path)`, an image as `![name](path)`: copy it into your working directory or this session's uploads directory first, and link the copy, never /tmp.
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
-
-The owner's Drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
-
-File work you discover in this task's run as a task, saying first what you are filing: it lands in this task's project. A separate undertaking is the user's to start, which project_create can propose to them on its card.
 
 When this task's position changes -- a new phase, or another item of a known total done -- report it with task_progress_report: Orbit reads progress from that report alone, not from your output or replies.
 
@@ -71,13 +61,11 @@ When the person asked to hear once something is done, tell them with notify when
 
 Hand work to another agent through Orbit. Look with task_list first: task_start work already recorded, never file it twice. Otherwise use delegate for a piece whose result you need back, in the background, on a cheaper or stronger model or on another machine (needs: ["os:darwin"], or workspace: an agent's name from agent_list); new work of its own is task_create with startNow. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
 
-To fan out several SubAgents, in parallel or in phases, whose results you only need combined, use workflow: one script runs them all and wakes this session once with its return value; delegate stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's built-in Workflow tool. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__workflow.
-
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the `mcp__orbit__*` tools. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
 === claude, resumed: same as claude
-=== codex 0.125-0.134 developer message (6209 bytes)
+=== codex 0.125-0.134 developer message (5377 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -102,24 +90,18 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`: copy it int
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
-The owner's Drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
-
-File work you discover in this task's run as a task, saying first what you are filing: it lands in this task's project. A separate undertaking is the user's to start, which project_create can propose to them on its card.
-
 When this task's position changes -- a new phase, or another item of a known total done -- report it with task_progress_report: Orbit reads progress from that report alone, not from your output or replies.
 
 When the person asked to hear once something is done, tell them with notify when it is: an answer in this conversation reaches them only when they next look.
 
 Hand work to another agent through Orbit, never your engine's own sub-agents or Agent tool, which are as private as its plan. Look with task_list first: task_start work already recorded, never file it twice. Otherwise use delegate for a piece whose result you need back, in the background, on a cheaper or stronger model or on another machine (needs: ["os:darwin"], or workspace: an agent's name from agent_list); new work of its own is task_create with startNow. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
 
-To fan out several SubAgents, in parallel or in phases, whose results you only need combined, use workflow: one script runs them all and wakes this session once with its return value; delegate stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's built-in Workflow tool. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__workflow.
-
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the `mcp__orbit__*` tools. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
 
 After generating an image, preserve the original file. Do not regenerate it solely because Orbit could not attach or upload it. Only claim that the image is attached or delivered when Orbit explicitly confirms attachment delivery; successful generation alone is not delivery confirmation. If delivery fails, report that the image was generated but delivery failed, keep the original file available, and let Orbit retry delivery. If delivery status is unavailable, report only generation success without claiming delivery success or failure.
-=== codex < 0.125 turn input (6266 bytes)
+=== codex < 0.125 turn input (5434 bytes)
 <orbit_application_context>
 Owner instructions.
 
@@ -145,17 +127,11 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`: copy it int
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
-The owner's Drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
-
-File work you discover in this task's run as a task, saying first what you are filing: it lands in this task's project. A separate undertaking is the user's to start, which project_create can propose to them on its card.
-
 When this task's position changes -- a new phase, or another item of a known total done -- report it with task_progress_report: Orbit reads progress from that report alone, not from your output or replies.
 
 When the person asked to hear once something is done, tell them with notify when it is: an answer in this conversation reaches them only when they next look.
 
 Hand work to another agent through Orbit, never your engine's own sub-agents or Agent tool, which are as private as its plan. Look with task_list first: task_start work already recorded, never file it twice. Otherwise use delegate for a piece whose result you need back, in the background, on a cheaper or stronger model or on another machine (needs: ["os:darwin"], or workspace: an agent's name from agent_list); new work of its own is task_create with startNow. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
-
-To fan out several SubAgents, in parallel or in phases, whose results you only need combined, use workflow: one script runs them all and wakes this session once with its return value; delegate stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's built-in Workflow tool. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__workflow.
 
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
@@ -166,7 +142,7 @@ After generating an image, preserve the original file. Do not regenerate it sole
 === codex >= 0.135 additional context: same as codex 0.125-0.134 developer message
 === codex >= 0.135, after compaction: same as codex 0.125-0.134 developer message
 === codex >= 0.135, resumed thread: same as codex 0.125-0.134 developer message
-=== cursor (5501 bytes)
+=== cursor (4757 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -190,10 +166,6 @@ After compaction or a resume, read before you act -- task_get with no id reads t
 Hand the user a file as `[name](path)`, an image as `![name](path)`: copy it into your working directory or this session's uploads directory first, and link the copy, never /tmp.
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
-
-The owner's Drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
-
-File work you discover in this task's run as a task, saying first what you are filing: it lands in this task's project. A separate undertaking is the user's to start, which project_create can propose to them on its card.
 
 When this task's position changes -- a new phase, or another item of a known total done -- report it with task_progress_report: Orbit reads progress from that report alone, not from your output or replies.
 
@@ -201,12 +173,10 @@ When the person asked to hear once something is done, tell them with notify when
 
 Hand work to another agent through Orbit, never your engine's own sub-agents or Agent tool, which are as private as its plan. Look with task_list first: task_start work already recorded, never file it twice. Otherwise use delegate for a piece whose result you need back, in the background, on a cheaper or stronger model or on another machine (needs: ["os:darwin"], or workspace: an agent's name from agent_list); new work of its own is task_create with startNow.
 
-To fan out several SubAgents, in parallel or in phases, whose results you only need combined, use workflow: one script runs them all and wakes this session once with its return value; delegate stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's built-in Workflow tool.
-
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the tools of the `orbit` MCP server. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
-=== deepseek harness (5667 bytes)
+=== deepseek harness (4835 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -231,22 +201,16 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`: copy it int
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
-The owner's Drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
-
-File work you discover in this task's run as a task, saying first what you are filing: it lands in this task's project. A separate undertaking is the user's to start, which project_create can propose to them on its card.
-
 When this task's position changes -- a new phase, or another item of a known total done -- report it with task_progress_report: Orbit reads progress from that report alone, not from your output or replies.
 
 When the person asked to hear once something is done, tell them with notify when it is: an answer in this conversation reaches them only when they next look.
 
 Hand work to another agent through Orbit, never your engine's own sub-agents or Agent tool, which are as private as its plan. Look with task_list first: task_start work already recorded, never file it twice. Otherwise use delegate for a piece whose result you need back, in the background, on a cheaper or stronger model or on another machine (needs: ["os:darwin"], or workspace: an agent's name from agent_list); new work of its own is task_create with startNow. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
 
-To fan out several SubAgents, in parallel or in phases, whose results you only need combined, use workflow: one script runs them all and wakes this session once with its return value; delegate stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's built-in Workflow tool. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__workflow.
-
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
 The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few operations with no MCP tool and commands that outlive this turn; otherwise prefer the `mcp__orbit__*` tools. Run it as `'<orbit-cli>'`: it reaches the same server under the same approvals and attributes work to you, so a refusal, a declined card or a missing switch there is the same answer. `'<orbit-cli>' guide [topic] --json` gives a recipe's argv; `--receipt` prints a write's receipt. Never run `'<orbit-cli>' mcp`.
-=== kimi (5748 bytes)
+=== kimi (4916 bytes)
 [map[text:<orbit-agent-instructions>
 Owner instructions.
 
@@ -272,17 +236,11 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`: copy it int
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
-The owner's Drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
-
-File work you discover in this task's run as a task, saying first what you are filing: it lands in this task's project. A separate undertaking is the user's to start, which project_create can propose to them on its card.
-
 When this task's position changes -- a new phase, or another item of a known total done -- report it with task_progress_report: Orbit reads progress from that report alone, not from your output or replies.
 
 When the person asked to hear once something is done, tell them with notify when it is: an answer in this conversation reaches them only when they next look.
 
 Hand work to another agent through Orbit, never your engine's own sub-agents or Agent tool, which are as private as its plan. Look with task_list first: task_start work already recorded, never file it twice. Otherwise use delegate for a piece whose result you need back, in the background, on a cheaper or stronger model or on another machine (needs: ["os:darwin"], or workspace: an agent's name from agent_list); new work of its own is task_create with startNow. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
-
-To fan out several SubAgents, in parallel or in phases, whose results you only need combined, use workflow: one script runs them all and wakes this session once with its return value; delegate stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's built-in Workflow tool. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__workflow.
 
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
@@ -290,7 +248,7 @@ The Orbit CLI is for pipes, scripts, bulk input from a file or stdin, the few op
 </orbit-agent-instructions>
 
 hi type:text]]
-=== opencode (5661 bytes)
+=== opencode (4829 bytes)
 Owner instructions.
 
 This session works on its own branch, `orbit/task-snapshot`, and the person reads its work as a list of commits. Commit each logical step when it is done, without being asked: a subject that says what changed and a body that says why in a sentence or two. Whatever is left uncommitted is saved when the session ends, under a generic message.
@@ -315,17 +273,11 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`: copy it int
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
-The owner's Drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
-
-File work you discover in this task's run as a task, saying first what you are filing: it lands in this task's project. A separate undertaking is the user's to start, which project_create can propose to them on its card.
-
 When this task's position changes -- a new phase, or another item of a known total done -- report it with task_progress_report: Orbit reads progress from that report alone, not from your output or replies.
 
 When the person asked to hear once something is done, tell them with notify when it is: an answer in this conversation reaches them only when they next look.
 
 Hand work to another agent through Orbit, never your engine's own sub-agents or Agent tool, which are as private as its plan. Look with task_list first: task_start work already recorded, never file it twice. Otherwise use delegate for a piece whose result you need back, in the background, on a cheaper or stronger model or on another machine (needs: ["os:darwin"], or workspace: an agent's name from agent_list); new work of its own is task_create with startNow. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
-
-To fan out several SubAgents, in parallel or in phases, whose results you only need combined, use workflow: one script runs them all and wakes this session once with its return value; delegate stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's built-in Workflow tool. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__workflow.
 
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 
@@ -350,5 +302,5 @@ After compaction or a resume, read before you act -- task_get with no id reads t
 Orbit primer 1.8.0 (Agent Contract 1.14.0). Orbit is the user's durable record; your todo or plan tool is private scratch. Record what they want kept or followed up: one piece of work is task_create, a worked-out plan task_create_batch, a goal with its own acceptance project_create; when two fit, the smaller wins. Use Orbit's MCP tools first, never the CLI to get around a card or a refusal. No returned id, no claim.
 
 After compaction or a resume, read before you act -- task_get with no id reads this session's task -- and never rebuild an id, a status or an approval from memory or a summary.
-=== orbit mcp initialize, help ask (310 bytes)
-Orbit help reads: read-only views of the person's Orbit account. help_machines: each machine, online or offline, and its last heartbeat. help_sessions: their sessions and where each stands. help_tasks: their open and failed tasks. help_quota: each machine's engine quota windows. Nothing here changes anything.
+=== orbit mcp initialize, help ask (0 bytes)
+

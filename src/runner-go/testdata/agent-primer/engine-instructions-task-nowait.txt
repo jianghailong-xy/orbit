@@ -16,17 +16,11 @@ Hand the user a file as `[name](path)`, an image as `![name](path)`: copy it int
 
 Evidence: cite a command's output by its tool call rather than saving a log; keep screenshots and reports with file_upload rather than in the repository: it reads those same two directories and returns a reply link and the id a FILE check cites.
 
-The owner's Drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); deletes go to a Trash agents cannot see. Verifying, judging and ORBIT_GUEST turns only read it.
-
-File work you discover in this task's run as a task, saying first what you are filing: it lands in this task's project. A separate undertaking is the user's to start, which project_create can propose to them on its card.
-
 When this task's position changes -- a new phase, or another item of a known total done -- report it with task_progress_report: Orbit reads progress from that report alone, not from your output or replies.
 
 When the person asked to hear once something is done, tell them with notify when it is: an answer in this conversation reaches them only when they next look.
 
 Hand work to another agent through Orbit. Look with task_list first: task_start work already recorded, never file it twice. Otherwise use delegate for a piece whose result you need back, in the background, on a cheaper or stronger model or on another machine (needs: ["os:darwin"], or workspace: an agent's name from agent_list); new work of its own is task_create with startNow. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate.
-
-To fan out several SubAgents, in parallel or in phases, whose results you only need combined, use workflow: one script runs them all and wakes this session once with its return value; delegate stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's built-in Workflow tool. In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__workflow.
 
 Before changing a file, use wiki_search with its path to look up known pitfalls. Cite an entry as `[title](orbit-wiki:<id>)`.
 

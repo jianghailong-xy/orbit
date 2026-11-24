@@ -17,12 +17,6 @@ func helpAskModeFromEnv() bool {
 	return strings.TrimSpace(os.Getenv(envHelpAsk)) == "1"
 }
 
-// helpAskInstructions is what an Ask's MCP client is told in place of the agent primer, which is about tools an Ask
-// does not have.
-const helpAskInstructions = "Orbit help reads: read-only views of the person's Orbit account. help_machines: each machine, " +
-	"online or offline, and its last heartbeat. help_sessions: their sessions and where each stands. help_tasks: their " +
-	"open and failed tasks. help_quota: each machine's engine quota windows. Nothing here changes anything."
-
 var helpAskToolDescriptions = map[string]string{
 	"machines": "Every machine (runner) on the person's account: its name and id, whether it is online, when Orbit last heard from it (lastHeartbeatAt, secondsSinceHeartbeat), its runner version, and which engines are installed and signed in. Read-only.",
 	"sessions": "The person's newest sessions: title, status (PENDING, RUNNING, AWAITING_INPUT, INTERRUPTED = paused, COMPLETED, FAILED), the machine and workspace each runs in, its error if it has one, and when it last did something. Never what was said in them. Read-only.",

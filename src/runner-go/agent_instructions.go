@@ -121,39 +121,6 @@ const orbitEvidenceFileInstructions = "Evidence: cite a command's output by its 
 	"keep screenshots and reports with file_upload rather than in the repository: it reads those same two " +
 	"directories and returns a reply link and the id a FILE check cites."
 
-// The drive paragraphs are the owner's Drive, per runner kind (docs/drive-technical-design.md
-// §4.6, §7.3). On Orbit Cloud the drive is mounted at ~/Drive and is used with the shell, so the paragraph says what
-// the mount does not support and where it reports; on every other runner the drive is reached only through the drive
-// tools. Either way agents never see Trash (D11), and verification, judgment and guest-driven turns only read (D9). Kept
-// short: it is in every session's instructions, inside orbitInstructionsMaxBytes. orbitDriveToolInstructions is the
-// paragraph for a runner without the mount, orbitDriveMountInstructions the one for a runner with it (units drive.tools
-// and drive.mount), and neither is given while the drive is off (orbitDocumentsShown).
-// The mount's paragraph names where it reports as {{drive_root}}, which compose renders from the machine
-// (driveParentPath: /run/orbit-drive).
-const (
-	orbitDriveReadOnly         = "Verifying, judging and ORBIT_GUEST turns only read it."
-	orbitDriveToolInstructions = "The owner's Drive: drive_put, drive_get, drive_list, drive_move, drive_delete (`orbit drive`); " +
-		"deletes go to a Trash agents cannot see. " + orbitDriveReadOnly
-	orbitDriveMountInstructions = "~/Drive is the owner's permanent Drive; link its files by path. Give ls, find, du ~/Drive/ (a " +
-		"symlink). Copy in with cp -r or rsync -rt (no modes: -a, -p fail on executables; tar x drops the x bit). No " +
-		"links, locks, in-place writes or exec; see {{drive_root}}/errors.log. " + orbitDriveReadOnly
-)
-
-// orbitDocumentsShown reports whether the drive paragraphs are given at all: not while the server, or the runner's
-// environment, has Documents switched off (documents_switch.go).
-func orbitDocumentsShown() bool { return !documentsOffProcess.Load() && documentsEnabledFromEnv() }
-
-// orbitDriveInstructions is the drive paragraph this runner's sessions are given, or "" while Documents is off.
-func orbitDriveInstructions() string {
-	switch {
-	case !orbitDocumentsShown():
-		return ""
-	case driveMounted():
-		return renderInstructionUnit(orbitDriveMountInstructions, SessionShape{}, unknownEngineProfile)
-	}
-	return orbitDriveToolInstructions
-}
-
 // orbitDriveGuide is the drive's rule in the guide's files topic: the whole of §7.3, which the drive paragraphs say
 // in brief because the guide is read on demand and has no byte budget.
 func orbitDriveGuide() string {
@@ -230,21 +197,6 @@ const orbitHandoffInstructions = "Hand work to another agent through Orbit{{own_
 	"stronger model or on another machine (needs: [\"os:darwin\"], or workspace: an agent's name from agent_list); new " +
 	"work of its own is task_create with startNow.{{toolsearch:delegate}}"
 
-// orbitWorkflowInstructions says when to reach for the workflow tool (subagent_workflow.go), next to delegate's.
-// Measured 2026-11-22: it shipped, a smoke run worked, and no agent ever chose it. Nothing named it, and in Claude Code
-// it is a deferred MCP tool, seen by name only until ToolSearch loads it, while the engine's own built-in Workflow
-// tool, which that engine is told to use only on a user's explicit opt-in, has nearly the same name: an agent carries
-// the caution over. So the paragraph says when, what it does, and that Orbit's tool needs no opt-in. ASCII like the rest.
-const orbitWorkflowInstructions = "To fan out several SubAgents, in parallel or in phases, whose results you only need " +
-	"combined, use workflow: one script runs them all and wakes this session once with its return value; delegate " +
-	"stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's " +
-	"built-in Workflow tool.{{toolsearch:workflow}}"
-
-// Its Claude Code sentence, {{toolsearch:workflow}}, is left out for Cursor like delegate's. Only a session that is
-// offered the workflow tool gets the paragraph (unit workflow.use-workflow): one that is offered delegate (a SubAgent is
-// not) and whose Agent has Workflows on (ClaimedSession.WorkflowsDisabled), the same two conditions under which
-// `orbit mcp` lists the tool (recovery_render.go). It never names a tool the session lacks.
-
 // workflowsOn reports whether this claimed session is spawned with the workflow tool offered.
 func (s *ClaimedSession) workflowsOn() bool {
 	return s == nil || !s.WorkflowsDisabled
@@ -279,11 +231,6 @@ const orbitProgressInstructions = "When this task's position changes -- a new ph
 // of the same paragraph to both kinds of session is what made the proposal read as something to
 // do on every turn rather than something to do rarely, and that is still why the two differ.
 const (
-	// One line since design step 5d: that the card is the only yes, that a yes binds the project to this conversation
-	// as its coordinator, and the bar a project has to clear are project_create's description.
-	orbitProjectInsideInstructions = "File work you discover in this task's run as a task, saying first what you are " +
-		"filing: it lands in this task's project. A separate undertaking is the user's to start, which project_create " +
-		"can propose to them on its card."
 	orbitProjectProposeInstructions = "Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and " +
 		"that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different " +
 		"parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then " +

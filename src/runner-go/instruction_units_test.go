@@ -131,7 +131,7 @@ func TestComposedMCPInstructionsAreThePrimer(t *testing.T) {
 				}
 			}
 			if shape.Role == roleHelpAsk {
-				want = helpAskInstructions
+				want = ""
 			}
 			if got := compose(shape, profile).MCP; got != want {
 				t.Errorf("%+v on %q: initialize instructions = %q, want %q", shape, profile.Engine, got, want)
@@ -239,10 +239,10 @@ func TestEachShapeIsGivenOnlyTheUnitsThatApplyToIt(t *testing.T) {
 		}
 		return false
 	}
-	projects := []string{orbitProjectInsideInstructions, orbitProjectProposeInstructions}
+	projects := []string{orbitProjectProposeInstructions}
 
 	task := system(job(func(*ClaimedSession) {}))
-	for name, p := range map[string]string{"project": orbitProjectInsideInstructions, "notify": orbitNotifyInstructions,
+	for name, p := range map[string]string{"notify": orbitNotifyInstructions,
 		"commit": "Commit each logical step", "evidence": orbitEvidenceFileInstructions, "progress": orbitProgressInstructions,
 		"orchestration-off": agentPrimerOrchestration, "wiki": orbitWikiPathInstructions} {
 		if !strings.Contains(task, p) {
@@ -279,5 +279,55 @@ func TestEachShapeIsGivenOnlyTheUnitsThatApplyToIt(t *testing.T) {
 	}
 	if strings.Contains(orbitWikiPathInstructions, "if your tool list has it") {
 		t.Error("the wiki line hedges on the tool list")
+	}
+}
+
+// Admission (design §4.5): a unit in always-on text is kind A or F and names the eval scenarios that fail without it.
+// Every unit of the registry is always-on on some shape, so the rule reads the whole registry.
+func TestEveryAlwaysOnUnitIsKindAOrFAndNamesItsEvalCase(t *testing.T) {
+	scenarios := map[string]bool{}
+	for _, sc := range evalScenarios() {
+		scenarios[sc.ID] = true
+	}
+	for _, unit := range instructionUnits {
+		if err := admissionError(unit, scenarios); err != "" {
+			t.Errorf("unit %s: %s", unit.id, err)
+		}
+	}
+}
+
+// admissionError is why the unit may not be always-on, or "".
+func admissionError(unit instructionUnit, scenarios map[string]bool) string {
+	if unit.kind != kindDisposition && unit.kind != kindEnvironment {
+		return "kind " + string(unit.kind) + " is not A (disposition) or F (environment); demote it to a tool description, a receipt note or a guide topic"
+	}
+	if len(unit.guardedBy) == 0 {
+		return "guardedBy names no eval scenario"
+	}
+	for _, id := range unit.guardedBy {
+		if !scenarios[id] {
+			return "guardedBy names " + id + ", which is no scenario of agent_eval_scenarios_test.go"
+		}
+	}
+	return ""
+}
+
+// The rule above has teeth: each way a unit can break it is reported.
+func TestAdmissionRuleRefusesAUnitThatBreaksIt(t *testing.T) {
+	scenarios := map[string]bool{"E1-record-task": true}
+	ok := instructionUnit{id: "x", kind: kindDisposition, guardedBy: []string{"E1-record-task"}}
+	if got := admissionError(ok, scenarios); got != "" {
+		t.Fatalf("a sound unit was refused: %s", got)
+	}
+	cleared := ok
+	cleared.guardedBy = nil
+	missing := ok
+	missing.guardedBy = []string{"E1-record-task", "E99-nothing"}
+	situation := ok
+	situation.kind = kindSituation
+	for name, unit := range map[string]instructionUnit{"cleared guardedBy": cleared, "missing scenario": missing, "kind E": situation} {
+		if admissionError(unit, scenarios) == "" {
+			t.Errorf("%s was admitted", name)
+		}
 	}
 }

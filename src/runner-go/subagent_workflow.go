@@ -85,6 +85,9 @@ func workflowToolDescriptor(obj func(map[string]interface{}, ...string) map[stri
 	return map[string]interface{}{
 		"name": workflowToolName,
 		"description": "Run a JavaScript script that orchestrates many SubAgents deterministically, in the background." +
+			" Use it to fan out several SubAgents, in parallel or in phases, whose results you only need combined; delegate" +
+			" stays the tool for one independent piece. It is Orbit's own tool and needs no user opt-in, unlike Claude Code's" +
+			" built-in Workflow tool." +
 			" It returns { workflowRunId, status: \"running\" } at once; Orbit starts one turn in this session with the" +
 			" script's return value when the whole workflow ends: end your turn then instead of polling. The script must" +
 			" begin with `export const meta = { name, description, phases? }` (a pure literal). Its body may use await and:" +
