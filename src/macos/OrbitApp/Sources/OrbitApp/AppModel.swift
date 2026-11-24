@@ -500,7 +500,7 @@ final class AppModel {
 
 #if DEBUG
     /// Test-only: a screenshot gallery's Documents model.
-    func seedDriveForTesting(_ model: DriveModel) { documents = model }
+    func seedDriveForTesting(_ model: DriveModel) { drive = model }
 #endif
 
     init() {
@@ -1197,9 +1197,9 @@ final class AppModel {
     /// A file an agent put in Documents, opened where it lives with it selected (a transfer card's "Show in
     /// Documents", `DriveTransferCardView`).
     func revealDocument(_ entryID: String) {
-        guard let documents else { return }
+        guard let drive else { return }
         selectedSection = .drive
-        Task { await documents.reveal(entryID: entryID) }
+        Task { await drive.reveal(entryID: entryID) }
     }
     #endif
 
