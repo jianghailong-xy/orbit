@@ -3070,6 +3070,23 @@ func (t *Transport) draftWiki(sessionID string, body interface{}) (json.RawMessa
 	return out, err
 }
 
+// readWiki is a wiki chat's read of its space (`wiki_read`, contract `chat.read`). Only a read: it is sent again like one.
+func (t *Transport) readWiki(sessionID string, query wikiReadQueryArgs) (json.RawMessage, error) {
+	values := url.Values{}
+	for name, value := range map[string]string{"q": query.Q, "doc": query.Doc, "section": query.Section, "draft": query.Draft, "more": query.More} {
+		if value != "" {
+			values.Set(name, value)
+		}
+	}
+	path := "/runner/wiki/read"
+	if encoded := values.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	var out json.RawMessage
+	_, err := t.doWiki(http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID), true)
+	return out, err
+}
+
 // listWikiVerifications reads one page of the ops the calling session proposed that wait for their
 // verification in a space (`orbit wiki verify`, contract `reviewModes.verification.list`). route is the
 // path after the space.

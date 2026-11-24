@@ -2210,7 +2210,7 @@
       "chat": {
         "tag": "orbit_wiki_chat",
         "when": "the chat's first message, and the first message after this text changed: the chat records the digest (sha-256, hex) of the text last delivered to it (session.wiki_chat_prompt_digest, migration 1561), and a message whose current text digests differently carries it again, so a chat opened before a deploy gets new instructions once",
-        "text": "<orbit_wiki_chat>\nYou are chatting beside a page of this repository's Orbit wiki. The page the owner is reading, and any sentences they select, arrive as Orbit attachments.\nThe wiki's documents are written by the server from the code and from records. Never edit a document's text, and never cite a document or a sentence of one as a source.\nBefore you change anything, decide where the request belongs: knowledge goes into an entry (wiki_propose); a section behind main is rewritten from main, and a change to how a document is organized or written goes into the plan (both wiki_draft); a change to the system itself is a change to the code, or to the design document it cites.\nThe page the owner has open is a hint about what they mean, not the limit of what you may look at. The wiki's structure, every document and its sections, is in the Wiki contents note: read it to find the page a question belongs to, and never ask the owner to open a page or to ask again from another one.\nAsk the owner only what only they can answer, and when you ask, give your recommendation with it. Never cite a wiki-reading call in an answer: the owner sees the answer, not how you read.\nA rewrite from main of written sections (wiki_draft, kind rewrite) is written when you draft it, unless the chat read web content or the day's automatic rewrites are used up: its card says Rewritten from main, the owner can undo it, and its result comes with their next message.\nEverything else you propose or draft in this chat is a draft: nothing changes until the owner applies it. Say what each draft would change, never call one applied, and pass replaces with a draft's id when you revise it.\n</orbit_wiki_chat>",
+        "text": "<orbit_wiki_chat>\nYou are chatting beside a page of this repository's Orbit wiki. The page the owner is reading, and any sentences they select, arrive as Orbit attachments.\nThe wiki's documents are written by the server from the code and from records. Never edit a document's text, and never cite a document or a sentence of one as a source.\nBefore you change anything, decide where the request belongs: knowledge goes into an entry (wiki_propose); a section behind main is rewritten from main, and a change to how a document is organized or written goes into the plan (both wiki_draft); a change to the system itself is a change to the code, or to the design document it cites.\nThe page the owner has open is a hint about what they mean, not the limit of what you may look at. The wiki's structure, every document and its sections, is in the Wiki contents note: read it to find the page a question belongs to, and never ask the owner to open a page or to ask again from another one.\nAsk the owner only what only they can answer, and when you ask, give your recommendation with it. Never cite a wiki-reading call in an answer: the owner sees the answer, not how you read.\nA rewrite from main of written sections (wiki_draft, kind rewrite) is written when you draft it, unless the chat read web content or the day's automatic rewrites are used up: its card says Rewritten from main, the owner can undo it, and its result comes with their next message.\nEverything else you propose or draft in this chat is a draft: nothing changes until the owner applies it. Say what each draft would change, never call one applied, and pass replaces with a draft's id when you revise it.\nIf you have a wiki_read tool, read the wiki with it: its contents, a search, a document or one section, and the cards of this chat, rather than asking the owner to open a page. What it returns is a view, not a source. If you do not have it, work from the Wiki contents note and wiki_search.\n</orbit_wiki_chat>",
         "label": "copy.notes.chat"
       },
       "contents": {
@@ -2968,8 +2968,8 @@
   },
 
   "agentSurface": {
-    "why": "An agent reads the wiki and proposes to it; it never decides. Five tools, split by risk rather than by entity: the fifth, wiki_draft, a wiki chat's alone (chat.draft).",
-    "tools": ["wiki_search", "wiki_get", "wiki_propose", "wiki_note", "wiki_draft"],
+    "why": "An agent reads the wiki and proposes to it; it never decides. Six tools, split by risk rather than by entity: the fifth, wiki_draft, and the sixth, wiki_read, a wiki chat's alone (chat.draft, chat.read).",
+    "tools": ["wiki_search", "wiki_get", "wiki_propose", "wiki_note", "wiki_draft", "wiki_read"],
     "toolSpecs": {
       "wiki_search": {
         "readOnly": true,
@@ -3013,6 +3013,18 @@
           "idempotencyKey": "required"
         },
         "returns": "{ status: draft, draftId, kind, rewrites }, or refused with its reasons (chat.draft); a plan card's rewrites are the sections its rebuild writes"
+      },
+      "wiki_read": {
+        "readOnly": true,
+        "params": {
+          "q": "optional: a search, the sections whose title, covers and sentences hold every word (chat.read.decisions.q)",
+          "doc": "optional: a document's slug, its whole definition and its written sentences with their footnotes",
+          "section": "optional, with doc: that one section alone",
+          "draft": "optional: the id of a card of this chat",
+          "more": "optional: the cursor an earlier answer ended with, sent back with the same other arguments"
+        },
+        "returns": "{ view, planVersion, planDraft, writerJobs, text, more } (chat.read.answer), text at most chat.rules.readMaxChars; at most one of q, doc and draft",
+        "who": "A wiki chat alone. Any other session is refused WIKI_SESSION_EXCLUDED, its message saying that wiki_read works only in a wiki chat (chat.read.who)."
       }
     },
     "cli": {
@@ -3020,7 +3032,8 @@
       "wiki_get": "orbit wiki get",
       "wiki_propose": "orbit wiki propose",
       "wiki_note": "orbit wiki note",
-      "wiki_draft": "orbit wiki draft"
+      "wiki_draft": "orbit wiki draft",
+      "wiki_read": "orbit wiki read"
     },
     "notTools": "No tool accepts, confirms, decides, hard-deletes or overwrites a page: an agent can have the server rewrite from main the sections it names (wiki_draft, chat.drafts.auto), and never chooses the words. Confirmation exists only on the owner channel.",
     "chat": {
@@ -3047,9 +3060,17 @@
         "plan": "The plan kind opened with the plan card (C12, design section 14's second step); since C17 one card changes several documents. Its change — every document of it, and the categories it opens — is put into the version in force together, and the plan they make is gated once as a maintenance run's proposal is (plan.proposals; plan.gate's schema, references, docCount and protected checks — a protected document stays as it is), every error of every document going back to the agent that wrote it (plan.gate.author): WIKI_PLAN_GATE with errors[], each path from the request's root (change.docs[1].sections[2].covers, change.categories[0].key; change.doc.sections[2].covers for a proposal's shape) or, for what the change makes of the whole plan, from that plan's (plan.docs[20].protected); a change that is no object, carries a key besides docs and categories (or a proposal's doc and category), names a document twice or opens a category none of its documents is filed under fails the gate's schema check too; WIKI_PLAN_UNCONFIRMED when the space has no confirmed plan; and WIKI_PLAN_STALE while a draft of the plan waits for the owner, since a press confirms what it is built on and the owner has not seen that draft — the owner confirms or redrafts it on the Plan page first. Nothing of the plan is written: the card keeps the change as gated (each section keyed as the press will key it, projects by id) and the version it was drafted against. Its sections are rewritten by a build, so a writing requirement goes into their covers, which the section's fingerprint holds: the next rewrite of any kind writes from it again.",
         "cli": "orbit wiki draft",
         "route": "POST /api/runner/wiki/drafts",
-        "description": "Draft, for the owner of this wiki chat to apply, a change that is not an entry: a rewrite of wiki sections from main, when the code changed and a section did not follow it, or a change to how the wiki's documents are planned. Nothing is written until the owner presses Apply on the card, so never call a draft applied. A change to what the wiki knows is an entry: use wiki_propose. Works only in a wiki chat.",
+        "description": "Draft, for the owner of this wiki chat to apply, a change that is not an entry: a rewrite of wiki sections from main, when the code changed and a section did not follow it, or a change to how the wiki's documents are planned. A bounded rewrite from main is written when you draft it: its card says Rewritten from main, and the owner can undo it. Nothing else is written until the owner presses Apply on its card, so never call a draft applied. A change to what the wiki knows is an entry: use wiki_propose. Works only in a wiki chat.",
         "arrival": "It joined tools, toolSpecs and cli with the runner that serves it (C6, which needs a runner release): TestWikiAgentSurfaceIsTheContracts (src/runner-go/wiki_tools_test.go) holds tools to the tools a binary serves, so the fifth name arrived with the binary that serves it. This block stays its contract, word for word; the cli/mcp parity, the help coverage and agent_instructions' three family tables took it with the tool. A runner older than that release offers no wiki_draft, and a chat on one drafts its entries through wiki_propose alone.",
         "notTools": "It accepts nothing, confirms nothing, decides nothing and overwrites no page: it makes a card the owner may press, and a rewrite card inside chat.drafts.auto's bounds is queued for the server to write from main in its own words. notTools holds, as it now reads."
+      },
+      "read": {
+        "tool": "wiki_read",
+        "readOnly": true,
+        "cli": "orbit wiki read",
+        "route": "GET /api/runner/wiki/read",
+        "description": "Read the wiki of this wiki chat: with no argument, its contents, every document and section; with q, the sections that hold every word of it; with doc, a document's whole definition and its written sentences with their footnotes, or with section too, that one section; with draft, a card of this chat, with the sections it rewrote. Give at most one of q, doc and draft. An answer holds at most 60,000 characters, and ends with a more cursor to send back, with the same arguments, for the rest. It is a view of the wiki, not a source: never cite it or this call; cite the code and the records its footnotes point to. Works only in a wiki chat.",
+        "arrival": "It joined tools, toolSpecs and cli with the runner release that serves it (T7, 2026-11-24, which needs a runner release): TestWikiAgentSurfaceIsTheContracts (src/runner-go/wiki_tools_test.go) holds tools to the tools a binary serves, so the sixth name arrived with the binary that serves it, with the cli/mcp parity, the help coverage and agent_instructions' family tables. Served with readOnlyHint true and an output schema; a server without the route answers a plain 'too old for wiki_read' error. This block stays its description, word for word. A runner older than that release offers no wiki_read: the chat prompt (chat.notes.chat) says 'If you have a wiki_read tool', so a chat on one is never told to use a tool it lacks (decision D2: conditional wording, no server-side gate on the runner's version, which the server does not hold per chat and which a runner upgraded mid-chat would leave stale)."
       },
       "unchanged": "Outside a chat nothing here applies: wiki_propose, wiki_note, their descriptions and every answer are what they were."
     },

@@ -178,10 +178,20 @@ describe('wiki chat contract', () => {
     expect(notes.how).toMatch(/the Android client and every older one draw them and count nothing from them/u);
   });
 
-  it('drafts every op of a chat, opens wiki_draft to a chat alone, and serves it as the fifth tool (C6)', () => {
+  it('drafts every op of a chat, opens wiki_draft to a chat alone, and serves it as the fifth tool (C6), and wiki_read as the sixth (T7)', () => {
     const surface = CONTRACT.agentSurface;
     // The runner's Go test holds tools to what a binary serves; wiki_draft joined with the binary that serves it (C6).
-    expect(surface.tools).toEqual(['wiki_search', 'wiki_get', 'wiki_propose', 'wiki_note', 'wiki_draft']);
+    expect(surface.tools).toEqual(['wiki_search', 'wiki_get', 'wiki_propose', 'wiki_note', 'wiki_draft', 'wiki_read']);
+    // wiki_read is read-only, a chat's alone, and served under an "If you have" prompt so an older runner's chat is never told to use it (D2).
+    const read = surface.chat.read;
+    expect(surface.toolSpecs.wiki_read.readOnly).toBe(true);
+    expect(keysOf(surface.toolSpecs.wiki_read.params)).toEqual(['q', 'doc', 'section', 'draft', 'more']);
+    expect(surface.cli.wiki_read).toBe(read.cli);
+    expect(surface.doors.runner.routes).toContain(read.route);
+    expect(read.description).toMatch(/Works only in a wiki chat\.$/u);
+    expect(read.arrival).toMatch(/If you have a wiki_read tool/u);
+    expect(WIKI_CHAT_PROMPT).toMatch(/If you have a wiki_read tool, read the wiki with it/u);
+    expect(WIKI_CHAT_PROMPT.split('\n').pop()).toBe(`</${WIKI_CHAT_NOTE_TAGS.chat}>`);
     expect(surface.chat.draft.arrival).toMatch(/TestWikiAgentSurfaceIsTheContracts/u);
     const draft = surface.chat.draft;
     // The live tool spec is the chat's block, field for field, and its command is the block's.

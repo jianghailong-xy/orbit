@@ -841,7 +841,7 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
 
 ---
 
-## 11. agentSurface：五个工具、两道门
+## 11. agentSurface：六个工具、两道门
 
 - **工具**（按风险拆，不按实体拆）：
 
@@ -920,8 +920,9 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
     它不接受、不确认、不决定、不覆写页面；方案 A 之后，边界内的 rewrite 卡起草即排服务端按 main 的重写（§28.5），字仍是服务端的，`notTools` 照此改了措辞
     （agent 能让服务端按 main 重写它点名的节，不能决定写什么字）。回答 `{ status: draft, draftId, kind, rewrites, state, held }`：`state` 是 `rewritten`（起草即排上）
     或 `draft`，`held` 是边界内却留给按的原因或 null；`status` 仍是 `draft`，留给读它的 runner。工具说明一字不差写在 `agentSurface.chat.draft.description`，
-    这一步不改：它随 runner 发版改（D8，T7）。
-  - **`agentSurface.tools` 是五个**（C6）：runner-go 的 `TestWikiAgentSurfaceIsTheContracts` 要求它与 binary 实际提供的工具相等，`wiki_draft` 随 runner
+    这一步不改：它随 runner 发版改（D8，T7）。T7 改了：说明里多了一句边界内的重写卡起草即写、卡上写 Rewritten from main、owner 可以撤销，
+    其余的草稿照旧要 owner 按下才写（`wikiDraftDescription` 与它一字不差，`TestWikiDraftDescriptionIsTheContracts`）。
+  - **`agentSurface.tools` 是六个**（C6 加 `wiki_draft`，T7 加 `wiki_read`）：runner-go 的 `TestWikiAgentSurfaceIsTheContracts` 要求它与 binary 实际提供的工具相等，`wiki_draft` 随 runner
     提供它的那次发版（C6，要 owner 发 runner 版）进了 `tools`、`toolSpecs`、`cli`，同时登记了 cli/mcp 对照（`sections` 在命令行是可重复的
     `--section doc/key`）、help 覆盖与 agent_instructions 三张 family 表；`replaces` 随之进了 `toolSpecs.wiki_propose.params` 与
     `toolSpecs.wiki_note.params`，别的会话带它不读。比这次发版旧的 runner 不提供 `wiki_draft`，聊天里照样只能用 `wiki_propose` 起草条目卡。
@@ -934,9 +935,14 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
       要立的标记撤掉（`recomputeFlags` 只把 pending 的 challenge 算作开着）。reinforce 追加出处、trust 不变（§8 的 op 表）。add、supersede、amend
       记 confirmed（amend 照 decide：改的是机器写的条目才升到 confirmed），原则类记 owner。
     - Apply 一张 `changed` 的卡拒 `WIKI_REVISION_CONFLICT`，什么都不写；它的动作只有 Redo 和 Discard。
+  - **老 runner 的聊天（决定 D2，T7）**：比这次发版旧的 runner 没有 `wiki_read`，而聊天提示词随服务端走、服务端不知道每场聊天的 runner 版本。
+    所以用条件措辞：`chat.notes.chat.text` 的最后一句是「If you have a wiki_read tool, read the wiki with it …  If you do not have it, work from the
+    Wiki contents note and wiki_search」。没有这个工具的聊天读到的是「如果你有」，从没被告知去用它没有的工具；runner 在聊天中途升级也不用重送提示词。
+    不做服务端按 runner 版本的闸：它要在每场聊天上记 runner 版本，升级后还要再送一次，换来的只是同一句话少说一半。
   - **读 wiki 的路由 `GET /api/runner/wiki/read`**（JSON 的 `chat.read`，设计 §4.2，决定 D10，2026-11-24）：工具 `wiki_read` 与
-    `orbit wiki read` 随 runner 的下一次发版提供，那时才进 `agentSurface.tools`、`toolSpecs`、`cli`（`TestWikiAgentSurfaceIsTheContracts`
-    要求 `tools` 与 binary 实际提供的相等），这之前没有 runner 调这条路由。只读，只对聊天会话开放，和 `wiki_draft` 一样：没有会话头 400，
+    `orbit wiki read` 随 runner 的这次发版（T7）提供，已进 `agentSurface.tools`、`toolSpecs`、`cli`（`TestWikiAgentSurfaceIsTheContracts`
+    要求 `tools` 与 binary 实际提供的相等），说明一字不差写在 `agentSurface.chat.read.description`；`readOnlyHint` 为真，带 `outputSchema`；
+    比它旧的服务端没有这条路由，工具回一句「this Orbit server is too old for wiki_read」，不是笼统的 404。只读，只对聊天会话开放，和 `wiki_draft` 一样：没有会话头 400，
     不是本 runner 托管的会话 403，不是聊天的会话拒 `WIKI_SESSION_EXCLUDED`（消息写明它只在 wiki 聊天里用），验证、foreman、判断会话照旧拒，
     聊天的 workspace 已不在它的 space 里是 `WIKI_SPACE_UNBOUND`。参数至多一个 `q`、`doc`、`draft`（多给是 `WIKI_SCHEMA`，空值当没给）：
     - 不带参数：目录，同 `<orbit_wiki_contents>` 的列法，总是全量（由下面的截断限长，不用附注的 30,000 字压缩）；没有已确认的 plan 就说还没有文档。
@@ -1044,7 +1050,7 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
   读取形状，以及会话记录脚注拼出 `SessionRecordLink` 深链。Go 的 `TestWikiDoc*`（钉住 runner 门写入请求的字段与路由）随 runner 的文档代码在 P11 删除。
 - **wiki 聊天、跟进与留版**（§28–§30）：`wikiChatContract.spec.ts` 钉住 `chat`、`docs.follow`、`docs.versions` 的闭集、限额（20 句、5 节、
   每天 40 节、每节 5 版、每天 20 节不按就写，并从设计原文里读出这几个数）、全部英文文案（与 `WIKI_CHAT_COPY` 相等，设计表格与效果图 42 里的句子逐字在场，没有一个中文字）、
-  `<orbit_wiki_chat>` 的原文、路由都在用户门（`wiki_draft` 的在 runner 门）、`tools` 是五个而 `wiki_draft` 的规格与 `chat.draft` 一致、`notTools` 是方案 A 之后的那句、
+  `<orbit_wiki_chat>` 的原文、路由都在用户门（`wiki_draft` 的在 runner 门）、`tools` 是六个而 `wiki_draft`、`wiki_read` 的规格与 `chat.draft` 一致、`notTools` 是方案 A 之后的那句、
   `jobs.onePerSpace` 的两条部分唯一索引与任意两种作业能否并行，并把 `wiki-chat.fixture.json` 的每条向量跑过 `wikiChat.ts` 的函数：
   卡的状态与按钮、卡下那一行、圆按钮的三个数与四种样子、「等你」、跟进作业等待的原因、Rewrites、逐句对照、附注标签、`wikiContext` 的校验、
   Activity 的 Docs 行。OrbitKit 的镜像（C11）读同一份向量；服务端的行为（建聊天、按压、跟进、留版）由 C3–C6 的 pg spec 逐条断言——草稿与按压在
@@ -3384,7 +3390,7 @@ C6（草稿与按压）、C8 与 C9（web）、C11（iOS）、C12（plan 卡）�
 
 | 块 | 何时 | 内容 | 那一行 |
 | --- | --- | --- | --- |
-| `<orbit_wiki_chat>` | 第一条消息，以及这段文字改了之后的第一条消息：聊天记下上次送达的文字的摘要（sha-256，`session.wiki_chat_prompt_digest`，迁移 1561），现在文字的摘要不同就再送一次，所以部署前开的聊天只新收一次新规则 | 给 agent 的规则，原文一字不差写在 JSON 的 `chat.notes.chat.text`：你在 wiki 页旁边聊天，页面和选中的句子作为附件送到；文档由服务端从代码和记录写，不要改文档的字，也不要拿文档或其中的句子当出处；先判断该落在哪一层——知识用 `wiki_propose` 写条目，落后于 main 的节和文档的组织、写法用 `wiki_draft`，系统本身改代码或它引用的设计文档；在这里提议和起草的都只是草稿，owner 按下才变，别说成已生效，改稿时带上旧卡的 `replaces`；还说明：当前页只是提示，wiki 的结构在 Wiki contents 里，不要请 owner 去打开某一页，只问 owner 才能回答的问题并带上建议，回答里不引用读 wiki 的调用 | `Wiki chat` |
+| `<orbit_wiki_chat>` | 第一条消息，以及这段文字改了之后的第一条消息：聊天记下上次送达的文字的摘要（sha-256，`session.wiki_chat_prompt_digest`，迁移 1561），现在文字的摘要不同就再送一次，所以部署前开的聊天只新收一次新规则 | 给 agent 的规则，原文一字不差写在 JSON 的 `chat.notes.chat.text`：你在 wiki 页旁边聊天，页面和选中的句子作为附件送到；文档由服务端从代码和记录写，不要改文档的字，也不要拿文档或其中的句子当出处；先判断该落在哪一层——知识用 `wiki_propose` 写条目，落后于 main 的节和文档的组织、写法用 `wiki_draft`，系统本身改代码或它引用的设计文档；在这里提议和起草的都只是草稿，owner 按下才变，别说成已生效，改稿时带上旧卡的 `replaces`；还说明：当前页只是提示，wiki 的结构在 Wiki contents 里，不要请 owner 去打开某一页，只问 owner 才能回答的问题并带上建议，回答里不引用读 wiki 的调用；最后一句（D1、D2）：「如果你有 `wiki_read`，用它读 wiki，别请 owner 去开页面；它给的是视图不是出处；没有它就从 Wiki contents 和 `wiki_search` 查」，条件措辞是为比这次发版旧的 runner | `Wiki chat` |
 | `<orbit_wiki_contents>` | 第一条消息，不论停在哪一页；之后只在已确认 plan 的版本与这个聊天上次收到的（`session.wiki_chat_contents_version`，迁移 1561）不同时再送。两个标记都和 `told_at` 一样写在投递的事务里，claim 回滚就重送 | wiki 的结构，一份视图而不是出处（头一句这样写）：已确认 plan 的版本；每篇的编号、slug、标题、大类；每节的序号、key、标题、写成没有、写成时的 `repoSha`（前 12 位）。没有 covers，没有句子。由已确认 plan 加一次只读 key 与 `repoSha` 的查询得出（不用读全部句子的 `writtenSections`）。上限：正文至多 30000 个字符（`WIKI_CHAT_CONTENTS_MAX_CHARS`），超出就只列节号、key 与写没写；量得：35 篇（`rules.docsMax`）每篇 8 节的 plan 完整形式 25942 个字符 | `Wiki contents` |
 | `<orbit_wiki_page>` | `wikiContext` 带了当前页 | 文档的节：标题、现在的句子与脚注、这一节的 `repoSha`；条目：同 `wiki_get` 的回答；plan 的篇：已确认 plan 里这一篇的完整定义，形状就是 plan 卡 `change.docs` 里的一篇（每节的 covers、sources 都在），页面停在某一节时点名那一节，并写明一张卡怎样改几篇、怎样把这一篇拆开（C17），以及写法要求放在节的 covers 上（会话读不了 plan，页面替它带过去，`plan.who`；C12）。这段话是服务端的，不等 runner 发版就到 agent | `Wiki page · 3.1 §3` / `Wiki entry · <标题>` / `Wiki plan · 3.1`（停在一节时 `Wiki plan · 3.1 §2`） |
 | `<orbit_wiki_selection>` | `wikiContext` 带了选区 | 选中的句子按阅读顺序、在各自的节标题下，每句带脚注：仓库原文 `path@sha#L起-止`、记录 `<种类> <记录 id> in session <会话 id>`、经由的条目 `via entry <id>`。服务端投递时按 id 读（句子、文档读给的脚注、同样脱敏），从不收客户端的文字 | `Wiki selection · 3.1 §3 · 1 sentence · 2 sources`（跨节写 `3.1 §3–§4`） |

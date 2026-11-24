@@ -138,7 +138,7 @@ export type WikiDocVersionReasonKind = (typeof WIKI_DOC_VERSION_REASONS)[number]
 /**
  * The block a chat's first message carries for its agent (contract `chat.notes.chat.text`, design §4.2's last
  * point), word for word. It says what the agent may do and that nothing it drafts is written until the owner
- * presses; it names no document tool, because there is none (docs.tool).
+ * presses; it names wiki_read, which a chat on a runner that has it reads with, behind an "If you have" so an older runner's chat is never told to use a tool it lacks (D2).
  */
 export const WIKI_CHAT_PROMPT = [
   '<orbit_wiki_chat>',
@@ -149,6 +149,7 @@ export const WIKI_CHAT_PROMPT = [
   "Ask the owner only what only they can answer, and when you ask, give your recommendation with it. Never cite a wiki-reading call in an answer: the owner sees the answer, not how you read.",
   'A rewrite from main of written sections (wiki_draft, kind rewrite) is written when you draft it, unless the chat read web content or the day\'s automatic rewrites are used up: its card says Rewritten from main, the owner can undo it, and its result comes with their next message.',
   'Everything else you propose or draft in this chat is a draft: nothing changes until the owner applies it. Say what each draft would change, never call one applied, and pass replaces with a draft\'s id when you revise it.',
+  'If you have a wiki_read tool, read the wiki with it: its contents, a search, a document or one section, and the cards of this chat, rather than asking the owner to open a page. What it returns is a view, not a source. If you do not have it, work from the Wiki contents note and wiki_search.',
   '</orbit_wiki_chat>',
 ].join('\n');
 

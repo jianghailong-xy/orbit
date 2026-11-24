@@ -130,6 +130,7 @@
   "mcp__orbit__wiki_get",
   "mcp__orbit__wiki_note",
   "mcp__orbit__wiki_propose",
+  "mcp__orbit__wiki_read",
   "mcp__orbit__wiki_search",
   "mcp__orbit__withdraw_owner_request"
  ],
