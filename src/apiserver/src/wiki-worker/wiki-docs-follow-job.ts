@@ -131,16 +131,21 @@ export async function runWikiDocsFollowJob(context: WikiJobContext, deps: WikiDo
   // The presses' sections, each with the cards that asked for it and the newest press among them.
   const presses = facts.filter((fact): fact is Extract<WikiDocsFollowFact, { kind: 'press' }> => fact.kind === 'press');
   const merges = facts.filter((fact): fact is Extract<WikiDocsFollowFact, { kind: 'merge' | 'landing' }> => fact.kind !== 'press');
-  const forced = new Map<string, { doc: string; key: string; draftIds: string[]; press: Extract<WikiDocsFollowFact, { kind: 'press' }> }>();
+  type PressFact = Extract<WikiDocsFollowFact, { kind: 'press' }>;
+  // `owner`: the newest press the owner made of the section, whose chat's turns are its material; a fact queued without
+  // a press (contract `chat.drafts.auto`) hands none, so a section only such facts asked for has none (design §7.2).
+  const forced = new Map<string, { doc: string; key: string; draftIds: string[]; press: PressFact; owner: PressFact | null }>();
   for (const press of presses) {
     for (const section of press.sections) {
       const id = at(section.doc, section.key);
       const before = forced.get(id);
+      const owner = before?.owner ?? null;
       forced.set(id, {
         doc: section.doc,
         key: section.key,
         draftIds: [...new Set([...(before?.draftIds ?? []), press.draftId])],
         press: !before || before.press.at <= press.at ? press : before.press,
+        owner: press.auto ? owner : !owner || owner.at <= press.at ? press : owner,
       });
     }
   }
@@ -352,8 +357,8 @@ export async function runWikiDocsFollowJob(context: WikiJobContext, deps: WikiDo
             ownerId: job.ownerId,
             spaceId: job.spaceId,
             entryIds: [...new Set(presses.filter((press) => pressOf.draftIds.includes(press.draftId)).flatMap((press) => press.entryIds))],
-            chatId: pressOf.press.chatId,
-            until: new Date(pressOf.press.at),
+            chatId: pressOf.owner?.chatId ?? null,
+            until: new Date((pressOf.owner ?? pressOf.press).at),
             literals,
           })).records
           : [];

@@ -3467,7 +3467,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '1560_document_sync',
       // 1561 adds two nullable columns to session (wiki_chat_prompt_digest, wiki_chat_contents_version) in short lock
       // tries; `session` is not a preserved relation, no row is written, and no trigger, function or DONE fence changes.
-      '1561_wiki_chat_delivery_markers'],
+      '1561_wiki_chat_delivery_markers',
+      // 1574 adds three nullable columns to wiki_chat_draft (auto_queued_at, held, held_by_id), two checks, a partial index,
+      // and loosens its undone, seen and told checks; no preserved relation, row, trigger, function or DONE fence changes.
+      '1574_wiki_chat_draft_auto'],
 
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
