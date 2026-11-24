@@ -113,6 +113,7 @@ import { RunnerHints } from '../realtime/runner-hints';
 import { forkAuthorityBindings, sessionSourceSnapshot } from '../projects/session-source';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
+import { documentsClaimFields } from '../drive/documents-switch';
 import { workflowClaimFields } from '../runner-api/workflow-run';
 import { branchName } from '../projects/project-criterion-landing';
 import { codelessClaimFields } from '../sessions/codeless-checkout';
@@ -1300,6 +1301,9 @@ export class QueueService {
       // The same for the wiki (ORBIT_WIKI, wiki/wiki-rollout.ts): `wikiDisabled` when it is not on for the owner, so
       // the runner spawns the session without the wiki tools.
       ...wikiClaimFields(currentWikiRollout(), session.ownerId),
+      // The Documents switch (drive/documents-switch.ts): `documentsDisabled` while it is off, so the runner spawns the
+      // session without the drive tools.
+      ...documentsClaimFields(),
       // The browser switch (managed-runner-browser-gate.ts): `browserEnabled` while it is on, so the runner spawns the
       // session with the browser tools; absent, they are not there.
       ...browserClaimFields(this.browserGate),

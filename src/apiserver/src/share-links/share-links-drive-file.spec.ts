@@ -16,6 +16,9 @@ import { SHARE_ROOT_KINDS } from './share-link';
 import { ShareLinksController } from './share-links.controller';
 import { ShareLinksService } from './share-links.service';
 
+// These specs share drive files, which Documents must be on for (drive/documents-switch.ts).
+process.env.ORBIT_DOCUMENTS_ENABLED = 'true';
+
 /** A drive version of `parts`, one chunk each, in a fake store. */
 function contentOf(parts: Buffer[]) {
   let offset = 0;

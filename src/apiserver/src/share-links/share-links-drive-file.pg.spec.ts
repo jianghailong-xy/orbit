@@ -40,6 +40,9 @@ import { SharedController } from '../shared/shared.controller';
 import { ShareLinksController } from './share-links.controller';
 import { ShareLinksService } from './share-links.service';
 
+// These specs share drive files, which Documents must be on for (drive/documents-switch.ts).
+process.env.ORBIT_DOCUMENTS_ENABLED = 'true';
+
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
 const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');

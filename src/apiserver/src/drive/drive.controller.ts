@@ -13,6 +13,7 @@ import { DriveUploadsService } from './drive-uploads.service';
 import { FilesService, type DriveUsage } from '../files/files.service';
 import { DriveService } from './drive.service';
 import { DriveDownloadLinks } from './drive-download-links';
+import { DocumentsEnabledGuard } from './documents-switch';
 import { CreateDriveFolderDto, DriveDownloadLinkDto, OpenDriveUploadDto, RestoreDriveVersionDto, UpdateDriveEntryDto } from './dto';
 
 /** What every drive route declares for a token: the files scope; a drive holds no workspace, so a confined token is refused. */
@@ -26,7 +27,7 @@ const limitOf = (limit?: string) => (limit === undefined ? undefined : Number.pa
  * is not found. Usage and the share check are their own tasks' routes. A token reaches them with the
  * `files` scope (DRIVE_PAT), declared on each handler like every scope; without it the guard refuses with the scope's 403.
  */
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, DocumentsEnabledGuard)
 @Controller('drive')
 export class DriveController {
   constructor(
@@ -289,6 +290,7 @@ function send(content: DriveContent, res: Response): StreamableFile | undefined 
  * login: the signed token is the credential, bound to one owner, file and version, and expired, forged or stale it is the
  * one 404. Range, If-Range and If-None-Match work as on the owner's content route.
  */
+@UseGuards(DocumentsEnabledGuard)
 @Controller('drive')
 export class DriveDownloadController {
   constructor(private readonly downloadLinks: DriveDownloadLinks) {}

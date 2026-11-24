@@ -14,6 +14,7 @@ import { withSessionState } from '../sessions/session-state';
 import { assertEngineSession } from '../sessions/engine-session';
 import { WikiDocs } from '../wiki/wiki-docs';
 import { currentWikiRollout, wikiDisabledError, wikiOnFor } from '../wiki/wiki-rollout';
+import { documentsDisabledError, documentsEnabled } from '../drive/documents-switch';
 import type { PutShareLinkDto } from './dto';
 import {
   effectiveProjectInclude,
@@ -479,6 +480,8 @@ export class ShareLinksService {
    *  public door's `content` route; nothing the file has since been given reaches here. */
   async driveFilePage(link: OpenLink): Promise<{ name: string; sizeBytes: number; versionId: string }> {
     const entryId = this.rootOf(link, 'DRIVE_FILE');
+    // A link made while Documents was on reads, while it is off, as one naming nothing (documents-switch.ts).
+    if (!documentsEnabled()) throw linkNotFound();
     const version = link.driveVersionId
       ? await this.prisma.driveVersion.findFirst({
           where: { id: link.driveVersionId, ownerId: link.ownerId, entryId },
@@ -591,6 +594,7 @@ export class ShareLinksService {
       return { inTrash: false };
     }
     if (kind === 'DRIVE_FILE') {
+      if (!documentsEnabled()) throw documentsDisabledError();
       const entry = await this.prisma.driveEntry.findFirst({ where: { id, ownerId, kind: 'FILE' }, select: { trashedAt: true } });
       if (!entry) throw new NotFoundException('file not found');
       return { inTrash: entry.trashedAt != null };

@@ -300,6 +300,7 @@ import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout'
 import { followWikiDocsAfterSessionMerge } from '../wiki/wiki-docs-follow';
 import { deliverIntegrationAftermath } from './integration-aftermath';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
+import { documentsClaimFields } from '../drive/documents-switch';
 import { appendWikiChatNotes } from '../wiki/wiki-chat-notes';
 import { appendScheduleChangeNote } from '../schedules/schedule-change-conversation';
 import {
@@ -4917,6 +4918,8 @@ export class RunnerApiController {
         ...watchClaimFields(watchRollout, s.ownerId),
         // And the wiki, on the same rule (wiki/wiki-rollout.ts).
         ...wikiClaimFields(wikiRollout, s.ownerId),
+        // And Documents (drive/documents-switch.ts), which may have been switched since the session was first claimed.
+        ...documentsClaimFields(),
         // And the browser switch (managed-runner-browser-gate.ts), read as the claim path reads it.
         ...browserClaimFields(this.browserGate),
         // cf. the claim path: the Agent's Workflows switch, which may have moved since the session was first claimed.

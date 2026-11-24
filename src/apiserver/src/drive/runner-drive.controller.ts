@@ -29,6 +29,7 @@ import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { DriveChunksService } from './drive-chunks.service';
 import { AcceptsDriveMountCredential, CurrentDriveMount, fenceManagedInstance, type DriveMount } from './drive-mount-credential';
 import { drivePathSegments, DriveService, type DriveEntryRow, type DriveWriter } from './drive.service';
+import { DocumentsEnabledGuard } from './documents-switch';
 import {
   RunnerDriveCommitDto,
   RunnerDriveCreateDto,
@@ -96,7 +97,7 @@ function rangeOf(header: string | undefined, size: number): { start: number; end
  *
  * Every rule of a write is the name layer's (DriveService); this door only names entries by path and says who writes.
  */
-@UseGuards(RunnerAuthGuard)
+@UseGuards(RunnerAuthGuard, DocumentsEnabledGuard)
 @AcceptsDriveMountCredential()
 @Controller('runner/drive')
 export class RunnerDriveController {
