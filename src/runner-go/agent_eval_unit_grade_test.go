@@ -209,7 +209,21 @@ func evalReachableLog(r *evalRun, path string) bool {
 		(evalUnder(path, r.World.WorkDir) || evalUnder(path, r.World.UploadsDir)) && r.hasFile(path)
 }
 
+// evalLinksUploadedLog says whether the reply links, as orbit-attachment:<id>, a log the agent kept with file_upload:
+// a hand-over every client renders (fileLink), from a file file_upload read out of the same two directories.
+func evalLinksUploadedLog(r *evalRun) bool {
+	for _, e := range r.eventsOf("file_uploaded") {
+		if strings.Contains(strings.ToLower(e.Detail), "log") && strings.Contains(r.repliesFrom(0), "orbit-attachment:"+e.ID) {
+			return true
+		}
+	}
+	return false
+}
+
 func checkReplyLinksReachableFile(r *evalRun) (bool, string) {
+	if evalLinksUploadedLog(r) {
+		return true, ""
+	}
 	links := evalReplyFileLinks(r)
 	for _, path := range links {
 		if evalReachableLog(r, path) {
@@ -232,6 +246,9 @@ func checkNoOutsideLink(r *evalRun) (bool, string) {
 }
 
 func checkLinkedCopyInUploads(r *evalRun) (bool, string) {
+	if evalLinksUploadedLog(r) {
+		return true, ""
+	}
 	for _, path := range evalReplyFileLinks(r) {
 		if evalReachableLog(r, path) && evalUnder(path, r.World.UploadsDir) {
 			return true, ""

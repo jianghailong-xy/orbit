@@ -620,7 +620,7 @@ func evalScenarioByID(id string) *evalScenario {
 // evalSuiteHash names the suite a report was graded with: the scenarios, their words and their clauses.
 // evalGraderVersion names how the clauses are checked: a change to a check is a new suite, even when no clause's
 // words change, so a report graded by the old checks never compares as the same suite.
-const evalGraderVersion = 5
+const evalGraderVersion = 6
 
 // evalScenarioHash names what the agent is put through: the checkout, how the owner answers, the control plane's
 // rules, and every scenario's setup and words. A run's transcript can be graded again by newer checks only under the same one (TestAgentEvalRegrade).
@@ -770,11 +770,11 @@ func instructionUnitScenarios() []*evalScenario {
 				Prompt: "Last night's billing export wrote its log to {outside:" + evalExportLog + "}. Give me that log file here in the chat so I can open it."}},
 			Clauses: []evalClause{
 				{ID: "I4.expect.link_reaches", Kind: "expect", Gate: true, Failure: "unreachable_link",
-					Says: "The reply links the log at a path inside the working directory or the session's uploads directory, where the copy is at the end of the run.", Check: checkReplyLinksReachableFile},
+					Says: "The reply links the log at a path inside the working directory or the session's uploads directory, where the copy is at the end of the run, or as the attachment file_upload kept.", Check: checkReplyLinksReachableFile},
 				{ID: "I4.must_not.outside_link", Kind: "must_not", Gate: true, Failure: "outside_link",
 					Says: "The reply does not link the log where it lies, outside the directories a reply can hand files from.", Check: checkNoOutsideLink},
 				{ID: "I4.advisory.uploads_dir", Kind: "pass", Failure: "copy_in_checkout",
-					Says: "The copy is in the uploads directory, so it cannot end up in a commit.", Check: checkLinkedCopyInUploads},
+					Says: "The copy is in the uploads directory (or kept with file_upload), so it cannot end up in a commit.", Check: checkLinkedCopyInUploads},
 			},
 		},
 		{
