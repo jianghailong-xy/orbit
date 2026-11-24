@@ -1,5 +1,5 @@
 /**
- * Moving old attachments out of Postgres in two steps (attachment-migration.ts; docs/orbit-files-design.md §2.1), held
+ * Moving old attachments out of Postgres in two steps (attachment-migration.ts; docs/documents-design.md §2.1), held
  * against the production apiserver — `build/main.js`, the whole AppModule, which runs the copy after a start — and the
  * real command that clears, as separate processes, over a real PostgreSQL that `scripts/run-pg-spec.sh` migrates from
  * empty, once with each store:
@@ -9,7 +9,7 @@
  *   local  the files directory, a directory of this run's (ORBIT_DOCUMENTS_DIR);
  *   s3     a real S3-compatible server (test-support/s3-test-server.ts) with a bucket of the run's.
  *
- * What is held, with each store, on a batch of rows written as an apiserver before Orbit Files wrote them:
+ * What is held, with each store, on a batch of rows written as an apiserver before Documents wrote them:
  *   (1) what every read door answers before anything moves is the baseline: GET /attachments/:id,
  *       GET /runner/sessions/:id/attachments/:attId, GET /shared/:token/attachments/:id on a session link and a task link;
  *   (2) a start does not wait for the copy: with the copy stalled on a row, the server answers, and it answers every door
@@ -17,7 +17,7 @@
  *   (3) killed partway (SIGKILL, with the bytes of one row stored and the row not yet naming them), the next start carries
  *       on from the rows and redoes none of them, with reads and uploads going on while it does, and logs its counts;
  *   (4) the copy alone leaves `data` as it was and writes `sha256`, one file_blob row per content, the store holding
- *       the same bytes, so a client of the schema before Orbit Files (a generated Prisma client) still reads every row;
+ *       the same bytes, so a client of the schema before Documents (a generated Prisma client) still reads every row;
  *   (5) a start after the copy writes nothing;
  *   (6) the clear, killed partway and run again under reads and uploads, reads each row's bytes back from the store first,
  *       and leaves and reports a row whose bytes the store lacks, a row whose bytes under that name are others, a row whose
@@ -140,7 +140,7 @@ async function readAll(stream: Readable | null): Promise<Buffer | null> {
   return Buffer.concat(chunks);
 }
 
-// ── The client of the last schema before Orbit Files ───────────────────────────────────────────
+// ── The client of the last schema before Documents ───────────────────────────────────────────
 /**
  * `model Attachment` as it stood before migration 0462 (schema.prisma at 1ab75589f^), less its relations: `data` is
  * required, and `sha256` and the columns beside it do not exist.
@@ -546,7 +546,7 @@ function storeCases(leg: Leg) {
       );
     });
 
-    await step(`${leg.storage}: the copy alone leaves data as it was, so a client from before Orbit Files reads every row`, async () => {
+    await step(`${leg.storage}: the copy alone leaves data as it was, so a client from before Documents reads every row`, async () => {
       const seen = await sql.query(
         `SELECT id::text, sha256, encode(pg_catalog.sha256(data), 'hex') AS in_data, octet_length(data) AS length FROM attachment WHERE id = ANY($1::uuid[]) ORDER BY id`,
         [everyId],

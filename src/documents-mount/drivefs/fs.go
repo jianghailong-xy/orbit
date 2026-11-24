@@ -1,4 +1,4 @@
-// Package drivefs is the mount daemon's file system (docs/orbit-files-drive-technical-design.md §5): the account's
+// Package drivefs is the mount daemon's file system (docs/documents-drive-technical-design.md §5): the account's
 // drive, served over FUSE (go-fuse's raw protocol) from the runner drive door.
 //
 //   - Inode numbers come from a per-mount table from entry id to inode, never reused while the mount lives (§5.4).

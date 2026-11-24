@@ -1,5 +1,5 @@
 /**
- * Who may write the verification relation (docs/orbit-files-design.md §2.7), held against the production apiserver —
+ * Who may write the verification relation (docs/documents-design.md §2.7), held against the production apiserver —
  * `build/main.js` and every guard and pipe in front of the routes — over a real PostgreSQL that `scripts/run-pg-spec.sh`
  * migrates from empty:
  *

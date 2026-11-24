@@ -158,7 +158,7 @@ export interface RunnerObjects {
   /** An import job of the space (server execution P5, contract `import.server`), ended, to be read back. */
   wikiImportJobId: string;
   /**
-   * The drive door (docs/orbit-files-drive-technical-design.md §4.2): a staging of this machine's on the account's drive
+   * The drive door (docs/documents-drive-technical-design.md §4.2): a staging of this machine's on the account's drive
    * file holding chunk 0 (`driveChunkSha256`, content of this account's alone); another staging with nothing in it, which
    * a commit names; a commit's id; and two files of the drive folder, one to move and one to delete.
    */
@@ -777,7 +777,7 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     nested: ['jobId'],
   },
   'GET /runner/wiki/entries/:id': { as: RUNNER, request: (of, mine) => ({ params: { id: of.wikiEntryId }, headers: calling(mine.runner.wikiSessionId) }) },
-  // ── the runner drive door (docs/orbit-files-drive-technical-design.md §4.2, §4.4) ───────────────
+  // ── the runner drive door (docs/documents-drive-technical-design.md §4.2, §4.4) ───────────────
   // A chunk only by a sha256 the caller's own versions or stagings name; a staging only of the caller's runner; a commit
   // id only within the caller's account.
   // Under /runner/documents and its /runner/drive alias.
@@ -1904,27 +1904,27 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
       + "so another account's commit id names nothing of anybody's here",
     // ── the runner drive door: who a write is recorded as coming from ─────────────────────────────
     'POST /runner/documents/create body writer.sessionId':
-      "a drive write's attribution (docs/orbit-files-drive-technical-design.md §3.6): kept only when it is a session of the "
+      "a drive write's attribution (docs/documents-drive-technical-design.md §3.6): kept only when it is a session of the "
       + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
       + "stored as null otherwise (documents/documents.service.ts:1226); no session is read beyond that, written or authorized by it",
     'POST /runner/documents/mkdir body writer.sessionId':
-      "a drive write's attribution (docs/orbit-files-drive-technical-design.md §3.6): kept only when it is a session of the "
+      "a drive write's attribution (docs/documents-drive-technical-design.md §3.6): kept only when it is a session of the "
       + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
       + "stored as null otherwise (documents/documents.service.ts:1226); no session is read beyond that, written or authorized by it",
     'POST /runner/documents/commit body writer.sessionId':
-      "a drive write's attribution (docs/orbit-files-drive-technical-design.md §3.6): kept only when it is a session of the "
+      "a drive write's attribution (docs/documents-drive-technical-design.md §3.6): kept only when it is a session of the "
       + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
       + "stored as null otherwise (documents/documents.service.ts:1226); no session is read beyond that, written or authorized by it",
     'POST /runner/documents/rename body writer.sessionId':
-      "a drive write's attribution (docs/orbit-files-drive-technical-design.md §3.6): kept only when it is a session of the "
+      "a drive write's attribution (docs/documents-drive-technical-design.md §3.6): kept only when it is a session of the "
       + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
       + "stored as null otherwise (documents/documents.service.ts:1226); no session is read beyond that, written or authorized by it",
     'POST /runner/documents/delete body writer.sessionId':
-      "a drive write's attribution (docs/orbit-files-drive-technical-design.md §3.6): kept only when it is a session of the "
+      "a drive write's attribution (docs/documents-drive-technical-design.md §3.6): kept only when it is a session of the "
       + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
       + "stored as null otherwise (documents/documents.service.ts:1226); no session is read beyond that, written or authorized by it",
     'POST /runner/documents/utimens body writer.sessionId':
-      "a drive write's attribution (docs/orbit-files-drive-technical-design.md §3.6): kept only when it is a session of the "
+      "a drive write's attribution (docs/documents-drive-technical-design.md §3.6): kept only when it is a session of the "
       + "runner's owner assigned to the calling runner, read by (id, owner, runner) in the write's own transaction, and "
       + "stored as null otherwise (documents/documents.service.ts:1226); no session is read beyond that, written or authorized by it",
   }),

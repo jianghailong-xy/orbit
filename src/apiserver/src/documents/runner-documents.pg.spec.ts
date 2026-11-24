@@ -1,5 +1,5 @@
 /**
- * The runner drive door (docs/orbit-files-drive-technical-design.md §4.2, §4.3, §4.6, §8.2; documents/runner-documents.controller.ts,
+ * The runner drive door (docs/documents-drive-technical-design.md §4.2, §4.3, §4.6, §8.2; documents/runner-documents.controller.ts,
  * documents/documents-mount-credential.ts), through the production apiserver (`node build/main.js`, every guard and pipe) over a
  * real PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty:
  *
@@ -101,7 +101,7 @@ const refused = (reply: Reply, status: number, code: string, what: string) => {
   assert.equal(reply.json?.code, code, `${what}: ${reply.text}`);
 };
 
-test('Orbit Files drive: the runner drive door — drive tools by path, no Trash or share, tenants, the mount credential', {
+test('Documents drive: the runner drive door — drive tools by path, no Trash or share, tenants, the mount credential', {
   skip: !URL, concurrency: 1, timeout: 600_000,
 }, async (t) => {
   const url = URL!;

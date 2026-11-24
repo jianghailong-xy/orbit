@@ -474,7 +474,7 @@ type Dialog =
   | null;
 
 /**
- * Orbit Files (board docs/mocks/orbit-files/02-web): the account's drive in a wide window — the folder tree, the list with
+ * Documents (board docs/mocks/documents/02-web): the account's drive in a wide window — the folder tree, the list with
  * who last wrote each file, and the picked file's preview and details. Trash and earlier versions are reached from in
  * here (board choice a). `/documents/trash` is its Trash.
  */

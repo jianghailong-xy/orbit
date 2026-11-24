@@ -1,5 +1,5 @@
 /**
- * Orbit Files' storage layer (docs/orbit-files-design.md §2.1, §2.10; migration 0462; files/), held against the
+ * Documents' storage layer (docs/documents-design.md §2.1, §2.10; migration 0462; files/), held against the
  * production apiserver — `build/main.js`, the whole AppModule, multer and every guard and pipe in front of the routes —
  * over a real PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty, once with each store:
  *
@@ -16,13 +16,13 @@
  *       keeps no bytes in Postgres;
  *   (2) every read door — GET /attachments/:id, GET /runner/sessions/:id/attachments/:attId, and GET
  *       /shared/:token/attachments/:id on a session link and on a task link — answers those bytes, byte for byte;
- *   (3) a row from before Orbit Files, its bytes in `data`, is answered from there through the same doors;
+ *   (3) a row from before Documents, its bytes in `data`, is answered from there through the same doors;
  *   (4) an upload goes through a temporary file on disk, never a buffer: halfway through the request its bytes are
  *       already in a file under <files dir>/tmp, and once it is answered that file is gone into the store;
  *   (5) a single file is still capped at 25 MiB: exactly that much is kept, one byte more is refused 413, and a
  *       refused upload — too large, or another runner's session — leaves nothing behind, on disk or in the database;
  *   (6) a dispatch copies a task's inputs as rows naming the same bytes (tasks.service.ts#copyTaskAttachments): no
- *       bytes copied and no file_blob row added; an input from before Orbit Files has its bytes kept the first time
+ *       bytes copied and no file_blob row added; an input from before Documents has its bytes kept the first time
  *       it is copied, and is copied the same way from then on;
  *   (7) a client that hangs up in the middle of an upload leaves nothing behind;
  *   (8) nor does an upload refused before its handler is entered — a malformed id, which PublicIdPipe turns down after
@@ -291,7 +291,7 @@ function storeCases(leg: Leg) {
     const oldSha = sha256(old);
     const legacy: Record<'session' | 'task', string> = { session: '', task: '' };
 
-    await t.test(`${leg.storage}: a row from before Orbit Files is answered from its own bytes, through the same doors`, async () => {
+    await t.test(`${leg.storage}: a row from before Documents is answered from its own bytes, through the same doors`, async () => {
       legacy.session = (await db.attachment.create({
         data: { ownerId, sessionId, mimeType: 'image/png', sizeBytes: old.length, fileName: 'old.png', data: old },
       })).id;
@@ -402,7 +402,7 @@ function storeCases(leg: Leg) {
         'one copy per input, in order, each a row that names the bytes and carries none',
       );
       assert.deepEqual(await blob(sha), shaBlob, 'copying a stored input writes nothing about its bytes');
-      // The input from before Orbit Files: its bytes kept once, the first time it was copied, and named on the row.
+      // The input from before Documents: its bytes kept once, the first time it was copied, and named on the row.
       assert.deepEqual(
         await db.attachment.findUniqueOrThrow({ where: { id: legacy.task }, select: { sha256: true } }),
         { sha256: oldSha },
@@ -535,7 +535,7 @@ function storeCases(leg: Leg) {
   };
 }
 
-test('Orbit Files storage, on the local files directory and on an S3-compatible server', {
+test('Documents storage, on the local files directory and on an S3-compatible server', {
   skip: !URL, concurrency: 1, timeout: 900_000,
 }, async (t) => {
   const url = URL!;

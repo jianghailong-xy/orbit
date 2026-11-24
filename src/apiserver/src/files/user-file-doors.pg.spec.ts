@@ -196,7 +196,7 @@ const doorCases = (sql: Client, scratch: string, storage: 'local' | 's3', env: R
     }
   });
 
-  await t.test('a row from before Orbit Files, whose bytes are in its own column, is held to the same rule', async () => {
+  await t.test('a row from before Documents, whose bytes are in its own column, is held to the same rule', async () => {
     const id = randomUUID();
     await sql.query(
       `INSERT INTO attachment (id, owner_id, session_id, mime_type, size_bytes, file_name, data) VALUES ($1, $2, $3, 'text/html', 13, 'old.html', $4)`,

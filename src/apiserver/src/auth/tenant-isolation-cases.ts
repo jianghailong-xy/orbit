@@ -138,7 +138,7 @@ export interface Tenant {
   adminSubjectTokenId: string;
   adminProviderId: string;
   /**
-   * The account's drive (docs/orbit-files-drive-technical-design.md §4.1): a folder, a file in it with a replaced
+   * The account's drive (docs/documents-drive-technical-design.md §4.1): a folder, a file in it with a replaced
    * version in Trash, and a Trash group of a deleted file.
    */
   driveFolderId: string;
@@ -327,7 +327,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /attachments/usage/tasks/:id/files': { request: (of) => ({ params: { id: of.taskId } }) },
   'DELETE /attachments/:id/everywhere': { request: (of) => ({ params: { id: of.spare.storedFileId } }) },
 
-  // ── Documents (docs/orbit-files-drive-technical-design.md §4.1, §4.4): every read and write by (id, owner) ──────────
+  // ── Documents (docs/documents-drive-technical-design.md §4.1, §4.4): every read and write by (id, owner) ──────────
   ...documentsUnderEveryPrefix({
     'GET /documents/entries/:id': { request: (of) => ({ params: { id: of.driveFileId } }) },
     'PATCH /documents/entries/:id': { request: (of) => ({ params: { id: of.driveFileId }, body: { name: 'renamed by the census.txt' } }) },
@@ -1057,7 +1057,7 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     "the request is read FOR UPDATE by (id, the caller as its owner) and nothing else, 404 SCHEDULE_REQUEST_NOT_FOUND for another account's (schedules/schedules.service.ts:427)",
   'GET /sessions/:id/schedule-cards':
     "the session is read by (id, the caller) first, 404 for another account's (schedules/schedule-reads.service.ts:183), and the cards and records are read by the caller as owner",
-  // Settings → Storage's file lists (docs/orbit-files-design.md §2.10).
+  // Settings → Storage's file lists (docs/documents-design.md §2.10).
   'GET /attachments/usage/weeks/:week/files':
     'the week is a date, not an object: every row the list reads is filtered by the caller\'s owner_id, in the scope, in what is counted as holding it and in its totals, so another account\'s files never reach it (files/files.service.ts:963, :965, :1011); it writes nothing',
   // ── main checkout (0534) ──

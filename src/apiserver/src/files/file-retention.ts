@@ -3,7 +3,7 @@ import { citedFileIds, storedEvidenceEnvelope } from '../tasks/task-evidence-env
 import type { FilesConfig } from './file-store';
 
 /**
- * How long a file an agent keeps with `file_upload` lasts (docs/orbit-files-design.md §2.8, decided 2026-11-02):
+ * How long a file an agent keeps with `file_upload` lasts (docs/documents-design.md §2.8, decided 2026-11-02):
  *
  *   uploaded, and no evidence cites it                 14 days after the upload
  *   cited by the newest version, undecided             does not expire

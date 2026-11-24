@@ -1,4 +1,4 @@
-/* Orbit Files board: shared styles for 01-ios, 02-web, 03-mac. Fonts are added by render.mjs. */
+/* Documents board: shared styles for 01-ios, 02-web, 03-mac. Fonts are added by render.mjs. */
 :root { --brand:#3E69F6; --brand-bg:#EAF0FF; --t1:#111114; --t2:#8a8a90; --t3:#b4b4ba; --sep:#e4e4e8;
         --grp:#f2f2f7; --green:#23a15a; --green-bg:#e3f5ea; --red:#e0453a; --red-bg:#fde8e6;
         --amber:#b86e00; --amber-bg:#FFF4E0; --grey-bg:#efeff2; --folder:#5b8def; }

@@ -433,7 +433,7 @@ export enum RunEventType {
   // translation.ts). The breaker is per process and the same for every account, so it reaches every user; only a
   // nudge, to read `GET /users/me` again.
   TRANSLATION_STATUS_CHANGED = 'translation_status_changed',
-  // The owner's drive changed (docs/orbit-files-drive-technical-design.md §4.1, §5.4): a commit, create, rename, move,
+  // The owner's drive changed (docs/documents-drive-technical-design.md §4.1, §5.4): a commit, create, rename, move,
   // delete or restore wrote rows to the change feed. Owner-scoped, and only a nudge carrying the feed's seq: a client
   // reads `GET /drive/changes` for what changed.
   DRIVE_CHANGED = 'drive_changed',

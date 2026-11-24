@@ -12483,7 +12483,7 @@ export function SessionComposer({
   const lastComposerTap = useRef<{ at: number; x: number; y: number; held?: number } | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // The `+` menu's Documents picker (board docs/mocks/orbit-files, 02-web frame 8).
+  // The `+` menu's Documents picker (board docs/mocks/documents, 02-web frame 8).
   const [documentsPickerOpen, setDocumentsPickerOpen] = useState(false);
   // Manual composer height (px). null = autoSize auto-grow (up to maxRows); once the user
   // drags the top handle, that height wins over autoSize until they double-click to reset.

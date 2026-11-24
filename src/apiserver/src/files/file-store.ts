@@ -8,7 +8,7 @@ import { pipeline } from 'node:stream/promises';
 import { promisify } from 'node:util';
 
 /**
- * Where the bytes of Orbit Files are kept (docs/orbit-files-design.md §2.1, §2.10): a store addressed by
+ * Where the bytes of Documents are kept (docs/documents-design.md §2.1, §2.10): a store addressed by
  * each content's sha256. `file_blob.storage` names the store a content is in.
  */
 export type FileStorage = 'local' | 's3';

@@ -44,7 +44,7 @@ import {
  *   - every container runs the profile's pinned image, it has no ephemeral containers, and its
  *     volumes are only that claim, emptyDirs, its own bootstrap Secret and at most one Documents
  *     drive volume — no host namespaces, host paths or privileged containers. The drive volume
- *     (docs/orbit-files-drive-technical-design.md §6.1, B13) is a `csi` volume of `documents.orbit.dev`
+ *     (docs/documents-drive-technical-design.md §6.1, B13) is a `csi` volume of `documents.orbit.dev`
  *     whose attributes are exactly `{ runnerId }` of this mapping, mounted only by the `runner`
  *     container, only at /run/orbit-documents, only with HostToContainer, writable. While Pods from
  *     before the rename drain, the old driver `files.orbit.dev` mounted at /run/orbit-files is

@@ -85,7 +85,7 @@ function rangeOf(header: string | undefined, size: number): { start: number; end
 }
 
 /**
- * The runner drive door (docs/orbit-files-drive-technical-design.md §4.2, §4.3, §4.6): what the drive tools on every
+ * The runner drive door (docs/documents-drive-technical-design.md §4.2, §4.3, §4.6): what the drive tools on every
  * runner, the runner itself (reply links, `file_upload` of a drive path) and the mount daemon on Orbit Cloud call.
  *
  *   - It takes the runner credential, with the managed-runner instance guard every runner door has, or the mount

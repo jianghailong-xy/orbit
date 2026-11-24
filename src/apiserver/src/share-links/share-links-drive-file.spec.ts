@@ -1,5 +1,5 @@
 /**
- * One-file share links (docs/orbit-files-drive-technical-design.md §9), without a database: the owner shares a file and a
+ * One-file share links (docs/documents-drive-technical-design.md §9), without a database: the owner shares a file and a
  * planted key warns without blocking, the scan reads what a share is pinned to, only the owner's controller makes a link,
  * and a client that does not ask for the new kind still lists its links. The rows themselves are held by
  * share-links-drive-file.pg.spec.ts.

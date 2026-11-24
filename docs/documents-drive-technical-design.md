@@ -1,21 +1,21 @@
-# Orbit Files drive: technical design
+# Documents drive: technical design
 
 Status: **draft for the owner's review, revision 2** (gate G2, and G3 for the container-hardening change in §6).
-Task [Orbit Files drive: technical design](orbit-task:350KSO2SDXIBqq7841EEI), 2026-11-20, repository at `58e176a1be`.
+Task [Documents drive: technical design](orbit-task:350KSO2SDXIBqq7841EEI), 2026-11-20, repository at `58e176a1be`.
 Revision 2 answers the independent review of revision 1 (task comment `350aNYQGBxSWjiw9h1ADT`, file
 `350a0QdK4XgIEDJIX8ziH`); §14 maps every review item to where this revision answers it.
 
 Inputs:
 
-- `docs/orbit-files-drive-design.md`: the product decisions D1–D23 and rules 1–8. Referred to below as "the product".
+- `docs/documents-drive-design.md`: the product decisions D1–D23 and rules 1–8. Referred to below as "the product".
 - The feasibility report of [can Orbit Cloud runners get a FUSE mount at /home/orbit/Files?](orbit-task:350KDMTso7g0wYwYRpU7y)
   (file `350SDm87q1Sxg2WzOEQXB`), cited as "the report" with its check names (D-1 … D-7, K-1 … K-4).
-- `docs/orbit-files-design.md`: today's sha256 store, retention sweep and evidence files.
+- `docs/documents-design.md`: today's sha256 store, retention sweep and evidence files.
 - The owner's rulings on this task (2026-11-19): G0, a node-level CSI driver on Kubernetes and a per-runner mounter
   container on Docker, parent-directory layout; storage, Ceph RGW (S3) for Orbit Cloud, local disk or any S3 for
   self-hosted; drive layer **option C**, our own name layer in Postgres with chunks as sha256 blobs through the existing
   `FileStore`, a Go mount daemon on go-fuse, and a node-only CSI plugin. No JuiceFS.
-- The board `docs/mocks/orbit-files/` and its four choices, settled as drawn: Trash and Storage are reached from inside
+- The board `docs/mocks/documents/` and its four choices, settled as drawn: Trash and Storage are reached from inside
   Files; Move to Trash asks nothing and web offers undo; an earlier version restores as the current version or as a
   copy; an owner upload whose name is taken gets a suffix and never overwrites.
 
@@ -909,14 +909,14 @@ This design relaxes it, on purpose, for one thing. The replacement text, from th
 > **Managed container hardening is fixed.** The channel (`deploy/managed-runner/docker-channel/channel.py`) refuses
 > privileged mode, added capabilities, devices, host binds and user-namespace modes for the runner container, and the
 > Pod template drops every capability. So the runner container cannot mount anything, use FUSE or loop devices, or
-> load kernel modules. **One exception, decided for Orbit Files (docs/orbit-files-drive-design.md,
-> docs/orbit-files-drive-technical-design.md §6):** the runner container may *receive* exactly one mount made outside
+> load kernel modules. **One exception, decided for Documents (docs/documents-drive-design.md,
+> docs/documents-drive-technical-design.md §6):** the runner container may *receive* exactly one mount made outside
 > it, `/run/orbit-documents` (a plain per-runner directory with slave propagation; the drive's FUSE mount sits below it),
 > from an Orbit-owned mounter: on Kubernetes the `documents.orbit.dev` CSI node driver; on Docker the per-runner
 > `mrf-<uuid>` container, the only container the channel creates with `SYS_ADMIN`, `/dev/fuse` and the
 > `orbit-documents-mounter` AppArmor profile. Nothing else in this design may relax the runner container's hardening.
 
-The product's "Feasibility first" risk in `docs/orbit-files-drive-design.md` (around line 146), which quotes §3, then
+The product's "Feasibility first" risk in `docs/documents-drive-design.md` (around line 146), which quotes §3, then
 points at the new wording.
 
 ## 7. Engine sandbox grants (D16)

@@ -1557,7 +1557,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
    * deletes it. Moving the rows would put the only copy of the user's image behind that, so the
    * failed attempt's bubble would lose its picture the first time a retry was cancelled. The
    * copies die with the session either way. A copy names the same stored bytes (`sha256`) as the
-   * row it copies; only a row from before Orbit Files carries its bytes in `data`, and its copy too.
+   * row it copies; only a row from before Documents carries its bytes in `data`, and its copy too.
    */
   private async copyAttachments(
     sessionId: string,

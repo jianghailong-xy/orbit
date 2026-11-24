@@ -98,7 +98,7 @@ export enum ControlEventType {
    *  above), sent to every user. `data` is a `ControlResourceChanged` whose id is `translation` and nothing
    *  else: a nudge to read `GET /users/me` again. Shipped clients treat it as an unknown type. */
   TRANSLATION_STATUS_CHANGED = 'translation.status_changed',
-  /** The owner's drive changed: a write added rows to its change feed (docs/orbit-files-drive-technical-design.md §5.4).
+  /** The owner's drive changed: a write added rows to its change feed (docs/documents-drive-technical-design.md §5.4).
    *  USER-SCOPED (see above). `data` is a `ControlDriveChanged`: the feed's seq and nothing else, a nudge to read
    *  `GET /drive/changes`. Sent ONLY to a stream that declared it with `GET /api/events?hints=drive_changed`
    *  (`CONTROL_HINT_DRIVE_CHANGED`): an agent writing through the mount commits often, and a shipped client re-reads

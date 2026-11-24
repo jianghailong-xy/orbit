@@ -1,6 +1,6 @@
-# Orbit Files · design board
+# Documents · design board
 
-The account's drive, drawn from [`docs/orbit-files-drive-design.md`](../../orbit-files-drive-design.md) (D1–D23 and rules 1–8, settled 2026-11-19).
+The account's drive, drawn from [`docs/documents-drive-design.md`](../../documents-drive-design.md) (D1–D23 and rules 1–8, settled 2026-11-19).
 iPhone is the reference design; web and Mac follow it. Start with the index.
 
 | Board | What it holds |

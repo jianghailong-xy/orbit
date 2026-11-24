@@ -1,5 +1,5 @@
 /**
- * One-file share links (docs/orbit-files-drive-technical-design.md §9; migration 1340; share-links.service.ts putDriveFile),
+ * One-file share links (docs/documents-drive-technical-design.md §9; migration 1340; share-links.service.ts putDriveFile),
  * over a real PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty, through the real controllers' methods:
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/share-links/share-links-drive-file.pg.spec.ts

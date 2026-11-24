@@ -1,5 +1,5 @@
 /**
- * `file_upload --as test-report` at its door (docs/orbit-files-design.md §2.5; migration 0465), held against the
+ * `file_upload --as test-report` at its door (docs/documents-design.md §2.5; migration 0465), held against the
  * production apiserver — `build/main.js`, multer and every guard and pipe in front of the route — over a real PostgreSQL
  * that `scripts/run-pg-spec.sh` migrates from empty:
  *

@@ -26,7 +26,7 @@ interface IncomingFilePart {
 /**
  * The multer storage engine of the attachment upload routes (`POST /attachments`, `POST
  * /runner/sessions/:id/attachments`), in place of multer's memory storage: each file part is streamed to a
- * temporary file in `<files dir>/tmp/` and hashed as it arrives (docs/orbit-files-design.md §2.1), so an
+ * temporary file in `<files dir>/tmp/` and hashed as it arrives (docs/documents-design.md §2.1), so an
  * upload is never held in memory whole — the route then keeps it in the file store (FilesService.store),
  * and FileUploadCleanupInterceptor removes it on any other ending of the request.
  *

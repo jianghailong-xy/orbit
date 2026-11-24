@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// The Documents drive is read-only in Plan mode (docs/orbit-files-drive-technical-design.md §7.2, test row 59*): where the
+// The Documents drive is read-only in Plan mode (docs/documents-drive-technical-design.md §7.2, test row 59*): where the
 // runner answers an engine's permission request, a Plan-mode write under the drive is refused with no card filed,
 // reads are not refused, and the other modes ask as before. Walk 350KSODTF8PzMHyZ3bSxP round 3 had a Claude Plan
 // session's Write and Bash calls into ~/Documents filed as cards, and an Allow on one wrote the drive.

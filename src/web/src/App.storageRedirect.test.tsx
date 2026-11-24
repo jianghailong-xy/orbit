@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 
 /**
- * Storage moved into Documents (docs/mocks/orbit-files, board choice a): /settings/storage, and the address of one of its
+ * Storage moved into Documents (docs/mocks/documents, board choice a): /settings/storage, and the address of one of its
  * rows' files, lead to Documents → Storage, with the address bar left at the new address.
  */
 

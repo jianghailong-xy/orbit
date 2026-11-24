@@ -1,5 +1,5 @@
 /**
- * Evidence that cites a file (docs/orbit-files-design.md §2.4, §2.7), held against the production apiserver — `build/main.js`
+ * Evidence that cites a file (docs/documents-design.md §2.4, §2.7), held against the production apiserver — `build/main.js`
  * and every guard and pipe in front of the routes — over a real PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty:
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/tasks/file-evidence.pg.spec.ts
@@ -22,7 +22,7 @@
  *   (6) the coordinator is told each cited file and the call that fetches it, and evidence with no FILE check reads as ever;
  *   (7) in no project the dispatching session judges: it reads the files, and its review block lists them;
  *   (8) `file_list` by evidence version answers what that version cites, for an older version too, and a bundle as one row;
- *   (9) a row from before Orbit Files is given its sha256 when it is cited, and a task's input may be cited;
+ *   (9) a row from before Documents is given its sha256 when it is cited, and a task's input may be cited;
  *  (10) the app's door saves evidence the same way.
  *
  * Not destructive: every row belongs to users this run creates.
@@ -372,7 +372,7 @@ test('evidence that cites a file', { skip: !URL, concurrency: 1, timeout: 600_00
     assert.deepEqual({ status: theirs.status, json: theirs.json }, { status: nothing.status, json: nothing.json }, 'another account\'s file is a file that is not there');
     const malformed = await submit(work, [work.tool, { kind: 'FILE', ref: 'not an id' }]);
     assert.deepEqual({ status: malformed.status, json: malformed.json }, { status: nothing.status, json: nothing.json });
-    // A drive file (docs/orbit-files-drive-technical-design.md §4.5) by any spelling: its content changes under its name, so
+    // A drive file (docs/documents-drive-technical-design.md §4.5) by any spelling: its content changes under its name, so
     // it is refused by name, pointing at file_upload, which makes the evidence copy.
     for (const ref of ['/home/orbit/Documents/Proj/report.md', '~/Documents/Proj/report.md', '/home/orbit/Files/Proj/report.md', '~/Files/Proj/report.md', '/run/orbit-documents/drive/Proj/report.md', '/run/orbit-files/drive/Proj/report.md', 'orbit-document:3bXk9sQ2a', 'orbit-drive:3bXk9sQ2a']) {
       const drive = await submit(work, [work.tool, { kind: 'FILE', ref }]);
@@ -567,7 +567,7 @@ test('evidence that cites a file', { skip: !URL, concurrency: 1, timeout: 600_00
     assert.equal(ownReads.status, 404, 'another account\'s version names nothing');
   });
 
-  await t.test('(9) a row from before Orbit Files is hashed when it is cited, and a task\'s input may be cited', async () => {
+  await t.test('(9) a row from before Documents is hashed when it is cited, and a task\'s input may be cited', async () => {
     const old = await workOf('work citing an old file', project);
     const bytes = png(320, 200);
     const legacy = await db.attachment.create({

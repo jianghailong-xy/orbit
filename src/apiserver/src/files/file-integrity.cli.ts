@@ -1,5 +1,5 @@
 /**
- * `files orphans` and `files verify` (docs/orbit-files-drive-technical-design.md §10.3), from a shell against DATABASE_URL and
+ * `files orphans` and `files verify` (docs/documents-drive-technical-design.md §10.3), from a shell against DATABASE_URL and
  * the deployment's ORBIT_DOCUMENTS_* settings:
  *
  *   node src/apiserver/dist/files/file-integrity.cli.js orphans [--delete]

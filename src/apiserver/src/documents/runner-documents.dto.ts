@@ -16,7 +16,7 @@ import {
 import { IsPublicId } from '../common/public-id';
 
 /**
- * The bodies of the runner drive door (docs/orbit-files-drive-technical-design.md §4.2). An entry is named by its drive
+ * The bodies of the runner drive door (docs/documents-drive-technical-design.md §4.2). An entry is named by its drive
  * path (`/Proj/r.md`, from the drive's root) or by its id; the owner is always the credential's.
  */
 

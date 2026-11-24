@@ -83,7 +83,7 @@ function claudeCheckOnly(level: AccessLevel | null | undefined, provider: string
  *     schedule the run serves and to its envelope (§8.3), and read the condition a WHEN rule's run was started by
  *     (`condition_get`, docs/condition-triggers-design.md §8);
  *   * `notify`, a line in front of the owner;
- *   * reads: tasks, sessions, projects, the wiki and Orbit Files;
+ *   * reads: tasks, sessions, projects, the wiki and Documents;
  *   * the guide, which reads the operation catalogue and asks the server nothing.
  *
  * Absent on purpose: `bg_run` (a shell outside Claude's check), `session_merge`, `task_start`, `task_update`,

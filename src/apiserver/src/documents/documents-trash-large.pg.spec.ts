@@ -1,5 +1,5 @@
 /**
- * A folder of 100,000 entries to Trash, back, and deleted for good (docs/orbit-files-drive-technical-design.md
+ * A folder of 100,000 entries to Trash, back, and deleted for good (docs/documents-drive-technical-design.md
  * §1.4, §3.3, §3.5), over a real
  * PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty, through the owner's routes on the real controller:
  *
@@ -63,7 +63,7 @@ interface SeenTransaction {
   accountLock?: boolean;
 }
 
-test('Orbit Files drive: bounded Trash operations on folders of 100,000 entries', {
+test('Documents drive: bounded Trash operations on folders of 100,000 entries', {
   skip: !URL, concurrency: 1, timeout: 1_200_000,
 }, async (t) => {
   const url = URL!;

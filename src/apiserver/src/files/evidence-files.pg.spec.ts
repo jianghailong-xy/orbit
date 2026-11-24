@@ -1,5 +1,5 @@
 /**
- * What an evidence card reads (docs/orbit-files-design.md §2.6): `GET /tasks/:taskId/evidence/:revision/files`, held against
+ * What an evidence card reads (docs/documents-design.md §2.6): `GET /tasks/:taskId/evidence/:revision/files`, held against
  * the production apiserver — `build/main.js` and every guard and pipe in front of the route — over a real PostgreSQL that
  * `scripts/run-pg-spec.sh` migrates from empty:
  *

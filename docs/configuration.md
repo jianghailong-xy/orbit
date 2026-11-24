@@ -121,9 +121,9 @@ Two deployment values matter to it:
 
 See [Google sign-in](self-hosting.md#google-sign-in) for the Google Cloud console steps and who can sign in.
 
-### Orbit Files
+### Documents
 
-Attachment bytes live outside PostgreSQL: one copy per content, named by its sha256 ([design](orbit-files-design.md)).
+Attachment bytes live outside PostgreSQL: one copy per content, named by its sha256 ([design](documents-design.md)).
 `local` keeps them under `./data/files`, which Compose mounts at `/var/lib/orbit/files`; `s3` keeps them in an
 S3-compatible bucket addressed path-style under `files/`. Uploads are written to the files directory's `tmp/` first
 with either backend. An invalid backend, an incomplete S3 configuration, or an endpoint that is not `http://` or

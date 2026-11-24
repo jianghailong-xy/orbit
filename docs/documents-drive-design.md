@@ -1,13 +1,13 @@
-# Orbit Files: the account's drive (product proposal)
+# Documents: the account's drive (product proposal)
 
 Status: **product decisions settled, round 4** (owner, 2026-11-19), after two reviews by a second model. Next: the
-feasibility check for the mount, then the board under `docs/mocks/orbit-files/`, then the technical design. This
-builds on `docs/orbit-files-design.md` (sha256-addressed bytes, `file_upload`, `FILE` evidence) and adds a drive the
+feasibility check for the mount, then the board under `docs/mocks/documents/`, then the technical design. This
+builds on `docs/documents-design.md` (sha256-addressed bytes, `file_upload`, `FILE` evidence) and adds a drive the
 owner and agents share.
 
 ## One sentence
 
-Each account has one drive, **Orbit Files**. The owner sees it under **Files** in the left menu; every Orbit Cloud
+Each account has one drive, **Documents**. The owner sees it under **Files** in the left menu; every Orbit Cloud
 agent sees the same drive as the local folder **`/home/orbit/Files`** (`~/Files`). What is put there is kept until
 someone deletes it.
 
@@ -94,7 +94,7 @@ for the account, no count: nothing in it waits on the owner.
   mode and read-only in Plan mode (D16).
 - No Trash folder (D11).
 - A reply can link a drive file (D21), and messages from the owner can carry drive paths from the composer's picker.
-- The guidance says: *`/home/orbit/Files` is the owner's Orbit Files drive. What you put there they see under Files,
+- The guidance says: *`/home/orbit/Files` is the owner's Documents drive. What you put there they see under Files,
   and it is kept. Put output for a project under `/home/orbit/Files/<Project>/` unless told otherwise. It is not a
   place for repositories, databases or build output. In a verification, judgment or guest-driven run, read it and do
   not write to it.*
@@ -176,7 +176,7 @@ quotas; folder share links; HTML, log and test-report preview; replacing git for
 
 1. Feasibility check: one read-write mount per Cloud runner, made outside the agent's container and passed in, on
    Kubernetes and on Docker.
-2. Board `docs/mocks/orbit-files/`: the left menu entry, the Files page (folders, preview, upload, share with the
+2. Board `docs/mocks/documents/`: the left menu entry, the Files page (folders, preview, upload, share with the
    secret warning, grouped Trash, Storage, who wrote it), the composer's drive picker, a reply linking a drive file, and
    the phone layout.
 3. Technical design.

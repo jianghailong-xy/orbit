@@ -1,5 +1,5 @@
 /**
- * The owner's resumable upload and ranged download (docs/orbit-files-drive-technical-design.md §4.1;
+ * The owner's resumable upload and ranged download (docs/documents-drive-technical-design.md §4.1;
  * documents/documents-uploads.service.ts, documents-content.service.ts, documents.controller.ts), over a real PostgreSQL that
  * `scripts/run-pg-spec.sh` migrates from empty, with the chunks on a files directory of this run's:
  *
@@ -54,7 +54,7 @@ const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
 const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 
-test('Orbit Files drive: resumable upload and ranged download', { skip: !URL, concurrency: 1, timeout: 600_000 }, async (t) => {
+test('Documents drive: resumable upload and ranged download', { skip: !URL, concurrency: 1, timeout: 600_000 }, async (t) => {
   const url = URL!;
   assertCoordinatorPgUrlIsIsolated(url);
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });

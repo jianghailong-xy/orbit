@@ -308,7 +308,7 @@ describe('Machines & models, which has no sidebar row (docs/mocks/machines-and-m
   });
 });
 
-// Orbit Files (docs/mocks/orbit-files/02-web, frame 1): the row directly under the Wiki, with no count and no shortcut.
+// Documents (docs/mocks/documents/02-web, frame 1): the row directly under the Wiki, with no count and no shortcut.
 describe('Files, the row under the Wiki', () => {
   const litTopEntries = () =>
     [...container!.querySelectorAll<HTMLElement>('.tp-section .tp-item.active .tp-label')].map((label) => label.textContent);

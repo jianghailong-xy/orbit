@@ -297,7 +297,7 @@ export class ShareLinksService {
 
   /**
    * Share one drive file, pinned to `versionId` (the version the owner's share check just read): open its link, or move the
-   * link it has to that version (docs/orbit-files-drive-technical-design.md §9). Only the owner's routes call this. The same
+   * link it has to that version (docs/documents-drive-technical-design.md §9). Only the owner's routes call this. The same
    * version twice changes nothing. A file in Trash cannot be shared.
    */
   async putDriveFile(ownerId: string, entryId: string, versionId: string, expiresAtRaw?: string | null): Promise<ShareLinkView> {

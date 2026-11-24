@@ -5792,7 +5792,7 @@ export class RunnerApiController {
   }
 
   /**
-   * A file an agent keeps with `file_upload` (docs/orbit-files-design.md §2.3). A route of its own rather than fields on
+   * A file an agent keeps with `file_upload` (docs/documents-design.md §2.3). A route of its own rather than fields on
    * the one above: an older server takes those fields, ignores them and answers 200, while this path answers it 404,
    * which the runner reports. It streams and cleans up exactly as the one above does, and FilesService.uploadFile says
    * what `taskId` may be. A remote SubAgent keeps its file under its parent's session by naming its run

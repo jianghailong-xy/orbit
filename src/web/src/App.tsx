@@ -88,7 +88,7 @@ function StorageSettingsRedirect() {
   return <Navigate to={`/documents/storage/${kind}/${id}`} replace />;
 }
 
-/** The old /files/* addresses (Orbit Files was renamed Documents) lead to /documents/* with the query kept. */
+/** The old /files/* addresses (the drive was renamed Documents) lead to /documents/* with the query kept. */
 function FilesRedirect() {
   const { '*': rest } = useParams();
   const { search } = useLocation();
@@ -327,7 +327,7 @@ export function App() {
             <Route path="general" element={<GeneralSettingsPage />} />
             <Route path="notifications" element={<NotificationsSettingsPage />} />
             <Route path="appearance" element={<AppearanceSettingsPage />} />
-            {/* Storage moved into Documents (docs/mocks/orbit-files, board choice a): the old addresses lead there. */}
+            {/* Storage moved into Documents (docs/mocks/documents, board choice a): the old addresses lead there. */}
             <Route path="storage" element={<Navigate to="/documents/storage" replace />} />
             <Route path="storage/:kind/:id" element={<StorageSettingsRedirect />} />
             <Route path="profile" element={<ProfilePage />} />
@@ -401,7 +401,7 @@ export function App() {
                 </FlushView>
               }
             />
-            {/* Documents, the account's drive (docs/mocks/orbit-files/02-web): `?folder=` opens a folder and `?file=`
+            {/* Documents, the account's drive (docs/mocks/documents/02-web): `?folder=` opens a folder and `?file=`
                 picks a file in it; its Trash is reached from inside it. */}
             <Route
               path="documents"
@@ -421,7 +421,7 @@ export function App() {
                 </FlushView>
               }
             />
-            {/* Orbit Files was renamed Documents: every old /files address keeps working, query string included. */}
+            {/* The drive was renamed Documents: every old /files address keeps working, query string included. */}
             <Route path="files" element={<FilesRedirect />} />
             <Route path="files/*" element={<FilesRedirect />} />
             {/* The Waiting on you inbox is gone; its old address opens the session that filed the request. */}

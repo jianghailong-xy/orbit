@@ -190,7 +190,7 @@ const TOP: TopNavItem[] = [
   // the Workspaces; this one stands for them all, as Projects does: the whole count, the one way in on
   // the collapsed rail, and the way to a first wiki for an account with none to list.
   { key: 'wiki', icon: <SidebarNavIcon name="wiki" />, label: 'Wiki' },
-  // Orbit Files, the account's drive, directly under the Wiki (docs/mocks/orbit-files/02-web, frame 1). No count and no
+  // Documents, the account's drive, directly under the Wiki (docs/mocks/documents/02-web, frame 1). No count and no
   // shortcut: nothing in Files waits on the owner. Its Trash and earlier versions are reached from inside it.
   { key: 'documents', icon: <SidebarNavIcon name="files" />, label: 'Documents' },
   // No Following here: its watches are the waits agents keep for their own sessions, already shown

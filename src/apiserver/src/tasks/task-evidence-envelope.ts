@@ -188,7 +188,7 @@ function refuseShape(why: string): never {
 }
 
 /**
- * Whether a FILE reference names a drive file (docs/orbit-files-drive-technical-design.md §4.5): an `orbit-document:` link
+ * Whether a FILE reference names a drive file (docs/documents-drive-technical-design.md §4.5): an `orbit-document:` link
  * (or `orbit-drive:`, its scheme before the Documents rename), or a path by any of the drive's spellings on Orbit Cloud. The drive's content changes under its name (D17), so it is
  * never what evidence binds; `file_upload` of the path makes the evidence copy that is.
  */
@@ -465,7 +465,7 @@ async function resolveArtifact(
  * bundle is its manifest's row, whose sha256 binds every file it lists (`FileBundleManifest`). Whose a row is can be read
  * off the row, so this takes one query where the other resolvers take two.
  *
- * A row with no sha256 has no bytes to bind and is not found. Only a row from before Orbit Files could be one, and saving
+ * A row with no sha256 has no bytes to bind and is not found. Only a row from before Documents could be one, and saving
  * a citation gives such a row its sha256 first (`FilesService.prepareCitedFiles`).
  */
 async function resolveFile(
@@ -787,7 +787,7 @@ export async function describeCitedFiles(
 }
 
 /**
- * What a revision's decider reads about its files (docs/orbit-files-design.md §2.7): each one, and the call that fetches
+ * What a revision's decider reads about its files (docs/documents-design.md §2.7): each one, and the call that fetches
  * it. Listed rather than delivered, because the p90 of evidence is 142 files and a judgment usually wants a few.
  */
 export function citedFilesBlock(files: ReadonlyArray<CitedFileLine>): string {

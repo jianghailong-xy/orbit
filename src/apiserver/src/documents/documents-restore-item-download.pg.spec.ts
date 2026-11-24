@@ -1,5 +1,5 @@
 /**
- * Two owner routes of the Files page (docs/orbit-files-drive-technical-design.md §3.5, §4.1; board 02-web frame 6, D12),
+ * Two owner routes of the Files page (docs/documents-drive-technical-design.md §3.5, §4.1; board 02-web frame 6, D12),
  * over a real PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty, with chunks on a files directory of this run's:
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/documents/documents-restore-item-download.pg.spec.ts
@@ -51,7 +51,7 @@ const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
 const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 
-test('Orbit Files drive: restore one item out of Trash, and the minted download URL', { skip: !URL, concurrency: 1, timeout: 600_000 }, async (t) => {
+test('Documents drive: restore one item out of Trash, and the minted download URL', { skip: !URL, concurrency: 1, timeout: 600_000 }, async (t) => {
   const url = URL!;
   assertCoordinatorPgUrlIsIsolated(url);
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });

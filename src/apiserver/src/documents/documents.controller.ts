@@ -22,7 +22,7 @@ export const DOCUMENTS_PAT = () => PatScope('documents', { workspaceConfinable: 
 const limitOf = (limit?: string) => (limit === undefined ? undefined : Number.parseInt(limit, 10));
 
 /**
- * The owner's drive routes (docs/orbit-files-drive-technical-design.md §4.1), under the owner's login: folders and files,
+ * The owner's drive routes (docs/documents-drive-technical-design.md §4.1), under the owner's login: folders and files,
  * versions, Trash and the change feed. The owner is always the credential's; another account's entry, version or group
  * is not found. Usage and the share check are their own tasks' routes. A token reaches them with the
  * `documents` scope (DOCUMENTS_PAT), declared on each handler like every scope; without it the guard refuses with the scope's 403.

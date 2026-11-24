@@ -1,5 +1,5 @@
 /**
- * The doors behind `file_upload`, `file_fetch` and `file_list` (docs/orbit-files-design.md §2.2, §2.3; migration 0464),
+ * The doors behind `file_upload`, `file_fetch` and `file_list` (docs/documents-design.md §2.2, §2.3; migration 0464),
  * held against the production apiserver — `build/main.js`, multer and every guard and pipe in front of the routes — over
  * a real PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty:
  *

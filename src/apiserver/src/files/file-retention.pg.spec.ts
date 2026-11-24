@@ -1,5 +1,5 @@
 /**
- * Orbit Files' retention (docs/orbit-files-design.md §2.8, §2.10; migration 0466; files/file-retention.ts,
+ * Documents' retention (docs/documents-design.md §2.8, §2.10; migration 0466; files/file-retention.ts,
  * files/file-retention-sweep.ts), walked with a fake clock: uploads, citations, decisions and pins go through the production
  * apiserver — `build/main.js`, every guard and pipe in front of the routes — and the sweep is the real one, over the same
  * database and files directory, told what time it is:
@@ -84,7 +84,7 @@ const fresh = (name: string) => `${name} ${randomBytes(12).toString('hex')}\n`;
 
 const SAMPLES = path.resolve(__dirname, '../../src/files/test-report-samples');
 
-test('Orbit Files retention', { skip: !URL, concurrency: 1, timeout: 900_000 }, async (t) => {
+test('Documents retention', { skip: !URL, concurrency: 1, timeout: 900_000 }, async (t) => {
   const url = URL!;
   assertCoordinatorPgUrlIsIsolated(url);
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });

@@ -193,9 +193,9 @@ The previous backend was Docker on the same host (`orbit-ws03`, channel at `http
 - The fast path's runtime log (`checkout index: filled …`) appears only when a session creates a checkout; the image
   version was verified, but the log had not yet been observed at the switch.
 
-## Orbit Files RGW storage
+## Documents RGW storage
 
-The production Orbit Files data pool is `orbit-files.rgw.buckets.data`. Its `max_bytes` quota is
+The production Documents data pool is `orbit-files.rgw.buckets.data`. Its `max_bytes` quota is
 **10 TiB (10,995,116,277,760 bytes)**. Set `ORBIT_DOCUMENTS_STORE_QUOTA_BYTES=10995116277760` when
 deploying the S3 backend. The S3 bucket is `orbit-files`.
 Keep `ORBIT_DOCUMENTS_S3_ACCESS_KEY_ID` and `ORBIT_DOCUMENTS_S3_SECRET_ACCESS_KEY` in the production

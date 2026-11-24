@@ -13,7 +13,7 @@ function usage(extra: Partial<StorageUsage> = {}): StorageUsage {
     totalBytes: Math.round(1.5 * GB),
     fileCount: 3120,
     quotaBytes: null,
-    projects: [{ projectId: 'p1', title: 'Orbit Files', bytes: GB, fileCount: 2000 }],
+    projects: [{ projectId: 'p1', title: 'Documents', bytes: GB, fileCount: 2000 }],
     tasks: [
       { taskId: 't1', title: 'Web evidence card', bytes: 300 * MB, fileCount: 40 },
       { taskId: 't2', title: 'Retention', bytes: 12 * MB, fileCount: 3 },
@@ -55,7 +55,7 @@ describe('Files → Storage', () => {
   it('says what the account keeps, where most of it is, and what each week added', () => {
     const text = card(render(usage()));
     expect(text).toContain('|1.5 GB · 3,120 files|');
-    expect(text).toContain('Largest projects|Orbit Files|1.0 GB|');
+    expect(text).toContain('Largest projects|Documents|1.0 GB|');
     expect(text).toContain('Largest tasks|Web evidence card|300.0 MB|Retention|12.0 MB|');
     expect(text).toContain('Added each week|Week of Nov 2|118.0 MB|Week of Oct 26|5.0 MB|');
     expect(text).not.toContain(' of 1');

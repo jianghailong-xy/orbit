@@ -1,5 +1,5 @@
 /**
- * The Documents drive's wiring on the manager's side (docs/orbit-files-drive-technical-design.md §4.3, §6.1, §8.2):
+ * The Documents drive's wiring on the manager's side (docs/documents-drive-technical-design.md §4.3, §6.1, §8.2):
  * with a profile that gives runners the drive, the manager issues each generation's mount credential with its runner
  * credential and writes it into Secret `mrf-<runner uuid>` of the files namespace before it creates the Pod; the Pod
  * carries the one drive volume and the admission guard admits it; retiring the generation (sleep) revokes the

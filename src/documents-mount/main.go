@@ -1,4 +1,4 @@
-// Command orbit-documents-mount presents the account's Documents drive at /run/orbit-documents/drive (docs/orbit-files-
+// Command orbit-documents-mount presents the account's Documents drive at /run/orbit-documents/drive (docs/documents-
 // drive-technical-design.md §5), which the runner shows its agents as /home/orbit/Documents.
 //
 //	orbit-documents-mount mount --root /run/orbit-documents --spool /var/lib/orbit-documents-spool/<runner> --server URL \

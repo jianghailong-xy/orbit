@@ -1,5 +1,5 @@
 /**
- * The mount daemon's finish line (docs/orbit-files-drive-technical-design.md §5.9): every shell operation of the list,
+ * The mount daemon's finish line (docs/documents-drive-technical-design.md §5.9): every shell operation of the list,
  * run as uid 10001 through a real FUSE mount made the way the privileged parent makes it (src/documents-mount), against
  * the production apiserver (`node build/main.js`) over a real PostgreSQL that `scripts/run-pg-spec.sh` migrates:
  *
@@ -232,7 +232,7 @@ function mounted(point: string): boolean {
   return mountpoints().some((m) => m.point === point && m.type === 'fuse.orbit-documents');
 }
 
-test('Orbit Files drive: the mount daemon passes the shell-operation list (§5.9)', {
+test('Documents drive: the mount daemon passes the shell-operation list (§5.9)', {
   skip: !URL ? 'no COORDINATOR_PG_URL' : usable || false,
   concurrency: 1,
   timeout: 4 * 60 * 60 * 1000,
@@ -1548,7 +1548,7 @@ f = open('$F/long52.log', 'w'); f.write('one line\\n'); f.flush(); time.sleep(70
     d.push(`a call blocked ${(blocked / 1000).toFixed(1)} s until the watchdog aborted the connection: the call in flight got "${/Software caused connection abort|Transport endpoint is not connected/.exec(s.out)![0]}" (the kernel's errno for requests in flight on an abort; later calls get "Transport endpoint is not connected"); recovered as in 53`);
   });
 
-  // Row 56 (docs/orbit-files-drive-technical-design.md §5.9, §7.2): for each engine's own sandbox, a process started
+  // Row 56 (docs/documents-drive-technical-design.md §5.9, §7.2): for each engine's own sandbox, a process started
   // under it writes and reads ~/Documents, the daemon is SIGKILLed, the parent remounts, and the SAME process writes and reads
   // again. Cursor's is bwrap with the parent bound (cursor_sandbox.go wrap); Codex's is `codex sandbox`, whose writable
   // roots are the ones codexSandboxPolicy names. Claude Code, OpenCode, Antigravity, Kimi and DSH run no OS sandbox of

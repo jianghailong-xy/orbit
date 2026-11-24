@@ -1,4 +1,4 @@
-// Package door speaks the runner drive door, /api/runner/documents/* (docs/orbit-files-drive-technical-design.md §4.2,
+// Package door speaks the runner drive door, /api/runner/documents/* (docs/documents-drive-technical-design.md §4.2,
 // §4.3), for the mount daemon.
 //
 //   - Every request carries the mount credential and the managed-runner instance it was issued for (generation and

@@ -316,7 +316,7 @@ services:
       # The GitHub repository (owner/repo) this build was released from: where Help → Still stuck → Report on GitHub
       # opens a new issue. Empty is Orbit's own.
       ORBIT_RELEASE_REPOSITORY: "${ORBIT_RELEASE_REPOSITORY:-}"
-      # Documents and attachments (docs/orbit-files-design.md §2.10): where their bytes are kept, one copy per content, named by
+      # Documents and attachments (docs/documents-design.md §2.10): where their bytes are kept, one copy per content, named by
       # its sha256; Postgres keeps only what describes each file. local (the default) is ./data/files, mounted below.
       # s3 is an S3-compatible bucket, addressed path-style at the endpoint, and needs the bucket and key pair below;
       # the region defaults to us-east-1. Uploads are written to ./data/files/tmp first with either. Each ORBIT_DOCUMENTS_*

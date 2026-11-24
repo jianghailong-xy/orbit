@@ -1,6 +1,6 @@
 //go:build linux
 
-// Package parent is the privileged parent of one runner's mount daemon (docs/orbit-files-drive-technical-design.md
+// Package parent is the privileged parent of one runner's mount daemon (docs/documents-drive-technical-design.md
 // §5.1, §5.7, §5.8): it opens /dev/fuse, mounts fuse.orbit-documents at <root>/drive, and starts the daemon with the FUSE
 // descriptor inherited, as an unprivileged user with no capabilities, which serves it through go-fuse's /dev/fd/N
 // mountpoint. It is what the CSI plugin (Kubernetes) or the Docker mounter runs per runner.

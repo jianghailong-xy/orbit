@@ -2014,7 +2014,7 @@ export class ManagedRunnerManager {
 
   /**
    * The Documents drive's mount credential of the mapping's generation, delivered for the mounter before any
-   * instance of the generation is created (docs/orbit-files-drive-technical-design.md §4.3, §6.1): the CSI plugin reads
+   * instance of the generation is created (docs/documents-drive-technical-design.md §4.3, §6.1): the CSI plugin reads
    * it when the kubelet publishes the drive. An older generation's is removed first. Issuing revokes every live mount
    * credential of the runner, this generation's included, so one that was issued and never delivered (a crash, a
    * failed create) holds nothing. Null once it is in place, or where runners receive no drive.

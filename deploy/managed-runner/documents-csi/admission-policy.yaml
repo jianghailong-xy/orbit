@@ -1,4 +1,4 @@
-# Who may name the driver (docs/orbit-files-drive-technical-design.md §6.1, review B13), layer 1 of 3: cluster-wide,
+# Who may name the driver (docs/documents-drive-technical-design.md §6.1, review B13), layer 1 of 3: cluster-wide,
 # no Pod outside the managed-runner namespace may have a volume of documents.orbit.dev. Orbit's webhook answers only for
 # the managed namespace (../admission/pod-admission-webhook.template.json), so it cannot be this guard. Inside that
 # namespace the webhook allows exactly one such volume, naming the Pod's own runner (layer 2), and the plugin checks
