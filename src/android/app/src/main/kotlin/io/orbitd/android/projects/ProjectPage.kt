@@ -979,8 +979,10 @@ object StartProjectCopy {
     const val defaultEscalationSeconds = 7_200
     /** `CriteriaDecisions.shortSeal`: enough to tell two seals apart. */
     fun shortSeal(seal: String) = if (seal.isEmpty()) "(unreadable)" else seal.take(12)
-    /** The project branch as the first option names it, without `refs/heads/`. */
-    fun branch(projectBranchName: String?, projectId: String) = (projectBranchName ?: "refs/heads/project/$projectId").removePrefix("refs/heads/")
+    /** The project branch as the first option names it, without `refs/heads/`: the one the request names, else the server's default
+     * ([defaultProjectBranchName], a full ref), else `project/<id>` for a server that sends neither. */
+    fun branch(projectBranchName: String?, defaultProjectBranchName: String?, projectId: String) =
+        (projectBranchName ?: defaultProjectBranchName ?: "refs/heads/project/$projectId").removePrefix("refs/heads/")
 
     fun doneWhenHead(count: Int) = "$doneWhen · $count ${if (count == 1) "criterion" else "criteria"}"
     /** "Plan · 12 tasks in 7 levels": the levels only when there are more than one. */
@@ -1215,8 +1217,9 @@ object StartProjectCopy {
         (if (ProjectMainBranch.chosenAt(view) != null) view?.text("upstreamRef") else null) ?: ProjectMainBranch.lastChoice(view)?.branch ?: suggested)
 
     /** What the card is drawn from (`ProjectStartRequest`): the coordinator's request, or the owner's own with nobody quoted. */
-    data class Request(val settings: Settings, val why: String, val criteriaDigest: String)
-    fun ownerRequest(settings: Settings, criteriaDigest: String) = Request(settings, "", criteriaDigest)
+    data class Request(val settings: Settings, val why: String, val criteriaDigest: String, val defaultProjectBranchName: String? = null)
+    /** [defaultProjectBranchName] is a full ref; the integration read names it short, so the caller adds `refs/heads/`. It only labels the card. */
+    fun ownerRequest(settings: Settings, criteriaDigest: String, defaultProjectBranchName: String? = null) = Request(settings, "", criteriaDigest, defaultProjectBranchName)
     /** The open `START_REQUEST` row's request, or null when its settings are not whole settings this build can read. */
     fun request(row: JsonObject?): Request? {
         val asked = row?.obj("startRequest") ?: return null
@@ -1229,7 +1232,8 @@ object StartProjectCopy {
         val check = when (val value = settings["mergeCheckCommand"]) { null, JsonNull -> null; is JsonPrimitive -> if (value.isString) value.content else return null; else -> return null }
         val digest = asked.text("criteriaDigest") ?: return null
         return Request(Settings(line, settings.text("projectBranchName"), automatic, count, check, settings.text("upstreamRef"),
-            settings.text("landingCheckCommand"), settings.number("landingCheckTimeoutSeconds"), settings.number("mergeCheckTimeoutSeconds")), asked.text("why").orEmpty(), digest)
+            settings.text("landingCheckCommand"), settings.number("landingCheckTimeoutSeconds"), settings.number("mergeCheckTimeoutSeconds")), asked.text("why").orEmpty(), digest,
+            asked.text("defaultProjectBranchName"))
     }
     /** The settings as the card edits them — opened with Automatic on whatever was suggested (`StartSettingsDraft`). `upstream` is
      * the main branch by name, `refs/heads/` left off: what the row shows and the picker takes — null for a project with no
@@ -1435,11 +1439,14 @@ object RunSettings {
     fun tasksAtATime(count: Int?) = "${if (count == 1) "task" else "tasks"} at a time"
     fun mergeCheckMissing(line: String?, automatic: Boolean, mergeCheckCommand: String?) =
         automatic && line == "PROJECT_BRANCH" && mergeCheckCommand.orEmpty().isBlank()
+    /** A branch as a row names it, `refs/heads/` off. Only the old bare-id form `project/<20+ base62 chars>` is cut to
+     * `project/xxxxx…`; a readable `project/foo-352xNyEH`, `project/352xNyEH` and any other name show in full (so does one with a newline). */
+    private val bareProjectId = Regex("[0-9A-Za-z]{20,}")
     fun shortBranch(ref: String): String {
         val name = ref.removePrefix("refs/heads/")
         if (!name.startsWith("project/")) return name
         val id = name.removePrefix("project/")
-        if (id.length < 6 || id.any { it == '\n' || it == '\r' }) return name
+        if (!bareProjectId.matches(id)) return name
         return "project/${id.take(5)}…"
     }
     fun lineInSentence(line: String?, main: String = defaultMainBranch) = if (line == "MAIN") "directly into $main" else "a project branch"

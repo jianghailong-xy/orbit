@@ -684,6 +684,7 @@ test('the detail item is the authored declaration, with no derived verdict besid
     project: {
       findFirst: async () => ({
         id: PROJECT_ID,
+        title: 'LFS',
         acceptanceCriterionDefinitions: [definition],
         _count: { tasks: 0 },
         members: [],

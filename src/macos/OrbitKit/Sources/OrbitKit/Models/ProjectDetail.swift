@@ -892,6 +892,10 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
     /// project with no binding. Not locked once integration starts. Nil from a server that predates
     /// it, which draws no Delivery row.
     public let deliveryMode: DeliveryMode?
+    /// The name the project's branch has, or would have, short (no `refs/heads/`):
+    /// `project/<title slug>-<8 chars of the id>`. Equals `ref` once the line is on a project
+    /// branch. Nil from a server that predates it.
+    public var defaultProjectBranch: String? = nil
 
     public init(line: IntegrationLine? = nil, ref: String? = nil, upstreamRef: String? = nil,
                 upstreamChosenAt: String? = nil, lastMainBranch: ProjectLastMainBranch? = nil,
@@ -903,9 +907,11 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
                 landingCheckCommand: String? = nil, landingCheckTimeoutSeconds: Int? = nil,
                 landingCheckCommandAbsentReason: String? = nil, mergeCheckTimeoutSeconds: Int? = nil,
                 escalationSeconds: Int? = nil, landTasks: [ProjectLandTask] = [],
-                inFlightJobs: [ProjectIntegrationJob]? = nil, deliveryMode: DeliveryMode? = nil) {
+                inFlightJobs: [ProjectIntegrationJob]? = nil, deliveryMode: DeliveryMode? = nil,
+                defaultProjectBranch: String? = nil) {
         self.line = line
         self.ref = ref
+        self.defaultProjectBranch = defaultProjectBranch
         self.upstreamRef = upstreamRef
         self.upstreamChosenAt = upstreamChosenAt
         self.lastMainBranch = lastMainBranch
@@ -961,6 +967,15 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
         // read: the landing row and How it runs still draw from the rest.
         inFlightJobs = try? c.decodeIfPresent([ProjectIntegrationJob].self, forKey: .inFlightJobs)
         deliveryMode = (try? c.decodeIfPresent(DeliveryMode.self, forKey: .deliveryMode)) ?? nil
+        defaultProjectBranch = (try? c.decodeIfPresent(String.self, forKey: .defaultProjectBranch)) ?? nil
+    }
+
+    /// The project branch as a client names it: the line's own ref once it is on one, else the
+    /// server's default name; `project/<id>` only from a server that sends neither.
+    public func projectBranchName(projectID: String) -> String {
+        let fallback = defaultProjectBranch ?? "project/\(projectID)"
+        guard line == .projectBranch else { return fallback }
+        return ref ?? fallback
     }
 }
 
