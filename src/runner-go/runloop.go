@@ -1565,9 +1565,10 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	}
 	pool := newSessionPool(startupConcurrency)
 	t.draining = pool.isDrainingForUpdate // every inbox fetch says whether the pool drains for an update
-	// A slot with nothing running under it is given back while the pool drains (§7.3), each in a request of its own.
+	// A slot with nothing running under it is given back while the pool drains (§7.3). Its callers run it on a
+	// goroutine of its own: it waits for the control plane's answer.
 	t.returnHeldSlot = func(sessionID string) {
-		go pool.returnHeldSlot(sessionID, func() (string, error) {
+		pool.returnHeldSlot(sessionID, func() (string, error) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			return t.returnSlot(ctx, sessionID)

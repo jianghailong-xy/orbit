@@ -210,7 +210,7 @@ func (p *inboxPoller) next(ctx context.Context) (*RunInboxResponse, error) {
 			// Stopped while its queued message waits for the update, the session holds a slot nothing runs under:
 			// it is given back, and the control plane, which the Stop left idle, says so (§7.4).
 			if p.t.draining != nil && p.t.draining() && p.t.returnHeldSlot != nil {
-				p.t.returnHeldSlot(p.sessionID)
+				go p.t.returnHeldSlot(p.sessionID)
 			}
 		}
 		return resp, nil

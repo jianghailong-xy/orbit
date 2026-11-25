@@ -279,7 +279,8 @@ type Transport struct {
 	// before any session starts; nil on every other transport, whose fetches say nothing.
 	draining func() bool
 	// returnHeldSlot gives back, while the pool drains for an update, the slot a session holds with no turn running
-	// under it (sessionPool.returnHeldSlot, §7.3). Set by runLoop with draining; nil on every other transport.
+	// under it (sessionPool.returnHeldSlot, §7.3), waiting for the control plane's answer, so its callers run it on a
+	// goroutine of their own. Set by runLoop with draining; nil on every other transport.
 	returnHeldSlot func(sessionID string)
 	// observer hears about every request and card of the tool call it was set for (transport_observe.go).
 	observerMu sync.Mutex

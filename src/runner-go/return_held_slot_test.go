@@ -100,13 +100,16 @@ func TestAnInterruptWhileDrainingGivesTheSlotBack(t *testing.T) {
 		if err != nil || resp == nil || resp.Kind != "interrupt" {
 			t.Fatalf("draining=%t: the interrupt was not handed on: %+v, %v", draining, resp, err)
 		}
-		mu.Lock()
-		got := append([]string(nil), returned...)
-		mu.Unlock()
-		if draining && (len(got) != 1 || got[0] != "stopped") {
+		got := func() []string { mu.Lock(); defer mu.Unlock(); return append([]string(nil), returned...) }
+		if draining {
+			waitWithin(t, 2*time.Second, func() bool { return len(got()) > 0 }, "an interrupt while draining gave no slot back")
+		} else {
+			time.Sleep(50 * time.Millisecond) // the slot return runs on a goroutine of its own
+		}
+		if got := got(); draining && (len(got) != 1 || got[0] != "stopped") {
 			t.Fatalf("an interrupt while draining gave back %q, want [stopped]", got)
 		}
-		if !draining && len(got) != 0 {
+		if got := got(); !draining && len(got) != 0 {
 			t.Fatalf("an interrupt while not draining gave back %q, want none", got)
 		}
 	}
