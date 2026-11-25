@@ -636,7 +636,7 @@ func runFakeCodexAppServer(dir string) int {
 	if data, err := os.ReadFile(filepath.Join(dir, "turnStart.json")); err == nil {
 		answers["turn/start"] = data
 	}
-	turnStarts := 0
+	turnStarts, turnInterrupts := 0, 0
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for scanner.Scan() {
@@ -650,6 +650,15 @@ func runFakeCodexAppServer(dir string) int {
 			continue
 		}
 		method, _ := frame["method"].(string)
+		if method == "turn/interrupt" {
+			turnInterrupts++
+			if served, ok := fakeCodexInterrupt(dir, id, turnInterrupts); ok {
+				if !served {
+					return 1
+				}
+				continue
+			}
+		}
 		reply := map[string]interface{}{"id": id}
 		answer, answered := answers[method]
 		if _, serves := answers["thread/start"]; serves && method == "thread/resume" {
@@ -682,6 +691,83 @@ func runFakeCodexAppServer(dir string) int {
 		}
 	}
 	return 0
+}
+
+// fakeCodexInterruptAnswer is how the fake answers one turn/interrupt (answerInterruptsWith): with
+// Result, or with Error, or — Silent — not at all; after WaitFor, a file in its dir the test writes
+// (releaseInterrupt), if it names one; and followed by Frames, as Codex follows a turn it stopped
+// with that turn's turn/completed.
+type fakeCodexInterruptAnswer struct {
+	Result  map[string]interface{}   `json:"result,omitempty"`
+	Error   string                   `json:"error,omitempty"`
+	Silent  bool                     `json:"silent,omitempty"`
+	WaitFor string                   `json:"waitFor,omitempty"`
+	Frames  []map[string]interface{} `json:"frames,omitempty"`
+}
+
+// answerInterruptsWith lets the fake take turn/interrupt: answers[n] is how it answers the (n+1)th.
+// One past the last is refused as an unknown method, as the fake refuses any it does not serve.
+func (f *fakeCodexBinary) answerInterruptsWith(t *testing.T, answers ...fakeCodexInterruptAnswer) {
+	t.Helper()
+	for i, answer := range answers {
+		data, err := json.Marshal(answer)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(f.dir, fmt.Sprintf("turnInterrupt-%d.json", i+1)), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// releaseInterrupt lets a turn/interrupt answer held on WaitFor name go out.
+func (f *fakeCodexBinary) releaseInterrupt(t *testing.T, name string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(f.dir, name), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// fakeCodexInterrupt serves the nth turn/interrupt from its answer file. ok is false when there is
+// none, and served false when stdout is gone.
+func fakeCodexInterrupt(dir string, id interface{}, n int) (served, ok bool) {
+	data, err := os.ReadFile(filepath.Join(dir, fmt.Sprintf("turnInterrupt-%d.json", n)))
+	if err != nil {
+		return false, false
+	}
+	var answer fakeCodexInterruptAnswer
+	if json.Unmarshal(data, &answer) != nil {
+		return false, false
+	}
+	if answer.WaitFor != "" {
+		for {
+			if _, err := os.Stat(filepath.Join(dir, answer.WaitFor)); err == nil {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	var out []byte
+	if !answer.Silent {
+		reply := map[string]interface{}{"id": id}
+		if answer.Error != "" {
+			reply["error"] = map[string]interface{}{"code": -32600, "message": answer.Error}
+		} else if answer.Result != nil {
+			reply["result"] = answer.Result
+		} else {
+			reply["result"] = map[string]interface{}{}
+		}
+		line, _ := json.Marshal(reply)
+		out = append(line, '\n')
+	}
+	for _, frame := range answer.Frames {
+		line, _ := json.Marshal(frame)
+		out = append(append(out, line...), '\n')
+	}
+	if _, err := os.Stdout.Write(out); err != nil {
+		return false, true
+	}
+	return true, true
 }
 
 // fakeCodexResume answers thread/resume the way codex 0.159 does: the thread whose rollout is under
