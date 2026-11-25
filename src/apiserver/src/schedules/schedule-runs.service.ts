@@ -25,11 +25,12 @@
  *
  * WATCHING AND ENDING (§6.4, §7)
  * ==============================
- * `schedule_run_report` ends a run, once, from the session serving it. Without one, what the session does decides:
- * an engine that ended, or whose session's phase is IDLE (no SubAgent, `bg_run` job or engine turn executing) with no
- * turn still to answer and nothing set to wake it (a scheduled wake-up, a RESUME_SESSION watch, an armed retry), is
- * NO_REPORT, which (like ENGINE_CRASHED) a report from that session still replaces once a person has written to it
- * (`acceptsLateReport`);
+ * `schedule_run_report` ends a run, once, from the session serving it. Without one, what the session does decides,
+ * read from its published state alone (schedule-run-session-reading.ts: the phase fields and `sessionWakes`, never a
+ * session column): a session released by a failure that nothing revives is ENGINE_CRASHED, released any other way
+ * NO_REPORT (an end asked for counts once it is released), and one held IDLE with nothing executing, queued or set to
+ * wake it is NO_REPORT once it has read so for SCHEDULE_IDLE_SETTLE_MS; a report from that session still replaces
+ * either once a person has written to it (`acceptsLateReport`);
  * a run past its limit is interrupted, RUN_LIMIT; a card nobody
  * answered for two hours interrupts it, APPROVAL_TIMEOUT. Whether the run reached its engine is read from its first
  * turn's `delivered_at`: a run that never did (RUNNER_UNAVAILABLE, QUOTA, ENGINE_CRASHED_BEFORE_START) has its
@@ -37,7 +38,8 @@
  * past it (§5.2: a slot not run, not a failure); one that did is never retried. A runner that is offline at the
  * start leaves the run waiting without an attempt. A session a full runner, run or batch holds keeps waiting for a
  * slot, with no 10-minute limit and no new attempt, until the catch-up deadline, then is MISSED (RUNNER_FULL). One run never has two live sessions (`start`, `fail`). `consecutiveFailures` counts
- * and nothing pauses. A NO_CHANGE run's session is completed; CHANGED and FAILED ones stay open.
+ * and nothing pauses. A NO_CHANGE run's session is completed once nothing works in it; CHANGED and FAILED ones stay
+ * open.
  */
 import {
   BadRequestException,

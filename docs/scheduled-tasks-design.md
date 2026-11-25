@@ -682,7 +682,8 @@ run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on y
 - Every run on Claude Code runs in Auto, whatever its access level (owner 2026-11-18), and so do the SubAgents it
   starts: a run waits on no card nobody is there to answer. The level's deny lists still apply in Auto. Other
   engines keep the level's mode: their Auto has no classifier.
-- A NO_CHANGE run completes its session. CHANGED and FAILED runs leave it open for follow-up questions.
+- A NO_CHANGE run completes its session, on the worker's pass once nothing works in it (a job or SubAgent it left
+  running is not stopped under it). CHANGED and FAILED runs leave it open for follow-up questions.
 - Archiving or deleting a run's session keeps the run row; the run shows its session as gone.
 
 ## 8. Creating and changing
