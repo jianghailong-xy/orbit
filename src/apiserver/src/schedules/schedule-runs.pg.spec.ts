@@ -598,6 +598,8 @@ test('§6.3 the run is a new session: runSource SCHEDULE, scheduleRunId, the mod
       '  Note from the last run: release notes moved to github.com/openai/codex/releases, the old changelog URL is 404.',
       '  Access: CHECK_ONLY. Limit: 30 minutes.',
       '  When you are done, call mcp__orbit__schedule_run_report exactly once.',
+      '  Ending your turn without it fails this run (NO_REPORT). To wait, use bg_run or a SubAgent: a watch, wakeup '
+        + 'or task_await does not keep the run open.',
       '</scheduled-run>',
       'Check the latest stable Codex release against the pinned version.',
     ].join('\n'),
