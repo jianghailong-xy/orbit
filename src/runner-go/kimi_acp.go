@@ -1850,6 +1850,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 	defer pollCancel()
 	// The generation's inbox: what fetches its turns, and the turnIds being processed.
 	inbox := newInboxPoller(t, job.SessionID, leaseGeneration)
+	inbox.holdTurns(waitTurnPermit, job, completeTurn) // a turn waiting for its permit does not stop the inbox being read
 	defer inbox.close()
 	inboxCh := make(chan *RunInboxResponse, 8)
 	app.wg.Add(1)

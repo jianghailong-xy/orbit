@@ -121,6 +121,8 @@ import {
   ReclaimResponse,
   ReclaimSession,
   ReleaseTurnLeasesRequest,
+  ReturnSlotRequest,
+  ReturnSlotResponse,
   RunEventBatch,
   RunEventType,
   RunStatus as SharedRunStatus,
@@ -1474,6 +1476,8 @@ function settlingFields(dto: TurnCompleteRequest): TurnCompleteRequest {
     // Zero says no engine turn ran, which decides whether its message is still owed its delivery.
     // Any other count books as the one turn a completion is when it reports none.
     ...(dto.numTurns === 0 ? { numTurns: 0 } : {}),
+    // Whether the turn's slot is kept for a follow-up (runner-update-drain-design.md §7.3) is the turn's settlement too.
+    ...(dto.draining === true ? { draining: true } : {}),
   };
 }
 
@@ -5717,6 +5721,49 @@ export class RunnerApiController {
     return { ok: true };
   }
 
+  /**
+   * A runner draining for an update gives back a slot under which no turn runs (docs/runner-update-drain-design.md
+   * §7.3): the claim it took for an engine running a turn of its own, once that turn has ended, or a claim whose queued
+   * message the draining inbox holds. The session goes back to the queue behind the update (PENDING, so it reads
+   * runner_updating) with its engine and inbox lease as they are, or idle when nothing is queued. A message or shell
+   * turn in flight keeps the slot, and so does the runner: the answer is the status, RUNNING. The runner is recorded as
+   * draining, as a draining turn completion records it.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('sessions/:id/return-slot')
+  @HttpCode(200)
+  async returnSlot(
+    @CurrentRunner() runner: { id: string },
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Body() dto?: ReturnSlotRequest,
+  ): Promise<ReturnSlotResponse> {
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
+    const leaseOwner = parseLeaseGeneration(dto?.leaseOwner, 'leaseOwner');
+    // Retried whole: whether anything runs is re-read under the session lock on every attempt.
+    const outcome = await withTransactionRetry(this.prisma, async (tx) => {
+      await this.lockSessionLeaseOwner(tx, sessionId, runner.id, leaseOwner);
+      const row = await tx.session.findUniqueOrThrow({ where: { id: sessionId }, select: { status: true, cancelRequestedAt: true } });
+      if (row.status !== RunStatus.RUNNING || row.cancelRequestedAt) return { status: row.status, returned: false };
+      const executable = (status: string) => tx.conversationTurn.count({
+        where: { sessionId, kind: { in: ['message', 'shell'] }, status },
+      });
+      if (await executable('IN_FLIGHT') > 0) return { status: row.status, returned: false };
+      const status = await executable('PENDING') > 0 ? RunStatus.PENDING : RunStatus.AWAITING_INPUT;
+      await tx.session.update({ where: { id: sessionId }, data: { status, engineTurnActive: false } });
+      return { status, returned: true };
+    }, loggedRetry(this.logger, 'runnerApi.returnSlot'));
+    await this.recordRunnerDraining(runner.id);
+    if (outcome.returned) this.realtime.publishSessionUpdated(sessionId);
+    return { ok: true, status: outcome.status };
+  }
+
+  /** What a draining turn completion and a slot return say of their runner, written where its heartbeat writes it. */
+  private async recordRunnerDraining(runnerId: string): Promise<void> {
+    await this.prisma.$executeRaw`
+      UPDATE "runner" SET "heartbeat_draining" = true
+      WHERE "id" = ${runnerId}::uuid AND "heartbeat_draining" IS DISTINCT FROM true`;
+  }
+
   /** Replace a missing/stale in-process proof without restarting the session runtime. */
   @CalledByNamedCallers()
   @UseGuards(RunnerAuthGuard)
@@ -5749,6 +5796,9 @@ export class RunnerApiController {
      *  for none: a turn its own generation leased that it is not running is one whose answer was lost,
      *  and is handed to it again now rather than when the lease runs out (dequeueTurn). */
     @Query('runningTurnId') runningTurnId?: string,
+    /** `1` while the runner drains for an update (docs/runner-update-drain-design.md §7.1): no message, shell or
+     *  reload is handed out, and the control turns still are. Absent is a runner that does not say. */
+    @Query('draining') draining?: string,
     @CurrentRunnerLink() link?: RunnerLinkContext,
   ): Promise<RunInboxResponse> {
     const generation = parseLeaseGeneration(leaseGeneration);
@@ -5761,7 +5811,8 @@ export class RunnerApiController {
     // handed a turn out is answered with that turn (dequeueTurn).
     const resend = link?.requestId ? { leaseOwner: link.leaseOwner, requestId: link.requestId } : undefined;
     // It answers at once: a hint says when there is something to fetch.
-    const turn = await this.dequeueTurn(sessionId, runner.id, generation, acceptsSteer === '1', declared, redelivery, resend);
+    const turn = await this.dequeueTurn(
+      sessionId, runner.id, generation, acceptsSteer === '1', declared, redelivery, resend, draining === '1');
     return turn ?? { turnId: '', seq: 0, kind: 'message' };
   }
 
@@ -5920,6 +5971,9 @@ export class RunnerApiController {
     /** A link call's request id and the process it came from: a fetch sent again under the id of one
      *  that handed a turn out is answered with that turn. */
     resend?: { leaseOwner: string; requestId: string },
+    /** The fetch says its runner is draining for an update: it is held as the dispatch pause holds, except that
+     *  nothing is put back in the queue — the session keeps its engine while the runner drains (§7.1). */
+    draining = false,
   ): Promise<RunInboxResponse | null> {
     let pauseRequeued = false;
     // Requeued because the engine is resident on a Default its owner removed from Orbit, not for a pause.
@@ -6171,7 +6225,8 @@ export class RunnerApiController {
         // message (agy, OpenCode) would be ended by the reaper's startup watchdog. It goes back to the
         // queue the way the account pause above puts a run back, and a claim hands it out again once the
         // pause is off. A turn in flight keeps its run, its lease expired or not: an expired one is the
-        // turn a replacement process takes up below.
+        // turn a replacement process takes up below. A draining fetch is not put back here: its session
+        // keeps its engine and background jobs while the runner drains (runner-update-drain-design.md §7.1).
         if (owned[0].dispatchPaused) {
           const held = await tx.$queryRaw<Array<{ id: string }>>`
             SELECT s.id FROM "session" s
@@ -6247,13 +6302,14 @@ export class RunnerApiController {
                 AND turn."created_at" > now() - (${STEER_WITHDRAW_DELIVERY_WINDOW_MS} * interval '1 millisecond'))
               -- A reload is ordered between executable turns, but does not itself consume
               -- an active-turn slot. A cold runtime can leave it queued until the next claim.
-              -- It replaces the engine's process, so the runner dispatch pause holds it.
+              -- It replaces the engine's process, so the runner dispatch pause holds it, and so does a
+              -- fetch that says its runner is draining for an update.
               OR (turn."kind" = 'reload' AND turn."status" = 'PENDING' AND NOT EXISTS (
                 SELECT 1 FROM "conversation_turn" inflight
                 WHERE inflight."session_id" = ${sessionId}::uuid
                   AND inflight."kind" IN ('message', 'shell')
                   AND inflight."status" = 'IN_FLIGHT'
-              ) AND NOT ${DISPATCH_PAUSED})
+              ) AND NOT (${DISPATCH_PAUSED} OR ${draining}::boolean))
               -- A steer is the mirror image of an executable turn: it is deliverable
               -- BECAUSE one is already running, and it is written into that turn instead of
               -- waiting for its result. It neither occupies the single in-flight slot (the
@@ -6298,14 +6354,15 @@ export class RunnerApiController {
                 )
                 AND (
                   (turn."status" = 'IN_FLIGHT' AND turn."lease_deadline_at" < now())
-                  -- A PENDING one starts a turn, which the runner dispatch pause holds. The expired
-                  -- lease above is a turn already running, handed to the process that replaced its own.
+                  -- A PENDING one starts a turn, which the runner dispatch pause holds, as does a draining
+                  -- fetch. The expired lease above is a turn already running, handed to the process that
+                  -- replaced its own.
                   OR (turn."status" = 'PENDING' AND NOT EXISTS (
                     SELECT 1 FROM "conversation_turn" inflight
                     WHERE inflight."session_id" = ${sessionId}::uuid
                       AND inflight."kind" IN ('message', 'shell')
                       AND inflight."status" = 'IN_FLIGHT'
-                  ) AND NOT ${DISPATCH_PAUSED})
+                  ) AND NOT (${DISPATCH_PAUSED} OR ${draining}::boolean))
                   -- The turn this link poller's own generation leased and it says it is not running
                   -- (redeliverOwnLease): a turn already running, like the expired lease above, so the
                   -- dispatch pause does not hold it either — a cut-over waits for it to finish.
@@ -6699,7 +6756,7 @@ export class RunnerApiController {
       this.realtime.publishSessionUpdated(sessionId);
       // What was queued behind it is this poll's to hand out. Refused, the reload is no longer leased
       // to this generation, so the poll is not answered with it again as a resend.
-      return this.dequeueTurn(sessionId, runnerId, leaseGeneration, acceptsSteer, declaredCapabilities, redelivery, resend);
+      return this.dequeueTurn(sessionId, runnerId, leaseGeneration, acceptsSteer, declaredCapabilities, redelivery, resend, draining);
     }
     // The run's wait moved (restartRedelivered): the clients read it off the session.
     if (restartRedelivered) this.realtime.publishSessionUpdated(sessionId);
@@ -7876,9 +7933,16 @@ export class RunnerApiController {
         && (await gatewayBooksSpend(tx, { id: sessionId, provider: current.provider, engine: current.engine }));
       const settledByItsRun =
         completedTurn?.senderSessionId != null && dto.status === RunStatus.SUCCEEDED && !noEngineTurnRan;
+      // A message a Stop overtook and the runner reports INTERRUPTED is not owed another delivery either: the Stop took
+      // it down with every other message still waiting, though no engine said anything for it — the runner hands back
+      // a follow-up it held for an update unrun that way (inboxPoller.handBackHeld, runner-update-drain-design.md §7.4).
+      const reportedInterrupted = dto.status === RunStatus.INTERRUPTED;
+      const stoppedUnrun = reportedInterrupted && completedTurn != null
+        && await stopOvertookTarget(tx, sessionId, completedTurn.seq);
       const unanswered =
         !regionStopped
         && !settledByItsRun
+        && !stoppedUnrun
         && completedTurn?.kind === 'message'
         && (await tx.runEvent.findFirst({
           where: {
@@ -8259,7 +8323,6 @@ export class RunnerApiController {
       let currentWorkTerminalized = 0;
       let currentWorkRequeued = 0;
       let stoppedRequestsClosed: string[] = [];
-      const reportedInterrupted = dto.status === RunStatus.INTERRUPTED;
       if (
         completedTurn
         && !failSession
@@ -8329,10 +8392,12 @@ export class RunnerApiController {
         && completedTurn?.id === current.overCapacityTurnId
         && !(unanswered && !swallowed);
       // A stopped engine passes no slot on: a message queued behind the stop waits for a claim, where the hold decides.
-      // Nor does a turn that ran over the limit: its follow-up queues for a slot like any other message.
+      // Nor does a turn that ran over the limit: its follow-up queues for a slot like any other message. Nor a turn that
+      // ended on a runner draining for an update (runner-update-drain-design.md §7.3): its follow-up waits behind the
+      // update, PENDING, and the updated runner's ordinary claim takes it. A completion without the field keeps the slot.
       const nextStatus = failSession
         ? (releaseOwed ? RunStatus.RUNNING : RunStatus.FAILED)
-        : regionStopped || overCapacityEnded
+        : regionStopped || overCapacityEnded || dto.draining === true
           ? (pendingExecutable > 0 ? RunStatus.PENDING : RunStatus.AWAITING_INPUT)
           : statusAfterTurnCompleted(pendingExecutable > 0);
       // OWNER_CONFIRMED: a run that declared its work finished and has stopped working asks its
@@ -8723,6 +8788,10 @@ export class RunnerApiController {
       this.logger.warn(`turn ${dto.turnId} of session ${sessionId} settles without its reports: ${faultLine(error)}`);
       return settle(settlingFields(dto));
     });
+    // The completion says its runner drains for an update (runner-update-drain-design.md §7.3): recorded where the
+    // heartbeat records it, so a session this put back in the queue reads runner_updating before the runner is answered,
+    // not after its next heartbeat.
+    if (dto.draining === true) await this.recordRunnerDraining(runner.id);
     // A message refused for the region went back in the queue with its session (§10): no turn ended, so nothing a
     // turn's end hands over is owed. The row and its queue changed, and the runner's slot is free for another session.
     if ('regionHeld' in finalized) {

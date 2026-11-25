@@ -999,7 +999,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		payload = runnerSecrets().scrubPayload(payload)
 		// The one place a turn the engine runs on its own shows up at all. Told before the
 		// event is buffered, so nothing reading the stream is ahead of the pool.
-		pool.engineTurnEvent(live, eventType, payload)
+		if pool.engineTurnEvent(live, eventType, payload) && t.returnHeldSlot != nil {
+			go t.returnHeldSlot(sessionID) // the engine's own turn ended under a claim held for the update
+		}
 		executing.observe(eventType, payload)
 		// A tool may have written to the volume (a commit, an edit): a managed runner syncs it
 		// behind the tool, in the background, without holding the stream up (volume_durability.go).
@@ -2353,6 +2355,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// The generation's inbox: what fetches its turns, and the turnIds being processed (dedup
 	// lease re-delivery).
 	inbox := newInboxPoller(t, job.SessionID, leaseGeneration)
+	inbox.holdTurns(waitTurnPermit, job, completeTurn) // a turn waiting for its permit does not stop the inbox being read
 	defer inbox.close()
 	// Exact Orbit executable turn owned by this Claude generation. It is separate from the
 	// transcript attribution cursor: the poller and stdout reader use it as one linearization
