@@ -39,6 +39,7 @@ import { ACCOUNT_CHOICE } from '../providers/account';
 import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
 import { followsRuntimeCatalog } from '../providers/preset-overlay';
 import { signedOutEngineRefusal } from '../sessions/engine-signin-preflight';
+import { LEGACY_STATUS_SELECT, legacySessionStatus } from '../sessions/session-legacy-words';
 import { blockedRunnerRegion } from '../runners/runner-region';
 import { taskRunSeed } from '../workspaces/start-anchor';
 import { RUNNER_BEATS } from '../runners/runner-presence';
@@ -413,7 +414,7 @@ async function readRunHistory(
     where: { ownerId, taskId, startsTaskWork: true },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     select: {
-      id: true, createdAt: true, ...RELEASE_FAILURE_SELECT, error: true, failureKind: true, accountHealthEffect: true,
+      id: true, createdAt: true, ...RELEASE_FAILURE_SELECT, ...LEGACY_STATUS_SELECT, error: true, failureKind: true, accountHealthEffect: true,
       engine: true, provider: true, providerBuiltin: true, ownerId: true, model: true, effort: true,
     },
   });
@@ -440,7 +441,8 @@ async function readRunHistory(
     const judged = (at: Date) => at >= run.createdAt && (!next || at < next);
     return {
       ordinal: index + 1,
-      status: run.status,
+      // The word derived from the facts (plan §3.1); a task's run is never a LANDING container.
+      status: legacySessionStatus(run),
       // Skipped for escalation when its failure was the account's or the provider's (common/run-not-counted.ts, §7.4).
       ...(failed && runNotCounted(run) ? { notCounted: runNotCounted(run) } : {}),
       ...(failed && run.accountHealthEffect === 'TRIAL' ? { trialOf: run.provider } : {}),

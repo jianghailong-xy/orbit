@@ -265,8 +265,9 @@ test('at most three replacements an hour; a refused trial\'s replacement is not 
       const refuse = (id: string, effect: 'BLOCKED' | 'TRIAL') => s.db.session.update({
         where: { id },
         data: {
-          status: RunStatus.FAILED, finishedAt: new Date(), error: CURSOR_ERROR, failureKind: RunFailureKind.ACCOUNT_ACTION_REQUIRED,
-          failureSaid: PAYMENT, admissionFailure: true, accountHealthEffect: effect,
+          // Released by a failure, as every failure release records it: its last turn failed (common/session-release.ts).
+          status: RunStatus.FAILED, finishedAt: new Date(), lastTurnOutcome: 'FAILED', error: CURSOR_ERROR,
+          failureKind: RunFailureKind.ACCOUNT_ACTION_REQUIRED, failureSaid: PAYMENT, admissionFailure: true, accountHealthEffect: effect,
         },
       });
       let last = await runNow(s, f, taskId);
