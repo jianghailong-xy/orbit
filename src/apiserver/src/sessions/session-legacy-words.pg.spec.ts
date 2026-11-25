@@ -150,6 +150,8 @@ test('the projector, its SQL twin and statusWordFilter agree', { skip, timeout: 
   await t.test('(4) a held row with no turn_state answers its stored word', async () => {
     // Compared all at once, so a failure shows every word that is answered wrong.
     const answers: Record<string, unknown> = {};
+    // Such a row exists only before deploy D2, whose CHECK (1622) refuses it: this database goes back to D1 for them.
+    await db.$executeRawUnsafe('ALTER TABLE session DROP CONSTRAINT session_turn_state_agrees_chk');
     for (const word of HELD_WORDS) {
       const { id } = await db.session.create({
         data: {
