@@ -1,0 +1,290 @@
+[
+  {
+    "name" : "status PENDING (queued)",
+    "newFields" : true,
+    "run" : "Queued",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Queued"
+  },
+  {
+    "name" : "status PENDING (queued)",
+    "newFields" : false,
+    "run" : "Queued",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Queued"
+  },
+  {
+    "name" : "status RUNNING",
+    "newFields" : true,
+    "run" : "Running",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Running"
+  },
+  {
+    "name" : "status RUNNING",
+    "newFields" : false,
+    "run" : "Running",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Running"
+  },
+  {
+    "name" : "status AWAITING_INPUT (held idle)",
+    "newFields" : true,
+    "run" : "Awaiting reply",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Waiting for your reply"
+  },
+  {
+    "name" : "status AWAITING_INPUT (held idle)",
+    "newFields" : false,
+    "run" : "Awaiting reply",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Waiting for your reply"
+  },
+  {
+    "name" : "status INTERRUPTED (held, stopped turn)",
+    "newFields" : true,
+    "run" : "Interrupted",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Interrupted"
+  },
+  {
+    "name" : "status INTERRUPTED (held, stopped turn)",
+    "newFields" : false,
+    "run" : "Interrupted",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Interrupted"
+  },
+  {
+    "name" : "status SUCCEEDED (task run finished)",
+    "newFields" : true,
+    "run" : "Finished",
+    "send" : "RESUME",
+    "waitOver" : true,
+    "word" : "Finished"
+  },
+  {
+    "name" : "status SUCCEEDED (task run finished)",
+    "newFields" : false,
+    "run" : "Finished",
+    "send" : "RESUME",
+    "waitOver" : true,
+    "word" : "Succeeded"
+  },
+  {
+    "name" : "status FAILED (released by a failed turn)",
+    "newFields" : true,
+    "run" : "Failed",
+    "send" : "RESUME",
+    "waitOver" : true,
+    "word" : "Failed"
+  },
+  {
+    "name" : "status FAILED (released by a failed turn)",
+    "newFields" : false,
+    "run" : "Failed",
+    "send" : "RESUME",
+    "waitOver" : true,
+    "word" : "Failed"
+  },
+  {
+    "name" : "status CANCELLED (released by End)",
+    "newFields" : true,
+    "run" : "Ended",
+    "send" : "RESUME",
+    "waitOver" : true,
+    "word" : "Ended"
+  },
+  {
+    "name" : "status CANCELLED (released by End)",
+    "newFields" : false,
+    "run" : "Ended",
+    "send" : "RESUME",
+    "waitOver" : true,
+    "word" : "Ended"
+  },
+  {
+    "name" : "running a job with no turn",
+    "newFields" : true,
+    "run" : "Awaiting reply",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Background process running"
+  },
+  {
+    "name" : "running a job with no turn",
+    "newFields" : false,
+    "run" : "Awaiting reply",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Background process running"
+  },
+  {
+    "name" : "waiting on an approval",
+    "newFields" : true,
+    "run" : "Running",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Waiting for approval"
+  },
+  {
+    "name" : "waiting on an approval",
+    "newFields" : false,
+    "run" : "Running",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Waiting for approval"
+  },
+  {
+    "name" : "on hold (queued, account paused)",
+    "newFields" : true,
+    "run" : "On hold",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "On hold"
+  },
+  {
+    "name" : "on hold (queued, account paused)",
+    "newFields" : false,
+    "run" : "Queued",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Queued"
+  },
+  {
+    "name" : "ended, runner never confirmed",
+    "newFields" : true,
+    "run" : "Ended",
+    "send" : "RESUME",
+    "waitOver" : true,
+    "word" : "Ended"
+  },
+  {
+    "name" : "ended, runner never confirmed",
+    "newFields" : false,
+    "run" : "Failed",
+    "send" : "RESUME",
+    "waitOver" : true,
+    "word" : "Failed"
+  },
+  {
+    "name" : "old plain row stored SUCCEEDED",
+    "newFields" : true,
+    "run" : "Ended",
+    "send" : "RESUME",
+    "waitOver" : true,
+    "word" : "Ended"
+  },
+  {
+    "name" : "old plain row stored SUCCEEDED",
+    "newFields" : false,
+    "run" : "Finished",
+    "send" : "RESUME",
+    "waitOver" : true,
+    "word" : "Succeeded"
+  },
+  {
+    "name" : "ending after an interrupted turn",
+    "newFields" : true,
+    "run" : "Interrupted",
+    "send" : "BLOCK",
+    "waitOver" : false,
+    "word" : "Interrupted"
+  },
+  {
+    "name" : "ending after an interrupted turn",
+    "newFields" : false,
+    "run" : "Ended",
+    "send" : "BLOCK",
+    "waitOver" : false,
+    "word" : "Ended"
+  },
+  {
+    "name" : "parked, engine started its own turn",
+    "newFields" : true,
+    "run" : "Awaiting reply",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Waiting for your reply"
+  },
+  {
+    "name" : "parked, engine started its own turn",
+    "newFields" : false,
+    "run" : "Awaiting reply",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Waiting for your reply"
+  },
+  {
+    "name" : "parked, sub-agent running",
+    "newFields" : true,
+    "run" : "Awaiting reply",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Running Agent"
+  },
+  {
+    "name" : "parked, sub-agent running",
+    "newFields" : false,
+    "run" : "Awaiting reply",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Running Agent"
+  },
+  {
+    "name" : "parked, will wake (watch or wake-up)",
+    "newFields" : true,
+    "run" : "Awaiting reply",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Waiting to resume"
+  },
+  {
+    "name" : "parked, will wake (watch or wake-up)",
+    "newFields" : false,
+    "run" : "Awaiting reply",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Waiting to resume"
+  },
+  {
+    "name" : "unknown status, no capabilities, held",
+    "newFields" : true,
+    "run" : "Awaiting reply",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Waiting for your reply"
+  },
+  {
+    "name" : "unknown status, no capabilities, held",
+    "newFields" : false,
+    "run" : "Ended",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Ended"
+  },
+  {
+    "name" : "unknown status, no capabilities, released",
+    "newFields" : true,
+    "run" : "Ended",
+    "send" : "RESUME",
+    "waitOver" : true,
+    "word" : "Ended"
+  },
+  {
+    "name" : "unknown status, no capabilities, released",
+    "newFields" : false,
+    "run" : "Ended",
+    "send" : "SEND",
+    "waitOver" : false,
+    "word" : "Ended"
+  }
+]
