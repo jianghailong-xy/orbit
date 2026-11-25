@@ -949,6 +949,20 @@ public enum ScheduleDisplay {
         return order.first(where: fields.contains) ?? fields.first
     }
 
+    /// A person's rename as the history says it (§8.4 *Rename*): "Renamed from “Codex check”". Nil for any other
+    /// record, an agent's new title included (web `scheduleRenamedText`).
+    public static func renamedText(_ record: ScheduleChangeRecord) -> String? {
+        guard record.changedBy == "USER", record.after.count == 1, record.after["title"] != nil,
+              let before = record.before else { return nil }
+        return fill(C.History.renamed, ["title": before["title"]?.asString ?? ""])
+    }
+
+    /// The title a rename field would save: trimmed, and nil when that is empty or the name it opened with.
+    public static func renameTitle(_ draft: String, from title: String) -> String? {
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty || trimmed == title.trimmingCharacters(in: .whitespacesAndNewlines) ? nil : trimmed
+    }
+
     public static func recordText(_ record: ScheduleChangeRecord, names: [String: String] = [:]) -> String {
         recordParts(revision: record.revision, before: record.before, after: record.after, names: names).text
     }
