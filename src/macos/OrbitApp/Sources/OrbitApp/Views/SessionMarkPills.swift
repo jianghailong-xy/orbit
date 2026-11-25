@@ -23,7 +23,7 @@ struct SessionMarkPill: View {
 
     var body: some View {
         HStack(spacing: 3) {
-            Image(systemName: mark.symbol).font(.system(size: 8, weight: .semibold))
+            Image(systemName: mark.symbol).imageScale(.small).fontWeight(.semibold)
             Text(mark.word).lineLimit(1)
         }
         .font(.orbitMeta)
