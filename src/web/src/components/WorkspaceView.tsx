@@ -4091,8 +4091,6 @@ export function WorkspaceView({
   const composing =
     !selectedId && !landingsProjectId &&
     (composingRoute || view !== 'open' || (sessionsQ.isSuccess && listedSessions.length === 0));
-  // A wide window draws the top pill centred in the header row (a phone floats it over the transcript).
-  const headerJumpShown = !isMobile && !!selectedId && !composing && jumpUpOffered;
   // The Projects CTA lands on the ordinary New Session route with one piece of transient framing:
   // this turn is meant to create a project. Keeping it in the URL makes refresh/back truthful and
   // lets dismissing it return to the byte-for-byte ordinary compose without a second screen/state.
@@ -4907,6 +4905,13 @@ export function WorkspaceView({
     detachedNow,
     backToLatest: streamBackToLatest,
   } = stream;
+  // The top pill: what is loading above, or the way back up once the reader has left the tail. A wide
+  // window draws it centred in the header row, a phone over the top of the transcript.
+  const topPillShown = loadingOlder || jumpUpOffered;
+  const topPill = (): ReturnType<typeof jumpUpPill> => (loadingOlder && !searchingMine
+    ? <span className="chat-older-pill">Loading earlier messages…</span>
+    : jumpUpPill());
+  const headerJumpShown = !isMobile && !!selectedId && !composing && topPillShown;
   // The session's SubAgent runs, read once for the transcript's blocks and the composer band's Agents line.
   const subagentRuns = useSubagentRuns(selectedId ?? '', transcriptEvents);
   // Settings › Translation (@orbit/shared translation.ts): what a translated conversation can do —
@@ -11041,7 +11046,7 @@ export function WorkspaceView({
               header row instead of floating over the messages. A phone keeps it over the transcript
               (no room up here). */}
           {headerJumpShown && (
-            <div className="workspace-header-jump">{jumpUpPill()}</div>
+            <div className="workspace-header-jump">{topPill()}</div>
           )}
           {/* docs/mocks/runner-update-indicator: this runner drains for its update with the reader's work waiting (D3). */}
           <RunnerUpdateIndicator runner={runner} machine={runnerShownName} />
@@ -11416,14 +11421,8 @@ export function WorkspaceView({
                   the transcript, so there it is only something covering a message. With nothing
                   older left on the server it still scrolls to the top: the reader scrolled up into
                   a fully loaded session wants the same way back. */}
-              {(loadingOlder || (isMobile && jumpUpOffered)) && (
-                <div className="chat-older-top">
-                  {loadingOlder && (!searchingMine || !isMobile) ? (
-                    <span className="chat-older-pill">Loading earlier messages…</span>
-                  ) : (
-                    jumpUpPill()
-                  )}
-                </div>
+              {isMobile && topPillShown && (
+                <div className="chat-older-top">{topPill()}</div>
               )}
               {/* This conversation made its workspace: its first line says what was made and where
                   (board rule 8). First means first, so not above a window that starts later. */}
