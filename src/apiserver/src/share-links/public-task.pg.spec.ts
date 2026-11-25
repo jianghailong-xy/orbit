@@ -18,7 +18,8 @@
  *       page of events, one event); a session that is not one of its runs, and a run in the Trash,
  *       answer the one 404; none of it counts a view;
  *   (5) dependencies inside the task's project are named, those in another project only counted;
- *   (6) the owner's dialog read counts what each layer holds.
+ *   (6) the owner's dialog read counts what each layer holds;
+ *   (7) a run that ended because its task was done (`task_done`) reads SUCCEEDED, on the task page and its own.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/share-links/public-task.pg.spec.ts
  *
@@ -611,5 +612,26 @@ test('a shared task: an explicit projection, the red line, its layers and its ru
     assert.equal(read.json.link.token, token);
     // Two comments and one input file; two runs to read — the one in the Trash is not counted.
     assert.deepEqual(read.json.counts, { comments: 2, files: 1, transcripts: 2 });
+  });
+
+  await t.test('(7) a run that ended with its task done reads SUCCEEDED, on the task page and its own', async () => {
+    const done = await task(`A task its run finished ${RUN}`, { status: TaskStatus.DONE });
+    const finished = await session(`Run that finished ${RUN}`, {
+      taskId: done, status: RunStatus.SUCCEEDED, endReason: 'task_done', startsTaskWork: false,
+      createdAt: new Date('2026-09-23T10:00:00Z'), startedAt: new Date('2026-09-23T10:00:05Z'),
+      finishedAt: new Date('2026-09-23T10:30:05Z'),
+    });
+    const shared = await owner('PUT', `/tasks/${pub(done)}/share`, { include: { conversations: true } });
+    assert.equal(shared.status, 200, shared.text);
+    const at = `/api/shared/${encodeURIComponent(shared.json.token)}`;
+    const page = await send(base, 'GET', at);
+    assert.equal(page.status, 200, page.text);
+    assert.deepEqual(page.json.root.runs, [{
+      state: 'SUCCEEDED', startedAt: '2026-09-23T10:00:05.000Z', endedAt: '2026-09-23T10:30:05.000Z',
+      durationMs: 30 * 60_000, sessionId: pub(finished), sessionPublicId: pub(finished),
+    }]);
+    const own = await send(base, 'GET', `${at}/sessions/${pub(finished)}`);
+    assert.equal(own.status, 200, own.text);
+    assert.equal(own.json.runState, 'SUCCEEDED');
   });
 });
