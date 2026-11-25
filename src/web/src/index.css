@@ -5022,10 +5022,27 @@ button.toast--pill:focus-visible {
   max-width: calc(50% - 210px - 12px);
   margin-right: auto;
 }
-/* The header's Share button: grey, or the live link's green while the session is shared. */
-.workspace-header-share { flex: none; color: var(--text-2); }
-.workspace-header-share.is-live,
-.workspace-header-share.is-live:hover:where(:not(:disabled)) { color: var(--success); }
+/* The header's ⋯ and Share (docs/mocks/session-header-share-more, A): ⋯ then Share, 28px buttons
+   2px apart with 16px glyphs in the title's colour, nudged 6px right so the last glyph sits near the
+   transcript's edge. Share takes the live link's green, with a dot, while the session is shared. */
+.workspace-header .workspace-header-more,
+.workspace-header .workspace-header-share { flex: none; width: 28px; height: 28px; color: var(--text-1); font-size: 16px; }
+.workspace-header .workspace-header-more + .workspace-header-share { margin-left: -10px; }
+.workspace-header .workspace-header-more:last-child,
+.workspace-header .workspace-header-share { margin-right: -6px; }
+.workspace-header .workspace-header-share.is-live,
+.workspace-header .workspace-header-share.is-live:hover:where(:not(:disabled)) { color: var(--success); }
+.workspace-header .workspace-header-share.is-live::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success-solid);
+  box-shadow: 0 0 0 2px var(--bg-base);
+}
 /* Canonical completion-repair obligations sit outside the transcript scroller: the command has
    already finished, so burying this behind a stale Running transcript would recreate the product
    failure the obligation exists to explain. Read-only by design — repair actions belong to the
@@ -20691,17 +20708,88 @@ button.chat-jump-start:hover {
   font-size: 12.5px;
   color: var(--text-3);
 }
-/* The ordinary empty state follows the mobile hierarchy: provider first, then the instruction,
-   then the model that this draft will actually send with. */
+/* The ordinary empty state: the engine, where it runs, then the instruction. The model is said once,
+   in the composer (docs/mocks/new-session-top ③). */
 .np-empty-copy {
   margin-top: 20px;
   font-size: 17px;
   color: var(--text-3);
 }
-.np-current-model {
-  margin-top: 5px;
-  font-size: 14px;
+/* `in [workspace ▾] › [folder ▾]` under the engine (docs/mocks/new-session-top ②⑤): quiet chips, grey on hover,
+   tinted while their menu is open, like the engine's name above them. */
+.np-place {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-top: 6px;
+  max-width: 100%;
+  font-size: 13px;
+  color: var(--text-3);
+}
+.np-place-in {
+  margin-right: 2px;
+}
+.np-place-sep {
   color: var(--text-4);
+}
+.np-place-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  max-width: 220px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.np-place-chip:hover {
+  background: var(--bg-hover);
+}
+.np-place-chip.open {
+  background: var(--brand-tint);
+  color: var(--brand-strong);
+}
+.np-place-chip.open .np-chev {
+  color: var(--brand-strong);
+}
+.np-place-chip > .anticon {
+  flex: none;
+  font-size: 13px;
+}
+.np-place-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.np-place-list {
+  width: 260px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.np-place-list .np-row > .anticon {
+  flex: none;
+  color: var(--text-3);
+}
+.np-place-check {
+  margin-left: auto;
+  color: var(--brand);
+}
+/* A phone has no room for the icons: the names and their ▾ (board ⑥). */
+@media (max-width: 960px) {
+  .np-place-chip > .anticon {
+    display: none;
+  }
+  .np-place-chip {
+    max-width: 160px;
+  }
 }
 .np-card {
   display: inline-flex;
