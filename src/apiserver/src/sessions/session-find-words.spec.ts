@@ -164,7 +164,11 @@ test('the count asks the same question the page did, broadened or not', async ()
 // ── the ⌘K palette ────────────────────────────────────────────────────────────────────────────
 
 test('the palette asks for the phrase first, and stops there when it finds anything', async () => {
-  const sql = await palette('confirm directory', [[{ id: SESSION_ID, total: 1 }]]);
+  const all = await palette('confirm directory', [[{ id: SESSION_ID, total: 1 }]]);
+  // Beside the search, a hit reads its session facts once (readSessionPhaseFields, readSessionBackgroundFields),
+  // as every session payload does; those are not a second search.
+  const sql = all.filter((q) => q.sql.includes('"matchField"'));
+  assert.equal(all.length, 3);
   assert.equal(sql.length, 1, 'a hit must not cost a second query');
   assert.ok(sql[0].values.includes('%confirm directory%'));
   assert.ok(!sql[0].values.includes('%confirm%'));

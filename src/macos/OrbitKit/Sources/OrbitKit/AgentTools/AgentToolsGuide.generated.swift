@@ -64,7 +64,7 @@ let agentToolsGuideJSON = #"""
         "task_create with startNow: true records the work and starts it on one card.",
         "runAt starts it once, at a set time; it is not a deadline (that is dueDate).",
         "startWhen starts it once, when something outside Orbit becomes true (\"when a third OSD is in\"); a schedule with a WHEN rule runs each time it does. The agent writes a read-only check command, runs it once, and the card shows you that command verbatim before anything is created; your runner then runs it unattended, with no secret in it. When you answer a question with \"wait until X\", the agent proposes that card instead of keeping a note to itself, and condition_get reads either one back.",
-        "autoRunWhenReady defaults to true: an assigned task in a started project starts by itself once every prerequisite is DONE. To hold work until you say so, the agent passes autoRunWhenReady: false.",
+        "autoRunWhenReady is required on every create: true makes an assigned task in a started project start by itself once every prerequisite is DONE, and false holds it until you say so.",
         "Your own \"Create and start\" on the card starts it even if the agent asked for no start, and the agent does not undo that."
       ],
       "asks": [
@@ -396,6 +396,7 @@ let agentToolsGuideJSON = #"""
             "tasks": [
               {
                 "acceptanceCriteria": "<what settles it>",
+                "autoRunWhenReady": true,
                 "completionCriterion": "EVIDENCE_JUDGMENT",
                 "description": "<what to do, the files, the steps>",
                 "ref": "s1",
@@ -403,6 +404,7 @@ let agentToolsGuideJSON = #"""
               },
               {
                 "acceptanceCriteria": "<what settles it>",
+                "autoRunWhenReady": true,
                 "completionCriterion": "EVIDENCE_JUDGMENT",
                 "dependsOnRefs": [
                   "s1"
@@ -432,6 +434,7 @@ let agentToolsGuideJSON = #"""
             "tasks": [
               {
                 "acceptanceCriteria": "<what settles it>",
+                "autoRunWhenReady": true,
                 "completionCriterion": "EVIDENCE_JUDGMENT",
                 "description": "<what to do, the files, the steps>",
                 "ref": "s1",
@@ -439,6 +442,7 @@ let agentToolsGuideJSON = #"""
               },
               {
                 "acceptanceCriteria": "<what settles it>",
+                "autoRunWhenReady": true,
                 "completionCriterion": "EVIDENCE_JUDGMENT",
                 "dependsOnRefs": [
                   "s1"
@@ -503,6 +507,7 @@ let agentToolsGuideJSON = #"""
           "tool": "task_create",
           "arguments": {
             "acceptanceCriteria": "<what settles it>",
+            "autoRunWhenReady": true,
             "completionCriterion": "EVIDENCE_JUDGMENT",
             "description": "<the failing test, how it fails, where>",
             "idempotencyKey": "fix-flaky-watch-test",
@@ -537,6 +542,7 @@ let agentToolsGuideJSON = #"""
           "EVIDENCE_JUDGMENT",
           "--acceptance-criteria",
           "<what settles it>",
+          "--auto-run-when-ready=true",
           "--start-now",
           "--idempotency-key",
           "fix-flaky-watch-test",
@@ -582,7 +588,7 @@ let agentToolsGuideJSON = #"""
           "--receipt"
         ]
       ],
-      "script": "jq -R -s 'split(\"\\n\") | map(select(length > 0)) | {tasks: map({title: ., description: (\"Fix: \" + .), completionCriterion: \"EVIDENCE_JUDGMENT\", acceptanceCriteria: \"<what settles it>\", autoRunWhenReady: false})}' issues.txt > plan.json\norbit task create-batch --tasks-file - --dry-run --json < plan.json\norbit task create-batch --tasks-file - --idempotency-key issues-txt-part-1 --receipt < plan.json",
+      "script": "jq -R -s 'split(\"\\n\") | map(select(length > 0)) | {tasks: map({title: ., description: (\"Fix: \" + .), completionCriterion: \"EVIDENCE_JUDGMENT\", acceptanceCriteria: \"<what settles it>\", autoRunWhenReady: true})}' issues.txt > plan.json\norbit task create-batch --tasks-file - --dry-run --json < plan.json\norbit task create-batch --tasks-file - --idempotency-key issues-txt-part-1 --receipt < plan.json",
       "proof": "--receipt prints one receipt with every item's id in input order, and the command exits 0 exactly when it wrote. Outside a session the same command runs with ORBIT_USER_TOKEN and is recorded as you.",
       "scenario": "E4-batch-plan",
       "playbook": "batch-script"
@@ -597,7 +603,7 @@ let agentToolsGuideJSON = #"""
         "Pick the record. One item is one task_create. Several related items are one task_create_batch (at most 50). A body of work with its own goal and acceptance, 4 or more dependent steps or several agents over days, may be proposed as project_create first; its card is the person's answer, and a no means tasks.",
         "Give every item a ref (s1, s2, ...). Order with dependsOnRefs (when an item may run) and nest with parentRef (what it is part of). dependsOnTaskIds and parentTaskId name tasks that already exist.",
         "Ask the person what would settle each item and pass their words as acceptanceCriteria; declare completionCriterion on every item. If they have not said, ask and end your turn.",
-        "Hold what must not start: autoRunWhenReady: false on that item. startNow: true only on an item they want running now.",
+        "Every item sets autoRunWhenReady: false for what must not start, true for what may. startNow: true only on an item they want running now.",
         "Unsure where it lands? Call task_create_batch with dryRun: true first: it writes nothing and asks nobody.",
         "Say in a sentence or two what you are about to file, then call task_create_batch once, keyed with an idempotencyKey derived from the plan.",
         "Read the receipt: ok: true, outcome: written, items[] in input order, each with its id. Link each as [title](orbit-task:<id>). A declined card is a refusal: do not file it another way."
@@ -609,13 +615,13 @@ let agentToolsGuideJSON = #"""
       "when": "The work arrives as a file or a list too long to type: issues in a text file or a CSV, lines of a checklist.",
       "steps": [
         "Use the CLI's bulk door, by the absolute path your instructions give, never one task_create per line.",
-        "Build one --tasks document of at most 50 items with a script; every item carries title, description, completionCriterion and acceptanceCriteria, and autoRunWhenReady: false when it must wait.",
+        "Build one --tasks document of at most 50 items with a script; every item carries title, description, completionCriterion and acceptanceCriteria, and autoRunWhenReady (false when it must wait).",
         "Preview it: orbit task create-batch --tasks-file - --dry-run --json writes nothing and says where every item would land.",
         "Write it: orbit task create-batch --tasks-file - --idempotency-key <a slug of the batch> --receipt. Inside a session it puts one card in front of the person; it exits 0 exactly when it wrote.",
         "More than 50 items: split them into parts, each with its own key. A part that fails can be sent again with the same key and cannot file twice.",
         "Outside a session (cron, CI) run the same command with the person's own token: ORBIT_USER_TOKEN=<token> orbit task create-batch ... is recorded as them and needs no card. The runner's machine credential cannot file work on its own (TASK_WRITE_NEEDS_OWNER_CARD)."
       ],
-      "code": "jq -R -s 'split(\"\\n\") | map(select(length > 0)) | {tasks: map({title: ., description: (\"Fix: \" + .), completionCriterion: \"EVIDENCE_JUDGMENT\", acceptanceCriteria: \"<what settles it>\", autoRunWhenReady: false})}' issues.txt > plan.json\norbit task create-batch --tasks-file - --dry-run --json < plan.json\norbit task create-batch --tasks-file - --idempotency-key issues-txt-part-1 --receipt < plan.json"
+      "code": "jq -R -s 'split(\"\\n\") | map(select(length > 0)) | {tasks: map({title: ., description: (\"Fix: \" + .), completionCriterion: \"EVIDENCE_JUDGMENT\", acceptanceCriteria: \"<what settles it>\", autoRunWhenReady: true})}' issues.txt > plan.json\norbit task create-batch --tasks-file - --dry-run --json < plan.json\norbit task create-batch --tasks-file - --idempotency-key issues-txt-part-1 --receipt < plan.json"
     },
     {
       "id": "delegate-now",
@@ -905,7 +911,7 @@ let agentToolsGuideJSON = #"""
         "title": "Orbit's runtime instructions",
         "role": "system",
         "roleLabel": "System · appended",
-        "detail": "The primer 1.4.7, then the CLI's absolute path, files, evidence, progress, waits and the wiki. Appended to the system prompt, so a compaction does not touch them.",
+        "detail": "The primer 1.8.1, then the CLI's absolute path, files, evidence, progress, waits and the wiki. Appended to the system prompt, so a compaction does not touch them.",
         "source": "orbit"
       },
       {
@@ -997,7 +1003,7 @@ let agentToolsGuideJSON = #"""
         "title": "Orbit's runtime instructions",
         "role": "developer",
         "roleLabel": "Developer",
-        "detail": "The primer 1.4.7, then the CLI's absolute path, files, evidence, progress, waits and the wiki. Application context, sent with every turn, so a compaction cannot drop them.",
+        "detail": "The primer 1.8.1, then the CLI's absolute path, files, evidence, progress, waits and the wiki. Application context, sent with every turn, so a compaction cannot drop them.",
         "source": "orbit",
         "when": [
           "additional_context"
@@ -1020,7 +1026,7 @@ let agentToolsGuideJSON = #"""
         "title": "Orbit's runtime instructions",
         "role": "developer",
         "roleLabel": "Developer",
-        "detail": "The primer 1.4.7, then the CLI's absolute path, files, evidence, progress, waits and the wiki. One developer message, sent again after a compaction.",
+        "detail": "The primer 1.8.1, then the CLI's absolute path, files, evidence, progress, waits and the wiki. One developer message, sent again after a compaction.",
         "source": "orbit",
         "when": [
           "developer_message"
@@ -1043,7 +1049,7 @@ let agentToolsGuideJSON = #"""
         "title": "Orbit's runtime instructions",
         "role": "user",
         "roleLabel": "User · turn input",
-        "detail": "The primer 1.4.7, then the CLI's absolute path, files, evidence, progress, waits and the wiki. At the top of every turn's input.",
+        "detail": "The primer 1.8.1, then the CLI's absolute path, files, evidence, progress, waits and the wiki. At the top of every turn's input.",
         "source": "orbit",
         "when": [
           "turn_input"

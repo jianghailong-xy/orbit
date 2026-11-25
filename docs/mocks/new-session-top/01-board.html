@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>New session · top area</title>
+<style>
+  :root{--text-1:#1f2329;--text-2:#646a73;--text-3:#8f959e;--text-4:#a8acb3;--border:#dee0e3;--border-subtle:#eceef1;
+    --brand:#3370ff;--brand-tint:#ebf1ff;--brand-strong:#245bdb;--bg-hover:#f2f3f5;--mark:#e5484d}
+  *{box-sizing:border-box}
+  body{margin:0;background:#eef0f3;font-family:-apple-system,BlinkMacSystemFont,Inter,'PingFang SC','Noto Sans SC',sans-serif;color:var(--text-1)}
+  .board{width:1960px;padding:44px 48px 48px;background:#eef0f3}
+  h1{margin:0 0 6px;font-size:30px;letter-spacing:-.01em}
+  .lede{font-size:16px;color:#4a505a;margin-bottom:30px;line-height:1.6}
+  .row{display:flex;gap:40px;margin-bottom:40px;align-items:flex-start}
+  .col{width:900px;flex:none}
+  .cap{font-size:20px;font-weight:650;margin-bottom:4px}
+  .cap .tag{display:inline-block;font-size:13px;font-weight:600;padding:2px 8px;border-radius:6px;margin-left:8px;vertical-align:3px}
+  .tag.rec{background:#e3f6ea;color:#1f7a3f}.tag.min{background:#eef0f3;color:#646a73;border:1px solid #d4d7dc}
+  .capsub{font-size:14.5px;color:#4a505a;margin-bottom:12px;line-height:1.55}
+  .shot{position:relative;width:900px;height:782px;border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.06),0 6px 24px rgba(0,0,0,.08)}
+  .shot>img{width:900px;display:block}
+  .win{position:absolute;left:0;top:0;width:1340px;height:1165px;transform:scale(.6716);transform-origin:0 0;background:#fff;font-family:-apple-system,BlinkMacSystemFont,Inter,'Noto Sans SC',sans-serif}
+  .notes{margin-top:14px;font-size:14.5px;line-height:1.65;color:#30353c}
+  .notes li{margin-bottom:4px}
+  .notes b{color:var(--text-1)}
+  /* marks */
+  .m{position:absolute;width:30px;height:30px;border-radius:50%;background:var(--mark);color:#fff;font:700 16px/30px Inter,sans-serif;text-align:center;box-shadow:0 0 0 3px #fff}
+  .ring{position:absolute;border:3px solid var(--mark);border-radius:10px}
+  /* in-window UI (prefixed w-) */
+  .w-head{position:absolute;left:24px;right:24px;top:16px;display:flex;align-items:center;gap:12px;padding-bottom:16px}
+  .w-title{font-size:18px;font-weight:600}
+  .w-sub{font-size:12.5px;color:var(--text-3);margin-top:3px;display:flex;align-items:center;gap:4px}
+  .w-chip{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 8px;border-radius:7px;color:var(--text-2);font-size:13px}
+  .w-chip.hover{background:var(--bg-hover)}
+  .w-chip.open{background:var(--brand-tint);color:var(--brand-strong)}
+  .w-chip svg{width:14px;height:14px;flex:none}
+  .w-chev{font-size:9px;color:var(--text-4);margin-left:1px}
+  .w-sep{color:var(--text-4);font-size:13px}
+  .w-hero{position:absolute;left:0;right:0;top:470px;display:flex;flex-direction:column;align-items:center;text-align:center}
+  .w-mark{width:56px;height:56px;border-radius:15px;background:linear-gradient(135deg,#d97757,#c15f3c);box-shadow:0 8px 22px rgba(193,95,60,.34);display:flex;align-items:center;justify-content:center;color:#fff}
+  .w-name{margin-top:10px;display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:10px;font-size:16px;font-weight:650}
+  .w-name .w-chev{font-size:10px}
+  .w-empty{margin-top:20px;font-size:17px;color:var(--text-3)}
+  .w-model{margin-top:5px;font-size:14px;color:var(--text-4)}
+  .w-place{margin-top:6px;display:flex;align-items:center;gap:2px;font-size:13px;color:var(--text-3)}
+  .w-place .w-in{margin-right:2px}
+  .w-comp{position:absolute;left:24px;right:24px;bottom:22px;height:92px;border:1px solid #c9cdd4;border-radius:22px;background:#fff}
+  .w-comp .ph{position:absolute;left:26px;top:20px;font-size:16px;color:var(--text-4)}
+  .w-comp .plus{position:absolute;left:26px;bottom:14px;font-size:22px;color:var(--text-2)}
+  .w-comp .auto{position:absolute;left:76px;bottom:18px;font-size:14px;color:var(--text-2)}
+  .w-comp .right{position:absolute;right:16px;bottom:12px;display:flex;align-items:center;gap:16px;font-size:14px;color:var(--text-2)}
+  .w-comp .right b{color:var(--text-1);font-weight:600}
+  .w-comp .send{width:34px;height:34px;border-radius:50%;background:#d7dae0}
+  .w-pill{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:999px;padding:3px 10px;font-size:12.5px}
+  .w-pop{position:absolute;width:280px;background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.12);padding:6px;font-size:14px;text-align:left}
+  .w-pop .hd{font-size:11.5px;color:var(--text-3);padding:6px 10px 4px;text-transform:uppercase;letter-spacing:.04em}
+  .w-pop .it{display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;border-radius:8px;color:var(--text-1)}
+  .w-pop .it svg{width:15px;height:15px;color:var(--text-3)}
+  .w-pop .it.on{background:var(--brand-tint);color:var(--brand-strong)}
+  .w-pop .it .ck{margin-left:auto;color:var(--brand)}
+  .w-pop .it .cnt{margin-left:auto;color:var(--text-4);font-size:12.5px}
+  .w-pop .sp{height:1px;background:var(--border-subtle);margin:5px 4px}
+  .w-pop .it.add{color:var(--text-2)}
+  .w-right{margin-left:auto;display:flex;align-items:center;gap:6px}
+  .w-place-pill{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border:1px solid var(--border);border-radius:9px;font-size:13px;color:var(--text-2)}
+  .w-place-pill svg{width:14px;height:14px}
+  /* phone */
+  .phone{position:relative;width:393px;height:782px;border-radius:40px;background:#fff;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.06),0 6px 24px rgba(0,0,0,.08);flex:none}
+  .p-status{height:50px}
+  .p-head{display:flex;align-items:center;gap:10px;padding:6px 16px 10px;border-bottom:1px solid var(--border-subtle)}
+  .p-back{font-size:22px;color:var(--text-2)}
+  .p-title{font-size:17px;font-weight:600}
+  .p-hero{position:absolute;left:0;right:0;top:300px;display:flex;flex-direction:column;align-items:center}
+  .p-comp{position:absolute;left:12px;right:12px;bottom:30px;height:96px;border:1px solid #c9cdd4;border-radius:22px}
+  .p-comp .ph{position:absolute;left:18px;top:16px;font-size:16px;color:var(--text-4)}
+  /* table */
+  table{border-collapse:collapse;width:100%;font-size:14.5px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+  th,td{padding:10px 14px;border-bottom:1px solid #eceef1;text-align:left;vertical-align:top;line-height:1.55}
+  th{background:#f6f7f9;font-weight:650;color:#30353c}
+  .panel{background:#fff;border-radius:12px;padding:18px 22px;box-shadow:0 1px 2px rgba(0,0,0,.05);font-size:14.5px;line-height:1.7}
+  .panel h3{margin:0 0 8px;font-size:17px}
+  code{font-family:'JetBrains Mono',monospace;font-size:13px;background:#f2f3f5;padding:1px 5px;border-radius:4px}
+  .decide{border-left:4px solid #f5a623}
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>New session · 顶部区域（Web）</h1>
+  <div class="lede">今天：左上角一行 “New session / orbit-ws01 › Orbit Session”，中间是引擎卡片，下面是输入框。“在哪儿跑（工作区 › 文件夹）”和“用什么跑（引擎）”被拆在屏幕两头，顶栏只有字、不能点。<br>
+  以下三个方案只动顶部与中间的引擎区，输入框不变。界面文案全部英文；批注中文。窗口按 1340×1165 绘制（与你的截图同尺寸），缩到 67% 放上来。</div>
+
+  <!-- Row 1: today + B (recommended) -->
+  <div class="row">
+    <div class="col">
+      <div class="cap">① 今天</div>
+      <div class="capsub">你的截图，标出四个问题。</div>
+      <div class="shot">
+        <img src="00-today-owner.png" alt="">
+        <div class="ring" style="left:10px;top:5px;width:74px;height:20px"></div>
+        <div class="m" style="left:90px;top:0px">1</div>
+        <div class="ring" style="left:10px;top:25px;width:116px;height:17px"></div>
+        <div class="m" style="left:132px;top:20px">2</div>
+        <div class="ring" style="left:414px;top:424px;width:72px;height:20px"></div>
+        <div class="m" style="left:492px;top:419px">3</div>
+        <div class="ring" style="left:586px;top:745px;width:88px;height:22px"></div>
+        <div class="m" style="left:640px;top:708px">3</div>
+        <div class="m" style="left:620px;top:30px">4</div>
+      </div>
+      <ol class="notes">
+        <li><b>“New session” 标题</b>：和中间的 “Send a task to get started.” 说的是同一件事，本身不可点、没有操作。</li>
+        <li><b>“orbit-ws01 › Orbit Session”</b>：这条会话将在哪个工作区、哪个文件夹里跑，是开跑前最该确认的信息，却是 12.5px 灰字、只读，而且离视线中心（引擎卡片）最远。</li>
+        <li><b>模型说了两遍</b>：中间 “Opus 5.5” 与输入框 “Opus 5.5 Default” 重复；能改的只有输入框里那个。</li>
+        <li><b>顶栏右半空着</b>：只有左上角一小块字，没有和下面内容对齐的东西；整页的重心全在中间偏下。</li>
+      </ol>
+    </div>
+
+    <div class="col">
+      <div class="cap">② 方案 B：顶栏让位，“在哪儿跑”并到引擎下面<span class="tag rec">推荐</span></div>
+      <div class="capsub">宽窗口的草稿不画顶栏。中间一块讲完一件事：<b>用 Claude Code，在 orbit-ws01 › Orbit Session 里跑</b>。去掉重复的模型行。</div>
+      <div class="shot">
+        <div class="win">
+          <div class="w-hero">
+            <div class="w-mark"><svg width="31" height="31" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.2 7.3L19 4.6l-4.6 5.8L22 12l-7.6 1.6 4.6 5.8-5.8-4.7L12 22l-1.2-7.3L5 19.4l4.6-5.8L2 12l7.6-1.6L5 4.6l5.8 4.7z"/></svg></div>
+            <div class="w-name">Claude Code <span class="w-chev">▾</span></div>
+            <div class="w-place">
+              <span class="w-in">in</span>
+              <span class="w-chip"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M5 7l2 1.5L5 10"/></svg>orbit-ws01<span class="w-chev">▾</span></span>
+              <span class="w-sep">›</span>
+              <span class="w-chip hover"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4.5A1.5 1.5 0 013.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0114 6v5.5a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 11.5z"/></svg>Orbit Session<span class="w-chev">▾</span></span>
+            </div>
+            <div class="w-empty">Send a task to get started.</div>
+          </div>
+          <div class="w-comp"><div class="ph">Send this workspace a task…</div><div class="plus">+</div><div class="auto">Auto</div>
+            <div class="right"><span><b>Opus 5.5</b> Default</span><span>2%</span><span class="w-pill">Chinese → English</span><span>✦</span><span class="send"></span></div></div>
+        </div>
+        <div class="m" style="left:556px;top:378px">a</div>
+        <div class="m" style="left:536px;top:408px">b</div>
+        <div class="m" style="left:20px;top:20px">c</div>
+      </div>
+      <ol class="notes" type="a">
+        <li><b>引擎、工作区、文件夹一行一行往下读</b>，都在视线中心。工作区/文件夹是浅色小 chip，悬停变灰底，点开是菜单（见 ⑤）。</li>
+        <li><b>“Send a task to get started.”</b> 保留，模型行删掉，模型只在输入框里说（那里能改）。</li>
+        <li><b>顶栏不画</b>：没有会话就没有标题、分享、⋯ 可放。窄窗口和手机仍保留带返回键的 “New session” 一行（见 ④），因为返回键要有地方。</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- Row 2: A + C -->
+  <div class="row">
+    <div class="col">
+      <div class="cap">③ 方案 A：顶栏保留，副标题变成可点的选择器<span class="tag min">改动最小</span></div>
+      <div class="capsub">位置不变，只把 “orbit-ws01 › Orbit Session” 两段做成 chip；中间去掉模型行。</div>
+      <div class="shot">
+        <div class="win">
+          <div class="w-head" style="border-bottom:1px solid var(--border-subtle)">
+            <div>
+              <div class="w-title">New session</div>
+              <div class="w-sub" style="margin-left:-8px">
+                <span class="w-chip"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M5 7l2 1.5L5 10"/></svg>orbit-ws01<span class="w-chev">▾</span></span>
+                <span class="w-sep">›</span>
+                <span class="w-chip"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4.5A1.5 1.5 0 013.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0114 6v5.5a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 11.5z"/></svg>Orbit Session<span class="w-chev">▾</span></span>
+              </div>
+            </div>
+          </div>
+          <div class="w-hero">
+            <div class="w-mark"><svg width="31" height="31" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.2 7.3L19 4.6l-4.6 5.8L22 12l-7.6 1.6 4.6 5.8-5.8-4.7L12 22l-1.2-7.3L5 19.4l4.6-5.8L2 12l7.6-1.6L5 4.6l5.8 4.7z"/></svg></div>
+            <div class="w-name">Claude Code <span class="w-chev">▾</span></div>
+            <div class="w-empty">Send a task to get started.</div>
+          </div>
+          <div class="w-comp"><div class="ph">Send this workspace a task…</div><div class="plus">+</div><div class="auto">Auto</div>
+            <div class="right"><span><b>Opus 5.5</b> Default</span><span>2%</span><span class="w-pill">Chinese → English</span><span>✦</span><span class="send"></span></div></div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>好处：改动最小，和会话页顶栏结构一致（标题 + 副标题）。</li>
+        <li>不足：问题 ②④ 只解决一半——位置仍在左上角，离引擎卡片远；顶栏右侧仍空。</li>
+      </ul>
+    </div>
+
+    <div class="col">
+      <div class="cap">④ 方案 C：顶栏做成工具条，位置放右侧</div>
+      <div class="capsub">左边 “New session”，右边一个 “orbit-ws01 › Orbit Session ▾” 按钮，占住会话页放分享和 ⋯ 的位置。</div>
+      <div class="shot">
+        <div class="win">
+          <div class="w-head" style="border-bottom:1px solid var(--border-subtle)">
+            <div class="w-title">New session</div>
+            <div class="w-right">
+              <span class="w-place-pill"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M5 7l2 1.5L5 10"/></svg>orbit-ws01 <span class="w-sep">›</span> Orbit Session <span class="w-chev">▾</span></span>
+            </div>
+          </div>
+          <div class="w-hero">
+            <div class="w-mark"><svg width="31" height="31" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.2 7.3L19 4.6l-4.6 5.8L22 12l-7.6 1.6 4.6 5.8-5.8-4.7L12 22l-1.2-7.3L5 19.4l4.6-5.8L2 12l7.6-1.6L5 4.6l5.8 4.7z"/></svg></div>
+            <div class="w-name">Claude Code <span class="w-chev">▾</span></div>
+            <div class="w-empty">Send a task to get started.</div>
+          </div>
+          <div class="w-comp"><div class="ph">Send this workspace a task…</div><div class="plus">+</div><div class="auto">Auto</div>
+            <div class="right"><span><b>Opus 5.5</b> Default</span><span>2%</span><span class="w-pill">Chinese → English</span><span>✦</span><span class="send"></span></div></div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>好处：顶栏两端都有东西，像一个“工具条”；一个按钮里同时选工作区和文件夹。</li>
+        <li>不足：右上角离中心更远，反而最不容易被看到；一个按钮里两级选择，菜单更深。</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Row 3: B menu + phone -->
+  <div class="row">
+    <div class="col">
+      <div class="cap">⑤ 方案 B · 点开文件夹 chip</div>
+      <div class="capsub">菜单列出这个工作区的文件夹，当前的打勾；“No folder” 放在最上面。工作区 chip 的菜单同样形状，列出工作区。</div>
+      <div class="shot">
+        <div class="win">
+          <div class="w-hero">
+            <div class="w-mark"><svg width="31" height="31" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.2 7.3L19 4.6l-4.6 5.8L22 12l-7.6 1.6 4.6 5.8-5.8-4.7L12 22l-1.2-7.3L5 19.4l4.6-5.8L2 12l7.6-1.6L5 4.6l5.8 4.7z"/></svg></div>
+            <div class="w-name">Claude Code <span class="w-chev">▾</span></div>
+            <div class="w-place">
+              <span class="w-in">in</span>
+              <span class="w-chip"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M5 7l2 1.5L5 10"/></svg>orbit-ws01<span class="w-chev">▾</span></span>
+              <span class="w-sep">›</span>
+              <span class="w-chip open"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4.5A1.5 1.5 0 013.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0114 6v5.5a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 11.5z"/></svg>Orbit Session<span class="w-chev">▾</span></span>
+            </div>
+            <div class="w-empty">Send a task to get started.</div>
+          </div>
+          <div class="w-pop" style="left:735px;top:606px">
+            <div class="it"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M4.2 11.8l7.6-7.6"/></svg>No folder</div>
+            <div class="sp"></div>
+            <div class="it on"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4.5A1.5 1.5 0 013.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0114 6v5.5a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 11.5z"/></svg>Orbit Session<span class="ck">✓</span></div>
+            <div class="it"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4.5A1.5 1.5 0 013.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0114 6v5.5a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 11.5z"/></svg>Releases<span class="cnt">12</span></div>
+            <div class="it"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4.5A1.5 1.5 0 013.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0114 6v5.5a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 11.5z"/></svg>Web polish<span class="cnt">7</span></div>
+          </div>
+          <div class="w-comp"><div class="ph">Send this workspace a task…</div><div class="plus">+</div><div class="auto">Auto</div>
+            <div class="right"><span><b>Opus 5.5</b> Default</span><span>2%</span><span class="w-pill">Chinese → English</span><span>✦</span><span class="send"></span></div></div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>选文件夹：草稿留在原地，输入框里已打的字不丢，地址栏的 <code>?folder=</code> 跟着变。</li>
+        <li>选另一个工作区：打开那个工作区的 New session，引擎取那个工作区记住的那个；输入框的字带过去。</li>
+        <li>没有文件夹的工作区：只画工作区 chip，不画 “›” 和文件夹。</li>
+      </ul>
+    </div>
+
+    <div class="col">
+      <div class="cap">⑥ 方案 B · 手机 / 窄窗口</div>
+      <div class="capsub">返回键要有位置，所以顶栏保留，但只剩返回键 + “New session”，副标题去掉——位置已经在中间说了。</div>
+      <div style="display:flex;gap:40px">
+        <div class="phone">
+          <div class="p-status"></div>
+          <div class="p-head"><span class="p-back">←</span><span class="p-title">New session</span></div>
+          <div class="p-hero">
+            <div class="w-mark"><svg width="31" height="31" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.2 7.3L19 4.6l-4.6 5.8L22 12l-7.6 1.6 4.6 5.8-5.8-4.7L12 22l-1.2-7.3L5 19.4l4.6-5.8L2 12l7.6-1.6L5 4.6l5.8 4.7z"/></svg></div>
+            <div class="w-name">Claude Code <span class="w-chev">▾</span></div>
+            <div class="w-place">
+              <span class="w-in">in</span>
+              <span class="w-chip">orbit-ws01<span class="w-chev">▾</span></span>
+              <span class="w-sep">›</span>
+              <span class="w-chip">Orbit Session<span class="w-chev">▾</span></span>
+            </div>
+            <div class="w-empty">Send a task to get started.</div>
+          </div>
+          <div class="p-comp"><div class="ph">Send this workspace a task…</div></div>
+        </div>
+        <div style="flex:1;font-size:14.5px;line-height:1.7;color:#30353c;padding-top:30px">
+          <b>窄屏规则</b>
+          <ul style="padding-left:18px;margin-top:6px">
+            <li>chip 去掉图标，只留名字和 ▾，一行放得下。</li>
+            <li>名字太长：每个 chip 最宽 160px，省略号截断，悬停/长按看全名。</li>
+            <li>手机上点 chip 打开底部弹层，而不是浮动菜单。</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <table>
+        <tr><th style="width:150px">项</th><th>A</th><th>B（推荐）</th><th>C</th></tr>
+        <tr><td>宽窗口顶栏</td><td>保留，副标题可点</td><td>不画</td><td>保留，右侧放位置按钮</td></tr>
+        <tr><td>工作区/文件夹</td><td>左上角 chip</td><td>引擎名下面 chip</td><td>右上角一个按钮</td></tr>
+        <tr><td>中间模型行</td><td>删</td><td>删</td><td>删</td></tr>
+        <tr><td>手机</td><td>同今天 + chip</td><td>← New session，位置在中间</td><td>同 A</td></tr>
+        <tr><td>解决 ①–④</td><td>①③ 半个②</td><td>①②③④</td><td>③ 半个②④</td></tr>
+      </table>
+      <div class="panel" style="margin-top:20px">
+        <h3>会改的文件（选定后）</h3>
+        <code>src/web/src/components/WorkspaceView.tsx</code> 草稿顶栏（<code>composing</code> 分支、<code>headSub</code>）<br>
+        <code>src/web/src/components/NewSessionProviderHero.tsx</code> 加位置行，删 <code>np-current-model</code><br>
+        <code>src/web/src/index.css</code> 位置 chip 样式<br>
+        测试：<code>NewSessionProviderHero.test.tsx</code>、<code>WorkspaceView.projectIntent.test.tsx</code><br>
+        macOS/iOS（<code>AgentsView.swift</code>）、Android（<code>NewSessionComposer.kt</code>）本轮不动，除非你要一起改。
+      </div>
+    </div>
+    <div class="col">
+      <div class="panel decide">
+        <h3>待你定</h3>
+        <ol style="margin:0;padding-left:20px">
+          <li><b>选哪个方案</b>：A / B / C。我推荐 <b>B</b>：草稿页本来就没有标题和按钮可放，顶栏让出来，所有“这次怎么跑”的信息集中在中间一处。</li>
+          <li><b>工作区/文件夹做成能改吗？</b> 今天它只读。能改（⑤ 的菜单）是推荐；只读的话 B 仍成立，chip 换成纯文字。</li>
+          <li><b>删掉中间的 “Opus 5.5” 吗？</b> 推荐删，输入框里已经有、而且那里能改。</li>
+          <li><b>只改 Web，还是 macOS/iOS/Android 跟着改？</b> 推荐先 Web，你看过实物再同步其他端。</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

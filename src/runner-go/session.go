@@ -861,7 +861,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// this belongs to the flush and not to the engine's reader. The roots are this session's own
 	// directories; the memo keeps a retried batch, or a mock linked twice, from being uploaded
 	// again under a second id.
-	replyFiles := newReplyAttachmentIDs()
+	replyFiles := replyFilesOf(sessionID)
+	defer replyFileMemos.Delete(sessionID)
 	replyFileRoots := []string{execDir, uploadsDir(sessionID)}
 	// takeBuffered takes what is buffered, its reply files uploaded.
 	takeBuffered := func(flushCtx context.Context) []RunEvent {
@@ -2017,6 +2018,11 @@ var builtinTaskTools = []string{
 	"TodoWrite", "TodoRead",
 }
 
+// builtinSubAgentTools are Claude's own sub-agent tool, under the two names it has had. They are disabled in a session
+// that is served Orbit's delegate (claude_spawn.go), which is the door for the same request that records the work and
+// brings its result back (design D1). Denying a name the installed claude does not have is a no-op.
+var builtinSubAgentTools = []string{"Agent", "Task"}
+
 // withBuiltinTaskToolsDisallowed appends builtinTaskTools to the agent's configured
 // disallow list, de-duplicated and order-stable.
 func withBuiltinTaskToolsDisallowed(configured []string) []string {
@@ -2631,6 +2637,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				// shell output, the flag is cleared only once the message is accepted below.
 				carriesReset := !steer && contextReset.Load()
 				feedText = withContextResetNote(feedText, carriesReset, job.insideRecordedWork())
+				if !steer {
+					feedText = withReplyFileCorrection(feedText, replyFilesOf(job.SessionID).takeCorrection())
+				}
 				// Tell claude where the written-to-disk uploads landed (absolute paths outside
 				// the worktree), so it reads them with its tools instead of expecting inline
 				// content it never received.

@@ -76,7 +76,7 @@ func runCodexChild(ctx context.Context, c subagentChild) (ExecResult, string, er
 		return ExecResult{Status: stFailed}, resumeID, errors.New("failed to start codex thread: " + err.Error())
 	}
 	if resumeID == "" && app.currentInstructionMode() == codexInstructionsInjectItems {
-		if err := app.injectAgentContext(ctx, threadID, child.Agent, child.insideRecordedWork(), child.watchesOn(), child.workflowsOn()); err != nil {
+		if err := app.injectAgentContext(ctx, threadID, child.Agent, child.sessionShape(app.orbitExecutable)); err != nil {
 			app.setInstructionMode(codexInstructionsUserInput)
 		}
 	}

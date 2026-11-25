@@ -2,6 +2,7 @@ import { questionsWithCoordinator } from '../sessions/run-question';
 import { KEEP_BACKGROUND_WORK_END_CONTENT } from '../sessions/running-work';
 import { readMergeRecovery, type MergeRecoveryAction, type SessionPhaseFields } from '@orbit/shared';
 import { readOneSessionPhaseFields } from '../sessions/session-phase';
+import { readOneSessionBackgroundFields } from '../sessions/task-work-carrier';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
@@ -1751,6 +1752,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             // The row as it stands now (sessions/session-phase.ts); absent when the session is gone. The end reason
             // stays the one the end settled with, as this event has always sent it.
             ...withoutEndReason(await readOneSessionPhaseFields(this.prisma, sessionId)),
+            // The Background mark's inputs, activity and runningBgCount, the row as it stands now; absent when it is gone.
+            ...(await readOneSessionBackgroundFields(this.prisma, sessionId)),
           };
         }
       case ControlEventType.SESSION_ERROR:
@@ -1954,6 +1957,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       waitingKind: sessionWaitingKind(approvals, decisions),
       // phase, released, lastTurnOutcome, waitingOn (sessions/session-phase.ts), over the count above.
       ...(await readOneSessionPhaseFields(this.prisma, sessionId, pendingApprovals)),
+      // The Background mark's inputs, activity and runningBgCount, as the list row reads them.
+      ...(await readOneSessionBackgroundFields(this.prisma, sessionId)),
       confirmationUnderReview: underReview
         ? {
           ...underReview,

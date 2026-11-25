@@ -19,7 +19,7 @@ import { readOwnerDecisionsBySession } from '../projects/owner-decision-signal';
 import { DISPATCH_PAUSED } from '../queue/dispatch-pause';
 import { isHoldNotice } from '../queue/hold-notice';
 import { runnerOfflineSql } from '../runners/runner-presence';
-import { countLiveApprovals } from './abandoned-approvals';
+import { countLiveApprovalsBySession } from './abandoned-approvals';
 
 /**
  * The three-state field and the facts beside it (docs/session-three-state-design.md §4, §11.5; plan step 5.1),
@@ -161,7 +161,8 @@ type Db = Prisma.TransactionClient;
  * The fields for the sessions `ids`, by id; a session that is not there is absent. One statement reads the row,
  * its wake facts, its runner and the dispatch pause. `pendingApprovals` is the count the caller already has (the list
  * row, the realtime summary, the link preview); a session it does not name is counted here, the way
- * `session.updated` counts it (`countLiveApprovals` plus the owner decisions on it).
+ * `session.updated` counts it (`countLiveApprovals` plus the owner decisions on it), for all of them in one batch
+ * (`countLiveApprovalsBySession`), so the statements do not grow with the number of sessions.
  */
 export async function readSessionPhaseFields(
   db: Db,
@@ -186,8 +187,10 @@ export async function readSessionPhaseFields(
   const uncounted = rows.filter((row) => !counted.has(row.id));
   for (const [ownerId, owned] of groupBy(uncounted, (row) => row.ownerId)) {
     const decisions = await readOwnerDecisionsBySession(db, ownerId, { sessionIds: owned.map((row) => row.id) });
+    // Counted for all of them at once: a search page of 50 hits is the same few statements as one session.
+    const live = await countLiveApprovalsBySession(db, owned);
     for (const row of owned) {
-      counted.set(row.id, (await countLiveApprovals(db, row)) + (decisions.get(row.id)?.count ?? 0));
+      counted.set(row.id, (live.get(row.id) ?? 0) + (decisions.get(row.id)?.count ?? 0));
     }
   }
   return new Map(rows.map((row) => [row.id, sessionPhaseFields(

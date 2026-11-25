@@ -900,16 +900,16 @@ describe('the title bar’s Project sessions button', { timeout: 60_000 }, () =>
     expect(button().getAttribute('title')).toBe('Project sessions');
     expect(button().classList.contains('orbit-button')).toBe(true);
     expect(button().querySelector('.orbit-button-icon svg, .orbit-button-icon .anticon, .orbit-button-icon img, .orbit-button-icon *')).not.toBeNull();
-    // Left of Share and the ⋮ More actions button (docs/mocks/session-header-compact).
-    expect(button().nextElementSibling?.classList.contains('workspace-header-share')).toBe(true);
-    expect(button().nextElementSibling?.nextElementSibling?.getAttribute('title')).toBe('More actions');
+    // Left of the ⋯ More actions button and Share (docs/mocks/session-header-share-more).
+    expect(button().nextElementSibling?.getAttribute('title')).toBe('More actions');
+    expect(button().nextElementSibling?.nextElementSibling?.classList.contains('workspace-header-share')).toBe(true);
     // The column header counts the same sessions.
     expect(column()!.querySelector('.session-project-page-header')?.textContent).toContain('Project · 2 sessions');
     // A member of the project carries it too.
     await act(async () => routerNavigate(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
     await until(() => expect(mounted().querySelector('.workspace-header .workspace-name')?.textContent).toBe(TASK.title));
     expect(button().textContent).toBe('2');
-    expect(button().nextElementSibling?.nextElementSibling?.getAttribute('title')).toBe('More actions');
+    expect(button().nextElementSibling?.getAttribute('title')).toBe('More actions');
     // A session in no project has none.
     await act(async () => routerNavigate(`/sessions/${LOOSE.id}`));
     await until(() => expect(mounted().querySelector('.workspace-header .workspace-name')?.textContent).toBe(LOOSE.title));

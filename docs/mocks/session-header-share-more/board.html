@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>Session 顶栏：分享与 ⋯ 按钮</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#eef0f3;font-family:-apple-system,Inter,'Noto Sans SC',sans-serif;color:#1f2329}
+.b-part{width:1180px;padding:32px 40px 28px;font:15px/1.6 Inter,'Noto Sans SC',sans-serif}
+h1{font-size:22px;margin:0 0 4px}
+h2{font-size:17px;margin:0 0 14px}
+.lead{color:#646a73;font-size:13.5px;margin:0 0 22px;line-height:1.6}
+.ftitle{font-size:14px;font-weight:700;margin:0 0 8px;display:flex;gap:10px;align-items:baseline}
+.ftitle small{font-weight:400;color:#646a73;font-size:12.5px}
+.rec{display:inline-block;background:#e8f7ee;color:#1a7f45;font-size:11px;font-weight:700;border-radius:4px;padding:0 6px}
+.frame{margin-bottom:22px}
+.pane{--bg:#fff;--t1:#1f2329;--t2:#646a73;--t3:#8f959e;--line:#eceef1;--hov:rgba(0,0,0,.05);--bub:#eaf1fe;
+ position:relative;background:var(--bg);color:var(--t1);border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.08);overflow:hidden;width:1100px;height:132px}
+.pane.dark{--bg:#202023;--t1:#e3e6ea;--t2:#a7adb6;--t3:#8b9099;--line:#343437;--hov:rgba(255,255,255,.08);--bub:#2b3242}
+.pane.tall{height:330px}
+.hdr{display:flex;align-items:center;gap:12px;height:64px;padding:0 24px;border-bottom:1px solid var(--line)}
+.name{font-size:16px;font-weight:700;flex:1;min-width:0}
+.ubub{position:absolute;right:24px;top:84px;width:360px;height:34px;border-radius:14px;background:var(--bub)}
+/* today: 32x32 text buttons, 14px glyphs, grey, header gap 12 */
+.btn{flex:none;position:relative;display:grid;place-items:center;border-radius:6px;color:var(--t2)}
+.btn.old{width:32px;height:32px}.btn.old svg{width:14px;height:14px}
+/* proposal: one group, 28x28, 16px glyphs, gap 2 */
+.grp{flex:none;display:flex;align-items:center;gap:2px;margin-right:-6px}
+.btn.new{width:28px;height:28px;color:var(--t1)}.btn.new svg{width:16px;height:16px}
+.btn.new.grey{color:var(--t2)}
+.btn.hover{background:var(--hov)}
+.btn.press{background:var(--hov);box-shadow:inset 0 0 0 100px var(--hov)}
+.btn.live{color:#1a9a56}
+.dark .btn.live{color:#3fcf7f}
+.btn.live i{position:absolute;right:3px;top:3px;width:6px;height:6px;border-radius:50%;background:#34c759;box-shadow:0 0 0 2px var(--bg)}
+.tip{position:absolute;font-size:12px;line-height:22px;padding:0 8px;border-radius:5px;background:#1f2329;color:#fff;white-space:nowrap}
+.menu{position:absolute;right:24px;top:58px;width:232px;background:var(--bg);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.14),0 0 0 1px var(--line);padding:6px;font-size:13.5px}
+.menu div{height:32px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:6px;color:var(--t1)}
+.menu div:first-child{background:var(--hov)}
+.menu hr{border:0;border-top:1px solid var(--line);margin:4px 2px}
+.mk{position:absolute;z-index:3;width:20px;height:20px;border-radius:50%;background:#e5484d;color:#fff;font-size:11.5px;font-weight:700;display:grid;place-items:center}
+.ring{position:absolute;z-index:3;border:2px dashed #e5484d;border-radius:8px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.note{background:#fff;border-radius:10px;padding:16px 20px;font-size:13px;line-height:1.75;margin-bottom:14px}
+.note h3{margin:0 0 6px;font-size:14px}
+.note ol,.note ul{margin:0;padding-left:0;list-style:none}
+.n{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#e5484d;color:#fff;font-size:11px;font-weight:700;margin-right:4px;vertical-align:1px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+td,th{border-bottom:1px solid #eceef1;padding:7px 8px;text-align:left;vertical-align:top}
+th{color:#646a73;font-weight:600;font-size:12.5px}
+.zoom{display:flex;gap:40px;align-items:center;background:#fff;border-radius:10px;padding:20px 28px;margin-bottom:22px}
+.zoom .cell{display:flex;flex-direction:column;align-items:center;gap:10px;font-size:12.5px;color:#646a73}
+.zoom .big{display:flex;align-items:center;gap:0;transform:scale(3);transform-origin:center;height:100px;justify-content:center;width:240px}
+.zoom .big .hdrlike{display:flex;align-items:center;gap:12px}
+.arrow{font-size:28px;color:#8f959e}
+code{font-family:'JetBrains Mono',monospace;font-size:12px;background:#f1f2f4;border-radius:4px;padding:0 4px}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute">
+ <defs>
+  <symbol id="g-export" viewBox="64 64 896 896"><path fill="currentColor" d="M880 912H144c-17.7 0-32-14.3-32-32V144c0-17.7 14.3-32 32-32h360c4.4 0 8 3.6 8 8v56c0 4.4-3.6 8-8 8H184v656h656V520c0-4.4 3.6-8 8-8h56c4.4 0 8 3.6 8 8v360c0 17.7-14.3 32-32 32zM770.87 199.13l-52.2-52.2a8.01 8.01 0 014.7-13.6l179.4-21c5.1-.6 9.5 3.7 8.9 8.9l-21 179.4c-.8 6.6-8.9 9.4-13.6 4.7l-52.4-52.4-256.2 256.2a8.03 8.03 0 01-11.3 0l-42.4-42.4a8.03 8.03 0 010-11.3l256.1-256.3z"/></symbol>
+  <symbol id="g-more" viewBox="64 64 896 896"><path fill="currentColor" d="M456 231a56 56 0 10112 0 56 56 0 10-112 0zm0 280a56 56 0 10112 0 56 56 0 10-112 0zm0 280a56 56 0 10112 0 56 56 0 10-112 0z"/></symbol>
+  <!-- proposed: horizontal ellipsis with dots a touch larger than antd's, and an open tray with an up arrow (the share glyph macOS/iOS use) -->
+  <symbol id="g-dots" viewBox="0 0 16 16"><circle cx="3" cy="8" r="1.45" fill="currentColor"/><circle cx="8" cy="8" r="1.45" fill="currentColor"/><circle cx="13" cy="8" r="1.45" fill="currentColor"/></symbol>
+  <symbol id="g-share" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M5.6 6.2H4.6a1.1 1.1 0 0 0-1.1 1.1v5.6a1.1 1.1 0 0 0 1.1 1.1h6.8a1.1 1.1 0 0 0 1.1-1.1V7.3a1.1 1.1 0 0 0-1.1-1.1h-1"/><path d="M8 1.6v8.2"/><path d="M5.7 3.9 8 1.6l2.3 2.3"/></g></symbol>
+ </defs>
+</svg>
+
+<section class="b-part" id="part-1">
+ <h1>Session 顶栏：分享与 ⋯ 按钮</h1>
+ <p class="lead">宽窗口（桌面 web）的 Session 标题栏右侧。参照图 2：⋯ 改为横向三点、放在左边，分享改为「托盘 + 上箭头」放在最右，两颗按钮收成一组、靠得更近、图标略大、颜色更实。手机端不变（手机上分享本来就在 ⋯ 里）。</p>
+
+ <div class="frame">
+  <div class="ftitle">① 今天 <small>ExportOutlined（方框 + 斜箭头）在前、竖向 ⋮ 在后；32×32 按钮、14px 灰色图标、间距 12px，中心距 44px</small></div>
+  <div class="pane" id="today">
+   <div class="hdr"><div class="name">Menu UI style polish</div>
+    <span class="btn old" id="t-share"><svg><use href="#g-export"/></svg></span>
+    <span class="btn old" id="t-more"><svg><use href="#g-more"/></svg></span>
+   </div><div class="ubub"></div>
+  </div>
+ </div>
+
+ <div class="frame">
+  <div class="ftitle">② 建议 <span class="rec">推荐</span> <small>⋯（横向）在前、分享（托盘 + 上箭头）在最右；一组 28×28、16px 图标、组内间距 2px，中心距 30px；颜色 text-1</small></div>
+  <div class="pane" id="prop">
+   <div class="hdr"><div class="name">Menu UI style polish</div>
+    <div class="grp">
+     <span class="btn new" id="p-more"><svg><use href="#g-dots"/></svg></span>
+     <span class="btn new" id="p-share"><svg><use href="#g-share"/></svg></span>
+    </div>
+   </div><div class="ubub"></div>
+  </div>
+ </div>
+
+ <div class="zoom">
+  <div class="cell"><div class="big"><div class="hdrlike" style="color:#646a73"><span class="btn old"><svg><use href="#g-export"/></svg></span><span class="btn old"><svg><use href="#g-more"/></svg></span></div></div>① 今天（放大 3×）</div>
+  <div class="arrow">→</div>
+  <div class="cell"><div class="big"><div class="grp" style="margin:0"><span class="btn new"><svg><use href="#g-dots"/></svg></span><span class="btn new"><svg><use href="#g-share"/></svg></span></div></div>② 建议（放大 3×）</div>
+ </div>
+
+ <div class="note">
+  <h3>改了什么</h3>
+  <ol>
+   <li><span class="n">1</span>顺序对调：⋯ 在左、分享在最右（同图 2，也和 macOS / iOS 工具栏一致）。</li>
+   <li><span class="n">2</span>⋯ 由竖向 <code>MoreOutlined</code> 换成横向三点；点比 antd <code>EllipsisOutlined</code> 稍大，16px 下仍清楚。</li>
+   <li><span class="n">3</span>分享由 <code>ExportOutlined</code>（看起来像「在新窗口打开」）换成托盘 + 上箭头，1.35px 线宽，读作「分享」而不是「外链」。</li>
+   <li><span class="n">4</span>两颗收成一组：28×28、组内 2px，组外仍是标题栏的 12px；组整体右移 6px，使图标右缘与下方气泡右缘对齐。</li>
+   <li><span class="n">5</span>颜色 text-1（#1f2329 / 暗色 #e3e6ea），悬停只加浅底，不变色（见 ③）。</li>
+  </ol>
+ </div>
+</section>
+
+<section class="b-part" id="part-2">
+ <h2>③ 状态（建议样式）</h2>
+ <div class="cols">
+  <div>
+   <div class="ftitle">悬停 ⋯ <small>浅底 + 提示 More actions</small></div>
+   <div class="pane" style="width:532px">
+    <div class="hdr"><div class="name">Menu UI style polish</div>
+     <div class="grp"><span class="btn new hover"><svg><use href="#g-dots"/></svg></span><span class="btn new"><svg><use href="#g-share"/></svg></span></div>
+    </div>
+    <div class="tip" style="right:30px;top:56px">More actions</div>
+   </div>
+  </div>
+  <div>
+   <div class="ftitle">已分享（Shared · Live） <small>分享图标变绿 + 右上绿点，提示不变</small></div>
+   <div class="pane" style="width:532px">
+    <div class="hdr"><div class="name">Menu UI style polish</div>
+     <div class="grp"><span class="btn new"><svg><use href="#g-dots"/></svg></span><span class="btn new live"><svg><use href="#g-share"/></svg><i></i></span></div>
+    </div>
+    <div class="tip" style="right:10px;top:56px">Shared · Live — anyone with the link can view</div>
+   </div>
+  </div>
+ </div>
+ <div class="cols" style="margin-top:22px">
+  <div>
+   <div class="ftitle">⋯ 打开 <small>菜单内容不变（此处条目为示意），右缘对齐分享按钮右缘</small></div>
+   <div class="pane tall" style="width:532px">
+    <div class="hdr"><div class="name">Menu UI style polish</div>
+     <div class="grp"><span class="btn new press"><svg><use href="#g-dots"/></svg></span><span class="btn new"><svg><use href="#g-share"/></svg></span></div>
+    </div>
+    <div class="menu"><div>Rename</div><div>Tags</div><div>Move…</div><hr><div>Find in session</div><div>Session settings</div><hr><div style="color:#e5484d">Move to Trash</div></div>
+   </div>
+  </div>
+  <div>
+   <div class="ftitle">暗色 <small>同一组，text-1 暗色值</small></div>
+   <div class="pane dark" style="width:532px">
+    <div class="hdr"><div class="name">Menu UI style polish</div>
+     <div class="grp"><span class="btn new"><svg><use href="#g-dots"/></svg></span><span class="btn new"><svg><use href="#g-share"/></svg></span></div>
+    </div><div class="ubub" style="width:260px"></div>
+   </div>
+   <div class="ftitle" style="margin-top:22px">暗色 · 已分享</div>
+   <div class="pane dark" style="width:532px;height:64px">
+    <div class="hdr" style="border:0"><div class="name">Menu UI style polish</div>
+     <div class="grp"><span class="btn new"><svg><use href="#g-dots"/></svg></span><span class="btn new live"><svg><use href="#g-share"/></svg><i></i></span></div>
+    </div>
+   </div>
+  </div>
+ </div>
+</section>
+
+<section class="b-part" id="part-3">
+ <h2>待定 · 要你拍板</h2>
+ <div class="cols">
+  <div>
+   <div class="ftitle">方案 A <span class="rec">推荐</span> <small>颜色 text-1，与图 2 一致</small></div>
+   <div class="pane" style="width:532px;height:64px"><div class="hdr" style="border:0"><div class="name">Menu UI style polish</div><div class="grp"><span class="btn new"><svg><use href="#g-dots"/></svg></span><span class="btn new"><svg><use href="#g-share"/></svg></span></div></div></div>
+  </div>
+  <div>
+   <div class="ftitle">方案 B <small>保持今天的 text-2 灰，更安静，与左侧项目按钮同色</small></div>
+   <div class="pane" style="width:532px;height:64px"><div class="hdr" style="border:0"><div class="name">Menu UI style polish</div><div class="grp"><span class="btn new grey"><svg><use href="#g-dots"/></svg></span><span class="btn new grey"><svg><use href="#g-share"/></svg></span></div></div></div>
+  </div>
+ </div>
+ <div class="note" style="margin-top:16px">
+  推荐 A：图 2 的两颗是实色；标题栏右侧只有这两颗常驻按钮，实色让它们一眼可见，又因为尺寸更小、贴在一起，不会比标题更抢眼。若觉得太重，选 B，其余改动不变。
+ </div>
+ <div class="note">
+  <h3>落地（按代价排）</h3>
+  <table>
+   <tr><th>改动</th><th>位置</th><th>代价</th></tr>
+   <tr><td>⋯ 与分享对调顺序，包进一个 <code>.workspace-header-actions</code> 组</td><td><code>WorkspaceView.tsx</code> 标题栏</td><td>小</td></tr>
+   <tr><td>组样式：28×28、16px 图标、gap 2px、颜色（A/B）、右移 6px</td><td><code>index.css</code></td><td>小</td></tr>
+   <tr><td>两个图标：横向三点、托盘 + 上箭头（仓库内 SVG 图标组件）</td><td>web 图标</td><td>小</td></tr>
+   <tr><td>已分享时的绿点（今天只变绿）</td><td><code>index.css</code></td><td>小</td></tr>
+   <tr><td>更新相关测试（按钮顺序 / aria-label 不变）</td><td>WorkspaceView 测试</td><td>小</td></tr>
+  </table>
+  <p style="margin:8px 0 0;color:#646a73">不动：手机端（分享在 ⋯ 里）、回收站中的 Session（只有 ⋯）、菜单内容、项目按钮、无障碍名称（<code>More actions</code> / <code>Share…</code> / <code>Shared · Live</code>）。</p>
+ </div>
+</section>
+
+<script>
+window.drawMarks = () => {
+  const put = (paneId, elId, n, dx = 0) => {
+    const pane = document.getElementById(paneId), el = document.getElementById(elId);
+    const p = pane.getBoundingClientRect(), r = el.getBoundingClientRect();
+    const ring = document.createElement('div'); ring.className = 'ring';
+    Object.assign(ring.style, { left: r.left - p.left - 4 + 'px', top: r.top - p.top - 4 + 'px', width: r.width + 8 + 'px', height: r.height + 8 + 'px' });
+    const mk = document.createElement('div'); mk.className = 'mk'; mk.textContent = n;
+    Object.assign(mk.style, { left: r.left - p.left + r.width / 2 - 10 + dx + 'px', top: r.bottom - p.top + 8 + 'px' });
+    pane.append(ring, mk);
+  };
+  put('prop', 'p-more', '2', -6); put('prop', 'p-share', '3', 6);
+};
+</script>
+</body></html>

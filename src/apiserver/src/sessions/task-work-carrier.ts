@@ -1,5 +1,5 @@
 import { Prisma, RunStatus } from '@prisma/client';
-import type { SessionActivity, TaskRunReason } from '@orbit/shared';
+import type { SessionBackgroundFields, TaskRunReason } from '@orbit/shared';
 
 import {
   ARMED_RETRY,
@@ -133,17 +133,31 @@ export function sessionActivitySql(session: string): string {
   END`;
 }
 
-/** `sessionActivitySql` for the sessions `ids`, by id; a session that is not there is absent. */
-export async function readSessionActivities(
+/**
+ * The Background mark's inputs for the sessions `ids`, by id, under the list row's own expressions: `activity`
+ * (`sessionActivitySql`) and `runningBgCount` (`cardinality(running_bg_shells)`). Every payload kind that does not
+ * read them in its own row query reads them here, so a session answers alike on all of them. A session that is not
+ * there is absent.
+ */
+export async function readSessionBackgroundFields(
   prisma: Pick<PrismaService, '$queryRaw'>,
   ids: readonly string[],
-): Promise<Map<string, SessionActivity | null>> {
+): Promise<Map<string, SessionBackgroundFields>> {
   if (ids.length === 0) return new Map();
-  const rows = await prisma.$queryRaw<Array<{ id: string; activity: SessionActivity | null }>>(Prisma.sql`
-    SELECT s."id" AS "id", (${Prisma.raw(sessionActivitySql('s'))}) AS "activity"
+  const rows = await prisma.$queryRaw<Array<{ id: string } & SessionBackgroundFields>>(Prisma.sql`
+    SELECT s."id" AS "id", (${Prisma.raw(sessionActivitySql('s'))}) AS "activity",
+           cardinality(s."running_bg_shells")::int AS "runningBgCount"
       FROM "session" s
      WHERE s."id" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})`);
-  return new Map(rows.map((row) => [row.id, row.activity]));
+  return new Map(rows.map(({ id, activity, runningBgCount }) => [id, { activity, runningBgCount }]));
+}
+
+/** `readSessionBackgroundFields` for one session; null when it is not there. */
+export async function readOneSessionBackgroundFields(
+  prisma: Pick<PrismaService, '$queryRaw'>,
+  id: string,
+): Promise<SessionBackgroundFields | null> {
+  return (await readSessionBackgroundFields(prisma, [id])).get(id) ?? null;
 }
 
 /** The session columns `runStalled` reads, as a reader selects them beside the run reason. */

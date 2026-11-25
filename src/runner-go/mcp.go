@@ -31,8 +31,13 @@ func cmdMcp() {
 		fmt.Fprintln(os.Stderr, "orbit mcp: no runner config — run `orbit register` first")
 		os.Exit(1)
 	}
-	srv := &mcpServer{
-		t:                     newCallerTransport(cfg.ServerURL, cfg.RunnerToken, runnerCallerMCP),
+	mcpServerFromEnv(newCallerTransport(cfg.ServerURL, cfg.RunnerToken, runnerCallerMCP)).serve(os.Stdin, os.Stdout)
+}
+
+// mcpServerFromEnv is the server for the session the runner's spawn environment describes.
+func mcpServerFromEnv(t *Transport) *mcpServer {
+	return &mcpServer{
+		t:                     t,
 		sessionID:             os.Getenv("ORBIT_SESSION_ID"),
 		agentID:               os.Getenv("ORBIT_AGENT_ID"),
 		taskID:                os.Getenv("ORBIT_TASK_ID"),
@@ -48,12 +53,13 @@ func cmdMcp() {
 		onlyTools:             mcpToolsFromEnv(),
 		callTimeout:           mcpCallTimeoutFromEnv(),
 		helpAsk:               helpAskModeFromEnv(),
+		engine:                strings.TrimSpace(os.Getenv(envMCPEngine)),
 	}
-	srv.serve(os.Stdin, os.Stdout)
 }
 
 type mcpServer struct {
 	t                     *Transport
+	createKeys            derivedCreateKeys // the keys given to creates that carried none (task_create_autorun.go)
 	sessionID             string
 	agentID               string // attributes created tasks/comments; "" => server falls back to USER
 	taskID                string // the "current task" default for get/update/comment
@@ -75,6 +81,9 @@ type mcpServer struct {
 	// helpAsk: spawned with ORBIT_HELP_ASK=1 for the help center's Ask, it serves the four help reads and nothing else
 	// (mcp_help_ask.go).
 	helpAsk bool
+	// engine is the engine whose own carrier the runner gave Orbit's instructions (ORBIT_MCP_ENGINE); "" when the
+	// runner did not say, as for a bare `orbit mcp`.
+	engine string
 	// callToolUseID is the engine's id for the tool call being answered (Claude Code's `claudecode/toolUseId`), so a
 	// drive transfer's progress lands on its card; "" outside one, or when the engine names none. Calls are served
 	// one at a time (serve), as rec is.
@@ -96,6 +105,23 @@ func (s *mcpServer) planRefusal(name string, args map[string]interface{}) string
 }
 
 const envMCPPermissionPrompt = "ORBIT_MCP_PERMISSION_PROMPT"
+
+// envMCPEngine names the engine `orbit mcp` serves. A runner sets it only where that engine's own carrier was given
+// Orbit's instructions (claudeCommandArgs), so initialize need not repeat them.
+const envMCPEngine = "ORBIT_MCP_ENGINE"
+
+// engineProfile is the profile initialize composes for: the named engine's inside a runner session, and
+// unknownEngineProfile, which repeats everything, anywhere else.
+func (s *mcpServer) engineProfile() EngineProfile {
+	if strings.TrimSpace(s.sessionID) != "" && s.engine != "" {
+		for _, profile := range engineProfiles {
+			if profile.Engine == s.engine {
+				return profile
+			}
+		}
+	}
+	return unknownEngineProfile
+}
 
 // envMCPCallTimeout is set by a runtime whose engine ends an MCP tool call on its own deadline, and
 // whose mcpServers declaration cannot change it (DeepSeek Harness, dsh_mcp.go). Unset, every call
@@ -173,6 +199,32 @@ func mcpOrchestrationEnabled() bool {
 // orchestrationEnabled requires the account's switch and an exact session context.
 // The credential is read (or, if absent/invalid, refreshed) lazily by Transport,
 // so a long-lived MCP process never depends on its startup environment snapshot.
+// sessionShape is the shape of the session this server serves, as its spawn environment says it.
+func (s *mcpServer) sessionShape() SessionShape {
+	role := roleTopLevel
+	switch {
+	case s.helpAsk:
+		role = roleHelpAsk
+	case os.Getenv(envSubagentRunID) != "":
+		role = roleSubAgent
+	case scheduledCheckOnlyFromEnv():
+		role = roleCheckOnly
+	case s.taskID != "":
+		role = roleTaskRun
+	}
+	return SessionShape{
+		Tools:              toolNameSet(s.listedToolDescriptors()),
+		Role:               role,
+		InsideRecordedWork: s.taskID != "",
+		Watches:            !s.watchesOff,
+		Browser:            s.browserOn,
+		Orchestration:      s.orchestrationEnabled(),
+		Wiki:               !s.wikiOff,
+		Workflows:          !s.workflowsOff,
+		DriveMounted:       driveMounted(),
+	}
+}
+
 func (s *mcpServer) orchestrationEnabled() bool {
 	return s.allowOrchestration &&
 		strings.TrimSpace(s.sessionID) != ""
@@ -240,12 +292,11 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		if len(req.Params) > 0 && json.Unmarshal(req.Params, &p) == nil && p.ProtocolVersion != "" {
 			pv = p.ProtocolVersion
 		}
-		// The agent primer, versioned in its first line, is the one set of instructions every engine's
-		// MCP client is handed; each engine's own instructions carry it too (agent_primer.go).
-		instructions := agentPrimer
-		if s.helpAsk {
-			instructions = helpAskInstructions
-		}
+		// The agent primer, versioned in its first line, is what every engine's MCP client is handed; each
+		// engine's own instructions carry it too (agent_primer.go). Inside a session of an engine whose own carrier
+		// is confirmed, that carrier has it, and initialize keeps only its lead paragraph. An Ask is given the help
+		// reads' instructions instead (unit help.ask).
+		instructions := compose(s.sessionShape(), s.engineProfile()).MCP
 		return s.ok(req.ID, map[string]interface{}{
 			"protocolVersion": pv,
 			"capabilities":    map[string]interface{}{"tools": map[string]interface{}{}},
@@ -401,8 +452,24 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	if refusal := s.planRefusal(name, args); refusal != "" {
 		return toolResult(refusal, true)
 	}
+	args = s.withDerivedCreateKey(name, args)
 	mark := markTransportActivity()
 	return s.withRecovery(name, args, mark, s.runTool(name, args))
+}
+
+// withDerivedCreateKey is args with an idempotencyKey derived for a task_create or task_create_batch that carries none
+// (design D4): a retry of the same call inside createKeyWindow answers with the first write. A key the caller gave
+// always wins, and a dry run writes nothing, so it gets none.
+func (s *mcpServer) withDerivedCreateKey(name string, args map[string]interface{}) map[string]interface{} {
+	if (name != "task_create" && name != "task_create_batch") || getString(args, "idempotencyKey") != "" || getBool(args, "dryRun") {
+		return args
+	}
+	keyed := make(map[string]interface{}, len(args)+1)
+	for key, value := range args {
+		keyed[key] = value
+	}
+	keyed["idempotencyKey"] = s.createKeys.derive(s.sessionID, name, args, createKeyNow())
+	return keyed
 }
 
 func driveToolDescriptors(obj func(map[string]interface{}, ...string) map[string]interface{}) []map[string]interface{} {
@@ -1337,6 +1404,9 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 		if err := requireRunnerTaskCompletionDeclaration(body); err != nil {
 			return toolResult(err.Error(), true)
 		}
+		if err := requireRunnerTaskAutoRunDeclaration(body); err != nil {
+			return toolResult(err.Error(), true)
+		}
 		// The snapshot is taken at the start of the call, before the card (design §2.1): the task
 		// starts from what this session had when it asked, and the card shows the fork it will carry.
 		var fork *forkSnapshot
@@ -1424,6 +1494,9 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 				body["assigneeId"] = s.agentID
 			}
 			if err := requireRunnerTaskCompletionDeclaration(body); err != nil {
+				return toolResult(fmt.Sprintf("tasks[%d]: %s", i, err), true)
+			}
+			if err := requireRunnerTaskAutoRunDeclaration(body); err != nil {
 				return toolResult(fmt.Sprintf("tasks[%d]: %s", i, err), true)
 			}
 			bodies = append(bodies, body)

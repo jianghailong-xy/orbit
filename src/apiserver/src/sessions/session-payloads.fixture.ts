@@ -30,6 +30,12 @@ export const PAYLOAD_KINDS = [
 ] as const;
 export type PayloadKind = (typeof PAYLOAD_KINDS)[number];
 
+/** A search hit (`GET /sessions/search`, the recents an empty query answers with): the six facts and the Background
+ *  mark's inputs joined it later (task 353YrK2AEGTm6mfl8GrW9), so it is read beside the kinds above and is not one of
+ *  them — the legacy golden (session-payloads-legacy.pg.spec.ts) has no rows for it. Search never answers a LANDING
+ *  row, so the settled landing has none. */
+export const SEARCH_HIT = 'searchHit';
+
 export interface FixtureCase {
   label: string;
   status: RunStatus;
@@ -178,8 +184,13 @@ export async function buildWorld(db: PrismaClient, run: string): Promise<World> 
 type Payload = Record<string, unknown>;
 
 /** Each case's payload on every kind, by label then kind. */
-export async function readPayloads(stack: Stack, w: World): Promise<Map<string, Record<PayloadKind, Payload>>> {
+export async function readPayloads(
+  stack: Stack,
+  w: World,
+): Promise<Map<string, Record<PayloadKind, Payload> & { [SEARCH_HIT]: Payload | null }>> {
   const ids = [...w.ids.values()];
+  const hits = new Map((await stack.sessions.search(w.ownerId, undefined, 50)).hits
+    .map((hit) => [hit.id, hit as unknown as Payload]));
   const rows = new Map((await stack.sessions.listRowsByIds(w.ownerId, ids)).map((row) => [row.id, row as Payload]));
   const previews = await stack.previews.read(w.ownerId, ids.map((id) => ({ kind: 'session' as const, id })));
   const previewOf = (id: string) => {
@@ -192,7 +203,7 @@ export async function readPayloads(stack: Stack, w: World): Promise<Map<string, 
     buildSessionSummary(id: string): Promise<Payload | null>;
     readEventData(id: string, type: ControlEventType, ev: unknown, ownerId: string): Promise<Payload | null>;
   };
-  const out = new Map<string, Record<PayloadKind, Payload>>();
+  const out = new Map<string, Record<PayloadKind, Payload> & { [SEARCH_HIT]: Payload | null }>();
   for (const [label, id] of w.ids) {
     const row = await stack.db.session.findUniqueOrThrow({ where: { id }, select: { status: true, endReason: true } });
     const taskDetail = (await stack.tasks.get(w.ownerId, w.taskIds.get(label)!)) as unknown as { sessions: Payload[] };
@@ -213,6 +224,7 @@ export async function readPayloads(stack: Stack, w: World): Promise<Map<string, 
       sharedHead: (await stack.sessions.sharedHead(id)) as unknown as Payload,
       // A run in the task detail's `sessions[]`.
       taskRun: need(taskDetail.sessions.find((run) => run.id === id), 'taskRun'),
+      [SEARCH_HIT]: hits.get(id) ?? null,
     });
   }
   return out;

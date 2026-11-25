@@ -1,0 +1,1590 @@
+[
+ {
+  "name": "PENDING",
+  "kind": "guestRow",
+  "web": {
+   "state": "Queued",
+   "icon": "clock",
+   "marks": [],
+   "line": "Queued",
+   "completed": false
+  },
+  "payload": {
+   "id": "a4c2656e-15ae-4644-b04b-699834c0ae84",
+   "title": "payloads PENDING",
+   "ownerName": "payloads owner",
+   "status": "PENDING",
+   "sessionState": "QUEUED",
+   "lifecycleState": "OPEN",
+   "activity": "TURN",
+   "phase": "PENDING",
+   "released": false,
+   "lastTurnOutcome": null,
+   "waitingOn": null,
+   "endReason": null,
+   "workFinished": false,
+   "addedAt": "2026-11-25T05:40:42.301Z",
+   "lastTurnAt": null
+  },
+  "legacy": {
+   "word": "Queued",
+   "tone": "queued"
+  }
+ },
+ {
+  "name": "PENDING",
+  "kind": "sharedHead",
+  "web": {
+   "state": "Queued",
+   "icon": "clock",
+   "marks": [],
+   "line": "Queued",
+   "completed": false
+  },
+  "payload": {
+   "waitingOnOwner": false,
+   "title": "payloads PENDING",
+   "workspaceName": "payloads-agent",
+   "status": "PENDING",
+   "activity": "TURN",
+   "runStatus": "PENDING",
+   "sessionState": "QUEUED",
+   "runState": "QUEUED",
+   "lifecycleState": "OPEN",
+   "filingState": "OPEN",
+   "phase": "PENDING",
+   "released": false,
+   "lastTurnOutcome": null,
+   "waitingOn": null,
+   "endReason": null,
+   "workFinished": false,
+   "createdAt": "2026-11-25T05:39:42.291Z"
+  },
+  "legacy": {
+   "word": "Queued",
+   "tone": "queued"
+  }
+ },
+ {
+  "name": "RUNNING",
+  "kind": "guestRow",
+  "web": {
+   "state": "Running",
+   "icon": "spinner",
+   "marks": [],
+   "line": "Running",
+   "completed": false
+  },
+  "payload": {
+   "id": "f68ebd18-56d0-4485-b550-4eac856008f0",
+   "title": "payloads RUNNING",
+   "ownerName": "payloads owner",
+   "status": "RUNNING",
+   "sessionState": "RUNNING",
+   "lifecycleState": "OPEN",
+   "activity": "TURN",
+   "phase": "RUNNING",
+   "released": false,
+   "lastTurnOutcome": null,
+   "waitingOn": null,
+   "endReason": null,
+   "workFinished": false,
+   "addedAt": "2026-11-25T05:40:42.310Z",
+   "lastTurnAt": null
+  },
+  "legacy": {
+   "word": "Running",
+   "tone": "running"
+  }
+ },
+ {
+  "name": "RUNNING",
+  "kind": "sharedHead",
+  "web": {
+   "state": "Running",
+   "icon": "spinner",
+   "marks": [],
+   "line": "Running",
+   "completed": false
+  },
+  "payload": {
+   "waitingOnOwner": false,
+   "title": "payloads RUNNING",
+   "workspaceName": "payloads-agent",
+   "status": "RUNNING",
+   "activity": "TURN",
+   "runStatus": "RUNNING",
+   "sessionState": "RUNNING",
+   "runState": "RUNNING",
+   "lifecycleState": "OPEN",
+   "filingState": "OPEN",
+   "phase": "RUNNING",
+   "released": false,
+   "lastTurnOutcome": null,
+   "waitingOn": null,
+   "endReason": null,
+   "workFinished": false,
+   "createdAt": "2026-11-25T05:38:42.305Z"
+  },
+  "legacy": {
+   "word": "Running",
+   "tone": "running"
+  }
+ },
+ {
+  "name": "AWAITING_INPUT",
+  "kind": "guestRow",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [],
+   "line": "Idle",
+   "completed": false
+  },
+  "payload": {
+   "id": "3ccbb341-e116-45c7-bc06-5be4e0706e5c",
+   "title": "payloads AWAITING_INPUT",
+   "ownerName": "payloads owner",
+   "status": "AWAITING_INPUT",
+   "sessionState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "activity": null,
+   "phase": "IDLE",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "endReason": null,
+   "workFinished": false,
+   "addedAt": "2026-11-25T05:40:42.317Z",
+   "lastTurnAt": null
+  },
+  "legacy": {
+   "word": "Awaiting reply",
+   "tone": "awaiting"
+  }
+ },
+ {
+  "name": "AWAITING_INPUT",
+  "kind": "sharedHead",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [],
+   "line": "Idle",
+   "completed": false
+  },
+  "payload": {
+   "waitingOnOwner": false,
+   "title": "payloads AWAITING_INPUT",
+   "workspaceName": "payloads-agent",
+   "status": "AWAITING_INPUT",
+   "activity": null,
+   "runStatus": "AWAITING_INPUT",
+   "sessionState": "AWAITING_INPUT",
+   "runState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "filingState": "OPEN",
+   "phase": "IDLE",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "endReason": null,
+   "workFinished": false,
+   "createdAt": "2026-11-25T05:37:42.312Z"
+  },
+  "legacy": {
+   "word": "Awaiting reply",
+   "tone": "awaiting"
+  }
+ },
+ {
+  "name": "INTERRUPTED",
+  "kind": "guestRow",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Interrupted"
+   ],
+   "line": "Idle · Interrupted",
+   "completed": false
+  },
+  "payload": {
+   "id": "3e5cae0b-b8b3-45cb-9c1a-457956cc2c95",
+   "title": "payloads INTERRUPTED",
+   "ownerName": "payloads owner",
+   "status": "INTERRUPTED",
+   "sessionState": "INTERRUPTED",
+   "lifecycleState": "OPEN",
+   "activity": null,
+   "phase": "IDLE",
+   "released": false,
+   "lastTurnOutcome": "INTERRUPTED",
+   "waitingOn": null,
+   "endReason": null,
+   "workFinished": false,
+   "addedAt": "2026-11-25T05:40:42.324Z",
+   "lastTurnAt": null
+  },
+  "legacy": {
+   "word": "Interrupted",
+   "tone": "cancelled"
+  }
+ },
+ {
+  "name": "INTERRUPTED",
+  "kind": "sharedHead",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Interrupted"
+   ],
+   "line": "Idle · Interrupted",
+   "completed": false
+  },
+  "payload": {
+   "waitingOnOwner": false,
+   "title": "payloads INTERRUPTED",
+   "workspaceName": "payloads-agent",
+   "status": "INTERRUPTED",
+   "activity": null,
+   "runStatus": "INTERRUPTED",
+   "sessionState": "INTERRUPTED",
+   "runState": "INTERRUPTED",
+   "lifecycleState": "OPEN",
+   "filingState": "OPEN",
+   "phase": "IDLE",
+   "released": false,
+   "lastTurnOutcome": "INTERRUPTED",
+   "waitingOn": null,
+   "endReason": null,
+   "workFinished": false,
+   "createdAt": "2026-11-25T05:36:42.319Z"
+  },
+  "legacy": {
+   "word": "Interrupted",
+   "tone": "cancelled"
+  }
+ },
+ {
+  "name": "SUCCEEDED",
+  "kind": "guestRow",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Finished"
+   ],
+   "line": "Idle · Finished",
+   "completed": false
+  },
+  "payload": {
+   "id": "df7ce22c-9fdf-475e-b2b1-83e6067575a6",
+   "title": "payloads SUCCEEDED",
+   "ownerName": "payloads owner",
+   "status": "SUCCEEDED",
+   "sessionState": "COMPLETED",
+   "lifecycleState": "OPEN",
+   "activity": null,
+   "phase": "IDLE",
+   "released": true,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "endReason": "task_done",
+   "workFinished": true,
+   "addedAt": "2026-11-25T05:40:42.331Z",
+   "lastTurnAt": null
+  },
+  "legacy": {
+   "word": "Succeeded",
+   "tone": "done"
+  }
+ },
+ {
+  "name": "SUCCEEDED",
+  "kind": "sharedHead",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Finished"
+   ],
+   "line": "Idle · Finished",
+   "completed": false
+  },
+  "payload": {
+   "waitingOnOwner": false,
+   "title": "payloads SUCCEEDED",
+   "workspaceName": "payloads-agent",
+   "status": "SUCCEEDED",
+   "activity": null,
+   "runStatus": "SUCCEEDED",
+   "sessionState": "COMPLETED",
+   "runState": "SUCCEEDED",
+   "lifecycleState": "OPEN",
+   "filingState": "OPEN",
+   "phase": "IDLE",
+   "released": true,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "endReason": "task_done",
+   "workFinished": true,
+   "createdAt": "2026-11-25T05:35:42.326Z"
+  },
+  "legacy": {
+   "word": "Succeeded",
+   "tone": "done"
+  }
+ },
+ {
+  "name": "FAILED",
+  "kind": "guestRow",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Failed"
+   ],
+   "line": "Idle · Failed",
+   "completed": false
+  },
+  "payload": {
+   "id": "3684dae5-a31c-4228-966f-06193e98d13e",
+   "title": "payloads FAILED",
+   "ownerName": "payloads owner",
+   "status": "FAILED",
+   "sessionState": "FAILED",
+   "lifecycleState": "OPEN",
+   "activity": null,
+   "phase": "IDLE",
+   "released": true,
+   "lastTurnOutcome": "FAILED",
+   "waitingOn": null,
+   "endReason": null,
+   "workFinished": false,
+   "addedAt": "2026-11-25T05:40:42.337Z",
+   "lastTurnAt": null
+  },
+  "legacy": {
+   "word": "Failed",
+   "tone": "failed"
+  }
+ },
+ {
+  "name": "FAILED",
+  "kind": "sharedHead",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Failed"
+   ],
+   "line": "Idle · Failed",
+   "completed": false
+  },
+  "payload": {
+   "waitingOnOwner": false,
+   "title": "payloads FAILED",
+   "workspaceName": "payloads-agent",
+   "status": "FAILED",
+   "activity": null,
+   "runStatus": "FAILED",
+   "sessionState": "FAILED",
+   "runState": "FAILED",
+   "lifecycleState": "OPEN",
+   "filingState": "OPEN",
+   "phase": "IDLE",
+   "released": true,
+   "lastTurnOutcome": "FAILED",
+   "waitingOn": null,
+   "endReason": null,
+   "workFinished": false,
+   "createdAt": "2026-11-25T05:34:42.333Z"
+  },
+  "legacy": {
+   "word": "Failed",
+   "tone": "failed"
+  }
+ },
+ {
+  "name": "CANCELLED",
+  "kind": "guestRow",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Ended"
+   ],
+   "line": "Idle · Ended",
+   "completed": false
+  },
+  "payload": {
+   "id": "d9cced16-4f8f-45c7-9d6c-b56f62d7df92",
+   "title": "payloads CANCELLED",
+   "ownerName": "payloads owner",
+   "status": "CANCELLED",
+   "sessionState": "DORMANT",
+   "lifecycleState": "OPEN",
+   "activity": null,
+   "phase": "IDLE",
+   "released": true,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "endReason": "ended",
+   "workFinished": false,
+   "addedAt": "2026-11-25T05:40:42.342Z",
+   "lastTurnAt": null
+  },
+  "legacy": {
+   "word": "Ended",
+   "tone": "cancelled"
+  }
+ },
+ {
+  "name": "CANCELLED",
+  "kind": "sharedHead",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Ended"
+   ],
+   "line": "Idle · Ended",
+   "completed": false
+  },
+  "payload": {
+   "waitingOnOwner": false,
+   "title": "payloads CANCELLED",
+   "workspaceName": "payloads-agent",
+   "status": "CANCELLED",
+   "activity": null,
+   "runStatus": "CANCELLED",
+   "sessionState": "DORMANT",
+   "runState": "ENDED",
+   "lifecycleState": "OPEN",
+   "filingState": "OPEN",
+   "phase": "IDLE",
+   "released": true,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "endReason": "ended",
+   "workFinished": false,
+   "createdAt": "2026-11-25T05:33:42.339Z"
+  },
+  "legacy": {
+   "word": "Ended",
+   "tone": "cancelled"
+  }
+ },
+ {
+  "name": "job running",
+  "kind": "guestRow",
+  "web": {
+   "state": "Running",
+   "icon": "spinner",
+   "marks": [
+    "Background"
+   ],
+   "line": "Running · Background",
+   "completed": false
+  },
+  "payload": {
+   "id": "078062dc-b613-402a-871a-7c0c340b581f",
+   "title": "payloads job running",
+   "ownerName": "payloads owner",
+   "status": "AWAITING_INPUT",
+   "sessionState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "activity": "BACKGROUND_JOB",
+   "phase": "RUNNING",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "endReason": null,
+   "workFinished": false,
+   "addedAt": "2026-11-25T05:40:42.348Z",
+   "lastTurnAt": null
+  },
+  "legacy": {
+   "word": "Awaiting reply",
+   "tone": "awaiting"
+  }
+ },
+ {
+  "name": "job running",
+  "kind": "sharedHead",
+  "web": {
+   "state": "Running",
+   "icon": "spinner",
+   "marks": [
+    "Background"
+   ],
+   "line": "Running · Background",
+   "completed": false
+  },
+  "payload": {
+   "waitingOnOwner": false,
+   "title": "payloads job running",
+   "workspaceName": "payloads-agent",
+   "status": "AWAITING_INPUT",
+   "activity": "BACKGROUND_JOB",
+   "runStatus": "AWAITING_INPUT",
+   "sessionState": "AWAITING_INPUT",
+   "runState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "filingState": "OPEN",
+   "phase": "RUNNING",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "endReason": null,
+   "workFinished": false,
+   "createdAt": "2026-11-25T05:32:42.344Z"
+  },
+  "legacy": {
+   "word": "Awaiting reply",
+   "tone": "awaiting"
+  }
+ },
+ {
+  "name": "waiting on an approval",
+  "kind": "guestRow",
+  "web": {
+   "state": "Running",
+   "icon": "spinner",
+   "marks": [
+    "Needs you"
+   ],
+   "line": "Running · Needs you",
+   "completed": false
+  },
+  "payload": {
+   "id": "5af94f51-3a88-4117-931a-c0f6722bd623",
+   "title": "payloads waiting on an approval",
+   "ownerName": "payloads owner",
+   "status": "RUNNING",
+   "sessionState": "RUNNING",
+   "lifecycleState": "OPEN",
+   "activity": "TURN",
+   "phase": "RUNNING",
+   "released": false,
+   "lastTurnOutcome": null,
+   "waitingOn": "PERSON",
+   "endReason": null,
+   "workFinished": false,
+   "addedAt": "2026-11-25T05:40:42.351Z",
+   "lastTurnAt": null
+  },
+  "legacy": {
+   "word": "Running",
+   "tone": "running"
+  }
+ },
+ {
+  "name": "waiting on an approval",
+  "kind": "sharedHead",
+  "web": {
+   "state": "Running",
+   "icon": "spinner",
+   "marks": [
+    "Needs you"
+   ],
+   "line": "Running · Needs you",
+   "completed": false
+  },
+  "payload": {
+   "waitingOnOwner": true,
+   "title": "payloads waiting on an approval",
+   "workspaceName": "payloads-agent",
+   "status": "RUNNING",
+   "activity": "TURN",
+   "runStatus": "RUNNING",
+   "sessionState": "RUNNING",
+   "runState": "RUNNING",
+   "lifecycleState": "OPEN",
+   "filingState": "OPEN",
+   "phase": "RUNNING",
+   "released": false,
+   "lastTurnOutcome": null,
+   "waitingOn": "PERSON",
+   "endReason": null,
+   "workFinished": false,
+   "createdAt": "2026-11-25T05:31:42.349Z"
+  },
+  "legacy": {
+   "word": "Running",
+   "tone": "running"
+  }
+ },
+ {
+  "name": "watch armed",
+  "kind": "guestRow",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Will resume"
+   ],
+   "line": "Idle · Will resume",
+   "completed": false
+  },
+  "payload": {
+   "id": "0c2a5d58-9208-4bf4-b37a-fe96e3ed9239",
+   "title": "payloads watch armed",
+   "ownerName": "payloads owner",
+   "status": "AWAITING_INPUT",
+   "sessionState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "activity": "WAITING",
+   "phase": "IDLE",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": "WAKE",
+   "endReason": null,
+   "workFinished": false,
+   "addedAt": "2026-11-25T05:40:42.357Z",
+   "lastTurnAt": null
+  },
+  "legacy": {
+   "word": "Awaiting reply",
+   "tone": "awaiting"
+  }
+ },
+ {
+  "name": "watch armed",
+  "kind": "sharedHead",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Will resume"
+   ],
+   "line": "Idle · Will resume",
+   "completed": false
+  },
+  "payload": {
+   "waitingOnOwner": false,
+   "title": "payloads watch armed",
+   "workspaceName": "payloads-agent",
+   "status": "AWAITING_INPUT",
+   "activity": "WAITING",
+   "runStatus": "AWAITING_INPUT",
+   "sessionState": "AWAITING_INPUT",
+   "runState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "filingState": "OPEN",
+   "phase": "IDLE",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": "WAKE",
+   "endReason": null,
+   "workFinished": false,
+   "createdAt": "2026-11-25T05:30:42.356Z"
+  },
+  "legacy": {
+   "word": "Awaiting reply",
+   "tone": "awaiting"
+  }
+ },
+ {
+  "name": "paused account",
+  "kind": "guestRow",
+  "web": {
+   "state": "Queued",
+   "icon": "clock",
+   "marks": [
+    "On hold"
+   ],
+   "line": "Queued · On hold",
+   "completed": false
+  },
+  "payload": {
+   "id": "0157682b-f963-4ebf-9b8e-154c6f5448fd",
+   "title": "payloads paused account",
+   "ownerName": "payloads owner",
+   "status": "PENDING",
+   "sessionState": "QUEUED",
+   "lifecycleState": "OPEN",
+   "activity": "TURN",
+   "phase": "PENDING",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": "HOLD",
+   "endReason": null,
+   "workFinished": false,
+   "addedAt": "2026-11-25T05:40:42.364Z",
+   "lastTurnAt": null
+  },
+  "legacy": {
+   "word": "Queued",
+   "tone": "queued"
+  }
+ },
+ {
+  "name": "paused account",
+  "kind": "sharedHead",
+  "web": {
+   "state": "Queued",
+   "icon": "clock",
+   "marks": [
+    "On hold"
+   ],
+   "line": "Queued · On hold",
+   "completed": false
+  },
+  "payload": {
+   "waitingOnOwner": false,
+   "title": "payloads paused account",
+   "workspaceName": "payloads-agent",
+   "status": "PENDING",
+   "activity": "TURN",
+   "runStatus": "PENDING",
+   "sessionState": "QUEUED",
+   "runState": "QUEUED",
+   "lifecycleState": "OPEN",
+   "filingState": "OPEN",
+   "phase": "PENDING",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": "HOLD",
+   "endReason": null,
+   "workFinished": false,
+   "createdAt": "2026-11-25T05:29:42.360Z"
+  },
+  "legacy": {
+   "word": "Queued",
+   "tone": "queued"
+  }
+ },
+ {
+  "name": "settled landing",
+  "kind": "guestRow",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Finished"
+   ],
+   "line": "Idle · Finished",
+   "completed": false
+  },
+  "payload": {
+   "id": "56d57773-f25d-4a53-8667-cdf6be30ae92",
+   "title": "payloads settled landing",
+   "ownerName": "payloads owner",
+   "status": "SUCCEEDED",
+   "sessionState": "COMPLETED",
+   "lifecycleState": "OPEN",
+   "activity": null,
+   "phase": "IDLE",
+   "released": true,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "endReason": null,
+   "workFinished": true,
+   "addedAt": "2026-11-25T05:40:42.370Z",
+   "lastTurnAt": null
+  },
+  "legacy": {
+   "word": "Succeeded",
+   "tone": "done"
+  }
+ },
+ {
+  "name": "settled landing",
+  "kind": "sharedHead",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Finished"
+   ],
+   "line": "Idle · Finished",
+   "completed": false
+  },
+  "payload": {
+   "waitingOnOwner": false,
+   "title": "payloads settled landing",
+   "workspaceName": "payloads-agent",
+   "status": "SUCCEEDED",
+   "activity": null,
+   "runStatus": "SUCCEEDED",
+   "sessionState": "COMPLETED",
+   "runState": "SUCCEEDED",
+   "lifecycleState": "OPEN",
+   "filingState": "OPEN",
+   "phase": "IDLE",
+   "released": true,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "endReason": null,
+   "workFinished": true,
+   "createdAt": "2026-11-25T05:28:42.366Z"
+  },
+  "legacy": {
+   "word": "Succeeded",
+   "tone": "done"
+  }
+ },
+ {
+  "name": "ended, runner never confirmed",
+  "kind": "guestRow",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Ended"
+   ],
+   "line": "Idle · Ended",
+   "completed": false
+  },
+  "payload": {
+   "id": "5314123e-3a01-4a00-b714-b227eb3ba385",
+   "title": "payloads ended, runner never confirmed",
+   "ownerName": "payloads owner",
+   "status": "FAILED",
+   "sessionState": "FAILED",
+   "lifecycleState": "OPEN",
+   "activity": null,
+   "phase": "IDLE",
+   "released": true,
+   "lastTurnOutcome": "FAILED",
+   "waitingOn": null,
+   "endReason": "ended",
+   "workFinished": false,
+   "addedAt": "2026-11-25T05:40:42.377Z",
+   "lastTurnAt": null
+  },
+  "legacy": {
+   "word": "Failed",
+   "tone": "failed"
+  }
+ },
+ {
+  "name": "ended, runner never confirmed",
+  "kind": "sharedHead",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Ended"
+   ],
+   "line": "Idle · Ended",
+   "completed": false
+  },
+  "payload": {
+   "waitingOnOwner": false,
+   "title": "payloads ended, runner never confirmed",
+   "workspaceName": "payloads-agent",
+   "status": "FAILED",
+   "activity": null,
+   "runStatus": "FAILED",
+   "sessionState": "FAILED",
+   "runState": "FAILED",
+   "lifecycleState": "OPEN",
+   "filingState": "OPEN",
+   "phase": "IDLE",
+   "released": true,
+   "lastTurnOutcome": "FAILED",
+   "waitingOn": null,
+   "endReason": "ended",
+   "workFinished": false,
+   "createdAt": "2026-11-25T05:27:42.372Z"
+  },
+  "legacy": {
+   "word": "Failed",
+   "tone": "failed"
+  }
+ },
+ {
+  "name": "old plain row stored SUCCEEDED",
+  "kind": "guestRow",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Ended"
+   ],
+   "line": "Idle · Ended",
+   "completed": false
+  },
+  "payload": {
+   "id": "c07f928a-18e3-49e5-b867-db38544fab8f",
+   "title": "payloads old plain row stored SUCCEEDED",
+   "ownerName": "payloads owner",
+   "status": "SUCCEEDED",
+   "sessionState": "COMPLETED",
+   "lifecycleState": "OPEN",
+   "activity": null,
+   "phase": "IDLE",
+   "released": true,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "endReason": null,
+   "workFinished": false,
+   "addedAt": "2026-11-25T05:40:42.384Z",
+   "lastTurnAt": null
+  },
+  "legacy": {
+   "word": "Succeeded",
+   "tone": "done"
+  }
+ },
+ {
+  "name": "old plain row stored SUCCEEDED",
+  "kind": "sharedHead",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Ended"
+   ],
+   "line": "Idle · Ended",
+   "completed": false
+  },
+  "payload": {
+   "waitingOnOwner": false,
+   "title": "payloads old plain row stored SUCCEEDED",
+   "workspaceName": "payloads-agent",
+   "status": "SUCCEEDED",
+   "activity": null,
+   "runStatus": "SUCCEEDED",
+   "sessionState": "COMPLETED",
+   "runState": "SUCCEEDED",
+   "lifecycleState": "OPEN",
+   "filingState": "OPEN",
+   "phase": "IDLE",
+   "released": true,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "endReason": null,
+   "workFinished": false,
+   "createdAt": "2026-11-25T05:26:42.379Z"
+  },
+  "legacy": {
+   "word": "Succeeded",
+   "tone": "done"
+  }
+ },
+ {
+  "name": "ending after an interrupted turn",
+  "kind": "guestRow",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Interrupted"
+   ],
+   "line": "Idle · Interrupted",
+   "completed": false
+  },
+  "payload": {
+   "id": "33ad94ee-360a-495a-9ac8-438a04bff758",
+   "title": "payloads ending after an interrupted turn",
+   "ownerName": "payloads owner",
+   "status": "INTERRUPTED",
+   "sessionState": "DORMANT",
+   "lifecycleState": "OPEN",
+   "activity": null,
+   "phase": "IDLE",
+   "released": false,
+   "lastTurnOutcome": "INTERRUPTED",
+   "waitingOn": null,
+   "endReason": "ended",
+   "workFinished": false,
+   "addedAt": "2026-11-25T05:40:42.391Z",
+   "lastTurnAt": null
+  },
+  "legacy": {
+   "word": "Interrupted",
+   "tone": "cancelled"
+  }
+ },
+ {
+  "name": "ending after an interrupted turn",
+  "kind": "sharedHead",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Interrupted"
+   ],
+   "line": "Idle · Interrupted",
+   "completed": false
+  },
+  "payload": {
+   "waitingOnOwner": false,
+   "title": "payloads ending after an interrupted turn",
+   "workspaceName": "payloads-agent",
+   "status": "INTERRUPTED",
+   "activity": null,
+   "runStatus": "INTERRUPTED",
+   "sessionState": "DORMANT",
+   "runState": "ENDED",
+   "lifecycleState": "OPEN",
+   "filingState": "OPEN",
+   "phase": "IDLE",
+   "released": false,
+   "lastTurnOutcome": "INTERRUPTED",
+   "waitingOn": null,
+   "endReason": "ended",
+   "workFinished": false,
+   "createdAt": "2026-11-25T05:25:42.387Z"
+  },
+  "legacy": {
+   "word": "Ended",
+   "tone": "cancelled"
+  }
+ },
+ {
+  "name": "parked, engine started its own turn",
+  "kind": "guestRow",
+  "web": {
+   "state": "Running",
+   "icon": "spinner",
+   "marks": [],
+   "line": "Running",
+   "completed": false
+  },
+  "payload": {
+   "id": "f130da0a-93f3-46c3-ba33-bae46953217d",
+   "title": "payloads parked, engine started its own turn",
+   "ownerName": "payloads owner",
+   "status": "AWAITING_INPUT",
+   "sessionState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "activity": "TURN",
+   "phase": "RUNNING",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "endReason": null,
+   "workFinished": false,
+   "addedAt": "2026-11-25T05:40:42.396Z",
+   "lastTurnAt": null
+  },
+  "legacy": {
+   "word": "Awaiting reply",
+   "tone": "awaiting"
+  }
+ },
+ {
+  "name": "parked, engine started its own turn",
+  "kind": "sharedHead",
+  "web": {
+   "state": "Running",
+   "icon": "spinner",
+   "marks": [],
+   "line": "Running",
+   "completed": false
+  },
+  "payload": {
+   "waitingOnOwner": false,
+   "title": "payloads parked, engine started its own turn",
+   "workspaceName": "payloads-agent",
+   "status": "AWAITING_INPUT",
+   "activity": "TURN",
+   "runStatus": "AWAITING_INPUT",
+   "sessionState": "AWAITING_INPUT",
+   "runState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "filingState": "OPEN",
+   "phase": "RUNNING",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "endReason": null,
+   "workFinished": false,
+   "createdAt": "2026-11-25T05:24:42.393Z"
+  },
+  "legacy": {
+   "word": "Awaiting reply",
+   "tone": "awaiting"
+  }
+ },
+ {
+  "name": "parked, sub-agent running",
+  "kind": "guestRow",
+  "web": {
+   "state": "Running",
+   "icon": "spinner",
+   "marks": [],
+   "line": "Running",
+   "completed": false
+  },
+  "payload": {
+   "id": "c38dee04-e729-42a2-8c49-357ca8b3d55d",
+   "title": "payloads parked, sub-agent running",
+   "ownerName": "payloads owner",
+   "status": "AWAITING_INPUT",
+   "sessionState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "activity": "TURN",
+   "phase": "RUNNING",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "endReason": null,
+   "workFinished": false,
+   "addedAt": "2026-11-25T05:40:42.402Z",
+   "lastTurnAt": null
+  },
+  "legacy": {
+   "word": "Awaiting reply",
+   "tone": "awaiting"
+  }
+ },
+ {
+  "name": "parked, sub-agent running",
+  "kind": "sharedHead",
+  "web": {
+   "state": "Running",
+   "icon": "spinner",
+   "marks": [],
+   "line": "Running",
+   "completed": false
+  },
+  "payload": {
+   "waitingOnOwner": false,
+   "title": "payloads parked, sub-agent running",
+   "workspaceName": "payloads-agent",
+   "status": "AWAITING_INPUT",
+   "activity": "TURN",
+   "runStatus": "AWAITING_INPUT",
+   "sessionState": "AWAITING_INPUT",
+   "runState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "filingState": "OPEN",
+   "phase": "RUNNING",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "endReason": null,
+   "workFinished": false,
+   "createdAt": "2026-11-25T05:23:42.398Z"
+  },
+  "legacy": {
+   "word": "Awaiting reply",
+   "tone": "awaiting"
+  }
+ },
+ {
+  "name": "parked, background process left up",
+  "kind": "guestRow",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [],
+   "line": "Idle",
+   "completed": false
+  },
+  "payload": {
+   "id": "cc10337c-fe9e-4d65-9cf4-70ac273f3f61",
+   "title": "payloads parked, background process left up",
+   "ownerName": "payloads owner",
+   "status": "AWAITING_INPUT",
+   "sessionState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "activity": null,
+   "phase": "IDLE",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "endReason": null,
+   "workFinished": false,
+   "addedAt": "2026-11-25T05:40:42.409Z",
+   "lastTurnAt": null
+  },
+  "legacy": {
+   "word": "Awaiting reply",
+   "tone": "awaiting"
+  }
+ },
+ {
+  "name": "parked, background process left up",
+  "kind": "sharedHead",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [],
+   "line": "Idle",
+   "completed": false
+  },
+  "payload": {
+   "waitingOnOwner": false,
+   "title": "payloads parked, background process left up",
+   "workspaceName": "payloads-agent",
+   "status": "AWAITING_INPUT",
+   "activity": null,
+   "runStatus": "AWAITING_INPUT",
+   "sessionState": "AWAITING_INPUT",
+   "runState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "filingState": "OPEN",
+   "phase": "IDLE",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": null,
+   "endReason": null,
+   "workFinished": false,
+   "createdAt": "2026-11-25T05:22:42.404Z"
+  },
+  "legacy": {
+   "word": "Awaiting reply",
+   "tone": "awaiting"
+  }
+ },
+ {
+  "name": "parked, retry armed",
+  "kind": "guestRow",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Will resume"
+   ],
+   "line": "Idle · Will resume",
+   "completed": false
+  },
+  "payload": {
+   "id": "17c6af9d-0aa8-4c84-8953-7007576d65e8",
+   "title": "payloads parked, retry armed",
+   "ownerName": "payloads owner",
+   "status": "AWAITING_INPUT",
+   "sessionState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "activity": "WAITING",
+   "phase": "IDLE",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": "WAKE",
+   "endReason": null,
+   "workFinished": false,
+   "addedAt": "2026-11-25T05:40:42.414Z",
+   "lastTurnAt": null
+  },
+  "legacy": {
+   "word": "Awaiting reply",
+   "tone": "awaiting"
+  }
+ },
+ {
+  "name": "parked, retry armed",
+  "kind": "sharedHead",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Will resume"
+   ],
+   "line": "Idle · Will resume",
+   "completed": false
+  },
+  "payload": {
+   "waitingOnOwner": false,
+   "title": "payloads parked, retry armed",
+   "workspaceName": "payloads-agent",
+   "status": "AWAITING_INPUT",
+   "activity": "WAITING",
+   "runStatus": "AWAITING_INPUT",
+   "sessionState": "AWAITING_INPUT",
+   "runState": "AWAITING_INPUT",
+   "lifecycleState": "OPEN",
+   "filingState": "OPEN",
+   "phase": "IDLE",
+   "released": false,
+   "lastTurnOutcome": "ANSWERED",
+   "waitingOn": "WAKE",
+   "endReason": null,
+   "workFinished": false,
+   "createdAt": "2026-11-25T05:21:42.410Z"
+  },
+  "legacy": {
+   "word": "Awaiting reply",
+   "tone": "awaiting"
+  }
+ },
+ {
+  "name": "failed, retry armed",
+  "kind": "guestRow",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Retrying"
+   ],
+   "line": "Idle · Retrying",
+   "completed": false
+  },
+  "payload": {
+   "id": "d9faa615-fd99-430a-81d5-6e7bc4e1265f",
+   "title": "payloads failed, retry armed",
+   "ownerName": "payloads owner",
+   "status": "FAILED",
+   "sessionState": "FAILED",
+   "lifecycleState": "OPEN",
+   "activity": null,
+   "phase": "IDLE",
+   "released": true,
+   "lastTurnOutcome": "FAILED",
+   "waitingOn": "WAKE",
+   "endReason": null,
+   "workFinished": false,
+   "addedAt": "2026-11-25T05:40:42.420Z",
+   "lastTurnAt": null
+  },
+  "legacy": {
+   "word": "Failed",
+   "tone": "failed"
+  }
+ },
+ {
+  "name": "failed, retry armed",
+  "kind": "sharedHead",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Retrying"
+   ],
+   "line": "Idle · Retrying",
+   "completed": false
+  },
+  "payload": {
+   "waitingOnOwner": false,
+   "title": "payloads failed, retry armed",
+   "workspaceName": "payloads-agent",
+   "status": "FAILED",
+   "activity": null,
+   "runStatus": "FAILED",
+   "sessionState": "FAILED",
+   "runState": "FAILED",
+   "lifecycleState": "OPEN",
+   "filingState": "OPEN",
+   "phase": "IDLE",
+   "released": true,
+   "lastTurnOutcome": "FAILED",
+   "waitingOn": "WAKE",
+   "endReason": null,
+   "workFinished": false,
+   "createdAt": "2026-11-25T05:20:42.416Z"
+  },
+  "legacy": {
+   "word": "Failed",
+   "tone": "failed"
+  }
+ },
+ {
+  "name": "failed, runner offline",
+  "kind": "guestRow",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Failed"
+   ],
+   "line": "Idle · Failed",
+   "completed": false
+  },
+  "payload": {
+   "id": "9d092711-6a1c-403a-9b83-015fa8eba633",
+   "title": "payloads failed, runner offline",
+   "ownerName": "payloads owner",
+   "status": "FAILED",
+   "sessionState": "FAILED",
+   "lifecycleState": "OPEN",
+   "activity": null,
+   "phase": "IDLE",
+   "released": true,
+   "lastTurnOutcome": "FAILED",
+   "waitingOn": null,
+   "endReason": null,
+   "workFinished": false,
+   "addedAt": "2026-11-25T05:40:42.424Z",
+   "lastTurnAt": null
+  },
+  "legacy": {
+   "word": "Failed",
+   "tone": "failed"
+  }
+ },
+ {
+  "name": "failed, runner offline",
+  "kind": "sharedHead",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Failed"
+   ],
+   "line": "Idle · Failed",
+   "completed": false
+  },
+  "payload": {
+   "waitingOnOwner": false,
+   "title": "payloads failed, runner offline",
+   "workspaceName": "payloads-agent",
+   "status": "FAILED",
+   "activity": null,
+   "runStatus": "FAILED",
+   "sessionState": "FAILED",
+   "runState": "FAILED",
+   "lifecycleState": "OPEN",
+   "filingState": "OPEN",
+   "phase": "IDLE",
+   "released": true,
+   "lastTurnOutcome": "FAILED",
+   "waitingOn": null,
+   "endReason": null,
+   "workFinished": false,
+   "createdAt": "2026-11-25T05:19:42.422Z"
+  },
+  "legacy": {
+   "word": "Failed",
+   "tone": "failed"
+  }
+ },
+ {
+  "name": "approval beside a background job",
+  "kind": "guestRow",
+  "web": {
+   "state": "Running",
+   "icon": "spinner",
+   "marks": [
+    "Needs you"
+   ],
+   "line": "Running · Needs you",
+   "completed": false
+  },
+  "payload": {
+   "id": "61a735c7-9e1b-450e-8408-787b7161ba86",
+   "title": "payloads approval beside a background job",
+   "ownerName": "payloads owner",
+   "status": "RUNNING",
+   "sessionState": "RUNNING",
+   "lifecycleState": "OPEN",
+   "activity": "TURN",
+   "phase": "RUNNING",
+   "released": false,
+   "lastTurnOutcome": null,
+   "waitingOn": "PERSON",
+   "endReason": null,
+   "workFinished": false,
+   "addedAt": "2026-11-25T05:40:42.429Z",
+   "lastTurnAt": null
+  },
+  "legacy": {
+   "word": "Running",
+   "tone": "running"
+  }
+ },
+ {
+  "name": "approval beside a background job",
+  "kind": "sharedHead",
+  "web": {
+   "state": "Running",
+   "icon": "spinner",
+   "marks": [
+    "Needs you"
+   ],
+   "line": "Running · Needs you",
+   "completed": false
+  },
+  "payload": {
+   "waitingOnOwner": true,
+   "title": "payloads approval beside a background job",
+   "workspaceName": "payloads-agent",
+   "status": "RUNNING",
+   "activity": "TURN",
+   "runStatus": "RUNNING",
+   "sessionState": "RUNNING",
+   "runState": "RUNNING",
+   "lifecycleState": "OPEN",
+   "filingState": "OPEN",
+   "phase": "RUNNING",
+   "released": false,
+   "lastTurnOutcome": null,
+   "waitingOn": "PERSON",
+   "endReason": null,
+   "workFinished": false,
+   "createdAt": "2026-11-25T05:18:42.425Z"
+  },
+  "legacy": {
+   "word": "Running",
+   "tone": "running"
+  }
+ },
+ {
+  "name": "interrupted, a process up, retry armed",
+  "kind": "guestRow",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Interrupted",
+    "Will resume"
+   ],
+   "line": "Idle · Interrupted · Will resume",
+   "completed": false
+  },
+  "payload": {
+   "id": "f78b1d0f-54ba-41a6-98ab-887a67083945",
+   "title": "payloads interrupted, a process up, retry armed",
+   "ownerName": "payloads owner",
+   "status": "INTERRUPTED",
+   "sessionState": "INTERRUPTED",
+   "lifecycleState": "OPEN",
+   "activity": null,
+   "phase": "IDLE",
+   "released": false,
+   "lastTurnOutcome": "INTERRUPTED",
+   "waitingOn": "WAKE",
+   "endReason": null,
+   "workFinished": false,
+   "addedAt": "2026-11-25T05:40:42.437Z",
+   "lastTurnAt": null
+  },
+  "legacy": {
+   "word": "Interrupted",
+   "tone": "cancelled"
+  }
+ },
+ {
+  "name": "interrupted, a process up, retry armed",
+  "kind": "sharedHead",
+  "web": {
+   "state": "Idle",
+   "icon": "circle",
+   "marks": [
+    "Interrupted",
+    "Will resume"
+   ],
+   "line": "Idle · Interrupted · Will resume",
+   "completed": false
+  },
+  "payload": {
+   "waitingOnOwner": false,
+   "title": "payloads interrupted, a process up, retry armed",
+   "workspaceName": "payloads-agent",
+   "status": "INTERRUPTED",
+   "activity": null,
+   "runStatus": "INTERRUPTED",
+   "sessionState": "INTERRUPTED",
+   "runState": "INTERRUPTED",
+   "lifecycleState": "OPEN",
+   "filingState": "OPEN",
+   "phase": "IDLE",
+   "released": false,
+   "lastTurnOutcome": "INTERRUPTED",
+   "waitingOn": "WAKE",
+   "endReason": null,
+   "workFinished": false,
+   "createdAt": "2026-11-25T05:17:42.433Z"
+  },
+  "legacy": {
+   "word": "Interrupted",
+   "tone": "cancelled"
+  }
+ }
+]
