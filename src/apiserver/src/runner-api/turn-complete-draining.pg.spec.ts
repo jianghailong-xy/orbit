@@ -20,16 +20,21 @@
  *   5. a slot the draining runner gives back with no turn run under it (the engine's own turn ended under a claim made
  *      for it) puts the session back in the queue behind the update; one with a turn in flight is kept;
  *   6. Stop on a session whose follow-up the runner fetched and held: the held turn handed back INTERRUPTED does not
- *      run, the queue is dropped, the slot is released and the session is idle.
+ *      run, the queue is dropped, the slot is released and the session is idle;
+ *   7. what the owner's clients are sent for a session held this way, with background work still up: the list row and
+ *      the detail read queued behind the update, never Running, and Stop and Stop-and-send on it are accepted. With
+ *      ORBIT_HELD_FIXTURE_OUT set, those replies are written there as src/shared/src/runner-update-held-session.fixture.json,
+ *      which the web, OrbitKit and Android rendering tests read.
  *
  * Not destructive: every row belongs to an account this run creates.
  */
 import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { JwtService } from '@nestjs/jwt';
 import { RunStatus, SessionDispatchOrigin, type PrismaClient } from '@prisma/client';
-import { toUuid, uuidToBase62 } from '@orbit/shared';
+import { SELF_UPDATE_NOW_V1, toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-test-apiserver';
@@ -376,5 +381,79 @@ test('a turn ending on a draining runner returns its slot, and Stop on the sessi
     // Nothing is left for the updated runner to run.
     await heartbeatDraining(draining, false);
     assert.notEqual(await claim(draining), s.id);
+  });
+
+  await t.test('7. the held session as the clients are sent it, and Stop and Stop-and-send on it', async () => {
+    // Board 5 of docs/mocks/runner-update-drain: studio-mac drains for 0.1.254 behind two turns.
+    const studio = await machine('studio-mac');
+    await beat();
+    await db.runner.update({
+      where: { id: studio.id },
+      data: {
+        displayName: 'studio-mac',
+        // So the clients offer board 5's Update Now beside Later.
+        capabilities: [...CAPABLE, SELF_UPDATE_NOW_V1],
+        selfUpdate: {
+          state: 'waitingForIdle', phase: 'draining', targetVersion: '0.1.254',
+          drainingSince: new Date(Date.now() - 38 * 60_000).toISOString(), turnsInFlight: 2,
+        },
+      },
+    });
+    const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000);
+    for (const [title, minutes] of [['Backfill missing shard rows', 52], ['Why are 11-08 metrics zero', 47]] as const) {
+      await session(studio, RunStatus.RUNNING, { title, lastTurnAt: ago(minutes) });
+    }
+    /** A session whose turn just ended on the draining runner, a follow-up queued and a dev server still up. */
+    async function held(title: string): Promise<Run> {
+      const s = await session(studio, RunStatus.RUNNING, { title, lastTurnAt: ago(1), runningBgShells: ['bg_dev_server'] });
+      const ran = await turn(s, 'message', 'Why is the send stuck?');
+      await turn(s, 'message', 'And check the queue after that.');
+      await running(s, ran);
+      await answered(s, ran);
+      const done = await complete(s, ran, true);
+      assert.equal(done.json?.status, 'PENDING', done.text);
+      return s;
+    }
+    const s = await held('Why is the send stuck in Queued');
+    const ok = async (route: string): Promise<any> => {
+      const reply = await owner('GET', route);
+      assert.equal(reply.status, 200, `${route}: ${reply.text}`);
+      return reply.json;
+    };
+    const listed = await row(s);
+    const detail = await ok(`/api/sessions/${uuidToBase62(s.id)}`);
+    for (const payload of [listed, detail]) {
+      assert.deepEqual([payload.status, payload.phase, payload.waitingOn], ['PENDING', 'PENDING', 'HOLD']);
+    }
+    assert.deepEqual([listed.queuedReason, listed.runningBgCount], ['runner_updating', 1]);
+    assert.deepEqual([listed.queuedRunnerUpdate.stopping, listed.queuedRunnerUpdate.targetVersion], [false, '0.1.254']);
+    assert.equal(listed.queuedRunnerUpdate.turns.length, 2);
+    const out = process.env.ORBIT_HELD_FIXTURE_OUT;
+    if (out) {
+      const id = uuidToBase62(s.id);
+      writeFileSync(out, `${JSON.stringify({
+        capturedFrom: 'src/apiserver/src/runner-api/turn-complete-draining.pg.spec.ts, case 7 (ORBIT_HELD_FIXTURE_OUT)',
+        listRow: listed,
+        detail,
+        // The web's read of the queue, then the one the native apps make.
+        queuedTurns: await ok(`/api/sessions/${id}/turns?view=active`),
+        queueOnlyTurns: await ok(`/api/sessions/${id}/turns`),
+        runner: (await ok('/api/runners') as Array<Record<string, any>>).find((x) => toUuid(String(x.id)) === studio.id),
+        workspace: (await ok('/api/workspaces') as Array<Record<string, any>>)
+          .find((x) => toUuid(String(x.id)) === studio.workspaceId),
+      }, null, 2)}\n`);
+    }
+
+    const stopped = await stop(s);
+    assert.equal(stopped.status, 201, stopped.text);
+    await stoppedIdle(s);
+
+    // The Mac composer's Stop-and-send (OrbitKit interruptAndSend): the follow-up replaces the queue and waits.
+    const other = await held('A second one held');
+    const sent = await owner('POST', `/api/sessions/${uuidToBase62(other.id)}/interrupt`,
+      { clientTurnId: randomUUID(), content: 'Do this instead.' });
+    assert.equal(sent.status, 201, sent.text);
+    assert.equal((await row(other)).queuedReason, 'runner_updating');
+    assert.equal(await queued(other), 1);
   });
 });
