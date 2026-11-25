@@ -47,6 +47,7 @@ import {
   APPROVAL_ABANDONED_STATUS,
   APPROVAL_ABANDONED_SUBAGENT_MESSAGE,
   countLiveApprovals,
+  countLiveApprovalsBySession,
 } from './abandoned-approvals';
 import { PushService } from '../push/push.service';
 import { SessionsService } from './sessions.service';
@@ -296,6 +297,9 @@ test('SubAgent permissions and approvals', { skip, concurrency: 1, timeout: 300_
     async function signals() {
       const row = (await sessions.list(ownerId, {})).find((s: { id: string }) => s.id === f.sessionId) as { pendingApprovals: number } | undefined;
       const session = await db.session.findUniqueOrThrow({ where: { id: f.sessionId } });
+      // The batch a search page counts with says what the one-session count says (countLiveApprovalsBySession).
+      assert.equal((await countLiveApprovalsBySession(db as never, [session])).get(session.id),
+        await countLiveApprovals(db as never, session), 'the batched count agrees');
       const workspace = (await sessions.workspaceSessionCounts(ownerId)).find((w: { workspaceId: string }) => w.workspaceId === session.workspaceId) as { needsYou: number } | undefined;
       return {
         pendingApprovals: row?.pendingApprovals,

@@ -13,6 +13,7 @@ import type { ConfirmationUnderReview } from './owner-confirmation-review';
 import type { SessionOwnerItem, SessionOwnerRequest, SessionTaskMoveGroup, SessionWaitingKind } from './project-progress';
 import type { ExternalMessageFrom, OrbitMessageFrom, SessionMessageFrom } from './session-message';
 import type { SessionPhase, SessionTurnOutcome, SessionWaitingOn } from './session-phase';
+import type { SessionActivity } from './task-run-reason';
 import type { SessionRequestPeer } from './session-request';
 import type { SessionSourceRefusalDetail, SourceRefusalCode, SourceState } from './source';
 
@@ -260,6 +261,10 @@ export interface ControlSessionSummary {
   waitingOn?: SessionWaitingOn | null;
   endReason?: string | null;
   workFinished?: boolean;
+  /** The Background mark's inputs (SessionBackgroundFields), as the list row carries them. Absent from an older
+   *  control plane. */
+  activity?: SessionActivity | null;
+  runningBgCount?: number;
   /** Server-derived actions; optional for rolling-version compatibility. */
   capabilities?: SessionCapabilities;
   /** The engine the session runs on for good — the CLI on the runner (`claude`, `codex`, `kimi`,
@@ -443,6 +448,10 @@ export interface ControlSessionEnded {
   lastTurnOutcome?: SessionTurnOutcome | null;
   waitingOn?: SessionWaitingOn | null;
   workFinished?: boolean;
+  /** The Background mark's inputs (SessionBackgroundFields), the row as it stands now. Absent from an older
+   *  control plane. */
+  activity?: SessionActivity | null;
+  runningBgCount?: number;
 }
 
 /** `data` for `session.error`. `recoverable=true` marks a mid-turn (non-fatal) error — e.g. a

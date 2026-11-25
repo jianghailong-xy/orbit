@@ -9,6 +9,8 @@
  * below can grow.
  */
 
+import type { SessionActivity } from './task-run-reason';
+
 /**
  * What the session is doing (`phase`; the name `activity` is taken by `SessionActivity`):
  *   - `RUNNING`: something is executing for it — a dispatched turn, a turn the engine started for itself,
@@ -58,3 +60,15 @@ export interface SessionPhaseFields {
 export const SESSION_PHASE_FIELD_NAMES = [
   'phase', 'released', 'lastTurnOutcome', 'waitingOn', 'endReason', 'workFinished',
 ] as const;
+
+/** What the Background mark reads beside the six facts, as the list row has always carried it: `activity`
+ *  (`sessionActivitySql`, apiserver `sessions/task-work-carrier.ts`) and `runningBgCount`, the runner-hosted jobs
+ *  and shells still running (`cardinality(session.running_bg_shells)`). Optional on the wire types: an older control
+ *  plane omits them. */
+export interface SessionBackgroundFields {
+  activity: SessionActivity | null;
+  runningBgCount: number;
+}
+
+/** Their names, in the order the contract lists them. */
+export const SESSION_BACKGROUND_FIELD_NAMES = ['activity', 'runningBgCount'] as const;

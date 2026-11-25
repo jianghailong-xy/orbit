@@ -144,6 +144,7 @@ import { RUNNER_BEATS } from '../runners/runner-presence';
 import { readSessionPhaseFields } from '../sessions/session-phase';
 import { withSessionState } from '../sessions/session-state';
 import {
+  readSessionBackgroundFields,
   readTaskWorkCarriers,
   sessionCarriesTaskSql,
   taskRunOverlay,
@@ -9806,12 +9807,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const dependencyState = computeDependencyState(dependencyFacts.get(id) ?? []);
     // The session facts of every run, from the function every other session payload reads
     // (sessions/session-phase.ts), so a run here answers as the same session does elsewhere.
-    const runFacts = await readSessionPhaseFields(this.prisma, (task.sessions ?? []).map((session) => session.id));
+    const runIds = (task.sessions ?? []).map((session) => session.id);
+    const [runFacts, runBackground] = await Promise.all([
+      readSessionPhaseFields(this.prisma, runIds),
+      // And the Background mark's inputs, activity and runningBgCount, as the list row reads them.
+      readSessionBackgroundFields(this.prisma, runIds),
+    ]);
     return {
       ...task,
       sessions: (task.sessions ?? []).map((session) => ({
         ...withSessionState(session),
         ...runFacts.get(session.id),
+        ...runBackground.get(session.id),
         route: routes.get(session.id) ?? null,
       })),
       creatorSession: task.creatorSession ? withSessionState(task.creatorSession) : null,

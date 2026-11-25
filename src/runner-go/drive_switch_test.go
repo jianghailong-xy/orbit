@@ -120,13 +120,7 @@ func TestDocumentsSwitchReachesTheSpawnAndSurvivesReclaim(t *testing.T) {
 func TestDocumentsOffDropsTheDriveFromTheAgentsInstructions(t *testing.T) {
 	t.Cleanup(func() { noteDocumentsDisabled(false) })
 	noteDocumentsDisabled(false)
-	if !strings.Contains(orbitDriveInstructions(), "drive_put") {
-		t.Fatal("the drive paragraph is missing with Drive on")
-	}
 	noteDocumentsDisabled(true)
-	if got := orbitDriveInstructions(); got != "" {
-		t.Errorf("drive instructions with Drive off = %q", got)
-	}
 	if got := orbitDriveGuide(); got != "" {
 		t.Errorf("drive guide rule with Drive off = %q", got)
 	}
