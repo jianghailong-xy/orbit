@@ -25,6 +25,10 @@ import io.orbitd.android.ui.LocalOrbitColors
 /* How Android draws what [SessionDisplay] decides (the approved board, docs/mocks/session-display-three-states): the state icon, and the
  * marks as small labelled chips after the state word. Drawing only: neither decides anything about the session. */
 
+/** A list row's facts. */
+internal val DirectorySession.displayFacts: SessionDisplay.Facts get() = SessionDisplay.Facts(phase, released, lastTurnOutcome, waitingOn,
+    endReason, workFinished, activity, pendingApprovals, runningBgCount ?: 0)
+
 /** The state icon, in the quiet tone of the slot it sits in: a clock for Queued, the row's spinner for Running, an empty circle for Idle. */
 @Composable
 internal fun SessionStateGlyph(state: SessionDisplayState, modifier: Modifier = Modifier) {

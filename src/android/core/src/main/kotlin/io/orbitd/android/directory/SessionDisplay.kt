@@ -13,10 +13,12 @@ import kotlinx.serialization.json.intOrNull
  * - [SessionDisplay.state]: the state icon and word, from `phase` alone. Exactly three.
  * - [SessionDisplay.marks]: everything that is not activity, one mark per fact the server sends, in drawing order.
  *
+ * In `core`, so the guest view's states (core/guests) call the same two functions the app's surfaces do.
+ *
  * Both answer null for a payload from a control plane too old to send `phase` and `released`: the surface then draws exactly what it
  * drew before (pinned by LegacyBaselineTest).
  */
-internal enum class SessionDisplayState(val word: String, val icon: Icon) {
+enum class SessionDisplayState(val word: String, val icon: Icon) {
     QUEUED("Queued", Icon.CLOCK), RUNNING("Running", Icon.SPINNER), IDLE("Idle", Icon.CIRCLE);
 
     enum class Icon { CLOCK, SPINNER, CIRCLE }
@@ -24,7 +26,7 @@ internal enum class SessionDisplayState(val word: String, val icon: Icon) {
 
 /** One mark per fact. [tone] is the only colour a mark may carry: amber = the person has to act, red = a failure nobody is retrying,
  * green = the work finished, grey = everything else. */
-internal enum class SessionMark(val word: String, val tone: Tone) {
+enum class SessionMark(val word: String, val tone: Tone) {
     NEEDS_YOU("Needs you", Tone.AMBER),
     FAILED("Failed", Tone.RED),
     RETRYING("Retrying", Tone.GREY),
@@ -38,7 +40,7 @@ internal enum class SessionMark(val word: String, val tone: Tone) {
     enum class Tone { AMBER, RED, GREEN, GREY }
 }
 
-internal object SessionDisplay {
+object SessionDisplay {
     /** The six facts (contracts/session-state.contract.json) and the two counts beside them that a mark reads, as the payload sent them. */
     data class Facts(val phase: String?, val released: Boolean?, val lastTurnOutcome: String? = null, val waitingOn: String? = null,
         val endReason: String? = null, val workFinished: Boolean? = null, val activity: String? = null, val pendingApprovals: Int = 0,
@@ -88,7 +90,3 @@ internal object SessionDisplay {
         SessionFacts.endReason(o), SessionFacts.workFinished(o), (o["activity"] as? JsonPrimitive)?.contentOrNull,
         (o["pendingApprovals"] as? JsonPrimitive)?.intOrNull ?: 0, (o["runningBgCount"] as? JsonPrimitive)?.intOrNull ?: 0)
 }
-
-/** A list row's facts. */
-internal val DirectorySession.displayFacts: SessionDisplay.Facts get() = SessionDisplay.Facts(phase, released, lastTurnOutcome, waitingOn,
-    endReason, workFinished, activity, pendingApprovals, runningBgCount ?: 0)
