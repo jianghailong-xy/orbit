@@ -1,6 +1,6 @@
 import { LoadingOutlined } from '@ant-design/icons';
 import type { TaskRunReason } from '@orbit/shared';
-import { sessionDisplayState, sessionMarks } from '../lib/sessionDisplay';
+import { sessionDisplayState, sessionDisplayText, sessionMarks } from '../lib/sessionDisplay';
 import { SessionMarkChips, SessionStateGlyph } from './SessionStateDisplay';
 
 const STATUS_PILL: Record<string, { cls: string; label: string }> = {
@@ -17,6 +17,42 @@ export function taskStatusLabel(status: string, running?: boolean, queued?: bool
   if (running) return 'Running';
   if (queued) return queuedOnHold ? 'On hold' : 'Queued';
   return STATUS_PILL[status]?.label ?? status;
+}
+
+/**
+ * A task row's live run as the session facts lib/sessionDisplay reads. A server that says whether the task's queued run
+ * is held (`queuedOnHold`) has the facts. A task's row carries the run as `running` / `queued`, `runReason` and
+ * `queuedOnHold`: a WAITING run is parked on a watch, a wake-up or a retry (Idle, Will resume), a BACKGROUND_JOB one
+ * wears Background, a held queue On hold. The run's other facts are not on the row. Null with no live run, and from an
+ * older server.
+ */
+function taskRunSource(running?: boolean, queued?: boolean, queuedOnHold?: boolean, runReason?: TaskRunReason | null) {
+  if (!(running || queued) || typeof queuedOnHold !== 'boolean') return null;
+  const waiting = running && runReason === 'WAITING';
+  return {
+    phase: waiting ? 'IDLE' : running ? 'RUNNING' : 'PENDING',
+    released: false,
+    waitingOn: waiting ? 'WAKE' : !running && queuedOnHold ? 'HOLD' : null,
+    activity: runReason,
+  };
+}
+
+/** What the pill says, as one line for an accessible name: the live run's state and marks, else its legacy word. */
+export function taskStatusPillText({
+  status,
+  running,
+  queued,
+  queuedOnHold,
+  runReason,
+}: {
+  status: string;
+  running?: boolean;
+  queued?: boolean;
+  queuedOnHold?: boolean;
+  runReason?: TaskRunReason | null;
+}): string {
+  const run = taskRunSource(running, queued, queuedOnHold, runReason);
+  return (run && sessionDisplayText(run)) ?? taskStatusLabel(status, running, queued);
 }
 
 /**
@@ -38,19 +74,10 @@ export function TaskStatusPill({
   /** Why the row's `running` run is running (the server's `runReason`): WAITING is a parked run something will wake. */
   runReason?: TaskRunReason | null;
 }) {
-  // A server that says whether the task's queued run is held (`queuedOnHold`) has the facts: the pill says the live
-  // run's state, with that state's icon and its marks beside it (lib/sessionDisplay). A task's row carries the run as
-  // `running` / `queued`, `runReason` and `queuedOnHold`: a WAITING run is parked on a watch, a wake-up or a retry
-  // (Idle, Will resume), a BACKGROUND_JOB one wears Background, a held queue On hold. The run's other facts are not on
-  // the row. From an older server, the pill as before.
-  if ((running || queued) && typeof queuedOnHold === 'boolean') {
-    const waiting = running && runReason === 'WAITING';
-    const run = {
-      phase: waiting ? 'IDLE' : running ? 'RUNNING' : 'PENDING',
-      released: false,
-      waitingOn: waiting ? 'WAKE' : !running && queuedOnHold ? 'HOLD' : null,
-      activity: runReason,
-    };
+  // With the facts, the pill says the live run's state, with that state's icon and its marks beside it
+  // (lib/sessionDisplay). From an older server, the pill as before.
+  const run = taskRunSource(running, queued, queuedOnHold, runReason);
+  if (run) {
     const shown = sessionDisplayState(run);
     const marks = sessionMarks(run);
     if (shown) {

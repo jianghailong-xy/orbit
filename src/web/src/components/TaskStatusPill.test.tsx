@@ -21,6 +21,11 @@ describe('TaskStatusPill queued word', () => {
     // it `queuedOnHold`.
     expect(taskStatusLabel(heldRow.status, heldRow.running, heldRow.queued, heldRow.queuedOnHold)).toBe('On hold');
   });
+  it('draws the clock, not a dot, on a queued Tasks list row', () => {
+    const html = renderToStaticMarkup(<TaskStatusPill {...plainRow} />);
+    expect(html).toContain('anticon-clock-circle');
+    expect(html).not.toContain('status-dot');
+  });
   it('reads "Queued" for a plainly queued row', () => {
     expect(text(plainRow)).toBe('Queued');
     expect(taskStatusLabel(plainRow.status, false, true, false)).toBe('Queued');
